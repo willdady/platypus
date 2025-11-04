@@ -11,7 +11,7 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
-import { Home, Settings, MessageSquareText, Bot } from "lucide-react";
+import { Home, Settings, Zap, Bot, Unplug } from "lucide-react";
 
 export function AppSidebar({orgId, workspaceId}: {orgId: string, workspaceId: string}) {
 
@@ -24,12 +24,17 @@ export function AppSidebar({orgId, workspaceId}: {orgId: string, workspaceId: st
     {
       title: "Quick Chat",
       url: `/${orgId}/workspace/${workspaceId}/chat`,
-      icon: MessageSquareText,
+      icon: Zap,
     },
     {
       title: "Agents",
       url: `/${orgId}/workspace/${workspaceId}/agents`,
       icon: Bot,
+    },
+    {
+      title: "MCP",
+      url: `/${orgId}/workspace/${workspaceId}/mcp`,
+      icon: Unplug,
     },
   ];
 
