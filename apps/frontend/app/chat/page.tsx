@@ -28,7 +28,7 @@ const Chat = () => {
   });
   const [input, setInput] = useState("");
   const [copied, setCopied] = useState(false);
-  
+
   return (
     <div className="flex flex-col h-full">
       <Conversation className="flex-1">
@@ -50,34 +50,36 @@ const Chat = () => {
                 })}
                 {message.role === "assistant" && (
                   <Actions className="mt-2">
-                     <Action
-                       onClick={() => {
-                         const text =
-                           message.parts
-                             ?.filter((part) => part.type === "text")
-                             .map((part) => part.text)
-                             .join("") || "";
-                         navigator.clipboard.writeText(text);
-                         setCopied(true);
-                         setTimeout(() => setCopied(false), 2000);
-                       }}
-                       tooltip={copied ? 'Copied!' : 'Copy (⌘C)'}
-                       variant={copied ? 'secondary' : 'ghost'}
-                       label="Copy"
-                     >
-                       <CopyIcon className="size-4" />
-                     </Action>
-                     <Action
-                       onClick={() => {
-                         const index = messages.findIndex(m => m.id === message.id);
-                         setMessages(messages.slice(0, index));
-                       }}
-                       tooltip="Delete this message and all after it"
-                       variant="ghost"
-                       label="Delete"
-                     >
-                       <TrashIcon className="size-4" />
-                     </Action>
+                    <Action
+                      onClick={() => {
+                        const text =
+                          message.parts
+                            ?.filter((part) => part.type === "text")
+                            .map((part) => part.text)
+                            .join("") || "";
+                        navigator.clipboard.writeText(text);
+                        setCopied(true);
+                        setTimeout(() => setCopied(false), 2000);
+                      }}
+                      tooltip={copied ? "Copied!" : "Copy (⌘C)"}
+                      variant={copied ? "secondary" : "ghost"}
+                      label="Copy"
+                    >
+                      <CopyIcon className="size-4" />
+                    </Action>
+                    <Action
+                      onClick={() => {
+                        const index = messages.findIndex(
+                          (m) => m.id === message.id,
+                        );
+                        setMessages(messages.slice(0, index));
+                      }}
+                      tooltip="Delete this message and all after it"
+                      variant="ghost"
+                      label="Delete"
+                    >
+                      <TrashIcon className="size-4" />
+                    </Action>
                   </Actions>
                 )}
               </MessageContent>

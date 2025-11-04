@@ -9,24 +9,21 @@ import { eq } from "drizzle-orm";
 const agent = new Hono();
 
 /** Create a new agent */
-agent.post(
-  "/",
-  sValidator("json", agentCreateSchema),
-  async (c) => {
-    const data = c.req.valid("json");
-    const record = await db.insert(agentTable).values({
+agent.post("/", sValidator("json", agentCreateSchema), async (c) => {
+  const data = c.req.valid("json");
+  const record = await db
+    .insert(agentTable)
+    .values({
       id: nanoid(),
       ...data,
-    }).returning();
-    return c.json(record, 201);
-  },
-);
+    })
+    .returning();
+  return c.json(record, 201);
+});
 
 /** List all agents */
 agent.get("/", async (c) => {
-  const results = await db
-    .select()
-    .from(agentTable);
+  const results = await db.select().from(agentTable);
   return c.json({ results });
 });
 
@@ -48,10 +45,14 @@ agent.get("/:id", async (c) => {
 agent.put("/:id", sValidator("json", agentUpdateSchema), async (c) => {
   const id = c.req.param("id");
   const data = c.req.valid("json");
-  const record = await db.update(agentTable).set({
-    ...data,
-    updatedAt: new Date(),
-  }).where(eq(agentTable.id, id)).returning();
+  const record = await db
+    .update(agentTable)
+    .set({
+      ...data,
+      updatedAt: new Date(),
+    })
+    .where(eq(agentTable.id, id))
+    .returning();
   return c.json(record, 200);
 });
 

@@ -19,10 +19,13 @@ workspace.post(
   organisationMiddleware,
   async (c) => {
     const data = c.req.valid("json");
-    const record = await db.insert(workspaceTable).values({
-      id: nanoid(),
-      ...data,
-    }).returning();
+    const record = await db
+      .insert(workspaceTable)
+      .values({
+        id: nanoid(),
+        ...data,
+      })
+      .returning();
     return c.json(record, 201);
   },
 );
@@ -36,9 +39,11 @@ workspace.get("/", async (c) => {
 /** Get a workspace by ID */
 workspace.get("/:id", async (c) => {
   const id = c.req.param("id");
-  const record = await db.select().from(workspaceTable).where(
-    eq(workspaceTable.id, id),
-  ).limit(1);
+  const record = await db
+    .select()
+    .from(workspaceTable)
+    .where(eq(workspaceTable.id, id))
+    .limit(1);
   if (record.length === 0) {
     return c.json({ message: "Workspace not found" }, 404);
   }
@@ -49,10 +54,14 @@ workspace.get("/:id", async (c) => {
 workspace.put("/:id", sValidator("json", workspaceUpdateSchema), async (c) => {
   const id = c.req.param("id");
   const data = c.req.valid("json");
-  const record = await db.update(workspaceTable).set({
-    ...data,
-    updatedAt: new Date(),
-  }).where(eq(workspaceTable.id, id)).returning();
+  const record = await db
+    .update(workspaceTable)
+    .set({
+      ...data,
+      updatedAt: new Date(),
+    })
+    .where(eq(workspaceTable.id, id))
+    .returning();
   return c.json(record, 200);
 });
 

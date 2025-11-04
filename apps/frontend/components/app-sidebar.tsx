@@ -9,8 +9,8 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
-} from "@/components/ui/sidebar"
-import { Calendar, Home, Inbox, Search, Settings } from "lucide-react"
+} from "@/components/ui/sidebar";
+import { Calendar, Home, Inbox, Search, Settings } from "lucide-react";
 
 // Menu items.
 const items = [
@@ -39,7 +39,7 @@ const items = [
     url: "#",
     icon: Settings,
   },
-]
+];
 
 export function AppSidebar() {
   return (
@@ -66,5 +66,5 @@ export function AppSidebar() {
       </SidebarContent>
       <SidebarFooter />
     </Sidebar>
-  )
+  );
 }

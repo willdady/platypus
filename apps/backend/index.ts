@@ -1,7 +1,7 @@
-import { serve } from '@hono/node-server'
-import app from './src/server.ts';
+import { serve } from "@hono/node-server";
+import app from "./src/server.ts";
 
-const PORT = process.env.PORT || '3000';
+const PORT = process.env.PORT || "3000";
 
 const main = async () => {
   console.clear();

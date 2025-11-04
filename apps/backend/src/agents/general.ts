@@ -1,8 +1,8 @@
-import { openrouter } from '@openrouter/ai-sdk-provider';
-import { Experimental_Agent as Agent, stepCountIs, tool } from 'ai';
+import { openrouter } from "@openrouter/ai-sdk-provider";
+import { Experimental_Agent as Agent, stepCountIs, tool } from "ai";
 
 const generalAgent = new Agent({
-  model: openrouter('deepseek/deepseek-chat-v3-0324'),
+  model: openrouter("deepseek/deepseek-chat-v3-0324"),
   tools: {
     // weather: tool({
     //   description: 'Get the weather in a location (in Fahrenheit)',

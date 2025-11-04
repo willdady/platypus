@@ -3,7 +3,10 @@ import { sValidator } from "@hono/standard-validator";
 import { nanoid } from "nanoid";
 import { db } from "../index.ts";
 import { organisation as organisationTable } from "../db/schema.ts";
-import { organisationCreateSchema, organisationUpdateSchema } from "@agent-kit/schemas";
+import {
+  organisationCreateSchema,
+  organisationUpdateSchema,
+} from "@agent-kit/schemas";
 import { eq } from "drizzle-orm";
 
 const organisation = new Hono();
@@ -14,19 +17,20 @@ organisation.post(
   sValidator("json", organisationCreateSchema),
   async (c) => {
     const data = c.req.valid("json");
-    const record = await db.insert(organisationTable).values({
-      id: nanoid(),
-      ...data,
-    }).returning();
+    const record = await db
+      .insert(organisationTable)
+      .values({
+        id: nanoid(),
+        ...data,
+      })
+      .returning();
     return c.json(record, 201);
   },
 );
 
 /** List all organisations */
 organisation.get("/", async (c) => {
-  const results = await db
-    .select()
-    .from(organisationTable);
+  const results = await db.select().from(organisationTable);
   return c.json({ results });
 });
 
@@ -45,15 +49,23 @@ organisation.get("/:id", async (c) => {
 });
 
 /** Update a organisation by ID */
-organisation.put("/:id", sValidator("json", organisationUpdateSchema), async (c) => {
-  const id = c.req.param("id");
-  const data = c.req.valid("json");
-  const record = await db.update(organisationTable).set({
-    ...data,
-    updatedAt: new Date(),
-  }).where(eq(organisationTable.id, id)).returning();
-  return c.json(record, 200);
-});
+organisation.put(
+  "/:id",
+  sValidator("json", organisationUpdateSchema),
+  async (c) => {
+    const id = c.req.param("id");
+    const data = c.req.valid("json");
+    const record = await db
+      .update(organisationTable)
+      .set({
+        ...data,
+        updatedAt: new Date(),
+      })
+      .where(eq(organisationTable.id, id))
+      .returning();
+    return c.json(record, 200);
+  },
+);
 
 /** Delete a organisation by ID */
 organisation.delete("/:id", async (c) => {

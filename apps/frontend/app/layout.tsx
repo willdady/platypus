@@ -3,7 +3,11 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { ThemeProvider } from "@/components/theme-provider";
 import { ModeToggle } from "@/components/mode-toggle";
-import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
+import {
+  SidebarInset,
+  SidebarProvider,
+  SidebarTrigger,
+} from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/app-sidebar";
 
 const geistSans = Geist({
@@ -44,9 +48,7 @@ export default function RootLayout({
                 <SidebarTrigger />
                 <ModeToggle />
               </header>
-              <div className="p-2 size-full">
-                {children}
-              </div>
+              <div className="p-2 size-full">{children}</div>
             </SidebarInset>
           </SidebarProvider>
         </ThemeProvider>

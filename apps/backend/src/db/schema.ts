@@ -38,14 +38,19 @@ export const agent = pgTable("agent", (t) => ({
   updatedAt: t.timestamp("updated_at").notNull().defaultNow(),
 }));
 
-export const agentTool = pgTable("agent_tool", (t) => ({
-  agentId: t.text("agent_id").notNull().references(() => agent.id, {
-    onDelete: "cascade",
+export const agentTool = pgTable(
+  "agent_tool",
+  (t) => ({
+    agentId: t
+      .text("agent_id")
+      .notNull()
+      .references(() => agent.id, {
+        onDelete: "cascade",
+      }),
+    toolId: t.text("tool_id").notNull(),
   }),
-  toolId: t.text("tool_id").notNull(),
-}), (t) => [
-  primaryKey({ columns: [t.agentId, t.toolId] }),
-]);
+  (t) => [primaryKey({ columns: [t.agentId, t.toolId] })],
+);
 
 export const mcp = pgTable("mcp", (t) => ({
   id: t.text("id").primaryKey(),
