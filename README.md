@@ -1,5 +1,18 @@
 # Agent Kit
 
+## Technology
+
+### Backend
+
+- Hono.js
+- Drizzle ORM
+- Postgres 17
+- AI SDK
+
+### Frontend
+
+- Next.js
+
 ## Development
 
 ### Prerequisites
@@ -35,7 +48,7 @@ For local development the defaults can be left as-is however you MUST set `OPENR
 ### Start dev environment.
 
 ```bash
-turbo dev
+pnpm dev
 ```
 
 ### Push database changes
@@ -45,5 +58,9 @@ After making database changes apply them to the local database with the below co
 Note you MUST already have `turbo dev` running.
 
 ```bash
-turbo drizzle-kit-push
+pnpm drizzle-kit-push
 ```
+
+## Known issues
+
+Currently, Postgres 18 is not supported due to [this issue](https://github.com/drizzle-team/drizzle-orm/issues/4944) with Drizzle ORM.
