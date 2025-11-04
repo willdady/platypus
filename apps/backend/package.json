@@ -1,0 +1,32 @@
+{
+  "name": "@agent-kit/backend",
+  "version": "0.1.0",
+  "description": "REST backend for AgentKit",
+  "license": "MIT",
+  "author": "Will Dady",
+  "type": "module",
+  "main": "index.ts",
+  "scripts": {
+    "dev": "node --env-file-if-exists=.env --watch index.ts",
+    "start-local-db": "./scripts/start_postgres.sh",
+    "drizzle-kit-push": "pnpm drizzle-kit push",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "dependencies": {
+    "@agent-kit/schemas": "workspace:*",
+    "@hono/node-server": "^1.19.6",
+    "@hono/standard-validator": "^0.1.5",
+    "@openrouter/ai-sdk-provider": "^1.2.0",
+    "ai": "^5.0.86",
+    "drizzle-orm": "^0.44.7",
+    "hono": "^4.10.4",
+    "nanoid": "^5.1.6",
+    "pg": "^8.16.3",
+    "zod": "^4.1.12"
+  },
+  "devDependencies": {
+    "@types/node": "^24.9.2",
+    "@types/pg": "^8.15.6",
+    "drizzle-kit": "^0.31.6"
+  }
+}

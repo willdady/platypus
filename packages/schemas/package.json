@@ -1,0 +1,15 @@
+{
+  "name": "@agent-kit/schemas",
+  "version": "0.1.0",
+  "description": "REST backend for AgentKit",
+  "license": "MIT",
+  "author": "Will Dady",
+  "type": "module",
+  "main": "index.ts",
+  "scripts": {
+  },
+  "dependencies": {
+    "zod": "^4.1.12"
+  },
+  "devDependencies": {}
+}

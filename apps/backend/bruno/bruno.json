@@ -1,0 +1,9 @@
+{
+  "version": "1",
+  "name": "agent-kit-bruno",
+  "type": "collection",
+  "ignore": [
+    "node_modules",
+    ".git"
+  ]
+}

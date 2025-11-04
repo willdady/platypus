@@ -1,0 +1,23 @@
+{
+  "$schema": "https://turborepo.com/schema.json",
+  "ui": "tui",
+  "tasks": {
+    "build": {
+      "dependsOn": ["^build"],
+      "inputs": ["$TURBO_DEFAULT$", ".env*"],
+      "outputs": [".next/**", "!.next/cache/**"]
+    },
+    "dev": {
+      "cache": false,
+      "persistent": true,
+      "with": ["start-local-db"]
+    },
+    "drizzle-kit-push": {
+      "cache": false
+    },
+    "start-local-db": {
+      "cache": false,
+      "persistent": true
+    }
+  }
+}

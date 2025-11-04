@@ -1,0 +1,22 @@
+meta {
+  name: Create Organisation
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{host}}/organisations
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "name": "ACME inc."
+  }
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

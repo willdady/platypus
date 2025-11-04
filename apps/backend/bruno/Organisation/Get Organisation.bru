@@ -1,0 +1,20 @@
+meta {
+  name: Get Organisation
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{host}}/organisations/:id
+  body: none
+  auth: inherit
+}
+
+params:path {
+  id: 
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

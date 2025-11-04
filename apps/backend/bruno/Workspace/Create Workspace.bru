@@ -1,0 +1,23 @@
+meta {
+  name: Create Workspace
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{host}}/workspaces
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "organisationId": "CeJaX2iHrbxqTl9t2vvQT",
+    "name": "My Workspace"
+  }
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

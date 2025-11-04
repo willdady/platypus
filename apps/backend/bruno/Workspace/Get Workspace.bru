@@ -1,0 +1,24 @@
+meta {
+  name: Get Workspace
+  type: http
+  seq: 3
+}
+
+get {
+  url: {{host}}/workspaces/:id
+  body: none
+  auth: inherit
+}
+
+params:path {
+  id: 
+}
+
+vars:pre-request {
+  id: 
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}
