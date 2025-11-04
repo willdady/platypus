@@ -20,10 +20,12 @@ import { DefaultChatTransport } from "ai";
 import { CopyIcon, TrashIcon } from "lucide-react";
 import { useState } from "react";
 
+const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL;
+
 const Chat = () => {
   const { messages, setMessages, sendMessage, status } = useChat({
     transport: new DefaultChatTransport({
-      api: "http://localhost:3999/chat",
+      api: `${BACKEND_URL}/chat`,
     }),
   });
   const [input, setInput] = useState("");
