@@ -53,6 +53,10 @@ export const agentSchema = z.object({
   name: z.string(),
   systemPrompt: z.string().optional(),
   maxSteps: z.number().optional(),
+  temperature: z.number().optional(),
+  topP: z.number().optional(),
+  topK: z.number().optional(),
+  seed: z.number().optional(),
   createdAt: z.date(),
   updatedAt: z.date(),
 });
