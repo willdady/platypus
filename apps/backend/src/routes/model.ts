@@ -6,7 +6,19 @@ const model = new Hono();
 model.post("/", (c) => c.json({ message: "Not implemented" }, 501));
 
 /** List all models */
-model.get("/", (c) => c.json({ message: "Not implemented" }, 501));
+model.get("/", async (c) => {
+  // FIXME: Hard coding for now!
+  return c.json({ results: [
+    {
+      id: "google/gemini-2.5-flash",
+      name: "Gemini 2.5 Flash",
+    },
+    {
+      id: "minimax/minimax-m2:free",
+      name: "Minmax M2 (free)",
+    },
+  ] }, 200)
+});
 
 /** Get a model by ID */
 model.get("/:id", (c) => c.json({ message: "Not implemented" }, 501));

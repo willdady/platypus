@@ -110,3 +110,12 @@ export const mcpSchema = z.object({
 });
 
 export type MCP = z.infer<typeof mcpSchema>;
+
+// Model
+
+export const modelSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+});
+
+export type Model = z.infer<typeof modelSchema>;

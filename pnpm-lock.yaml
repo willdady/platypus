@@ -63,6 +63,9 @@ importers:
 
   apps/frontend:
     dependencies:
+      '@agent-kit/schemas':
+        specifier: workspace:*
+        version: link:../../packages/schemas
       '@ai-sdk/react':
         specifier: ^2.0.86
         version: 2.0.87(react@19.2.0)(zod@4.1.12)

@@ -9,6 +9,11 @@ import {
 import { Message, MessageContent } from "@/components/ui/shadcn-io/ai/message";
 import {
   PromptInput,
+  PromptInputModelSelect,
+  PromptInputModelSelectContent,
+  PromptInputModelSelectItem,
+  PromptInputModelSelectTrigger,
+  PromptInputModelSelectValue,
   PromptInputSubmit,
   PromptInputTextarea,
   PromptInputToolbar,
@@ -18,18 +23,42 @@ import { Response } from "@/components/ui/shadcn-io/ai/response";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport } from "ai";
 import { CopyIcon, TrashIcon } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { Model } from "@agent-kit/schemas";
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL;
 
-export const Chat = () => {
+export const Chat = ({ orgId, workspaceId }: { orgId: string; workspaceId: string }) => {
+  const [model, setModel] = useState("google/gemini-2.5-flash");
   const { messages, setMessages, sendMessage, status } = useChat({
     transport: new DefaultChatTransport({
       api: `${BACKEND_URL}/chat`,
+      body: {
+        model,
+        orgId,
+        workspaceId,
+      },
     }),
   });
   const [input, setInput] = useState("");
   const [copied, setCopied] = useState(false);
+  const [models, setModels] = useState<Model[]>([]);
+
+  useEffect(() => {
+    const fetchModels = async () => {
+      const response = await fetch(`${BACKEND_URL}/models`);
+      if (!response.ok) {
+        throw new Error("Failed to fetch models");
+      }
+      const data = await response.json();
+      if (data.results.length === 0) {
+        throw new Error("No models available");
+      }
+      setModels(data.results);
+      setModel(data.results[0].id);
+    };
+    fetchModels();
+  }, []);
 
   return (
     <div className="flex flex-col h-full">
@@ -73,7 +102,7 @@ export const Chat = () => {
                     <Action
                       onClick={() => {
                         const index = messages.findIndex(
-                          (m) => m.id === message.id,
+                          (m) => m.id === message.id
                         );
                         setMessages(messages.slice(0, index));
                       }}
@@ -107,7 +136,20 @@ export const Chat = () => {
           placeholder="Type your message..."
         />
         <PromptInputToolbar>
-          <PromptInputTools></PromptInputTools>
+          <PromptInputTools>
+            <PromptInputModelSelect onValueChange={setModel} value={model}>
+              <PromptInputModelSelectTrigger>
+                <PromptInputModelSelectValue />
+              </PromptInputModelSelectTrigger>
+              <PromptInputModelSelectContent>
+                {models.map((model) => (
+                  <PromptInputModelSelectItem key={model.id} value={model.id}>
+                    {model.name}
+                  </PromptInputModelSelectItem>
+                ))}
+              </PromptInputModelSelectContent>
+            </PromptInputModelSelect>
+          </PromptInputTools>
           <PromptInputSubmit disabled={!input} status={status} />
         </PromptInputToolbar>
       </PromptInput>
