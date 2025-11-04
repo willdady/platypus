@@ -1,3 +1,4 @@
+import Link from 'next/link'
 import {
   Sidebar,
   SidebarContent,
@@ -10,53 +11,67 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
-import { Calendar, Home, Inbox, Search, Settings } from "lucide-react";
+import { Home, Settings, MessageSquareText, Bot } from "lucide-react";
 
-// Menu items.
-const items = [
-  {
-    title: "Home",
-    url: "#",
-    icon: Home,
-  },
-  {
-    title: "Inbox",
-    url: "#",
-    icon: Inbox,
-  },
-  {
-    title: "Calendar",
-    url: "#",
-    icon: Calendar,
-  },
-  {
-    title: "Search",
-    url: "#",
-    icon: Search,
-  },
-  {
-    title: "Settings",
-    url: "#",
-    icon: Settings,
-  },
-];
+export function AppSidebar({orgId, workspaceId}: {orgId: string, workspaceId: string}) {
 
-export function AppSidebar() {
+  const primaryItems = [
+    {
+      title: "Home",
+      url: `/${orgId}/workspace/${workspaceId}`,
+      icon: Home,
+    },
+    {
+      title: "Quick Chat",
+      url: `/${orgId}/workspace/${workspaceId}/chat`,
+      icon: MessageSquareText,
+    },
+    {
+      title: "Agents",
+      url: `/${orgId}/workspace/${workspaceId}/agents`,
+      icon: Bot,
+    },
+  ];
+
+  const secondaryItems = [
+    {
+      title: "Settings",
+      url: `/${orgId}/workspace/${workspaceId}/settings`,
+      icon: Settings,
+    },
+  ];
+
   return (
     <Sidebar>
       <SidebarHeader />
-      <SidebarContent>
+      <SidebarContent className='justify-between'>
         <SidebarGroup>
           <SidebarGroupLabel>Application</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              {items.map((item) => (
+              {primaryItems.map((item) => (
                 <SidebarMenuItem key={item.title}>
                   <SidebarMenuButton asChild>
-                    <a href={item.url}>
+                    <Link href={item.url}>
                       <item.icon />
                       <span>{item.title}</span>
-                    </a>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              ))}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+        <SidebarGroup>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              {secondaryItems.map((item) => (
+                <SidebarMenuItem key={item.title}>
+                  <SidebarMenuButton asChild>
+                    <Link href={item.url}>
+                      <item.icon />
+                      <span>{item.title}</span>
+                    </Link>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
               ))}
