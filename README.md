@@ -2,13 +2,47 @@
 
 ## Development
 
-Start dev environment.
+### Prerequisites
+
+The following software is required:
+
+- Docker
+- Node.js v24+
+- pnpm
+
+In addition to this you MUST have access to an AI provider.
+Currently only **Open Router** is supported.
+Refer to the following [Setup](/#Setup) section for how to configure your provider credentials.
+
+### Setup
+
+Install dependencies.
+
+```bash
+pnpm install
+```
+
+You MUST create a `.env` in both the frontend and backend applications.
+This should be done by copying each example file like so:
+
+```bash
+cp apps/frontend/.example.env apps/frontend/.env
+cp apps/backend/.example.env apps/backend/.env
+```
+
+For local development the defaults can be left as-is however you MUST set `OPENROUTER_API_KEY` in `apps/backend/.env`.
+
+### Start dev environment.
 
 ```bash
 turbo dev
 ```
 
-Apply local database changes.
+### Push database changes
+
+Database tables are defined in `apps/backend/src/db/schema.ts`.
+After making database changes apply them to the local database with the below command.
+Note you MUST already have `turbo dev` running.
 
 ```bash
 turbo drizzle-kit-push
