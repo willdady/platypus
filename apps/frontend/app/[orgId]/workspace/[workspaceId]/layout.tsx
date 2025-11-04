@@ -27,7 +27,7 @@ export default async function WorkspaceLayout({
       <AppSidebar orgId={orgId} workspaceId={workspaceId} />
       <SidebarInset>
         <header className="flex justify-between p-2">
-          <SidebarTrigger />
+          <SidebarTrigger className="cursor-pointer" />
           <ModeToggle />
         </header>
         <div className="p-2 size-full">{children}</div>
