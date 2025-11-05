@@ -61,67 +61,70 @@ export const Chat = ({ orgId, workspaceId }: { orgId: string; workspaceId: strin
   }, []);
 
   return (
-    <div className="flex flex-col h-full">
-      <Conversation className="flex-1">
-        <ConversationContent>
-          {messages.map((message) => (
-            <Message key={message.id} from={message.role}>
-              <MessageContent>
-                {message.parts?.map((part, i) => {
-                  switch (part.type) {
-                    case "text":
-                      return (
-                        <Response key={`${message.id}-${i}`}>
-                          {part.text}
-                        </Response>
-                      );
-                    default:
-                      "text";
-                      return null;
-                  }
-                })}
-                {message.role === "assistant" && (
-                  <Actions className="mt-2">
-                    <Action
-                      onClick={() => {
-                        const text =
-                          message.parts
-                            ?.filter((part) => part.type === "text")
-                            .map((part) => part.text)
-                            .join("") || "";
-                        navigator.clipboard.writeText(text);
-                        setCopied(true);
-                        setTimeout(() => setCopied(false), 2000);
-                      }}
-                      tooltip={copied ? "Copied!" : "Copy (⌘C)"}
-                      variant={copied ? "secondary" : "ghost"}
-                      label="Copy"
-                    >
-                      <CopyIcon className="size-4" />
-                    </Action>
-                    <Action
-                      onClick={() => {
-                        const index = messages.findIndex(
-                          (m) => m.id === message.id
+    <div className="flex flex-col size-full items-center">
+      <Conversation className="flex-none w-full h-[calc(100vh-44px-110px-1.5rem)]">
+        <ConversationContent className="h-full flex justify-center">
+          <div className="w-full xl:w-3/5">
+            {messages.map((message) => (
+              <Message key={message.id} from={message.role}>
+                <MessageContent>
+                  {message.parts?.map((part, i) => {
+                    switch (part.type) {
+                      case "text":
+                        return (
+                          <Response key={`${message.id}-${i}`}>
+                            {part.text}
+                          </Response>
                         );
-                        setMessages(messages.slice(0, index));
-                      }}
-                      tooltip="Delete this message and all after it"
-                      variant="ghost"
-                      label="Delete"
-                    >
-                      <TrashIcon className="size-4" />
-                    </Action>
-                  </Actions>
-                )}
-              </MessageContent>
-            </Message>
-          ))}
+                      default:
+                        "text";
+                        return null;
+                    }
+                  })}
+                  {message.role === "assistant" && (
+                    <Actions className="mt-2">
+                      <Action
+                        onClick={() => {
+                          const text =
+                            message.parts
+                              ?.filter((part) => part.type === "text")
+                              .map((part) => part.text)
+                              .join("") || "";
+                          navigator.clipboard.writeText(text);
+                          setCopied(true);
+                          setTimeout(() => setCopied(false), 2000);
+                        }}
+                        tooltip={copied ? "Copied!" : "Copy (⌘C)"}
+                        variant={copied ? "secondary" : "ghost"}
+                        label="Copy"
+                      >
+                        <CopyIcon className="size-4" />
+                      </Action>
+                      <Action
+                        onClick={() => {
+                          const index = messages.findIndex(
+                            (m) => m.id === message.id
+                          );
+                          setMessages(messages.slice(0, index));
+                        }}
+                        tooltip="Delete this message and all after it"
+                        variant="ghost"
+                        label="Delete"
+                      >
+                        <TrashIcon className="size-4" />
+                      </Action>
+                    </Actions>
+                  )}
+                </MessageContent>
+              </Message>
+            ))}
+          </div>
         </ConversationContent>
         <ConversationScrollButton />
       </Conversation>
 
       <PromptInput
+        className="w-full xl:w-3/5"
         onSubmit={(e) => {
           e.preventDefault();
           if (input.trim()) {
