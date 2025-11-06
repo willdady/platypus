@@ -25,7 +25,7 @@ export default async function WorkspaceLayout({
           <SidebarTrigger className="cursor-pointer" />
           <ModeToggle />
         </header>
-        <div className="p-2 size-full">{children}</div>
+        {children}
       </SidebarInset>
     </SidebarProvider>
   );

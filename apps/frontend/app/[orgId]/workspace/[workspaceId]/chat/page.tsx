@@ -7,9 +7,7 @@ const ChatPage = async ({
 }) => {
   const { orgId, workspaceId } = await params;
   return (
-    <div className="flex size-full justify-center">
-      <Chat orgId={orgId} workspaceId={workspaceId} />
-    </div>
+    <Chat orgId={orgId} workspaceId={workspaceId} />
   );
 };
 
