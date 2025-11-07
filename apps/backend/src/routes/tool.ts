@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import { getTools } from "../tools/index.ts";
+import { type Tool } from "@agent-kit/schemas";
 
 const tool = new Hono();
 
@@ -10,7 +11,7 @@ tool.get("/", async (c) => {
       acc.push({ id, description: tool.description || "No description" });
       return acc;
     },
-    [] as { id: string; description: string }[],
+    [] as Tool[],
   );
   return c.json({ results: toolsList });
 });

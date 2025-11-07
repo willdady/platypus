@@ -9,7 +9,11 @@ const Agents = async ({
 
   return (
     <div className="flex justify-center">
-      <AgentForm classNames="xl:w-2/5" />
+      <AgentForm
+        classNames="xl:w-2/5"
+        orgId={orgId}
+        workspaceId={workspaceId}
+      />
     </div>
   );
 };
