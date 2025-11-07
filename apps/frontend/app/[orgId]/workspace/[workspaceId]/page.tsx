@@ -1,7 +1,7 @@
 const Workspace = async ({
   params,
 }: {
-  params: Promise<{ orgId: string; workspaceId: string }>
+  params: Promise<{ orgId: string; workspaceId: string }>;
 }) => {
   const { orgId, workspaceId } = await params;
 

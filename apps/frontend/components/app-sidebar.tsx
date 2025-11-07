@@ -1,4 +1,4 @@
-import Link from 'next/link'
+import Link from "next/link";
 import {
   Sidebar,
   SidebarContent,
@@ -13,8 +13,13 @@ import {
 } from "@/components/ui/sidebar";
 import { Home, Settings, Zap, Bot, Unplug } from "lucide-react";
 
-export function AppSidebar({orgId, workspaceId}: {orgId: string, workspaceId: string}) {
-
+export function AppSidebar({
+  orgId,
+  workspaceId,
+}: {
+  orgId: string;
+  workspaceId: string;
+}) {
   const primaryItems = [
     {
       title: "Home",
@@ -49,7 +54,7 @@ export function AppSidebar({orgId, workspaceId}: {orgId: string, workspaceId: st
   return (
     <Sidebar>
       <SidebarHeader />
-      <SidebarContent className='justify-between'>
+      <SidebarContent className="justify-between">
         <SidebarGroup>
           <SidebarGroupLabel>Application</SidebarGroupLabel>
           <SidebarGroupContent>

@@ -6,14 +6,12 @@ const chat = new Hono();
 
 chat.post("/", async (c) => {
   const { messages, model, orgId, workspaceId } = await c.req.json<
-    Promise<
-      {
-        messages: UIMessage[];
-        model: string;
-        orgId: string;
-        workspaceId: string;
-      }
-    >
+    Promise<{
+      messages: UIMessage[];
+      model: string;
+      orgId: string;
+      workspaceId: string;
+    }>
   >();
 
   // FIXME

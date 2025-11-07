@@ -15,7 +15,8 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "Agent Kit",
-  description: "A rich web interface for interacting with AI chatbots and agents",
+  description:
+    "A rich web interface for interacting with AI chatbots and agents",
 };
 
 export default function RootLayout({

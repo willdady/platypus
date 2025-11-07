@@ -6,7 +6,9 @@ const MCP = async ({
   const { orgId, workspaceId } = await params;
   return (
     <div>
-      <h1>MCP: {orgId}/{workspaceId}</h1>
+      <h1>
+        MCP: {orgId}/{workspaceId}
+      </h1>
     </div>
   );
 };

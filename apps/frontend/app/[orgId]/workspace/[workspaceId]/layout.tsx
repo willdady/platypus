@@ -9,12 +9,11 @@ import { AppSidebar } from "@/components/app-sidebar";
 
 export default async function WorkspaceLayout({
   children,
-  params
+  params,
 }: Readonly<{
   children: React.ReactNode;
-  params: Promise<{ orgId: string; workspaceId: string }>
+  params: Promise<{ orgId: string; workspaceId: string }>;
 }>) {
-
   const { orgId, workspaceId } = await params;
 
   return (
@@ -25,7 +24,9 @@ export default async function WorkspaceLayout({
           <SidebarTrigger className="cursor-pointer" />
           <ModeToggle />
         </header>
-        {children}
+        <div className="h-[calc(100vh-2.75rem)] overflow-y-auto">
+          {children}
+        </div>
       </SidebarInset>
     </SidebarProvider>
   );

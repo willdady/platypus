@@ -7,7 +7,9 @@ const WorkspaceSettings = async ({
 
   return (
     <div>
-      <h1>Workspace settings: {orgId}/{workspaceId}</h1>
+      <h1>
+        Workspace settings: {orgId}/{workspaceId}
+      </h1>
     </div>
   );
 };

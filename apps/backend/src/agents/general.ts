@@ -5,7 +5,7 @@ import { convertFahrenheitToCelsius } from "../tools/math.ts";
 const generalAgent = new Agent({
   model: openrouter("deepseek/deepseek-chat-v3-0324"),
   tools: {
-    convertFahrenheitToCelsius
+    convertFahrenheitToCelsius,
   },
   stopWhen: stepCountIs(20),
 });

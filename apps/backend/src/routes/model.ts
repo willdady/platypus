@@ -8,16 +8,21 @@ model.post("/", (c) => c.json({ message: "Not implemented" }, 501));
 /** List all models */
 model.get("/", async (c) => {
   // FIXME: Hard coding for now!
-  return c.json({ results: [
+  return c.json(
     {
-      id: "google/gemini-2.5-flash",
-      name: "Gemini 2.5 Flash",
+      results: [
+        {
+          id: "google/gemini-2.5-flash",
+          name: "Gemini 2.5 Flash",
+        },
+        {
+          id: "minimax/minimax-m2:free",
+          name: "Minmax M2 (free)",
+        },
+      ],
     },
-    {
-      id: "minimax/minimax-m2:free",
-      name: "Minmax M2 (free)",
-    },
-  ] }, 200)
+    200,
+  );
 });
 
 /** Get a model by ID */

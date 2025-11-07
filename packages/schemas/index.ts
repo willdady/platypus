@@ -68,12 +68,20 @@ export const agentCreateSchema = agentSchema.pick({
   name: true,
   systemPrompt: true,
   maxSteps: true,
+  temperature: true,
+  topP: true,
+  topK: true,
+  seed: true,
 });
 
 export const agentUpdateSchema = agentSchema.pick({
   name: true,
   systemPrompt: true,
   maxSteps: true,
+  temperature: true,
+  topP: true,
+  topK: true,
+  seed: true,
 });
 
 // Tool

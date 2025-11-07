@@ -85,11 +85,11 @@ export const Chat = ({
     if (!(hasText || hasAttachments)) {
       return;
     }
-    sendMessage({ text: message.text! })
+    sendMessage({ text: message.text! });
   };
 
   return (
-    <div className="relative size-full flex flex-col divide-y overflow-hidden h-[calc(100vh-44px)]">
+    <div className="relative size-full flex flex-col divide-y overflow-hidden h-[calc(100vh-2.75rem)]">
       <Conversation className="overflow-y-hidden" data-conversation>
         <ConversationContent>
           <div className="flex justify-center">
@@ -160,7 +160,7 @@ export const Chat = ({
                         <Action
                           onClick={() => {
                             const index = messages.findIndex(
-                              (m) => m.id === message.id
+                              (m) => m.id === message.id,
                             );
                             setMessages(messages.slice(0, index));
                           }}
@@ -188,7 +188,9 @@ export const Chat = ({
               <PromptInput globalDrop multiple onSubmit={handleSubmit}>
                 <PromptInputHeader>
                   <PromptInputAttachments>
-                    {(attachment) => <PromptInputAttachment data={attachment} />}
+                    {(attachment) => (
+                      <PromptInputAttachment data={attachment} />
+                    )}
                   </PromptInputAttachments>
                 </PromptInputHeader>
                 <PromptInputBody>
@@ -207,7 +209,10 @@ export const Chat = ({
                       <GlobeIcon size={16} />
                       <span>Search</span>
                     </PromptInputButton>
-                    <PromptInputModelSelect onValueChange={setModel} value={model}>
+                    <PromptInputModelSelect
+                      onValueChange={setModel}
+                      value={model}
+                    >
                       <PromptInputModelSelectTrigger>
                         <PromptInputModelSelectValue />
                       </PromptInputModelSelectTrigger>
