@@ -52,6 +52,7 @@ export const agentSchema = z.object({
   workspaceId: z.string(),
   name: z.string(),
   systemPrompt: z.string().optional(),
+  modelId: z.string(),
   maxSteps: z.number().optional(),
   temperature: z.number().optional(),
   topP: z.number().optional(),
@@ -88,19 +89,16 @@ export const agentUpdateSchema = agentSchema.pick({
 
 export const toolSchema = z.object({
   id: z.string(),
-  name: z.string(),
   description: z.string(),
 });
 
 export type Tool = z.infer<typeof toolSchema>;
 
 export const toolCreateSchema = toolSchema.pick({
-  name: true,
   description: true,
 });
 
 export const toolUpdateSchema = toolSchema.pick({
-  name: true,
   description: true,
 });
 

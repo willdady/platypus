@@ -33,6 +33,7 @@ export const agent = pgTable("agent", (t) => ({
   }),
   name: t.text("name").notNull(),
   systemPrompt: t.text("system_prompt"),
+  modelId: t.text("model_id"),
   maxSteps: t.integer("max_steps"),
   temperature: t.real("temperature"),
   topP: t.real("top_p"),
