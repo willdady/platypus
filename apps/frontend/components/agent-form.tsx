@@ -89,7 +89,7 @@ const AgentForm = ({
       });
 
       if (response.ok) {
-        router.push("/");
+        router.push(`/${orgId}/workspace/${workspaceId}`);
       } else {
         // Handle error, e.g., show a toast notification
         console.error("Failed to save agent");

@@ -68,6 +68,7 @@ export const agentCreateSchema = agentSchema.pick({
   workspaceId: true,
   name: true,
   systemPrompt: true,
+  modelId: true,
   maxSteps: true,
   temperature: true,
   topP: true,
@@ -78,6 +79,7 @@ export const agentCreateSchema = agentSchema.pick({
 export const agentUpdateSchema = agentSchema.pick({
   name: true,
   systemPrompt: true,
+  modelId: true,
   maxSteps: true,
   temperature: true,
   topP: true,
