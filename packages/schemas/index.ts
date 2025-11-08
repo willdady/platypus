@@ -58,6 +58,7 @@ export const agentSchema = z.object({
   topP: z.number().optional(),
   topK: z.number().optional(),
   seed: z.number().optional(),
+  tools: z.array(z.string()).optional(),
   createdAt: z.date(),
   updatedAt: z.date(),
 });
@@ -74,6 +75,7 @@ export const agentCreateSchema = agentSchema.pick({
   topP: true,
   topK: true,
   seed: true,
+  tools: true,
 });
 
 export const agentUpdateSchema = agentSchema.pick({
@@ -85,6 +87,7 @@ export const agentUpdateSchema = agentSchema.pick({
   topP: true,
   topK: true,
   seed: true,
+  tools: true,
 });
 
 // Tool

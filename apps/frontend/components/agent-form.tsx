@@ -29,7 +29,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { type Tool, type Agent } from "@agent-kit/schemas";
+import { type Tool, type Agent, type Model } from "@agent-kit/schemas";
 
 const AgentForm = ({
   classNames,
@@ -43,27 +43,64 @@ const AgentForm = ({
   const [isOpen, setIsOpen] = useState(false);
 
   const [tools, setTools] = useState<Tool[]>([]);
-  const [name, setName] = useState("");
-  const [systemPrompt, setSystemPrompt] = useState("");
-  const [modelId, setModelId] = useState("");
-  const [maxSteps, setMaxSteps] = useState(10);
-  const [selectedTools, setSelectedTools] = useState<string[]>([]);
-  const [temperature, setTemperature] = useState(1);
-  const [topP, setTopP] = useState(1);
-  const [topK, setTopK] = useState(50);
+  const [models, setModels] = useState<Model[]>([]);
+  const [formData, setFormData] = useState({
+    name: "",
+    systemPrompt: "",
+    modelId: "",
+    maxSteps: 10,
+    temperature: undefined,
+    tools: [] as string[],
+    topP: undefined,
+    topK: undefined,
+  });
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const router = useRouter();
 
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    const { id, value } = e.target;
+    setFormData((prevData) => ({
+      ...prevData,
+      [id]: value,
+    }));
+  };
+
+  const handleSelectChange = (id: string, value: string) => {
+    setFormData((prevData) => ({
+      ...prevData,
+      [id]: value,
+    }));
+  };
+
+  const handleNumberChange = (id: string, value: string) => {
+    setFormData((prevData) => ({
+      ...prevData,
+      [id]: parseInt(value),
+    }));
+  };
+
+  const handleFloatChange = (id: string, value: string) => {
+    setFormData((prevData) => ({
+      ...prevData,
+      [id]: parseFloat(value),
+    }));
+  };
+
   useEffect(() => {
-    const fetchTools = async () => {
-      const response = await fetch(
-        `${process.env.NEXT_PUBLIC_BACKEND_URL}/tools`
-      );
-      const data = await response.json();
-      setTools(data.results);
+    const fetchData = async () => {
+      const [toolsResponse, modelsResponse] = await Promise.all([
+        fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/tools`),
+        fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/models`),
+      ]);
+
+      const toolsData = await toolsResponse.json();
+      setTools(toolsData.results);
+
+      const modelsData = await modelsResponse.json();
+      setModels(modelsData.results);
     };
-    fetchTools();
+    fetchData();
   }, []);
 
   const handleSubmit = async () => {
@@ -71,13 +108,13 @@ const AgentForm = ({
     try {
       const payload: Omit<Agent, "id" | "createdAt" | "updatedAt"> = {
         workspaceId,
-        name,
-        systemPrompt,
-        modelId,
-        maxSteps,
-        temperature,
-        topP,
-        topK,
+        name: formData.name,
+        systemPrompt: formData.systemPrompt,
+        modelId: formData.modelId,
+        maxSteps: formData.maxSteps,
+        temperature: formData.temperature,
+        topP: formData.topP,
+        topK: formData.topK,
       };
 
       const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/agents`, {
@@ -110,8 +147,8 @@ const AgentForm = ({
             <Input
               id="name"
               placeholder="Name"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
+              value={formData.name}
+              onChange={handleChange}
               disabled={isSubmitting}
             />
             {/* <FieldError>Validation message.</FieldError> */}
@@ -121,26 +158,25 @@ const AgentForm = ({
             <Textarea
               id="systemPrompt"
               placeholder="You are a helpful agent..."
-              value={systemPrompt}
-              onChange={(e) => setSystemPrompt(e.target.value)}
+              value={formData.systemPrompt}
+              onChange={handleChange}
               disabled={isSubmitting}
             />
           </Field>
           <Field>
             <FieldLabel>Model</FieldLabel>
-            <Select value={modelId} onValueChange={setModelId} disabled={isSubmitting}>
+            <Select value={formData.modelId} onValueChange={(value) => handleSelectChange("modelId", value)} disabled={isSubmitting}>
               <SelectTrigger disabled={isSubmitting}>
                 <SelectValue placeholder="Select a model" />
               </SelectTrigger>
               <SelectContent>
                 <SelectGroup>
                   <SelectLabel>Models</SelectLabel>
-                  <SelectItem value="gemini-pro-2.5-pro">
-                    Gemini Pro 2.5 Pro
-                  </SelectItem>
-                  <SelectItem value="anthropic-sonnet-4.5">
-                    Anthropic Sonnet 4.5
-                  </SelectItem>
+                  {models.map((model) => (
+                    <SelectItem key={model.id} value={model.id}>
+                      {model.id}
+                    </SelectItem>
+                  ))}
                 </SelectGroup>
               </SelectContent>
             </Select>
@@ -151,8 +187,8 @@ const AgentForm = ({
               id="maxSteps"
               type="number"
               min="1"
-              value={maxSteps}
-              onChange={(e) => setMaxSteps(parseInt(e.target.value))}
+              value={formData.maxSteps}
+              onChange={(e) => handleNumberChange("maxSteps", e.target.value)}
               disabled={isSubmitting}
             />
             <FieldDescription>
@@ -170,13 +206,14 @@ const AgentForm = ({
                 <Switch
                   id={t.id}
                   className="cursor-pointer"
-                  checked={selectedTools.includes(t.id)}
+                  checked={formData.tools.includes(t.id)}
                   onCheckedChange={(checked) => {
-                    if (checked) {
-                      setSelectedTools([...selectedTools, t.id]);
-                    } else {
-                      setSelectedTools(selectedTools.filter((id) => id !== t.id));
-                    }
+                    setFormData((prevData) => {
+                      const newSelectedTools = checked
+                        ? [...prevData.tools, t.id]
+                        : prevData.tools.filter((id) => id !== t.id);
+                      return { ...prevData, tools: newSelectedTools };
+                    });
                   }}
                   disabled={isSubmitting}
                 />
@@ -214,8 +251,8 @@ const AgentForm = ({
                   type="number"
                   min="0"
                   step="0.1"
-                  value={temperature}
-                  onChange={(e) => setTemperature(parseFloat(e.target.value))}
+                  value={formData.temperature}
+                  onChange={(e) => handleFloatChange("temperature", e.target.value)}
                   disabled={isSubmitting}
                 />
               </Field>
@@ -227,8 +264,8 @@ const AgentForm = ({
                   min="0"
                   max="1"
                   step="0.1"
-                  value={topP}
-                  onChange={(e) => setTopP(parseFloat(e.target.value))}
+                  value={formData.topP}
+                  onChange={(e) => handleFloatChange("topP", e.target.value)}
                   disabled={isSubmitting}
                 />
               </Field>
@@ -238,8 +275,8 @@ const AgentForm = ({
                   id="topK"
                   type="number"
                   min="1"
-                  value={topK}
-                  onChange={(e) => setTopK(parseInt(e.target.value))}
+                  value={formData.topK}
+                  onChange={(e) => handleNumberChange("topK", e.target.value)}
                   disabled={isSubmitting}
                 />
               </Field>

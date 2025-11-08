@@ -5,12 +5,16 @@ import { db } from "../index.ts";
 import { agent as agentTable } from "../db/schema.ts";
 import { agentCreateSchema, agentUpdateSchema } from "@agent-kit/schemas";
 import { eq } from "drizzle-orm";
+import { dedupeArray } from "../../../frontend/src/utils.ts";
 
 const agent = new Hono();
 
 /** Create a new agent */
 agent.post("/", sValidator("json", agentCreateSchema), async (c) => {
   const data = c.req.valid("json");
+  if (data.tools) {
+    data.tools = dedupeArray(data.tools);
+  }
   const record = await db
     .insert(agentTable)
     .values({
@@ -45,6 +49,9 @@ agent.get("/:id", async (c) => {
 agent.put("/:id", sValidator("json", agentUpdateSchema), async (c) => {
   const id = c.req.param("id");
   const data = c.req.valid("json");
+  if (data.tools) {
+    data.tools = dedupeArray(data.tools);
+  }
   const record = await db
     .update(agentTable)
     .set({

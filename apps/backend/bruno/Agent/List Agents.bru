@@ -1,0 +1,28 @@
+meta {
+  name: List Agents
+  type: http
+  seq: 4
+}
+
+get {
+  url: {{host}}/agents
+  body: none
+  auth: inherit
+}
+
+body:json {
+  {
+    "workspaceId": "default",
+    "name": "My agent",
+    "systemPrompt": "Hello world",
+    "modelId": "google/gemini-2.5.-flash",
+    "tools": [
+      "myCoolTool"
+    ]
+  }
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

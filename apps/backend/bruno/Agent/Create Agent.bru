@@ -1,0 +1,25 @@
+meta {
+  name: Create Agent
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{host}}/agents
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "workspaceId": "default",
+    "name": "My agent",
+    "systemPrompt": "Hello world",
+    "modelId": "google/gemini-2.5.-flash"
+  }
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}
