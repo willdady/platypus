@@ -107,13 +107,6 @@ export const toolUpdateSchema = toolSchema.pick({
   description: true,
 });
 
-// Agent / Tool
-
-export const agentToolSchema = z.object({
-  agentId: z.string(),
-  toolId: z.string(),
-});
-
 // MCP
 
 export const mcpSchema = z.object({
