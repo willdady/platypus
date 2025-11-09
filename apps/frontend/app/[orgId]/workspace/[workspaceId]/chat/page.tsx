@@ -6,9 +6,9 @@ const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL;
 const ChatPage = async ({
   params,
 }: {
-  params: { orgId: string; workspaceId: string };
+  params: Promise<{ orgId: string; workspaceId: string }>;
 }) => {
-  const { orgId, workspaceId } = params;
+  const { orgId, workspaceId } = await params;
 
   const response = await fetch(`${BACKEND_URL}/models`);
   if (!response.ok) {
