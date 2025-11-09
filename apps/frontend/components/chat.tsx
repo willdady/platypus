@@ -35,7 +35,7 @@ import { Response } from "@/components/ui/shadcn-io/ai/response";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport } from "ai";
 import { CopyIcon, GlobeIcon, TrashIcon } from "lucide-react";
-import { useState, useEffect, useRef } from "react";
+import { useState, useRef } from "react";
 import { Model } from "@agent-kit/schemas";
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL;
@@ -43,12 +43,16 @@ const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL;
 export const Chat = ({
   orgId,
   workspaceId,
+  models,
+  initialModelId,
 }: {
   orgId: string;
   workspaceId: string;
+  models: Model[];
+  initialModelId: string;
 }) => {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const [model, setModel] = useState("google/gemini-2.5-flash");
+  const [model, setModel] = useState(initialModelId);
   const { messages, setMessages, sendMessage, status } = useChat({
     transport: new DefaultChatTransport({
       api: `${BACKEND_URL}/chat`,
@@ -61,23 +65,6 @@ export const Chat = ({
   });
   const [input, setInput] = useState("");
   const [copied, setCopied] = useState(false);
-  const [models, setModels] = useState<Model[]>([]);
-
-  useEffect(() => {
-    const fetchModels = async () => {
-      const response = await fetch(`${BACKEND_URL}/models`);
-      if (!response.ok) {
-        throw new Error("Failed to fetch models");
-      }
-      const data = await response.json();
-      if (data.results.length === 0) {
-        throw new Error("No models available");
-      }
-      setModels(data.results);
-      setModel(data.results[0].id);
-    };
-    fetchModels();
-  }, []);
 
   const handleSubmit = (message: PromptInputMessage) => {
     const hasText = Boolean(message.text);

@@ -35,15 +35,17 @@ const AgentForm = ({
   classNames,
   orgId,
   workspaceId,
+  tools,
+  models,
 }: {
   classNames?: string;
   orgId: string;
   workspaceId: string;
+  tools: Tool[];
+  models: Model[];
 }) => {
   const [isOpen, setIsOpen] = useState(false);
 
-  const [tools, setTools] = useState<Tool[]>([]);
-  const [models, setModels] = useState<Model[]>([]);
   const [formData, setFormData] = useState({
     name: "",
     systemPrompt: "",
@@ -86,22 +88,6 @@ const AgentForm = ({
       [id]: parseFloat(value),
     }));
   };
-
-  useEffect(() => {
-    const fetchData = async () => {
-      const [toolsResponse, modelsResponse] = await Promise.all([
-        fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/tools`),
-        fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/models`),
-      ]);
-
-      const toolsData = await toolsResponse.json();
-      setTools(toolsData.results);
-
-      const modelsData = await modelsResponse.json();
-      setModels(modelsData.results);
-    };
-    fetchData();
-  }, []);
 
   const handleSubmit = async () => {
     setIsSubmitting(true);
