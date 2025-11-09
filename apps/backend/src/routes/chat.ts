@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import { type UIMessage, validateUIMessages } from "ai";
-import { generalAgent } from "../agents/general.ts";
+import { openrouter } from "@openrouter/ai-sdk-provider";
+import { Experimental_Agent as Agent, stepCountIs } from "ai";
 
 const chat = new Hono();
 
@@ -19,7 +20,12 @@ chat.post("/", async (c) => {
   console.log(`GOT ORG: ${orgId}`);
   console.log(`GOT WORKSPACE: ${workspaceId}`);
 
-  return generalAgent.respond({
+  const quickChatAgent = new Agent({
+    model: openrouter(model),
+    stopWhen: stepCountIs(20),
+  });
+
+  return quickChatAgent.respond({
     messages: await validateUIMessages({ messages }),
   });
 });

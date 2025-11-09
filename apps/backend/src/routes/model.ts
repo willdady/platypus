@@ -12,12 +12,20 @@ model.get("/", async (c) => {
     {
       results: [
         {
+          id: "google/gemini-2.5-pro",
+          name: "Gemini 2.5 Pro",
+        },
+        {
           id: "google/gemini-2.5-flash",
           name: "Gemini 2.5 Flash",
         },
         {
           id: "minimax/minimax-m2:free",
-          name: "Minmax M2 (free)",
+          name: "MiniMax M2 (free)",
+        },
+        {
+          id: "anthropic/claude-sonnet-4.5",
+          name: "Claude Sonnet 4.5",
         },
       ],
     },
