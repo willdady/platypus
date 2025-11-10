@@ -14,7 +14,10 @@ const main = async () => {
     await db
       .insert(organisation)
       .values({ id: "default", name: "Default" })
-      .onConflictDoUpdate({ target: organisation.id, set: { name: "Default" } });
+      .onConflictDoUpdate({
+        target: organisation.id,
+        set: { name: "Default" },
+      });
     console.log("- Default organisation upserted.");
 
     console.log("Upserting default workspace...");

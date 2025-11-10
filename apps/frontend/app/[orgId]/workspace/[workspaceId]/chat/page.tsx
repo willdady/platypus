@@ -21,7 +21,14 @@ const ChatPage = async ({
   const models: Model[] = data.results;
   const initialModelId = models[0].id;
 
-  return <Chat orgId={orgId} workspaceId={workspaceId} models={models} initialModelId={initialModelId} />;
+  return (
+    <Chat
+      orgId={orgId}
+      workspaceId={workspaceId}
+      models={models}
+      initialModelId={initialModelId}
+    />
+  );
 };
 
 export default ChatPage;

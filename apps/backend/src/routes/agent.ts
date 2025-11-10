@@ -5,7 +5,7 @@ import { db } from "../index.ts";
 import { agent as agentTable } from "../db/schema.ts";
 import { agentCreateSchema, agentUpdateSchema } from "@agent-kit/schemas";
 import { eq } from "drizzle-orm";
-import { dedupeArray } from "../../../frontend/src/utils.ts";
+import { dedupeArray } from "../utils.ts";
 
 const agent = new Hono();
 

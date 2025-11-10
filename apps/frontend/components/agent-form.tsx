@@ -60,7 +60,9 @@ const AgentForm = ({
 
   const router = useRouter();
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+  const handleChange = (
+    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>,
+  ) => {
     const { id, value } = e.target;
     setFormData((prevData) => ({
       ...prevData,
@@ -103,13 +105,16 @@ const AgentForm = ({
         topK: formData.topK,
       };
 
-      const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/agents`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_BACKEND_URL}/agents`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(payload),
         },
-        body: JSON.stringify(payload),
-      });
+      );
 
       if (response.ok) {
         router.push(`/${orgId}/workspace/${workspaceId}`);
@@ -151,7 +156,11 @@ const AgentForm = ({
           </Field>
           <Field>
             <FieldLabel>Model</FieldLabel>
-            <Select value={formData.modelId} onValueChange={(value) => handleSelectChange("modelId", value)} disabled={isSubmitting}>
+            <Select
+              value={formData.modelId}
+              onValueChange={(value) => handleSelectChange("modelId", value)}
+              disabled={isSubmitting}
+            >
               <SelectTrigger disabled={isSubmitting}>
                 <SelectValue placeholder="Select a model" />
               </SelectTrigger>
@@ -206,7 +215,9 @@ const AgentForm = ({
                 <FieldLabel htmlFor={t.id}>
                   <div className="flex flex-col">
                     <p>{t.id}</p>
-                    <p className="text-xs text-muted-foreground">{t.description}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {t.description}
+                    </p>
                   </div>
                 </FieldLabel>
               </Field>
@@ -238,7 +249,9 @@ const AgentForm = ({
                   min="0"
                   step="0.1"
                   value={formData.temperature}
-                  onChange={(e) => handleFloatChange("temperature", e.target.value)}
+                  onChange={(e) =>
+                    handleFloatChange("temperature", e.target.value)
+                  }
                   disabled={isSubmitting}
                 />
               </Field>
@@ -271,7 +284,11 @@ const AgentForm = ({
         </Collapsible>
       </FieldSet>
 
-      <Button className="cursor-pointer" onClick={handleSubmit} disabled={isSubmitting}>
+      <Button
+        className="cursor-pointer"
+        onClick={handleSubmit}
+        disabled={isSubmitting}
+      >
         Save
       </Button>
     </div>

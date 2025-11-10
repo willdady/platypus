@@ -1,12 +1,17 @@
 "use client";
 
-import { Action, Actions } from "@/components/ui/shadcn-io/ai/actions";
 import {
   Conversation,
   ConversationContent,
   ConversationScrollButton,
 } from "@/components/ai-elements/conversation";
-import { Message, MessageContent } from "@/components/ui/shadcn-io/ai/message";
+import {
+  Message,
+  MessageContent,
+  MessageResponse,
+  MessageActions,
+  MessageAction,
+} from "@/components/ai-elements/message";
 import {
   PromptInput,
   PromptInputActionAddAttachments,
@@ -31,11 +36,10 @@ import {
   PromptInputTools,
   type PromptInputMessage,
 } from "@/components/ai-elements/prompt-input";
-import { Response } from "@/components/ui/shadcn-io/ai/response";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport } from "ai";
 import { CopyIcon, GlobeIcon, TrashIcon } from "lucide-react";
-import { useState, useRef } from "react";
+import { useState, useRef, Fragment } from "react";
 import { Model } from "@agent-kit/schemas";
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL;
@@ -80,97 +84,71 @@ export const Chat = ({
       <Conversation className="overflow-y-hidden" data-conversation>
         <ConversationContent>
           <div className="flex justify-center">
-            <div className="w-full xl:w-3/5">
+            <div className="w-full xl:w-4/5 flex flex-col gap-4">
               {messages.map((message) => (
-                <Message key={message.id} from={message.role}>
-                  <MessageContent>
-                    {message.parts?.map((part, i) => {
-                      switch (part.type) {
-                        case "text":
-                          return (
-                            <Response key={`${message.id}-${i}`}>
-                              {part.text}
-                            </Response>
-                          );
-                        case "tool-convertFahrenheitToCelsius":
-                          switch (part.state) {
-                            case "input-streaming":
-                              return (
-                                <pre key={`${message.id}-${i}`}>
-                                  {JSON.stringify(part.input, null, 2)}
-                                </pre>
-                              );
-                            case "input-available":
-                              return (
-                                <pre key={`${message.id}-${i}`}>
-                                  {JSON.stringify(part.input, null, 2)}
-                                </pre>
-                              );
-                            case "output-available":
-                              return (
-                                <pre key={`${message.id}-${i}`}>
-                                  {JSON.stringify(part.output, null, 2)}
-                                </pre>
-                              );
-                            case "output-error":
-                              return (
-                                <div key={`${message.id}-${i}`}>
-                                  Error: {part.errorText}
-                                </div>
-                              );
-                          }
-                        default:
-                          "text";
-                          return null;
-                      }
-                    })}
-                    {message.role === "assistant" && (
-                      <Actions className="mt-2">
-                        <Action
-                          onClick={() => {
-                            const text =
-                              message.parts
-                                ?.filter((part) => part.type === "text")
-                                .map((part) => part.text)
-                                .join("") || "";
-                            navigator.clipboard.writeText(text);
-                            setCopied(true);
-                            setTimeout(() => setCopied(false), 2000);
-                          }}
-                          tooltip={copied ? "Copied!" : "Copy (⌘C)"}
-                          variant={copied ? "secondary" : "ghost"}
-                          size="icon"
-                          label="Copy"
-                        >
-                          <CopyIcon className="size-4" />
-                        </Action>
-                        <Action
-                          onClick={() => {
-                            const index = messages.findIndex(
-                              (m) => m.id === message.id,
-                            );
-                            setMessages(messages.slice(0, index));
-                          }}
-                          tooltip="Delete this message and all after it"
-                          variant="ghost"
-                          size="icon"
-                          label="Delete"
-                        >
-                          <TrashIcon className="size-4" />
-                        </Action>
-                      </Actions>
-                    )}
-                  </MessageContent>
-                </Message>
+                <Fragment key={message.id}>
+                  {message.parts?.map((part, i) => {
+                    switch (part.type) {
+                      case "text":
+                        return (
+                          <Fragment key={`${message.id}-${i}`}>
+                            <Message key={message.id} from={message.role}>
+                              <MessageContent>
+                                <MessageResponse>{part.text}</MessageResponse>
+                              </MessageContent>
+                            </Message>
+                            {message.role === "assistant" && (
+                              <MessageActions className="mt-2">
+                                <MessageAction
+                                  className="cursor-pointer"
+                                  onClick={() => {
+                                    const text =
+                                      message.parts
+                                        ?.filter((part) => part.type === "text")
+                                        .map((part) => part.text)
+                                        .join("") || "";
+                                    navigator.clipboard.writeText(text);
+                                    setCopied(true);
+                                    setTimeout(() => setCopied(false), 2000);
+                                  }}
+                                  variant={copied ? "secondary" : "ghost"}
+                                  size="icon"
+                                  label="Copy"
+                                >
+                                  <CopyIcon className="size-4" />
+                                </MessageAction>
+                                <MessageAction
+                                  className="cursor-pointer"
+                                  onClick={() => {
+                                    const index = messages.findIndex(
+                                      (m) => m.id === message.id,
+                                    );
+                                    setMessages(messages.slice(0, index));
+                                  }}
+                                  variant="ghost"
+                                  size="icon"
+                                  label="Delete"
+                                >
+                                  <TrashIcon className="size-4" />
+                                </MessageAction>
+                              </MessageActions>
+                            )}
+                          </Fragment>
+                        );
+                      default:
+                        return null;
+                    }
+                  })}
+                </Fragment>
               ))}
             </div>
           </div>
         </ConversationContent>
-        <ConversationScrollButton />
+        <ConversationScrollButton className="cursor-pointer" />
       </Conversation>
       <div className="grid shrink-0 gap-4 p-4">
         <div className="flex justify-center">
-          <div className="w-full xl:w-3/5">
+          <div className="w-full xl:w-4/5">
             <PromptInputProvider>
               <PromptInput globalDrop multiple onSubmit={handleSubmit}>
                 <PromptInputHeader>
