@@ -8,6 +8,7 @@ import { agent } from "./routes/agent.ts";
 import { tool } from "./routes/tool.ts";
 import { model } from "./routes/model.ts";
 import { mcp } from "./routes/mcp.ts";
+import { provider } from "./routes/provider.ts";
 
 const ALLOWED_ORIGINS = process.env.ALLOWED_ORIGINS!.split(",");
 
@@ -36,5 +37,6 @@ app.route("/agents", agent);
 app.route("/tools", tool);
 app.route("/models", model);
 app.route("/mcps", mcp);
+app.route("/providers", provider);
 
 export default app;

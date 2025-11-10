@@ -1,0 +1,20 @@
+meta {
+  name: Get Provider
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{host}}/providers/:providerId
+  body: none
+  auth: inherit
+}
+
+params:path {
+  providerId: 
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

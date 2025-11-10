@@ -22,7 +22,7 @@ agent.post("/", sValidator("json", agentCreateSchema), async (c) => {
       ...data,
     })
     .returning();
-  return c.json(record, 201);
+  return c.json(record[0], 201);
 });
 
 /** List all agents */

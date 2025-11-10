@@ -11,7 +11,7 @@ export default async function WorkspaceSettingsLayout({
 
   return (
     <div className="flex justify-center">
-      <div className="flex w-4/5">
+      <div className="flex w-4/5 max-w-4xl">
         <div className="w-64">
           <SettingsMenu orgId={orgId} workspaceId={workspaceId} />
         </div>

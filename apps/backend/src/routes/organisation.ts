@@ -24,7 +24,7 @@ organisation.post(
         ...data,
       })
       .returning();
-    return c.json(record, 201);
+    return c.json(record[0], 201);
   },
 );
 

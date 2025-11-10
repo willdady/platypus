@@ -1,0 +1,20 @@
+meta {
+  name: Delete Provider
+  type: http
+  seq: 4
+}
+
+delete {
+  url: {{host}}/providers/:providerId
+  body: none
+  auth: inherit
+}
+
+params:path {
+  providerId: 
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

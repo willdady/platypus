@@ -46,7 +46,7 @@ const ProviderForm = ({
     authType: "None",
     bearerToken: "",
     headers: {},
-    modelIds: []
+    modelIds: [],
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [headersError, setHeadersError] = useState<string | null>(null);
@@ -238,10 +238,7 @@ const ProviderForm = ({
             <FieldLabel htmlFor="modelIds">Model IDs</FieldLabel>
             <Textarea
               id="modelIds"
-              placeholder={[
-                'gpt-4',
-                'gpt-3.5-turbo'
-              ].join('\n')}
+              placeholder={["gpt-4", "gpt-3.5-turbo"].join("\n")}
               value={modelIdsString}
               onChange={handleChange}
               disabled={isSubmitting}
@@ -265,7 +262,6 @@ const ProviderForm = ({
             </FieldDescription>
             {headersError && <FieldError>{headersError}</FieldError>}
           </Field>
-
         </FieldGroup>
       </FieldSet>
 

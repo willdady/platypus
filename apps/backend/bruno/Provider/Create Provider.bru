@@ -1,0 +1,31 @@
+meta {
+  name: Create Provider
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{host}}/providers
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "workspaceId": "default",
+    "name": "Open Router",
+    "providerType": "OpenAI",
+    "apiKey": "sk-1234",
+    "baseUrl": "",
+    "authType": "Bearer",
+    "headers": {
+      "foo": "bar"
+    },
+    "modelIds": ["google/gemini-2.5-flash"]
+  }
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

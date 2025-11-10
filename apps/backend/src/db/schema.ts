@@ -54,3 +54,20 @@ export const mcp = pgTable("mcp", (t) => ({
   createdAt: t.timestamp("created_at").notNull().defaultNow(),
   updatedAt: t.timestamp("updated_at").notNull().defaultNow(),
 }));
+
+export const provider = pgTable("provider", (t) => ({
+  id: t.text("id").primaryKey(),
+  workspaceId: t.text("workspace_id").references(() => workspace.id, {
+    onDelete: "cascade",
+  }),
+  name: t.text("name").notNull(),
+  providerType: t.text("provider_type").notNull(),
+  apiKey: t.text("api_key").notNull(),
+  baseUrl: t.text("base_url"),
+  authType: t.text("auth_type").notNull(),
+  bearerToken: t.text("bearer_token"),
+  headers: t.jsonb().$type<Record<string, string>>(),
+  modelIds: t.jsonb().$type<string[]>().notNull(),
+  createdAt: t.timestamp("created_at").notNull().defaultNow(),
+  updatedAt: t.timestamp("updated_at").notNull().defaultNow(),
+}));
