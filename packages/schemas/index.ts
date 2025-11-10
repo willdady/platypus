@@ -127,3 +127,39 @@ export const modelSchema = z.object({
 });
 
 export type Model = z.infer<typeof modelSchema>;
+
+// Provider
+
+export const providerSchema = z.object({
+  id: z.string(),
+  workspaceId: z.string(),
+  name: z.string(),
+  providerType: z.enum(["OpenAI"]),
+  apiKey: z.string(),
+  baseUrl: z.string().optional(),
+  authType: z.enum(["None", "Bearer"]),
+  bearerToken: z.string().optional(),
+  createdAt: z.date(),
+  updatedAt: z.date(),
+});
+
+export type Provider = z.infer<typeof providerSchema>;
+
+export const providerCreateSchema = providerSchema.pick({
+  workspaceId: true,
+  name: true,
+  providerType: true,
+  apiKey: true,
+  baseUrl: true,
+  authType: true,
+  bearerToken: true,
+});
+
+export const providerUpdateSchema = providerSchema.pick({
+  name: true,
+  providerType: true,
+  apiKey: true,
+  baseUrl: true,
+  authType: true,
+  bearerToken: true,
+});
