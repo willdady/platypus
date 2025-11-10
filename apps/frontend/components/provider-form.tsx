@@ -5,10 +5,11 @@ import {
   FieldLabel,
   FieldGroup,
   FieldSet,
-  FieldLegend,
+  FieldError,
   FieldDescription,
 } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -44,8 +45,11 @@ const ProviderForm = ({
     baseUrl: "",
     authType: "None",
     bearerToken: "",
+    headers: {}
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [headersError, setHeadersError] = useState<string | null>(null);
+  const [headersString, setHeadersString] = useState("{}");
 
   const router = useRouter();
 
@@ -53,10 +57,24 @@ const ProviderForm = ({
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>,
   ) => {
     const { id, value } = e.target;
-    setFormData((prevData) => ({
-      ...prevData,
-      [id]: value,
-    }));
+    if (id === "headers") {
+      setHeadersString(value);
+      try {
+        const parsed = JSON.parse(value);
+        setFormData((prevData) => ({
+          ...prevData,
+          headers: parsed,
+        }));
+        setHeadersError(null);
+      } catch {
+        setHeadersError("Invalid JSON");
+      }
+    } else {
+      setFormData((prevData) => ({
+        ...prevData,
+        [id]: value,
+      }));
+    }
   };
 
   const handleSelectChange = (id: string, value: string) => {
@@ -78,6 +96,7 @@ const ProviderForm = ({
         authType: formData.authType,
         bearerToken:
           formData.authType === "Bearer" ? formData.bearerToken : undefined,
+        headers: formData.headers,
       };
 
       const response = await fetch(
@@ -166,8 +185,8 @@ const ProviderForm = ({
             </FieldDescription>
           </Field>
 
-          <FieldGroup className="grid grid-cols-2 gap-4">
-            <Field>
+          <FieldGroup className="grid grid-cols-3 gap-4">
+            <Field className="col-span-1">
               <FieldLabel htmlFor="authType">Auth</FieldLabel>
               <Select
                 value={formData.authType}
@@ -188,7 +207,7 @@ const ProviderForm = ({
             </Field>
 
             {formData.authType === "Bearer" && (
-              <Field>
+              <Field className="col-span-2">
                 <FieldLabel htmlFor="bearerToken">Bearer Token</FieldLabel>
                 <Input
                   id="bearerToken"
@@ -201,13 +220,28 @@ const ProviderForm = ({
               </Field>
             )}
           </FieldGroup>
+
+          <Field>
+            <FieldLabel htmlFor="headers">Headers</FieldLabel>
+            <Textarea
+              id="headers"
+              placeholder='{"Header Name": "Header Value"}'
+              value={headersString}
+              onChange={handleChange}
+              disabled={isSubmitting}
+            />
+            <FieldDescription>
+              Optional headers as JSON object.
+            </FieldDescription>
+            {headersError && <FieldError>{headersError}</FieldError>}
+          </Field>
         </FieldGroup>
       </FieldSet>
 
       <Button
         className="cursor-pointer"
         onClick={handleSubmit}
-        disabled={isSubmitting}
+        disabled={isSubmitting || !!headersError}
       >
         Save
       </Button>

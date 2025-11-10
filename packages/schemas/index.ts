@@ -139,6 +139,7 @@ export const providerSchema = z.object({
   baseUrl: z.string().optional(),
   authType: z.enum(["None", "Bearer"]),
   bearerToken: z.string().optional(),
+  headers: z.record(z.string(), z.string()).optional(),
   createdAt: z.date(),
   updatedAt: z.date(),
 });
@@ -153,6 +154,7 @@ export const providerCreateSchema = providerSchema.pick({
   baseUrl: true,
   authType: true,
   bearerToken: true,
+  headers: true,
 });
 
 export const providerUpdateSchema = providerSchema.pick({
@@ -162,4 +164,5 @@ export const providerUpdateSchema = providerSchema.pick({
   baseUrl: true,
   authType: true,
   bearerToken: true,
+  headers: true,
 });
