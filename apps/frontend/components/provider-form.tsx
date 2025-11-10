@@ -45,11 +45,13 @@ const ProviderForm = ({
     baseUrl: "",
     authType: "None",
     bearerToken: "",
-    headers: {}
+    headers: {},
+    modelIds: []
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [headersError, setHeadersError] = useState<string | null>(null);
   const [headersString, setHeadersString] = useState("{}");
+  const [modelIdsString, setModelIdsString] = useState("");
 
   const router = useRouter();
 
@@ -69,6 +71,16 @@ const ProviderForm = ({
       } catch {
         setHeadersError("Invalid JSON");
       }
+    } else if (id === "modelIds") {
+      setModelIdsString(value);
+      const parsed = value
+        .split("\n")
+        .map((line) => line.trim())
+        .filter((line) => line.length > 0);
+      setFormData((prevData) => ({
+        ...prevData,
+        modelIds: parsed,
+      }));
     } else {
       setFormData((prevData) => ({
         ...prevData,
@@ -97,6 +109,7 @@ const ProviderForm = ({
         bearerToken:
           formData.authType === "Bearer" ? formData.bearerToken : undefined,
         headers: formData.headers,
+        modelIds: formData.modelIds,
       };
 
       const response = await fetch(
@@ -170,21 +183,6 @@ const ProviderForm = ({
             />
           </Field>
 
-          <Field>
-            <FieldLabel htmlFor="baseUrl">Base URL</FieldLabel>
-            <Input
-              id="baseUrl"
-              type="url"
-              placeholder="https://api.openai.com/v1"
-              value={formData.baseUrl}
-              onChange={handleChange}
-              disabled={isSubmitting}
-            />
-            <FieldDescription>
-              Optional base URL for the provider.
-            </FieldDescription>
-          </Field>
-
           <FieldGroup className="grid grid-cols-3 gap-4">
             <Field className="col-span-1">
               <FieldLabel htmlFor="authType">Auth</FieldLabel>
@@ -222,6 +220,38 @@ const ProviderForm = ({
           </FieldGroup>
 
           <Field>
+            <FieldLabel htmlFor="baseUrl">Base URL</FieldLabel>
+            <Input
+              id="baseUrl"
+              type="url"
+              placeholder="https://api.openai.com/v1"
+              value={formData.baseUrl}
+              onChange={handleChange}
+              disabled={isSubmitting}
+            />
+            <FieldDescription>
+              Optional base URL for the provider.
+            </FieldDescription>
+          </Field>
+
+          <Field>
+            <FieldLabel htmlFor="modelIds">Model IDs</FieldLabel>
+            <Textarea
+              id="modelIds"
+              placeholder={[
+                'gpt-4',
+                'gpt-3.5-turbo'
+              ].join('\n')}
+              value={modelIdsString}
+              onChange={handleChange}
+              disabled={isSubmitting}
+            />
+            <FieldDescription>
+              Model IDs to allow for this provider. One per line.
+            </FieldDescription>
+          </Field>
+
+          <Field>
             <FieldLabel htmlFor="headers">Headers</FieldLabel>
             <Textarea
               id="headers"
@@ -235,6 +265,7 @@ const ProviderForm = ({
             </FieldDescription>
             {headersError && <FieldError>{headersError}</FieldError>}
           </Field>
+
         </FieldGroup>
       </FieldSet>
 
