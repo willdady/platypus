@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { type UIMessage, validateUIMessages } from "ai";
 import { openrouter } from "@openrouter/ai-sdk-provider";
 import { Experimental_Agent as Agent, stepCountIs } from "ai";
+import { getTool } from "../tools/index.ts";
 
 const chat = new Hono();
 
@@ -22,6 +23,10 @@ chat.post("/", async (c) => {
 
   const quickChatAgent = new Agent({
     model: openrouter(model),
+    // FIXME: Tool is just for testing
+    tools: {
+      convertFahrenheitToCelsius: getTool('convertFahrenheitToCelsius')
+    },
     stopWhen: stepCountIs(20),
   });
 
