@@ -41,6 +41,11 @@ import { DefaultChatTransport } from "ai";
 import { CopyIcon, GlobeIcon, TrashIcon } from "lucide-react";
 import { useState, useRef, Fragment } from "react";
 import { Model } from "@agent-kit/schemas";
+import {
+  Reasoning,
+  ReasoningContent,
+  ReasoningTrigger,
+} from "./ai-elements/reasoning";
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL;
 
@@ -135,6 +140,24 @@ export const Chat = ({
                             )}
                           </Fragment>
                         );
+                      case "reasoning":
+                        return (
+                          <Fragment key={`${message.id}-${i}`}>
+                            <Reasoning
+                              key={message.id}
+                              isStreaming={
+                                status === "streaming" &&
+                                i === message.parts.length - 1 &&
+                                message.id === messages.at(-1)?.id
+                              }
+                              defaultOpen={false}
+                            >
+                              <ReasoningTrigger className="cursor-pointer" />
+                              <ReasoningContent>{part.text}</ReasoningContent>
+                            </Reasoning>
+                          </Fragment>
+                        );
+                        
                       default:
                         return null;
                     }
