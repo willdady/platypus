@@ -18,6 +18,7 @@ interface SettingsMenuProps {
 
 export function SettingsMenu({ orgId, workspaceId }: SettingsMenuProps) {
   const pathname = usePathname();
+  const workspaceHref = `/${orgId}/workspace/${workspaceId}/settings`;
   const providersHref = `/${orgId}/workspace/${workspaceId}/settings/providers`;
 
   return (
@@ -26,7 +27,15 @@ export function SettingsMenu({ orgId, workspaceId }: SettingsMenuProps) {
         <SidebarGroupContent>
           <SidebarMenu>
             <SidebarMenuItem>
-              <SidebarMenuButton asChild isActive={pathname === providersHref}>
+              <SidebarMenuButton asChild isActive={pathname === workspaceHref}>
+                <Link href={workspaceHref}>
+                  {/* <item.icon /> */}
+                  <span>Workspace</span>
+                </Link>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+            <SidebarMenuItem>
+              <SidebarMenuButton asChild isActive={pathname.startsWith(providersHref)}>
                 <Link href={providersHref}>
                   {/* <item.icon /> */}
                   <span>Providers</span>

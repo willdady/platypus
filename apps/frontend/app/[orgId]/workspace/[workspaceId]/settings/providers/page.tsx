@@ -1,4 +1,6 @@
-import { ProviderForm } from "@/components/provider-form";
+import { ProvidersList } from "@/components/providers-list";
+import { Button } from "@/components/ui/button";
+import Link from "next/link";
 
 const ProvidersPage = async ({
   params,
@@ -7,7 +9,18 @@ const ProvidersPage = async ({
 }) => {
   const { orgId, workspaceId } = await params;
 
-  return <ProviderForm orgId={orgId} workspaceId={workspaceId} />;
+  return (
+    <div>
+      <ProvidersList orgId={orgId} workspaceId={workspaceId} />
+      <Button asChild>
+        <Link
+          href={`/${orgId}/workspace/${workspaceId}/settings/providers/create`}
+        >
+          Add provider
+        </Link>
+      </Button>
+    </div>
+  );
 };
 
 export default ProvidersPage;
