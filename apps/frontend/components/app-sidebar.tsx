@@ -11,7 +11,7 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
-import { Home, Settings, Zap, Bot, Unplug } from "lucide-react";
+import { Home, Settings, Zap, Bot } from "lucide-react";
 
 export function AppSidebar({
   orgId,
@@ -35,11 +35,6 @@ export function AppSidebar({
       title: "Agents",
       url: `/${orgId}/workspace/${workspaceId}/agents`,
       icon: Bot,
-    },
-    {
-      title: "MCP",
-      url: `/${orgId}/workspace/${workspaceId}/mcp`,
-      icon: Unplug,
     },
   ];
 

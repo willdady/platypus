@@ -20,9 +20,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { type Provider } from "@agent-kit/schemas";
+import useSWR from "swr";
 
 type ProviderFormData = Omit<
   Provider,
@@ -33,10 +34,12 @@ const ProviderForm = ({
   classNames,
   orgId,
   workspaceId,
+  providerId,
 }: {
   classNames?: string;
   orgId: string;
   workspaceId: string;
+  providerId?: string;
 }) => {
   const [formData, setFormData] = useState<ProviderFormData>({
     providerType: "OpenAI",
@@ -54,6 +57,31 @@ const ProviderForm = ({
   const [modelIdsString, setModelIdsString] = useState("");
 
   const router = useRouter();
+
+  const fetcher = (url: string) => fetch(url).then((res) => res.json());
+  const { data: provider, isLoading } = useSWR<Provider>(
+    providerId
+      ? `${process.env.NEXT_PUBLIC_BACKEND_URL}/providers/${providerId}`
+      : null,
+    fetcher,
+  );
+
+  useEffect(() => {
+    if (provider) {
+      setFormData({
+        providerType: provider.providerType,
+        name: provider.name,
+        apiKey: provider.apiKey,
+        baseUrl: provider.baseUrl || "",
+        authType: provider.authType,
+        bearerToken: provider.bearerToken || "",
+        headers: provider.headers || {},
+        modelIds: provider.modelIds || [],
+      });
+      setHeadersString(JSON.stringify(provider.headers || {}, null, 2));
+      setModelIdsString((provider.modelIds || []).join("\n"));
+    }
+  }, [provider]);
 
   const handleChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>,
@@ -112,16 +140,19 @@ const ProviderForm = ({
         modelIds: formData.modelIds,
       };
 
-      const response = await fetch(
-        `${process.env.NEXT_PUBLIC_BACKEND_URL}/providers`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(payload),
+      const url = providerId
+        ? `${process.env.NEXT_PUBLIC_BACKEND_URL}/providers/${providerId}`
+        : `${process.env.NEXT_PUBLIC_BACKEND_URL}/providers`;
+
+      const method = providerId ? "PUT" : "POST";
+
+      const response = await fetch(url, {
+        method,
+        headers: {
+          "Content-Type": "application/json",
         },
-      );
+        body: JSON.stringify(payload),
+      });
 
       if (response.ok) {
         router.push(`/${orgId}/workspace/${workspaceId}/settings`);
@@ -134,6 +165,10 @@ const ProviderForm = ({
       setIsSubmitting(false);
     }
   };
+
+  if (isLoading) {
+    return <div className={classNames}>Loading...</div>;
+  }
 
   return (
     <div className={classNames}>
@@ -270,7 +305,7 @@ const ProviderForm = ({
         onClick={handleSubmit}
         disabled={isSubmitting || !!headersError}
       >
-        Save
+        {providerId ? "Update" : "Save"}
       </Button>
     </div>
   );

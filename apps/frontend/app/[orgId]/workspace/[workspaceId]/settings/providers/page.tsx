@@ -1,5 +1,6 @@
 import { ProvidersList } from "@/components/providers-list";
 import { Button } from "@/components/ui/button";
+import { Plus } from "lucide-react";
 import Link from "next/link";
 
 const ProvidersPage = async ({
@@ -16,7 +17,7 @@ const ProvidersPage = async ({
         <Link
           href={`/${orgId}/workspace/${workspaceId}/settings/providers/create`}
         >
-          Add provider
+          <Plus /> Add provider
         </Link>
       </Button>
     </div>

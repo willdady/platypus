@@ -3,12 +3,12 @@ import { Button } from "@/components/ui/button";
 import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
 
-const ProviderCreatePage = async ({
+const ProviderEditPage = async ({
   params,
 }: {
-  params: Promise<{ orgId: string; workspaceId: string }>;
+  params: Promise<{ orgId: string; workspaceId: string; providerId: string }>;
 }) => {
-  const { orgId, workspaceId } = await params;
+  const { orgId, workspaceId, providerId } = await params;
 
   return (
     <div>
@@ -17,10 +17,14 @@ const ProviderCreatePage = async ({
           <ArrowLeft /> Back
         </Link>
       </Button>
-      <h1 className="text-2xl mb-4 font-bold">Create Provider</h1>
-      <ProviderForm orgId={orgId} workspaceId={workspaceId} />
+      <h1 className="text-2xl mb-4 font-bold">Edit Provider</h1>
+      <ProviderForm
+        orgId={orgId}
+        workspaceId={workspaceId}
+        providerId={providerId}
+      />
     </div>
   );
 };
 
-export default ProviderCreatePage;
+export default ProviderEditPage;

@@ -15,7 +15,7 @@ export default async function WorkspaceSettingsLayout({
         <div className="w-48 fixed top-7 pt-4">
           <SettingsMenu orgId={orgId} workspaceId={workspaceId} />
         </div>
-        <div className="flex-1 p-2 ml-48">{children}</div>
+        <div className="flex-1 p-2 ml-48 pb-8">{children}</div>
       </div>
     </div>
   );

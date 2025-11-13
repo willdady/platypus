@@ -18,7 +18,7 @@ const ProvidersList = ({
 }) => {
   const { data, error, isLoading } = useSWR<{ results: Provider[] }>(
     `${process.env.NEXT_PUBLIC_BACKEND_URL}/providers`,
-    fetcher
+    fetcher,
   );
 
   if (isLoading || error) return null; // FIXME
@@ -35,7 +35,7 @@ const ProvidersList = ({
                 <ItemTitle>{provider.name}</ItemTitle>
               </ItemContent>
               <ItemActions>
-                <Pencil className="size-5" />
+                <Pencil className="size-4" />
               </ItemActions>
             </Link>
           </Item>

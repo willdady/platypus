@@ -8,6 +8,7 @@ import {
   SidebarMenuItem,
   SidebarMenu,
 } from "@/components/ui/sidebar";
+import { Settings, Unplug, Wrench } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
@@ -29,16 +30,24 @@ export function SettingsMenu({ orgId, workspaceId }: SettingsMenuProps) {
             <SidebarMenuItem>
               <SidebarMenuButton asChild isActive={pathname === workspaceHref}>
                 <Link href={workspaceHref}>
-                  {/* <item.icon /> */}
-                  <span>Workspace</span>
+                  <Settings /> Workspace
                 </Link>
               </SidebarMenuButton>
             </SidebarMenuItem>
             <SidebarMenuItem>
-              <SidebarMenuButton asChild isActive={pathname.startsWith(providersHref)}>
+              <SidebarMenuButton
+                asChild
+                isActive={pathname.startsWith(providersHref)}
+              >
                 <Link href={providersHref}>
-                  {/* <item.icon /> */}
-                  <span>Providers</span>
+                  <Unplug /> Providers
+                </Link>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+            <SidebarMenuItem>
+              <SidebarMenuButton asChild>
+                <Link href={providersHref}>
+                  <Wrench /> MCP
                 </Link>
               </SidebarMenuButton>
             </SidebarMenuItem>

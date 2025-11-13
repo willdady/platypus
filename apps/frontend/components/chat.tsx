@@ -46,7 +46,13 @@ import {
   ReasoningContent,
   ReasoningTrigger,
 } from "./ai-elements/reasoning";
-import { Tool, ToolContent, ToolHeader, ToolInput, ToolOutput } from "./ai-elements/tool";
+import {
+  Tool,
+  ToolContent,
+  ToolHeader,
+  ToolInput,
+  ToolOutput,
+} from "./ai-elements/tool";
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL;
 
@@ -159,7 +165,10 @@ export const Chat = ({
                       const toolPart = part as ToolUIPart;
                       return (
                         <Tool key={`${message.id}-${i}`}>
-                          <ToolHeader state={toolPart.state} type={toolPart.type} />
+                          <ToolHeader
+                            state={toolPart.state}
+                            type={toolPart.type}
+                          />
                           <ToolContent>
                             <ToolInput input={toolPart.input} />
                             <ToolOutput
