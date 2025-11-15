@@ -2,7 +2,7 @@ import { type Tool } from "ai";
 import { convertFahrenheitToCelsius } from "./math.ts";
 
 type ToolMetadata = {
-  category?: string
+  category?: string;
 };
 
 type RegisteredTool = { tool: Tool<any, any> } & ToolMetadata;
@@ -11,7 +11,11 @@ const TOOLS_REGISTRY: {
   [toolId: string]: RegisteredTool;
 } = {};
 
-export const registerTool = <T extends Tool>(toolId: string, tool: T, metadata?: ToolMetadata): RegisteredTool => {
+export const registerTool = <T extends Tool>(
+  toolId: string,
+  tool: T,
+  metadata?: ToolMetadata,
+): RegisteredTool => {
   if (toolId in TOOLS_REGISTRY) {
     throw new Error(`Tool with id '${toolId}' has already been registered.`);
   }
@@ -29,4 +33,6 @@ export const getTool = (toolId: string): RegisteredTool => {
 export const getTools = (): typeof TOOLS_REGISTRY => TOOLS_REGISTRY;
 
 // REGISTER TOOLS HERE!
-registerTool("convertFahrenheitToCelsius", convertFahrenheitToCelsius, { category: 'Math' });
+registerTool("convertFahrenheitToCelsius", convertFahrenheitToCelsius, {
+  category: "Math",
+});

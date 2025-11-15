@@ -92,8 +92,6 @@ export const Chat = ({
     transport: new DefaultChatTransport({
       api: `${BACKEND_URL}/chat`,
       body: {
-        modelId,
-        providerId,
         orgId,
         workspaceId,
       },
@@ -116,7 +114,7 @@ export const Chat = ({
     if (!(hasText || hasAttachments)) {
       return;
     }
-    sendMessage({ text: message.text! });
+    sendMessage({ text: message.text! }, { body: { providerId, modelId } });
   };
 
   return (

@@ -46,7 +46,10 @@ export function SettingsMenu({ orgId, workspaceId }: SettingsMenuProps) {
               </SidebarMenuButton>
             </SidebarMenuItem>
             <SidebarMenuItem>
-              <SidebarMenuButton asChild isActive={pathname.startsWith(mcpHref)}>
+              <SidebarMenuButton
+                asChild
+                isActive={pathname.startsWith(mcpHref)}
+              >
                 <Link href={mcpHref}>
                   <Wrench /> MCP
                 </Link>

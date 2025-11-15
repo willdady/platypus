@@ -7,12 +7,7 @@ const ChatPage = async ({
 }) => {
   const { orgId, workspaceId } = await params;
 
-  return (
-    <Chat
-      orgId={orgId}
-      workspaceId={workspaceId}
-    />
-  );
+  return <Chat orgId={orgId} workspaceId={workspaceId} />;
 };
 
 export default ChatPage;

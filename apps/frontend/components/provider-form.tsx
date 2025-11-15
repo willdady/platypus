@@ -155,7 +155,7 @@ const ProviderForm = ({
       });
 
       if (response.ok) {
-        router.push(`/${orgId}/workspace/${workspaceId}/settings`);
+        router.push(`/${orgId}/workspace/${workspaceId}/settings/providers`);
       } else {
         console.error("Failed to save provider");
       }
@@ -190,6 +190,7 @@ const ProviderForm = ({
                 <SelectGroup>
                   <SelectLabel>Provider Types</SelectLabel>
                   <SelectItem value="OpenAI">OpenAI</SelectItem>
+                  <SelectItem value="OpenRouter">OpenRouter</SelectItem>
                 </SelectGroup>
               </SelectContent>
             </Select>
@@ -259,7 +260,7 @@ const ProviderForm = ({
             <Input
               id="baseUrl"
               type="url"
-              placeholder="https://api.openai.com/v1"
+              placeholder="https://api.example.com/"
               value={formData.baseUrl}
               onChange={handleChange}
               disabled={isSubmitting}

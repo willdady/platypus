@@ -145,7 +145,7 @@ export const providerSchema = z.object({
   id: z.string(),
   workspaceId: z.string(),
   name: z.string(),
-  providerType: z.enum(["OpenAI"]),
+  providerType: z.enum(["OpenAI", "OpenRouter"]),
   apiKey: z.string(),
   baseUrl: z.string().optional(),
   authType: z.enum(["None", "Bearer"]),

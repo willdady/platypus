@@ -14,9 +14,10 @@
   },
   "dependencies": {
     "@agent-kit/schemas": "workspace:*",
+    "@ai-sdk/openai": "^2.0.67",
     "@hono/node-server": "^1.19.6",
     "@hono/standard-validator": "^0.1.5",
-    "@openrouter/ai-sdk-provider": "^1.2.0",
+    "@openrouter/ai-sdk-provider": "^1.2.3",
     "ai": "^5.0.86",
     "drizzle-orm": "^0.44.7",
     "hono": "^4.10.4",
