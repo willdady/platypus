@@ -49,8 +49,10 @@ export const mcp = pgTable("mcp", (t) => ({
   workspaceId: t.text("workspace_id").references(() => workspace.id, {
     onDelete: "cascade",
   }),
+  name: t.text("name").notNull(),
   url: t.text("url"),
-  token: t.text("token"),
+  authType: t.text("auth_type").notNull(),
+  bearerToken: t.text("bearer_token"),
   createdAt: t.timestamp("created_at").notNull().defaultNow(),
   updatedAt: t.timestamp("updated_at").notNull().defaultNow(),
 }));

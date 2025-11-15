@@ -1,0 +1,29 @@
+meta {
+  name: Update MCP
+  type: http
+  seq: 4
+}
+
+put {
+  url: {{host}}/mcps/:mcpId
+  body: json
+  auth: inherit
+}
+
+params:path {
+  mcpId:
+}
+
+body:json {
+  {
+    "name": "My Updated MCP Server",
+    "url": "https://example.com/mcp/v2",
+    "authType": "Bearer",
+    "bearerToken": "updated-token"
+  }
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

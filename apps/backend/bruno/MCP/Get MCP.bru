@@ -1,0 +1,20 @@
+meta {
+  name: Get MCP
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{host}}/mcps/:mcpId
+  body: none
+  auth: inherit
+}
+
+params:path {
+  mcpId:
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

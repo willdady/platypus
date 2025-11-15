@@ -1,0 +1,26 @@
+meta {
+  name: Create MCP
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{host}}/mcps
+  body: json
+  auth: inherit
+}
+
+body:json {
+  {
+    "workspaceId": "default",
+    "name": "My MCP Server",
+    "url": "https://example.com/mcp",
+    "authType": "Bearer",
+    "bearerToken": "your-token-here"
+  }
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

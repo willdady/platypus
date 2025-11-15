@@ -111,13 +111,31 @@ export const toolUpdateSchema = toolSchema.pick({
 
 export const mcpSchema = z.object({
   id: z.string(),
+  workspaceId: z.string(),
+  name: z.string(),
   url: z.string().optional(),
-  token: z.string().optional(),
+  authType: z.enum(["None", "Bearer"]),
+  bearerToken: z.string().optional(),
   createdAt: z.date(),
   updatedAt: z.date(),
 });
 
 export type MCP = z.infer<typeof mcpSchema>;
+
+export const mcpCreateSchema = mcpSchema.pick({
+  workspaceId: true,
+  name: true,
+  url: true,
+  authType: true,
+  bearerToken: true,
+});
+
+export const mcpUpdateSchema = mcpSchema.pick({
+  name: true,
+  url: true,
+  authType: true,
+  bearerToken: true,
+});
 
 // Model
 

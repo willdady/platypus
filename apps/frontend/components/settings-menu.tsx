@@ -21,6 +21,7 @@ export function SettingsMenu({ orgId, workspaceId }: SettingsMenuProps) {
   const pathname = usePathname();
   const workspaceHref = `/${orgId}/workspace/${workspaceId}/settings`;
   const providersHref = `/${orgId}/workspace/${workspaceId}/settings/providers`;
+  const mcpHref = `/${orgId}/workspace/${workspaceId}/settings/mcp`;
 
   return (
     <SidebarContent>
@@ -45,8 +46,8 @@ export function SettingsMenu({ orgId, workspaceId }: SettingsMenuProps) {
               </SidebarMenuButton>
             </SidebarMenuItem>
             <SidebarMenuItem>
-              <SidebarMenuButton asChild>
-                <Link href={providersHref}>
+              <SidebarMenuButton asChild isActive={pathname.startsWith(mcpHref)}>
+                <Link href={mcpHref}>
                   <Wrench /> MCP
                 </Link>
               </SidebarMenuButton>

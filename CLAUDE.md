@@ -146,3 +146,5 @@ These schemas are imported by both frontend and backend to ensure type safety ac
 - Postgres 18 is NOT supported due to Drizzle ORM compatibility issues
 - Currently only OpenRouter AI provider is fully implemented
 - Custom providers use OpenAI-compatible API format
+- When writing Typescript, format code matching the conventions used by Prettier.
+- This project uses Bruno, the API Client, for working with and testing the API endpoints. The Bruno files are stored under `apps/backend/bruno`.
