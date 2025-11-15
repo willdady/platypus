@@ -142,8 +142,6 @@ export const providerSchema = z.object({
   providerType: z.enum(["OpenAI", "OpenRouter"]),
   apiKey: z.string(),
   baseUrl: z.string().optional(),
-  authType: z.enum(["None", "Bearer"]),
-  bearerToken: z.string().optional(),
   headers: z.record(z.string(), z.string()).optional(),
   modelIds: z.array(z.string()),
   createdAt: z.date(),
@@ -158,8 +156,6 @@ export const providerCreateSchema = providerSchema.pick({
   providerType: true,
   apiKey: true,
   baseUrl: true,
-  authType: true,
-  bearerToken: true,
   headers: true,
   modelIds: true,
 });
@@ -169,8 +165,6 @@ export const providerUpdateSchema = providerSchema.pick({
   providerType: true,
   apiKey: true,
   baseUrl: true,
-  authType: true,
-  bearerToken: true,
   headers: true,
   modelIds: true,
 });

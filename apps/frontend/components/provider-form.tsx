@@ -46,8 +46,6 @@ const ProviderForm = ({
     name: "",
     apiKey: "",
     baseUrl: "",
-    authType: "None",
-    bearerToken: "",
     headers: {},
     modelIds: [],
   });
@@ -73,8 +71,6 @@ const ProviderForm = ({
         name: provider.name,
         apiKey: provider.apiKey,
         baseUrl: provider.baseUrl || "",
-        authType: provider.authType,
-        bearerToken: provider.bearerToken || "",
         headers: provider.headers || {},
         modelIds: provider.modelIds || [],
       });
@@ -133,9 +129,6 @@ const ProviderForm = ({
         providerType: formData.providerType,
         apiKey: formData.apiKey,
         baseUrl: formData.baseUrl || undefined,
-        authType: formData.authType,
-        bearerToken:
-          formData.authType === "Bearer" ? formData.bearerToken : undefined,
         headers: formData.headers,
         modelIds: formData.modelIds,
       };
@@ -218,42 +211,6 @@ const ProviderForm = ({
               disabled={isSubmitting}
             />
           </Field>
-
-          <FieldGroup className="grid grid-cols-3 gap-4">
-            <Field className="col-span-1">
-              <FieldLabel htmlFor="authType">Auth</FieldLabel>
-              <Select
-                value={formData.authType}
-                onValueChange={(value) => handleSelectChange("authType", value)}
-                disabled={isSubmitting}
-              >
-                <SelectTrigger disabled={isSubmitting}>
-                  <SelectValue placeholder="Select authentication type" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectGroup>
-                    <SelectLabel>Authentication</SelectLabel>
-                    <SelectItem value="None">None</SelectItem>
-                    <SelectItem value="Bearer">Bearer</SelectItem>
-                  </SelectGroup>
-                </SelectContent>
-              </Select>
-            </Field>
-
-            {formData.authType === "Bearer" && (
-              <Field className="col-span-2">
-                <FieldLabel htmlFor="bearerToken">Bearer Token</FieldLabel>
-                <Input
-                  id="bearerToken"
-                  type="password"
-                  placeholder="Bearer token"
-                  value={formData.bearerToken}
-                  onChange={handleChange}
-                  disabled={isSubmitting}
-                />
-              </Field>
-            )}
-          </FieldGroup>
 
           <Field>
             <FieldLabel htmlFor="baseUrl">Base URL</FieldLabel>
