@@ -193,37 +193,61 @@ const AgentForm = ({
           </Field>
         </FieldGroup>
 
-        <FieldSet>
-          <FieldLegend variant="label">Tools</FieldLegend>
-          <FieldGroup className="grid grid-cols-2 gap-4">
-            {tools.map((t: Tool) => (
-              <Field key={t.id} orientation="horizontal">
-                <Switch
-                  id={t.id}
-                  className="cursor-pointer"
-                  checked={formData.tools.includes(t.id)}
-                  onCheckedChange={(checked) => {
-                    setFormData((prevData) => {
-                      const newSelectedTools = checked
-                        ? [...prevData.tools, t.id]
-                        : prevData.tools.filter((id) => id !== t.id);
-                      return { ...prevData, tools: newSelectedTools };
-                    });
-                  }}
-                  disabled={isSubmitting}
-                />
-                <FieldLabel htmlFor={t.id}>
-                  <div className="flex flex-col">
-                    <p>{t.id}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {t.description}
-                    </p>
-                  </div>
-                </FieldLabel>
-              </Field>
-            ))}
-          </FieldGroup>
-        </FieldSet>
+        {(() => {
+          // Group tools by category
+          const toolsByCategory = tools.reduce(
+            (acc, tool) => {
+              const category = tool.category || "Uncategorized";
+              if (!acc[category]) {
+                acc[category] = [];
+              }
+              acc[category].push(tool);
+              return acc;
+            },
+            {} as Record<string, Tool[]>,
+          );
+
+          // Sort categories alphabetically, but keep "Uncategorized" last
+          const sortedCategories = Object.keys(toolsByCategory).sort((a, b) => {
+            if (a === "Uncategorized") return 1;
+            if (b === "Uncategorized") return -1;
+            return a.localeCompare(b);
+          });
+
+          return sortedCategories.map((category) => (
+            <FieldSet key={category}>
+              <FieldLegend variant="label">{category}</FieldLegend>
+              <FieldGroup className="grid grid-cols-2 gap-4">
+                {toolsByCategory[category].map((t: Tool) => (
+                  <Field key={t.id} orientation="horizontal">
+                    <Switch
+                      id={t.id}
+                      className="cursor-pointer"
+                      checked={formData.tools.includes(t.id)}
+                      onCheckedChange={(checked) => {
+                        setFormData((prevData) => {
+                          const newSelectedTools = checked
+                            ? [...prevData.tools, t.id]
+                            : prevData.tools.filter((id) => id !== t.id);
+                          return { ...prevData, tools: newSelectedTools };
+                        });
+                      }}
+                      disabled={isSubmitting}
+                    />
+                    <FieldLabel htmlFor={t.id}>
+                      <div className="flex flex-col">
+                        <p>{t.id}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {t.description}
+                        </p>
+                      </div>
+                    </FieldLabel>
+                  </Field>
+                ))}
+              </FieldGroup>
+            </FieldSet>
+          ));
+        })()}
 
         <Collapsible open={isOpen} onOpenChange={setIsOpen}>
           <CollapsibleTrigger asChild>

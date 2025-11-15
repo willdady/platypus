@@ -6,10 +6,17 @@ const tool = new Hono();
 
 /** List all tools */
 tool.get("/", async (c) => {
-  const toolsList = Object.entries(getTools()).reduce((acc, [id, tool]) => {
-    acc.push({ id, description: tool.description || "No description" });
-    return acc;
-  }, [] as Tool[]);
+  const toolsList = Object.entries(getTools()).reduce(
+    (acc, [id, registeredTool]) => {
+      acc.push({
+        id,
+        description: registeredTool.tool.description || "No description",
+        category: registeredTool.category,
+      });
+      return acc;
+    },
+    [] as Tool[],
+  );
   return c.json({ results: toolsList });
 });
 

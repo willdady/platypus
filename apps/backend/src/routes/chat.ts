@@ -25,7 +25,7 @@ chat.post("/", async (c) => {
     model: openrouter(model),
     // FIXME: Tool is just for testing
     tools: {
-      convertFahrenheitToCelsius: getTool("convertFahrenheitToCelsius"),
+      convertFahrenheitToCelsius: getTool("convertFahrenheitToCelsius").tool,
     },
     stopWhen: stepCountIs(20),
   });

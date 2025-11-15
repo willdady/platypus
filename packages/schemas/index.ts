@@ -95,17 +95,10 @@ export const agentUpdateSchema = agentSchema.pick({
 export const toolSchema = z.object({
   id: z.string(),
   description: z.string(),
+  category: z.string().optional(),
 });
 
 export type Tool = z.infer<typeof toolSchema>;
-
-export const toolCreateSchema = toolSchema.pick({
-  description: true,
-});
-
-export const toolUpdateSchema = toolSchema.pick({
-  description: true,
-});
 
 // MCP
 
