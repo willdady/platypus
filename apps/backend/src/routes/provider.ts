@@ -13,7 +13,7 @@ const provider = new Hono();
 provider.post("/", sValidator("json", providerCreateSchema), async (c) => {
   const data = c.req.valid("json");
   if (data.modelIds) {
-    data.modelIds = dedupeArray(data.modelIds);
+    data.modelIds = dedupeArray(data.modelIds).sort();
   }
   const record = await db
     .insert(providerTable)
@@ -50,7 +50,7 @@ provider.put("/:id", sValidator("json", providerUpdateSchema), async (c) => {
   const id = c.req.param("id");
   const data = c.req.valid("json");
   if (data.modelIds) {
-    data.modelIds = dedupeArray(data.modelIds);
+    data.modelIds = dedupeArray(data.modelIds).sort();
   }
   const record = await db
     .update(providerTable)
