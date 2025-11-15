@@ -11,6 +11,8 @@ import {
   MessageResponse,
   MessageActions,
   MessageAction,
+  MessageAttachments,
+  MessageAttachment,
 } from "@/components/ai-elements/message";
 import {
   PromptInput,
@@ -114,7 +116,18 @@ export const Chat = ({
     if (!(hasText || hasAttachments)) {
       return;
     }
-    sendMessage({ text: message.text! }, { body: { providerId, modelId } });
+    sendMessage(
+      {
+        text: message.text || "Sent with attachments",
+        files: message.files,
+      },
+      {
+        body: {
+          providerId,
+          modelId,
+        },
+      },
+    );
   };
 
   return (
@@ -125,6 +138,21 @@ export const Chat = ({
             <div className="w-full xl:w-4/5 max-w-5xl flex flex-col gap-4">
               {messages.map((message) => (
                 <Fragment key={message.id}>
+                  {(() => {
+                    const fileParts = message.parts?.filter(part => part.type === 'file')
+                    if (!!fileParts.length) {
+                      return (
+                        <MessageAttachments key={`${message.id}`}>
+                          {
+                            fileParts.map((part, i) => (
+                              <MessageAttachment key={`${message.id}-${i}`} data={part} />
+                            ))
+                          }
+                        </MessageAttachments>
+                      )
+                    }
+                    return null
+                  })()}
                   {message.parts?.map((part, i) => {
                     if (part.type === "text") {
                       return (
