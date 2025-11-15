@@ -12,6 +12,7 @@ const McpPage = async ({
 
   return (
     <div>
+      <h1 className="text-2xl font-bold mb-4">MCP Servers</h1>
       <McpList orgId={orgId} workspaceId={workspaceId} />
       <Button asChild>
         <Link href={`/${orgId}/workspace/${workspaceId}/settings/mcp/create`}>

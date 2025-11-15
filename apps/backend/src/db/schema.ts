@@ -31,6 +31,9 @@ export const agent = pgTable("agent", (t) => ({
   workspaceId: t.text("workspace_id").references(() => workspace.id, {
     onDelete: "cascade",
   }),
+  providerId: t.text("provider_id").notNull().references(() => provider.id, {
+    onDelete: "restrict",
+  }),
   name: t.text("name").notNull(),
   systemPrompt: t.text("system_prompt"),
   modelId: t.text("model_id").notNull(),

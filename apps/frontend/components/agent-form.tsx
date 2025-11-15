@@ -17,7 +17,7 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { ChevronsUpDown } from "lucide-react";
 import {
@@ -29,26 +29,36 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { type Tool, type Agent, type Model } from "@agent-kit/schemas";
+import { type Tool, type Agent, type Provider } from "@agent-kit/schemas";
+import useSWR from "swr";
+import { fetcher } from "@/lib/utils";
+
+const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL;
 
 const AgentForm = ({
   classNames,
   orgId,
   workspaceId,
   tools,
-  models,
 }: {
   classNames?: string;
   orgId: string;
   workspaceId: string;
   tools: Tool[];
-  models: Model[];
 }) => {
   const [isOpen, setIsOpen] = useState(false);
+
+  // Fetch providers
+  const { data: providersData } = useSWR<{ results: Provider[] }>(
+    `${BACKEND_URL}/providers?workspaceId=${workspaceId}`,
+    fetcher,
+  );
+  const providers = providersData?.results || [];
 
   const [formData, setFormData] = useState({
     name: "",
     systemPrompt: "",
+    providerId: "",
     modelId: "",
     maxSteps: 10,
     temperature: undefined,
@@ -60,17 +70,21 @@ const AgentForm = ({
 
   const router = useRouter();
 
+  // Initialize with first provider's first model once providers are loaded
+  useEffect(() => {
+    if (providers.length > 0 && !formData.modelId && !formData.providerId) {
+      setFormData((prevData) => ({
+        ...prevData,
+        modelId: providers[0].modelIds[0],
+        providerId: providers[0].id,
+      }));
+    }
+  }, [providers, formData.modelId, formData.providerId]);
+
   const handleChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>,
   ) => {
     const { id, value } = e.target;
-    setFormData((prevData) => ({
-      ...prevData,
-      [id]: value,
-    }));
-  };
-
-  const handleSelectChange = (id: string, value: string) => {
     setFormData((prevData) => ({
       ...prevData,
       [id]: value,
@@ -91,11 +105,24 @@ const AgentForm = ({
     }));
   };
 
+  const handleModelChange = (value: string) => {
+    // Value is in format "providerId:modelId"
+    const [newProviderId, newModelId] = value.split(":");
+    if (newProviderId && newModelId) {
+      setFormData((prevData) => ({
+        ...prevData,
+        providerId: newProviderId,
+        modelId: newModelId,
+      }));
+    }
+  };
+
   const handleSubmit = async () => {
     setIsSubmitting(true);
     try {
       const payload: Omit<Agent, "id" | "createdAt" | "updatedAt"> = {
         workspaceId,
+        providerId: formData.providerId,
         name: formData.name,
         systemPrompt: formData.systemPrompt,
         modelId: formData.modelId,
@@ -157,22 +184,27 @@ const AgentForm = ({
           <Field>
             <FieldLabel>Model</FieldLabel>
             <Select
-              value={formData.modelId}
-              onValueChange={(value) => handleSelectChange("modelId", value)}
+              value={`${formData.providerId}:${formData.modelId}`}
+              onValueChange={handleModelChange}
               disabled={isSubmitting}
             >
               <SelectTrigger disabled={isSubmitting}>
                 <SelectValue placeholder="Select a model" />
               </SelectTrigger>
               <SelectContent>
-                <SelectGroup>
-                  <SelectLabel>Models</SelectLabel>
-                  {models.map((model) => (
-                    <SelectItem key={model.id} value={model.id}>
-                      {model.id}
-                    </SelectItem>
-                  ))}
-                </SelectGroup>
+                {providers.map((provider) => (
+                  <SelectGroup key={provider.id}>
+                    <SelectLabel>{provider.name}</SelectLabel>
+                    {provider.modelIds.map((modelId) => (
+                      <SelectItem
+                        key={`${provider.id}:${modelId}`}
+                        value={`${provider.id}:${modelId}`}
+                      >
+                        {modelId}
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
+                ))}
               </SelectContent>
             </Select>
           </Field>

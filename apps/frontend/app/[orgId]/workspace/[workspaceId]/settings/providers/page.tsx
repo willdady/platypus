@@ -12,6 +12,7 @@ const ProvidersPage = async ({
 
   return (
     <div>
+      <h1 className="text-2xl font-bold mb-4">Providers</h1>
       <ProvidersList orgId={orgId} workspaceId={workspaceId} />
       <Button asChild>
         <Link

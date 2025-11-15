@@ -6,7 +6,6 @@ import { organisation } from "./routes/organisation.ts";
 import { workspace } from "./routes/workspace.ts";
 import { agent } from "./routes/agent.ts";
 import { tool } from "./routes/tool.ts";
-import { model } from "./routes/model.ts";
 import { mcp } from "./routes/mcp.ts";
 import { provider } from "./routes/provider.ts";
 
@@ -35,7 +34,6 @@ app.route("/organisations", organisation);
 app.route("/workspaces", workspace);
 app.route("/agents", agent);
 app.route("/tools", tool);
-app.route("/models", model);
 app.route("/mcps", mcp);
 app.route("/providers", provider);
 

@@ -50,6 +50,7 @@ export type Chat = z.infer<typeof chatSchema>;
 export const agentSchema = z.object({
   id: z.string(),
   workspaceId: z.string(),
+  providerId: z.string(),
   name: z.string(),
   systemPrompt: z.string().optional(),
   modelId: z.string(),
@@ -67,6 +68,7 @@ export type Agent = z.infer<typeof agentSchema>;
 
 export const agentCreateSchema = agentSchema.pick({
   workspaceId: true,
+  providerId: true,
   name: true,
   systemPrompt: true,
   modelId: true,
@@ -79,6 +81,7 @@ export const agentCreateSchema = agentSchema.pick({
 });
 
 export const agentUpdateSchema = agentSchema.pick({
+  providerId: true,
   name: true,
   systemPrompt: true,
   modelId: true,
@@ -129,15 +132,6 @@ export const mcpUpdateSchema = mcpSchema.pick({
   authType: true,
   bearerToken: true,
 });
-
-// Model
-
-export const modelSchema = z.object({
-  id: z.string(),
-  name: z.string(),
-});
-
-export type Model = z.infer<typeof modelSchema>;
 
 // Provider
 
