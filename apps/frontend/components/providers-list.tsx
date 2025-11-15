@@ -26,7 +26,7 @@ const ProvidersList = ({
   return (
     <ul className={cn("mb-4", className)}>
       {data?.results.map((provider) => (
-        <li key={provider.id}>
+        <li key={provider.id} className="mb-2">
           <Item variant="outline" asChild>
             <Link
               href={`/${orgId}/workspace/${workspaceId}/settings/providers/${provider.id}`}

@@ -26,7 +26,7 @@ const McpList = ({
   return (
     <ul className={cn("mb-4", className)}>
       {data?.results.map((mcp) => (
-        <li key={mcp.id}>
+        <li key={mcp.id} className="mb-2">
           <Item variant="outline" asChild>
             <Link
               href={`/${orgId}/workspace/${workspaceId}/settings/mcp/${mcp.id}`}
