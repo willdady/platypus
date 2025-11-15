@@ -26,7 +26,9 @@ import {
   PromptInputHeader,
   PromptInputModelSelect,
   PromptInputModelSelectContent,
+  PromptInputModelSelectGroup,
   PromptInputModelSelectItem,
+  PromptInputModelSelectLabel,
   PromptInputModelSelectTrigger,
   PromptInputModelSelectValue,
   PromptInputProvider,
@@ -39,8 +41,10 @@ import {
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, ToolUIPart } from "ai";
 import { CopyIcon, GlobeIcon, TrashIcon } from "lucide-react";
-import { useState, useRef, Fragment } from "react";
-import { Model } from "@agent-kit/schemas";
+import { useState, useRef, Fragment, useEffect } from "react";
+import { Provider } from "@agent-kit/schemas";
+import useSWR from "swr";
+import { fetcher } from "@/lib/utils";
 import {
   Reasoning,
   ReasoningContent,
@@ -59,28 +63,52 @@ const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL;
 export const Chat = ({
   orgId,
   workspaceId,
-  models,
-  initialModelId,
 }: {
   orgId: string;
   workspaceId: string;
-  models: Model[];
-  initialModelId: string;
 }) => {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const [model, setModel] = useState(initialModelId);
+
+  // Fetch providers
+  const { data: providersData } = useSWR<{ results: Provider[] }>(
+    `${BACKEND_URL}/providers?workspaceId=${workspaceId}`,
+    fetcher,
+  );
+  const providers = providersData?.results || [];
+
+  // State for selected model and provider
+  const [modelId, setModelId] = useState("");
+  const [providerId, setProviderId] = useState("");
+
+  // Initialize with first provider's first model once providers are loaded
+  useEffect(() => {
+    if (providers.length > 0 && !modelId && !providerId) {
+      setModelId(providers[0].modelIds[0]);
+      setProviderId(providers[0].id);
+    }
+  }, [providers, modelId, providerId]);
+
   const { messages, setMessages, sendMessage, status } = useChat({
     transport: new DefaultChatTransport({
       api: `${BACKEND_URL}/chat`,
       body: {
-        model,
+        modelId,
+        providerId,
         orgId,
         workspaceId,
       },
     }),
   });
-  const [input, setInput] = useState("");
   const [copied, setCopied] = useState(false);
+
+  const handleModelChange = (value: string) => {
+    // Value is in format "providerId:modelId"
+    const [newProviderId, newModelId] = value.split(":");
+    if (newProviderId && newModelId) {
+      setProviderId(newProviderId);
+      setModelId(newModelId);
+    }
+  };
 
   const handleSubmit = (message: PromptInputMessage) => {
     const hasText = Boolean(message.text);
@@ -96,7 +124,7 @@ export const Chat = ({
       <Conversation className="overflow-y-hidden" data-conversation>
         <ConversationContent>
           <div className="flex justify-center">
-            <div className="w-full xl:w-4/5 flex flex-col gap-4">
+            <div className="w-full xl:w-4/5 max-w-5xl flex flex-col gap-4">
               {messages.map((message) => (
                 <Fragment key={message.id}>
                   {message.parts?.map((part, i) => {
@@ -191,7 +219,7 @@ export const Chat = ({
       </Conversation>
       <div className="grid shrink-0 gap-4 p-4">
         <div className="flex justify-center">
-          <div className="w-full xl:w-4/5">
+          <div className="w-full xl:w-4/5 max-w-5xl">
             <PromptInputProvider>
               <PromptInput globalDrop multiple onSubmit={handleSubmit}>
                 <PromptInputHeader>
@@ -218,20 +246,27 @@ export const Chat = ({
                       <span>Search</span>
                     </PromptInputButton>
                     <PromptInputModelSelect
-                      onValueChange={setModel}
-                      value={model}
+                      onValueChange={handleModelChange}
+                      value={`${providerId}:${modelId}`}
                     >
                       <PromptInputModelSelectTrigger>
                         <PromptInputModelSelectValue />
                       </PromptInputModelSelectTrigger>
                       <PromptInputModelSelectContent>
-                        {models.map((modelOption) => (
-                          <PromptInputModelSelectItem
-                            key={modelOption.id}
-                            value={modelOption.id}
-                          >
-                            {modelOption.name}
-                          </PromptInputModelSelectItem>
+                        {providers.map((provider) => (
+                          <PromptInputModelSelectGroup key={provider.id}>
+                            <PromptInputModelSelectLabel>
+                              {provider.name}
+                            </PromptInputModelSelectLabel>
+                            {provider.modelIds.map((modelId) => (
+                              <PromptInputModelSelectItem
+                                key={`${provider.id}:${modelId}`}
+                                value={`${provider.id}:${modelId}`}
+                              >
+                                {modelId}
+                              </PromptInputModelSelectItem>
+                            ))}
+                          </PromptInputModelSelectGroup>
                         ))}
                       </PromptInputModelSelectContent>
                     </PromptInputModelSelect>

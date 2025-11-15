@@ -7,22 +7,24 @@ import { getTool } from "../tools/index.ts";
 const chat = new Hono();
 
 chat.post("/", async (c) => {
-  const { messages, model, orgId, workspaceId } = await c.req.json<
+  const { messages, orgId, workspaceId, providerId, modelId } = await c.req.json<
     Promise<{
       messages: UIMessage[];
-      model: string;
       orgId: string;
       workspaceId: string;
+      providerId: string;
+      modelId: string;
     }>
   >();
 
   // FIXME
-  console.log(`GOT MODEL: ${model}`);
+  console.log(`GOT PROVIDER: ${providerId}`);
+  console.log(`GOT MODEL: ${modelId}`);
   console.log(`GOT ORG: ${orgId}`);
   console.log(`GOT WORKSPACE: ${workspaceId}`);
 
   const quickChatAgent = new Agent({
-    model: openrouter(model),
+    model: openrouter(modelId),
     // FIXME: Tool is just for testing
     tools: {
       convertFahrenheitToCelsius: getTool("convertFahrenheitToCelsius").tool,
