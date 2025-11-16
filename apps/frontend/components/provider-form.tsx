@@ -12,6 +12,12 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
+import { ChevronsUpDown } from "lucide-react";
+import {
   Select,
   SelectContent,
   SelectGroup,
@@ -63,6 +69,7 @@ const ProviderForm = ({
   const [modelIdsString, setModelIdsString] = useState("");
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [isOpen, setIsOpen] = useState(false);
 
   const router = useRouter();
 
@@ -276,22 +283,41 @@ const ProviderForm = ({
               Model IDs to allow for this provider. One per line.
             </FieldDescription>
           </Field>
-
-          <Field>
-            <FieldLabel htmlFor="headers">Headers</FieldLabel>
-            <Textarea
-              id="headers"
-              placeholder='{"Header Name": "Header Value"}'
-              value={headersString}
-              onChange={handleChange}
-              disabled={isSubmitting}
-            />
-            <FieldDescription>
-              Optional headers as JSON object.
-            </FieldDescription>
-            {headersError && <FieldError>{headersError}</FieldError>}
-          </Field>
         </FieldGroup>
+
+        <Collapsible open={isOpen} onOpenChange={setIsOpen}>
+          <CollapsibleTrigger asChild>
+            <div className="flex text-sm justify-between items-center mb-6">
+              <span className="cursor-default">Advanced settings</span>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="cursor-pointer size-8"
+              >
+                <ChevronsUpDown />
+                <span className="sr-only">Toggle</span>
+              </Button>
+            </div>
+          </CollapsibleTrigger>
+          <CollapsibleContent className="mb-6">
+            <FieldGroup>
+              <Field>
+                <FieldLabel htmlFor="headers">Headers</FieldLabel>
+                <Textarea
+                  id="headers"
+                  placeholder='{"Header Name": "Header Value"}'
+                  value={headersString}
+                  onChange={handleChange}
+                  disabled={isSubmitting}
+                />
+                <FieldDescription>
+                  Optional headers as JSON object.
+                </FieldDescription>
+                {headersError && <FieldError>{headersError}</FieldError>}
+              </Field>
+            </FieldGroup>
+          </CollapsibleContent>
+        </Collapsible>
       </FieldSet>
 
       <div className="flex gap-2">
