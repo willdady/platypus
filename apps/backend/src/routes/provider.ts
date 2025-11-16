@@ -27,7 +27,11 @@ provider.post("/", sValidator("json", providerCreateSchema), async (c) => {
 
 /** List all providers */
 provider.get("/", async (c) => {
-  const results = await db.select().from(providerTable);
+  const workspaceId = c.req.query("workspaceId");
+  const results = await db
+    .select()
+    .from(providerTable)
+    .where(workspaceId ? eq(providerTable.workspaceId, workspaceId) : undefined);
   return c.json({ results });
 });
 

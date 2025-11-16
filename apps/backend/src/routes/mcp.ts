@@ -23,7 +23,11 @@ mcp.post("/", sValidator("json", mcpCreateSchema), async (c) => {
 
 /** List all MCPs */
 mcp.get("/", async (c) => {
-  const results = await db.select().from(mcpTable);
+  const workspaceId = c.req.query("workspaceId");
+  const results = await db
+    .select()
+    .from(mcpTable)
+    .where(workspaceId ? eq(mcpTable.workspaceId, workspaceId) : undefined);
   return c.json({ results });
 });
 

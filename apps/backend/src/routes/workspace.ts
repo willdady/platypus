@@ -32,7 +32,11 @@ workspace.post(
 
 /** List all workspaces */
 workspace.get("/", async (c) => {
-  const results = await db.select().from(workspaceTable);
+  const orgId = c.req.query("orgId");
+  const results = await db
+    .select()
+    .from(workspaceTable)
+    .where(orgId ? eq(workspaceTable.organisationId, orgId) : undefined);
   return c.json({ results });
 });
 
