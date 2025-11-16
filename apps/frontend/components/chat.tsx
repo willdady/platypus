@@ -42,7 +42,13 @@ import {
 } from "@/components/ai-elements/prompt-input";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, ToolUIPart } from "ai";
-import { CopyIcon, GlobeIcon, Plus, TrashIcon, TriangleAlert } from "lucide-react";
+import {
+  CopyIcon,
+  GlobeIcon,
+  Plus,
+  TrashIcon,
+  TriangleAlert,
+} from "lucide-react";
 import { useState, useRef, Fragment, useEffect } from "react";
 import { Provider } from "@agent-kit/schemas";
 import useSWR from "swr";
@@ -62,6 +68,12 @@ import {
 import { Alert, AlertTitle, AlertDescription } from "./ui/alert";
 import Link from "next/link";
 import { Button } from "./ui/button";
+import {
+  Source,
+  Sources,
+  SourcesContent,
+  SourcesTrigger,
+} from "./ai-elements/sources";
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL;
 
@@ -82,7 +94,7 @@ export const Chat = ({
   // Fetch providers
   const { data: providersData, isLoading } = useSWR<{ results: Provider[] }>(
     `${BACKEND_URL}/providers?workspaceId=${workspaceId}`,
-    fetcher
+    fetcher,
   );
 
   const providers = providersData?.results || [];
@@ -157,7 +169,7 @@ export const Chat = ({
           providerId,
           modelId,
         },
-      }
+      },
     );
   };
 
@@ -167,111 +179,134 @@ export const Chat = ({
         <ConversationContent>
           <div className="flex justify-center">
             <div className="w-full xl:w-4/5 max-w-5xl flex flex-col gap-4">
-              {messages.map((message) => (
-                <Fragment key={message.id}>
-                  {(() => {
-                    const fileParts = message.parts?.filter(
-                      (part) => part.type === "file"
-                    );
-                    if (!!fileParts.length) {
-                      return (
-                        <MessageAttachments key={`${message.id}`}>
-                          {fileParts.map((part, i) => (
-                            <MessageAttachment
-                              key={`${message.id}-${i}`}
-                              data={part}
-                            />
-                          ))}
-                        </MessageAttachments>
-                      );
-                    }
-                    return null;
-                  })()}
-                  {message.parts?.map((part, i) => {
-                    if (part.type === "text") {
-                      return (
-                        <Fragment key={`${message.id}-${i}`}>
-                          <Message key={message.id} from={message.role}>
-                            <MessageContent>
-                              <MessageResponse>{part.text}</MessageResponse>
-                            </MessageContent>
-                          </Message>
-                          {message.role === "assistant" && (
-                            <MessageActions className="mt-2">
-                              <MessageAction
-                                className="cursor-pointer"
-                                onClick={() => {
-                                  const text =
-                                    message.parts
-                                      ?.filter((part) => part.type === "text")
-                                      .map((part) => part.text)
-                                      .join("") || "";
-                                  navigator.clipboard.writeText(text);
-                                  setCopied(true);
-                                  setTimeout(() => setCopied(false), 2000);
-                                }}
-                                variant={copied ? "secondary" : "ghost"}
-                                size="icon"
-                                label="Copy"
-                              >
-                                <CopyIcon className="size-4" />
-                              </MessageAction>
-                              <MessageAction
-                                className="cursor-pointer"
-                                onClick={() => {
-                                  const index = messages.findIndex(
-                                    (m) => m.id === message.id
-                                  );
-                                  setMessages(messages.slice(0, index));
-                                }}
-                                variant="ghost"
-                                size="icon"
-                                label="Delete"
-                              >
-                                <TrashIcon className="size-4" />
-                              </MessageAction>
-                            </MessageActions>
-                          )}
-                        </Fragment>
-                      );
-                    } else if (part.type === "reasoning") {
-                      return (
-                        <Reasoning
-                          key={`${message.id}-${i}`}
-                          isStreaming={
-                            status === "streaming" &&
-                            i === message.parts.length - 1 &&
-                            message.id === messages.at(-1)?.id
-                          }
-                          defaultOpen={false}
-                        >
-                          <ReasoningTrigger className="cursor-pointer" />
-                          <ReasoningContent>{part.text}</ReasoningContent>
-                        </Reasoning>
-                      );
-                    } else if (part.type.startsWith("tool-")) {
-                      const toolPart = part as ToolUIPart;
-                      return (
-                        <Tool key={`${message.id}-${i}`}>
-                          <ToolHeader
-                            state={toolPart.state}
-                            type={toolPart.type}
+              {messages.map((message) => {
+                const fileParts = message.parts?.filter(
+                  (part) => part.type === "file",
+                );
+
+                return (
+                  <Fragment key={message.id}>
+                    {fileParts && fileParts.length > 0 && (
+                      <MessageAttachments key={`${message.id}`}>
+                        {fileParts.map((part, i) => (
+                          <MessageAttachment
+                            key={`${message.id}-${i}`}
+                            data={part}
                           />
-                          <ToolContent>
-                            <ToolInput input={toolPart.input} />
-                            <ToolOutput
-                              output={toolPart.output}
-                              errorText={toolPart.errorText}
+                        ))}
+                      </MessageAttachments>
+                    )}
+                    {message.role === "assistant" && (
+                      <Sources>
+                        <SourcesTrigger
+                          count={
+                            message.parts.filter(
+                              (part) => part.type === "source-url",
+                            ).length
+                          }
+                        />
+                        {message.parts.map((part, i) => {
+                          switch (part.type) {
+                            case "source-url":
+                              return (
+                                <SourcesContent key={`${message.id}-${i}`}>
+                                  <Source
+                                    key={`${message.id}-${i}`}
+                                    href={part.url}
+                                    title={part.url}
+                                  />
+                                </SourcesContent>
+                              );
+                          }
+                        })}
+                      </Sources>
+                    )}
+                    {message.parts?.map((part, i) => {
+                      if (part.type === "text") {
+                        return (
+                          <Fragment key={`${message.id}-${i}`}>
+                            <Message key={message.id} from={message.role}>
+                              <MessageContent>
+                                <MessageResponse>{part.text}</MessageResponse>
+                              </MessageContent>
+                            </Message>
+                            {message.role === "assistant" && (
+                              <MessageActions className="mt-2">
+                                <MessageAction
+                                  className="cursor-pointer"
+                                  onClick={() => {
+                                    const text =
+                                      message.parts
+                                        ?.filter((part) => part.type === "text")
+                                        .map((part) => part.text)
+                                        .join("") || "";
+                                    navigator.clipboard.writeText(text);
+                                    setCopied(true);
+                                    setTimeout(() => setCopied(false), 2000);
+                                  }}
+                                  variant={copied ? "secondary" : "ghost"}
+                                  size="icon"
+                                  label="Copy"
+                                >
+                                  <CopyIcon className="size-4" />
+                                </MessageAction>
+                                <MessageAction
+                                  className="cursor-pointer"
+                                  onClick={() => {
+                                    const index = messages.findIndex(
+                                      (m) => m.id === message.id,
+                                    );
+                                    setMessages(messages.slice(0, index));
+                                  }}
+                                  variant="ghost"
+                                  size="icon"
+                                  label="Delete"
+                                >
+                                  <TrashIcon className="size-4" />
+                                </MessageAction>
+                              </MessageActions>
+                            )}
+                          </Fragment>
+                        );
+                      } else if (part.type === "reasoning") {
+                        return (
+                          <Reasoning
+                            key={`${message.id}-${i}`}
+                            isStreaming={
+                              status === "streaming" &&
+                              i === message.parts.length - 1 &&
+                              message.id === messages.at(-1)?.id
+                            }
+                            defaultOpen={false}
+                          >
+                            <ReasoningTrigger className="cursor-pointer" />
+                            <ReasoningContent>{part.text}</ReasoningContent>
+                          </Reasoning>
+                        );
+                      } else if (part.type.startsWith("tool-")) {
+                        const toolPart = part as ToolUIPart;
+                        return (
+                          <Tool key={`${message.id}-${i}`}>
+                            <ToolHeader
+                              state={toolPart.state}
+                              type={toolPart.type}
                             />
-                          </ToolContent>
-                        </Tool>
-                      );
-                    } else {
-                      return null;
-                    }
-                  })}
-                </Fragment>
-              ))}
+                            <ToolContent>
+                              <ToolInput input={toolPart.input} />
+                              <ToolOutput
+                                output={toolPart.output}
+                                errorText={toolPart.errorText}
+                              />
+                            </ToolContent>
+                          </Tool>
+                        );
+                      } else {
+                        return null;
+                      }
+                    })}
+                  </Fragment>
+                );
+              })}
             </div>
           </div>
         </ConversationContent>
