@@ -23,16 +23,7 @@ import {
   PromptInputAttachment,
   PromptInputAttachments,
   PromptInputBody,
-  PromptInputButton,
   PromptInputFooter,
-  PromptInputHeader,
-  PromptInputModelSelect,
-  PromptInputModelSelectContent,
-  PromptInputModelSelectGroup,
-  PromptInputModelSelectItem,
-  PromptInputModelSelectLabel,
-  PromptInputModelSelectTrigger,
-  PromptInputModelSelectValue,
   PromptInputProvider,
   PromptInputSpeechButton,
   PromptInputSubmit,
@@ -40,11 +31,19 @@ import {
   PromptInputTools,
   type PromptInputMessage,
 } from "@/components/ai-elements/prompt-input";
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectLabel,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, ToolUIPart } from "ai";
 import {
   CopyIcon,
-  GlobeIcon,
   Plus,
   TrashIcon,
   TriangleAlert,
@@ -94,7 +93,7 @@ export const Chat = ({
   // Fetch providers
   const { data: providersData, isLoading } = useSWR<{ results: Provider[] }>(
     `${BACKEND_URL}/providers?workspaceId=${workspaceId}`,
-    fetcher,
+    fetcher
   );
 
   const providers = providersData?.results || [];
@@ -169,7 +168,7 @@ export const Chat = ({
           providerId,
           modelId,
         },
-      },
+      }
     );
   };
 
@@ -181,10 +180,10 @@ export const Chat = ({
             <div className="w-full xl:w-4/5 max-w-5xl flex flex-col gap-4">
               {messages.map((message) => {
                 const fileParts = message.parts?.filter(
-                  (part) => part.type === "file",
+                  (part) => part.type === "file"
                 );
                 const sourceUrlParts = message.parts.filter(
-                  (part) => part.type === "source-url",
+                  (part) => part.type === "source-url"
                 );
 
                 return (
@@ -252,7 +251,7 @@ export const Chat = ({
                                   className="cursor-pointer"
                                   onClick={() => {
                                     const index = messages.findIndex(
-                                      (m) => m.id === message.id,
+                                      (m) => m.id === message.id
                                     );
                                     setMessages(messages.slice(0, index));
                                   }}
@@ -315,54 +314,45 @@ export const Chat = ({
           <div className="w-full xl:w-4/5 max-w-5xl">
             <PromptInputProvider>
               <PromptInput globalDrop multiple onSubmit={handleSubmit}>
-                <PromptInputHeader>
-                  <PromptInputAttachments>
-                    {(attachment) => (
-                      <PromptInputAttachment data={attachment} />
-                    )}
-                  </PromptInputAttachments>
-                </PromptInputHeader>
+                <PromptInputAttachments className="w-full">
+                  {(attachment) => <PromptInputAttachment data={attachment} />}
+                </PromptInputAttachments>
                 <PromptInputBody>
                   <PromptInputTextarea ref={textareaRef} />
                 </PromptInputBody>
                 <PromptInputFooter>
                   <PromptInputTools>
                     <PromptInputActionMenu>
-                      <PromptInputActionMenuTrigger />
+                      <PromptInputActionMenuTrigger className="cursor-pointer" />
                       <PromptInputActionMenuContent>
-                        <PromptInputActionAddAttachments />
+                        <PromptInputActionAddAttachments className="cursor-pointer" />
                       </PromptInputActionMenuContent>
                     </PromptInputActionMenu>
-                    <PromptInputSpeechButton textareaRef={textareaRef} />
-                    <PromptInputButton>
-                      <GlobeIcon size={16} />
-                      <span>Search</span>
-                    </PromptInputButton>
-                    <PromptInputModelSelect
+                    <PromptInputSpeechButton className="cursor-pointer" textareaRef={textareaRef} />
+                    <Select
                       onValueChange={handleModelChange}
                       value={`${providerId}:${modelId}`}
                     >
-                      <PromptInputModelSelectTrigger>
-                        <PromptInputModelSelectValue />
-                      </PromptInputModelSelectTrigger>
-                      <PromptInputModelSelectContent>
+                      <SelectTrigger className="cursor-pointer" size="sm">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
                         {providers.map((provider) => (
-                          <PromptInputModelSelectGroup key={provider.id}>
-                            <PromptInputModelSelectLabel>
-                              {provider.name}
-                            </PromptInputModelSelectLabel>
+                          <SelectGroup key={provider.id}>
+                            <SelectLabel>{provider.name}</SelectLabel>
                             {provider.modelIds.map((modelId) => (
-                              <PromptInputModelSelectItem
+                              <SelectItem
                                 key={`${provider.id}:${modelId}`}
+                                className="cursor-pointer"
                                 value={`${provider.id}:${modelId}`}
                               >
                                 {modelId}
-                              </PromptInputModelSelectItem>
+                              </SelectItem>
                             ))}
-                          </PromptInputModelSelectGroup>
+                          </SelectGroup>
                         ))}
-                      </PromptInputModelSelectContent>
-                    </PromptInputModelSelect>
+                      </SelectContent>
+                    </Select>
                   </PromptInputTools>
                   <PromptInputSubmit status={status} />
                 </PromptInputFooter>
