@@ -9,7 +9,7 @@ export const organisationSchema = z.object({
   updatedAt: z.date(),
 });
 
-export type organisation = z.infer<typeof organisationSchema>;
+export type Organisation = z.infer<typeof organisationSchema>;
 
 export const organisationCreateSchema = organisationSchema.pick({ name: true });
 
