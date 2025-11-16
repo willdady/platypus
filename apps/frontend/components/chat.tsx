@@ -74,16 +74,39 @@ export const Chat = ({
 }) => {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
+  // State for selected model and provider
+  const [modelId, setModelId] = useState("");
+  const [providerId, setProviderId] = useState("");
+  const [copied, setCopied] = useState(false);
+
   // Fetch providers
   const { data: providersData, isLoading } = useSWR<{ results: Provider[] }>(
     `${BACKEND_URL}/providers?workspaceId=${workspaceId}`,
     fetcher
   );
 
+  const providers = providersData?.results || [];
+
+  const { messages, setMessages, sendMessage, status } = useChat({
+    transport: new DefaultChatTransport({
+      api: `${BACKEND_URL}/chat`,
+      body: {
+        orgId,
+        workspaceId,
+      },
+    }),
+  });
+
+  // Initialize with first provider's first model once providers are loaded
+  useEffect(() => {
+    if (providers.length > 0 && !modelId && !providerId) {
+      setModelId(providers[0].modelIds[0]);
+      setProviderId(providers[0].id);
+    }
+  }, [providers, modelId, providerId]);
+
   // TODO: Ideally show a loading indicator here
   if (isLoading) return null;
-
-  const providers = providersData?.results || [];
 
   // Show alert if no providers are configured
   if (providers.length === 0) {
@@ -108,29 +131,6 @@ export const Chat = ({
       </div>
     );
   }
-
-  // State for selected model and provider
-  const [modelId, setModelId] = useState("");
-  const [providerId, setProviderId] = useState("");
-
-  // Initialize with first provider's first model once providers are loaded
-  useEffect(() => {
-    if (providers.length > 0 && !modelId && !providerId) {
-      setModelId(providers[0].modelIds[0]);
-      setProviderId(providers[0].id);
-    }
-  }, [providers, modelId, providerId]);
-
-  const { messages, setMessages, sendMessage, status } = useChat({
-    transport: new DefaultChatTransport({
-      api: `${BACKEND_URL}/chat`,
-      body: {
-        orgId,
-        workspaceId,
-      },
-    }),
-  });
-  const [copied, setCopied] = useState(false);
 
   const handleModelChange = (value: string) => {
     // Value is in format "providerId:modelId"
