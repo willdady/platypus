@@ -183,6 +183,9 @@ export const Chat = ({
                 const fileParts = message.parts?.filter(
                   (part) => part.type === "file",
                 );
+                const sourceUrlParts = message.parts.filter(
+                  (part) => part.type === "source-url",
+                );
 
                 return (
                   <Fragment key={message.id}>
@@ -196,31 +199,26 @@ export const Chat = ({
                         ))}
                       </MessageAttachments>
                     )}
-                    {message.role === "assistant" && (
-                      <Sources>
-                        <SourcesTrigger
-                          count={
-                            message.parts.filter(
-                              (part) => part.type === "source-url",
-                            ).length
-                          }
-                        />
-                        {message.parts.map((part, i) => {
-                          switch (part.type) {
-                            case "source-url":
-                              return (
-                                <SourcesContent key={`${message.id}-${i}`}>
-                                  <Source
-                                    key={`${message.id}-${i}`}
-                                    href={part.url}
-                                    title={part.url}
-                                  />
-                                </SourcesContent>
-                              );
-                          }
-                        })}
-                      </Sources>
-                    )}
+                    {message.role === "assistant" &&
+                      !!sourceUrlParts.length && (
+                        <Sources>
+                          <SourcesTrigger
+                            className="cursor-pointer"
+                            count={sourceUrlParts.length}
+                          />
+                          {sourceUrlParts.map((part, i) => {
+                            return (
+                              <SourcesContent key={`${message.id}-${i}`}>
+                                <Source
+                                  key={`${message.id}-${i}`}
+                                  href={part.url}
+                                  title={part.url}
+                                />
+                              </SourcesContent>
+                            );
+                          })}
+                        </Sources>
+                      )}
                     {message.parts?.map((part, i) => {
                       if (part.type === "text") {
                         return (

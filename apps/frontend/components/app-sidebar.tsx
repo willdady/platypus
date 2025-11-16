@@ -83,8 +83,17 @@ export function AppSidebar({
             <SelectGroup>
               <SelectLabel>Workspaces</SelectLabel>
               {workspaces.map((workspace) => (
-                <SelectItem key={workspace.id} className="cursor-pointer" value={workspace.id}>
-                  {currentWorkspace?.id === workspace.id ? <FolderOpen /> : <Folder />} {workspace.name}
+                <SelectItem
+                  key={workspace.id}
+                  className="cursor-pointer"
+                  value={workspace.id}
+                >
+                  {currentWorkspace?.id === workspace.id ? (
+                    <FolderOpen />
+                  ) : (
+                    <Folder />
+                  )}{" "}
+                  {workspace.name}
                 </SelectItem>
               ))}
             </SelectGroup>
@@ -97,7 +106,10 @@ export function AppSidebar({
             <SidebarMenu>
               {primaryItems.map((item) => (
                 <SidebarMenuItem key={item.title}>
-                  <SidebarMenuButton asChild isActive={pathname.startsWith(item.url)}>
+                  <SidebarMenuButton
+                    asChild
+                    isActive={pathname.startsWith(item.url)}
+                  >
                     <Link href={item.url}>
                       <item.icon />
                       <span>{item.title}</span>
@@ -113,7 +125,10 @@ export function AppSidebar({
             <SidebarMenu>
               {secondaryItems.map((item) => (
                 <SidebarMenuItem key={item.title}>
-                  <SidebarMenuButton asChild isActive={pathname.startsWith(item.url)}>
+                  <SidebarMenuButton
+                    asChild
+                    isActive={pathname.startsWith(item.url)}
+                  >
                     <Link href={item.url}>
                       <item.icon />
                       <span>{item.title}</span>
