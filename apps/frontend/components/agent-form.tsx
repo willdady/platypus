@@ -66,6 +66,8 @@ const AgentForm = ({
     topP: undefined,
     topK: undefined,
     seed: undefined,
+    presencePenalty: undefined,
+    frequencyPenalty: undefined,
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -95,14 +97,14 @@ const AgentForm = ({
   const handleNumberChange = (id: string, value: string) => {
     setFormData((prevData) => ({
       ...prevData,
-      [id]: parseInt(value),
+      [id]: value === "" ? undefined : parseInt(value),
     }));
   };
 
   const handleFloatChange = (id: string, value: string) => {
     setFormData((prevData) => ({
       ...prevData,
-      [id]: parseFloat(value),
+      [id]: value === "" ? undefined : parseFloat(value),
     }));
   };
 
@@ -132,6 +134,8 @@ const AgentForm = ({
         topP: formData.topP,
         topK: formData.topK,
         seed: formData.seed,
+        presencePenalty: formData.presencePenalty,
+        frequencyPenalty: formData.frequencyPenalty,
       };
 
       const response = await fetch(
@@ -306,7 +310,7 @@ const AgentForm = ({
                   type="number"
                   min="0"
                   step="0.1"
-                  value={formData.temperature}
+                  value={formData.temperature ?? ""}
                   onChange={(e) =>
                     handleFloatChange("temperature", e.target.value)
                   }
@@ -318,13 +322,10 @@ const AgentForm = ({
                 <Input
                   id="seed"
                   type="number"
-                  value={formData.seed}
+                  value={formData.seed ?? ""}
                   onChange={(e) => handleNumberChange("seed", e.target.value)}
                   disabled={isSubmitting}
                 />
-                <FieldDescription>
-                  Random seed for deterministic generation
-                </FieldDescription>
               </Field>
               <Field>
                 <FieldLabel htmlFor="topP">Top-p</FieldLabel>
@@ -334,7 +335,7 @@ const AgentForm = ({
                   min="0"
                   max="1"
                   step="0.1"
-                  value={formData.topP}
+                  value={formData.topP ?? ""}
                   onChange={(e) => handleFloatChange("topP", e.target.value)}
                   disabled={isSubmitting}
                 />
@@ -345,8 +346,34 @@ const AgentForm = ({
                   id="topK"
                   type="number"
                   min="1"
-                  value={formData.topK}
+                  value={formData.topK ?? ""}
                   onChange={(e) => handleNumberChange("topK", e.target.value)}
+                  disabled={isSubmitting}
+                />
+              </Field>
+              <Field>
+                <FieldLabel htmlFor="presencePenalty">Presence Penalty</FieldLabel>
+                <Input
+                  id="presencePenalty"
+                  type="number"
+                  min="-2"
+                  max="2"
+                  step="0.1"
+                  value={formData.presencePenalty ?? ""}
+                  onChange={(e) => handleFloatChange("presencePenalty", e.target.value)}
+                  disabled={isSubmitting}
+                />
+              </Field>
+              <Field>
+                <FieldLabel htmlFor="frequencyPenalty">Frequency Penalty</FieldLabel>
+                <Input
+                  id="frequencyPenalty"
+                  type="number"
+                  min="-2"
+                  max="2"
+                  step="0.1"
+                  value={formData.frequencyPenalty ?? ""}
+                  onChange={(e) => handleFloatChange("frequencyPenalty", e.target.value)}
                   disabled={isSubmitting}
                 />
               </Field>

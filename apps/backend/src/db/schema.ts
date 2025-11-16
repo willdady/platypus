@@ -45,6 +45,8 @@ export const agent = pgTable("agent", (t) => ({
   topP: t.real("top_p"),
   topK: t.real("top_k"),
   seed: t.real("seed"),
+  presencePenalty: t.real("presence_penalty"),
+  frequencyPenalty: t.real("frequency_penalty"),
   tools: t.jsonb().$type<string[]>().default([]), // Array of tool ids
   createdAt: t.timestamp("created_at").notNull().defaultNow(),
   updatedAt: t.timestamp("updated_at").notNull().defaultNow(),
