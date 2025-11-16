@@ -18,6 +18,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { type MCP } from "@agent-kit/schemas";
@@ -43,6 +51,8 @@ const McpForm = ({
     bearerToken: "",
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const router = useRouter();
 
@@ -113,6 +123,32 @@ const McpForm = ({
       console.error("Error saving MCP:", error);
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!mcpId) return;
+
+    setIsDeleting(true);
+    try {
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_BACKEND_URL}/mcps/${mcpId}`,
+        {
+          method: "DELETE",
+        },
+      );
+
+      if (response.ok) {
+        router.push(`/${orgId}/workspace/${workspaceId}/settings/mcp`);
+      } else {
+        console.error("Failed to delete MCP");
+        setIsDeleting(false);
+        setIsDeleteDialogOpen(false);
+      }
+    } catch (error) {
+      console.error("Error deleting MCP:", error);
+      setIsDeleting(false);
+      setIsDeleteDialogOpen(false);
     }
   };
 
@@ -188,13 +224,75 @@ const McpForm = ({
         </FieldGroup>
       </FieldSet>
 
-      <Button
-        className="cursor-pointer"
-        onClick={handleSubmit}
-        disabled={isSubmitting}
+      <div className="flex gap-2">
+        <Button
+          className="cursor-pointer"
+          onClick={handleSubmit}
+          disabled={isSubmitting}
+        >
+          {mcpId ? "Update" : "Save"}
+        </Button>
+
+        {mcpId && (
+          <Button
+            className="cursor-pointer"
+            variant="outline"
+            onClick={() => setIsDeleteDialogOpen(true)}
+            disabled={isSubmitting}
+          >
+            Delete
+          </Button>
+        )}
+      </div>
+
+      <Dialog
+        open={isDeleteDialogOpen}
+        onOpenChange={(open) => {
+          if (!isDeleting) {
+            setIsDeleteDialogOpen(open);
+          }
+        }}
       >
-        {mcpId ? "Update" : "Save"}
-      </Button>
+        <DialogContent
+          onPointerDownOutside={(e) => {
+            if (isDeleting) {
+              e.preventDefault();
+            }
+          }}
+          onEscapeKeyDown={(e) => {
+            if (isDeleting) {
+              e.preventDefault();
+            }
+          }}
+          showCloseButton={false}
+        >
+          <DialogHeader>
+            <DialogTitle>Delete MCP server</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete this MCP server? This action cannot be
+              undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              className="cursor-pointer"
+              variant="outline"
+              onClick={() => setIsDeleteDialogOpen(false)}
+              disabled={isDeleting}
+            >
+              Cancel
+            </Button>
+            <Button
+              className="cursor-pointer"
+              variant="destructive"
+              onClick={handleDelete}
+              disabled={isDeleting}
+            >
+              Delete
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

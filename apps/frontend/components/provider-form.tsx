@@ -20,6 +20,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { type Provider } from "@agent-kit/schemas";
@@ -53,6 +61,8 @@ const ProviderForm = ({
   const [headersError, setHeadersError] = useState<string | null>(null);
   const [headersString, setHeadersString] = useState("{}");
   const [modelIdsString, setModelIdsString] = useState("");
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const router = useRouter();
 
@@ -159,6 +169,32 @@ const ProviderForm = ({
     }
   };
 
+  const handleDelete = async () => {
+    if (!providerId) return;
+
+    setIsDeleting(true);
+    try {
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_BACKEND_URL}/providers/${providerId}`,
+        {
+          method: "DELETE",
+        },
+      );
+
+      if (response.ok) {
+        router.push(`/${orgId}/workspace/${workspaceId}/settings/providers`);
+      } else {
+        console.error("Failed to delete provider");
+        setIsDeleting(false);
+        setIsDeleteDialogOpen(false);
+      }
+    } catch (error) {
+      console.error("Error deleting provider:", error);
+      setIsDeleting(false);
+      setIsDeleteDialogOpen(false);
+    }
+  };
+
   if (isLoading) {
     return <div className={classNames}>Loading...</div>;
   }
@@ -258,13 +294,75 @@ const ProviderForm = ({
         </FieldGroup>
       </FieldSet>
 
-      <Button
-        className="cursor-pointer"
-        onClick={handleSubmit}
-        disabled={isSubmitting || !!headersError}
+      <div className="flex gap-2">
+        <Button
+          className="cursor-pointer"
+          onClick={handleSubmit}
+          disabled={isSubmitting || !!headersError}
+        >
+          {providerId ? "Update" : "Save"}
+        </Button>
+
+        {providerId && (
+          <Button
+            className="cursor-pointer"
+            variant="outline"
+            onClick={() => setIsDeleteDialogOpen(true)}
+            disabled={isSubmitting}
+          >
+            Delete
+          </Button>
+        )}
+      </div>
+
+      <Dialog
+        open={isDeleteDialogOpen}
+        onOpenChange={(open) => {
+          if (!isDeleting) {
+            setIsDeleteDialogOpen(open);
+          }
+        }}
       >
-        {providerId ? "Update" : "Save"}
-      </Button>
+        <DialogContent
+          onPointerDownOutside={(e) => {
+            if (isDeleting) {
+              e.preventDefault();
+            }
+          }}
+          onEscapeKeyDown={(e) => {
+            if (isDeleting) {
+              e.preventDefault();
+            }
+          }}
+          showCloseButton={false}
+        >
+          <DialogHeader>
+            <DialogTitle>Delete Provider</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete this provider? This action cannot
+              be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              className="cursor-pointer"
+              variant="outline"
+              onClick={() => setIsDeleteDialogOpen(false)}
+              disabled={isDeleting}
+            >
+              Cancel
+            </Button>
+            <Button
+              className="cursor-pointer"
+              variant="destructive"
+              onClick={handleDelete}
+              disabled={isDeleting}
+            >
+              Delete
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
