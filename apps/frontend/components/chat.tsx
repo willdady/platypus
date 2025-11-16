@@ -42,7 +42,7 @@ import {
 } from "@/components/ai-elements/prompt-input";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, ToolUIPart } from "ai";
-import { CopyIcon, GlobeIcon, TrashIcon } from "lucide-react";
+import { CopyIcon, GlobeIcon, Plus, TrashIcon, TriangleAlert } from "lucide-react";
 import { useState, useRef, Fragment, useEffect } from "react";
 import { Provider } from "@agent-kit/schemas";
 import useSWR from "swr";
@@ -59,6 +59,9 @@ import {
   ToolInput,
   ToolOutput,
 } from "./ai-elements/tool";
+import { Alert, AlertTitle, AlertDescription } from "./ui/alert";
+import Link from "next/link";
+import { Button } from "./ui/button";
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL;
 
@@ -72,11 +75,39 @@ export const Chat = ({
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   // Fetch providers
-  const { data: providersData } = useSWR<{ results: Provider[] }>(
+  const { data: providersData, isLoading } = useSWR<{ results: Provider[] }>(
     `${BACKEND_URL}/providers?workspaceId=${workspaceId}`,
-    fetcher,
+    fetcher
   );
+
+  // TODO: Ideally show a loading indicator here
+  if (isLoading) return null;
+
   const providers = providersData?.results || [];
+
+  // Show alert if no providers are configured
+  if (providers.length === 0) {
+    return (
+      <div className="flex items-center justify-center h-full">
+        <Alert className="max-w-md">
+          <TriangleAlert />
+          <AlertTitle>No AI providers configured</AlertTitle>
+          <AlertDescription>
+            <p className="mb-2">
+              You need to configure at least one AI provider to start chatting.
+            </p>
+            <Button size="sm" asChild>
+              <Link
+                href={`/${orgId}/workspace/${workspaceId}/settings/providers/create`}
+              >
+                <Plus /> Create your first provider
+              </Link>
+            </Button>
+          </AlertDescription>
+        </Alert>
+      </div>
+    );
+  }
 
   // State for selected model and provider
   const [modelId, setModelId] = useState("");
@@ -126,7 +157,7 @@ export const Chat = ({
           providerId,
           modelId,
         },
-      },
+      }
     );
   };
 
@@ -139,19 +170,22 @@ export const Chat = ({
               {messages.map((message) => (
                 <Fragment key={message.id}>
                   {(() => {
-                    const fileParts = message.parts?.filter(part => part.type === 'file')
+                    const fileParts = message.parts?.filter(
+                      (part) => part.type === "file"
+                    );
                     if (!!fileParts.length) {
                       return (
                         <MessageAttachments key={`${message.id}`}>
-                          {
-                            fileParts.map((part, i) => (
-                              <MessageAttachment key={`${message.id}-${i}`} data={part} />
-                            ))
-                          }
+                          {fileParts.map((part, i) => (
+                            <MessageAttachment
+                              key={`${message.id}-${i}`}
+                              data={part}
+                            />
+                          ))}
                         </MessageAttachments>
-                      )
+                      );
                     }
-                    return null
+                    return null;
                   })()}
                   {message.parts?.map((part, i) => {
                     if (part.type === "text") {
@@ -186,7 +220,7 @@ export const Chat = ({
                                 className="cursor-pointer"
                                 onClick={() => {
                                   const index = messages.findIndex(
-                                    (m) => m.id === message.id,
+                                    (m) => m.id === message.id
                                   );
                                   setMessages(messages.slice(0, index));
                                 }}
