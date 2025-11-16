@@ -9,7 +9,7 @@ const Org = async ({ params }: { params: Promise<{ orgId: string }> }) => {
   const { orgId } = await params;
 
   const response = await fetch(
-    `${process.env.NEXT_PUBLIC_BACKEND_URL}/organisations/${orgId}`
+    `${process.env.NEXT_PUBLIC_BACKEND_URL}/organisations/${orgId}`,
   );
 
   if (response.status === 404) {
@@ -25,7 +25,9 @@ const Org = async ({ params }: { params: Promise<{ orgId: string }> }) => {
         <WorkspaceList orgId={orgId} />
         <div className="mt-4">
           <Button asChild>
-            <Link href={`/${orgId}/create`}><Plus /> New workspace</Link>
+            <Link href={`/${orgId}/create`}>
+              <Plus /> New workspace
+            </Link>
           </Button>
         </div>
       </div>

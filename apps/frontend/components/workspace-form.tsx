@@ -1,11 +1,6 @@
 "use client";
 
-import {
-  Field,
-  FieldLabel,
-  FieldGroup,
-  FieldSet,
-} from "@/components/ui/field";
+import { Field, FieldLabel, FieldGroup, FieldSet } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { useState } from "react";
@@ -26,9 +21,7 @@ const WorkspaceForm = ({
 
   const router = useRouter();
 
-  const handleChange = (
-    e: React.ChangeEvent<HTMLInputElement>,
-  ) => {
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { id, value } = e.target;
     setFormData((prevData) => ({
       ...prevData,

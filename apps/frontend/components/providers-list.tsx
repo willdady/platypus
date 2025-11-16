@@ -19,7 +19,7 @@ const ProvidersList = ({
 }) => {
   const { data, error, isLoading } = useSWR<{ results: Provider[] }>(
     `${process.env.NEXT_PUBLIC_BACKEND_URL}/providers?workspaceId=${workspaceId}`,
-    fetcher
+    fetcher,
   );
 
   if (isLoading || error) return null; // FIXME

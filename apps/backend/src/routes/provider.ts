@@ -31,7 +31,9 @@ provider.get("/", async (c) => {
   const results = await db
     .select()
     .from(providerTable)
-    .where(workspaceId ? eq(providerTable.workspaceId, workspaceId) : undefined);
+    .where(
+      workspaceId ? eq(providerTable.workspaceId, workspaceId) : undefined,
+    );
   return c.json({ results });
 });
 
