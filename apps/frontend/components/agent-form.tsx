@@ -65,6 +65,7 @@ const AgentForm = ({
     tools: [] as string[],
     topP: undefined,
     topK: undefined,
+    seed: undefined,
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -130,6 +131,7 @@ const AgentForm = ({
         temperature: formData.temperature,
         topP: formData.topP,
         topK: formData.topK,
+        seed: formData.seed,
       };
 
       const response = await fetch(
@@ -208,7 +210,7 @@ const AgentForm = ({
               </SelectContent>
             </Select>
           </Field>
-          <Field>
+          <Field className="w-1/2">
             <FieldLabel htmlFor="maxSteps">Max steps</FieldLabel>
             <Input
               id="maxSteps"
@@ -296,7 +298,7 @@ const AgentForm = ({
             </div>
           </CollapsibleTrigger>
           <CollapsibleContent className="mb-6">
-            <FieldGroup>
+            <FieldGroup className="grid grid-cols-2 gap-4">
               <Field>
                 <FieldLabel htmlFor="temperature">Temperature</FieldLabel>
                 <Input
@@ -310,6 +312,19 @@ const AgentForm = ({
                   }
                   disabled={isSubmitting}
                 />
+              </Field>
+              <Field>
+                <FieldLabel htmlFor="seed">Seed</FieldLabel>
+                <Input
+                  id="seed"
+                  type="number"
+                  value={formData.seed}
+                  onChange={(e) => handleNumberChange("seed", e.target.value)}
+                  disabled={isSubmitting}
+                />
+                <FieldDescription>
+                  Random seed for deterministic generation
+                </FieldDescription>
               </Field>
               <Field>
                 <FieldLabel htmlFor="topP">Top-p</FieldLabel>
