@@ -42,12 +42,7 @@ import {
 } from "@/components/ui/select";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, ToolUIPart } from "ai";
-import {
-  CopyIcon,
-  Plus,
-  TrashIcon,
-  TriangleAlert,
-} from "lucide-react";
+import { CopyIcon, Plus, TrashIcon, TriangleAlert } from "lucide-react";
 import { useState, useRef, Fragment, useEffect } from "react";
 import { Provider } from "@agent-kit/schemas";
 import useSWR from "swr";
@@ -93,7 +88,7 @@ export const Chat = ({
   // Fetch providers
   const { data: providersData, isLoading } = useSWR<{ results: Provider[] }>(
     `${BACKEND_URL}/providers?workspaceId=${workspaceId}`,
-    fetcher
+    fetcher,
   );
 
   const providers = providersData?.results || [];
@@ -168,7 +163,7 @@ export const Chat = ({
           providerId,
           modelId,
         },
-      }
+      },
     );
   };
 
@@ -180,10 +175,10 @@ export const Chat = ({
             <div className="w-full xl:w-4/5 max-w-5xl flex flex-col gap-4">
               {messages.map((message) => {
                 const fileParts = message.parts?.filter(
-                  (part) => part.type === "file"
+                  (part) => part.type === "file",
                 );
                 const sourceUrlParts = message.parts.filter(
-                  (part) => part.type === "source-url"
+                  (part) => part.type === "source-url",
                 );
 
                 return (
@@ -251,7 +246,7 @@ export const Chat = ({
                                   className="cursor-pointer"
                                   onClick={() => {
                                     const index = messages.findIndex(
-                                      (m) => m.id === message.id
+                                      (m) => m.id === message.id,
                                     );
                                     setMessages(messages.slice(0, index));
                                   }}
@@ -328,7 +323,10 @@ export const Chat = ({
                         <PromptInputActionAddAttachments className="cursor-pointer" />
                       </PromptInputActionMenuContent>
                     </PromptInputActionMenu>
-                    <PromptInputSpeechButton className="cursor-pointer" textareaRef={textareaRef} />
+                    <PromptInputSpeechButton
+                      className="cursor-pointer"
+                      textareaRef={textareaRef}
+                    />
                     <Select
                       onValueChange={handleModelChange}
                       value={`${providerId}:${modelId}`}

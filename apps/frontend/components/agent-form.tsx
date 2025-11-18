@@ -7,6 +7,7 @@ import {
   FieldSet,
   FieldLegend,
   FieldDescription,
+  FieldError,
 } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -31,7 +32,7 @@ import {
 } from "@/components/ui/select";
 import { type Tool, type Agent, type Provider } from "@agent-kit/schemas";
 import useSWR from "swr";
-import { fetcher } from "@/lib/utils";
+import { fetcher, parseValidationErrors } from "@/lib/utils";
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL;
 
@@ -70,6 +71,9 @@ const AgentForm = ({
     frequencyPenalty: undefined,
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [validationErrors, setValidationErrors] = useState<
+    Record<string, string>
+  >({});
 
   const router = useRouter();
 
@@ -88,6 +92,16 @@ const AgentForm = ({
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>,
   ) => {
     const { id, value } = e.target;
+
+    // Clear validation error for this field
+    if (validationErrors[id]) {
+      setValidationErrors((prev) => {
+        const newErrors = { ...prev };
+        delete newErrors[id];
+        return newErrors;
+      });
+    }
+
     setFormData((prevData) => ({
       ...prevData,
       [id]: value,
@@ -122,6 +136,7 @@ const AgentForm = ({
 
   const handleSubmit = async () => {
     setIsSubmitting(true);
+    setValidationErrors({});
     try {
       const payload: Omit<Agent, "id" | "createdAt" | "updatedAt"> = {
         workspaceId,
@@ -152,7 +167,9 @@ const AgentForm = ({
       if (response.ok) {
         router.push(`/${orgId}/workspace/${workspaceId}`);
       } else {
-        // Handle error, e.g., show a toast notification
+        // Parse standardschema.dev validation errors
+        const errorData = await response.json();
+        setValidationErrors(parseValidationErrors(errorData));
         console.error("Failed to save agent");
       }
     } catch (error) {
@@ -166,7 +183,7 @@ const AgentForm = ({
     <div className={classNames}>
       <FieldSet>
         <FieldGroup>
-          <Field>
+          <Field data-invalid={!!validationErrors.name}>
             <FieldLabel htmlFor="name">Name</FieldLabel>
             <Input
               id="name"
@@ -174,8 +191,11 @@ const AgentForm = ({
               value={formData.name}
               onChange={handleChange}
               disabled={isSubmitting}
+              aria-invalid={!!validationErrors.name}
             />
-            {/* <FieldError>Validation message.</FieldError> */}
+            {validationErrors.name && (
+              <FieldError>{validationErrors.name}</FieldError>
+            )}
           </Field>
           <Field>
             <FieldLabel htmlFor="systemPrompt">System prompt</FieldLabel>
@@ -352,7 +372,9 @@ const AgentForm = ({
                 />
               </Field>
               <Field>
-                <FieldLabel htmlFor="presencePenalty">Presence Penalty</FieldLabel>
+                <FieldLabel htmlFor="presencePenalty">
+                  Presence Penalty
+                </FieldLabel>
                 <Input
                   id="presencePenalty"
                   type="number"
@@ -360,12 +382,16 @@ const AgentForm = ({
                   max="2"
                   step="0.1"
                   value={formData.presencePenalty ?? ""}
-                  onChange={(e) => handleFloatChange("presencePenalty", e.target.value)}
+                  onChange={(e) =>
+                    handleFloatChange("presencePenalty", e.target.value)
+                  }
                   disabled={isSubmitting}
                 />
               </Field>
               <Field>
-                <FieldLabel htmlFor="frequencyPenalty">Frequency Penalty</FieldLabel>
+                <FieldLabel htmlFor="frequencyPenalty">
+                  Frequency Penalty
+                </FieldLabel>
                 <Input
                   id="frequencyPenalty"
                   type="number"
@@ -373,7 +399,9 @@ const AgentForm = ({
                   max="2"
                   step="0.1"
                   value={formData.frequencyPenalty ?? ""}
-                  onChange={(e) => handleFloatChange("frequencyPenalty", e.target.value)}
+                  onChange={(e) =>
+                    handleFloatChange("frequencyPenalty", e.target.value)
+                  }
                   disabled={isSubmitting}
                 />
               </Field>
@@ -385,7 +413,7 @@ const AgentForm = ({
       <Button
         className="cursor-pointer"
         onClick={handleSubmit}
-        disabled={isSubmitting}
+        disabled={isSubmitting || Object.keys(validationErrors).length > 0}
       >
         Save
       </Button>

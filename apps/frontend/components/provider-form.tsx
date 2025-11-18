@@ -38,6 +38,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { type Provider } from "@agent-kit/schemas";
 import useSWR from "swr";
+import { parseValidationErrors } from "@/lib/utils";
 
 type ProviderFormData = Omit<
   Provider,
@@ -70,6 +71,9 @@ const ProviderForm = ({
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isOpen, setIsOpen] = useState(false);
+  const [validationErrors, setValidationErrors] = useState<
+    Record<string, string>
+  >({});
 
   const router = useRouter();
 
@@ -100,6 +104,16 @@ const ProviderForm = ({
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>,
   ) => {
     const { id, value } = e.target;
+
+    // Clear validation error for this field
+    if (validationErrors[id]) {
+      setValidationErrors((prev) => {
+        const newErrors = { ...prev };
+        delete newErrors[id];
+        return newErrors;
+      });
+    }
+
     if (id === "headers") {
       setHeadersString(value);
       try {
@@ -131,6 +145,15 @@ const ProviderForm = ({
   };
 
   const handleSelectChange = (id: string, value: string) => {
+    // Clear validation error for this field
+    if (validationErrors[id]) {
+      setValidationErrors((prev) => {
+        const newErrors = { ...prev };
+        delete newErrors[id];
+        return newErrors;
+      });
+    }
+
     setFormData((prevData) => ({
       ...prevData,
       [id]: value,
@@ -139,6 +162,7 @@ const ProviderForm = ({
 
   const handleSubmit = async () => {
     setIsSubmitting(true);
+    setValidationErrors({});
     try {
       const payload: Omit<Provider, "id" | "createdAt" | "updatedAt"> = {
         workspaceId,
@@ -167,6 +191,9 @@ const ProviderForm = ({
       if (response.ok) {
         router.push(`/${orgId}/workspace/${workspaceId}/settings/providers`);
       } else {
+        // Parse standardschema.dev validation errors
+        const errorData = await response.json();
+        setValidationErrors(parseValidationErrors(errorData));
         console.error("Failed to save provider");
       }
     } catch (error) {
@@ -232,7 +259,7 @@ const ProviderForm = ({
             </Select>
           </Field>
 
-          <Field>
+          <Field data-invalid={!!validationErrors.name}>
             <FieldLabel htmlFor="name">Name</FieldLabel>
             <Input
               id="name"
@@ -240,10 +267,14 @@ const ProviderForm = ({
               value={formData.name}
               onChange={handleChange}
               disabled={isSubmitting}
+              aria-invalid={!!validationErrors.name}
             />
+            {validationErrors.name && (
+              <FieldError>{validationErrors.name}</FieldError>
+            )}
           </Field>
 
-          <Field>
+          <Field data-invalid={!!validationErrors.apiKey}>
             <FieldLabel htmlFor="apiKey">API Key</FieldLabel>
             <Input
               id="apiKey"
@@ -252,10 +283,14 @@ const ProviderForm = ({
               value={formData.apiKey}
               onChange={handleChange}
               disabled={isSubmitting}
+              aria-invalid={!!validationErrors.apiKey}
             />
+            {validationErrors.apiKey && (
+              <FieldError>{validationErrors.apiKey}</FieldError>
+            )}
           </Field>
 
-          <Field>
+          <Field data-invalid={!!validationErrors.baseUrl}>
             <FieldLabel htmlFor="baseUrl">Base URL</FieldLabel>
             <Input
               id="baseUrl"
@@ -264,13 +299,17 @@ const ProviderForm = ({
               value={formData.baseUrl}
               onChange={handleChange}
               disabled={isSubmitting}
+              aria-invalid={!!validationErrors.baseUrl}
             />
             <FieldDescription>
               Optional base URL for the provider.
             </FieldDescription>
+            {validationErrors.baseUrl && (
+              <FieldError>{validationErrors.baseUrl}</FieldError>
+            )}
           </Field>
 
-          <Field>
+          <Field data-invalid={!!validationErrors.modelIds}>
             <FieldLabel htmlFor="modelIds">Model IDs</FieldLabel>
             <Textarea
               id="modelIds"
@@ -278,10 +317,14 @@ const ProviderForm = ({
               value={modelIdsString}
               onChange={handleChange}
               disabled={isSubmitting}
+              aria-invalid={!!validationErrors.modelIds}
             />
             <FieldDescription>
               Model IDs to allow for this provider. One per line.
             </FieldDescription>
+            {validationErrors.modelIds && (
+              <FieldError>{validationErrors.modelIds}</FieldError>
+            )}
           </Field>
         </FieldGroup>
 
@@ -301,7 +344,9 @@ const ProviderForm = ({
           </CollapsibleTrigger>
           <CollapsibleContent className="mb-6">
             <FieldGroup>
-              <Field>
+              <Field
+                data-invalid={!!headersError || !!validationErrors.headers}
+              >
                 <FieldLabel htmlFor="headers">Headers</FieldLabel>
                 <Textarea
                   id="headers"
@@ -309,11 +354,16 @@ const ProviderForm = ({
                   value={headersString}
                   onChange={handleChange}
                   disabled={isSubmitting}
+                  aria-invalid={!!headersError || !!validationErrors.headers}
                 />
                 <FieldDescription>
                   Optional headers as JSON object.
                 </FieldDescription>
-                {headersError && <FieldError>{headersError}</FieldError>}
+                {(headersError || validationErrors.headers) && (
+                  <FieldError>
+                    {headersError || validationErrors.headers}
+                  </FieldError>
+                )}
               </Field>
             </FieldGroup>
           </CollapsibleContent>
@@ -324,7 +374,11 @@ const ProviderForm = ({
         <Button
           className="cursor-pointer"
           onClick={handleSubmit}
-          disabled={isSubmitting || !!headersError}
+          disabled={
+            isSubmitting ||
+            !!headersError ||
+            Object.keys(validationErrors).length > 0
+          }
         >
           {providerId ? "Update" : "Save"}
         </Button>

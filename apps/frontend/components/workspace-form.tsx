@@ -1,11 +1,18 @@
 "use client";
 
-import { Field, FieldLabel, FieldGroup, FieldSet } from "@/components/ui/field";
+import {
+  Field,
+  FieldLabel,
+  FieldGroup,
+  FieldSet,
+  FieldError,
+} from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { type Workspace } from "@agent-kit/schemas";
+import { parseValidationErrors } from "@/lib/utils";
 
 const WorkspaceForm = ({
   classNames,
@@ -18,11 +25,24 @@ const WorkspaceForm = ({
     name: "",
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [validationErrors, setValidationErrors] = useState<
+    Record<string, string>
+  >({});
 
   const router = useRouter();
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { id, value } = e.target;
+
+    // Clear validation error for this field
+    if (validationErrors[id]) {
+      setValidationErrors((prev) => {
+        const newErrors = { ...prev };
+        delete newErrors[id];
+        return newErrors;
+      });
+    }
+
     setFormData((prevData) => ({
       ...prevData,
       [id]: value,
@@ -31,6 +51,7 @@ const WorkspaceForm = ({
 
   const handleSubmit = async () => {
     setIsSubmitting(true);
+    setValidationErrors({});
     try {
       const payload: Omit<Workspace, "id" | "createdAt" | "updatedAt"> = {
         organisationId: orgId,
@@ -52,7 +73,9 @@ const WorkspaceForm = ({
         const workspace = await response.json();
         router.push(`/${orgId}/workspace/${workspace.id}`);
       } else {
-        // Handle error, e.g., show a toast notification
+        // Parse standardschema.dev validation errors
+        const errorData = await response.json();
+        setValidationErrors(parseValidationErrors(errorData));
         console.error("Failed to save workspace");
       }
     } catch (error) {
@@ -66,7 +89,7 @@ const WorkspaceForm = ({
     <div className={classNames}>
       <FieldSet>
         <FieldGroup>
-          <Field>
+          <Field data-invalid={!!validationErrors.name}>
             <FieldLabel htmlFor="name">Name</FieldLabel>
             <Input
               id="name"
@@ -74,7 +97,11 @@ const WorkspaceForm = ({
               value={formData.name}
               onChange={handleChange}
               disabled={isSubmitting}
+              aria-invalid={!!validationErrors.name}
             />
+            {validationErrors.name && (
+              <FieldError>{validationErrors.name}</FieldError>
+            )}
           </Field>
         </FieldGroup>
       </FieldSet>
@@ -82,7 +109,7 @@ const WorkspaceForm = ({
       <Button
         className="cursor-pointer"
         onClick={handleSubmit}
-        disabled={isSubmitting}
+        disabled={isSubmitting || Object.keys(validationErrors).length > 0}
       >
         Create Workspace
       </Button>

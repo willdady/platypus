@@ -6,6 +6,7 @@ import {
   FieldGroup,
   FieldSet,
   FieldDescription,
+  FieldError,
 } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -30,6 +31,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { type MCP } from "@agent-kit/schemas";
 import useSWR from "swr";
+import { parseValidationErrors } from "@/lib/utils";
 
 type McpFormData = Omit<MCP, "id" | "createdAt" | "updatedAt" | "workspaceId">;
 
@@ -53,6 +55,9 @@ const McpForm = ({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [validationErrors, setValidationErrors] = useState<
+    Record<string, string>
+  >({});
 
   const router = useRouter();
 
@@ -75,6 +80,16 @@ const McpForm = ({
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { id, value } = e.target;
+
+    // Clear validation error for this field
+    if (validationErrors[id]) {
+      setValidationErrors((prev) => {
+        const newErrors = { ...prev };
+        delete newErrors[id];
+        return newErrors;
+      });
+    }
+
     setFormData((prevData) => ({
       ...prevData,
       [id]: value,
@@ -82,6 +97,24 @@ const McpForm = ({
   };
 
   const handleSelectChange = (id: string, value: string) => {
+    // Clear validation error for this field
+    if (validationErrors[id]) {
+      setValidationErrors((prev) => {
+        const newErrors = { ...prev };
+        delete newErrors[id];
+        return newErrors;
+      });
+    }
+
+    // Clear bearerToken error when authType changes
+    if (id === "authType" && validationErrors.bearerToken) {
+      setValidationErrors((prev) => {
+        const newErrors = { ...prev };
+        delete newErrors.bearerToken;
+        return newErrors;
+      });
+    }
+
     setFormData((prevData) => ({
       ...prevData,
       [id]: value,
@@ -90,11 +123,12 @@ const McpForm = ({
 
   const handleSubmit = async () => {
     setIsSubmitting(true);
+    setValidationErrors({});
     try {
       const payload: Omit<MCP, "id" | "createdAt" | "updatedAt"> = {
         workspaceId,
         name: formData.name,
-        url: formData.url || undefined,
+        url: formData.url,
         authType: formData.authType,
         bearerToken:
           formData.authType === "Bearer" ? formData.bearerToken : undefined,
@@ -117,6 +151,9 @@ const McpForm = ({
       if (response.ok) {
         router.push(`/${orgId}/workspace/${workspaceId}/settings/mcp`);
       } else {
+        // Parse standardschema.dev validation errors
+        const errorData = await response.json();
+        setValidationErrors(parseValidationErrors(errorData));
         console.error("Failed to save MCP");
       }
     } catch (error) {
@@ -160,7 +197,7 @@ const McpForm = ({
     <div className={classNames}>
       <FieldSet className="mb-4">
         <FieldGroup>
-          <Field>
+          <Field data-invalid={!!validationErrors.name}>
             <FieldLabel htmlFor="name">Name</FieldLabel>
             <Input
               id="name"
@@ -168,10 +205,14 @@ const McpForm = ({
               value={formData.name}
               onChange={handleChange}
               disabled={isSubmitting}
+              aria-invalid={!!validationErrors.name}
             />
+            {validationErrors.name && (
+              <FieldError>{validationErrors.name}</FieldError>
+            )}
           </Field>
 
-          <Field>
+          <Field data-invalid={!!validationErrors.url}>
             <FieldLabel htmlFor="url">URL</FieldLabel>
             <Input
               id="url"
@@ -180,10 +221,14 @@ const McpForm = ({
               value={formData.url}
               onChange={handleChange}
               disabled={isSubmitting}
+              aria-invalid={!!validationErrors.url}
             />
             <FieldDescription>
               The URL endpoint for the MCP integration.
             </FieldDescription>
+            {validationErrors.url && (
+              <FieldError>{validationErrors.url}</FieldError>
+            )}
           </Field>
 
           <FieldGroup className="grid grid-cols-3 gap-4">
@@ -208,7 +253,10 @@ const McpForm = ({
             </Field>
 
             {formData.authType === "Bearer" && (
-              <Field className="col-span-2">
+              <Field
+                className="col-span-2"
+                data-invalid={!!validationErrors.bearerToken}
+              >
                 <FieldLabel htmlFor="bearerToken">Bearer Token</FieldLabel>
                 <Input
                   id="bearerToken"
@@ -217,7 +265,11 @@ const McpForm = ({
                   value={formData.bearerToken}
                   onChange={handleChange}
                   disabled={isSubmitting}
+                  aria-invalid={!!validationErrors.bearerToken}
                 />
+                {validationErrors.bearerToken && (
+                  <FieldError>{validationErrors.bearerToken}</FieldError>
+                )}
               </Field>
             )}
           </FieldGroup>
@@ -228,7 +280,7 @@ const McpForm = ({
         <Button
           className="cursor-pointer"
           onClick={handleSubmit}
-          disabled={isSubmitting}
+          disabled={isSubmitting || Object.keys(validationErrors).length > 0}
         >
           {mcpId ? "Update" : "Save"}
         </Button>
@@ -269,8 +321,8 @@ const McpForm = ({
           <DialogHeader>
             <DialogTitle>Delete MCP server</DialogTitle>
             <DialogDescription>
-              Are you sure you want to delete this MCP server? This action cannot be
-              undone.
+              Are you sure you want to delete this MCP server? This action
+              cannot be undone.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>

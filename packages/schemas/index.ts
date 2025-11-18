@@ -20,7 +20,7 @@ export const organisationUpdateSchema = organisationSchema.pick({ name: true });
 export const workspaceSchema = z.object({
   id: z.string(),
   organisationId: z.string(),
-  name: z.string(),
+  name: z.string().min(3).max(30),
   createdAt: z.date(),
   updatedAt: z.date(),
 });
@@ -51,7 +51,7 @@ export const agentSchema = z.object({
   id: z.string(),
   workspaceId: z.string(),
   providerId: z.string(),
-  name: z.string(),
+  name: z.string().min(3).max(30),
   systemPrompt: z.string().optional(),
   modelId: z.string(),
   maxSteps: z.number().optional(),
@@ -111,45 +111,64 @@ export type Tool = z.infer<typeof toolSchema>;
 
 // MCP
 
-export const mcpSchema = z.object({
-  id: z.string(),
-  workspaceId: z.string(),
-  name: z.string(),
-  url: z.string().optional(),
-  authType: z.enum(["None", "Bearer"]),
-  bearerToken: z.string().optional(),
-  createdAt: z.date(),
-  updatedAt: z.date(),
-});
+const mcpBearerTokenRefine = {
+  validator: (data: { authType: string; bearerToken?: string }) => {
+    if (data.authType === "Bearer") {
+      return data.bearerToken && data.bearerToken.length > 0;
+    }
+    return true;
+  },
+  params: {
+    message: "Bearer token is required when auth type is Bearer",
+    path: ["bearerToken"],
+  },
+};
+
+export const mcpSchema = z
+  .object({
+    id: z.string(),
+    workspaceId: z.string(),
+    name: z.string().min(3).max(30),
+    url: z.url(),
+    authType: z.enum(["None", "Bearer"]),
+    bearerToken: z.string().optional(),
+    createdAt: z.date(),
+    updatedAt: z.date(),
+  })
+  .refine(mcpBearerTokenRefine.validator, mcpBearerTokenRefine.params);
 
 export type MCP = z.infer<typeof mcpSchema>;
 
-export const mcpCreateSchema = mcpSchema.pick({
-  workspaceId: true,
-  name: true,
-  url: true,
-  authType: true,
-  bearerToken: true,
-});
+export const mcpCreateSchema = mcpSchema
+  .pick({
+    workspaceId: true,
+    name: true,
+    url: true,
+    authType: true,
+    bearerToken: true,
+  })
+  .refine(mcpBearerTokenRefine.validator, mcpBearerTokenRefine.params);
 
-export const mcpUpdateSchema = mcpSchema.pick({
-  name: true,
-  url: true,
-  authType: true,
-  bearerToken: true,
-});
+export const mcpUpdateSchema = mcpSchema
+  .pick({
+    name: true,
+    url: true,
+    authType: true,
+    bearerToken: true,
+  })
+  .refine(mcpBearerTokenRefine.validator, mcpBearerTokenRefine.params);
 
 // Provider
 
 export const providerSchema = z.object({
   id: z.string(),
   workspaceId: z.string(),
-  name: z.string(),
+  name: z.string().min(3).max(32),
   providerType: z.enum(["OpenAI", "OpenRouter"]),
-  apiKey: z.string(),
+  apiKey: z.string().min(1),
   baseUrl: z.string().optional(),
   headers: z.record(z.string(), z.string()).optional(),
-  modelIds: z.array(z.string()),
+  modelIds: z.array(z.string()).min(1),
   createdAt: z.date(),
   updatedAt: z.date(),
 });
