@@ -25,7 +25,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Settings, Zap, Bot, Folder, FolderOpen } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import {
+  Settings,
+  Bot,
+  Folder,
+  FolderOpen,
+  BotMessageSquare,
+} from "lucide-react";
 
 export function AppSidebar({
   orgId,
@@ -50,11 +57,6 @@ export function AppSidebar({
   };
 
   const primaryItems = [
-    {
-      title: "Quick Chat",
-      url: `/${orgId}/workspace/${workspaceId}/chat`,
-      icon: Zap,
-    },
     {
       title: "Agents",
       url: `/${orgId}/workspace/${workspaceId}/agents`,
@@ -99,6 +101,11 @@ export function AppSidebar({
             </SelectGroup>
           </SelectContent>
         </Select>
+        <Button asChild className="w-full mt-2">
+          <Link href={`/${orgId}/workspace/${workspaceId}/chat`}>
+            <BotMessageSquare /> New Chat
+          </Link>
+        </Button>
       </SidebarHeader>
       <SidebarContent className="justify-between">
         <SidebarGroup>

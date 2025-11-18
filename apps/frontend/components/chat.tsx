@@ -74,9 +74,11 @@ const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL;
 export const Chat = ({
   orgId,
   workspaceId,
+  chatId,
 }: {
   orgId: string;
   workspaceId: string;
+  chatId: string;
 }) => {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -93,7 +95,14 @@ export const Chat = ({
 
   const providers = providersData?.results || [];
 
+  // Fetch existing chat data
+  const { data: chatData } = useSWR(
+    `${BACKEND_URL}/chat/${chatId}?workspaceId=${workspaceId}`,
+    fetcher,
+  );
+
   const { messages, setMessages, sendMessage, status } = useChat({
+    id: chatId,
     transport: new DefaultChatTransport({
       api: `${BACKEND_URL}/chat`,
       body: {
@@ -102,6 +111,13 @@ export const Chat = ({
       },
     }),
   });
+
+  // Initialize messages from existing chat data
+  useEffect(() => {
+    if (chatData?.messages && chatData.messages.length > 0) {
+      setMessages(chatData.messages);
+    }
+  }, [chatData, setMessages]);
 
   // Initialize with first provider's first model once providers are loaded
   useEffect(() => {

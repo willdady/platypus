@@ -47,6 +47,18 @@ export const chatSchema = z.object({
 
 export type Chat = z.infer<typeof chatSchema>;
 
+export const chatUpdateSchema = chatSchema
+  .pick({
+    id: true,
+    workspaceId: true,
+    title: true,
+    messages: true,
+  })
+  .extend({
+    providerId: z.string(),
+    modelId: z.string(),
+  });
+
 // Agent
 
 export const agentSchema = z.object({
