@@ -1,4 +1,4 @@
-import { pgTable, primaryKey } from "drizzle-orm/pg-core";
+import { pgTable, primaryKey, jsonb } from "drizzle-orm/pg-core";
 
 export const organisation = pgTable("organisation", (t) => ({
   id: t.text("id").primaryKey(),
@@ -22,6 +22,8 @@ export const chat = pgTable("chat", (t) => ({
   workspaceId: t.text("workspace_id").references(() => workspace.id, {
     onDelete: "cascade",
   }),
+  title: t.text("title").notNull(),
+  messages: t.jsonb("messages"),
   createdAt: t.timestamp("created_at").notNull().defaultNow(),
   updatedAt: t.timestamp("updated_at").notNull().defaultNow(),
 }));

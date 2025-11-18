@@ -39,6 +39,8 @@ export const workspaceUpdateSchema = workspaceSchema.pick({ name: true });
 export const chatSchema = z.object({
   id: z.string(),
   workspaceId: z.string(),
+  title: z.string().min(3).max(30),
+  messages: z.any().optional(),
   createdAt: z.date(),
   updatedAt: z.date(),
 });
