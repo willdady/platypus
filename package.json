@@ -3,6 +3,7 @@
   "private": true,
   "scripts": {
     "build": "turbo run build",
+    "build-docker": "turbo run build-docker",
     "dev": "turbo run dev",
     "drizzle-kit-push": "turbo run drizzle-kit-push -F @agent-kit/backend",
     "format": "prettier --write \"**/*.{ts,tsx,md}\""
