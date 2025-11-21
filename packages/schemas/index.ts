@@ -58,6 +58,19 @@ export const chatUpdateSchema = chatSchema
     modelId: z.string(),
   });
 
+export const chatListItemSchema = chatSchema.pick({
+  id: true,
+  title: true,
+});
+
+export type ChatListItem = z.infer<typeof chatListItemSchema>;
+
+export const chatListSchema = z.object({
+  results: z.array(chatListItemSchema),
+});
+
+export type ChatList = z.infer<typeof chatListSchema>;
+
 // Agent
 
 export const agentSchema = z.object({

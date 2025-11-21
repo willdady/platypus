@@ -1,11 +1,10 @@
 import { Hono } from "hono";
 import { sValidator } from "@hono/standard-validator";
-import { nanoid } from "nanoid";
+import { z } from "zod";
 import {
   convertToModelMessages,
   type LanguageModel,
   streamText,
-  type UIMessage,
 } from "ai";
 import { createOpenAI } from "@ai-sdk/openai";
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
@@ -13,28 +12,70 @@ import { stepCountIs } from "ai";
 import { db } from "../index.ts";
 import { chat as chatTable, provider as providerTable } from "../db/schema.ts";
 import { chatUpdateSchema } from "@agent-kit/schemas";
-import { and, eq } from "drizzle-orm";
+import { and, eq, desc } from "drizzle-orm";
 
 const chat = new Hono();
 
-chat.get("/:id", async (c) => {
-  const id = c.req.param("id");
-  const workspaceId = c.req.query("workspaceId");
+chat.get(
+  "/",
+  sValidator(
+    "query",
+    z.object({
+      workspaceId: z.string(),
+      limit: z.string().optional(),
+      offset: z.string().optional(),
+    }),
+  ),
+  async (c) => {
+    const {
+      workspaceId,
+      limit: limitStr,
+      offset: offsetStr,
+    } = c.req.valid("query");
 
-  if (!workspaceId) {
-    return c.json({ message: "workspaceId query parameter is required" }, 400);
-  }
+    if (!workspaceId) {
+      return c.json(
+        { message: "workspaceId query parameter is required" },
+        400,
+      );
+    }
 
-  const record = await db
-    .select()
-    .from(chatTable)
-    .where(and(eq(chatTable.id, id), eq(chatTable.workspaceId, workspaceId)))
-    .limit(1);
-  if (record.length === 0) {
-    return c.json({ message: "Chat not found" }, 404);
-  }
-  return c.json(record[0]);
-});
+    const limit = Math.min(parseInt(limitStr ?? "100") || 100, 100);
+    const offset = parseInt(offsetStr ?? "0") || 0;
+
+    const records = await db
+      .select({
+        id: chatTable.id,
+        title: chatTable.title,
+      })
+      .from(chatTable)
+      .where(eq(chatTable.workspaceId, workspaceId))
+      .orderBy(desc(chatTable.updatedAt))
+      .limit(limit)
+      .offset(offset);
+
+    return c.json({ results: records });
+  },
+);
+
+chat.get(
+  "/:id",
+  sValidator("query", z.object({ workspaceId: z.string() })),
+  async (c) => {
+    const id = c.req.param("id");
+    const { workspaceId } = c.req.valid("query");
+
+    const record = await db
+      .select()
+      .from(chatTable)
+      .where(and(eq(chatTable.id, id), eq(chatTable.workspaceId, workspaceId)))
+      .limit(1);
+    if (record.length === 0) {
+      return c.json({ message: "Chat not found" }, 404);
+    }
+    return c.json(record[0]);
+  },
+);
 
 chat.post("/", sValidator("json", chatUpdateSchema), async (c) => {
   const data = c.req.valid("json");

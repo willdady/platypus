@@ -1,0 +1,22 @@
+meta {
+  name: List Chats
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{host}}/chat
+  body: none
+  auth: inherit
+}
+
+query:json {
+  {
+    "workspaceId": "default"
+  }
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}
