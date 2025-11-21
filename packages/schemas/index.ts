@@ -51,7 +51,6 @@ export const chatUpdateSchema = chatSchema
   .pick({
     id: true,
     workspaceId: true,
-    title: true,
     messages: true,
   })
   .extend({
