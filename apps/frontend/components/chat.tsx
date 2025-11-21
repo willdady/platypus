@@ -156,7 +156,8 @@ export const Chat = ({
 
   const handleModelChange = (value: string) => {
     // Value is in format "providerId:modelId"
-    const [newProviderId, newModelId] = value.split(":");
+    const [newProviderId, ...modelIdParts] = value.split(":");
+    const newModelId = modelIdParts.join(":");
     if (newProviderId && newModelId) {
       setProviderId(newProviderId);
       setModelId(newModelId);
