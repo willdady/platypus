@@ -93,6 +93,7 @@ chat.post("/", sValidator("json", chatUpdateSchema), async (c) => {
   });
 
   return result.toUIMessageStreamResponse({
+    originalMessages: messages,
     onFinish: async ({ messages }) => {
       try {
         // Upsert chat record - try update first, then insert if not found
