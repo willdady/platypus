@@ -16,20 +16,20 @@
   },
   "dependencies": {
     "@agent-kit/schemas": "workspace:*",
-    "@ai-sdk/openai": "^2.0.67",
+    "@ai-sdk/openai": "^2.0.71",
     "@hono/node-server": "^1.19.6",
     "@hono/standard-validator": "^0.1.5",
-    "@openrouter/ai-sdk-provider": "^1.2.3",
-    "ai": "^5.0.86",
+    "@openrouter/ai-sdk-provider": "^1.2.5",
+    "ai": "^5.0.98",
     "drizzle-orm": "^0.44.7",
-    "hono": "^4.10.4",
+    "hono": "^4.10.6",
     "nanoid": "^5.1.6",
     "pg": "^8.16.3",
     "zod": "^4.1.12"
   },
   "devDependencies": {
-    "@types/node": "^24.9.2",
+    "@types/node": "^24.10.1",
     "@types/pg": "^8.15.6",
-    "drizzle-kit": "^0.31.6"
+    "drizzle-kit": "^0.31.7"
   }
 }
