@@ -1,0 +1,22 @@
+meta {
+  name: Delete Chat
+  type: http
+  seq: 3
+}
+
+delete {
+  url: {{baseUrl}}/chat/:id?workspaceId={{workspaceId}}
+  body: none
+  auth: none
+}
+
+query:json {
+  {
+    "workspaceId": "default"
+  }
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

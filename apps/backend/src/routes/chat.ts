@@ -1,11 +1,7 @@
 import { Hono } from "hono";
 import { sValidator } from "@hono/standard-validator";
 import { z } from "zod";
-import {
-  convertToModelMessages,
-  type LanguageModel,
-  streamText,
-} from "ai";
+import { convertToModelMessages, type LanguageModel, streamText } from "ai";
 import { createOpenAI } from "@ai-sdk/openai";
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 import { stepCountIs } from "ai";
@@ -173,5 +169,25 @@ chat.post("/", sValidator("json", chatUpdateSchema), async (c) => {
     },
   });
 });
+
+chat.delete(
+  "/:id",
+  sValidator("query", z.object({ workspaceId: z.string() })),
+  async (c) => {
+    const id = c.req.param("id");
+    const { workspaceId } = c.req.valid("query");
+
+    const result = await db
+      .delete(chatTable)
+      .where(and(eq(chatTable.id, id), eq(chatTable.workspaceId, workspaceId)))
+      .returning();
+
+    if (result.length === 0) {
+      return c.json({ message: "Chat not found" }, 404);
+    }
+
+    return c.json({ message: "Chat deleted successfully" }, 200);
+  },
+);
 
 export { chat };
