@@ -73,6 +73,7 @@ export const chatListItemSchema = chatSchema.pick({
   id: true,
   title: true,
   isStarred: true,
+  createdAt: true,
   updatedAt: true,
 });
 

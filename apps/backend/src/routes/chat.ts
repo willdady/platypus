@@ -44,11 +44,12 @@ chat.get(
         id: chatTable.id,
         title: chatTable.title,
         isStarred: chatTable.isStarred,
+        createdAt: chatTable.createdAt,
         updatedAt: chatTable.updatedAt,
       })
       .from(chatTable)
       .where(eq(chatTable.workspaceId, workspaceId))
-      .orderBy(desc(chatTable.updatedAt))
+      .orderBy(desc(chatTable.createdAt))
       .limit(limit)
       .offset(offset);
 
