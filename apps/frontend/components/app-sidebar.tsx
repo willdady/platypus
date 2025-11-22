@@ -261,7 +261,7 @@ export function AppSidebar({
                         <Link
                           href={`/${orgId}/workspace/${workspaceId}/chat/${chat.id}`}
                         >
-                          {chat.title}
+                          <p className="truncate">{chat.title}</p>
                         </Link>
                       </SidebarMenuButton>
                       <DropdownMenu modal={false}>
