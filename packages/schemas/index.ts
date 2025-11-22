@@ -70,6 +70,7 @@ export const chatGenerateTitleSchema = z.object({
 export const chatListItemSchema = chatSchema.pick({
   id: true,
   title: true,
+  updatedAt: true,
 });
 
 export type ChatListItem = z.infer<typeof chatListItemSchema>;

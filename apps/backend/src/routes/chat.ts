@@ -43,6 +43,7 @@ chat.get(
       .select({
         id: chatTable.id,
         title: chatTable.title,
+        updatedAt: chatTable.updatedAt,
       })
       .from(chatTable)
       .where(eq(chatTable.workspaceId, workspaceId))

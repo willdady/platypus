@@ -11,6 +11,7 @@ import {
   SidebarFooter,
   SidebarGroup,
   SidebarGroupContent,
+  SidebarGroupLabel,
   SidebarHeader,
   SidebarMenu,
   SidebarMenuAction,
@@ -78,17 +79,31 @@ export function AppSidebar({
   const { mutate } = useSWRConfig();
   const { data } = useSWR<{ results: Workspace[] }>(
     `${process.env.NEXT_PUBLIC_BACKEND_URL}/workspaces?orgId=${orgId}`,
-    fetcher,
+    fetcher
   );
 
   const { data: chatData } = useSWR<{ results: ChatListItem[] }>(
     `${process.env.NEXT_PUBLIC_BACKEND_URL}/chat?workspaceId=${workspaceId}`,
-    fetcher,
+    fetcher
   );
 
   const workspaces = data?.results ?? [];
   const chats = chatData?.results ?? [];
   const currentWorkspace = workspaces.find((w) => w.id === workspaceId);
+
+  // Group chats by time periods
+  const now = new Date();
+  const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+
+  const last7Days = chats.filter(chat => new Date(chat.updatedAt) >= sevenDaysAgo);
+  const other = chats.filter(chat => new Date(chat.updatedAt) < sevenDaysAgo);
+
+  const hasRecent = last7Days.length > 0;
+
+  const chatGroups = [
+    { label: "Last 7 days", chats: last7Days },
+    { label: hasRecent ? "Other" : "Chats", chats: hasRecent ? other : chats },
+  ].filter(group => group.chats.length > 0);
 
   const handleWorkspaceChange = (newWorkspaceId: string) => {
     router.push(`/${orgId}/workspace/${newWorkspaceId}/chat`);
@@ -111,7 +126,7 @@ export function AppSidebar({
             workspaceId,
             title: renameTitle,
           }),
-        },
+        }
       );
 
       if (response.ok) {
@@ -121,7 +136,7 @@ export function AppSidebar({
 
         // Revalidate the chat list
         await mutate(
-          `${process.env.NEXT_PUBLIC_BACKEND_URL}/chat?workspaceId=${workspaceId}`,
+          `${process.env.NEXT_PUBLIC_BACKEND_URL}/chat?workspaceId=${workspaceId}`
         );
       } else {
         // Parse standardschema.dev validation errors
@@ -145,7 +160,7 @@ export function AppSidebar({
         `${process.env.NEXT_PUBLIC_BACKEND_URL}/chat/${deleteChatId}?workspaceId=${workspaceId}`,
         {
           method: "DELETE",
-        },
+        }
       );
 
       if (!response.ok) {
@@ -158,7 +173,7 @@ export function AppSidebar({
       // Navigate to the main chat page if we were on the deleted chat
       if (
         pathname.startsWith(
-          `/${orgId}/workspace/${workspaceId}/chat/${deleteChatId}`,
+          `/${orgId}/workspace/${workspaceId}/chat/${deleteChatId}`
         )
       ) {
         router.push(`/${orgId}/workspace/${workspaceId}/chat`);
@@ -166,7 +181,7 @@ export function AppSidebar({
 
       // Revalidate the chat list
       await mutate(
-        `${process.env.NEXT_PUBLIC_BACKEND_URL}/chat?workspaceId=${workspaceId}`,
+        `${process.env.NEXT_PUBLIC_BACKEND_URL}/chat?workspaceId=${workspaceId}`
       );
     } catch (error) {
       console.error("Error deleting chat:", error);
@@ -227,7 +242,7 @@ export function AppSidebar({
             </Link>
           </Button>
         </SidebarHeader>
-        <SidebarContent className="justify-between">
+        <SidebarContent>
           <SidebarGroup>
             <SidebarGroupContent>
               <SidebarMenu>
@@ -247,76 +262,76 @@ export function AppSidebar({
               </SidebarMenu>
             </SidebarGroupContent>
           </SidebarGroup>
-          <SidebarGroup className="flex-1">
-            <SidebarGroupContent>
-              <SidebarMenu>
-                {chats.map((chat) => (
-                  <SidebarMenuItem key={chat.id}>
-                    <div className="flex items-center justify-between w-full">
-                      <SidebarMenuButton
-                        asChild
-                        isActive={pathname.startsWith(
-                          `/${orgId}/workspace/${workspaceId}/chat/${chat.id}`,
-                        )}
-                      >
-                        <Link
-                          href={`/${orgId}/workspace/${workspaceId}/chat/${chat.id}`}
+          {chatGroups.map((group) => (
+            <SidebarGroup key={group.label}>
+              <SidebarGroupLabel>{group.label}</SidebarGroupLabel>
+              <SidebarGroupContent>
+                <SidebarMenu>
+                  {group.chats.map((chat) => (
+                    <SidebarMenuItem key={chat.id}>
+                      <div className="flex items-center justify-between w-full">
+                        <SidebarMenuButton
+                          asChild
+                          isActive={pathname.startsWith(
+                            `/${orgId}/workspace/${workspaceId}/chat/${chat.id}`
+                          )}
                         >
-                          <p className="truncate">{chat.title}</p>
-                        </Link>
-                      </SidebarMenuButton>
-                      <DropdownMenu modal={false}>
-                        <DropdownMenuTrigger asChild>
-                          <SidebarMenuAction className="cursor-pointer">
-                            <EllipsisVertical className="h-4 w-4" />
-                          </SidebarMenuAction>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent side="right" align="start">
-                          <DropdownMenuItem
-                            className="cursor-pointer"
-                            onSelect={() => {
-                              setRenameChatId(chat.id);
-                              setRenameTitle(chat.title);
-                              setRenameValidationErrors({});
-                            }}
+                          <Link
+                            href={`/${orgId}/workspace/${workspaceId}/chat/${chat.id}`}
                           >
-                            <Pencil className="mr-2 h-4 w-4" /> Rename
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            className="cursor-pointer"
-                            onSelect={() => setDeleteChatId(chat.id)}
-                          >
-                            <Trash2 className="mr-2 h-4 w-4" /> Delete
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </div>
-                  </SidebarMenuItem>
-                ))}
-              </SidebarMenu>
-            </SidebarGroupContent>
-          </SidebarGroup>
-          <SidebarGroup>
-            <SidebarGroupContent>
-              <SidebarMenu>
-                {secondaryItems.map((item) => (
-                  <SidebarMenuItem key={item.title}>
-                    <SidebarMenuButton
-                      asChild
-                      isActive={pathname.startsWith(item.url)}
-                    >
-                      <Link href={item.url}>
-                        <item.icon />
-                        <span>{item.title}</span>
-                      </Link>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                ))}
-              </SidebarMenu>
-            </SidebarGroupContent>
-          </SidebarGroup>
+                            <p className="truncate">{chat.title}</p>
+                          </Link>
+                        </SidebarMenuButton>
+                        <DropdownMenu modal={false}>
+                          <DropdownMenuTrigger asChild>
+                            <SidebarMenuAction className="cursor-pointer">
+                              <EllipsisVertical className="h-4 w-4" />
+                            </SidebarMenuAction>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent side="right" align="start">
+                            <DropdownMenuItem
+                              className="cursor-pointer"
+                              onSelect={() => {
+                                setRenameChatId(chat.id);
+                                setRenameTitle(chat.title);
+                                setRenameValidationErrors({});
+                              }}
+                            >
+                              <Pencil className="mr-2 h-4 w-4" /> Rename
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              className="cursor-pointer"
+                              onSelect={() => setDeleteChatId(chat.id)}
+                            >
+                              <Trash2 className="mr-2 h-4 w-4" /> Delete
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </div>
+                    </SidebarMenuItem>
+                  ))}
+                </SidebarMenu>
+              </SidebarGroupContent>
+            </SidebarGroup>
+          ))}
         </SidebarContent>
-        <SidebarFooter />
+        <SidebarFooter>
+          <SidebarMenu>
+            {secondaryItems.map((item) => (
+              <SidebarMenuItem key={item.title}>
+                <SidebarMenuButton
+                  asChild
+                  isActive={pathname.startsWith(item.url)}
+                >
+                  <Link href={item.url}>
+                    <item.icon />
+                    <span>{item.title}</span>
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            ))}
+          </SidebarMenu>
+        </SidebarFooter>
       </Sidebar>
 
       {/* Rename Chat Dialog */}
