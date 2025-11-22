@@ -1,0 +1,29 @@
+meta {
+  name: Update Chat
+  type: http
+  seq: 4
+}
+
+put {
+  url: {{baseUrl}}/chat/:id?workspaceId={{workspaceId}}
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "workspaceId": "default",
+    "title": "My Renamed Chat"
+  }
+}
+
+query:json {
+  {
+    "workspaceId": "default"
+  }
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

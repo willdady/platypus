@@ -7,7 +7,7 @@ import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 import { stepCountIs } from "ai";
 import { db } from "../index.ts";
 import { chat as chatTable, provider as providerTable } from "../db/schema.ts";
-import { chatUpdateSchema } from "@agent-kit/schemas";
+import { chatSubmitSchema, chatUpdateSchema } from "@agent-kit/schemas";
 import { and, eq, desc } from "drizzle-orm";
 
 const chat = new Hono();
@@ -73,7 +73,7 @@ chat.get(
   },
 );
 
-chat.post("/", sValidator("json", chatUpdateSchema), async (c) => {
+chat.post("/", sValidator("json", chatSubmitSchema), async (c) => {
   const data = c.req.valid("json");
 
   const { id, workspaceId, providerId, modelId, messages = [] } = data;
@@ -187,6 +187,29 @@ chat.delete(
     }
 
     return c.json({ message: "Chat deleted successfully" }, 200);
+  },
+);
+
+chat.put(
+  "/:id",
+  sValidator("query", z.object({ workspaceId: z.string() })),
+  sValidator("json", chatUpdateSchema),
+  async (c) => {
+    const id = c.req.param("id");
+    const { workspaceId } = c.req.valid("query");
+    const { title } = c.req.valid("json");
+
+    const result = await db
+      .update(chatTable)
+      .set({ title, updatedAt: new Date() })
+      .where(and(eq(chatTable.id, id), eq(chatTable.workspaceId, workspaceId)))
+      .returning();
+
+    if (result.length === 0) {
+      return c.json({ message: "Chat not found" }, 404);
+    }
+
+    return c.json(result[0]);
   },
 );
 
