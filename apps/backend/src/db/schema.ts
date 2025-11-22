@@ -78,6 +78,7 @@ export const provider = pgTable("provider", (t) => ({
   baseUrl: t.text("base_url"),
   headers: t.jsonb().$type<Record<string, string>>(),
   modelIds: t.jsonb().$type<string[]>().notNull(),
+  taskModelId: t.text("task_model_id").notNull(),
   createdAt: t.timestamp("created_at").notNull().defaultNow(),
   updatedAt: t.timestamp("updated_at").notNull().defaultNow(),
 }));

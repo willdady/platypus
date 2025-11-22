@@ -63,6 +63,7 @@ const ProviderForm = ({
     baseUrl: "",
     headers: {},
     modelIds: [],
+    taskModelId: "",
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [headersError, setHeadersError] = useState<string | null>(null);
@@ -94,6 +95,7 @@ const ProviderForm = ({
         baseUrl: provider.baseUrl || "",
         headers: provider.headers || {},
         modelIds: provider.modelIds || [],
+        taskModelId: provider.taskModelId,
       });
       setHeadersString(JSON.stringify(provider.headers || {}, null, 2));
       setModelIdsString((provider.modelIds || []).join("\n"));
@@ -172,6 +174,7 @@ const ProviderForm = ({
         baseUrl: formData.baseUrl || undefined,
         headers: formData.headers,
         modelIds: formData.modelIds,
+        taskModelId: formData.taskModelId,
       };
 
       const url = providerId
@@ -324,6 +327,24 @@ const ProviderForm = ({
             </FieldDescription>
             {validationErrors.modelIds && (
               <FieldError>{validationErrors.modelIds}</FieldError>
+            )}
+          </Field>
+
+          <Field data-invalid={!!validationErrors.taskModelId}>
+            <FieldLabel htmlFor="taskModelId">Task Model ID</FieldLabel>
+            <Input
+              id="taskModelId"
+              placeholder="gpt-4"
+              value={formData.taskModelId}
+              onChange={handleChange}
+              disabled={isSubmitting}
+              aria-invalid={!!validationErrors.taskModelId}
+            />
+            <FieldDescription>
+              Model ID to use for tasks.
+            </FieldDescription>
+            {validationErrors.taskModelId && (
+              <FieldError>{validationErrors.taskModelId}</FieldError>
             )}
           </Field>
         </FieldGroup>
