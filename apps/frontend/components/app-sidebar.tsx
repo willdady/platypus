@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import useSWR, { mutate } from "swr";
+import useSWR, { useSWRConfig } from "swr";
 import { fetcher } from "@/lib/utils";
 import type { Workspace, ChatListItem } from "@agent-kit/schemas";
 import {
@@ -75,6 +75,7 @@ export function AppSidebar({
   const [deleteChatId, setDeleteChatId] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
+  const { mutate } = useSWRConfig();
   const { data } = useSWR<{ results: Workspace[] }>(
     `${process.env.NEXT_PUBLIC_BACKEND_URL}/workspaces?orgId=${orgId}`,
     fetcher,
@@ -272,6 +273,7 @@ export function AppSidebar({
                         </DropdownMenuTrigger>
                         <DropdownMenuContent side="right" align="start">
                           <DropdownMenuItem
+                            className="cursor-pointer"
                             onSelect={() => {
                               setRenameChatId(chat.id);
                               setRenameTitle(chat.title);
@@ -281,6 +283,7 @@ export function AppSidebar({
                             <Pencil className="mr-2 h-4 w-4" /> Rename
                           </DropdownMenuItem>
                           <DropdownMenuItem
+                            className="cursor-pointer"
                             onSelect={() => setDeleteChatId(chat.id)}
                           >
                             <Trash2 className="mr-2 h-4 w-4" /> Delete

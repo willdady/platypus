@@ -45,7 +45,7 @@ import { DefaultChatTransport, ToolUIPart } from "ai";
 import { CopyIcon, Plus, TrashIcon, TriangleAlert } from "lucide-react";
 import { useState, useRef, Fragment, useEffect } from "react";
 import { Provider } from "@agent-kit/schemas";
-import useSWR from "swr";
+import useSWR, { useSWRConfig } from "swr";
 import { fetcher } from "@/lib/utils";
 import {
   Reasoning,
@@ -86,6 +86,9 @@ export const Chat = ({
   const [modelId, setModelId] = useState("");
   const [providerId, setProviderId] = useState("");
   const [copied, setCopied] = useState(false);
+  const [hasMutated, setHasMutated] = useState(false);
+
+  const { mutate } = useSWRConfig();
 
   // Fetch providers
   const { data: providersData, isLoading } = useSWR<{ results: Provider[] }>(
@@ -112,12 +115,26 @@ export const Chat = ({
     }),
   });
 
+  // Reset hasMutated when chatId changes
+  useEffect(() => {
+    setHasMutated(false);
+  }, [chatId]);
+
   // Initialize messages from existing chat data
   useEffect(() => {
     if (chatData?.messages && chatData.messages.length > 0) {
       setMessages(chatData.messages);
     }
   }, [chatData, setMessages]);
+
+  // Revalidate the chat list (visible in AppSidebar) when our message array contains exactly 2 messages.
+  // This will be true after the first successful response from the backend for a new chat.
+  useEffect(() => {
+    if (messages.length === 2 && !hasMutated) {
+      mutate(`${process.env.NEXT_PUBLIC_BACKEND_URL}/chat?workspaceId=${workspaceId}`);
+      setHasMutated(true);
+    }
+  }, [messages, hasMutated, mutate, workspaceId]);
 
   // Initialize with first provider's first model once providers are loaded
   useEffect(() => {
