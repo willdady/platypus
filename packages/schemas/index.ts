@@ -47,7 +47,7 @@ export const chatSchema = z.object({
 
 export type Chat = z.infer<typeof chatSchema>;
 
-export const chatUpdateSchema = chatSchema
+export const chatSubmitSchema = chatSchema
   .pick({
     id: true,
     workspaceId: true,
@@ -57,6 +57,11 @@ export const chatUpdateSchema = chatSchema
     providerId: z.string(),
     modelId: z.string(),
   });
+
+export const chatUpdateSchema = chatSchema.pick({
+  workspaceId: true,
+  title: true,
+});
 
 export const chatListItemSchema = chatSchema.pick({
   id: true,

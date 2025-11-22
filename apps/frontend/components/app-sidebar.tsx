@@ -48,11 +48,13 @@ import {
   Folder,
   FolderOpen,
   BotMessageSquare,
-  MessageSquare,
   EllipsisVertical,
   Trash2,
   Pencil,
 } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Field, FieldLabel, FieldError } from "@/components/ui/field";
+import { parseValidationErrors } from "@/lib/utils";
 
 export function AppSidebar({
   orgId,
@@ -65,6 +67,11 @@ export function AppSidebar({
   const router = useRouter();
 
   const [renameChatId, setRenameChatId] = useState<string | null>(null);
+  const [renameTitle, setRenameTitle] = useState("");
+  const [isRenaming, setIsRenaming] = useState(false);
+  const [renameValidationErrors, setRenameValidationErrors] = useState<
+    Record<string, string>
+  >({});
   const [deleteChatId, setDeleteChatId] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
@@ -84,6 +91,48 @@ export function AppSidebar({
 
   const handleWorkspaceChange = (newWorkspaceId: string) => {
     router.push(`/${orgId}/workspace/${newWorkspaceId}/chat`);
+  };
+
+  const handleRenameChat = async () => {
+    if (!renameChatId) return;
+
+    setIsRenaming(true);
+    setRenameValidationErrors({});
+    try {
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_BACKEND_URL}/chat/${renameChatId}?workspaceId=${workspaceId}`,
+        {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            workspaceId,
+            title: renameTitle,
+          }),
+        },
+      );
+
+      if (response.ok) {
+        // Close the dialog
+        setRenameChatId(null);
+        setRenameTitle("");
+
+        // Revalidate the chat list
+        await mutate(
+          `${process.env.NEXT_PUBLIC_BACKEND_URL}/chat?workspaceId=${workspaceId}`,
+        );
+      } else {
+        // Parse standardschema.dev validation errors
+        const errorData = await response.json();
+        setRenameValidationErrors(parseValidationErrors(errorData));
+        console.error("Failed to rename chat");
+      }
+    } catch (error) {
+      console.error("Error renaming chat:", error);
+    } finally {
+      setIsRenaming(false);
+    }
   };
 
   const handleDeleteChat = async () => {
@@ -212,7 +261,7 @@ export function AppSidebar({
                         <Link
                           href={`/${orgId}/workspace/${workspaceId}/chat/${chat.id}`}
                         >
-                          <MessageSquare /> {chat.title}
+                          {chat.title}
                         </Link>
                       </SidebarMenuButton>
                       <DropdownMenu modal={false}>
@@ -223,7 +272,11 @@ export function AppSidebar({
                         </DropdownMenuTrigger>
                         <DropdownMenuContent side="right" align="start">
                           <DropdownMenuItem
-                            onSelect={() => setRenameChatId(chat.id)}
+                            onSelect={() => {
+                              setRenameChatId(chat.id);
+                              setRenameTitle(chat.title);
+                              setRenameValidationErrors({});
+                            }}
                           >
                             <Pencil className="mr-2 h-4 w-4" /> Rename
                           </DropdownMenuItem>
@@ -263,12 +316,92 @@ export function AppSidebar({
         <SidebarFooter />
       </Sidebar>
 
+      {/* Rename Chat Dialog */}
+      <Dialog
+        open={!!renameChatId}
+        onOpenChange={(open) => {
+          if (!open) {
+            setRenameChatId(null);
+            setRenameTitle("");
+          }
+        }}
+      >
+        <DialogContent
+          onPointerDownOutside={(e) => {
+            if (isRenaming) {
+              e.preventDefault();
+            }
+          }}
+          onEscapeKeyDown={(e) => {
+            if (isRenaming) {
+              e.preventDefault();
+            }
+          }}
+          showCloseButton={false}
+        >
+          <DialogHeader>
+            <DialogTitle>Rename Chat</DialogTitle>
+            <DialogDescription>
+              Enter a new name for this chat.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            <Field data-invalid={!!renameValidationErrors.title}>
+              <FieldLabel htmlFor="title">Title</FieldLabel>
+              <Input
+                id="title"
+                value={renameTitle}
+                onChange={(e) => setRenameTitle(e.target.value)}
+                placeholder="Chat title"
+                disabled={isRenaming}
+                aria-invalid={!!renameValidationErrors.title}
+              />
+              {renameValidationErrors.title && (
+                <FieldError>{renameValidationErrors.title}</FieldError>
+              )}
+            </Field>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setRenameChatId(null);
+                setRenameTitle("");
+              }}
+              disabled={isRenaming}
+              className="cursor-pointer"
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleRenameChat}
+              disabled={isRenaming || !renameTitle.trim()}
+              className="cursor-pointer"
+            >
+              {isRenaming ? "Renaming..." : "Rename"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* Delete Chat Confirmation Dialog */}
       <Dialog
         open={!!deleteChatId}
         onOpenChange={(open) => !open && setDeleteChatId(null)}
       >
-        <DialogContent>
+        <DialogContent
+          onPointerDownOutside={(e) => {
+            if (isDeleting) {
+              e.preventDefault();
+            }
+          }}
+          onEscapeKeyDown={(e) => {
+            if (isDeleting) {
+              e.preventDefault();
+            }
+          }}
+          showCloseButton={false}
+        >
           <DialogHeader>
             <DialogTitle>Delete Chat</DialogTitle>
             <DialogDescription>
@@ -281,6 +414,7 @@ export function AppSidebar({
               variant="outline"
               onClick={() => setDeleteChatId(null)}
               disabled={isDeleting}
+              className="cursor-pointer"
             >
               Cancel
             </Button>
@@ -288,6 +422,7 @@ export function AppSidebar({
               variant="destructive"
               onClick={handleDeleteChat}
               disabled={isDeleting}
+              className="cursor-pointer"
             >
               {isDeleting ? "Deleting..." : "Delete"}
             </Button>
