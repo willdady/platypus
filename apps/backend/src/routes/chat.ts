@@ -1,13 +1,13 @@
 import { Hono } from "hono";
 import { sValidator } from "@hono/standard-validator";
 import { z } from "zod";
-import { convertToModelMessages, type LanguageModel, streamText } from "ai";
+import { convertToModelMessages, type LanguageModel, streamText, generateObject, type UIMessage } from "ai";
 import { createOpenAI } from "@ai-sdk/openai";
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 import { stepCountIs } from "ai";
 import { db } from "../index.ts";
 import { chat as chatTable, provider as providerTable } from "../db/schema.ts";
-import { chatSubmitSchema, chatUpdateSchema } from "@agent-kit/schemas";
+import { chatSubmitSchema, chatUpdateSchema, chatGenerateTitleSchema } from "@agent-kit/schemas";
 import { and, eq, desc } from "drizzle-orm";
 
 const chat = new Hono();
@@ -75,7 +75,7 @@ chat.get(
 
 chat.post("/", sValidator("json", chatSubmitSchema), async (c) => {
   const data = c.req.valid("json");
-
+  
   const { id, workspaceId, providerId, modelId, messages = [] } = data;
 
   // Get the provider record from the database
@@ -210,6 +210,97 @@ chat.put(
     }
 
     return c.json(result[0]);
+  },
+);
+
+chat.post(
+  "/:id/generate-title",
+  sValidator("query", z.object({ workspaceId: z.string() })),
+  sValidator("json", chatGenerateTitleSchema),
+  async (c) => {
+    const id = c.req.param("id");
+    const { workspaceId } = c.req.valid("query");
+    const { providerId } = c.req.valid("json");
+
+    // Fetch chat record
+    const chatRecord = await db
+      .select()
+      .from(chatTable)
+      .where(and(eq(chatTable.id, id), eq(chatTable.workspaceId, workspaceId)))
+      .limit(1);
+    if (chatRecord.length === 0) {
+      return c.json({ message: "Chat not found" }, 404);
+    }
+    const chat = chatRecord[0];
+
+    // Fetch provider record
+    const providerRecord = await db
+      .select()
+      .from(providerTable)
+      .where(
+        and(
+          eq(providerTable.id, providerId),
+          eq(providerTable.workspaceId, workspaceId),
+        ),
+      )
+      .limit(1);
+
+    if (providerRecord.length === 0) {
+      return c.json({ message: "Provider not found" }, 404);
+    }
+    const provider = providerRecord[0];
+
+    // Instantiate model
+    let model: LanguageModel;
+    if (provider.providerType === "OpenAI") {
+      const openai = createOpenAI({
+        baseURL: provider.baseUrl ?? undefined,
+        apiKey: provider.apiKey ?? undefined,
+        headers: provider.headers ?? undefined,
+      });
+      model = openai(provider.taskModelId);
+    } else if (provider.providerType === "OpenRouter") {
+      const openRouter = createOpenRouter({
+        baseURL: provider.baseUrl ?? undefined,
+        apiKey: provider.apiKey ?? undefined,
+        headers: provider.headers ?? undefined,
+      });
+      model = openRouter(provider.taskModelId);
+    } else {
+      throw new Error(`Unrecognized provider type '${provider.providerType}'`);
+    }
+
+    // Generate title
+    const messages = (chat.messages as UIMessage[]) || [];
+    const conversationText = messages
+      .map((m) => {
+        const message = m.parts.map(p => {
+          if (p.type === 'text') return p.text;
+          return '';
+        });
+        return `${m.role}:\n${message.join("")}`;
+      })
+      .join("\n");
+
+    const result = await generateObject({
+      model,
+      schema: z.object({ title: z.string() }),
+      prompt: [
+        `Generate a short, descriptive title for this chat conversation. You may use at most one emoji and must not exceed 30 characters.\n`,
+        `Conversation:\n${conversationText}`
+      ].join("\n"),
+    });
+
+    const newTitle = result.object.title;
+
+    // Update chat title
+    const updateResult = await db
+      .update(chatTable)
+      .set({ title: newTitle, updatedAt: new Date() })
+      .where(and(eq(chatTable.id, id), eq(chatTable.workspaceId, workspaceId)))
+      .returning();
+
+    return c.json(updateResult[0]);
   },
 );
 

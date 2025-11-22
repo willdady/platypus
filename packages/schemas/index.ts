@@ -63,6 +63,10 @@ export const chatUpdateSchema = chatSchema.pick({
   title: true,
 });
 
+export const chatGenerateTitleSchema = z.object({
+  providerId: z.string(),
+});
+
 export const chatListItemSchema = chatSchema.pick({
   id: true,
   title: true,

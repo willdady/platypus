@@ -1,0 +1,28 @@
+meta {
+  name: Generate Title
+  type: http
+  seq: 5
+}
+
+post {
+  url: {{host}}/chat/:id/generate-title?workspaceId={{workspaceId}}
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "providerId": "provider-123"
+  }
+}
+
+query:json {
+  {
+    "workspaceId": "default"
+  }
+}
+
+settings {
+  encodeUrl: true
+  timeout: 0
+}

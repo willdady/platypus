@@ -70,7 +70,7 @@ importers:
         specifier: workspace:*
         version: link:../../packages/schemas
       '@ai-sdk/react':
-        specifier: ^2.0.86
+        specifier: ^2.0.71
         version: 2.0.87(react@19.2.0)(zod@4.1.12)
       '@icons-pack/react-simple-icons':
         specifier: ^13.8.0
@@ -118,8 +118,8 @@ importers:
         specifier: ^3.14.0
         version: 3.14.0
       ai:
-        specifier: ^5.0.87
-        version: 5.0.87(zod@4.1.12)
+        specifier: ^5.0.98
+        version: 5.0.98(zod@4.1.12)
       class-variance-authority:
         specifier: ^0.7.1
         version: 0.7.1

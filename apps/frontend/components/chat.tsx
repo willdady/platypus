@@ -86,7 +86,7 @@ export const Chat = ({
   const [modelId, setModelId] = useState("");
   const [providerId, setProviderId] = useState("");
   const [copied, setCopied] = useState(false);
-  const [hasMutated, setHasMutated] = useState(false);
+  const hasMutatedRef = useRef(false);
 
   const { mutate } = useSWRConfig();
 
@@ -117,7 +117,7 @@ export const Chat = ({
 
   // Reset hasMutated when chatId changes
   useEffect(() => {
-    setHasMutated(false);
+    hasMutatedRef.current = false;
   }, [chatId]);
 
   // Initialize messages from existing chat data
@@ -130,11 +130,21 @@ export const Chat = ({
   // Revalidate the chat list (visible in AppSidebar) when our message array contains exactly 2 messages.
   // This will be true after the first successful response from the backend for a new chat.
   useEffect(() => {
-    if (messages.length === 2 && !hasMutated) {
-      mutate(`${process.env.NEXT_PUBLIC_BACKEND_URL}/chat?workspaceId=${workspaceId}`);
-      setHasMutated(true);
+    if (messages.length === 2 && !hasMutatedRef.current && status === "ready") {
+      hasMutatedRef.current = true;
+      // Call generate-title endpoint
+      fetch(`${BACKEND_URL}/chat/${chatId}/generate-title?workspaceId=${workspaceId}`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ providerId }),
+      }).then(() => {
+        // Revalidate the chat list
+        mutate(`${process.env.NEXT_PUBLIC_BACKEND_URL}/chat?workspaceId=${workspaceId}`);
+      });
     }
-  }, [messages, hasMutated, mutate, workspaceId]);
+  }, [messages, mutate, workspaceId, chatId, providerId, status]);
 
   // Initialize with first provider's first model once providers are loaded
   useEffect(() => {
