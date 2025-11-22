@@ -41,6 +41,7 @@ export const chatSchema = z.object({
   workspaceId: z.string(),
   title: z.string().min(3).max(30),
   messages: z.any().optional(),
+  isStarred: z.boolean(),
   createdAt: z.date(),
   updatedAt: z.date(),
 });
@@ -61,6 +62,7 @@ export const chatSubmitSchema = chatSchema
 export const chatUpdateSchema = chatSchema.pick({
   workspaceId: true,
   title: true,
+  isStarred: true,
 });
 
 export const chatGenerateTitleSchema = z.object({
@@ -70,6 +72,7 @@ export const chatGenerateTitleSchema = z.object({
 export const chatListItemSchema = chatSchema.pick({
   id: true,
   title: true,
+  isStarred: true,
   updatedAt: true,
 });
 

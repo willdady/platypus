@@ -43,6 +43,7 @@ chat.get(
       .select({
         id: chatTable.id,
         title: chatTable.title,
+        isStarred: chatTable.isStarred,
         updatedAt: chatTable.updatedAt,
       })
       .from(chatTable)
@@ -198,11 +199,11 @@ chat.put(
   async (c) => {
     const id = c.req.param("id");
     const { workspaceId } = c.req.valid("query");
-    const { title } = c.req.valid("json");
+    const { title, isStarred } = c.req.valid("json");
 
     const result = await db
       .update(chatTable)
-      .set({ title, updatedAt: new Date() })
+      .set({ title, isStarred, updatedAt: new Date() })
       .where(and(eq(chatTable.id, id), eq(chatTable.workspaceId, workspaceId)))
       .returning();
 

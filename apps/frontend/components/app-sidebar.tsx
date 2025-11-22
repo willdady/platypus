@@ -52,6 +52,8 @@ import {
   EllipsisVertical,
   Trash2,
   Pencil,
+  Star,
+  StarOff,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Field, FieldLabel, FieldError } from "@/components/ui/field";
@@ -75,6 +77,7 @@ export function AppSidebar({
   >({});
   const [deleteChatId, setDeleteChatId] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [isTogglingStar, setIsTogglingStar] = useState(false);
 
   const { mutate } = useSWRConfig();
   const { data } = useSWR<{ results: Workspace[] }>(
@@ -91,18 +94,23 @@ export function AppSidebar({
   const chats = chatData?.results ?? [];
   const currentWorkspace = workspaces.find((w) => w.id === workspaceId);
 
-  // Group chats by time periods
+  // Separate starred chats from regular chats
+  const starredChats = chats.filter(chat => chat.isStarred);
+  const regularChats = chats.filter(chat => !chat.isStarred);
+
+  // Group regular chats by time periods
   const now = new Date();
   const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
 
-  const last7Days = chats.filter(chat => new Date(chat.updatedAt) >= sevenDaysAgo);
-  const other = chats.filter(chat => new Date(chat.updatedAt) < sevenDaysAgo);
+  const last7Days = regularChats.filter(chat => new Date(chat.updatedAt) >= sevenDaysAgo);
+  const other = regularChats.filter(chat => new Date(chat.updatedAt) < sevenDaysAgo);
 
   const hasRecent = last7Days.length > 0;
 
   const chatGroups = [
-    { label: "Last 7 days", chats: last7Days },
-    { label: hasRecent ? "Other" : "Chats", chats: hasRecent ? other : chats },
+    ...(starredChats.length > 0 ? [{ label: "Starred", chats: starredChats }] : []),
+    ...(hasRecent ? [{ label: "Last 7 days", chats: last7Days }] : []),
+    { label: hasRecent ? "Other" : "Chats", chats: hasRecent ? other : regularChats },
   ].filter(group => group.chats.length > 0);
 
   const handleWorkspaceChange = (newWorkspaceId: string) => {
@@ -111,6 +119,9 @@ export function AppSidebar({
 
   const handleRenameChat = async () => {
     if (!renameChatId) return;
+
+    const currentChat = chats.find(chat => chat.id === renameChatId);
+    if (!currentChat) return;
 
     setIsRenaming(true);
     setRenameValidationErrors({});
@@ -125,6 +136,7 @@ export function AppSidebar({
           body: JSON.stringify({
             workspaceId,
             title: renameTitle,
+            isStarred: currentChat.isStarred,
           }),
         }
       );
@@ -187,6 +199,42 @@ export function AppSidebar({
       console.error("Error deleting chat:", error);
     } finally {
       setIsDeleting(false);
+    }
+  };
+
+  const handleToggleStar = async (chatId: string) => {
+    const currentChat = chats.find(chat => chat.id === chatId);
+    if (!currentChat) return;
+
+    setIsTogglingStar(true);
+    try {
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_BACKEND_URL}/chat/${chatId}?workspaceId=${workspaceId}`,
+        {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            workspaceId,
+            title: currentChat.title,
+            isStarred: !currentChat.isStarred,
+          }),
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error("Failed to toggle star status");
+      }
+
+      // Revalidate the chat list
+      await mutate(
+        `${process.env.NEXT_PUBLIC_BACKEND_URL}/chat?workspaceId=${workspaceId}`
+      );
+    } catch (error) {
+      console.error("Error toggling star status:", error);
+    } finally {
+      setIsTogglingStar(false);
     }
   };
 
@@ -289,6 +337,21 @@ export function AppSidebar({
                             </SidebarMenuAction>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent side="right" align="start">
+                            <DropdownMenuItem
+                              className="cursor-pointer"
+                              onSelect={() => handleToggleStar(chat.id)}
+                              disabled={isTogglingStar}
+                            >
+                              {chat.isStarred ? (
+                                <>
+                                  <StarOff className="mr-2 h-4 w-4" /> Unstar
+                                </>
+                              ) : (
+                                <>
+                                  <Star className="mr-2 h-4 w-4" /> Star
+                                </>
+                              )}
+                            </DropdownMenuItem>
                             <DropdownMenuItem
                               className="cursor-pointer"
                               onSelect={() => {
