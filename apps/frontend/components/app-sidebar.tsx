@@ -18,20 +18,13 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
-import {
-  Select,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-  SelectLabel,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
+  DropdownMenuLabel,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
@@ -46,7 +39,6 @@ import { useState } from "react";
 import {
   Settings,
   Bot,
-  Folder,
   FolderOpen,
   BotMessageSquare,
   EllipsisVertical,
@@ -54,6 +46,8 @@ import {
   Pencil,
   Star,
   StarOff,
+  FolderClosed,
+  ChevronsUpDown,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Field, FieldLabel, FieldError } from "@/components/ui/field";
@@ -258,37 +252,42 @@ export function AppSidebar({
     <>
       <Sidebar>
         <SidebarHeader>
-          <Select value={workspaceId} onValueChange={handleWorkspaceChange}>
-            <SelectTrigger className="w-full cursor-pointer">
-              <SelectValue>
-                <FolderOpen /> {currentWorkspace?.name}
-              </SelectValue>
-            </SelectTrigger>
-            <SelectContent>
-              <SelectGroup>
-                <SelectLabel>Workspaces</SelectLabel>
-                {workspaces.map((workspace) => (
-                  <SelectItem
-                    key={workspace.id}
-                    className="cursor-pointer"
-                    value={workspace.id}
-                  >
-                    {currentWorkspace?.id === workspace.id ? (
-                      <FolderOpen />
-                    ) : (
-                      <Folder />
-                    )}{" "}
-                    {workspace.name}
-                  </SelectItem>
-                ))}
-              </SelectGroup>
-            </SelectContent>
-          </Select>
-          <Button asChild className="w-full mt-2">
-            <Link href={`/${orgId}/workspace/${workspaceId}/chat`}>
-              <BotMessageSquare /> New Chat
-            </Link>
-          </Button>
+          <SidebarMenuItem>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <SidebarMenuButton className="cursor-pointer">
+                  <div className="inline-flex flex-1 [&>svg]:size-4 [&>svg]:shrink-0 items-center gap-2">
+                    <FolderOpen /> <span>{currentWorkspace?.name}</span>
+                  </div>
+                  <ChevronsUpDown />
+                </SidebarMenuButton>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent className="w-56" align="start" side="right">
+                <DropdownMenuLabel className="text-xs text-muted-foreground">Workspaces</DropdownMenuLabel>
+                <DropdownMenuGroup>
+                  {
+                    workspaces.map((workspace) => {
+                      const href = `/${workspace.organisationId}/workspace/${workspace.id}`;
+                      return (
+                        <DropdownMenuItem key={workspace.id} asChild>
+                          <Link className="cursor-pointer" href={href}>
+                            {pathname.startsWith(href) ? <FolderOpen /> : <FolderClosed />} {workspace.name}
+                          </Link>
+                        </DropdownMenuItem>
+                      );
+                    })
+                  }
+                </DropdownMenuGroup>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </SidebarMenuItem>
+          <SidebarMenuItem>
+            <Button asChild className="w-full mt-2">
+              <Link href={`/${orgId}/workspace/${workspaceId}/chat`}>
+                <BotMessageSquare /> New Chat
+              </Link>
+            </Button>
+          </SidebarMenuItem>
         </SidebarHeader>
         <SidebarContent>
           <SidebarGroup>
