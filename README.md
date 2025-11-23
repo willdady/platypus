@@ -59,6 +59,7 @@ Note you MUST already have `turbo dev` running.
 pnpm drizzle-kit-push
 ```
 
-## Known issues
+## Known issues / Gotcha's
 
-Currently, Postgres 18 is not supported due to [this issue](https://github.com/drizzle-team/drizzle-orm/issues/4944) with Drizzle ORM.
+- Currently, Postgres 18 is not supported due to [this issue](https://github.com/drizzle-team/drizzle-orm/issues/4944) with Drizzle ORM.
+- Need to be careful that the **same** version of AI SDK is used for the backend and frontend apps otherwise you will experience confusing errors.
