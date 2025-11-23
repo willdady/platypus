@@ -1,5 +1,4 @@
-import { AgentForm } from "@/components/agent-form";
-import { type Tool } from "@agent-kit/schemas";
+import { AgentsList } from "@/components/agents-list";
 
 const Agents = async ({
   params,
@@ -8,23 +7,11 @@ const Agents = async ({
 }) => {
   const { orgId, workspaceId } = await params;
 
-  // Fetch tools from the server
-  const [toolsResponse] = await Promise.all([
-    fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/tools`),
-  ]);
-
-  const toolsData = await toolsResponse.json();
-
-  const tools: Tool[] = toolsData.results;
-
   return (
-    <div className="flex justify-center">
-      <AgentForm
-        classNames="xl:w-2/5"
-        orgId={orgId}
-        workspaceId={workspaceId}
-        tools={tools}
-      />
+    <div className="flex justify-center px-3">
+      <div className="max-w-6xl">
+        <AgentsList orgId={orgId} workspaceId={workspaceId} />
+      </div>
     </div>
   );
 };

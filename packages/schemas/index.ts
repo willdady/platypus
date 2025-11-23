@@ -92,6 +92,7 @@ export const agentSchema = z.object({
   workspaceId: z.string(),
   providerId: z.string(),
   name: z.string().min(3).max(30),
+  description: z.string().optional(),
   systemPrompt: z.string().optional(),
   modelId: z.string(),
   maxSteps: z.number().optional(),
@@ -112,6 +113,7 @@ export const agentCreateSchema = agentSchema.pick({
   workspaceId: true,
   providerId: true,
   name: true,
+  description: true,
   systemPrompt: true,
   modelId: true,
   maxSteps: true,
@@ -127,6 +129,7 @@ export const agentCreateSchema = agentSchema.pick({
 export const agentUpdateSchema = agentSchema.pick({
   providerId: true,
   name: true,
+  description: true,
   systemPrompt: true,
   modelId: true,
   maxSteps: true,

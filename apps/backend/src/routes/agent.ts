@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import { sValidator } from "@hono/standard-validator";
+import { z } from "zod";
 import { nanoid } from "nanoid";
 import { db } from "../index.ts";
 import { agent as agentTable } from "../db/schema.ts";
@@ -26,10 +27,23 @@ agent.post("/", sValidator("json", agentCreateSchema), async (c) => {
 });
 
 /** List all agents */
-agent.get("/", async (c) => {
-  const results = await db.select().from(agentTable);
-  return c.json({ results });
-});
+agent.get(
+  "/",
+  sValidator(
+    "query",
+    z.object({
+      workspaceId: z.string(),
+    }),
+  ),
+  async (c) => {
+    const { workspaceId } = c.req.valid("query");
+    const results = await db
+      .select()
+      .from(agentTable)
+      .where(eq(agentTable.workspaceId, workspaceId));
+    return c.json({ results });
+  },
+);
 
 /** Get an agent by ID */
 agent.get("/:id", async (c) => {

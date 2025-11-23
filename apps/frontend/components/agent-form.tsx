@@ -58,6 +58,7 @@ const AgentForm = ({
 
   const [formData, setFormData] = useState({
     name: "",
+    description: "",
     systemPrompt: "",
     providerId: "",
     modelId: "",
@@ -142,6 +143,7 @@ const AgentForm = ({
         workspaceId,
         providerId: formData.providerId,
         name: formData.name,
+        description: formData.description,
         systemPrompt: formData.systemPrompt,
         modelId: formData.modelId,
         maxSteps: formData.maxSteps,
@@ -165,7 +167,7 @@ const AgentForm = ({
       );
 
       if (response.ok) {
-        router.push(`/${orgId}/workspace/${workspaceId}`);
+        router.push(`/${orgId}/workspace/${workspaceId}/agents`);
       } else {
         // Parse standardschema.dev validation errors
         const errorData = await response.json();
@@ -196,6 +198,16 @@ const AgentForm = ({
             {validationErrors.name && (
               <FieldError>{validationErrors.name}</FieldError>
             )}
+          </Field>
+          <Field>
+            <FieldLabel htmlFor="description">Description</FieldLabel>
+            <Textarea
+              id="description"
+              placeholder="Optional description of the agent..."
+              value={formData.description}
+              onChange={handleChange}
+              disabled={isSubmitting}
+            />
           </Field>
           <Field>
             <FieldLabel htmlFor="systemPrompt">System prompt</FieldLabel>

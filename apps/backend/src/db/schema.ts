@@ -41,6 +41,7 @@ export const agent = pgTable("agent", (t) => ({
       onDelete: "restrict",
     }),
   name: t.text("name").notNull(),
+  description: t.text("description"),
   systemPrompt: t.text("system_prompt"),
   modelId: t.text("model_id").notNull(),
   maxSteps: t.integer("max_steps"),
