@@ -12,6 +12,7 @@
 ### Frontend
 
 - Next.js
+- AI SDK
 
 ## Development
 
@@ -24,7 +25,6 @@ The following software is required:
 - pnpm
 
 In addition to this you MUST have access to an AI provider.
-Currently only **Open Router** is supported.
 Refer to the following [Setup](/#Setup) section for how to configure your provider credentials.
 
 ### Setup
@@ -42,8 +42,6 @@ This should be done by copying each example file like so:
 cp apps/frontend/.example.env apps/frontend/.env
 cp apps/backend/.example.env apps/backend/.env
 ```
-
-For local development the defaults can be left as-is however you MUST set `OPENROUTER_API_KEY` in `apps/backend/.env`.
 
 ### Start dev environment.
 
