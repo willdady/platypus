@@ -44,7 +44,7 @@ import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, ToolUIPart } from "ai";
 import { CopyIcon, Plus, TrashIcon, TriangleAlert } from "lucide-react";
 import { useState, useRef, Fragment, useEffect } from "react";
-import { Provider } from "@agent-kit/schemas";
+import { Chat as ChatType, Provider } from "@agent-kit/schemas";
 import useSWR, { useSWRConfig } from "swr";
 import { fetcher } from "@/lib/utils";
 import {
@@ -101,7 +101,10 @@ export const Chat = ({
   const providers = providersData?.results || [];
 
   // Fetch existing chat data
-  const { data: chatData } = useSWR(
+  const {
+    data: chatData,
+    mutate: mutateChatData,
+  } = useSWR<ChatType>(
     `${backendUrl}/chat/${chatId}?workspaceId=${workspaceId}`,
     fetcher,
   );
@@ -131,27 +134,41 @@ export const Chat = ({
 
   // Revalidate the chat list (visible in AppSidebar) when our message array contains exactly 2 messages.
   // This will be true after the first successful response from the backend for a new chat.
+  // Only generate a title if the chat has "Untitled" as the title.
   useEffect(() => {
     if (messages.length === 2 && !hasMutatedRef.current && status === "ready") {
       hasMutatedRef.current = true;
-      // Call generate-title endpoint
-      fetch(
-        `${backendUrl}/chat/${chatId}/generate-title?workspaceId=${workspaceId}`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({ providerId }),
-        },
-      ).then(() => {
-        // Revalidate the chat list
-        mutate(
-          `${backendUrl}/chat?workspaceId=${workspaceId}`,
-        );
+      // First, revalidate chat data to ensure we have the latest chat record from the backend
+      mutateChatData().then((freshChatData) => {
+        // Only generate title if the chat has "Untitled" as its title
+        if (freshChatData?.title === "Untitled") {
+          // Call generate-title endpoint
+          fetch(
+            `${backendUrl}/chat/${chatId}/generate-title?workspaceId=${workspaceId}`,
+            {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({ providerId }),
+            },
+          ).then(() => {
+            // Revalidate the chat list
+            mutate(`${backendUrl}/chat?workspaceId=${workspaceId}`);
+          });
+        }
       });
     }
-  }, [messages, mutate, workspaceId, chatId, providerId, status]);
+  }, [
+    messages,
+    mutate,
+    mutateChatData,
+    workspaceId,
+    chatId,
+    providerId,
+    status,
+    backendUrl,
+  ]);
 
   // Initialize with first provider's first model once providers are loaded
   useEffect(() => {
