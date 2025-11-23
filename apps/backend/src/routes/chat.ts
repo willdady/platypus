@@ -7,6 +7,7 @@ import {
   streamText,
   generateObject,
   type UIMessage,
+  createIdGenerator,
 } from "ai";
 import { createOpenAI } from "@ai-sdk/openai";
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
@@ -144,6 +145,10 @@ chat.post("/", sValidator("json", chatSubmitSchema), async (c) => {
 
   return result.toUIMessageStreamResponse({
     originalMessages: messages,
+    generateMessageId: createIdGenerator({
+      prefix: 'msg',
+      size: 16,
+    }),
     onFinish: async ({ messages }) => {
       try {
         // Upsert chat record - try update first, then insert if not found
