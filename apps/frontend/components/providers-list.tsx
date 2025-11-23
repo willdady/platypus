@@ -7,6 +7,7 @@ import { cn, fetcher } from "../lib/utils";
 import { Pencil, TriangleAlert } from "lucide-react";
 import Link from "next/link";
 import { Alert, AlertDescription, AlertTitle } from "./ui/alert";
+import { useBackendUrl } from "@/app/client-context";
 
 const ProvidersList = ({
   className,
@@ -17,8 +18,10 @@ const ProvidersList = ({
   orgId: string;
   workspaceId: string;
 }) => {
+  const backendUrl = useBackendUrl();
+
   const { data, error, isLoading } = useSWR<{ results: Provider[] }>(
-    `${process.env.NEXT_PUBLIC_BACKEND_URL}/providers?workspaceId=${workspaceId}`,
+    `${backendUrl}/providers?workspaceId=${workspaceId}`,
     fetcher,
   );
 

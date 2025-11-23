@@ -10,7 +10,7 @@ const AgentCreatePage = async ({
 
   // Fetch tools from the server
   const [toolsResponse] = await Promise.all([
-    fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/tools`),
+    fetch(`${process.env.BACKEND_URL}/tools`),
   ]);
 
   const toolsData = await toolsResponse.json();

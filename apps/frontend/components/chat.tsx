@@ -68,8 +68,8 @@ import {
   SourcesContent,
   SourcesTrigger,
 } from "./ai-elements/sources";
+import { useBackendUrl } from "@/app/client-context";
 
-const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL;
 
 export const Chat = ({
   orgId,
@@ -80,6 +80,8 @@ export const Chat = ({
   workspaceId: string;
   chatId: string;
 }) => {
+  const backendUrl = useBackendUrl();
+
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   // State for selected model and provider
@@ -92,7 +94,7 @@ export const Chat = ({
 
   // Fetch providers
   const { data: providersData, isLoading } = useSWR<{ results: Provider[] }>(
-    `${BACKEND_URL}/providers?workspaceId=${workspaceId}`,
+    `${backendUrl}/providers?workspaceId=${workspaceId}`,
     fetcher,
   );
 
@@ -100,14 +102,14 @@ export const Chat = ({
 
   // Fetch existing chat data
   const { data: chatData } = useSWR(
-    `${BACKEND_URL}/chat/${chatId}?workspaceId=${workspaceId}`,
+    `${backendUrl}/chat/${chatId}?workspaceId=${workspaceId}`,
     fetcher,
   );
 
   const { messages, setMessages, sendMessage, status } = useChat({
     id: chatId,
     transport: new DefaultChatTransport({
-      api: `${BACKEND_URL}/chat`,
+      api: `${backendUrl}/chat`,
       body: {
         orgId,
         workspaceId,
@@ -134,7 +136,7 @@ export const Chat = ({
       hasMutatedRef.current = true;
       // Call generate-title endpoint
       fetch(
-        `${BACKEND_URL}/chat/${chatId}/generate-title?workspaceId=${workspaceId}`,
+        `${backendUrl}/chat/${chatId}/generate-title?workspaceId=${workspaceId}`,
         {
           method: "POST",
           headers: {
@@ -145,7 +147,7 @@ export const Chat = ({
       ).then(() => {
         // Revalidate the chat list
         mutate(
-          `${process.env.NEXT_PUBLIC_BACKEND_URL}/chat?workspaceId=${workspaceId}`,
+          `${backendUrl}/chat?workspaceId=${workspaceId}`,
         );
       });
     }

@@ -16,8 +16,6 @@ cp apps/frontend/.example.env apps/frontend/.env
 cp apps/backend/.example.env apps/backend/.env
 ```
 
-**IMPORTANT**: You MUST set `OPENROUTER_API_KEY` in `apps/backend/.env` for the application to work.
-
 ### Running the Application
 
 ```bash
@@ -137,8 +135,8 @@ These schemas are imported by both frontend and backend to ensure type safety ac
 
 ### Environment Variables
 
-- Backend requires `DATABASE_URL`, `OPENROUTER_API_KEY`, `ALLOWED_ORIGINS`, and `PORT`
-- Frontend requires `NEXT_PUBLIC_BACKEND_URL`
+- Backend requires `DATABASE_URL`, `ALLOWED_ORIGINS`, and `PORT`
+- Frontend requires `BACKEND_URL`
 - Default values work for local development after copying `.example.env` files
 
 ## Known Constraints

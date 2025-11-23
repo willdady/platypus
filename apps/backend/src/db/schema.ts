@@ -1,4 +1,4 @@
-import { pgTable, primaryKey, jsonb } from "drizzle-orm/pg-core";
+import { pgTable } from "drizzle-orm/pg-core";
 
 export const organisation = pgTable("organisation", (t) => ({
   id: t.text("id").primaryKey(),

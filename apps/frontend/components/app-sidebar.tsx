@@ -55,6 +55,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Field, FieldLabel, FieldError } from "@/components/ui/field";
 import { parseValidationErrors } from "@/lib/utils";
+import { useBackendUrl } from "@/app/client-context";
 
 export function AppSidebar({
   orgId,
@@ -63,6 +64,8 @@ export function AppSidebar({
   orgId: string;
   workspaceId: string;
 }) {
+  const backendUrl = useBackendUrl();
+
   const pathname = usePathname();
   const router = useRouter();
 
@@ -78,12 +81,12 @@ export function AppSidebar({
 
   const { mutate } = useSWRConfig();
   const { data } = useSWR<{ results: Workspace[] }>(
-    `${process.env.NEXT_PUBLIC_BACKEND_URL}/workspaces?orgId=${orgId}`,
+    `${backendUrl}/workspaces?orgId=${orgId}`,
     fetcher,
   );
 
   const { data: chatData } = useSWR<{ results: ChatListItem[] }>(
-    `${process.env.NEXT_PUBLIC_BACKEND_URL}/chat?workspaceId=${workspaceId}`,
+    `${backendUrl}/chat?workspaceId=${workspaceId}`,
     fetcher,
   );
 
@@ -133,7 +136,7 @@ export function AppSidebar({
     setRenameValidationErrors({});
     try {
       const response = await fetch(
-        `${process.env.NEXT_PUBLIC_BACKEND_URL}/chat/${renameChatId}?workspaceId=${workspaceId}`,
+        `${backendUrl}/chat/${renameChatId}?workspaceId=${workspaceId}`,
         {
           method: "PUT",
           headers: {
@@ -154,7 +157,7 @@ export function AppSidebar({
 
         // Revalidate the chat list
         await mutate(
-          `${process.env.NEXT_PUBLIC_BACKEND_URL}/chat?workspaceId=${workspaceId}`,
+          `${backendUrl}/chat?workspaceId=${workspaceId}`,
         );
       } else {
         // Parse standardschema.dev validation errors
@@ -175,7 +178,7 @@ export function AppSidebar({
     setIsDeleting(true);
     try {
       const response = await fetch(
-        `${process.env.NEXT_PUBLIC_BACKEND_URL}/chat/${deleteChatId}?workspaceId=${workspaceId}`,
+        `${backendUrl}/chat/${deleteChatId}?workspaceId=${workspaceId}`,
         {
           method: "DELETE",
         },
@@ -199,7 +202,7 @@ export function AppSidebar({
 
       // Revalidate the chat list
       await mutate(
-        `${process.env.NEXT_PUBLIC_BACKEND_URL}/chat?workspaceId=${workspaceId}`,
+        `${backendUrl}/chat?workspaceId=${workspaceId}`,
       );
     } catch (error) {
       console.error("Error deleting chat:", error);
@@ -215,7 +218,7 @@ export function AppSidebar({
     setIsTogglingStar(true);
     try {
       const response = await fetch(
-        `${process.env.NEXT_PUBLIC_BACKEND_URL}/chat/${chatId}?workspaceId=${workspaceId}`,
+        `${backendUrl}/chat/${chatId}?workspaceId=${workspaceId}`,
         {
           method: "PUT",
           headers: {
@@ -235,7 +238,7 @@ export function AppSidebar({
 
       // Revalidate the chat list
       await mutate(
-        `${process.env.NEXT_PUBLIC_BACKEND_URL}/chat?workspaceId=${workspaceId}`,
+        `${backendUrl}/chat?workspaceId=${workspaceId}`,
       );
     } catch (error) {
       console.error("Error toggling star status:", error);

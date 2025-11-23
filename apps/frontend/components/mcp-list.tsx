@@ -7,6 +7,7 @@ import { cn, fetcher } from "../lib/utils";
 import { Pencil, TriangleAlert } from "lucide-react";
 import Link from "next/link";
 import { Alert, AlertDescription, AlertTitle } from "./ui/alert";
+import { useBackendUrl } from "@/app/client-context";
 
 const McpList = ({
   className,
@@ -17,8 +18,10 @@ const McpList = ({
   orgId: string;
   workspaceId: string;
 }) => {
+  const backendUrl = useBackendUrl();
+
   const { data, error, isLoading } = useSWR<{ results: MCP[] }>(
-    `${process.env.NEXT_PUBLIC_BACKEND_URL}/mcps?workspaceId=${workspaceId}`,
+    `${backendUrl}/mcps?workspaceId=${workspaceId}`,
     fetcher,
   );
 

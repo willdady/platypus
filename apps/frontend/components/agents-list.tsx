@@ -19,8 +19,7 @@ import { type Agent } from "@agent-kit/schemas";
 import useSWR from "swr";
 import { fetcher } from "@/lib/utils";
 import Link from "next/link";
-
-const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL;
+import { useBackendUrl } from "@/app/client-context";
 
 export const AgentsList = ({
   orgId,
@@ -29,8 +28,10 @@ export const AgentsList = ({
   orgId: string;
   workspaceId: string;
 }) => {
+  const backendUrl = useBackendUrl();
+
   const { data, isLoading } = useSWR<{ results: Agent[] }>(
-    `${BACKEND_URL}/agents?workspaceId=${workspaceId}`,
+    `${backendUrl}/agents?workspaceId=${workspaceId}`,
     fetcher
   );
 

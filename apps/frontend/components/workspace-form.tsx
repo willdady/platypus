@@ -13,6 +13,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { type Workspace } from "@agent-kit/schemas";
 import { parseValidationErrors } from "@/lib/utils";
+import { useBackendUrl } from "@/app/client-context";
 
 const WorkspaceForm = ({
   classNames,
@@ -21,6 +22,8 @@ const WorkspaceForm = ({
   classNames?: string;
   orgId: string;
 }) => {
+  const backendUrl = useBackendUrl();
+
   const [formData, setFormData] = useState({
     name: "",
   });
@@ -59,7 +62,7 @@ const WorkspaceForm = ({
       };
 
       const response = await fetch(
-        `${process.env.NEXT_PUBLIC_BACKEND_URL}/workspaces`,
+        `${backendUrl}/workspaces`,
         {
           method: "POST",
           headers: {

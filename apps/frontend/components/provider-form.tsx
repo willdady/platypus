@@ -39,6 +39,7 @@ import { useRouter } from "next/navigation";
 import { type Provider } from "@agent-kit/schemas";
 import useSWR from "swr";
 import { parseValidationErrors } from "@/lib/utils";
+import { useBackendUrl } from "@/app/client-context";
 
 type ProviderFormData = Omit<
   Provider,
@@ -56,6 +57,8 @@ const ProviderForm = ({
   workspaceId: string;
   providerId?: string;
 }) => {
+  const backendUrl = useBackendUrl();
+
   const [formData, setFormData] = useState<ProviderFormData>({
     providerType: "OpenAI",
     name: "",
@@ -81,7 +84,7 @@ const ProviderForm = ({
   const fetcher = (url: string) => fetch(url).then((res) => res.json());
   const { data: provider, isLoading } = useSWR<Provider>(
     providerId
-      ? `${process.env.NEXT_PUBLIC_BACKEND_URL}/providers/${providerId}`
+      ? `${backendUrl}/providers/${providerId}`
       : null,
     fetcher,
   );
@@ -178,8 +181,8 @@ const ProviderForm = ({
       };
 
       const url = providerId
-        ? `${process.env.NEXT_PUBLIC_BACKEND_URL}/providers/${providerId}`
-        : `${process.env.NEXT_PUBLIC_BACKEND_URL}/providers`;
+        ? `${backendUrl}/providers/${providerId}`
+        : `${backendUrl}/providers`;
 
       const method = providerId ? "PUT" : "POST";
 
@@ -212,7 +215,7 @@ const ProviderForm = ({
     setIsDeleting(true);
     try {
       const response = await fetch(
-        `${process.env.NEXT_PUBLIC_BACKEND_URL}/providers/${providerId}`,
+        `${backendUrl}/providers/${providerId}`,
         {
           method: "DELETE",
         },

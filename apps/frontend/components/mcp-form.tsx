@@ -32,6 +32,7 @@ import { useRouter } from "next/navigation";
 import { type MCP } from "@agent-kit/schemas";
 import useSWR from "swr";
 import { parseValidationErrors } from "@/lib/utils";
+import { useBackendUrl } from "@/app/client-context";
 
 type McpFormData = Omit<MCP, "id" | "createdAt" | "updatedAt" | "workspaceId">;
 
@@ -46,6 +47,8 @@ const McpForm = ({
   workspaceId: string;
   mcpId?: string;
 }) => {
+  const backendUrl = useBackendUrl();
+
   const [formData, setFormData] = useState<McpFormData>({
     name: "",
     url: "",
@@ -63,7 +66,7 @@ const McpForm = ({
 
   const fetcher = (url: string) => fetch(url).then((res) => res.json());
   const { data: mcp, isLoading } = useSWR<MCP>(
-    mcpId ? `${process.env.NEXT_PUBLIC_BACKEND_URL}/mcps/${mcpId}` : null,
+    mcpId ? `${backendUrl}/mcps/${mcpId}` : null,
     fetcher,
   );
 
@@ -135,8 +138,8 @@ const McpForm = ({
       };
 
       const url = mcpId
-        ? `${process.env.NEXT_PUBLIC_BACKEND_URL}/mcps/${mcpId}`
-        : `${process.env.NEXT_PUBLIC_BACKEND_URL}/mcps`;
+        ? `${backendUrl}/mcps/${mcpId}`
+        : `${backendUrl}/mcps`;
 
       const method = mcpId ? "PUT" : "POST";
 
@@ -169,7 +172,7 @@ const McpForm = ({
     setIsDeleting(true);
     try {
       const response = await fetch(
-        `${process.env.NEXT_PUBLIC_BACKEND_URL}/mcps/${mcpId}`,
+        `${backendUrl}/mcps/${mcpId}`,
         {
           method: "DELETE",
         },

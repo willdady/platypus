@@ -6,6 +6,7 @@ import useSWR from "swr";
 import { cn, fetcher } from "../lib/utils";
 import { ChevronRight } from "lucide-react";
 import Link from "next/link";
+import { useBackendUrl } from "@/app/client-context";
 
 const WorkspaceList = ({
   className,
@@ -14,8 +15,10 @@ const WorkspaceList = ({
   className?: string;
   orgId: string;
 }) => {
+  const backendUrl = useBackendUrl();
+
   const { data, error, isLoading } = useSWR<{ results: Workspace[] }>(
-    `${process.env.NEXT_PUBLIC_BACKEND_URL}/workspaces?orgId=${orgId}`,
+    `${backendUrl}/workspaces?orgId=${orgId}`,
     fetcher,
   );
 

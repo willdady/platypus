@@ -33,8 +33,7 @@ import {
 import { type Tool, type Agent, type Provider } from "@agent-kit/schemas";
 import useSWR from "swr";
 import { fetcher, parseValidationErrors } from "@/lib/utils";
-
-const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL;
+import { useBackendUrl } from "@/app/client-context";
 
 const AgentForm = ({
   classNames,
@@ -49,9 +48,11 @@ const AgentForm = ({
 }) => {
   const [isOpen, setIsOpen] = useState(false);
 
+  const backendUrl = useBackendUrl();
+
   // Fetch providers
   const { data: providersData } = useSWR<{ results: Provider[] }>(
-    `${BACKEND_URL}/providers?workspaceId=${workspaceId}`,
+    `${backendUrl}/providers?workspaceId=${workspaceId}`,
     fetcher,
   );
   const providers = providersData?.results || [];
@@ -156,7 +157,7 @@ const AgentForm = ({
       };
 
       const response = await fetch(
-        `${process.env.NEXT_PUBLIC_BACKEND_URL}/agents`,
+        `${backendUrl}/agents`,
         {
           method: "POST",
           headers: {

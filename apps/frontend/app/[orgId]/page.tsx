@@ -9,7 +9,7 @@ const Org = async ({ params }: { params: Promise<{ orgId: string }> }) => {
   const { orgId } = await params;
 
   const response = await fetch(
-    `${process.env.NEXT_PUBLIC_BACKEND_URL}/organisations/${orgId}`,
+    `${process.env.BACKEND_URL}/organisations/${orgId}`,
   );
 
   if (response.status === 404) {
