@@ -1,13 +1,23 @@
 import { Hono } from "hono";
 import { sValidator } from "@hono/standard-validator";
 import { z } from "zod";
-import { convertToModelMessages, type LanguageModel, streamText, generateObject, type UIMessage } from "ai";
+import {
+  convertToModelMessages,
+  type LanguageModel,
+  streamText,
+  generateObject,
+  type UIMessage,
+} from "ai";
 import { createOpenAI } from "@ai-sdk/openai";
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 import { stepCountIs } from "ai";
 import { db } from "../index.ts";
 import { chat as chatTable, provider as providerTable } from "../db/schema.ts";
-import { chatSubmitSchema, chatUpdateSchema, chatGenerateTitleSchema } from "@agent-kit/schemas";
+import {
+  chatSubmitSchema,
+  chatUpdateSchema,
+  chatGenerateTitleSchema,
+} from "@agent-kit/schemas";
 import { and, eq, desc } from "drizzle-orm";
 
 const chat = new Hono();
@@ -78,7 +88,7 @@ chat.get(
 
 chat.post("/", sValidator("json", chatSubmitSchema), async (c) => {
   const data = c.req.valid("json");
-  
+
   const { id, workspaceId, providerId, modelId, messages = [] } = data;
 
   // Get the provider record from the database
@@ -277,9 +287,9 @@ chat.post(
     const messages = (chat.messages as UIMessage[]) || [];
     const conversationText = messages
       .map((m) => {
-        const message = m.parts.map(p => {
-          if (p.type === 'text') return p.text;
-          return '';
+        const message = m.parts.map((p) => {
+          if (p.type === "text") return p.text;
+          return "";
         });
         return `${m.role}:\n${message.join("")}`;
       })
@@ -290,7 +300,7 @@ chat.post(
       schema: z.object({ title: z.string() }),
       prompt: [
         `Generate a short, descriptive title for this chat conversation. You may use at most one emoji and must not exceed 30 characters.\n`,
-        `Conversation:\n${conversationText}`
+        `Conversation:\n${conversationText}`,
       ].join("\n"),
     });
 

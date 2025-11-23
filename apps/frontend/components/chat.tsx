@@ -133,15 +133,20 @@ export const Chat = ({
     if (messages.length === 2 && !hasMutatedRef.current && status === "ready") {
       hasMutatedRef.current = true;
       // Call generate-title endpoint
-      fetch(`${BACKEND_URL}/chat/${chatId}/generate-title?workspaceId=${workspaceId}`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
+      fetch(
+        `${BACKEND_URL}/chat/${chatId}/generate-title?workspaceId=${workspaceId}`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ providerId }),
         },
-        body: JSON.stringify({ providerId }),
-      }).then(() => {
+      ).then(() => {
         // Revalidate the chat list
-        mutate(`${process.env.NEXT_PUBLIC_BACKEND_URL}/chat?workspaceId=${workspaceId}`);
+        mutate(
+          `${process.env.NEXT_PUBLIC_BACKEND_URL}/chat?workspaceId=${workspaceId}`,
+        );
       });
     }
   }, [messages, mutate, workspaceId, chatId, providerId, status]);

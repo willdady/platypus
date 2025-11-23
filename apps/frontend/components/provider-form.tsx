@@ -238,7 +238,7 @@ const ProviderForm = ({
 
   return (
     <div className={classNames}>
-      <FieldSet className="mb-4">
+      <FieldSet className="mb-6">
         <FieldGroup>
           <Field>
             <FieldLabel htmlFor="providerType">Provider Type</FieldLabel>
@@ -340,9 +340,7 @@ const ProviderForm = ({
               disabled={isSubmitting}
               aria-invalid={!!validationErrors.taskModelId}
             />
-            <FieldDescription>
-              Model ID to use for tasks.
-            </FieldDescription>
+            <FieldDescription>Model ID to use for tasks.</FieldDescription>
             {validationErrors.taskModelId && (
               <FieldError>{validationErrors.taskModelId}</FieldError>
             )}
@@ -351,7 +349,7 @@ const ProviderForm = ({
 
         <Collapsible open={isOpen} onOpenChange={setIsOpen}>
           <CollapsibleTrigger asChild>
-            <div className="flex text-sm justify-between items-center mb-6">
+            <div className="flex text-sm justify-between items-center">
               <span className="cursor-default">Advanced settings</span>
               <Button
                 variant="ghost"
@@ -363,7 +361,7 @@ const ProviderForm = ({
               </Button>
             </div>
           </CollapsibleTrigger>
-          <CollapsibleContent className="mb-6">
+          <CollapsibleContent>
             <FieldGroup>
               <Field
                 data-invalid={!!headersError || !!validationErrors.headers}

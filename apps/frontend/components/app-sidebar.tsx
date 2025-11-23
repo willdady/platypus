@@ -17,6 +17,7 @@ import {
   SidebarMenuAction,
   SidebarMenuButton,
   SidebarMenuItem,
+  SidebarSeparator,
 } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
 import {
@@ -25,6 +26,7 @@ import {
   DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuLabel,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
@@ -48,6 +50,7 @@ import {
   StarOff,
   FolderClosed,
   ChevronsUpDown,
+  Plus,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Field, FieldLabel, FieldError } from "@/components/ui/field";
@@ -76,12 +79,12 @@ export function AppSidebar({
   const { mutate } = useSWRConfig();
   const { data } = useSWR<{ results: Workspace[] }>(
     `${process.env.NEXT_PUBLIC_BACKEND_URL}/workspaces?orgId=${orgId}`,
-    fetcher
+    fetcher,
   );
 
   const { data: chatData } = useSWR<{ results: ChatListItem[] }>(
     `${process.env.NEXT_PUBLIC_BACKEND_URL}/chat?workspaceId=${workspaceId}`,
-    fetcher
+    fetcher,
   );
 
   const workspaces = data?.results ?? [];
@@ -89,23 +92,32 @@ export function AppSidebar({
   const currentWorkspace = workspaces.find((w) => w.id === workspaceId);
 
   // Separate starred chats from regular chats
-  const starredChats = chats.filter(chat => chat.isStarred);
-  const regularChats = chats.filter(chat => !chat.isStarred);
+  const starredChats = chats.filter((chat) => chat.isStarred);
+  const regularChats = chats.filter((chat) => !chat.isStarred);
 
   // Group regular chats by time periods
   const now = new Date();
   const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
 
-  const last7Days = regularChats.filter(chat => new Date(chat.createdAt) >= sevenDaysAgo);
-  const other = regularChats.filter(chat => new Date(chat.createdAt) < sevenDaysAgo);
+  const last7Days = regularChats.filter(
+    (chat) => new Date(chat.createdAt) >= sevenDaysAgo,
+  );
+  const other = regularChats.filter(
+    (chat) => new Date(chat.createdAt) < sevenDaysAgo,
+  );
 
   const hasRecent = last7Days.length > 0;
 
   const chatGroups = [
-    ...(starredChats.length > 0 ? [{ label: "Starred", chats: starredChats }] : []),
+    ...(starredChats.length > 0
+      ? [{ label: "Starred", chats: starredChats }]
+      : []),
     ...(hasRecent ? [{ label: "Last 7 days", chats: last7Days }] : []),
-    { label: hasRecent ? "Other" : "Chats", chats: hasRecent ? other : regularChats },
-  ].filter(group => group.chats.length > 0);
+    {
+      label: hasRecent ? "Other" : "Chats",
+      chats: hasRecent ? other : regularChats,
+    },
+  ].filter((group) => group.chats.length > 0);
 
   const handleWorkspaceChange = (newWorkspaceId: string) => {
     router.push(`/${orgId}/workspace/${newWorkspaceId}/chat`);
@@ -114,7 +126,7 @@ export function AppSidebar({
   const handleRenameChat = async () => {
     if (!renameChatId) return;
 
-    const currentChat = chats.find(chat => chat.id === renameChatId);
+    const currentChat = chats.find((chat) => chat.id === renameChatId);
     if (!currentChat) return;
 
     setIsRenaming(true);
@@ -132,7 +144,7 @@ export function AppSidebar({
             title: renameTitle,
             isStarred: currentChat.isStarred,
           }),
-        }
+        },
       );
 
       if (response.ok) {
@@ -142,7 +154,7 @@ export function AppSidebar({
 
         // Revalidate the chat list
         await mutate(
-          `${process.env.NEXT_PUBLIC_BACKEND_URL}/chat?workspaceId=${workspaceId}`
+          `${process.env.NEXT_PUBLIC_BACKEND_URL}/chat?workspaceId=${workspaceId}`,
         );
       } else {
         // Parse standardschema.dev validation errors
@@ -166,7 +178,7 @@ export function AppSidebar({
         `${process.env.NEXT_PUBLIC_BACKEND_URL}/chat/${deleteChatId}?workspaceId=${workspaceId}`,
         {
           method: "DELETE",
-        }
+        },
       );
 
       if (!response.ok) {
@@ -179,7 +191,7 @@ export function AppSidebar({
       // Navigate to the main chat page if we were on the deleted chat
       if (
         pathname.startsWith(
-          `/${orgId}/workspace/${workspaceId}/chat/${deleteChatId}`
+          `/${orgId}/workspace/${workspaceId}/chat/${deleteChatId}`,
         )
       ) {
         router.push(`/${orgId}/workspace/${workspaceId}/chat`);
@@ -187,7 +199,7 @@ export function AppSidebar({
 
       // Revalidate the chat list
       await mutate(
-        `${process.env.NEXT_PUBLIC_BACKEND_URL}/chat?workspaceId=${workspaceId}`
+        `${process.env.NEXT_PUBLIC_BACKEND_URL}/chat?workspaceId=${workspaceId}`,
       );
     } catch (error) {
       console.error("Error deleting chat:", error);
@@ -197,7 +209,7 @@ export function AppSidebar({
   };
 
   const handleToggleStar = async (chatId: string) => {
-    const currentChat = chats.find(chat => chat.id === chatId);
+    const currentChat = chats.find((chat) => chat.id === chatId);
     if (!currentChat) return;
 
     setIsTogglingStar(true);
@@ -214,7 +226,7 @@ export function AppSidebar({
             title: currentChat.title,
             isStarred: !currentChat.isStarred,
           }),
-        }
+        },
       );
 
       if (!response.ok) {
@@ -223,7 +235,7 @@ export function AppSidebar({
 
       // Revalidate the chat list
       await mutate(
-        `${process.env.NEXT_PUBLIC_BACKEND_URL}/chat?workspaceId=${workspaceId}`
+        `${process.env.NEXT_PUBLIC_BACKEND_URL}/chat?workspaceId=${workspaceId}`,
       );
     } catch (error) {
       console.error("Error toggling star status:", error);
@@ -232,15 +244,12 @@ export function AppSidebar({
     }
   };
 
-  const primaryItems = [
+  const footerItems = [
     {
       title: "Agents",
       url: `/${orgId}/workspace/${workspaceId}/agents`,
       icon: Bot,
     },
-  ];
-
-  const secondaryItems = [
     {
       title: "Settings",
       url: `/${orgId}/workspace/${workspaceId}/settings`,
@@ -263,52 +272,47 @@ export function AppSidebar({
                 </SidebarMenuButton>
               </DropdownMenuTrigger>
               <DropdownMenuContent className="w-56" align="start" side="right">
-                <DropdownMenuLabel className="text-xs text-muted-foreground">Workspaces</DropdownMenuLabel>
+                <DropdownMenuLabel className="text-xs text-muted-foreground">
+                  Workspaces
+                </DropdownMenuLabel>
                 <DropdownMenuGroup>
-                  {
-                    workspaces.map((workspace) => {
-                      const href = `/${workspace.organisationId}/workspace/${workspace.id}`;
-                      return (
-                        <DropdownMenuItem key={workspace.id} asChild>
-                          <Link className="cursor-pointer" href={href}>
-                            {pathname.startsWith(href) ? <FolderOpen /> : <FolderClosed />} {workspace.name}
-                          </Link>
-                        </DropdownMenuItem>
-                      );
-                    })
-                  }
+                  {workspaces.map((workspace) => {
+                    const href = `/${workspace.organisationId}/workspace/${workspace.id}`;
+                    return (
+                      <DropdownMenuItem key={workspace.id} asChild>
+                        <Link className="cursor-pointer" href={href}>
+                          {pathname.startsWith(href) ? (
+                            <FolderOpen />
+                          ) : (
+                            <FolderClosed />
+                          )}{" "}
+                          {workspace.name}
+                        </Link>
+                      </DropdownMenuItem>
+                    );
+                  })}
+                </DropdownMenuGroup>
+                <DropdownMenuSeparator />
+                <DropdownMenuGroup>
+                  <DropdownMenuItem asChild>
+                    <Link className="cursor-pointer" href={`/${orgId}/create`}>
+                      <Plus /> Create Workspace
+                    </Link>
+                  </DropdownMenuItem>
                 </DropdownMenuGroup>
               </DropdownMenuContent>
             </DropdownMenu>
           </SidebarMenuItem>
           <SidebarMenuItem>
-            <Button asChild className="w-full mt-2">
+            <Button asChild className="w-full">
               <Link href={`/${orgId}/workspace/${workspaceId}/chat`}>
                 <BotMessageSquare /> New Chat
               </Link>
             </Button>
           </SidebarMenuItem>
         </SidebarHeader>
+        <SidebarSeparator className="mx-0 mt-1" />
         <SidebarContent>
-          <SidebarGroup>
-            <SidebarGroupContent>
-              <SidebarMenu>
-                {primaryItems.map((item) => (
-                  <SidebarMenuItem key={item.title}>
-                    <SidebarMenuButton
-                      asChild
-                      isActive={pathname.startsWith(item.url)}
-                    >
-                      <Link href={item.url}>
-                        <item.icon />
-                        <span>{item.title}</span>
-                      </Link>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                ))}
-              </SidebarMenu>
-            </SidebarGroupContent>
-          </SidebarGroup>
           {chatGroups.map((group) => (
             <SidebarGroup key={group.label}>
               <SidebarGroupLabel>{group.label}</SidebarGroupLabel>
@@ -320,7 +324,7 @@ export function AppSidebar({
                         <SidebarMenuButton
                           asChild
                           isActive={pathname.startsWith(
-                            `/${orgId}/workspace/${workspaceId}/chat/${chat.id}`
+                            `/${orgId}/workspace/${workspaceId}/chat/${chat.id}`,
                           )}
                         >
                           <Link
@@ -331,7 +335,7 @@ export function AppSidebar({
                         </SidebarMenuButton>
                         <DropdownMenu modal={false}>
                           <DropdownMenuTrigger asChild>
-                            <SidebarMenuAction className="cursor-pointer">
+                            <SidebarMenuAction className="cursor-pointer text-muted-foreground">
                               <EllipsisVertical className="h-4 w-4" />
                             </SidebarMenuAction>
                           </DropdownMenuTrigger>
@@ -379,7 +383,7 @@ export function AppSidebar({
         </SidebarContent>
         <SidebarFooter>
           <SidebarMenu>
-            {secondaryItems.map((item) => (
+            {footerItems.map((item) => (
               <SidebarMenuItem key={item.title}>
                 <SidebarMenuButton
                   asChild
@@ -458,7 +462,7 @@ export function AppSidebar({
               disabled={isRenaming || !renameTitle.trim()}
               className="cursor-pointer"
             >
-              {isRenaming ? "Renaming..." : "Rename"}
+              Rename
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -504,7 +508,7 @@ export function AppSidebar({
               disabled={isDeleting}
               className="cursor-pointer"
             >
-              {isDeleting ? "Deleting..." : "Delete"}
+              Delete
             </Button>
           </DialogFooter>
         </DialogContent>

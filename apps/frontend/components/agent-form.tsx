@@ -181,7 +181,7 @@ const AgentForm = ({
 
   return (
     <div className={classNames}>
-      <FieldSet>
+      <FieldSet className="mb-6">
         <FieldGroup>
           <Field data-invalid={!!validationErrors.name}>
             <FieldLabel htmlFor="name">Name</FieldLabel>
@@ -309,7 +309,7 @@ const AgentForm = ({
 
         <Collapsible open={isOpen} onOpenChange={setIsOpen}>
           <CollapsibleTrigger asChild>
-            <div className="flex text-sm justify-between items-center mb-6">
+            <div className="flex text-sm justify-between items-center">
               <span className="cursor-default">Advanced settings</span>
               <Button
                 variant="ghost"
@@ -322,7 +322,7 @@ const AgentForm = ({
             </div>
           </CollapsibleTrigger>
           <CollapsibleContent className="mb-6">
-            <FieldGroup className="grid grid-cols-2 gap-4">
+            <FieldGroup className="grid grid-cols-2">
               <Field>
                 <FieldLabel htmlFor="temperature">Temperature</FieldLabel>
                 <Input

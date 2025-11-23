@@ -195,7 +195,7 @@ const McpForm = ({
 
   return (
     <div className={classNames}>
-      <FieldSet className="mb-4">
+      <FieldSet className="mb-6">
         <FieldGroup>
           <Field data-invalid={!!validationErrors.name}>
             <FieldLabel htmlFor="name">Name</FieldLabel>
