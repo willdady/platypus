@@ -6,6 +6,8 @@
     "build-docker": "turbo run build-docker",
     "dev": "turbo run dev",
     "drizzle-kit-push": "turbo run drizzle-kit-push -F @agent-kit/backend",
+    "drizzle-kit-generate": "turbo run drizzle-kit-generate -F @agent-kit/backend",
+    "drizzle-kit-migrate": "turbo run drizzle-kit-migrate -F @agent-kit/backend",
     "format": "prettier --write \"**/*.{ts,tsx,md}\""
   },
   "devDependencies": {

@@ -11,6 +11,8 @@
     "dev": "node --env-file-if-exists=.env --watch index.ts",
     "start-local-db": "./scripts/start_postgres.sh",
     "drizzle-kit-push": "pnpm drizzle-kit push",
+    "drizzle-kit-generate": "pnpm drizzle-kit generate",
+    "drizzle-kit-migrate": "pnpm drizzle-kit migrate",
     "build-docker": "cd ../.. && docker build --tag agent-kit-backend:latest --tag agent-kit-backend:$(git rev-parse --short HEAD) -f apps/backend/Dockerfile .",
     "test": "echo \"Error: no test specified\" && exit 1"
   },

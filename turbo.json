@@ -18,6 +18,12 @@
     "drizzle-kit-push": {
       "cache": false
     },
+    "drizzle-kit-generate": {
+      "cache": false
+    },
+    "drizzle-kit-migrate": {
+      "cache": false
+    },
     "start-local-db": {
       "cache": false,
       "persistent": true
