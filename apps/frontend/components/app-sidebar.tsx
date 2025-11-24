@@ -146,6 +146,7 @@ export function AppSidebar({
             workspaceId,
             title: renameTitle,
             isStarred: currentChat.isStarred,
+            tags: currentChat.tags ?? [],
           }),
         },
       );
@@ -156,9 +157,7 @@ export function AppSidebar({
         setRenameTitle("");
 
         // Revalidate the chat list
-        await mutate(
-          `${backendUrl}/chat?workspaceId=${workspaceId}`,
-        );
+        await mutate(`${backendUrl}/chat?workspaceId=${workspaceId}`);
       } else {
         // Parse standardschema.dev validation errors
         const errorData = await response.json();
@@ -201,9 +200,7 @@ export function AppSidebar({
       }
 
       // Revalidate the chat list
-      await mutate(
-        `${backendUrl}/chat?workspaceId=${workspaceId}`,
-      );
+      await mutate(`${backendUrl}/chat?workspaceId=${workspaceId}`);
     } catch (error) {
       console.error("Error deleting chat:", error);
     } finally {
@@ -228,6 +225,7 @@ export function AppSidebar({
             workspaceId,
             title: currentChat.title,
             isStarred: !currentChat.isStarred,
+            tags: currentChat.tags ?? [],
           }),
         },
       );
@@ -237,9 +235,7 @@ export function AppSidebar({
       }
 
       // Revalidate the chat list
-      await mutate(
-        `${backendUrl}/chat?workspaceId=${workspaceId}`,
-      );
+      await mutate(`${backendUrl}/chat?workspaceId=${workspaceId}`);
     } catch (error) {
       console.error("Error toggling star status:", error);
     } finally {

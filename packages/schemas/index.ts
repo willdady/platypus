@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+const kebabCaseRegex = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+
 // Organisation
 
 export const organisationSchema = z.object({
@@ -42,6 +44,9 @@ export const chatSchema = z.object({
   title: z.string().min(3).max(30),
   messages: z.any().optional(),
   isStarred: z.boolean(),
+  tags: z
+    .array(z.string().regex(kebabCaseRegex, "Tags must be kebab-case"))
+    .optional(),
   createdAt: z.date(),
   updatedAt: z.date(),
 });
@@ -63,6 +68,7 @@ export const chatUpdateSchema = chatSchema.pick({
   workspaceId: true,
   title: true,
   isStarred: true,
+  tags: true,
 });
 
 export const chatGenerateTitleSchema = z.object({
@@ -73,6 +79,7 @@ export const chatListItemSchema = chatSchema.pick({
   id: true,
   title: true,
   isStarred: true,
+  tags: true,
   createdAt: true,
   updatedAt: true,
 });

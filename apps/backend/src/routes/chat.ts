@@ -55,6 +55,7 @@ chat.get(
         id: chatTable.id,
         title: chatTable.title,
         isStarred: chatTable.isStarred,
+        tags: chatTable.tags,
         createdAt: chatTable.createdAt,
         updatedAt: chatTable.updatedAt,
       })
@@ -146,7 +147,7 @@ chat.post("/", sValidator("json", chatSubmitSchema), async (c) => {
   return result.toUIMessageStreamResponse({
     originalMessages: messages,
     generateMessageId: createIdGenerator({
-      prefix: 'msg',
+      prefix: "msg",
       size: 16,
     }),
     onFinish: async ({ messages }) => {
@@ -215,11 +216,11 @@ chat.put(
   async (c) => {
     const id = c.req.param("id");
     const { workspaceId } = c.req.valid("query");
-    const { title, isStarred } = c.req.valid("json");
+    const { title, isStarred, tags } = c.req.valid("json");
 
     const result = await db
       .update(chatTable)
-      .set({ title, isStarred, updatedAt: new Date() })
+      .set({ title, isStarred, tags, updatedAt: new Date() })
       .where(and(eq(chatTable.id, id), eq(chatTable.workspaceId, workspaceId)))
       .returning();
 
