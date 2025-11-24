@@ -20,6 +20,7 @@ import {
   SidebarSeparator,
 } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -338,7 +339,7 @@ export function AppSidebar({
                               <EllipsisVertical className="h-4 w-4" />
                             </SidebarMenuAction>
                           </DropdownMenuTrigger>
-                          <DropdownMenuContent side="right" align="start">
+                          <DropdownMenuContent className="max-w-3xs" side="right" align="start">
                             <DropdownMenuItem
                               className="cursor-pointer"
                               onSelect={() => handleToggleStar(chat.id)}
@@ -370,6 +371,18 @@ export function AppSidebar({
                             >
                               <Trash2 className="mr-2 h-4 w-4" /> Delete
                             </DropdownMenuItem>
+                            {chat.tags && chat.tags.length > 0 && (
+                              <>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuGroup className="flex flex-wrap p-1 gap-1">
+                                  {chat.tags.map((tag: string) => (
+                                    <Badge key={tag} className="cursor-default" variant="secondary">
+                                      {tag}
+                                    </Badge>
+                                  ))}
+                                </DropdownMenuGroup>
+                              </>
+                            )}
                           </DropdownMenuContent>
                         </DropdownMenu>
                       </div>

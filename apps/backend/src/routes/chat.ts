@@ -303,19 +303,24 @@ chat.post(
 
     const result = await generateObject({
       model,
-      schema: z.object({ title: z.string() }),
+      schema: z.object({
+        title: z.string(),
+        tags: z.array(z.string()).min(1).max(5),
+      }),
       prompt: [
-        `Generate a short, descriptive title for this chat conversation. You may use at most one emoji and must not exceed 30 characters.\n`,
+        `Generate a short, descriptive title for this chat conversation. You may use at most one emoji and must not exceed 30 characters.`,
+        `Also generate between 1 and 5 kebab-case tags relevant to the chat. Each tag should ideally be a single word but no more than two words.`,
         `Conversation:\n${conversationText}`,
       ].join("\n"),
     });
 
     const newTitle = result.object.title;
+    const newTags = result.object.tags;
 
-    // Update chat title
+    // Update chat title and tags
     const updateResult = await db
       .update(chatTable)
-      .set({ title: newTitle, updatedAt: new Date() })
+      .set({ title: newTitle, tags: newTags, updatedAt: new Date() })
       .where(and(eq(chatTable.id, id), eq(chatTable.workspaceId, workspaceId)))
       .returning();
 
