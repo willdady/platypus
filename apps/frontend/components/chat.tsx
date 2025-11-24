@@ -70,7 +70,6 @@ import {
 } from "./ai-elements/sources";
 import { useBackendUrl } from "@/app/client-context";
 
-
 export const Chat = ({
   orgId,
   workspaceId,
@@ -101,10 +100,7 @@ export const Chat = ({
   const providers = providersData?.results || [];
 
   // Fetch existing chat data
-  const {
-    data: chatData,
-    mutate: mutateChatData,
-  } = useSWR<ChatType>(
+  const { data: chatData, mutate: mutateChatData } = useSWR<ChatType>(
     `${backendUrl}/chat/${chatId}?workspaceId=${workspaceId}`,
     fetcher,
   );

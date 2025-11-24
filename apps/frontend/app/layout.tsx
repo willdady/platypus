@@ -25,8 +25,7 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-
-  const backendUrl = process.env.BACKEND_URL || '';
+  const backendUrl = process.env.BACKEND_URL || "";
 
   return (
     <html lang="en" suppressHydrationWarning>
@@ -39,9 +38,7 @@ export default function RootLayout({
           enableSystem
           disableTransitionOnChange
         >
-          <ClientProvider backendUrl={backendUrl}>
-            {children}
-          </ClientProvider>
+          <ClientProvider backendUrl={backendUrl}>{children}</ClientProvider>
         </ThemeProvider>
       </body>
     </html>

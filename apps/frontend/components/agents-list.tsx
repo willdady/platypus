@@ -32,7 +32,7 @@ export const AgentsList = ({
 
   const { data, isLoading } = useSWR<{ results: Agent[] }>(
     `${backendUrl}/agents?workspaceId=${workspaceId}`,
-    fetcher
+    fetcher,
   );
 
   const agents = data?.results || [];
@@ -49,7 +49,9 @@ export const AgentsList = ({
             <ItemContent>
               <ItemTitle>{agent.name}</ItemTitle>
               {agent.description && (
-                <ItemDescription className="text-xs">{agent.description}</ItemDescription>
+                <ItemDescription className="text-xs">
+                  {agent.description}
+                </ItemDescription>
               )}
             </ItemContent>
             <ItemActions className="gap-1">
@@ -62,13 +64,20 @@ export const AgentsList = ({
               </Button>
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button className="cursor-pointer text-muted-foreground" variant="ghost" size="icon">
+                  <Button
+                    className="cursor-pointer text-muted-foreground"
+                    variant="ghost"
+                    size="icon"
+                  >
                     <EllipsisVertical className="h-4 w-4" />
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent>
                   <DropdownMenuItem asChild>
-                    <Link className="cursor-pointer" href={`/${orgId}/workspace/${workspaceId}/agents/${agent.id}`}>
+                    <Link
+                      className="cursor-pointer"
+                      href={`/${orgId}/workspace/${workspaceId}/agents/${agent.id}`}
+                    >
                       <Pencil /> Edit
                     </Link>
                   </DropdownMenuItem>

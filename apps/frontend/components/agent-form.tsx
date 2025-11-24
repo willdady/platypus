@@ -156,16 +156,13 @@ const AgentForm = ({
         frequencyPenalty: formData.frequencyPenalty,
       };
 
-      const response = await fetch(
-        `${backendUrl}/agents`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(payload),
+      const response = await fetch(`${backendUrl}/agents`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
         },
-      );
+        body: JSON.stringify(payload),
+      });
 
       if (response.ok) {
         router.push(`/${orgId}/workspace/${workspaceId}/agents`);

@@ -137,9 +137,7 @@ const McpForm = ({
           formData.authType === "Bearer" ? formData.bearerToken : undefined,
       };
 
-      const url = mcpId
-        ? `${backendUrl}/mcps/${mcpId}`
-        : `${backendUrl}/mcps`;
+      const url = mcpId ? `${backendUrl}/mcps/${mcpId}` : `${backendUrl}/mcps`;
 
       const method = mcpId ? "PUT" : "POST";
 
@@ -171,12 +169,9 @@ const McpForm = ({
 
     setIsDeleting(true);
     try {
-      const response = await fetch(
-        `${backendUrl}/mcps/${mcpId}`,
-        {
-          method: "DELETE",
-        },
-      );
+      const response = await fetch(`${backendUrl}/mcps/${mcpId}`, {
+        method: "DELETE",
+      });
 
       if (response.ok) {
         router.push(`/${orgId}/workspace/${workspaceId}/settings/mcp`);

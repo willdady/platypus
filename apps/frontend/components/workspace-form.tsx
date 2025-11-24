@@ -61,16 +61,13 @@ const WorkspaceForm = ({
         name: formData.name,
       };
 
-      const response = await fetch(
-        `${backendUrl}/workspaces`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(payload),
+      const response = await fetch(`${backendUrl}/workspaces`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
         },
-      );
+        body: JSON.stringify(payload),
+      });
 
       if (response.ok) {
         const workspace = await response.json();

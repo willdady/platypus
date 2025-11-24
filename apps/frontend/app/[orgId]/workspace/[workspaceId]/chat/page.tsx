@@ -10,7 +10,6 @@ const ChatPage = () => {
   const searchParams = useSearchParams();
 
   useEffect(() => {
-
     // Extract orgId and workspaceId from pathname
     // Pathname format: /:orgId/workspace/:workspaceId/chat
     const pathParts = pathname.split("/").filter(Boolean);

@@ -83,9 +83,7 @@ const ProviderForm = ({
 
   const fetcher = (url: string) => fetch(url).then((res) => res.json());
   const { data: provider, isLoading } = useSWR<Provider>(
-    providerId
-      ? `${backendUrl}/providers/${providerId}`
-      : null,
+    providerId ? `${backendUrl}/providers/${providerId}` : null,
     fetcher,
   );
 
@@ -214,12 +212,9 @@ const ProviderForm = ({
 
     setIsDeleting(true);
     try {
-      const response = await fetch(
-        `${backendUrl}/providers/${providerId}`,
-        {
-          method: "DELETE",
-        },
-      );
+      const response = await fetch(`${backendUrl}/providers/${providerId}`, {
+        method: "DELETE",
+      });
 
       if (response.ok) {
         router.push(`/${orgId}/workspace/${workspaceId}/settings/providers`);
