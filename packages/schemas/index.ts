@@ -47,6 +47,7 @@ export const chatSchema = z.object({
   tags: z
     .array(z.string().regex(kebabCaseRegex, "Tags must be kebab-case"))
     .optional(),
+  agentId: z.string().optional(),
   providerId: z.string().optional(),
   modelId: z.string().optional(),
   createdAt: z.date(),
@@ -62,9 +63,21 @@ export const chatSubmitSchema = chatSchema
     messages: true,
   })
   .extend({
-    providerId: z.string(),
-    modelId: z.string(),
-  });
+    agentId: z.string().optional(),
+    providerId: z.string().optional(),
+    modelId: z.string().optional(),
+  })
+  .refine(
+    (data) => {
+      const hasAgent = Boolean(data.agentId);
+      const hasProviderModel = Boolean(data.providerId && data.modelId);
+      return hasAgent || hasProviderModel;
+    },
+    {
+      message: "Must provide either agentId or (providerId and modelId)",
+      path: ["agentId"],
+    },
+  );
 
 export const chatUpdateSchema = chatSchema.pick({
   workspaceId: true,
@@ -82,6 +95,7 @@ export const chatListItemSchema = chatSchema.pick({
   title: true,
   isStarred: true,
   tags: true,
+  agentId: true,
   providerId: true,
   modelId: true,
   createdAt: true,

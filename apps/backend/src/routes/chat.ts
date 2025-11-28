@@ -13,7 +13,12 @@ import { createOpenAI } from "@ai-sdk/openai";
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 import { stepCountIs } from "ai";
 import { db } from "../index.ts";
-import { chat as chatTable, provider as providerTable } from "../db/schema.ts";
+import {
+  chat as chatTable,
+  provider as providerTable,
+  agent as agentTable,
+} from "../db/schema.ts";
+import { getToolSet } from "../tools/index.ts";
 import {
   chatSubmitSchema,
   chatUpdateSchema,
@@ -56,6 +61,7 @@ chat.get(
         title: chatTable.title,
         isStarred: chatTable.isStarred,
         tags: chatTable.tags,
+        agentId: chatTable.agentId,
         providerId: chatTable.providerId,
         modelId: chatTable.modelId,
         createdAt: chatTable.createdAt,
@@ -93,7 +99,42 @@ chat.get(
 chat.post("/", sValidator("json", chatSubmitSchema), async (c) => {
   const data = c.req.valid("json");
 
-  const { id, workspaceId, providerId, modelId, messages = [] } = data;
+  const { id, workspaceId, agentId, providerId, modelId, messages = [] } = data;
+
+  // Agent handling logic
+  let resolvedProviderId: string;
+  let resolvedModelId: string;
+  let resolvedAgentId: string | undefined;
+
+  if (agentId) {
+    // Agent selected - fetch agent and use its configuration
+    resolvedAgentId = agentId;
+    const agentRecord = await db
+      .select()
+      .from(agentTable)
+      .where(
+        and(
+          eq(agentTable.id, agentId),
+          eq(agentTable.workspaceId, workspaceId),
+        ),
+      )
+      .limit(1);
+
+    if (agentRecord.length === 0) {
+      throw new Error(`Agent '${agentId}' not found`);
+    }
+    const agent = agentRecord[0];
+    resolvedProviderId = agent.providerId;
+    resolvedModelId = agent.modelId;
+    // TODO: Apply agent's systemPrompt, temperature, etc. to streamText
+  } else if (providerId && modelId) {
+    // Direct provider/model selection
+    resolvedProviderId = providerId;
+    resolvedModelId = modelId;
+    resolvedAgentId = undefined;
+  } else {
+    throw new Error("Must provide either agentId or (providerId and modelId)");
+  }
 
   // Get the provider record from the database
   const providerRecord = await db
@@ -101,21 +142,21 @@ chat.post("/", sValidator("json", chatSubmitSchema), async (c) => {
     .from(providerTable)
     .where(
       and(
-        eq(providerTable.id, providerId),
+        eq(providerTable.id, resolvedProviderId),
         eq(providerTable.workspaceId, workspaceId),
       ),
     )
     .limit(1);
 
   if (providerRecord.length === 0) {
-    throw new Error(`Provider with id '${providerId}' not found`);
+    throw new Error(`Provider with id '${resolvedProviderId}' not found`);
   }
   const provider = providerRecord[0];
 
   // Check the received modelId is enabled/defined on the provider
-  if (!provider.modelIds.includes(modelId)) {
+  if (!provider.modelIds.includes(resolvedModelId)) {
     throw new Error(
-      `Model id '${modelId}' not enabled for provider '${providerId}'`,
+      `Model id '${resolvedModelId}' not enabled for provider '${resolvedProviderId}'`,
     );
   }
 
@@ -127,24 +168,63 @@ chat.post("/", sValidator("json", chatSubmitSchema), async (c) => {
       apiKey: provider.apiKey ?? undefined,
       headers: provider.headers ?? undefined,
     });
-    model = openai(modelId);
+    model = openai(resolvedModelId);
   } else if (provider.providerType === "OpenRouter") {
     const openRouter = createOpenRouter({
       baseURL: provider.baseUrl ?? undefined,
       apiKey: provider.apiKey ?? undefined,
       headers: provider.headers ?? undefined,
     });
-    model = openRouter(modelId);
+    model = openRouter(resolvedModelId);
   } else {
     throw new Error(`Unrecognized provider type '${provider.providerType}'`);
   }
 
-  // Stream chat response to client
-  const result = streamText({
+  // Build streamText parameters
+  const streamTextParams: Parameters<typeof streamText>[0] = {
     model,
     messages: convertToModelMessages(messages),
     stopWhen: stepCountIs(20),
-  });
+  };
+
+  // Load agent's tools if agent is selected
+  if (resolvedAgentId) {
+    const agent = (
+      await db
+        .select()
+        .from(agentTable)
+        .where(eq(agentTable.id, resolvedAgentId))
+        .limit(1)
+    )[0];
+
+    // Load agent's tools
+    if (agent.toolSetIds && agent.toolSetIds.length > 0) {
+      const tools: Record<string, any> = {};
+      for (const toolSetId of agent.toolSetIds) {
+        const toolSet = getToolSet(toolSetId);
+        Object.assign(tools, toolSet.tools);
+      }
+      streamTextParams.tools = tools;
+    }
+
+    // Apply agent's configuration parameters
+    Object.assign(
+      streamTextParams,
+      agent.systemPrompt && { system: agent.systemPrompt },
+      agent.temperature != null && { temperature: agent.temperature },
+      agent.topP != null && { topP: agent.topP },
+      agent.topK != null && { topK: agent.topK },
+      agent.frequencyPenalty != null && {
+        frequencyPenalty: agent.frequencyPenalty,
+      },
+      agent.presencePenalty != null && {
+        presencePenalty: agent.presencePenalty,
+      },
+    );
+  }
+
+  // Stream chat response to client
+  const result = streamText(streamTextParams);
 
   return result.toUIMessageStreamResponse({
     originalMessages: messages,
@@ -159,8 +239,9 @@ chat.post("/", sValidator("json", chatSubmitSchema), async (c) => {
           .update(chatTable)
           .set({
             messages,
-            providerId,
-            modelId,
+            agentId: resolvedAgentId || null,
+            providerId: resolvedAgentId ? null : resolvedProviderId,
+            modelId: resolvedAgentId ? null : resolvedModelId,
             updatedAt: new Date(),
           })
           .where(
@@ -175,8 +256,9 @@ chat.post("/", sValidator("json", chatSubmitSchema), async (c) => {
             workspaceId,
             title: "Untitled",
             messages,
-            providerId,
-            modelId,
+            agentId: resolvedAgentId || null,
+            providerId: resolvedAgentId ? null : resolvedProviderId,
+            modelId: resolvedAgentId ? null : resolvedModelId,
             createdAt: new Date(),
             updatedAt: new Date(),
           });

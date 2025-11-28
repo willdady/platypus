@@ -26,6 +26,7 @@ export const chat = pgTable("chat", (t) => ({
   messages: t.jsonb("messages"),
   isStarred: t.boolean("is_starred").notNull().default(false),
   tags: t.jsonb("tags").$type<string[]>().default([]),
+  agentId: t.text("agent_id"),
   providerId: t.text("provider_id"),
   modelId: t.text("model_id"),
   createdAt: t.timestamp("created_at").notNull().defaultNow(),

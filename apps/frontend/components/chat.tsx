@@ -44,7 +44,7 @@ import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, ToolUIPart } from "ai";
 import { CopyIcon, Plus, TrashIcon, TriangleAlert } from "lucide-react";
 import { useState, useRef, Fragment, useEffect } from "react";
-import { Chat as ChatType, Provider } from "@agent-kit/schemas";
+import { Chat as ChatType, Provider, Agent } from "@agent-kit/schemas";
 import useSWR, { useSWRConfig } from "swr";
 import { fetcher } from "@/lib/utils";
 import {
@@ -83,7 +83,8 @@ export const Chat = ({
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  // State for selected model and provider
+  // State for selected model, provider, and agent
+  const [agentId, setAgentId] = useState("");
   const [modelId, setModelId] = useState("");
   const [providerId, setProviderId] = useState("");
   const [copied, setCopied] = useState(false);
@@ -98,6 +99,14 @@ export const Chat = ({
   );
 
   const providers = providersData?.results || [];
+
+  // Fetch agents
+  const { data: agentsData } = useSWR<{ results: Agent[] }>(
+    `${backendUrl}/agents?workspaceId=${workspaceId}`,
+    fetcher,
+  );
+
+  const agents = agentsData?.results || [];
 
   // Fetch existing chat data
   const { data: chatData, mutate: mutateChatData } = useSWR<ChatType>(
@@ -166,9 +175,29 @@ export const Chat = ({
     backendUrl,
   ]);
 
-  // Restore persisted provider/model from chat data, with validation and fallback
+  // Restore persisted agent/provider/model from chat data, with validation and fallback
   useEffect(() => {
-    if (chatData && providers.length > 0 && !modelId && !providerId) {
+    if (
+      chatData &&
+      providers.length > 0 &&
+      !modelId &&
+      !providerId &&
+      !agentId
+    ) {
+      // Check if chat has an agent
+      if (chatData.agentId && agents.length > 0) {
+        const agent = agents.find((a) => a.id === chatData.agentId);
+        if (agent) {
+          // Agent still exists, restore it
+          setAgentId(chatData.agentId);
+          return;
+        } else {
+          // Agent was deleted, fall back to provider/model
+          console.warn(`Agent '${chatData.agentId}' no longer exists`);
+        }
+      }
+
+      // Restore provider/model (existing logic)
       const persistedProviderId = chatData.providerId;
       const persistedModelId = chatData.modelId;
 
@@ -203,7 +232,7 @@ export const Chat = ({
       setModelId(providers[0].modelIds[0]);
       setProviderId(providers[0].id);
     }
-  }, [chatData, providers, modelId, providerId]);
+  }, [chatData, providers, agents, modelId, providerId, agentId]);
 
   // TODO: Ideally show a loading indicator here
   if (isLoading) return null;
@@ -233,12 +262,19 @@ export const Chat = ({
   }
 
   const handleModelChange = (value: string) => {
-    // Value is in format "providerId:modelId"
-    const [newProviderId, ...modelIdParts] = value.split(":");
-    const newModelId = modelIdParts.join(":");
-    if (newProviderId && newModelId) {
+    if (value.startsWith("agent:")) {
+      // Agent selected
+      const newAgentId = value.replace("agent:", "");
+      setAgentId(newAgentId);
+      setProviderId(""); // Clear provider/model
+      setModelId("");
+    } else if (value.startsWith("provider:")) {
+      // Provider/model selected
+      const [_, newProviderId, ...modelIdParts] = value.split(":");
+      const newModelId = modelIdParts.join(":");
       setProviderId(newProviderId);
       setModelId(newModelId);
+      setAgentId(""); // Clear agent
     }
   };
 
@@ -248,17 +284,16 @@ export const Chat = ({
     if (!(hasText || hasAttachments)) {
       return;
     }
+
+    // Send EITHER agentId OR (providerId + modelId)
+    const body = agentId ? { agentId } : { providerId, modelId };
+
     sendMessage(
       {
         text: message.text || "Sent with attachments",
         files: message.files,
       },
-      {
-        body: {
-          providerId,
-          modelId,
-        },
-      },
+      { body },
     );
   };
 
@@ -424,20 +459,41 @@ export const Chat = ({
                     />
                     <Select
                       onValueChange={handleModelChange}
-                      value={`${providerId}:${modelId}`}
+                      value={
+                        agentId
+                          ? `agent:${agentId}`
+                          : `provider:${providerId}:${modelId}`
+                      }
                     >
                       <SelectTrigger className="cursor-pointer" size="sm">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
+                        {/* Agents Group */}
+                        {agents.length > 0 && (
+                          <SelectGroup>
+                            <SelectLabel>Agents</SelectLabel>
+                            {agents.map((agent) => (
+                              <SelectItem
+                                key={agent.id}
+                                value={`agent:${agent.id}`}
+                                className="cursor-pointer"
+                              >
+                                {agent.name}
+                              </SelectItem>
+                            ))}
+                          </SelectGroup>
+                        )}
+
+                        {/* Providers Group */}
                         {providers.map((provider) => (
                           <SelectGroup key={provider.id}>
                             <SelectLabel>{provider.name}</SelectLabel>
                             {provider.modelIds.map((modelId) => (
                               <SelectItem
-                                key={`${provider.id}:${modelId}`}
+                                key={`provider:${provider.id}:${modelId}`}
                                 className="cursor-pointer"
-                                value={`${provider.id}:${modelId}`}
+                                value={`provider:${provider.id}:${modelId}`}
                               >
                                 {modelId}
                               </SelectItem>
