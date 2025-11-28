@@ -17,7 +17,7 @@ import { chat as chatTable, provider as providerTable } from "../db/schema.ts";
 import {
   chatSubmitSchema,
   chatUpdateSchema,
-  chatGenerateTitleSchema,
+  chatGenerateMetadataSchema,
 } from "@agent-kit/schemas";
 import { and, eq, desc } from "drizzle-orm";
 
@@ -233,9 +233,9 @@ chat.put(
 );
 
 chat.post(
-  "/:id/generate-title",
+  "/:id/generate-metadata",
   sValidator("query", z.object({ workspaceId: z.string() })),
-  sValidator("json", chatGenerateTitleSchema),
+  sValidator("json", chatGenerateMetadataSchema),
   async (c) => {
     const id = c.req.param("id");
     const { workspaceId } = c.req.valid("query");

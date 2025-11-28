@@ -138,9 +138,9 @@ export const Chat = ({
       mutateChatData().then((freshChatData) => {
         // Only generate title if the chat has "Untitled" as its title
         if (freshChatData?.title === "Untitled") {
-          // Call generate-title endpoint
+          // Call generate-metadata endpoint
           fetch(
-            `${backendUrl}/chat/${chatId}/generate-title?workspaceId=${workspaceId}`,
+            `${backendUrl}/chat/${chatId}/generate-metadata?workspaceId=${workspaceId}`,
             {
               method: "POST",
               headers: {

@@ -71,7 +71,7 @@ export const chatUpdateSchema = chatSchema.pick({
   tags: true,
 });
 
-export const chatGenerateTitleSchema = z.object({
+export const chatGenerateMetadataSchema = z.object({
   providerId: z.string(),
 });
 

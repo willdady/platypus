@@ -339,7 +339,11 @@ export function AppSidebar({
                               <EllipsisVertical className="h-4 w-4" />
                             </SidebarMenuAction>
                           </DropdownMenuTrigger>
-                          <DropdownMenuContent className="max-w-3xs" side="right" align="start">
+                          <DropdownMenuContent
+                            className="max-w-3xs"
+                            side="right"
+                            align="start"
+                          >
                             <DropdownMenuItem
                               className="cursor-pointer"
                               onSelect={() => handleToggleStar(chat.id)}
@@ -376,7 +380,11 @@ export function AppSidebar({
                                 <DropdownMenuSeparator />
                                 <DropdownMenuGroup className="flex flex-wrap p-1 gap-1">
                                   {chat.tags.map((tag: string) => (
-                                    <Badge key={tag} className="cursor-default" variant="secondary">
+                                    <Badge
+                                      key={tag}
+                                      className="cursor-default"
+                                      variant="secondary"
+                                    >
                                       {tag}
                                     </Badge>
                                   ))}

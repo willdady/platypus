@@ -1,11 +1,11 @@
 meta {
-  name: Generate Title
+  name: Generate Metadata
   type: http
   seq: 5
 }
 
 post {
-  url: {{host}}/chat/:id/generate-title?workspaceId={{workspaceId}}
+  url: {{host}}/chat/:id/generate-metadata?workspaceId={{workspaceId}}
   body: json
   auth: none
 }
