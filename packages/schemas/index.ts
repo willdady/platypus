@@ -113,7 +113,7 @@ export const agentSchema = z.object({
   seed: z.number().optional(),
   presencePenalty: z.number().optional(),
   frequencyPenalty: z.number().optional(),
-  tools: z.array(z.string()).optional(),
+  toolSetIds: z.array(z.string()).optional(),
   createdAt: z.date(),
   updatedAt: z.date(),
 });
@@ -134,7 +134,7 @@ export const agentCreateSchema = agentSchema.pick({
   seed: true,
   presencePenalty: true,
   frequencyPenalty: true,
-  tools: true,
+  toolSetIds: true,
 });
 
 export const agentUpdateSchema = agentSchema.pick({
@@ -150,7 +150,7 @@ export const agentUpdateSchema = agentSchema.pick({
   seed: true,
   presencePenalty: true,
   frequencyPenalty: true,
-  tools: true,
+  toolSetIds: true,
 });
 
 // Tool
@@ -162,6 +162,17 @@ export const toolSchema = z.object({
 });
 
 export type Tool = z.infer<typeof toolSchema>;
+
+// Tool Set
+
+export const toolSetSchema = z.object({
+  id: z.string(),
+  category: z.string(),
+  description: z.string().optional(),
+  tools: z.array(toolSchema),
+});
+
+export type ToolSet = z.infer<typeof toolSetSchema>;
 
 // MCP
 

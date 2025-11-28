@@ -13,6 +13,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
+import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import {
   Collapsible,
   CollapsibleContent,
@@ -30,7 +31,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { type Tool, type Agent, type Provider } from "@agent-kit/schemas";
+import { type ToolSet, type Agent, type Provider } from "@agent-kit/schemas";
 import useSWR from "swr";
 import { fetcher, parseValidationErrors } from "@/lib/utils";
 import { useBackendUrl } from "@/app/client-context";
@@ -39,12 +40,12 @@ const AgentForm = ({
   classNames,
   orgId,
   workspaceId,
-  tools,
+  toolSets,
 }: {
   classNames?: string;
   orgId: string;
   workspaceId: string;
-  tools: Tool[];
+  toolSets: ToolSet[];
 }) => {
   const [isOpen, setIsOpen] = useState(false);
 
@@ -65,7 +66,7 @@ const AgentForm = ({
     modelId: "",
     maxSteps: 10,
     temperature: undefined,
-    tools: [] as string[],
+    toolSetIds: [] as string[],
     topP: undefined,
     topK: undefined,
     seed: undefined,
@@ -154,6 +155,7 @@ const AgentForm = ({
         seed: formData.seed,
         presencePenalty: formData.presencePenalty,
         frequencyPenalty: formData.frequencyPenalty,
+        toolSetIds: formData.toolSetIds,
       };
 
       const response = await fetch(`${backendUrl}/agents`, {
@@ -261,61 +263,77 @@ const AgentForm = ({
           </Field>
         </FieldGroup>
 
-        {(() => {
-          // Group tools by category
-          const toolsByCategory = tools.reduce(
-            (acc, tool) => {
-              const category = tool.category || "Uncategorized";
-              if (!acc[category]) {
-                acc[category] = [];
-              }
-              acc[category].push(tool);
-              return acc;
-            },
-            {} as Record<string, Tool[]>,
-          );
+        {toolSets.length > 0 && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Tools</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {(() => {
+                // Group tool sets by category
+                const toolSetsByCategory = toolSets.reduce(
+                  (acc, toolSet) => {
+                    const category = toolSet.category || "Uncategorized";
+                    if (!acc[category]) {
+                      acc[category] = [];
+                    }
+                    acc[category].push(toolSet);
+                    return acc;
+                  },
+                  {} as Record<string, ToolSet[]>,
+                );
 
-          // Sort categories alphabetically, but keep "Uncategorized" last
-          const sortedCategories = Object.keys(toolsByCategory).sort((a, b) => {
-            if (a === "Uncategorized") return 1;
-            if (b === "Uncategorized") return -1;
-            return a.localeCompare(b);
-          });
+                // Sort categories alphabetically, but keep "Uncategorized" last
+                const sortedCategories = Object.keys(toolSetsByCategory).sort(
+                  (a, b) => {
+                    if (a === "Uncategorized") return 1;
+                    if (b === "Uncategorized") return -1;
+                    return a.localeCompare(b);
+                  },
+                );
 
-          return sortedCategories.map((category) => (
-            <FieldSet key={category}>
-              <FieldLegend variant="label">{category}</FieldLegend>
-              <FieldGroup className="grid grid-cols-2 gap-4">
-                {toolsByCategory[category].map((t: Tool) => (
-                  <Field key={t.id} orientation="horizontal">
-                    <Switch
-                      id={t.id}
-                      className="cursor-pointer"
-                      checked={formData.tools.includes(t.id)}
-                      onCheckedChange={(checked) => {
-                        setFormData((prevData) => {
-                          const newSelectedTools = checked
-                            ? [...prevData.tools, t.id]
-                            : prevData.tools.filter((id) => id !== t.id);
-                          return { ...prevData, tools: newSelectedTools };
-                        });
-                      }}
-                      disabled={isSubmitting}
-                    />
-                    <FieldLabel htmlFor={t.id}>
-                      <div className="flex flex-col">
-                        <p>{t.id}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {t.description}
-                        </p>
-                      </div>
-                    </FieldLabel>
-                  </Field>
-                ))}
-              </FieldGroup>
-            </FieldSet>
-          ));
-        })()}
+                return sortedCategories.map((category) => (
+                  <FieldSet key={category}>
+                    <FieldLegend variant="label">{category}</FieldLegend>
+                    <FieldGroup className="grid grid-cols-2 gap-4">
+                      {toolSetsByCategory[category].map((toolSet) => (
+                        <Field key={toolSet.id} orientation="horizontal">
+                          <Switch
+                            id={toolSet.id}
+                            className="cursor-pointer"
+                            checked={formData.toolSetIds.includes(toolSet.id)}
+                            onCheckedChange={(checked) => {
+                              setFormData((prevData) => {
+                                const newToolSetIds = checked
+                                  ? [...prevData.toolSetIds, toolSet.id]
+                                  : prevData.toolSetIds.filter(
+                                      (id: string) => id !== toolSet.id,
+                                    );
+                                return {
+                                  ...prevData,
+                                  toolSetIds: newToolSetIds,
+                                };
+                              });
+                            }}
+                            disabled={isSubmitting}
+                          />
+                          <FieldLabel htmlFor={toolSet.id}>
+                            <div className="flex flex-col">
+                              <p>{toolSet.id}</p>
+                              <p className="text-xs text-muted-foreground">
+                                {toolSet.description}
+                              </p>
+                            </div>
+                          </FieldLabel>
+                        </Field>
+                      ))}
+                    </FieldGroup>
+                  </FieldSet>
+                ));
+              })()}
+            </CardContent>
+          </Card>
+        )}
 
         <Collapsible open={isOpen} onOpenChange={setIsOpen}>
           <CollapsibleTrigger asChild>

@@ -1,23 +1,20 @@
 import { Hono } from "hono";
-import { getTools } from "../tools/index.ts";
-import { type Tool } from "@agent-kit/schemas";
+import { getToolSets } from "../tools/index.ts";
 
 const tool = new Hono();
 
-/** List all tools */
+/** List all tool sets */
 tool.get("/", async (c) => {
-  const toolsList = Object.entries(getTools()).reduce(
-    (acc, [id, registeredTool]) => {
-      acc.push({
-        id,
-        description: registeredTool.tool.description || "No description",
-        category: registeredTool.category,
-      });
-      return acc;
-    },
-    [] as Tool[],
-  );
-  return c.json({ results: toolsList });
+  const toolSetsList = Object.entries(getToolSets()).map(([id, toolSet]) => ({
+    id,
+    category: toolSet.category,
+    description: toolSet.description,
+    tools: Object.entries(toolSet.tools).map(([toolId, tool]) => ({
+      id: toolId,
+      description: tool.description || "No description",
+    })),
+  }));
+  return c.json({ results: toolSetsList });
 });
 
 export { tool };

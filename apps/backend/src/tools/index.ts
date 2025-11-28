@@ -1,38 +1,57 @@
 import { type Tool } from "ai";
-import { convertFahrenheitToCelsius } from "./math.ts";
+import {
+  convertFahrenheitToCelsius,
+  convertCelsiusToFahrenheit,
+  calculateCircleArea,
+} from "./math.ts";
 
-type ToolMetadata = {
-  category?: string;
+type ToolSet = {
+  id: string;
+  category: string;
+  description?: string;
+  tools: { [toolId: string]: Tool<any, any> };
 };
 
-type RegisteredTool = { tool: Tool<any, any> } & ToolMetadata;
-
-const TOOLS_REGISTRY: {
-  [toolId: string]: RegisteredTool;
+const TOOL_SETS_REGISTRY: {
+  [toolSetId: string]: ToolSet;
 } = {};
 
-export const registerTool = <T extends Tool>(
-  toolId: string,
-  tool: T,
-  metadata?: ToolMetadata,
-): RegisteredTool => {
-  if (toolId in TOOLS_REGISTRY) {
-    throw new Error(`Tool with id '${toolId}' has already been registered.`);
+export const registerToolSet = (
+  toolSetId: string,
+  toolSet: Omit<ToolSet, "id">,
+): ToolSet => {
+  if (toolSetId in TOOL_SETS_REGISTRY) {
+    throw new Error(
+      `Tool set with id '${toolSetId}' has already been registered.`,
+    );
   }
-  TOOLS_REGISTRY[toolId] = { tool, ...metadata };
-  return TOOLS_REGISTRY[toolId];
+  TOOL_SETS_REGISTRY[toolSetId] = { id: toolSetId, ...toolSet };
+  return TOOL_SETS_REGISTRY[toolSetId];
 };
 
-export const getTool = (toolId: string): RegisteredTool => {
-  if (!(toolId in TOOLS_REGISTRY)) {
-    throw new Error(`Tool with id '${toolId}' has not been registered.`);
+export const getToolSet = (toolSetId: string): ToolSet => {
+  if (!(toolSetId in TOOL_SETS_REGISTRY)) {
+    throw new Error(`Tool set with id '${toolSetId}' has not been registered.`);
   }
-  return TOOLS_REGISTRY[toolId];
+  return TOOL_SETS_REGISTRY[toolSetId];
 };
 
-export const getTools = (): typeof TOOLS_REGISTRY => TOOLS_REGISTRY;
+export const getToolSets = (): typeof TOOL_SETS_REGISTRY => TOOL_SETS_REGISTRY;
 
-// REGISTER TOOLS HERE!
-registerTool("convertFahrenheitToCelsius", convertFahrenheitToCelsius, {
+// REGISTER TOOL SETS HERE!
+registerToolSet("math-conversions", {
   category: "Math",
+  description: "Temperature and unit conversions",
+  tools: {
+    convertFahrenheitToCelsius,
+    convertCelsiusToFahrenheit,
+  },
+});
+
+registerToolSet("math-geometry", {
+  category: "Math",
+  description: "Geometric calculations and formulas",
+  tools: {
+    calculateCircleArea,
+  },
 });
