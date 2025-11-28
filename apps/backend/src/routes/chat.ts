@@ -56,6 +56,8 @@ chat.get(
         title: chatTable.title,
         isStarred: chatTable.isStarred,
         tags: chatTable.tags,
+        providerId: chatTable.providerId,
+        modelId: chatTable.modelId,
         createdAt: chatTable.createdAt,
         updatedAt: chatTable.updatedAt,
       })
@@ -157,6 +159,8 @@ chat.post("/", sValidator("json", chatSubmitSchema), async (c) => {
           .update(chatTable)
           .set({
             messages,
+            providerId,
+            modelId,
             updatedAt: new Date(),
           })
           .where(
@@ -171,6 +175,8 @@ chat.post("/", sValidator("json", chatSubmitSchema), async (c) => {
             workspaceId,
             title: "Untitled",
             messages,
+            providerId,
+            modelId,
             createdAt: new Date(),
             updatedAt: new Date(),
           });

@@ -47,6 +47,8 @@ export const chatSchema = z.object({
   tags: z
     .array(z.string().regex(kebabCaseRegex, "Tags must be kebab-case"))
     .optional(),
+  providerId: z.string().optional(),
+  modelId: z.string().optional(),
   createdAt: z.date(),
   updatedAt: z.date(),
 });
@@ -80,6 +82,8 @@ export const chatListItemSchema = chatSchema.pick({
   title: true,
   isStarred: true,
   tags: true,
+  providerId: true,
+  modelId: true,
   createdAt: true,
   updatedAt: true,
 });

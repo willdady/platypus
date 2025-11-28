@@ -166,13 +166,44 @@ export const Chat = ({
     backendUrl,
   ]);
 
-  // Initialize with first provider's first model once providers are loaded
+  // Restore persisted provider/model from chat data, with validation and fallback
   useEffect(() => {
-    if (providers.length > 0 && !modelId && !providerId) {
+    if (chatData && providers.length > 0 && !modelId && !providerId) {
+      const persistedProviderId = chatData.providerId;
+      const persistedModelId = chatData.modelId;
+
+      if (persistedProviderId && persistedModelId) {
+        // Check if the persisted provider still exists
+        const provider = providers.find((p) => p.id === persistedProviderId);
+        if (provider) {
+          // Check if the persisted model is still available for this provider
+          if (provider.modelIds.includes(persistedModelId)) {
+            // Both provider and model are valid, restore them
+            setProviderId(persistedProviderId);
+            setModelId(persistedModelId);
+            return;
+          } else {
+            // Provider exists but model is no longer available, use provider's first model
+            console.warn(
+              `Model '${persistedModelId}' no longer available for provider '${persistedProviderId}', falling back to first model`,
+            );
+            setProviderId(persistedProviderId);
+            setModelId(provider.modelIds[0]);
+            return;
+          }
+        } else {
+          // Provider no longer exists, fall back to first available provider
+          console.warn(
+            `Provider '${persistedProviderId}' no longer exists, falling back to first available provider`,
+          );
+        }
+      }
+
+      // Fall back to first provider's first model (for new chats or invalid persisted data)
       setModelId(providers[0].modelIds[0]);
       setProviderId(providers[0].id);
     }
-  }, [providers, modelId, providerId]);
+  }, [chatData, providers, modelId, providerId]);
 
   // TODO: Ideally show a loading indicator here
   if (isLoading) return null;
