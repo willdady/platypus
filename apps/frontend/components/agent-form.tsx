@@ -270,6 +270,7 @@ const AgentForm = ({
               onChange={handleChange}
               disabled={isSubmitting}
               aria-invalid={!!validationErrors.name}
+              autoFocus
             />
             {validationErrors.name && (
               <FieldError>{validationErrors.name}</FieldError>
