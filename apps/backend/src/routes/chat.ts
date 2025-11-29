@@ -392,7 +392,7 @@ chat.post(
     const result = await generateObject({
       model,
       schema: z.object({
-        title: z.string(),
+        title: z.string().max(30),
         tags: z.array(z.string()).min(1).max(5),
       }),
       prompt: [
