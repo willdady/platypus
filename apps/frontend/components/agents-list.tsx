@@ -39,7 +39,7 @@ export const AgentsList = ({
 
   const { data, isLoading } = useSWR<{ results: Agent[] }>(
     `${backendUrl}/agents?workspaceId=${workspaceId}`,
-    fetcher
+    fetcher,
   );
 
   const agents = data?.results || [];

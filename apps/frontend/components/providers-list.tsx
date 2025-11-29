@@ -23,7 +23,7 @@ const ProvidersList = ({
 
   const { data, error, isLoading } = useSWR<{ results: Provider[] }>(
     `${backendUrl}/providers?workspaceId=${workspaceId}`,
-    fetcher
+    fetcher,
   );
 
   if (isLoading || error) return null; // FIXME

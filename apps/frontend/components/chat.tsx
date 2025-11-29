@@ -42,7 +42,13 @@ import {
 } from "@/components/ui/select";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, ToolUIPart } from "ai";
-import { CopyIcon, Plus, TrashIcon, TriangleAlert } from "lucide-react";
+import {
+  CopyIcon,
+  Plus,
+  RefreshCwIcon,
+  TrashIcon,
+  TriangleAlert,
+} from "lucide-react";
 import { useState, useRef, Fragment, useEffect } from "react";
 import { Chat as ChatType, Provider, Agent } from "@agent-kit/schemas";
 import useSWR, { useSWRConfig } from "swr";
@@ -116,7 +122,7 @@ export const Chat = ({
     fetcher,
   );
 
-  const { messages, setMessages, sendMessage, status } = useChat({
+  const { messages, setMessages, sendMessage, status, regenerate } = useChat({
     id: chatId,
     transport: new DefaultChatTransport({
       api: `${backendUrl}/chat`,
@@ -337,13 +343,18 @@ export const Chat = ({
     );
   };
 
+  const handleRegenerate = () => {
+    const body = agentId ? { agentId } : { providerId, modelId };
+    regenerate({ body });
+  };
+
   return (
     <div className="relative size-full flex flex-col divide-y overflow-hidden h-[calc(100vh-2.75rem)]">
       <Conversation className="overflow-y-hidden" data-conversation>
         <ConversationContent>
           <div className="flex justify-center">
             <div className="w-full xl:w-4/5 max-w-5xl flex flex-col gap-4">
-              {messages.map((message) => {
+              {messages.map((message, messageIndex) => {
                 const fileParts = message.parts?.filter(
                   (part) => part.type === "file",
                 );
@@ -385,6 +396,8 @@ export const Chat = ({
                       )}
                     {message.parts?.map((part, i) => {
                       if (part.type === "text") {
+                        const isLastMessage =
+                          messageIndex === messages.length - 1;
                         return (
                           <Fragment key={`${message.id}-${i}`}>
                             <Message key={message.id} from={message.role}>
@@ -426,6 +439,17 @@ export const Chat = ({
                                 >
                                   <TrashIcon className="size-4" />
                                 </MessageAction>
+                                {isLastMessage && (
+                                  <MessageAction
+                                    className="cursor-pointer"
+                                    onClick={handleRegenerate}
+                                    variant="ghost"
+                                    size="icon"
+                                    label="Regenerate"
+                                  >
+                                    <RefreshCwIcon className="size-4" />
+                                  </MessageAction>
+                                )}
                               </MessageActions>
                             )}
                           </Fragment>
