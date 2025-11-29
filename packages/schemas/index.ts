@@ -247,6 +247,7 @@ export const providerSchema = z.object({
   apiKey: z.string().min(1),
   baseUrl: z.string().optional(),
   headers: z.record(z.string(), z.string()).optional(),
+  extraBody: z.record(z.string(), z.unknown()).optional(),
   modelIds: z.array(z.string()).min(1),
   taskModelId: z.string(),
   createdAt: z.date(),
@@ -262,6 +263,7 @@ export const providerCreateSchema = providerSchema.pick({
   apiKey: true,
   baseUrl: true,
   headers: true,
+  extraBody: true,
   modelIds: true,
   taskModelId: true,
 });
@@ -272,6 +274,7 @@ export const providerUpdateSchema = providerSchema.pick({
   apiKey: true,
   baseUrl: true,
   headers: true,
+  extraBody: true,
   modelIds: true,
   taskModelId: true,
 });

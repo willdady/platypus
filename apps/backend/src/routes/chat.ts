@@ -174,6 +174,7 @@ chat.post("/", sValidator("json", chatSubmitSchema), async (c) => {
       baseURL: provider.baseUrl ?? undefined,
       apiKey: provider.apiKey ?? undefined,
       headers: provider.headers ?? undefined,
+      extraBody: provider.extraBody ?? undefined,
     });
     model = openRouter(resolvedModelId);
   } else {
@@ -371,6 +372,7 @@ chat.post(
         baseURL: provider.baseUrl ?? undefined,
         apiKey: provider.apiKey ?? undefined,
         headers: provider.headers ?? undefined,
+        extraBody: provider.extraBody ?? undefined,
       });
       model = openRouter(provider.taskModelId);
     } else {

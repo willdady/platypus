@@ -14,13 +14,17 @@ body:json {
   {
     "workspaceId": "default",
     "name": "Open Router",
-    "providerType": "OpenAI",
+    "providerType": "OpenRouter",
     "apiKey": "sk-1234",
     "baseUrl": "",
     "headers": {
       "foo": "bar"
     },
-    "modelIds": ["google/gemini-2.5-flash"]
+    "extraBody": {
+      "customParam": "customValue"
+    },
+    "modelIds": ["google/gemini-2.5-flash"],
+    "taskModelId": "google/gemini-2.5-flash"
   }
 }
 

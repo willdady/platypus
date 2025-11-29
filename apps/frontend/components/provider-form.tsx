@@ -44,7 +44,9 @@ import { useBackendUrl } from "@/app/client-context";
 type ProviderFormData = Omit<
   Provider,
   "id" | "createdAt" | "updatedAt" | "workspaceId"
->;
+> & {
+  extraBody?: Record<string, unknown>;
+};
 
 const ProviderForm = ({
   classNames,
@@ -65,12 +67,15 @@ const ProviderForm = ({
     apiKey: "",
     baseUrl: "",
     headers: {},
+    extraBody: {},
     modelIds: [],
     taskModelId: "",
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [headersError, setHeadersError] = useState<string | null>(null);
   const [headersString, setHeadersString] = useState("{}");
+  const [extraBodyError, setExtraBodyError] = useState<string | null>(null);
+  const [extraBodyString, setExtraBodyString] = useState("{}");
   const [modelIdsString, setModelIdsString] = useState("");
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -95,10 +100,12 @@ const ProviderForm = ({
         apiKey: provider.apiKey,
         baseUrl: provider.baseUrl || "",
         headers: provider.headers || {},
+        extraBody: provider.extraBody || {},
         modelIds: provider.modelIds || [],
         taskModelId: provider.taskModelId,
       });
       setHeadersString(JSON.stringify(provider.headers || {}, null, 2));
+      setExtraBodyString(JSON.stringify(provider.extraBody || {}, null, 2));
       setModelIdsString((provider.modelIds || []).join("\n"));
     }
   }, [provider]);
@@ -128,6 +135,18 @@ const ProviderForm = ({
         setHeadersError(null);
       } catch {
         setHeadersError("Invalid JSON");
+      }
+    } else if (id === "extraBody") {
+      setExtraBodyString(value);
+      try {
+        const parsed = JSON.parse(value);
+        setFormData((prevData) => ({
+          ...prevData,
+          extraBody: parsed,
+        }));
+        setExtraBodyError(null);
+      } catch {
+        setExtraBodyError("Invalid JSON");
       }
     } else if (id === "modelIds") {
       setModelIdsString(value);
@@ -174,6 +193,7 @@ const ProviderForm = ({
         apiKey: formData.apiKey,
         baseUrl: formData.baseUrl || undefined,
         headers: formData.headers,
+        extraBody: formData.extraBody,
         modelIds: formData.modelIds,
         taskModelId: formData.taskModelId,
       };
@@ -383,6 +403,30 @@ const ProviderForm = ({
                   </FieldError>
                 )}
               </Field>
+
+              {formData.providerType === "OpenRouter" && (
+                <Field
+                  data-invalid={!!extraBodyError || !!validationErrors.extraBody}
+                >
+                  <FieldLabel htmlFor="extraBody">Extra Body</FieldLabel>
+                  <Textarea
+                    id="extraBody"
+                    placeholder='{"customField": "value"}'
+                    value={extraBodyString}
+                    onChange={handleChange}
+                    disabled={isSubmitting}
+                    aria-invalid={!!extraBodyError || !!validationErrors.extraBody}
+                  />
+                  <FieldDescription>
+                    Optional extra body parameters as JSON object.
+                  </FieldDescription>
+                  {(extraBodyError || validationErrors.extraBody) && (
+                    <FieldError>
+                      {extraBodyError || validationErrors.extraBody}
+                    </FieldError>
+                  )}
+                </Field>
+              )}
             </FieldGroup>
           </CollapsibleContent>
         </Collapsible>
@@ -395,6 +439,7 @@ const ProviderForm = ({
           disabled={
             isSubmitting ||
             !!headersError ||
+            !!extraBodyError ||
             Object.keys(validationErrors).length > 0
           }
         >
