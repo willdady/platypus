@@ -296,7 +296,7 @@ export function AppSidebar({
                 <DropdownMenuGroup>
                   <DropdownMenuItem asChild>
                     <Link className="cursor-pointer" href={`/${orgId}/create`}>
-                      <Plus /> Create Workspace
+                      <Plus /> Add Workspace
                     </Link>
                   </DropdownMenuItem>
                 </DropdownMenuGroup>

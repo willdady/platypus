@@ -87,7 +87,7 @@ const WorkspaceForm = ({
 
   return (
     <div className={classNames}>
-      <FieldSet>
+      <FieldSet className="mb-6">
         <FieldGroup>
           <Field data-invalid={!!validationErrors.name}>
             <FieldLabel htmlFor="name">Name</FieldLabel>
@@ -112,7 +112,7 @@ const WorkspaceForm = ({
         onClick={handleSubmit}
         disabled={isSubmitting || Object.keys(validationErrors).length > 0}
       >
-        Create Workspace
+        Save
       </Button>
     </div>
   );

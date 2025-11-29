@@ -4,7 +4,7 @@ import { Workspace } from "@agent-kit/schemas";
 import { Item, ItemActions, ItemContent, ItemTitle } from "./ui/item";
 import useSWR from "swr";
 import { cn, fetcher } from "../lib/utils";
-import { ChevronRight } from "lucide-react";
+import { ChevronRight, FolderClosed } from "lucide-react";
 import Link from "next/link";
 import { useBackendUrl } from "@/app/client-context";
 
@@ -31,7 +31,9 @@ const WorkspaceList = ({
           <Item variant="outline" asChild>
             <Link href={`/${orgId}/workspace/${workspace.id}`}>
               <ItemContent>
-                <ItemTitle>{workspace.name}</ItemTitle>
+                <ItemTitle>
+                  <FolderClosed size={18} /> {workspace.name}
+                </ItemTitle>
               </ItemContent>
               <ItemActions>
                 <ChevronRight className="size-4" />

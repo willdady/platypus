@@ -406,7 +406,9 @@ const ProviderForm = ({
 
               {formData.providerType === "OpenRouter" && (
                 <Field
-                  data-invalid={!!extraBodyError || !!validationErrors.extraBody}
+                  data-invalid={
+                    !!extraBodyError || !!validationErrors.extraBody
+                  }
                 >
                   <FieldLabel htmlFor="extraBody">Extra Body</FieldLabel>
                   <Textarea
@@ -415,7 +417,9 @@ const ProviderForm = ({
                     value={extraBodyString}
                     onChange={handleChange}
                     disabled={isSubmitting}
-                    aria-invalid={!!extraBodyError || !!validationErrors.extraBody}
+                    aria-invalid={
+                      !!extraBodyError || !!validationErrors.extraBody
+                    }
                   />
                   <FieldDescription>
                     Optional extra body parameters as JSON object.
