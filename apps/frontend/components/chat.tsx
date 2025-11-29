@@ -74,10 +74,12 @@ export const Chat = ({
   orgId,
   workspaceId,
   chatId,
+  initialAgentId,
 }: {
   orgId: string;
   workspaceId: string;
   chatId: string;
+  initialAgentId?: string;
 }) => {
   const backendUrl = useBackendUrl();
 
@@ -129,6 +131,18 @@ export const Chat = ({
   useEffect(() => {
     hasMutatedRef.current = false;
   }, [chatId]);
+
+  // Set initial agent if provided and no existing chat agent
+  useEffect(() => {
+    if (
+      initialAgentId &&
+      !agentId &&
+      chatData !== undefined &&
+      (!chatData || !chatData.agentId)
+    ) {
+      setAgentId(initialAgentId);
+    }
+  }, [initialAgentId, agentId, chatData]);
 
   // Initialize messages from existing chat data
   useEffect(() => {
