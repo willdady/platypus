@@ -353,7 +353,7 @@ export const Chat = ({
       <Conversation className="overflow-y-hidden" data-conversation>
         <ConversationContent>
           <div className="flex justify-center">
-            <div className="w-full xl:w-4/5 max-w-5xl flex flex-col gap-4">
+            <div className="w-full xl:w-4/5 max-w-4xl flex flex-col gap-4">
               {messages.map((message, messageIndex) => {
                 const fileParts = message.parts?.filter(
                   (part) => part.type === "file",
@@ -500,7 +500,7 @@ export const Chat = ({
       </Conversation>
       <div className="grid shrink-0 gap-4 p-4">
         <div className="flex justify-center">
-          <div className="w-full xl:w-4/5 max-w-5xl">
+          <div className="w-full xl:w-4/5 max-w-4xl">
             <PromptInputProvider>
               <PromptInput globalDrop multiple onSubmit={handleSubmit}>
                 <PromptInputAttachments className="w-full">
