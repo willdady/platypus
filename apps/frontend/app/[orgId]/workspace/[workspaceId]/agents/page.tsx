@@ -9,7 +9,7 @@ const Agents = async ({
 
   return (
     <div className="flex justify-center px-3">
-      <div className="max-w-6xl">
+      <div className="max-w-7xl">
         <AgentsList orgId={orgId} workspaceId={workspaceId} />
       </div>
     </div>

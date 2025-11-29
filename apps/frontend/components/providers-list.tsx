@@ -4,10 +4,11 @@ import { Provider } from "@agent-kit/schemas";
 import { Item, ItemActions, ItemContent, ItemTitle } from "./ui/item";
 import useSWR from "swr";
 import { cn, fetcher } from "../lib/utils";
-import { Pencil, TriangleAlert } from "lucide-react";
+import { Pencil, Plus, TriangleAlert } from "lucide-react";
 import Link from "next/link";
 import { Alert, AlertDescription, AlertTitle } from "./ui/alert";
 import { useBackendUrl } from "@/app/client-context";
+import { Button } from "./ui/button";
 
 const ProvidersList = ({
   className,
@@ -22,7 +23,7 @@ const ProvidersList = ({
 
   const { data, error, isLoading } = useSWR<{ results: Provider[] }>(
     `${backendUrl}/providers?workspaceId=${workspaceId}`,
-    fetcher,
+    fetcher
   );
 
   if (isLoading || error) return null; // FIXME
@@ -34,7 +35,14 @@ const ProvidersList = ({
         <TriangleAlert />
         <AlertTitle>No AI providers configured</AlertTitle>
         <AlertDescription>
-          <p>You must configure at least one AI provider.</p>
+          <p className="mb-2">You must configure at least one AI provider.</p>
+          <Button size="sm" asChild>
+            <Link
+              href={`/${orgId}/workspace/${workspaceId}/settings/providers/create`}
+            >
+              <Plus /> Create your first provider
+            </Link>
+          </Button>
         </AlertDescription>
       </Alert>
     );

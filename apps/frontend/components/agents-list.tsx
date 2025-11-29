@@ -14,7 +14,14 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { BotMessageSquare, EllipsisVertical, Pencil } from "lucide-react";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import {
+  BotMessageSquare,
+  EllipsisVertical,
+  Pencil,
+  Plus,
+  TriangleAlert,
+} from "lucide-react";
 import { type Agent } from "@agent-kit/schemas";
 import useSWR from "swr";
 import { fetcher } from "@/lib/utils";
@@ -32,7 +39,7 @@ export const AgentsList = ({
 
   const { data, isLoading } = useSWR<{ results: Agent[] }>(
     `${backendUrl}/agents?workspaceId=${workspaceId}`,
-    fetcher,
+    fetcher
   );
 
   const agents = data?.results || [];
@@ -41,8 +48,27 @@ export const AgentsList = ({
     return <div>Loading...</div>;
   }
 
+  if (!agents.length) {
+    return (
+      <div className="flex items-center justify-center h-[calc(100vh-2.75rem)]">
+        <Alert className="w-full mb-4">
+          <TriangleAlert />
+          <AlertTitle>No agents configured</AlertTitle>
+          <AlertDescription>
+            <p className="mb-2">Start by creating your first agent.</p>
+            <Button size="sm" asChild>
+              <Link href={`/${orgId}/workspace/${workspaceId}/agents/create`}>
+                <Plus /> Add agent
+              </Link>
+            </Button>
+          </AlertDescription>
+        </Alert>
+      </div>
+    );
+  }
+
   return (
-    <ul className="grid grid-cols-2 grid-rows-1 gap-4">
+    <ul className="grid grid-cols-1 lg:grid-cols-2 grid-rows-1 gap-4">
       {agents.map((agent) => (
         <li key={agent.id}>
           <Item variant="outline" className="h-full">
@@ -87,6 +113,22 @@ export const AgentsList = ({
           </Item>
         </li>
       ))}
+      <li>
+        <Item variant="outline" className="h-full border-dashed">
+          <ItemContent>
+            <Button
+              size="sm"
+              variant="secondary"
+              className="cursor-pointer"
+              asChild
+            >
+              <Link href={`/${orgId}/workspace/${workspaceId}/agents/create`}>
+                <Plus /> Add agent
+              </Link>
+            </Button>
+          </ItemContent>
+        </Item>
+      </li>
     </ul>
   );
 };
