@@ -4,12 +4,12 @@ import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
 import { type ToolSet } from "@agent-kit/schemas";
 
-const AgentCreatePage = async ({
+const AgentEditPage = async ({
   params,
 }: {
-  params: Promise<{ orgId: string; workspaceId: string }>;
+  params: Promise<{ orgId: string; workspaceId: string; agentId: string }>;
 }) => {
-  const { orgId, workspaceId } = await params;
+  const { orgId, workspaceId, agentId } = await params;
 
   // Fetch tool sets from the server
   const [toolSetsResponse] = await Promise.all([
@@ -27,10 +27,11 @@ const AgentCreatePage = async ({
             <ArrowLeft /> Back
           </Link>
         </Button>
-        <h1 className="text-2xl mb-4 font-bold">Create Agent</h1>
+        <h1 className="text-2xl mb-4 font-bold">Edit Agent</h1>
         <AgentForm
           orgId={orgId}
           workspaceId={workspaceId}
+          agentId={agentId}
           toolSets={toolSets}
         />
       </div>
@@ -38,4 +39,4 @@ const AgentCreatePage = async ({
   );
 };
 
-export default AgentCreatePage;
+export default AgentEditPage;

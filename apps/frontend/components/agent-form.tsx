@@ -19,9 +19,17 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { ChevronsUpDown } from "lucide-react";
+import { ChevronsUpDown, Trash2 } from "lucide-react";
 import {
   Select,
   SelectContent,
@@ -40,23 +48,32 @@ const AgentForm = ({
   classNames,
   orgId,
   workspaceId,
+  agentId,
   toolSets,
 }: {
   classNames?: string;
   orgId: string;
   workspaceId: string;
+  agentId?: string;
   toolSets: ToolSet[];
 }) => {
   const [isOpen, setIsOpen] = useState(false);
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const backendUrl = useBackendUrl();
 
   // Fetch providers
-  const { data: providersData } = useSWR<{ results: Provider[] }>(
-    `${backendUrl}/providers?workspaceId=${workspaceId}`,
+  const { data: providersData, isLoading: providersLoading } = useSWR<{
+    results: Provider[];
+  }>(`${backendUrl}/providers?workspaceId=${workspaceId}`, fetcher);
+  const providers = providersData?.results || [];
+
+  // Fetch existing agent data if editing
+  const { data: agent, isLoading: agentLoading } = useSWR<Agent>(
+    agentId ? `${backendUrl}/agents/${agentId}` : null,
     fetcher,
   );
-  const providers = providersData?.results || [];
 
   const [formData, setFormData] = useState({
     name: "",
@@ -65,13 +82,13 @@ const AgentForm = ({
     providerId: "",
     modelId: "",
     maxSteps: 10,
-    temperature: undefined,
+    temperature: undefined as number | undefined,
     toolSetIds: [] as string[],
-    topP: undefined,
-    topK: undefined,
-    seed: undefined,
-    presencePenalty: undefined,
-    frequencyPenalty: undefined,
+    topP: undefined as number | undefined,
+    topK: undefined as number | undefined,
+    seed: undefined as number | undefined,
+    presencePenalty: undefined as number | undefined,
+    frequencyPenalty: undefined as number | undefined,
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [validationErrors, setValidationErrors] = useState<
@@ -82,14 +99,44 @@ const AgentForm = ({
 
   // Initialize with first provider's first model once providers are loaded
   useEffect(() => {
-    if (providers.length > 0 && !formData.modelId && !formData.providerId) {
+    if (
+      providers.length > 0 &&
+      !formData.modelId &&
+      !formData.providerId &&
+      !agentId
+    ) {
       setFormData((prevData) => ({
         ...prevData,
         modelId: providers[0].modelIds[0],
         providerId: providers[0].id,
       }));
     }
-  }, [providers, formData.modelId, formData.providerId]);
+  }, [providers, formData.modelId, formData.providerId, agentId]);
+
+  // Initialize form with existing agent data when editing
+  useEffect(() => {
+    if (agent) {
+      setFormData({
+        name: agent.name,
+        description: agent.description || "",
+        systemPrompt: agent.systemPrompt || "",
+        providerId: agent.providerId,
+        modelId: agent.modelId,
+        maxSteps: agent.maxSteps || 10,
+        temperature: agent.temperature ?? undefined,
+        topP: agent.topP ?? undefined,
+        topK: agent.topK ?? undefined,
+        seed: agent.seed ?? undefined,
+        presencePenalty: agent.presencePenalty ?? undefined,
+        frequencyPenalty: agent.frequencyPenalty ?? undefined,
+        toolSetIds: agent.toolSetIds || [],
+      });
+    }
+  }, [agent]);
+
+  if (providersLoading || agentLoading) {
+    return <div className={classNames}>Loading...</div>;
+  }
 
   const handleChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>,
@@ -158,8 +205,14 @@ const AgentForm = ({
         toolSetIds: formData.toolSetIds,
       };
 
-      const response = await fetch(`${backendUrl}/agents`, {
-        method: "POST",
+      const url = agentId
+        ? `${backendUrl}/agents/${agentId}`
+        : `${backendUrl}/agents`;
+
+      const method = agentId ? "PUT" : "POST";
+
+      const response = await fetch(url, {
+        method,
         headers: {
           "Content-Type": "application/json",
         },
@@ -178,6 +231,29 @@ const AgentForm = ({
       console.error("Error saving agent:", error);
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!agentId) return;
+
+    setIsDeleting(true);
+    try {
+      const response = await fetch(`${backendUrl}/agents/${agentId}`, {
+        method: "DELETE",
+      });
+
+      if (response.ok) {
+        router.push(`/${orgId}/workspace/${workspaceId}/agents`);
+      } else {
+        console.error("Failed to delete agent");
+        setIsDeleting(false);
+        setIsDeleteDialogOpen(false);
+      }
+    } catch (error) {
+      console.error("Error deleting agent:", error);
+      setIsDeleting(false);
+      setIsDeleteDialogOpen(false);
     }
   };
 
@@ -438,13 +514,75 @@ const AgentForm = ({
         </Collapsible>
       </FieldSet>
 
-      <Button
-        className="cursor-pointer"
-        onClick={handleSubmit}
-        disabled={isSubmitting || Object.keys(validationErrors).length > 0}
+      <div className="flex gap-2">
+        <Button
+          className="cursor-pointer"
+          onClick={handleSubmit}
+          disabled={isSubmitting || Object.keys(validationErrors).length > 0}
+        >
+          {agentId ? "Update" : "Save"}
+        </Button>
+
+        {agentId && (
+          <Button
+            className="cursor-pointer"
+            variant="outline"
+            onClick={() => setIsDeleteDialogOpen(true)}
+            disabled={isSubmitting}
+          >
+            <Trash2 /> Delete
+          </Button>
+        )}
+      </div>
+
+      <Dialog
+        open={isDeleteDialogOpen}
+        onOpenChange={(open) => {
+          if (!isDeleting) {
+            setIsDeleteDialogOpen(open);
+          }
+        }}
       >
-        Save
-      </Button>
+        <DialogContent
+          onPointerDownOutside={(e) => {
+            if (isDeleting) {
+              e.preventDefault();
+            }
+          }}
+          onEscapeKeyDown={(e) => {
+            if (isDeleting) {
+              e.preventDefault();
+            }
+          }}
+          showCloseButton={false}
+        >
+          <DialogHeader>
+            <DialogTitle>Delete Agent</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete this agent? This action cannot be
+              undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              className="cursor-pointer"
+              variant="outline"
+              onClick={() => setIsDeleteDialogOpen(false)}
+              disabled={isDeleting}
+            >
+              Cancel
+            </Button>
+            <Button
+              className="cursor-pointer"
+              variant="destructive"
+              onClick={handleDelete}
+              disabled={isDeleting}
+            >
+              Delete
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

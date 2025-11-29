@@ -33,6 +33,7 @@ import { type MCP } from "@agent-kit/schemas";
 import useSWR from "swr";
 import { parseValidationErrors } from "@/lib/utils";
 import { useBackendUrl } from "@/app/client-context";
+import { Trash2 } from "lucide-react";
 
 type McpFormData = Omit<MCP, "id" | "createdAt" | "updatedAt" | "workspaceId">;
 
@@ -290,7 +291,7 @@ const McpForm = ({
             onClick={() => setIsDeleteDialogOpen(true)}
             disabled={isSubmitting}
           >
-            Delete
+            <Trash2 /> Delete
           </Button>
         )}
       </div>

@@ -16,7 +16,7 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
-import { ChevronsUpDown } from "lucide-react";
+import { ChevronsUpDown, Trash2 } from "lucide-react";
 import {
   Select,
   SelectContent,
@@ -407,7 +407,7 @@ const ProviderForm = ({
             onClick={() => setIsDeleteDialogOpen(true)}
             disabled={isSubmitting}
           >
-            Delete
+            <Trash2 /> Delete
           </Button>
         )}
       </div>
