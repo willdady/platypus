@@ -51,7 +51,7 @@ export const AgentsList = ({
   if (!agents.length) {
     return (
       <div className="flex items-center justify-center h-[calc(100vh-2.75rem)]">
-        <Alert className="w-full mb-4">
+        <Alert className="min-w-sm max-w-md">
           <TriangleAlert />
           <AlertTitle>No agents configured</AlertTitle>
           <AlertDescription>

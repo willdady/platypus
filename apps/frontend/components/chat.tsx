@@ -326,7 +326,7 @@ export const Chat = ({
   if (providers.length === 0) {
     return (
       <div className="flex items-center justify-center h-full">
-        <Alert className="max-w-md">
+        <Alert className="min-w-sm max-w-md">
           <TriangleAlert />
           <AlertTitle>No AI providers configured</AlertTitle>
           <AlertDescription>
@@ -337,7 +337,7 @@ export const Chat = ({
               <Link
                 href={`/${orgId}/workspace/${workspaceId}/settings/providers/create`}
               >
-                <Plus /> Create your first provider
+                <Plus /> Add provider
               </Link>
             </Button>
           </AlertDescription>
