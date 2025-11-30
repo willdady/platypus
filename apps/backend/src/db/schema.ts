@@ -29,6 +29,13 @@ export const chat = pgTable("chat", (t) => ({
   agentId: t.text("agent_id"),
   providerId: t.text("provider_id"),
   modelId: t.text("model_id"),
+  systemPrompt: t.text("system_prompt"),
+  temperature: t.real("temperature"),
+  topP: t.real("top_p"),
+  topK: t.real("top_k"),
+  seed: t.real("seed"),
+  presencePenalty: t.real("presence_penalty"),
+  frequencyPenalty: t.real("frequency_penalty"),
   createdAt: t.timestamp("created_at").notNull().defaultNow(),
   updatedAt: t.timestamp("updated_at").notNull().defaultNow(),
 }));

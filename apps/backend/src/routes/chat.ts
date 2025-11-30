@@ -99,7 +99,21 @@ chat.get(
 chat.post("/", sValidator("json", chatSubmitSchema), async (c) => {
   const data = c.req.valid("json");
 
-  const { id, workspaceId, agentId, providerId, modelId, messages = [] } = data;
+  const {
+    id,
+    workspaceId,
+    agentId,
+    providerId,
+    modelId,
+    messages = [],
+    systemPrompt,
+    temperature,
+    topP,
+    topK,
+    seed,
+    presencePenalty,
+    frequencyPenalty,
+  } = data;
 
   // Agent handling logic
   let resolvedProviderId: string;
@@ -222,6 +236,17 @@ chat.post("/", sValidator("json", chatSubmitSchema), async (c) => {
         presencePenalty: agent.presencePenalty,
       },
     );
+  } else {
+    // Apply chat-level configuration parameters when no agent is selected
+    Object.assign(
+      streamTextParams,
+      systemPrompt && { system: systemPrompt },
+      temperature != null && { temperature },
+      topP != null && { topP },
+      topK != null && { topK },
+      frequencyPenalty != null && { frequencyPenalty },
+      presencePenalty != null && { presencePenalty },
+    );
   }
 
   // Stream chat response to client
@@ -243,6 +268,13 @@ chat.post("/", sValidator("json", chatSubmitSchema), async (c) => {
             agentId: resolvedAgentId || null,
             providerId: resolvedAgentId ? null : resolvedProviderId,
             modelId: resolvedAgentId ? null : resolvedModelId,
+            systemPrompt: resolvedAgentId ? null : systemPrompt || null,
+            temperature: resolvedAgentId ? null : temperature || null,
+            topP: resolvedAgentId ? null : topP || null,
+            topK: resolvedAgentId ? null : topK || null,
+            seed: resolvedAgentId ? null : seed || null,
+            presencePenalty: resolvedAgentId ? null : presencePenalty || null,
+            frequencyPenalty: resolvedAgentId ? null : frequencyPenalty || null,
             updatedAt: new Date(),
           })
           .where(
@@ -260,6 +292,13 @@ chat.post("/", sValidator("json", chatSubmitSchema), async (c) => {
             agentId: resolvedAgentId || null,
             providerId: resolvedAgentId ? null : resolvedProviderId,
             modelId: resolvedAgentId ? null : resolvedModelId,
+            systemPrompt: resolvedAgentId ? null : systemPrompt || null,
+            temperature: resolvedAgentId ? null : temperature || null,
+            topP: resolvedAgentId ? null : topP || null,
+            topK: resolvedAgentId ? null : topK || null,
+            seed: resolvedAgentId ? null : seed || null,
+            presencePenalty: resolvedAgentId ? null : presencePenalty || null,
+            frequencyPenalty: resolvedAgentId ? null : frequencyPenalty || null,
             createdAt: new Date(),
             updatedAt: new Date(),
           });

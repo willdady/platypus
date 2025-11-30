@@ -23,6 +23,7 @@ import {
   PromptInputAttachment,
   PromptInputAttachments,
   PromptInputBody,
+  PromptInputButton,
   PromptInputFooter,
   PromptInputProvider,
   PromptInputSpeechButton,
@@ -46,6 +47,7 @@ import {
   CopyIcon,
   Plus,
   RefreshCwIcon,
+  Settings2,
   TrashIcon,
   TriangleAlert,
 } from "lucide-react";
@@ -68,6 +70,18 @@ import {
 import { Alert, AlertTitle, AlertDescription } from "./ui/alert";
 import Link from "next/link";
 import { Button } from "./ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "./ui/dialog";
+import { Input } from "./ui/input";
+import { Textarea } from "./ui/textarea";
+import { Label } from "./ui/label";
 import {
   Source,
   Sources,
@@ -97,6 +111,18 @@ export const Chat = ({
   const [providerId, setProviderId] = useState("");
   const [copied, setCopied] = useState(false);
   const hasMutatedRef = useRef(false);
+
+  // State for chat settings
+  const [systemPrompt, setSystemPrompt] = useState("");
+  const [temperature, setTemperature] = useState<number | undefined>();
+  const [topP, setTopP] = useState<number | undefined>();
+  const [topK, setTopK] = useState<number | undefined>();
+  const [seed, setSeed] = useState<number | undefined>();
+  const [presencePenalty, setPresencePenalty] = useState<number | undefined>();
+  const [frequencyPenalty, setFrequencyPenalty] = useState<
+    number | undefined
+  >();
+  const [isSettingsDialogOpen, setIsSettingsDialogOpen] = useState(false);
 
   const { mutate } = useSWRConfig();
 
@@ -156,6 +182,19 @@ export const Chat = ({
       setMessages(chatData.messages);
     }
   }, [chatData, setMessages]);
+
+  // Initialize chat settings from existing chat data
+  useEffect(() => {
+    if (chatData && !agentId) {
+      setSystemPrompt(chatData.systemPrompt || "");
+      setTemperature(chatData.temperature ?? undefined);
+      setTopP(chatData.topP ?? undefined);
+      setTopK(chatData.topK ?? undefined);
+      setSeed(chatData.seed ?? undefined);
+      setPresencePenalty(chatData.presencePenalty ?? undefined);
+      setFrequencyPenalty(chatData.frequencyPenalty ?? undefined);
+    }
+  }, [chatData, agentId]);
 
   // Revalidate the chat list (visible in AppSidebar) when our message array contains exactly 2 messages.
   // This will be true after the first successful response from the backend for a new chat.
@@ -331,8 +370,20 @@ export const Chat = ({
       return;
     }
 
-    // Send EITHER agentId OR (providerId + modelId)
-    const body = agentId ? { agentId } : { providerId, modelId };
+    // Send EITHER agentId OR (providerId + modelId + chat settings)
+    const body = agentId
+      ? { agentId }
+      : {
+          providerId,
+          modelId,
+          systemPrompt: systemPrompt || undefined,
+          temperature,
+          topP,
+          topK,
+          seed,
+          presencePenalty,
+          frequencyPenalty,
+        };
 
     sendMessage(
       {
@@ -344,7 +395,19 @@ export const Chat = ({
   };
 
   const handleRegenerate = () => {
-    const body = agentId ? { agentId } : { providerId, modelId };
+    const body = agentId
+      ? { agentId }
+      : {
+          providerId,
+          modelId,
+          systemPrompt: systemPrompt || undefined,
+          temperature,
+          topP,
+          topK,
+          seed,
+          presencePenalty,
+          frequencyPenalty,
+        };
     regenerate({ body });
   };
 
@@ -566,6 +629,161 @@ export const Chat = ({
                         ))}
                       </SelectContent>
                     </Select>
+                    {!agentId && (
+                      <Dialog
+                        open={isSettingsDialogOpen}
+                        onOpenChange={setIsSettingsDialogOpen}
+                      >
+                        <DialogTrigger asChild>
+                          <PromptInputButton className="cursor-pointer">
+                            <Settings2 />
+                          </PromptInputButton>
+                        </DialogTrigger>
+                        <DialogContent
+                          className="sm:max-w-[600px]"
+                          showCloseButton={false}
+                        >
+                          <DialogHeader>
+                            <DialogTitle>Chat Settings</DialogTitle>
+                            <DialogDescription>
+                              Configure advanced settings for this chat session.
+                            </DialogDescription>
+                          </DialogHeader>
+                          <div className="grid gap-4 py-4">
+                            <div className="grid gap-2">
+                              <Label htmlFor="systemPrompt">
+                                System Prompt
+                              </Label>
+                              <Textarea
+                                id="systemPrompt"
+                                placeholder="You are a helpful assistant..."
+                                value={systemPrompt}
+                                onChange={(e) =>
+                                  setSystemPrompt(e.target.value)
+                                }
+                                rows={3}
+                              />
+                            </div>
+                            <div className="grid grid-cols-2 gap-4">
+                              <div className="grid gap-2">
+                                <Label htmlFor="temperature">Temperature</Label>
+                                <Input
+                                  id="temperature"
+                                  type="number"
+                                  min="0"
+                                  step="0.1"
+                                  value={temperature ?? ""}
+                                  onChange={(e) =>
+                                    setTemperature(
+                                      e.target.value === ""
+                                        ? undefined
+                                        : parseFloat(e.target.value),
+                                    )
+                                  }
+                                />
+                              </div>
+                              <div className="grid gap-2">
+                                <Label htmlFor="seed">Seed</Label>
+                                <Input
+                                  id="seed"
+                                  type="number"
+                                  value={seed ?? ""}
+                                  onChange={(e) =>
+                                    setSeed(
+                                      e.target.value === ""
+                                        ? undefined
+                                        : parseInt(e.target.value),
+                                    )
+                                  }
+                                />
+                              </div>
+                              <div className="grid gap-2">
+                                <Label htmlFor="topP">Top-p</Label>
+                                <Input
+                                  id="topP"
+                                  type="number"
+                                  min="0"
+                                  max="1"
+                                  step="0.1"
+                                  value={topP ?? ""}
+                                  onChange={(e) =>
+                                    setTopP(
+                                      e.target.value === ""
+                                        ? undefined
+                                        : parseFloat(e.target.value),
+                                    )
+                                  }
+                                />
+                              </div>
+                              <div className="grid gap-2">
+                                <Label htmlFor="topK">Top-k</Label>
+                                <Input
+                                  id="topK"
+                                  type="number"
+                                  min="1"
+                                  value={topK ?? ""}
+                                  onChange={(e) =>
+                                    setTopK(
+                                      e.target.value === ""
+                                        ? undefined
+                                        : parseInt(e.target.value),
+                                    )
+                                  }
+                                />
+                              </div>
+                              <div className="grid gap-2">
+                                <Label htmlFor="presencePenalty">
+                                  Presence Penalty
+                                </Label>
+                                <Input
+                                  id="presencePenalty"
+                                  type="number"
+                                  min="-2"
+                                  max="2"
+                                  step="0.1"
+                                  value={presencePenalty ?? ""}
+                                  onChange={(e) =>
+                                    setPresencePenalty(
+                                      e.target.value === ""
+                                        ? undefined
+                                        : parseFloat(e.target.value),
+                                    )
+                                  }
+                                />
+                              </div>
+                              <div className="grid gap-2">
+                                <Label htmlFor="frequencyPenalty">
+                                  Frequency Penalty
+                                </Label>
+                                <Input
+                                  id="frequencyPenalty"
+                                  type="number"
+                                  min="-2"
+                                  max="2"
+                                  step="0.1"
+                                  value={frequencyPenalty ?? ""}
+                                  onChange={(e) =>
+                                    setFrequencyPenalty(
+                                      e.target.value === ""
+                                        ? undefined
+                                        : parseFloat(e.target.value),
+                                    )
+                                  }
+                                />
+                              </div>
+                            </div>
+                          </div>
+                          <DialogFooter>
+                            <Button
+                              className="cursor-pointer"
+                              onClick={() => setIsSettingsDialogOpen(false)}
+                            >
+                              Done
+                            </Button>
+                          </DialogFooter>
+                        </DialogContent>
+                      </Dialog>
+                    )}
                   </PromptInputTools>
                   <PromptInputSubmit status={status} />
                 </PromptInputFooter>

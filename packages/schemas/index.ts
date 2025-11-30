@@ -50,6 +50,13 @@ export const chatSchema = z.object({
   agentId: z.string().optional(),
   providerId: z.string().optional(),
   modelId: z.string().optional(),
+  systemPrompt: z.string().optional(),
+  temperature: z.number().optional(),
+  topP: z.number().optional(),
+  topK: z.number().optional(),
+  seed: z.number().optional(),
+  presencePenalty: z.number().optional(),
+  frequencyPenalty: z.number().optional(),
   createdAt: z.date(),
   updatedAt: z.date(),
 });
@@ -61,6 +68,13 @@ export const chatSubmitSchema = chatSchema
     id: true,
     workspaceId: true,
     messages: true,
+    systemPrompt: true,
+    temperature: true,
+    topP: true,
+    topK: true,
+    seed: true,
+    presencePenalty: true,
+    frequencyPenalty: true,
   })
   .extend({
     agentId: z.string().optional(),
