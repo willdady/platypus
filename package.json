@@ -4,6 +4,7 @@
   "scripts": {
     "build": "turbo run build",
     "build-docker": "turbo run build-docker",
+    "cleanup-docker": "docker rmi -f $(docker images agent-kit/frontend --format \"{{.Repository}}:{{.Tag}}\" | grep -v \"latest\" | xargs) && docker rmi -f $(docker images agent-kit/backend --format \"{{.Repository}}:{{.Tag}}\" | grep -v \"latest\" | xargs)",
     "dev": "turbo run dev",
     "drizzle-kit-push": "turbo run drizzle-kit-push -F @agent-kit/backend",
     "drizzle-kit-generate": "turbo run drizzle-kit-generate -F @agent-kit/backend",

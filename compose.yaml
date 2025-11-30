@@ -16,7 +16,7 @@ services:
       retries: 5
 
   backend:
-    image: agent-kit-backend:latest
+    image: agent-kit/backend:latest
     environment:
       NODE_OPTIONS: "--disable-warning=ExperimentalWarning"
       PORT: "4000"
@@ -36,7 +36,7 @@ services:
       retries: 5
 
   frontend:
-    image: agent-kit-frontend:latest
+    image: agent-kit/frontend:latest
     environment:
       BACKEND_URL: http://localhost:4000
       INTERNAL_BACKEND_URL: http://backend:4000

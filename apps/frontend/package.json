@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "build-docker": "cd ../.. && docker build --tag agent-kit-frontend:latest --tag agent-kit-frontend:$(git rev-parse --short HEAD) -f apps/frontend/Dockerfile .",
+    "build-docker": "cd ../.. && docker build --tag agent-kit/frontend:latest --tag agent-kit/frontend:$(git rev-parse --short HEAD) -f apps/frontend/Dockerfile .",
     "start": "next start",
     "lint": "eslint"
   },
