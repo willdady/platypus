@@ -11,10 +11,11 @@ const AgentEditPage = async ({
 }) => {
   const { orgId, workspaceId, agentId } = await params;
 
+  // Use internal URL for SSR, fallback to BACKEND_URL for local dev
+  const backendUrl = process.env.INTERNAL_BACKEND_URL || process.env.BACKEND_URL;
+
   // Fetch tool sets from the server
-  const [toolSetsResponse] = await Promise.all([
-    fetch(`${process.env.BACKEND_URL}/tools`),
-  ]);
+  const [toolSetsResponse] = await Promise.all([fetch(`${backendUrl}/tools`)]);
 
   const toolSetsData = await toolSetsResponse.json();
   const toolSets: ToolSet[] = toolSetsData.results;

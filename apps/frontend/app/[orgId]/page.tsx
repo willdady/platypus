@@ -8,9 +8,9 @@ import { Building, Plus } from "lucide-react";
 const Org = async ({ params }: { params: Promise<{ orgId: string }> }) => {
   const { orgId } = await params;
 
-  const response = await fetch(
-    `${process.env.BACKEND_URL}/organisations/${orgId}`,
-  );
+  // Use internal URL for SSR, fallback to BACKEND_URL for local dev
+  const backendUrl = process.env.INTERNAL_BACKEND_URL || process.env.BACKEND_URL;
+  const response = await fetch(`${backendUrl}/organisations/${orgId}`);
 
   if (response.status === 404) {
     notFound();
