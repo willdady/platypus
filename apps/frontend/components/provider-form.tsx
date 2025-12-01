@@ -176,10 +176,17 @@ const ProviderForm = ({
       });
     }
 
-    setFormData((prevData) => ({
-      ...prevData,
-      [id]: value,
-    }));
+    setFormData((prevData) => {
+      const newData = { ...prevData, [id]: value };
+      if (id === "providerType") {
+        if (value === "OpenRouter") {
+          newData.baseUrl = "https://openrouter.ai/api/v1";
+        } else {
+          newData.baseUrl = "";
+        }
+      }
+      return newData;
+    });
   };
 
   const handleSubmit = async () => {
