@@ -570,7 +570,7 @@ export const Chat = ({
                   {(attachment) => <PromptInputAttachment data={attachment} />}
                 </PromptInputAttachments>
                 <PromptInputBody>
-                  <PromptInputTextarea ref={textareaRef} />
+                  <PromptInputTextarea ref={textareaRef} autoFocus />
                 </PromptInputBody>
                 <PromptInputFooter>
                   <PromptInputTools>
