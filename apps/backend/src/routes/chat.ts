@@ -433,12 +433,13 @@ chat.post(
     const result = await generateObject({
       model,
       schema: z.object({
-        title: z.string().max(30),
-        tags: z.array(z.string()).min(1).max(5),
+        title: z.string(),
+        tags: z.array(z.string()),
       }),
       prompt: [
-        `Generate a short, descriptive title for this chat conversation. You may use at most one emoji and must not exceed 30 characters.`,
-        `Also generate between 1 and 5 kebab-case tags relevant to the chat. Each tag should ideally be a single word but no more than two words.`,
+        `Generate a short, descriptive title for this chat conversation. You MAY use at most one emoji. The complete title MUST NOT exceed 30 characters.`,
+        `Also generate between 1 and 5 kebab-case tags relevant to the chat.`,
+        `Each tag should ideally be a single word but no more than two words.`,
         `Conversation:\n${conversationText}`,
       ].join("\n"),
     });
