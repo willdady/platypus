@@ -7,7 +7,7 @@
 [x] Prefill the base url field to `https://openrouter.ai/api/v1` when the user selects the OpenRouter provider (but only if the field is empty)
 [x] It MUST be possible to edit a previously submitted user message
 [ ] Bug: navigating to a non-existant workspace should yield a 404 error
-[ ] The chat prompt should auto-focus when navigating to the chat page
-[ ] The chat prompt should be vertically centered until the first message is submitted
+[x] The chat prompt should auto-focus when navigating to the chat page
+[x] The chat prompt should be vertically centered until the first message is submitted
 [ ] The root workspace page needs to be designed
 [ ] Pick a better name than Agent Kit as it's already used by Open AI
