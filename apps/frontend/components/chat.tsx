@@ -448,8 +448,8 @@ export const Chat = ({
   };
 
   return (
-    <div className="relative size-full flex flex-col divide-y overflow-hidden h-[calc(100vh-2.75rem)]">
-      <Conversation className="overflow-y-hidden" data-conversation>
+    <div className={`relative size-full flex flex-col overflow-hidden h-[calc(100vh-2.75rem)] ${messages.length === 0 ? 'justify-center' : ''}`}>
+      <Conversation className={`overflow-y-hidden ${messages.length === 0 ? 'flex-none' : ''}`} data-conversation>
         <ConversationContent>
           <div className="flex justify-center">
             <div className="w-full xl:w-4/5 max-w-4xl flex flex-col gap-2">
