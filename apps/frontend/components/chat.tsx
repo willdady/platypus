@@ -513,7 +513,7 @@ export const Chat = ({
                             {isEditing ? (
                               <MessageActions className="justify-end">
                                 <MessageAction
-                                  className="cursor-pointer"
+                                  className="cursor-pointer text-muted-foreground"
                                   onClick={handleMessageEditSubmit}
                                   variant="ghost"
                                   size="icon"
@@ -522,7 +522,7 @@ export const Chat = ({
                                   <CheckIcon className="size-4" />
                                 </MessageAction>
                                 <MessageAction
-                                  className="cursor-pointer"
+                                  className="cursor-pointer text-muted-foreground"
                                   onClick={handleMessageEditCancel}
                                   variant="ghost"
                                   size="icon"
@@ -535,7 +535,7 @@ export const Chat = ({
                               <MessageActions className={message.role === "user" ? "justify-end" : ""}>
                                 {message.role === "user" && (
                                   <MessageAction
-                                    className="cursor-pointer"
+                                    className="cursor-pointer text-muted-foreground"
                                     onClick={() => handleMessageEditStart(message.id, textContent)}
                                     variant="ghost"
                                     size="icon"
@@ -545,7 +545,7 @@ export const Chat = ({
                                   </MessageAction>
                                 )}
                                 <MessageAction
-                                  className="cursor-pointer"
+                                  className="cursor-pointer text-muted-foreground"
                                   onClick={() => {
                                     navigator.clipboard.writeText(textContent);
                                     setCopiedMessageId(message.id);
@@ -558,7 +558,7 @@ export const Chat = ({
                                   <CopyIcon className="size-4" />
                                 </MessageAction>
                                 <MessageAction
-                                  className="cursor-pointer"
+                                  className="cursor-pointer text-muted-foreground"
                                   onClick={() => handleMessageDelete(message.id)}
                                   variant="ghost"
                                   size="icon"
@@ -568,7 +568,7 @@ export const Chat = ({
                                 </MessageAction>
                                 {message.role === "assistant" && isLastMessage && (
                                   <MessageAction
-                                    className="cursor-pointer"
+                                    className="cursor-pointer text-muted-foreground"
                                     onClick={handleRegenerate}
                                     variant="ghost"
                                     size="icon"
