@@ -107,6 +107,7 @@ export const Chat = ({
   const backendUrl = useBackendUrl();
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const editTextareaRef = useRef<HTMLTextAreaElement>(null);
 
   // State for selected model, provider, and agent
   const [agentId, setAgentId] = useState("");
@@ -168,6 +169,13 @@ export const Chat = ({
   useEffect(() => {
     hasMutatedRef.current = false;
   }, [chatId]);
+
+  // Select all text in edit textarea when editing starts
+  useEffect(() => {
+    if (editingMessageId && editTextareaRef.current) {
+      editTextareaRef.current.select();
+    }
+  }, [editingMessageId]);
 
   // Set initial agent if provided and no existing chat agent
   useEffect(() => {
@@ -500,6 +508,7 @@ export const Chat = ({
                               <MessageContent>
                                 {isEditing ? (
                                   <Textarea
+                                    ref={editTextareaRef}
                                     value={editContent}
                                     onChange={(e) => setEditContent(e.target.value)}
                                     className="min-h-[100px]"
