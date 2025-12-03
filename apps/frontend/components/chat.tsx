@@ -44,12 +44,15 @@ import {
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, ToolUIPart } from "ai";
 import {
+  CheckIcon,
   CopyIcon,
+  PencilIcon,
   Plus,
   RefreshCwIcon,
   Settings2,
   TrashIcon,
   TriangleAlert,
+  XIcon,
 } from "lucide-react";
 import { useState, useRef, Fragment, useEffect } from "react";
 import { Chat as ChatType, Provider, Agent } from "@agent-kit/schemas";
@@ -109,7 +112,9 @@ export const Chat = ({
   const [agentId, setAgentId] = useState("");
   const [modelId, setModelId] = useState("");
   const [providerId, setProviderId] = useState("");
-  const [copied, setCopied] = useState(false);
+  const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
+  const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
+  const [editContent, setEditContent] = useState("");
   const hasMutatedRef = useRef(false);
 
   // State for chat settings
@@ -346,6 +351,22 @@ export const Chat = ({
     );
   }
 
+  const getRequestBody = () => {
+    return agentId
+      ? { agentId }
+      : {
+          providerId,
+          modelId,
+          systemPrompt: systemPrompt || undefined,
+          temperature,
+          topP,
+          topK,
+          seed,
+          presencePenalty,
+          frequencyPenalty,
+        };
+  };
+
   const handleModelChange = (value: string) => {
     if (value.startsWith("agent:")) {
       // Agent selected
@@ -370,20 +391,7 @@ export const Chat = ({
       return;
     }
 
-    // Send EITHER agentId OR (providerId + modelId + chat settings)
-    const body = agentId
-      ? { agentId }
-      : {
-          providerId,
-          modelId,
-          systemPrompt: systemPrompt || undefined,
-          temperature,
-          topP,
-          topK,
-          seed,
-          presencePenalty,
-          frequencyPenalty,
-        };
+    const body = getRequestBody();
 
     sendMessage(
       {
@@ -395,20 +403,40 @@ export const Chat = ({
   };
 
   const handleRegenerate = () => {
-    const body = agentId
-      ? { agentId }
-      : {
-          providerId,
-          modelId,
-          systemPrompt: systemPrompt || undefined,
-          temperature,
-          topP,
-          topK,
-          seed,
-          presencePenalty,
-          frequencyPenalty,
-        };
+    const body = getRequestBody();
     regenerate({ body });
+  };
+
+  const handleMessageDelete = (messageId: string) => {
+    setMessages(messages.filter(m => m.id !== messageId));
+  };
+
+  const handleMessageEditStart = (messageId: string, content: string) => {
+    setEditingMessageId(messageId);
+    setEditContent(content);
+  };
+
+  const handleMessageEditCancel = () => {
+    setEditingMessageId(null);
+    setEditContent("");
+  };
+
+  const handleMessageEditSubmit = () => {
+    if (!editingMessageId) return;
+    const messageIndex = messages.findIndex(m => m.id === editingMessageId);
+    if (messageIndex === -1) return;
+
+    // Remove messages after this one (including this one)
+    const newMessages = messages.slice(0, messageIndex);
+    setMessages(newMessages);
+
+    // Submit the edited message to backend (will append it)
+    const body = getRequestBody();
+    sendMessage({ text: editContent }, { body });
+
+    // Reset edit state
+    setEditingMessageId(null);
+    setEditContent("");
   };
 
   return (
@@ -416,7 +444,7 @@ export const Chat = ({
       <Conversation className="overflow-y-hidden" data-conversation>
         <ConversationContent>
           <div className="flex justify-center">
-            <div className="w-full xl:w-4/5 max-w-4xl flex flex-col gap-4">
+            <div className="w-full xl:w-4/5 max-w-4xl flex flex-col gap-2">
               {messages.map((message, messageIndex) => {
                 const fileParts = message.parts?.filter(
                   (part) => part.type === "file",
@@ -461,28 +489,69 @@ export const Chat = ({
                       if (part.type === "text") {
                         const isLastMessage =
                           messageIndex === messages.length - 1;
+                        const isEditing = editingMessageId === message.id;
+                        const textContent = message.parts
+                          ?.filter((part) => part.type === "text")
+                          .map((part) => part.text)
+                          .join("") || "";
                         return (
                           <Fragment key={`${message.id}-${i}`}>
                             <Message key={message.id} from={message.role}>
                               <MessageContent>
-                                <MessageResponse>{part.text}</MessageResponse>
+                                {isEditing ? (
+                                  <Textarea
+                                    value={editContent}
+                                    onChange={(e) => setEditContent(e.target.value)}
+                                    className="min-h-[100px]"
+                                    autoFocus
+                                  />
+                                ) : (
+                                  <MessageResponse>{part.text}</MessageResponse>
+                                )}
                               </MessageContent>
                             </Message>
-                            {message.role === "assistant" && (
-                              <MessageActions className="mt-2">
+                            {isEditing ? (
+                              <MessageActions className="justify-end">
+                                <MessageAction
+                                  className="cursor-pointer"
+                                  onClick={handleMessageEditSubmit}
+                                  variant="ghost"
+                                  size="icon"
+                                  label="Save"
+                                >
+                                  <CheckIcon className="size-4" />
+                                </MessageAction>
+                                <MessageAction
+                                  className="cursor-pointer"
+                                  onClick={handleMessageEditCancel}
+                                  variant="ghost"
+                                  size="icon"
+                                  label="Cancel"
+                                >
+                                  <XIcon className="size-4" />
+                                </MessageAction>
+                              </MessageActions>
+                            ) : (
+                              <MessageActions className={message.role === "user" ? "justify-end" : ""}>
+                                {message.role === "user" && (
+                                  <MessageAction
+                                    className="cursor-pointer"
+                                    onClick={() => handleMessageEditStart(message.id, textContent)}
+                                    variant="ghost"
+                                    size="icon"
+                                    label="Edit"
+                                  >
+                                    <PencilIcon className="size-4" />
+                                  </MessageAction>
+                                )}
                                 <MessageAction
                                   className="cursor-pointer"
                                   onClick={() => {
-                                    const text =
-                                      message.parts
-                                        ?.filter((part) => part.type === "text")
-                                        .map((part) => part.text)
-                                        .join("") || "";
-                                    navigator.clipboard.writeText(text);
-                                    setCopied(true);
-                                    setTimeout(() => setCopied(false), 2000);
+                                    navigator.clipboard.writeText(textContent);
+                                    setCopiedMessageId(message.id);
+                                    setTimeout(() => setCopiedMessageId(null), 2000);
                                   }}
-                                  variant={copied ? "secondary" : "ghost"}
+                                  variant={copiedMessageId === message.id ? "secondary" : "ghost"}
                                   size="icon"
                                   label="Copy"
                                 >
@@ -490,19 +559,14 @@ export const Chat = ({
                                 </MessageAction>
                                 <MessageAction
                                   className="cursor-pointer"
-                                  onClick={() => {
-                                    const index = messages.findIndex(
-                                      (m) => m.id === message.id,
-                                    );
-                                    setMessages(messages.slice(0, index));
-                                  }}
+                                  onClick={() => handleMessageDelete(message.id)}
                                   variant="ghost"
                                   size="icon"
                                   label="Delete"
                                 >
                                   <TrashIcon className="size-4" />
                                 </MessageAction>
-                                {isLastMessage && (
+                                {message.role === "assistant" && isLastMessage && (
                                   <MessageAction
                                     className="cursor-pointer"
                                     onClick={handleRegenerate}
