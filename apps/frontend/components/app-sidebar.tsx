@@ -52,6 +52,8 @@ import {
   FolderClosed,
   ChevronsUpDown,
   Plus,
+  ClockFading,
+  CalendarDays,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Field, FieldLabel, FieldError } from "@/components/ui/field";
@@ -114,12 +116,13 @@ export function AppSidebar({
 
   const chatGroups = [
     ...(starredChats.length > 0
-      ? [{ label: "Starred", chats: starredChats }]
+      ? [{ label: "Starred", chats: starredChats, icon: Star }]
       : []),
-    ...(hasRecent ? [{ label: "Last 7 days", chats: last7Days }] : []),
+    ...(hasRecent ? [{ label: "Last 7 days", chats: last7Days, icon: ClockFading }] : []),
     {
       label: hasRecent ? "Other" : "Chats",
       chats: hasRecent ? other : regularChats,
+      icon: CalendarDays,
     },
   ].filter((group) => group.chats.length > 0);
 
@@ -315,7 +318,10 @@ export function AppSidebar({
         <SidebarContent>
           {chatGroups.map((group) => (
             <SidebarGroup key={group.label}>
-              <SidebarGroupLabel>{group.label}</SidebarGroupLabel>
+              <SidebarGroupLabel>
+                <group.icon className="mr-2 h-4 w-4" />
+                {group.label}
+              </SidebarGroupLabel>
               <SidebarGroupContent>
                 <SidebarMenu>
                   {group.chats.map((chat) => (
