@@ -6,10 +6,8 @@
   "author": "Will Dady",
   "type": "module",
   "main": "index.ts",
-  "scripts": {
-  },
+  "scripts": {},
   "dependencies": {
-    "zod": "^4.1.12"
-  },
-  "devDependencies": {}
+    "zod": "^4.1.13"
+  }
 }
