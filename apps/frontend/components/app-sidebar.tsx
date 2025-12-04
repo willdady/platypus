@@ -118,7 +118,9 @@ export function AppSidebar({
     ...(starredChats.length > 0
       ? [{ label: "Starred", chats: starredChats, icon: Star }]
       : []),
-    ...(hasRecent ? [{ label: "Last 7 days", chats: last7Days, icon: ClockFading }] : []),
+    ...(hasRecent
+      ? [{ label: "Last 7 days", chats: last7Days, icon: ClockFading }]
+      : []),
     {
       label: hasRecent ? "Other" : "Chats",
       chats: hasRecent ? other : regularChats,

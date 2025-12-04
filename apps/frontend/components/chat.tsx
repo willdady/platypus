@@ -42,7 +42,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useChat } from "@ai-sdk/react";
-import { DefaultChatTransport, ToolUIPart } from "ai";
+import { DefaultChatTransport, DynamicToolUIPart, ToolUIPart } from "ai";
 import {
   CheckIcon,
   CopyIcon,
@@ -92,6 +92,7 @@ import {
   SourcesTrigger,
 } from "./ai-elements/sources";
 import { useBackendUrl } from "@/app/client-context";
+import { DynamicToolHeader } from "./dynamic-tool-header";
 
 export const Chat = ({
   orgId,
@@ -416,7 +417,7 @@ export const Chat = ({
   };
 
   const handleMessageDelete = (messageId: string) => {
-    setMessages(messages.filter(m => m.id !== messageId));
+    setMessages(messages.filter((m) => m.id !== messageId));
   };
 
   const handleMessageEditStart = (messageId: string, content: string) => {
@@ -431,7 +432,7 @@ export const Chat = ({
 
   const handleMessageEditSubmit = () => {
     if (!editingMessageId) return;
-    const messageIndex = messages.findIndex(m => m.id === editingMessageId);
+    const messageIndex = messages.findIndex((m) => m.id === editingMessageId);
     if (messageIndex === -1) return;
 
     // Remove messages after this one (including this one)
@@ -448,8 +449,13 @@ export const Chat = ({
   };
 
   return (
-    <div className={`relative size-full flex flex-col overflow-hidden h-[calc(100vh-2.75rem)] ${messages.length === 0 ? 'justify-center' : ''}`}>
-      <Conversation className={`overflow-y-hidden ${messages.length === 0 ? 'flex-none' : ''}`} data-conversation>
+    <div
+      className={`relative size-full flex flex-col overflow-hidden h-[calc(100vh-2.75rem)] ${messages.length === 0 ? "justify-center" : ""}`}
+    >
+      <Conversation
+        className={`overflow-y-hidden ${messages.length === 0 ? "flex-none" : ""}`}
+        data-conversation
+      >
         <ConversationContent>
           <div className="flex justify-center">
             <div className="w-full xl:w-4/5 max-w-4xl flex flex-col gap-2">
@@ -498,10 +504,11 @@ export const Chat = ({
                         const isLastMessage =
                           messageIndex === messages.length - 1;
                         const isEditing = editingMessageId === message.id;
-                        const textContent = message.parts
-                          ?.filter((part) => part.type === "text")
-                          .map((part) => part.text)
-                          .join("") || "";
+                        const textContent =
+                          message.parts
+                            ?.filter((part) => part.type === "text")
+                            .map((part) => part.text)
+                            .join("") || "";
                         return (
                           <Fragment key={`${message.id}-${i}`}>
                             <Message key={message.id} from={message.role}>
@@ -510,7 +517,9 @@ export const Chat = ({
                                   <Textarea
                                     ref={editTextareaRef}
                                     value={editContent}
-                                    onChange={(e) => setEditContent(e.target.value)}
+                                    onChange={(e) =>
+                                      setEditContent(e.target.value)
+                                    }
                                     className="min-h-[100px]"
                                     autoFocus
                                   />
@@ -541,11 +550,20 @@ export const Chat = ({
                                 </MessageAction>
                               </MessageActions>
                             ) : (
-                              <MessageActions className={message.role === "user" ? "justify-end" : ""}>
+                              <MessageActions
+                                className={
+                                  message.role === "user" ? "justify-end" : ""
+                                }
+                              >
                                 {message.role === "user" && (
                                   <MessageAction
                                     className="cursor-pointer text-muted-foreground"
-                                    onClick={() => handleMessageEditStart(message.id, textContent)}
+                                    onClick={() =>
+                                      handleMessageEditStart(
+                                        message.id,
+                                        textContent,
+                                      )
+                                    }
                                     variant="ghost"
                                     size="icon"
                                     label="Edit"
@@ -558,9 +576,16 @@ export const Chat = ({
                                   onClick={() => {
                                     navigator.clipboard.writeText(textContent);
                                     setCopiedMessageId(message.id);
-                                    setTimeout(() => setCopiedMessageId(null), 2000);
+                                    setTimeout(
+                                      () => setCopiedMessageId(null),
+                                      2000,
+                                    );
                                   }}
-                                  variant={copiedMessageId === message.id ? "secondary" : "ghost"}
+                                  variant={
+                                    copiedMessageId === message.id
+                                      ? "secondary"
+                                      : "ghost"
+                                  }
                                   size="icon"
                                   label="Copy"
                                 >
@@ -568,24 +593,27 @@ export const Chat = ({
                                 </MessageAction>
                                 <MessageAction
                                   className="cursor-pointer text-muted-foreground"
-                                  onClick={() => handleMessageDelete(message.id)}
+                                  onClick={() =>
+                                    handleMessageDelete(message.id)
+                                  }
                                   variant="ghost"
                                   size="icon"
                                   label="Delete"
                                 >
                                   <TrashIcon className="size-4" />
                                 </MessageAction>
-                                {message.role === "assistant" && isLastMessage && (
-                                  <MessageAction
-                                    className="cursor-pointer text-muted-foreground"
-                                    onClick={handleRegenerate}
-                                    variant="ghost"
-                                    size="icon"
-                                    label="Regenerate"
-                                  >
-                                    <RefreshCwIcon className="size-4" />
-                                  </MessageAction>
-                                )}
+                                {message.role === "assistant" &&
+                                  isLastMessage && (
+                                    <MessageAction
+                                      className="cursor-pointer text-muted-foreground"
+                                      onClick={handleRegenerate}
+                                      variant="ghost"
+                                      size="icon"
+                                      label="Regenerate"
+                                    >
+                                      <RefreshCwIcon className="size-4" />
+                                    </MessageAction>
+                                  )}
                               </MessageActions>
                             )}
                           </Fragment>
@@ -604,6 +632,23 @@ export const Chat = ({
                             <ReasoningTrigger className="cursor-pointer" />
                             <ReasoningContent>{part.text}</ReasoningContent>
                           </Reasoning>
+                        );
+                      } else if (part.type === "dynamic-tool") {
+                        const toolPart = part as DynamicToolUIPart;
+                        return (
+                          <Tool key={`${message.id}-${i}`}>
+                            <DynamicToolHeader
+                              state={toolPart.state}
+                              title={toolPart.toolName}
+                            />
+                            <ToolContent>
+                              <ToolInput input={toolPart.input} />
+                              <ToolOutput
+                                output={toolPart.output}
+                                errorText={toolPart.errorText}
+                              />
+                            </ToolContent>
+                          </Tool>
                         );
                       } else if (part.type.startsWith("tool-")) {
                         const toolPart = part as ToolUIPart;

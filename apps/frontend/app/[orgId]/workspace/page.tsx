@@ -1,4 +1,4 @@
-import { permanentRedirect } from 'next/navigation';
+import { permanentRedirect } from "next/navigation";
 
 interface PageProps {
   params: Promise<{

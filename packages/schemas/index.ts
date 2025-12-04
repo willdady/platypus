@@ -195,6 +195,7 @@ export type Tool = z.infer<typeof toolSchema>;
 
 export const toolSetSchema = z.object({
   id: z.string(),
+  name: z.string(),
   category: z.string(),
   description: z.string().optional(),
   tools: z.array(toolSchema),

@@ -396,7 +396,7 @@ const AgentForm = ({
                           />
                           <FieldLabel htmlFor={toolSet.id}>
                             <div className="flex flex-col">
-                              <p>{toolSet.id}</p>
+                              <p>{toolSet.name}</p>
                               <p className="text-xs text-muted-foreground">
                                 {toolSet.description}
                               </p>

@@ -11,12 +11,14 @@ import {
 } from "ai";
 import { createOpenAI } from "@ai-sdk/openai";
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
+import { experimental_createMCPClient as createMCPClient } from "@ai-sdk/mcp";
 import { stepCountIs } from "ai";
 import { db } from "../index.ts";
 import {
   chat as chatTable,
   provider as providerTable,
   agent as agentTable,
+  mcp as mcpTable,
 } from "../db/schema.ts";
 import { getToolSet } from "../tools/index.ts";
 import {
@@ -202,6 +204,9 @@ chat.post("/", sValidator("json", chatSubmitSchema), async (c) => {
     stopWhen: stepCountIs(20),
   };
 
+  // Initialize MCP clients array for cleanup in onFinish
+  const mcpClients: any[] = [];
+
   // Load agent's tools if agent is selected
   if (resolvedAgentId) {
     const agent = (
@@ -215,11 +220,55 @@ chat.post("/", sValidator("json", chatSubmitSchema), async (c) => {
     // Load agent's tools
     if (agent.toolSetIds && agent.toolSetIds.length > 0) {
       const tools: Record<string, any> = {};
+
       for (const toolSetId of agent.toolSetIds) {
-        const toolSet = getToolSet(toolSetId);
-        Object.assign(tools, toolSet.tools);
+        try {
+          // Try to load as static tool set first
+          const toolSet = getToolSet(toolSetId);
+          Object.assign(tools, toolSet.tools);
+        } catch (error) {
+          // If static tool set not found, try to load as MCP
+          const mcpRecord = await db
+            .select()
+            .from(mcpTable)
+            .where(
+              and(
+                eq(mcpTable.id, toolSetId),
+                eq(mcpTable.workspaceId, workspaceId),
+              ),
+            )
+            .limit(1);
+
+          if (mcpRecord.length > 0) {
+            const mcp = mcpRecord[0];
+            if (mcp.url) {
+              const mcpClient = await createMCPClient({
+                transport: {
+                  type: "http",
+                  url: mcp.url,
+                  headers:
+                    mcp.authType === "Bearer"
+                      ? { Authorization: `Bearer ${mcp.bearerToken}` }
+                      : undefined,
+                },
+              });
+              const mcpTools = await mcpClient.tools();
+              Object.assign(tools, mcpTools);
+              mcpClients.push(mcpClient);
+            } else {
+              console.warn(`MCP '${toolSetId}' has no URL configured`);
+            }
+          } else {
+            console.warn(
+              `Tool set with id '${toolSetId}' not found as static tool set or MCP`,
+            );
+          }
+        }
       }
-      streamTextParams.tools = tools;
+
+      if (Object.keys(tools).length > 0) {
+        streamTextParams.tools = tools;
+      }
     }
 
     // Apply agent's configuration parameters
@@ -260,6 +309,15 @@ chat.post("/", sValidator("json", chatSubmitSchema), async (c) => {
     }),
     onFinish: async ({ messages }) => {
       try {
+        // Close all MCP clients
+        for (const mcpClient of mcpClients) {
+          try {
+            await mcpClient.close();
+          } catch (error) {
+            console.error("Error closing MCP client:", error);
+          }
+        }
+
         // Upsert chat record - try update first, then insert if not found
         const updateResult = await db
           .update(chatTable)

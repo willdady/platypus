@@ -7,6 +7,7 @@ import {
 
 type ToolSet = {
   id: string;
+  name: string;
   category: string;
   description?: string;
   tools: { [toolId: string]: Tool<any, any> };
@@ -40,6 +41,7 @@ export const getToolSets = (): typeof TOOL_SETS_REGISTRY => TOOL_SETS_REGISTRY;
 
 // REGISTER TOOL SETS HERE!
 registerToolSet("math-conversions", {
+  name: "Math Conversions",
   category: "Math",
   description: "Temperature and unit conversions",
   tools: {
@@ -49,6 +51,7 @@ registerToolSet("math-conversions", {
 });
 
 registerToolSet("math-geometry", {
+  name: "Math Geometry",
   category: "Math",
   description: "Geometric calculations and formulas",
   tools: {
