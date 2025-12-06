@@ -1,4 +1,6 @@
 import type { Metadata } from "next";
+import { notFound } from "next/navigation";
+import type { Workspace } from "@agent-kit/schemas";
 import { ModeToggle } from "@/components/mode-toggle";
 import {
   SidebarInset,
@@ -15,6 +17,17 @@ export default async function WorkspaceLayout({
   params: Promise<{ orgId: string; workspaceId: string }>;
 }>) {
   const { orgId, workspaceId } = await params;
+
+  // Use internal URL for SSR, fallback to BACKEND_URL for local dev
+  const backendUrl =
+    process.env.INTERNAL_BACKEND_URL || process.env.BACKEND_URL;
+  const response = await fetch(`${backendUrl}/workspaces/${workspaceId}`);
+
+  if (response.status === 404) {
+    notFound();
+  }
+
+  // const workspace: Workspace = await response.json();
 
   return (
     <SidebarProvider>
