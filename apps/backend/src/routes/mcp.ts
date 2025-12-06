@@ -1,9 +1,10 @@
 import { Hono } from "hono";
 import { sValidator } from "@hono/standard-validator";
 import { nanoid } from "nanoid";
+import { experimental_createMCPClient as createMCPClient } from "@ai-sdk/mcp";
 import { db } from "../index.ts";
 import { mcp as mcpTable } from "../db/schema.ts";
-import { mcpCreateSchema, mcpUpdateSchema } from "@agent-kit/schemas";
+import { mcpCreateSchema, mcpUpdateSchema, mcpTestSchema } from "@agent-kit/schemas";
 import { eq } from "drizzle-orm";
 
 const mcp = new Hono();
@@ -65,6 +66,67 @@ mcp.delete("/:id", async (c) => {
   const id = c.req.param("id");
   await db.delete(mcpTable).where(eq(mcpTable.id, id));
   return c.json({ message: "MCP deleted" });
+});
+
+/** Test MCP connection */
+mcp.post("/test", sValidator("json", mcpTestSchema), async (c) => {
+  const data = c.req.valid("json");
+
+  let mcpClient;
+  try {
+    mcpClient = await createMCPClient({
+      transport: {
+        type: "http",
+        url: data.url,
+        headers:
+          data.authType === "Bearer"
+            ? { Authorization: `Bearer ${data.bearerToken}` }
+            : undefined,
+      },
+    });
+
+    // Fetch available tools
+    const mcpTools = await mcpClient.tools();
+
+    // Extract tool names from the tools object
+    const toolNames = Object.keys(mcpTools);
+
+    // Close connection
+    await mcpClient.close();
+
+    // Return success with tool names
+    return c.json({
+      success: true,
+      toolNames
+    }, 200);
+
+  } catch (error) {
+    // Close client if it was created
+    if (mcpClient) {
+      try {
+        await mcpClient.close();
+      } catch (closeError) {
+        console.error("Error closing MCP client:", closeError);
+      }
+    }
+
+    // Log the full error for debugging
+    console.error("MCP test connection error:", error);
+
+    // Return error details
+    let errorMessage = "Unknown error connecting to MCP server";
+
+    if (error instanceof Error) {
+      errorMessage = error.message;
+    } else if (typeof error === 'string') {
+      errorMessage = error;
+    }
+
+    return c.json({
+      success: false,
+      error: errorMessage
+    }, 400);
+  }
 });
 
 export { mcp };

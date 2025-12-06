@@ -252,6 +252,14 @@ export const mcpUpdateSchema = mcpSchema
   })
   .refine(mcpBearerTokenRefine.validator, mcpBearerTokenRefine.params);
 
+export const mcpTestSchema = mcpSchema
+  .pick({
+    url: true,
+    authType: true,
+    bearerToken: true,
+  })
+  .refine(mcpBearerTokenRefine.validator, mcpBearerTokenRefine.params);
+
 // Provider
 
 export const providerSchema = z.object({

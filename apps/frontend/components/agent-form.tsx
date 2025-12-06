@@ -370,7 +370,7 @@ const AgentForm = ({
                 );
 
                 return sortedCategories.map((category) => (
-                  <FieldSet key={category}>
+                  <FieldSet key={category} className="mb-4">
                     <FieldLegend variant="label">{category}</FieldLegend>
                     <FieldGroup className="grid grid-cols-2 gap-4">
                       {toolSetsByCategory[category].map((toolSet) => (

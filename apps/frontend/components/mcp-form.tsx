@@ -10,6 +10,7 @@ import {
 } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 import {
   Select,
   SelectContent,
@@ -33,7 +34,7 @@ import { type MCP } from "@agent-kit/schemas";
 import useSWR from "swr";
 import { parseValidationErrors } from "@/lib/utils";
 import { useBackendUrl } from "@/app/client-context";
-import { Trash2 } from "lucide-react";
+import { Trash2, Plug, Check, X } from "lucide-react";
 
 type McpFormData = Omit<MCP, "id" | "createdAt" | "updatedAt" | "workspaceId">;
 
@@ -62,6 +63,12 @@ const McpForm = ({
   const [validationErrors, setValidationErrors] = useState<
     Record<string, string>
   >({});
+  const [isTesting, setIsTesting] = useState(false);
+  const [testResult, setTestResult] = useState<{
+    success: boolean;
+    toolNames?: string[];
+    error?: string;
+  } | null>(null);
 
   const router = useRouter();
 
@@ -98,6 +105,9 @@ const McpForm = ({
       ...prevData,
       [id]: value,
     }));
+
+    // Clear test result when form changes
+    setTestResult(null);
   };
 
   const handleSelectChange = (id: string, value: string) => {
@@ -123,6 +133,9 @@ const McpForm = ({
       ...prevData,
       [id]: value,
     }));
+
+    // Clear test result when form changes
+    setTestResult(null);
   };
 
   const handleSubmit = async () => {
@@ -185,6 +198,48 @@ const McpForm = ({
       console.error("Error deleting MCP:", error);
       setIsDeleting(false);
       setIsDeleteDialogOpen(false);
+    }
+  };
+
+  const handleTestConnection = async () => {
+    setIsTesting(true);
+    setTestResult(null);
+
+    try {
+      const payload = {
+        url: formData.url,
+        authType: formData.authType,
+        bearerToken: formData.authType === "Bearer" ? formData.bearerToken : undefined,
+      };
+
+      const response = await fetch(`${backendUrl}/mcps/test`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(payload),
+      });
+
+      const data = await response.json();
+
+      if (response.ok && data.success) {
+        setTestResult({
+          success: true,
+          toolNames: data.toolNames,
+        });
+      } else {
+        setTestResult({
+          success: false,
+          error: data.error || "Failed to connect to MCP server",
+        });
+      }
+    } catch (error) {
+      setTestResult({
+        success: false,
+        error: error instanceof Error ? error.message : "Network error",
+      });
+    } finally {
+      setIsTesting(false);
     }
   };
 
@@ -274,13 +329,68 @@ const McpForm = ({
             )}
           </FieldGroup>
         </FieldGroup>
+
+        {/* Test Connection Section */}
+        <div className="space-y-3">
+          <Button
+            type="button"
+            variant="outline"
+            className="cursor-pointer"
+            onClick={handleTestConnection}
+            disabled={isTesting || isSubmitting || !formData.url}
+          >
+            <Plug />
+            {isTesting ? "Testing..." : "Test Connection"}
+          </Button>
+
+          {/* Display test results */}
+          {testResult && (
+            <Alert
+              variant={testResult.success ? "default" : "destructive"}
+              className={testResult.success ? "border-green-200 bg-green-50 text-green-800 dark:border-green-800 dark:bg-green-950/20 dark:text-green-300 [&>svg]:text-green-600 dark:[&>svg]:text-green-400" : ""}
+            >
+              {testResult.success ? <Check /> : <X />}
+              <AlertTitle>
+                {testResult.success ? "Connection successful" : "Connection failed"}
+              </AlertTitle>
+              <AlertDescription>
+                {testResult.success ? (
+                  <div className="space-y-2">
+                    <p>
+                      Found {testResult.toolNames?.length || 0} tool{(testResult.toolNames?.length || 0) !== 1 ? "s" : ""}
+                    </p>
+                    {testResult.toolNames && testResult.toolNames.length > 0 && (
+                      <div className="mt-2">
+                        <p className="text-xs font-medium mb-1">
+                          Available tools:
+                        </p>
+                        <div className="flex flex-wrap gap-1">
+                          {testResult.toolNames.map((name) => (
+                            <span
+                              key={name}
+                              className="inline-flex items-center px-2 py-0.5 rounded text-xs font-mono bg-muted text-muted-foreground"
+                            >
+                              {name}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <p>{testResult.error}</p>
+                )}
+              </AlertDescription>
+            </Alert>
+          )}
+        </div>
       </FieldSet>
 
       <div className="flex gap-2">
         <Button
           className="cursor-pointer"
           onClick={handleSubmit}
-          disabled={isSubmitting || Object.keys(validationErrors).length > 0}
+          disabled={isSubmitting || isTesting || Object.keys(validationErrors).length > 0}
         >
           {mcpId ? "Update" : "Save"}
         </Button>
@@ -290,7 +400,7 @@ const McpForm = ({
             className="cursor-pointer"
             variant="outline"
             onClick={() => setIsDeleteDialogOpen(true)}
-            disabled={isSubmitting}
+            disabled={isSubmitting || isTesting}
           >
             <Trash2 /> Delete
           </Button>
