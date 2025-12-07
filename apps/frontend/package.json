@@ -48,6 +48,7 @@
     "remark-gfm": "^4.0.1",
     "remark-math": "^6.0.0",
     "shiki": "^3.19.0",
+    "sonner": "^2.0.7",
     "streamdown": "^1.6.10",
     "swr": "^2.3.7",
     "tailwind-merge": "^3.4.0",

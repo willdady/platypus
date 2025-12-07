@@ -93,6 +93,7 @@ import {
 } from "./ai-elements/sources";
 import { useBackendUrl } from "@/app/client-context";
 import { DynamicToolHeader } from "./dynamic-tool-header";
+import { toast } from "sonner";
 
 export const Chat = ({
   orgId,
@@ -575,6 +576,7 @@ export const Chat = ({
                                   className="cursor-pointer text-muted-foreground"
                                   onClick={() => {
                                     navigator.clipboard.writeText(textContent);
+                                    toast.info("Copied to clipboard");
                                     setCopiedMessageId(message.id);
                                     setTimeout(
                                       () => setCopiedMessageId(null),
