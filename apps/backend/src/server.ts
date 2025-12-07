@@ -29,6 +29,8 @@ app.use("*", async (c, next) => {
   await next();
 });
 
+app.get("/health", (c) => c.json({ status: "ok" }));
+
 app.route("/chat", chat);
 app.route("/organisations", organisation);
 app.route("/workspaces", workspace);
