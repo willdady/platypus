@@ -2,7 +2,7 @@
 @import "tw-animate-css";
 
 /* See https://ai-sdk.dev/elements/components/message */
-@source "../node_modules/streamdown/dist/index.js";
+@source "../node_modules/streamdown/dist/*.js";
 
 @custom-variant dark (&:is(.dark *));
 

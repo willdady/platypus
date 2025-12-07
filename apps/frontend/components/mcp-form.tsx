@@ -209,7 +209,8 @@ const McpForm = ({
       const payload = {
         url: formData.url,
         authType: formData.authType,
-        bearerToken: formData.authType === "Bearer" ? formData.bearerToken : undefined,
+        bearerToken:
+          formData.authType === "Bearer" ? formData.bearerToken : undefined,
       };
 
       const response = await fetch(`${backendUrl}/mcps/test`, {
@@ -347,35 +348,43 @@ const McpForm = ({
           {testResult && (
             <Alert
               variant={testResult.success ? "default" : "destructive"}
-              className={testResult.success ? "border-green-200 bg-green-50 text-green-800 dark:border-green-800 dark:bg-green-950/20 dark:text-green-300 [&>svg]:text-green-600 dark:[&>svg]:text-green-400" : ""}
+              className={
+                testResult.success
+                  ? "border-green-200 bg-green-50 text-green-800 dark:border-green-800 dark:bg-green-950/20 dark:text-green-300 [&>svg]:text-green-600 dark:[&>svg]:text-green-400"
+                  : ""
+              }
             >
               {testResult.success ? <Check /> : <X />}
               <AlertTitle>
-                {testResult.success ? "Connection successful" : "Connection failed"}
+                {testResult.success
+                  ? "Connection successful"
+                  : "Connection failed"}
               </AlertTitle>
               <AlertDescription>
                 {testResult.success ? (
                   <div className="space-y-2">
                     <p>
-                      Found {testResult.toolNames?.length || 0} tool{(testResult.toolNames?.length || 0) !== 1 ? "s" : ""}
+                      Found {testResult.toolNames?.length || 0} tool
+                      {(testResult.toolNames?.length || 0) !== 1 ? "s" : ""}
                     </p>
-                    {testResult.toolNames && testResult.toolNames.length > 0 && (
-                      <div className="mt-2">
-                        <p className="text-xs font-medium mb-1">
-                          Available tools:
-                        </p>
-                        <div className="flex flex-wrap gap-1">
-                          {testResult.toolNames.map((name) => (
-                            <span
-                              key={name}
-                              className="inline-flex items-center px-2 py-0.5 rounded text-xs font-mono bg-muted text-muted-foreground"
-                            >
-                              {name}
-                            </span>
-                          ))}
+                    {testResult.toolNames &&
+                      testResult.toolNames.length > 0 && (
+                        <div className="mt-2">
+                          <p className="text-xs font-medium mb-1">
+                            Available tools:
+                          </p>
+                          <div className="flex flex-wrap gap-1">
+                            {testResult.toolNames.map((name) => (
+                              <span
+                                key={name}
+                                className="inline-flex items-center px-2 py-0.5 rounded text-xs font-mono bg-muted text-muted-foreground"
+                              >
+                                {name}
+                              </span>
+                            ))}
+                          </div>
                         </div>
-                      </div>
-                    )}
+                      )}
                   </div>
                 ) : (
                   <p>{testResult.error}</p>
@@ -390,7 +399,11 @@ const McpForm = ({
         <Button
           className="cursor-pointer"
           onClick={handleSubmit}
-          disabled={isSubmitting || isTesting || Object.keys(validationErrors).length > 0}
+          disabled={
+            isSubmitting ||
+            isTesting ||
+            Object.keys(validationErrors).length > 0
+          }
         >
           {mcpId ? "Update" : "Save"}
         </Button>

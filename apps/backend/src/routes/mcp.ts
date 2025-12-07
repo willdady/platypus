@@ -4,7 +4,11 @@ import { nanoid } from "nanoid";
 import { experimental_createMCPClient as createMCPClient } from "@ai-sdk/mcp";
 import { db } from "../index.ts";
 import { mcp as mcpTable } from "../db/schema.ts";
-import { mcpCreateSchema, mcpUpdateSchema, mcpTestSchema } from "@agent-kit/schemas";
+import {
+  mcpCreateSchema,
+  mcpUpdateSchema,
+  mcpTestSchema,
+} from "@agent-kit/schemas";
 import { eq } from "drizzle-orm";
 
 const mcp = new Hono();
@@ -95,11 +99,13 @@ mcp.post("/test", sValidator("json", mcpTestSchema), async (c) => {
     await mcpClient.close();
 
     // Return success with tool names
-    return c.json({
-      success: true,
-      toolNames
-    }, 200);
-
+    return c.json(
+      {
+        success: true,
+        toolNames,
+      },
+      200,
+    );
   } catch (error) {
     // Close client if it was created
     if (mcpClient) {
@@ -118,14 +124,17 @@ mcp.post("/test", sValidator("json", mcpTestSchema), async (c) => {
 
     if (error instanceof Error) {
       errorMessage = error.message;
-    } else if (typeof error === 'string') {
+    } else if (typeof error === "string") {
       errorMessage = error;
     }
 
-    return c.json({
-      success: false,
-      error: errorMessage
-    }, 400);
+    return c.json(
+      {
+        success: false,
+        error: errorMessage,
+      },
+      400,
+    );
   }
 });
 

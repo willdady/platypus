@@ -1,13 +1,15 @@
-'use client';
+"use client";
 
 import { Button } from "@/components/ui/button";
 import { Copy } from "lucide-react";
 import { useParams } from "next/navigation";
 import { toast } from "sonner";
 
-
 const WorkspaceSettingsPage = () => {
-  const { orgId, workspaceId } = useParams<{ orgId: string; workspaceId: string }>();
+  const { orgId, workspaceId } = useParams<{
+    orgId: string;
+    workspaceId: string;
+  }>();
 
   return (
     <div>
