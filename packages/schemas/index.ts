@@ -271,6 +271,8 @@ export const providerSchema = z.object({
   baseUrl: z.string().optional(),
   headers: z.record(z.string(), z.string()).optional(),
   extraBody: z.record(z.string(), z.unknown()).optional(),
+  organization: z.string().optional(),
+  project: z.string().optional(),
   modelIds: z.array(z.string()).min(1),
   taskModelId: z.string(),
   createdAt: z.date(),
@@ -287,6 +289,8 @@ export const providerCreateSchema = providerSchema.pick({
   baseUrl: true,
   headers: true,
   extraBody: true,
+  organization: true,
+  project: true,
   modelIds: true,
   taskModelId: true,
 });
@@ -298,6 +302,8 @@ export const providerUpdateSchema = providerSchema.pick({
   baseUrl: true,
   headers: true,
   extraBody: true,
+  organization: true,
+  project: true,
   modelIds: true,
   taskModelId: true,
 });

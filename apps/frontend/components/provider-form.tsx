@@ -68,6 +68,8 @@ const ProviderForm = ({
     baseUrl: "",
     headers: {},
     extraBody: {},
+    organization: "",
+    project: "",
     modelIds: [],
     taskModelId: "",
   });
@@ -101,6 +103,8 @@ const ProviderForm = ({
         baseUrl: provider.baseUrl || "",
         headers: provider.headers || {},
         extraBody: provider.extraBody || {},
+        organization: provider.organization || "",
+        project: provider.project || "",
         modelIds: provider.modelIds || [],
         taskModelId: provider.taskModelId,
       });
@@ -201,6 +205,8 @@ const ProviderForm = ({
         baseUrl: formData.baseUrl || undefined,
         headers: formData.headers,
         extraBody: formData.extraBody,
+        organization: formData.organization || undefined,
+        project: formData.project || undefined,
         modelIds: formData.modelIds,
         taskModelId: formData.taskModelId,
       };
@@ -389,6 +395,46 @@ const ProviderForm = ({
           </CollapsibleTrigger>
           <CollapsibleContent>
             <FieldGroup>
+              {formData.providerType === "OpenAI" && (
+                <>
+                  <Field data-invalid={!!validationErrors.organization}>
+                    <FieldLabel htmlFor="organization">Organization</FieldLabel>
+                    <Input
+                      id="organization"
+                      placeholder="org-..."
+                      value={formData.organization}
+                      onChange={handleChange}
+                      disabled={isSubmitting}
+                      aria-invalid={!!validationErrors.organization}
+                    />
+                    <FieldDescription>
+                      OpenAI organization ID.
+                    </FieldDescription>
+                    {validationErrors.organization && (
+                      <FieldError>{validationErrors.organization}</FieldError>
+                    )}
+                  </Field>
+  
+                  <Field data-invalid={!!validationErrors.project}>
+                    <FieldLabel htmlFor="project">Project</FieldLabel>
+                    <Input
+                      id="project"
+                      placeholder="proj_..."
+                      value={formData.project}
+                      onChange={handleChange}
+                      disabled={isSubmitting}
+                      aria-invalid={!!validationErrors.project}
+                    />
+                    <FieldDescription>
+                      OpenAI project ID.
+                    </FieldDescription>
+                    {validationErrors.project && (
+                      <FieldError>{validationErrors.project}</FieldError>
+                    )}
+                  </Field>
+                </>
+              )}
+  
               <Field
                 data-invalid={!!headersError || !!validationErrors.headers}
               >

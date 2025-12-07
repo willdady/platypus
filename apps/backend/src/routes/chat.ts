@@ -25,8 +25,38 @@ import {
   chatSubmitSchema,
   chatUpdateSchema,
   chatGenerateMetadataSchema,
+  type Provider,
 } from "@agent-kit/schemas";
 import { and, eq, desc } from "drizzle-orm";
+
+/**
+ * Creates a LanguageModel instance based on the provider configuration.
+ * @param provider The provider configuration
+ * @param modelId The model ID to use
+ * @returns The instantiated LanguageModel
+ */
+const createModel = (provider: Provider, modelId: string): LanguageModel => {
+  if (provider.providerType === "OpenAI") {
+    const openai = createOpenAI({
+      baseURL: provider.baseUrl ?? undefined,
+      apiKey: provider.apiKey ?? undefined,
+      headers: provider.headers ?? undefined,
+      organization: provider.organization ?? undefined,
+      project: provider.project ?? undefined,
+    });
+    return openai(modelId);
+  } else if (provider.providerType === "OpenRouter") {
+    const openRouter = createOpenRouter({
+      baseURL: provider.baseUrl ?? undefined,
+      apiKey: provider.apiKey ?? undefined,
+      headers: provider.headers ?? undefined,
+      extraBody: provider.extraBody ?? undefined,
+    });
+    return openRouter(modelId);
+  } else {
+    throw new Error(`Unrecognized provider type '${provider.providerType}'`);
+  }
+};
 
 const chat = new Hono();
 
@@ -167,7 +197,7 @@ chat.post("/", sValidator("json", chatSubmitSchema), async (c) => {
   if (providerRecord.length === 0) {
     throw new Error(`Provider with id '${resolvedProviderId}' not found`);
   }
-  const provider = providerRecord[0];
+  const provider = providerRecord[0] as Provider;
 
   // Check the received modelId is enabled/defined on the provider
   if (!provider.modelIds.includes(resolvedModelId)) {
@@ -176,26 +206,7 @@ chat.post("/", sValidator("json", chatSubmitSchema), async (c) => {
     );
   }
 
-  let model: LanguageModel;
-  if (provider.providerType === "OpenAI") {
-    // NOTE: the OpenAI provider uses the Responses API by default
-    const openai = createOpenAI({
-      baseURL: provider.baseUrl ?? undefined,
-      apiKey: provider.apiKey ?? undefined,
-      headers: provider.headers ?? undefined,
-    });
-    model = openai(resolvedModelId);
-  } else if (provider.providerType === "OpenRouter") {
-    const openRouter = createOpenRouter({
-      baseURL: provider.baseUrl ?? undefined,
-      apiKey: provider.apiKey ?? undefined,
-      headers: provider.headers ?? undefined,
-      extraBody: provider.extraBody ?? undefined,
-    });
-    model = openRouter(resolvedModelId);
-  } else {
-    throw new Error(`Unrecognized provider type '${provider.providerType}'`);
-  }
+  let model: LanguageModel = createModel(provider, resolvedModelId);
 
   // Build streamText parameters
   const streamTextParams: Parameters<typeof streamText>[0] = {
@@ -453,28 +464,10 @@ chat.post(
     if (providerRecord.length === 0) {
       return c.json({ message: "Provider not found" }, 404);
     }
-    const provider = providerRecord[0];
+    const provider = providerRecord[0] as Provider;
 
     // Instantiate model
-    let model: LanguageModel;
-    if (provider.providerType === "OpenAI") {
-      const openai = createOpenAI({
-        baseURL: provider.baseUrl ?? undefined,
-        apiKey: provider.apiKey ?? undefined,
-        headers: provider.headers ?? undefined,
-      });
-      model = openai(provider.taskModelId);
-    } else if (provider.providerType === "OpenRouter") {
-      const openRouter = createOpenRouter({
-        baseURL: provider.baseUrl ?? undefined,
-        apiKey: provider.apiKey ?? undefined,
-        headers: provider.headers ?? undefined,
-        extraBody: provider.extraBody ?? undefined,
-      });
-      model = openRouter(provider.taskModelId);
-    } else {
-      throw new Error(`Unrecognized provider type '${provider.providerType}'`);
-    }
+    let model: LanguageModel = createModel(provider, provider.taskModelId);
 
     // Generate title
     const messages = (chat.messages as UIMessage[]) || [];
