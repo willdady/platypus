@@ -513,7 +513,7 @@ export const Chat = ({
                         return (
                           <Fragment key={`${message.id}-${i}`}>
                             <Message key={message.id} from={message.role}>
-                              <MessageContent>
+                              <MessageContent className="max-w-full">
                                 {isEditing ? (
                                   <Textarea
                                     ref={editTextareaRef}
