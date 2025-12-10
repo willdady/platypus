@@ -10,5 +10,7 @@
 [x] The chat prompt should auto-focus when navigating to the chat page
 [x] The chat prompt should be vertically centered until the first message is submitted
 [x] On the MCP edit/create page add the ability to test the MCP connection
+[ ] Bug: message sending fails silently when a provider is missconfigured
+[ ] Add support for Bedrock provider
 [ ] The root workspace page needs to be designed
 [ ] Pick a better name than Agent Kit as it's already used by Open AI
