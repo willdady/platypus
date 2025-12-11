@@ -10,7 +10,7 @@
 [x] The chat prompt should auto-focus when navigating to the chat page
 [x] The chat prompt should be vertically centered until the first message is submitted
 [x] On the MCP edit/create page add the ability to test the MCP connection
-[ ] Bug: message sending fails silently when a provider is missconfigured
+[x] Bug: message sending fails silently when a provider is missconfigured
 [x] Add support for Bedrock provider
 [ ] Change model picker from Select to a dialog with Fuzzy search (Fuse.js?)
 [ ] The root workspace page needs to be designed

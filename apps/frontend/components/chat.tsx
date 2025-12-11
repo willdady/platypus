@@ -131,6 +131,7 @@ export const Chat = ({
     number | undefined
   >();
   const [isSettingsDialogOpen, setIsSettingsDialogOpen] = useState(false);
+  const [showErrorDialog, setShowErrorDialog] = useState(false);
 
   const { mutate } = useSWRConfig();
 
@@ -156,7 +157,7 @@ export const Chat = ({
     fetcher,
   );
 
-  const { messages, setMessages, sendMessage, status, regenerate } = useChat({
+  const { messages, setMessages, sendMessage, status, regenerate, error } = useChat({
     id: chatId,
     transport: new DefaultChatTransport({
       api: `${backendUrl}/chat`,
@@ -360,6 +361,13 @@ export const Chat = ({
       </div>
     );
   }
+
+  // Show error dialog if there's an error from useChat
+  useEffect(() => {
+    if (error) {
+      setShowErrorDialog(true);
+    }
+  }, [error]);
 
   const getRequestBody = () => {
     return agentId
@@ -912,6 +920,30 @@ export const Chat = ({
           </div>
         </div>
       </div>
+
+      {/* Error Dialog */}
+      <Dialog open={showErrorDialog} onOpenChange={setShowErrorDialog}>
+        <DialogContent showCloseButton={false}>
+          <DialogHeader>
+            <DialogTitle>Chat Error</DialogTitle>
+            <DialogDescription>
+              An error occurred while processing your request.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            <Alert variant="destructive">
+              <TriangleAlert />
+              <AlertTitle>Error Details</AlertTitle>
+              <AlertDescription>
+                {error?.message || "An unknown error occurred."}
+              </AlertDescription>
+            </Alert>
+          </div>
+          <DialogFooter>
+            <Button className="cursor-pointer" onClick={() => setShowErrorDialog(false)}>Ok</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
