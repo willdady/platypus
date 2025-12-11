@@ -174,7 +174,7 @@ const AgentForm = ({
 
   const handleModelChange = (value: string) => {
     // Value is in format "providerId:modelId"
-    const [newProviderId, newModelId] = value.split(":");
+    const [newProviderId, newModelId] = value.split(":", 2);
     if (newProviderId && newModelId) {
       setFormData((prevData) => ({
         ...prevData,
