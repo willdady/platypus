@@ -15,6 +15,13 @@
       "when": 1765089554252,
       "tag": "0001_burly_doctor_strange",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1765421802698,
+      "tag": "0002_lame_captain_midlands",
+      "breakpoints": true
     }
   ]
 }

@@ -11,6 +11,7 @@ import {
 } from "ai";
 import { createOpenAI } from "@ai-sdk/openai";
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
+import { createAmazonBedrock } from '@ai-sdk/amazon-bedrock';
 import { experimental_createMCPClient as createMCPClient } from "@ai-sdk/mcp";
 import { stepCountIs } from "ai";
 import { db } from "../index.ts";
@@ -53,6 +54,14 @@ const createModel = (provider: Provider, modelId: string): LanguageModel => {
       extraBody: provider.extraBody ?? undefined,
     });
     return openRouter(modelId);
+  } else if (provider.providerType === "Bedrock") {
+    const bedrock = createAmazonBedrock({
+      baseURL: provider.baseUrl ?? undefined,
+      region: provider.region ?? undefined,
+      apiKey: provider.apiKey ?? undefined,
+      headers: provider.headers ?? undefined,
+    });
+    return bedrock(modelId);
   } else {
     throw new Error(`Unrecognized provider type '${provider.providerType}'`);
   }

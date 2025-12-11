@@ -88,6 +88,7 @@ export const provider = pgTable("provider", (t) => ({
   name: t.text("name").notNull(),
   providerType: t.text("provider_type").notNull(),
   apiKey: t.text("api_key").notNull(),
+  region: t.text("region"),
   baseUrl: t.text("base_url"),
   headers: t.jsonb().$type<Record<string, string>>(),
   extraBody: t.jsonb().$type<Record<string, unknown>>(),

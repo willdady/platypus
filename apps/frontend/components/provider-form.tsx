@@ -65,6 +65,7 @@ const ProviderForm = ({
     providerType: "OpenAI",
     name: "",
     apiKey: "",
+    region: "",
     baseUrl: "",
     headers: {},
     extraBody: {},
@@ -100,6 +101,7 @@ const ProviderForm = ({
         providerType: provider.providerType,
         name: provider.name,
         apiKey: provider.apiKey,
+        region: provider.region || "",
         baseUrl: provider.baseUrl || "",
         headers: provider.headers || {},
         extraBody: provider.extraBody || {},
@@ -202,6 +204,7 @@ const ProviderForm = ({
         name: formData.name,
         providerType: formData.providerType,
         apiKey: formData.apiKey,
+        region: formData.region || undefined,
         baseUrl: formData.baseUrl || undefined,
         headers: formData.headers,
         extraBody: formData.extraBody,
@@ -286,6 +289,7 @@ const ProviderForm = ({
               <SelectContent>
                 <SelectGroup>
                   <SelectLabel>Provider Types</SelectLabel>
+                  <SelectItem value="Bedrock">Bedrock</SelectItem>
                   <SelectItem value="OpenAI">OpenAI</SelectItem>
                   <SelectItem value="OpenRouter">OpenRouter</SelectItem>
                 </SelectGroup>
@@ -324,6 +328,26 @@ const ProviderForm = ({
               <FieldError>{validationErrors.apiKey}</FieldError>
             )}
           </Field>
+
+          {formData.providerType === "Bedrock" && (
+            <Field data-invalid={!!validationErrors.region}>
+              <FieldLabel htmlFor="region">Region</FieldLabel>
+              <Input
+                id="region"
+                placeholder="us-east-1"
+                value={formData.region}
+                onChange={handleChange}
+                disabled={isSubmitting}
+                aria-invalid={!!validationErrors.region}
+              />
+              <FieldDescription>
+                AWS region identifier (e.g., us-east-1, eu-west-1).
+              </FieldDescription>
+              {validationErrors.region && (
+                <FieldError>{validationErrors.region}</FieldError>
+              )}
+            </Field>
+          )}
 
           <Field data-invalid={!!validationErrors.baseUrl}>
             <FieldLabel htmlFor="baseUrl">Base URL</FieldLabel>
