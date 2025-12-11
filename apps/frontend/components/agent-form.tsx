@@ -173,9 +173,10 @@ const AgentForm = ({
   };
 
   const handleModelChange = (value: string) => {
-    // Value is in format "providerId:modelId"
-    const [newProviderId, newModelId] = value.split(":", 2);
-    if (newProviderId && newModelId) {
+    if (value.startsWith("provider:")) {
+      // Provider/model selected
+      const [_, newProviderId, ...modelIdParts] = value.split(":");
+      const newModelId = modelIdParts.join(":");
       setFormData((prevData) => ({
         ...prevData,
         providerId: newProviderId,
@@ -299,7 +300,7 @@ const AgentForm = ({
           <Field>
             <FieldLabel>Model</FieldLabel>
             <Select
-              value={`${formData.providerId}:${formData.modelId}`}
+              value={`provider:${formData.providerId}:${formData.modelId}`}
               onValueChange={handleModelChange}
               disabled={isSubmitting}
             >
@@ -312,8 +313,8 @@ const AgentForm = ({
                     <SelectLabel>{provider.name}</SelectLabel>
                     {provider.modelIds.map((modelId) => (
                       <SelectItem
-                        key={`${provider.id}:${modelId}`}
-                        value={`${provider.id}:${modelId}`}
+                        key={`provider:${provider.id}:${modelId}`}
+                        value={`provider:${provider.id}:${modelId}`}
                       >
                         {modelId}
                       </SelectItem>
