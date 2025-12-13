@@ -267,7 +267,7 @@ export const providerSchema = z
     id: z.string(),
     workspaceId: z.string(),
     name: z.string().min(3).max(32),
-    providerType: z.enum(["OpenAI", "OpenRouter", "Bedrock"]),
+    providerType: z.enum(["OpenAI", "OpenRouter", "Bedrock", "Google"]),
     apiKey: z.string().min(1),
     region: z
       .string()

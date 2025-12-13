@@ -1,6 +1,4 @@
-import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import type { Workspace } from "@agent-kit/schemas";
 import { ModeToggle } from "@/components/mode-toggle";
 import {
   SidebarInset,

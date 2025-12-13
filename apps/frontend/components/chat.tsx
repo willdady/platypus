@@ -6,15 +6,6 @@ import {
   ConversationScrollButton,
 } from "@/components/ai-elements/conversation";
 import {
-  Message,
-  MessageContent,
-  MessageResponse,
-  MessageActions,
-  MessageAction,
-  MessageAttachments,
-  MessageAttachment,
-} from "@/components/ai-elements/message";
-import {
   PromptInput,
   PromptInputActionAddAttachments,
   PromptInputActionMenu,
@@ -33,77 +24,29 @@ import {
   type PromptInputMessage,
 } from "@/components/ai-elements/prompt-input";
 import { useChat } from "@ai-sdk/react";
-import { DefaultChatTransport, DynamicToolUIPart, ToolUIPart } from "ai";
-import {
-  CheckIcon,
-  ChevronsUpDown,
-  CopyIcon,
-  Info,
-  PencilIcon,
-  Plus,
-  RefreshCwIcon,
-  Settings2,
-  TrashIcon,
-  TriangleAlert,
-  XIcon,
-} from "lucide-react";
-import { useState, useRef, Fragment, useEffect } from "react";
+import { DefaultChatTransport } from "ai";
+import { Info, Settings2 } from "lucide-react";
+import { useRef, useEffect } from "react";
 import { Chat as ChatType, Provider, Agent, ToolSet } from "@agent-kit/schemas";
-import useSWR, { useSWRConfig } from "swr";
+import useSWR from "swr";
 import { fetcher } from "@/lib/utils";
-import {
-  Reasoning,
-  ReasoningContent,
-  ReasoningTrigger,
-} from "./ai-elements/reasoning";
-import {
-  ModelSelector,
-  ModelSelectorContent,
-  ModelSelectorEmpty,
-  ModelSelectorGroup,
-  ModelSelectorInput,
-  ModelSelectorItem,
-  ModelSelectorList,
-  ModelSelectorTrigger,
-} from "./ai-elements/model-selector";
-import {
-  Tool,
-  ToolContent,
-  ToolHeader,
-  ToolInput,
-  ToolOutput,
-} from "./ai-elements/tool";
-import { Alert, AlertTitle, AlertDescription } from "./ui/alert";
-import { Card, CardHeader, CardTitle, CardContent } from "./ui/card";
-import { Badge } from "./ui/badge";
-import Link from "next/link";
-import { Button } from "./ui/button";
+import { useChatSettings } from "@/hooks/use-chat-settings";
+import { useModelSelection } from "@/hooks/use-model-selection";
+import { useMessageEditing } from "@/hooks/use-message-editing";
+import { useChatMetadata } from "@/hooks/use-chat-metadata";
+import { useChatUI } from "@/hooks/use-chat-ui";
 import {
   Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
   DialogTrigger,
 } from "./ui/dialog";
-import { Input } from "./ui/input";
-import { Textarea } from "./ui/textarea";
-import { Label } from "./ui/label";
-import {
-  Source,
-  Sources,
-  SourcesContent,
-  SourcesTrigger,
-} from "./ai-elements/sources";
 import { useBackendUrl } from "@/app/client-context";
-import { DynamicToolHeader } from "./dynamic-tool-header";
+import { NoProvidersAlert } from "./no-providers-alert";
+import { AgentInfoDialog } from "./agent-info-dialog";
+import { ChatSettingsDialog } from "./chat-settings-dialog";
+import { ErrorDialog } from "./error-dialog";
+import { ChatMessage } from "./chat-message";
+import { ModelSelectorDropdown } from "./model-selector-dropdown";
 import { toast } from "sonner";
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/components/ui/collapsible";
 
 export const Chat = ({
   orgId,
@@ -119,35 +62,6 @@ export const Chat = ({
   const backendUrl = useBackendUrl();
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const editTextareaRef = useRef<HTMLTextAreaElement>(null);
-
-  // State for selected model, provider, and agent
-  const [agentId, setAgentId] = useState("");
-  const [modelId, setModelId] = useState("");
-  const [providerId, setProviderId] = useState("");
-  const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
-  const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
-  const [editContent, setEditContent] = useState("");
-  const [isModelSelectorOpen, setIsModelSelectorOpen] = useState(false);
-  const hasMutatedRef = useRef(false);
-
-  // State for chat settings
-  const [systemPrompt, setSystemPrompt] = useState("");
-  const [temperature, setTemperature] = useState<number | undefined>();
-  const [topP, setTopP] = useState<number | undefined>();
-  const [topK, setTopK] = useState<number | undefined>();
-  const [seed, setSeed] = useState<number | undefined>();
-  const [presencePenalty, setPresencePenalty] = useState<number | undefined>();
-  const [frequencyPenalty, setFrequencyPenalty] = useState<
-    number | undefined
-  >();
-  const [isSettingsDialogOpen, setIsSettingsDialogOpen] = useState(false);
-  const [isAgentInfoDialogOpen, setIsAgentInfoDialogOpen] = useState(false);
-  const [isAdvancedOpen, setIsAdvancedOpen] = useState(false);
-  const [isChatAdvancedOpen, setIsChatAdvancedOpen] = useState(false);
-  const [showErrorDialog, setShowErrorDialog] = useState(false);
-
-  const { mutate } = useSWRConfig();
 
   // Fetch providers
   const { data: providersData, isLoading } = useSWR<{ results: Provider[] }>(
@@ -174,7 +88,7 @@ export const Chat = ({
   const toolSets = toolSetsData?.results || [];
 
   // Fetch existing chat data
-  const { data: chatData, mutate: mutateChatData } = useSWR<ChatType>(
+  const { data: chatData } = useSWR<ChatType>(
     `${backendUrl}/chat/${chatId}?workspaceId=${workspaceId}`,
     fetcher,
   );
@@ -191,207 +105,40 @@ export const Chat = ({
       }),
     });
 
-  // Reset hasMutated when chatId changes
-  useEffect(() => {
-    hasMutatedRef.current = false;
-  }, [chatId]);
+  // Custom hooks for state management (must be called before any conditional returns)
+  const {
+    selection,
+    handleModelChange,
+    setters: modelSetters,
+  } = useModelSelection(chatData, providers, agents);
+  const { settings, setters } = useChatSettings(chatData, selection.agentId);
+  const chatUI = useChatUI(error);
 
-  // Select all text in edit textarea when editing starts
-  useEffect(() => {
-    if (editingMessageId && editTextareaRef.current) {
-      editTextareaRef.current.select();
-    }
-  }, [editingMessageId]);
+  // Extract values from hooks for easier access
+  const { agentId, modelId, providerId } = selection;
+  const {
+    systemPrompt,
+    temperature,
+    topP,
+    topK,
+    seed,
+    presencePenalty,
+    frequencyPenalty,
+  } = settings;
+  const {
+    isModelSelectorOpen,
+    setIsModelSelectorOpen,
+    isSettingsDialogOpen,
+    setIsSettingsDialogOpen,
+    isAgentInfoDialogOpen,
+    setIsAgentInfoDialogOpen,
+    showErrorDialog,
+    setShowErrorDialog,
+    copiedMessageId,
+    setCopiedMessageId,
+  } = chatUI;
 
-  // Set initial agent if provided and no existing chat agent
-  useEffect(() => {
-    if (
-      initialAgentId &&
-      !agentId &&
-      chatData !== undefined &&
-      (!chatData || !chatData.agentId)
-    ) {
-      setAgentId(initialAgentId);
-    }
-  }, [initialAgentId, agentId, chatData]);
-
-  // Initialize messages from existing chat data
-  useEffect(() => {
-    if (chatData?.messages && chatData.messages.length > 0) {
-      setMessages(chatData.messages);
-    }
-  }, [chatData, setMessages]);
-
-  // Initialize chat settings from existing chat data
-  useEffect(() => {
-    if (chatData && !agentId) {
-      setSystemPrompt(chatData.systemPrompt || "");
-      setTemperature(chatData.temperature ?? undefined);
-      setTopP(chatData.topP ?? undefined);
-      setTopK(chatData.topK ?? undefined);
-      setSeed(chatData.seed ?? undefined);
-      setPresencePenalty(chatData.presencePenalty ?? undefined);
-      setFrequencyPenalty(chatData.frequencyPenalty ?? undefined);
-    }
-  }, [chatData, agentId]);
-
-  // Revalidate the chat list (visible in AppSidebar) when our message array contains exactly 2 messages.
-  // This will be true after the first successful response from the backend for a new chat.
-  // Only generate a title if the chat has "Untitled" as the title.
-  useEffect(() => {
-    if (messages.length === 2 && !hasMutatedRef.current && status === "ready") {
-      hasMutatedRef.current = true;
-      // First, revalidate chat data to ensure we have the latest chat record from the backend
-      mutateChatData().then((freshChatData) => {
-        // Only generate title if the chat has "Untitled" as its title
-        if (freshChatData?.title === "Untitled") {
-          // Determine the correct providerId to use for metadata generation
-          let providerIdForMetadata = providerId;
-
-          if (agentId) {
-            // Agent is selected - use the agent's providerId
-            const agent = agents.find((a) => a.id === agentId);
-            if (agent?.providerId) {
-              providerIdForMetadata = agent.providerId;
-            } else {
-              console.warn(
-                `Agent '${agentId}' not found or missing providerId, falling back to current providerId`,
-              );
-            }
-          }
-
-          // Validate that we have a providerId before making the request
-          if (providerIdForMetadata) {
-            // Call generate-metadata endpoint
-            fetch(
-              `${backendUrl}/chat/${chatId}/generate-metadata?workspaceId=${workspaceId}`,
-              {
-                method: "POST",
-                headers: {
-                  "Content-Type": "application/json",
-                },
-                body: JSON.stringify({ providerId: providerIdForMetadata }),
-              },
-            )
-              .then(() => {
-                // Revalidate the chat list
-                mutate(`${backendUrl}/chat?workspaceId=${workspaceId}`);
-              })
-              .catch((error) => {
-                console.error("Failed to generate chat metadata:", error);
-              });
-          } else {
-            console.warn("No providerId available for metadata generation");
-          }
-        }
-      });
-    }
-  }, [
-    messages,
-    mutate,
-    mutateChatData,
-    workspaceId,
-    chatId,
-    providerId,
-    agentId,
-    agents,
-    status,
-    backendUrl,
-  ]);
-
-  // Restore persisted agent/provider/model from chat data, with validation and fallback
-  useEffect(() => {
-    if (
-      chatData &&
-      providers.length > 0 &&
-      !modelId &&
-      !providerId &&
-      !agentId
-    ) {
-      // Check if chat has an agent
-      if (chatData.agentId && agents.length > 0) {
-        const agent = agents.find((a) => a.id === chatData.agentId);
-        if (agent) {
-          // Agent still exists, restore it
-          setAgentId(chatData.agentId);
-          return;
-        } else {
-          // Agent was deleted, fall back to provider/model
-          console.warn(`Agent '${chatData.agentId}' no longer exists`);
-        }
-      }
-
-      // Restore provider/model (existing logic)
-      const persistedProviderId = chatData.providerId;
-      const persistedModelId = chatData.modelId;
-
-      if (persistedProviderId && persistedModelId) {
-        // Check if the persisted provider still exists
-        const provider = providers.find((p) => p.id === persistedProviderId);
-        if (provider) {
-          // Check if the persisted model is still available for this provider
-          if (provider.modelIds.includes(persistedModelId)) {
-            // Both provider and model are valid, restore them
-            setProviderId(persistedProviderId);
-            setModelId(persistedModelId);
-            return;
-          } else {
-            // Provider exists but model is no longer available, use provider's first model
-            console.warn(
-              `Model '${persistedModelId}' no longer available for provider '${persistedProviderId}', falling back to first model`,
-            );
-            setProviderId(persistedProviderId);
-            setModelId(provider.modelIds[0]);
-            return;
-          }
-        } else {
-          // Provider no longer exists, fall back to first available provider
-          console.warn(
-            `Provider '${persistedProviderId}' no longer exists, falling back to first available provider`,
-          );
-        }
-      }
-
-      // Fall back to first provider's first model (for new chats or invalid persisted data)
-      setModelId(providers[0].modelIds[0]);
-      setProviderId(providers[0].id);
-    }
-  }, [chatData, providers, agents, modelId, providerId, agentId]);
-
-  // Show error dialog if there's an error from useChat
-  useEffect(() => {
-    if (error) {
-      setShowErrorDialog(true);
-    }
-  }, [error]);
-
-  // TODO: Ideally show a loading indicator here
-  if (isLoading) return null;
-
-  // Show alert if no providers are configured
-  if (providers.length === 0) {
-    return (
-      <div className="flex items-center justify-center h-full">
-        <Alert className="min-w-sm max-w-md">
-          <TriangleAlert />
-          <AlertTitle>No AI providers configured</AlertTitle>
-          <AlertDescription>
-            <p className="mb-2">
-              You need to configure at least one AI provider to start chatting.
-            </p>
-            <Button size="sm" asChild>
-              <Link
-                href={`/${orgId}/workspace/${workspaceId}/settings/providers/create`}
-              >
-                <Plus /> Add provider
-              </Link>
-            </Button>
-          </AlertDescription>
-        </Alert>
-      </div>
-    );
-  }
-
+  // Create getRequestBody function that depends on extracted values
   const getRequestBody = () => {
     return agentId
       ? { agentId }
@@ -408,22 +155,60 @@ export const Chat = ({
         };
   };
 
-  const handleModelChange = (value: string) => {
-    if (value.startsWith("agent:")) {
-      // Agent selected
-      const newAgentId = value.replace("agent:", "");
-      setAgentId(newAgentId);
-      setProviderId(""); // Clear provider/model
-      setModelId("");
-    } else if (value.startsWith("provider:")) {
-      // Provider/model selected
-      const [_, newProviderId, ...modelIdParts] = value.split(":");
-      const newModelId = modelIdParts.join(":");
-      setProviderId(newProviderId);
-      setModelId(newModelId);
-      setAgentId(""); // Clear agent
+  // Message editing hook (needs getRequestBody to be defined)
+  const messageEditing = useMessageEditing(
+    messages,
+    setMessages,
+    sendMessage,
+    getRequestBody,
+  );
+  const {
+    editingMessageId,
+    editContent,
+    editTextareaRef,
+    handleMessageEditStart,
+    handleMessageEditCancel,
+    handleMessageEditSubmit,
+  } = messageEditing;
+
+  // Initialize messages from existing chat data
+  useEffect(() => {
+    if (chatData?.messages && chatData.messages.length > 0) {
+      setMessages(chatData.messages);
     }
-  };
+  }, [chatData, setMessages]);
+
+  // Use chat metadata hook
+  useChatMetadata(
+    messages,
+    status,
+    chatId,
+    workspaceId,
+    providerId,
+    agentId,
+    agents,
+    backendUrl,
+  );
+
+  // Set initial agent if provided and no existing chat agent
+  useEffect(() => {
+    if (
+      initialAgentId &&
+      !agentId &&
+      chatData !== undefined &&
+      (!chatData || !chatData.agentId)
+    ) {
+      modelSetters.setAgentId(initialAgentId);
+    }
+  }, [initialAgentId, agentId, chatData, modelSetters]);
+
+  // TODO: Ideally show a loading indicator here
+  if (isLoading) return null;
+
+  // Show alert if no providers are configured
+  if (providers.length === 0) {
+    return <NoProvidersAlert orgId={orgId} workspaceId={workspaceId} />;
+  }
 
   const selectedAgent = agentId ? agents.find((a) => a.id === agentId) : null;
 
@@ -454,34 +239,6 @@ export const Chat = ({
     setMessages(messages.filter((m) => m.id !== messageId));
   };
 
-  const handleMessageEditStart = (messageId: string, content: string) => {
-    setEditingMessageId(messageId);
-    setEditContent(content);
-  };
-
-  const handleMessageEditCancel = () => {
-    setEditingMessageId(null);
-    setEditContent("");
-  };
-
-  const handleMessageEditSubmit = () => {
-    if (!editingMessageId) return;
-    const messageIndex = messages.findIndex((m) => m.id === editingMessageId);
-    if (messageIndex === -1) return;
-
-    // Remove messages after this one (including this one)
-    const newMessages = messages.slice(0, messageIndex);
-    setMessages(newMessages);
-
-    // Submit the edited message to backend (will append it)
-    const body = getRequestBody();
-    sendMessage({ text: editContent }, { body });
-
-    // Reset edit state
-    setEditingMessageId(null);
-    setEditContent("");
-  };
-
   return (
     <div
       className={`relative size-full flex flex-col overflow-hidden h-[calc(100vh-2.75rem)] ${messages.length === 0 ? "justify-center" : ""}`}
@@ -493,222 +250,30 @@ export const Chat = ({
         <ConversationContent>
           <div className="flex justify-center">
             <div className="w-full xl:w-4/5 max-w-4xl flex flex-col gap-2">
-              {messages.map((message, messageIndex) => {
-                const fileParts = message.parts?.filter(
-                  (part) => part.type === "file",
-                );
-                const sourceUrlParts = message.parts.filter(
-                  (part) => part.type === "source-url",
-                );
-
-                return (
-                  <Fragment key={message.id}>
-                    {fileParts && fileParts.length > 0 && (
-                      <MessageAttachments key={`${message.id}`}>
-                        {fileParts.map((part, i) => (
-                          <MessageAttachment
-                            key={`${message.id}-${i}`}
-                            data={part}
-                          />
-                        ))}
-                      </MessageAttachments>
-                    )}
-                    {message.role === "assistant" &&
-                      !!sourceUrlParts.length && (
-                        <Sources>
-                          <SourcesTrigger
-                            className="cursor-pointer"
-                            count={sourceUrlParts.length}
-                          />
-                          {sourceUrlParts.map((part, i) => {
-                            return (
-                              <SourcesContent key={`${message.id}-${i}`}>
-                                <Source
-                                  key={`${message.id}-${i}`}
-                                  href={part.url}
-                                  title={part.url}
-                                />
-                              </SourcesContent>
-                            );
-                          })}
-                        </Sources>
-                      )}
-                    {message.parts?.map((part, i) => {
-                      if (part.type === "text") {
-                        const isLastMessage =
-                          messageIndex === messages.length - 1;
-                        const isEditing = editingMessageId === message.id;
-                        const textContent =
-                          message.parts
-                            ?.filter((part) => part.type === "text")
-                            .map((part) => part.text)
-                            .join("") || "";
-                        return (
-                          <Fragment key={`${message.id}-${i}`}>
-                            <Message key={message.id} from={message.role}>
-                              <MessageContent className="max-w-full">
-                                {isEditing ? (
-                                  <Textarea
-                                    ref={editTextareaRef}
-                                    value={editContent}
-                                    onChange={(e) =>
-                                      setEditContent(e.target.value)
-                                    }
-                                    className="min-h-[100px]"
-                                    autoFocus
-                                  />
-                                ) : (
-                                  <MessageResponse>{part.text}</MessageResponse>
-                                )}
-                              </MessageContent>
-                            </Message>
-                            {isEditing ? (
-                              <MessageActions className="justify-end">
-                                <MessageAction
-                                  className="cursor-pointer text-muted-foreground"
-                                  onClick={handleMessageEditSubmit}
-                                  variant="ghost"
-                                  size="icon"
-                                  label="Save"
-                                >
-                                  <CheckIcon className="size-4" />
-                                </MessageAction>
-                                <MessageAction
-                                  className="cursor-pointer text-muted-foreground"
-                                  onClick={handleMessageEditCancel}
-                                  variant="ghost"
-                                  size="icon"
-                                  label="Cancel"
-                                >
-                                  <XIcon className="size-4" />
-                                </MessageAction>
-                              </MessageActions>
-                            ) : (
-                              <MessageActions
-                                className={
-                                  message.role === "user" ? "justify-end" : ""
-                                }
-                              >
-                                {message.role === "user" && (
-                                  <MessageAction
-                                    className="cursor-pointer text-muted-foreground"
-                                    onClick={() =>
-                                      handleMessageEditStart(
-                                        message.id,
-                                        textContent,
-                                      )
-                                    }
-                                    variant="ghost"
-                                    size="icon"
-                                    label="Edit"
-                                  >
-                                    <PencilIcon className="size-4" />
-                                  </MessageAction>
-                                )}
-                                <MessageAction
-                                  className="cursor-pointer text-muted-foreground"
-                                  onClick={() => {
-                                    navigator.clipboard.writeText(textContent);
-                                    toast.info("Copied to clipboard");
-                                    setCopiedMessageId(message.id);
-                                    setTimeout(
-                                      () => setCopiedMessageId(null),
-                                      2000,
-                                    );
-                                  }}
-                                  variant={
-                                    copiedMessageId === message.id
-                                      ? "secondary"
-                                      : "ghost"
-                                  }
-                                  size="icon"
-                                  label="Copy"
-                                >
-                                  <CopyIcon className="size-4" />
-                                </MessageAction>
-                                <MessageAction
-                                  className="cursor-pointer text-muted-foreground"
-                                  onClick={() =>
-                                    handleMessageDelete(message.id)
-                                  }
-                                  variant="ghost"
-                                  size="icon"
-                                  label="Delete"
-                                >
-                                  <TrashIcon className="size-4" />
-                                </MessageAction>
-                                {message.role === "assistant" &&
-                                  isLastMessage && (
-                                    <MessageAction
-                                      className="cursor-pointer text-muted-foreground"
-                                      onClick={handleRegenerate}
-                                      variant="ghost"
-                                      size="icon"
-                                      label="Regenerate"
-                                    >
-                                      <RefreshCwIcon className="size-4" />
-                                    </MessageAction>
-                                  )}
-                              </MessageActions>
-                            )}
-                          </Fragment>
-                        );
-                      } else if (part.type === "reasoning") {
-                        return (
-                          <Reasoning
-                            key={`${message.id}-${i}`}
-                            isStreaming={
-                              status === "streaming" &&
-                              i === message.parts.length - 1 &&
-                              message.id === messages.at(-1)?.id
-                            }
-                            defaultOpen={false}
-                          >
-                            <ReasoningTrigger className="cursor-pointer" />
-                            <ReasoningContent>{part.text}</ReasoningContent>
-                          </Reasoning>
-                        );
-                      } else if (part.type === "dynamic-tool") {
-                        const toolPart = part as DynamicToolUIPart;
-                        return (
-                          <Tool key={`${message.id}-${i}`}>
-                            <DynamicToolHeader
-                              state={toolPart.state}
-                              title={toolPart.toolName}
-                            />
-                            <ToolContent>
-                              <ToolInput input={toolPart.input} />
-                              <ToolOutput
-                                output={toolPart.output}
-                                errorText={toolPart.errorText}
-                              />
-                            </ToolContent>
-                          </Tool>
-                        );
-                      } else if (part.type.startsWith("tool-")) {
-                        const toolPart = part as ToolUIPart;
-                        return (
-                          <Tool key={`${message.id}-${i}`}>
-                            <ToolHeader
-                              state={toolPart.state}
-                              type={toolPart.type}
-                            />
-                            <ToolContent>
-                              <ToolInput input={toolPart.input} />
-                              <ToolOutput
-                                output={toolPart.output}
-                                errorText={toolPart.errorText}
-                              />
-                            </ToolContent>
-                          </Tool>
-                        );
-                      } else {
-                        return null;
-                      }
-                    })}
-                  </Fragment>
-                );
-              })}
+              {messages.map((message, messageIndex) => (
+                <ChatMessage
+                  key={message.id}
+                  message={message}
+                  isLastMessage={messageIndex === messages.length - 1}
+                  status={status}
+                  isEditing={editingMessageId === message.id}
+                  editContent={editContent}
+                  editTextareaRef={editTextareaRef}
+                  setEditContent={messageEditing.setEditContent}
+                  onEditStart={handleMessageEditStart}
+                  onEditCancel={handleMessageEditCancel}
+                  onEditSubmit={handleMessageEditSubmit}
+                  onMessageDelete={handleMessageDelete}
+                  onRegenerate={handleRegenerate}
+                  onCopyMessage={(content, messageId) => {
+                    navigator.clipboard.writeText(content);
+                    toast.info("Copied to clipboard");
+                    setCopiedMessageId(messageId);
+                    setTimeout(() => setCopiedMessageId(null), 2000);
+                  }}
+                  copiedMessageId={copiedMessageId}
+                />
+              ))}
             </div>
           </div>
         </ConversationContent>
@@ -737,73 +302,15 @@ export const Chat = ({
                       className="cursor-pointer"
                       textareaRef={textareaRef}
                     />
-                    <ModelSelector
-                      open={isModelSelectorOpen}
+                    <ModelSelectorDropdown
+                      agents={agents}
+                      providers={providers}
+                      agentId={agentId}
+                      modelId={modelId}
+                      isOpen={isModelSelectorOpen}
                       onOpenChange={setIsModelSelectorOpen}
-                    >
-                      <ModelSelectorTrigger asChild>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="cursor-pointer"
-                        >
-                          {agentId
-                            ? agents.find((a) => a.id === agentId)?.name ||
-                              "Select model"
-                            : modelId || "Select model"}
-                        </Button>
-                      </ModelSelectorTrigger>
-                      <ModelSelectorContent>
-                        <ModelSelectorInput placeholder="Search models..." />
-                        <ModelSelectorList>
-                          <ModelSelectorEmpty>
-                            No results found.
-                          </ModelSelectorEmpty>
-                          {/* Agents Group */}
-                          {agents.length > 0 && (
-                            <ModelSelectorGroup heading="Agents">
-                              {agents.map((agent) => (
-                                <ModelSelectorItem
-                                  key={agent.id}
-                                  value={`agent:${agent.id}`}
-                                  className="cursor-pointer"
-                                  onSelect={() => {
-                                    handleModelChange(`agent:${agent.id}`);
-                                    setIsModelSelectorOpen(false);
-                                  }}
-                                >
-                                  {agent.name}
-                                </ModelSelectorItem>
-                              ))}
-                            </ModelSelectorGroup>
-                          )}
-
-                          {/* Providers Group */}
-                          {providers.map((provider) => (
-                            <ModelSelectorGroup
-                              key={provider.id}
-                              heading={provider.name}
-                            >
-                              {provider.modelIds.map((model) => (
-                                <ModelSelectorItem
-                                  key={`provider:${provider.id}:${model}`}
-                                  className="cursor-pointer"
-                                  value={`provider:${provider.id}:${model}`}
-                                  onSelect={() => {
-                                    handleModelChange(
-                                      `provider:${provider.id}:${model}`,
-                                    );
-                                    setIsModelSelectorOpen(false);
-                                  }}
-                                >
-                                  {model}
-                                </ModelSelectorItem>
-                              ))}
-                            </ModelSelectorGroup>
-                          ))}
-                        </ModelSelectorList>
-                      </ModelSelectorContent>
-                    </ModelSelector>
+                      onModelChange={handleModelChange}
+                    />
                     {agentId && selectedAgent && (
                       <Dialog
                         open={isAgentInfoDialogOpen}
@@ -814,130 +321,11 @@ export const Chat = ({
                             <Info />
                           </PromptInputButton>
                         </DialogTrigger>
-                        <DialogContent
-                          className="sm:max-w-[600px] max-h-[80vh]"
-                          showCloseButton={false}
-                        >
-                          <DialogHeader>
-                            <DialogTitle>Agent Information</DialogTitle>
-                            <DialogDescription>
-                              View the configuration for this agent.
-                            </DialogDescription>
-                          </DialogHeader>
-                          <div className="grid gap-4 py-4 max-h-[60vh] overflow-y-auto">
-                            <div className="grid gap-2">
-                              <Label>Model</Label>
-                              <div className="text-sm font-mono bg-muted p-2 rounded cursor-default">
-                                {selectedAgent.modelId}
-                              </div>
-                            </div>
-                            <div className="grid gap-2">
-                              <Label>System Prompt</Label>
-                              <div className="text-sm bg-muted p-2 rounded whitespace-pre-wrap max-h-32 overflow-y-auto cursor-default">
-                                {selectedAgent.systemPrompt ||
-                                  "No system prompt set"}
-                              </div>
-                            </div>
-                            <div className="grid gap-2">
-                              <Label>Max Steps</Label>
-                              <div className="text-sm font-mono bg-muted p-2 rounded cursor-default">
-                                {selectedAgent.maxSteps ?? "Not set"}
-                              </div>
-                            </div>
-                            {toolSets.length > 0 &&
-                              selectedAgent.toolSetIds &&
-                              selectedAgent.toolSetIds.length > 0 && (
-                                <div className="grid gap-2">
-                                  <Label>Tools</Label>
-                                  <div className="flex flex-wrap gap-2">
-                                    {selectedAgent.toolSetIds.map((id) => {
-                                      const toolSet = toolSets.find(
-                                        (ts) => ts.id === id,
-                                      );
-                                      return toolSet ? (
-                                        <Badge
-                                          key={id}
-                                          className="cursor-default"
-                                          variant="secondary"
-                                        >
-                                          {toolSet.name}
-                                        </Badge>
-                                      ) : null;
-                                    })}
-                                  </div>
-                                </div>
-                              )}
-                            <Collapsible
-                              open={isAdvancedOpen}
-                              onOpenChange={setIsAdvancedOpen}
-                            >
-                              <CollapsibleTrigger asChild>
-                                <div className="flex text-sm justify-between items-center">
-                                  <span className="cursor-default">
-                                    Advanced settings
-                                  </span>
-                                  <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    className="cursor-pointer size-8"
-                                  >
-                                    <ChevronsUpDown />
-                                  </Button>
-                                </div>
-                              </CollapsibleTrigger>
-                              <CollapsibleContent className="mb-6">
-                                <div className="grid grid-cols-2 gap-4">
-                                  <div className="grid gap-2">
-                                    <Label>Temperature</Label>
-                                    <div className="text-sm font-mono bg-muted p-2 rounded cursor-default">
-                                      {selectedAgent.temperature ?? "Not set"}
-                                    </div>
-                                  </div>
-                                  <div className="grid gap-2">
-                                    <Label>Seed</Label>
-                                    <div className="text-sm font-mono bg-muted p-2 rounded cursor-default">
-                                      {selectedAgent.seed ?? "Not set"}
-                                    </div>
-                                  </div>
-                                  <div className="grid gap-2">
-                                    <Label>Top-p</Label>
-                                    <div className="text-sm font-mono bg-muted p-2 rounded cursor-default">
-                                      {selectedAgent.topP ?? "Not set"}
-                                    </div>
-                                  </div>
-                                  <div className="grid gap-2">
-                                    <Label>Top-k</Label>
-                                    <div className="text-sm font-mono bg-muted p-2 rounded cursor-default">
-                                      {selectedAgent.topK ?? "Not set"}
-                                    </div>
-                                  </div>
-                                  <div className="grid gap-2">
-                                    <Label>Presence Penalty</Label>
-                                    <div className="text-sm font-mono bg-muted p-2 rounded cursor-default">
-                                      {selectedAgent.presencePenalty ??
-                                        "Not set"}
-                                    </div>
-                                  </div>
-                                  <div className="grid gap-2">
-                                    <Label>Frequency Penalty</Label>
-                                    <div className="text-sm font-mono bg-muted p-2 rounded cursor-default">
-                                      {selectedAgent.frequencyPenalty ??
-                                        "Not set"}
-                                    </div>
-                                  </div>
-                                </div>
-                              </CollapsibleContent>
-                            </Collapsible>
-                          </div>
-                          <DialogFooter>
-                            <Button
-                              className="cursor-pointer"
-                              onClick={() => setIsAgentInfoDialogOpen(false)}
-                            >
-                              Close
-                            </Button>
-                          </DialogFooter>
-                        </DialogContent>
+                        <AgentInfoDialog
+                          agent={selectedAgent}
+                          toolSets={toolSets}
+                          onClose={() => setIsAgentInfoDialogOpen(false)}
+                        />
                       </Dialog>
                     )}
                     {!agentId && (
@@ -950,170 +338,23 @@ export const Chat = ({
                             <Settings2 />
                           </PromptInputButton>
                         </DialogTrigger>
-                        <DialogContent
-                          className="sm:max-w-[600px]"
-                          showCloseButton={false}
-                        >
-                          <DialogHeader>
-                            <DialogTitle>Chat Settings</DialogTitle>
-                            <DialogDescription>
-                              Configure advanced settings for this chat session.
-                            </DialogDescription>
-                          </DialogHeader>
-                          <div className="grid gap-4 py-4">
-                            <div className="grid gap-2">
-                              <Label htmlFor="systemPrompt">
-                                System Prompt
-                              </Label>
-                              <Textarea
-                                id="systemPrompt"
-                                placeholder="You are a helpful assistant..."
-                                value={systemPrompt}
-                                onChange={(e) =>
-                                  setSystemPrompt(e.target.value)
-                                }
-                                rows={3}
-                              />
-                            </div>
-                            <Collapsible
-                              open={isChatAdvancedOpen}
-                              onOpenChange={setIsChatAdvancedOpen}
-                            >
-                              <CollapsibleTrigger asChild>
-                                <div className="flex text-sm justify-between items-center">
-                                  <span className="cursor-default">
-                                    Advanced settings
-                                  </span>
-                                  <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    className="cursor-pointer size-8"
-                                  >
-                                    <ChevronsUpDown />
-                                  </Button>
-                                </div>
-                              </CollapsibleTrigger>
-                              <CollapsibleContent className="mt-4">
-                                <div className="grid grid-cols-2 gap-4">
-                                  <div className="grid gap-2">
-                                    <Label htmlFor="temperature">Temperature</Label>
-                                    <Input
-                                      id="temperature"
-                                      type="number"
-                                      min="0"
-                                      step="0.1"
-                                      value={temperature ?? ""}
-                                      onChange={(e) =>
-                                        setTemperature(
-                                          e.target.value === ""
-                                            ? undefined
-                                            : parseFloat(e.target.value),
-                                        )
-                                      }
-                                    />
-                                  </div>
-                                  <div className="grid gap-2">
-                                    <Label htmlFor="seed">Seed</Label>
-                                    <Input
-                                      id="seed"
-                                      type="number"
-                                      value={seed ?? ""}
-                                      onChange={(e) =>
-                                        setSeed(
-                                          e.target.value === ""
-                                            ? undefined
-                                            : parseInt(e.target.value),
-                                        )
-                                      }
-                                    />
-                                  </div>
-                                  <div className="grid gap-2">
-                                    <Label htmlFor="topP">Top-p</Label>
-                                    <Input
-                                      id="topP"
-                                      type="number"
-                                      min="0"
-                                      max="1"
-                                      step="0.1"
-                                      value={topP ?? ""}
-                                      onChange={(e) =>
-                                        setTopP(
-                                          e.target.value === ""
-                                            ? undefined
-                                            : parseFloat(e.target.value),
-                                        )
-                                      }
-                                    />
-                                  </div>
-                                  <div className="grid gap-2">
-                                    <Label htmlFor="topK">Top-k</Label>
-                                    <Input
-                                      id="topK"
-                                      type="number"
-                                      min="1"
-                                      value={topK ?? ""}
-                                      onChange={(e) =>
-                                        setTopK(
-                                          e.target.value === ""
-                                            ? undefined
-                                            : parseInt(e.target.value),
-                                        )
-                                      }
-                                    />
-                                  </div>
-                                  <div className="grid gap-2">
-                                    <Label htmlFor="presencePenalty">
-                                      Presence Penalty
-                                    </Label>
-                                    <Input
-                                      id="presencePenalty"
-                                      type="number"
-                                      min="-2"
-                                      max="2"
-                                      step="0.1"
-                                      value={presencePenalty ?? ""}
-                                      onChange={(e) =>
-                                        setPresencePenalty(
-                                          e.target.value === ""
-                                            ? undefined
-                                            : parseFloat(e.target.value),
-                                        )
-                                      }
-                                    />
-                                  </div>
-                                  <div className="grid gap-2">
-                                    <Label htmlFor="frequencyPenalty">
-                                      Frequency Penalty
-                                    </Label>
-                                    <Input
-                                      id="frequencyPenalty"
-                                      type="number"
-                                      min="-2"
-                                      max="2"
-                                      step="0.1"
-                                      value={frequencyPenalty ?? ""}
-                                      onChange={(e) =>
-                                        setFrequencyPenalty(
-                                          e.target.value === ""
-                                            ? undefined
-                                            : parseFloat(e.target.value),
-                                        )
-                                      }
-                                    />
-                                  </div>
-                                </div>
-                              </CollapsibleContent>
-                            </Collapsible>
-                          </div>
-                          <DialogFooter>
-                            <Button
-                              className="cursor-pointer"
-                              onClick={() => setIsSettingsDialogOpen(false)}
-                            >
-                              Done
-                            </Button>
-                          </DialogFooter>
-                        </DialogContent>
+                        <ChatSettingsDialog
+                          systemPrompt={systemPrompt}
+                          onSystemPromptChange={setters.setSystemPrompt}
+                          temperature={temperature}
+                          onTemperatureChange={setters.setTemperature}
+                          seed={seed}
+                          onSeedChange={setters.setSeed}
+                          topP={topP}
+                          onTopPChange={setters.setTopP}
+                          topK={topK}
+                          onTopKChange={setters.setTopK}
+                          presencePenalty={presencePenalty}
+                          onPresencePenaltyChange={setters.setPresencePenalty}
+                          frequencyPenalty={frequencyPenalty}
+                          onFrequencyPenaltyChange={setters.setFrequencyPenalty}
+                          onClose={() => setIsSettingsDialogOpen(false)}
+                        />
                       </Dialog>
                     )}
                   </PromptInputTools>
@@ -1126,33 +367,11 @@ export const Chat = ({
       </div>
 
       {/* Error Dialog */}
-      <Dialog open={showErrorDialog} onOpenChange={setShowErrorDialog}>
-        <DialogContent showCloseButton={false}>
-          <DialogHeader>
-            <DialogTitle>Chat Error</DialogTitle>
-            <DialogDescription>
-              An error occurred while processing your request.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="py-4">
-            <Alert variant="destructive">
-              <TriangleAlert />
-              <AlertTitle>Error Details</AlertTitle>
-              <AlertDescription>
-                {error?.message || "An unknown error occurred."}
-              </AlertDescription>
-            </Alert>
-          </div>
-          <DialogFooter>
-            <Button
-              className="cursor-pointer"
-              onClick={() => setShowErrorDialog(false)}
-            >
-              Ok
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <ErrorDialog
+        isOpen={showErrorDialog}
+        onOpenChange={setShowErrorDialog}
+        error={error}
+      />
     </div>
   );
 };
