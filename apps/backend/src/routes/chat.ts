@@ -11,7 +11,7 @@ import {
 } from "ai";
 import { createOpenAI } from "@ai-sdk/openai";
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
-import { createAmazonBedrock } from '@ai-sdk/amazon-bedrock';
+import { createAmazonBedrock } from "@ai-sdk/amazon-bedrock";
 import { experimental_createMCPClient as createMCPClient } from "@ai-sdk/mcp";
 import { stepCountIs } from "ai";
 import { db } from "../index.ts";

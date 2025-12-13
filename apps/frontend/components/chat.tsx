@@ -32,15 +32,6 @@ import {
   PromptInputTools,
   type PromptInputMessage,
 } from "@/components/ai-elements/prompt-input";
-import {
-  Select,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-  SelectLabel,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, DynamicToolUIPart, ToolUIPart } from "ai";
 import {
@@ -63,6 +54,16 @@ import {
   ReasoningContent,
   ReasoningTrigger,
 } from "./ai-elements/reasoning";
+import {
+  ModelSelector,
+  ModelSelectorContent,
+  ModelSelectorEmpty,
+  ModelSelectorGroup,
+  ModelSelectorInput,
+  ModelSelectorItem,
+  ModelSelectorList,
+  ModelSelectorTrigger,
+} from "./ai-elements/model-selector";
 import {
   Tool,
   ToolContent,
@@ -118,6 +119,7 @@ export const Chat = ({
   const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const [editContent, setEditContent] = useState("");
+  const [isModelSelectorOpen, setIsModelSelectorOpen] = useState(false);
   const hasMutatedRef = useRef(false);
 
   // State for chat settings
@@ -157,16 +159,17 @@ export const Chat = ({
     fetcher,
   );
 
-  const { messages, setMessages, sendMessage, status, regenerate, error } = useChat({
-    id: chatId,
-    transport: new DefaultChatTransport({
-      api: `${backendUrl}/chat`,
-      body: {
-        orgId,
-        workspaceId,
-      },
-    }),
-  });
+  const { messages, setMessages, sendMessage, status, regenerate, error } =
+    useChat({
+      id: chatId,
+      transport: new DefaultChatTransport({
+        api: `${backendUrl}/chat`,
+        body: {
+          orgId,
+          workspaceId,
+        },
+      }),
+    });
 
   // Reset hasMutated when chatId changes
   useEffect(() => {
@@ -335,6 +338,13 @@ export const Chat = ({
     }
   }, [chatData, providers, agents, modelId, providerId, agentId]);
 
+  // Show error dialog if there's an error from useChat
+  useEffect(() => {
+    if (error) {
+      setShowErrorDialog(true);
+    }
+  }, [error]);
+
   // TODO: Ideally show a loading indicator here
   if (isLoading) return null;
 
@@ -361,13 +371,6 @@ export const Chat = ({
       </div>
     );
   }
-
-  // Show error dialog if there's an error from useChat
-  useEffect(() => {
-    if (error) {
-      setShowErrorDialog(true);
-    }
-  }, [error]);
 
   const getRequestBody = () => {
     return agentId
@@ -712,51 +715,73 @@ export const Chat = ({
                       className="cursor-pointer"
                       textareaRef={textareaRef}
                     />
-                    <Select
-                      onValueChange={handleModelChange}
-                      value={
-                        agentId
-                          ? `agent:${agentId}`
-                          : `provider:${providerId}:${modelId}`
-                      }
+                    <ModelSelector
+                      open={isModelSelectorOpen}
+                      onOpenChange={setIsModelSelectorOpen}
                     >
-                      <SelectTrigger className="cursor-pointer" size="sm">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {/* Agents Group */}
-                        {agents.length > 0 && (
-                          <SelectGroup>
-                            <SelectLabel>Agents</SelectLabel>
-                            {agents.map((agent) => (
-                              <SelectItem
-                                key={agent.id}
-                                value={`agent:${agent.id}`}
-                                className="cursor-pointer"
-                              >
-                                {agent.name}
-                              </SelectItem>
-                            ))}
-                          </SelectGroup>
-                        )}
+                      <ModelSelectorTrigger asChild>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="cursor-pointer"
+                        >
+                          {agentId
+                            ? agents.find((a) => a.id === agentId)?.name ||
+                              "Select model"
+                            : modelId || "Select model"}
+                        </Button>
+                      </ModelSelectorTrigger>
+                      <ModelSelectorContent>
+                        <ModelSelectorInput placeholder="Search models..." />
+                        <ModelSelectorList>
+                          <ModelSelectorEmpty>
+                            No results found.
+                          </ModelSelectorEmpty>
+                          {/* Agents Group */}
+                          {agents.length > 0 && (
+                            <ModelSelectorGroup heading="Agents">
+                              {agents.map((agent) => (
+                                <ModelSelectorItem
+                                  key={agent.id}
+                                  value={`agent:${agent.id}`}
+                                  className="cursor-pointer"
+                                  onSelect={() => {
+                                    handleModelChange(`agent:${agent.id}`);
+                                    setIsModelSelectorOpen(false);
+                                  }}
+                                >
+                                  {agent.name}
+                                </ModelSelectorItem>
+                              ))}
+                            </ModelSelectorGroup>
+                          )}
 
-                        {/* Providers Group */}
-                        {providers.map((provider) => (
-                          <SelectGroup key={provider.id}>
-                            <SelectLabel>{provider.name}</SelectLabel>
-                            {provider.modelIds.map((modelId) => (
-                              <SelectItem
-                                key={`provider:${provider.id}:${modelId}`}
-                                className="cursor-pointer"
-                                value={`provider:${provider.id}:${modelId}`}
-                              >
-                                {modelId}
-                              </SelectItem>
-                            ))}
-                          </SelectGroup>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                          {/* Providers Group */}
+                          {providers.map((provider) => (
+                            <ModelSelectorGroup
+                              key={provider.id}
+                              heading={provider.name}
+                            >
+                              {provider.modelIds.map((model) => (
+                                <ModelSelectorItem
+                                  key={`provider:${provider.id}:${model}`}
+                                  className="cursor-pointer"
+                                  value={`provider:${provider.id}:${model}`}
+                                  onSelect={() => {
+                                    handleModelChange(
+                                      `provider:${provider.id}:${model}`,
+                                    );
+                                    setIsModelSelectorOpen(false);
+                                  }}
+                                >
+                                  {model}
+                                </ModelSelectorItem>
+                              ))}
+                            </ModelSelectorGroup>
+                          ))}
+                        </ModelSelectorList>
+                      </ModelSelectorContent>
+                    </ModelSelector>
                     {!agentId && (
                       <Dialog
                         open={isSettingsDialogOpen}
@@ -940,7 +965,12 @@ export const Chat = ({
             </Alert>
           </div>
           <DialogFooter>
-            <Button className="cursor-pointer" onClick={() => setShowErrorDialog(false)}>Ok</Button>
+            <Button
+              className="cursor-pointer"
+              onClick={() => setShowErrorDialog(false)}
+            >
+              Ok
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

@@ -431,14 +431,12 @@ const ProviderForm = ({
                       disabled={isSubmitting}
                       aria-invalid={!!validationErrors.organization}
                     />
-                    <FieldDescription>
-                      OpenAI organization ID.
-                    </FieldDescription>
+                    <FieldDescription>OpenAI organization ID.</FieldDescription>
                     {validationErrors.organization && (
                       <FieldError>{validationErrors.organization}</FieldError>
                     )}
                   </Field>
-  
+
                   <Field data-invalid={!!validationErrors.project}>
                     <FieldLabel htmlFor="project">Project</FieldLabel>
                     <Input
@@ -449,16 +447,14 @@ const ProviderForm = ({
                       disabled={isSubmitting}
                       aria-invalid={!!validationErrors.project}
                     />
-                    <FieldDescription>
-                      OpenAI project ID.
-                    </FieldDescription>
+                    <FieldDescription>OpenAI project ID.</FieldDescription>
                     {validationErrors.project && (
                       <FieldError>{validationErrors.project}</FieldError>
                     )}
                   </Field>
                 </>
               )}
-  
+
               <Field
                 data-invalid={!!headersError || !!validationErrors.headers}
               >

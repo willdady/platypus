@@ -262,34 +262,39 @@ export const mcpTestSchema = mcpSchema
 
 // Provider
 
-export const providerSchema = z.object({
-  id: z.string(),
-  workspaceId: z.string(),
-  name: z.string().min(3).max(32),
-  providerType: z.enum(["OpenAI", "OpenRouter", "Bedrock"]),
-  apiKey: z.string().min(1),
-  region: z.string().regex(/^[a-z]{2}-[a-z]+-\d+$/, "Invalid AWS region format").optional(),
-  baseUrl: z.string().optional(),
-  headers: z.record(z.string(), z.string()).optional(),
-  extraBody: z.record(z.string(), z.unknown()).optional(),
-  organization: z.string().optional(),
-  project: z.string().optional(),
-  modelIds: z.array(z.string()).min(1),
-  taskModelId: z.string(),
-  createdAt: z.date(),
-  updatedAt: z.date(),
-}).refine(
-  (data) => {
-    if (data.providerType === "Bedrock") {
-      return data.region && data.region.length > 0;
-    }
-    return true;
-  },
-  {
-    message: "Region is required for Bedrock providers",
-    path: ["region"],
-  }
-);
+export const providerSchema = z
+  .object({
+    id: z.string(),
+    workspaceId: z.string(),
+    name: z.string().min(3).max(32),
+    providerType: z.enum(["OpenAI", "OpenRouter", "Bedrock"]),
+    apiKey: z.string().min(1),
+    region: z
+      .string()
+      .regex(/^[a-z]{2}-[a-z]+-\d+$/, "Invalid AWS region format")
+      .optional(),
+    baseUrl: z.string().optional(),
+    headers: z.record(z.string(), z.string()).optional(),
+    extraBody: z.record(z.string(), z.unknown()).optional(),
+    organization: z.string().optional(),
+    project: z.string().optional(),
+    modelIds: z.array(z.string()).min(1),
+    taskModelId: z.string(),
+    createdAt: z.date(),
+    updatedAt: z.date(),
+  })
+  .refine(
+    (data) => {
+      if (data.providerType === "Bedrock") {
+        return data.region && data.region.length > 0;
+      }
+      return true;
+    },
+    {
+      message: "Region is required for Bedrock providers",
+      path: ["region"],
+    },
+  );
 
 export type Provider = z.infer<typeof providerSchema>;
 
