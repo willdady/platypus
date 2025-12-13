@@ -35,10 +35,7 @@ import { useModelSelection } from "@/hooks/use-model-selection";
 import { useMessageEditing } from "@/hooks/use-message-editing";
 import { useChatMetadata } from "@/hooks/use-chat-metadata";
 import { useChatUI } from "@/hooks/use-chat-ui";
-import {
-  Dialog,
-  DialogTrigger,
-} from "./ui/dialog";
+import { Dialog, DialogTrigger } from "./ui/dialog";
 import { useBackendUrl } from "@/app/client-context";
 import { NoProvidersAlert } from "./no-providers-alert";
 import { AgentInfoDialog } from "./agent-info-dialog";
@@ -308,7 +305,12 @@ export const Chat = ({
                       agentId={agentId}
                       modelId={modelId}
                       isOpen={isModelSelectorOpen}
-                      onOpenChange={setIsModelSelectorOpen}
+                      onOpenChange={(open) => {
+                        setIsModelSelectorOpen(open);
+                        if (!open) {
+                          setTimeout(() => textareaRef.current?.focus(), 250);
+                        }
+                      }}
                       onModelChange={handleModelChange}
                     />
                     {agentId && selectedAgent && (
