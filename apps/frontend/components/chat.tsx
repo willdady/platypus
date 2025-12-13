@@ -36,7 +36,9 @@ import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, DynamicToolUIPart, ToolUIPart } from "ai";
 import {
   CheckIcon,
+  ChevronsUpDown,
   CopyIcon,
+  Info,
   PencilIcon,
   Plus,
   RefreshCwIcon,
@@ -46,7 +48,7 @@ import {
   XIcon,
 } from "lucide-react";
 import { useState, useRef, Fragment, useEffect } from "react";
-import { Chat as ChatType, Provider, Agent } from "@agent-kit/schemas";
+import { Chat as ChatType, Provider, Agent, ToolSet } from "@agent-kit/schemas";
 import useSWR, { useSWRConfig } from "swr";
 import { fetcher } from "@/lib/utils";
 import {
@@ -72,6 +74,8 @@ import {
   ToolOutput,
 } from "./ai-elements/tool";
 import { Alert, AlertTitle, AlertDescription } from "./ui/alert";
+import { Card, CardHeader, CardTitle, CardContent } from "./ui/card";
+import { Badge } from "./ui/badge";
 import Link from "next/link";
 import { Button } from "./ui/button";
 import {
@@ -95,6 +99,11 @@ import {
 import { useBackendUrl } from "@/app/client-context";
 import { DynamicToolHeader } from "./dynamic-tool-header";
 import { toast } from "sonner";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 
 export const Chat = ({
   orgId,
@@ -133,6 +142,8 @@ export const Chat = ({
     number | undefined
   >();
   const [isSettingsDialogOpen, setIsSettingsDialogOpen] = useState(false);
+  const [isAgentInfoDialogOpen, setIsAgentInfoDialogOpen] = useState(false);
+  const [isAdvancedOpen, setIsAdvancedOpen] = useState(false);
   const [showErrorDialog, setShowErrorDialog] = useState(false);
 
   const { mutate } = useSWRConfig();
@@ -152,6 +163,14 @@ export const Chat = ({
   );
 
   const agents = agentsData?.results || [];
+
+  // Fetch tool sets
+  const { data: toolSetsData } = useSWR<{ results: ToolSet[] }>(
+    `${backendUrl}/tools?workspaceId=${workspaceId}`,
+    fetcher,
+  );
+
+  const toolSets = toolSetsData?.results || [];
 
   // Fetch existing chat data
   const { data: chatData, mutate: mutateChatData } = useSWR<ChatType>(
@@ -404,6 +423,8 @@ export const Chat = ({
       setAgentId(""); // Clear agent
     }
   };
+
+  const selectedAgent = agentId ? agents.find((a) => a.id === agentId) : null;
 
   const handleSubmit = (message: PromptInputMessage) => {
     const hasText = Boolean(message.text);
@@ -782,6 +803,142 @@ export const Chat = ({
                         </ModelSelectorList>
                       </ModelSelectorContent>
                     </ModelSelector>
+                    {agentId && selectedAgent && (
+                      <Dialog
+                        open={isAgentInfoDialogOpen}
+                        onOpenChange={setIsAgentInfoDialogOpen}
+                      >
+                        <DialogTrigger asChild>
+                          <PromptInputButton className="cursor-pointer">
+                            <Info />
+                          </PromptInputButton>
+                        </DialogTrigger>
+                        <DialogContent
+                          className="sm:max-w-[600px] max-h-[80vh]"
+                          showCloseButton={false}
+                        >
+                          <DialogHeader>
+                            <DialogTitle>Agent Information</DialogTitle>
+                            <DialogDescription>
+                              View the configuration for this agent.
+                            </DialogDescription>
+                          </DialogHeader>
+                          <div className="grid gap-4 py-4 max-h-[60vh] overflow-y-auto">
+                            <div className="grid gap-2">
+                              <Label>Model</Label>
+                              <div className="text-sm font-mono bg-muted p-2 rounded cursor-default">
+                                {selectedAgent.modelId}
+                              </div>
+                            </div>
+                            <div className="grid gap-2">
+                              <Label>System Prompt</Label>
+                              <div className="text-sm bg-muted p-2 rounded whitespace-pre-wrap max-h-32 overflow-y-auto cursor-default">
+                                {selectedAgent.systemPrompt ||
+                                  "No system prompt set"}
+                              </div>
+                            </div>
+                            <div className="grid gap-2">
+                              <Label>Max Steps</Label>
+                              <div className="text-sm font-mono bg-muted p-2 rounded cursor-default">
+                                {selectedAgent.maxSteps ?? "Not set"}
+                              </div>
+                            </div>
+                            {toolSets.length > 0 &&
+                              selectedAgent.toolSetIds &&
+                              selectedAgent.toolSetIds.length > 0 && (
+                                <div className="grid gap-2">
+                                  <Label>Tools</Label>
+                                  <div className="flex flex-wrap gap-2">
+                                    {selectedAgent.toolSetIds.map((id) => {
+                                      const toolSet = toolSets.find(
+                                        (ts) => ts.id === id,
+                                      );
+                                      return toolSet ? (
+                                        <Badge
+                                          key={id}
+                                          className="cursor-default"
+                                          variant="secondary"
+                                        >
+                                          {toolSet.name}
+                                        </Badge>
+                                      ) : null;
+                                    })}
+                                  </div>
+                                </div>
+                              )}
+                            <Collapsible
+                              open={isAdvancedOpen}
+                              onOpenChange={setIsAdvancedOpen}
+                            >
+                              <CollapsibleTrigger asChild>
+                                <div className="flex text-sm justify-between items-center">
+                                  <span className="cursor-default">
+                                    Advanced settings
+                                  </span>
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="cursor-pointer size-8"
+                                  >
+                                    <ChevronsUpDown />
+                                  </Button>
+                                </div>
+                              </CollapsibleTrigger>
+                              <CollapsibleContent className="mb-6">
+                                <div className="grid grid-cols-2 gap-4">
+                                  <div className="grid gap-2">
+                                    <Label>Temperature</Label>
+                                    <div className="text-sm font-mono bg-muted p-2 rounded cursor-default">
+                                      {selectedAgent.temperature ?? "Not set"}
+                                    </div>
+                                  </div>
+                                  <div className="grid gap-2">
+                                    <Label>Seed</Label>
+                                    <div className="text-sm font-mono bg-muted p-2 rounded cursor-default">
+                                      {selectedAgent.seed ?? "Not set"}
+                                    </div>
+                                  </div>
+                                  <div className="grid gap-2">
+                                    <Label>Top-p</Label>
+                                    <div className="text-sm font-mono bg-muted p-2 rounded cursor-default">
+                                      {selectedAgent.topP ?? "Not set"}
+                                    </div>
+                                  </div>
+                                  <div className="grid gap-2">
+                                    <Label>Top-k</Label>
+                                    <div className="text-sm font-mono bg-muted p-2 rounded cursor-default">
+                                      {selectedAgent.topK ?? "Not set"}
+                                    </div>
+                                  </div>
+                                  <div className="grid gap-2">
+                                    <Label>Presence Penalty</Label>
+                                    <div className="text-sm font-mono bg-muted p-2 rounded cursor-default">
+                                      {selectedAgent.presencePenalty ??
+                                        "Not set"}
+                                    </div>
+                                  </div>
+                                  <div className="grid gap-2">
+                                    <Label>Frequency Penalty</Label>
+                                    <div className="text-sm font-mono bg-muted p-2 rounded cursor-default">
+                                      {selectedAgent.frequencyPenalty ??
+                                        "Not set"}
+                                    </div>
+                                  </div>
+                                </div>
+                              </CollapsibleContent>
+                            </Collapsible>
+                          </div>
+                          <DialogFooter>
+                            <Button
+                              className="cursor-pointer"
+                              onClick={() => setIsAgentInfoDialogOpen(false)}
+                            >
+                              Close
+                            </Button>
+                          </DialogFooter>
+                        </DialogContent>
+                      </Dialog>
+                    )}
                     {!agentId && (
                       <Dialog
                         open={isSettingsDialogOpen}
