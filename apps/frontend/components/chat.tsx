@@ -42,7 +42,7 @@ import { AgentInfoDialog } from "./agent-info-dialog";
 import { ChatSettingsDialog } from "./chat-settings-dialog";
 import { ErrorDialog } from "./error-dialog";
 import { ChatMessage } from "./chat-message";
-import { ModelSelectorDropdown } from "./model-selector-dropdown";
+import { ModelSelectorDialog } from "./model-selector-dialog";
 import { toast } from "sonner";
 
 export const Chat = ({
@@ -299,7 +299,7 @@ export const Chat = ({
                       className="cursor-pointer"
                       textareaRef={textareaRef}
                     />
-                    <ModelSelectorDropdown
+                    <ModelSelectorDialog
                       agents={agents}
                       providers={providers}
                       agentId={agentId}

@@ -11,7 +11,7 @@ import {
 } from "./ai-elements/model-selector";
 import { Button } from "./ui/button";
 
-interface ModelSelectorDropdownProps {
+interface ModelSelectorDialogProps {
   agents: Agent[];
   providers: Provider[];
   agentId: string;
@@ -21,7 +21,7 @@ interface ModelSelectorDropdownProps {
   onModelChange: (value: string) => void;
 }
 
-export const ModelSelectorDropdown = ({
+export const ModelSelectorDialog = ({
   agents,
   providers,
   agentId,
@@ -29,7 +29,7 @@ export const ModelSelectorDropdown = ({
   isOpen,
   onOpenChange,
   onModelChange,
-}: ModelSelectorDropdownProps) => {
+}: ModelSelectorDialogProps) => {
   const selectedAgent = agentId ? agents.find((a) => a.id === agentId) : null;
 
   return (
