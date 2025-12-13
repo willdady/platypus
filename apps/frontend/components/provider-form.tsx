@@ -290,6 +290,7 @@ const ProviderForm = ({
                 <SelectGroup>
                   <SelectLabel>Provider Types</SelectLabel>
                   <SelectItem value="Bedrock">Bedrock</SelectItem>
+                  <SelectItem value="Google">Google</SelectItem>
                   <SelectItem value="OpenAI">OpenAI</SelectItem>
                   <SelectItem value="OpenRouter">OpenRouter</SelectItem>
                 </SelectGroup>
