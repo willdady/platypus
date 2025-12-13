@@ -144,6 +144,7 @@ export const Chat = ({
   const [isSettingsDialogOpen, setIsSettingsDialogOpen] = useState(false);
   const [isAgentInfoDialogOpen, setIsAgentInfoDialogOpen] = useState(false);
   const [isAdvancedOpen, setIsAdvancedOpen] = useState(false);
+  const [isChatAdvancedOpen, setIsChatAdvancedOpen] = useState(false);
   const [showErrorDialog, setShowErrorDialog] = useState(false);
 
   const { mutate } = useSWRConfig();
@@ -974,114 +975,135 @@ export const Chat = ({
                                 rows={3}
                               />
                             </div>
-                            <div className="grid grid-cols-2 gap-4">
-                              <div className="grid gap-2">
-                                <Label htmlFor="temperature">Temperature</Label>
-                                <Input
-                                  id="temperature"
-                                  type="number"
-                                  min="0"
-                                  step="0.1"
-                                  value={temperature ?? ""}
-                                  onChange={(e) =>
-                                    setTemperature(
-                                      e.target.value === ""
-                                        ? undefined
-                                        : parseFloat(e.target.value),
-                                    )
-                                  }
-                                />
-                              </div>
-                              <div className="grid gap-2">
-                                <Label htmlFor="seed">Seed</Label>
-                                <Input
-                                  id="seed"
-                                  type="number"
-                                  value={seed ?? ""}
-                                  onChange={(e) =>
-                                    setSeed(
-                                      e.target.value === ""
-                                        ? undefined
-                                        : parseInt(e.target.value),
-                                    )
-                                  }
-                                />
-                              </div>
-                              <div className="grid gap-2">
-                                <Label htmlFor="topP">Top-p</Label>
-                                <Input
-                                  id="topP"
-                                  type="number"
-                                  min="0"
-                                  max="1"
-                                  step="0.1"
-                                  value={topP ?? ""}
-                                  onChange={(e) =>
-                                    setTopP(
-                                      e.target.value === ""
-                                        ? undefined
-                                        : parseFloat(e.target.value),
-                                    )
-                                  }
-                                />
-                              </div>
-                              <div className="grid gap-2">
-                                <Label htmlFor="topK">Top-k</Label>
-                                <Input
-                                  id="topK"
-                                  type="number"
-                                  min="1"
-                                  value={topK ?? ""}
-                                  onChange={(e) =>
-                                    setTopK(
-                                      e.target.value === ""
-                                        ? undefined
-                                        : parseInt(e.target.value),
-                                    )
-                                  }
-                                />
-                              </div>
-                              <div className="grid gap-2">
-                                <Label htmlFor="presencePenalty">
-                                  Presence Penalty
-                                </Label>
-                                <Input
-                                  id="presencePenalty"
-                                  type="number"
-                                  min="-2"
-                                  max="2"
-                                  step="0.1"
-                                  value={presencePenalty ?? ""}
-                                  onChange={(e) =>
-                                    setPresencePenalty(
-                                      e.target.value === ""
-                                        ? undefined
-                                        : parseFloat(e.target.value),
-                                    )
-                                  }
-                                />
-                              </div>
-                              <div className="grid gap-2">
-                                <Label htmlFor="frequencyPenalty">
-                                  Frequency Penalty
-                                </Label>
-                                <Input
-                                  id="frequencyPenalty"
-                                  type="number"
-                                  min="-2"
-                                  max="2"
-                                  step="0.1"
-                                  value={frequencyPenalty ?? ""}
-                                  onChange={(e) =>
-                                    setFrequencyPenalty(
-                                      e.target.value === ""
-                                        ? undefined
-                                        : parseFloat(e.target.value),
-                                    )
-                                  }
-                                />
-                              </div>
-                            </div>
+                            <Collapsible
+                              open={isChatAdvancedOpen}
+                              onOpenChange={setIsChatAdvancedOpen}
+                            >
+                              <CollapsibleTrigger asChild>
+                                <div className="flex text-sm justify-between items-center">
+                                  <span className="cursor-default">
+                                    Advanced settings
+                                  </span>
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="cursor-pointer size-8"
+                                  >
+                                    <ChevronsUpDown />
+                                  </Button>
+                                </div>
+                              </CollapsibleTrigger>
+                              <CollapsibleContent className="mt-4">
+                                <div className="grid grid-cols-2 gap-4">
+                                  <div className="grid gap-2">
+                                    <Label htmlFor="temperature">Temperature</Label>
+                                    <Input
+                                      id="temperature"
+                                      type="number"
+                                      min="0"
+                                      step="0.1"
+                                      value={temperature ?? ""}
+                                      onChange={(e) =>
+                                        setTemperature(
+                                          e.target.value === ""
+                                            ? undefined
+                                            : parseFloat(e.target.value),
+                                        )
+                                      }
+                                    />
+                                  </div>
+                                  <div className="grid gap-2">
+                                    <Label htmlFor="seed">Seed</Label>
+                                    <Input
+                                      id="seed"
+                                      type="number"
+                                      value={seed ?? ""}
+                                      onChange={(e) =>
+                                        setSeed(
+                                          e.target.value === ""
+                                            ? undefined
+                                            : parseInt(e.target.value),
+                                        )
+                                      }
+                                    />
+                                  </div>
+                                  <div className="grid gap-2">
+                                    <Label htmlFor="topP">Top-p</Label>
+                                    <Input
+                                      id="topP"
+                                      type="number"
+                                      min="0"
+                                      max="1"
+                                      step="0.1"
+                                      value={topP ?? ""}
+                                      onChange={(e) =>
+                                        setTopP(
+                                          e.target.value === ""
+                                            ? undefined
+                                            : parseFloat(e.target.value),
+                                        )
+                                      }
+                                    />
+                                  </div>
+                                  <div className="grid gap-2">
+                                    <Label htmlFor="topK">Top-k</Label>
+                                    <Input
+                                      id="topK"
+                                      type="number"
+                                      min="1"
+                                      value={topK ?? ""}
+                                      onChange={(e) =>
+                                        setTopK(
+                                          e.target.value === ""
+                                            ? undefined
+                                            : parseInt(e.target.value),
+                                        )
+                                      }
+                                    />
+                                  </div>
+                                  <div className="grid gap-2">
+                                    <Label htmlFor="presencePenalty">
+                                      Presence Penalty
+                                    </Label>
+                                    <Input
+                                      id="presencePenalty"
+                                      type="number"
+                                      min="-2"
+                                      max="2"
+                                      step="0.1"
+                                      value={presencePenalty ?? ""}
+                                      onChange={(e) =>
+                                        setPresencePenalty(
+                                          e.target.value === ""
+                                            ? undefined
+                                            : parseFloat(e.target.value),
+                                        )
+                                      }
+                                    />
+                                  </div>
+                                  <div className="grid gap-2">
+                                    <Label htmlFor="frequencyPenalty">
+                                      Frequency Penalty
+                                    </Label>
+                                    <Input
+                                      id="frequencyPenalty"
+                                      type="number"
+                                      min="-2"
+                                      max="2"
+                                      step="0.1"
+                                      value={frequencyPenalty ?? ""}
+                                      onChange={(e) =>
+                                        setFrequencyPenalty(
+                                          e.target.value === ""
+                                            ? undefined
+                                            : parseFloat(e.target.value),
+                                        )
+                                      }
+                                    />
+                                  </div>
+                                </div>
+                              </CollapsibleContent>
+                            </Collapsible>
                           </div>
                           <DialogFooter>
                             <Button
