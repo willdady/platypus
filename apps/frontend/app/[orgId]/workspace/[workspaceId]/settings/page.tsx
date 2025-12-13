@@ -28,12 +28,9 @@ const WorkspaceSettingsPage = () => {
 
   const handleDelete = async () => {
     try {
-      const response = await fetch(
-        `${backendUrl}/workspaces/${workspaceId}`,
-        {
-          method: "DELETE",
-        }
-      );
+      const response = await fetch(`${backendUrl}/workspaces/${workspaceId}`, {
+        method: "DELETE",
+      });
       if (response.ok) {
         toast.success("Workspace deleted");
         window.location.href = `/${orgId}`;
