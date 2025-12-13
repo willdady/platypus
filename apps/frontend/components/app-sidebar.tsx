@@ -409,6 +409,7 @@ export function AppSidebar({
             </SidebarGroup>
           ))}
         </SidebarContent>
+        <SidebarSeparator className="mx-0 mt-1" />
         <SidebarFooter>
           <SidebarMenu>
             {footerItems.map((item) => (
