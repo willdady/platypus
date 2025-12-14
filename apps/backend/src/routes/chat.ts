@@ -3,41 +3,47 @@ import { sValidator } from "@hono/standard-validator";
 import { z } from "zod";
 import {
   convertToModelMessages,
+  createIdGenerator,
+  generateObject,
   type LanguageModel,
   streamText,
-  generateObject,
   type UIMessage,
-  createIdGenerator,
 } from "ai";
-import { createOpenAI } from "@ai-sdk/openai";
+import { createOpenAI, type OpenAIProvider } from "@ai-sdk/openai";
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 import { createAmazonBedrock } from "@ai-sdk/amazon-bedrock";
-import { createGoogleGenerativeAI } from "@ai-sdk/google";
+import {
+  createGoogleGenerativeAI,
+  type GoogleGenerativeAIProvider,
+} from "@ai-sdk/google";
 import { experimental_createMCPClient as createMCPClient } from "@ai-sdk/mcp";
-import { stepCountIs } from "ai";
+import { type Provider as AIProvider, stepCountIs } from "ai";
 import { db } from "../index.ts";
 import {
-  chat as chatTable,
-  provider as providerTable,
   agent as agentTable,
+  chat as chatTable,
   mcp as mcpTable,
+  provider as providerTable,
 } from "../db/schema.ts";
 import { getToolSet } from "../tools/index.ts";
 import {
+  chatGenerateMetadataSchema,
   chatSubmitSchema,
   chatUpdateSchema,
-  chatGenerateMetadataSchema,
   type Provider,
 } from "@agent-kit/schemas";
-import { and, eq, desc } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 
 /**
  * Creates a LanguageModel instance based on the provider configuration.
  * @param provider The provider configuration
  * @param modelId The model ID to use
- * @returns The instantiated LanguageModel
+ * @returns A tuple containing the AIProvider and the instantiated LanguageModel.
  */
-const createModel = (provider: Provider, modelId: string): LanguageModel => {
+const createModel = (
+  provider: Provider,
+  modelId: string,
+): [AIProvider, LanguageModel] => {
   if (provider.providerType === "OpenAI") {
     const openai = createOpenAI({
       baseURL: provider.baseUrl ?? undefined,
@@ -46,7 +52,7 @@ const createModel = (provider: Provider, modelId: string): LanguageModel => {
       organization: provider.organization ?? undefined,
       project: provider.project ?? undefined,
     });
-    return openai(modelId);
+    return [openai, openai(modelId)];
   } else if (provider.providerType === "OpenRouter") {
     const openRouter = createOpenRouter({
       baseURL: provider.baseUrl ?? undefined,
@@ -54,7 +60,7 @@ const createModel = (provider: Provider, modelId: string): LanguageModel => {
       headers: provider.headers ?? undefined,
       extraBody: provider.extraBody ?? undefined,
     });
-    return openRouter(modelId);
+    return [openRouter, openRouter(modelId)];
   } else if (provider.providerType === "Bedrock") {
     const bedrock = createAmazonBedrock({
       baseURL: provider.baseUrl ?? undefined,
@@ -62,14 +68,14 @@ const createModel = (provider: Provider, modelId: string): LanguageModel => {
       apiKey: provider.apiKey ?? undefined,
       headers: provider.headers ?? undefined,
     });
-    return bedrock(modelId);
+    return [bedrock, bedrock(modelId)];
   } else if (provider.providerType === "Google") {
     const google = createGoogleGenerativeAI({
       baseURL: provider.baseUrl ?? undefined,
       apiKey: provider.apiKey ?? undefined,
       headers: provider.headers ?? undefined,
     });
-    return google(modelId);
+    return [google, google(modelId)];
   } else {
     throw new Error(`Unrecognized provider type '${provider.providerType}'`);
   }
@@ -162,12 +168,14 @@ chat.post("/", sValidator("json", chatSubmitSchema), async (c) => {
     seed,
     presencePenalty,
     frequencyPenalty,
+    search,
   } = data;
 
   // Agent handling logic
   let resolvedProviderId: string;
   let resolvedModelId: string;
   let resolvedAgentId: string | undefined;
+  let resolvedMaxSteps = 1;
 
   if (agentId) {
     // Agent selected - fetch agent and use its configuration
@@ -189,7 +197,7 @@ chat.post("/", sValidator("json", chatSubmitSchema), async (c) => {
     const agent = agentRecord[0];
     resolvedProviderId = agent.providerId;
     resolvedModelId = agent.modelId;
-    // TODO: Apply agent's systemPrompt, temperature, etc. to streamText
+    resolvedMaxSteps = agent.maxSteps ?? 1;
   } else if (providerId && modelId) {
     // Direct provider/model selection
     resolvedProviderId = providerId;
@@ -223,14 +231,57 @@ chat.post("/", sValidator("json", chatSubmitSchema), async (c) => {
     );
   }
 
-  let model: LanguageModel = createModel(provider, resolvedModelId);
+  // If `search === true` and we're using the OpenRouter provider, append ":online" to the modelId to enable web-search
+  // See https://openrouter.ai/docs/guides/features/plugins/web-search
+  if (
+    search &&
+    provider.providerType === "OpenRouter" &&
+    !(modelId || "").includes(":online")
+  ) {
+    resolvedModelId = `${resolvedModelId}:online`;
+  }
+
+  let [aiProvider, model] = createModel(provider, resolvedModelId);
 
   // Build streamText parameters
-  const streamTextParams: Parameters<typeof streamText>[0] = {
+  const streamTextParams = {
     model,
     messages: convertToModelMessages(messages),
-    stopWhen: stepCountIs(20),
+    stopWhen: stepCountIs(resolvedMaxSteps),
+    tools: {} as Record<string, any>,
   };
+
+  // Initialise provider-specific search tools
+  if (search) {
+    if (provider.providerType === "OpenAI") {
+      // https://ai-sdk.dev/providers/ai-sdk-providers/openai#web-search-tool
+      streamTextParams.tools = {
+        ...streamTextParams.tools,
+        ...{
+          web_search: (aiProvider as OpenAIProvider).tools.webSearch({
+            externalWebAccess: true,
+            searchContextSize: "high",
+            // FIXME:
+            // userLocation: {
+            //   type: 'approximate',
+            //   city: 'San Francisco',
+            //   region: 'California',
+            // },
+          }),
+        },
+      };
+    } else if (provider.providerType === "Google") {
+      // https://ai-sdk.dev/providers/ai-sdk-providers/google-generative-ai#google-search
+      streamTextParams.tools = {
+        ...streamTextParams.tools,
+        ...{
+          google_search: (
+            aiProvider as GoogleGenerativeAIProvider
+          ).tools.googleSearch({}),
+        },
+      };
+    }
+  }
 
   // Initialize MCP clients array for cleanup in onFinish
   const mcpClients: any[] = [];
@@ -295,7 +346,7 @@ chat.post("/", sValidator("json", chatSubmitSchema), async (c) => {
       }
 
       if (Object.keys(tools).length > 0) {
-        streamTextParams.tools = tools;
+        streamTextParams.tools = { ...streamTextParams.tools, ...tools };
       }
     }
 
@@ -484,7 +535,7 @@ chat.post(
     const provider = providerRecord[0] as Provider;
 
     // Instantiate model
-    let model: LanguageModel = createModel(provider, provider.taskModelId);
+    let [_, model] = createModel(provider, provider.taskModelId);
 
     // Generate title
     const messages = (chat.messages as UIMessage[]) || [];

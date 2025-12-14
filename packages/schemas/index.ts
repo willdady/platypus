@@ -80,6 +80,7 @@ export const chatSubmitSchema = chatSchema
     agentId: z.string().optional(),
     providerId: z.string().optional(),
     modelId: z.string().optional(),
+    search: z.boolean().optional(),
   })
   .refine(
     (data) => {
