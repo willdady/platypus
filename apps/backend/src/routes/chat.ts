@@ -8,6 +8,7 @@ import {
   type LanguageModel,
   streamText,
   type UIMessage,
+  type Tool,
 } from "ai";
 import { createOpenAI, type OpenAIProvider } from "@ai-sdk/openai";
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
@@ -34,11 +35,33 @@ import {
 } from "@agent-kit/schemas";
 import { and, desc, eq } from "drizzle-orm";
 
+// --- Types ---
+
+type ChatSubmitData = z.infer<typeof chatSubmitSchema>;
+
+type ChatContext = {
+  provider: Provider;
+  agent?: typeof agentTable.$inferSelect;
+  resolvedModelId: string;
+  resolvedProviderId: string;
+  resolvedAgentId?: string;
+  resolvedMaxSteps: number;
+};
+
+type GenerationConfig = {
+  systemPrompt?: string;
+  temperature?: number;
+  topP?: number;
+  topK?: number;
+  frequencyPenalty?: number;
+  presencePenalty?: number;
+  seed?: number;
+};
+
+// --- Helper Functions ---
+
 /**
  * Creates a LanguageModel instance based on the provider configuration.
- * @param provider The provider configuration
- * @param modelId The model ID to use
- * @returns A tuple containing the AIProvider and the instantiated LanguageModel.
  */
 const createModel = (
   provider: Provider,
@@ -80,6 +103,283 @@ const createModel = (
     throw new Error(`Unrecognized provider type '${provider.providerType}'`);
   }
 };
+
+/**
+ * Resolves the chat context: determines the agent (if any), provider, and model to use.
+ */
+const resolveChatContext = async (
+  data: ChatSubmitData,
+  workspaceId: string,
+): Promise<ChatContext> => {
+  const { agentId, providerId, modelId, search } = data;
+
+  let resolvedProviderId: string;
+  let resolvedModelId: string;
+  let resolvedAgentId: string | undefined;
+  let resolvedMaxSteps = 1;
+  let agent: typeof agentTable.$inferSelect | undefined;
+
+  if (agentId) {
+    // Agent selected - fetch agent and use its configuration
+    resolvedAgentId = agentId;
+    const agentRecord = await db
+      .select()
+      .from(agentTable)
+      .where(
+        and(
+          eq(agentTable.id, agentId),
+          eq(agentTable.workspaceId, workspaceId),
+        ),
+      )
+      .limit(1);
+
+    if (agentRecord.length === 0) {
+      throw new Error(`Agent '${agentId}' not found`);
+    }
+    agent = agentRecord[0];
+    resolvedProviderId = agent.providerId;
+    resolvedModelId = agent.modelId;
+    resolvedMaxSteps = agent.maxSteps ?? 1;
+  } else if (providerId && modelId) {
+    // Direct provider/model selection
+    resolvedProviderId = providerId;
+    resolvedModelId = modelId;
+    resolvedAgentId = undefined;
+  } else {
+    throw new Error("Must provide either agentId or (providerId and modelId)");
+  }
+
+  // Get the provider record from the database
+  const providerRecord = await db
+    .select()
+    .from(providerTable)
+    .where(
+      and(
+        eq(providerTable.id, resolvedProviderId),
+        eq(providerTable.workspaceId, workspaceId),
+      ),
+    )
+    .limit(1);
+
+  if (providerRecord.length === 0) {
+    throw new Error(`Provider with id '${resolvedProviderId}' not found`);
+  }
+  const provider = providerRecord[0] as Provider;
+
+  // Check the received modelId is enabled/defined on the provider
+  if (!provider.modelIds.includes(resolvedModelId)) {
+    throw new Error(
+      `Model id '${resolvedModelId}' not enabled for provider '${resolvedProviderId}'`,
+    );
+  }
+
+  // If `search === true` and we're using the OpenRouter provider, append ":online" to the modelId
+  if (
+    search &&
+    provider.providerType === "OpenRouter" &&
+    !(resolvedModelId || "").includes(":online")
+  ) {
+    resolvedModelId = `${resolvedModelId}:online`;
+  }
+
+  return {
+    provider,
+    agent,
+    resolvedModelId,
+    resolvedProviderId,
+    resolvedAgentId,
+    resolvedMaxSteps,
+  };
+};
+
+/**
+ * Loads tools for the chat session, including static tools and MCP clients.
+ */
+const loadTools = async (
+  agent: typeof agentTable.$inferSelect | undefined,
+  workspaceId: string,
+): Promise<{ tools: Record<string, Tool>; mcpClients: any[] }> => {
+  const tools: Record<string, Tool> = {};
+  const mcpClients: any[] = [];
+
+  if (!agent || !agent.toolSetIds || agent.toolSetIds.length === 0) {
+    return { tools, mcpClients };
+  }
+
+  for (const toolSetId of agent.toolSetIds) {
+    try {
+      // Try to load as static tool set first
+      const toolSet = getToolSet(toolSetId);
+      Object.assign(tools, toolSet.tools);
+    } catch (error) {
+      // If static tool set not found, try to load as MCP
+      const mcpRecord = await db
+        .select()
+        .from(mcpTable)
+        .where(
+          and(
+            eq(mcpTable.id, toolSetId),
+            eq(mcpTable.workspaceId, workspaceId),
+          ),
+        )
+        .limit(1);
+
+      if (mcpRecord.length > 0) {
+        const mcp = mcpRecord[0];
+        if (mcp.url) {
+          const mcpClient = await createMCPClient({
+            transport: {
+              type: "http",
+              url: mcp.url,
+              headers:
+                mcp.authType === "Bearer"
+                  ? { Authorization: `Bearer ${mcp.bearerToken}` }
+                  : undefined,
+            },
+          });
+          const mcpTools = await mcpClient.tools();
+          Object.assign(tools, mcpTools);
+          mcpClients.push(mcpClient);
+        } else {
+          console.warn(`MCP '${toolSetId}' has no URL configured`);
+        }
+      } else {
+        console.warn(
+          `Tool set with id '${toolSetId}' not found as static tool set or MCP`,
+        );
+      }
+    }
+  }
+
+  return { tools, mcpClients };
+};
+
+/**
+ * Creates provider-specific search tools if enabled.
+ */
+const createSearchTools = (
+  provider: Provider,
+  aiProvider: AIProvider,
+): Record<string, Tool> => {
+  const tools: Record<string, any> = {};
+
+  if (provider.providerType === "OpenAI") {
+    tools.web_search = (aiProvider as OpenAIProvider).tools.webSearch({
+      externalWebAccess: true,
+      searchContextSize: "high",
+    });
+  } else if (provider.providerType === "Google") {
+    tools.google_search = (
+      aiProvider as GoogleGenerativeAIProvider
+    ).tools.googleSearch({});
+  }
+
+  return tools;
+};
+
+/**
+ * Resolves the generation configuration (system prompt, temperature, etc.)
+ * by merging agent settings with request overrides.
+ */
+const resolveGenerationConfig = (
+  data: ChatSubmitData,
+  agent?: typeof agentTable.$inferSelect,
+): GenerationConfig => {
+  const config: GenerationConfig = {};
+
+  if (agent) {
+    Object.assign(
+      config,
+      agent.systemPrompt && { systemPrompt: agent.systemPrompt },
+      agent.temperature != null && { temperature: agent.temperature },
+      agent.topP != null && { topP: agent.topP },
+      agent.topK != null && { topK: agent.topK },
+      agent.frequencyPenalty != null && {
+        frequencyPenalty: agent.frequencyPenalty,
+      },
+      agent.presencePenalty != null && {
+        presencePenalty: agent.presencePenalty,
+      },
+    );
+  } else {
+    Object.assign(
+      config,
+      data.systemPrompt && { systemPrompt: data.systemPrompt },
+      data.temperature != null && { temperature: data.temperature },
+      data.topP != null && { topP: data.topP },
+      data.topK != null && { topK: data.topK },
+      data.frequencyPenalty != null && {
+        frequencyPenalty: data.frequencyPenalty,
+      },
+      data.presencePenalty != null && {
+        presencePenalty: data.presencePenalty,
+      },
+    );
+  }
+
+  return config;
+};
+
+/**
+ * Upserts the chat record in the database.
+ */
+const upsertChatRecord = async (
+  id: string,
+  workspaceId: string,
+  messages: any[],
+  context: ChatContext,
+  config: GenerationConfig,
+  data: ChatSubmitData,
+) => {
+  const { resolvedAgentId, resolvedProviderId, resolvedModelId } = context;
+
+  // Prepare values for DB
+  const dbValues = {
+    messages,
+    agentId: resolvedAgentId || null,
+    providerId: resolvedAgentId ? null : resolvedProviderId,
+    modelId: resolvedAgentId ? null : resolvedModelId,
+    systemPrompt: resolvedAgentId ? null : config.systemPrompt || null,
+    temperature: resolvedAgentId ? null : config.temperature || null,
+    topP: resolvedAgentId ? null : config.topP || null,
+    topK: resolvedAgentId ? null : config.topK || null,
+    seed: resolvedAgentId ? null : data.seed || null,
+    presencePenalty: resolvedAgentId ? null : config.presencePenalty || null,
+    frequencyPenalty: resolvedAgentId ? null : config.frequencyPenalty || null,
+    updatedAt: new Date(),
+  };
+
+  try {
+    // Upsert chat record - try update first, then insert if not found
+    const updateResult = await db
+      .update(chatTable)
+      .set(dbValues)
+      .where(and(eq(chatTable.id, id), eq(chatTable.workspaceId, workspaceId)))
+      .returning();
+
+    // If no rows were updated, insert the record
+    if (updateResult.length === 0) {
+      await db.insert(chatTable).values({
+        id,
+        workspaceId,
+        title: "Untitled",
+        createdAt: new Date(),
+        ...dbValues,
+      });
+    }
+
+    console.log(
+      `Successfully upserted chat '${id}' in workspace '${workspaceId}'`,
+    );
+  } catch (error) {
+    console.error(
+      `Error upserting chat '${id}' in workspace '${workspaceId}':`,
+    );
+    console.error(error);
+  }
+};
+
+// --- Routes ---
 
 const chat = new Hono();
 
@@ -153,232 +453,36 @@ chat.get(
 
 chat.post("/", sValidator("json", chatSubmitSchema), async (c) => {
   const data = c.req.valid("json");
+  const { workspaceId, messages = [] } = data;
 
-  const {
-    id,
-    workspaceId,
-    agentId,
-    providerId,
-    modelId,
-    messages = [],
-    systemPrompt,
-    temperature,
-    topP,
-    topK,
-    seed,
-    presencePenalty,
-    frequencyPenalty,
-    search,
-  } = data;
+  // 1. Resolve Context (Agent vs Direct) & Provider
+  const context = await resolveChatContext(data, workspaceId);
+  const { provider, agent, resolvedModelId } = context;
 
-  // Agent handling logic
-  let resolvedProviderId: string;
-  let resolvedModelId: string;
-  let resolvedAgentId: string | undefined;
-  let resolvedMaxSteps = 1;
+  // 2. Initialize Model
+  const [aiProvider, model] = createModel(provider, resolvedModelId);
 
-  if (agentId) {
-    // Agent selected - fetch agent and use its configuration
-    resolvedAgentId = agentId;
-    const agentRecord = await db
-      .select()
-      .from(agentTable)
-      .where(
-        and(
-          eq(agentTable.id, agentId),
-          eq(agentTable.workspaceId, workspaceId),
-        ),
-      )
-      .limit(1);
+  // 3. Load Tools (Static & MCP)
+  const { tools, mcpClients } = await loadTools(agent, workspaceId);
 
-    if (agentRecord.length === 0) {
-      throw new Error(`Agent '${agentId}' not found`);
-    }
-    const agent = agentRecord[0];
-    resolvedProviderId = agent.providerId;
-    resolvedModelId = agent.modelId;
-    resolvedMaxSteps = agent.maxSteps ?? 1;
-  } else if (providerId && modelId) {
-    // Direct provider/model selection
-    resolvedProviderId = providerId;
-    resolvedModelId = modelId;
-    resolvedAgentId = undefined;
-  } else {
-    throw new Error("Must provide either agentId or (providerId and modelId)");
+  // 4. Configure Search (if enabled)
+  if (data.search) {
+    Object.assign(tools, createSearchTools(provider, aiProvider));
   }
 
-  // Get the provider record from the database
-  const providerRecord = await db
-    .select()
-    .from(providerTable)
-    .where(
-      and(
-        eq(providerTable.id, resolvedProviderId),
-        eq(providerTable.workspaceId, workspaceId),
-      ),
-    )
-    .limit(1);
+  // 5. Prepare Generation Config (Merge Agent & Request params)
+  const config = resolveGenerationConfig(data, agent);
 
-  if (providerRecord.length === 0) {
-    throw new Error(`Provider with id '${resolvedProviderId}' not found`);
-  }
-  const provider = providerRecord[0] as Provider;
-
-  // Check the received modelId is enabled/defined on the provider
-  if (!provider.modelIds.includes(resolvedModelId)) {
-    throw new Error(
-      `Model id '${resolvedModelId}' not enabled for provider '${resolvedProviderId}'`,
-    );
-  }
-
-  // If `search === true` and we're using the OpenRouter provider, append ":online" to the modelId to enable web-search
-  // See https://openrouter.ai/docs/guides/features/plugins/web-search
-  if (
-    search &&
-    provider.providerType === "OpenRouter" &&
-    !(modelId || "").includes(":online")
-  ) {
-    resolvedModelId = `${resolvedModelId}:online`;
-  }
-
-  let [aiProvider, model] = createModel(provider, resolvedModelId);
-
-  // Build streamText parameters
-  const streamTextParams = {
+  // 6. Stream Response
+  const { systemPrompt, ...restConfig } = config;
+  const result = streamText({
     model,
     messages: convertToModelMessages(messages),
-    stopWhen: stepCountIs(resolvedMaxSteps),
-    tools: {} as Record<string, any>,
-  };
-
-  // Initialise provider-specific search tools
-  if (search) {
-    if (provider.providerType === "OpenAI") {
-      // https://ai-sdk.dev/providers/ai-sdk-providers/openai#web-search-tool
-      streamTextParams.tools = {
-        ...streamTextParams.tools,
-        ...{
-          web_search: (aiProvider as OpenAIProvider).tools.webSearch({
-            externalWebAccess: true,
-            searchContextSize: "high",
-            // FIXME:
-            // userLocation: {
-            //   type: 'approximate',
-            //   city: 'San Francisco',
-            //   region: 'California',
-            // },
-          }),
-        },
-      };
-    } else if (provider.providerType === "Google") {
-      // https://ai-sdk.dev/providers/ai-sdk-providers/google-generative-ai#google-search
-      streamTextParams.tools = {
-        ...streamTextParams.tools,
-        ...{
-          google_search: (
-            aiProvider as GoogleGenerativeAIProvider
-          ).tools.googleSearch({}),
-        },
-      };
-    }
-  }
-
-  // Initialize MCP clients array for cleanup in onFinish
-  const mcpClients: any[] = [];
-
-  // Load agent's tools if agent is selected
-  if (resolvedAgentId) {
-    const agent = (
-      await db
-        .select()
-        .from(agentTable)
-        .where(eq(agentTable.id, resolvedAgentId))
-        .limit(1)
-    )[0];
-
-    // Load agent's tools
-    if (agent.toolSetIds && agent.toolSetIds.length > 0) {
-      const tools: Record<string, any> = {};
-
-      for (const toolSetId of agent.toolSetIds) {
-        try {
-          // Try to load as static tool set first
-          const toolSet = getToolSet(toolSetId);
-          Object.assign(tools, toolSet.tools);
-        } catch (error) {
-          // If static tool set not found, try to load as MCP
-          const mcpRecord = await db
-            .select()
-            .from(mcpTable)
-            .where(
-              and(
-                eq(mcpTable.id, toolSetId),
-                eq(mcpTable.workspaceId, workspaceId),
-              ),
-            )
-            .limit(1);
-
-          if (mcpRecord.length > 0) {
-            const mcp = mcpRecord[0];
-            if (mcp.url) {
-              const mcpClient = await createMCPClient({
-                transport: {
-                  type: "http",
-                  url: mcp.url,
-                  headers:
-                    mcp.authType === "Bearer"
-                      ? { Authorization: `Bearer ${mcp.bearerToken}` }
-                      : undefined,
-                },
-              });
-              const mcpTools = await mcpClient.tools();
-              Object.assign(tools, mcpTools);
-              mcpClients.push(mcpClient);
-            } else {
-              console.warn(`MCP '${toolSetId}' has no URL configured`);
-            }
-          } else {
-            console.warn(
-              `Tool set with id '${toolSetId}' not found as static tool set or MCP`,
-            );
-          }
-        }
-      }
-
-      if (Object.keys(tools).length > 0) {
-        streamTextParams.tools = { ...streamTextParams.tools, ...tools };
-      }
-    }
-
-    // Apply agent's configuration parameters
-    Object.assign(
-      streamTextParams,
-      agent.systemPrompt && { system: agent.systemPrompt },
-      agent.temperature != null && { temperature: agent.temperature },
-      agent.topP != null && { topP: agent.topP },
-      agent.topK != null && { topK: agent.topK },
-      agent.frequencyPenalty != null && {
-        frequencyPenalty: agent.frequencyPenalty,
-      },
-      agent.presencePenalty != null && {
-        presencePenalty: agent.presencePenalty,
-      },
-    );
-  } else {
-    // Apply chat-level configuration parameters when no agent is selected
-    Object.assign(
-      streamTextParams,
-      systemPrompt && { system: systemPrompt },
-      temperature != null && { temperature },
-      topP != null && { topP },
-      topK != null && { topK },
-      frequencyPenalty != null && { frequencyPenalty },
-      presencePenalty != null && { presencePenalty },
-    );
-  }
-
-  // Stream chat response to client
-  const result = streamText(streamTextParams);
+    stopWhen: stepCountIs(context.resolvedMaxSteps),
+    tools,
+    system: systemPrompt,
+    ...restConfig,
+  });
 
   return result.toUIMessageStreamResponse({
     originalMessages: messages,
@@ -397,58 +501,17 @@ chat.post("/", sValidator("json", chatSubmitSchema), async (c) => {
           }
         }
 
-        // Upsert chat record - try update first, then insert if not found
-        const updateResult = await db
-          .update(chatTable)
-          .set({
-            messages,
-            agentId: resolvedAgentId || null,
-            providerId: resolvedAgentId ? null : resolvedProviderId,
-            modelId: resolvedAgentId ? null : resolvedModelId,
-            systemPrompt: resolvedAgentId ? null : systemPrompt || null,
-            temperature: resolvedAgentId ? null : temperature || null,
-            topP: resolvedAgentId ? null : topP || null,
-            topK: resolvedAgentId ? null : topK || null,
-            seed: resolvedAgentId ? null : seed || null,
-            presencePenalty: resolvedAgentId ? null : presencePenalty || null,
-            frequencyPenalty: resolvedAgentId ? null : frequencyPenalty || null,
-            updatedAt: new Date(),
-          })
-          .where(
-            and(eq(chatTable.id, id), eq(chatTable.workspaceId, workspaceId)),
-          )
-          .returning();
-
-        // If no rows were updated, insert the record
-        if (updateResult.length === 0) {
-          await db.insert(chatTable).values({
-            id,
-            workspaceId,
-            title: "Untitled",
-            messages,
-            agentId: resolvedAgentId || null,
-            providerId: resolvedAgentId ? null : resolvedProviderId,
-            modelId: resolvedAgentId ? null : resolvedModelId,
-            systemPrompt: resolvedAgentId ? null : systemPrompt || null,
-            temperature: resolvedAgentId ? null : temperature || null,
-            topP: resolvedAgentId ? null : topP || null,
-            topK: resolvedAgentId ? null : topK || null,
-            seed: resolvedAgentId ? null : seed || null,
-            presencePenalty: resolvedAgentId ? null : presencePenalty || null,
-            frequencyPenalty: resolvedAgentId ? null : frequencyPenalty || null,
-            createdAt: new Date(),
-            updatedAt: new Date(),
-          });
-        }
-
-        console.log(
-          `Successfully upserted chat '${id}' in workspace '${workspaceId}'`,
+        // Upsert chat record
+        await upsertChatRecord(
+          data.id,
+          workspaceId,
+          messages,
+          context,
+          config,
+          data,
         );
       } catch (error) {
-        console.error(
-          `Error upserting chat '${id}' in workspace '${workspaceId}':`,
-        );
-        console.error(error);
+        console.error("Error in onFinish:", error);
       }
     },
   });
