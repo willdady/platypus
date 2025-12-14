@@ -25,8 +25,8 @@ import {
 } from "@/components/ai-elements/prompt-input";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport } from "ai";
-import { Info, Settings2 } from "lucide-react";
-import { useRef, useEffect } from "react";
+import { GlobeIcon, Info, Settings2 } from "lucide-react";
+import { useRef, useEffect, useState } from "react";
 import { Chat as ChatType, Provider, Agent, ToolSet } from "@agent-kit/schemas";
 import useSWR from "swr";
 import { fetcher } from "@/lib/utils";
@@ -59,6 +59,7 @@ export const Chat = ({
   const backendUrl = useBackendUrl();
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const [search, setSearch] = useState(false);
 
   // Fetch providers
   const { data: providersData, isLoading } = useSWR<{ results: Provider[] }>(
@@ -149,6 +150,7 @@ export const Chat = ({
           seed,
           presencePenalty,
           frequencyPenalty,
+          search,
         };
   };
 
@@ -199,6 +201,11 @@ export const Chat = ({
     }
   }, [initialAgentId, agentId, chatData, modelSetters]);
 
+  // Reset search when model or provider changes
+  useEffect(() => {
+    setSearch(false);
+  }, [modelId, providerId]);
+
   // TODO: Ideally show a loading indicator here
   if (isLoading) return null;
 
@@ -208,6 +215,10 @@ export const Chat = ({
   }
 
   const selectedAgent = agentId ? agents.find((a) => a.id === agentId) : null;
+  const currentProvider = providerId
+    ? providers.find((p) => p.id === providerId)
+    : null;
+  const currentProviderType = currentProvider?.providerType;
 
   const handleSubmit = (message: PromptInputMessage) => {
     const hasText = Boolean(message.text);
@@ -299,6 +310,17 @@ export const Chat = ({
                       className="cursor-pointer"
                       textareaRef={textareaRef}
                     />
+                    {(!currentProviderType ||
+                      currentProviderType !== "Bedrock") && (
+                      <PromptInputButton
+                        className="cursor-pointer"
+                        onClick={() => setSearch(!search)}
+                        variant={search ? "default" : "ghost"}
+                      >
+                        <GlobeIcon size={16} />
+                        <span>Search</span>
+                      </PromptInputButton>
+                    )}
                     <ModelSelectorDialog
                       agents={agents}
                       providers={providers}
