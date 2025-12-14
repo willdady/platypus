@@ -14,5 +14,7 @@
 [x] Add support for Bedrock provider
 [x] Change model picker from Select to a dialog with Fuzzy search (Fuse.js?)
 [x] Add Google Provider
+[x] Add global command pallete
+[ ] Add AuthZ (better-auth)
 [ ] The root workspace page needs to be designed
 [ ] Pick a better name than Agent Kit as it's already used by Open AI
