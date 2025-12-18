@@ -16,7 +16,7 @@
 [x] Add Google Provider
 [x] Add global command pallete
 [x] The "agent info" dialog must show the provider in addition to the model id
-[ ] Need ability to rename a workspace. Repurpose the existing workspace create form.
+[x] Need ability to rename a workspace. Repurpose the existing workspace create form.
 [ ] Need to be able to navigate back to the workspace picker at the org level `/{orgId}`
 [ ] There should be a way to export and import agents, preferably as JSON.
 [ ] Add AuthZ (better-auth)
