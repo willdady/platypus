@@ -1,7 +1,5 @@
 import { McpForm } from "@/components/mcp-form";
-import { Button } from "@/components/ui/button";
-import { ArrowLeft } from "lucide-react";
-import Link from "next/link";
+import { BackButton } from "@/components/back-button";
 
 const McpCreatePage = async ({
   params,
@@ -12,11 +10,9 @@ const McpCreatePage = async ({
 
   return (
     <div>
-      <Button className="mb-8" variant="outline" size="sm" asChild>
-        <Link href={`/${orgId}/workspace/${workspaceId}/settings/mcp`}>
-          <ArrowLeft /> Back
-        </Link>
-      </Button>
+      <BackButton
+        fallbackHref={`/${orgId}/workspace/${workspaceId}/settings/mcp`}
+      />
       <h1 className="text-2xl mb-4 font-bold">Create MCP</h1>
       <McpForm orgId={orgId} workspaceId={workspaceId} />
     </div>

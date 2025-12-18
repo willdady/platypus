@@ -17,6 +17,7 @@
 [x] Add global command pallete
 [x] The "agent info" dialog must show the provider in addition to the model id
 [x] Need ability to rename a workspace. Repurpose the existing workspace create form.
+[x] Bug: Back button should go back in route history.
 [ ] Need to be able to navigate back to the workspace picker at the org level `/{orgId}`
 [ ] There should be a way to export and import agents, preferably as JSON.
 [ ] Add AuthZ (better-auth)
