@@ -19,30 +19,24 @@ import {
 } from "@/components/ui/dialog";
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { type Workspace } from "@agent-kit/schemas";
+import { type Organisation } from "@agent-kit/schemas";
 import { fetcher, parseValidationErrors } from "@/lib/utils";
 import { useBackendUrl } from "@/app/client-context";
 import { Trash2 } from "lucide-react";
 import { toast } from "sonner";
-import useSWR, { useSWRConfig } from "swr";
+import useSWR from "swr";
 
-interface WorkspaceFormProps {
+interface OrganisationFormProps {
   classNames?: string;
-  orgId: string;
-  workspaceId?: string;
+  orgId?: string;
 }
 
-const WorkspaceForm = ({
-  classNames,
-  orgId,
-  workspaceId,
-}: WorkspaceFormProps) => {
+const OrganisationForm = ({ classNames, orgId }: OrganisationFormProps) => {
   const backendUrl = useBackendUrl();
   const router = useRouter();
-  const { mutate: globalMutate } = useSWRConfig();
 
-  const { data: workspace, mutate } = useSWR<Workspace>(
-    workspaceId ? `${backendUrl}/workspaces/${workspaceId}` : null,
+  const { data: organisation, mutate } = useSWR<Organisation>(
+    orgId ? `${backendUrl}/organisations/${orgId}` : null,
     fetcher,
   );
 
@@ -59,10 +53,10 @@ const WorkspaceForm = ({
   const [isDeleting, setIsDeleting] = useState(false);
 
   useEffect(() => {
-    if (workspace) {
-      setFormData({ name: workspace.name });
+    if (organisation) {
+      setFormData({ name: organisation.name });
     }
-  }, [workspace]);
+  }, [organisation]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { id, value } = e.target;
@@ -86,15 +80,13 @@ const WorkspaceForm = ({
     setIsSubmitting(true);
     setValidationErrors({});
     try {
-      const url = workspaceId
-        ? `${backendUrl}/workspaces/${workspaceId}`
-        : `${backendUrl}/workspaces`;
+      const url = orgId
+        ? `${backendUrl}/organisations/${orgId}`
+        : `${backendUrl}/organisations`;
 
-      const method = workspaceId ? "PUT" : "POST";
+      const method = orgId ? "PUT" : "POST";
 
-      const payload = workspaceId
-        ? { name: formData.name }
-        : { organisationId: orgId, name: formData.name };
+      const payload = { name: formData.name };
 
       const response = await fetch(url, {
         method,
@@ -105,49 +97,47 @@ const WorkspaceForm = ({
       });
 
       if (response.ok) {
-        if (workspaceId) {
-          toast.success("Workspace updated");
+        if (orgId) {
+          toast.success("Organisation updated");
           mutate(); // Refresh the local cache
-          globalMutate(`${backendUrl}/workspaces?orgId=${orgId}`);
           router.refresh();
         } else {
-          const workspace = await response.json();
-          toast.success("Workspace created");
-          globalMutate(`${backendUrl}/workspaces?orgId=${orgId}`);
-          router.push(`/${orgId}/workspace/${workspace.id}`);
+          const organisation = await response.json();
+          toast.success("Organisation created");
+          router.push(`/${organisation.id}`);
         }
       } else {
         // Parse standardschema.dev validation errors
         const errorData = await response.json();
         setValidationErrors(parseValidationErrors(errorData));
-        toast.error("Failed to save workspace");
+        toast.error("Failed to save organisation");
       }
     } catch (error) {
-      console.error("Error saving workspace:", error);
-      toast.error("Error saving workspace");
+      console.error("Error saving organisation:", error);
+      toast.error("Error saving organisation");
     } finally {
       setIsSubmitting(false);
     }
   };
 
   const handleDelete = async () => {
-    if (!workspaceId) return;
+    if (!orgId) return;
 
     setIsDeleting(true);
     try {
-      const response = await fetch(`${backendUrl}/workspaces/${workspaceId}`, {
+      const response = await fetch(`${backendUrl}/organisations/${orgId}`, {
         method: "DELETE",
       });
       if (response.ok) {
-        toast.success("Workspace deleted");
-        window.location.href = `/${orgId}`;
+        toast.success("Organisation deleted");
+        window.location.href = `/`;
       } else {
-        toast.error("Failed to delete workspace");
+        toast.error("Failed to delete organisation");
         setIsDeleting(false);
         setIsDeleteDialogOpen(false);
       }
     } catch (error) {
-      toast.error("Error deleting workspace");
+      toast.error("Error deleting organisation");
       setIsDeleting(false);
       setIsDeleteDialogOpen(false);
     }
@@ -161,7 +151,7 @@ const WorkspaceForm = ({
             <FieldLabel htmlFor="name">Name</FieldLabel>
             <Input
               id="name"
-              placeholder="Workspace name"
+              placeholder="Organisation name"
               value={formData.name}
               onChange={handleChange}
               disabled={isSubmitting}
@@ -181,10 +171,10 @@ const WorkspaceForm = ({
           onClick={handleSubmit}
           disabled={isSubmitting || Object.keys(validationErrors).length > 0}
         >
-          {workspaceId ? "Update" : "Save"}
+          {orgId ? "Update" : "Save"}
         </Button>
 
-        {workspaceId && (
+        {orgId && (
           <Button
             className="cursor-pointer"
             variant="outline"
@@ -221,14 +211,14 @@ const WorkspaceForm = ({
           showCloseButton={false}
         >
           <DialogHeader>
-            <DialogTitle>Delete Workspace</DialogTitle>
+            <DialogTitle>Delete Organisation</DialogTitle>
             <DialogDescription>
-              Are you sure you want to delete this workspace? This action cannot
-              be undone.
+              Are you sure you want to delete this organisation? This action
+              cannot be undone.
             </DialogDescription>
             <div className="mt-4">
               <Input
-                placeholder="Type 'Delete workspace' to confirm"
+                placeholder="Type 'Delete organisation' to confirm"
                 value={deleteInput}
                 onChange={(e) => setDeleteInput(e.target.value)}
                 disabled={isDeleting}
@@ -249,7 +239,8 @@ const WorkspaceForm = ({
               variant="destructive"
               onClick={handleDelete}
               disabled={
-                isDeleting || deleteInput.toLowerCase() !== "delete workspace"
+                isDeleting ||
+                deleteInput.toLowerCase() !== "delete organisation"
               }
             >
               Delete
@@ -261,4 +252,4 @@ const WorkspaceForm = ({
   );
 };
 
-export { WorkspaceForm };
+export { OrganisationForm };
