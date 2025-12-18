@@ -66,7 +66,12 @@ workspace.put("/:id", sValidator("json", workspaceUpdateSchema), async (c) => {
     })
     .where(eq(workspaceTable.id, id))
     .returning();
-  return c.json(record, 200);
+
+  if (record.length === 0) {
+    return c.json({ message: "Workspace not found" }, 404);
+  }
+
+  return c.json(record[0], 200);
 });
 
 /** Delete a workspace by ID */

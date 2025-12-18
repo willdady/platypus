@@ -9,20 +9,41 @@ import {
 } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { useState } from "react";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { type Workspace } from "@agent-kit/schemas";
-import { parseValidationErrors } from "@/lib/utils";
+import { fetcher, parseValidationErrors } from "@/lib/utils";
 import { useBackendUrl } from "@/app/client-context";
+import { Trash2 } from "lucide-react";
+import { toast } from "sonner";
+import useSWR from "swr";
+
+interface WorkspaceFormProps {
+  classNames?: string;
+  orgId: string;
+  workspaceId?: string;
+}
 
 const WorkspaceForm = ({
   classNames,
   orgId,
-}: {
-  classNames?: string;
-  orgId: string;
-}) => {
+  workspaceId,
+}: WorkspaceFormProps) => {
   const backendUrl = useBackendUrl();
+  const router = useRouter();
+
+  const { data: workspace, mutate } = useSWR<Workspace>(
+    workspaceId ? `${backendUrl}/workspaces/${workspaceId}` : null,
+    fetcher,
+  );
 
   const [formData, setFormData] = useState({
     name: "",
@@ -32,7 +53,15 @@ const WorkspaceForm = ({
     Record<string, string>
   >({});
 
-  const router = useRouter();
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [deleteInput, setDeleteInput] = useState("");
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  useEffect(() => {
+    if (workspace) {
+      setFormData({ name: workspace.name });
+    }
+  }, [workspace]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { id, value } = e.target;
@@ -56,13 +85,18 @@ const WorkspaceForm = ({
     setIsSubmitting(true);
     setValidationErrors({});
     try {
-      const payload: Omit<Workspace, "id" | "createdAt" | "updatedAt"> = {
-        organisationId: orgId,
-        name: formData.name,
-      };
+      const url = workspaceId
+        ? `${backendUrl}/workspaces/${workspaceId}`
+        : `${backendUrl}/workspaces`;
 
-      const response = await fetch(`${backendUrl}/workspaces`, {
-        method: "POST",
+      const method = workspaceId ? "PUT" : "POST";
+
+      const payload = workspaceId
+        ? { name: formData.name }
+        : { organisationId: orgId, name: formData.name };
+
+      const response = await fetch(url, {
+        method,
         headers: {
           "Content-Type": "application/json",
         },
@@ -70,18 +104,49 @@ const WorkspaceForm = ({
       });
 
       if (response.ok) {
-        const workspace = await response.json();
-        router.push(`/${orgId}/workspace/${workspace.id}`);
+        if (workspaceId) {
+          toast.success("Workspace updated");
+          mutate(); // Refresh the local cache
+          router.refresh();
+        } else {
+          const workspace = await response.json();
+          toast.success("Workspace created");
+          router.push(`/${orgId}/workspace/${workspace.id}`);
+        }
       } else {
         // Parse standardschema.dev validation errors
         const errorData = await response.json();
         setValidationErrors(parseValidationErrors(errorData));
-        console.error("Failed to save workspace");
+        toast.error("Failed to save workspace");
       }
     } catch (error) {
       console.error("Error saving workspace:", error);
+      toast.error("Error saving workspace");
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!workspaceId) return;
+
+    setIsDeleting(true);
+    try {
+      const response = await fetch(`${backendUrl}/workspaces/${workspaceId}`, {
+        method: "DELETE",
+      });
+      if (response.ok) {
+        toast.success("Workspace deleted");
+        window.location.href = `/${orgId}`;
+      } else {
+        toast.error("Failed to delete workspace");
+        setIsDeleting(false);
+        setIsDeleteDialogOpen(false);
+      }
+    } catch (error) {
+      toast.error("Error deleting workspace");
+      setIsDeleting(false);
+      setIsDeleteDialogOpen(false);
     }
   };
 
@@ -107,13 +172,88 @@ const WorkspaceForm = ({
         </FieldGroup>
       </FieldSet>
 
-      <Button
-        className="cursor-pointer"
-        onClick={handleSubmit}
-        disabled={isSubmitting || Object.keys(validationErrors).length > 0}
+      <div className="flex gap-2">
+        <Button
+          className="cursor-pointer"
+          onClick={handleSubmit}
+          disabled={isSubmitting || Object.keys(validationErrors).length > 0}
+        >
+          {workspaceId ? "Update" : "Save"}
+        </Button>
+
+        {workspaceId && (
+          <Button
+            className="cursor-pointer"
+            variant="outline"
+            onClick={() => {
+              setIsDeleteDialogOpen(true);
+              setDeleteInput("");
+            }}
+            disabled={isSubmitting}
+          >
+            <Trash2 /> Delete
+          </Button>
+        )}
+      </div>
+
+      <Dialog
+        open={isDeleteDialogOpen}
+        onOpenChange={(open) => {
+          if (!isDeleting) {
+            setIsDeleteDialogOpen(open);
+          }
+        }}
       >
-        Save
-      </Button>
+        <DialogContent
+          onPointerDownOutside={(e) => {
+            if (isDeleting) {
+              e.preventDefault();
+            }
+          }}
+          onEscapeKeyDown={(e) => {
+            if (isDeleting) {
+              e.preventDefault();
+            }
+          }}
+          showCloseButton={false}
+        >
+          <DialogHeader>
+            <DialogTitle>Delete Workspace</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete this workspace? This action cannot
+              be undone.
+              <div className="mt-4">
+                <Input
+                  placeholder="Type 'Delete workspace' to confirm"
+                  value={deleteInput}
+                  onChange={(e) => setDeleteInput(e.target.value)}
+                  disabled={isDeleting}
+                />
+              </div>
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              className="cursor-pointer"
+              variant="outline"
+              onClick={() => setIsDeleteDialogOpen(false)}
+              disabled={isDeleting}
+            >
+              Cancel
+            </Button>
+            <Button
+              className="cursor-pointer"
+              variant="destructive"
+              onClick={handleDelete}
+              disabled={
+                isDeleting || deleteInput.toLowerCase() !== "delete workspace"
+              }
+            >
+              Delete
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
