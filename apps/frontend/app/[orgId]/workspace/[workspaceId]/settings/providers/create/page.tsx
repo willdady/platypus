@@ -1,7 +1,5 @@
 import { ProviderForm } from "@/components/provider-form";
-import { Button } from "@/components/ui/button";
-import { ArrowLeft } from "lucide-react";
-import Link from "next/link";
+import { BackButton } from "@/components/back-button";
 
 const ProviderCreatePage = async ({
   params,
@@ -12,11 +10,9 @@ const ProviderCreatePage = async ({
 
   return (
     <div>
-      <Button className="mb-8" variant="outline" size="sm" asChild>
-        <Link href={`/${orgId}/workspace/${workspaceId}/settings/providers`}>
-          <ArrowLeft /> Back
-        </Link>
-      </Button>
+      <BackButton
+        fallbackHref={`/${orgId}/workspace/${workspaceId}/settings/providers`}
+      />
       <h1 className="text-2xl mb-4 font-bold">Create Provider</h1>
       <ProviderForm orgId={orgId} workspaceId={workspaceId} />
     </div>

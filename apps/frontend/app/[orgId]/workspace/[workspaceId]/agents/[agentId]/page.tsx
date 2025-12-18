@@ -1,7 +1,5 @@
 import { AgentForm } from "@/components/agent-form";
-import { Button } from "@/components/ui/button";
-import { ArrowLeft } from "lucide-react";
-import Link from "next/link";
+import { BackButton } from "@/components/back-button";
 import { type ToolSet } from "@agent-kit/schemas";
 
 const AgentEditPage = async ({
@@ -26,11 +24,9 @@ const AgentEditPage = async ({
   return (
     <div className="flex justify-center pb-8">
       <div className="xl:w-2/5">
-        <Button className="mb-8" variant="outline" size="sm" asChild>
-          <Link href={`/${orgId}/workspace/${workspaceId}/agents`}>
-            <ArrowLeft /> Back
-          </Link>
-        </Button>
+        <BackButton
+          fallbackHref={`/${orgId}/workspace/${workspaceId}/agents`}
+        />
         <h1 className="text-2xl mb-4 font-bold">Edit Agent</h1>
         <AgentForm
           orgId={orgId}
