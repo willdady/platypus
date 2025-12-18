@@ -54,6 +54,7 @@ import {
   Plus,
   ClockFading,
   CalendarDays,
+  Home,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Field, FieldLabel, FieldError } from "@/components/ui/field";
@@ -302,6 +303,11 @@ export function AppSidebar({
                   <DropdownMenuItem asChild>
                     <Link className="cursor-pointer" href={`/${orgId}/create`}>
                       <Plus /> Add Workspace
+                    </Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem asChild>
+                    <Link className="cursor-pointer" href="/">
+                      <Home /> Home
                     </Link>
                   </DropdownMenuItem>
                 </DropdownMenuGroup>
