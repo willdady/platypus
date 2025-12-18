@@ -1,17 +1,39 @@
+"use client";
+
 import type { Organisation } from "@agent-kit/schemas";
 import { WorkspaceList } from "@/components/workspace-list";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import { Building, Plus, Pencil } from "lucide-react";
+import useSWR from "swr";
+import { fetcher } from "@/lib/utils";
+import { useBackendUrl } from "./client-context";
 
-export default async function Home() {
-  // Use internal URL for SSR, fallback to BACKEND_URL for local dev
-  const backendUrl =
-    process.env.INTERNAL_BACKEND_URL || process.env.BACKEND_URL;
-  const response = await fetch(`${backendUrl}/organisations`);
+export default function Home() {
+  const backendUrl = useBackendUrl();
+  const { data, error, isLoading } = useSWR<{ results: Organisation[] }>(
+    `${backendUrl}/organisations`,
+    fetcher,
+  );
 
-  const { results: organisations }: { results: Organisation[] } =
-    await response.json();
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-screen p-8">
+        <div className="text-red-500 mb-4">Failed to load organisations</div>
+        <Button onClick={() => window.location.reload()}>Retry</Button>
+      </div>
+    );
+  }
+
+  const organisations = data?.results || [];
 
   return (
     <div className="flex flex-col items-center justify-center min-h-screen p-8">
