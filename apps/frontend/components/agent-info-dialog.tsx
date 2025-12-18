@@ -45,7 +45,7 @@ export const AgentInfoDialog = ({
           View the configuration for this agent.
         </DialogDescription>
       </DialogHeader>
-      <div className="grid gap-4 py-4 max-h-[60vh] overflow-y-auto">
+      <div className="grid gap-4 py-4 max-h-[60vh] overflow-y-auto -mx-6 px-6">
         <div className="grid gap-2">
           <Label>Provider</Label>
           <div className="text-sm bg-muted p-2 rounded cursor-default">
