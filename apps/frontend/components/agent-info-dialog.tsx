@@ -1,4 +1,4 @@
-import { Agent, ToolSet } from "@agent-kit/schemas";
+import { Agent, ToolSet, Provider } from "@agent-kit/schemas";
 import {
   DialogContent,
   DialogDescription,
@@ -20,15 +20,19 @@ import { useState } from "react";
 interface AgentInfoDialogProps {
   agent: Agent;
   toolSets: ToolSet[];
+  providers: Provider[];
   onClose?: () => void;
 }
 
 export const AgentInfoDialog = ({
   agent,
   toolSets,
+  providers,
   onClose,
 }: AgentInfoDialogProps) => {
   const [isAdvancedOpen, setIsAdvancedOpen] = useState(false);
+
+  const provider = providers.find((p) => p.id === agent.providerId);
 
   return (
     <DialogContent
@@ -43,6 +47,12 @@ export const AgentInfoDialog = ({
       </DialogHeader>
       <div className="grid gap-4 py-4 max-h-[60vh] overflow-y-auto">
         <div className="grid gap-2">
+          <Label>Provider</Label>
+          <div className="text-sm bg-muted p-2 rounded cursor-default">
+            {provider?.name || "Unknown"}
+          </div>
+        </div>
+        <div className="grid gap-2">
           <Label>Model</Label>
           <div className="text-sm font-mono bg-muted p-2 rounded cursor-default">
             {agent.modelId}
@@ -50,7 +60,7 @@ export const AgentInfoDialog = ({
         </div>
         <div className="grid gap-2">
           <Label>System Prompt</Label>
-          <div className="text-sm bg-muted p-2 rounded whitespace-pre-wrap max-h-32 overflow-y-auto cursor-default">
+          <div className="text-sm bg-muted p-2 rounded whitespace-pre-wrap cursor-default">
             {agent.systemPrompt || "No system prompt set"}
           </div>
         </div>

@@ -348,6 +348,7 @@ export const Chat = ({
                         <AgentInfoDialog
                           agent={selectedAgent}
                           toolSets={toolSets}
+                          providers={providers}
                           onClose={() => setIsAgentInfoDialogOpen(false)}
                         />
                       </Dialog>
