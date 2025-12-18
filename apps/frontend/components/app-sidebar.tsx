@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import useSWR, { useSWRConfig } from "swr";
 import { fetcher } from "@/lib/utils";
-import type { Workspace, ChatListItem } from "@agent-kit/schemas";
+import type { Workspace, ChatListItem, Organisation } from "@agent-kit/schemas";
 import {
   Sidebar,
   SidebarContent,
@@ -91,6 +91,11 @@ export function AppSidebar({
 
   const { data: chatData } = useSWR<{ results: ChatListItem[] }>(
     `${backendUrl}/chat?workspaceId=${workspaceId}`,
+    fetcher,
+  );
+
+  const { data: orgData } = useSWR<Organisation>(
+    `${backendUrl}/organisations/${orgId}`,
     fetcher,
   );
 
@@ -270,11 +275,19 @@ export function AppSidebar({
           <SidebarMenuItem>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <SidebarMenuButton className="cursor-pointer">
-                  <div className="inline-flex flex-1 [&>svg]:size-4 [&>svg]:shrink-0 items-center gap-2">
-                    <FolderOpen /> <span>{currentWorkspace?.name}</span>
+                <SidebarMenuButton className="cursor-pointer h-auto py-2">
+                  <div className="flex flex-col flex-1 items-start leading-none">
+                    <span className="text-xs text-muted-foreground mb-1">
+                      {orgData?.name}
+                    </span>
+                    <div className="flex items-center gap-2 w-full">
+                      <FolderOpen className="size-4 shrink-0" />
+                      <span className="font-medium">
+                        {currentWorkspace?.name}
+                      </span>
+                      <ChevronsUpDown className="ml-auto size-4 shrink-0" />
+                    </div>
                   </div>
-                  <ChevronsUpDown />
                 </SidebarMenuButton>
               </DropdownMenuTrigger>
               <DropdownMenuContent className="w-56" align="start" side="right">

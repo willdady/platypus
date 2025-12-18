@@ -6,7 +6,7 @@ const kebabCaseRegex = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
 export const organisationSchema = z.object({
   id: z.string(),
-  name: z.string(),
+  name: z.string().min(3).max(30),
   createdAt: z.date(),
   updatedAt: z.date(),
 });
