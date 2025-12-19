@@ -3,8 +3,14 @@
 import type { Organisation } from "@agent-kit/schemas";
 import { WorkspaceList } from "@/components/workspace-list";
 import { Button } from "@/components/ui/button";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
 import Link from "next/link";
-import { Building, Plus, Pencil } from "lucide-react";
+import { Building, Plus, Settings } from "lucide-react";
 import useSWR from "swr";
 import { fetcher } from "@/lib/utils";
 import { useBackendUrl } from "./client-context";
@@ -38,28 +44,32 @@ export default function Home() {
   return (
     <div className="flex flex-col items-center justify-center min-h-screen p-8">
       <div className="w-full max-w-md space-y-12">
-        {organisations.map((organisation) => (
-          <div key={organisation.id}>
-            <div className="flex items-center justify-between mb-4">
-              <h1 className="text-2xl font-bold flex items-center gap-1">
-                <Building className="inline-block" /> {organisation.name}
-              </h1>
-              <Button variant="ghost" size="icon" asChild>
-                <Link href={`/${organisation.id}/edit`}>
-                  <Pencil className="h-4 w-4" />
-                </Link>
-              </Button>
-            </div>
-            <WorkspaceList orgId={organisation.id} />
-            <div className="mt-4">
-              <Button asChild>
-                <Link href={`/${organisation.id}/create`}>
-                  <Plus /> Add workspace
-                </Link>
-              </Button>
-            </div>
-          </div>
-        ))}
+        <Accordion type="single" collapsible className="w-full">
+          {organisations.map((organisation) => (
+            <AccordionItem key={organisation.id} value={organisation.id}>
+              <AccordionTrigger className="hover:no-underline">
+                <div className="text-lg font-semibold flex items-center gap-2">
+                  <Building className="size-5" /> {organisation.name}
+                </div>
+              </AccordionTrigger>
+              <AccordionContent>
+                <WorkspaceList orgId={organisation.id} />
+                <div className="mt-4 flex items-center gap-2">
+                  <Button asChild>
+                    <Link href={`/${organisation.id}/create`}>
+                      <Plus /> Add workspace
+                    </Link>
+                  </Button>
+                  <Button variant="outline" asChild>
+                    <Link href={`/${organisation.id}/edit`}>
+                      <Settings className="h-4 w-4" /> Org settings
+                    </Link>
+                  </Button>
+                </div>
+              </AccordionContent>
+            </AccordionItem>
+          ))}
+        </Accordion>
 
         <div className="pt-8 border-t">
           <Button variant="outline" className="w-full" asChild>
