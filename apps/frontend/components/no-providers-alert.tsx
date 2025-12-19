@@ -19,7 +19,7 @@ export const NoProvidersAlert = ({
         <AlertTitle>No AI providers configured</AlertTitle>
         <AlertDescription>
           <p className="mb-2">
-            You need to configure at least one AI provider to start chatting.
+            You need to configure at least one AI provider in this workspace.
           </p>
           <Button size="sm" asChild>
             <Link

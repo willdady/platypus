@@ -22,11 +22,12 @@ import {
   Plus,
   TriangleAlert,
 } from "lucide-react";
-import { type Agent } from "@agent-kit/schemas";
+import { type Agent, type Provider } from "@agent-kit/schemas";
 import useSWR from "swr";
 import { fetcher } from "@/lib/utils";
 import Link from "next/link";
 import { useBackendUrl } from "@/app/client-context";
+import { NoProvidersAlert } from "@/components/no-providers-alert";
 
 export const AgentsList = ({
   orgId,
@@ -37,15 +38,27 @@ export const AgentsList = ({
 }) => {
   const backendUrl = useBackendUrl();
 
-  const { data, isLoading } = useSWR<{ results: Agent[] }>(
-    `${backendUrl}/agents?workspaceId=${workspaceId}`,
-    fetcher,
-  );
+  const { data: agentsData, isLoading: isLoadingAgents } = useSWR<{
+    results: Agent[];
+  }>(`${backendUrl}/agents?workspaceId=${workspaceId}`, fetcher);
 
-  const agents = data?.results || [];
+  const { data: providersData, isLoading: isLoadingProviders } = useSWR<{
+    results: Provider[];
+  }>(`${backendUrl}/providers?workspaceId=${workspaceId}`, fetcher);
 
-  if (isLoading) {
+  const agents = agentsData?.results || [];
+  const providers = providersData?.results || [];
+
+  if (isLoadingAgents || isLoadingProviders) {
     return <div>Loading...</div>;
+  }
+
+  if (!providers.length) {
+    return (
+      <div className="h-[calc(100vh-2.75rem)]">
+        <NoProvidersAlert orgId={orgId} workspaceId={workspaceId} />
+      </div>
+    );
   }
 
   if (!agents.length) {
