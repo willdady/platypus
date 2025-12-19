@@ -14,8 +14,9 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "./ui/collapsible";
-import { ChevronsUpDown } from "lucide-react";
+import { ChevronsUpDown, Pencil } from "lucide-react";
 import { useState } from "react";
+import { useParams, useRouter } from "next/navigation";
 
 interface AgentInfoDialogProps {
   agent: Agent;
@@ -31,8 +32,17 @@ export const AgentInfoDialog = ({
   onClose,
 }: AgentInfoDialogProps) => {
   const [isAdvancedOpen, setIsAdvancedOpen] = useState(false);
+  const router = useRouter();
+  const params = useParams();
+
+  const orgId = params.orgId as string;
+  const workspaceId = params.workspaceId as string;
 
   const provider = providers.find((p) => p.id === agent.providerId);
+
+  const handleEdit = () => {
+    router.push(`/${orgId}/workspace/${workspaceId}/agents/${agent.id}`);
+  };
 
   return (
     <DialogContent
@@ -146,7 +156,14 @@ export const AgentInfoDialog = ({
           </CollapsibleContent>
         </Collapsible>
       </div>
-      <DialogFooter>
+      <DialogFooter className="sm:justify-between">
+        <Button
+          variant="outline"
+          className="cursor-pointer"
+          onClick={handleEdit}
+        >
+          <Pencil className="size-4" /> Edit Agent
+        </Button>
         <Button className="cursor-pointer" onClick={onClose}>
           Close
         </Button>
