@@ -2,7 +2,14 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { BotMessageSquare, Bot, Unplug, Wrench, Settings } from "lucide-react";
+import {
+  BotMessageSquare,
+  Bot,
+  Unplug,
+  Wrench,
+  Settings,
+  Home,
+} from "lucide-react";
 
 import {
   CommandDialog,
@@ -45,6 +52,15 @@ export function CommandMenu({ orgId, workspaceId }: CommandMenuProps) {
       <CommandList>
         <CommandEmpty>No results found.</CommandEmpty>
         <CommandGroup heading="Actions">
+          <CommandItem
+            className="cursor-pointer"
+            onSelect={() => {
+              runCommand(() => router.push("/"));
+            }}
+          >
+            <Home />
+            <span>Home</span>
+          </CommandItem>
           <CommandItem
             className="cursor-pointer"
             onSelect={() => {

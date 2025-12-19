@@ -19,6 +19,8 @@
 [x] Need ability to rename a workspace. Repurpose the existing workspace create form.
 [x] Bug: Back button should go back in route history.
 [x] The root page `/` should render Organisations with Workspaces under each.
+[x] Use an accordion component on the home page to make it less "busy"
+[ ] Add an edit agent button to the agent information dialog.
 [ ] There should be a way to export and import agents, preferably as JSON.
 [ ] Add AuthZ (better-auth)
 [ ] The root workspace page needs to be designed

@@ -1,7 +1,13 @@
 "use client";
 
 import { Workspace } from "@agent-kit/schemas";
-import { Item, ItemActions, ItemContent, ItemTitle } from "./ui/item";
+import {
+  Item,
+  ItemActions,
+  ItemContent,
+  ItemGroup,
+  ItemTitle,
+} from "./ui/item";
 import useSWR from "swr";
 import { cn, fetcher } from "../lib/utils";
 import { ChevronRight, FolderClosed } from "lucide-react";
@@ -25,24 +31,22 @@ const WorkspaceList = ({
   if (isLoading || error) return null; // FIXME
 
   return (
-    <ul className={cn("mb-4", className)}>
+    <ItemGroup className={cn("mb-4", className)}>
       {data?.results.map((workspace) => (
-        <li key={workspace.id} className="mb-2">
-          <Item variant="outline" asChild>
-            <Link href={`/${orgId}/workspace/${workspace.id}`}>
-              <ItemContent>
-                <ItemTitle>
-                  <FolderClosed size={18} /> {workspace.name}
-                </ItemTitle>
-              </ItemContent>
-              <ItemActions>
-                <ChevronRight className="size-4" />
-              </ItemActions>
-            </Link>
-          </Item>
-        </li>
+        <Item key={workspace.id} variant="outline" asChild className="mb-2">
+          <Link href={`/${orgId}/workspace/${workspace.id}`}>
+            <ItemContent>
+              <ItemTitle>
+                <FolderClosed size={18} /> {workspace.name}
+              </ItemTitle>
+            </ItemContent>
+            <ItemActions>
+              <ChevronRight className="size-4" />
+            </ItemActions>
+          </Link>
+        </Item>
       ))}
-    </ul>
+    </ItemGroup>
   );
 };
 
