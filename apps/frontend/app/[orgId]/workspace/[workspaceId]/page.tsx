@@ -2,12 +2,7 @@
 
 import { AgentsList } from "@/components/agents-list";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import {
   Bot,
@@ -33,10 +28,8 @@ const Workspace = () => {
   const workspaceId = params.workspaceId as string;
   const backendUrl = useBackendUrl();
 
-  const { data: workspaceData, isLoading: isLoadingWorkspace } = useSWR<WorkspaceType>(
-    `${backendUrl}/workspaces/${workspaceId}`,
-    fetcher,
-  );
+  const { data: workspaceData, isLoading: isLoadingWorkspace } =
+    useSWR<WorkspaceType>(`${backendUrl}/workspaces/${workspaceId}`, fetcher);
 
   const { data: agentsData, isLoading: isLoadingAgents } = useSWR<{
     results: [];
