@@ -23,5 +23,5 @@
 [x] Add an edit agent button to the agent information dialog.
 [ ] There should be a way to export and import agents, preferably as JSON.
 [ ] Add AuthZ (better-auth)
-[ ] The root workspace page needs to be designed
+[x] The root workspace page needs to be designed
 [ ] Pick a better name than Agent Kit as it's already used by Open AI

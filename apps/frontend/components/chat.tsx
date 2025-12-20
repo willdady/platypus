@@ -37,7 +37,7 @@ import { useChatMetadata } from "@/hooks/use-chat-metadata";
 import { useChatUI } from "@/hooks/use-chat-ui";
 import { Dialog, DialogTrigger } from "./ui/dialog";
 import { useBackendUrl } from "@/app/client-context";
-import { NoProvidersAlert } from "./no-providers-alert";
+import { NoProvidersEmptyState } from "./no-providers-empty-state";
 import { AgentInfoDialog } from "./agent-info-dialog";
 import { ChatSettingsDialog } from "./chat-settings-dialog";
 import { ErrorDialog } from "./error-dialog";
@@ -211,7 +211,13 @@ export const Chat = ({
 
   // Show alert if no providers are configured
   if (providers.length === 0) {
-    return <NoProvidersAlert orgId={orgId} workspaceId={workspaceId} />;
+    return (
+      <div className="flex items-center justify-center h-full p-8">
+        <div className="w-full xl:w-4/5 max-w-4xl">
+          <NoProvidersEmptyState orgId={orgId} workspaceId={workspaceId} />
+        </div>
+      </div>
+    );
   }
 
   const selectedAgent = agentId ? agents.find((a) => a.id === agentId) : null;
