@@ -126,22 +126,6 @@ export const AgentsList = ({
           </Item>
         </li>
       ))}
-      <li>
-        <Item variant="outline" className="h-full border-dashed">
-          <ItemContent>
-            <Button
-              size="sm"
-              variant="secondary"
-              className="cursor-pointer"
-              asChild
-            >
-              <Link href={`/${orgId}/workspace/${workspaceId}/agents/create`}>
-                <Plus /> Add agent
-              </Link>
-            </Button>
-          </ItemContent>
-        </Item>
-      </li>
     </ul>
   );
 };
