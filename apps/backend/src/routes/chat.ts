@@ -33,7 +33,7 @@ import {
   chatUpdateSchema,
   type Provider,
 } from "@agent-kit/schemas";
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, sql } from "drizzle-orm";
 
 // --- Types ---
 
@@ -429,6 +429,24 @@ chat.get(
       .offset(offset);
 
     return c.json({ results: records });
+  },
+);
+
+chat.get(
+  "/tags",
+  sValidator("query", z.object({ workspaceId: z.string() })),
+  async (c) => {
+    const { workspaceId } = c.req.valid("query");
+
+    const result = await db.execute(sql`
+      SELECT value as tag, count(*)::int as count
+      FROM ${chatTable}, jsonb_array_elements_text(${chatTable.tags})
+      WHERE ${chatTable.workspaceId} = ${workspaceId}
+      GROUP BY tag
+      ORDER BY count DESC
+    `);
+
+    return c.json({ results: result.rows });
   },
 );
 
