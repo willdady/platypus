@@ -5,16 +5,11 @@ meta {
 }
 
 get {
-  url: {{host}}/mcps/:mcpId
+  url: {{host}}/mcps/:id
   body: none
   auth: inherit
 }
 
 params:path {
-  mcpId:
-}
-
-settings {
-  encodeUrl: true
-  timeout: 0
+  id: 
 }

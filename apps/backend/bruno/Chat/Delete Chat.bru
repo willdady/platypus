@@ -1,22 +1,19 @@
 meta {
   name: Delete Chat
   type: http
-  seq: 3
+  seq: 5
 }
 
 delete {
-  url: {{baseUrl}}/chat/:id?workspaceId={{workspaceId}}
+  url: {{host}}/chat/:id?workspaceId=default
   body: none
-  auth: none
+  auth: inherit
 }
 
-query:json {
-  {
-    "workspaceId": "default"
-  }
+params:query {
+  workspaceId: default
 }
 
-settings {
-  encodeUrl: true
-  timeout: 0
+params:path {
+  id: 
 }

@@ -5,11 +5,11 @@ meta {
 }
 
 get {
-  url: {{host}}/providers
+  url: {{host}}/providers?workspaceId=default
   body: none
   auth: inherit
 }
 
-settings {
-  encodeUrl: true
+params:query {
+  workspaceId: default
 }

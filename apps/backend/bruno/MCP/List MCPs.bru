@@ -5,11 +5,11 @@ meta {
 }
 
 get {
-  url: {{host}}/mcps
+  url: {{host}}/mcps?workspaceId=default
   body: none
   auth: inherit
 }
 
-settings {
-  encodeUrl: true
+params:query {
+  workspaceId: default
 }

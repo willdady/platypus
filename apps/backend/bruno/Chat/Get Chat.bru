@@ -5,18 +5,15 @@ meta {
 }
 
 get {
-  url: {{host}}/chat/{{chatId}}
+  url: {{host}}/chat/:id?workspaceId=default
   body: none
   auth: inherit
 }
 
-query:json {
-  {
-    "workspaceId": "default"
-  }
+params:query {
+  workspaceId: default
 }
 
-settings {
-  encodeUrl: true
-  timeout: 0
+params:path {
+  id: 
 }

@@ -1,31 +1,22 @@
 meta {
   name: Update Agent
   type: http
-  seq: 2
+  seq: 4
 }
 
 put {
-  url: {{host}}/agents/:agentId
+  url: {{host}}/agents/:id
   body: json
   auth: inherit
 }
 
 params:path {
-  agentId: MDTy14I9kEsc7z8EcjjTA
+  id: 
 }
 
 body:json {
   {
-    "workspaceId": "default",
-    "providerId": "provider-id-here",
-    "name": "My agent",
-    "systemPrompt": "Hello world",
-    "modelId": "google/gemini-2.5.-flash",
-    "toolSetIds": ["math-conversions"]
+    "name": "Updated Agent Name",
+    "description": "Updated description"
   }
-}
-
-settings {
-  encodeUrl: true
-  timeout: 0
 }

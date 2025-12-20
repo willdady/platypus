@@ -5,26 +5,11 @@ meta {
 }
 
 delete {
-  url: {{host}}/agents/:agentId
-  body: json
+  url: {{host}}/agents/:id
+  body: none
   auth: inherit
 }
 
 params:path {
-  agentId: DJ2RGVZ0xz28yLZgYWt12
-}
-
-body:json {
-  {
-    "workspaceId": "default",
-    "name": "My agent",
-    "systemPrompt": "Hello world",
-    "modelId": "google/gemini-2.5.-flash",
-    "tools": ["myCoolTool"]
-  }
-}
-
-settings {
-  encodeUrl: true
-  timeout: 0
+  id: 
 }

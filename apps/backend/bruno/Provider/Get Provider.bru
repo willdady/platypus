@@ -5,16 +5,11 @@ meta {
 }
 
 get {
-  url: {{host}}/providers/:providerId
+  url: {{host}}/providers/:id
   body: none
   auth: inherit
 }
 
 params:path {
-  providerId: 
-}
-
-settings {
-  encodeUrl: true
-  timeout: 0
+  id: 
 }
