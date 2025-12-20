@@ -4,10 +4,10 @@ import * as React from "react";
 import { useRouter } from "next/navigation";
 import {
   BotMessageSquare,
-  Bot,
   Unplug,
   Wrench,
   Settings,
+  ArrowLeftRight,
   Home,
 } from "lucide-react";
 
@@ -55,11 +55,22 @@ export function CommandMenu({ orgId, workspaceId }: CommandMenuProps) {
           <CommandItem
             className="cursor-pointer"
             onSelect={() => {
-              runCommand(() => router.push("/"));
+              runCommand(() =>
+                router.push(`/${orgId}/workspace/${workspaceId}`),
+              );
             }}
           >
             <Home />
             <span>Home</span>
+          </CommandItem>
+          <CommandItem
+            className="cursor-pointer"
+            onSelect={() => {
+              runCommand(() => router.push("/"));
+            }}
+          >
+            <ArrowLeftRight />
+            <span>Switch Org</span>
           </CommandItem>
           <CommandItem
             className="cursor-pointer"
@@ -106,17 +117,6 @@ export function CommandMenu({ orgId, workspaceId }: CommandMenuProps) {
           >
             <Wrench />
             <span>MCP</span>
-          </CommandItem>
-          <CommandItem
-            className="cursor-pointer"
-            onSelect={() => {
-              runCommand(() =>
-                router.push(`/${orgId}/workspace/${workspaceId}/agents`),
-              );
-            }}
-          >
-            <Bot />
-            <span>Agents</span>
           </CommandItem>
         </CommandGroup>
       </CommandList>

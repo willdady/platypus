@@ -54,7 +54,7 @@ import {
   Plus,
   ClockFading,
   CalendarDays,
-  Home,
+  ArrowLeftRight,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Field, FieldLabel, FieldError } from "@/components/ui/field";
@@ -257,11 +257,6 @@ export function AppSidebar({
 
   const footerItems = [
     {
-      title: "Agents",
-      url: `/${orgId}/workspace/${workspaceId}/agents`,
-      icon: Bot,
-    },
-    {
       title: "Settings",
       url: `/${orgId}/workspace/${workspaceId}/settings`,
       icon: Settings,
@@ -320,7 +315,7 @@ export function AppSidebar({
                   </DropdownMenuItem>
                   <DropdownMenuItem asChild>
                     <Link className="cursor-pointer" href="/">
-                      <Home /> Home
+                      <ArrowLeftRight /> Switch Org
                     </Link>
                   </DropdownMenuItem>
                 </DropdownMenuGroup>

@@ -8,7 +8,9 @@ import {
 } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/app-sidebar";
 import { Kbd } from "@/components/ui/kbd";
-import { Search } from "lucide-react";
+import { Search, Home } from "lucide-react";
+import Link from "next/link";
+import { Button } from "@/components/ui/button";
 
 export default async function WorkspaceLayout({
   children,
@@ -35,7 +37,14 @@ export default async function WorkspaceLayout({
       <AppSidebar orgId={orgId} workspaceId={workspaceId} />
       <SidebarInset>
         <header className="flex justify-between p-2">
-          <SidebarTrigger className="cursor-pointer" />
+          <div className="flex items-center gap-2">
+            <SidebarTrigger className="cursor-pointer" />
+            <Button variant="ghost" size="icon" asChild className="size-7 cursor-pointer">
+              <Link href={`/${orgId}/workspace/${workspaceId}`}>
+                <Home />
+              </Link>
+            </Button>
+          </div>
           <div className="flex items-center gap-4">
             <Kbd className="text-sm font-sans">
               <Search className="size-4" /> ⌘K
