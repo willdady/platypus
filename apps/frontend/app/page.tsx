@@ -40,11 +40,18 @@ export default function Home() {
   }
 
   const organisations = data?.results || [];
+  const defaultOrgId =
+    organisations.length === 1 ? organisations[0].id : undefined;
 
   return (
     <div className="flex flex-col items-center justify-center min-h-screen p-8">
       <div className="w-full max-w-md space-y-12">
-        <Accordion type="single" collapsible className="w-full">
+        <Accordion
+          type="single"
+          collapsible
+          className="w-full"
+          defaultValue={defaultOrgId}
+        >
           {organisations.map((organisation) => (
             <AccordionItem key={organisation.id} value={organisation.id}>
               <AccordionTrigger className="hover:no-underline">

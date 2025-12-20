@@ -39,7 +39,12 @@ export default async function WorkspaceLayout({
         <header className="flex justify-between p-2">
           <div className="flex items-center gap-2">
             <SidebarTrigger className="cursor-pointer" />
-            <Button variant="ghost" size="icon" asChild className="size-7 cursor-pointer">
+            <Button
+              variant="ghost"
+              size="icon"
+              asChild
+              className="size-7 cursor-pointer"
+            >
               <Link href={`/${orgId}/workspace/${workspaceId}`}>
                 <Home />
               </Link>
