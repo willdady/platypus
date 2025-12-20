@@ -14,13 +14,10 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
   BotMessageSquare,
   EllipsisVertical,
   Pencil,
-  Plus,
-  TriangleAlert,
 } from "lucide-react";
 import { type Agent, type Provider } from "@agent-kit/schemas";
 import useSWR from "swr";
@@ -64,22 +61,7 @@ export const AgentsList = ({
   }
 
   if (!agents.length) {
-    return (
-      <div className="flex items-center justify-center h-[calc(100vh-2.75rem)]">
-        <Alert className="min-w-sm max-w-md">
-          <TriangleAlert />
-          <AlertTitle>No agents configured</AlertTitle>
-          <AlertDescription>
-            <p className="mb-2">Start by creating your first agent.</p>
-            <Button size="sm" asChild>
-              <Link href={`/${orgId}/workspace/${workspaceId}/agents/create`}>
-                <Plus /> Add agent
-              </Link>
-            </Button>
-          </AlertDescription>
-        </Alert>
-      </div>
-    );
+    return null;
   }
 
   return (
