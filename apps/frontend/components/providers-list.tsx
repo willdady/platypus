@@ -1,6 +1,6 @@
 "use client";
 
-import { Provider } from "@agent-kit/schemas";
+import { Provider } from "@platypus/schemas";
 import { Item, ItemActions, ItemContent, ItemTitle } from "./ui/item";
 import useSWR from "swr";
 import { cn, fetcher } from "../lib/utils";

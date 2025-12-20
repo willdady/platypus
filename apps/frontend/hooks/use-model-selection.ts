@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Provider, Agent, Chat } from "@agent-kit/schemas";
+import { Provider, Agent, Chat } from "@platypus/schemas";
 
 export interface ModelSelection {
   agentId: string;

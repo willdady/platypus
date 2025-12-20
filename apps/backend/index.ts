@@ -2,6 +2,8 @@ import { serve } from "@hono/node-server";
 import app from "./src/server.ts";
 import { db } from "./src/index.ts";
 import { organisation, workspace } from "./src/db/schema.ts";
+import { nanoid } from "nanoid";
+import { count } from "drizzle-orm";
 
 const PORT = process.env.PORT || "3000";
 
@@ -10,22 +12,26 @@ const main = async () => {
   console.log(`Serving on port: ${PORT}`);
 
   await exponentialBackoff(async () => {
-    console.log("Upserting default organisation...");
-    await db
-      .insert(organisation)
-      .values({ id: "default", name: "Default" })
-      .onConflictDoUpdate({
-        target: organisation.id,
-        set: { name: "Default" },
-      });
-    console.log("- Default organisation upserted.");
+    const [orgCount] = await db.select({ value: count() }).from(organisation);
 
-    console.log("Upserting default workspace...");
-    await db
-      .insert(workspace)
-      .values({ id: "default", organisationId: "default", name: "Default" })
-      .onConflictDoUpdate({ target: workspace.id, set: { name: "Default" } });
-    console.log("- Default workspace upserted.");
+    if (orgCount.value === 0) {
+      console.log("No organisations found. Creating initial organisation...");
+      const orgId = nanoid();
+      await db.insert(organisation).values({
+        id: orgId,
+        name: "Default Organisation",
+      });
+      console.log(`- Organisation created: ${orgId}`);
+
+      console.log("Creating initial workspace...");
+      const workspaceId = nanoid();
+      await db.insert(workspace).values({
+        id: workspaceId,
+        organisationId: orgId,
+        name: "Default Workspace",
+      });
+      console.log(`- Workspace created: ${workspaceId}`);
+    }
   });
 
   serve({

@@ -1,6 +1,6 @@
 ## Project Overview
 
-Agent Kit is a full-stack application for building and managing AI agents with tool support and multi-provider capabilities. It uses a monorepo structure with pnpm workspaces and Turborepo.
+Platypus is a full-stack application for building and managing AI agents with tool support and multi-provider capabilities. It uses a monorepo structure with pnpm workspaces and Turborepo.
 
 ## Development Commands
 

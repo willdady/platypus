@@ -1,7 +1,7 @@
 {
-  "name": "@agent-kit/schemas",
+  "name": "@platypus/schemas",
   "version": "0.1.0",
-  "description": "REST backend for AgentKit",
+  "description": "REST backend for Platypus",
   "license": "MIT",
   "author": "Will Dady",
   "type": "module",

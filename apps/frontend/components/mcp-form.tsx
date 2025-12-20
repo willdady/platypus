@@ -30,7 +30,7 @@ import {
 } from "@/components/ui/dialog";
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { type MCP } from "@agent-kit/schemas";
+import { type MCP } from "@platypus/schemas";
 import useSWR from "swr";
 import { parseValidationErrors } from "@/lib/utils";
 import { useBackendUrl } from "@/app/client-context";

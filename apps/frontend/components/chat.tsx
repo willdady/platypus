@@ -27,7 +27,7 @@ import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport } from "ai";
 import { GlobeIcon, Info, Settings2 } from "lucide-react";
 import { useRef, useEffect, useState } from "react";
-import { Chat as ChatType, Provider, Agent, ToolSet } from "@agent-kit/schemas";
+import { Chat as ChatType, Provider, Agent, ToolSet } from "@platypus/schemas";
 import useSWR from "swr";
 import { fetcher } from "@/lib/utils";
 import { useChatSettings } from "@/hooks/use-chat-settings";

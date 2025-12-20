@@ -1,6 +1,6 @@
 import { AgentForm } from "@/components/agent-form";
 import { BackButton } from "@/components/back-button";
-import { type ToolSet } from "@agent-kit/schemas";
+import { type ToolSet } from "@platypus/schemas";
 
 const AgentEditPage = async ({
   params,

@@ -44,7 +44,7 @@ COPY packages/schemas ./packages/schemas
 ENV NEXT_TELEMETRY_DISABLED=1
 
 # Build the frontend application
-RUN pnpm turbo build --filter=@agent-kit/frontend
+RUN pnpm turbo build --filter=@platypus/frontend
 
 # Production image, copy all the files and run next
 FROM base AS runner

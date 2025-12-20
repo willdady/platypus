@@ -1,14 +1,14 @@
 {
-  "name": "agent-kit",
+  "name": "platypus",
   "private": true,
   "scripts": {
     "build": "turbo run build",
     "build-docker": "turbo run build-docker",
-    "cleanup-docker": "docker rmi -f $(docker images agent-kit/frontend --format \"{{.Repository}}:{{.Tag}}\" | grep -v \"latest\" | xargs) && docker rmi -f $(docker images agent-kit/backend --format \"{{.Repository}}:{{.Tag}}\" | grep -v \"latest\" | xargs)",
+    "cleanup-docker": "docker rmi -f $(docker images willdady/platypus-frontend --format \"{{.Repository}}:{{.Tag}}\" | grep -v \"latest\" | xargs) && docker rmi -f $(docker images willdady/platypus-backend --format \"{{.Repository}}:{{.Tag}}\" | grep -v \"latest\" | xargs)",
     "dev": "turbo run dev",
-    "drizzle-kit-push": "turbo run drizzle-kit-push -F @agent-kit/backend",
-    "drizzle-kit-generate": "turbo run drizzle-kit-generate -F @agent-kit/backend",
-    "drizzle-kit-migrate": "turbo run drizzle-kit-migrate -F @agent-kit/backend",
+    "drizzle-kit-push": "turbo run drizzle-kit-push -F @platypus/backend",
+    "drizzle-kit-generate": "turbo run drizzle-kit-generate -F @platypus/backend",
+    "drizzle-kit-migrate": "turbo run drizzle-kit-migrate -F @platypus/backend",
     "format": "prettier --write \"**/*.{ts,tsx,md}\""
   },
   "devDependencies": {

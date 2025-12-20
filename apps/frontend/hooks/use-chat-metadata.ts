@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 import { UIMessage } from "ai";
-import { Agent } from "@agent-kit/schemas";
+import { Agent } from "@platypus/schemas";
 import { mutate } from "swr";
 
 export const useChatMetadata = (

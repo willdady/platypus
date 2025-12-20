@@ -20,7 +20,7 @@ import { useBackendUrl } from "@/app/client-context";
 import {
   type Workspace as WorkspaceType,
   type Organisation,
-} from "@agent-kit/schemas";
+} from "@platypus/schemas";
 import { useParams } from "next/navigation";
 import { TagCloud } from "@/components/tag-cloud";
 

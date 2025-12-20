@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Chat } from "@agent-kit/schemas";
+import { Chat } from "@platypus/schemas";
 
 export interface ChatSettings {
   systemPrompt: string;
