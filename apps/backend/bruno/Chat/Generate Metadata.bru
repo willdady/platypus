@@ -1,28 +1,25 @@
 meta {
   name: Generate Metadata
   type: http
-  seq: 5
+  seq: 6
 }
 
 post {
-  url: {{host}}/chat/:id/generate-metadata?workspaceId={{workspaceId}}
+  url: {{host}}/chat/:id/generate-metadata?workspaceId=default
   body: json
-  auth: none
+  auth: inherit
+}
+
+params:query {
+  workspaceId: default
+}
+
+params:path {
+  id: 
 }
 
 body:json {
   {
     "providerId": "provider-123"
   }
-}
-
-query:json {
-  {
-    "workspaceId": "default"
-  }
-}
-
-settings {
-  encodeUrl: true
-  timeout: 0
 }

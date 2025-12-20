@@ -5,13 +5,13 @@ meta {
 }
 
 put {
-  url: {{host}}/mcps/:mcpId
+  url: {{host}}/mcps/:id
   body: json
   auth: inherit
 }
 
 params:path {
-  mcpId:
+  id: 
 }
 
 body:json {
@@ -21,9 +21,4 @@ body:json {
     "authType": "Bearer",
     "bearerToken": "updated-token"
   }
-}
-
-settings {
-  encodeUrl: true
-  timeout: 0
 }

@@ -1,22 +1,15 @@
 meta {
   name: List Agents
   type: http
-  seq: 4
+  seq: 1
 }
 
 get {
-  url: {{host}}/agents
+  url: {{host}}/agents?workspaceId=default
   body: none
   auth: inherit
 }
 
-query:json {
-  {
-    "workspaceId": "default"
-  }
-}
-
-settings {
-  encodeUrl: true
-  timeout: 0
+params:query {
+  workspaceId: default
 }

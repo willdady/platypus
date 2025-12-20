@@ -5,25 +5,21 @@ meta {
 }
 
 put {
-  url: {{baseUrl}}/chat/:id?workspaceId={{workspaceId}}
+  url: {{host}}/chat/:id?workspaceId=default
   body: json
-  auth: none
+  auth: inherit
+}
+
+params:query {
+  workspaceId: default
+}
+
+params:path {
+  id: 
 }
 
 body:json {
   {
-    "workspaceId": "default",
     "title": "My Renamed Chat"
   }
-}
-
-query:json {
-  {
-    "workspaceId": "default"
-  }
-}
-
-settings {
-  encodeUrl: true
-  timeout: 0
 }
