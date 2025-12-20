@@ -27,7 +27,7 @@ import useSWR from "swr";
 import { fetcher } from "@/lib/utils";
 import Link from "next/link";
 import { useBackendUrl } from "@/app/client-context";
-import { NoProvidersAlert } from "@/components/no-providers-alert";
+import { NoProvidersEmptyState } from "@/components/no-providers-empty-state";
 
 export const AgentsList = ({
   orgId,
@@ -55,8 +55,10 @@ export const AgentsList = ({
 
   if (!providers.length) {
     return (
-      <div className="h-[calc(100vh-2.75rem)]">
-        <NoProvidersAlert orgId={orgId} workspaceId={workspaceId} />
+      <div className="flex items-center justify-center h-[calc(100vh-2.75rem)] p-8">
+        <div className="w-full xl:w-4/5 max-w-4xl">
+          <NoProvidersEmptyState orgId={orgId} workspaceId={workspaceId} />
+        </div>
       </div>
     );
   }
