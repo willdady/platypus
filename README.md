@@ -1,3 +1,7 @@
+<div style="display: flex; justify-content: center; align-items: center; margin-bottom: 2rem;">
+  <img src="assets/platypus.png" width="198" height="198" />
+</div>
+
 # Platypus
 
 **A modern, multi-tenant platform for building and managing AI Agents.**
@@ -84,3 +88,7 @@ The fastest way to get Platypus running is using Docker Compose.
 ## 🤝 Contributing
 
 Contributions are welcome! Please feel free to submit a Pull Request.
+
+---
+
+Platypus logo by [Thiings.co](https://www.thiings.co/things)
