@@ -2,6 +2,9 @@
   "$schema": "https://turborepo.com/schema.json",
   "ui": "tui",
   "tasks": {
+    "prebuild": {
+      "cache": false
+    },
     "build": {
       "dependsOn": ["^build"],
       "inputs": ["$TURBO_DEFAULT$", ".env*"],
@@ -11,6 +14,7 @@
       "cache": false
     },
     "dev": {
+      "dependsOn": ["prebuild"],
       "cache": false,
       "persistent": true,
       "with": ["start-local-db"]
