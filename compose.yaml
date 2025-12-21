@@ -16,7 +16,7 @@ services:
       retries: 5
 
   backend:
-    image: platypus/backend:latest
+    image: willdady/platypus-backend:latest
     environment:
       NODE_OPTIONS: "--disable-warning=ExperimentalWarning"
       PORT: "4000"
@@ -38,7 +38,7 @@ services:
       - "host.docker.internal:host-gateway"
 
   frontend:
-    image: platypus/frontend:latest
+    image: willdady/platypus-frontend:latest
     environment:
       BACKEND_URL: http://localhost:4000
       INTERNAL_BACKEND_URL: http://backend:4000
