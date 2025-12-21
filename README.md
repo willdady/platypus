@@ -1,6 +1,4 @@
-<div style="display: flex; justify-content: center; align-items: center; margin-bottom: 2rem;">
-  <img src="assets/platypus.png" width="198" height="198" />
-</div>
+![](assets/platypus_256x256.png)
 
 # Platypus
 
