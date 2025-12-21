@@ -1,6 +1,6 @@
 "use client";
 
-import type { Organisation } from "@agent-kit/schemas";
+import type { Organisation } from "@platypus/schemas";
 import { WorkspaceList } from "@/components/workspace-list";
 import { Button } from "@/components/ui/button";
 import {

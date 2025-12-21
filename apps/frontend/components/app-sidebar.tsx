@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import useSWR, { useSWRConfig } from "swr";
 import { fetcher } from "@/lib/utils";
-import type { Workspace, ChatListItem, Organisation } from "@agent-kit/schemas";
+import type { Workspace, ChatListItem, Organisation } from "@platypus/schemas";
 import {
   Sidebar,
   SidebarContent,

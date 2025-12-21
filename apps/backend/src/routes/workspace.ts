@@ -6,7 +6,7 @@ import { workspace as workspaceTable } from "../db/schema.ts";
 import {
   workspaceCreateSchema,
   workspaceUpdateSchema,
-} from "@agent-kit/schemas";
+} from "@platypus/schemas";
 import { eq } from "drizzle-orm";
 import { organisationMiddleware } from "../middleware.ts";
 

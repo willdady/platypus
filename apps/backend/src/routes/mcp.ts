@@ -8,7 +8,7 @@ import {
   mcpCreateSchema,
   mcpUpdateSchema,
   mcpTestSchema,
-} from "@agent-kit/schemas";
+} from "@platypus/schemas";
 import { eq } from "drizzle-orm";
 
 const mcp = new Hono();

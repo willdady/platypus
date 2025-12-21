@@ -1,65 +1,86 @@
-# Agent Kit
+# Platypus
 
-## Technology
+**A modern, multi-tenant platform for building and managing AI Agents.**
 
-### Backend
+Platypus is an open-source, full-stack application designed to help you build, test, and deploy AI agents. Built with a focus on extensibility and modern web standards, Platypus allows you to create agents that can reason, use tools, and interact with the world.
 
-- Hono.js
-- Drizzle ORM
-- Postgres 17
-- AI SDK
+> 🚧 **Note:** Platypus is currently a Work In Progress. Features are being added rapidly. Authentication and Authorization are coming soon.
 
-### Frontend
+## ✨ Key Features
 
-- Next.js
-- AI SDK
+- **🏢 Multi-Tenancy:** Built-in support for Organisations and Workspaces to isolate data and manage teams.
+- **🤖 Agentic Workflows:** Create sophisticated agents with custom system prompts, model configurations, and tool assignments.
+- **🛠️ Extensible Tool System:** Register custom tools that agents can invoke intelligently to perform complex tasks.
+- **🔌 MCP Support:** First-class support for the **Model Context Protocol** (MCP), allowing agents to securely connect to local and remote data sources.
+- **⚡ Modern Tech Stack:** Built on the bleeding edge with **Next.js**, **Hono.js**, **Drizzle ORM**, and **Tailwind CSS**.
+- **🌐 Provider Agnostic:** Powered by the Vercel AI SDK, supporting OpenAI, Anthropic, Google, Amazon Bedrock, and more via OpenRouter.
 
-## Development
+## 🏗️ Architecture
+
+Platypus is a monorepo managed by [Turborepo](https://turbo.build/), ensuring a fast and efficient development workflow.
+
+- **`apps/frontend`**: A responsive web interface built with Next.js (App Router), Radix UI, and Tailwind. It uses the AI SDK for real-time streaming responses.
+- **`apps/backend`**: A high-performance REST API built with Hono.js running on Node.js. It handles agent logic, tool execution, and database interactions.
+- **`packages/schemas`**: Shared Zod schemas used by both frontend and backend for end-to-end type safety.
+
+## 🚀 Quick Start (Docker)
+
+The fastest way to get Platypus running is using Docker Compose.
+
+1.  **Install dependencies:**
+    ```bash
+    pnpm install
+    ```
+
+2.  **Build Docker images:**
+    ```bash
+    pnpm run build-docker
+    ```
+
+3.  **Start the application:**
+    ```bash
+    docker compose up -d
+    ```
+
+## 🛠️ Local Development
 
 ### Prerequisites
 
-The following software is required:
-
-- Docker
-- Node.js v24+
-- pnpm
-
-In addition to this you MUST have access to an AI provider.
-Refer to the following [Setup](/#Setup) section for how to configure your provider credentials.
+- **Docker** (for the local Postgres database)
+- **Node.js v24+**
+- **pnpm**
+- An AI Provider API Key (e.g., OpenRouter, OpenAI)
 
 ### Setup
 
-Install dependencies.
+1.  **Install dependencies:**
+    ```bash
+    pnpm install
+    ```
 
-```bash
-pnpm install
-```
+2.  **Configure Environment:**
+    Create `.env` files for both apps:
+    ```bash
+    cp apps/frontend/.example.env apps/frontend/.env
+    cp apps/backend/.example.env apps/backend/.env
+    ```
 
-You MUST create a `.env` in both the frontend and backend applications.
-This should be done by copying each example file like so:
+3.  **Start Development Server:**
+    This command starts the frontend, backend, and a local Postgres container.
+    ```bash
+    pnpm dev
+    ```
 
-```bash
-cp apps/frontend/.example.env apps/frontend/.env
-cp apps/backend/.example.env apps/backend/.env
-```
+4.  **Initialize Database:**
+    Apply the schema to your local database (ensure `pnpm dev` is running first).
+    ```bash
+    pnpm drizzle-kit-push
+    ```
 
-### Start dev environment.
+## 🗺️ Roadmap
 
-```bash
-pnpm dev
-```
+- [ ] Authentication & Authorization
 
-### Push database changes
+## 🤝 Contributing
 
-Database tables are defined in `apps/backend/src/db/schema.ts`.
-After making database changes apply them to the local database with the below command.
-Note you MUST already have `turbo dev` running.
-
-```bash
-pnpm drizzle-kit-push
-```
-
-## Known issues / Gotcha's
-
-- Currently, Postgres 18 is not supported due to [this issue](https://github.com/drizzle-team/drizzle-orm/issues/4944) with Drizzle ORM.
-- Need to be careful that the **same** version of AI SDK is used for the backend and frontend apps otherwise you will experience confusing errors.
+Contributions are welcome! Please feel free to submit a Pull Request.

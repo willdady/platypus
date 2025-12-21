@@ -19,7 +19,7 @@ import {
   EllipsisVertical,
   Pencil,
 } from "lucide-react";
-import { type Agent, type Provider } from "@agent-kit/schemas";
+import { type Agent, type Provider } from "@platypus/schemas";
 import useSWR from "swr";
 import { fetcher } from "@/lib/utils";
 import Link from "next/link";

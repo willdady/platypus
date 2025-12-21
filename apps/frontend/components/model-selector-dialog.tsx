@@ -1,4 +1,4 @@
-import { Agent, Provider } from "@agent-kit/schemas";
+import { Agent, Provider } from "@platypus/schemas";
 import {
   ModelSelector,
   ModelSelectorContent,

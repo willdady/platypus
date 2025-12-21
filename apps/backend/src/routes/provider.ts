@@ -3,7 +3,7 @@ import { sValidator } from "@hono/standard-validator";
 import { nanoid } from "nanoid";
 import { db } from "../index.ts";
 import { provider as providerTable } from "../db/schema.ts";
-import { providerCreateSchema, providerUpdateSchema } from "@agent-kit/schemas";
+import { providerCreateSchema, providerUpdateSchema } from "@platypus/schemas";
 import { eq } from "drizzle-orm";
 import { dedupeArray } from "../utils.ts";
 

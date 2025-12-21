@@ -1,6 +1,6 @@
 "use client";
 
-import { Workspace } from "@agent-kit/schemas";
+import { Workspace } from "@platypus/schemas";
 import {
   Item,
   ItemActions,

@@ -6,7 +6,7 @@ import { organisation as organisationTable } from "../db/schema.ts";
 import {
   organisationCreateSchema,
   organisationUpdateSchema,
-} from "@agent-kit/schemas";
+} from "@platypus/schemas";
 import { eq } from "drizzle-orm";
 
 const organisation = new Hono();

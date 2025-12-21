@@ -39,7 +39,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { type ToolSet, type Agent, type Provider } from "@agent-kit/schemas";
+import { type ToolSet, type Agent, type Provider } from "@platypus/schemas";
 import useSWR from "swr";
 import { fetcher, parseValidationErrors } from "@/lib/utils";
 import { useBackendUrl } from "@/app/client-context";

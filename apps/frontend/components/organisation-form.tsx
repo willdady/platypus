@@ -19,7 +19,7 @@ import {
 } from "@/components/ui/dialog";
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { type Organisation } from "@agent-kit/schemas";
+import { type Organisation } from "@platypus/schemas";
 import { fetcher, parseValidationErrors } from "@/lib/utils";
 import { useBackendUrl } from "@/app/client-context";
 import { Trash2 } from "lucide-react";

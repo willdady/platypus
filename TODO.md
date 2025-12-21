@@ -24,4 +24,4 @@
 [ ] There should be a way to export and import agents, preferably as JSON.
 [ ] Add AuthZ (better-auth)
 [x] The root workspace page needs to be designed
-[ ] Pick a better name than Agent Kit as it's already used by Open AI
+[x] Pick a better name than Agent Kit as it's already used by Open AI

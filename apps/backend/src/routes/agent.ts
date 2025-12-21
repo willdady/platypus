@@ -4,7 +4,7 @@ import { z } from "zod";
 import { nanoid } from "nanoid";
 import { db } from "../index.ts";
 import { agent as agentTable } from "../db/schema.ts";
-import { agentCreateSchema, agentUpdateSchema } from "@agent-kit/schemas";
+import { agentCreateSchema, agentUpdateSchema } from "@platypus/schemas";
 import { eq } from "drizzle-orm";
 import { dedupeArray } from "../utils.ts";
 
