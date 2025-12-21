@@ -8,7 +8,7 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
     networks:
-      - agent-kit-network
+      - platypus-network
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 5s
@@ -16,7 +16,7 @@ services:
       retries: 5
 
   backend:
-    image: agent-kit/backend:latest
+    image: platypus/backend:latest
     environment:
       NODE_OPTIONS: "--disable-warning=ExperimentalWarning"
       PORT: "4000"
@@ -28,7 +28,7 @@ services:
       database:
         condition: service_healthy
     networks:
-      - agent-kit-network
+      - platypus-network
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://localhost:4000/health').then(r => r.ok ? process.exit(0) : process.exit(1)).catch(() => process.exit(1))"]
       interval: 5s
@@ -38,7 +38,7 @@ services:
       - "host.docker.internal:host-gateway"
 
   frontend:
-    image: agent-kit/frontend:latest
+    image: platypus/frontend:latest
     environment:
       BACKEND_URL: http://localhost:4000
       INTERNAL_BACKEND_URL: http://backend:4000
@@ -48,11 +48,11 @@ services:
       backend:
         condition: service_healthy
     networks:
-      - agent-kit-network
+      - platypus-network
 
 volumes:
   postgres_data:
 
 networks:
-  agent-kit-network:
+  platypus-network:
     driver: bridge

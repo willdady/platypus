@@ -1,6 +1,6 @@
 {
   "version": "1",
-  "name": "agent-kit-bruno",
+  "name": "platypus-bruno",
   "type": "collection",
   "ignore": [
     "node_modules",

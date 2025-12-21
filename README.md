@@ -1,4 +1,4 @@
-# Agent Kit
+# Platypus
 
 ## Technology
 

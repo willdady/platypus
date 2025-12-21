@@ -32,7 +32,7 @@ import {
   chatSubmitSchema,
   chatUpdateSchema,
   type Provider,
-} from "@agent-kit/schemas";
+} from "@platypus/schemas";
 import { and, desc, eq, sql } from "drizzle-orm";
 
 // --- Types ---

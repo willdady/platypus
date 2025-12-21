@@ -16,7 +16,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Agent Kit",
+  title: "Platypus",
   description:
     "A rich web interface for interacting with AI chatbots and agents",
 };

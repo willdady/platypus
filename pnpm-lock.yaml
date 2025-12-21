@@ -20,7 +20,7 @@ importers:
 
   apps/backend:
     dependencies:
-      '@agent-kit/schemas':
+      '@platypus/schemas':
         specifier: workspace:*
         version: link:../../packages/schemas
       '@ai-sdk/amazon-bedrock':
@@ -75,7 +75,7 @@ importers:
 
   apps/frontend:
     dependencies:
-      '@agent-kit/schemas':
+      '@platypus/schemas':
         specifier: workspace:*
         version: link:../../packages/schemas
       '@ai-sdk/react':

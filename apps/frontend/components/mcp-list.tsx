@@ -1,6 +1,6 @@
 "use client";
 
-import { MCP } from "@agent-kit/schemas";
+import { MCP } from "@platypus/schemas";
 import { Item, ItemActions, ItemContent, ItemTitle } from "./ui/item";
 import useSWR from "swr";
 import { cn, fetcher } from "../lib/utils";

@@ -1,4 +1,4 @@
-# Agent Kit Backend
+# Platypus Backend
 
 ## Development
 
