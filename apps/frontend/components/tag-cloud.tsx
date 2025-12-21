@@ -1,7 +1,7 @@
 "use client";
 
 import useSWR from "swr";
-import { fetcher } from "@/lib/utils";
+import { fetcher, joinUrl } from "@/lib/utils";
 import { useBackendUrl } from "@/app/client-context";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -19,8 +19,10 @@ interface TagData {
 export const TagCloud = ({ workspaceId }: TagCloudProps) => {
   const backendUrl = useBackendUrl();
   const { data, isLoading } = useSWR<{ results: TagData[] }>(
-    `${backendUrl}/chat/tags?workspaceId=${workspaceId}`,
-    fetcher
+    backendUrl
+      ? joinUrl(backendUrl, `/chat/tags?workspaceId=${workspaceId}`)
+      : null,
+    fetcher,
   );
 
   if (isLoading) {
@@ -58,7 +60,9 @@ export const TagCloud = ({ workspaceId }: TagCloudProps) => {
     // Linear scale between 0.75rem (12px) and 1.375rem (22px)
     const minSize = 0.75;
     const maxSize = 1.375;
-    const size = minSize + ((count - minCount) / (maxCount - minCount)) * (maxSize - minSize);
+    const size =
+      minSize +
+      ((count - minCount) / (maxCount - minCount)) * (maxSize - minSize);
     return `${size}rem`;
   };
 

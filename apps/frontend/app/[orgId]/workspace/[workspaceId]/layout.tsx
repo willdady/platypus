@@ -11,6 +11,7 @@ import { Kbd } from "@/components/ui/kbd";
 import { Search, Home } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
+import { joinUrl } from "@/lib/utils";
 
 export default async function WorkspaceLayout({
   children,
@@ -23,8 +24,10 @@ export default async function WorkspaceLayout({
 
   // Use internal URL for SSR, fallback to BACKEND_URL for local dev
   const backendUrl =
-    process.env.INTERNAL_BACKEND_URL || process.env.BACKEND_URL;
-  const response = await fetch(`${backendUrl}/workspaces/${workspaceId}`);
+    process.env.INTERNAL_BACKEND_URL || process.env.BACKEND_URL || "";
+  const response = await fetch(
+    joinUrl(backendUrl, `/workspaces/${workspaceId}`),
+  );
 
   if (response.status === 404) {
     notFound();

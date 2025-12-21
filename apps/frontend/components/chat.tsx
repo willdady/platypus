@@ -29,7 +29,7 @@ import { GlobeIcon, Info, Settings2 } from "lucide-react";
 import { useRef, useEffect, useState } from "react";
 import { Chat as ChatType, Provider, Agent, ToolSet } from "@platypus/schemas";
 import useSWR from "swr";
-import { fetcher } from "@/lib/utils";
+import { fetcher, joinUrl } from "@/lib/utils";
 import { useChatSettings } from "@/hooks/use-chat-settings";
 import { useModelSelection } from "@/hooks/use-model-selection";
 import { useMessageEditing } from "@/hooks/use-message-editing";
@@ -63,7 +63,9 @@ export const Chat = ({
 
   // Fetch providers
   const { data: providersData, isLoading } = useSWR<{ results: Provider[] }>(
-    `${backendUrl}/providers?workspaceId=${workspaceId}`,
+    backendUrl
+      ? joinUrl(backendUrl, `/providers?workspaceId=${workspaceId}`)
+      : null,
     fetcher,
   );
 
@@ -71,7 +73,9 @@ export const Chat = ({
 
   // Fetch agents
   const { data: agentsData } = useSWR<{ results: Agent[] }>(
-    `${backendUrl}/agents?workspaceId=${workspaceId}`,
+    backendUrl
+      ? joinUrl(backendUrl, `/agents?workspaceId=${workspaceId}`)
+      : null,
     fetcher,
   );
 
@@ -79,7 +83,9 @@ export const Chat = ({
 
   // Fetch tool sets
   const { data: toolSetsData } = useSWR<{ results: ToolSet[] }>(
-    `${backendUrl}/tools?workspaceId=${workspaceId}`,
+    backendUrl
+      ? joinUrl(backendUrl, `/tools?workspaceId=${workspaceId}`)
+      : null,
     fetcher,
   );
 
@@ -87,7 +93,9 @@ export const Chat = ({
 
   // Fetch existing chat data
   const { data: chatData } = useSWR<ChatType>(
-    `${backendUrl}/chat/${chatId}?workspaceId=${workspaceId}`,
+    backendUrl
+      ? joinUrl(backendUrl, `/chat/${chatId}?workspaceId=${workspaceId}`)
+      : null,
     fetcher,
   );
 
@@ -95,7 +103,7 @@ export const Chat = ({
     useChat({
       id: chatId,
       transport: new DefaultChatTransport({
-        api: `${backendUrl}/chat`,
+        api: joinUrl(backendUrl || "", "/chat"),
         body: {
           orgId,
           workspaceId,

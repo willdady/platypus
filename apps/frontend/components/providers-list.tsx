@@ -3,7 +3,7 @@
 import { Provider } from "@platypus/schemas";
 import { Item, ItemActions, ItemContent, ItemTitle } from "./ui/item";
 import useSWR from "swr";
-import { cn, fetcher } from "../lib/utils";
+import { cn, fetcher, joinUrl } from "../lib/utils";
 import { Pencil, TriangleAlert } from "lucide-react";
 import Link from "next/link";
 import { Alert, AlertDescription, AlertTitle } from "./ui/alert";
@@ -21,7 +21,9 @@ const ProvidersList = ({
   const backendUrl = useBackendUrl();
 
   const { data, error, isLoading } = useSWR<{ results: Provider[] }>(
-    `${backendUrl}/providers?workspaceId=${workspaceId}`,
+    backendUrl
+      ? joinUrl(backendUrl, `/providers?workspaceId=${workspaceId}`)
+      : null,
     fetcher,
   );
 

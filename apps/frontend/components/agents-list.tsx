@@ -14,14 +14,10 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import {
-  BotMessageSquare,
-  EllipsisVertical,
-  Pencil,
-} from "lucide-react";
+import { BotMessageSquare, EllipsisVertical, Pencil } from "lucide-react";
 import { type Agent, type Provider } from "@platypus/schemas";
 import useSWR from "swr";
-import { fetcher } from "@/lib/utils";
+import { fetcher, joinUrl } from "@/lib/utils";
 import Link from "next/link";
 import { useBackendUrl } from "@/app/client-context";
 import { NoProvidersEmptyState } from "@/components/no-providers-empty-state";
@@ -37,11 +33,21 @@ export const AgentsList = ({
 
   const { data: agentsData, isLoading: isLoadingAgents } = useSWR<{
     results: Agent[];
-  }>(`${backendUrl}/agents?workspaceId=${workspaceId}`, fetcher);
+  }>(
+    backendUrl
+      ? joinUrl(backendUrl, `/agents?workspaceId=${workspaceId}`)
+      : null,
+    fetcher,
+  );
 
   const { data: providersData, isLoading: isLoadingProviders } = useSWR<{
     results: Provider[];
-  }>(`${backendUrl}/providers?workspaceId=${workspaceId}`, fetcher);
+  }>(
+    backendUrl
+      ? joinUrl(backendUrl, `/providers?workspaceId=${workspaceId}`)
+      : null,
+    fetcher,
+  );
 
   const agents = agentsData?.results || [];
   const providers = providersData?.results || [];

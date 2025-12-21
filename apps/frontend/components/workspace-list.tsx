@@ -9,7 +9,7 @@ import {
   ItemTitle,
 } from "./ui/item";
 import useSWR from "swr";
-import { cn, fetcher } from "../lib/utils";
+import { cn, fetcher, joinUrl } from "../lib/utils";
 import { ChevronRight, FolderClosed } from "lucide-react";
 import Link from "next/link";
 import { useBackendUrl } from "@/app/client-context";
@@ -24,7 +24,7 @@ const WorkspaceList = ({
   const backendUrl = useBackendUrl();
 
   const { data, error, isLoading } = useSWR<{ results: Workspace[] }>(
-    `${backendUrl}/workspaces?orgId=${orgId}`,
+    backendUrl ? joinUrl(backendUrl, `/workspaces?orgId=${orgId}`) : null,
     fetcher,
   );
 

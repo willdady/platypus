@@ -10,17 +10,32 @@ import {
   AccordionTrigger,
 } from "@/components/ui/accordion";
 import Link from "next/link";
-import { Building, Plus, Settings } from "lucide-react";
+import { AlertCircle, Building, Plus, Settings } from "lucide-react";
 import useSWR from "swr";
-import { fetcher } from "@/lib/utils";
+import { fetcher, joinUrl } from "@/lib/utils";
 import { useBackendUrl } from "./client-context";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
 export default function Home() {
   const backendUrl = useBackendUrl();
   const { data, error, isLoading } = useSWR<{ results: Organisation[] }>(
-    `${backendUrl}/organisations`,
+    backendUrl ? joinUrl(backendUrl, "/organisations") : null,
     fetcher,
   );
+
+  if (!backendUrl) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-screen p-8">
+        <Alert variant="destructive" className="max-w-md">
+          <AlertCircle className="h-4 w-4" />
+          <AlertTitle>Configuration Error</AlertTitle>
+          <AlertDescription>
+            The <code>BACKEND_URL</code> environment variable is not set.
+          </AlertDescription>
+        </Alert>
+      </div>
+    );
+  }
 
   if (isLoading) {
     return (

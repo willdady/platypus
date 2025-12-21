@@ -1,6 +1,7 @@
 import { AgentForm } from "@/components/agent-form";
 import { BackButton } from "@/components/back-button";
 import { type ToolSet } from "@platypus/schemas";
+import { joinUrl } from "@/lib/utils";
 
 const AgentEditPage = async ({
   params,
@@ -15,7 +16,7 @@ const AgentEditPage = async ({
 
   // Fetch tool sets from the server
   const [toolSetsResponse] = await Promise.all([
-    fetch(`${backendUrl}/tools?workspaceId=${workspaceId}`),
+    fetch(joinUrl(backendUrl || "", `/tools?workspaceId=${workspaceId}`)),
   ]);
 
   const toolSetsData = await toolSetsResponse.json();

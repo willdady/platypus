@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 import { UIMessage } from "ai";
 import { Agent } from "@platypus/schemas";
 import { mutate } from "swr";
+import { joinUrl } from "@/lib/utils";
 
 export const useChatMetadata = (
   messages: UIMessage[],
@@ -27,7 +28,7 @@ export const useChatMetadata = (
     if (messages.length === 2 && !hasMutatedRef.current && status === "ready") {
       hasMutatedRef.current = true;
       // First, revalidate chat data to ensure we have the latest chat record from the backend
-      fetch(`${backendUrl}/chat/${chatId}?workspaceId=${workspaceId}`)
+      fetch(joinUrl(backendUrl, `/chat/${chatId}?workspaceId=${workspaceId}`))
         .then((res) => res.json())
         .then((freshChatData) => {
           // Only generate title if the chat has "Untitled" as its title
@@ -51,7 +52,10 @@ export const useChatMetadata = (
             if (providerIdForMetadata) {
               // Call generate-metadata endpoint
               fetch(
-                `${backendUrl}/chat/${chatId}/generate-metadata?workspaceId=${workspaceId}`,
+                joinUrl(
+                  backendUrl,
+                  `/chat/${chatId}/generate-metadata?workspaceId=${workspaceId}`,
+                ),
                 {
                   method: "POST",
                   headers: {
@@ -62,7 +66,9 @@ export const useChatMetadata = (
               )
                 .then(() => {
                   // Revalidate the chat list
-                  mutate(`${backendUrl}/chat?workspaceId=${workspaceId}`);
+                  mutate(
+                    joinUrl(backendUrl, `/chat?workspaceId=${workspaceId}`),
+                  );
                 })
                 .catch((error) => {
                   console.error("Failed to generate chat metadata:", error);

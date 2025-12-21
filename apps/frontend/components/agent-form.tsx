@@ -41,7 +41,7 @@ import {
 } from "@/components/ui/select";
 import { type ToolSet, type Agent, type Provider } from "@platypus/schemas";
 import useSWR from "swr";
-import { fetcher, parseValidationErrors } from "@/lib/utils";
+import { fetcher, parseValidationErrors, joinUrl } from "@/lib/utils";
 import { useBackendUrl } from "@/app/client-context";
 
 const AgentForm = ({
@@ -66,12 +66,17 @@ const AgentForm = ({
   // Fetch providers
   const { data: providersData, isLoading: providersLoading } = useSWR<{
     results: Provider[];
-  }>(`${backendUrl}/providers?workspaceId=${workspaceId}`, fetcher);
+  }>(
+    backendUrl
+      ? joinUrl(backendUrl, `/providers?workspaceId=${workspaceId}`)
+      : null,
+    fetcher,
+  );
   const providers = providersData?.results || [];
 
   // Fetch existing agent data if editing
   const { data: agent, isLoading: agentLoading } = useSWR<Agent>(
-    agentId ? `${backendUrl}/agents/${agentId}` : null,
+    agentId ? joinUrl(backendUrl, `/agents/${agentId}`) : null,
     fetcher,
   );
 
@@ -207,8 +212,8 @@ const AgentForm = ({
       };
 
       const url = agentId
-        ? `${backendUrl}/agents/${agentId}`
-        : `${backendUrl}/agents`;
+        ? joinUrl(backendUrl, `/agents/${agentId}`)
+        : joinUrl(backendUrl, "/agents");
 
       const method = agentId ? "PUT" : "POST";
 
@@ -240,7 +245,7 @@ const AgentForm = ({
 
     setIsDeleting(true);
     try {
-      const response = await fetch(`${backendUrl}/agents/${agentId}`, {
+      const response = await fetch(joinUrl(backendUrl, `/agents/${agentId}`), {
         method: "DELETE",
       });
 

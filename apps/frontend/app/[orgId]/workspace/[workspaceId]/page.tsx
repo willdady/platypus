@@ -14,7 +14,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import useSWR from "swr";
-import { fetcher } from "@/lib/utils";
+import { fetcher, joinUrl } from "@/lib/utils";
 import { NoProvidersEmptyState } from "@/components/no-providers-empty-state";
 import { useBackendUrl } from "@/app/client-context";
 import {
@@ -31,22 +31,38 @@ const Workspace = () => {
   const backendUrl = useBackendUrl();
 
   const { data: workspaceData, isLoading: isLoadingWorkspace } =
-    useSWR<WorkspaceType>(`${backendUrl}/workspaces/${workspaceId}`, fetcher);
+    useSWR<WorkspaceType>(
+      backendUrl ? joinUrl(backendUrl, `/workspaces/${workspaceId}`) : null,
+      fetcher,
+    );
 
   const { data: agentsData, isLoading: isLoadingAgents } = useSWR<{
     results: [];
-  }>(`${backendUrl}/agents?workspaceId=${workspaceId}`, fetcher);
+  }>(
+    backendUrl
+      ? joinUrl(backendUrl, `/agents?workspaceId=${workspaceId}`)
+      : null,
+    fetcher,
+  );
 
   const { data: chatsData, isLoading: isLoadingChats } = useSWR<{
     results: [];
-  }>(`${backendUrl}/chat?workspaceId=${workspaceId}`, fetcher);
+  }>(
+    backendUrl ? joinUrl(backendUrl, `/chat?workspaceId=${workspaceId}`) : null,
+    fetcher,
+  );
 
   const { data: providersData, isLoading: isLoadingProviders } = useSWR<{
     results: [];
-  }>(`${backendUrl}/providers?workspaceId=${workspaceId}`, fetcher);
+  }>(
+    backendUrl
+      ? joinUrl(backendUrl, `/providers?workspaceId=${workspaceId}`)
+      : null,
+    fetcher,
+  );
 
   const { data: orgData, isLoading: isLoadingOrg } = useSWR<Organisation>(
-    `${backendUrl}/organisations/${orgId}`,
+    backendUrl ? joinUrl(backendUrl, `/organisations/${orgId}`) : null,
     fetcher,
   );
 

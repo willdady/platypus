@@ -3,7 +3,7 @@
 import { MCP } from "@platypus/schemas";
 import { Item, ItemActions, ItemContent, ItemTitle } from "./ui/item";
 import useSWR from "swr";
-import { cn, fetcher } from "../lib/utils";
+import { cn, fetcher, joinUrl } from "../lib/utils";
 import { Pencil, TriangleAlert } from "lucide-react";
 import Link from "next/link";
 import { Alert, AlertDescription, AlertTitle } from "./ui/alert";
@@ -21,7 +21,7 @@ const McpList = ({
   const backendUrl = useBackendUrl();
 
   const { data, error, isLoading } = useSWR<{ results: MCP[] }>(
-    `${backendUrl}/mcps?workspaceId=${workspaceId}`,
+    backendUrl ? joinUrl(backendUrl, `/mcps?workspaceId=${workspaceId}`) : null,
     fetcher,
   );
 

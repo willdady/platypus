@@ -20,7 +20,7 @@ import {
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { type Workspace } from "@platypus/schemas";
-import { fetcher, parseValidationErrors } from "@/lib/utils";
+import { fetcher, parseValidationErrors, joinUrl } from "@/lib/utils";
 import { useBackendUrl } from "@/app/client-context";
 import { Trash2 } from "lucide-react";
 import { toast } from "sonner";
@@ -42,7 +42,7 @@ const WorkspaceForm = ({
   const { mutate: globalMutate } = useSWRConfig();
 
   const { data: workspace, mutate } = useSWR<Workspace>(
-    workspaceId ? `${backendUrl}/workspaces/${workspaceId}` : null,
+    workspaceId ? joinUrl(backendUrl, `/workspaces/${workspaceId}`) : null,
     fetcher,
   );
 
@@ -87,8 +87,8 @@ const WorkspaceForm = ({
     setValidationErrors({});
     try {
       const url = workspaceId
-        ? `${backendUrl}/workspaces/${workspaceId}`
-        : `${backendUrl}/workspaces`;
+        ? joinUrl(backendUrl, `/workspaces/${workspaceId}`)
+        : joinUrl(backendUrl, "/workspaces");
 
       const method = workspaceId ? "PUT" : "POST";
 
@@ -108,12 +108,12 @@ const WorkspaceForm = ({
         if (workspaceId) {
           toast.success("Workspace updated");
           mutate(); // Refresh the local cache
-          globalMutate(`${backendUrl}/workspaces?orgId=${orgId}`);
+          globalMutate(joinUrl(backendUrl, `/workspaces?orgId=${orgId}`));
           router.refresh();
         } else {
           const workspace = await response.json();
           toast.success("Workspace created");
-          globalMutate(`${backendUrl}/workspaces?orgId=${orgId}`);
+          globalMutate(joinUrl(backendUrl, `/workspaces?orgId=${orgId}`));
           router.push(`/${orgId}/workspace/${workspace.id}`);
         }
       } else {
@@ -135,9 +135,12 @@ const WorkspaceForm = ({
 
     setIsDeleting(true);
     try {
-      const response = await fetch(`${backendUrl}/workspaces/${workspaceId}`, {
-        method: "DELETE",
-      });
+      const response = await fetch(
+        joinUrl(backendUrl, `/workspaces/${workspaceId}`),
+        {
+          method: "DELETE",
+        },
+      );
       if (response.ok) {
         toast.success("Workspace deleted");
         window.location.href = `/${orgId}`;

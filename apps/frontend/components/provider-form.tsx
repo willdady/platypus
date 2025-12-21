@@ -38,7 +38,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { type Provider } from "@platypus/schemas";
 import useSWR from "swr";
-import { parseValidationErrors } from "@/lib/utils";
+import { parseValidationErrors, joinUrl } from "@/lib/utils";
 import { useBackendUrl } from "@/app/client-context";
 
 type ProviderFormData = Omit<
@@ -91,7 +91,7 @@ const ProviderForm = ({
 
   const fetcher = (url: string) => fetch(url).then((res) => res.json());
   const { data: provider, isLoading } = useSWR<Provider>(
-    providerId ? `${backendUrl}/providers/${providerId}` : null,
+    providerId ? joinUrl(backendUrl, `/providers/${providerId}`) : null,
     fetcher,
   );
 
@@ -215,8 +215,8 @@ const ProviderForm = ({
       };
 
       const url = providerId
-        ? `${backendUrl}/providers/${providerId}`
-        : `${backendUrl}/providers`;
+        ? joinUrl(backendUrl, `/providers/${providerId}`)
+        : joinUrl(backendUrl, "/providers");
 
       const method = providerId ? "PUT" : "POST";
 
@@ -248,9 +248,12 @@ const ProviderForm = ({
 
     setIsDeleting(true);
     try {
-      const response = await fetch(`${backendUrl}/providers/${providerId}`, {
-        method: "DELETE",
-      });
+      const response = await fetch(
+        joinUrl(backendUrl, `/providers/${providerId}`),
+        {
+          method: "DELETE",
+        },
+      );
 
       if (response.ok) {
         router.push(`/${orgId}/workspace/${workspaceId}/settings/providers`);

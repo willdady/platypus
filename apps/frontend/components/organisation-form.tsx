@@ -20,7 +20,7 @@ import {
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { type Organisation } from "@platypus/schemas";
-import { fetcher, parseValidationErrors } from "@/lib/utils";
+import { fetcher, parseValidationErrors, joinUrl } from "@/lib/utils";
 import { useBackendUrl } from "@/app/client-context";
 import { Trash2 } from "lucide-react";
 import { toast } from "sonner";
@@ -36,7 +36,7 @@ const OrganisationForm = ({ classNames, orgId }: OrganisationFormProps) => {
   const router = useRouter();
 
   const { data: organisation, mutate } = useSWR<Organisation>(
-    orgId ? `${backendUrl}/organisations/${orgId}` : null,
+    orgId ? joinUrl(backendUrl, `/organisations/${orgId}`) : null,
     fetcher,
   );
 
@@ -81,8 +81,8 @@ const OrganisationForm = ({ classNames, orgId }: OrganisationFormProps) => {
     setValidationErrors({});
     try {
       const url = orgId
-        ? `${backendUrl}/organisations/${orgId}`
-        : `${backendUrl}/organisations`;
+        ? joinUrl(backendUrl, `/organisations/${orgId}`)
+        : joinUrl(backendUrl, "/organisations");
 
       const method = orgId ? "PUT" : "POST";
 
@@ -125,9 +125,12 @@ const OrganisationForm = ({ classNames, orgId }: OrganisationFormProps) => {
 
     setIsDeleting(true);
     try {
-      const response = await fetch(`${backendUrl}/organisations/${orgId}`, {
-        method: "DELETE",
-      });
+      const response = await fetch(
+        joinUrl(backendUrl, `/organisations/${orgId}`),
+        {
+          method: "DELETE",
+        },
+      );
       if (response.ok) {
         toast.success("Organisation deleted");
         window.location.href = `/`;

@@ -32,7 +32,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { type MCP } from "@platypus/schemas";
 import useSWR from "swr";
-import { parseValidationErrors } from "@/lib/utils";
+import { parseValidationErrors, joinUrl } from "@/lib/utils";
 import { useBackendUrl } from "@/app/client-context";
 import { Trash2, Plug, Check, X } from "lucide-react";
 
@@ -74,7 +74,7 @@ const McpForm = ({
 
   const fetcher = (url: string) => fetch(url).then((res) => res.json());
   const { data: mcp, isLoading } = useSWR<MCP>(
-    mcpId ? `${backendUrl}/mcps/${mcpId}` : null,
+    mcpId ? joinUrl(backendUrl, `/mcps/${mcpId}`) : null,
     fetcher,
   );
 
@@ -151,7 +151,9 @@ const McpForm = ({
           formData.authType === "Bearer" ? formData.bearerToken : undefined,
       };
 
-      const url = mcpId ? `${backendUrl}/mcps/${mcpId}` : `${backendUrl}/mcps`;
+      const url = mcpId
+        ? joinUrl(backendUrl, `/mcps/${mcpId}`)
+        : joinUrl(backendUrl, "/mcps");
 
       const method = mcpId ? "PUT" : "POST";
 
@@ -183,7 +185,7 @@ const McpForm = ({
 
     setIsDeleting(true);
     try {
-      const response = await fetch(`${backendUrl}/mcps/${mcpId}`, {
+      const response = await fetch(joinUrl(backendUrl, `/mcps/${mcpId}`), {
         method: "DELETE",
       });
 
@@ -213,7 +215,7 @@ const McpForm = ({
           formData.authType === "Bearer" ? formData.bearerToken : undefined,
       };
 
-      const response = await fetch(`${backendUrl}/mcps/test`, {
+      const response = await fetch(joinUrl(backendUrl, "/mcps/test"), {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
