@@ -21,6 +21,10 @@ export const metadata: Metadata = {
     "A rich web interface for interacting with AI chatbots and agents",
 };
 
+// Force dynamic rendering to ensure environment variables are read at runtime
+// and not baked into the static output during build time.
+export const dynamic = "force-dynamic";
+
 export default function RootLayout({
   children,
 }: Readonly<{
