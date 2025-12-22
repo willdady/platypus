@@ -16,7 +16,7 @@ const AboutPage = () => {
             href={`https://github.com/willdady/platypus/releases/tag/v${version}`}
             target="_blank"
             rel="noopener noreferrer"
-            className="font-mono hover:underline text-primary inline-flex items-center gap-1"
+            className="font-mono hover:underline inline-flex items-center gap-1"
           >
             {version} <ExternalLink className="size-4" />
           </Link>
@@ -28,7 +28,7 @@ const AboutPage = () => {
           href="https://github.com/willdady/platypus"
           target="_blank"
           rel="noopener noreferrer"
-          className="hover:underline text-primary inline-flex items-center gap-1"
+          className="hover:underline inline-flex items-center gap-1"
         >
           willdady/platypus <ExternalLink className="size-4" />
         </Link>

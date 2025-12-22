@@ -9,6 +9,7 @@ import {
   Settings,
   ArrowLeftRight,
   Home,
+  Info,
 } from "lucide-react";
 
 import {
@@ -117,6 +118,19 @@ export function CommandMenu({ orgId, workspaceId }: CommandMenuProps) {
           >
             <Wrench />
             <span>MCP</span>
+          </CommandItem>
+          <CommandItem
+            className="cursor-pointer"
+            onSelect={() => {
+              runCommand(() =>
+                router.push(
+                  `/${orgId}/workspace/${workspaceId}/settings/about`,
+                ),
+              );
+            }}
+          >
+            <Info />
+            <span>About</span>
           </CommandItem>
         </CommandGroup>
       </CommandList>
