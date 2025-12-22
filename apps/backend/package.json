@@ -13,7 +13,7 @@
     "drizzle-kit-push": "pnpm drizzle-kit push",
     "drizzle-kit-generate": "pnpm drizzle-kit generate",
     "drizzle-kit-migrate": "pnpm drizzle-kit migrate",
-    "build-docker": "cd ../.. && docker build --tag willdady/platypus-backend:latest --tag willdady/platypus-backend:$(git rev-parse --short HEAD) -f apps/backend/Dockerfile .",
+    "build-docker": "./scripts/build_docker.sh",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "dependencies": {
