@@ -1,4 +1,4 @@
-import { pgTable } from "drizzle-orm/pg-core";
+import { pgTable, index } from "drizzle-orm/pg-core";
 
 export const organisation = pgTable("organisation", (t) => ({
   id: t.text("id").primaryKey(),
@@ -15,7 +15,9 @@ export const workspace = pgTable("workspace", (t) => ({
   name: t.text("name").notNull(),
   createdAt: t.timestamp("created_at").notNull().defaultNow(),
   updatedAt: t.timestamp("updated_at").notNull().defaultNow(),
-}));
+}), (t) => [
+  index("idx_workspace_organisation_id").on(t.organisationId),
+]);
 
 export const chat = pgTable("chat", (t) => ({
   id: t.text("id").primaryKey(),
@@ -38,7 +40,9 @@ export const chat = pgTable("chat", (t) => ({
   frequencyPenalty: t.real("frequency_penalty"),
   createdAt: t.timestamp("created_at").notNull().defaultNow(),
   updatedAt: t.timestamp("updated_at").notNull().defaultNow(),
-}));
+}), (t) => [
+  index("idx_chat_workspace_id").on(t.workspaceId),
+]);
 
 export const agent = pgTable("agent", (t) => ({
   id: t.text("id").primaryKey(),
@@ -65,7 +69,10 @@ export const agent = pgTable("agent", (t) => ({
   toolSetIds: t.jsonb("tool_set_ids").$type<string[]>().default([]), // Array of tool set ids
   createdAt: t.timestamp("created_at").notNull().defaultNow(),
   updatedAt: t.timestamp("updated_at").notNull().defaultNow(),
-}));
+}), (t) => [
+  index("idx_agent_workspace_id").on(t.workspaceId),
+  index("idx_agent_provider_id").on(t.providerId),
+]);
 
 export const mcp = pgTable("mcp", (t) => ({
   id: t.text("id").primaryKey(),
@@ -78,7 +85,9 @@ export const mcp = pgTable("mcp", (t) => ({
   bearerToken: t.text("bearer_token"),
   createdAt: t.timestamp("created_at").notNull().defaultNow(),
   updatedAt: t.timestamp("updated_at").notNull().defaultNow(),
-}));
+}), (t) => [
+  index("idx_mcp_workspace_id").on(t.workspaceId),
+]);
 
 export const provider = pgTable("provider", (t) => ({
   id: t.text("id").primaryKey(),
@@ -98,4 +107,6 @@ export const provider = pgTable("provider", (t) => ({
   taskModelId: t.text("task_model_id").notNull(),
   createdAt: t.timestamp("created_at").notNull().defaultNow(),
   updatedAt: t.timestamp("updated_at").notNull().defaultNow(),
-}));
+}), (t) => [
+  index("idx_provider_workspace_id").on(t.workspaceId),
+]);
