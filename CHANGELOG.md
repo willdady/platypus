@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.2.0](https://github.com/willdady/platypus/compare/v1.1.0...v1.2.0) (2025-12-22)
+
+
+### Features
+
+* **backend:** add indexes to tables with foreign keys ([db6f340](https://github.com/willdady/platypus/commit/db6f3403db0502b039bfe5a2c92a1b76f156af7f))
+* **ui:** add `About` option to command menu ([086a3a9](https://github.com/willdady/platypus/commit/086a3a90bf49ed29dceab6c018886c2809f69a4e))
+
 ## [1.1.0](https://github.com/willdady/platypus/compare/v1.0.1...v1.1.0) (2025-12-22)
 
 
