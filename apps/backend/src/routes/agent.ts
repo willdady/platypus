@@ -7,8 +7,12 @@ import { agent as agentTable } from "../db/schema.ts";
 import { agentCreateSchema, agentUpdateSchema } from "@platypus/schemas";
 import { eq } from "drizzle-orm";
 import { dedupeArray } from "../utils.ts";
+import { requireAuth } from "../middleware.ts";
 
 const agent = new Hono();
+
+// Require authentication for all routes
+agent.use("*", requireAuth);
 
 /** Create a new agent */
 agent.post("/", sValidator("json", agentCreateSchema), async (c) => {

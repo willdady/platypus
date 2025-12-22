@@ -12,6 +12,7 @@ import { Search, Home } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { joinUrl } from "@/lib/utils";
+import { UserMenu } from "@/components/user-menu";
 
 export default async function WorkspaceLayout({
   children,
@@ -53,11 +54,12 @@ export default async function WorkspaceLayout({
               </Link>
             </Button>
           </div>
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2">
             <Kbd className="text-sm font-sans">
               <Search className="size-4" /> ⌘K
             </Kbd>
             <ModeToggle />
+            <UserMenu />
           </div>
         </header>
         <div className="h-[calc(100vh-2.75rem)] overflow-y-auto">

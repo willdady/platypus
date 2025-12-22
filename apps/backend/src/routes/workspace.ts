@@ -8,15 +8,17 @@ import {
   workspaceUpdateSchema,
 } from "@platypus/schemas";
 import { eq } from "drizzle-orm";
-import { organisationMiddleware } from "../middleware.ts";
+import { requireAuth } from "../middleware.ts";
 
 const workspace = new Hono();
+
+// Require authentication for all routes
+workspace.use("*", requireAuth);
 
 /** Create a new workspace */
 workspace.post(
   "/",
   sValidator("json", workspaceCreateSchema),
-  organisationMiddleware,
   async (c) => {
     const data = c.req.valid("json");
     const record = await db

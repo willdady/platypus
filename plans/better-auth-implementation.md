@@ -639,21 +639,21 @@ pnpm drizzle-kit-push
 
 ## Checklist
 
-- [ ] Install better-auth in backend
-- [ ] Create initial auth configuration
-- [ ] Generate auth schema with CLI (`pnpm dlx @better-auth/cli@latest generate`)
-- [ ] Update auth configuration with generated schema
-- [ ] Mount auth routes in server
-- [ ] Add requireAuth middleware
-- [ ] Update backend environment variables
-- [ ] Install better-auth in frontend
-- [ ] Create auth client (uses existing `BACKEND_URL` env var)
-- [ ] Create auth provider component
-- [ ] Update root layout with auth provider
-- [ ] Implement sign-in page
-- [ ] Create sign-up page
-- [ ] Create protected route wrapper
-- [ ] Apply database schema changes (`pnpm drizzle-kit-push`)
+- [x] Install better-auth in backend
+- [x] Create initial auth configuration
+- [x] Generate auth schema with CLI (`pnpm dlx @better-auth/cli@latest generate`)
+- [x] Update auth configuration with generated schema
+- [x] Mount auth routes in server
+- [x] Add requireAuth middleware
+- [x] Update backend environment variables
+- [x] Install better-auth in frontend
+- [x] Create auth client (uses existing `BACKEND_URL` env var)
+- [x] Create auth provider component
+- [x] Update root layout with auth provider
+- [x] Implement sign-in page
+- [x] Create sign-up page
+- [x] Create protected route wrapper
+- [x] Apply database schema changes (`pnpm drizzle-kit-push`)
 - [ ] Test sign-up flow
 - [ ] Test sign-in flow
 - [ ] Test sign-out flow

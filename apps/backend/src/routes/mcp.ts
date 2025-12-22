@@ -10,8 +10,12 @@ import {
   mcpTestSchema,
 } from "@platypus/schemas";
 import { eq } from "drizzle-orm";
+import { requireAuth } from "../middleware.ts";
 
 const mcp = new Hono();
+
+// Require authentication for all routes
+mcp.use("*", requireAuth);
 
 /** Create a new MCP */
 mcp.post("/", sValidator("json", mcpCreateSchema), async (c) => {

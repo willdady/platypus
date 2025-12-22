@@ -1,5 +1,8 @@
 import { pgTable, index } from "drizzle-orm/pg-core";
 
+// Import and re-export auth schema
+export * from "./auth-schema.ts";
+
 export const organisation = pgTable("organisation", (t) => ({
   id: t.text("id").primaryKey(),
   name: t.text("name").notNull(),

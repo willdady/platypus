@@ -18,8 +18,8 @@ export function joinUrl(base: string, path: string): string {
   return `${normalizedBase}${normalizedPath}`;
 }
 
-export const fetcher = (...args: Parameters<typeof fetch>) =>
-  fetch(...args).then((res) => res.json());
+export const fetcher = (input: RequestInfo | URL, init?: RequestInit) =>
+  fetch(input, { ...init, credentials: 'include' }).then((res) => res.json());
 
 /**
  * Parses standardschema.dev validation errors from an error response

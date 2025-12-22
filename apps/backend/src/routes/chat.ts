@@ -34,6 +34,7 @@ import {
   type Provider,
 } from "@platypus/schemas";
 import { and, desc, eq, sql } from "drizzle-orm";
+import { requireAuth } from "../middleware.ts";
 
 // --- Types ---
 
@@ -382,6 +383,9 @@ const upsertChatRecord = async (
 // --- Routes ---
 
 const chat = new Hono();
+
+// Require authentication for all routes
+chat.use("*", requireAuth);
 
 chat.get(
   "/",

@@ -4,6 +4,7 @@ import { db } from "./src/index.ts";
 import { organisation, workspace } from "./src/db/schema.ts";
 import { nanoid } from "nanoid";
 import { count } from "drizzle-orm";
+import { auth } from "./src/auth.ts";
 
 const PORT = process.env.PORT || "3000";
 
@@ -31,6 +32,26 @@ const main = async () => {
         name: "Default Workspace",
       });
       console.log(`- Workspace created: ${workspaceId}`);
+
+      console.log("Creating default user...");
+      const defaultEmail = "admin@example.com";
+      const defaultPassword = "admin123";
+
+      try {
+        await auth.api.signUpEmail({
+          body: {
+            email: defaultEmail,
+            password: defaultPassword,
+            name: "Admin User",
+          },
+        });
+        console.log(`- User created: ${defaultEmail}`);
+        console.log(`- Default credentials: ${defaultEmail} / ${defaultPassword}`);
+        console.log("⚠️  Please change the default password after first login!");
+      } catch (error) {
+        console.error("Failed to create default user:", error);
+        throw error;
+      }
     }
   });
 

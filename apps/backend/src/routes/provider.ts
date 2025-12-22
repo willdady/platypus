@@ -6,8 +6,12 @@ import { provider as providerTable } from "../db/schema.ts";
 import { providerCreateSchema, providerUpdateSchema } from "@platypus/schemas";
 import { eq } from "drizzle-orm";
 import { dedupeArray } from "../utils.ts";
+import { requireAuth } from "../middleware.ts";
 
 const provider = new Hono();
+
+// Require authentication for all routes
+provider.use("*", requireAuth);
 
 /** Create a new provider */
 provider.post("/", sValidator("json", providerCreateSchema), async (c) => {

@@ -6,7 +6,7 @@
 
 Platypus is an open-source, full-stack application designed to help you build AI agents. Built with a focus on extensibility and modern web standards, Platypus allows you to create agents that can reason, use tools, and interact with the world.
 
-> 🚧 **Note:** Platypus is currently a Work In Progress. Features are being added rapidly. Authentication and Authorization are coming soon.
+> 🚧 **Note:** Platypus is currently a Work In Progress. Features are being added rapidly.
 
 ## ✨ Key Features
 
@@ -29,17 +29,27 @@ Platypus is a monorepo managed by [Turborepo](https://turbo.build/), ensuring a 
 
 The fastest way to get Platypus running is using Docker Compose.
 
-1.  **Start the application:**
+1.  **Configure authentication secret:**
+
+    Edit `compose.yaml` and set a secure random string (minimum 32 characters) for `BETTER_AUTH_SECRET`:
+
+    ```yaml
+    BETTER_AUTH_SECRET: "your-secure-random-string-here"
+    ```
+
+2.  **Start the application:**
 
     ```bash
     docker compose up -d
     ```
 
-2.  **Navigate to:**
+3.  **Sign in:**
 
-    ```bash
-    http://localhost:3001
-    ```
+    Navigate to `http://localhost:3001` and sign in with the default credentials:
+    - **Email:** `admin@example.com`
+    - **Password:** `admin123`
+
+    > ⚠️ **Important:** Change the default password after your first login!
 
 ## 🛠️ Local Development
 
@@ -66,6 +76,12 @@ The fastest way to get Platypus running is using Docker Compose.
     cp apps/backend/.example.env apps/backend/.env
     ```
 
+    Edit `apps/backend/.env` and set a secure random string (minimum 32 characters) for `BETTER_AUTH_SECRET`:
+
+    ```env
+    BETTER_AUTH_SECRET=your-secure-random-string-here
+    ```
+
 3.  **Start Development Server:**
     This command starts the frontend, backend, and a local Postgres container.
 
@@ -79,9 +95,17 @@ The fastest way to get Platypus running is using Docker Compose.
     pnpm drizzle-kit-push
     ```
 
+5.  **Sign in:**
+    Navigate to `http://localhost:3000` and sign in with the default credentials:
+    - **Email:** `admin@example.com`
+    - **Password:** `admin123`
+
+    > ⚠️ **Important:** Change the default password after your first login!
+
 ## 🗺️ Roadmap
 
-- [ ] Authentication & Authorization
+- [x] Authentication & Authorization
+- [ ] Role-Based Access Control (RBAC)
 
 ## 🤝 Contributing
 

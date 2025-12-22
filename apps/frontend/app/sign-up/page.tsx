@@ -8,9 +8,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import Link from "next/link";
 
-export default function SignInPage() {
+export default function SignUpPage() {
   const router = useRouter();
   const { authClient } = useAuth();
+  const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -22,13 +23,14 @@ export default function SignInPage() {
     setIsLoading(true);
 
     try {
-      const result = await authClient.signIn.email({
+      const result = await authClient.signUp.email({
         email,
         password,
+        name,
       });
 
       if (result.error) {
-        setError(result.error.message || "Sign in failed");
+        setError(result.error.message || "Sign up failed");
         return;
       }
 
@@ -44,9 +46,9 @@ export default function SignInPage() {
     <div className="flex min-h-screen items-center justify-center">
       <div className="w-full max-w-md space-y-8 p-8">
         <div className="text-center">
-          <h1 className="text-2xl font-bold">Sign in to Platypus</h1>
+          <h1 className="text-2xl font-bold">Create an account</h1>
           <p className="text-muted-foreground mt-2">
-            Enter your credentials to continue
+            Sign up to get started with Platypus
           </p>
         </div>
 
@@ -58,6 +60,19 @@ export default function SignInPage() {
           )}
 
           <div className="space-y-2">
+            <Label htmlFor="name">Name</Label>
+            <Input
+              id="name"
+              type="text"
+              placeholder="Your name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              autoFocus
+              required
+            />
+          </div>
+
+          <div className="space-y-2">
             <Label htmlFor="email">Email</Label>
             <Input
               id="email"
@@ -65,7 +80,6 @@ export default function SignInPage() {
               placeholder="you@example.com"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              autoFocus
               required
             />
           </div>
@@ -75,21 +89,23 @@ export default function SignInPage() {
             <Input
               id="password"
               type="password"
+              placeholder="At least 8 characters"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
+              minLength={8}
               required
             />
           </div>
 
           <Button type="submit" className="w-full" disabled={isLoading}>
-            {isLoading ? "Signing in..." : "Sign in"}
+            {isLoading ? "Creating account..." : "Sign up"}
           </Button>
         </form>
 
         <p className="text-center text-sm text-muted-foreground">
-          Don&apos;t have an account?{" "}
-          <Link href="/sign-up" className="text-primary hover:underline">
-            Sign up
+          Already have an account?{" "}
+          <Link href="/sign-in" className="text-primary hover:underline">
+            Sign in
           </Link>
         </p>
       </div>

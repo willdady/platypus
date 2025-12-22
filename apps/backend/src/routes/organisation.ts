@@ -8,8 +8,12 @@ import {
   organisationUpdateSchema,
 } from "@platypus/schemas";
 import { eq } from "drizzle-orm";
+import { requireAuth } from "../middleware.ts";
 
 const organisation = new Hono();
+
+// Require authentication for all routes
+organisation.use("*", requireAuth);
 
 /** Create a new organisation */
 organisation.post(

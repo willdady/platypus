@@ -5,8 +5,12 @@ import { getToolSets } from "../tools/index.ts";
 import { db } from "../index.ts";
 import { mcp as mcpTable } from "../db/schema.ts";
 import { eq } from "drizzle-orm";
+import { requireAuth } from "../middleware.ts";
 
 const tool = new Hono();
+
+// Require authentication for all routes
+tool.use("*", requireAuth);
 
 /** List all tool sets */
 tool.get(
