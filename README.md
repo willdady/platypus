@@ -4,7 +4,7 @@
 
 **A modern, multi-tenant platform for building and managing AI Agents.**
 
-Platypus is an open-source, full-stack application designed to help you building AI agents. Built with a focus on extensibility and modern web standards, Platypus allows you to create agents that can reason, use tools, and interact with the world.
+Platypus is an open-source, full-stack application designed to help you build AI agents. Built with a focus on extensibility and modern web standards, Platypus allows you to create agents that can reason, use tools, and interact with the world.
 
 > 🚧 **Note:** Platypus is currently a Work In Progress. Features are being added rapidly. Authentication and Authorization are coming soon.
 
@@ -38,7 +38,7 @@ The fastest way to get Platypus running is using Docker Compose.
 2.  **Build Docker images:**
 
     ```bash
-    pnpm run build-docker
+    pnpm build-docker
     ```
 
 3.  **Start the application:**
