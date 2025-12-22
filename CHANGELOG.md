@@ -1,5 +1,20 @@
 # Changelog
 
+## [1.1.0](https://github.com/willdady/platypus/compare/v1.0.1...v1.1.0) (2025-12-22)
+
+
+### Features
+
+* docker images now tagged with root `package.json` version ([ea8fa9d](https://github.com/willdady/platypus/commit/ea8fa9d28e2e87f984b8555bbab9dca3acacac95))
+* **frontend:** improved URL joining ([324bc7a](https://github.com/willdady/platypus/commit/324bc7a6a9170c305f58a6c48741f9191e5d567c))
+* **ui:** add About page showing current version and link to Github project ([55b9114](https://github.com/willdady/platypus/commit/55b91144eef9d604a0659e0808d6ed71c7797b6f))
+
+
+### Bug Fixes
+
+* missnamed example ENV file in frontend app ([0e6ee10](https://github.com/willdady/platypus/commit/0e6ee10bce41610f969380e81ac8038b6bb57a90))
+* **ui:** forcing RootLayout to be dynamic so environment variables don't get baked in. ([44867f4](https://github.com/willdady/platypus/commit/44867f4fee12b168c1776584ac75188f5b2bd682))
+
 ## 1.0.1 (2025-12-21)
 
 
