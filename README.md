@@ -29,25 +29,14 @@ Platypus is a monorepo managed by [Turborepo](https://turbo.build/), ensuring a 
 
 The fastest way to get Platypus running is using Docker Compose.
 
-1.  **Install dependencies:**
-
-    ```bash
-    pnpm install
-    ```
-
-2.  **Build Docker images:**
-
-    ```bash
-    pnpm build-docker
-    ```
-
-3.  **Start the application:**
+1.  **Start the application:**
 
     ```bash
     docker compose up -d
     ```
 
-4.  **Navigate to:**
+2.  **Navigate to:**
+
     ```bash
     http://localhost:3001
     ```
