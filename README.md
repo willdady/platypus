@@ -4,7 +4,7 @@
 
 **A modern, multi-tenant platform for building and managing AI Agents.**
 
-Platypus is an open-source, full-stack application designed to help you build, test, and deploy AI agents. Built with a focus on extensibility and modern web standards, Platypus allows you to create agents that can reason, use tools, and interact with the world.
+Platypus is an open-source, full-stack application designed to help you building AI agents. Built with a focus on extensibility and modern web standards, Platypus allows you to create agents that can reason, use tools, and interact with the world.
 
 > 🚧 **Note:** Platypus is currently a Work In Progress. Features are being added rapidly. Authentication and Authorization are coming soon.
 
@@ -21,7 +21,7 @@ Platypus is an open-source, full-stack application designed to help you build, t
 
 Platypus is a monorepo managed by [Turborepo](https://turbo.build/), ensuring a fast and efficient development workflow.
 
-- **`apps/frontend`**: A responsive web interface built with Next.js (App Router), Radix UI, and Tailwind. It uses the AI SDK for real-time streaming responses.
+- **`apps/frontend`**: A responsive web interface built with Next.js, ShadCN, and Tailwind. It uses the AI SDK for real-time streaming responses.
 - **`apps/backend`**: A high-performance REST API built with Hono.js running on Node.js. It handles agent logic, tool execution, and database interactions.
 - **`packages/schemas`**: Shared Zod schemas used by both frontend and backend for end-to-end type safety.
 
@@ -30,18 +30,26 @@ Platypus is a monorepo managed by [Turborepo](https://turbo.build/), ensuring a 
 The fastest way to get Platypus running is using Docker Compose.
 
 1.  **Install dependencies:**
+
     ```bash
     pnpm install
     ```
 
 2.  **Build Docker images:**
+
     ```bash
     pnpm run build-docker
     ```
 
 3.  **Start the application:**
+
     ```bash
     docker compose up -d
+    ```
+
+4.  **Navigate to:**
+    ```bash
+    http://localhost:3001
     ```
 
 ## 🛠️ Local Development
@@ -56,12 +64,14 @@ The fastest way to get Platypus running is using Docker Compose.
 ### Setup
 
 1.  **Install dependencies:**
+
     ```bash
     pnpm install
     ```
 
 2.  **Configure Environment:**
     Create `.env` files for both apps:
+
     ```bash
     cp apps/frontend/.example.env apps/frontend/.env
     cp apps/backend/.example.env apps/backend/.env
@@ -69,6 +79,7 @@ The fastest way to get Platypus running is using Docker Compose.
 
 3.  **Start Development Server:**
     This command starts the frontend, backend, and a local Postgres container.
+
     ```bash
     pnpm dev
     ```
