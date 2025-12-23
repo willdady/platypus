@@ -88,7 +88,7 @@ export default function Home() {
                         </Link>
                       </Button>
                       <Button variant="outline" asChild>
-                        <Link href={`/${organisation.id}/edit`}>
+                        <Link href={`/${organisation.id}/settings`}>
                           <Settings className="h-4 w-4" /> Org settings
                         </Link>
                       </Button>

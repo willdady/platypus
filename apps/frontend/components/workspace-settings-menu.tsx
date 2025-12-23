@@ -12,12 +12,15 @@ import { Info, Settings, Unplug, Wrench } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
-interface SettingsMenuProps {
+interface WorkspaceSettingsMenuProps {
   orgId: string;
   workspaceId: string;
 }
 
-export function SettingsMenu({ orgId, workspaceId }: SettingsMenuProps) {
+export function WorkspaceSettingsMenu({
+  orgId,
+  workspaceId,
+}: WorkspaceSettingsMenuProps) {
   const pathname = usePathname();
   const workspaceHref = `/${orgId}/workspace/${workspaceId}/settings`;
   const providersHref = `/${orgId}/workspace/${workspaceId}/settings/providers`;
