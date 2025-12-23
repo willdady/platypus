@@ -5,11 +5,13 @@ meta {
 }
 
 delete {
-  url: {{host}}/mcps/:id
+  url: {{host}}/organisations/:orgId/workspaces/:workspaceId/mcps/:mcpId
   body: none
   auth: inherit
 }
 
 params:path {
-  id: 
+  orgId: {{orgId}}
+  workspaceId: {{workspaceId}}
+  mcpId:
 }

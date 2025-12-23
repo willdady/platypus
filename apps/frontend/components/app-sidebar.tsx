@@ -85,12 +85,19 @@ export function AppSidebar({
 
   const { mutate } = useSWRConfig();
   const { data } = useSWR<{ results: Workspace[] }>(
-    backendUrl ? joinUrl(backendUrl, `/workspaces?orgId=${orgId}`) : null,
+    backendUrl
+      ? joinUrl(backendUrl, `/organisations/${orgId}/workspaces`)
+      : null,
     fetcher,
   );
 
   const { data: chatData } = useSWR<{ results: ChatListItem[] }>(
-    backendUrl ? joinUrl(backendUrl, `/chat?workspaceId=${workspaceId}`) : null,
+    backendUrl
+      ? joinUrl(
+          backendUrl,
+          `/organisations/${orgId}/workspaces/${workspaceId}/chat`,
+        )
+      : null,
     fetcher,
   );
 
@@ -148,7 +155,10 @@ export function AppSidebar({
     setRenameValidationErrors({});
     try {
       const response = await fetch(
-        joinUrl(backendUrl, `/chat/${renameChatId}?workspaceId=${workspaceId}`),
+        joinUrl(
+          backendUrl,
+          `/organisations/${orgId}/workspaces/${workspaceId}/chat/${renameChatId}`,
+        ),
         {
           method: "PUT",
           headers: {
@@ -169,7 +179,12 @@ export function AppSidebar({
         setRenameTitle("");
 
         // Revalidate the chat list
-        await mutate(joinUrl(backendUrl, `/chat?workspaceId=${workspaceId}`));
+        await mutate(
+          joinUrl(
+            backendUrl,
+            `/organisations/${orgId}/workspaces/${workspaceId}/chat`,
+          ),
+        );
       } else {
         // Parse standardschema.dev validation errors
         const errorData = await response.json();
@@ -189,7 +204,10 @@ export function AppSidebar({
     setIsDeleting(true);
     try {
       const response = await fetch(
-        joinUrl(backendUrl, `/chat/${deleteChatId}?workspaceId=${workspaceId}`),
+        joinUrl(
+          backendUrl,
+          `/organisations/${orgId}/workspaces/${workspaceId}/chat/${deleteChatId}`,
+        ),
         {
           method: "DELETE",
         },
@@ -212,7 +230,12 @@ export function AppSidebar({
       }
 
       // Revalidate the chat list
-      await mutate(joinUrl(backendUrl, `/chat?workspaceId=${workspaceId}`));
+      await mutate(
+        joinUrl(
+          backendUrl,
+          `/organisations/${orgId}/workspaces/${workspaceId}/chat`,
+        ),
+      );
     } catch (error) {
       console.error("Error deleting chat:", error);
     } finally {
@@ -227,7 +250,10 @@ export function AppSidebar({
     setIsTogglingStar(true);
     try {
       const response = await fetch(
-        joinUrl(backendUrl, `/chat/${chatId}?workspaceId=${workspaceId}`),
+        joinUrl(
+          backendUrl,
+          `/organisations/${orgId}/workspaces/${workspaceId}/chat/${chatId}`,
+        ),
         {
           method: "PUT",
           headers: {
@@ -247,7 +273,12 @@ export function AppSidebar({
       }
 
       // Revalidate the chat list
-      await mutate(joinUrl(backendUrl, `/chat?workspaceId=${workspaceId}`));
+      await mutate(
+        joinUrl(
+          backendUrl,
+          `/organisations/${orgId}/workspaces/${workspaceId}/chat`,
+        ),
+      );
     } catch (error) {
       console.error("Error toggling star status:", error);
     } finally {

@@ -1,7 +1,11 @@
 import { serve } from "@hono/node-server";
 import app from "./src/server.ts";
 import { db } from "./src/index.ts";
-import { organisation, workspace, organisationMember } from "./src/db/schema.ts";
+import {
+  organisation,
+  workspace,
+  organisationMember,
+} from "./src/db/schema.ts";
 import { nanoid } from "nanoid";
 import { count } from "drizzle-orm";
 import { auth } from "./src/auth.ts";
@@ -62,8 +66,12 @@ const main = async () => {
         });
         console.log(`- Organization membership created for ${defaultEmail}`);
 
-        console.log(`- Default credentials: ${defaultEmail} / ${defaultPassword}`);
-        console.log("⚠️  Please change the default password after first login!");
+        console.log(
+          `- Default credentials: ${defaultEmail} / ${defaultPassword}`,
+        );
+        console.log(
+          "⚠️  Please change the default password after first login!",
+        );
       } catch (error) {
         console.error("Failed to create default user:", error);
         throw error;

@@ -32,7 +32,12 @@ const Workspace = () => {
 
   const { data: workspaceData, isLoading: isLoadingWorkspace } =
     useSWR<WorkspaceType>(
-      backendUrl ? joinUrl(backendUrl, `/workspaces/${workspaceId}`) : null,
+      backendUrl
+        ? joinUrl(
+            backendUrl,
+            `/organisations/${orgId}/workspaces/${workspaceId}`,
+          )
+        : null,
       fetcher,
     );
 
@@ -40,7 +45,10 @@ const Workspace = () => {
     results: [];
   }>(
     backendUrl
-      ? joinUrl(backendUrl, `/agents?workspaceId=${workspaceId}`)
+      ? joinUrl(
+          backendUrl,
+          `/organisations/${orgId}/workspaces/${workspaceId}/agents`,
+        )
       : null,
     fetcher,
   );
@@ -48,7 +56,12 @@ const Workspace = () => {
   const { data: chatsData, isLoading: isLoadingChats } = useSWR<{
     results: [];
   }>(
-    backendUrl ? joinUrl(backendUrl, `/chat?workspaceId=${workspaceId}`) : null,
+    backendUrl
+      ? joinUrl(
+          backendUrl,
+          `/organisations/${orgId}/workspaces/${workspaceId}/chat`,
+        )
+      : null,
     fetcher,
   );
 
@@ -56,7 +69,10 @@ const Workspace = () => {
     results: [];
   }>(
     backendUrl
-      ? joinUrl(backendUrl, `/providers?workspaceId=${workspaceId}`)
+      ? joinUrl(
+          backendUrl,
+          `/organisations/${orgId}/workspaces/${workspaceId}/providers`,
+        )
       : null,
     fetcher,
   );
@@ -148,7 +164,7 @@ const Workspace = () => {
             </Card>
           </div>
 
-          <TagCloud workspaceId={workspaceId} />
+          <TagCloud orgId={orgId} workspaceId={workspaceId} />
 
           {/* Quick Actions */}
           <div className="flex gap-4">

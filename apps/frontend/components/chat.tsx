@@ -64,7 +64,10 @@ export const Chat = ({
   // Fetch providers
   const { data: providersData, isLoading } = useSWR<{ results: Provider[] }>(
     backendUrl
-      ? joinUrl(backendUrl, `/providers?workspaceId=${workspaceId}`)
+      ? joinUrl(
+          backendUrl,
+          `/organisations/${orgId}/workspaces/${workspaceId}/providers`,
+        )
       : null,
     fetcher,
   );
@@ -74,7 +77,10 @@ export const Chat = ({
   // Fetch agents
   const { data: agentsData } = useSWR<{ results: Agent[] }>(
     backendUrl
-      ? joinUrl(backendUrl, `/agents?workspaceId=${workspaceId}`)
+      ? joinUrl(
+          backendUrl,
+          `/organisations/${orgId}/workspaces/${workspaceId}/agents`,
+        )
       : null,
     fetcher,
   );
@@ -84,7 +90,10 @@ export const Chat = ({
   // Fetch tool sets
   const { data: toolSetsData } = useSWR<{ results: ToolSet[] }>(
     backendUrl
-      ? joinUrl(backendUrl, `/tools?workspaceId=${workspaceId}`)
+      ? joinUrl(
+          backendUrl,
+          `/organisations/${orgId}/workspaces/${workspaceId}/tools`,
+        )
       : null,
     fetcher,
   );
@@ -94,7 +103,10 @@ export const Chat = ({
   // Fetch existing chat data
   const { data: chatData } = useSWR<ChatType>(
     backendUrl
-      ? joinUrl(backendUrl, `/chat/${chatId}?workspaceId=${workspaceId}`)
+      ? joinUrl(
+          backendUrl,
+          `/organisations/${orgId}/workspaces/${workspaceId}/chat/${chatId}`,
+        )
       : null,
     fetcher,
   );
@@ -103,7 +115,10 @@ export const Chat = ({
     useChat({
       id: chatId,
       transport: new DefaultChatTransport({
-        api: joinUrl(backendUrl || "", "/chat"),
+        api: joinUrl(
+          backendUrl || "",
+          `/organisations/${orgId}/workspaces/${workspaceId}/chat`,
+        ),
         body: {
           orgId,
           workspaceId,
@@ -190,6 +205,7 @@ export const Chat = ({
     messages,
     status,
     chatId,
+    orgId,
     workspaceId,
     providerId,
     agentId,

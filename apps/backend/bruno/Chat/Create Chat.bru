@@ -5,15 +5,20 @@ meta {
 }
 
 post {
-  url: {{host}}/chat
+  url: {{host}}/organisations/:orgId/workspaces/:workspaceId/chat
   body: json
   auth: inherit
+}
+
+params:path {
+  orgId: {{orgId}}
+  workspaceId: {{workspaceId}}
 }
 
 body:json {
   {
     "id": "chat-123",
-    "workspaceId": "default",
+    "workspaceId": "{{workspaceId}}",
     "providerId": "provider-123",
     "modelId": "google/gemini-2.5-flash",
     "messages": [

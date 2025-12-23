@@ -68,7 +68,10 @@ const AgentForm = ({
     results: Provider[];
   }>(
     backendUrl
-      ? joinUrl(backendUrl, `/providers?workspaceId=${workspaceId}`)
+      ? joinUrl(
+          backendUrl,
+          `/organisations/${orgId}/workspaces/${workspaceId}/providers`,
+        )
       : null,
     fetcher,
   );
@@ -76,7 +79,12 @@ const AgentForm = ({
 
   // Fetch existing agent data if editing
   const { data: agent, isLoading: agentLoading } = useSWR<Agent>(
-    agentId ? joinUrl(backendUrl, `/agents/${agentId}`) : null,
+    agentId
+      ? joinUrl(
+          backendUrl,
+          `/organisations/${orgId}/workspaces/${workspaceId}/agents/${agentId}`,
+        )
+      : null,
     fetcher,
   );
 
@@ -212,8 +220,14 @@ const AgentForm = ({
       };
 
       const url = agentId
-        ? joinUrl(backendUrl, `/agents/${agentId}`)
-        : joinUrl(backendUrl, "/agents");
+        ? joinUrl(
+            backendUrl,
+            `/organisations/${orgId}/workspaces/${workspaceId}/agents/${agentId}`,
+          )
+        : joinUrl(
+            backendUrl,
+            `/organisations/${orgId}/workspaces/${workspaceId}/agents`,
+          );
 
       const method = agentId ? "PUT" : "POST";
 
@@ -245,9 +259,15 @@ const AgentForm = ({
 
     setIsDeleting(true);
     try {
-      const response = await fetch(joinUrl(backendUrl, `/agents/${agentId}`), {
-        method: "DELETE",
-      });
+      const response = await fetch(
+        joinUrl(
+          backendUrl,
+          `/organisations/${orgId}/workspaces/${workspaceId}/agents/${agentId}`,
+        ),
+        {
+          method: "DELETE",
+        },
+      );
 
       if (response.ok) {
         router.push(`/${orgId}/workspace/${workspaceId}/agents`);

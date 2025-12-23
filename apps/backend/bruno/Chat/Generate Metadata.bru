@@ -5,17 +5,16 @@ meta {
 }
 
 post {
-  url: {{host}}/chat/:id/generate-metadata?workspaceId=default
+  url: {{host}}/organisations/:orgId/workspaces/:workspaceId/chat/:chatId/generate-metadata
   body: json
   auth: inherit
 }
 
-params:query {
-  workspaceId: default
-}
 
 params:path {
-  id: 
+  orgId: {{orgId}}
+  workspaceId: {{workspaceId}}
+  chatId:
 }
 
 body:json {

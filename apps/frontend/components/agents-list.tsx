@@ -35,7 +35,10 @@ export const AgentsList = ({
     results: Agent[];
   }>(
     backendUrl
-      ? joinUrl(backendUrl, `/agents?workspaceId=${workspaceId}`)
+      ? joinUrl(
+          backendUrl,
+          `/organisations/${orgId}/workspaces/${workspaceId}/agents`,
+        )
       : null,
     fetcher,
   );
@@ -44,7 +47,10 @@ export const AgentsList = ({
     results: Provider[];
   }>(
     backendUrl
-      ? joinUrl(backendUrl, `/providers?workspaceId=${workspaceId}`)
+      ? joinUrl(
+          backendUrl,
+          `/organisations/${orgId}/workspaces/${workspaceId}/providers`,
+        )
       : null,
     fetcher,
   );

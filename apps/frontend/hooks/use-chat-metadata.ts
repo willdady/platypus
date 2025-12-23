@@ -8,6 +8,7 @@ export const useChatMetadata = (
   messages: UIMessage[],
   status: string,
   chatId: string,
+  orgId: string,
   workspaceId: string,
   providerId: string,
   agentId: string,
@@ -28,7 +29,12 @@ export const useChatMetadata = (
     if (messages.length === 2 && !hasMutatedRef.current && status === "ready") {
       hasMutatedRef.current = true;
       // First, revalidate chat data to ensure we have the latest chat record from the backend
-      fetch(joinUrl(backendUrl, `/chat/${chatId}?workspaceId=${workspaceId}`))
+      fetch(
+        joinUrl(
+          backendUrl,
+          `/organisations/${orgId}/workspaces/${workspaceId}/chat/${chatId}`,
+        ),
+      )
         .then((res) => res.json())
         .then((freshChatData) => {
           // Only generate title if the chat has "Untitled" as its title
@@ -54,7 +60,7 @@ export const useChatMetadata = (
               fetch(
                 joinUrl(
                   backendUrl,
-                  `/chat/${chatId}/generate-metadata?workspaceId=${workspaceId}`,
+                  `/organisations/${orgId}/workspaces/${workspaceId}/chat/${chatId}/generate-metadata`,
                 ),
                 {
                   method: "POST",
@@ -67,7 +73,10 @@ export const useChatMetadata = (
                 .then(() => {
                   // Revalidate the chat list
                   mutate(
-                    joinUrl(backendUrl, `/chat?workspaceId=${workspaceId}`),
+                    joinUrl(
+                      backendUrl,
+                      `/organisations/${orgId}/workspaces/${workspaceId}/chat`,
+                    ),
                   );
                 })
                 .catch((error) => {
@@ -86,6 +95,7 @@ export const useChatMetadata = (
     messages,
     status,
     chatId,
+    orgId,
     workspaceId,
     providerId,
     agentId,

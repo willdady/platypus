@@ -7,7 +7,10 @@ import { providerCreateSchema, providerUpdateSchema } from "@platypus/schemas";
 import { eq } from "drizzle-orm";
 import { dedupeArray } from "../utils.ts";
 import { requireAuth } from "../middleware/authentication.ts";
-import { requireOrgAccess, requireWorkspaceAccess } from "../middleware/authorization.ts";
+import {
+  requireOrgAccess,
+  requireWorkspaceAccess,
+} from "../middleware/authorization.ts";
 import type { Variables } from "../server.ts";
 
 const provider = new Hono<{ Variables: Variables }>();
@@ -36,40 +39,50 @@ provider.post(
 );
 
 /** List all providers */
-provider.get("/", requireAuth, requireOrgAccess(), requireWorkspaceAccess(), async (c) => {
-  const workspaceId = c.req.query("workspaceId");
-  const results = await db
-    .select()
-    .from(providerTable)
-    .where(
-      workspaceId ? eq(providerTable.workspaceId, workspaceId) : undefined,
-    );
-  return c.json({ results });
-});
+provider.get(
+  "/",
+  requireAuth,
+  requireOrgAccess(),
+  requireWorkspaceAccess(),
+  async (c) => {
+    const workspaceId = c.req.param("workspaceId")!;
+    const results = await db
+      .select()
+      .from(providerTable)
+      .where(eq(providerTable.workspaceId, workspaceId));
+    return c.json({ results });
+  },
+);
 
 /** Get a provider by ID */
-provider.get("/:id", requireAuth, requireOrgAccess(), requireWorkspaceAccess(), async (c) => {
-  const id = c.req.param("id");
-  const record = await db
-    .select()
-    .from(providerTable)
-    .where(eq(providerTable.id, id))
-    .limit(1);
-  if (record.length === 0) {
-    return c.json({ message: "Provider not found" }, 404);
-  }
-  return c.json(record[0]);
-});
+provider.get(
+  "/:providerId",
+  requireAuth,
+  requireOrgAccess(),
+  requireWorkspaceAccess(),
+  async (c) => {
+    const providerId = c.req.param("providerId");
+    const record = await db
+      .select()
+      .from(providerTable)
+      .where(eq(providerTable.id, providerId))
+      .limit(1);
+    if (record.length === 0) {
+      return c.json({ message: "Provider not found" }, 404);
+    }
+    return c.json(record[0]);
+  },
+);
 
 /** Update a provider by ID (admin only) */
 provider.put(
-  "/:id",
+  "/:providerId",
   requireAuth,
   requireOrgAccess(),
   requireWorkspaceAccess(["admin"]),
   sValidator("json", providerUpdateSchema),
   async (c) => {
-    const id = c.req.param("id");
+    const providerId = c.req.param("providerId");
     const data = c.req.valid("json");
     if (data.modelIds) {
       data.modelIds = dedupeArray(data.modelIds).sort();
@@ -80,7 +93,7 @@ provider.put(
         ...data,
         updatedAt: new Date(),
       })
-      .where(eq(providerTable.id, id))
+      .where(eq(providerTable.id, providerId))
       .returning();
     return c.json(record, 200);
   },
@@ -88,13 +101,13 @@ provider.put(
 
 /** Delete a provider by ID (admin only) */
 provider.delete(
-  "/:id",
+  "/:providerId",
   requireAuth,
   requireOrgAccess(),
   requireWorkspaceAccess(["admin"]),
   async (c) => {
-    const id = c.req.param("id");
-    await db.delete(providerTable).where(eq(providerTable.id, id));
+    const providerId = c.req.param("providerId");
+    await db.delete(providerTable).where(eq(providerTable.id, providerId));
     return c.json({ message: "Provider deleted" });
   },
 );

@@ -11,7 +11,10 @@ import {
 } from "@platypus/schemas";
 import { eq } from "drizzle-orm";
 import { requireAuth } from "../middleware/authentication.ts";
-import { requireOrgAccess, requireWorkspaceAccess } from "../middleware/authorization.ts";
+import {
+  requireOrgAccess,
+  requireWorkspaceAccess,
+} from "../middleware/authorization.ts";
 import type { Variables } from "../server.ts";
 
 const mcp = new Hono<{ Variables: Variables }>();
@@ -37,38 +40,50 @@ mcp.post(
 );
 
 /** List all MCPs */
-mcp.get("/", requireAuth, requireOrgAccess(), requireWorkspaceAccess(), async (c) => {
-  const workspaceId = c.req.query("workspaceId");
-  const results = await db
-    .select()
-    .from(mcpTable)
-    .where(workspaceId ? eq(mcpTable.workspaceId, workspaceId) : undefined);
-  return c.json({ results });
-});
+mcp.get(
+  "/",
+  requireAuth,
+  requireOrgAccess(),
+  requireWorkspaceAccess(),
+  async (c) => {
+    const workspaceId = c.req.param("workspaceId")!;
+    const results = await db
+      .select()
+      .from(mcpTable)
+      .where(eq(mcpTable.workspaceId, workspaceId));
+    return c.json({ results });
+  },
+);
 
 /** Get a MCP by ID */
-mcp.get("/:id", requireAuth, requireOrgAccess(), requireWorkspaceAccess(), async (c) => {
-  const id = c.req.param("id");
-  const record = await db
-    .select()
-    .from(mcpTable)
-    .where(eq(mcpTable.id, id))
-    .limit(1);
-  if (record.length === 0) {
-    return c.json({ message: "MCP not found" }, 404);
-  }
-  return c.json(record[0]);
-});
+mcp.get(
+  "/:mcpId",
+  requireAuth,
+  requireOrgAccess(),
+  requireWorkspaceAccess(),
+  async (c) => {
+    const mcpId = c.req.param("mcpId");
+    const record = await db
+      .select()
+      .from(mcpTable)
+      .where(eq(mcpTable.id, mcpId))
+      .limit(1);
+    if (record.length === 0) {
+      return c.json({ message: "MCP not found" }, 404);
+    }
+    return c.json(record[0]);
+  },
+);
 
 /** Update a MCP by ID (admin only) */
 mcp.put(
-  "/:id",
+  "/:mcpId",
   requireAuth,
   requireOrgAccess(),
   requireWorkspaceAccess(["admin"]),
   sValidator("json", mcpUpdateSchema),
   async (c) => {
-    const id = c.req.param("id");
+    const mcpId = c.req.param("mcpId");
     const data = c.req.valid("json");
     const record = await db
       .update(mcpTable)
@@ -76,7 +91,7 @@ mcp.put(
         ...data,
         updatedAt: new Date(),
       })
-      .where(eq(mcpTable.id, id))
+      .where(eq(mcpTable.id, mcpId))
       .returning();
     return c.json(record, 200);
   },
@@ -84,13 +99,13 @@ mcp.put(
 
 /** Delete a MCP by ID (admin only) */
 mcp.delete(
-  "/:id",
+  "/:mcpId",
   requireAuth,
   requireOrgAccess(),
   requireWorkspaceAccess(["admin"]),
   async (c) => {
-    const id = c.req.param("id");
-    await db.delete(mcpTable).where(eq(mcpTable.id, id));
+    const mcpId = c.req.param("mcpId");
+    await db.delete(mcpTable).where(eq(mcpTable.id, mcpId));
     return c.json({ message: "MCP deleted" });
   },
 );
@@ -103,68 +118,69 @@ mcp.post(
   requireWorkspaceAccess(["admin"]),
   sValidator("json", mcpTestSchema),
   async (c) => {
-  const data = c.req.valid("json");
+    const data = c.req.valid("json");
 
-  let mcpClient;
-  try {
-    mcpClient = await createMCPClient({
-      transport: {
-        type: "http",
-        url: data.url,
-        headers:
-          data.authType === "Bearer"
-            ? { Authorization: `Bearer ${data.bearerToken}` }
-            : undefined,
-      },
-    });
+    let mcpClient;
+    try {
+      mcpClient = await createMCPClient({
+        transport: {
+          type: "http",
+          url: data.url,
+          headers:
+            data.authType === "Bearer"
+              ? { Authorization: `Bearer ${data.bearerToken}` }
+              : undefined,
+        },
+      });
 
-    // Fetch available tools
-    const mcpTools = await mcpClient.tools();
+      // Fetch available tools
+      const mcpTools = await mcpClient.tools();
 
-    // Extract tool names from the tools object
-    const toolNames = Object.keys(mcpTools);
+      // Extract tool names from the tools object
+      const toolNames = Object.keys(mcpTools);
 
-    // Close connection
-    await mcpClient.close();
+      // Close connection
+      await mcpClient.close();
 
-    // Return success with tool names
-    return c.json(
-      {
-        success: true,
-        toolNames,
-      },
-      200,
-    );
-  } catch (error) {
-    // Close client if it was created
-    if (mcpClient) {
-      try {
-        await mcpClient.close();
-      } catch (closeError) {
-        console.error("Error closing MCP client:", closeError);
+      // Return success with tool names
+      return c.json(
+        {
+          success: true,
+          toolNames,
+        },
+        200,
+      );
+    } catch (error) {
+      // Close client if it was created
+      if (mcpClient) {
+        try {
+          await mcpClient.close();
+        } catch (closeError) {
+          console.error("Error closing MCP client:", closeError);
+        }
       }
+
+      // Log the full error for debugging
+      console.error("MCP test connection error:", error);
+
+      // Return error details
+      let errorMessage = "Unknown error connecting to MCP server";
+
+      if (error instanceof Error) {
+        errorMessage = error.message;
+      } else if (typeof error === "string") {
+        errorMessage = error;
+      }
+
+      return c.json(
+        {
+          success: false,
+          error: errorMessage,
+        },
+        400,
+      );
     }
-
-    // Log the full error for debugging
-    console.error("MCP test connection error:", error);
-
-    // Return error details
-    let errorMessage = "Unknown error connecting to MCP server";
-
-    if (error instanceof Error) {
-      errorMessage = error.message;
-    } else if (typeof error === "string") {
-      errorMessage = error;
-    }
-
-    return c.json(
-      {
-        success: false,
-        error: errorMessage,
-      },
-      400,
-    );
-  }
-});
+  },
+);
 
 export { mcp };

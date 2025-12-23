@@ -35,7 +35,10 @@ import {
 } from "@platypus/schemas";
 import { and, desc, eq, sql } from "drizzle-orm";
 import { requireAuth } from "../middleware/authentication.ts";
-import { requireOrgAccess, requireWorkspaceAccess } from "../middleware/authorization.ts";
+import {
+  requireOrgAccess,
+  requireWorkspaceAccess,
+} from "../middleware/authorization.ts";
 import type { Variables } from "../server.ts";
 
 // --- Types ---
@@ -394,24 +397,13 @@ chat.get(
   sValidator(
     "query",
     z.object({
-      workspaceId: z.string(),
       limit: z.string().optional(),
       offset: z.string().optional(),
     }),
   ),
   async (c) => {
-    const {
-      workspaceId,
-      limit: limitStr,
-      offset: offsetStr,
-    } = c.req.valid("query");
-
-    if (!workspaceId) {
-      return c.json(
-        { message: "workspaceId query parameter is required" },
-        400,
-      );
-    }
+    const workspaceId = c.req.param("workspaceId")!;
+    const { limit: limitStr, offset: offsetStr } = c.req.valid("query");
 
     const limit = Math.min(parseInt(limitStr ?? "100") || 100, 100);
     const offset = parseInt(offsetStr ?? "0") || 0;
@@ -443,9 +435,8 @@ chat.get(
   requireAuth,
   requireOrgAccess(),
   requireWorkspaceAccess(),
-  sValidator("query", z.object({ workspaceId: z.string() })),
   async (c) => {
-    const { workspaceId } = c.req.valid("query");
+    const workspaceId = c.req.param("workspaceId")!;
 
     const result = await db.execute(sql`
       SELECT value as tag, count(*)::int as count
@@ -460,19 +451,20 @@ chat.get(
 );
 
 chat.get(
-  "/:id",
+  "/:chatId",
   requireAuth,
   requireOrgAccess(),
   requireWorkspaceAccess(),
-  sValidator("query", z.object({ workspaceId: z.string() })),
   async (c) => {
-    const id = c.req.param("id");
-    const { workspaceId } = c.req.valid("query");
+    const chatId = c.req.param("chatId");
+    const workspaceId = c.req.param("workspaceId")!;
 
     const record = await db
       .select()
       .from(chatTable)
-      .where(and(eq(chatTable.id, id), eq(chatTable.workspaceId, workspaceId)))
+      .where(
+        and(eq(chatTable.id, chatId), eq(chatTable.workspaceId, workspaceId)),
+      )
       .limit(1);
     if (record.length === 0) {
       return c.json({ message: "Chat not found" }, 404);
@@ -488,84 +480,87 @@ chat.post(
   requireWorkspaceAccess(),
   sValidator("json", chatSubmitSchema),
   async (c) => {
-  const data = c.req.valid("json");
-  const { workspaceId, messages = [] } = data;
+    const workspaceId = c.req.param("workspaceId")!;
+    const data = c.req.valid("json");
+    const { messages = [] } = data;
 
-  // 1. Resolve Context (Agent vs Direct) & Provider
-  const context = await resolveChatContext(data, workspaceId);
-  const { provider, agent, resolvedModelId } = context;
+    // 1. Resolve Context (Agent vs Direct) & Provider
+    const context = await resolveChatContext(data, workspaceId);
+    const { provider, agent, resolvedModelId } = context;
 
-  // 2. Initialize Model
-  const [aiProvider, model] = createModel(provider, resolvedModelId);
+    // 2. Initialize Model
+    const [aiProvider, model] = createModel(provider, resolvedModelId);
 
-  // 3. Load Tools (Static & MCP)
-  const { tools, mcpClients } = await loadTools(agent, workspaceId);
+    // 3. Load Tools (Static & MCP)
+    const { tools, mcpClients } = await loadTools(agent, workspaceId);
 
-  // 4. Configure Search (if enabled)
-  if (data.search) {
-    Object.assign(tools, createSearchTools(provider, aiProvider));
-  }
+    // 4. Configure Search (if enabled)
+    if (data.search) {
+      Object.assign(tools, createSearchTools(provider, aiProvider));
+    }
 
-  // 5. Prepare Generation Config (Merge Agent & Request params)
-  const config = resolveGenerationConfig(data, agent);
+    // 5. Prepare Generation Config (Merge Agent & Request params)
+    const config = resolveGenerationConfig(data, agent);
 
-  // 6. Stream Response
-  const { systemPrompt, ...restConfig } = config;
-  const result = streamText({
-    model,
-    messages: convertToModelMessages(messages),
-    stopWhen: stepCountIs(context.resolvedMaxSteps),
-    tools,
-    system: systemPrompt,
-    ...restConfig,
-  });
+    // 6. Stream Response
+    const { systemPrompt, ...restConfig } = config;
+    const result = streamText({
+      model,
+      messages: convertToModelMessages(messages),
+      stopWhen: stepCountIs(context.resolvedMaxSteps),
+      tools,
+      system: systemPrompt,
+      ...restConfig,
+    });
 
-  return result.toUIMessageStreamResponse({
-    originalMessages: messages,
-    generateMessageId: createIdGenerator({
-      prefix: "msg",
-      size: 16,
-    }),
-    onFinish: async ({ messages }) => {
-      try {
-        // Close all MCP clients
-        for (const mcpClient of mcpClients) {
-          try {
-            await mcpClient.close();
-          } catch (error) {
-            console.error("Error closing MCP client:", error);
+    return result.toUIMessageStreamResponse({
+      originalMessages: messages,
+      generateMessageId: createIdGenerator({
+        prefix: "msg",
+        size: 16,
+      }),
+      onFinish: async ({ messages }) => {
+        try {
+          // Close all MCP clients
+          for (const mcpClient of mcpClients) {
+            try {
+              await mcpClient.close();
+            } catch (error) {
+              console.error("Error closing MCP client:", error);
+            }
           }
-        }
 
-        // Upsert chat record
-        await upsertChatRecord(
-          data.id,
-          workspaceId,
-          messages,
-          context,
-          config,
-          data,
-        );
-      } catch (error) {
-        console.error("Error in onFinish:", error);
-      }
-    },
-  });
-});
+          // Upsert chat record
+          await upsertChatRecord(
+            data.id,
+            workspaceId,
+            messages,
+            context,
+            config,
+            data,
+          );
+        } catch (error) {
+          console.error("Error in onFinish:", error);
+        }
+      },
+    });
+  },
+);
 
 chat.delete(
-  "/:id",
+  "/:chatId",
   requireAuth,
   requireOrgAccess(),
   requireWorkspaceAccess(),
-  sValidator("query", z.object({ workspaceId: z.string() })),
   async (c) => {
-    const id = c.req.param("id");
-    const { workspaceId } = c.req.valid("query");
+    const chatId = c.req.param("chatId");
+    const workspaceId = c.req.param("workspaceId")!;
 
     const result = await db
       .delete(chatTable)
-      .where(and(eq(chatTable.id, id), eq(chatTable.workspaceId, workspaceId)))
+      .where(
+        and(eq(chatTable.id, chatId), eq(chatTable.workspaceId, workspaceId)),
+      )
       .returning();
 
     if (result.length === 0) {
@@ -577,21 +572,22 @@ chat.delete(
 );
 
 chat.put(
-  "/:id",
+  "/:chatId",
   requireAuth,
   requireOrgAccess(),
   requireWorkspaceAccess(),
-  sValidator("query", z.object({ workspaceId: z.string() })),
   sValidator("json", chatUpdateSchema),
   async (c) => {
-    const id = c.req.param("id");
-    const { workspaceId } = c.req.valid("query");
+    const chatId = c.req.param("chatId");
+    const workspaceId = c.req.param("workspaceId")!;
     const { title, isStarred, tags } = c.req.valid("json");
 
     const result = await db
       .update(chatTable)
       .set({ title, isStarred, tags, updatedAt: new Date() })
-      .where(and(eq(chatTable.id, id), eq(chatTable.workspaceId, workspaceId)))
+      .where(
+        and(eq(chatTable.id, chatId), eq(chatTable.workspaceId, workspaceId)),
+      )
       .returning();
 
     if (result.length === 0) {
@@ -603,22 +599,23 @@ chat.put(
 );
 
 chat.post(
-  "/:id/generate-metadata",
+  "/:chatId/generate-metadata",
   requireAuth,
   requireOrgAccess(),
   requireWorkspaceAccess(),
-  sValidator("query", z.object({ workspaceId: z.string() })),
   sValidator("json", chatGenerateMetadataSchema),
   async (c) => {
-    const id = c.req.param("id");
-    const { workspaceId } = c.req.valid("query");
+    const chatId = c.req.param("chatId");
+    const workspaceId = c.req.param("workspaceId")!;
     const { providerId } = c.req.valid("json");
 
     // Fetch chat record
     const chatRecord = await db
       .select()
       .from(chatTable)
-      .where(and(eq(chatTable.id, id), eq(chatTable.workspaceId, workspaceId)))
+      .where(
+        and(eq(chatTable.id, chatId), eq(chatTable.workspaceId, workspaceId)),
+      )
       .limit(1);
     if (chatRecord.length === 0) {
       return c.json({ message: "Chat not found" }, 404);
@@ -678,7 +675,9 @@ chat.post(
     const updateResult = await db
       .update(chatTable)
       .set({ title: newTitle, tags: newTags, updatedAt: new Date() })
-      .where(and(eq(chatTable.id, id), eq(chatTable.workspaceId, workspaceId)))
+      .where(
+        and(eq(chatTable.id, chatId), eq(chatTable.workspaceId, workspaceId)),
+      )
       .returning();
 
     return c.json(updateResult[0]);

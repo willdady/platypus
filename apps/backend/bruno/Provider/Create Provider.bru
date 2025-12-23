@@ -5,14 +5,19 @@ meta {
 }
 
 post {
-  url: {{host}}/providers
+  url: {{host}}/organisations/:orgId/workspaces/:workspaceId/providers
   body: json
   auth: inherit
 }
 
+params:path {
+  orgId: {{orgId}}
+  workspaceId: {{workspaceId}}
+}
+
 body:json {
   {
-    "workspaceId": "default",
+    "workspaceId": "{{workspaceId}}",
     "name": "Open Router",
     "providerType": "OpenRouter",
     "apiKey": "sk-1234",

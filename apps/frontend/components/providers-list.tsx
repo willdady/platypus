@@ -22,7 +22,10 @@ const ProvidersList = ({
 
   const { data, error, isLoading } = useSWR<{ results: Provider[] }>(
     backendUrl
-      ? joinUrl(backendUrl, `/providers?workspaceId=${workspaceId}`)
+      ? joinUrl(
+          backendUrl,
+          `/organisations/${orgId}/workspaces/${workspaceId}/providers`,
+        )
       : null,
     fetcher,
   );

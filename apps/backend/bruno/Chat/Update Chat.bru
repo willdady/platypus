@@ -5,17 +5,16 @@ meta {
 }
 
 put {
-  url: {{host}}/chat/:id?workspaceId=default
+  url: {{host}}/organisations/:orgId/workspaces/:workspaceId/chat/:chatId
   body: json
   auth: inherit
 }
 
-params:query {
-  workspaceId: default
-}
 
 params:path {
-  id: 
+  orgId: {{orgId}}
+  workspaceId: {{workspaceId}}
+  chatId:
 }
 
 body:json {

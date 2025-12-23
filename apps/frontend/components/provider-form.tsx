@@ -91,7 +91,12 @@ const ProviderForm = ({
 
   const fetcher = (url: string) => fetch(url).then((res) => res.json());
   const { data: provider, isLoading } = useSWR<Provider>(
-    providerId ? joinUrl(backendUrl, `/providers/${providerId}`) : null,
+    providerId
+      ? joinUrl(
+          backendUrl,
+          `/organisations/${orgId}/workspaces/${workspaceId}/providers/${providerId}`,
+        )
+      : null,
     fetcher,
   );
 
@@ -215,8 +220,14 @@ const ProviderForm = ({
       };
 
       const url = providerId
-        ? joinUrl(backendUrl, `/providers/${providerId}`)
-        : joinUrl(backendUrl, "/providers");
+        ? joinUrl(
+            backendUrl,
+            `/organisations/${orgId}/workspaces/${workspaceId}/providers/${providerId}`,
+          )
+        : joinUrl(
+            backendUrl,
+            `/organisations/${orgId}/workspaces/${workspaceId}/providers`,
+          );
 
       const method = providerId ? "PUT" : "POST";
 
@@ -249,7 +260,10 @@ const ProviderForm = ({
     setIsDeleting(true);
     try {
       const response = await fetch(
-        joinUrl(backendUrl, `/providers/${providerId}`),
+        joinUrl(
+          backendUrl,
+          `/organisations/${orgId}/workspaces/${workspaceId}/providers/${providerId}`,
+        ),
         {
           method: "DELETE",
         },

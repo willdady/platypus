@@ -6,7 +6,10 @@ import { db } from "../index.ts";
 import { mcp as mcpTable } from "../db/schema.ts";
 import { eq } from "drizzle-orm";
 import { requireAuth } from "../middleware/authentication.ts";
-import { requireOrgAccess, requireWorkspaceAccess } from "../middleware/authorization.ts";
+import {
+  requireOrgAccess,
+  requireWorkspaceAccess,
+} from "../middleware/authorization.ts";
 import type { Variables } from "../server.ts";
 
 const tool = new Hono<{ Variables: Variables }>();
@@ -17,14 +20,8 @@ tool.get(
   requireAuth,
   requireOrgAccess(),
   requireWorkspaceAccess(),
-  sValidator(
-    "query",
-    z.object({
-      workspaceId: z.string(),
-    }),
-  ),
   async (c) => {
-    const { workspaceId } = c.req.valid("query");
+    const workspaceId = c.req.param("workspaceId")!;
     // Get static tools
     const toolSetsList = Object.entries(getToolSets()).map(([id, toolSet]) => ({
       id,

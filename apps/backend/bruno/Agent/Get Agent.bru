@@ -5,11 +5,13 @@ meta {
 }
 
 get {
-  url: {{host}}/agents/:id
+  url: {{host}}/organisations/:orgId/workspaces/:workspaceId/agents/:agentId
   body: none
   auth: inherit
 }
 
 params:path {
-  id: 
+  orgId: {{orgId}}
+  workspaceId: {{workspaceId}}
+  agentId:
 }

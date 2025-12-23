@@ -42,7 +42,9 @@ const WorkspaceForm = ({
   const { mutate: globalMutate } = useSWRConfig();
 
   const { data: workspace, mutate } = useSWR<Workspace>(
-    workspaceId ? joinUrl(backendUrl, `/workspaces/${workspaceId}`) : null,
+    workspaceId
+      ? joinUrl(backendUrl, `/organisations/${orgId}/workspaces/${workspaceId}`)
+      : null,
     fetcher,
   );
 
@@ -87,8 +89,11 @@ const WorkspaceForm = ({
     setValidationErrors({});
     try {
       const url = workspaceId
-        ? joinUrl(backendUrl, `/workspaces/${workspaceId}`)
-        : joinUrl(backendUrl, "/workspaces");
+        ? joinUrl(
+            backendUrl,
+            `/organisations/${orgId}/workspaces/${workspaceId}`,
+          )
+        : joinUrl(backendUrl, `/organisations/${orgId}/workspaces`);
 
       const method = workspaceId ? "PUT" : "POST";
 
@@ -108,12 +113,16 @@ const WorkspaceForm = ({
         if (workspaceId) {
           toast.success("Workspace updated");
           mutate(); // Refresh the local cache
-          globalMutate(joinUrl(backendUrl, `/workspaces?orgId=${orgId}`));
+          globalMutate(
+            joinUrl(backendUrl, `/organisations/${orgId}/workspaces`),
+          );
           router.refresh();
         } else {
           const workspace = await response.json();
           toast.success("Workspace created");
-          globalMutate(joinUrl(backendUrl, `/workspaces?orgId=${orgId}`));
+          globalMutate(
+            joinUrl(backendUrl, `/organisations/${orgId}/workspaces`),
+          );
           router.push(`/${orgId}/workspace/${workspace.id}`);
         }
       } else {
@@ -136,7 +145,10 @@ const WorkspaceForm = ({
     setIsDeleting(true);
     try {
       const response = await fetch(
-        joinUrl(backendUrl, `/workspaces/${workspaceId}`),
+        joinUrl(
+          backendUrl,
+          `/organisations/${orgId}/workspaces/${workspaceId}`,
+        ),
         {
           method: "DELETE",
         },

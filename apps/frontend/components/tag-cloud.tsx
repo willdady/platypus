@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Tag } from "lucide-react";
 
 interface TagCloudProps {
+  orgId: string;
   workspaceId: string;
 }
 
@@ -16,11 +17,14 @@ interface TagData {
   count: number;
 }
 
-export const TagCloud = ({ workspaceId }: TagCloudProps) => {
+export const TagCloud = ({ orgId, workspaceId }: TagCloudProps) => {
   const backendUrl = useBackendUrl();
   const { data, isLoading } = useSWR<{ results: TagData[] }>(
     backendUrl
-      ? joinUrl(backendUrl, `/chat/tags?workspaceId=${workspaceId}`)
+      ? joinUrl(
+          backendUrl,
+          `/organisations/${orgId}/workspaces/${workspaceId}/chat/tags`,
+        )
       : null,
     fetcher,
   );

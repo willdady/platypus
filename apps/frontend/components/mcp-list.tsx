@@ -21,7 +21,12 @@ const McpList = ({
   const backendUrl = useBackendUrl();
 
   const { data, error, isLoading } = useSWR<{ results: MCP[] }>(
-    backendUrl ? joinUrl(backendUrl, `/mcps?workspaceId=${workspaceId}`) : null,
+    backendUrl
+      ? joinUrl(
+          backendUrl,
+          `/organisations/${orgId}/workspaces/${workspaceId}/mcps`,
+        )
+      : null,
     fetcher,
   );
 

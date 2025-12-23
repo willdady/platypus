@@ -2,7 +2,11 @@ import { createMiddleware } from "hono/factory";
 import { eq, and } from "drizzle-orm";
 import { organisationMember, workspaceMember } from "../db/schema.ts";
 import type { Context } from "hono";
-import type { WorkspaceRole, SuperAdminOrgMembership, OrgRole } from "../server.ts";
+import type {
+  WorkspaceRole,
+  SuperAdminOrgMembership,
+  OrgRole,
+} from "../server.ts";
 
 /**
  * Checks if a user is a super admin based on email address.
@@ -20,7 +24,8 @@ import type { WorkspaceRole, SuperAdminOrgMembership, OrgRole } from "../server.
  * ```
  */
 const isSuperAdmin = (userEmail: string): boolean => {
-  const superAdminEmails = process.env.SUPER_ADMIN_EMAILS?.split(',').map(e => e.trim()) || [];
+  const superAdminEmails =
+    process.env.SUPER_ADMIN_EMAILS?.split(",").map((e) => e.trim()) || [];
   return superAdminEmails.includes(userEmail);
 };
 
@@ -44,95 +49,9 @@ const isSuperAdmin = (userEmail: string): boolean => {
  * ```
  */
 const isSuperAdminMembership = (
-  membership: any
+  membership: any,
 ): membership is SuperAdminOrgMembership => {
   return membership?.isSuperAdmin === true;
-};
-
-/**
- * Extracts the organisation ID from the request using smart detection.
- * Attempts to find the ID in the following order:
- * 1. URL parameters (orgId, id)
- * 2. Query parameters (organisationId, orgId)
- * 3. Request body (organisationId, orgId)
- *
- * @param c - The Hono context object
- * @returns The organisation ID if found, undefined otherwise
- *
- * @example
- * ```typescript
- * // Extracts from /organisations/:id
- * // or ?organisationId=123
- * // or { "organisationId": "123" } in body
- * const orgId = await extractOrgId(c);
- * ```
- */
-const extractOrgId = async (c: Context): Promise<string | undefined> => {
-  // Try URL params first: /:orgId/ or /:id/ (for org-specific routes)
-  const orgIdParam = c.req.param("orgId");
-  if (orgIdParam) return orgIdParam;
-
-  const idParam = c.req.param("id");
-  if (idParam) return idParam;
-
-  // Try query params
-  const organisationIdQuery = c.req.query("organisationId");
-  if (organisationIdQuery) return organisationIdQuery;
-
-  const orgIdQuery = c.req.query("orgId");
-  if (orgIdQuery) return orgIdQuery;
-
-  // Try request body (for POST/PUT requests)
-  try {
-    const body = await c.req.json();
-    if (body?.organisationId) return body.organisationId;
-    if (body?.orgId) return body.orgId;
-  } catch {
-    // Body parsing failed, continue
-  }
-
-  return undefined;
-};
-
-/**
- * Extracts the workspace ID from the request using smart detection.
- * Attempts to find the ID in the following order:
- * 1. URL parameters (workspaceId, id)
- * 2. Query parameters (workspaceId)
- * 3. Request body (workspaceId)
- *
- * @param c - The Hono context object
- * @returns The workspace ID if found, undefined otherwise
- *
- * @example
- * ```typescript
- * // Extracts from /workspaces/:workspaceId
- * // or ?workspaceId=456
- * // or { "workspaceId": "456" } in body
- * const workspaceId = await extractWorkspaceId(c);
- * ```
- */
-const extractWorkspaceId = async (c: Context): Promise<string | undefined> => {
-  // Try URL params first: /:workspaceId/ or /:id/ (for workspace-specific routes)
-  const workspaceIdParam = c.req.param("workspaceId");
-  if (workspaceIdParam) return workspaceIdParam;
-
-  const idParam = c.req.param("id");
-  if (idParam) return idParam;
-
-  // Try query params
-  const workspaceIdQuery = c.req.query("workspaceId");
-  if (workspaceIdQuery) return workspaceIdQuery;
-
-  // Try request body (for POST/PUT requests)
-  try {
-    const body = await c.req.json();
-    if (body?.workspaceId) return body.workspaceId;
-  } catch {
-    // Body parsing failed, continue
-  }
-
-  return undefined;
 };
 
 /**
@@ -179,8 +98,8 @@ export const requireOrgAccess = (requiredRoles?: OrgRole[]) =>
       return;
     }
 
-    // Get orgId using smart detection (URL params → query → body)
-    const orgId = await extractOrgId(c);
+    // Get orgId from path parameters
+    const orgId = c.req.param("orgId");
 
     if (!orgId) {
       return c.json({ error: "Organisation ID required" }, 400);
@@ -189,10 +108,12 @@ export const requireOrgAccess = (requiredRoles?: OrgRole[]) =>
     const [membership] = await db
       .select()
       .from(organisationMember)
-      .where(and(
-        eq(organisationMember.userId, user.id),
-        eq(organisationMember.organisationId, orgId)
-      ))
+      .where(
+        and(
+          eq(organisationMember.userId, user.id),
+          eq(organisationMember.organisationId, orgId),
+        ),
+      )
       .limit(1);
 
     if (!membership) {
@@ -259,8 +180,8 @@ export const requireWorkspaceAccess = (requiredRoles?: WorkspaceRole[]) =>
       return;
     }
 
-    // Get workspaceId using smart detection (URL params → query → body)
-    const workspaceId = await extractWorkspaceId(c);
+    // Get workspaceId from path parameters
+    const workspaceId = c.req.param("workspaceId");
 
     if (!workspaceId) {
       return c.json({ error: "Workspace ID required" }, 400);
@@ -278,17 +199,22 @@ export const requireWorkspaceAccess = (requiredRoles?: WorkspaceRole[]) =>
     const [wsMembership] = await db
       .select()
       .from(workspaceMember)
-      .where(and(
-        eq(workspaceMember.userId, user.id),
-        eq(workspaceMember.workspaceId, workspaceId)
-      ))
+      .where(
+        and(
+          eq(workspaceMember.userId, user.id),
+          eq(workspaceMember.workspaceId, workspaceId),
+        ),
+      )
       .limit(1);
 
     if (!wsMembership) {
       return c.json({ error: "No access to this workspace" }, 403);
     }
 
-    if (requiredRoles && !requiredRoles.includes(wsMembership.role as WorkspaceRole)) {
+    if (
+      requiredRoles &&
+      !requiredRoles.includes(wsMembership.role as WorkspaceRole)
+    ) {
       return c.json({ error: "Insufficient workspace permissions" }, 403);
     }
 

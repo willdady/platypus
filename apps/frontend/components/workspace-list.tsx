@@ -24,7 +24,9 @@ const WorkspaceList = ({
   const backendUrl = useBackendUrl();
 
   const { data, error, isLoading } = useSWR<{ results: Workspace[] }>(
-    backendUrl ? joinUrl(backendUrl, `/workspaces?orgId=${orgId}`) : null,
+    backendUrl
+      ? joinUrl(backendUrl, `/organisations/${orgId}/workspaces`)
+      : null,
     fetcher,
   );
 

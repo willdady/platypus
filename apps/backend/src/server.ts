@@ -101,12 +101,12 @@ app.use("*", async (c, next) => {
 
 app.get("/health", (c) => c.json({ status: "ok" }));
 
-app.route("/chat", chat);
 app.route("/organisations", organisation);
-app.route("/workspaces", workspace);
-app.route("/agents", agent);
-app.route("/tools", tool);
-app.route("/mcps", mcp);
-app.route("/providers", provider);
+app.route("/organisations/:orgId/workspaces", workspace);
+app.route("/organisations/:orgId/workspaces/:workspaceId/agents", agent);
+app.route("/organisations/:orgId/workspaces/:workspaceId/chat", chat);
+app.route("/organisations/:orgId/workspaces/:workspaceId/mcps", mcp);
+app.route("/organisations/:orgId/workspaces/:workspaceId/providers", provider);
+app.route("/organisations/:orgId/workspaces/:workspaceId/tools", tool);
 
 export default app;

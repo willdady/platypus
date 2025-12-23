@@ -5,11 +5,13 @@ meta {
 }
 
 delete {
-  url: {{host}}/providers/:id
+  url: {{host}}/organisations/:orgId/workspaces/:workspaceId/providers/:providerId
   body: none
   auth: inherit
 }
 
 params:path {
-  id: 
+  orgId: {{orgId}}
+  workspaceId: {{workspaceId}}
+  providerId:
 }

@@ -28,7 +28,7 @@ export default async function WorkspaceLayout({
   const backendUrl =
     process.env.INTERNAL_BACKEND_URL || process.env.BACKEND_URL || "";
   const response = await fetch(
-    joinUrl(backendUrl, `/workspaces/${workspaceId}`),
+    joinUrl(backendUrl, `/organisations/${orgId}/workspaces/${workspaceId}`),
   );
 
   if (response.status === 404) {

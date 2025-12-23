@@ -5,11 +5,13 @@ meta {
 }
 
 get {
-  url: {{host}}/agents?workspaceId=default
+  url: {{host}}/organisations/:orgId/workspaces/:workspaceId/agents
   body: none
   auth: inherit
 }
 
-params:query {
-  workspaceId: default
+params:path {
+  orgId: {{orgId}}
+  workspaceId: {{workspaceId}}
 }
+

@@ -14,9 +14,11 @@ Apply authorization middleware (`requireOrgAccess`, `requireWorkspaceAccess`) to
 ## Critical Files
 
 ### Middleware
+
 - `apps/backend/src/middleware/authorization.ts` - Enhance ID resolution and add requireSuperAdmin
 
 ### Route Files (all in `apps/backend/src/routes/`)
+
 - `organisation.ts` - Org-level access control + super admin restriction
 - `workspace.ts` - Org-level access control
 - `agent.ts` - Workspace-level access control with role restrictions
@@ -34,12 +36,19 @@ Apply authorization middleware (`requireOrgAccess`, `requireWorkspaceAccess`) to
 **Changes:**
 
 1. **Add smart ID detection helper function**
+
    ```typescript
    // Helper to extract ID from request (URL params → query → body)
-   const extractId = (c: any, paramName: string, queryName?: string): string | undefined => {
-     return c.req.param(paramName) ||
-            c.req.query(queryName || paramName) ||
-            c.req.json?.[queryName || paramName];
+   const extractId = (
+     c: any,
+     paramName: string,
+     queryName?: string,
+   ): string | undefined => {
+     return (
+       c.req.param(paramName) ||
+       c.req.query(queryName || paramName) ||
+       c.req.json?.[queryName || paramName]
+     );
    };
    ```
 
@@ -55,6 +64,7 @@ Apply authorization middleware (`requireOrgAccess`, `requireWorkspaceAccess`) to
    - With: Smart detection for `workspaceId`, `id` from params/query/body
 
 4. **Add `requireSuperAdmin` middleware**
+
    ```typescript
    export const requireSuperAdmin = createMiddleware(async (c, next) => {
      const user = c.get("user");
@@ -72,8 +82,12 @@ Apply authorization middleware (`requireOrgAccess`, `requireWorkspaceAccess`) to
 **File:** `apps/backend/src/routes/organisation.ts`
 
 **Import additions:**
+
 ```typescript
-import { requireOrgAccess, requireSuperAdmin } from "../middleware/authorization.ts";
+import {
+  requireOrgAccess,
+  requireSuperAdmin,
+} from "../middleware/authorization.ts";
 ```
 
 **Changes:**
@@ -89,6 +103,7 @@ import { requireOrgAccess, requireSuperAdmin } from "../middleware/authorization
 7. **GET /:orgId/membership** - `requireAuth, requireOrgAccess()`
 
 **Special handling for GET /**:
+
 ```typescript
 organisation.get("/", requireAuth, async (c) => {
   const user = c.get("user")!;
@@ -106,7 +121,7 @@ organisation.get("/", requireAuth, async (c) => {
     .from(organisationMember)
     .where(eq(organisationMember.userId, user.id));
 
-  const orgIds = memberships.map(m => m.organisationId);
+  const orgIds = memberships.map((m) => m.organisationId);
 
   if (orgIds.length === 0) {
     return c.json({ results: [] });
@@ -126,8 +141,12 @@ organisation.get("/", requireAuth, async (c) => {
 **File:** `apps/backend/src/routes/workspace.ts`
 
 **Import additions:**
+
 ```typescript
-import { requireOrgAccess, requireWorkspaceAccess } from "../middleware/authorization.ts";
+import {
+  requireOrgAccess,
+  requireWorkspaceAccess,
+} from "../middleware/authorization.ts";
 ```
 
 **Changes:**
@@ -147,8 +166,12 @@ import { requireOrgAccess, requireWorkspaceAccess } from "../middleware/authoriz
 **File:** `apps/backend/src/routes/agent.ts`
 
 **Import additions:**
+
 ```typescript
-import { requireOrgAccess, requireWorkspaceAccess } from "../middleware/authorization.ts";
+import {
+  requireOrgAccess,
+  requireWorkspaceAccess,
+} from "../middleware/authorization.ts";
 ```
 
 **Changes:**
@@ -167,8 +190,12 @@ import { requireOrgAccess, requireWorkspaceAccess } from "../middleware/authoriz
 **File:** `apps/backend/src/routes/chat.ts`
 
 **Import additions:**
+
 ```typescript
-import { requireOrgAccess, requireWorkspaceAccess } from "../middleware/authorization.ts";
+import {
+  requireOrgAccess,
+  requireWorkspaceAccess,
+} from "../middleware/authorization.ts";
 ```
 
 **Changes:**
@@ -190,8 +217,12 @@ import { requireOrgAccess, requireWorkspaceAccess } from "../middleware/authoriz
 **File:** `apps/backend/src/routes/provider.ts`
 
 **Import additions:**
+
 ```typescript
-import { requireOrgAccess, requireWorkspaceAccess } from "../middleware/authorization.ts";
+import {
+  requireOrgAccess,
+  requireWorkspaceAccess,
+} from "../middleware/authorization.ts";
 ```
 
 **Changes:**
@@ -210,8 +241,12 @@ import { requireOrgAccess, requireWorkspaceAccess } from "../middleware/authoriz
 **File:** `apps/backend/src/routes/mcp.ts`
 
 **Import additions:**
+
 ```typescript
-import { requireOrgAccess, requireWorkspaceAccess } from "../middleware/authorization.ts";
+import {
+  requireOrgAccess,
+  requireWorkspaceAccess,
+} from "../middleware/authorization.ts";
 ```
 
 **Changes:**
@@ -231,8 +266,12 @@ import { requireOrgAccess, requireWorkspaceAccess } from "../middleware/authoriz
 **File:** `apps/backend/src/routes/tool.ts`
 
 **Import additions:**
+
 ```typescript
-import { requireOrgAccess, requireWorkspaceAccess } from "../middleware/authorization.ts";
+import {
+  requireOrgAccess,
+  requireWorkspaceAccess,
+} from "../middleware/authorization.ts";
 ```
 
 **Changes:**
@@ -282,6 +321,7 @@ This implementation addresses these critical security issues:
 ## Rollback Plan
 
 If issues arise:
+
 1. Middleware changes are backwards compatible (existing behavior preserved)
 2. Each route file can be reverted independently
 3. Super admin restriction on org creation can be removed if too restrictive

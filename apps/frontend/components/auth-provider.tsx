@@ -1,6 +1,13 @@
 "use client";
 
-import { createContext, useContext, ReactNode, useMemo, useState, useEffect } from "react";
+import {
+  createContext,
+  useContext,
+  ReactNode,
+  useMemo,
+  useState,
+  useEffect,
+} from "react";
 import { createAuthClient } from "better-auth/react";
 import { useParams } from "next/navigation";
 
@@ -21,6 +28,7 @@ interface AuthContextType {
   user: any | null;
   session: any | null;
   isPending: boolean;
+  isAuthLoading: boolean;
   error: any;
   authClient: ReturnType<typeof createAuthClient>;
   orgMembership: OrgMembership | null;
@@ -35,7 +43,7 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({
   children,
-  backendUrl
+  backendUrl,
 }: {
   children: ReactNode;
   backendUrl: string;
@@ -49,45 +57,72 @@ export function AuthProvider({
 
   const { data, isPending, error } = authClient.useSession();
   const params = useParams();
-  const [orgMembership, setOrgMembership] = useState<OrgMembership | null>(null);
-  const [workspaceMembership, setWorkspaceMembership] = useState<WorkspaceMembership | null>(null);
+  const [orgMembership, setOrgMembership] = useState<OrgMembership | null>(
+    null,
+  );
+  const [workspaceMembership, setWorkspaceMembership] =
+    useState<WorkspaceMembership | null>(null);
+  const [isOrgMembershipLoading, setIsOrgMembershipLoading] = useState(false);
+  const [isWorkspaceMembershipLoading, setIsWorkspaceMembershipLoading] =
+    useState(false);
 
   const orgId = params.orgId as string | undefined;
   const workspaceId = params.workspaceId as string | undefined;
 
   // Fetch org membership when orgId changes
   useEffect(() => {
+    setOrgMembership(null);
     if (!data?.user || !orgId) {
-      setOrgMembership(null);
+      setIsOrgMembershipLoading(false);
       return;
     }
 
+    setIsOrgMembershipLoading(true);
     fetch(`${backendUrl}/organisations/${orgId}/membership`, {
       credentials: "include",
     })
-      .then(res => res.ok ? res.json() : null)
-      .then(setOrgMembership)
-      .catch(() => setOrgMembership(null));
+      .then((res) => (res.ok ? res.json() : null))
+      .then((membership) => {
+        setOrgMembership(membership);
+        setIsOrgMembershipLoading(false);
+      })
+      .catch(() => {
+        setOrgMembership(null);
+        setIsOrgMembershipLoading(false);
+      });
   }, [data?.user, orgId, backendUrl]);
 
   // Fetch workspace membership when workspaceId changes
   useEffect(() => {
-    if (!data?.user || !workspaceId) {
-      setWorkspaceMembership(null);
+    setWorkspaceMembership(null);
+    if (!data?.user || !workspaceId || !orgId) {
+      setIsWorkspaceMembershipLoading(false);
       return;
     }
 
-    fetch(`${backendUrl}/workspaces/${workspaceId}/membership`, {
-      credentials: "include",
-    })
-      .then(res => res.ok ? res.json() : null)
-      .then(setWorkspaceMembership)
-      .catch(() => setWorkspaceMembership(null));
-  }, [data?.user, workspaceId, backendUrl]);
+    setIsWorkspaceMembershipLoading(true);
+    fetch(
+      `${backendUrl}/organisations/${orgId}/workspaces/${workspaceId}/membership`,
+      {
+        credentials: "include",
+      },
+    )
+      .then((res) => (res.ok ? res.json() : null))
+      .then((membership) => {
+        setWorkspaceMembership(membership);
+        setIsWorkspaceMembershipLoading(false);
+      })
+      .catch(() => {
+        setWorkspaceMembership(null);
+        setIsWorkspaceMembershipLoading(false);
+      });
+  }, [data?.user, orgId, workspaceId, backendUrl]);
 
   // Computed permissions
   const isOrgAdmin = orgMembership?.role === "admin";
-  const workspaceRole = isOrgAdmin ? "admin" : workspaceMembership?.role ?? null;
+  const workspaceRole = isOrgAdmin
+    ? "admin"
+    : (workspaceMembership?.role ?? null);
   const canEdit = workspaceRole === "admin" || workspaceRole === "editor";
   const canManage = workspaceRole === "admin";
 
@@ -97,6 +132,11 @@ export function AuthProvider({
         user: data?.user ?? null,
         session: data?.session ?? null,
         isPending,
+        isAuthLoading:
+          isPending ||
+          (!!orgId && (isOrgMembershipLoading || !orgMembership)) ||
+          (!!workspaceId &&
+            (isWorkspaceMembershipLoading || !workspaceMembership)),
         error,
         authClient,
         orgMembership,

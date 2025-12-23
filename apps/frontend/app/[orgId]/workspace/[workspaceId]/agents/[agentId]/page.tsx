@@ -16,7 +16,12 @@ const AgentEditPage = async ({
 
   // Fetch tool sets from the server
   const [toolSetsResponse] = await Promise.all([
-    fetch(joinUrl(backendUrl || "", `/tools?workspaceId=${workspaceId}`)),
+    fetch(
+      joinUrl(
+        backendUrl || "",
+        `/organisations/${orgId}/workspaces/${workspaceId}/tools`,
+      ),
+    ),
   ]);
 
   const toolSetsData = await toolSetsResponse.json();

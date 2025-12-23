@@ -74,7 +74,12 @@ const McpForm = ({
 
   const fetcher = (url: string) => fetch(url).then((res) => res.json());
   const { data: mcp, isLoading } = useSWR<MCP>(
-    mcpId ? joinUrl(backendUrl, `/mcps/${mcpId}`) : null,
+    mcpId
+      ? joinUrl(
+          backendUrl,
+          `/organisations/${orgId}/workspaces/${workspaceId}/mcps/${mcpId}`,
+        )
+      : null,
     fetcher,
   );
 
@@ -152,8 +157,14 @@ const McpForm = ({
       };
 
       const url = mcpId
-        ? joinUrl(backendUrl, `/mcps/${mcpId}`)
-        : joinUrl(backendUrl, "/mcps");
+        ? joinUrl(
+            backendUrl,
+            `/organisations/${orgId}/workspaces/${workspaceId}/mcps/${mcpId}`,
+          )
+        : joinUrl(
+            backendUrl,
+            `/organisations/${orgId}/workspaces/${workspaceId}/mcps`,
+          );
 
       const method = mcpId ? "PUT" : "POST";
 
@@ -185,9 +196,15 @@ const McpForm = ({
 
     setIsDeleting(true);
     try {
-      const response = await fetch(joinUrl(backendUrl, `/mcps/${mcpId}`), {
-        method: "DELETE",
-      });
+      const response = await fetch(
+        joinUrl(
+          backendUrl,
+          `/organisations/${orgId}/workspaces/${workspaceId}/mcps/${mcpId}`,
+        ),
+        {
+          method: "DELETE",
+        },
+      );
 
       if (response.ok) {
         router.push(`/${orgId}/workspace/${workspaceId}/settings/mcp`);
@@ -215,13 +232,19 @@ const McpForm = ({
           formData.authType === "Bearer" ? formData.bearerToken : undefined,
       };
 
-      const response = await fetch(joinUrl(backendUrl, "/mcps/test"), {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
+      const response = await fetch(
+        joinUrl(
+          backendUrl,
+          `/organisations/${orgId}/workspaces/${workspaceId}/mcps/test`,
+        ),
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(payload),
         },
-        body: JSON.stringify(payload),
-      });
+      );
 
       const data = await response.json();
 

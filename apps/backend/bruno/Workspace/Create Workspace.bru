@@ -5,14 +5,18 @@ meta {
 }
 
 post {
-  url: {{host}}/workspaces
+  url: {{host}}/organisations/:orgId/workspaces
   body: json
   auth: inherit
 }
 
+params:path {
+  orgId: {{orgId}}
+}
+
 body:json {
   {
-    "organisationId": "default",
+    "organisationId": "{{orgId}}",
     "name": "Project X"
   }
 }

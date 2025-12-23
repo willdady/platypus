@@ -2,14 +2,21 @@ import { Hono } from "hono";
 import { sValidator } from "@hono/standard-validator";
 import { nanoid } from "nanoid";
 import { db } from "../index.ts";
-import { organisation as organisationTable, organisationMember } from "../db/schema.ts";
+import {
+  organisation as organisationTable,
+  organisationMember,
+} from "../db/schema.ts";
 import {
   organisationCreateSchema,
   organisationUpdateSchema,
 } from "@platypus/schemas";
 import { eq, and, inArray } from "drizzle-orm";
 import { requireAuth } from "../middleware/authentication.ts";
-import { requireOrgAccess, requireSuperAdmin, isSuperAdmin } from "../middleware/authorization.ts";
+import {
+  requireOrgAccess,
+  requireSuperAdmin,
+  isSuperAdmin,
+} from "../middleware/authorization.ts";
 import type { Variables } from "../server.ts";
 
 const organisation = new Hono<{ Variables: Variables }>();
@@ -49,7 +56,7 @@ organisation.get("/", requireAuth, async (c) => {
     .from(organisationMember)
     .where(eq(organisationMember.userId, user.id));
 
-  const orgIds = memberships.map(m => m.organisationId);
+  const orgIds = memberships.map((m) => m.organisationId);
 
   if (orgIds.length === 0) {
     return c.json({ results: [] });
@@ -64,12 +71,12 @@ organisation.get("/", requireAuth, async (c) => {
 });
 
 /** Get a organisation by ID */
-organisation.get("/:id", requireAuth, requireOrgAccess(), async (c) => {
-  const id = c.req.param("id");
+organisation.get("/:orgId", requireAuth, requireOrgAccess(), async (c) => {
+  const orgId = c.req.param("orgId");
   const record = await db
     .select()
     .from(organisationTable)
-    .where(eq(organisationTable.id, id))
+    .where(eq(organisationTable.id, orgId))
     .limit(1);
   if (record.length === 0) {
     return c.json({ message: "Organisation not found" }, 404);
@@ -79,12 +86,12 @@ organisation.get("/:id", requireAuth, requireOrgAccess(), async (c) => {
 
 /** Update a organisation by ID (admin only) */
 organisation.put(
-  "/:id",
+  "/:orgId",
   requireAuth,
   requireOrgAccess(["admin"]),
   sValidator("json", organisationUpdateSchema),
   async (c) => {
-    const id = c.req.param("id");
+    const orgId = c.req.param("orgId");
     const data = c.req.valid("json");
     const record = await db
       .update(organisationTable)
@@ -92,38 +99,32 @@ organisation.put(
         ...data,
         updatedAt: new Date(),
       })
-      .where(eq(organisationTable.id, id))
+      .where(eq(organisationTable.id, orgId))
       .returning();
     return c.json(record, 200);
   },
 );
 
 /** Delete a organisation by ID (admin only) */
-organisation.delete("/:id", requireAuth, requireOrgAccess(["admin"]), async (c) => {
-  const id = c.req.param("id");
-  await db.delete(organisationTable).where(eq(organisationTable.id, id));
-  return c.json({ message: "Organisation deleted" });
-});
+organisation.delete(
+  "/:orgId",
+  requireAuth,
+  requireOrgAccess(["admin"]),
+  async (c) => {
+    const orgId = c.req.param("orgId");
+    await db.delete(organisationTable).where(eq(organisationTable.id, orgId));
+    return c.json({ message: "Organisation deleted" });
+  },
+);
 
 /** Get user's membership for an organisation */
-organisation.get("/:orgId/membership", requireAuth, requireOrgAccess(), async (c) => {
-  const user = c.get("user")!;
-  const orgId = c.req.param("orgId");
-
-  const [membership] = await db
-    .select()
-    .from(organisationMember)
-    .where(and(
-      eq(organisationMember.userId, user.id),
-      eq(organisationMember.organisationId, orgId)
-    ))
-    .limit(1);
-
-  if (!membership) {
-    return c.json({ error: "Not a member" }, 404);
-  }
-
-  return c.json(membership);
-});
+organisation.get(
+  "/:orgId/membership",
+  requireAuth,
+  requireOrgAccess(),
+  async (c) => {
+    return c.json(c.get("orgMembership"));
+  },
+);
 
 export { organisation };

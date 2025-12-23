@@ -5,13 +5,15 @@ meta {
 }
 
 put {
-  url: {{host}}/mcps/:id
+  url: {{host}}/organisations/:orgId/workspaces/:workspaceId/mcps/:mcpId
   body: json
   auth: inherit
 }
 
 params:path {
-  id: 
+  orgId: {{orgId}}
+  workspaceId: {{workspaceId}}
+  mcpId:
 }
 
 body:json {

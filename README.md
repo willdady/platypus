@@ -91,6 +91,7 @@ The fastest way to get Platypus running is using Docker Compose.
 
 4.  **Initialize Database:**
     Apply the schema to your local database (ensure `pnpm dev` is running first).
+
     ```bash
     pnpm drizzle-kit-push
     ```

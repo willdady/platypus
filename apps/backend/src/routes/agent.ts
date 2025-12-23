@@ -8,7 +8,10 @@ import { agentCreateSchema, agentUpdateSchema } from "@platypus/schemas";
 import { eq } from "drizzle-orm";
 import { dedupeArray } from "../utils.ts";
 import { requireAuth } from "../middleware/authentication.ts";
-import { requireOrgAccess, requireWorkspaceAccess } from "../middleware/authorization.ts";
+import {
+  requireOrgAccess,
+  requireWorkspaceAccess,
+} from "../middleware/authorization.ts";
 import type { Variables } from "../server.ts";
 
 const agent = new Hono<{ Variables: Variables }>();
@@ -42,14 +45,8 @@ agent.get(
   requireAuth,
   requireOrgAccess(),
   requireWorkspaceAccess(),
-  sValidator(
-    "query",
-    z.object({
-      workspaceId: z.string(),
-    }),
-  ),
   async (c) => {
-    const { workspaceId } = c.req.valid("query");
+    const workspaceId = c.req.param("workspaceId")!;
     const results = await db
       .select()
       .from(agentTable)
@@ -59,28 +56,34 @@ agent.get(
 );
 
 /** Get an agent by ID */
-agent.get("/:id", requireAuth, requireOrgAccess(), requireWorkspaceAccess(), async (c) => {
-  const id = c.req.param("id");
-  const record = await db
-    .select()
-    .from(agentTable)
-    .where(eq(agentTable.id, id))
-    .limit(1);
-  if (record.length === 0) {
-    return c.json({ message: "Agent not found" }, 404);
-  }
-  return c.json(record[0]);
-});
+agent.get(
+  "/:agentId",
+  requireAuth,
+  requireOrgAccess(),
+  requireWorkspaceAccess(),
+  async (c) => {
+    const agentId = c.req.param("agentId");
+    const record = await db
+      .select()
+      .from(agentTable)
+      .where(eq(agentTable.id, agentId))
+      .limit(1);
+    if (record.length === 0) {
+      return c.json({ message: "Agent not found" }, 404);
+    }
+    return c.json(record[0]);
+  },
+);
 
 /** Update an agent by ID (admin or editor) */
 agent.put(
-  "/:id",
+  "/:agentId",
   requireAuth,
   requireOrgAccess(),
   requireWorkspaceAccess(["admin", "editor"]),
   sValidator("json", agentUpdateSchema),
   async (c) => {
-    const id = c.req.param("id");
+    const agentId = c.req.param("agentId");
     const data = c.req.valid("json");
     if (data.toolSetIds) {
       data.toolSetIds = dedupeArray(data.toolSetIds);
@@ -91,7 +94,7 @@ agent.put(
         ...data,
         updatedAt: new Date(),
       })
-      .where(eq(agentTable.id, id))
+      .where(eq(agentTable.id, agentId))
       .returning();
     return c.json(record, 200);
   },
@@ -99,13 +102,13 @@ agent.put(
 
 /** Delete an agent by ID (admin only) */
 agent.delete(
-  "/:id",
+  "/:agentId",
   requireAuth,
   requireOrgAccess(),
   requireWorkspaceAccess(["admin"]),
   async (c) => {
-    const id = c.req.param("id");
-    await db.delete(agentTable).where(eq(agentTable.id, id));
+    const agentId = c.req.param("agentId");
+    await db.delete(agentTable).where(eq(agentTable.id, agentId));
     return c.json({ message: "Agent deleted" });
   },
 );

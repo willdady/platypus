@@ -5,6 +5,7 @@ This document outlines the implementation plan for adding authentication to Plat
 ## Overview
 
 Better-auth will provide:
+
 - Email/password authentication
 - Session management with database-backed sessions
 - Social OAuth providers (optional, can be added later)
@@ -21,17 +22,17 @@ flowchart TB
         AuthProvider["Session Provider"]
         ProtectedLayout["Protected Layout Wrapper"]
     end
-    
+
     subgraph Backend["Backend - Hono"]
         AuthRoutes["Auth Routes<br/>/api/auth/*"]
         AuthMiddleware["Auth Middleware"]
         ExistingRoutes["Existing API Routes"]
     end
-    
+
     subgraph Database["PostgreSQL"]
         AuthTables["Auth Tables<br/>user, session, account, verification"]
     end
-    
+
     SignInPage --> AuthClient
     SignUpPage --> AuthClient
     AuthClient --> AuthRoutes
@@ -94,6 +95,7 @@ pnpm dlx @better-auth/cli@latest generate --config ./src/auth.ts --output ./src/
 ```
 
 This will create `apps/backend/src/db/auth-schema.ts` with the correct table definitions for:
+
 - `user` - User accounts
 - `session` - Active sessions
 - `account` - OAuth provider accounts
@@ -182,11 +184,11 @@ import { auth } from "./auth";
 
 export const requireAuth = createMiddleware(async (c, next) => {
   const session = await auth.api.getSession({ headers: c.req.raw.headers });
-  
+
   if (!session) {
     return c.json({ error: "Unauthorized" }, 401);
   }
-  
+
   c.set("user", session.user);
   c.set("session", session.session);
   await next();
@@ -227,13 +229,7 @@ export const authClient = createAuthClient({
   baseURL: process.env.BACKEND_URL || "http://localhost:4000",
 });
 
-export const {
-  signIn,
-  signUp,
-  signOut,
-  useSession,
-  getSession
-} = authClient;
+export const { signIn, signUp, signOut, useSession, getSession } = authClient;
 ```
 
 #### 2.3 Create Auth Provider
@@ -619,26 +615,26 @@ pnpm drizzle-kit-push
 
 ### New Files
 
-| File | Purpose |
-|------|---------|
-| `apps/backend/src/db/auth-schema.ts` | better-auth database tables (CLI-generated) |
-| `apps/backend/src/auth.ts` | better-auth configuration |
-| `apps/frontend/lib/auth-client.ts` | better-auth React client |
-| `apps/frontend/components/auth-provider.tsx` | Auth context provider |
-| `apps/frontend/components/protected-route.tsx` | Route protection wrapper |
-| `apps/frontend/app/sign-up/page.tsx` | Sign up page |
+| File                                           | Purpose                                     |
+| ---------------------------------------------- | ------------------------------------------- |
+| `apps/backend/src/db/auth-schema.ts`           | better-auth database tables (CLI-generated) |
+| `apps/backend/src/auth.ts`                     | better-auth configuration                   |
+| `apps/frontend/lib/auth-client.ts`             | better-auth React client                    |
+| `apps/frontend/components/auth-provider.tsx`   | Auth context provider                       |
+| `apps/frontend/components/protected-route.tsx` | Route protection wrapper                    |
+| `apps/frontend/app/sign-up/page.tsx`           | Sign up page                                |
 
 ### Modified Files
 
-| File | Changes |
-|------|---------|
-| `apps/backend/package.json` | Add better-auth dependency |
-| `apps/backend/src/server.ts` | Mount auth routes, update CORS, add Variables type |
-| `apps/backend/src/middleware.ts` | Add requireAuth middleware |
-| `apps/backend/.example.env` | Add auth environment variables |
-| `apps/frontend/package.json` | Add better-auth dependency |
-| `apps/frontend/app/layout.tsx` | Wrap with AuthProvider |
-| `apps/frontend/app/sign-in/page.tsx` | Complete sign-in form implementation |
+| File                                 | Changes                                            |
+| ------------------------------------ | -------------------------------------------------- |
+| `apps/backend/package.json`          | Add better-auth dependency                         |
+| `apps/backend/src/server.ts`         | Mount auth routes, update CORS, add Variables type |
+| `apps/backend/src/middleware.ts`     | Add requireAuth middleware                         |
+| `apps/backend/.example.env`          | Add auth environment variables                     |
+| `apps/frontend/package.json`         | Add better-auth dependency                         |
+| `apps/frontend/app/layout.tsx`       | Wrap with AuthProvider                             |
+| `apps/frontend/app/sign-in/page.tsx` | Complete sign-in form implementation               |
 
 ## Checklist
 
@@ -667,6 +663,7 @@ pnpm drizzle-kit-push
 Rather than using better-auth's organization plugin, we'll implement custom authorization that integrates with your existing `organisation` and `workspace` tables. This provides full control over the two-tier permission model.
 
 **Key Design Decisions:**
+
 - **No "owner" role at org level** - Simplified to just `admin` and `member` roles
 - **Super admin via environment variable** - Platform-level admins identified by `SUPER_ADMIN_EMAILS` env var
 - **No modification to better-auth tables** - All custom authorization uses separate tables
@@ -677,6 +674,7 @@ Rather than using better-auth's organization plugin, we'll implement custom auth
 The application supports a **super admin** role for platform administrators who need access to all organizations and workspaces without explicit membership.
 
 **Implementation:**
+
 - Super admin users are identified by email address stored in the `SUPER_ADMIN_EMAILS` environment variable
 - Format: Comma-separated list of email addresses (e.g., `admin@example.com,admin2@example.com`)
 - Super admins bypass all organization and workspace membership checks
@@ -684,6 +682,7 @@ The application supports a **super admin** role for platform administrators who 
 - Changes require app restart (acceptable for infrequent super admin management)
 
 **Environment Variable:**
+
 ```env
 SUPER_ADMIN_EMAILS=admin@example.com
 ```
@@ -722,52 +721,87 @@ Add to `apps/backend/src/db/schema.ts` (not the auth-schema file):
 import { user } from "./auth-schema";
 
 // Organisation membership - links users to organisations with roles
-export const organisationMember = pgTable("organisation_member", (t) => ({
-  id: t.text("id").primaryKey(),
-  organisationId: t.text("organisation_id").notNull().references(() => organisation.id, { onDelete: "cascade" }),
-  userId: t.text("user_id").notNull().references(() => user.id, { onDelete: "cascade" }),
-  role: t.text("role").notNull().default("member"), // admin | member
-  createdAt: t.timestamp("created_at").notNull().defaultNow(),
-  updatedAt: t.timestamp("updated_at").notNull().defaultNow(),
-}), (t) => [
-  index("idx_org_member_org_id").on(t.organisationId),
-  index("idx_org_member_user_id").on(t.userId),
-]);
+export const organisationMember = pgTable(
+  "organisation_member",
+  (t) => ({
+    id: t.text("id").primaryKey(),
+    organisationId: t
+      .text("organisation_id")
+      .notNull()
+      .references(() => organisation.id, { onDelete: "cascade" }),
+    userId: t
+      .text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    role: t.text("role").notNull().default("member"), // admin | member
+    createdAt: t.timestamp("created_at").notNull().defaultNow(),
+    updatedAt: t.timestamp("updated_at").notNull().defaultNow(),
+  }),
+  (t) => [
+    index("idx_org_member_org_id").on(t.organisationId),
+    index("idx_org_member_user_id").on(t.userId),
+  ],
+);
 
 // Workspace membership - links users to specific workspaces with granular roles
-export const workspaceMember = pgTable("workspace_member", (t) => ({
-  id: t.text("id").primaryKey(),
-  workspaceId: t.text("workspace_id").notNull().references(() => workspace.id, { onDelete: "cascade" }),
-  userId: t.text("user_id").notNull().references(() => user.id, { onDelete: "cascade" }),
-  orgMemberId: t.text("org_member_id").notNull().references(() => organisationMember.id, { onDelete: "cascade" }),
-  role: t.text("role").notNull().default("viewer"), // admin | editor | viewer
-  createdAt: t.timestamp("created_at").notNull().defaultNow(),
-  updatedAt: t.timestamp("updated_at").notNull().defaultNow(),
-}), (t) => [
-  index("idx_ws_member_workspace_id").on(t.workspaceId),
-  index("idx_ws_member_user_id").on(t.userId),
-]);
+export const workspaceMember = pgTable(
+  "workspace_member",
+  (t) => ({
+    id: t.text("id").primaryKey(),
+    workspaceId: t
+      .text("workspace_id")
+      .notNull()
+      .references(() => workspace.id, { onDelete: "cascade" }),
+    userId: t
+      .text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    orgMemberId: t
+      .text("org_member_id")
+      .notNull()
+      .references(() => organisationMember.id, { onDelete: "cascade" }),
+    role: t.text("role").notNull().default("viewer"), // admin | editor | viewer
+    createdAt: t.timestamp("created_at").notNull().defaultNow(),
+    updatedAt: t.timestamp("updated_at").notNull().defaultNow(),
+  }),
+  (t) => [
+    index("idx_ws_member_workspace_id").on(t.workspaceId),
+    index("idx_ws_member_user_id").on(t.userId),
+  ],
+);
 
 // Invitations for both org and workspace levels
-export const invitation = pgTable("invitation", (t) => ({
-  id: t.text("id").primaryKey(),
-  email: t.text("email").notNull(),
-  organisationId: t.text("organisation_id").references(() => organisation.id, { onDelete: "cascade" }),
-  workspaceId: t.text("workspace_id").references(() => workspace.id, { onDelete: "cascade" }),
-  role: t.text("role").notNull(),
-  invitedBy: t.text("invited_by").notNull().references(() => user.id),
-  status: t.text("status").notNull().default("pending"), // pending | accepted | expired
-  expiresAt: t.timestamp("expires_at").notNull(),
-  createdAt: t.timestamp("created_at").notNull().defaultNow(),
-}), (t) => [
-  index("idx_invitation_email").on(t.email),
-  index("idx_invitation_org_id").on(t.organisationId),
-]);
+export const invitation = pgTable(
+  "invitation",
+  (t) => ({
+    id: t.text("id").primaryKey(),
+    email: t.text("email").notNull(),
+    organisationId: t
+      .text("organisation_id")
+      .references(() => organisation.id, { onDelete: "cascade" }),
+    workspaceId: t
+      .text("workspace_id")
+      .references(() => workspace.id, { onDelete: "cascade" }),
+    role: t.text("role").notNull(),
+    invitedBy: t
+      .text("invited_by")
+      .notNull()
+      .references(() => user.id),
+    status: t.text("status").notNull().default("pending"), // pending | accepted | expired
+    expiresAt: t.timestamp("expires_at").notNull(),
+    createdAt: t.timestamp("created_at").notNull().defaultNow(),
+  }),
+  (t) => [
+    index("idx_invitation_email").on(t.email),
+    index("idx_invitation_org_id").on(t.organisationId),
+  ],
+);
 ```
 
 ### 5.2 Role Hierarchy
 
 **Super Admin (Platform Level):**
+
 - Identified by email in `SUPER_ADMIN_EMAILS` environment variable
 - Bypasses all membership checks
 - Full admin access to ALL organizations and workspaces
@@ -775,20 +809,21 @@ export const invitation = pgTable("invitation", (t) => ({
 
 **Organization Roles:**
 
-| Org Role | Workspace Access |
-|----------|------------------|
-| `admin` | Full admin access to ALL workspaces in the organization |
-| `member` | Only workspaces where explicitly assigned |
+| Org Role | Workspace Access                                        |
+| -------- | ------------------------------------------------------- |
+| `admin`  | Full admin access to ALL workspaces in the organization |
+| `member` | Only workspaces where explicitly assigned               |
 
 **Workspace Roles:**
 
-| Workspace Role | Permissions |
-|----------------|-------------|
-| `admin` | Full CRUD, settings, member management |
-| `editor` | Create/edit chats, agents, MCPs |
-| `viewer` | Read-only access |
+| Workspace Role | Permissions                            |
+| -------------- | -------------------------------------- |
+| `admin`        | Full CRUD, settings, member management |
+| `editor`       | Create/edit chats, agents, MCPs        |
+| `viewer`       | Read-only access                       |
 
 **Inheritance Rules:**
+
 - Super admins have implicit admin access everywhere
 - Org admins have implicit admin access to all workspaces in their organization
 - Org members need explicit workspace membership
@@ -807,7 +842,8 @@ type WorkspaceRole = "admin" | "editor" | "viewer";
 
 // Helper to check if user is a super admin
 const isSuperAdmin = (userEmail: string): boolean => {
-  const superAdminEmails = process.env.SUPER_ADMIN_EMAILS?.split(',').map(e => e.trim()) || [];
+  const superAdminEmails =
+    process.env.SUPER_ADMIN_EMAILS?.split(",").map((e) => e.trim()) || [];
   return superAdminEmails.includes(userEmail);
 };
 
@@ -834,10 +870,12 @@ export const requireOrgAccess = (requiredRoles?: OrgRole[]) =>
     const [membership] = await db
       .select()
       .from(organisationMember)
-      .where(and(
-        eq(organisationMember.userId, user.id),
-        eq(organisationMember.organisationId, orgId)
-      ))
+      .where(
+        and(
+          eq(organisationMember.userId, user.id),
+          eq(organisationMember.organisationId, orgId),
+        ),
+      )
       .limit(1);
 
     if (!membership) {
@@ -867,7 +905,8 @@ export const requireWorkspaceAccess = (requiredRoles?: WorkspaceRole[]) =>
       return;
     }
 
-    const workspaceId = c.req.param("workspaceId") || c.req.query("workspaceId");
+    const workspaceId =
+      c.req.param("workspaceId") || c.req.query("workspaceId");
 
     if (!workspaceId) {
       return c.json({ error: "Workspace ID required" }, 400);
@@ -885,20 +924,25 @@ export const requireWorkspaceAccess = (requiredRoles?: WorkspaceRole[]) =>
     const [wsMembership] = await db
       .select()
       .from(workspaceMember)
-      .where(and(
-        eq(workspaceMember.userId, user.id),
-        eq(workspaceMember.workspaceId, workspaceId)
-      ))
+      .where(
+        and(
+          eq(workspaceMember.userId, user.id),
+          eq(workspaceMember.workspaceId, workspaceId),
+        ),
+      )
       .limit(1);
 
     if (!wsMembership) {
       return c.json({ error: "No access to this workspace" }, 403);
     }
-    
-    if (requiredRoles && !requiredRoles.includes(wsMembership.role as WorkspaceRole)) {
+
+    if (
+      requiredRoles &&
+      !requiredRoles.includes(wsMembership.role as WorkspaceRole)
+    ) {
       return c.json({ error: "Insufficient workspace permissions" }, 403);
     }
-    
+
     c.set("workspaceRole", wsMembership.role);
     c.set("workspaceMembership", wsMembership);
     await next();
@@ -912,7 +956,10 @@ Apply middleware to routes. Example for workspace routes:
 ```typescript
 // apps/backend/src/routes/workspace.ts
 import { requireAuth } from "../middleware";
-import { requireOrgAccess, requireWorkspaceAccess } from "../middleware/authorization";
+import {
+  requireOrgAccess,
+  requireWorkspaceAccess,
+} from "../middleware/authorization";
 
 // List workspaces - any org member
 workspace.get("/", requireAuth, requireOrgAccess(), async (c) => {
@@ -920,9 +967,15 @@ workspace.get("/", requireAuth, requireOrgAccess(), async (c) => {
 });
 
 // Get workspace - need workspace access
-workspace.get("/:workspaceId", requireAuth, requireOrgAccess(), requireWorkspaceAccess(), async (c) => {
-  // User has at least viewer access
-});
+workspace.get(
+  "/:workspaceId",
+  requireAuth,
+  requireOrgAccess(),
+  requireWorkspaceAccess(),
+  async (c) => {
+    // User has at least viewer access
+  },
+);
 
 // Create workspace - org admin only
 workspace.post("/", requireAuth, requireOrgAccess(["admin"]), async (c) => {
@@ -930,9 +983,15 @@ workspace.post("/", requireAuth, requireOrgAccess(["admin"]), async (c) => {
 });
 
 // Delete workspace - workspace admin or org admin
-workspace.delete("/:workspaceId", requireAuth, requireOrgAccess(), requireWorkspaceAccess(["admin"]), async (c) => {
-  // Only workspace/org admins can delete
-});
+workspace.delete(
+  "/:workspaceId",
+  requireAuth,
+  requireOrgAccess(),
+  requireWorkspaceAccess(["admin"]),
+  async (c) => {
+    // Only workspace/org admins can delete
+  },
+);
 ```
 
 ### 5.5 Frontend Authorization
@@ -983,7 +1042,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const params = useParams();
   const [orgMembership, setOrgMembership] = useState<OrgMembership | null>(null);
   const [workspaceMembership, setWorkspaceMembership] = useState<WorkspaceMembership | null>(null);
-  
+
   const orgId = params.orgId as string | undefined;
   const workspaceId = params.workspaceId as string | undefined;
 
@@ -993,7 +1052,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setOrgMembership(null);
       return;
     }
-    
+
     fetch(`${process.env.BACKEND_URL}/organisations/${orgId}/membership`, {
       credentials: "include",
     })
@@ -1008,7 +1067,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setWorkspaceMembership(null);
       return;
     }
-    
+
     fetch(`${process.env.BACKEND_URL}/workspaces/${workspaceId}/membership`, {
       credentials: "include",
     })
@@ -1228,7 +1287,7 @@ export function AgentsList() {
           <Button>Create Agent</Button>
         )}
       </div>
-      
+
       {/* Agent list */}
       {agents.map(agent => (
         <AgentCard
@@ -1253,20 +1312,22 @@ organisation.get("/:orgId/membership", requireAuth, async (c) => {
   const user = c.get("user");
   const db = c.get("db");
   const orgId = c.req.param("orgId");
-  
+
   const [membership] = await db
     .select()
     .from(organisationMember)
-    .where(and(
-      eq(organisationMember.userId, user.id),
-      eq(organisationMember.organisationId, orgId)
-    ))
+    .where(
+      and(
+        eq(organisationMember.userId, user.id),
+        eq(organisationMember.organisationId, orgId),
+      ),
+    )
     .limit(1);
-  
+
   if (!membership) {
     return c.json({ error: "Not a member" }, 404);
   }
-  
+
   return c.json(membership);
 });
 
@@ -1275,27 +1336,29 @@ workspace.get("/:workspaceId/membership", requireAuth, async (c) => {
   const user = c.get("user");
   const db = c.get("db");
   const workspaceId = c.req.param("workspaceId");
-  
+
   // First check if user is org admin (automatic workspace access)
   const [ws] = await db
     .select()
     .from(workspace)
     .where(eq(workspace.id, workspaceId))
     .limit(1);
-  
+
   if (!ws) {
     return c.json({ error: "Workspace not found" }, 404);
   }
-  
+
   const [orgMembership] = await db
     .select()
     .from(organisationMember)
-    .where(and(
-      eq(organisationMember.userId, user.id),
-      eq(organisationMember.organisationId, ws.organisationId)
-    ))
+    .where(
+      and(
+        eq(organisationMember.userId, user.id),
+        eq(organisationMember.organisationId, ws.organisationId),
+      ),
+    )
     .limit(1);
-  
+
   // Org admins get automatic admin access
   if (orgMembership && orgMembership.role === "admin") {
     return c.json({
@@ -1305,21 +1368,23 @@ workspace.get("/:workspaceId/membership", requireAuth, async (c) => {
       inherited: true,
     });
   }
-  
+
   // Check explicit workspace membership
   const [wsMembership] = await db
     .select()
     .from(workspaceMember)
-    .where(and(
-      eq(workspaceMember.userId, user.id),
-      eq(workspaceMember.workspaceId, workspaceId)
-    ))
+    .where(
+      and(
+        eq(workspaceMember.userId, user.id),
+        eq(workspaceMember.workspaceId, workspaceId),
+      ),
+    )
     .limit(1);
-  
+
   if (!wsMembership) {
     return c.json({ error: "No workspace access" }, 404);
   }
-  
+
   return c.json(wsMembership);
 });
 ```
@@ -1328,27 +1393,27 @@ workspace.get("/:workspaceId/membership", requireAuth, async (c) => {
 
 **Note:** Super admins (configured via `SUPER_ADMIN_EMAILS`) bypass all permission checks and have full access to all resources.
 
-| Resource | Action | Required Permission |
-|----------|--------|---------------------|
-| Organisation | View | org: member+ OR super admin |
-| Organisation | Edit | org: admin OR super admin |
-| Organisation | Delete | org: admin OR super admin |
-| Organisation | Manage members | org: admin OR super admin |
-| Workspace | List | org: member+ (sees only accessible) OR super admin (sees all) |
-| Workspace | View | ws: viewer+ OR org: admin OR super admin |
-| Workspace | Create | org: admin OR super admin |
-| Workspace | Edit | ws: editor+ OR org: admin OR super admin |
-| Workspace | Delete | ws: admin OR org: admin OR super admin |
-| Chat | View | ws: viewer+ OR super admin |
-| Chat | Create/Edit | ws: editor+ OR super admin |
-| Chat | Delete | ws: editor+ OR super admin |
-| Agent | View | ws: viewer+ OR super admin |
-| Agent | Create/Edit | ws: editor+ OR super admin |
-| Agent | Delete | ws: editor+ OR super admin |
-| Provider | View | ws: admin OR super admin (contains API keys) |
-| Provider | Create/Edit | ws: admin OR super admin |
-| MCP | View | ws: viewer+ OR super admin |
-| MCP | Create/Edit | ws: admin OR super admin |
+| Resource     | Action         | Required Permission                                           |
+| ------------ | -------------- | ------------------------------------------------------------- |
+| Organisation | View           | org: member+ OR super admin                                   |
+| Organisation | Edit           | org: admin OR super admin                                     |
+| Organisation | Delete         | org: admin OR super admin                                     |
+| Organisation | Manage members | org: admin OR super admin                                     |
+| Workspace    | List           | org: member+ (sees only accessible) OR super admin (sees all) |
+| Workspace    | View           | ws: viewer+ OR org: admin OR super admin                      |
+| Workspace    | Create         | org: admin OR super admin                                     |
+| Workspace    | Edit           | ws: editor+ OR org: admin OR super admin                      |
+| Workspace    | Delete         | ws: admin OR org: admin OR super admin                        |
+| Chat         | View           | ws: viewer+ OR super admin                                    |
+| Chat         | Create/Edit    | ws: editor+ OR super admin                                    |
+| Chat         | Delete         | ws: editor+ OR super admin                                    |
+| Agent        | View           | ws: viewer+ OR super admin                                    |
+| Agent        | Create/Edit    | ws: editor+ OR super admin                                    |
+| Agent        | Delete         | ws: editor+ OR super admin                                    |
+| Provider     | View           | ws: admin OR super admin (contains API keys)                  |
+| Provider     | Create/Edit    | ws: admin OR super admin                                      |
+| MCP          | View           | ws: viewer+ OR super admin                                    |
+| MCP          | Create/Edit    | ws: admin OR super admin                                      |
 
 ### 5.8 Entity Relationship Diagram
 
@@ -1357,40 +1422,40 @@ erDiagram
     USER ||--o{ ORGANISATION_MEMBER : "has memberships"
     USER ||--o{ WORKSPACE_MEMBER : "has workspace access"
     USER ||--o{ INVITATION : "sends"
-    
+
     ORGANISATION ||--o{ ORGANISATION_MEMBER : "has members"
     ORGANISATION ||--o{ WORKSPACE : "contains"
     ORGANISATION ||--o{ INVITATION : "has invites"
-    
+
     WORKSPACE ||--o{ WORKSPACE_MEMBER : "has members"
     WORKSPACE ||--o{ INVITATION : "has invites"
-    
+
     ORGANISATION_MEMBER ||--o{ WORKSPACE_MEMBER : "enables"
-    
+
     USER {
         string id PK
         string email
         string name
     }
-    
+
     ORGANISATION {
         string id PK
         string name
     }
-    
+
     WORKSPACE {
         string id PK
         string organisationId FK
         string name
     }
-    
+
     ORGANISATION_MEMBER {
         string id PK
         string organisationId FK
         string userId FK
         string role "admin|member"
     }
-    
+
     WORKSPACE_MEMBER {
         string id PK
         string workspaceId FK
@@ -1398,7 +1463,7 @@ erDiagram
         string orgMemberId FK
         string role "admin|editor|viewer"
     }
-    
+
     INVITATION {
         string id PK
         string email
@@ -1412,6 +1477,7 @@ erDiagram
 ### 5.9 Authorization Checklist
 
 **Backend:**
+
 - [x] Add `SUPER_ADMIN_EMAILS` environment variable to `.env` and `.example.env`
 - [x] Add `organisationMember` table to schema (use role: "admin" | "member", no "owner")
 - [x] Add `workspaceMember` table to schema
@@ -1432,6 +1498,7 @@ erDiagram
 - [ ] Add API endpoints for invitations
 
 **Frontend:**
+
 - [x] Update `AuthProvider` to fetch and expose org/workspace membership
 - [x] Add `isSuperAdmin` to `AuthContextType` interface
 - [ ] Fetch super admin status from backend (add endpoint or include in session)

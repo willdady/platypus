@@ -19,7 +19,7 @@ export function joinUrl(base: string, path: string): string {
 }
 
 export const fetcher = (input: RequestInfo | URL, init?: RequestInit) =>
-  fetch(input, { ...init, credentials: 'include' }).then((res) => res.json());
+  fetch(input, { ...init, credentials: "include" }).then((res) => res.json());
 
 /**
  * Parses standardschema.dev validation errors from an error response

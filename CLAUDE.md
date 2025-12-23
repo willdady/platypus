@@ -73,16 +73,15 @@ The project is organized as a Turborepo monorepo with three main packages:
 - Currently hardcoded to OpenRouter provider but extensible to custom providers
 - Tools are registered in `src/tools/index.ts` and can be assigned to agents
 
-**API Routes** (in `src/routes/`):
+**API Routes** (hierarchical structure):
 
-- `/chat`: Stream AI chat responses
 - `/organisations`: CRUD for organisations
-- `/workspaces`: CRUD for workspaces
-- `/agents`: CRUD for agents with tool/model configuration
-- `/tools`: List available tools
-- `/models`: List available models
-- `/mcps`: CRUD for MCP integrations
-- `/providers`: CRUD for custom AI providers
+- `/organisations/:orgId/workspaces`: CRUD for workspaces
+- `/organisations/:orgId/workspaces/:workspaceId/agents`: CRUD for agents
+- `/organisations/:orgId/workspaces/:workspaceId/chat`: Stream AI chat responses and CRUD for chats
+- `/organisations/:orgId/workspaces/:workspaceId/mcps`: CRUD for MCP integrations
+- `/organisations/:orgId/workspaces/:workspaceId/providers`: CRUD for custom AI providers
+- `/organisations/:orgId/workspaces/:workspaceId/tools`: List available tools
 
 **Entry Point**: `apps/backend/index.ts` starts the server and upserts default org/workspace on startup.
 
@@ -103,7 +102,7 @@ The project is organized as a Turborepo monorepo with three main packages:
 **Structure**:
 
 - Uses App Router with `app/` directory
-- Route structure: `/[orgId]/[workspaceId]/...` for multi-tenant routing
+- Route structure: `/[orgId]/workspace/[workspaceId]/...` for multi-tenant routing
 - Main chat interface in components: `chat.tsx`, `agent-form.tsx`, `provider-form.tsx`
 - UI components in `components/ui/` (Radix UI + Tailwind CSS)
 - AI-specific components in `components/ai-elements/`
@@ -141,6 +140,7 @@ These schemas are imported by both frontend and backend to ensure type safety ac
 3. Run `pnpm drizzle-kit-push` to apply changes
 
 **Note**: Authentication tables are managed by better-auth. If you modify the auth configuration in `apps/backend/src/auth.ts`, regenerate the schema:
+
 ```bash
 pnpm --dir apps/backend dlx @better-auth/cli@latest generate --config ./src/auth.ts --output ./src/db/auth-schema.ts --yes
 ```
@@ -152,6 +152,7 @@ pnpm --dir apps/backend dlx @better-auth/cli@latest generate --config ./src/auth
 3. Define validation schemas in `packages/schemas/index.ts`
 4. Use Hono's context to access the database: `c.get("db")`
 5. Apply `requireAuth` middleware to protect routes:
+
    ```typescript
    import { requireAuth } from "../middleware.ts";
 
@@ -168,6 +169,7 @@ pnpm --dir apps/backend dlx @better-auth/cli@latest generate --config ./src/auth
 ### Environment Variables
 
 **Backend** (`apps/backend/.env`):
+
 - `DATABASE_URL`: Postgres connection string
 - `ALLOWED_ORIGINS`: Comma-separated list of allowed CORS origins
 - `PORT`: Server port (default: 4000)
@@ -175,6 +177,7 @@ pnpm --dir apps/backend dlx @better-auth/cli@latest generate --config ./src/auth
 - `BETTER_AUTH_URL`: Base URL for better-auth (e.g., `http://localhost:4000`)
 
 **Frontend** (`apps/frontend/.env`):
+
 - `BACKEND_URL`: Backend API URL for server-side and client-side requests
 
 Default values work for local development after copying `.example.env` files
@@ -182,6 +185,7 @@ Default values work for local development after copying `.example.env` files
 ### Default Credentials
 
 On first startup, the backend automatically creates:
+
 - **Email**: `admin@example.com`
 - **Password**: `admin123`
 

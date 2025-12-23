@@ -25,45 +25,56 @@ export function ProtectedRoute({
   requireOrgAccess = false,
   requireWorkspaceAccess = false,
 }: ProtectedRouteProps) {
-  const {
-    user,
-    isPending,
-    orgMembership,
-    workspaceRole,
-  } = useAuth();
+  const { user, isAuthLoading, orgMembership, workspaceRole } = useAuth();
   const router = useRouter();
   const params = useParams();
 
   useEffect(() => {
     // Not logged in - redirect to sign in
-    if (!isPending && !user) {
+    if (!isAuthLoading && !user) {
       router.push("/sign-in");
       return;
     }
 
     // Need org access but not a member
-    if (!isPending && requireOrgAccess && params.orgId && !orgMembership) {
+    if (!isAuthLoading && requireOrgAccess && params.orgId && !orgMembership) {
       router.push("/"); // Redirect to org selection
       return;
     }
 
     // Need workspace access but no role
-    if (!isPending && requireWorkspaceAccess && params.workspaceId && !workspaceRole) {
+    if (
+      !isAuthLoading &&
+      requireWorkspaceAccess &&
+      params.workspaceId &&
+      !workspaceRole
+    ) {
       router.push(`/${params.orgId}`); // Redirect to workspace selection
       return;
     }
 
     // Have workspace access but insufficient role
-    if (!isPending && requireWorkspaceAccess && workspaceRole) {
-      const hasRole = roleHierarchy[workspaceRole] >= roleHierarchy[requiredRole];
+    if (!isAuthLoading && requireWorkspaceAccess && workspaceRole) {
+      const hasRole =
+        roleHierarchy[workspaceRole] >= roleHierarchy[requiredRole];
       if (!hasRole) {
         // Could show an "access denied" page instead
         router.push(`/${params.orgId}/workspace/${params.workspaceId}`);
       }
     }
-  }, [user, isPending, orgMembership, workspaceRole, requiredRole, requireOrgAccess, requireWorkspaceAccess, params, router]);
+  }, [
+    user,
+    isAuthLoading,
+    orgMembership,
+    workspaceRole,
+    requiredRole,
+    requireOrgAccess,
+    requireWorkspaceAccess,
+    params,
+    router,
+  ]);
 
-  if (isPending) {
+  if (isAuthLoading) {
     return (
       <div className="flex min-h-screen items-center justify-center">
         <div className="animate-pulse">Loading...</div>

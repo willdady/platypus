@@ -5,14 +5,19 @@ meta {
 }
 
 post {
-  url: {{host}}/mcps
+  url: {{host}}/organisations/:orgId/workspaces/:workspaceId/mcps
   body: json
   auth: inherit
 }
 
+params:path {
+  orgId: {{orgId}}
+  workspaceId: {{workspaceId}}
+}
+
 body:json {
   {
-    "workspaceId": "default",
+    "workspaceId": "{{workspaceId}}",
     "name": "My MCP Server",
     "url": "https://example.com/mcp",
     "authType": "Bearer",

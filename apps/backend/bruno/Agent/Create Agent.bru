@@ -5,14 +5,19 @@ meta {
 }
 
 post {
-  url: {{host}}/agents
+  url: {{host}}/organisations/:orgId/workspaces/:workspaceId/agents
   body: json
   auth: inherit
 }
 
+params:path {
+  orgId: {{orgId}}
+  workspaceId: {{workspaceId}}
+}
+
 body:json {
   {
-    "workspaceId": "default",
+    "workspaceId": "{{workspaceId}}",
     "providerId": "provider-id-here",
     "name": "My agent",
     "description": "A helpful assistant",
