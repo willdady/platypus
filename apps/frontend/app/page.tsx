@@ -16,6 +16,7 @@ import { fetcher, joinUrl } from "@/lib/utils";
 import { useBackendUrl } from "./client-context";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { ProtectedRoute } from "@/components/protected-route";
+import { Header } from "@/components/header";
 
 export default function Home() {
   const backendUrl = useBackendUrl();
@@ -61,46 +62,49 @@ export default function Home() {
 
   return (
     <ProtectedRoute>
-      <div className="flex flex-col items-center justify-center min-h-screen p-8">
-        <div className="w-full max-w-md space-y-12">
-          <Accordion
-            type="single"
-            collapsible
-            className="w-full"
-            defaultValue={defaultOrgId}
-          >
-            {organisations.map((organisation) => (
-              <AccordionItem key={organisation.id} value={organisation.id}>
-                <AccordionTrigger className="hover:no-underline">
-                  <div className="text-lg font-semibold flex items-center gap-2">
-                    <Building className="size-5" /> {organisation.name}
-                  </div>
-                </AccordionTrigger>
-                <AccordionContent>
-                  <WorkspaceList orgId={organisation.id} />
-                  <div className="mt-4 flex items-center gap-2">
-                    <Button asChild>
-                      <Link href={`/${organisation.id}/create`}>
-                        <Plus /> Add workspace
-                      </Link>
-                    </Button>
-                    <Button variant="outline" asChild>
-                      <Link href={`/${organisation.id}/edit`}>
-                        <Settings className="h-4 w-4" /> Org settings
-                      </Link>
-                    </Button>
-                  </div>
-                </AccordionContent>
-              </AccordionItem>
-            ))}
-          </Accordion>
+      <div className="min-h-screen flex flex-col">
+        <Header />
+        <div className="flex-1 flex flex-col items-center justify-center p-8">
+          <div className="w-full max-w-md space-y-12">
+            <Accordion
+              type="single"
+              collapsible
+              className="w-full"
+              defaultValue={defaultOrgId}
+            >
+              {organisations.map((organisation) => (
+                <AccordionItem key={organisation.id} value={organisation.id}>
+                  <AccordionTrigger className="hover:no-underline">
+                    <div className="text-lg font-semibold flex items-center gap-2">
+                      <Building className="size-5" /> {organisation.name}
+                    </div>
+                  </AccordionTrigger>
+                  <AccordionContent>
+                    <WorkspaceList orgId={organisation.id} />
+                    <div className="mt-4 flex items-center gap-2">
+                      <Button asChild>
+                        <Link href={`/${organisation.id}/create`}>
+                          <Plus /> Add workspace
+                        </Link>
+                      </Button>
+                      <Button variant="outline" asChild>
+                        <Link href={`/${organisation.id}/edit`}>
+                          <Settings className="h-4 w-4" /> Org settings
+                        </Link>
+                      </Button>
+                    </div>
+                  </AccordionContent>
+                </AccordionItem>
+              ))}
+            </Accordion>
 
-          <div className="pt-8 border-t">
-            <Button variant="outline" className="w-full" asChild>
-              <Link href="/create">
-                <Plus /> Add Organisation
-              </Link>
-            </Button>
+            <div className="pt-8 border-t">
+              <Button variant="outline" className="w-full" asChild>
+                <Link href="/create">
+                  <Plus /> Add Organisation
+                </Link>
+              </Button>
+            </div>
           </div>
         </div>
       </div>

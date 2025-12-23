@@ -93,7 +93,7 @@ export function CommandMenu({ orgId, workspaceId }: CommandMenuProps) {
             }}
           >
             <Settings />
-            <span>Settings</span>
+            <span>Workspace Settings</span>
           </CommandItem>
           <CommandItem
             className="cursor-pointer"
