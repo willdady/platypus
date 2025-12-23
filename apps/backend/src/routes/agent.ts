@@ -7,32 +7,41 @@ import { agent as agentTable } from "../db/schema.ts";
 import { agentCreateSchema, agentUpdateSchema } from "@platypus/schemas";
 import { eq } from "drizzle-orm";
 import { dedupeArray } from "../utils.ts";
-import { requireAuth } from "../middleware.ts";
+import { requireAuth } from "../middleware/authentication.ts";
+import { requireOrgAccess, requireWorkspaceAccess } from "../middleware/authorization.ts";
+import type { Variables } from "../server.ts";
 
-const agent = new Hono();
+const agent = new Hono<{ Variables: Variables }>();
 
-// Require authentication for all routes
-agent.use("*", requireAuth);
-
-/** Create a new agent */
-agent.post("/", sValidator("json", agentCreateSchema), async (c) => {
-  const data = c.req.valid("json");
-  if (data.toolSetIds) {
-    data.toolSetIds = dedupeArray(data.toolSetIds);
-  }
-  const record = await db
-    .insert(agentTable)
-    .values({
-      id: nanoid(),
-      ...data,
-    })
-    .returning();
-  return c.json(record[0], 201);
-});
+/** Create a new agent (admin or editor) */
+agent.post(
+  "/",
+  requireAuth,
+  requireOrgAccess(),
+  requireWorkspaceAccess(["admin", "editor"]),
+  sValidator("json", agentCreateSchema),
+  async (c) => {
+    const data = c.req.valid("json");
+    if (data.toolSetIds) {
+      data.toolSetIds = dedupeArray(data.toolSetIds);
+    }
+    const record = await db
+      .insert(agentTable)
+      .values({
+        id: nanoid(),
+        ...data,
+      })
+      .returning();
+    return c.json(record[0], 201);
+  },
+);
 
 /** List all agents */
 agent.get(
   "/",
+  requireAuth,
+  requireOrgAccess(),
+  requireWorkspaceAccess(),
   sValidator(
     "query",
     z.object({
@@ -50,7 +59,7 @@ agent.get(
 );
 
 /** Get an agent by ID */
-agent.get("/:id", async (c) => {
+agent.get("/:id", requireAuth, requireOrgAccess(), requireWorkspaceAccess(), async (c) => {
   const id = c.req.param("id");
   const record = await db
     .select()
@@ -63,29 +72,42 @@ agent.get("/:id", async (c) => {
   return c.json(record[0]);
 });
 
-/** Update an agent by ID */
-agent.put("/:id", sValidator("json", agentUpdateSchema), async (c) => {
-  const id = c.req.param("id");
-  const data = c.req.valid("json");
-  if (data.toolSetIds) {
-    data.toolSetIds = dedupeArray(data.toolSetIds);
-  }
-  const record = await db
-    .update(agentTable)
-    .set({
-      ...data,
-      updatedAt: new Date(),
-    })
-    .where(eq(agentTable.id, id))
-    .returning();
-  return c.json(record, 200);
-});
+/** Update an agent by ID (admin or editor) */
+agent.put(
+  "/:id",
+  requireAuth,
+  requireOrgAccess(),
+  requireWorkspaceAccess(["admin", "editor"]),
+  sValidator("json", agentUpdateSchema),
+  async (c) => {
+    const id = c.req.param("id");
+    const data = c.req.valid("json");
+    if (data.toolSetIds) {
+      data.toolSetIds = dedupeArray(data.toolSetIds);
+    }
+    const record = await db
+      .update(agentTable)
+      .set({
+        ...data,
+        updatedAt: new Date(),
+      })
+      .where(eq(agentTable.id, id))
+      .returning();
+    return c.json(record, 200);
+  },
+);
 
-/** Delete an agent by ID */
-agent.delete("/:id", async (c) => {
-  const id = c.req.param("id");
-  await db.delete(agentTable).where(eq(agentTable.id, id));
-  return c.json({ message: "Agent deleted" });
-});
+/** Delete an agent by ID (admin only) */
+agent.delete(
+  "/:id",
+  requireAuth,
+  requireOrgAccess(),
+  requireWorkspaceAccess(["admin"]),
+  async (c) => {
+    const id = c.req.param("id");
+    await db.delete(agentTable).where(eq(agentTable.id, id));
+    return c.json({ message: "Agent deleted" });
+  },
+);
 
 export { agent };

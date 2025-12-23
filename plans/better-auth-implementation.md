@@ -200,7 +200,10 @@ Add to `apps/backend/.example.env`:
 ```env
 BETTER_AUTH_SECRET=your-secret-key-min-32-chars
 BETTER_AUTH_URL=http://localhost:3001
+SUPER_ADMIN_EMAILS=admin@example.com
 ```
+
+The `SUPER_ADMIN_EMAILS` variable contains comma-separated email addresses of users who should have platform-wide admin access, bypassing all organization and workspace membership checks.
 
 ### Phase 2: Frontend Setup
 
@@ -654,14 +657,38 @@ pnpm drizzle-kit-push
 - [x] Create sign-up page
 - [x] Create protected route wrapper
 - [x] Apply database schema changes (`pnpm drizzle-kit-push`)
-- [ ] Test sign-up flow
-- [ ] Test sign-in flow
-- [ ] Test sign-out flow
-- [ ] Test protected route access
+- [x] Test sign-up flow
+- [x] Test sign-in flow
+- [x] Test sign-out flow
+- [x] Test protected route access
 
 ## Phase 5: Custom Role-Based Access Control (Future)
 
 Rather than using better-auth's organization plugin, we'll implement custom authorization that integrates with your existing `organisation` and `workspace` tables. This provides full control over the two-tier permission model.
+
+**Key Design Decisions:**
+- **No "owner" role at org level** - Simplified to just `admin` and `member` roles
+- **Super admin via environment variable** - Platform-level admins identified by `SUPER_ADMIN_EMAILS` env var
+- **No modification to better-auth tables** - All custom authorization uses separate tables
+- **Environment-based super admin** - Simple, requires no database changes, suitable for small number of platform admins
+
+### Super Admin Role
+
+The application supports a **super admin** role for platform administrators who need access to all organizations and workspaces without explicit membership.
+
+**Implementation:**
+- Super admin users are identified by email address stored in the `SUPER_ADMIN_EMAILS` environment variable
+- Format: Comma-separated list of email addresses (e.g., `admin@example.com,admin2@example.com`)
+- Super admins bypass all organization and workspace membership checks
+- They have full admin access to all resources across the entire platform
+- Changes require app restart (acceptable for infrequent super admin management)
+
+**Environment Variable:**
+```env
+SUPER_ADMIN_EMAILS=admin@example.com
+```
+
+The default admin user created on first startup is automatically included as a super admin.
 
 ### Authorization Architecture
 
@@ -670,14 +697,17 @@ flowchart TB
     subgraph AuthCheck["Authorization Check Flow"]
         Request["API Request"]
         AuthMW["requireAuth Middleware<br/>Is user logged in?"]
+        SuperAdminCheck["Is user a super admin?<br/>(Check SUPER_ADMIN_EMAILS)"]
         OrgMW["requireOrgAccess Middleware<br/>Is user a member of this org?"]
         WsMW["requireWorkspaceAccess Middleware<br/>Can user access this workspace?"]
         Route["Route Handler"]
     end
-    
+
     Request --> AuthMW
-    AuthMW -->|"Yes"| OrgMW
+    AuthMW -->|"Yes"| SuperAdminCheck
     AuthMW -->|"No"| Deny401["401 Unauthorized"]
+    SuperAdminCheck -->|"Yes"| Route
+    SuperAdminCheck -->|"No"| OrgMW
     OrgMW -->|"Yes"| WsMW
     OrgMW -->|"No"| Deny403Org["403 Forbidden<br/>Not org member"]
     WsMW -->|"Yes"| Route
@@ -696,7 +726,7 @@ export const organisationMember = pgTable("organisation_member", (t) => ({
   id: t.text("id").primaryKey(),
   organisationId: t.text("organisation_id").notNull().references(() => organisation.id, { onDelete: "cascade" }),
   userId: t.text("user_id").notNull().references(() => user.id, { onDelete: "cascade" }),
-  role: t.text("role").notNull().default("member"), // owner | admin | member
+  role: t.text("role").notNull().default("member"), // admin | member
   createdAt: t.timestamp("created_at").notNull().defaultNow(),
   updatedAt: t.timestamp("updated_at").notNull().defaultNow(),
 }), (t) => [
@@ -737,19 +767,31 @@ export const invitation = pgTable("invitation", (t) => ({
 
 ### 5.2 Role Hierarchy
 
-The permission model uses inheritance where higher org roles grant implicit workspace access:
+**Super Admin (Platform Level):**
+- Identified by email in `SUPER_ADMIN_EMAILS` environment variable
+- Bypasses all membership checks
+- Full admin access to ALL organizations and workspaces
+- Intended for platform administrators only
+
+**Organization Roles:**
 
 | Org Role | Workspace Access |
 |----------|------------------|
-| `owner` | Full admin access to ALL workspaces |
-| `admin` | Full admin access to ALL workspaces |
+| `admin` | Full admin access to ALL workspaces in the organization |
 | `member` | Only workspaces where explicitly assigned |
+
+**Workspace Roles:**
 
 | Workspace Role | Permissions |
 |----------------|-------------|
 | `admin` | Full CRUD, settings, member management |
 | `editor` | Create/edit chats, agents, MCPs |
 | `viewer` | Read-only access |
+
+**Inheritance Rules:**
+- Super admins have implicit admin access everywhere
+- Org admins have implicit admin access to all workspaces in their organization
+- Org members need explicit workspace membership
 
 ### 5.3 Authorization Middleware
 
@@ -760,22 +802,35 @@ import { createMiddleware } from "hono/factory";
 import { eq, and } from "drizzle-orm";
 import { organisationMember, workspaceMember } from "../db/schema";
 
-type OrgRole = "owner" | "admin" | "member";
+type OrgRole = "admin" | "member";
 type WorkspaceRole = "admin" | "editor" | "viewer";
+
+// Helper to check if user is a super admin
+const isSuperAdmin = (userEmail: string): boolean => {
+  const superAdminEmails = process.env.SUPER_ADMIN_EMAILS?.split(',').map(e => e.trim()) || [];
+  return superAdminEmails.includes(userEmail);
+};
 
 // Check if user has access to an organisation
 export const requireOrgAccess = (requiredRoles?: OrgRole[]) =>
   createMiddleware(async (c, next) => {
     const user = c.get("user");
     const db = c.get("db");
-    
+
+    // Super admins bypass all checks
+    if (isSuperAdmin(user.email)) {
+      c.set("orgMembership", { role: "admin", isSuperAdmin: true });
+      await next();
+      return;
+    }
+
     // Get orgId from URL param or request body
     const orgId = c.req.param("orgId") || c.req.query("organisationId");
-    
+
     if (!orgId) {
       return c.json({ error: "Organisation ID required" }, 400);
     }
-    
+
     const [membership] = await db
       .select()
       .from(organisationMember)
@@ -784,15 +839,15 @@ export const requireOrgAccess = (requiredRoles?: OrgRole[]) =>
         eq(organisationMember.organisationId, orgId)
       ))
       .limit(1);
-    
+
     if (!membership) {
       return c.json({ error: "Not a member of this organisation" }, 403);
     }
-    
+
     if (requiredRoles && !requiredRoles.includes(membership.role as OrgRole)) {
       return c.json({ error: "Insufficient organisation permissions" }, 403);
     }
-    
+
     c.set("orgMembership", membership);
     await next();
   });
@@ -803,21 +858,29 @@ export const requireWorkspaceAccess = (requiredRoles?: WorkspaceRole[]) =>
     const user = c.get("user");
     const db = c.get("db");
     const orgMembership = c.get("orgMembership");
-    
+
+    // Super admins bypass all checks
+    if (isSuperAdmin(user.email)) {
+      c.set("workspaceRole", "admin");
+      c.set("workspaceMembership", null);
+      await next();
+      return;
+    }
+
     const workspaceId = c.req.param("workspaceId") || c.req.query("workspaceId");
-    
+
     if (!workspaceId) {
       return c.json({ error: "Workspace ID required" }, 400);
     }
-    
-    // Org owners and admins have automatic admin access to all workspaces
-    if (["owner", "admin"].includes(orgMembership.role)) {
+
+    // Org admins have automatic admin access to all workspaces
+    if (orgMembership.role === "admin") {
       c.set("workspaceRole", "admin");
       c.set("workspaceMembership", null); // No explicit membership needed
       await next();
       return;
     }
-    
+
     // For regular members, check workspace-specific membership
     const [wsMembership] = await db
       .select()
@@ -827,7 +890,7 @@ export const requireWorkspaceAccess = (requiredRoles?: WorkspaceRole[]) =>
         eq(workspaceMember.workspaceId, workspaceId)
       ))
       .limit(1);
-    
+
     if (!wsMembership) {
       return c.json({ error: "No access to this workspace" }, 403);
     }
@@ -861,8 +924,8 @@ workspace.get("/:workspaceId", requireAuth, requireOrgAccess(), requireWorkspace
   // User has at least viewer access
 });
 
-// Create workspace - org admin or owner only
-workspace.post("/", requireAuth, requireOrgAccess(["owner", "admin"]), async (c) => {
+// Create workspace - org admin only
+workspace.post("/", requireAuth, requireOrgAccess(["admin"]), async (c) => {
   // Only org admins can create workspaces
 });
 
@@ -890,7 +953,7 @@ import { useParams } from "next/navigation";
 interface OrgMembership {
   id: string;
   organisationId: string;
-  role: "owner" | "admin" | "member";
+  role: "admin" | "member";
 }
 
 interface WorkspaceMembership {
@@ -907,6 +970,7 @@ interface AuthContextType {
   orgMembership: OrgMembership | null;
   workspaceMembership: WorkspaceMembership | null;
   workspaceRole: "admin" | "editor" | "viewer" | null;
+  isSuperAdmin: boolean;
   isOrgAdmin: boolean;
   canEdit: boolean;
   canManage: boolean;
@@ -954,8 +1018,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [data?.user, workspaceId]);
 
   // Computed permissions
-  const isOrgAdmin = orgMembership?.role === "owner" || orgMembership?.role === "admin";
-  const workspaceRole = isOrgAdmin ? "admin" : workspaceMembership?.role ?? null;
+  // isSuperAdmin should be fetched from backend endpoint or included in session data
+  // For simplicity, you could add a /auth/me endpoint that returns { user, isSuperAdmin }
+  const isSuperAdmin = false; // TODO: Fetch from backend
+  const isOrgAdmin = orgMembership?.role === "admin";
+  const workspaceRole = isSuperAdmin || isOrgAdmin ? "admin" : workspaceMembership?.role ?? null;
   const canEdit = workspaceRole === "admin" || workspaceRole === "editor";
   const canManage = workspaceRole === "admin";
 
@@ -969,6 +1036,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         orgMembership,
         workspaceMembership,
         workspaceRole,
+        isSuperAdmin,
         isOrgAdmin,
         canEdit,
         canManage,
@@ -1229,7 +1297,7 @@ workspace.get("/:workspaceId/membership", requireAuth, async (c) => {
     .limit(1);
   
   // Org admins get automatic admin access
-  if (orgMembership && ["owner", "admin"].includes(orgMembership.role)) {
+  if (orgMembership && orgMembership.role === "admin") {
     return c.json({
       id: "org-admin",
       workspaceId,
@@ -1258,27 +1326,29 @@ workspace.get("/:workspaceId/membership", requireAuth, async (c) => {
 
 ### 5.6 Permission Matrix
 
+**Note:** Super admins (configured via `SUPER_ADMIN_EMAILS`) bypass all permission checks and have full access to all resources.
+
 | Resource | Action | Required Permission |
 |----------|--------|---------------------|
-| Organisation | View | org: member+ |
-| Organisation | Edit | org: admin+ |
-| Organisation | Delete | org: owner |
-| Organisation | Manage members | org: admin+ |
-| Workspace | List | org: member+ (sees only accessible) |
-| Workspace | View | ws: viewer+ OR org: admin+ |
-| Workspace | Create | org: admin+ |
-| Workspace | Edit | ws: editor+ OR org: admin+ |
-| Workspace | Delete | ws: admin OR org: admin+ |
-| Chat | View | ws: viewer+ |
-| Chat | Create/Edit | ws: editor+ |
-| Chat | Delete | ws: editor+ |
-| Agent | View | ws: viewer+ |
-| Agent | Create/Edit | ws: editor+ |
-| Agent | Delete | ws: editor+ |
-| Provider | View | ws: admin (contains API keys) |
-| Provider | Create/Edit | ws: admin |
-| MCP | View | ws: viewer+ |
-| MCP | Create/Edit | ws: admin |
+| Organisation | View | org: member+ OR super admin |
+| Organisation | Edit | org: admin OR super admin |
+| Organisation | Delete | org: admin OR super admin |
+| Organisation | Manage members | org: admin OR super admin |
+| Workspace | List | org: member+ (sees only accessible) OR super admin (sees all) |
+| Workspace | View | ws: viewer+ OR org: admin OR super admin |
+| Workspace | Create | org: admin OR super admin |
+| Workspace | Edit | ws: editor+ OR org: admin OR super admin |
+| Workspace | Delete | ws: admin OR org: admin OR super admin |
+| Chat | View | ws: viewer+ OR super admin |
+| Chat | Create/Edit | ws: editor+ OR super admin |
+| Chat | Delete | ws: editor+ OR super admin |
+| Agent | View | ws: viewer+ OR super admin |
+| Agent | Create/Edit | ws: editor+ OR super admin |
+| Agent | Delete | ws: editor+ OR super admin |
+| Provider | View | ws: admin OR super admin (contains API keys) |
+| Provider | Create/Edit | ws: admin OR super admin |
+| MCP | View | ws: viewer+ OR super admin |
+| MCP | Create/Edit | ws: admin OR super admin |
 
 ### 5.8 Entity Relationship Diagram
 
@@ -1318,7 +1388,7 @@ erDiagram
         string id PK
         string organisationId FK
         string userId FK
-        string role "owner|admin|member"
+        string role "admin|member"
     }
     
     WORKSPACE_MEMBER {
@@ -1342,14 +1412,16 @@ erDiagram
 ### 5.9 Authorization Checklist
 
 **Backend:**
-- [ ] Add `organisationMember` table to schema
-- [ ] Add `workspaceMember` table to schema
-- [ ] Add `invitation` table to schema
-- [ ] Create authorization middleware file (`src/middleware/authorization.ts`)
-- [ ] Implement `requireOrgAccess` middleware
-- [ ] Implement `requireWorkspaceAccess` middleware
-- [ ] Add membership endpoint to organisation routes (`GET /:orgId/membership`)
-- [ ] Add membership endpoint to workspace routes (`GET /:workspaceId/membership`)
+- [x] Add `SUPER_ADMIN_EMAILS` environment variable to `.env` and `.example.env`
+- [x] Add `organisationMember` table to schema (use role: "admin" | "member", no "owner")
+- [x] Add `workspaceMember` table to schema
+- [x] Add `invitation` table to schema
+- [x] Create authorization middleware file (`src/middleware/authorization.ts`)
+- [x] Implement `isSuperAdmin()` helper function in authorization middleware
+- [x] Implement `requireOrgAccess` middleware with super admin check
+- [x] Implement `requireWorkspaceAccess` middleware with super admin check
+- [x] Add membership endpoint to organisation routes (`GET /:orgId/membership`)
+- [x] Add membership endpoint to workspace routes (`GET /:workspaceId/membership`)
 - [ ] Update organisation routes with authorization middleware
 - [ ] Update workspace routes with authorization middleware
 - [ ] Update chat routes with authorization middleware
@@ -1360,11 +1432,14 @@ erDiagram
 - [ ] Add API endpoints for invitations
 
 **Frontend:**
-- [ ] Update `AuthProvider` to fetch and expose org/workspace membership
-- [ ] Update `ProtectedRoute` component with `requireOrgAccess` and `requireWorkspaceAccess` props
-- [ ] Update `[orgId]/layout.tsx` to use `requireOrgAccess`
-- [ ] Update `[orgId]/workspace/[workspaceId]/layout.tsx` to use `requireWorkspaceAccess`
-- [ ] Add role-based conditional rendering with `useAuth` hook (`canEdit`, `canManage`)
+- [x] Update `AuthProvider` to fetch and expose org/workspace membership
+- [x] Add `isSuperAdmin` to `AuthContextType` interface
+- [ ] Fetch super admin status from backend (add endpoint or include in session)
+- [x] Update permission calculations to account for super admin (canEdit, canManage, etc.)
+- [x] Update `ProtectedRoute` component with `requireOrgAccess` and `requireWorkspaceAccess` props
+- [x] Update `[orgId]/layout.tsx` to use `requireOrgAccess`
+- [x] Update `[orgId]/workspace/[workspaceId]/layout.tsx` to use `requireWorkspaceAccess`
+- [ ] Add role-based conditional rendering with `useAuth` hook (`canEdit`, `canManage`, `isSuperAdmin`)
 - [ ] Update UI components to conditionally show/hide actions based on permissions
 - [ ] Add frontend UI for member management
 

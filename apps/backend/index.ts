@@ -1,7 +1,7 @@
 import { serve } from "@hono/node-server";
 import app from "./src/server.ts";
 import { db } from "./src/index.ts";
-import { organisation, workspace } from "./src/db/schema.ts";
+import { organisation, workspace, organisationMember } from "./src/db/schema.ts";
 import { nanoid } from "nanoid";
 import { count } from "drizzle-orm";
 import { auth } from "./src/auth.ts";
@@ -38,14 +38,30 @@ const main = async () => {
       const defaultPassword = "admin123";
 
       try {
-        await auth.api.signUpEmail({
+        const result = await auth.api.signUpEmail({
           body: {
             email: defaultEmail,
             password: defaultPassword,
             name: "Admin User",
           },
         });
+
+        if (!result.user) {
+          throw new Error("Failed to get user from sign up response");
+        }
+
         console.log(`- User created: ${defaultEmail}`);
+
+        // Create organization membership with admin role
+        console.log("Creating organization membership...");
+        await db.insert(organisationMember).values({
+          id: nanoid(),
+          organisationId: orgId,
+          userId: result.user.id,
+          role: "admin",
+        });
+        console.log(`- Organization membership created for ${defaultEmail}`);
+
         console.log(`- Default credentials: ${defaultEmail} / ${defaultPassword}`);
         console.log("⚠️  Please change the default password after first login!");
       } catch (error) {

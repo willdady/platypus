@@ -5,16 +5,18 @@ import { getToolSets } from "../tools/index.ts";
 import { db } from "../index.ts";
 import { mcp as mcpTable } from "../db/schema.ts";
 import { eq } from "drizzle-orm";
-import { requireAuth } from "../middleware.ts";
+import { requireAuth } from "../middleware/authentication.ts";
+import { requireOrgAccess, requireWorkspaceAccess } from "../middleware/authorization.ts";
+import type { Variables } from "../server.ts";
 
-const tool = new Hono();
-
-// Require authentication for all routes
-tool.use("*", requireAuth);
+const tool = new Hono<{ Variables: Variables }>();
 
 /** List all tool sets */
 tool.get(
   "/",
+  requireAuth,
+  requireOrgAccess(),
+  requireWorkspaceAccess(),
   sValidator(
     "query",
     z.object({

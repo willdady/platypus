@@ -6,31 +6,37 @@ import { provider as providerTable } from "../db/schema.ts";
 import { providerCreateSchema, providerUpdateSchema } from "@platypus/schemas";
 import { eq } from "drizzle-orm";
 import { dedupeArray } from "../utils.ts";
-import { requireAuth } from "../middleware.ts";
+import { requireAuth } from "../middleware/authentication.ts";
+import { requireOrgAccess, requireWorkspaceAccess } from "../middleware/authorization.ts";
+import type { Variables } from "../server.ts";
 
-const provider = new Hono();
+const provider = new Hono<{ Variables: Variables }>();
 
-// Require authentication for all routes
-provider.use("*", requireAuth);
-
-/** Create a new provider */
-provider.post("/", sValidator("json", providerCreateSchema), async (c) => {
-  const data = c.req.valid("json");
-  if (data.modelIds) {
-    data.modelIds = dedupeArray(data.modelIds).sort();
-  }
-  const record = await db
-    .insert(providerTable)
-    .values({
-      id: nanoid(),
-      ...data,
-    })
-    .returning();
-  return c.json(record[0], 201);
-});
+/** Create a new provider (admin only) */
+provider.post(
+  "/",
+  requireAuth,
+  requireOrgAccess(),
+  requireWorkspaceAccess(["admin"]),
+  sValidator("json", providerCreateSchema),
+  async (c) => {
+    const data = c.req.valid("json");
+    if (data.modelIds) {
+      data.modelIds = dedupeArray(data.modelIds).sort();
+    }
+    const record = await db
+      .insert(providerTable)
+      .values({
+        id: nanoid(),
+        ...data,
+      })
+      .returning();
+    return c.json(record[0], 201);
+  },
+);
 
 /** List all providers */
-provider.get("/", async (c) => {
+provider.get("/", requireAuth, requireOrgAccess(), requireWorkspaceAccess(), async (c) => {
   const workspaceId = c.req.query("workspaceId");
   const results = await db
     .select()
@@ -42,7 +48,7 @@ provider.get("/", async (c) => {
 });
 
 /** Get a provider by ID */
-provider.get("/:id", async (c) => {
+provider.get("/:id", requireAuth, requireOrgAccess(), requireWorkspaceAccess(), async (c) => {
   const id = c.req.param("id");
   const record = await db
     .select()
@@ -55,29 +61,42 @@ provider.get("/:id", async (c) => {
   return c.json(record[0]);
 });
 
-/** Update a provider by ID */
-provider.put("/:id", sValidator("json", providerUpdateSchema), async (c) => {
-  const id = c.req.param("id");
-  const data = c.req.valid("json");
-  if (data.modelIds) {
-    data.modelIds = dedupeArray(data.modelIds).sort();
-  }
-  const record = await db
-    .update(providerTable)
-    .set({
-      ...data,
-      updatedAt: new Date(),
-    })
-    .where(eq(providerTable.id, id))
-    .returning();
-  return c.json(record, 200);
-});
+/** Update a provider by ID (admin only) */
+provider.put(
+  "/:id",
+  requireAuth,
+  requireOrgAccess(),
+  requireWorkspaceAccess(["admin"]),
+  sValidator("json", providerUpdateSchema),
+  async (c) => {
+    const id = c.req.param("id");
+    const data = c.req.valid("json");
+    if (data.modelIds) {
+      data.modelIds = dedupeArray(data.modelIds).sort();
+    }
+    const record = await db
+      .update(providerTable)
+      .set({
+        ...data,
+        updatedAt: new Date(),
+      })
+      .where(eq(providerTable.id, id))
+      .returning();
+    return c.json(record, 200);
+  },
+);
 
-/** Delete a provider by ID */
-provider.delete("/:id", async (c) => {
-  const id = c.req.param("id");
-  await db.delete(providerTable).where(eq(providerTable.id, id));
-  return c.json({ message: "Provider deleted" });
-});
+/** Delete a provider by ID (admin only) */
+provider.delete(
+  "/:id",
+  requireAuth,
+  requireOrgAccess(),
+  requireWorkspaceAccess(["admin"]),
+  async (c) => {
+    const id = c.req.param("id");
+    await db.delete(providerTable).where(eq(providerTable.id, id));
+    return c.json({ message: "Provider deleted" });
+  },
+);
 
 export { provider };

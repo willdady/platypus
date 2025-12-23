@@ -34,7 +34,9 @@ import {
   type Provider,
 } from "@platypus/schemas";
 import { and, desc, eq, sql } from "drizzle-orm";
-import { requireAuth } from "../middleware.ts";
+import { requireAuth } from "../middleware/authentication.ts";
+import { requireOrgAccess, requireWorkspaceAccess } from "../middleware/authorization.ts";
+import type { Variables } from "../server.ts";
 
 // --- Types ---
 
@@ -382,13 +384,13 @@ const upsertChatRecord = async (
 
 // --- Routes ---
 
-const chat = new Hono();
-
-// Require authentication for all routes
-chat.use("*", requireAuth);
+const chat = new Hono<{ Variables: Variables }>();
 
 chat.get(
   "/",
+  requireAuth,
+  requireOrgAccess(),
+  requireWorkspaceAccess(),
   sValidator(
     "query",
     z.object({
@@ -438,6 +440,9 @@ chat.get(
 
 chat.get(
   "/tags",
+  requireAuth,
+  requireOrgAccess(),
+  requireWorkspaceAccess(),
   sValidator("query", z.object({ workspaceId: z.string() })),
   async (c) => {
     const { workspaceId } = c.req.valid("query");
@@ -456,6 +461,9 @@ chat.get(
 
 chat.get(
   "/:id",
+  requireAuth,
+  requireOrgAccess(),
+  requireWorkspaceAccess(),
   sValidator("query", z.object({ workspaceId: z.string() })),
   async (c) => {
     const id = c.req.param("id");
@@ -473,7 +481,13 @@ chat.get(
   },
 );
 
-chat.post("/", sValidator("json", chatSubmitSchema), async (c) => {
+chat.post(
+  "/",
+  requireAuth,
+  requireOrgAccess(),
+  requireWorkspaceAccess(),
+  sValidator("json", chatSubmitSchema),
+  async (c) => {
   const data = c.req.valid("json");
   const { workspaceId, messages = [] } = data;
 
@@ -541,6 +555,9 @@ chat.post("/", sValidator("json", chatSubmitSchema), async (c) => {
 
 chat.delete(
   "/:id",
+  requireAuth,
+  requireOrgAccess(),
+  requireWorkspaceAccess(),
   sValidator("query", z.object({ workspaceId: z.string() })),
   async (c) => {
     const id = c.req.param("id");
@@ -561,6 +578,9 @@ chat.delete(
 
 chat.put(
   "/:id",
+  requireAuth,
+  requireOrgAccess(),
+  requireWorkspaceAccess(),
   sValidator("query", z.object({ workspaceId: z.string() })),
   sValidator("json", chatUpdateSchema),
   async (c) => {
@@ -584,6 +604,9 @@ chat.put(
 
 chat.post(
   "/:id/generate-metadata",
+  requireAuth,
+  requireOrgAccess(),
+  requireWorkspaceAccess(),
   sValidator("query", z.object({ workspaceId: z.string() })),
   sValidator("json", chatGenerateMetadataSchema),
   async (c) => {

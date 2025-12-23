@@ -5,5 +5,5 @@ export default function OrgLayout({
 }: {
   children: React.ReactNode;
 }) {
-  return <ProtectedRoute>{children}</ProtectedRoute>;
+  return <ProtectedRoute requireOrgAccess>{children}</ProtectedRoute>;
 }

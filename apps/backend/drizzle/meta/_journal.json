@@ -29,6 +29,13 @@
       "when": 1766371475453,
       "tag": "0003_nervous_puff_adder",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1766447057705,
+      "tag": "0004_loud_switch",
+      "breakpoints": true
     }
   ]
 }

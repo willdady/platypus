@@ -2,6 +2,7 @@ import { pgTable, index } from "drizzle-orm/pg-core";
 
 // Import and re-export auth schema
 export * from "./auth-schema.ts";
+import { user } from "./auth-schema.ts";
 
 export const organisation = pgTable("organisation", (t) => ({
   id: t.text("id").primaryKey(),
@@ -12,7 +13,7 @@ export const organisation = pgTable("organisation", (t) => ({
 
 export const workspace = pgTable("workspace", (t) => ({
   id: t.text("id").primaryKey(),
-  organisationId: t.text("organisation_id").references(() => organisation.id, {
+  organisationId: t.text("organisation_id").notNull().references(() => organisation.id, {
     onDelete: "cascade",
   }),
   name: t.text("name").notNull(),
@@ -24,7 +25,7 @@ export const workspace = pgTable("workspace", (t) => ({
 
 export const chat = pgTable("chat", (t) => ({
   id: t.text("id").primaryKey(),
-  workspaceId: t.text("workspace_id").references(() => workspace.id, {
+  workspaceId: t.text("workspace_id").notNull().references(() => workspace.id, {
     onDelete: "cascade",
   }),
   title: t.text("title").notNull(),
@@ -49,7 +50,7 @@ export const chat = pgTable("chat", (t) => ({
 
 export const agent = pgTable("agent", (t) => ({
   id: t.text("id").primaryKey(),
-  workspaceId: t.text("workspace_id").references(() => workspace.id, {
+  workspaceId: t.text("workspace_id").notNull().references(() => workspace.id, {
     onDelete: "cascade",
   }),
   providerId: t
@@ -79,7 +80,7 @@ export const agent = pgTable("agent", (t) => ({
 
 export const mcp = pgTable("mcp", (t) => ({
   id: t.text("id").primaryKey(),
-  workspaceId: t.text("workspace_id").references(() => workspace.id, {
+  workspaceId: t.text("workspace_id").notNull().references(() => workspace.id, {
     onDelete: "cascade",
   }),
   name: t.text("name").notNull(),
@@ -94,7 +95,7 @@ export const mcp = pgTable("mcp", (t) => ({
 
 export const provider = pgTable("provider", (t) => ({
   id: t.text("id").primaryKey(),
-  workspaceId: t.text("workspace_id").references(() => workspace.id, {
+  workspaceId: t.text("workspace_id").notNull().references(() => workspace.id, {
     onDelete: "cascade",
   }),
   name: t.text("name").notNull(),
@@ -112,4 +113,47 @@ export const provider = pgTable("provider", (t) => ({
   updatedAt: t.timestamp("updated_at").notNull().defaultNow(),
 }), (t) => [
   index("idx_provider_workspace_id").on(t.workspaceId),
+]);
+
+// Organisation membership - links users to organisations with roles
+export const organisationMember = pgTable("organisation_member", (t) => ({
+  id: t.text("id").primaryKey(),
+  organisationId: t.text("organisation_id").notNull().references(() => organisation.id, { onDelete: "cascade" }),
+  userId: t.text("user_id").notNull().references(() => user.id, { onDelete: "cascade" }),
+  role: t.text("role").notNull().default("member"), // admin | member
+  createdAt: t.timestamp("created_at").notNull().defaultNow(),
+  updatedAt: t.timestamp("updated_at").notNull().defaultNow(),
+}), (t) => [
+  index("idx_org_member_org_id").on(t.organisationId),
+  index("idx_org_member_user_id").on(t.userId),
+]);
+
+// Workspace membership - links users to specific workspaces with granular roles
+export const workspaceMember = pgTable("workspace_member", (t) => ({
+  id: t.text("id").primaryKey(),
+  workspaceId: t.text("workspace_id").notNull().references(() => workspace.id, { onDelete: "cascade" }),
+  userId: t.text("user_id").notNull().references(() => user.id, { onDelete: "cascade" }),
+  orgMemberId: t.text("org_member_id").notNull().references(() => organisationMember.id, { onDelete: "cascade" }),
+  role: t.text("role").notNull().default("viewer"), // admin | editor | viewer
+  createdAt: t.timestamp("created_at").notNull().defaultNow(),
+  updatedAt: t.timestamp("updated_at").notNull().defaultNow(),
+}), (t) => [
+  index("idx_ws_member_workspace_id").on(t.workspaceId),
+  index("idx_ws_member_user_id").on(t.userId),
+]);
+
+// Invitations for both org and workspace levels
+export const invitation = pgTable("invitation", (t) => ({
+  id: t.text("id").primaryKey(),
+  email: t.text("email").notNull(),
+  organisationId: t.text("organisation_id").references(() => organisation.id, { onDelete: "cascade" }),
+  workspaceId: t.text("workspace_id").references(() => workspace.id, { onDelete: "cascade" }),
+  role: t.text("role").notNull(),
+  invitedBy: t.text("invited_by").notNull().references(() => user.id),
+  status: t.text("status").notNull().default("pending"), // pending | accepted | expired
+  expiresAt: t.timestamp("expires_at").notNull(),
+  createdAt: t.timestamp("created_at").notNull().defaultNow(),
+}), (t) => [
+  index("idx_invitation_email").on(t.email),
+  index("idx_invitation_org_id").on(t.organisationId),
 ]);
