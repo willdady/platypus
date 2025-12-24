@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import { headers } from "next/headers";
 import { ModeToggle } from "@/components/mode-toggle";
 import { NotificationsDropdown } from "@/components/notifications-dropdown";
 import { CommandMenu } from "@/components/command-menu";
@@ -28,8 +29,14 @@ export default async function WorkspaceLayout({
   // Use internal URL for SSR, fallback to BACKEND_URL for local dev
   const backendUrl =
     process.env.INTERNAL_BACKEND_URL || process.env.BACKEND_URL || "";
+  const headersList = await headers();
   const response = await fetch(
     joinUrl(backendUrl, `/organisations/${orgId}/workspaces/${workspaceId}`),
+    {
+      headers: {
+        cookie: headersList.get("cookie") || "",
+      },
+    },
   );
 
   if (response.status === 404) {

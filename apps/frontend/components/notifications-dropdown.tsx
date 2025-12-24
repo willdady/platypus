@@ -1,5 +1,6 @@
 "use client";
 
+import { useAuth } from "@/components/auth-provider";
 import { Bell, Mail } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -17,11 +18,12 @@ import Link from "next/link";
 import useSWR from "swr";
 
 export function NotificationsDropdown() {
+  const { user } = useAuth();
   const backendUrl = useBackendUrl();
   const { data } = useSWR<{ results: InvitationListItem[] }>(
-    joinUrl(backendUrl, "/users/me/invitations"),
+    backendUrl && user ? joinUrl(backendUrl, "/users/me/invitations") : null,
     fetcher,
-    { refreshInterval: 60000 * 2 } // Refresh every 2 minutes
+    { refreshInterval: 60000 * 2 }, // Refresh every 2 minutes
   );
 
   const invitations = data?.results || [];
@@ -60,7 +62,8 @@ export function NotificationsDropdown() {
                       Workspace Invitation
                     </div>
                     <div className="text-xs text-muted-foreground line-clamp-2">
-                      You've been invited to join <strong>{invite.workspaceName}</strong> in{" "}
+                      You've been invited to join{" "}
+                      <strong>{invite.workspaceName}</strong> in{" "}
                       <strong>{invite.organisationName}</strong>.
                     </div>
                   </Link>

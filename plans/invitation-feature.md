@@ -11,17 +11,17 @@ This plan outlines the implementation of a workspace invitation system for Platy
 
 ## Key Design Decisions
 
-| Decision | Choice |
-|----------|--------|
-| Invitation scope | Per-workspace (not org-only) |
-| Invite existing/new users | Both - email lookup, new users sign up first |
-| Email notifications | Not supported at this stage |
-| Default expiration | 7 days (configurable via env var) |
-| Available roles | All workspace roles: admin, editor, viewer |
-| Duplicate prevention | Unique constraint on workspace + email pair |
-| Notifications system | Simple - query invitations directly (no separate notifications table) |
-| Invite creation UI | New "Invitations" tab in org settings |
-| Workspaces per invite | Single workspace per invitation |
+| Decision                  | Choice                                                                |
+| ------------------------- | --------------------------------------------------------------------- |
+| Invitation scope          | Per-workspace (not org-only)                                          |
+| Invite existing/new users | Both - email lookup, new users sign up first                          |
+| Email notifications       | Not supported at this stage                                           |
+| Default expiration        | 7 days (configurable via env var)                                     |
+| Available roles           | All workspace roles: admin, editor, viewer                            |
+| Duplicate prevention      | Unique constraint on workspace + email pair                           |
+| Notifications system      | Simple - query invitations directly (no separate notifications table) |
+| Invite creation UI        | New "Invitations" tab in org settings                                 |
+| Workspaces per invite     | Single workspace per invitation                                       |
 
 ## Architecture
 
@@ -34,19 +34,19 @@ flowchart TD
         A --> C[View Invitations]
         A --> D[Delete Invitation]
     end
-    
+
     subgraph Invitation Storage
         B --> E[invitation table]
         C --> E
         D --> E
     end
-    
+
     subgraph Invited User Actions
         F[Invited User] --> G[View Pending Invitations]
         F --> H[Accept Invitation]
         F --> I[Decline Invitation]
     end
-    
+
     G --> E
     H --> J{User exists?}
     J -->|Yes| K[Create organisationMember if needed]
@@ -72,7 +72,7 @@ erDiagram
         timestamp expires_at
         timestamp created_at
     }
-    
+
     organisation ||--o{ invitation : has
     workspace ||--o{ invitation : has
     user ||--o{ invitation : invites
@@ -81,28 +81,28 @@ erDiagram
 **Required Schema Changes to [`apps/backend/src/db/schema.ts`](apps/backend/src/db/schema.ts:196):**
 
 1. Add `.notNull()` to `organisationId` field
-2. Add `.notNull()` to `workspaceId` field  
+2. Add `.notNull()` to `workspaceId` field
 3. Add unique index on `(workspaceId, email)` to prevent duplicate invites
 4. Add index on `workspaceId` for efficient queries
 5. Consider adding `declined` to the status options
 
 ### API Endpoints
 
-| Method | Endpoint | Description | Auth |
-|--------|----------|-------------|------|
-| POST | `/organisations/:orgId/invitations` | Create invitation | Org admin |
-| GET | `/organisations/:orgId/invitations` | List org's invitations | Org admin |
-| DELETE | `/organisations/:orgId/invitations/:invitationId` | Delete invitation | Org admin |
-| GET | `/users/me/invitations` | List user's pending invitations | Authenticated |
-| POST | `/users/me/invitations/:invitationId/accept` | Accept invitation | Authenticated |
-| POST | `/users/me/invitations/:invitationId/decline` | Decline invitation | Authenticated |
+| Method | Endpoint                                          | Description                     | Auth          |
+| ------ | ------------------------------------------------- | ------------------------------- | ------------- |
+| POST   | `/organisations/:orgId/invitations`               | Create invitation               | Org admin     |
+| GET    | `/organisations/:orgId/invitations`               | List org's invitations          | Org admin     |
+| DELETE | `/organisations/:orgId/invitations/:invitationId` | Delete invitation               | Org admin     |
+| GET    | `/users/me/invitations`                           | List user's pending invitations | Authenticated |
+| POST   | `/users/me/invitations/:invitationId/accept`      | Accept invitation               | Authenticated |
+| POST   | `/users/me/invitations/:invitationId/decline`     | Decline invitation              | Authenticated |
 
 ### Frontend Routes
 
-| Route | Description |
-|-------|-------------|
+| Route                           | Description                                   |
+| ------------------------------- | --------------------------------------------- |
 | `/[orgId]/settings/invitations` | Manage org invitations (create, view, delete) |
-| `/settings/invitations` | User's received invitations (accept/decline) |
+| `/settings/invitations`         | User's received invitations (accept/decline)  |
 
 ## Implementation Tasks
 
@@ -303,6 +303,7 @@ INVITATION_EXPIRY_DAYS=7
 ## Summary
 
 This plan implements a complete invitation system with:
+
 - **6 new API endpoints** for managing invitations
 - **2 new frontend pages** (org invitations, user invitations)
 - **1 new header component** (notifications dropdown)

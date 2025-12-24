@@ -1,6 +1,7 @@
 "use client";
 
 import { Workspace } from "@platypus/schemas";
+import { useAuth } from "@/components/auth-provider";
 import {
   Item,
   ItemActions,
@@ -21,10 +22,11 @@ const WorkspaceList = ({
   className?: string;
   orgId: string;
 }) => {
+  const { user } = useAuth();
   const backendUrl = useBackendUrl();
 
   const { data, error, isLoading } = useSWR<{ results: Workspace[] }>(
-    backendUrl
+    backendUrl && user
       ? joinUrl(backendUrl, `/organisations/${orgId}/workspaces`)
       : null,
     fetcher,
@@ -34,7 +36,7 @@ const WorkspaceList = ({
 
   return (
     <ItemGroup className={cn("mb-4", className)}>
-      {data?.results.map((workspace) => (
+      {data?.results?.map((workspace) => (
         <Item key={workspace.id} variant="outline" asChild className="mb-2">
           <Link href={`/${orgId}/workspace/${workspace.id}`}>
             <ItemContent>

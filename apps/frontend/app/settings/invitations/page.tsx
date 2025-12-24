@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Mail, Check, X } from "lucide-react";
 import { toast } from "sonner";
 import useSWR from "swr";
+import { useAuth } from "@/components/auth-provider";
 import { format } from "date-fns";
 import {
   Dialog,
@@ -19,14 +20,15 @@ import {
 import { useState } from "react";
 
 const UserInvitationsPage = () => {
+  const { user } = useAuth();
   const backendUrl = useBackendUrl();
   const { data, mutate, isLoading } = useSWR<{ results: InvitationListItem[] }>(
-    joinUrl(backendUrl, "/users/me/invitations"),
-    fetcher
+    backendUrl && user ? joinUrl(backendUrl, "/users/me/invitations") : null,
+    fetcher,
   );
 
   const [invitationToDecline, setInvitationToDecline] = useState<string | null>(
-    null
+    null,
   );
   const [isDeclining, setIsDeclining] = useState(false);
 
@@ -34,7 +36,7 @@ const UserInvitationsPage = () => {
     try {
       const response = await fetch(
         joinUrl(backendUrl, `/users/me/invitations/${invitationId}/accept`),
-        { method: "POST", credentials: "include" }
+        { method: "POST", credentials: "include" },
       );
       if (response.ok) {
         toast.success("Invitation accepted");
@@ -56,9 +58,9 @@ const UserInvitationsPage = () => {
       const response = await fetch(
         joinUrl(
           backendUrl,
-          `/users/me/invitations/${invitationToDecline}/decline`
+          `/users/me/invitations/${invitationToDecline}/decline`,
         ),
-        { method: "POST", credentials: "include" }
+        { method: "POST", credentials: "include" },
       );
       if (response.ok) {
         toast.success("Invitation declined");
@@ -85,7 +87,7 @@ const UserInvitationsPage = () => {
         <p>Loading invitations...</p>
       ) : data?.results.length === 0 ? (
         <div className="text-center py-12 border border-dashed rounded-lg">
-          <Mail className="mx-auto h-12 w-12 text-muted-foreground/50 mb-4" />
+          <Mail className="mx-auto h-12 w-12 text-muted-foreground mb-4 opacity-50" />
           <p className="text-muted-foreground">No pending invitations.</p>
         </div>
       ) : (
@@ -100,9 +102,13 @@ const UserInvitationsPage = () => {
                   {invite.organisationName} / {invite.workspaceName}
                 </h3>
                 <div className="text-sm text-muted-foreground space-y-1">
-                  <p>Role: <span className="capitalize">{invite.role}</span></p>
+                  <p>
+                    Role: <span className="capitalize">{invite.role}</span>
+                  </p>
                   <p>Invited by: {invite.invitedByName}</p>
-                  <p>Expires: {format(new Date(invite.expiresAt), "MMM d, yyyy")}</p>
+                  <p>
+                    Expires: {format(new Date(invite.expiresAt), "MMM d, yyyy")}
+                  </p>
                 </div>
               </div>
               <div className="flex gap-2">

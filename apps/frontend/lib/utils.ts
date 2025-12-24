@@ -18,8 +18,18 @@ export function joinUrl(base: string, path: string): string {
   return `${normalizedBase}${normalizedPath}`;
 }
 
-export const fetcher = (input: RequestInfo | URL, init?: RequestInit) =>
-  fetch(input, { ...init, credentials: "include" }).then((res) => res.json());
+export const fetcher = async (input: RequestInfo | URL, init?: RequestInit) => {
+  const res = await fetch(input, { ...init, credentials: "include" });
+  if (!res.ok) {
+    const error = new Error("An error occurred while fetching the data.");
+    // Attach extra info to the error object.
+    const info = await res.json().catch(() => ({}));
+    (error as any).info = info;
+    (error as any).status = res.status;
+    throw error;
+  }
+  return res.json();
+};
 
 /**
  * Parses standardschema.dev validation errors from an error response

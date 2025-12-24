@@ -11,7 +11,7 @@ import {
   workspaceCreateSchema,
   workspaceUpdateSchema,
 } from "@platypus/schemas";
-import { eq, and } from "drizzle-orm";
+import { eq, and, inArray } from "drizzle-orm";
 import { requireAuth } from "../middleware/authentication.ts";
 import {
   requireOrgAccess,
@@ -43,10 +43,39 @@ workspace.post(
 /** List all workspaces */
 workspace.get("/", requireAuth, requireOrgAccess(), async (c) => {
   const orgId = c.req.param("orgId")!;
+  const orgMembership = c.get("orgMembership")!;
+  const user = c.get("user")!;
+
+  // If admin, return all workspaces
+  if (orgMembership.role === "admin") {
+    const results = await db
+      .select()
+      .from(workspaceTable)
+      .where(eq(workspaceTable.organisationId, orgId));
+    return c.json({ results });
+  }
+
+  // If regular member, return only workspaces they are a member of
+  const memberWorkspaces = await db
+    .select({ workspaceId: workspaceMember.workspaceId })
+    .from(workspaceMember)
+    .where(eq(workspaceMember.userId, user.id));
+
+  const workspaceIds = memberWorkspaces.map((w) => w.workspaceId);
+
+  if (workspaceIds.length === 0) {
+    return c.json({ results: [] });
+  }
+
   const results = await db
     .select()
     .from(workspaceTable)
-    .where(eq(workspaceTable.organisationId, orgId));
+    .where(
+      and(
+        eq(workspaceTable.organisationId, orgId),
+        inArray(workspaceTable.id, workspaceIds),
+      ),
+    );
   return c.json({ results });
 });
 

@@ -366,3 +366,80 @@ export const providerUpdateSchema = providerSchema.pick({
   modelIds: true,
   taskModelId: true,
 });
+
+// Organisation Member
+
+export const organisationMemberSchema = z.object({
+  id: z.string(),
+  organisationId: z.string(),
+  userId: z.string(),
+  role: z.enum(["admin", "member"]),
+  createdAt: z.date(),
+  updatedAt: z.date(),
+});
+
+export type OrganisationMember = z.infer<typeof organisationMemberSchema>;
+
+export const organisationMemberUpdateSchema = organisationMemberSchema.pick({
+  role: true,
+});
+
+export const organisationMemberWithUserSchema = organisationMemberSchema.extend(
+  {
+    user: z.object({
+      id: z.string(),
+      name: z.string(),
+      email: z.string(),
+      image: z.string().nullable().optional(),
+    }),
+  },
+);
+
+export type OrganisationMemberWithUser = z.infer<
+  typeof organisationMemberWithUserSchema
+>;
+
+// Workspace Member
+
+export const workspaceMemberSchema = z.object({
+  id: z.string(),
+  workspaceId: z.string(),
+  userId: z.string(),
+  orgMemberId: z.string(),
+  role: z.enum(["admin", "editor", "viewer"]),
+  createdAt: z.date(),
+  updatedAt: z.date(),
+});
+
+export type WorkspaceMember = z.infer<typeof workspaceMemberSchema>;
+
+export const workspaceMemberCreateSchema = workspaceMemberSchema.pick({
+  workspaceId: true,
+  role: true,
+});
+
+export const workspaceMemberUpdateSchema = workspaceMemberSchema.pick({
+  role: true,
+});
+
+// Combined Org Member for List
+
+export const orgMemberListItemSchema = organisationMemberWithUserSchema.extend({
+  workspaces: z.array(
+    z.object({
+      workspaceMemberId: z.string(),
+      workspaceId: z.string(),
+      workspaceName: z.string(),
+      role: z.enum(["admin", "editor", "viewer"]),
+    }),
+  ),
+  isSuperAdmin: z.boolean(),
+});
+
+export type OrgMemberListItem = z.infer<typeof orgMemberListItemSchema>;
+
+export const orgMemberListSchema = z.object({
+  results: z.array(orgMemberListItemSchema),
+});
+
+export type OrgMemberList = z.infer<typeof orgMemberListSchema>;

@@ -4,11 +4,12 @@ import { useParams } from "next/navigation";
 import { InvitationForm } from "@/components/invitation-form";
 import { fetcher, joinUrl } from "@/lib/utils";
 import { useBackendUrl } from "@/app/client-context";
-import { type InvitationListItem } from "@platypus/schemas";
+import { type InvitationListItem, type Organisation } from "@platypus/schemas";
 import { Button } from "@/components/ui/button";
 import { Trash2, Mail } from "lucide-react";
 import { toast } from "sonner";
 import useSWR from "swr";
+import { useAuth } from "@/components/auth-provider";
 import { format } from "date-fns";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -30,15 +31,22 @@ import {
 import { useState } from "react";
 
 const OrgInvitationsPage = () => {
+  const { user } = useAuth();
   const { orgId } = useParams<{ orgId: string }>();
   const backendUrl = useBackendUrl();
+  const { data: orgData } = useSWR<Organisation>(
+    backendUrl && user ? joinUrl(backendUrl, `/organisations/${orgId}`) : null,
+    fetcher,
+  );
   const { data, mutate, isLoading } = useSWR<{ results: InvitationListItem[] }>(
-    joinUrl(backendUrl, `/organisations/${orgId}/invitations`),
-    fetcher
+    backendUrl && user
+      ? joinUrl(backendUrl, `/organisations/${orgId}/invitations`)
+      : null,
+    fetcher,
   );
 
   const [invitationToDelete, setInvitationToDelete] = useState<string | null>(
-    null
+    null,
   );
   const [isDeleting, setIsDeleting] = useState(false);
 
@@ -50,9 +58,9 @@ const OrgInvitationsPage = () => {
       const response = await fetch(
         joinUrl(
           backendUrl,
-          `/organisations/${orgId}/invitations/${invitationToDelete}`
+          `/organisations/${orgId}/invitations/${invitationToDelete}`,
         ),
-        { method: "DELETE", credentials: "include" }
+        { method: "DELETE", credentials: "include" },
       );
       if (response.ok) {
         toast.success("Invitation deleted");
@@ -71,13 +79,41 @@ const OrgInvitationsPage = () => {
   const getStatusBadge = (status: string) => {
     switch (status) {
       case "pending":
-        return <Badge variant="outline" className="bg-yellow-50 text-yellow-700 border-yellow-200">Pending</Badge>;
+        return (
+          <Badge
+            variant="outline"
+            className="bg-yellow-50 text-yellow-700 border-yellow-200"
+          >
+            Pending
+          </Badge>
+        );
       case "accepted":
-        return <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">Accepted</Badge>;
+        return (
+          <Badge
+            variant="outline"
+            className="bg-green-50 text-green-700 border-green-200"
+          >
+            Accepted
+          </Badge>
+        );
       case "declined":
-        return <Badge variant="outline" className="bg-red-50 text-red-700 border-red-200">Declined</Badge>;
+        return (
+          <Badge
+            variant="outline"
+            className="bg-red-50 text-red-700 border-red-200"
+          >
+            Declined
+          </Badge>
+        );
       case "expired":
-        return <Badge variant="outline" className="bg-gray-50 text-gray-700 border-gray-200">Expired</Badge>;
+        return (
+          <Badge
+            variant="outline"
+            className="bg-gray-50 text-gray-700 border-gray-200"
+          >
+            Expired
+          </Badge>
+        );
       default:
         return <Badge variant="outline">{status}</Badge>;
     }
@@ -88,7 +124,11 @@ const OrgInvitationsPage = () => {
       <div>
         <h1 className="text-2xl font-bold mb-4">Invitations</h1>
         <p className="text-muted-foreground mb-6">
-          Manage invitations for users to join workspaces in this organisation.
+          Manage invitations for users to join workspaces in{" "}
+          <span className="font-bold">
+            {orgData?.name || "this organisation"}
+          </span>
+          .
         </p>
         <InvitationForm orgId={orgId} onSuccess={() => mutate()} />
       </div>
@@ -99,7 +139,7 @@ const OrgInvitationsPage = () => {
           <p>Loading invitations...</p>
         ) : data?.results.length === 0 ? (
           <div className="text-center py-12 border border-dashed rounded-lg">
-            <Mail className="mx-auto h-12 w-12 text-muted-foreground/50 mb-4" />
+            <Mail className="mx-auto h-12 w-12 text-muted-foreground mb-4 opacity-50" />
             <p className="text-muted-foreground">No invitations sent yet.</p>
           </div>
         ) : (

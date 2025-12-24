@@ -20,6 +20,7 @@ import useSWR from "swr";
 import { fetcher, joinUrl } from "@/lib/utils";
 import Link from "next/link";
 import { useBackendUrl } from "@/app/client-context";
+import { useAuth } from "@/components/auth-provider";
 import { NoProvidersEmptyState } from "@/components/no-providers-empty-state";
 
 export const AgentsList = ({
@@ -29,12 +30,13 @@ export const AgentsList = ({
   orgId: string;
   workspaceId: string;
 }) => {
+  const { user } = useAuth();
   const backendUrl = useBackendUrl();
 
   const { data: agentsData, isLoading: isLoadingAgents } = useSWR<{
     results: Agent[];
   }>(
-    backendUrl
+    backendUrl && user
       ? joinUrl(
           backendUrl,
           `/organisations/${orgId}/workspaces/${workspaceId}/agents`,
@@ -46,7 +48,7 @@ export const AgentsList = ({
   const { data: providersData, isLoading: isLoadingProviders } = useSWR<{
     results: Provider[];
   }>(
-    backendUrl
+    backendUrl && user
       ? joinUrl(
           backendUrl,
           `/organisations/${orgId}/workspaces/${workspaceId}/providers`,

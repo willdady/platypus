@@ -1,0 +1,23 @@
+meta {
+  name: Add to Workspace
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{baseUrl}}/organisations/:orgId/members/:memberId/workspaces
+  body: json
+  auth: none
+}
+
+params:path {
+  orgId: {{orgId}}
+  memberId: 
+}
+
+body:json {
+  {
+    "workspaceId": "",
+    "role": "editor"
+  }
+}

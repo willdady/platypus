@@ -4,6 +4,7 @@ import { MCP } from "@platypus/schemas";
 import { Item, ItemActions, ItemContent, ItemTitle } from "./ui/item";
 import useSWR from "swr";
 import { cn, fetcher, joinUrl } from "../lib/utils";
+import { useAuth } from "@/components/auth-provider";
 import { Pencil, TriangleAlert } from "lucide-react";
 import Link from "next/link";
 import { Alert, AlertDescription, AlertTitle } from "./ui/alert";
@@ -18,10 +19,11 @@ const McpList = ({
   orgId: string;
   workspaceId: string;
 }) => {
+  const { user } = useAuth();
   const backendUrl = useBackendUrl();
 
   const { data, error, isLoading } = useSWR<{ results: MCP[] }>(
-    backendUrl
+    backendUrl && user
       ? joinUrl(
           backendUrl,
           `/organisations/${orgId}/workspaces/${workspaceId}/mcps`,

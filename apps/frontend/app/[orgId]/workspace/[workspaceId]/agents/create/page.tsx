@@ -1,4 +1,5 @@
 import { AgentForm } from "@/components/agent-form";
+import { headers } from "next/headers";
 import { BackButton } from "@/components/back-button";
 import { type ToolSet } from "@platypus/schemas";
 import { joinUrl } from "@/lib/utils";
@@ -15,12 +16,18 @@ const AgentCreatePage = async ({
     process.env.INTERNAL_BACKEND_URL || process.env.BACKEND_URL;
 
   // Fetch tool sets from the server
+  const headersList = await headers();
   const [toolSetsResponse] = await Promise.all([
     fetch(
       joinUrl(
         backendUrl || "",
         `/organisations/${orgId}/workspaces/${workspaceId}/tools`,
       ),
+      {
+        headers: {
+          cookie: headersList.get("cookie") || "",
+        },
+      },
     ),
   ]);
 

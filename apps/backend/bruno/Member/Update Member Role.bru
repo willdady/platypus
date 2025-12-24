@@ -1,0 +1,22 @@
+meta {
+  name: Update Member Role
+  type: http
+  seq: 2
+}
+
+patch {
+  url: {{baseUrl}}/organisations/:orgId/members/:memberId
+  body: json
+  auth: none
+}
+
+params:path {
+  orgId: {{orgId}}
+  memberId: 
+}
+
+body:json {
+  {
+    "role": "admin"
+  }
+}

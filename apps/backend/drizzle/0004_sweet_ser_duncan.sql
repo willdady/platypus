@@ -1,13 +1,14 @@
 CREATE TABLE "invitation" (
 	"id" text PRIMARY KEY NOT NULL,
 	"email" text NOT NULL,
-	"organisation_id" text,
-	"workspace_id" text,
+	"organisation_id" text NOT NULL,
+	"workspace_id" text NOT NULL,
 	"role" text NOT NULL,
 	"invited_by" text NOT NULL,
 	"status" text DEFAULT 'pending' NOT NULL,
 	"expires_at" timestamp NOT NULL,
-	"created_at" timestamp DEFAULT now() NOT NULL
+	"created_at" timestamp DEFAULT now() NOT NULL,
+	CONSTRAINT "unique_invitation_workspace_email" UNIQUE("workspace_id","email")
 );
 --> statement-breakpoint
 CREATE TABLE "organisation_member" (
@@ -94,6 +95,7 @@ ALTER TABLE "account" ADD CONSTRAINT "account_user_id_user_id_fk" FOREIGN KEY ("
 ALTER TABLE "session" ADD CONSTRAINT "session_user_id_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 CREATE INDEX "idx_invitation_email" ON "invitation" USING btree ("email");--> statement-breakpoint
 CREATE INDEX "idx_invitation_org_id" ON "invitation" USING btree ("organisation_id");--> statement-breakpoint
+CREATE INDEX "idx_invitation_workspace_id" ON "invitation" USING btree ("workspace_id");--> statement-breakpoint
 CREATE INDEX "idx_org_member_org_id" ON "organisation_member" USING btree ("organisation_id");--> statement-breakpoint
 CREATE INDEX "idx_org_member_user_id" ON "organisation_member" USING btree ("user_id");--> statement-breakpoint
 CREATE INDEX "idx_ws_member_workspace_id" ON "workspace_member" USING btree ("workspace_id");--> statement-breakpoint

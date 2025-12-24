@@ -22,6 +22,7 @@ import { useRouter } from "next/navigation";
 import { type Organisation } from "@platypus/schemas";
 import { fetcher, parseValidationErrors, joinUrl } from "@/lib/utils";
 import { useBackendUrl } from "@/app/client-context";
+import { useAuth } from "@/components/auth-provider";
 import { Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import useSWR from "swr";
@@ -32,11 +33,12 @@ interface OrganisationFormProps {
 }
 
 const OrganisationForm = ({ classNames, orgId }: OrganisationFormProps) => {
+  const { user } = useAuth();
   const backendUrl = useBackendUrl();
   const router = useRouter();
 
   const { data: organisation, mutate } = useSWR<Organisation>(
-    orgId ? joinUrl(backendUrl, `/organisations/${orgId}`) : null,
+    orgId && user ? joinUrl(backendUrl, `/organisations/${orgId}`) : null,
     fetcher,
   );
 
@@ -94,6 +96,7 @@ const OrganisationForm = ({ classNames, orgId }: OrganisationFormProps) => {
           "Content-Type": "application/json",
         },
         body: JSON.stringify(payload),
+        credentials: "include",
       });
 
       if (response.ok) {
@@ -129,6 +132,7 @@ const OrganisationForm = ({ classNames, orgId }: OrganisationFormProps) => {
         joinUrl(backendUrl, `/organisations/${orgId}`),
         {
           method: "DELETE",
+          credentials: "include",
         },
       );
       if (response.ok) {

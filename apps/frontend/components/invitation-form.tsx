@@ -20,6 +20,7 @@ import { useState } from "react";
 import { type Workspace } from "@platypus/schemas";
 import { fetcher, parseValidationErrors, joinUrl } from "@/lib/utils";
 import { useBackendUrl } from "@/app/client-context";
+import { useAuth } from "@/components/auth-provider";
 import { toast } from "sonner";
 import useSWR from "swr";
 
@@ -29,10 +30,13 @@ interface InvitationFormProps {
 }
 
 export function InvitationForm({ orgId, onSuccess }: InvitationFormProps) {
+  const { user } = useAuth();
   const backendUrl = useBackendUrl();
   const { data: workspacesData } = useSWR<{ results: Workspace[] }>(
-    joinUrl(backendUrl, `/organisations/${orgId}/workspaces`),
-    fetcher
+    backendUrl && user
+      ? joinUrl(backendUrl, `/organisations/${orgId}/workspaces`)
+      : null,
+    fetcher,
   );
 
   const [formData, setFormData] = useState({
@@ -81,11 +85,11 @@ export function InvitationForm({ orgId, onSuccess }: InvitationFormProps) {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(formData),
           credentials: "include",
-        }
+        },
       );
 
       if (response.ok) {
-        toast.success("Invitation sent");
+        toast.success("Invitation created");
         setFormData({ email: "", workspaceId: "", role: "viewer" });
         onSuccess?.();
       } else {
@@ -110,23 +114,31 @@ export function InvitationForm({ orgId, onSuccess }: InvitationFormProps) {
   };
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4 border p-4 rounded-lg bg-muted/30">
+    <form
+      onSubmit={handleSubmit}
+      className="space-y-4 border p-4 rounded-lg bg-muted/30"
+    >
       <h3 className="font-semibold">Invite User</h3>
       <FieldSet>
         <FieldGroup className="gap-y-4">
-          <Field data-invalid={!!validationErrors.email}>
-            <FieldLabel htmlFor="email">Email</FieldLabel>
-            <Input
-              id="email"
-              type="email"
-              placeholder="user@example.com"
-              value={formData.email}
-              onChange={handleChange}
-              disabled={isSubmitting}
-              required
-            />
-            {validationErrors.email && <FieldError>{validationErrors.email}</FieldError>}
-          </Field>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <Field data-invalid={!!validationErrors.email}>
+              <FieldLabel htmlFor="email">Email</FieldLabel>
+              <Input
+                id="email"
+                type="email"
+                placeholder="user@example.com"
+                value={formData.email}
+                onChange={handleChange}
+                disabled={isSubmitting}
+                autoFocus
+                required
+              />
+              {validationErrors.email && (
+                <FieldError>{validationErrors.email}</FieldError>
+              )}
+            </Field>
+          </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <Field data-invalid={!!validationErrors.workspaceId}>
@@ -168,7 +180,9 @@ export function InvitationForm({ orgId, onSuccess }: InvitationFormProps) {
                   <SelectItem value="viewer">Viewer</SelectItem>
                 </SelectContent>
               </Select>
-              {validationErrors.role && <FieldError>{validationErrors.role}</FieldError>}
+              {validationErrors.role && (
+                <FieldError>{validationErrors.role}</FieldError>
+              )}
             </Field>
           </div>
         </FieldGroup>

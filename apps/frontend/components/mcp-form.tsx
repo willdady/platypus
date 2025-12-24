@@ -34,6 +34,7 @@ import { type MCP } from "@platypus/schemas";
 import useSWR from "swr";
 import { parseValidationErrors, joinUrl } from "@/lib/utils";
 import { useBackendUrl } from "@/app/client-context";
+import { useAuth } from "@/components/auth-provider";
 import { Trash2, Plug, Check, X } from "lucide-react";
 
 type McpFormData = Omit<MCP, "id" | "createdAt" | "updatedAt" | "workspaceId">;
@@ -49,6 +50,7 @@ const McpForm = ({
   workspaceId: string;
   mcpId?: string;
 }) => {
+  const { user } = useAuth();
   const backendUrl = useBackendUrl();
 
   const [formData, setFormData] = useState<McpFormData>({
@@ -72,9 +74,10 @@ const McpForm = ({
 
   const router = useRouter();
 
-  const fetcher = (url: string) => fetch(url).then((res) => res.json());
+  const fetcher = (url: string) =>
+    fetch(url, { credentials: "include" }).then((res) => res.json());
   const { data: mcp, isLoading } = useSWR<MCP>(
-    mcpId
+    mcpId && user
       ? joinUrl(
           backendUrl,
           `/organisations/${orgId}/workspaces/${workspaceId}/mcps/${mcpId}`,
@@ -174,6 +177,7 @@ const McpForm = ({
           "Content-Type": "application/json",
         },
         body: JSON.stringify(payload),
+        credentials: "include",
       });
 
       if (response.ok) {
@@ -203,6 +207,7 @@ const McpForm = ({
         ),
         {
           method: "DELETE",
+          credentials: "include",
         },
       );
 
@@ -243,6 +248,7 @@ const McpForm = ({
             "Content-Type": "application/json",
           },
           body: JSON.stringify(payload),
+          credentials: "include",
         },
       );
 

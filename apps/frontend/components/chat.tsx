@@ -37,6 +37,7 @@ import { useChatMetadata } from "@/hooks/use-chat-metadata";
 import { useChatUI } from "@/hooks/use-chat-ui";
 import { Dialog, DialogTrigger } from "./ui/dialog";
 import { useBackendUrl } from "@/app/client-context";
+import { useAuth } from "@/components/auth-provider";
 import { NoProvidersEmptyState } from "./no-providers-empty-state";
 import { AgentInfoDialog } from "./agent-info-dialog";
 import { ChatSettingsDialog } from "./chat-settings-dialog";
@@ -56,6 +57,7 @@ export const Chat = ({
   chatId: string;
   initialAgentId?: string;
 }) => {
+  const { user } = useAuth();
   const backendUrl = useBackendUrl();
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -63,7 +65,7 @@ export const Chat = ({
 
   // Fetch providers
   const { data: providersData, isLoading } = useSWR<{ results: Provider[] }>(
-    backendUrl
+    backendUrl && user
       ? joinUrl(
           backendUrl,
           `/organisations/${orgId}/workspaces/${workspaceId}/providers`,
@@ -76,7 +78,7 @@ export const Chat = ({
 
   // Fetch agents
   const { data: agentsData } = useSWR<{ results: Agent[] }>(
-    backendUrl
+    backendUrl && user
       ? joinUrl(
           backendUrl,
           `/organisations/${orgId}/workspaces/${workspaceId}/agents`,
@@ -89,7 +91,7 @@ export const Chat = ({
 
   // Fetch tool sets
   const { data: toolSetsData } = useSWR<{ results: ToolSet[] }>(
-    backendUrl
+    backendUrl && user
       ? joinUrl(
           backendUrl,
           `/organisations/${orgId}/workspaces/${workspaceId}/tools`,
@@ -102,7 +104,7 @@ export const Chat = ({
 
   // Fetch existing chat data
   const { data: chatData } = useSWR<ChatType>(
-    backendUrl
+    backendUrl && user
       ? joinUrl(
           backendUrl,
           `/organisations/${orgId}/workspaces/${workspaceId}/chat/${chatId}`,

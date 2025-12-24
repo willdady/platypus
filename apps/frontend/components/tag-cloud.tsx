@@ -3,6 +3,7 @@
 import useSWR from "swr";
 import { fetcher, joinUrl } from "@/lib/utils";
 import { useBackendUrl } from "@/app/client-context";
+import { useAuth } from "@/components/auth-provider";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tag } from "lucide-react";
@@ -18,9 +19,10 @@ interface TagData {
 }
 
 export const TagCloud = ({ orgId, workspaceId }: TagCloudProps) => {
+  const { user } = useAuth();
   const backendUrl = useBackendUrl();
   const { data, isLoading } = useSWR<{ results: TagData[] }>(
-    backendUrl
+    backendUrl && user
       ? joinUrl(
           backendUrl,
           `/organisations/${orgId}/workspaces/${workspaceId}/chat/tags`,

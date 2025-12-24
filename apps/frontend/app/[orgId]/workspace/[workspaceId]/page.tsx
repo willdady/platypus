@@ -17,6 +17,7 @@ import useSWR from "swr";
 import { fetcher, joinUrl } from "@/lib/utils";
 import { NoProvidersEmptyState } from "@/components/no-providers-empty-state";
 import { useBackendUrl } from "@/app/client-context";
+import { useAuth } from "@/components/auth-provider";
 import {
   type Workspace as WorkspaceType,
   type Organisation,
@@ -28,11 +29,12 @@ const Workspace = () => {
   const params = useParams();
   const orgId = params.orgId as string;
   const workspaceId = params.workspaceId as string;
+  const { user } = useAuth();
   const backendUrl = useBackendUrl();
 
   const { data: workspaceData, isLoading: isLoadingWorkspace } =
     useSWR<WorkspaceType>(
-      backendUrl
+      backendUrl && user
         ? joinUrl(
             backendUrl,
             `/organisations/${orgId}/workspaces/${workspaceId}`,
@@ -44,7 +46,7 @@ const Workspace = () => {
   const { data: agentsData, isLoading: isLoadingAgents } = useSWR<{
     results: [];
   }>(
-    backendUrl
+    backendUrl && user
       ? joinUrl(
           backendUrl,
           `/organisations/${orgId}/workspaces/${workspaceId}/agents`,
@@ -56,7 +58,7 @@ const Workspace = () => {
   const { data: chatsData, isLoading: isLoadingChats } = useSWR<{
     results: [];
   }>(
-    backendUrl
+    backendUrl && user
       ? joinUrl(
           backendUrl,
           `/organisations/${orgId}/workspaces/${workspaceId}/chat`,
@@ -68,7 +70,7 @@ const Workspace = () => {
   const { data: providersData, isLoading: isLoadingProviders } = useSWR<{
     results: [];
   }>(
-    backendUrl
+    backendUrl && user
       ? joinUrl(
           backendUrl,
           `/organisations/${orgId}/workspaces/${workspaceId}/providers`,
@@ -78,7 +80,7 @@ const Workspace = () => {
   );
 
   const { data: orgData, isLoading: isLoadingOrg } = useSWR<Organisation>(
-    backendUrl ? joinUrl(backendUrl, `/organisations/${orgId}`) : null,
+    backendUrl && user ? joinUrl(backendUrl, `/organisations/${orgId}`) : null,
     fetcher,
   );
 

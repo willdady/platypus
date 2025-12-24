@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import useSWR, { useSWRConfig } from "swr";
 import { fetcher, joinUrl } from "@/lib/utils";
 import type { Workspace, ChatListItem, Organisation } from "@platypus/schemas";
+import { useAuth } from "@/components/auth-provider";
 import {
   Sidebar,
   SidebarContent,
@@ -68,6 +69,7 @@ export function AppSidebar({
   orgId: string;
   workspaceId: string;
 }) {
+  const { user } = useAuth();
   const backendUrl = useBackendUrl();
 
   const pathname = usePathname();
@@ -85,14 +87,14 @@ export function AppSidebar({
 
   const { mutate } = useSWRConfig();
   const { data } = useSWR<{ results: Workspace[] }>(
-    backendUrl
+    backendUrl && user
       ? joinUrl(backendUrl, `/organisations/${orgId}/workspaces`)
       : null,
     fetcher,
   );
 
   const { data: chatData } = useSWR<{ results: ChatListItem[] }>(
-    backendUrl
+    backendUrl && user
       ? joinUrl(
           backendUrl,
           `/organisations/${orgId}/workspaces/${workspaceId}/chat`,
@@ -102,7 +104,7 @@ export function AppSidebar({
   );
 
   const { data: orgData } = useSWR<Organisation>(
-    backendUrl ? joinUrl(backendUrl, `/organisations/${orgId}`) : null,
+    backendUrl && user ? joinUrl(backendUrl, `/organisations/${orgId}`) : null,
     fetcher,
   );
 
@@ -170,6 +172,7 @@ export function AppSidebar({
             isStarred: currentChat.isStarred,
             tags: currentChat.tags ?? [],
           }),
+          credentials: "include",
         },
       );
 
@@ -210,6 +213,7 @@ export function AppSidebar({
         ),
         {
           method: "DELETE",
+          credentials: "include",
         },
       );
 
@@ -265,6 +269,7 @@ export function AppSidebar({
             isStarred: !currentChat.isStarred,
             tags: currentChat.tags ?? [],
           }),
+          credentials: "include",
         },
       );
 

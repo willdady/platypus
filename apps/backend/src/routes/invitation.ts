@@ -14,7 +14,9 @@ import type { Variables } from "../server.ts";
 
 const invitation = new Hono<{ Variables: Variables }>();
 
-const INVITATION_EXPIRY_DAYS = parseInt(process.env.INVITATION_EXPIRY_DAYS || "7");
+const INVITATION_EXPIRY_DAYS = parseInt(
+  process.env.INVITATION_EXPIRY_DAYS || "7",
+);
 
 /** Create a new invitation (org admin only) */
 invitation.post(
@@ -38,13 +40,16 @@ invitation.post(
       .where(
         and(
           eq(workspaceTable.id, data.workspaceId),
-          eq(workspaceTable.organisationId, orgId)
-        )
+          eq(workspaceTable.organisationId, orgId),
+        ),
       )
       .limit(1);
 
     if (workspace.length === 0) {
-      return c.json({ message: "Workspace not found in this organisation" }, 404);
+      return c.json(
+        { message: "Workspace not found in this organisation" },
+        404,
+      );
     }
 
     const expiresAt = new Date();
@@ -78,20 +83,23 @@ invitation.post(
 
       if (isDuplicate) {
         return c.json(
-          { message: "A pending invitation already exists for this user and workspace" },
-          409
+          {
+            message:
+              "A pending invitation already exists for this user and workspace",
+          },
+          409,
         );
       }
       console.error("Error creating invitation:", error);
       throw error;
     }
-  }
+  },
 );
 
 /** List all invitations for an organisation (org admin only) */
 invitation.get("/", requireAuth, requireOrgAccess(["admin"]), async (c) => {
   const orgId = c.req.param("orgId")!;
-  
+
   const results = await db
     .select({
       id: invitationTable.id,
@@ -106,7 +114,10 @@ invitation.get("/", requireAuth, requireOrgAccess(["admin"]), async (c) => {
       workspaceName: workspaceTable.name,
     })
     .from(invitationTable)
-    .innerJoin(workspaceTable, eq(invitationTable.workspaceId, workspaceTable.id))
+    .innerJoin(
+      workspaceTable,
+      eq(invitationTable.workspaceId, workspaceTable.id),
+    )
     .where(eq(invitationTable.organisationId, orgId));
 
   return c.json({ results });
@@ -126,8 +137,8 @@ invitation.delete(
       .where(
         and(
           eq(invitationTable.id, invitationId),
-          eq(invitationTable.organisationId, orgId)
-        )
+          eq(invitationTable.organisationId, orgId),
+        ),
       )
       .returning();
 
@@ -136,7 +147,7 @@ invitation.delete(
     }
 
     return c.json({ message: "Invitation deleted" });
-  }
+  },
 );
 
 export { invitation };

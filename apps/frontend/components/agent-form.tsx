@@ -43,6 +43,7 @@ import { type ToolSet, type Agent, type Provider } from "@platypus/schemas";
 import useSWR from "swr";
 import { fetcher, parseValidationErrors, joinUrl } from "@/lib/utils";
 import { useBackendUrl } from "@/app/client-context";
+import { useAuth } from "@/components/auth-provider";
 
 const AgentForm = ({
   classNames,
@@ -61,13 +62,14 @@ const AgentForm = ({
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
 
+  const { user } = useAuth();
   const backendUrl = useBackendUrl();
 
   // Fetch providers
   const { data: providersData, isLoading: providersLoading } = useSWR<{
     results: Provider[];
   }>(
-    backendUrl
+    backendUrl && user
       ? joinUrl(
           backendUrl,
           `/organisations/${orgId}/workspaces/${workspaceId}/providers`,
@@ -79,7 +81,7 @@ const AgentForm = ({
 
   // Fetch existing agent data if editing
   const { data: agent, isLoading: agentLoading } = useSWR<Agent>(
-    agentId
+    agentId && user
       ? joinUrl(
           backendUrl,
           `/organisations/${orgId}/workspaces/${workspaceId}/agents/${agentId}`,
@@ -237,6 +239,7 @@ const AgentForm = ({
           "Content-Type": "application/json",
         },
         body: JSON.stringify(payload),
+        credentials: "include",
       });
 
       if (response.ok) {
@@ -266,6 +269,7 @@ const AgentForm = ({
         ),
         {
           method: "DELETE",
+          credentials: "include",
         },
       );
 

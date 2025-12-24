@@ -22,6 +22,7 @@ import { useRouter } from "next/navigation";
 import { type Workspace } from "@platypus/schemas";
 import { fetcher, parseValidationErrors, joinUrl } from "@/lib/utils";
 import { useBackendUrl } from "@/app/client-context";
+import { useAuth } from "@/components/auth-provider";
 import { Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import useSWR, { useSWRConfig } from "swr";
@@ -37,12 +38,13 @@ const WorkspaceForm = ({
   orgId,
   workspaceId,
 }: WorkspaceFormProps) => {
+  const { user } = useAuth();
   const backendUrl = useBackendUrl();
   const router = useRouter();
   const { mutate: globalMutate } = useSWRConfig();
 
   const { data: workspace, mutate } = useSWR<Workspace>(
-    workspaceId
+    workspaceId && user
       ? joinUrl(backendUrl, `/organisations/${orgId}/workspaces/${workspaceId}`)
       : null,
     fetcher,
@@ -107,6 +109,7 @@ const WorkspaceForm = ({
           "Content-Type": "application/json",
         },
         body: JSON.stringify(payload),
+        credentials: "include",
       });
 
       if (response.ok) {
@@ -151,6 +154,7 @@ const WorkspaceForm = ({
         ),
         {
           method: "DELETE",
+          credentials: "include",
         },
       );
       if (response.ok) {

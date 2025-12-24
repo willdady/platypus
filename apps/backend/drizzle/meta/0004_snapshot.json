@@ -1,5 +1,5 @@
 {
-  "id": "d54fc762-619e-4bc0-93eb-e65a4931d069",
+  "id": "dd1bfe22-7e73-453b-b07e-1ec0276bb84d",
   "prevId": "44289b34-e2a3-4a6a-853b-7b8b6f97261d",
   "version": "7",
   "dialect": "postgresql",
@@ -355,13 +355,13 @@
           "name": "organisation_id",
           "type": "text",
           "primaryKey": false,
-          "notNull": false
+          "notNull": true
         },
         "workspace_id": {
           "name": "workspace_id",
           "type": "text",
           "primaryKey": false,
-          "notNull": false
+          "notNull": true
         },
         "role": {
           "name": "role",
@@ -426,6 +426,21 @@
           "concurrently": false,
           "method": "btree",
           "with": {}
+        },
+        "idx_invitation_workspace_id": {
+          "name": "idx_invitation_workspace_id",
+          "columns": [
+            {
+              "expression": "workspace_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
         }
       },
       "foreignKeys": {
@@ -470,7 +485,16 @@
         }
       },
       "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
+      "uniqueConstraints": {
+        "unique_invitation_workspace_email": {
+          "name": "unique_invitation_workspace_email",
+          "nullsNotDistinct": false,
+          "columns": [
+            "workspace_id",
+            "email"
+          ]
+        }
+      },
       "policies": {},
       "checkConstraints": {},
       "isRLSEnabled": false

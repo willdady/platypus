@@ -19,7 +19,7 @@ const userInvitation = new Hono<{ Variables: Variables }>();
 userInvitation.get("/", requireAuth, async (c) => {
   const user = c.get("user")!;
   const now = new Date();
-  
+
   const results = await db
     .select({
       id: invitationTable.id,
@@ -36,19 +36,25 @@ userInvitation.get("/", requireAuth, async (c) => {
       invitedByName: userTable.name,
     })
     .from(invitationTable)
-    .innerJoin(organisationTable, eq(invitationTable.organisationId, organisationTable.id))
-    .innerJoin(workspaceTable, eq(invitationTable.workspaceId, workspaceTable.id))
+    .innerJoin(
+      organisationTable,
+      eq(invitationTable.organisationId, organisationTable.id),
+    )
+    .innerJoin(
+      workspaceTable,
+      eq(invitationTable.workspaceId, workspaceTable.id),
+    )
     .innerJoin(userTable, eq(invitationTable.invitedBy, userTable.id))
     .where(
       and(
         eq(invitationTable.email, user.email),
-        eq(invitationTable.status, "pending")
+        eq(invitationTable.status, "pending"),
         // We'll handle expiration filtering in JS or add the correct Drizzle op
-      )
+      ),
     );
 
   // Filter out expired ones in JS for simplicity or use gt(invitationTable.expiresAt, now)
-  const activeResults = results.filter(r => new Date(r.expiresAt) > now);
+  const activeResults = results.filter((r) => new Date(r.expiresAt) > now);
 
   return c.json({ results: activeResults });
 });
@@ -66,13 +72,16 @@ userInvitation.post("/:invitationId/accept", requireAuth, async (c) => {
       and(
         eq(invitationTable.id, invitationId),
         eq(invitationTable.email, user.email),
-        eq(invitationTable.status, "pending")
-      )
+        eq(invitationTable.status, "pending"),
+      ),
     )
     .limit(1);
 
   if (invitation.length === 0) {
-    return c.json({ message: "Invitation not found or already processed" }, 404);
+    return c.json(
+      { message: "Invitation not found or already processed" },
+      404,
+    );
   }
 
   if (new Date(invitation[0].expiresAt) < now) {
@@ -93,8 +102,8 @@ userInvitation.post("/:invitationId/accept", requireAuth, async (c) => {
       .where(
         and(
           eq(organisationMember.organisationId, invite.organisationId),
-          eq(organisationMember.userId, user.id)
-        )
+          eq(organisationMember.userId, user.id),
+        ),
       )
       .limit(1);
 
@@ -143,13 +152,16 @@ userInvitation.post("/:invitationId/decline", requireAuth, async (c) => {
       and(
         eq(invitationTable.id, invitationId),
         eq(invitationTable.email, user.email),
-        eq(invitationTable.status, "pending")
-      )
+        eq(invitationTable.status, "pending"),
+      ),
     )
     .returning();
 
   if (result.length === 0) {
-    return c.json({ message: "Invitation not found or already processed" }, 404);
+    return c.json(
+      { message: "Invitation not found or already processed" },
+      404,
+    );
   }
 
   return c.json({ message: "Invitation declined" });

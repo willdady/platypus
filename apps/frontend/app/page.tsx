@@ -25,11 +25,14 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from "@/components/ui/empty";
+import { useAuth } from "@/components/auth-provider";
 
 export default function Home() {
+  const { user, isAuthLoading: isAuthLoadingUser } = useAuth();
   const backendUrl = useBackendUrl();
+
   const { data, error, isLoading } = useSWR<{ results: Organisation[] }>(
-    backendUrl ? joinUrl(backendUrl, "/organisations") : null,
+    backendUrl && user ? joinUrl(backendUrl, "/organisations") : null,
     fetcher,
   );
 
@@ -47,7 +50,7 @@ export default function Home() {
     );
   }
 
-  if (isLoading) {
+  if (isAuthLoadingUser || (user && isLoading)) {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
@@ -58,8 +61,11 @@ export default function Home() {
   if (error) {
     return (
       <div className="flex flex-col items-center justify-center min-h-screen p-8">
-        <div className="text-red-500 mb-4">Failed to load organisations</div>
-        <Button onClick={() => window.location.reload()}>Retry</Button>
+        <Alert variant="destructive" className="max-w-md">
+          <AlertCircle className="h-4 w-4" />
+          <AlertTitle>Error</AlertTitle>
+          <AlertDescription>Failed to load organisations</AlertDescription>
+        </Alert>
       </div>
     );
   }
