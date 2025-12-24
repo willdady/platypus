@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import { ModeToggle } from "@/components/mode-toggle";
+import { NotificationsDropdown } from "@/components/notifications-dropdown";
 import { CommandMenu } from "@/components/command-menu";
 import {
   SidebarInset,
@@ -60,6 +61,7 @@ export default async function WorkspaceLayout({
               <Kbd className="text-sm font-sans">
                 <Search className="size-4" /> ⌘K
               </Kbd>
+              <NotificationsDropdown />
               <ModeToggle />
               <UserMenu />
             </div>

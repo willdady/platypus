@@ -1,4 +1,4 @@
-import { pgTable, index } from "drizzle-orm/pg-core";
+import { pgTable, index, unique } from "drizzle-orm/pg-core";
 
 // Import and re-export auth schema
 export * from "./auth-schema.ts";
@@ -200,21 +200,25 @@ export const invitation = pgTable(
     email: t.text("email").notNull(),
     organisationId: t
       .text("organisation_id")
+      .notNull()
       .references(() => organisation.id, { onDelete: "cascade" }),
     workspaceId: t
       .text("workspace_id")
+      .notNull()
       .references(() => workspace.id, { onDelete: "cascade" }),
     role: t.text("role").notNull(),
     invitedBy: t
       .text("invited_by")
       .notNull()
       .references(() => user.id),
-    status: t.text("status").notNull().default("pending"), // pending | accepted | expired
+    status: t.text("status").notNull().default("pending"), // pending | accepted | declined | expired
     expiresAt: t.timestamp("expires_at").notNull(),
     createdAt: t.timestamp("created_at").notNull().defaultNow(),
   }),
   (t) => [
     index("idx_invitation_email").on(t.email),
     index("idx_invitation_org_id").on(t.organisationId),
+    index("idx_invitation_workspace_id").on(t.workspaceId),
+    unique("unique_invitation_workspace_email").on(t.workspaceId, t.email),
   ],
 );

@@ -21,7 +21,10 @@
 [x] The root page `/` should render Organisations with Workspaces under each.
 [x] Use an accordion component on the home page to make it less "busy"
 [x] Add an edit agent button to the agent information dialog.
-[ ] There should be a way to export and import agents, preferably as JSON.
-[ ] Add AuthZ (better-auth)
 [x] The root workspace page needs to be designed
 [x] Pick a better name than Agent Kit as it's already used by Open AI
+[x] Add ability to invite users to workspaces
+[ ] Add AuthZ (better-auth)
+[ ] Add proper logging (not just `console.log`) in backend service
+[ ] Add testing framework (Vitest?, Jest?)
+[ ] There should be a way to export and import agents, preferably as JSON.

@@ -17,6 +17,14 @@ import { useBackendUrl } from "./client-context";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { ProtectedRoute } from "@/components/protected-route";
 import { Header } from "@/components/header";
+import {
+  Empty,
+  EmptyContent,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from "@/components/ui/empty";
 
 export default function Home() {
   const backendUrl = useBackendUrl();
@@ -59,6 +67,37 @@ export default function Home() {
   const organisations = data?.results || [];
   const defaultOrgId =
     organisations.length === 1 ? organisations[0].id : undefined;
+
+  if (organisations.length === 0) {
+    return (
+      <ProtectedRoute>
+        <div className="min-h-screen flex flex-col">
+          <Header />
+          <div className="flex-1 flex flex-col items-center justify-center p-8">
+            <Empty className="border-none">
+              <EmptyHeader>
+                <EmptyMedia variant="icon">
+                  <Building />
+                </EmptyMedia>
+                <EmptyTitle>No organisations found</EmptyTitle>
+                <EmptyDescription>
+                  Get started by creating your first organisation to manage your
+                  workspaces and agents.
+                </EmptyDescription>
+              </EmptyHeader>
+              <EmptyContent>
+                <Button asChild className="w-full">
+                  <Link href="/create">
+                    <Plus className="h-4 w-4" /> Create Organisation
+                  </Link>
+                </Button>
+              </EmptyContent>
+            </Empty>
+          </div>
+        </div>
+      </ProtectedRoute>
+    );
+  }
 
   return (
     <ProtectedRoute>

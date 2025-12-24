@@ -2,6 +2,7 @@
 
 import { UserMenu } from "@/components/user-menu";
 import { ModeToggle } from "@/components/mode-toggle";
+import { NotificationsDropdown } from "@/components/notifications-dropdown";
 
 interface HeaderProps {
   leftContent?: React.ReactNode;
@@ -15,6 +16,7 @@ export function Header({ leftContent, rightContent }: HeaderProps) {
       <div className="flex items-center gap-2">
         {rightContent || (
           <>
+            <NotificationsDropdown />
             <ModeToggle />
             <UserMenu />
           </>

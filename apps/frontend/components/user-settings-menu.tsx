@@ -8,7 +8,7 @@ import {
   SidebarMenuItem,
   SidebarMenu,
 } from "@/components/ui/sidebar";
-import { User, ShieldCheck } from "lucide-react";
+import { User, ShieldCheck, Mail } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
@@ -16,6 +16,7 @@ export function UserSettingsMenu() {
   const pathname = usePathname();
   const profileHref = `/settings`;
   const securityHref = `/settings/security`;
+  const invitationsHref = `/settings/invitations`;
 
   return (
     <SidebarContent>
@@ -33,6 +34,16 @@ export function UserSettingsMenu() {
               <SidebarMenuButton asChild isActive={pathname === securityHref}>
                 <Link href={securityHref}>
                   <ShieldCheck /> Security
+                </Link>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+            <SidebarMenuItem>
+              <SidebarMenuButton
+                asChild
+                isActive={pathname === invitationsHref}
+              >
+                <Link href={invitationsHref}>
+                  <Mail /> Invitations
                 </Link>
               </SidebarMenuButton>
             </SidebarMenuItem>

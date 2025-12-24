@@ -9,6 +9,8 @@ import { agent } from "./routes/agent.ts";
 import { tool } from "./routes/tool.ts";
 import { mcp } from "./routes/mcp.ts";
 import { provider } from "./routes/provider.ts";
+import { invitation } from "./routes/invitation.ts";
+import { userInvitation } from "./routes/user-invitation.ts";
 import { organisationMember, workspaceMember } from "./db/schema.ts";
 
 const ALLOWED_ORIGINS = process.env.ALLOWED_ORIGINS!.split(",");
@@ -108,5 +110,7 @@ app.route("/organisations/:orgId/workspaces/:workspaceId/chat", chat);
 app.route("/organisations/:orgId/workspaces/:workspaceId/mcps", mcp);
 app.route("/organisations/:orgId/workspaces/:workspaceId/providers", provider);
 app.route("/organisations/:orgId/workspaces/:workspaceId/tools", tool);
+app.route("/organisations/:orgId/invitations", invitation);
+app.route("/users/me/invitations", userInvitation);
 
 export default app;

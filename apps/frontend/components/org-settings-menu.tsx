@@ -8,7 +8,7 @@ import {
   SidebarMenuItem,
   SidebarMenu,
 } from "@/components/ui/sidebar";
-import { Settings, Users } from "lucide-react";
+import { Mail, Settings, Users } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
@@ -20,6 +20,7 @@ export function OrgSettingsMenu({ orgId }: OrgSettingsMenuProps) {
   const pathname = usePathname();
   const generalHref = `/${orgId}/settings`;
   const membersHref = `/${orgId}/settings/members`;
+  const invitationsHref = `/${orgId}/settings/invitations`;
 
   return (
     <SidebarContent>
@@ -40,6 +41,16 @@ export function OrgSettingsMenu({ orgId }: OrgSettingsMenuProps) {
               >
                 <Link href={membersHref}>
                   <Users /> Members
+                </Link>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+            <SidebarMenuItem>
+              <SidebarMenuButton
+                asChild
+                isActive={pathname.startsWith(invitationsHref)}
+              >
+                <Link href={invitationsHref}>
+                  <Mail /> Invitations
                 </Link>
               </SidebarMenuButton>
             </SidebarMenuItem>

@@ -314,6 +314,45 @@ export const providerCreateSchema = providerSchema.pick({
   taskModelId: true,
 });
 
+// Invitation
+
+export const invitationStatusSchema = z.enum([
+  "pending",
+  "accepted",
+  "declined",
+  "expired",
+]);
+
+export type InvitationStatus = z.infer<typeof invitationStatusSchema>;
+
+export const invitationSchema = z.object({
+  id: z.string(),
+  email: z.string().email(),
+  organisationId: z.string(),
+  workspaceId: z.string(),
+  role: z.enum(["admin", "editor", "viewer"]),
+  invitedBy: z.string(),
+  status: invitationStatusSchema,
+  expiresAt: z.date(),
+  createdAt: z.date(),
+});
+
+export type Invitation = z.infer<typeof invitationSchema>;
+
+export const invitationCreateSchema = invitationSchema.pick({
+  email: true,
+  workspaceId: true,
+  role: true,
+});
+
+export const invitationListItemSchema = invitationSchema.extend({
+  organisationName: z.string().optional(),
+  workspaceName: z.string().optional(),
+  invitedByName: z.string().optional(),
+});
+
+export type InvitationListItem = z.infer<typeof invitationListItemSchema>;
+
 export const providerUpdateSchema = providerSchema.pick({
   name: true,
   providerType: true,
