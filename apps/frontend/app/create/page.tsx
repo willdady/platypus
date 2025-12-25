@@ -4,7 +4,7 @@ import { ProtectedRoute } from "@/components/protected-route";
 
 const OrganisationCreatePage = () => {
   return (
-    <ProtectedRoute>
+    <ProtectedRoute requireSuperAdmin={true}>
       <div className="flex justify-center w-full p-4">
         <div className="w-lg">
           <BackButton fallbackHref="/" />

@@ -34,7 +34,8 @@ export default function SignUpPage() {
         return;
       }
 
-      router.push("/");
+      // Force a full page reload to ensure auth state is correctly propagated
+      window.location.href = "/";
     } catch (err) {
       setError("An unexpected error occurred");
     } finally {

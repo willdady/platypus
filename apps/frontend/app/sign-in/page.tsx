@@ -32,7 +32,9 @@ export default function SignInPage() {
         return;
       }
 
-      router.push("/");
+      // Force a full page reload to ensure auth state is correctly propagated
+      // and to avoid race conditions with client-side routing
+      window.location.href = "/";
     } catch (err) {
       setError("An unexpected error occurred");
     } finally {
