@@ -16,13 +16,14 @@ export default async function OrgSettingsLayout({
     <SidebarProvider>
       <div className="h-screen flex flex-col w-full overflow-hidden">
         <Header leftContent={<HeaderBackButton />} />
-        <div className="flex-1 flex justify-center overflow-y-auto">
+        <div className="flex-1 flex flex-col items-center overflow-y-auto">
           <div className="flex flex-col md:flex-row w-full md:w-full lg:w-4/5 max-w-5xl py-8 px-4 md:px-0">
             <div className="w-full md:w-48 md:fixed md:top-16 pt-4 mb-8 md:mb-0">
               <OrgSettingsMenu orgId={orgId} />
             </div>
-            <div className="flex-1 p-2 md:ml-48 pb-8 min-w-0">{children}</div>
+            <div className="flex-1 p-2 md:ml-48 min-w-0">{children}</div>
           </div>
+          <div className="h-1 shrink-0" />
         </div>
       </div>
     </SidebarProvider>
