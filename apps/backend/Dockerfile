@@ -25,6 +25,8 @@ FROM node:24-alpine AS runner
 # Set working directory
 WORKDIR /app
 
+ENV NODE_ENV=production
+
 # Copy package.json files (needed for ESM module resolution)
 COPY --from=builder /app/package.json ./
 COPY --from=builder /app/pnpm-workspace.yaml ./
