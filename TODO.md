@@ -25,7 +25,7 @@
 [x] Pick a better name than Agent Kit as it's already used by Open AI
 [x] Add ability to invite users to workspaces
 [x] Add ability to administer members within an Org
-[ ] Add AuthZ (better-auth)
+[x] Add AuthZ (better-auth)
 [ ] Add proper logging (not just `console.log`) in backend service
 [ ] Add testing framework (Vitest?, Jest?)
 [ ] There should be a way to export and import agents, preferably as JSON.

@@ -56,8 +56,8 @@ The fastest way to get Platypus running is using Docker Compose.
 
     Navigate to `http://localhost:3001` and sign in with the default credentials configured via the `ADMIN_EMAIL` and `ADMIN_PASSWORD` environment variables.
 
-    > [!CAUTION]
-    > Change the default password after your first login!
+> [!CAUTION]
+> Change the default password after your first login!
 
 ## 🛠️ Local Development
 
@@ -112,8 +112,8 @@ The fastest way to get Platypus running is using Docker Compose.
 5.  **Sign in:**
     Navigate to `http://localhost:3000` and sign in with the default credentials configured in your `.env` file (`ADMIN_EMAIL` and `ADMIN_PASSWORD`).
 
-    > [!CAUTION]
-    > Change the default password after your first login!
+> [!CAUTION]
+> Change the default password after your first login!
 
 ## 🤝 Contributing
 
