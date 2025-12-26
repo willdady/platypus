@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.4.0](https://github.com/willdady/platypus/compare/v1.3.0...v1.4.0) (2025-12-26)
+
+
+### Features
+
+* **backend:** adding logging library ([0b6ac70](https://github.com/willdady/platypus/commit/0b6ac7098eed6f1edf0ff066d836db13c39ee8c6))
+* **ui:** improved empty states for the Providers and MCP settings screens ([ab61b9d](https://github.com/willdady/platypus/commit/ab61b9d5865cb339d1e826aab462bb90930192ea))
+
+
+### Bug Fixes
+
+* **backend:** setting NODE_ENV=production in Dockerfile ([e3bfd77](https://github.com/willdady/platypus/commit/e3bfd779aef22e04aaffc9e5165dc57cf7395d47))
+
 ## [1.3.0](https://github.com/willdady/platypus/compare/v1.2.0...v1.3.0) (2025-12-26)
 
 
