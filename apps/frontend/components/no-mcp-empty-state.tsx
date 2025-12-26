@@ -7,36 +7,33 @@ import {
   EmptyTitle,
 } from "@/components/ui/empty";
 import { Button } from "@/components/ui/button";
-import { Plus, Unplug } from "lucide-react";
+import { Wrench, Plus } from "lucide-react";
 import Link from "next/link";
 
-interface NoProvidersEmptyStateProps {
+interface NoMcpEmptyStateProps {
   orgId: string;
   workspaceId: string;
 }
 
-export const NoProvidersEmptyState = ({
+export const NoMcpEmptyState = ({
   orgId,
   workspaceId,
-}: NoProvidersEmptyStateProps) => {
+}: NoMcpEmptyStateProps) => {
   return (
     <Empty className="border-2 border-dashed">
       <EmptyHeader>
         <EmptyMedia variant="icon">
-          <Unplug className="size-6" />
+          <Wrench className="size-6" />
         </EmptyMedia>
-        <EmptyTitle>No providers configured</EmptyTitle>
+        <EmptyTitle>No MCP servers configured</EmptyTitle>
         <EmptyDescription>
-          You need to configure at least one AI provider to start using agents
-          and chats in this workspace.
+          There are currently no MCP servers configured for this workspace.
         </EmptyDescription>
       </EmptyHeader>
       <EmptyContent>
         <Button asChild>
-          <Link
-            href={`/${orgId}/workspace/${workspaceId}/settings/providers/create`}
-          >
-            <Plus /> Add Provider
+          <Link href={`/${orgId}/workspace/${workspaceId}/settings/mcp/create`}>
+            <Plus /> Add MCP
           </Link>
         </Button>
       </EmptyContent>

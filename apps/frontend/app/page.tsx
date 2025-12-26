@@ -38,7 +38,7 @@ export default function Home() {
 
   const { data, error, isLoading } = useSWR<{ results: Organisation[] }>(
     backendUrl && user ? joinUrl(backendUrl, "/organisations") : null,
-    fetcher,
+    fetcher
   );
 
   const organisations = data?.results || [];
@@ -164,16 +164,10 @@ export default function Home() {
               {/* Right Column: Workspace List */}
               <div className="flex-1 p-2 md:ml-48">
                 {selectedOrg ? (
-                  <div className="space-y-8">
-                    <div>
-                      <h2 className="text-2xl font-bold flex items-center gap-2">
-                        {selectedOrg.name}
-                      </h2>
-                      <p className="text-muted-foreground">
-                        Manage workspaces for this organisation.
-                      </p>
-                    </div>
-
+                  <div className="space-y-6">
+                    <h2 className="text-2xl font-bold flex items-center gap-2">
+                      {selectedOrg.name}
+                    </h2>
                     <div className="space-y-4">
                       <WorkspaceList orgId={selectedOrg.id} />
                       <div className="flex items-center gap-2">

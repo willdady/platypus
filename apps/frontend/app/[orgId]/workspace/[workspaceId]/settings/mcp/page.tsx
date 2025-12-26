@@ -1,7 +1,4 @@
 import { McpList } from "@/components/mcp-list";
-import { Button } from "@/components/ui/button";
-import { Plus } from "lucide-react";
-import Link from "next/link";
 
 const McpPage = async ({
   params,
@@ -14,11 +11,6 @@ const McpPage = async ({
     <div>
       <h1 className="text-2xl font-bold mb-4">MCP Servers</h1>
       <McpList orgId={orgId} workspaceId={workspaceId} />
-      <Button asChild>
-        <Link href={`/${orgId}/workspace/${workspaceId}/settings/mcp/create`}>
-          <Plus /> Add MCP
-        </Link>
-      </Button>
     </div>
   );
 };

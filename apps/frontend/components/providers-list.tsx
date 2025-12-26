@@ -5,10 +5,11 @@ import { Item, ItemActions, ItemContent, ItemTitle } from "./ui/item";
 import useSWR from "swr";
 import { cn, fetcher, joinUrl } from "../lib/utils";
 import { useAuth } from "@/components/auth-provider";
-import { Pencil, TriangleAlert } from "lucide-react";
+import { Pencil, Plus } from "lucide-react";
 import Link from "next/link";
-import { Alert, AlertDescription, AlertTitle } from "./ui/alert";
 import { useBackendUrl } from "@/app/client-context";
+import { Button } from "./ui/button";
+import { NoProvidersEmptyState } from "./no-providers-empty-state";
 
 const ProvidersList = ({
   className,
@@ -36,36 +37,37 @@ const ProvidersList = ({
 
   const providers: Provider[] = data?.results ?? [];
   if (!providers.length) {
-    return (
-      <Alert className="w-full mb-4">
-        <TriangleAlert />
-        <AlertTitle>No AI providers configured</AlertTitle>
-        <AlertDescription>
-          You must configure at least one AI provider.
-        </AlertDescription>
-      </Alert>
-    );
+    return <NoProvidersEmptyState orgId={orgId} workspaceId={workspaceId} />;
   }
 
   return (
-    <ul className={cn("mb-4", className)}>
-      {providers.map((provider) => (
-        <li key={provider.id} className="mb-2">
-          <Item variant="outline" asChild>
-            <Link
-              href={`/${orgId}/workspace/${workspaceId}/settings/providers/${provider.id}`}
-            >
-              <ItemContent>
-                <ItemTitle>{provider.name}</ItemTitle>
-              </ItemContent>
-              <ItemActions>
-                <Pencil className="size-4" />
-              </ItemActions>
-            </Link>
-          </Item>
-        </li>
-      ))}
-    </ul>
+    <>
+      <ul className={cn("mb-4", className)}>
+        {providers.map((provider) => (
+          <li key={provider.id} className="mb-2">
+            <Item variant="outline" asChild>
+              <Link
+                href={`/${orgId}/workspace/${workspaceId}/settings/providers/${provider.id}`}
+              >
+                <ItemContent>
+                  <ItemTitle>{provider.name}</ItemTitle>
+                </ItemContent>
+                <ItemActions>
+                  <Pencil className="size-4" />
+                </ItemActions>
+              </Link>
+            </Item>
+          </li>
+        ))}
+      </ul>
+      <Button asChild>
+        <Link
+          href={`/${orgId}/workspace/${workspaceId}/settings/providers/create`}
+        >
+          <Plus /> Add provider
+        </Link>
+      </Button>
+    </>
   );
 };
 
