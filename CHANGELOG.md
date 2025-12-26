@@ -1,5 +1,23 @@
 # Changelog
 
+## [1.3.0](https://github.com/willdady/platypus/compare/v1.2.0...v1.3.0) (2025-12-26)
+
+
+### Features
+
+* **auth:** add better-auth ([527269d](https://github.com/willdady/platypus/commit/527269d8c3bd0c8dfefd351c8ec7ab60bcfc3a8b))
+* **auth:** default admin username and password now configurable via env vars ([72c79aa](https://github.com/willdady/platypus/commit/72c79aaf04483a16eff6d77503986ac16957529b))
+* **authz:** add middlewares to backend routes ([a62eca2](https://github.com/willdady/platypus/commit/a62eca254c781b2ba416fdd47d8788758353d616))
+* **routing:** routes are now hierarchical ([8c9824b](https://github.com/willdady/platypus/commit/8c9824bcfca2962661c7bbf85eabcf38be076b90))
+* super admins now denoted via field on user table instead of env var ([7958fb2](https://github.com/willdady/platypus/commit/7958fb2aa149b532073db1b8de0ecd5ca5c1b3a7))
+* **ui:** add user settings screen ([e00ecb8](https://github.com/willdady/platypus/commit/e00ecb821d6604545fc35cda7838e6e6e798ff6d))
+* **ui:** added bottom margin to settings pages ([883a22f](https://github.com/willdady/platypus/commit/883a22f81978b6206e308a7269b58450ee3e363f))
+* **ui:** improved the Org switcher UI ([bc9f4a4](https://github.com/willdady/platypus/commit/bc9f4a4ba4a79936f6b157f88f9d58965476dfd3))
+* **ui:** ProtectedRoute component now renders permission errors. ([289af70](https://github.com/willdady/platypus/commit/289af70b9accad674a20d5fed6796d3af52780f5))
+* **ui:** updated Org settings page ([37eff32](https://github.com/willdady/platypus/commit/37eff32baceb6e2e40dc988f9a254af59c9a3802))
+* **user-management:** add member management ([ce3cda2](https://github.com/willdady/platypus/commit/ce3cda2c26128ec09adb4de8e4573019d87b2ff2))
+* **user-management:** org admins can now invite users to workspaces ([c9d0b4b](https://github.com/willdady/platypus/commit/c9d0b4b54234314bf35b1c9b1cd1847cb5409211))
+
 ## [1.2.0](https://github.com/willdady/platypus/compare/v1.1.0...v1.2.0) (2025-12-22)
 
 ### Features
