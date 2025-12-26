@@ -23,4 +23,14 @@ export const auth = betterAuth({
     },
   },
   trustedOrigins: process.env.ALLOWED_ORIGINS?.split(",") || [],
+  user: {
+    additionalFields: {
+      role: {
+        type: ["user", "admin"],
+        required: true,
+        defaultValue: "user",
+        input: false,
+      },
+    },
+  },
 });

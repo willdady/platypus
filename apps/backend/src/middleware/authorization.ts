@@ -1,7 +1,6 @@
 import { createMiddleware } from "hono/factory";
 import { eq, and } from "drizzle-orm";
 import { organisationMember, workspaceMember } from "../db/schema.ts";
-import type { Context } from "hono";
 import type {
   WorkspaceRole,
   SuperAdminOrgMembership,
@@ -9,24 +8,21 @@ import type {
 } from "../server.ts";
 
 /**
- * Checks if a user is a super admin based on email address.
- * Super admins are defined in the SUPER_ADMIN_EMAILS environment variable
- * as a comma-separated list of email addresses.
+ * Checks if a user is a super admin based on their role field.
+ * Super admins have full platform-level access.
  *
- * @param userEmail - The email address to check
+ * @param user - The user object with role field
  * @returns True if the user is a super admin, false otherwise
  *
  * @example
  * ```typescript
- * if (isSuperAdmin("admin@example.com")) {
+ * if (isSuperAdmin(user)) {
  *   // Grant full platform access
  * }
  * ```
  */
-const isSuperAdmin = (userEmail: string): boolean => {
-  const superAdminEmails =
-    process.env.SUPER_ADMIN_EMAILS?.split(",").map((e) => e.trim()) || [];
-  return superAdminEmails.includes(userEmail);
+const isSuperAdmin = (user: { role: string }): boolean => {
+  return user.role === "admin";
 };
 
 /**
@@ -88,7 +84,7 @@ export const requireOrgAccess = (requiredRoles?: OrgRole[]) =>
     const db = c.get("db");
 
     // Super admins bypass all checks
-    if (isSuperAdmin(user.email)) {
+    if (isSuperAdmin(user)) {
       const superAdminMembership: SuperAdminOrgMembership = {
         role: "admin",
         isSuperAdmin: true,
@@ -173,7 +169,7 @@ export const requireWorkspaceAccess = (requiredRoles?: WorkspaceRole[]) =>
     const orgMembership = c.get("orgMembership");
 
     // Super admins bypass all checks
-    if (isSuperAdmin(user.email)) {
+    if (isSuperAdmin(user)) {
       c.set("workspaceRole", "admin");
       c.set("workspaceMembership", null);
       await next();
@@ -228,10 +224,10 @@ export const requireWorkspaceAccess = (requiredRoles?: WorkspaceRole[]) =>
  *
  * **Purpose:**
  * Used for platform-level administrative operations that should only be
- * accessible to super admins defined in the SUPER_ADMIN_EMAILS environment variable.
+ * accessible to users with role="admin".
  *
  * **Behavior:**
- * - Checks if authenticated user's email is in the super admin list
+ * - Checks if authenticated user's role is "admin"
  * - Returns 403 if user is not a super admin
  * - Allows request to proceed if user is a super admin
  *
@@ -252,33 +248,11 @@ export const requireWorkspaceAccess = (requiredRoles?: WorkspaceRole[]) =>
 export const requireSuperAdmin = createMiddleware(async (c, next) => {
   const user = c.get("user");
 
-  if (!isSuperAdmin(user.email)) {
+  if (!isSuperAdmin(user)) {
     return c.json({ error: "Super admin access required" }, 403);
   }
 
   await next();
 });
 
-/**
- * Helper function to check if a user is a super admin.
- * Exported for use in route handlers that need to conditionally apply
- * super admin logic (e.g., showing all organisations vs. user's organisations).
- *
- * @param userEmail - The email address to check
- * @returns True if the user is a super admin, false otherwise
- *
- * @example
- * ```typescript
- * import { isSuperAdmin } from "../middleware/authorization";
- *
- * // Conditionally filter results based on super admin status
- * if (isSuperAdmin(user.email)) {
- *   // Return all organisations
- *   return await db.select().from(organisationTable);
- * } else {
- *   // Return only user's organisations
- *   return await getUserOrganisations(user.id);
- * }
- * ```
- */
 export { isSuperAdmin, isSuperAdminMembership };

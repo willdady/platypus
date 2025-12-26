@@ -5,9 +5,10 @@ import {
   organisation,
   workspace,
   organisationMember,
+  user,
 } from "./src/db/schema.ts";
 import { nanoid } from "nanoid";
-import { count } from "drizzle-orm";
+import { count, eq } from "drizzle-orm";
 import { auth } from "./src/auth.ts";
 
 const PORT = process.env.PORT || "3000";
@@ -55,6 +56,14 @@ const main = async () => {
         }
 
         console.log(`- User created: ${defaultEmail}`);
+
+        // Update role to admin after creation
+        await db
+          .update(user)
+          .set({ role: "admin" })
+          .where(eq(user.id, result.user.id));
+
+        console.log(`- User upgraded to admin role`);
 
         // Create organization membership with admin role
         console.log("Creating organization membership...");

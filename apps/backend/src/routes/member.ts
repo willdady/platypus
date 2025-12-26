@@ -37,6 +37,7 @@ member.get("/", requireAuth, requireOrgAccess(["admin"]), async (c) => {
         name: userTable.name,
         email: userTable.email,
         image: userTable.image,
+        role: userTable.role,
       },
     })
     .from(organisationMember)
@@ -67,7 +68,7 @@ member.get("/", requireAuth, requireOrgAccess(["admin"]), async (c) => {
       return {
         ...m,
         workspaces,
-        isSuperAdmin: isSuperAdmin(m.user.email),
+        isSuperAdmin: isSuperAdmin(m.user),
       };
     }),
   );
@@ -97,6 +98,7 @@ member.get(
           name: userTable.name,
           email: userTable.email,
           image: userTable.image,
+          role: userTable.role,
         },
       })
       .from(organisationMember)
@@ -135,7 +137,7 @@ member.get(
     return c.json({
       ...m,
       workspaces,
-      isSuperAdmin: isSuperAdmin(m.user.email),
+      isSuperAdmin: isSuperAdmin(m.user),
     });
   },
 );

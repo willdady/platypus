@@ -45,7 +45,7 @@ organisation.get("/", requireAuth, async (c) => {
   const user = c.get("user")!;
 
   // Super admins see all organisations
-  if (isSuperAdmin(user.email)) {
+  if (isSuperAdmin(user)) {
     const results = await db.select().from(organisationTable);
     return c.json({ results });
   }
