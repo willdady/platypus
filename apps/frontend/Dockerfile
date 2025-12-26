@@ -46,6 +46,11 @@ ENV NEXT_TELEMETRY_DISABLED=1
 # Build the frontend application
 RUN pnpm turbo build --filter=@platypus/frontend
 
+# Test stage
+FROM builder AS test
+WORKDIR /app
+RUN pnpm --filter @platypus/frontend test
+
 # Production image, copy all the files and run next
 FROM base AS runner
 WORKDIR /app

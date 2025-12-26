@@ -31,6 +31,11 @@
     "start-local-db": {
       "cache": false,
       "persistent": true
+    },
+    "test": {
+      "dependsOn": ["^build"],
+      "inputs": ["$TURBO_DEFAULT$", "**/*.test.ts", "**/*.test.tsx"],
+      "outputs": ["coverage/**"]
     }
   }
 }

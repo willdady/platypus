@@ -33,7 +33,29 @@ pnpm drizzle-kit-push  # Apply schema changes to database (requires `pnpm dev` t
 ```bash
 pnpm build   # Build all packages
 pnpm format  # Format code with Prettier
+pnpm test    # Run all tests via Turborepo
 ```
+
+## Testing
+
+The project uses Vitest for testing across all packages. Tests are orchestrated by Turborepo.
+
+### Running Tests
+
+- **All tests**: `pnpm test` from the root.
+- **Specific package**: `pnpm --filter <package-name> test`.
+- **Watch mode**: `pnpm --filter <package-name> test:watch`.
+- **Coverage**: `pnpm --filter <package-name> test:coverage`.
+
+### Configuration
+
+- **Backend** (`apps/backend`): Configured in `vitest.config.ts` for Node.js.
+- **Frontend** (`apps/frontend`): Configured in `vitest.config.ts` for `jsdom` with React support. Setup in `vitest.setup.ts`.
+- **Schemas** (`packages/schemas`): Configured in `vitest.config.ts` for Node.js.
+
+### Docker Integration
+
+Tests are automatically run during the Docker build process for both frontend and backend to ensure build stability.
 
 ## Architecture
 

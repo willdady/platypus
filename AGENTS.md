@@ -31,6 +31,23 @@ pnpm build   # Build all packages
 pnpm format  # Format code with Prettier
 ```
 
+## Testing
+
+The project uses Vitest for testing across all packages. Tests are orchestrated by Turborepo.
+
+### Running Tests
+
+- **All tests**: `pnpm test` from the root.
+- **Specific package**: `pnpm --filter <package-name> test`.
+- **Watch mode**: `pnpm --filter <package-name> test:watch`.
+- **Coverage**: `pnpm --filter <package-name> test:coverage`.
+
+### Configuration
+
+- **Backend** (`apps/backend`): Configured in `vitest.config.ts` for Node.js.
+- **Frontend** (`apps/frontend`): Configured in `vitest.config.ts` for `jsdom` with React support. Setup in `vitest.setup.ts`.
+- **Schemas** (`packages/schemas`): Configured in `vitest.config.ts` for Node.js.
+
 ## Architecture
 
 ### Monorepo Structure

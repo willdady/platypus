@@ -19,7 +19,13 @@ RUN pnpm install --frozen-lockfile
 COPY apps/backend ./apps/backend
 COPY packages/schemas ./packages/schemas
 
-# Stage 2: Runner
+# Stage 2: Test
+FROM builder AS test
+WORKDIR /app
+RUN pnpm --filter @platypus/backend test
+RUN pnpm --filter @platypus/schemas test
+
+# Stage 3: Runner
 FROM node:24-alpine AS runner
 
 # Set working directory
