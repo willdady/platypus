@@ -24,7 +24,8 @@ services:
       DATABASE_URL: postgres://postgres:mypassword@database:5432/postgres
       BETTER_AUTH_SECRET: "g532b5Ede8hpeUxuCETPD7vUlAjb10Ts"
       BETTER_AUTH_URL: "http://localhost:4000"
-      SUPER_ADMIN_EMAILS: "admin@example.com"
+      ADMIN_EMAIL: "admin@example.com"
+      ADMIN_PASSWORD: "admin123"
     ports:
       - "4000:4000"
     depends_on:

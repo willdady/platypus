@@ -39,8 +39,14 @@ const main = async () => {
       console.log(`- Workspace created: ${workspaceId}`);
 
       console.log("Creating default user...");
-      const defaultEmail = "admin@example.com";
-      const defaultPassword = "admin123";
+      const defaultEmail = process.env.ADMIN_EMAIL;
+      const defaultPassword = process.env.ADMIN_PASSWORD;
+
+      if (!defaultEmail || !defaultPassword) {
+        throw new Error(
+          "ADMIN_EMAIL and ADMIN_PASSWORD environment variables are required for initial setup",
+        );
+      }
 
       try {
         const result = await auth.api.signUpEmail({
@@ -57,10 +63,10 @@ const main = async () => {
 
         console.log(`- User created: ${defaultEmail}`);
 
-        // Update role to admin after creation
+        // Update role to admin and verify email after creation
         await db
           .update(user)
-          .set({ role: "admin" })
+          .set({ role: "admin", emailVerified: true })
           .where(eq(user.id, result.user.id));
 
         console.log(`- User upgraded to admin role`);

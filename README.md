@@ -6,7 +6,8 @@
 
 Platypus is an open-source, full-stack application designed to help you build AI agents. Built with a focus on extensibility and modern web standards, Platypus allows you to create agents that can reason, use tools, and interact with the world.
 
-> 🚧 **Note:** Platypus is currently a Work In Progress. Features are being added rapidly.
+> [!NOTE]
+> Platypus is currently a Work In Progress. Features are being added rapidly.
 
 ## ✨ Key Features
 
@@ -29,12 +30,20 @@ Platypus is a monorepo managed by [Turborepo](https://turbo.build/), ensuring a 
 
 The fastest way to get Platypus running is using Docker Compose.
 
-1.  **Configure authentication secret:**
+1.  **Configure environment:**
 
-    Edit `compose.yaml` and set a secure random string (minimum 32 characters) for `BETTER_AUTH_SECRET`:
+    Create a `compose.override.yaml` file (or edit `compose.yaml` directly) and set the following environment variables:
+    - `BETTER_AUTH_SECRET`: A secure random string (minimum 32 characters).
+    - `ADMIN_EMAIL`: The email address for the initial admin user.
+    - `ADMIN_PASSWORD`: A secure password for the initial admin user.
 
     ```yaml
-    BETTER_AUTH_SECRET: "your-secure-random-string-here"
+    services:
+      backend:
+        environment:
+          BETTER_AUTH_SECRET: "your-secure-random-string-here"
+          ADMIN_EMAIL: "admin@example.com"
+          ADMIN_PASSWORD: "your-secure-password-here"
     ```
 
 2.  **Start the application:**
@@ -45,11 +54,10 @@ The fastest way to get Platypus running is using Docker Compose.
 
 3.  **Sign in:**
 
-    Navigate to `http://localhost:3001` and sign in with the default credentials:
-    - **Email:** `admin@example.com`
-    - **Password:** `admin123`
+    Navigate to `http://localhost:3001` and sign in with the default credentials configured via the `ADMIN_EMAIL` and `ADMIN_PASSWORD` environment variables.
 
-    > ⚠️ **Important:** Change the default password after your first login!
+    > [!CAUTION]
+    > Change the default password after your first login!
 
 ## 🛠️ Local Development
 
@@ -76,10 +84,15 @@ The fastest way to get Platypus running is using Docker Compose.
     cp apps/backend/.example.env apps/backend/.env
     ```
 
-    Edit `apps/backend/.env` and set a secure random string (minimum 32 characters) for `BETTER_AUTH_SECRET`:
+    Edit `apps/backend/.env` and set the following environment variables:
+    - `BETTER_AUTH_SECRET`: A secure random string (minimum 32 characters).
+    - `ADMIN_EMAIL`: The email address for the initial admin user.
+    - `ADMIN_PASSWORD`: A secure password for the initial admin user.
 
     ```env
-    BETTER_AUTH_SECRET=your-secure-random-string-here
+    BETTER_AUTH_SECRET: "your-secure-random-string-here"
+    ADMIN_EMAIL: "admin@example.com"
+    ADMIN_PASSWORD: "your-secure-password-here"
     ```
 
 3.  **Start Development Server:**
@@ -97,16 +110,10 @@ The fastest way to get Platypus running is using Docker Compose.
     ```
 
 5.  **Sign in:**
-    Navigate to `http://localhost:3000` and sign in with the default credentials:
-    - **Email:** `admin@example.com`
-    - **Password:** `admin123`
+    Navigate to `http://localhost:3000` and sign in with the default credentials configured in your `.env` file (`ADMIN_EMAIL` and `ADMIN_PASSWORD`).
 
-    > ⚠️ **Important:** Change the default password after your first login!
-
-## 🗺️ Roadmap
-
-- [x] Authentication & Authorization
-- [ ] Role-Based Access Control (RBAC)
+    > [!CAUTION]
+    > Change the default password after your first login!
 
 ## 🤝 Contributing
 
