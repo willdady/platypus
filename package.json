@@ -10,7 +10,8 @@
     "drizzle-kit-push": "turbo run drizzle-kit-push -F @platypus/backend",
     "drizzle-kit-generate": "turbo run drizzle-kit-generate -F @platypus/backend",
     "drizzle-kit-migrate": "turbo run drizzle-kit-migrate -F @platypus/backend",
-    "format": "prettier --write \"**/*.{ts,tsx,md}\""
+    "format": "prettier --write \"**/*.{ts,tsx,md}\"",
+    "test": "turbo run test"
   },
   "devDependencies": {
     "prettier": "^3.7.4",
