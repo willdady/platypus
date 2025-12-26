@@ -40,6 +40,7 @@ import {
   requireWorkspaceAccess,
 } from "../middleware/authorization.ts";
 import type { Variables } from "../server.ts";
+import { logger } from "../logger.ts";
 
 // --- Types ---
 
@@ -247,10 +248,10 @@ const loadTools = async (
           Object.assign(tools, mcpTools);
           mcpClients.push(mcpClient);
         } else {
-          console.warn(`MCP '${toolSetId}' has no URL configured`);
+          logger.warn(`MCP '${toolSetId}' has no URL configured`);
         }
       } else {
-        console.warn(
+        logger.warn(
           `Tool set with id '${toolSetId}' not found as static tool set or MCP`,
         );
       }
@@ -374,14 +375,14 @@ const upsertChatRecord = async (
       });
     }
 
-    console.log(
+    logger.info(
       `Successfully upserted chat '${id}' in workspace '${workspaceId}'`,
     );
   } catch (error) {
-    console.error(
-      `Error upserting chat '${id}' in workspace '${workspaceId}':`,
+    logger.error(
+      { error, chatId: id, workspaceId },
+      "Error upserting chat record",
     );
-    console.error(error);
   }
 };
 
@@ -526,7 +527,7 @@ chat.post(
             try {
               await mcpClient.close();
             } catch (error) {
-              console.error("Error closing MCP client:", error);
+              logger.error({ error }, "Error closing MCP client");
             }
           }
 
@@ -540,7 +541,7 @@ chat.post(
             data,
           );
         } catch (error) {
-          console.error("Error in onFinish:", error);
+          logger.error({ error }, "Error in onFinish");
         }
       },
     });

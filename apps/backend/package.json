@@ -31,11 +31,13 @@
     "hono": "^4.11.2",
     "nanoid": "^5.1.6",
     "pg": "^8.16.3",
+    "pino": "^10.1.0",
     "zod": "^4.2.1"
   },
   "devDependencies": {
     "@types/node": "^24.10.4",
     "@types/pg": "^8.16.0",
-    "drizzle-kit": "^0.31.8"
+    "drizzle-kit": "^0.31.8",
+    "pino-pretty": "^13.1.3"
   }
 }

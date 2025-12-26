@@ -26,6 +26,6 @@
 [x] Add ability to invite users to workspaces
 [x] Add ability to administer members within an Org
 [x] Add AuthZ (better-auth)
-[ ] Add proper logging (not just `console.log`) in backend service
+[x] Add proper logging (not just `console.log`) in backend service
 [ ] Add testing framework (Vitest?, Jest?)
 [ ] There should be a way to export and import agents, preferably as JSON.

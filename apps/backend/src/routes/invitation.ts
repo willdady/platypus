@@ -11,6 +11,7 @@ import { eq, and } from "drizzle-orm";
 import { requireAuth } from "../middleware/authentication.ts";
 import { requireOrgAccess } from "../middleware/authorization.ts";
 import type { Variables } from "../server.ts";
+import { logger } from "../logger.ts";
 
 const invitation = new Hono<{ Variables: Variables }>();
 
@@ -90,7 +91,7 @@ invitation.post(
           409,
         );
       }
-      console.error("Error creating invitation:", error);
+      logger.error({ error }, "Error creating invitation");
       throw error;
     }
   },

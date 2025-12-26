@@ -13,6 +13,7 @@ import { invitation } from "./routes/invitation.ts";
 import { userInvitation } from "./routes/user-invitation.ts";
 import { member } from "./routes/member.ts";
 import { organisationMember, workspaceMember } from "./db/schema.ts";
+import { logger } from "./logger.ts";
 
 const ALLOWED_ORIGINS = process.env.ALLOWED_ORIGINS!.split(",");
 
@@ -91,6 +92,21 @@ app.use(
     credentials: true, // Important for cookies
   }),
 );
+
+app.use("*", async (c, next) => {
+  const start = Date.now();
+  await next();
+  const ms = Date.now() - start;
+  logger.info(
+    {
+      method: c.req.method,
+      path: c.req.path,
+      status: c.res.status,
+      duration: `${ms}ms`,
+    },
+    "Request processed",
+  );
+});
 
 // Auth routes - must be before the db middleware
 app.on(["POST", "GET"], "/auth/*", (c) => {

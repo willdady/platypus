@@ -16,6 +16,7 @@ import {
   requireWorkspaceAccess,
 } from "../middleware/authorization.ts";
 import type { Variables } from "../server.ts";
+import { logger } from "../logger.ts";
 
 const mcp = new Hono<{ Variables: Variables }>();
 
@@ -156,12 +157,12 @@ mcp.post(
         try {
           await mcpClient.close();
         } catch (closeError) {
-          console.error("Error closing MCP client:", closeError);
+          logger.error({ error: closeError }, "Error closing MCP client");
         }
       }
 
       // Log the full error for debugging
-      console.error("MCP test connection error:", error);
+      logger.error({ error }, "MCP test connection error");
 
       // Return error details
       let errorMessage = "Unknown error connecting to MCP server";

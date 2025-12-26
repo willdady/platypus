@@ -10,35 +10,35 @@ import {
 import { nanoid } from "nanoid";
 import { count, eq } from "drizzle-orm";
 import { auth } from "./src/auth.ts";
+import { logger } from "./src/logger.ts";
 
 const PORT = process.env.PORT || "3000";
 
 const main = async () => {
-  console.clear();
-  console.log(`Serving on port: ${PORT}`);
+  logger.info(`Serving on port: ${PORT}`);
 
   await exponentialBackoff(async () => {
     const [orgCount] = await db.select({ value: count() }).from(organisation);
 
     if (orgCount.value === 0) {
-      console.log("No organisations found. Creating initial organisation...");
+      logger.info("No organisations found. Creating initial organisation...");
       const orgId = nanoid();
       await db.insert(organisation).values({
         id: orgId,
         name: "Default Organisation",
       });
-      console.log(`- Organisation created: ${orgId}`);
+      logger.info(`- Organisation created: ${orgId}`);
 
-      console.log("Creating initial workspace...");
+      logger.info("Creating initial workspace...");
       const workspaceId = nanoid();
       await db.insert(workspace).values({
         id: workspaceId,
         organisationId: orgId,
         name: "Default Workspace",
       });
-      console.log(`- Workspace created: ${workspaceId}`);
+      logger.info(`- Workspace created: ${workspaceId}`);
 
-      console.log("Creating default user...");
+      logger.info("Creating default user...");
       const defaultEmail = process.env.ADMIN_EMAIL;
       const defaultPassword = process.env.ADMIN_PASSWORD;
 
@@ -61,7 +61,7 @@ const main = async () => {
           throw new Error("Failed to get user from sign up response");
         }
 
-        console.log(`- User created: ${defaultEmail}`);
+        logger.info(`- User created: ${defaultEmail}`);
 
         // Update role to admin and verify email after creation
         await db
@@ -69,26 +69,26 @@ const main = async () => {
           .set({ role: "admin", emailVerified: true })
           .where(eq(user.id, result.user.id));
 
-        console.log(`- User upgraded to admin role`);
+        logger.info(`- User upgraded to admin role`);
 
         // Create organization membership with admin role
-        console.log("Creating organization membership...");
+        logger.info("Creating organization membership...");
         await db.insert(organisationMember).values({
           id: nanoid(),
           organisationId: orgId,
           userId: result.user.id,
           role: "admin",
         });
-        console.log(`- Organization membership created for ${defaultEmail}`);
+        logger.info(`- Organization membership created for ${defaultEmail}`);
 
-        console.log(
+        logger.info(
           `- Default credentials: ${defaultEmail} / ${defaultPassword}`,
         );
-        console.log(
+        logger.info(
           "⚠️  Please change the default password after first login!",
         );
       } catch (error) {
-        console.error("Failed to create default user:", error);
+        logger.error({ error }, "Failed to create default user");
         throw error;
       }
     }
@@ -109,9 +109,9 @@ const exponentialBackoff = async <T>(
     return await fn();
   } catch (error) {
     if (retries > 0) {
-      console.warn(
+      logger.warn(
+        { error },
         `Operation failed, retrying in ${delay / 1000} seconds...`,
-        error,
       );
       await new Promise((resolve) => setTimeout(resolve, delay));
       return exponentialBackoff(fn, retries - 1, delay * 2);

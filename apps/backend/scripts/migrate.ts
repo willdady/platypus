@@ -1,6 +1,7 @@
 import { drizzle } from "drizzle-orm/node-postgres";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
 import pg from "pg";
+import { logger } from "../src/logger.ts";
 
 const { Pool } = pg;
 
@@ -11,13 +12,13 @@ async function runMigrations() {
 
   const db = drizzle(pool);
 
-  console.log("Running migrations...");
+  logger.info("Running migrations...");
 
   try {
     await migrate(db, { migrationsFolder: "./apps/backend/drizzle" });
-    console.log("Migrations completed successfully!");
+    logger.info("Migrations completed successfully!");
   } catch (error) {
-    console.error("Migration failed:", error);
+    logger.error({ error }, "Migration failed");
     process.exit(1);
   } finally {
     await pool.end();
