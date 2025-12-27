@@ -1,6 +1,4 @@
 import { Hono } from "hono";
-import { sValidator } from "@hono/standard-validator";
-import { z } from "zod";
 import { getToolSets } from "../tools/index.ts";
 import { db } from "../index.ts";
 import { mcp as mcpTable } from "../db/schema.ts";

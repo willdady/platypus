@@ -1,6 +1,5 @@
 import { Hono } from "hono";
 import { sValidator } from "@hono/standard-validator";
-import { z } from "zod";
 import { nanoid } from "nanoid";
 import { db } from "../index.ts";
 import { agent as agentTable } from "../db/schema.ts";
