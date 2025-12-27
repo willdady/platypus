@@ -1,46 +1,57 @@
-# Stage 1: Builder
-FROM node:24-alpine AS builder
-
-# Set working directory
-WORKDIR /app
-
-# Install pnpm
+FROM node:24-alpine AS base
+ENV PNPM_HOME="/pnpm"
+ENV PATH="$PNPM_HOME:$PATH"
 RUN corepack enable pnpm
 
-# Copy all package.json files first (needed for pnpm to know workspace structure)
-COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
-COPY apps/backend/package.json ./apps/backend/
-COPY packages/schemas/package.json ./packages/schemas/
+FROM base AS builder
+RUN apk add --no-cache libc6-compat
+# Install turbo globally
+RUN npm install -g turbo
+WORKDIR /app
+COPY . .
+# Prune the workspace for backend
+RUN turbo prune --scope=@platypus/backend --docker
 
-# Install dependencies (now pnpm knows about all workspace packages)
-RUN pnpm install --frozen-lockfile
+# Stage to install dependencies and run tests
+FROM base AS tester
+RUN apk add --no-cache libc6-compat
+WORKDIR /app
+
+# Copy pruned package.json files
+COPY --from=builder /app/out/json/ .
+# Remove the lockfile to force re-resolution of dependencies.
+RUN rm -f pnpm-lock.yaml
+
+# Install ALL dependencies (including devDependencies for testing)
+RUN pnpm install
 
 # Copy source code
-COPY apps/backend ./apps/backend
-COPY packages/schemas ./packages/schemas
+COPY --from=builder /app/out/full/ .
 
-# Stage 2: Test
-FROM builder AS test
+# Run tests
+RUN pnpm test
+
+# Stage to install production dependencies
+FROM base AS prod-deps
+RUN apk add --no-cache libc6-compat
 WORKDIR /app
-RUN pnpm --filter @platypus/backend test
-RUN pnpm --filter @platypus/schemas test
+COPY --from=builder /app/out/json/ .
+RUN pnpm install --prod --no-optional
 
-# Stage 3: Runner
-FROM node:24-alpine AS runner
-
-# Set working directory
+FROM base AS runner
 WORKDIR /app
 
 ENV NODE_ENV=production
 
-# Copy package.json files (needed for ESM module resolution)
-COPY --from=builder /app/package.json ./
-COPY --from=builder /app/pnpm-workspace.yaml ./
+# Don't run production as root
+RUN addgroup --system --gid 1001 nodejs
+RUN adduser --system --uid 1001 hono
 
-# Copy dependencies and source code from builder
-COPY --from=builder /app/node_modules ./node_modules
-COPY --from=builder /app/apps/backend ./apps/backend
-COPY --from=builder /app/packages/schemas ./packages/schemas
+# Copy prod dependencies (includes root node_modules and workspace node_modules)
+COPY --from=prod-deps /app .
+
+# Copy source code
+COPY --from=builder /app/out/full/ .
 
 # Expose port
 EXPOSE 4000
