@@ -27,5 +27,5 @@
 [x] Add ability to administer members within an Org
 [x] Add AuthZ (better-auth)
 [x] Add proper logging (not just `console.log`) in backend service
-[ ] Add testing framework (Vitest?, Jest?)
+[x] Add testing framework (Vitest?, Jest?)
 [ ] There should be a way to export and import agents, preferably as JSON.
