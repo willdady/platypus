@@ -34,6 +34,7 @@ export const useChatMetadata = (
           backendUrl,
           `/organisations/${orgId}/workspaces/${workspaceId}/chat/${chatId}`,
         ),
+        { credentials: "include" },
       )
         .then((res) => res.json())
         .then((freshChatData) => {
@@ -67,6 +68,7 @@ export const useChatMetadata = (
                   headers: {
                     "Content-Type": "application/json",
                   },
+                  credentials: "include",
                   body: JSON.stringify({ providerId: providerIdForMetadata }),
                 },
               )

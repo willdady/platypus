@@ -125,6 +125,7 @@ export const Chat = ({
           orgId,
           workspaceId,
         },
+        credentials: "include",
       }),
     });
 
