@@ -4,8 +4,8 @@ import { z } from "zod";
 import {
   convertToModelMessages,
   createIdGenerator,
-  generateObject,
-  type LanguageModel,
+  generateText,
+  Output,
   streamText,
   type UIMessage,
   type Tool,
@@ -18,7 +18,7 @@ import {
   type GoogleGenerativeAIProvider,
 } from "@ai-sdk/google";
 import { experimental_createMCPClient as createMCPClient } from "@ai-sdk/mcp";
-import { type Provider as AIProvider, stepCountIs } from "ai";
+import { stepCountIs } from "ai";
 import { db } from "../index.ts";
 import { dedupeArray, toKebabCase } from "../utils.ts";
 import {
@@ -76,10 +76,7 @@ type GenerationConfig = {
 /**
  * Creates a LanguageModel instance based on the provider configuration.
  */
-const createModel = (
-  provider: Provider,
-  modelId: string,
-): [AIProvider, LanguageModel] => {
+const createModel = (provider: Provider, modelId: string) => {
   if (provider.providerType === "OpenAI") {
     const openai = createOpenAI({
       baseURL: provider.baseUrl ?? undefined,
@@ -88,7 +85,7 @@ const createModel = (
       organization: provider.organization ?? undefined,
       project: provider.project ?? undefined,
     });
-    return [openai, openai(modelId)];
+    return [openai, openai(modelId)] as const;
   } else if (provider.providerType === "OpenRouter") {
     const openRouter = createOpenRouter({
       baseURL: provider.baseUrl ?? undefined,
@@ -96,7 +93,7 @@ const createModel = (
       headers: provider.headers ?? undefined,
       extraBody: provider.extraBody ?? undefined,
     });
-    return [openRouter, openRouter(modelId)];
+    return [openRouter, openRouter(modelId)] as const;
   } else if (provider.providerType === "Bedrock") {
     const bedrock = createAmazonBedrock({
       baseURL: provider.baseUrl ?? undefined,
@@ -104,14 +101,14 @@ const createModel = (
       apiKey: provider.apiKey ?? undefined,
       headers: provider.headers ?? undefined,
     });
-    return [bedrock, bedrock(modelId)];
+    return [bedrock, bedrock(modelId)] as const;
   } else if (provider.providerType === "Google") {
     const google = createGoogleGenerativeAI({
       baseURL: provider.baseUrl ?? undefined,
       apiKey: provider.apiKey ?? undefined,
       headers: provider.headers ?? undefined,
     });
-    return [google, google(modelId)];
+    return [google, google(modelId)] as const;
   } else {
     throw new Error(`Unrecognized provider type '${provider.providerType}'`);
   }
@@ -276,7 +273,7 @@ const loadTools = async (
  */
 const createSearchTools = (
   provider: Provider,
-  aiProvider: AIProvider,
+  aiProvider: any,
 ): Record<string, Tool> => {
   const tools: Record<string, any> = {};
 
@@ -554,8 +551,8 @@ chat.post(
     // 9. Stream Response
     const { systemPrompt, ...restConfig } = config;
     const result = streamText({
-      model,
-      messages: convertToModelMessages(messages),
+      model: model as any,
+      messages: await convertToModelMessages(messages),
       stopWhen: stepCountIs(context.resolvedMaxSteps),
       tools,
       system: systemPrompt,
@@ -707,11 +704,13 @@ chat.post(
       })
       .join("\n");
 
-    const result = await generateObject({
-      model,
-      schema: z.object({
-        title: z.string(),
-        tags: z.array(z.string()),
+    const { output } = await generateText({
+      model: model as any,
+      output: Output.object({
+        schema: z.object({
+          title: z.string(),
+          tags: z.array(z.string()),
+        }),
       }),
       prompt: [
         `Generate a short, descriptive title for this chat conversation. You MAY use at most one emoji. The complete title MUST NOT exceed 30 characters.`,
@@ -721,7 +720,7 @@ chat.post(
       ].join("\n"),
     });
 
-    let newTitle = result.object.title;
+    let newTitle = output.title;
     // Truncate the title if it exceeds 30 characters. This is needed as some
     // models don't respect the limit mentioned in the above prompt :\
     if (newTitle.length > 30) {
@@ -729,7 +728,7 @@ chat.post(
     }
 
     // Enforce kebab-case tags and dedupe
-    const newTags = dedupeArray(result.object.tags.map(toKebabCase));
+    const newTags = dedupeArray(output.tags.map(toKebabCase));
 
     // Update chat title and tags
     const updateResult = await db

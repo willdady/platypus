@@ -12,9 +12,12 @@ vi.mock("ai", async () => {
         .fn()
         .mockReturnValue(new Response("stream")),
     }),
-    generateObject: vi.fn().mockResolvedValue({
-      object: { title: "Generated Title", tags: ["tag1", "tag2"] },
+    generateText: vi.fn().mockResolvedValue({
+      output: { title: "Generated Title", tags: ["tag1", "tag2"] },
     }),
+    Output: {
+      object: vi.fn().mockReturnValue({}),
+    },
     convertToModelMessages: vi.fn().mockReturnValue([]),
     createIdGenerator: vi.fn().mockReturnValue(() => "msg-1"),
     stepCountIs: vi.fn(),

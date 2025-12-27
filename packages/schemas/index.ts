@@ -265,22 +265,25 @@ const mcpBearerTokenRefine = {
   },
 };
 
-export const mcpSchema = z
-  .object({
-    id: z.string(),
-    workspaceId: z.string(),
-    name: z.string().min(3).max(30),
-    url: z.url(),
-    authType: z.enum(["None", "Bearer"]),
-    bearerToken: z.string().optional(),
-    createdAt: z.date(),
-    updatedAt: z.date(),
-  })
-  .refine(mcpBearerTokenRefine.validator, mcpBearerTokenRefine.params);
+const mcpBaseSchema = z.object({
+  id: z.string(),
+  workspaceId: z.string(),
+  name: z.string().min(3).max(30),
+  url: z.url(),
+  authType: z.enum(["None", "Bearer"]),
+  bearerToken: z.string().optional(),
+  createdAt: z.date(),
+  updatedAt: z.date(),
+});
+
+export const mcpSchema = mcpBaseSchema.refine(
+  mcpBearerTokenRefine.validator,
+  mcpBearerTokenRefine.params,
+);
 
 export type MCP = z.infer<typeof mcpSchema>;
 
-export const mcpCreateSchema = mcpSchema
+export const mcpCreateSchema = mcpBaseSchema
   .pick({
     workspaceId: true,
     name: true,
@@ -290,7 +293,7 @@ export const mcpCreateSchema = mcpSchema
   })
   .refine(mcpBearerTokenRefine.validator, mcpBearerTokenRefine.params);
 
-export const mcpUpdateSchema = mcpSchema
+export const mcpUpdateSchema = mcpBaseSchema
   .pick({
     name: true,
     url: true,
@@ -299,7 +302,7 @@ export const mcpUpdateSchema = mcpSchema
   })
   .refine(mcpBearerTokenRefine.validator, mcpBearerTokenRefine.params);
 
-export const mcpTestSchema = mcpSchema
+export const mcpTestSchema = mcpBaseSchema
   .pick({
     url: true,
     authType: true,
@@ -309,28 +312,29 @@ export const mcpTestSchema = mcpSchema
 
 // Provider
 
-export const providerSchema = z
-  .object({
-    id: z.string(),
-    organizationId: z.string().optional(),
-    workspaceId: z.string().optional(),
-    name: z.string().min(3).max(32),
-    providerType: z.enum(["OpenAI", "OpenRouter", "Bedrock", "Google"]),
-    apiKey: z.string().min(1),
-    region: z
-      .string()
-      .regex(/^[a-z]{2}-[a-z]+-\d+$/, "Invalid AWS region format")
-      .optional(),
-    baseUrl: z.string().optional(),
-    headers: z.record(z.string(), z.string()).optional(),
-    extraBody: z.record(z.string(), z.unknown()).optional(),
-    organization: z.string().optional(),
-    project: z.string().optional(),
-    modelIds: z.array(z.string()).min(1),
-    taskModelId: z.string(),
-    createdAt: z.date(),
-    updatedAt: z.date(),
-  })
+const providerBaseSchema = z.object({
+  id: z.string(),
+  organizationId: z.string().optional(),
+  workspaceId: z.string().optional(),
+  name: z.string().min(3).max(32),
+  providerType: z.enum(["OpenAI", "OpenRouter", "Bedrock", "Google"]),
+  apiKey: z.string().min(1),
+  region: z
+    .string()
+    .regex(/^[a-z]{2}-[a-z]+-\d+$/, "Invalid AWS region format")
+    .optional(),
+  baseUrl: z.string().optional(),
+  headers: z.record(z.string(), z.string()).optional(),
+  extraBody: z.record(z.string(), z.unknown()).optional(),
+  organization: z.string().optional(),
+  project: z.string().optional(),
+  modelIds: z.array(z.string()).min(1),
+  taskModelId: z.string(),
+  createdAt: z.date(),
+  updatedAt: z.date(),
+});
+
+export const providerSchema = providerBaseSchema
   .refine(
     (data) => {
       if (data.providerType === "Bedrock") {
@@ -358,7 +362,7 @@ export const providerSchema = z
 
 export type Provider = z.infer<typeof providerSchema>;
 
-export const providerCreateSchema = providerSchema.pick({
+export const providerCreateSchema = providerBaseSchema.pick({
   organizationId: true,
   workspaceId: true,
   name: true,
@@ -413,7 +417,7 @@ export const invitationListItemSchema = invitationSchema.extend({
 
 export type InvitationListItem = z.infer<typeof invitationListItemSchema>;
 
-export const providerUpdateSchema = providerSchema.pick({
+export const providerUpdateSchema = providerBaseSchema.pick({
   name: true,
   providerType: true,
   apiKey: true,
