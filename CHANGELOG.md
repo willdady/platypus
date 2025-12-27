@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.5.0](https://github.com/willdady/platypus/compare/v1.4.0...v1.5.0) (2025-12-27)
+
+
+### Features
+
+* **testing:** add Vitest and tests for backend routes and middleware ([d6fa43f](https://github.com/willdady/platypus/commit/d6fa43f5ec2af96d08b0385f5f8156f284fd6265))
+* **ui:** added not-found page ([be04735](https://github.com/willdady/platypus/commit/be04735a02e828d870c5b06aac4de407906ce4eb))
+* updated next.js to 16.1.1 ([53cc9ac](https://github.com/willdady/platypus/commit/53cc9acba2575988c9a69e243758c4480ea8be99))
+
+
+### Bug Fixes
+
+* **ui:** navigating to an Org when not signed-in now correctly redirects to sign-in page ([d8d59fb](https://github.com/willdady/platypus/commit/d8d59fb03a8f1932199ca27e1f0b7a4eeaf88ce9))
+
 ## [1.4.0](https://github.com/willdady/platypus/compare/v1.3.0...v1.4.0) (2025-12-26)
 
 
