@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.5.1](https://github.com/willdady/platypus/compare/v1.5.0...v1.5.1) (2025-12-27)
+
+
+### Bug Fixes
+
+* **ui:** base URL on provider form no longer pre-fills when selecting OpenRouter as provider type ([f4453b9](https://github.com/willdady/platypus/commit/f4453b96e24cf75c5c55e2a2cf754b0f914f109a))
+* **ui:** chat screen not sending credentials to backend ([fba0340](https://github.com/willdady/platypus/commit/fba0340c54adb34fae5d5ec1208c72265cc1100f))
+
 ## [1.5.0](https://github.com/willdady/platypus/compare/v1.4.0...v1.5.0) (2025-12-27)
 
 
