@@ -65,6 +65,8 @@ export function AuthProvider({
   const [isOrgMembershipLoading, setIsOrgMembershipLoading] = useState(false);
   const [isWorkspaceMembershipLoading, setIsWorkspaceMembershipLoading] =
     useState(false);
+  const [hasFetchedOrg, setHasFetchedOrg] = useState(false);
+  const [hasFetchedWorkspace, setHasFetchedWorkspace] = useState(false);
 
   const orgId = params.orgId as string | undefined;
   const workspaceId = params.workspaceId as string | undefined;
@@ -72,6 +74,7 @@ export function AuthProvider({
   // Fetch org membership when orgId changes
   useEffect(() => {
     setOrgMembership(null);
+    setHasFetchedOrg(false);
     if (!data?.user || !orgId) {
       setIsOrgMembershipLoading(false);
       return;
@@ -85,16 +88,19 @@ export function AuthProvider({
       .then((membership) => {
         setOrgMembership(membership);
         setIsOrgMembershipLoading(false);
+        setHasFetchedOrg(true);
       })
       .catch(() => {
         setOrgMembership(null);
         setIsOrgMembershipLoading(false);
+        setHasFetchedOrg(true);
       });
   }, [data?.user, orgId, backendUrl]);
 
   // Fetch workspace membership when workspaceId changes
   useEffect(() => {
     setWorkspaceMembership(null);
+    setHasFetchedWorkspace(false);
     if (!data?.user || !workspaceId || !orgId) {
       setIsWorkspaceMembershipLoading(false);
       return;
@@ -111,10 +117,12 @@ export function AuthProvider({
       .then((membership) => {
         setWorkspaceMembership(membership);
         setIsWorkspaceMembershipLoading(false);
+        setHasFetchedWorkspace(true);
       })
       .catch(() => {
         setWorkspaceMembership(null);
         setIsWorkspaceMembershipLoading(false);
+        setHasFetchedWorkspace(true);
       });
   }, [data?.user, orgId, workspaceId, backendUrl]);
 
@@ -134,9 +142,10 @@ export function AuthProvider({
         isPending,
         isAuthLoading:
           isPending ||
-          (!!orgId && (isOrgMembershipLoading || !orgMembership)) ||
-          (!!workspaceId &&
-            (isWorkspaceMembershipLoading || !workspaceMembership)),
+          (!!data?.user &&
+            ((!!orgId && (isOrgMembershipLoading || !hasFetchedOrg)) ||
+              (!!workspaceId &&
+                (isWorkspaceMembershipLoading || !hasFetchedWorkspace)))),
         error,
         authClient,
         orgMembership,
