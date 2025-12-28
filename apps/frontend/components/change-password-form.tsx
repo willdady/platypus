@@ -52,7 +52,7 @@ export function ChangePasswordForm() {
 
   return (
     <form onSubmit={handleSubmit}>
-      <FieldSet className="mb-6">
+      <FieldSet className="mb-8">
         <FieldGroup>
           <Field>
             <FieldLabel htmlFor="currentPassword">Current Password</FieldLabel>

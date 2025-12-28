@@ -87,6 +87,15 @@ export function CommandMenu({ orgId, workspaceId }: CommandMenuProps) {
           <CommandItem
             className="cursor-pointer"
             onSelect={() => {
+              runCommand(() => router.push("/settings"));
+            }}
+          >
+            <Settings />
+            <span>Profile Settings</span>
+          </CommandItem>
+          <CommandItem
+            className="cursor-pointer"
+            onSelect={() => {
               runCommand(() =>
                 router.push(`/${orgId}/workspace/${workspaceId}/settings`),
               );
