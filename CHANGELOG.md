@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.6.1](https://github.com/willdady/platypus/compare/v1.6.0...v1.6.1) (2025-12-28)
+
+
+### Bug Fixes
+
+* **ui:** incorrect navigation to missing page after submitting agent creation form ([53a892b](https://github.com/willdady/platypus/commit/53a892bf10a822248e1ac737cdc26cba6ad0b985))
+* **ui:** sign-in/up forms now show cursor pointer on submit buttons ([edcf559](https://github.com/willdady/platypus/commit/edcf5596a0fa5df6e78132fb7ea8a2367925d0cc))
+
 ## [1.6.0](https://github.com/willdady/platypus/compare/v1.5.1...v1.6.0) (2025-12-28)
 
 
