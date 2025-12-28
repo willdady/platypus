@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.6.0](https://github.com/willdady/platypus/compare/v1.5.1...v1.6.0) (2025-12-28)
+
+
+### Features
+
+* **providers:** add org-scoped providers in addtion to existing workspace-scoped providers ([215b010](https://github.com/willdady/platypus/commit/215b0101d8f9960cffd50fb66bd513a4edafdf61))
+* **ui:** add "Profile Settings" option to command menu ([4ad7f96](https://github.com/willdady/platypus/commit/4ad7f96d2951ff1b80d2e39989cb34ce94a1e088))
+* **ui:** added Home button to Org settings screens ([8e2c2ad](https://github.com/willdady/platypus/commit/8e2c2adb6d7159cc84cc259a999c1439560068ec))
+
+
+### Bug Fixes
+
+* **spelling:** renamed all occurances of "organisation" to US spelling "organization" ([a1022dc](https://github.com/willdady/platypus/commit/a1022dc14c473402e64b5b90e38799b5fd1a2d12))
+
 ## [1.5.1](https://github.com/willdady/platypus/compare/v1.5.0...v1.5.1) (2025-12-27)
 
 
