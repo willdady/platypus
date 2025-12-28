@@ -221,7 +221,6 @@ export const Chat = ({
     if (
       initialAgentId &&
       !agentId &&
-      chatData !== undefined &&
       (!chatData || !chatData.agentId)
     ) {
       modelSetters.setAgentId(initialAgentId);
