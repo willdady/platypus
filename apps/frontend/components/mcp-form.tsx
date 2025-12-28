@@ -80,7 +80,7 @@ const McpForm = ({
     mcpId && user
       ? joinUrl(
           backendUrl,
-          `/organisations/${orgId}/workspaces/${workspaceId}/mcps/${mcpId}`,
+          `/organizations/${orgId}/workspaces/${workspaceId}/mcps/${mcpId}`,
         )
       : null,
     fetcher,
@@ -162,11 +162,11 @@ const McpForm = ({
       const url = mcpId
         ? joinUrl(
             backendUrl,
-            `/organisations/${orgId}/workspaces/${workspaceId}/mcps/${mcpId}`,
+            `/organizations/${orgId}/workspaces/${workspaceId}/mcps/${mcpId}`,
           )
         : joinUrl(
             backendUrl,
-            `/organisations/${orgId}/workspaces/${workspaceId}/mcps`,
+            `/organizations/${orgId}/workspaces/${workspaceId}/mcps`,
           );
 
       const method = mcpId ? "PUT" : "POST";
@@ -203,7 +203,7 @@ const McpForm = ({
       const response = await fetch(
         joinUrl(
           backendUrl,
-          `/organisations/${orgId}/workspaces/${workspaceId}/mcps/${mcpId}`,
+          `/organizations/${orgId}/workspaces/${workspaceId}/mcps/${mcpId}`,
         ),
         {
           method: "DELETE",
@@ -240,7 +240,7 @@ const McpForm = ({
       const response = await fetch(
         joinUrl(
           backendUrl,
-          `/organisations/${orgId}/workspaces/${workspaceId}/mcps/test`,
+          `/organizations/${orgId}/workspaces/${workspaceId}/mcps/test`,
         ),
         {
           method: "POST",

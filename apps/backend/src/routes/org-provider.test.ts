@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, vi } from "vitest";
 import { mockDb, mockSession, resetMockDb } from "../test-utils.ts";
 import app from "../server.ts";
 
-describe("Organisation Provider Routes", () => {
+describe("Organization Provider Routes", () => {
   beforeEach(() => {
     resetMockDb();
     vi.clearAllMocks();
@@ -10,7 +10,7 @@ describe("Organisation Provider Routes", () => {
   });
 
   const orgId = "org-1";
-  const baseUrl = `/organisations/${orgId}/providers`;
+  const baseUrl = `/organizations/${orgId}/providers`;
 
   describe("POST /", () => {
     it("should create org provider if org admin", async () => {
@@ -21,7 +21,7 @@ describe("Organisation Provider Routes", () => {
         id: "p1",
         name: "Org OpenAI",
         providerType: "OpenAI",
-        organisationId: orgId,
+        organizationId: orgId,
       };
       mockDb.returning.mockResolvedValueOnce([mockProvider]);
 
@@ -33,7 +33,7 @@ describe("Organisation Provider Routes", () => {
           apiKey: "sk-123",
           modelIds: ["gpt-4"],
           taskModelId: "gpt-4",
-          organisationId: orgId,
+          organizationId: orgId,
         }),
         headers: { "Content-Type": "application/json" },
       });
@@ -54,7 +54,7 @@ describe("Organisation Provider Routes", () => {
           apiKey: "sk-123",
           modelIds: ["gpt-4"],
           taskModelId: "gpt-4",
-          organisationId: orgId,
+          organizationId: orgId,
         }),
         headers: { "Content-Type": "application/json" },
       });
@@ -83,7 +83,7 @@ describe("Organisation Provider Routes", () => {
           apiKey: "sk-123",
           modelIds: ["gpt-4"],
           taskModelId: "gpt-4",
-          organisationId: orgId,
+          organizationId: orgId,
         }),
         headers: { "Content-Type": "application/json" },
       });
@@ -91,7 +91,7 @@ describe("Organisation Provider Routes", () => {
       expect(res.status).toBe(409);
       expect(await res.json()).toEqual({
         message:
-          "A provider with this name already exists in this organisation",
+          "A provider with this name already exists in this organization",
       });
     });
   });

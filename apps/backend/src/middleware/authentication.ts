@@ -29,7 +29,7 @@ import { auth } from "../auth.ts";
  * app.get("/profile", requireAuth, handler);
  *
  * // Authentication + authorization
- * app.get("/organisations/:id", requireAuth, requireOrgAccess(), handler);
+ * app.get("/organizations/:id", requireAuth, requireOrgAccess(), handler);
  *
  * // Multiple middleware in sequence
  * app.post("/workspaces/:workspaceId/agents",

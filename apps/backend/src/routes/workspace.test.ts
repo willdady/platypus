@@ -11,14 +11,14 @@ describe("Workspace Routes", () => {
     mockDb.where.mockReturnValue(mockDb);
   });
 
-  describe("POST /organisations/:orgId/workspaces", () => {
+  describe("POST /organizations/:orgId/workspaces", () => {
     it("should return 403 if not org admin", async () => {
       mockSession({ id: "user-1", role: "user" });
       
       // Mock requireOrgAccess: return member role
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
 
-      const res = await app.request("/organisations/org-1/workspaces", {
+      const res = await app.request("/organizations/org-1/workspaces", {
         method: "POST",
         body: JSON.stringify({ name: "New Workspace" }),
         headers: { "Content-Type": "application/json" },
@@ -36,9 +36,9 @@ describe("Workspace Routes", () => {
       const mockWorkspace = { id: "ws-1", name: "New Workspace" };
       mockDb.returning.mockResolvedValueOnce([mockWorkspace]);
 
-      const res = await app.request("/organisations/org-1/workspaces", {
+      const res = await app.request("/organizations/org-1/workspaces", {
         method: "POST",
-        body: JSON.stringify({ name: "New Workspace", organisationId: "org-1" }),
+        body: JSON.stringify({ name: "New Workspace", organizationId: "org-1" }),
         headers: { "Content-Type": "application/json" },
       });
 
@@ -47,7 +47,7 @@ describe("Workspace Routes", () => {
     });
   });
 
-  describe("GET /organisations/:orgId/workspaces", () => {
+  describe("GET /organizations/:orgId/workspaces", () => {
     it("should return all workspaces for org admin", async () => {
       mockSession({ id: "user-1", role: "user" });
       const mockWorkspaces = [{ id: "ws-1", name: "WS 1" }];
@@ -62,7 +62,7 @@ describe("Workspace Routes", () => {
         .mockReturnValueOnce(mockDb)
         .mockResolvedValueOnce(mockWorkspaces);
 
-      const res = await app.request("/organisations/org-1/workspaces");
+      const res = await app.request("/organizations/org-1/workspaces");
       expect(res.status).toBe(200);
       expect(await res.json()).toEqual({ results: mockWorkspaces });
     });
@@ -84,13 +84,13 @@ describe("Workspace Routes", () => {
         .mockResolvedValueOnce(mockMemberships)
         .mockResolvedValueOnce(mockWorkspaces);
 
-      const res = await app.request("/organisations/org-1/workspaces");
+      const res = await app.request("/organizations/org-1/workspaces");
       expect(res.status).toBe(200);
       expect(await res.json()).toEqual({ results: mockWorkspaces });
     });
   });
 
-  describe("GET /organisations/:orgId/workspaces/:workspaceId", () => {
+  describe("GET /organizations/:orgId/workspaces/:workspaceId", () => {
     it("should return workspace", async () => {
       mockSession({ id: "user-1", role: "user" });
       const mockWorkspace = { id: "ws-1", name: "WS 1" };
@@ -101,7 +101,7 @@ describe("Workspace Routes", () => {
       // Mock get workspace (ends in limit)
       mockDb.limit.mockResolvedValueOnce([mockWorkspace]);
 
-      const res = await app.request("/organisations/org-1/workspaces/ws-1");
+      const res = await app.request("/organizations/org-1/workspaces/ws-1");
       expect(res.status).toBe(200);
       expect(await res.json()).toEqual(mockWorkspace);
     });
@@ -115,12 +115,12 @@ describe("Workspace Routes", () => {
       // Mock get workspace (empty)
       mockDb.limit.mockResolvedValueOnce([]);
 
-      const res = await app.request("/organisations/org-1/workspaces/ws-1");
+      const res = await app.request("/organizations/org-1/workspaces/ws-1");
       expect(res.status).toBe(404);
     });
   });
 
-  describe("PUT /organisations/:orgId/workspaces/:workspaceId", () => {
+  describe("PUT /organizations/:orgId/workspaces/:workspaceId", () => {
     it("should update workspace if org admin", async () => {
       mockSession({ id: "user-1", role: "user" });
       const mockWorkspace = { id: "ws-1", name: "Updated WS" };
@@ -131,7 +131,7 @@ describe("Workspace Routes", () => {
       // Mock update
       mockDb.returning.mockResolvedValueOnce([mockWorkspace]);
 
-      const res = await app.request("/organisations/org-1/workspaces/ws-1", {
+      const res = await app.request("/organizations/org-1/workspaces/ws-1", {
         method: "PUT",
         body: JSON.stringify({ name: "Updated WS" }),
         headers: { "Content-Type": "application/json" },
@@ -142,7 +142,7 @@ describe("Workspace Routes", () => {
     });
   });
 
-  describe("DELETE /organisations/:orgId/workspaces/:workspaceId", () => {
+  describe("DELETE /organizations/:orgId/workspaces/:workspaceId", () => {
     it("should delete workspace if org admin", async () => {
       mockSession({ id: "user-1", role: "user" });
 
@@ -154,7 +154,7 @@ describe("Workspace Routes", () => {
       // Second call is for delete (returns data)
       mockDb.where.mockReturnValueOnce(mockDb).mockResolvedValueOnce([]);
 
-      const res = await app.request("/organisations/org-1/workspaces/ws-1", {
+      const res = await app.request("/organizations/org-1/workspaces/ws-1", {
         method: "DELETE",
       });
 

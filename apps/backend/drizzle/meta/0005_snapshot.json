@@ -351,8 +351,8 @@
           "primaryKey": false,
           "notNull": true
         },
-        "organisation_id": {
-          "name": "organisation_id",
+        "organization_id": {
+          "name": "organization_id",
           "type": "text",
           "primaryKey": false,
           "notNull": true
@@ -416,7 +416,7 @@
           "name": "idx_invitation_org_id",
           "columns": [
             {
-              "expression": "organisation_id",
+              "expression": "organization_id",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -444,12 +444,12 @@
         }
       },
       "foreignKeys": {
-        "invitation_organisation_id_organisation_id_fk": {
-          "name": "invitation_organisation_id_organisation_id_fk",
+        "invitation_organization_id_organization_id_fk": {
+          "name": "invitation_organization_id_organization_id_fk",
           "tableFrom": "invitation",
-          "tableTo": "organisation",
+          "tableTo": "organization",
           "columnsFrom": [
-            "organisation_id"
+            "organization_id"
           ],
           "columnsTo": [
             "id"
@@ -592,8 +592,8 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
-    "public.organisation": {
-      "name": "organisation",
+    "public.organization": {
+      "name": "organization",
       "schema": "",
       "columns": {
         "id": {
@@ -631,8 +631,8 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
-    "public.organisation_member": {
-      "name": "organisation_member",
+    "public.organization_member": {
+      "name": "organization_member",
       "schema": "",
       "columns": {
         "id": {
@@ -641,8 +641,8 @@
           "primaryKey": true,
           "notNull": true
         },
-        "organisation_id": {
-          "name": "organisation_id",
+        "organization_id": {
+          "name": "organization_id",
           "type": "text",
           "primaryKey": false,
           "notNull": true
@@ -680,7 +680,7 @@
           "name": "idx_org_member_org_id",
           "columns": [
             {
-              "expression": "organisation_id",
+              "expression": "organization_id",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -708,12 +708,12 @@
         }
       },
       "foreignKeys": {
-        "organisation_member_organisation_id_organisation_id_fk": {
-          "name": "organisation_member_organisation_id_organisation_id_fk",
-          "tableFrom": "organisation_member",
-          "tableTo": "organisation",
+        "organization_member_organization_id_organization_id_fk": {
+          "name": "organization_member_organization_id_organization_id_fk",
+          "tableFrom": "organization_member",
+          "tableTo": "organization",
           "columnsFrom": [
-            "organisation_id"
+            "organization_id"
           ],
           "columnsTo": [
             "id"
@@ -721,9 +721,9 @@
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
-        "organisation_member_user_id_user_id_fk": {
-          "name": "organisation_member_user_id_user_id_fk",
-          "tableFrom": "organisation_member",
+        "organization_member_user_id_user_id_fk": {
+          "name": "organization_member_user_id_user_id_fk",
+          "tableFrom": "organization_member",
           "tableTo": "user",
           "columnsFrom": [
             "user_id"
@@ -886,8 +886,8 @@
           "primaryKey": true,
           "notNull": true
         },
-        "organisation_id": {
-          "name": "organisation_id",
+        "organization_id": {
+          "name": "organization_id",
           "type": "text",
           "primaryKey": false,
           "notNull": true
@@ -914,11 +914,11 @@
         }
       },
       "indexes": {
-        "idx_workspace_organisation_id": {
-          "name": "idx_workspace_organisation_id",
+        "idx_workspace_organization_id": {
+          "name": "idx_workspace_organization_id",
           "columns": [
             {
-              "expression": "organisation_id",
+              "expression": "organization_id",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -931,12 +931,12 @@
         }
       },
       "foreignKeys": {
-        "workspace_organisation_id_organisation_id_fk": {
-          "name": "workspace_organisation_id_organisation_id_fk",
+        "workspace_organization_id_organization_id_fk": {
+          "name": "workspace_organization_id_organization_id_fk",
           "tableFrom": "workspace",
-          "tableTo": "organisation",
+          "tableTo": "organization",
           "columnsFrom": [
-            "organisation_id"
+            "organization_id"
           ],
           "columnsTo": [
             "id"
@@ -1060,10 +1060,10 @@
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
-        "workspace_member_org_member_id_organisation_member_id_fk": {
-          "name": "workspace_member_org_member_id_organisation_member_id_fk",
+        "workspace_member_org_member_id_organization_member_id_fk": {
+          "name": "workspace_member_org_member_id_organization_member_id_fk",
           "tableFrom": "workspace_member",
-          "tableTo": "organisation_member",
+          "tableTo": "organization_member",
           "columnsFrom": [
             "org_member_id"
           ],

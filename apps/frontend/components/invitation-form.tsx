@@ -34,7 +34,7 @@ export function InvitationForm({ orgId, onSuccess }: InvitationFormProps) {
   const backendUrl = useBackendUrl();
   const { data: workspacesData } = useSWR<{ results: Workspace[] }>(
     backendUrl && user
-      ? joinUrl(backendUrl, `/organisations/${orgId}/workspaces`)
+      ? joinUrl(backendUrl, `/organizations/${orgId}/workspaces`)
       : null,
     fetcher,
   );
@@ -79,7 +79,7 @@ export function InvitationForm({ orgId, onSuccess }: InvitationFormProps) {
 
     try {
       const response = await fetch(
-        joinUrl(backendUrl, `/organisations/${orgId}/invitations`),
+        joinUrl(backendUrl, `/organizations/${orgId}/invitations`),
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },

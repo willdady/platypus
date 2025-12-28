@@ -11,7 +11,7 @@ describe("Provider Routes", () => {
 
   const orgId = "org-1";
   const workspaceId = "ws-1";
-  const baseUrl = `/organisations/${orgId}/workspaces/${workspaceId}/providers`;
+  const baseUrl = `/organizations/${orgId}/workspaces/${workspaceId}/providers`;
 
   describe("POST /", () => {
     it("should create provider if workspace admin", async () => {
@@ -81,7 +81,7 @@ describe("Provider Routes", () => {
 
       const workspaceProviders = [{ id: "p1", name: "WS OpenAI" }];
       const orgProviders = [
-        { id: "p2", name: "Org OpenAI", organisationId: orgId },
+        { id: "p2", name: "Org OpenAI", organizationId: orgId },
       ];
 
       mockDb.where
@@ -97,7 +97,7 @@ describe("Provider Routes", () => {
       expect(data.results).toEqual(
         expect.arrayContaining([
           expect.objectContaining({ id: "p1", scope: "workspace" }),
-          expect.objectContaining({ id: "p2", scope: "organisation" }),
+          expect.objectContaining({ id: "p2", scope: "organization" }),
         ]),
       );
     });

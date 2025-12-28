@@ -19,7 +19,7 @@ import {
 } from "@/components/ui/dialog";
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { type Organisation } from "@platypus/schemas";
+import { type Organization } from "@platypus/schemas";
 import { fetcher, parseValidationErrors, joinUrl } from "@/lib/utils";
 import { useBackendUrl } from "@/app/client-context";
 import { useAuth } from "@/components/auth-provider";
@@ -27,18 +27,18 @@ import { Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import useSWR from "swr";
 
-interface OrganisationFormProps {
+interface OrganizationFormProps {
   classNames?: string;
   orgId?: string;
 }
 
-const OrganisationForm = ({ classNames, orgId }: OrganisationFormProps) => {
+const OrganizationForm = ({ classNames, orgId }: OrganizationFormProps) => {
   const { user } = useAuth();
   const backendUrl = useBackendUrl();
   const router = useRouter();
 
-  const { data: organisation, mutate } = useSWR<Organisation>(
-    orgId && user ? joinUrl(backendUrl, `/organisations/${orgId}`) : null,
+  const { data: organization, mutate } = useSWR<Organization>(
+    orgId && user ? joinUrl(backendUrl, `/organizations/${orgId}`) : null,
     fetcher,
   );
 
@@ -55,10 +55,10 @@ const OrganisationForm = ({ classNames, orgId }: OrganisationFormProps) => {
   const [isDeleting, setIsDeleting] = useState(false);
 
   useEffect(() => {
-    if (organisation) {
-      setFormData({ name: organisation.name });
+    if (organization) {
+      setFormData({ name: organization.name });
     }
-  }, [organisation]);
+  }, [organization]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { id, value } = e.target;
@@ -83,8 +83,8 @@ const OrganisationForm = ({ classNames, orgId }: OrganisationFormProps) => {
     setValidationErrors({});
     try {
       const url = orgId
-        ? joinUrl(backendUrl, `/organisations/${orgId}`)
-        : joinUrl(backendUrl, "/organisations");
+        ? joinUrl(backendUrl, `/organizations/${orgId}`)
+        : joinUrl(backendUrl, "/organizations");
 
       const method = orgId ? "PUT" : "POST";
 
@@ -101,23 +101,23 @@ const OrganisationForm = ({ classNames, orgId }: OrganisationFormProps) => {
 
       if (response.ok) {
         if (orgId) {
-          toast.success("Organisation updated");
+          toast.success("Organization updated");
           mutate(); // Refresh the local cache
           router.refresh();
         } else {
-          const organisation = await response.json();
-          toast.success("Organisation created");
-          router.push(`/${organisation.id}`);
+          const organization = await response.json();
+          toast.success("Organization created");
+          router.push(`/${organization.id}`);
         }
       } else {
         // Parse standardschema.dev validation errors
         const errorData = await response.json();
         setValidationErrors(parseValidationErrors(errorData));
-        toast.error("Failed to save organisation");
+        toast.error("Failed to save organization");
       }
     } catch (error) {
-      console.error("Error saving organisation:", error);
-      toast.error("Error saving organisation");
+      console.error("Error saving organization:", error);
+      toast.error("Error saving organization");
     } finally {
       setIsSubmitting(false);
     }
@@ -129,22 +129,22 @@ const OrganisationForm = ({ classNames, orgId }: OrganisationFormProps) => {
     setIsDeleting(true);
     try {
       const response = await fetch(
-        joinUrl(backendUrl, `/organisations/${orgId}`),
+        joinUrl(backendUrl, `/organizations/${orgId}`),
         {
           method: "DELETE",
           credentials: "include",
         },
       );
       if (response.ok) {
-        toast.success("Organisation deleted");
+        toast.success("Organization deleted");
         window.location.href = `/`;
       } else {
-        toast.error("Failed to delete organisation");
+        toast.error("Failed to delete organization");
         setIsDeleting(false);
         setIsDeleteDialogOpen(false);
       }
     } catch (error) {
-      toast.error("Error deleting organisation");
+      toast.error("Error deleting organization");
       setIsDeleting(false);
       setIsDeleteDialogOpen(false);
     }
@@ -158,7 +158,7 @@ const OrganisationForm = ({ classNames, orgId }: OrganisationFormProps) => {
             <FieldLabel htmlFor="name">Name</FieldLabel>
             <Input
               id="name"
-              placeholder="Organisation name"
+              placeholder="Organization name"
               value={formData.name}
               onChange={handleChange}
               disabled={isSubmitting}
@@ -218,14 +218,14 @@ const OrganisationForm = ({ classNames, orgId }: OrganisationFormProps) => {
           showCloseButton={false}
         >
           <DialogHeader>
-            <DialogTitle>Delete Organisation</DialogTitle>
+            <DialogTitle>Delete Organization</DialogTitle>
             <DialogDescription>
-              Are you sure you want to delete this organisation? This action
+              Are you sure you want to delete this organization? This action
               cannot be undone.
             </DialogDescription>
             <div className="mt-4">
               <Input
-                placeholder="Type 'Delete organisation' to confirm"
+                placeholder="Type 'Delete organization' to confirm"
                 value={deleteInput}
                 onChange={(e) => setDeleteInput(e.target.value)}
                 disabled={isDeleting}
@@ -247,7 +247,7 @@ const OrganisationForm = ({ classNames, orgId }: OrganisationFormProps) => {
               onClick={handleDelete}
               disabled={
                 isDeleting ||
-                deleteInput.toLowerCase() !== "delete organisation"
+                deleteInput.toLowerCase() !== "delete organization"
               }
             >
               Delete
@@ -259,4 +259,4 @@ const OrganisationForm = ({ classNames, orgId }: OrganisationFormProps) => {
   );
 };
 
-export { OrganisationForm };
+export { OrganizationForm };

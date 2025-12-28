@@ -41,14 +41,14 @@ invitation.post(
       .where(
         and(
           eq(workspaceTable.id, data.workspaceId),
-          eq(workspaceTable.organisationId, orgId),
+          eq(workspaceTable.organizationId, orgId),
         ),
       )
       .limit(1);
 
     if (workspace.length === 0) {
       return c.json(
-        { message: "Workspace not found in this organisation" },
+        { message: "Workspace not found in this organization" },
         404,
       );
     }
@@ -62,7 +62,7 @@ invitation.post(
         .values({
           id: nanoid(),
           email: data.email,
-          organisationId: orgId,
+          organizationId: orgId,
           workspaceId: data.workspaceId,
           role: data.role,
           invitedBy: user.id,
@@ -97,7 +97,7 @@ invitation.post(
   },
 );
 
-/** List all invitations for an organisation (org admin only) */
+/** List all invitations for an organization (org admin only) */
 invitation.get("/", requireAuth, requireOrgAccess(["admin"]), async (c) => {
   const orgId = c.req.param("orgId")!;
 
@@ -105,7 +105,7 @@ invitation.get("/", requireAuth, requireOrgAccess(["admin"]), async (c) => {
     .select({
       id: invitationTable.id,
       email: invitationTable.email,
-      organisationId: invitationTable.organisationId,
+      organizationId: invitationTable.organizationId,
       workspaceId: invitationTable.workspaceId,
       role: invitationTable.role,
       invitedBy: invitationTable.invitedBy,
@@ -119,7 +119,7 @@ invitation.get("/", requireAuth, requireOrgAccess(["admin"]), async (c) => {
       workspaceTable,
       eq(invitationTable.workspaceId, workspaceTable.id),
     )
-    .where(eq(invitationTable.organisationId, orgId));
+    .where(eq(invitationTable.organizationId, orgId));
 
   return c.json({ results });
 });
@@ -138,7 +138,7 @@ invitation.delete(
       .where(
         and(
           eq(invitationTable.id, invitationId),
-          eq(invitationTable.organisationId, orgId),
+          eq(invitationTable.organizationId, orgId),
         ),
       )
       .returning();

@@ -30,7 +30,7 @@ describe("Authorization Middleware", () => {
       expect(await res.json()).toEqual({ role: "admin", isSuperAdmin: true });
     });
 
-    it("should return 403 if user is not a member of the organisation", async () => {
+    it("should return 403 if user is not a member of the organization", async () => {
       mockDb.limit.mockResolvedValueOnce([]); // No membership found
       
       const app = new Hono<{ Variables: { user: any; db: any } }>();
@@ -39,16 +39,16 @@ describe("Authorization Middleware", () => {
         c.set("db", mockDb);
         await next();
       });
-      app.use("/organisations/:orgId/*", requireOrgAccess());
-      app.get("/organisations/:orgId/test", (c) => c.text("ok"));
+      app.use("/organizations/:orgId/*", requireOrgAccess());
+      app.get("/organizations/:orgId/test", (c) => c.text("ok"));
 
-      const res = await app.request("/organisations/org-1/test");
+      const res = await app.request("/organizations/org-1/test");
       expect(res.status).toBe(403);
-      expect(await res.json()).toEqual({ error: "Not a member of this organisation" });
+      expect(await res.json()).toEqual({ error: "Not a member of this organization" });
     });
 
     it("should set orgMembership if user is a member", async () => {
-      const mockMembership = { organisationId: "org-1", userId: "u1", role: "member" };
+      const mockMembership = { organizationId: "org-1", userId: "u1", role: "member" };
       mockDb.limit.mockResolvedValueOnce([mockMembership]);
       
       const app = new Hono<{ Variables: { user: any; orgMembership: any; db: any } }>();
@@ -57,10 +57,10 @@ describe("Authorization Middleware", () => {
         c.set("db", mockDb);
         await next();
       });
-      app.use("/organisations/:orgId/*", requireOrgAccess());
-      app.get("/organisations/:orgId/test", (c) => c.json(c.get("orgMembership")));
+      app.use("/organizations/:orgId/*", requireOrgAccess());
+      app.get("/organizations/:orgId/test", (c) => c.json(c.get("orgMembership")));
 
-      const res = await app.request("/organisations/org-1/test");
+      const res = await app.request("/organizations/org-1/test");
       expect(res.status).toBe(200);
       expect(await res.json()).toEqual(mockMembership);
     });

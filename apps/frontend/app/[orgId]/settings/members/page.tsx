@@ -3,7 +3,7 @@
 import { useParams } from "next/navigation";
 import { useBackendUrl } from "@/app/client-context";
 import { fetcher, joinUrl } from "@/lib/utils";
-import { type OrgMemberListItem, type Organisation } from "@platypus/schemas";
+import { type OrgMemberListItem, type Organization } from "@platypus/schemas";
 import { MembersList } from "@/components/members-list";
 import { Users } from "lucide-react";
 import useSWR from "swr";
@@ -13,13 +13,13 @@ const OrgMembersPage = () => {
   const { user } = useAuth();
   const { orgId } = useParams<{ orgId: string }>();
   const backendUrl = useBackendUrl();
-  const { data: orgData } = useSWR<Organisation>(
-    backendUrl && user ? joinUrl(backendUrl, `/organisations/${orgId}`) : null,
+  const { data: orgData } = useSWR<Organization>(
+    backendUrl && user ? joinUrl(backendUrl, `/organizations/${orgId}`) : null,
     fetcher,
   );
   const { data, mutate, isLoading } = useSWR<{ results: OrgMemberListItem[] }>(
     backendUrl && user
-      ? joinUrl(backendUrl, `/organisations/${orgId}/members`)
+      ? joinUrl(backendUrl, `/organizations/${orgId}/members`)
       : null,
     fetcher,
   );
@@ -31,7 +31,7 @@ const OrgMembersPage = () => {
         <p className="text-muted-foreground">
           Manage members of{" "}
           <span className="font-bold">
-            {orgData?.name || "this organisation"}
+            {orgData?.name || "this organization"}
           </span>{" "}
           and their workspace access.
         </p>

@@ -1,6 +1,6 @@
 "use client";
 
-import type { Organisation } from "@platypus/schemas";
+import type { Organization } from "@platypus/schemas";
 import { WorkspaceList } from "@/components/workspace-list";
 import { Button } from "@/components/ui/button";
 import {
@@ -36,18 +36,18 @@ export default function Home() {
   const backendUrl = useBackendUrl();
   const [selectedOrgId, setSelectedOrgId] = useState<string | null>(null);
 
-  const { data, error, isLoading } = useSWR<{ results: Organisation[] }>(
-    backendUrl && user ? joinUrl(backendUrl, "/organisations") : null,
+  const { data, error, isLoading } = useSWR<{ results: Organization[] }>(
+    backendUrl && user ? joinUrl(backendUrl, "/organizations") : null,
     fetcher
   );
 
-  const organisations = data?.results || [];
+  const organizations = data?.results || [];
 
   useEffect(() => {
-    if (organisations.length > 0 && !selectedOrgId) {
-      setSelectedOrgId(organisations[0].id);
+    if (organizations.length > 0 && !selectedOrgId) {
+      setSelectedOrgId(organizations[0].id);
     }
-  }, [organisations, selectedOrgId]);
+  }, [organizations, selectedOrgId]);
 
   if (!backendUrl) {
     return (
@@ -77,13 +77,13 @@ export default function Home() {
         <Alert variant="destructive" className="max-w-md">
           <AlertCircle className="h-4 w-4" />
           <AlertTitle>Error</AlertTitle>
-          <AlertDescription>Failed to load organisations</AlertDescription>
+          <AlertDescription>Failed to load organizations</AlertDescription>
         </Alert>
       </div>
     );
   }
 
-  if (organisations.length === 0) {
+  if (organizations.length === 0) {
     return (
       <ProtectedRoute>
         <div className="min-h-screen flex flex-col">
@@ -94,16 +94,16 @@ export default function Home() {
                 <EmptyMedia variant="icon">
                   <Building />
                 </EmptyMedia>
-                <EmptyTitle>No organisations found</EmptyTitle>
+                <EmptyTitle>No organizations found</EmptyTitle>
                 <EmptyDescription>
-                  Get started by creating your first organisation to manage your
+                  Get started by creating your first organization to manage your
                   workspaces and agents.
                 </EmptyDescription>
               </EmptyHeader>
               <EmptyContent>
                 <Button asChild className="w-full">
                   <Link href="/create">
-                    <Plus className="h-4 w-4" /> Create Organisation
+                    <Plus className="h-4 w-4" /> Create Organization
                   </Link>
                 </Button>
               </EmptyContent>
@@ -114,7 +114,7 @@ export default function Home() {
     );
   }
 
-  const selectedOrg = organisations.find((org) => org.id === selectedOrgId);
+  const selectedOrg = organizations.find((org) => org.id === selectedOrgId);
 
   return (
     <ProtectedRoute>
@@ -123,13 +123,13 @@ export default function Home() {
           <Header />
           <div className="flex-1 flex flex-col items-center overflow-y-auto">
             <div className="flex flex-col md:flex-row w-full md:w-full lg:w-4/5 max-w-3xl py-8 px-4 md:px-0">
-              {/* Left Column: Organisation Navigation */}
+              {/* Left Column: Organization Navigation */}
               <div className="w-full md:w-48 md:fixed md:top-16 pt-4 mb-8 md:mb-0">
                 <SidebarContent>
                   <SidebarGroup>
                     <SidebarGroupContent>
                       <SidebarMenu>
-                        {organisations.map((org) => (
+                        {organizations.map((org) => (
                           <SidebarMenuItem key={org.id}>
                             <SidebarMenuButton
                               isActive={selectedOrgId === org.id}
@@ -151,7 +151,7 @@ export default function Home() {
                           <SidebarMenuButton asChild>
                             <Link href="/create">
                               <Plus className="size-4" />
-                              <span>Add Organisation</span>
+                              <span>Add Organization</span>
                             </Link>
                           </SidebarMenuButton>
                         </SidebarMenuItem>
@@ -187,7 +187,7 @@ export default function Home() {
                 ) : (
                   <div className="flex items-center justify-center h-64">
                     <p className="text-muted-foreground">
-                      Select an organisation from the menu.
+                      Select an organization from the menu.
                     </p>
                   </div>
                 )}

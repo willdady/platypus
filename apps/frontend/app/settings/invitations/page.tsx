@@ -80,7 +80,7 @@ const UserInvitationsPage = () => {
     <div>
       <h1 className="text-2xl font-bold mb-4">Invitations</h1>
       <p className="text-muted-foreground mb-8">
-        Pending invitations to join organisations and workspaces.
+        Pending invitations to join organizations and workspaces.
       </p>
 
       {isLoading ? (
@@ -99,7 +99,7 @@ const UserInvitationsPage = () => {
             >
               <div className="space-y-1">
                 <h3 className="font-semibold">
-                  {invite.organisationName} / {invite.workspaceName}
+                  {invite.organizationName} / {invite.workspaceName}
                 </h3>
                 <div className="text-sm text-muted-foreground space-y-1">
                   <p>

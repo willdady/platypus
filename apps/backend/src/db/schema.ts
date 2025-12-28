@@ -4,7 +4,7 @@ import { pgTable, index, unique } from "drizzle-orm/pg-core";
 export * from "./auth-schema.ts";
 import { user } from "./auth-schema.ts";
 
-export const organisation = pgTable("organisation", (t) => ({
+export const organization = pgTable("organization", (t) => ({
   id: t.text("id").primaryKey(),
   name: t.text("name").notNull(),
   createdAt: t.timestamp("created_at").notNull().defaultNow(),
@@ -15,17 +15,17 @@ export const workspace = pgTable(
   "workspace",
   (t) => ({
     id: t.text("id").primaryKey(),
-    organisationId: t
-      .text("organisation_id")
+    organizationId: t
+      .text("organization_id")
       .notNull()
-      .references(() => organisation.id, {
+      .references(() => organization.id, {
         onDelete: "cascade",
       }),
     name: t.text("name").notNull(),
     createdAt: t.timestamp("created_at").notNull().defaultNow(),
     updatedAt: t.timestamp("updated_at").notNull().defaultNow(),
   }),
-  (t) => [index("idx_workspace_organisation_id").on(t.organisationId)],
+  (t) => [index("idx_workspace_organization_id").on(t.organizationId)],
 );
 
 export const chat = pgTable(
@@ -119,7 +119,7 @@ export const provider = pgTable(
   "provider",
   (t) => ({
     id: t.text("id").primaryKey(),
-    organisationId: t.text("organisation_id").references(() => organisation.id, {
+    organizationId: t.text("organization_id").references(() => organization.id, {
       onDelete: "cascade",
     }),
     workspaceId: t.text("workspace_id").references(() => workspace.id, {
@@ -141,21 +141,21 @@ export const provider = pgTable(
   }),
   (t) => [
     index("idx_provider_workspace_id").on(t.workspaceId),
-    index("idx_provider_organisation_id").on(t.organisationId),
-    unique("unique_provider_name_org").on(t.organisationId, t.name),
+    index("idx_provider_organization_id").on(t.organizationId),
+    unique("unique_provider_name_org").on(t.organizationId, t.name),
     unique("unique_provider_name_workspace").on(t.workspaceId, t.name),
   ],
 );
 
-// Organisation membership - links users to organisations with roles
-export const organisationMember = pgTable(
-  "organisation_member",
+// Organization membership - links users to organizations with roles
+export const organizationMember = pgTable(
+  "organization_member",
   (t) => ({
     id: t.text("id").primaryKey(),
-    organisationId: t
-      .text("organisation_id")
+    organizationId: t
+      .text("organization_id")
       .notNull()
-      .references(() => organisation.id, { onDelete: "cascade" }),
+      .references(() => organization.id, { onDelete: "cascade" }),
     userId: t
       .text("user_id")
       .notNull()
@@ -165,7 +165,7 @@ export const organisationMember = pgTable(
     updatedAt: t.timestamp("updated_at").notNull().defaultNow(),
   }),
   (t) => [
-    index("idx_org_member_org_id").on(t.organisationId),
+    index("idx_org_member_org_id").on(t.organizationId),
     index("idx_org_member_user_id").on(t.userId),
   ],
 );
@@ -186,7 +186,7 @@ export const workspaceMember = pgTable(
     orgMemberId: t
       .text("org_member_id")
       .notNull()
-      .references(() => organisationMember.id, { onDelete: "cascade" }),
+      .references(() => organizationMember.id, { onDelete: "cascade" }),
     role: t.text("role").notNull().default("viewer"), // admin | editor | viewer
     createdAt: t.timestamp("created_at").notNull().defaultNow(),
     updatedAt: t.timestamp("updated_at").notNull().defaultNow(),
@@ -203,10 +203,10 @@ export const invitation = pgTable(
   (t) => ({
     id: t.text("id").primaryKey(),
     email: t.text("email").notNull(),
-    organisationId: t
-      .text("organisation_id")
+    organizationId: t
+      .text("organization_id")
       .notNull()
-      .references(() => organisation.id, { onDelete: "cascade" }),
+      .references(() => organization.id, { onDelete: "cascade" }),
     workspaceId: t
       .text("workspace_id")
       .notNull()
@@ -222,7 +222,7 @@ export const invitation = pgTable(
   }),
   (t) => [
     index("idx_invitation_email").on(t.email),
-    index("idx_invitation_org_id").on(t.organisationId),
+    index("idx_invitation_org_id").on(t.organizationId),
     index("idx_invitation_workspace_id").on(t.workspaceId),
     unique("unique_invitation_workspace_email").on(t.workspaceId, t.email),
   ],

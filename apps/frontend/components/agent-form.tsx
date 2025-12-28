@@ -72,7 +72,7 @@ const AgentForm = ({
     backendUrl && user
       ? joinUrl(
           backendUrl,
-          `/organisations/${orgId}/workspaces/${workspaceId}/providers`,
+          `/organizations/${orgId}/workspaces/${workspaceId}/providers`,
         )
       : null,
     fetcher,
@@ -84,7 +84,7 @@ const AgentForm = ({
     agentId && user
       ? joinUrl(
           backendUrl,
-          `/organisations/${orgId}/workspaces/${workspaceId}/agents/${agentId}`,
+          `/organizations/${orgId}/workspaces/${workspaceId}/agents/${agentId}`,
         )
       : null,
     fetcher,
@@ -224,11 +224,11 @@ const AgentForm = ({
       const url = agentId
         ? joinUrl(
             backendUrl,
-            `/organisations/${orgId}/workspaces/${workspaceId}/agents/${agentId}`,
+            `/organizations/${orgId}/workspaces/${workspaceId}/agents/${agentId}`,
           )
         : joinUrl(
             backendUrl,
-            `/organisations/${orgId}/workspaces/${workspaceId}/agents`,
+            `/organizations/${orgId}/workspaces/${workspaceId}/agents`,
           );
 
       const method = agentId ? "PUT" : "POST";
@@ -265,7 +265,7 @@ const AgentForm = ({
       const response = await fetch(
         joinUrl(
           backendUrl,
-          `/organisations/${orgId}/workspaces/${workspaceId}/agents/${agentId}`,
+          `/organizations/${orgId}/workspaces/${workspaceId}/agents/${agentId}`,
         ),
         {
           method: "DELETE",

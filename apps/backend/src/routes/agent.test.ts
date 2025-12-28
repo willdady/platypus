@@ -11,7 +11,7 @@ describe("Agent Routes", () => {
 
   const orgId = "org-1";
   const workspaceId = "ws-1";
-  const baseUrl = `/organisations/${orgId}/workspaces/${workspaceId}/agents`;
+  const baseUrl = `/organizations/${orgId}/workspaces/${workspaceId}/agents`;
 
   describe("POST /", () => {
     it("should return 401 if not authenticated", async () => {

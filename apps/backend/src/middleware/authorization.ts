@@ -1,6 +1,6 @@
 import { createMiddleware } from "hono/factory";
 import { eq, and } from "drizzle-orm";
-import { organisationMember, workspaceMember } from "../db/schema.ts";
+import { organizationMember, workspaceMember } from "../db/schema.ts";
 import type {
   WorkspaceRole,
   SuperAdminOrgMembership,
@@ -26,10 +26,10 @@ const isSuperAdmin = (user: { role: string }): boolean => {
 };
 
 /**
- * Type guard to check if an organisation membership is from a super admin.
+ * Type guard to check if an organization membership is from a super admin.
  * Useful for discriminating between regular and super admin memberships in route handlers.
  *
- * @param membership - The organisation membership to check
+ * @param membership - The organization membership to check
  * @returns True if the membership is a super admin membership
  *
  * @example
@@ -39,7 +39,7 @@ const isSuperAdmin = (user: { role: string }): boolean => {
  *   // TypeScript knows orgMembership.isSuperAdmin is true
  *   console.log("Super admin access");
  * } else {
- *   // TypeScript knows this is a regular OrganisationMembership
+ *   // TypeScript knows this is a regular OrganizationMembership
  *   console.log("Regular member:", orgMembership.userId);
  * }
  * ```
@@ -51,17 +51,17 @@ const isSuperAdminMembership = (
 };
 
 /**
- * Middleware that validates user access to an organisation.
+ * Middleware that validates user access to an organization.
  *
  * **Access Control:**
  * - Super admins bypass all checks and are granted admin access
- * - Regular users must be members of the organisation
+ * - Regular users must be members of the organization
  * - Optional role restrictions can be enforced (e.g., admin-only operations)
  *
  * **Behavior:**
  * - Extracts orgId using smart detection (URL params → query → body)
- * - Returns 400 if organisation ID not found in request
- * - Returns 403 if user is not a member of the organisation
+ * - Returns 400 if organization ID not found in request
+ * - Returns 403 if user is not a member of the organization
  * - Returns 403 if user's role doesn't meet the required roles
  * - Sets `orgMembership` in context with user's membership details
  *
@@ -72,10 +72,10 @@ const isSuperAdminMembership = (
  * @example
  * ```typescript
  * // Allow any org member
- * app.get("/organisations/:id", requireAuth, requireOrgAccess(), handler);
+ * app.get("/organizations/:id", requireAuth, requireOrgAccess(), handler);
  *
  * // Require admin role
- * app.delete("/organisations/:id", requireAuth, requireOrgAccess(["admin"]), handler);
+ * app.delete("/organizations/:id", requireAuth, requireOrgAccess(["admin"]), handler);
  * ```
  */
 export const requireOrgAccess = (requiredRoles?: OrgRole[]) =>
@@ -98,26 +98,26 @@ export const requireOrgAccess = (requiredRoles?: OrgRole[]) =>
     const orgId = c.req.param("orgId");
 
     if (!orgId) {
-      return c.json({ error: "Organisation ID required" }, 400);
+      return c.json({ error: "Organization ID required" }, 400);
     }
 
     const [membership] = await db
       .select()
-      .from(organisationMember)
+      .from(organizationMember)
       .where(
         and(
-          eq(organisationMember.userId, user.id),
-          eq(organisationMember.organisationId, orgId),
+          eq(organizationMember.userId, user.id),
+          eq(organizationMember.organizationId, orgId),
         ),
       )
       .limit(1);
 
     if (!membership) {
-      return c.json({ error: "Not a member of this organisation" }, 403);
+      return c.json({ error: "Not a member of this organization" }, 403);
     }
 
     if (requiredRoles && !requiredRoles.includes(membership.role as OrgRole)) {
-      return c.json({ error: "Insufficient organisation permissions" }, 403);
+      return c.json({ error: "Insufficient organization permissions" }, 403);
     }
 
     c.set("orgMembership", membership);
@@ -132,7 +132,7 @@ export const requireOrgAccess = (requiredRoles?: OrgRole[]) =>
  *
  * **Access Control:**
  * - Super admins bypass all checks and are granted admin access
- * - Org admins automatically get admin access to all workspaces in their organisation
+ * - Org admins automatically get admin access to all workspaces in their organization
  * - Regular org members need explicit workspace membership
  * - Optional role restrictions can be enforced (e.g., admin/editor-only operations)
  *
@@ -232,14 +232,14 @@ export const requireWorkspaceAccess = (requiredRoles?: WorkspaceRole[]) =>
  * - Allows request to proceed if user is a super admin
  *
  * **Use Cases:**
- * - Creating new organisations
+ * - Creating new organizations
  * - Platform-wide configuration changes
  * - System administration tasks
  *
  * @example
  * ```typescript
- * // Restrict organisation creation to super admins only
- * app.post("/organisations", requireAuth, requireSuperAdmin, handler);
+ * // Restrict organization creation to super admins only
+ * app.post("/organizations", requireAuth, requireSuperAdmin, handler);
  *
  * // Platform settings (super admin only)
  * app.put("/system/settings", requireAuth, requireSuperAdmin, handler);

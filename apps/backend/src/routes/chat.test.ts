@@ -46,7 +46,7 @@ describe("Chat Routes", () => {
 
   const orgId = "org-1";
   const workspaceId = "ws-1";
-  const baseUrl = `/organisations/${orgId}/workspaces/${workspaceId}/chat`;
+  const baseUrl = `/organizations/${orgId}/workspaces/${workspaceId}/chat`;
 
   describe("GET /", () => {
     it("should list chats", async () => {

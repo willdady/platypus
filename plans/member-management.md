@@ -4,11 +4,11 @@
 
 This plan outlines the implementation of a comprehensive member management feature for Platypus. Org admins will be able to:
 
-- View all organisation members with their workspace assignments
-- Change organisation roles (admin ↔ member)
+- View all organization members with their workspace assignments
+- Change organization roles (admin ↔ member)
 - Manage workspace access (add/remove members from workspaces)
 - Change workspace roles (admin | editor | viewer)
-- Remove members from the organisation entirely
+- Remove members from the organization entirely
 
 ## Current State Analysis
 
@@ -16,7 +16,7 @@ This plan outlines the implementation of a comprehensive member management featu
 
 The schema already supports the membership model:
 
-- [`organisationMember`](apps/backend/src/db/schema.ts:146) - Links users to organisations with roles (admin | member)
+- [`organizationMember`](apps/backend/src/db/schema.ts:146) - Links users to organizations with roles (admin | member)
 - [`workspaceMember`](apps/backend/src/db/schema.ts:169) - Links users to workspaces with roles (admin | editor | viewer)
 
 ### Existing Authorization
@@ -46,14 +46,14 @@ The schema already supports the membership model:
 
 ### New Endpoints
 
-All endpoints are under `/organisations/:orgId/members`
+All endpoints are under `/organizations/:orgId/members`
 
 | Method | Endpoint                             | Description                                     | Auth      |
 | ------ | ------------------------------------ | ----------------------------------------------- | --------- |
 | GET    | `/`                                  | List all org members with workspace memberships | Org Admin |
 | GET    | `/:memberId`                         | Get single member details with workspaces       | Org Admin |
 | PATCH  | `/:memberId`                         | Update org member role                          | Org Admin |
-| DELETE | `/:memberId`                         | Remove member from organisation                 | Org Admin |
+| DELETE | `/:memberId`                         | Remove member from organization                 | Org Admin |
 | POST   | `/:memberId/workspaces`              | Add member to a workspace                       | Org Admin |
 | PATCH  | `/:memberId/workspaces/:workspaceId` | Update workspace role                           | Org Admin |
 | DELETE | `/:memberId/workspaces/:workspaceId` | Remove member from workspace                    | Org Admin |
@@ -65,7 +65,7 @@ All endpoints are under `/organisations/:orgId/members`
 ```typescript
 {
   results: [{
-    id: string;              // organisationMember.id
+    id: string;              // organizationMember.id
     userId: string;
     user: {
       id: string;
@@ -106,7 +106,7 @@ flowchart TB
     end
 
     subgraph Database
-        OM[organisationMember]
+        OM[organizationMember]
         WM[workspaceMember]
         U[user]
         W[workspace]
@@ -195,7 +195,7 @@ flowchart TB
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │ Members                                                          │
-│ Manage members of this organisation.                            │
+│ Manage members of this organization.                            │
 ├─────────────────────────────────────────────────────────────────┤
 │ ┌─────────────────────────────────────────────────────────────┐ │
 │ │ Name          │ Email           │ Org Role │ Workspaces │ ⋮ │ │
@@ -238,18 +238,18 @@ flowchart TB
 // Before demoting or removing an admin
 const adminCount = await db
   .select({ count: count() })
-  .from(organisationMember)
+  .from(organizationMember)
   .where(
     and(
-      eq(organisationMember.organisationId, orgId),
-      eq(organisationMember.role, "admin"),
+      eq(organizationMember.organizationId, orgId),
+      eq(organizationMember.role, "admin"),
     ),
   );
 
 if (adminCount[0].count <= 1 && targetMember.role === "admin") {
   return c.json(
     {
-      error: "Cannot remove or demote the last organisation admin",
+      error: "Cannot remove or demote the last organization admin",
     },
     400,
   );
@@ -263,7 +263,7 @@ if (adminCount[0].count <= 1 && targetMember.role === "admin") {
 if (memberToRemove.userId === currentUser.id) {
   return c.json(
     {
-      error: "You cannot remove yourself from the organisation",
+      error: "You cannot remove yourself from the organization",
     },
     400,
   );
@@ -296,7 +296,7 @@ sequenceDiagram
     participant DB as Database
 
     User->>FE: Open Members page
-    FE->>API: GET /organisations/:orgId/members
+    FE->>API: GET /organizations/:orgId/members
     API->>DB: Query org members + workspaces
     DB-->>API: Member data with joins
     API-->>FE: Member list response

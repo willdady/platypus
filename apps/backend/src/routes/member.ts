@@ -3,13 +3,13 @@ import { sValidator } from "@hono/standard-validator";
 import { nanoid } from "nanoid";
 import { db } from "../index.ts";
 import {
-  organisationMember,
+  organizationMember,
   workspaceMember,
   user as userTable,
   workspace as workspaceTable,
 } from "../db/schema.ts";
 import {
-  organisationMemberUpdateSchema,
+  organizationMemberUpdateSchema,
   workspaceMemberCreateSchema,
   workspaceMemberUpdateSchema,
 } from "@platypus/schemas";
@@ -20,18 +20,18 @@ import type { Variables } from "../server.ts";
 
 const member = new Hono<{ Variables: Variables }>();
 
-/** List all organisation members with their workspace assignments */
+/** List all organization members with their workspace assignments */
 member.get("/", requireAuth, requireOrgAccess(["admin"]), async (c) => {
   const orgId = c.req.param("orgId")!;
 
   const members = await db
     .select({
-      id: organisationMember.id,
-      organisationId: organisationMember.organisationId,
-      userId: organisationMember.userId,
-      role: organisationMember.role,
-      createdAt: organisationMember.createdAt,
-      updatedAt: organisationMember.updatedAt,
+      id: organizationMember.id,
+      organizationId: organizationMember.organizationId,
+      userId: organizationMember.userId,
+      role: organizationMember.role,
+      createdAt: organizationMember.createdAt,
+      updatedAt: organizationMember.updatedAt,
       user: {
         id: userTable.id,
         name: userTable.name,
@@ -40,9 +40,9 @@ member.get("/", requireAuth, requireOrgAccess(["admin"]), async (c) => {
         role: userTable.role,
       },
     })
-    .from(organisationMember)
-    .innerJoin(userTable, eq(organisationMember.userId, userTable.id))
-    .where(eq(organisationMember.organisationId, orgId));
+    .from(organizationMember)
+    .innerJoin(userTable, eq(organizationMember.userId, userTable.id))
+    .where(eq(organizationMember.organizationId, orgId));
 
   const results = await Promise.all(
     members.map(async (m) => {
@@ -61,7 +61,7 @@ member.get("/", requireAuth, requireOrgAccess(["admin"]), async (c) => {
         .where(
           and(
             eq(workspaceMember.userId, m.userId),
-            eq(workspaceTable.organisationId, orgId),
+            eq(workspaceTable.organizationId, orgId),
           ),
         );
 
@@ -76,7 +76,7 @@ member.get("/", requireAuth, requireOrgAccess(["admin"]), async (c) => {
   return c.json({ results });
 });
 
-/** Get a single organisation member with details */
+/** Get a single organization member with details */
 member.get(
   "/:memberId",
   requireAuth,
@@ -87,12 +87,12 @@ member.get(
 
     const [m] = await db
       .select({
-        id: organisationMember.id,
-        organisationId: organisationMember.organisationId,
-        userId: organisationMember.userId,
-        role: organisationMember.role,
-        createdAt: organisationMember.createdAt,
-        updatedAt: organisationMember.updatedAt,
+        id: organizationMember.id,
+        organizationId: organizationMember.organizationId,
+        userId: organizationMember.userId,
+        role: organizationMember.role,
+        createdAt: organizationMember.createdAt,
+        updatedAt: organizationMember.updatedAt,
         user: {
           id: userTable.id,
           name: userTable.name,
@@ -101,12 +101,12 @@ member.get(
           role: userTable.role,
         },
       })
-      .from(organisationMember)
-      .innerJoin(userTable, eq(organisationMember.userId, userTable.id))
+      .from(organizationMember)
+      .innerJoin(userTable, eq(organizationMember.userId, userTable.id))
       .where(
         and(
-          eq(organisationMember.id, memberId),
-          eq(organisationMember.organisationId, orgId),
+          eq(organizationMember.id, memberId),
+          eq(organizationMember.organizationId, orgId),
         ),
       )
       .limit(1);
@@ -130,7 +130,7 @@ member.get(
       .where(
         and(
           eq(workspaceMember.userId, m.userId),
-          eq(workspaceTable.organisationId, orgId),
+          eq(workspaceTable.organizationId, orgId),
         ),
       );
 
@@ -142,12 +142,12 @@ member.get(
   },
 );
 
-/** Update organisation member role */
+/** Update organization member role */
 member.patch(
   "/:memberId",
   requireAuth,
   requireOrgAccess(["admin"]),
-  sValidator("json", organisationMemberUpdateSchema),
+  sValidator("json", organizationMemberUpdateSchema),
   async (c) => {
     const orgId = c.req.param("orgId")!;
     const memberId = c.req.param("memberId");
@@ -156,11 +156,11 @@ member.patch(
 
     const [targetMember] = await db
       .select()
-      .from(organisationMember)
+      .from(organizationMember)
       .where(
         and(
-          eq(organisationMember.id, memberId),
-          eq(organisationMember.organisationId, orgId),
+          eq(organizationMember.id, memberId),
+          eq(organizationMember.organizationId, orgId),
         ),
       )
       .limit(1);
@@ -178,33 +178,33 @@ member.patch(
     if (targetMember.role === "admin" && newRole === "member") {
       const [adminCountResult] = await db
         .select({ value: count() })
-        .from(organisationMember)
+        .from(organizationMember)
         .where(
           and(
-            eq(organisationMember.organisationId, orgId),
-            eq(organisationMember.role, "admin"),
+            eq(organizationMember.organizationId, orgId),
+            eq(organizationMember.role, "admin"),
           ),
         );
 
       if (adminCountResult.value <= 1) {
         return c.json(
-          { error: "Cannot demote the last organisation admin" },
+          { error: "Cannot demote the last organization admin" },
           400,
         );
       }
     }
 
     const [updated] = await db
-      .update(organisationMember)
+      .update(organizationMember)
       .set({ role: newRole, updatedAt: new Date() })
-      .where(eq(organisationMember.id, memberId))
+      .where(eq(organizationMember.id, memberId))
       .returning();
 
     return c.json(updated);
   },
 );
 
-/** Remove member from organisation */
+/** Remove member from organization */
 member.delete(
   "/:memberId",
   requireAuth,
@@ -216,11 +216,11 @@ member.delete(
 
     const [targetMember] = await db
       .select()
-      .from(organisationMember)
+      .from(organizationMember)
       .where(
         and(
-          eq(organisationMember.id, memberId),
-          eq(organisationMember.organisationId, orgId),
+          eq(organizationMember.id, memberId),
+          eq(organizationMember.organizationId, orgId),
         ),
       )
       .limit(1);
@@ -232,7 +232,7 @@ member.delete(
     // Self-removal protection
     if (targetMember.userId === currentUser.id) {
       return c.json(
-        { error: "You cannot remove yourself from the organisation" },
+        { error: "You cannot remove yourself from the organization" },
         400,
       );
     }
@@ -241,27 +241,27 @@ member.delete(
     if (targetMember.role === "admin") {
       const [adminCountResult] = await db
         .select({ value: count() })
-        .from(organisationMember)
+        .from(organizationMember)
         .where(
           and(
-            eq(organisationMember.organisationId, orgId),
-            eq(organisationMember.role, "admin"),
+            eq(organizationMember.organizationId, orgId),
+            eq(organizationMember.role, "admin"),
           ),
         );
 
       if (adminCountResult.value <= 1) {
         return c.json(
-          { error: "Cannot remove the last organisation admin" },
+          { error: "Cannot remove the last organization admin" },
           400,
         );
       }
     }
 
     await db
-      .delete(organisationMember)
-      .where(eq(organisationMember.id, memberId));
+      .delete(organizationMember)
+      .where(eq(organizationMember.id, memberId));
 
-    return c.json({ message: "Member removed from organisation" });
+    return c.json({ message: "Member removed from organization" });
   },
 );
 
@@ -278,11 +278,11 @@ member.post(
 
     const [m] = await db
       .select()
-      .from(organisationMember)
+      .from(organizationMember)
       .where(
         and(
-          eq(organisationMember.id, memberId),
-          eq(organisationMember.organisationId, orgId),
+          eq(organizationMember.id, memberId),
+          eq(organizationMember.organizationId, orgId),
         ),
       )
       .limit(1);
@@ -298,14 +298,14 @@ member.post(
       .where(
         and(
           eq(workspaceTable.id, workspaceId),
-          eq(workspaceTable.organisationId, orgId),
+          eq(workspaceTable.organizationId, orgId),
         ),
       )
       .limit(1);
 
     if (!ws) {
       return c.json(
-        { message: "Workspace not found in this organisation" },
+        { message: "Workspace not found in this organization" },
         404,
       );
     }
@@ -358,11 +358,11 @@ member.patch(
 
     const [m] = await db
       .select()
-      .from(organisationMember)
+      .from(organizationMember)
       .where(
         and(
-          eq(organisationMember.id, memberId),
-          eq(organisationMember.organisationId, orgId),
+          eq(organizationMember.id, memberId),
+          eq(organizationMember.organizationId, orgId),
         ),
       )
       .limit(1);
@@ -402,11 +402,11 @@ member.delete(
 
     const [m] = await db
       .select()
-      .from(organisationMember)
+      .from(organizationMember)
       .where(
         and(
-          eq(organisationMember.id, memberId),
-          eq(organisationMember.organisationId, orgId),
+          eq(organizationMember.id, memberId),
+          eq(organizationMember.organizationId, orgId),
         ),
       )
       .limit(1);

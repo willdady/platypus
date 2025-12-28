@@ -12,7 +12,7 @@ import type { Variables } from "../server.ts";
 
 const orgProvider = new Hono<{ Variables: Variables }>();
 
-/** Create a new organisation provider (admin only) */
+/** Create a new organization provider (admin only) */
 orgProvider.post(
   "/",
   requireAuth,
@@ -32,7 +32,7 @@ orgProvider.post(
         .values({
           id: nanoid(),
           ...data,
-          organisationId: orgId,
+          organizationId: orgId,
           workspaceId: null,
         })
         .returning();
@@ -49,7 +49,7 @@ orgProvider.post(
         return c.json(
           {
             message:
-              "A provider with this name already exists in this organisation",
+              "A provider with this name already exists in this organization",
           },
           409,
         );
@@ -59,18 +59,18 @@ orgProvider.post(
   },
 );
 
-/** List all organisation providers */
+/** List all organization providers */
 orgProvider.get("/", requireAuth, requireOrgAccess(), async (c) => {
   const orgId = c.req.param("orgId")!;
   const results = await db
     .select()
     .from(providerTable)
-    .where(eq(providerTable.organisationId, orgId));
+    .where(eq(providerTable.organizationId, orgId));
 
   return c.json({ results });
 });
 
-/** Get an organisation provider by ID */
+/** Get an organization provider by ID */
 orgProvider.get("/:providerId", requireAuth, requireOrgAccess(), async (c) => {
   const orgId = c.req.param("orgId")!;
   const providerId = c.req.param("providerId");
@@ -81,7 +81,7 @@ orgProvider.get("/:providerId", requireAuth, requireOrgAccess(), async (c) => {
     .where(
       and(
         eq(providerTable.id, providerId),
-        eq(providerTable.organisationId, orgId),
+        eq(providerTable.organizationId, orgId),
       ),
     )
     .limit(1);
@@ -93,7 +93,7 @@ orgProvider.get("/:providerId", requireAuth, requireOrgAccess(), async (c) => {
   return c.json(record[0]);
 });
 
-/** Update an organisation provider by ID (admin only) */
+/** Update an organization provider by ID (admin only) */
 orgProvider.put(
   "/:providerId",
   requireAuth,
@@ -118,7 +118,7 @@ orgProvider.put(
         .where(
           and(
             eq(providerTable.id, providerId),
-            eq(providerTable.organisationId, orgId),
+            eq(providerTable.organizationId, orgId),
           ),
         )
         .returning();
@@ -139,7 +139,7 @@ orgProvider.put(
         return c.json(
           {
             message:
-              "A provider with this name already exists in this organisation",
+              "A provider with this name already exists in this organization",
           },
           409,
         );
@@ -149,7 +149,7 @@ orgProvider.put(
   },
 );
 
-/** Delete an organisation provider by ID (admin only) */
+/** Delete an organization provider by ID (admin only) */
 orgProvider.delete(
   "/:providerId",
   requireAuth,
@@ -163,7 +163,7 @@ orgProvider.delete(
       .where(
         and(
           eq(providerTable.id, providerId),
-          eq(providerTable.organisationId, orgId),
+          eq(providerTable.organizationId, orgId),
         ),
       )
       .returning();

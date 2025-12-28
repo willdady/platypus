@@ -365,8 +365,8 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
-    "public.organisation": {
-      "name": "organisation",
+    "public.organization": {
+      "name": "organization",
       "schema": "",
       "columns": {
         "id": {
@@ -515,8 +515,8 @@
           "primaryKey": true,
           "notNull": true
         },
-        "organisation_id": {
-          "name": "organisation_id",
+        "organization_id": {
+          "name": "organization_id",
           "type": "text",
           "primaryKey": false,
           "notNull": false
@@ -544,12 +544,12 @@
       },
       "indexes": {},
       "foreignKeys": {
-        "workspace_organisation_id_organisation_id_fk": {
-          "name": "workspace_organisation_id_organisation_id_fk",
+        "workspace_organization_id_organization_id_fk": {
+          "name": "workspace_organization_id_organization_id_fk",
           "tableFrom": "workspace",
-          "tableTo": "organisation",
+          "tableTo": "organization",
           "columnsFrom": [
-            "organisation_id"
+            "organization_id"
           ],
           "columnsTo": [
             "id"

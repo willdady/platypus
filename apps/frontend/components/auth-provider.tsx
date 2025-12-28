@@ -13,7 +13,7 @@ import { useParams } from "next/navigation";
 
 interface OrgMembership {
   id: string;
-  organisationId: string;
+  organizationId: string;
   role: "admin" | "member";
 }
 
@@ -82,14 +82,14 @@ export function AuthProvider({
 
     // If we already have the membership for this org, don't reset it
     // This prevents unmounting children in ProtectedRoute during revalidation
-    if (orgMembership?.organisationId === orgId) {
+    if (orgMembership?.organizationId === orgId) {
       return;
     }
 
     setOrgMembership(null);
     setHasFetchedOrg(false);
     setIsOrgMembershipLoading(true);
-    fetch(`${backendUrl}/organisations/${orgId}/membership`, {
+    fetch(`${backendUrl}/organizations/${orgId}/membership`, {
       credentials: "include",
     })
       .then((res) => (res.ok ? res.json() : null))
@@ -123,7 +123,7 @@ export function AuthProvider({
     setHasFetchedWorkspace(false);
     setIsWorkspaceMembershipLoading(true);
     fetch(
-      `${backendUrl}/organisations/${orgId}/workspaces/${workspaceId}/membership`,
+      `${backendUrl}/organizations/${orgId}/workspaces/${workspaceId}/membership`,
       {
         credentials: "include",
       },

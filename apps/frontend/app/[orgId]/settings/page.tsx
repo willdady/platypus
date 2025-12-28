@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Copy } from "lucide-react";
 import { useParams } from "next/navigation";
 import { toast } from "sonner";
-import { OrganisationForm } from "@/components/organisation-form";
+import { OrganizationForm } from "@/components/organization-form";
 
 const OrgSettingsPage = () => {
   const { orgId } = useParams<{
@@ -13,10 +13,10 @@ const OrgSettingsPage = () => {
 
   return (
     <div>
-      <h1 className="text-2xl font-bold mb-4">Organisation Settings</h1>
+      <h1 className="text-2xl font-bold mb-4">Organization Settings</h1>
       <div className="grid grid-cols-2 gap-6 mb-4">
         <div>
-          <p className="text-sm text-muted-foreground mb-2">Organisation ID</p>
+          <p className="text-sm text-muted-foreground mb-2">Organization ID</p>
           <div className="flex items-center justify-between">
             <p className="font-mono">{orgId}</p>
             <Button
@@ -35,7 +35,7 @@ const OrgSettingsPage = () => {
       </div>
 
       <div className="max-w-md">
-        <OrganisationForm orgId={orgId} />
+        <OrganizationForm orgId={orgId} />
       </div>
     </div>
   );

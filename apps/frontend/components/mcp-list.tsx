@@ -27,7 +27,7 @@ const McpList = ({
     backendUrl && user
       ? joinUrl(
           backendUrl,
-          `/organisations/${orgId}/workspaces/${workspaceId}/mcps`,
+          `/organizations/${orgId}/workspaces/${workspaceId}/mcps`,
         )
       : null,
     fetcher,

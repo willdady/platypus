@@ -166,7 +166,7 @@ const resolveChatContext = async (
         eq(providerTable.id, resolvedProviderId),
         or(
           eq(providerTable.workspaceId, workspaceId),
-          eq(providerTable.organisationId, orgId),
+          eq(providerTable.organizationId, orgId),
         ),
       ),
     )
@@ -638,7 +638,7 @@ chat.post(
           eq(providerTable.id, providerId),
           or(
             eq(providerTable.workspaceId, workspaceId),
-            eq(providerTable.organisationId, orgId),
+            eq(providerTable.organizationId, orgId),
           ),
         ),
       )

@@ -9,7 +9,7 @@ const CreateOrgProviderPage = async ({
 
   return (
     <div>
-      <h1 className="text-2xl font-bold mb-4">Add Organisation Provider</h1>
+      <h1 className="text-2xl font-bold mb-4">Add Organization Provider</h1>
       <ProviderForm orgId={orgId} />
     </div>
   );

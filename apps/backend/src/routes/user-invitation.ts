@@ -2,9 +2,9 @@ import { Hono } from "hono";
 import { db } from "../index.ts";
 import {
   invitation as invitationTable,
-  organisation as organisationTable,
+  organization as organizationTable,
   workspace as workspaceTable,
-  organisationMember,
+  organizationMember,
   workspaceMember,
   user as userTable,
 } from "../db/schema.ts";
@@ -24,21 +24,21 @@ userInvitation.get("/", requireAuth, async (c) => {
     .select({
       id: invitationTable.id,
       email: invitationTable.email,
-      organisationId: invitationTable.organisationId,
+      organizationId: invitationTable.organizationId,
       workspaceId: invitationTable.workspaceId,
       role: invitationTable.role,
       invitedBy: invitationTable.invitedBy,
       status: invitationTable.status,
       expiresAt: invitationTable.expiresAt,
       createdAt: invitationTable.createdAt,
-      organisationName: organisationTable.name,
+      organizationName: organizationTable.name,
       workspaceName: workspaceTable.name,
       invitedByName: userTable.name,
     })
     .from(invitationTable)
     .innerJoin(
-      organisationTable,
-      eq(invitationTable.organisationId, organisationTable.id),
+      organizationTable,
+      eq(invitationTable.organizationId, organizationTable.id),
     )
     .innerJoin(
       workspaceTable,
@@ -98,11 +98,11 @@ userInvitation.post("/:invitationId/accept", requireAuth, async (c) => {
     // 1. Ensure org membership exists
     let orgMember = await tx
       .select()
-      .from(organisationMember)
+      .from(organizationMember)
       .where(
         and(
-          eq(organisationMember.organisationId, invite.organisationId),
-          eq(organisationMember.userId, user.id),
+          eq(organizationMember.organizationId, invite.organizationId),
+          eq(organizationMember.userId, user.id),
         ),
       )
       .limit(1);
@@ -111,9 +111,9 @@ userInvitation.post("/:invitationId/accept", requireAuth, async (c) => {
 
     if (orgMember.length === 0) {
       orgMemberId = nanoid();
-      await tx.insert(organisationMember).values({
+      await tx.insert(organizationMember).values({
         id: orgMemberId,
-        organisationId: invite.organisationId,
+        organizationId: invite.organizationId,
         userId: user.id,
         role: "member",
       });

@@ -428,8 +428,8 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
-    "public.organisation": {
-      "name": "organisation",
+    "public.organization": {
+      "name": "organization",
       "schema": "",
       "columns": {
         "id": {
@@ -612,8 +612,8 @@
           "primaryKey": true,
           "notNull": true
         },
-        "organisation_id": {
-          "name": "organisation_id",
+        "organization_id": {
+          "name": "organization_id",
           "type": "text",
           "primaryKey": false,
           "notNull": false
@@ -640,11 +640,11 @@
         }
       },
       "indexes": {
-        "idx_workspace_organisation_id": {
-          "name": "idx_workspace_organisation_id",
+        "idx_workspace_organization_id": {
+          "name": "idx_workspace_organization_id",
           "columns": [
             {
-              "expression": "organisation_id",
+              "expression": "organization_id",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -657,12 +657,12 @@
         }
       },
       "foreignKeys": {
-        "workspace_organisation_id_organisation_id_fk": {
-          "name": "workspace_organisation_id_organisation_id_fk",
+        "workspace_organization_id_organization_id_fk": {
+          "name": "workspace_organization_id_organization_id_fk",
           "tableFrom": "workspace",
-          "tableTo": "organisation",
+          "tableTo": "organization",
           "columnsFrom": [
-            "organisation_id"
+            "organization_id"
           ],
           "columnsTo": [
             "id"

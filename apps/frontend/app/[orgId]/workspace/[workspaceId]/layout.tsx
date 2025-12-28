@@ -31,7 +31,7 @@ export default async function WorkspaceLayout({
     process.env.INTERNAL_BACKEND_URL || process.env.BACKEND_URL || "";
   const headersList = await headers();
   const response = await fetch(
-    joinUrl(backendUrl, `/organisations/${orgId}/workspaces/${workspaceId}`),
+    joinUrl(backendUrl, `/organizations/${orgId}/workspaces/${workspaceId}`),
     {
       headers: {
         cookie: headersList.get("cookie") || "",

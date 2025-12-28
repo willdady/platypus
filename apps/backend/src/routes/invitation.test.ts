@@ -11,7 +11,7 @@ describe("Invitation Routes", () => {
   });
 
   const orgId = "org-1";
-  const baseUrl = `/organisations/${orgId}/invitations`;
+  const baseUrl = `/organizations/${orgId}/invitations`;
 
   describe("POST /", () => {
     it("should create invitation if org admin", async () => {
@@ -19,7 +19,7 @@ describe("Invitation Routes", () => {
       // requireOrgAccess
       mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]);
       // Verify workspace belongs to org
-      mockDb.limit.mockResolvedValueOnce([{ id: "ws-1", organisationId: orgId }]);
+      mockDb.limit.mockResolvedValueOnce([{ id: "ws-1", organizationId: orgId }]);
       
       const mockInvitation = { id: "inv-1", email: "user@example.com", workspaceId: "ws-1" };
       mockDb.returning.mockResolvedValueOnce([mockInvitation]);

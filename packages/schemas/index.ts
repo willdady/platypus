@@ -2,26 +2,26 @@ import { z } from "zod";
 
 const kebabCaseRegex = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
-// Organisation
+// Organization
 
-export const organisationSchema = z.object({
+export const organizationSchema = z.object({
   id: z.string(),
   name: z.string().min(3).max(30),
   createdAt: z.date(),
   updatedAt: z.date(),
 });
 
-export type Organisation = z.infer<typeof organisationSchema>;
+export type Organization = z.infer<typeof organizationSchema>;
 
-export const organisationCreateSchema = organisationSchema.pick({ name: true });
+export const organizationCreateSchema = organizationSchema.pick({ name: true });
 
-export const organisationUpdateSchema = organisationSchema.pick({ name: true });
+export const organizationUpdateSchema = organizationSchema.pick({ name: true });
 
 // Workspace
 
 export const workspaceSchema = z.object({
   id: z.string(),
-  organisationId: z.string(),
+  organizationId: z.string(),
   name: z.string().min(3).max(30),
   createdAt: z.date(),
   updatedAt: z.date(),
@@ -31,7 +31,7 @@ export type Workspace = z.infer<typeof workspaceSchema>;
 
 export const workspaceCreateSchema = workspaceSchema.pick({
   name: true,
-  organisationId: true,
+  organizationId: true,
 });
 
 export const workspaceUpdateSchema = workspaceSchema.pick({ name: true });
@@ -266,7 +266,7 @@ export const mcpTestSchema = mcpSchema
 export const providerSchema = z
   .object({
     id: z.string(),
-    organisationId: z.string().optional(),
+    organizationId: z.string().optional(),
     workspaceId: z.string().optional(),
     name: z.string().min(3).max(32),
     providerType: z.enum(["OpenAI", "OpenRouter", "Bedrock", "Google"]),
@@ -299,21 +299,21 @@ export const providerSchema = z
   )
   .refine(
     (data) => {
-      const hasOrg = Boolean(data.organisationId);
+      const hasOrg = Boolean(data.organizationId);
       const hasWorkspace = Boolean(data.workspaceId);
       return (hasOrg || hasWorkspace) && !(hasOrg && hasWorkspace);
     },
     {
       message:
-        "Provider must have either organisationId or workspaceId, but not both",
-      path: ["organisationId"],
+        "Provider must have either organizationId or workspaceId, but not both",
+      path: ["organizationId"],
     },
   );
 
 export type Provider = z.infer<typeof providerSchema>;
 
 export const providerCreateSchema = providerSchema.pick({
-  organisationId: true,
+  organizationId: true,
   workspaceId: true,
   name: true,
   providerType: true,
@@ -342,7 +342,7 @@ export type InvitationStatus = z.infer<typeof invitationStatusSchema>;
 export const invitationSchema = z.object({
   id: z.string(),
   email: z.string().email(),
-  organisationId: z.string(),
+  organizationId: z.string(),
   workspaceId: z.string(),
   role: z.enum(["admin", "editor", "viewer"]),
   invitedBy: z.string(),
@@ -360,7 +360,7 @@ export const invitationCreateSchema = invitationSchema.pick({
 });
 
 export const invitationListItemSchema = invitationSchema.extend({
-  organisationName: z.string().optional(),
+  organizationName: z.string().optional(),
   workspaceName: z.string().optional(),
   invitedByName: z.string().optional(),
 });
@@ -381,24 +381,24 @@ export const providerUpdateSchema = providerSchema.pick({
   taskModelId: true,
 });
 
-// Organisation Member
+// Organization Member
 
-export const organisationMemberSchema = z.object({
+export const organizationMemberSchema = z.object({
   id: z.string(),
-  organisationId: z.string(),
+  organizationId: z.string(),
   userId: z.string(),
   role: z.enum(["admin", "member"]),
   createdAt: z.date(),
   updatedAt: z.date(),
 });
 
-export type OrganisationMember = z.infer<typeof organisationMemberSchema>;
+export type OrganizationMember = z.infer<typeof organizationMemberSchema>;
 
-export const organisationMemberUpdateSchema = organisationMemberSchema.pick({
+export const organizationMemberUpdateSchema = organizationMemberSchema.pick({
   role: true,
 });
 
-export const organisationMemberWithUserSchema = organisationMemberSchema.extend(
+export const organizationMemberWithUserSchema = organizationMemberSchema.extend(
   {
     user: z.object({
       id: z.string(),
@@ -409,8 +409,8 @@ export const organisationMemberWithUserSchema = organisationMemberSchema.extend(
   },
 );
 
-export type OrganisationMemberWithUser = z.infer<
-  typeof organisationMemberWithUserSchema
+export type OrganizationMemberWithUser = z.infer<
+  typeof organizationMemberWithUserSchema
 >;
 
 // Workspace Member
@@ -438,7 +438,7 @@ export const workspaceMemberUpdateSchema = workspaceMemberSchema.pick({
 
 // Combined Org Member for List
 
-export const orgMemberListItemSchema = organisationMemberWithUserSchema.extend({
+export const orgMemberListItemSchema = organizationMemberWithUserSchema.extend({
   workspaces: z.array(
     z.object({
       workspaceMemberId: z.string(),

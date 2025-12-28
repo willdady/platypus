@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import useSWR, { useSWRConfig } from "swr";
 import { fetcher, joinUrl } from "@/lib/utils";
-import type { Workspace, ChatListItem, Organisation } from "@platypus/schemas";
+import type { Workspace, ChatListItem, Organization } from "@platypus/schemas";
 import { useAuth } from "@/components/auth-provider";
 import {
   Sidebar,
@@ -88,7 +88,7 @@ export function AppSidebar({
   const { mutate } = useSWRConfig();
   const { data } = useSWR<{ results: Workspace[] }>(
     backendUrl && user
-      ? joinUrl(backendUrl, `/organisations/${orgId}/workspaces`)
+      ? joinUrl(backendUrl, `/organizations/${orgId}/workspaces`)
       : null,
     fetcher,
   );
@@ -97,14 +97,14 @@ export function AppSidebar({
     backendUrl && user
       ? joinUrl(
           backendUrl,
-          `/organisations/${orgId}/workspaces/${workspaceId}/chat`,
+          `/organizations/${orgId}/workspaces/${workspaceId}/chat`,
         )
       : null,
     fetcher,
   );
 
-  const { data: orgData } = useSWR<Organisation>(
-    backendUrl && user ? joinUrl(backendUrl, `/organisations/${orgId}`) : null,
+  const { data: orgData } = useSWR<Organization>(
+    backendUrl && user ? joinUrl(backendUrl, `/organizations/${orgId}`) : null,
     fetcher,
   );
 
@@ -159,7 +159,7 @@ export function AppSidebar({
       const response = await fetch(
         joinUrl(
           backendUrl,
-          `/organisations/${orgId}/workspaces/${workspaceId}/chat/${renameChatId}`,
+          `/organizations/${orgId}/workspaces/${workspaceId}/chat/${renameChatId}`,
         ),
         {
           method: "PUT",
@@ -185,7 +185,7 @@ export function AppSidebar({
         await mutate(
           joinUrl(
             backendUrl,
-            `/organisations/${orgId}/workspaces/${workspaceId}/chat`,
+            `/organizations/${orgId}/workspaces/${workspaceId}/chat`,
           ),
         );
       } else {
@@ -209,7 +209,7 @@ export function AppSidebar({
       const response = await fetch(
         joinUrl(
           backendUrl,
-          `/organisations/${orgId}/workspaces/${workspaceId}/chat/${deleteChatId}`,
+          `/organizations/${orgId}/workspaces/${workspaceId}/chat/${deleteChatId}`,
         ),
         {
           method: "DELETE",
@@ -237,7 +237,7 @@ export function AppSidebar({
       await mutate(
         joinUrl(
           backendUrl,
-          `/organisations/${orgId}/workspaces/${workspaceId}/chat`,
+          `/organizations/${orgId}/workspaces/${workspaceId}/chat`,
         ),
       );
     } catch (error) {
@@ -256,7 +256,7 @@ export function AppSidebar({
       const response = await fetch(
         joinUrl(
           backendUrl,
-          `/organisations/${orgId}/workspaces/${workspaceId}/chat/${chatId}`,
+          `/organizations/${orgId}/workspaces/${workspaceId}/chat/${chatId}`,
         ),
         {
           method: "PUT",
@@ -281,7 +281,7 @@ export function AppSidebar({
       await mutate(
         joinUrl(
           backendUrl,
-          `/organisations/${orgId}/workspaces/${workspaceId}/chat`,
+          `/organizations/${orgId}/workspaces/${workspaceId}/chat`,
         ),
       );
     } catch (error) {
@@ -327,7 +327,7 @@ export function AppSidebar({
                 </DropdownMenuLabel>
                 <DropdownMenuGroup>
                   {workspaces.map((workspace) => {
-                    const href = `/${workspace.organisationId}/workspace/${workspace.id}`;
+                    const href = `/${workspace.organizationId}/workspace/${workspace.id}`;
                     return (
                       <DropdownMenuItem key={workspace.id} asChild>
                         <Link className="cursor-pointer" href={href}>

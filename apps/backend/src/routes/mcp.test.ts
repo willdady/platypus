@@ -18,7 +18,7 @@ describe("MCP Routes", () => {
 
   const orgId = "org-1";
   const workspaceId = "ws-1";
-  const baseUrl = `/organisations/${orgId}/workspaces/${workspaceId}/mcps`;
+  const baseUrl = `/organizations/${orgId}/workspaces/${workspaceId}/mcps`;
 
   describe("POST /", () => {
     it("should create MCP if workspace admin", async () => {

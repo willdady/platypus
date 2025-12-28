@@ -24,7 +24,7 @@ describe("Tool Routes", () => {
 
   const orgId = "org-1";
   const workspaceId = "ws-1";
-  const baseUrl = `/organisations/${orgId}/workspaces/${workspaceId}/tools`;
+  const baseUrl = `/organizations/${orgId}/workspaces/${workspaceId}/tools`;
 
   describe("GET /", () => {
     it("should list all tool sets including MCPs", async () => {

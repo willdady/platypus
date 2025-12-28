@@ -4,53 +4,53 @@ This plan outlines the steps to restructure the Platypus API routes from a flat 
 
 ## Proposed API Structure
 
-### Organisations
+### Organizations
 
-- `GET /organisations` - List all organisations (Super Admin)
-- `POST /organisations` - Create an organisation (Super Admin)
-- `GET /organisations/:id` - Get organisation details
-- `PUT /organisations/:id` - Update organisation
-- `DELETE /organisations/:id` - Delete organisation
+- `GET /organizations` - List all organizations (Super Admin)
+- `POST /organizations` - Create an organization (Super Admin)
+- `GET /organizations/:id` - Get organization details
+- `PUT /organizations/:id` - Update organization
+- `DELETE /organizations/:id` - Delete organization
 
-### Workspaces (Nested under Organisation)
+### Workspaces (Nested under Organization)
 
-- `GET /organisations/:orgId/workspaces` - List workspaces in an organisation
-- `POST /organisations/:orgId/workspaces` - Create a workspace in an organisation
-- `GET /organisations/:orgId/workspaces/:id` - Get workspace details
-- `PUT /organisations/:orgId/workspaces/:id` - Update workspace
-- `DELETE /organisations/:orgId/workspaces/:id` - Delete workspace
+- `GET /organizations/:orgId/workspaces` - List workspaces in an organization
+- `POST /organizations/:orgId/workspaces` - Create a workspace in an organization
+- `GET /organizations/:orgId/workspaces/:id` - Get workspace details
+- `PUT /organizations/:orgId/workspaces/:id` - Update workspace
+- `DELETE /organizations/:orgId/workspaces/:id` - Delete workspace
 
 ### Agents (Nested under Workspace)
 
-- `GET /organisations/:orgId/workspaces/:workspaceId/agents` - List agents in a workspace
-- `POST /organisations/:orgId/workspaces/:workspaceId/agents` - Create an agent in a workspace
-- `GET /organisations/:orgId/workspaces/:workspaceId/agents/:id` - Get agent details
-- `PUT /organisations/:orgId/workspaces/:workspaceId/agents/:id` - Update agent
-- `DELETE /organisations/:orgId/workspaces/:workspaceId/agents/:id` - Delete agent
+- `GET /organizations/:orgId/workspaces/:workspaceId/agents` - List agents in a workspace
+- `POST /organizations/:orgId/workspaces/:workspaceId/agents` - Create an agent in a workspace
+- `GET /organizations/:orgId/workspaces/:workspaceId/agents/:id` - Get agent details
+- `PUT /organizations/:orgId/workspaces/:workspaceId/agents/:id` - Update agent
+- `DELETE /organizations/:orgId/workspaces/:workspaceId/agents/:id` - Delete agent
 
 ### Chats (Nested under Workspace)
 
-- `GET /organisations/:orgId/workspaces/:workspaceId/chats` - List chats in a workspace
-- `POST /organisations/:orgId/workspaces/:workspaceId/chats` - Create a chat in a workspace
-- `GET /organisations/:orgId/workspaces/:workspaceId/chats/:id` - Get chat details
-- `PUT /organisations/:orgId/workspaces/:workspaceId/chats/:id` - Update chat
-- `DELETE /organisations/:orgId/workspaces/:workspaceId/chats/:id` - Delete chat
+- `GET /organizations/:orgId/workspaces/:workspaceId/chats` - List chats in a workspace
+- `POST /organizations/:orgId/workspaces/:workspaceId/chats` - Create a chat in a workspace
+- `GET /organizations/:orgId/workspaces/:workspaceId/chats/:id` - Get chat details
+- `PUT /organizations/:orgId/workspaces/:workspaceId/chats/:id` - Update chat
+- `DELETE /organizations/:orgId/workspaces/:workspaceId/chats/:id` - Delete chat
 
 ### MCPs (Nested under Workspace)
 
-- `GET /organisations/:orgId/workspaces/:workspaceId/mcps` - List MCPs in a workspace
-- `POST /organisations/:orgId/workspaces/:workspaceId/mcps` - Create an MCP in a workspace
-- `GET /organisations/:orgId/workspaces/:workspaceId/mcps/:id` - Get MCP details
-- `PUT /organisations/:orgId/workspaces/:workspaceId/mcps/:id` - Update MCP
-- `DELETE /organisations/:orgId/workspaces/:workspaceId/mcps/:id` - Delete MCP
+- `GET /organizations/:orgId/workspaces/:workspaceId/mcps` - List MCPs in a workspace
+- `POST /organizations/:orgId/workspaces/:workspaceId/mcps` - Create an MCP in a workspace
+- `GET /organizations/:orgId/workspaces/:workspaceId/mcps/:id` - Get MCP details
+- `PUT /organizations/:orgId/workspaces/:workspaceId/mcps/:id` - Update MCP
+- `DELETE /organizations/:orgId/workspaces/:workspaceId/mcps/:id` - Delete MCP
 
 ### Providers (Nested under Workspace)
 
-- `GET /organisations/:orgId/workspaces/:workspaceId/providers` - List providers in a workspace
-- `POST /organisations/:orgId/workspaces/:workspaceId/providers` - Create a provider in a workspace
-- `GET /organisations/:orgId/workspaces/:workspaceId/providers/:id` - Get provider details
-- `PUT /organisations/:orgId/workspaces/:workspaceId/providers/:id` - Update provider
-- `DELETE /organisations/:orgId/workspaces/:workspaceId/providers/:id` - Delete provider
+- `GET /organizations/:orgId/workspaces/:workspaceId/providers` - List providers in a workspace
+- `POST /organizations/:orgId/workspaces/:workspaceId/providers` - Create a provider in a workspace
+- `GET /organizations/:orgId/workspaces/:workspaceId/providers/:id` - Get provider details
+- `PUT /organizations/:orgId/workspaces/:workspaceId/providers/:id` - Update provider
+- `DELETE /organizations/:orgId/workspaces/:workspaceId/providers/:id` - Delete provider
 
 ## Implementation Steps
 
@@ -63,8 +63,8 @@ This plan outlines the steps to restructure the Platypus API routes from a flat 
 
 #### 1.2. Refactor Route Files
 
-- **`organisation.ts`**: Keep mostly as is, but ensure it handles the top-level `/organisations` routes.
-- **`workspace.ts`**: Remove `/` prefix from routes that will be mounted under `/organisations/:orgId/workspaces`.
+- **`organization.ts`**: Keep mostly as is, but ensure it handles the top-level `/organizations` routes.
+- **`workspace.ts`**: Remove `/` prefix from routes that will be mounted under `/organizations/:orgId/workspaces`.
 - **`agent.ts`, `chat.ts`, `mcp.ts`, `provider.ts`**: Refactor to handle both nested collection routes and flat instance routes.
 
 #### 1.3. Update Middleware
@@ -93,7 +93,7 @@ This plan outlines the steps to restructure the Platypus API routes from a flat 
 ### 4. Verification
 
 - Run `pnpm dev` to start the full stack.
-- Test navigation between organisations and workspaces.
+- Test navigation between organizations and workspaces.
 - Test CRUD operations for agents, chats, MCPs, and providers.
 - Verify that authorization still works as expected (e.g., a user cannot access a workspace they don't belong to).
 
@@ -105,7 +105,7 @@ graph TD
         R["/"]
     end
 
-    R --> ORGS["/organisations"]
+    R --> ORGS["/organizations"]
     ORGS --> ORG_ID["/:id (Flat)"]
 
     ORGS --> ORG_WS["/:orgId/workspaces"]

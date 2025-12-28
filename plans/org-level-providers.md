@@ -2,13 +2,13 @@
 
 ## Overview
 
-Currently, providers are scoped only at the workspace level. This plan describes the changes needed to support organisation-level providers that are automatically available to all workspaces under an organisation.
+Currently, providers are scoped only at the workspace level. This plan describes the changes needed to support organization-level providers that are automatically available to all workspaces under an organization.
 
 ## Requirements Summary
 
-- **Org-scoped providers**: Available to all workspaces under the organisation
+- **Org-scoped providers**: Available to all workspaces under the organization
 - **Workspace-scoped providers**: Available only to the specific workspace (existing behavior)
-- **Provider must have either**: `organisationId` OR `workspaceId` (never neither, never both)
+- **Provider must have either**: `organizationId` OR `workspaceId` (never neither, never both)
 - **Duplicate names**: Disallowed within the same scope
 - **Org providers in workspace UI**: Display with visual badge indicator, but not editable
 - **Org settings UI**: Add new "Providers" section for managing org-level providers
@@ -19,7 +19,7 @@ Currently, providers are scoped only at the workspace level. This plan describes
 
 ```mermaid
 flowchart TB
-    subgraph Organisation
+    subgraph Organization
         OrgProvider1[Org Provider 1]
         OrgProvider2[Org Provider 2]
         
@@ -56,10 +56,10 @@ flowchart TB
 
 Modify the `provider` table definition:
 
-1. Add optional `organisationId` field with foreign key reference to `organisation`
+1. Add optional `organizationId` field with foreign key reference to `organization`
 2. Make `workspaceId` optional (nullable)
-3. Add database-level constraint to ensure exactly one of `organisationId` or `workspaceId` is set
-4. Add index on `organisationId` for efficient queries
+3. Add database-level constraint to ensure exactly one of `organizationId` or `workspaceId` is set
+4. Add index on `organizationId` for efficient queries
 
 **Updated Schema:**
 
@@ -68,9 +68,9 @@ export const provider = pgTable(
   "provider",
   (t) => ({
     id: t.text("id").primaryKey(),
-    organisationId: t
-      .text("organisation_id")
-      .references(() => organisation.id, {
+    organizationId: t
+      .text("organization_id")
+      .references(() => organization.id, {
         onDelete: "cascade",
       }),
     workspaceId: t
@@ -94,16 +94,16 @@ export const provider = pgTable(
   }),
   (t) => [
     index("idx_provider_workspace_id").on(t.workspaceId),
-    index("idx_provider_organisation_id").on(t.organisationId),
+    index("idx_provider_organization_id").on(t.organizationId),
     // Ensure unique name within org scope
-    unique("unique_provider_name_org").on(t.organisationId, t.name),
+    unique("unique_provider_name_org").on(t.organizationId, t.name),
     // Ensure unique name within workspace scope
     unique("unique_provider_name_workspace").on(t.workspaceId, t.name),
   ],
 );
 ```
 
-**Note:** Drizzle ORM does not natively support CHECK constraints. The validation that exactly one of `organisationId` or `workspaceId` is set will be enforced at the application level in the API routes.
+**Note:** Drizzle ORM does not natively support CHECK constraints. The validation that exactly one of `organizationId` or `workspaceId` is set will be enforced at the application level in the API routes.
 
 ---
 
@@ -114,7 +114,7 @@ export const provider = pgTable(
 Update the provider schemas to support both org and workspace scopes:
 
 1. Make `workspaceId` optional
-2. Add optional `organisationId` field
+2. Add optional `organizationId` field
 3. Add computed `scope` field for frontend convenience
 4. Create separate create schemas for org and workspace providers
 5. Add refinement to ensure exactly one scope field is set
@@ -125,7 +125,7 @@ Update the provider schemas to support both org and workspace scopes:
 export const providerSchema = z
   .object({
     id: z.string(),
-    organisationId: z.string().optional(),
+    organizationId: z.string().optional(),
     workspaceId: z.string().optional(),
     name: z.string().min(3).max(32),
     providerType: z.enum(["OpenAI", "OpenRouter", "Bedrock", "Google"]),
@@ -147,19 +147,19 @@ export const providerSchema = z
   .refine(/* Bedrock region validation */)
   .refine(
     (data) => {
-      const hasOrg = Boolean(data.organisationId);
+      const hasOrg = Boolean(data.organizationId);
       const hasWorkspace = Boolean(data.workspaceId);
       return (hasOrg || hasWorkspace) && !(hasOrg && hasWorkspace);
     },
     {
-      message: "Provider must have either organisationId or workspaceId, but not both",
-      path: ["organisationId"],
+      message: "Provider must have either organizationId or workspaceId, but not both",
+      path: ["organizationId"],
     }
   );
 
 // Create schema for org-scoped providers
 export const providerCreateOrgSchema = providerSchema.pick({
-  organisationId: true,
+  organizationId: true,
   name: true,
   providerType: true,
   apiKey: true,
@@ -202,11 +202,11 @@ Create new routes for org-level provider management:
 
 | Method | Endpoint | Description | Auth |
 |--------|----------|-------------|------|
-| `POST` | `/organisations/:orgId/providers` | Create org provider | Org admin |
-| `GET` | `/organisations/:orgId/providers` | List org providers | Org member |
-| `GET` | `/organisations/:orgId/providers/:providerId` | Get org provider | Org member |
-| `PUT` | `/organisations/:orgId/providers/:providerId` | Update org provider | Org admin |
-| `DELETE` | `/organisations/:orgId/providers/:providerId` | Delete org provider | Org admin |
+| `POST` | `/organizations/:orgId/providers` | Create org provider | Org admin |
+| `GET` | `/organizations/:orgId/providers` | List org providers | Org member |
+| `GET` | `/organizations/:orgId/providers/:providerId` | Get org provider | Org member |
+| `PUT` | `/organizations/:orgId/providers/:providerId` | Update org provider | Org admin |
+| `DELETE` | `/organizations/:orgId/providers/:providerId` | Delete org provider | Org admin |
 
 ### 2. Update Existing Workspace Provider Routes
 
@@ -230,11 +230,11 @@ provider.get("/", requireAuth, requireOrgAccess(), requireWorkspaceAccess(), asy
   const orgProviders = await db
     .select()
     .from(providerTable)
-    .where(eq(providerTable.organisationId, orgId));
+    .where(eq(providerTable.organizationId, orgId));
   
   // Tag providers with their scope for frontend
   const results = [
-    ...orgProviders.map(p => ({ ...p, scope: "organisation" as const })),
+    ...orgProviders.map(p => ({ ...p, scope: "organization" as const })),
     ...workspaceProviders.map(p => ({ ...p, scope: "workspace" as const })),
   ];
   
@@ -252,7 +252,7 @@ Add the new org provider routes:
 import { orgProvider } from "./routes/org-provider.ts";
 
 // ... existing routes ...
-app.route("/organisations/:orgId/providers", orgProvider);
+app.route("/organizations/:orgId/providers", orgProvider);
 ```
 
 ### 4. Update Provider Validation
@@ -269,7 +269,7 @@ The `Provider` type from schemas will automatically include the new fields. Add 
 
 ```typescript
 // In a utils or types file
-export type ProviderScope = "organisation" | "workspace";
+export type ProviderScope = "organization" | "workspace";
 
 export interface ProviderWithScope extends Provider {
   scope: ProviderScope;
@@ -286,10 +286,10 @@ export interface ProviderWithScope extends Provider {
 
 ```tsx
 // Badge component example
-{provider.scope === "organisation" && (
+{provider.scope === "organization" && (
   <Badge variant="secondary" className="ml-2">
     <Building className="size-3 mr-1" />
-    Organisation
+    Organization
   </Badge>
 )}
 ```
@@ -314,13 +314,13 @@ Edit page for existing org providers.
 
 Similar to the workspace provider form but:
 - Uses org-level API endpoints
-- Submits `organisationId` instead of `workspaceId`
+- Submits `organizationId` instead of `workspaceId`
 
 ### 5. Create Org Providers List Component
 
 **File:** `apps/frontend/components/org-providers-list.tsx` (new)
 
-List component for org settings page, fetching from `/organisations/:orgId/providers`.
+List component for org settings page, fetching from `/organizations/:orgId/providers`.
 
 ### 6. Update Org Settings Menu
 
@@ -385,7 +385,7 @@ Add read-only mode for org-scoped providers when accessed from workspace setting
 
 ## Migration Notes
 
-- Existing providers will have `workspaceId` set and `organisationId` as NULL
+- Existing providers will have `workspaceId` set and `organizationId` as NULL
 - No data migration required - existing providers continue to work as workspace-scoped
 - The schema push will make `workspaceId` nullable, which is a backward-compatible change
 

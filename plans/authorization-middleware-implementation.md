@@ -6,7 +6,7 @@ Apply authorization middleware (`requireOrgAccess`, `requireWorkspaceAccess`) to
 
 ## User Requirements
 
-1. **Organisation creation** - Restrict to super admins only
+1. **Organization creation** - Restrict to super admins only
 2. **Chat access for viewers** - Allow all operations (read, create, edit, delete)
 3. **Agent deletion** - Admins only (editors can create/update but not delete)
 4. **ID resolution** - Smart detection: URL params → query params → request body
@@ -19,7 +19,7 @@ Apply authorization middleware (`requireOrgAccess`, `requireWorkspaceAccess`) to
 
 ### Route Files (all in `apps/backend/src/routes/`)
 
-- `organisation.ts` - Org-level access control + super admin restriction
+- `organization.ts` - Org-level access control + super admin restriction
 - `workspace.ts` - Org-level access control
 - `agent.ts` - Workspace-level access control with role restrictions
 - `chat.ts` - Workspace-level access control (no role restrictions)
@@ -53,11 +53,11 @@ Apply authorization middleware (`requireOrgAccess`, `requireWorkspaceAccess`) to
    ```
 
 2. **Update `requireOrgAccess` middleware**
-   - Replace line 28: `const orgId = c.req.param("orgId") || c.req.query("organisationId");`
+   - Replace line 28: `const orgId = c.req.param("orgId") || c.req.query("organizationId");`
    - With: Smart detection that tries multiple sources and variations:
      - URL param: `orgId`, `id` (for /:id routes)
-     - Query param: `organisationId`, `orgId`
-     - Body: `organisationId`, `orgId`
+     - Query param: `organizationId`, `orgId`
+     - Body: `organizationId`, `orgId`
 
 3. **Update `requireWorkspaceAccess` middleware**
    - Replace line 70: `const workspaceId = c.req.param("workspaceId") || c.req.query("workspaceId");`
@@ -77,9 +77,9 @@ Apply authorization middleware (`requireOrgAccess`, `requireWorkspaceAccess`) to
    });
    ```
 
-### Step 2: Update Organisation Routes
+### Step 2: Update Organization Routes
 
-**File:** `apps/backend/src/routes/organisation.ts`
+**File:** `apps/backend/src/routes/organization.ts`
 
 **Import additions:**
 
@@ -94,7 +94,7 @@ import {
 
 1. **Remove global `requireAuth`** (line 17) - will apply per-route
 2. **POST /** - `requireAuth, requireSuperAdmin` (super admin only)
-3. **GET /** - `requireAuth` + filter results to user's organisations
+3. **GET /** - `requireAuth` + filter results to user's organizations
    - Query user's org memberships first
    - Return only orgs where user is a member (or all if super admin)
 4. **GET /:id** - `requireAuth, requireOrgAccess()`
@@ -105,23 +105,23 @@ import {
 **Special handling for GET /**:
 
 ```typescript
-organisation.get("/", requireAuth, async (c) => {
+organization.get("/", requireAuth, async (c) => {
   const user = c.get("user")!;
   const db = c.get("db");
 
   // Super admins see all orgs
   if (isSuperAdmin(user.email)) {
-    const results = await db.select().from(organisationTable);
+    const results = await db.select().from(organizationTable);
     return c.json({ results });
   }
 
   // Regular users see only their orgs
   const memberships = await db
-    .select({ organisationId: organisationMember.organisationId })
-    .from(organisationMember)
-    .where(eq(organisationMember.userId, user.id));
+    .select({ organizationId: organizationMember.organizationId })
+    .from(organizationMember)
+    .where(eq(organizationMember.userId, user.id));
 
-  const orgIds = memberships.map((m) => m.organisationId);
+  const orgIds = memberships.map((m) => m.organizationId);
 
   if (orgIds.length === 0) {
     return c.json({ results: [] });
@@ -129,8 +129,8 @@ organisation.get("/", requireAuth, async (c) => {
 
   const results = await db
     .select()
-    .from(organisationTable)
-    .where(inArray(organisationTable.id, orgIds));
+    .from(organizationTable)
+    .where(inArray(organizationTable.id, orgIds));
 
   return c.json({ results });
 });
@@ -159,7 +159,7 @@ import {
 6. **DELETE /:id** - `requireAuth, requireOrgAccess(["admin"])`
 7. **GET /:workspaceId/membership** - `requireAuth, requireOrgAccess(), requireWorkspaceAccess()`
 
-**Note:** Current logic queries by `organisationId` query param, middleware will validate access.
+**Note:** Current logic queries by `organizationId` query param, middleware will validate access.
 
 ### Step 4: Update Agent Routes
 
@@ -284,7 +284,7 @@ import {
 ## Implementation Order
 
 1. **Step 1** - Enhance middleware (foundation for everything else)
-2. **Step 2** - Organisation routes (includes critical security fix for GET /)
+2. **Step 2** - Organization routes (includes critical security fix for GET /)
 3. **Step 3** - Workspace routes (org-scoped, no workspace dependency)
 4. **Step 4-8** - Workspace-scoped resources (agent, chat, provider, mcp, tool) - can be done in parallel
 
@@ -301,7 +301,7 @@ For each route file after changes:
 
 ## Edge Cases & Considerations
 
-1. **Organisation GET /** - Returns empty array if user has no org memberships (not an error)
+1. **Organization GET /** - Returns empty array if user has no org memberships (not an error)
 2. **Resource ownership validation** - Middleware only checks org/workspace membership, not resource ownership
 3. **Cascading deletes** - Deleting an org/workspace will cascade to all child resources
 4. **Missing IDs** - Middleware returns 400 if required IDs not found in request
@@ -312,7 +312,7 @@ For each route file after changes:
 
 This implementation addresses these critical security issues:
 
-1. **Organisation leak** - Fixed GET / to filter by user membership
+1. **Organization leak** - Fixed GET / to filter by user membership
 2. **Workspace scope bypass** - All workspace resources now validate access
 3. **Sensitive data exposure** - Provider/MCP write operations restricted to admins
 4. **Role enforcement** - Agent deletion restricted to admins only
@@ -333,7 +333,7 @@ If issues arise:
 - [ ] Super admins can access all resources
 - [ ] Org admins can manage org resources and auto-access workspaces
 - [ ] Workspace role restrictions work correctly (admin/editor/viewer)
-- [ ] Organisation GET / returns only user's organisations
+- [ ] Organization GET / returns only user's organizations
 - [ ] Provider/MCP management restricted to admins
 - [ ] Agent deletion restricted to admins
 - [ ] Smart ID detection works from params, query, and body

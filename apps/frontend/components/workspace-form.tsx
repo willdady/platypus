@@ -45,7 +45,7 @@ const WorkspaceForm = ({
 
   const { data: workspace, mutate } = useSWR<Workspace>(
     workspaceId && user
-      ? joinUrl(backendUrl, `/organisations/${orgId}/workspaces/${workspaceId}`)
+      ? joinUrl(backendUrl, `/organizations/${orgId}/workspaces/${workspaceId}`)
       : null,
     fetcher,
   );
@@ -93,15 +93,15 @@ const WorkspaceForm = ({
       const url = workspaceId
         ? joinUrl(
             backendUrl,
-            `/organisations/${orgId}/workspaces/${workspaceId}`,
+            `/organizations/${orgId}/workspaces/${workspaceId}`,
           )
-        : joinUrl(backendUrl, `/organisations/${orgId}/workspaces`);
+        : joinUrl(backendUrl, `/organizations/${orgId}/workspaces`);
 
       const method = workspaceId ? "PUT" : "POST";
 
       const payload = workspaceId
         ? { name: formData.name }
-        : { organisationId: orgId, name: formData.name };
+        : { organizationId: orgId, name: formData.name };
 
       const response = await fetch(url, {
         method,
@@ -117,14 +117,14 @@ const WorkspaceForm = ({
           toast.success("Workspace updated");
           mutate(); // Refresh the local cache
           globalMutate(
-            joinUrl(backendUrl, `/organisations/${orgId}/workspaces`),
+            joinUrl(backendUrl, `/organizations/${orgId}/workspaces`),
           );
           router.refresh();
         } else {
           const workspace = await response.json();
           toast.success("Workspace created");
           globalMutate(
-            joinUrl(backendUrl, `/organisations/${orgId}/workspaces`),
+            joinUrl(backendUrl, `/organizations/${orgId}/workspaces`),
           );
           router.push(`/${orgId}/workspace/${workspace.id}`);
         }
@@ -150,7 +150,7 @@ const WorkspaceForm = ({
       const response = await fetch(
         joinUrl(
           backendUrl,
-          `/organisations/${orgId}/workspaces/${workspaceId}`,
+          `/organizations/${orgId}/workspaces/${workspaceId}`,
         ),
         {
           method: "DELETE",

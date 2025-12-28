@@ -64,7 +64,7 @@ export function NotificationsDropdown() {
                     <div className="text-xs text-muted-foreground line-clamp-2">
                       You've been invited to join{" "}
                       <strong>{invite.workspaceName}</strong> in{" "}
-                      <strong>{invite.organisationName}</strong>.
+                      <strong>{invite.organizationName}</strong>.
                     </div>
                   </Link>
                 </DropdownMenuItem>

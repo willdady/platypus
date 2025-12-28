@@ -25,7 +25,7 @@ export const TagCloud = ({ orgId, workspaceId }: TagCloudProps) => {
     backendUrl && user
       ? joinUrl(
           backendUrl,
-          `/organisations/${orgId}/workspaces/${workspaceId}/chat/tags`,
+          `/organizations/${orgId}/workspaces/${workspaceId}/chat/tags`,
         )
       : null,
     fetcher,

@@ -2,9 +2,9 @@ import { serve } from "@hono/node-server";
 import app from "./src/server.ts";
 import { db } from "./src/index.ts";
 import {
-  organisation,
+  organization,
   workspace,
-  organisationMember,
+  organizationMember,
   user,
 } from "./src/db/schema.ts";
 import { nanoid } from "nanoid";
@@ -18,22 +18,22 @@ const main = async () => {
   logger.info(`Serving on port: ${PORT}`);
 
   await exponentialBackoff(async () => {
-    const [orgCount] = await db.select({ value: count() }).from(organisation);
+    const [orgCount] = await db.select({ value: count() }).from(organization);
 
     if (orgCount.value === 0) {
-      logger.info("No organisations found. Creating initial organisation...");
+      logger.info("No organizations found. Creating initial organization...");
       const orgId = nanoid();
-      await db.insert(organisation).values({
+      await db.insert(organization).values({
         id: orgId,
-        name: "Default Organisation",
+        name: "Default Organization",
       });
-      logger.info(`- Organisation created: ${orgId}`);
+      logger.info(`- Organization created: ${orgId}`);
 
       logger.info("Creating initial workspace...");
       const workspaceId = nanoid();
       await db.insert(workspace).values({
         id: workspaceId,
-        organisationId: orgId,
+        organizationId: orgId,
         name: "Default Workspace",
       });
       logger.info(`- Workspace created: ${workspaceId}`);
@@ -73,9 +73,9 @@ const main = async () => {
 
         // Create organization membership with admin role
         logger.info("Creating organization membership...");
-        await db.insert(organisationMember).values({
+        await db.insert(organizationMember).values({
           id: nanoid(),
-          organisationId: orgId,
+          organizationId: orgId,
           userId: result.user.id,
           role: "admin",
         });

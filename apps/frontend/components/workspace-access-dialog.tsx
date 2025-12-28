@@ -54,7 +54,7 @@ export function WorkspaceAccessDialog({
     results: Workspace[];
   }>(
     backendUrl && user
-      ? joinUrl(backendUrl, `/organisations/${orgId}/workspaces`)
+      ? joinUrl(backendUrl, `/organizations/${orgId}/workspaces`)
       : null,
     fetcher,
   );
@@ -72,7 +72,7 @@ export function WorkspaceAccessDialog({
         const response = await fetch(
           joinUrl(
             backendUrl,
-            `/organisations/${orgId}/members/${member.id}/workspaces`,
+            `/organizations/${orgId}/members/${member.id}/workspaces`,
           ),
           {
             method: "POST",
@@ -93,7 +93,7 @@ export function WorkspaceAccessDialog({
         const response = await fetch(
           joinUrl(
             backendUrl,
-            `/organisations/${orgId}/members/${member.id}/workspaces/${workspaceId}`,
+            `/organizations/${orgId}/members/${member.id}/workspaces/${workspaceId}`,
           ),
           {
             method: "DELETE",
@@ -121,7 +121,7 @@ export function WorkspaceAccessDialog({
       const response = await fetch(
         joinUrl(
           backendUrl,
-          `/organisations/${orgId}/members/${member.id}/workspaces/${workspaceId}`,
+          `/organizations/${orgId}/members/${member.id}/workspaces/${workspaceId}`,
         ),
         {
           method: "PATCH",

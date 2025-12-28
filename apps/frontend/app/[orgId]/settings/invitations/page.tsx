@@ -4,7 +4,7 @@ import { useParams } from "next/navigation";
 import { InvitationForm } from "@/components/invitation-form";
 import { fetcher, joinUrl } from "@/lib/utils";
 import { useBackendUrl } from "@/app/client-context";
-import { type InvitationListItem, type Organisation } from "@platypus/schemas";
+import { type InvitationListItem, type Organization } from "@platypus/schemas";
 import { Button } from "@/components/ui/button";
 import { Trash2, Mail } from "lucide-react";
 import { toast } from "sonner";
@@ -34,13 +34,13 @@ const OrgInvitationsPage = () => {
   const { user } = useAuth();
   const { orgId } = useParams<{ orgId: string }>();
   const backendUrl = useBackendUrl();
-  const { data: orgData } = useSWR<Organisation>(
-    backendUrl && user ? joinUrl(backendUrl, `/organisations/${orgId}`) : null,
+  const { data: orgData } = useSWR<Organization>(
+    backendUrl && user ? joinUrl(backendUrl, `/organizations/${orgId}`) : null,
     fetcher,
   );
   const { data, mutate, isLoading } = useSWR<{ results: InvitationListItem[] }>(
     backendUrl && user
-      ? joinUrl(backendUrl, `/organisations/${orgId}/invitations`)
+      ? joinUrl(backendUrl, `/organizations/${orgId}/invitations`)
       : null,
     fetcher,
   );
@@ -58,7 +58,7 @@ const OrgInvitationsPage = () => {
       const response = await fetch(
         joinUrl(
           backendUrl,
-          `/organisations/${orgId}/invitations/${invitationToDelete}`,
+          `/organizations/${orgId}/invitations/${invitationToDelete}`,
         ),
         { method: "DELETE", credentials: "include" },
       );
@@ -126,7 +126,7 @@ const OrgInvitationsPage = () => {
         <p className="text-muted-foreground mb-6">
           Manage invitations for users to join workspaces in{" "}
           <span className="font-bold">
-            {orgData?.name || "this organisation"}
+            {orgData?.name || "this organization"}
           </span>
           .
         </p>

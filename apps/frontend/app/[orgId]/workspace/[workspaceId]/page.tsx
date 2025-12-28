@@ -20,7 +20,7 @@ import { useBackendUrl } from "@/app/client-context";
 import { useAuth } from "@/components/auth-provider";
 import {
   type Workspace as WorkspaceType,
-  type Organisation,
+  type Organization,
 } from "@platypus/schemas";
 import { useParams } from "next/navigation";
 import { TagCloud } from "@/components/tag-cloud";
@@ -37,7 +37,7 @@ const Workspace = () => {
       backendUrl && user
         ? joinUrl(
             backendUrl,
-            `/organisations/${orgId}/workspaces/${workspaceId}`,
+            `/organizations/${orgId}/workspaces/${workspaceId}`,
           )
         : null,
       fetcher,
@@ -49,7 +49,7 @@ const Workspace = () => {
     backendUrl && user
       ? joinUrl(
           backendUrl,
-          `/organisations/${orgId}/workspaces/${workspaceId}/agents`,
+          `/organizations/${orgId}/workspaces/${workspaceId}/agents`,
         )
       : null,
     fetcher,
@@ -61,7 +61,7 @@ const Workspace = () => {
     backendUrl && user
       ? joinUrl(
           backendUrl,
-          `/organisations/${orgId}/workspaces/${workspaceId}/chat`,
+          `/organizations/${orgId}/workspaces/${workspaceId}/chat`,
         )
       : null,
     fetcher,
@@ -73,14 +73,14 @@ const Workspace = () => {
     backendUrl && user
       ? joinUrl(
           backendUrl,
-          `/organisations/${orgId}/workspaces/${workspaceId}/providers`,
+          `/organizations/${orgId}/workspaces/${workspaceId}/providers`,
         )
       : null,
     fetcher,
   );
 
-  const { data: orgData, isLoading: isLoadingOrg } = useSWR<Organisation>(
-    backendUrl && user ? joinUrl(backendUrl, `/organisations/${orgId}`) : null,
+  const { data: orgData, isLoading: isLoadingOrg } = useSWR<Organization>(
+    backendUrl && user ? joinUrl(backendUrl, `/organizations/${orgId}`) : null,
     fetcher,
   );
 

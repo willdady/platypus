@@ -25,7 +25,7 @@ describe("User Invitation Routes", () => {
           email: "user@example.com", 
           status: "pending", 
           expiresAt: futureDate.toISOString(),
-          organisationName: "Org 1",
+          organizationName: "Org 1",
           workspaceName: "WS 1",
           invitedByName: "Admin"
         }
@@ -51,7 +51,7 @@ describe("User Invitation Routes", () => {
         email: "user@example.com", 
         status: "pending", 
         expiresAt: futureDate.toISOString(),
-        organisationId: "org-1",
+        organizationId: "org-1",
         workspaceId: "ws-1",
         role: "editor"
       };

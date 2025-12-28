@@ -2,7 +2,7 @@
 
 ## Executive Summary
 
-This plan addresses the issue where authenticated super admin users cannot access the `/create` (Organisation Create) page because the frontend's [`ProtectedRoute`](apps/frontend/components/protected-route.tsx:163) component checks for a `user.role` field that doesn't exist in the database or session.
+This plan addresses the issue where authenticated super admin users cannot access the `/create` (Organization Create) page because the frontend's [`ProtectedRoute`](apps/frontend/components/protected-route.tsx:163) component checks for a `user.role` field that doesn't exist in the database or session.
 
 **Current Problem:** The frontend checks `user?.role !== "admin"` but the user table has no `role` field, causing all users (including super admins) to fail the check.
 
@@ -22,8 +22,8 @@ This plan addresses the issue where authenticated super admin users cannot acces
 - Function [`isSuperAdmin()`](apps/backend/src/middleware/authorization.ts:26-30) checks if user email matches
 - Middleware [`requireSuperAdmin`](apps/backend/src/middleware/authorization.ts:252) protects routes like org creation
 - Used in 3 locations:
-  1. [`organisation.post("/")`](apps/backend/src/routes/organisation.ts:28) - Create organisation
-  2. [`organisation.get("/")`](apps/backend/src/routes/organisation.ts:48) - List all orgs for super admins
+  1. [`organization.post("/")`](apps/backend/src/routes/organization.ts:28) - Create organization
+  2. [`organization.get("/")`](apps/backend/src/routes/organization.ts:48) - List all orgs for super admins
   3. [`member.get("/")`](apps/backend/src/routes/member.ts:70) - Include `isSuperAdmin` flag in member list
 
 **User Table Schema:**
@@ -281,14 +281,14 @@ const isSuperAdmin = (user: { role: string }): boolean => {
  * - Allows request to proceed if user is a super admin
  *
  * **Use Cases:**
- * - Creating new organisations
+ * - Creating new organizations
  * - Platform-wide configuration changes
  * - System administration tasks
  *
  * @example
  * ```typescript
- * // Restrict organisation creation to super admins only
- * app.post("/organisations", requireAuth, requireSuperAdmin, handler);
+ * // Restrict organization creation to super admins only
+ * app.post("/organizations", requireAuth, requireSuperAdmin, handler);
  * ```
  */
 export const requireSuperAdmin = createMiddleware(async (c, next) => {
@@ -352,21 +352,21 @@ export const requireWorkspaceAccess = (requiredRoles?: WorkspaceRole[]) =>
 
 ### 4. Update route handlers
 
-**File:** [`apps/backend/src/routes/organisation.ts`](apps/backend/src/routes/organisation.ts:48)
+**File:** [`apps/backend/src/routes/organization.ts`](apps/backend/src/routes/organization.ts:48)
 
 ```typescript
-/** List all organisations (filtered to user's memberships) */
-organisation.get("/", requireAuth, async (c) => {
+/** List all organizations (filtered to user's memberships) */
+organization.get("/", requireAuth, async (c) => {
   const user = c.get("user")!;
 
-  // Super admins see all organisations
+  // Super admins see all organizations
   if (isSuperAdmin(user)) {
     // ✅ Pass full user object
-    const results = await db.select().from(organisationTable);
+    const results = await db.select().from(organizationTable);
     return c.json({ results });
   }
 
-  // Regular users see only their organisations
+  // Regular users see only their organizations
   // ... rest unchanged
 });
 ```
@@ -555,8 +555,8 @@ Update any JSDoc or inline comments that reference `SUPER_ADMIN_EMAILS`.
 
    ```bash
    # Sign in as admin@example.com
-   # Test POST /organisations (should succeed)
-   curl -X POST http://localhost:4000/organisations \
+   # Test POST /organizations (should succeed)
+   curl -X POST http://localhost:4000/organizations \
      -H "Content-Type: application/json" \
      -H "Cookie: session=..." \
      -d '{"name": "Test Org"}'
@@ -565,7 +565,7 @@ Update any JSDoc or inline comments that reference `SUPER_ADMIN_EMAILS`.
 5. **Regular User Block:**
    ```bash
    # Create regular user (role="user")
-   # Test POST /organisations (should return 403)
+   # Test POST /organizations (should return 403)
    ```
 
 ### Frontend Testing
@@ -578,7 +578,7 @@ Update any JSDoc or inline comments that reference `SUPER_ADMIN_EMAILS`.
 2. **Super Admin Access:**
    - Navigate to `/create`
    - Verify page loads successfully
-   - Verify can create organisations
+   - Verify can create organizations
 
 3. **Regular User Block:**
    - Sign in as regular user
@@ -627,7 +627,7 @@ Update any JSDoc or inline comments that reference `SUPER_ADMIN_EMAILS`.
 - [ ] Update [`requireSuperAdmin` middleware](apps/backend/src/middleware/authorization.ts:252)
 - [ ] Update [`requireOrgAccess()`](apps/backend/src/middleware/authorization.ts:91)
 - [ ] Update [`requireWorkspaceAccess()`](apps/backend/src/middleware/authorization.ts:176)
-- [ ] Update [`organisation.ts`](apps/backend/src/routes/organisation.ts:48) route handler
+- [ ] Update [`organization.ts`](apps/backend/src/routes/organization.ts:48) route handler
 - [ ] Update [`member.ts`](apps/backend/src/routes/member.ts:70,138) - 2 locations
 - [ ] Update default user creation in [`index.ts`](apps/backend/index.ts:44-75)
 - [ ] Remove `SUPER_ADMIN_EMAILS` from [`.example.env`](apps/backend/.example.env:7)
@@ -642,8 +642,8 @@ Update any JSDoc or inline comments that reference `SUPER_ADMIN_EMAILS`.
 
 - [ ] Test schema generation
 - [ ] Test database migration
-- [ ] Test super admin can create organisations
-- [ ] Test super admin can list all organisations
+- [ ] Test super admin can create organizations
+- [ ] Test super admin can list all organizations
 - [ ] Test regular user blocked from super admin routes
 - [ ] Test session includes `user.role` field
 - [ ] Test frontend `/create` page loads for admin
@@ -729,7 +729,7 @@ Move from role-based to permission-based access control:
 const permissions = {
   user: ["read:own-data"],
   support: ["read:all-data", "write:support-tickets"],
-  admin: ["create:organisation", "read:all", "write:all"],
+  admin: ["create:organization", "read:all", "write:all"],
   owner: ["*"],
 };
 

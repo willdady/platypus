@@ -9,7 +9,7 @@ const EditOrgProviderPage = async ({
 
   return (
     <div>
-      <h1 className="text-2xl font-bold mb-4">Edit Organisation Provider</h1>
+      <h1 className="text-2xl font-bold mb-4">Edit Organization Provider</h1>
       <ProviderForm orgId={orgId} providerId={providerId} />
     </div>
   );

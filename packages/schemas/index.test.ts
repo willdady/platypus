@@ -1,54 +1,54 @@
 import { describe, it, expect } from 'vitest';
 import {
-  organisationSchema,
+  organizationSchema,
   workspaceSchema,
   agentSchema,
-  organisationCreateSchema,
+  organizationCreateSchema,
 } from './index';
 
-describe('Organisation Schema', () => {
-  it('should validate a valid organisation', () => {
+describe('Organization Schema', () => {
+  it('should validate a valid organization', () => {
     const validOrg = {
       id: '123',
       name: 'Test Org',
       createdAt: new Date(),
       updatedAt: new Date(),
     };
-    const result = organisationSchema.safeParse(validOrg);
+    const result = organizationSchema.safeParse(validOrg);
     expect(result.success).toBe(true);
   });
 
-  it('should reject organisation with short name', () => {
+  it('should reject organization with short name', () => {
     const invalidOrg = {
       id: '123',
       name: 'AB',
       createdAt: new Date(),
       updatedAt: new Date(),
     };
-    const result = organisationSchema.safeParse(invalidOrg);
+    const result = organizationSchema.safeParse(invalidOrg);
     expect(result.success).toBe(false);
   });
 
-  it('should reject organisation with long name', () => {
+  it('should reject organization with long name', () => {
     const invalidOrg = {
       id: '123',
       name: 'A'.repeat(31),
       createdAt: new Date(),
       updatedAt: new Date(),
     };
-    const result = organisationSchema.safeParse(invalidOrg);
+    const result = organizationSchema.safeParse(invalidOrg);
     expect(result.success).toBe(false);
   });
 });
 
-describe('Organisation Create Schema', () => {
+describe('Organization Create Schema', () => {
   it('should validate create input with only required fields', () => {
-    const result = organisationCreateSchema.safeParse({ name: 'New Org' });
+    const result = organizationCreateSchema.safeParse({ name: 'New Org' });
     expect(result.success).toBe(true);
   });
 
   it('should reject empty name', () => {
-    const result = organisationCreateSchema.safeParse({ name: '' });
+    const result = organizationCreateSchema.safeParse({ name: '' });
     expect(result.success).toBe(false);
   });
 });
@@ -57,7 +57,7 @@ describe('Workspace Schema', () => {
   it('should validate a valid workspace', () => {
     const validWorkspace = {
       id: '456',
-      organisationId: '123',
+      organizationId: '123',
       name: 'Test Workspace',
       createdAt: new Date(),
       updatedAt: new Date(),

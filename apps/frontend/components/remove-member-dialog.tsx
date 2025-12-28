@@ -38,7 +38,7 @@ export function RemoveMemberDialog({
     setIsSubmitting(true);
     try {
       const response = await fetch(
-        joinUrl(backendUrl, `/organisations/${orgId}/members/${member.id}`),
+        joinUrl(backendUrl, `/organizations/${orgId}/members/${member.id}`),
         {
           method: "DELETE",
           credentials: "include",
@@ -46,7 +46,7 @@ export function RemoveMemberDialog({
       );
 
       if (response.ok) {
-        toast.success("Member removed from organisation");
+        toast.success("Member removed from organization");
         onSuccess();
       } else {
         const data = await response.json();
@@ -69,14 +69,14 @@ export function RemoveMemberDialog({
           </DialogTitle>
           <DialogDescription>
             Are you sure you want to remove <strong>{member.user.name}</strong>{" "}
-            from this organisation?
+            from this organization?
           </DialogDescription>
         </DialogHeader>
 
         <div className="py-4">
           <p className="text-sm text-muted-foreground">
             This will immediately revoke their access to all workspaces in this
-            organisation:
+            organization:
           </p>
           <ul className="mt-2 space-y-1">
             {member.workspaces.map((ws) => (

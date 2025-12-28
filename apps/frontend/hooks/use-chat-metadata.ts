@@ -32,7 +32,7 @@ export const useChatMetadata = (
       fetch(
         joinUrl(
           backendUrl,
-          `/organisations/${orgId}/workspaces/${workspaceId}/chat/${chatId}`,
+          `/organizations/${orgId}/workspaces/${workspaceId}/chat/${chatId}`,
         ),
         { credentials: "include" },
       )
@@ -61,7 +61,7 @@ export const useChatMetadata = (
               fetch(
                 joinUrl(
                   backendUrl,
-                  `/organisations/${orgId}/workspaces/${workspaceId}/chat/${chatId}/generate-metadata`,
+                  `/organizations/${orgId}/workspaces/${workspaceId}/chat/${chatId}/generate-metadata`,
                 ),
                 {
                   method: "POST",
@@ -77,7 +77,7 @@ export const useChatMetadata = (
                   mutate(
                     joinUrl(
                       backendUrl,
-                      `/organisations/${orgId}/workspaces/${workspaceId}/chat`,
+                      `/organizations/${orgId}/workspaces/${workspaceId}/chat`,
                     ),
                   );
                 })

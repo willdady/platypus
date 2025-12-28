@@ -61,14 +61,14 @@ const ProviderForm = ({
   providerId?: string;
 }) => {
   // Add scope to Provider type for this component
-  type ProviderWithScope = Provider & { scope: "organisation" | "workspace" };
+  type ProviderWithScope = Provider & { scope: "organization" | "workspace" };
 
   const { user } = useAuth();
   const backendUrl = useBackendUrl();
   const router = useRouter();
   const hasInitialized = useRef(false);
 
-  const formScope = workspaceId ? "workspace" : "organisation";
+  const formScope = workspaceId ? "workspace" : "organization";
 
   const [formData, setFormData] = useState<ProviderFormData>({
     providerType: "OpenAI",
@@ -105,9 +105,9 @@ const ProviderForm = ({
       ? formScope === "workspace"
         ? joinUrl(
             backendUrl,
-            `/organisations/${orgId}/workspaces/${workspaceId}/providers/${providerId}`,
+            `/organizations/${orgId}/workspaces/${workspaceId}/providers/${providerId}`,
           )
-        : joinUrl(backendUrl, `/organisations/${orgId}/providers/${providerId}`)
+        : joinUrl(backendUrl, `/organizations/${orgId}/providers/${providerId}`)
       : null;
 
   const { data: provider, isLoading } = useSWR<ProviderWithScope>(
@@ -218,7 +218,7 @@ const ProviderForm = ({
     try {
       const payload: Omit<Provider, "id" | "createdAt" | "updatedAt"> = {
         workspaceId: workspaceId || undefined,
-        organisationId: !workspaceId ? orgId : undefined,
+        organizationId: !workspaceId ? orgId : undefined,
         name: formData.name,
         providerType: formData.providerType,
         apiKey: formData.apiKey,
@@ -236,18 +236,18 @@ const ProviderForm = ({
         ? formScope === "workspace"
           ? joinUrl(
               backendUrl,
-              `/organisations/${orgId}/workspaces/${workspaceId}/providers/${providerId}`,
+              `/organizations/${orgId}/workspaces/${workspaceId}/providers/${providerId}`,
             )
           : joinUrl(
               backendUrl,
-              `/organisations/${orgId}/providers/${providerId}`,
+              `/organizations/${orgId}/providers/${providerId}`,
             )
         : formScope === "workspace"
           ? joinUrl(
               backendUrl,
-              `/organisations/${orgId}/workspaces/${workspaceId}/providers`,
+              `/organizations/${orgId}/workspaces/${workspaceId}/providers`,
             )
-          : joinUrl(backendUrl, `/organisations/${orgId}/providers`);
+          : joinUrl(backendUrl, `/organizations/${orgId}/providers`);
 
       const method = providerId ? "PUT" : "POST";
 
@@ -291,11 +291,11 @@ const ProviderForm = ({
         formScope === "workspace"
           ? joinUrl(
               backendUrl,
-              `/organisations/${orgId}/workspaces/${workspaceId}/providers/${providerId}`,
+              `/organizations/${orgId}/workspaces/${workspaceId}/providers/${providerId}`,
             )
           : joinUrl(
               backendUrl,
-              `/organisations/${orgId}/providers/${providerId}`,
+              `/organizations/${orgId}/providers/${providerId}`,
             );
 
       const response = await fetch(deleteUrl, {
@@ -325,7 +325,7 @@ const ProviderForm = ({
     return <div className={classNames}>Loading...</div>;
   }
 
-  const isReadOnly = formScope === "workspace" && provider?.scope === "organisation";
+  const isReadOnly = formScope === "workspace" && provider?.scope === "organization";
 
   return (
     <div className={classNames}>
@@ -338,7 +338,7 @@ const ProviderForm = ({
       {isReadOnly && (
         <div className="mb-6 p-4 rounded-lg bg-secondary/50 border border-secondary text-sm text-secondary-foreground flex items-center gap-2">
           <Building className="size-4" />
-          This provider is managed at the organisation level and cannot be
+          This provider is managed at the organization level and cannot be
           edited from this workspace.
         </div>
       )}

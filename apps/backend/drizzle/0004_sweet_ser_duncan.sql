@@ -1,7 +1,7 @@
 CREATE TABLE "invitation" (
 	"id" text PRIMARY KEY NOT NULL,
 	"email" text NOT NULL,
-	"organisation_id" text NOT NULL,
+	"organization_id" text NOT NULL,
 	"workspace_id" text NOT NULL,
 	"role" text NOT NULL,
 	"invited_by" text NOT NULL,
@@ -11,9 +11,9 @@ CREATE TABLE "invitation" (
 	CONSTRAINT "unique_invitation_workspace_email" UNIQUE("workspace_id","email")
 );
 --> statement-breakpoint
-CREATE TABLE "organisation_member" (
+CREATE TABLE "organization_member" (
 	"id" text PRIMARY KEY NOT NULL,
-	"organisation_id" text NOT NULL,
+	"organization_id" text NOT NULL,
 	"user_id" text NOT NULL,
 	"role" text DEFAULT 'member' NOT NULL,
 	"created_at" timestamp DEFAULT now() NOT NULL,
@@ -82,22 +82,22 @@ ALTER TABLE "agent" ALTER COLUMN "workspace_id" SET NOT NULL;--> statement-break
 ALTER TABLE "chat" ALTER COLUMN "workspace_id" SET NOT NULL;--> statement-breakpoint
 ALTER TABLE "mcp" ALTER COLUMN "workspace_id" SET NOT NULL;--> statement-breakpoint
 ALTER TABLE "provider" ALTER COLUMN "workspace_id" SET NOT NULL;--> statement-breakpoint
-ALTER TABLE "workspace" ALTER COLUMN "organisation_id" SET NOT NULL;--> statement-breakpoint
-ALTER TABLE "invitation" ADD CONSTRAINT "invitation_organisation_id_organisation_id_fk" FOREIGN KEY ("organisation_id") REFERENCES "public"."organisation"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "workspace" ALTER COLUMN "organization_id" SET NOT NULL;--> statement-breakpoint
+ALTER TABLE "invitation" ADD CONSTRAINT "invitation_organization_id_organization_id_fk" FOREIGN KEY ("organization_id") REFERENCES "public"."organization"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "invitation" ADD CONSTRAINT "invitation_workspace_id_workspace_id_fk" FOREIGN KEY ("workspace_id") REFERENCES "public"."workspace"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "invitation" ADD CONSTRAINT "invitation_invited_by_user_id_fk" FOREIGN KEY ("invited_by") REFERENCES "public"."user"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "organisation_member" ADD CONSTRAINT "organisation_member_organisation_id_organisation_id_fk" FOREIGN KEY ("organisation_id") REFERENCES "public"."organisation"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "organisation_member" ADD CONSTRAINT "organisation_member_user_id_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "organization_member" ADD CONSTRAINT "organization_member_organization_id_organization_id_fk" FOREIGN KEY ("organization_id") REFERENCES "public"."organization"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "organization_member" ADD CONSTRAINT "organization_member_user_id_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "workspace_member" ADD CONSTRAINT "workspace_member_workspace_id_workspace_id_fk" FOREIGN KEY ("workspace_id") REFERENCES "public"."workspace"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "workspace_member" ADD CONSTRAINT "workspace_member_user_id_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "workspace_member" ADD CONSTRAINT "workspace_member_org_member_id_organisation_member_id_fk" FOREIGN KEY ("org_member_id") REFERENCES "public"."organisation_member"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "workspace_member" ADD CONSTRAINT "workspace_member_org_member_id_organization_member_id_fk" FOREIGN KEY ("org_member_id") REFERENCES "public"."organization_member"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "account" ADD CONSTRAINT "account_user_id_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "session" ADD CONSTRAINT "session_user_id_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 CREATE INDEX "idx_invitation_email" ON "invitation" USING btree ("email");--> statement-breakpoint
-CREATE INDEX "idx_invitation_org_id" ON "invitation" USING btree ("organisation_id");--> statement-breakpoint
+CREATE INDEX "idx_invitation_org_id" ON "invitation" USING btree ("organization_id");--> statement-breakpoint
 CREATE INDEX "idx_invitation_workspace_id" ON "invitation" USING btree ("workspace_id");--> statement-breakpoint
-CREATE INDEX "idx_org_member_org_id" ON "organisation_member" USING btree ("organisation_id");--> statement-breakpoint
-CREATE INDEX "idx_org_member_user_id" ON "organisation_member" USING btree ("user_id");--> statement-breakpoint
+CREATE INDEX "idx_org_member_org_id" ON "organization_member" USING btree ("organization_id");--> statement-breakpoint
+CREATE INDEX "idx_org_member_user_id" ON "organization_member" USING btree ("user_id");--> statement-breakpoint
 CREATE INDEX "idx_ws_member_workspace_id" ON "workspace_member" USING btree ("workspace_id");--> statement-breakpoint
 CREATE INDEX "idx_ws_member_user_id" ON "workspace_member" USING btree ("user_id");--> statement-breakpoint
 CREATE INDEX "account_userId_idx" ON "account" USING btree ("user_id");--> statement-breakpoint

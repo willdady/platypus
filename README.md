@@ -11,7 +11,7 @@ Platypus is an open-source, full-stack application designed to help you build AI
 
 ## ✨ Key Features
 
-- **🏢 Multi-Tenancy:** Built-in support for Organisations and Workspaces to isolate data and manage teams.
+- **🏢 Multi-Tenancy:** Built-in support for Organizations and Workspaces to isolate data and manage teams.
 - **🤖 Agentic Workflows:** Create sophisticated agents with custom system prompts, model configurations, and tool assignments.
 - **🛠️ Extensible Tool System:** Register custom tools that agents can invoke intelligently to perform complex tasks.
 - **🔌 MCP Support:** First-class support for the **Model Context Protocol** (MCP), allowing agents to securely connect to local and remote data sources.

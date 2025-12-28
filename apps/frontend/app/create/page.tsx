@@ -1,19 +1,19 @@
-import { OrganisationForm } from "@/components/organisation-form";
+import { OrganizationForm } from "@/components/organization-form";
 import { BackButton } from "@/components/back-button";
 import { ProtectedRoute } from "@/components/protected-route";
 
-const OrganisationCreatePage = () => {
+const OrganizationCreatePage = () => {
   return (
     <ProtectedRoute requireSuperAdmin={true}>
       <div className="flex justify-center w-full p-4">
         <div className="w-lg">
           <BackButton fallbackHref="/" />
-          <h1 className="text-2xl mb-4 font-bold">Create Organisation</h1>
-          <OrganisationForm />
+          <h1 className="text-2xl mb-4 font-bold">Create Organization</h1>
+          <OrganizationForm />
         </div>
       </div>
     </ProtectedRoute>
   );
 };
 
-export default OrganisationCreatePage;
+export default OrganizationCreatePage;

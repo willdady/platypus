@@ -9,10 +9,10 @@ const OrgProvidersPage = async ({
 
   return (
     <div>
-      <h1 className="text-2xl font-bold mb-4">Organisation Providers</h1>
+      <h1 className="text-2xl font-bold mb-4">Organization Providers</h1>
       <p className="text-muted-foreground mb-6">
         Providers defined here are available to all workspaces in this
-        organisation.
+        organization.
       </p>
       <ProvidersList orgId={orgId} />
     </div>

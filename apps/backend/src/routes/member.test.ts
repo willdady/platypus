@@ -11,10 +11,10 @@ describe("Member Routes", () => {
   });
 
   const orgId = "org-1";
-  const baseUrl = `/organisations/${orgId}/members`;
+  const baseUrl = `/organizations/${orgId}/members`;
 
   describe("GET /", () => {
-    it("should list organisation members", async () => {
+    it("should list organization members", async () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]); // requireOrgAccess
       
@@ -87,7 +87,7 @@ describe("Member Routes", () => {
       // Fetch member
       mockDb.limit.mockResolvedValueOnce([{ id: "m1", userId: "u1" }]);
       // Verify workspace
-      mockDb.limit.mockResolvedValueOnce([{ id: "ws-1", organisationId: orgId }]);
+      mockDb.limit.mockResolvedValueOnce([{ id: "ws-1", organizationId: orgId }]);
       // Check if already member
       mockDb.limit.mockResolvedValueOnce([]);
       

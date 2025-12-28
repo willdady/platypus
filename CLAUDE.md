@@ -80,8 +80,8 @@ The project is organized as a Turborepo monorepo with three main packages:
 
 **Core Domain Models**:
 
-- **Organisation** → **Workspace** → **Chat/Agent/MCP/Provider** (hierarchical relationship)
-- `organisation`: Top-level tenant/org
+- **Organization** → **Workspace** → **Chat/Agent/MCP/Provider** (hierarchical relationship)
+- `organization`: Top-level tenant/org
 - `workspace`: Scoped environment within an org
 - `chat`: Chat sessions within a workspace
 - `agent`: Configurable AI agents with system prompts, model selection, temperature, and tool assignments
@@ -97,13 +97,13 @@ The project is organized as a Turborepo monorepo with three main packages:
 
 **API Routes** (hierarchical structure):
 
-- `/organisations`: CRUD for organisations
-- `/organisations/:orgId/workspaces`: CRUD for workspaces
-- `/organisations/:orgId/workspaces/:workspaceId/agents`: CRUD for agents
-- `/organisations/:orgId/workspaces/:workspaceId/chat`: Stream AI chat responses and CRUD for chats
-- `/organisations/:orgId/workspaces/:workspaceId/mcps`: CRUD for MCP integrations
-- `/organisations/:orgId/workspaces/:workspaceId/providers`: CRUD for custom AI providers
-- `/organisations/:orgId/workspaces/:workspaceId/tools`: List available tools
+- `/organizations`: CRUD for organizations
+- `/organizations/:orgId/workspaces`: CRUD for workspaces
+- `/organizations/:orgId/workspaces/:workspaceId/agents`: CRUD for agents
+- `/organizations/:orgId/workspaces/:workspaceId/chat`: Stream AI chat responses and CRUD for chats
+- `/organizations/:orgId/workspaces/:workspaceId/mcps`: CRUD for MCP integrations
+- `/organizations/:orgId/workspaces/:workspaceId/providers`: CRUD for custom AI providers
+- `/organizations/:orgId/workspaces/:workspaceId/tools`: List available tools
 
 **Entry Point**: `apps/backend/index.ts` starts the server and upserts default org/workspace on startup.
 

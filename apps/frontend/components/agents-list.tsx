@@ -39,7 +39,7 @@ export const AgentsList = ({
     backendUrl && user
       ? joinUrl(
           backendUrl,
-          `/organisations/${orgId}/workspaces/${workspaceId}/agents`,
+          `/organizations/${orgId}/workspaces/${workspaceId}/agents`,
         )
       : null,
     fetcher,
@@ -51,7 +51,7 @@ export const AgentsList = ({
     backendUrl && user
       ? joinUrl(
           backendUrl,
-          `/organisations/${orgId}/workspaces/${workspaceId}/providers`,
+          `/organizations/${orgId}/workspaces/${workspaceId}/providers`,
         )
       : null,
     fetcher,

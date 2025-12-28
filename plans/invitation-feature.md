@@ -2,9 +2,9 @@
 
 ## Overview
 
-This plan outlines the implementation of a workspace invitation system for Platypus. Users can be invited to join specific workspaces within an organisation. The feature includes:
+This plan outlines the implementation of a workspace invitation system for Platypus. Users can be invited to join specific workspaces within an organization. The feature includes:
 
-- Organisation admins creating/managing invitations
+- Organization admins creating/managing invitations
 - Users receiving and accepting/declining invitations
 - A notifications dropdown in the header to surface pending invitations
 - An "Invitations" tab in user settings to manage received invitations
@@ -49,7 +49,7 @@ flowchart TD
 
     G --> E
     H --> J{User exists?}
-    J -->|Yes| K[Create organisationMember if needed]
+    J -->|Yes| K[Create organizationMember if needed]
     K --> L[Create workspaceMember]
     L --> M[Update invitation status]
     J -->|No| N[User signs up first]
@@ -64,7 +64,7 @@ erDiagram
     invitation {
         text id PK
         text email
-        text organisation_id FK
+        text organization_id FK
         text workspace_id FK
         text role
         text invited_by FK
@@ -73,14 +73,14 @@ erDiagram
         timestamp created_at
     }
 
-    organisation ||--o{ invitation : has
+    organization ||--o{ invitation : has
     workspace ||--o{ invitation : has
     user ||--o{ invitation : invites
 ```
 
 **Required Schema Changes to [`apps/backend/src/db/schema.ts`](apps/backend/src/db/schema.ts:196):**
 
-1. Add `.notNull()` to `organisationId` field
+1. Add `.notNull()` to `organizationId` field
 2. Add `.notNull()` to `workspaceId` field
 3. Add unique index on `(workspaceId, email)` to prevent duplicate invites
 4. Add index on `workspaceId` for efficient queries
@@ -90,9 +90,9 @@ erDiagram
 
 | Method | Endpoint                                          | Description                     | Auth          |
 | ------ | ------------------------------------------------- | ------------------------------- | ------------- |
-| POST   | `/organisations/:orgId/invitations`               | Create invitation               | Org admin     |
-| GET    | `/organisations/:orgId/invitations`               | List org's invitations          | Org admin     |
-| DELETE | `/organisations/:orgId/invitations/:invitationId` | Delete invitation               | Org admin     |
+| POST   | `/organizations/:orgId/invitations`               | Create invitation               | Org admin     |
+| GET    | `/organizations/:orgId/invitations`               | List org's invitations          | Org admin     |
+| DELETE | `/organizations/:orgId/invitations/:invitationId` | Delete invitation               | Org admin     |
 | GET    | `/users/me/invitations`                           | List user's pending invitations | Authenticated |
 | POST   | `/users/me/invitations/:invitationId/accept`      | Accept invitation               | Authenticated |
 | POST   | `/users/me/invitations/:invitationId/decline`     | Decline invitation              | Authenticated |
@@ -109,7 +109,7 @@ erDiagram
 ### Phase 1: Database & Schemas
 
 - [ ] Update invitation table schema in [`apps/backend/src/db/schema.ts`](apps/backend/src/db/schema.ts:196)
-  - Add `.notNull()` to `organisationId`
+  - Add `.notNull()` to `organizationId`
   - Add `.notNull()` to `workspaceId`
   - Add unique constraint on `(workspaceId, email)`
   - Add index on `workspaceId`
@@ -125,17 +125,17 @@ erDiagram
 
 - [ ] Add `INVITATION_EXPIRY_DAYS` environment variable support (default: 7)
 - [ ] Create invitation routes file at `apps/backend/src/routes/invitation.ts`
-- [ ] Implement `POST /organisations/:orgId/invitations` endpoint
+- [ ] Implement `POST /organizations/:orgId/invitations` endpoint
   - Validate org admin role
   - Check workspace belongs to org
   - Check for existing pending invitation (workspace + email)
   - Calculate expiry date from env var
   - Create invitation record
-- [ ] Implement `GET /organisations/:orgId/invitations` endpoint
-  - List all invitations for the organisation
+- [ ] Implement `GET /organizations/:orgId/invitations` endpoint
+  - List all invitations for the organization
   - Include workspace name in response
   - Filter out expired invitations or mark them
-- [ ] Implement `DELETE /organisations/:orgId/invitations/:invitationId` endpoint
+- [ ] Implement `DELETE /organizations/:orgId/invitations/:invitationId` endpoint
   - Validate org admin role
   - Soft delete or hard delete the invitation
 - [ ] Create user invitation routes at `apps/backend/src/routes/user-invitation.ts`
@@ -146,7 +146,7 @@ erDiagram
 - [ ] Implement `POST /users/me/invitations/:invitationId/accept` endpoint
   - Validate invitation belongs to user's email
   - Check invitation not expired
-  - Create organisationMember if not exists
+  - Create organizationMember if not exists
   - Create workspaceMember with invitation role
   - Update invitation status to accepted
 - [ ] Implement `POST /users/me/invitations/:invitationId/decline` endpoint
@@ -215,7 +215,7 @@ erDiagram
 
 ```
 ┌─────────────────────────────────────────────────────────┐
-│ Organisation Settings                                   │
+│ Organization Settings                                   │
 ├─────────────────────────────────────────────────────────┤
 │ ┌──────────┐                                            │
 │ │ General  │  Invitations                               │

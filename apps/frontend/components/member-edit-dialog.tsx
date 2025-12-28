@@ -46,7 +46,7 @@ export function MemberEditDialog({
     setIsSubmitting(true);
     try {
       const response = await fetch(
-        joinUrl(backendUrl, `/organisations/${orgId}/members/${member.id}`),
+        joinUrl(backendUrl, `/organizations/${orgId}/members/${member.id}`),
         {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
@@ -77,14 +77,14 @@ export function MemberEditDialog({
         <DialogHeader>
           <DialogTitle>Edit Member Role</DialogTitle>
           <DialogDescription>
-            Change the organisation-level role for {member.user.name}.
+            Change the organization-level role for {member.user.name}.
           </DialogDescription>
         </DialogHeader>
 
         <FieldSet>
           <FieldGroup>
             <Field>
-              <FieldLabel htmlFor="role">Organisation Role</FieldLabel>
+              <FieldLabel htmlFor="role">Organization Role</FieldLabel>
               <Select
                 value={role}
                 onValueChange={setRole}

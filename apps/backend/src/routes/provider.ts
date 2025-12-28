@@ -77,11 +77,11 @@ provider.get(
     const orgProviders = await db
       .select()
       .from(providerTable)
-      .where(eq(providerTable.organisationId, orgId));
+      .where(eq(providerTable.organizationId, orgId));
 
     // Tag providers with their scope for frontend
     const results = [
-      ...orgProviders.map((p) => ({ ...p, scope: "organisation" as const })),
+      ...orgProviders.map((p) => ({ ...p, scope: "organization" as const })),
       ...workspaceProviders.map((p) => ({ ...p, scope: "workspace" as const })),
     ];
 
@@ -108,7 +108,7 @@ provider.get(
           eq(providerTable.id, providerId),
           or(
             eq(providerTable.workspaceId, workspaceId),
-            eq(providerTable.organisationId, orgId),
+            eq(providerTable.organizationId, orgId),
           ),
         ),
       )
@@ -119,7 +119,7 @@ provider.get(
     }
 
     const p = record[0];
-    const scope = p.organisationId ? "organisation" : "workspace";
+    const scope = p.organizationId ? "organization" : "workspace";
 
     return c.json({ ...p, scope });
   },

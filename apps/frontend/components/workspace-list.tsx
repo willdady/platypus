@@ -27,7 +27,7 @@ const WorkspaceList = ({
 
   const { data, error, isLoading } = useSWR<{ results: Workspace[] }>(
     backendUrl && user
-      ? joinUrl(backendUrl, `/organisations/${orgId}/workspaces`)
+      ? joinUrl(backendUrl, `/organizations/${orgId}/workspaces`)
       : null,
     fetcher,
   );

@@ -3,7 +3,7 @@ import { cors } from "hono/cors";
 import { db } from "./index.ts";
 import { auth } from "./auth.ts";
 import { chat } from "./routes/chat.ts";
-import { organisation } from "./routes/organisation.ts";
+import { organization } from "./routes/organization.ts";
 import { workspace } from "./routes/workspace.ts";
 import { agent } from "./routes/agent.ts";
 import { tool } from "./routes/tool.ts";
@@ -13,20 +13,20 @@ import { orgProvider } from "./routes/org-provider.ts";
 import { invitation } from "./routes/invitation.ts";
 import { userInvitation } from "./routes/user-invitation.ts";
 import { member } from "./routes/member.ts";
-import { organisationMember, workspaceMember } from "./db/schema.ts";
+import { organizationMember, workspaceMember } from "./db/schema.ts";
 import { logger } from "./logger.ts";
 
 const ALLOWED_ORIGINS = process.env.ALLOWED_ORIGINS!.split(",");
 
 /**
- * Organisation membership type inferred from the database schema.
- * Represents a user's membership and role within an organisation.
+ * Organization membership type inferred from the database schema.
+ * Represents a user's membership and role within an organization.
  */
-export type OrganisationMembership = typeof organisationMember.$inferSelect;
+export type OrganizationMembership = typeof organizationMember.$inferSelect;
 
 /**
- * Organisation membership with super admin flag.
- * Used when a super admin accesses an organisation (bypasses normal membership checks).
+ * Organization membership with super admin flag.
+ * Used when a super admin accesses an organization (bypasses normal membership checks).
  */
 export type SuperAdminOrgMembership = {
   role: "admin";
@@ -40,8 +40,8 @@ export type SuperAdminOrgMembership = {
 export type WorkspaceMembership = typeof workspaceMember.$inferSelect;
 
 /**
- * Valid organisation roles.
- * - admin: Can manage the organisation and all workspaces within it
+ * Valid organization roles.
+ * - admin: Can manage the organization and all workspaces within it
  * - member: Regular member who needs explicit workspace access
  */
 export type OrgRole = "admin" | "member";
@@ -66,10 +66,10 @@ export type Variables = {
   session?: typeof auth.$Infer.Session.session;
 
   /**
-   * Organisation membership data (set by requireOrgAccess middleware).
+   * Organization membership data (set by requireOrgAccess middleware).
    * Can be either regular membership or super admin membership.
    */
-  orgMembership?: OrganisationMembership | SuperAdminOrgMembership;
+  orgMembership?: OrganizationMembership | SuperAdminOrgMembership;
 
   /**
    * Workspace membership data (set by requireWorkspaceAccess middleware).
@@ -121,16 +121,16 @@ app.use("*", async (c, next) => {
 
 app.get("/health", (c) => c.json({ status: "ok" }));
 
-app.route("/organisations", organisation);
-app.route("/organisations/:orgId/workspaces", workspace);
-app.route("/organisations/:orgId/workspaces/:workspaceId/agents", agent);
-app.route("/organisations/:orgId/workspaces/:workspaceId/chat", chat);
-app.route("/organisations/:orgId/workspaces/:workspaceId/mcps", mcp);
-app.route("/organisations/:orgId/workspaces/:workspaceId/providers", provider);
-app.route("/organisations/:orgId/providers", orgProvider);
-app.route("/organisations/:orgId/workspaces/:workspaceId/tools", tool);
-app.route("/organisations/:orgId/invitations", invitation);
-app.route("/organisations/:orgId/members", member);
+app.route("/organizations", organization);
+app.route("/organizations/:orgId/workspaces", workspace);
+app.route("/organizations/:orgId/workspaces/:workspaceId/agents", agent);
+app.route("/organizations/:orgId/workspaces/:workspaceId/chat", chat);
+app.route("/organizations/:orgId/workspaces/:workspaceId/mcps", mcp);
+app.route("/organizations/:orgId/workspaces/:workspaceId/providers", provider);
+app.route("/organizations/:orgId/providers", orgProvider);
+app.route("/organizations/:orgId/workspaces/:workspaceId/tools", tool);
+app.route("/organizations/:orgId/invitations", invitation);
+app.route("/organizations/:orgId/members", member);
 app.route("/users/me/invitations", userInvitation);
 
 export default app;

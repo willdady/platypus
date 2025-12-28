@@ -5,7 +5,7 @@ import { db } from "../index.ts";
 import {
   workspace as workspaceTable,
   workspaceMember,
-  organisationMember,
+  organizationMember,
 } from "../db/schema.ts";
 import {
   workspaceCreateSchema,
@@ -51,7 +51,7 @@ workspace.get("/", requireAuth, requireOrgAccess(), async (c) => {
     const results = await db
       .select()
       .from(workspaceTable)
-      .where(eq(workspaceTable.organisationId, orgId));
+      .where(eq(workspaceTable.organizationId, orgId));
     return c.json({ results });
   }
 
@@ -72,7 +72,7 @@ workspace.get("/", requireAuth, requireOrgAccess(), async (c) => {
     .from(workspaceTable)
     .where(
       and(
-        eq(workspaceTable.organisationId, orgId),
+        eq(workspaceTable.organizationId, orgId),
         inArray(workspaceTable.id, workspaceIds),
       ),
     );

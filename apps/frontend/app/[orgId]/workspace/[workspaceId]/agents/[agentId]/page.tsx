@@ -21,7 +21,7 @@ const AgentEditPage = async ({
     fetch(
       joinUrl(
         backendUrl || "",
-        `/organisations/${orgId}/workspaces/${workspaceId}/tools`,
+        `/organizations/${orgId}/workspaces/${workspaceId}/tools`,
       ),
       {
         headers: {

@@ -68,7 +68,7 @@ export const Chat = ({
     backendUrl && user
       ? joinUrl(
           backendUrl,
-          `/organisations/${orgId}/workspaces/${workspaceId}/providers`,
+          `/organizations/${orgId}/workspaces/${workspaceId}/providers`,
         )
       : null,
     fetcher,
@@ -81,7 +81,7 @@ export const Chat = ({
     backendUrl && user
       ? joinUrl(
           backendUrl,
-          `/organisations/${orgId}/workspaces/${workspaceId}/agents`,
+          `/organizations/${orgId}/workspaces/${workspaceId}/agents`,
         )
       : null,
     fetcher,
@@ -94,7 +94,7 @@ export const Chat = ({
     backendUrl && user
       ? joinUrl(
           backendUrl,
-          `/organisations/${orgId}/workspaces/${workspaceId}/tools`,
+          `/organizations/${orgId}/workspaces/${workspaceId}/tools`,
         )
       : null,
     fetcher,
@@ -107,7 +107,7 @@ export const Chat = ({
     backendUrl && user
       ? joinUrl(
           backendUrl,
-          `/organisations/${orgId}/workspaces/${workspaceId}/chat/${chatId}`,
+          `/organizations/${orgId}/workspaces/${workspaceId}/chat/${chatId}`,
         )
       : null,
     fetcher,
@@ -119,7 +119,7 @@ export const Chat = ({
       transport: new DefaultChatTransport({
         api: joinUrl(
           backendUrl || "",
-          `/organisations/${orgId}/workspaces/${workspaceId}/chat`,
+          `/organizations/${orgId}/workspaces/${workspaceId}/chat`,
         ),
         body: {
           orgId,
