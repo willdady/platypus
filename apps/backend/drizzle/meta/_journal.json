@@ -5,50 +5,8 @@
     {
       "idx": 0,
       "version": "7",
-      "when": 1764486920805,
-      "tag": "0000_square_madelyne_pryor",
-      "breakpoints": true
-    },
-    {
-      "idx": 1,
-      "version": "7",
-      "when": 1765089554252,
-      "tag": "0001_burly_doctor_strange",
-      "breakpoints": true
-    },
-    {
-      "idx": 2,
-      "version": "7",
-      "when": 1765421802698,
-      "tag": "0002_lame_captain_midlands",
-      "breakpoints": true
-    },
-    {
-      "idx": 3,
-      "version": "7",
-      "when": 1766371475453,
-      "tag": "0003_nervous_puff_adder",
-      "breakpoints": true
-    },
-    {
-      "idx": 4,
-      "version": "7",
-      "when": 1766552408437,
-      "tag": "0004_sweet_ser_duncan",
-      "breakpoints": true
-    },
-    {
-      "idx": 5,
-      "version": "7",
-      "when": 1766713984004,
-      "tag": "0005_mysterious_next_avengers",
-      "breakpoints": true
-    },
-    {
-      "idx": 6,
-      "version": "7",
-      "when": 1766883508957,
-      "tag": "0006_modern_warpath",
+      "when": 1766900390387,
+      "tag": "0000_fearless_red_shift",
       "breakpoints": true
     }
   ]
