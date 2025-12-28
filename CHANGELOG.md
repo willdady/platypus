@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.6.2](https://github.com/willdady/platypus/compare/v1.6.1...v1.6.2) (2025-12-28)
+
+
+### Bug Fixes
+
+* **agents:** starting a chat from an agent's "New Chat" button selects the agent on the chat screen model picker ([c4487c4](https://github.com/willdady/platypus/commit/c4487c4f1014e89ba9617992c298f8f2d31993ba))
+
 ## [1.6.1](https://github.com/willdady/platypus/compare/v1.6.0...v1.6.1) (2025-12-28)
 
 
