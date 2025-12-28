@@ -15,22 +15,22 @@ describe("User Invitation Routes", () => {
   describe("GET /", () => {
     it("should list pending invitations for user", async () => {
       mockSession({ id: "u1", email: "user@example.com", role: "user" });
-      
+
       const futureDate = new Date();
       futureDate.setDate(futureDate.getDate() + 7);
-      
+
       const mockInvitations = [
-        { 
-          id: "inv-1", 
-          email: "user@example.com", 
-          status: "pending", 
+        {
+          id: "inv-1",
+          email: "user@example.com",
+          status: "pending",
           expiresAt: futureDate.toISOString(),
           organizationName: "Org 1",
           workspaceName: "WS 1",
-          invitedByName: "Admin"
-        }
+          invitedByName: "Admin",
+        },
       ];
-      
+
       mockDb.where.mockResolvedValueOnce(mockInvitations);
 
       const res = await app.request(baseUrl);
@@ -42,25 +42,25 @@ describe("User Invitation Routes", () => {
   describe("POST /:invitationId/accept", () => {
     it("should accept invitation", async () => {
       mockSession({ id: "u1", email: "user@example.com", role: "user" });
-      
+
       const futureDate = new Date();
       futureDate.setDate(futureDate.getDate() + 7);
-      
-      const mockInvitation = { 
-        id: "inv-1", 
-        email: "user@example.com", 
-        status: "pending", 
+
+      const mockInvitation = {
+        id: "inv-1",
+        email: "user@example.com",
+        status: "pending",
         expiresAt: futureDate.toISOString(),
         organizationId: "org-1",
         workspaceId: "ws-1",
-        role: "editor"
+        role: "editor",
       };
-      
+
       mockDb.limit.mockResolvedValueOnce([mockInvitation]); // fetch invitation
-      
+
       // Transaction mocks
       mockDb.limit.mockResolvedValueOnce([]); // check org membership (none)
-      
+
       const res = await app.request(`${baseUrl}/inv-1/accept`, {
         method: "POST",
       });
@@ -72,17 +72,17 @@ describe("User Invitation Routes", () => {
 
     it("should return 410 if invitation expired", async () => {
       mockSession({ id: "u1", email: "user@example.com", role: "user" });
-      
+
       const pastDate = new Date();
       pastDate.setDate(pastDate.getDate() - 1);
-      
-      const mockInvitation = { 
-        id: "inv-1", 
-        email: "user@example.com", 
-        status: "pending", 
-        expiresAt: pastDate.toISOString()
+
+      const mockInvitation = {
+        id: "inv-1",
+        email: "user@example.com",
+        status: "pending",
+        expiresAt: pastDate.toISOString(),
       };
-      
+
       mockDb.limit.mockResolvedValueOnce([mockInvitation]);
 
       const res = await app.request(`${baseUrl}/inv-1/accept`, {
@@ -97,8 +97,10 @@ describe("User Invitation Routes", () => {
   describe("POST /:invitationId/decline", () => {
     it("should decline invitation", async () => {
       mockSession({ id: "u1", email: "user@example.com", role: "user" });
-      
-      mockDb.returning.mockResolvedValueOnce([{ id: "inv-1", status: "declined" }]);
+
+      mockDb.returning.mockResolvedValueOnce([
+        { id: "inv-1", status: "declined" },
+      ]);
 
       const res = await app.request(`${baseUrl}/inv-1/decline`, {
         method: "POST",

@@ -4,14 +4,14 @@ import app from "../server.ts";
 
 vi.mock("../tools/index.ts", () => ({
   getToolSets: vi.fn().mockReturnValue({
-    "math": {
+    math: {
       name: "Math",
       category: "Utilities",
       description: "Math tools",
       tools: {
-        "add": { description: "Add numbers" }
-      }
-    }
+        add: { description: "Add numbers" },
+      },
+    },
   }),
 }));
 
@@ -31,7 +31,7 @@ describe("Tool Routes", () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
       mockDb.limit.mockResolvedValueOnce([{ role: "viewer" }]); // requireWorkspaceAccess
-      
+
       const mockMcps = [{ id: "mcp-1", name: "MCP 1" }];
       mockDb.where
         .mockReturnValueOnce(mockDb)
@@ -41,20 +41,24 @@ describe("Tool Routes", () => {
       const res = await app.request(baseUrl);
       expect(res.status).toBe(200);
       const json = await res.json();
-      
+
       // Static tools
-      expect(json.results).toContainEqual(expect.objectContaining({
-        id: "math",
-        name: "Math",
-        category: "Utilities"
-      }));
-      
+      expect(json.results).toContainEqual(
+        expect.objectContaining({
+          id: "math",
+          name: "Math",
+          category: "Utilities",
+        }),
+      );
+
       // MCPs
-      expect(json.results).toContainEqual(expect.objectContaining({
-        id: "mcp-1",
-        name: "MCP 1",
-        category: "MCP"
-      }));
+      expect(json.results).toContainEqual(
+        expect.objectContaining({
+          id: "mcp-1",
+          name: "MCP 1",
+          category: "MCP",
+        }),
+      );
     });
   });
 });

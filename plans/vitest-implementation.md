@@ -7,6 +7,7 @@ This plan outlines the implementation of Vitest as the testing framework for bot
 ## Current State Analysis
 
 ### Project Structure
+
 - **Monorepo**: pnpm workspaces with Turborepo
 - **Frontend**: Next.js 16 with React 19 (App Router)
 - **Backend**: Hono.js with Node.js (ESM modules)
@@ -14,6 +15,7 @@ This plan outlines the implementation of Vitest as the testing framework for bot
 - **Build System**: Turborepo with task orchestration
 
 ### Key Observations
+
 1. Backend uses ESM modules (`"type": "module"`)
 2. Frontend uses Next.js with modern React features
 3. Both Dockerfiles run in production mode without tests currently
@@ -27,26 +29,26 @@ graph TD
     subgraph Root
         A[pnpm test] --> B[turbo run test]
     end
-    
+
     subgraph Turborepo
         B --> C[test task]
         C --> D[frontend test]
         C --> E[backend test]
         C --> F[schemas test]
     end
-    
+
     subgraph Frontend
         D --> G[vitest run]
         G --> H[Unit Tests]
         G --> I[Component Tests]
     end
-    
+
     subgraph Backend
         E --> J[vitest run]
         J --> K[Unit Tests]
         J --> L[Route Tests]
     end
-    
+
     subgraph Schemas
         F --> M[vitest run]
         M --> N[Schema Validation Tests]
@@ -58,19 +60,23 @@ graph TD
 ### 1. Install Vitest Dependencies
 
 #### Root Level
+
 No changes needed at root level - Turborepo handles orchestration.
 
 #### Backend (`apps/backend`)
+
 ```bash
 pnpm add -D vitest @vitest/coverage-v8
 ```
 
 #### Frontend (`apps/frontend`)
+
 ```bash
 pnpm add -D vitest @vitejs/plugin-react jsdom @testing-library/react @testing-library/dom @vitest/coverage-v8
 ```
 
 #### Schemas (`packages/schemas`)
+
 ```bash
 pnpm add -D vitest
 ```
@@ -78,24 +84,25 @@ pnpm add -D vitest
 ### 2. Configuration Files
 
 #### Backend: `apps/backend/vitest.config.ts`
+
 ```typescript
-import { defineConfig } from 'vitest/config';
+import { defineConfig } from "vitest/config";
 
 export default defineConfig({
   test: {
     globals: true,
-    environment: 'node',
-    include: ['**/*.test.ts'],
-    exclude: ['node_modules', 'drizzle'],
+    environment: "node",
+    include: ["**/*.test.ts"],
+    exclude: ["node_modules", "drizzle"],
     coverage: {
-      provider: 'v8',
-      reporter: ['text', 'json', 'html'],
+      provider: "v8",
+      reporter: ["text", "json", "html"],
       exclude: [
-        'node_modules/**',
-        'drizzle/**',
-        '**/*.test.ts',
-        'bruno/**',
-        'scripts/**',
+        "node_modules/**",
+        "drizzle/**",
+        "**/*.test.ts",
+        "bruno/**",
+        "scripts/**",
       ],
     },
   },
@@ -103,54 +110,53 @@ export default defineConfig({
 ```
 
 #### Frontend: `apps/frontend/vitest.config.ts`
+
 Following Next.js + Vitest best practices:
+
 ```typescript
-import { defineConfig } from 'vitest/config';
-import react from '@vitejs/plugin-react';
-import path from 'path';
+import { defineConfig } from "vitest/config";
+import react from "@vitejs/plugin-react";
+import path from "path";
 
 export default defineConfig({
   plugins: [react()],
   test: {
     globals: true,
-    environment: 'jsdom',
-    include: ['**/*.test.ts', '**/*.test.tsx'],
-    exclude: ['node_modules', '.next'],
-    setupFiles: ['./vitest.setup.ts'],
+    environment: "jsdom",
+    include: ["**/*.test.ts", "**/*.test.tsx"],
+    exclude: ["node_modules", ".next"],
+    setupFiles: ["./vitest.setup.ts"],
     coverage: {
-      provider: 'v8',
-      reporter: ['text', 'json', 'html'],
-      exclude: [
-        'node_modules/**',
-        '.next/**',
-        '**/*.test.ts',
-        '**/*.test.tsx',
-      ],
+      provider: "v8",
+      reporter: ["text", "json", "html"],
+      exclude: ["node_modules/**", ".next/**", "**/*.test.ts", "**/*.test.tsx"],
     },
   },
   resolve: {
     alias: {
-      '@': path.resolve(__dirname, './'),
+      "@": path.resolve(__dirname, "./"),
     },
   },
 });
 ```
 
 #### Frontend: `apps/frontend/vitest.setup.ts`
+
 ```typescript
-import '@testing-library/jest-dom/vitest';
+import "@testing-library/jest-dom/vitest";
 ```
 
 #### Schemas: `packages/schemas/vitest.config.ts`
+
 ```typescript
-import { defineConfig } from 'vitest/config';
+import { defineConfig } from "vitest/config";
 
 export default defineConfig({
   test: {
     globals: true,
-    environment: 'node',
-    include: ['**/*.test.ts'],
-    exclude: ['node_modules'],
+    environment: "node",
+    include: ["**/*.test.ts"],
+    exclude: ["node_modules"],
   },
 });
 ```
@@ -158,7 +164,9 @@ export default defineConfig({
 ### 3. Package.json Updates
 
 #### Root `package.json`
+
 Add test script:
+
 ```json
 {
   "scripts": {
@@ -168,6 +176,7 @@ Add test script:
 ```
 
 #### Backend `apps/backend/package.json`
+
 ```json
 {
   "scripts": {
@@ -179,6 +188,7 @@ Add test script:
 ```
 
 #### Frontend `apps/frontend/package.json`
+
 ```json
 {
   "scripts": {
@@ -190,6 +200,7 @@ Add test script:
 ```
 
 #### Schemas `packages/schemas/package.json`
+
 ```json
 {
   "scripts": {
@@ -201,6 +212,7 @@ Add test script:
 ### 4. Turborepo Configuration
 
 Update `turbo.json` to add test task:
+
 ```json
 {
   "tasks": {
@@ -216,95 +228,98 @@ Update `turbo.json` to add test task:
 ### 5. Validation Test Files
 
 #### Backend: `apps/backend/src/utils.test.ts`
-```typescript
-import { describe, it, expect } from 'vitest';
-import { dedupeArray } from './utils';
 
-describe('dedupeArray', () => {
-  it('should remove duplicate strings', () => {
-    const input = ['a', 'b', 'a', 'c', 'b'];
+```typescript
+import { describe, it, expect } from "vitest";
+import { dedupeArray } from "./utils";
+
+describe("dedupeArray", () => {
+  it("should remove duplicate strings", () => {
+    const input = ["a", "b", "a", "c", "b"];
     const result = dedupeArray(input);
-    expect(result).toEqual(['a', 'b', 'c']);
+    expect(result).toEqual(["a", "b", "c"]);
   });
 
-  it('should return empty array for empty input', () => {
+  it("should return empty array for empty input", () => {
     expect(dedupeArray([])).toEqual([]);
   });
 
-  it('should return same array when no duplicates', () => {
-    const input = ['a', 'b', 'c'];
-    expect(dedupeArray(input)).toEqual(['a', 'b', 'c']);
+  it("should return same array when no duplicates", () => {
+    const input = ["a", "b", "c"];
+    expect(dedupeArray(input)).toEqual(["a", "b", "c"]);
   });
 });
 ```
 
 #### Frontend: `apps/frontend/lib/utils.test.ts`
+
 ```typescript
-import { describe, it, expect } from 'vitest';
-import { joinUrl, parseValidationErrors } from './utils';
+import { describe, it, expect } from "vitest";
+import { joinUrl, parseValidationErrors } from "./utils";
 
-describe('joinUrl', () => {
-  it('should join base URL and path', () => {
-    expect(joinUrl('http://localhost:4000', '/api/test')).toBe(
-      'http://localhost:4000/api/test'
+describe("joinUrl", () => {
+  it("should join base URL and path", () => {
+    expect(joinUrl("http://localhost:4000", "/api/test")).toBe(
+      "http://localhost:4000/api/test",
     );
   });
 
-  it('should handle base URL with trailing slash', () => {
-    expect(joinUrl('http://localhost:4000/', '/api/test')).toBe(
-      'http://localhost:4000/api/test'
+  it("should handle base URL with trailing slash", () => {
+    expect(joinUrl("http://localhost:4000/", "/api/test")).toBe(
+      "http://localhost:4000/api/test",
     );
   });
 
-  it('should handle path without leading slash', () => {
-    expect(joinUrl('http://localhost:4000', 'api/test')).toBe(
-      'http://localhost:4000/api/test'
+  it("should handle path without leading slash", () => {
+    expect(joinUrl("http://localhost:4000", "api/test")).toBe(
+      "http://localhost:4000/api/test",
     );
   });
 
-  it('should return path when base is empty', () => {
-    expect(joinUrl('', '/api/test')).toBe('/api/test');
+  it("should return path when base is empty", () => {
+    expect(joinUrl("", "/api/test")).toBe("/api/test");
   });
 });
 
-describe('parseValidationErrors', () => {
-  it('should parse validation errors correctly', () => {
+describe("parseValidationErrors", () => {
+  it("should parse validation errors correctly", () => {
     const errorData = {
       error: [
-        { path: ['name'], message: 'Name is required' },
-        { path: ['email'], message: 'Invalid email' },
+        { path: ["name"], message: "Name is required" },
+        { path: ["email"], message: "Invalid email" },
       ],
     };
     const result = parseValidationErrors(errorData);
     expect(result).toEqual({
-      name: 'Name is required',
-      email: 'Invalid email',
+      name: "Name is required",
+      email: "Invalid email",
     });
   });
 
-  it('should return empty object for invalid input', () => {
+  it("should return empty object for invalid input", () => {
     expect(parseValidationErrors(null)).toEqual({});
     expect(parseValidationErrors({})).toEqual({});
-    expect(parseValidationErrors({ error: 'string' })).toEqual({});
+    expect(parseValidationErrors({ error: "string" })).toEqual({});
   });
 });
 ```
 
 #### Schemas: `packages/schemas/index.test.ts`
+
 ```typescript
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from "vitest";
 import {
   organizationSchema,
   workspaceSchema,
   agentSchema,
   organizationCreateSchema,
-} from './index';
+} from "./index";
 
-describe('Organization Schema', () => {
-  it('should validate a valid organization', () => {
+describe("Organization Schema", () => {
+  it("should validate a valid organization", () => {
     const validOrg = {
-      id: '123',
-      name: 'Test Org',
+      id: "123",
+      name: "Test Org",
       createdAt: new Date(),
       updatedAt: new Date(),
     };
@@ -312,10 +327,10 @@ describe('Organization Schema', () => {
     expect(result.success).toBe(true);
   });
 
-  it('should reject organization with short name', () => {
+  it("should reject organization with short name", () => {
     const invalidOrg = {
-      id: '123',
-      name: 'AB',
+      id: "123",
+      name: "AB",
       createdAt: new Date(),
       updatedAt: new Date(),
     };
@@ -323,10 +338,10 @@ describe('Organization Schema', () => {
     expect(result.success).toBe(false);
   });
 
-  it('should reject organization with long name', () => {
+  it("should reject organization with long name", () => {
     const invalidOrg = {
-      id: '123',
-      name: 'A'.repeat(31),
+      id: "123",
+      name: "A".repeat(31),
       createdAt: new Date(),
       updatedAt: new Date(),
     };
@@ -335,24 +350,24 @@ describe('Organization Schema', () => {
   });
 });
 
-describe('Organization Create Schema', () => {
-  it('should validate create input with only required fields', () => {
-    const result = organizationCreateSchema.safeParse({ name: 'New Org' });
+describe("Organization Create Schema", () => {
+  it("should validate create input with only required fields", () => {
+    const result = organizationCreateSchema.safeParse({ name: "New Org" });
     expect(result.success).toBe(true);
   });
 
-  it('should reject empty name', () => {
-    const result = organizationCreateSchema.safeParse({ name: '' });
+  it("should reject empty name", () => {
+    const result = organizationCreateSchema.safeParse({ name: "" });
     expect(result.success).toBe(false);
   });
 });
 
-describe('Workspace Schema', () => {
-  it('should validate a valid workspace', () => {
+describe("Workspace Schema", () => {
+  it("should validate a valid workspace", () => {
     const validWorkspace = {
-      id: '456',
-      organizationId: '123',
-      name: 'Test Workspace',
+      id: "456",
+      organizationId: "123",
+      name: "Test Workspace",
       createdAt: new Date(),
       updatedAt: new Date(),
     };
@@ -361,14 +376,14 @@ describe('Workspace Schema', () => {
   });
 });
 
-describe('Agent Schema', () => {
-  it('should validate a valid agent', () => {
+describe("Agent Schema", () => {
+  it("should validate a valid agent", () => {
     const validAgent = {
-      id: '789',
-      workspaceId: '456',
-      providerId: 'provider-123',
-      name: 'Test Agent',
-      modelId: 'gpt-4',
+      id: "789",
+      workspaceId: "456",
+      providerId: "provider-123",
+      name: "Test Agent",
+      modelId: "gpt-4",
       createdAt: new Date(),
       updatedAt: new Date(),
     };
@@ -376,15 +391,15 @@ describe('Agent Schema', () => {
     expect(result.success).toBe(true);
   });
 
-  it('should allow optional fields', () => {
+  it("should allow optional fields", () => {
     const agentWithOptionals = {
-      id: '789',
-      workspaceId: '456',
-      providerId: 'provider-123',
-      name: 'Test Agent',
-      description: 'A test agent',
-      systemPrompt: 'You are a helpful assistant',
-      modelId: 'gpt-4',
+      id: "789",
+      workspaceId: "456",
+      providerId: "provider-123",
+      name: "Test Agent",
+      description: "A test agent",
+      systemPrompt: "You are a helpful assistant",
+      modelId: "gpt-4",
       temperature: 0.7,
       maxSteps: 10,
       createdAt: new Date(),
@@ -401,6 +416,7 @@ describe('Agent Schema', () => {
 Tests should run during the Docker build process to catch issues before deployment.
 
 #### Backend Dockerfile Update (`apps/backend/Dockerfile`)
+
 Add test stage before the runner stage:
 
 ```dockerfile
@@ -433,6 +449,7 @@ FROM node:24-alpine AS runner
 ```
 
 #### Frontend Dockerfile Update (`apps/frontend/Dockerfile`)
+
 Add test stage after builder:
 
 ```dockerfile
@@ -451,10 +468,13 @@ FROM base AS runner
 ### 7. TypeScript Configuration Updates
 
 #### Backend: No changes needed
+
 The backend already uses ESM with TypeScript and Vitest supports this natively.
 
 #### Frontend: Update `tsconfig.json`
+
 Add vitest types to the configuration:
+
 ```json
 {
   "compilerOptions": {
@@ -465,23 +485,23 @@ Add vitest types to the configuration:
 
 ## File Summary
 
-| File | Action | Purpose |
-|------|--------|---------|
-| `package.json` | Modify | Add `test` script |
-| `turbo.json` | Modify | Add `test` task |
-| `apps/backend/package.json` | Modify | Add test scripts and devDependencies |
-| `apps/backend/vitest.config.ts` | Create | Vitest configuration for backend |
-| `apps/backend/src/utils.test.ts` | Create | Unit tests for utility functions |
-| `apps/backend/Dockerfile` | Modify | Add test stage |
-| `apps/frontend/package.json` | Modify | Add test scripts and devDependencies |
-| `apps/frontend/vitest.config.ts` | Create | Vitest configuration for frontend |
-| `apps/frontend/vitest.setup.ts` | Create | Test setup file |
-| `apps/frontend/lib/utils.test.ts` | Create | Unit tests for utility functions |
-| `apps/frontend/tsconfig.json` | Modify | Add vitest types |
-| `apps/frontend/Dockerfile` | Modify | Add test stage |
-| `packages/schemas/package.json` | Modify | Add test script and devDependency |
-| `packages/schemas/vitest.config.ts` | Create | Vitest configuration for schemas |
-| `packages/schemas/index.test.ts` | Create | Schema validation tests |
+| File                                | Action | Purpose                              |
+| ----------------------------------- | ------ | ------------------------------------ |
+| `package.json`                      | Modify | Add `test` script                    |
+| `turbo.json`                        | Modify | Add `test` task                      |
+| `apps/backend/package.json`         | Modify | Add test scripts and devDependencies |
+| `apps/backend/vitest.config.ts`     | Create | Vitest configuration for backend     |
+| `apps/backend/src/utils.test.ts`    | Create | Unit tests for utility functions     |
+| `apps/backend/Dockerfile`           | Modify | Add test stage                       |
+| `apps/frontend/package.json`        | Modify | Add test scripts and devDependencies |
+| `apps/frontend/vitest.config.ts`    | Create | Vitest configuration for frontend    |
+| `apps/frontend/vitest.setup.ts`     | Create | Test setup file                      |
+| `apps/frontend/lib/utils.test.ts`   | Create | Unit tests for utility functions     |
+| `apps/frontend/tsconfig.json`       | Modify | Add vitest types                     |
+| `apps/frontend/Dockerfile`          | Modify | Add test stage                       |
+| `packages/schemas/package.json`     | Modify | Add test script and devDependency    |
+| `packages/schemas/vitest.config.ts` | Create | Vitest configuration for schemas     |
+| `packages/schemas/index.test.ts`    | Create | Schema validation tests              |
 
 ## Implementation Order
 
@@ -526,12 +546,14 @@ pnpm --filter @platypus/backend test:coverage
 ## Dependencies to Install
 
 ### Backend
+
 ```
 vitest
 @vitest/coverage-v8
 ```
 
 ### Frontend
+
 ```
 vitest
 @vitejs/plugin-react
@@ -543,6 +565,7 @@ jsdom
 ```
 
 ### Schemas
+
 ```
 vitest
 ```

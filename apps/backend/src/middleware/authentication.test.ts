@@ -10,7 +10,7 @@ describe("Authentication Middleware", () => {
 
   it("should return 401 if no session is found", async () => {
     mockNoSession();
-    
+
     const app = new Hono();
     app.use("*", requireAuth);
     app.get("/test", (c) => c.text("ok"));
@@ -28,7 +28,7 @@ describe("Authentication Middleware", () => {
     mockSession(sessionData.user);
     // Overwrite session id if needed, but mockSession sets it to session-1
     mockAuth.api.getSession.mockResolvedValue(sessionData);
-    
+
     const app = new Hono<{ Variables: { user: any; session: any } }>();
     app.use("*", requireAuth);
     app.get("/test", (c) => {

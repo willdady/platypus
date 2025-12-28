@@ -325,7 +325,8 @@ const ProviderForm = ({
     return <div className={classNames}>Loading...</div>;
   }
 
-  const isReadOnly = formScope === "workspace" && provider?.scope === "organization";
+  const isReadOnly =
+    formScope === "workspace" && provider?.scope === "organization";
 
   return (
     <div className={classNames}>

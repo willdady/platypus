@@ -38,7 +38,7 @@ export default function Home() {
 
   const { data, error, isLoading } = useSWR<{ results: Organization[] }>(
     backendUrl && user ? joinUrl(backendUrl, "/organizations") : null,
-    fetcher
+    fetcher,
   );
 
   const organizations = data?.results || [];

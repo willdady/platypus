@@ -25,17 +25,17 @@ describe("MCP Routes", () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
       mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]); // requireWorkspaceAccess
-      
+
       const mockMcp = { id: "mcp-1", name: "New MCP", url: "http://mcp.com" };
       mockDb.returning.mockResolvedValueOnce([mockMcp]);
 
       const res = await app.request(baseUrl, {
         method: "POST",
-        body: JSON.stringify({ 
-          name: "New MCP", 
+        body: JSON.stringify({
+          name: "New MCP",
           url: "http://mcp.com",
           authType: "None",
-          workspaceId
+          workspaceId,
         }),
         headers: { "Content-Type": "application/json" },
       });
@@ -50,7 +50,7 @@ describe("MCP Routes", () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
       mockDb.limit.mockResolvedValueOnce([{ role: "viewer" }]); // requireWorkspaceAccess
-      
+
       const mockMcps = [{ id: "mcp-1", name: "MCP 1" }];
       mockDb.where
         .mockReturnValueOnce(mockDb)
@@ -68,12 +68,12 @@ describe("MCP Routes", () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
       mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]); // requireWorkspaceAccess
-      
+
       const res = await app.request(`${baseUrl}/test`, {
         method: "POST",
-        body: JSON.stringify({ 
+        body: JSON.stringify({
           url: "http://mcp.com",
-          authType: "None"
+          authType: "None",
         }),
         headers: { "Content-Type": "application/json" },
       });

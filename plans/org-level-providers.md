@@ -22,22 +22,22 @@ flowchart TB
     subgraph Organization
         OrgProvider1[Org Provider 1]
         OrgProvider2[Org Provider 2]
-        
+
         subgraph Workspace A
             WsAProvider1[Workspace A Provider 1]
         end
-        
+
         subgraph Workspace B
             WsBProvider1[Workspace B Provider 1]
             WsBProvider2[Workspace B Provider 2]
         end
     end
-    
+
     OrgProvider1 --> |Available to| WorkspaceA
     OrgProvider1 --> |Available to| WorkspaceB
     OrgProvider2 --> |Available to| WorkspaceA
     OrgProvider2 --> |Available to| WorkspaceB
-    
+
     note1[Org providers are accessible from all workspaces but managed at org level only]
 
     style OrgProvider1 fill:#e1f5fe
@@ -73,11 +73,9 @@ export const provider = pgTable(
       .references(() => organization.id, {
         onDelete: "cascade",
       }),
-    workspaceId: t
-      .text("workspace_id")
-      .references(() => workspace.id, {
-        onDelete: "cascade",
-      }),
+    workspaceId: t.text("workspace_id").references(() => workspace.id, {
+      onDelete: "cascade",
+    }),
     name: t.text("name").notNull(),
     providerType: t.text("provider_type").notNull(),
     apiKey: t.text("api_key").notNull(),
@@ -152,9 +150,10 @@ export const providerSchema = z
       return (hasOrg || hasWorkspace) && !(hasOrg && hasWorkspace);
     },
     {
-      message: "Provider must have either organizationId or workspaceId, but not both",
+      message:
+        "Provider must have either organizationId or workspaceId, but not both",
       path: ["organizationId"],
-    }
+    },
   );
 
 // Create schema for org-scoped providers
@@ -200,13 +199,13 @@ export const providerCreateWorkspaceSchema = providerSchema.pick({
 
 Create new routes for org-level provider management:
 
-| Method | Endpoint | Description | Auth |
-|--------|----------|-------------|------|
-| `POST` | `/organizations/:orgId/providers` | Create org provider | Org admin |
-| `GET` | `/organizations/:orgId/providers` | List org providers | Org member |
-| `GET` | `/organizations/:orgId/providers/:providerId` | Get org provider | Org member |
-| `PUT` | `/organizations/:orgId/providers/:providerId` | Update org provider | Org admin |
-| `DELETE` | `/organizations/:orgId/providers/:providerId` | Delete org provider | Org admin |
+| Method   | Endpoint                                      | Description         | Auth       |
+| -------- | --------------------------------------------- | ------------------- | ---------- |
+| `POST`   | `/organizations/:orgId/providers`             | Create org provider | Org admin  |
+| `GET`    | `/organizations/:orgId/providers`             | List org providers  | Org member |
+| `GET`    | `/organizations/:orgId/providers/:providerId` | Get org provider    | Org member |
+| `PUT`    | `/organizations/:orgId/providers/:providerId` | Update org provider | Org admin  |
+| `DELETE` | `/organizations/:orgId/providers/:providerId` | Delete org provider | Org admin  |
 
 ### 2. Update Existing Workspace Provider Routes
 
@@ -216,30 +215,36 @@ Modify the list providers endpoint to include org-scoped providers:
 
 ```typescript
 /** List all providers (workspace + org-scoped) */
-provider.get("/", requireAuth, requireOrgAccess(), requireWorkspaceAccess(), async (c) => {
-  const orgId = c.req.param("orgId")!;
-  const workspaceId = c.req.param("workspaceId")!;
-  
-  // Get workspace-scoped providers
-  const workspaceProviders = await db
-    .select()
-    .from(providerTable)
-    .where(eq(providerTable.workspaceId, workspaceId));
-  
-  // Get org-scoped providers
-  const orgProviders = await db
-    .select()
-    .from(providerTable)
-    .where(eq(providerTable.organizationId, orgId));
-  
-  // Tag providers with their scope for frontend
-  const results = [
-    ...orgProviders.map(p => ({ ...p, scope: "organization" as const })),
-    ...workspaceProviders.map(p => ({ ...p, scope: "workspace" as const })),
-  ];
-  
-  return c.json({ results });
-});
+provider.get(
+  "/",
+  requireAuth,
+  requireOrgAccess(),
+  requireWorkspaceAccess(),
+  async (c) => {
+    const orgId = c.req.param("orgId")!;
+    const workspaceId = c.req.param("workspaceId")!;
+
+    // Get workspace-scoped providers
+    const workspaceProviders = await db
+      .select()
+      .from(providerTable)
+      .where(eq(providerTable.workspaceId, workspaceId));
+
+    // Get org-scoped providers
+    const orgProviders = await db
+      .select()
+      .from(providerTable)
+      .where(eq(providerTable.organizationId, orgId));
+
+    // Tag providers with their scope for frontend
+    const results = [
+      ...orgProviders.map((p) => ({ ...p, scope: "organization" as const })),
+      ...workspaceProviders.map((p) => ({ ...p, scope: "workspace" as const })),
+    ];
+
+    return c.json({ results });
+  },
+);
 ```
 
 ### 3. Update Server Routes
@@ -286,12 +291,14 @@ export interface ProviderWithScope extends Provider {
 
 ```tsx
 // Badge component example
-{provider.scope === "organization" && (
-  <Badge variant="secondary" className="ml-2">
-    <Building className="size-3 mr-1" />
-    Organization
-  </Badge>
-)}
+{
+  provider.scope === "organization" && (
+    <Badge variant="secondary" className="ml-2">
+      <Building className="size-3 mr-1" />
+      Organization
+    </Badge>
+  );
+}
 ```
 
 ### 3. Add Org Providers Settings Page
@@ -313,6 +320,7 @@ Edit page for existing org providers.
 **File:** `apps/frontend/components/org-provider-form.tsx` (new)
 
 Similar to the workspace provider form but:
+
 - Uses org-level API endpoints
 - Submits `organizationId` instead of `workspaceId`
 
@@ -330,10 +338,7 @@ Add "Providers" menu item:
 
 ```tsx
 <SidebarMenuItem>
-  <SidebarMenuButton
-    asChild
-    isActive={pathname.startsWith(providersHref)}
-  >
+  <SidebarMenuButton asChild isActive={pathname.startsWith(providersHref)}>
     <Link href={providersHref}>
       <Unplug /> Providers
     </Link>
@@ -346,6 +351,7 @@ Add "Providers" menu item:
 **File:** [`apps/frontend/components/provider-form.tsx`](apps/frontend/components/provider-form.tsx)
 
 Add read-only mode for org-scoped providers when accessed from workspace settings:
+
 - Disable all form fields
 - Hide save/delete buttons
 - Show informational banner explaining the provider is org-scoped
@@ -417,9 +423,9 @@ Add read-only mode for org-scoped providers when accessed from workspace setting
 
 ## Questions Resolved
 
-| # | Question | Answer |
-|---|----------|--------|
-| 1 | API routes structure | Separate routes at org level |
-| 2 | Duplicate name handling | Disallow within same scope |
-| 3 | UI display in workspace | Visual badge indicator |
-| 4 | Org settings UI | Yes, add Providers to org settings menu |
+| #   | Question                | Answer                                  |
+| --- | ----------------------- | --------------------------------------- |
+| 1   | API routes structure    | Separate routes at org level            |
+| 2   | Duplicate name handling | Disallow within same scope              |
+| 3   | UI display in workspace | Visual badge indicator                  |
+| 4   | Org settings UI         | Yes, add Providers to org settings menu |

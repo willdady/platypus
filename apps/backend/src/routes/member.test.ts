@@ -17,16 +17,18 @@ describe("Member Routes", () => {
     it("should list organization members", async () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]); // requireOrgAccess
-      
+
       const mockMembers = [
-        { 
-          id: "m1", 
-          userId: "u1", 
-          user: { id: "u1", name: "User 1", email: "u1@ex.com", role: "user" } 
-        }
+        {
+          id: "m1",
+          userId: "u1",
+          user: { id: "u1", name: "User 1", email: "u1@ex.com", role: "user" },
+        },
       ];
-      const mockWorkspaces = [{ workspaceId: "ws-1", workspaceName: "WS 1", role: "admin" }];
-      
+      const mockWorkspaces = [
+        { workspaceId: "ws-1", workspaceName: "WS 1", role: "admin" },
+      ];
+
       mockDb.where
         .mockReturnValueOnce(mockDb) // requireOrgAccess
         .mockResolvedValueOnce(mockMembers) // list members
@@ -44,10 +46,12 @@ describe("Member Routes", () => {
     it("should update member role", async () => {
       mockSession({ id: "admin-1", role: "user" });
       mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]); // requireOrgAccess
-      
+
       // Target member
-      mockDb.limit.mockResolvedValueOnce([{ id: "m1", userId: "u1", role: "member" }]);
-      
+      mockDb.limit.mockResolvedValueOnce([
+        { id: "m1", userId: "u1", role: "member" },
+      ]);
+
       const mockUpdated = { id: "m1", role: "admin" };
       mockDb.returning.mockResolvedValueOnce([mockUpdated]);
 
@@ -64,9 +68,11 @@ describe("Member Routes", () => {
     it("should return 400 if demoting self", async () => {
       mockSession({ id: "admin-1", role: "user" });
       mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]); // requireOrgAccess
-      
+
       // Target member is self
-      mockDb.limit.mockResolvedValueOnce([{ id: "m1", userId: "admin-1", role: "admin" }]);
+      mockDb.limit.mockResolvedValueOnce([
+        { id: "m1", userId: "admin-1", role: "admin" },
+      ]);
 
       const res = await app.request(`${baseUrl}/m1`, {
         method: "PATCH",
@@ -75,7 +81,9 @@ describe("Member Routes", () => {
       });
 
       expect(res.status).toBe(400);
-      expect(await res.json()).toEqual({ error: "You cannot demote yourself from admin" });
+      expect(await res.json()).toEqual({
+        error: "You cannot demote yourself from admin",
+      });
     });
   });
 
@@ -83,15 +91,22 @@ describe("Member Routes", () => {
     it("should add member to workspace", async () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]); // requireOrgAccess
-      
+
       // Fetch member
       mockDb.limit.mockResolvedValueOnce([{ id: "m1", userId: "u1" }]);
       // Verify workspace
-      mockDb.limit.mockResolvedValueOnce([{ id: "ws-1", organizationId: orgId }]);
+      mockDb.limit.mockResolvedValueOnce([
+        { id: "ws-1", organizationId: orgId },
+      ]);
       // Check if already member
       mockDb.limit.mockResolvedValueOnce([]);
-      
-      const mockWsMember = { id: "wsm1", workspaceId: "ws-1", userId: "u1", role: "editor" };
+
+      const mockWsMember = {
+        id: "wsm1",
+        workspaceId: "ws-1",
+        userId: "u1",
+        role: "editor",
+      };
       mockDb.returning.mockResolvedValueOnce([mockWsMember]);
 
       const res = await app.request(`${baseUrl}/m1/workspaces`, {

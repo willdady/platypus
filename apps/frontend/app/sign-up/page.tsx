@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import { useAuth } from "@/components/auth-provider";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,7 +8,6 @@ import { Label } from "@/components/ui/label";
 import Link from "next/link";
 
 export default function SignUpPage() {
-  const router = useRouter();
   const { authClient } = useAuth();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -98,7 +96,11 @@ export default function SignUpPage() {
             />
           </div>
 
-          <Button type="submit" className="w-full" disabled={isLoading}>
+          <Button
+            type="submit"
+            className="w-full cursor-pointer"
+            disabled={isLoading}
+          >
             {isLoading ? "Creating account..." : "Sign up"}
           </Button>
         </form>

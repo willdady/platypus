@@ -1,12 +1,17 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import { mockDb, mockSession, mockNoSession, resetMockDb } from "../test-utils.ts";
+import {
+  mockDb,
+  mockSession,
+  mockNoSession,
+  resetMockDb,
+} from "../test-utils.ts";
 import app from "../server.ts";
 
 describe("Workspace Routes", () => {
   beforeEach(() => {
     resetMockDb();
     vi.clearAllMocks();
-    
+
     // Force reset where to ensure it returns mockDb
     mockDb.where.mockReturnValue(mockDb);
   });
@@ -14,7 +19,7 @@ describe("Workspace Routes", () => {
   describe("POST /organizations/:orgId/workspaces", () => {
     it("should return 403 if not org admin", async () => {
       mockSession({ id: "user-1", role: "user" });
-      
+
       // Mock requireOrgAccess: return member role
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
 
@@ -38,7 +43,10 @@ describe("Workspace Routes", () => {
 
       const res = await app.request("/organizations/org-1/workspaces", {
         method: "POST",
-        body: JSON.stringify({ name: "New Workspace", organizationId: "org-1" }),
+        body: JSON.stringify({
+          name: "New Workspace",
+          organizationId: "org-1",
+        }),
         headers: { "Content-Type": "application/json" },
       });
 
@@ -97,7 +105,7 @@ describe("Workspace Routes", () => {
 
       // Mock requireOrgAccess: return member role
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
-      
+
       // Mock get workspace (ends in limit)
       mockDb.limit.mockResolvedValueOnce([mockWorkspace]);
 
@@ -111,7 +119,7 @@ describe("Workspace Routes", () => {
 
       // Mock requireOrgAccess: return member role
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
-      
+
       // Mock get workspace (empty)
       mockDb.limit.mockResolvedValueOnce([]);
 
@@ -127,7 +135,7 @@ describe("Workspace Routes", () => {
 
       // Mock requireOrgAccess: return admin role
       mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]);
-      
+
       // Mock update
       mockDb.returning.mockResolvedValueOnce([mockWorkspace]);
 

@@ -7,15 +7,28 @@ process.env.DATABASE_URL = "postgres://localhost:5432/test";
 const { mockDb, mockAuth } = vi.hoisted(() => {
   // Create a mock db object that allows chaining
   const mock: any = {};
-  
+
   const methods = [
-    'select', 'from', 'where', 'limit', 'offset', 
-    'orderBy', 'innerJoin', 'leftJoin', 'rightJoin',
-    'insert', 'values', 'update', 'set', 'delete', 
-    'returning', 'execute', 'inArray'
+    "select",
+    "from",
+    "where",
+    "limit",
+    "offset",
+    "orderBy",
+    "innerJoin",
+    "leftJoin",
+    "rightJoin",
+    "insert",
+    "values",
+    "update",
+    "set",
+    "delete",
+    "returning",
+    "execute",
+    "inArray",
   ];
 
-  methods.forEach(method => {
+  methods.forEach((method) => {
     mock[method] = vi.fn().mockImplementation(() => mock);
   });
 
@@ -42,17 +55,30 @@ export { mockDb, mockAuth };
 
 export const resetMockDb = () => {
   const methods = [
-    'select', 'from', 'where', 'limit', 'offset', 
-    'orderBy', 'innerJoin', 'leftJoin', 'rightJoin',
-    'insert', 'values', 'update', 'set', 'delete', 
-    'returning', 'execute', 'inArray'
+    "select",
+    "from",
+    "where",
+    "limit",
+    "offset",
+    "orderBy",
+    "innerJoin",
+    "leftJoin",
+    "rightJoin",
+    "insert",
+    "values",
+    "update",
+    "set",
+    "delete",
+    "returning",
+    "execute",
+    "inArray",
   ];
 
-  methods.forEach(method => {
+  methods.forEach((method) => {
     // Re-assign a fresh mock function to ensure no state leaks
     mockDb[method] = vi.fn().mockImplementation(() => mockDb);
   });
-  
+
   mockDb.transaction = vi.fn((cb: any) => cb(mockDb));
 };
 
@@ -85,7 +111,9 @@ import { auth } from "./auth.ts";
 /**
  * Helper to mock a successful session
  */
-export const mockSession = (user: any = { id: "user-1", email: "test@example.com", role: "user" }) => {
+export const mockSession = (
+  user: any = { id: "user-1", email: "test@example.com", role: "user" },
+) => {
   mockAuth.api.getSession.mockResolvedValue({
     user,
     session: { id: "session-1" },

@@ -1,5 +1,10 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import { mockDb, mockSession, mockNoSession, resetMockDb } from "../test-utils.ts";
+import {
+  mockDb,
+  mockSession,
+  mockNoSession,
+  resetMockDb,
+} from "../test-utils.ts";
 import app from "../server.ts";
 
 describe("Organization Routes", () => {
@@ -49,7 +54,10 @@ describe("Organization Routes", () => {
   describe("GET /organizations", () => {
     it("should return all organizations for super admin", async () => {
       mockSession({ id: "admin-1", role: "admin" });
-      const mockOrgs = [{ id: "org-1", name: "Org 1" }, { id: "org-2", name: "Org 2" }];
+      const mockOrgs = [
+        { id: "org-1", name: "Org 1" },
+        { id: "org-2", name: "Org 2" },
+      ];
       // Mock the chain: select().from() -> resolves to mockOrgs
       mockDb.from.mockResolvedValueOnce(mockOrgs);
 
@@ -62,11 +70,11 @@ describe("Organization Routes", () => {
       mockSession({ id: "user-1", role: "user" });
       const mockMemberships = [{ organizationId: "org-1" }];
       const mockOrgs = [{ id: "org-1", name: "Org 1" }];
-      
+
       // First call: memberships query
       // db.select().from().where()
       mockDb.where.mockResolvedValueOnce(mockMemberships);
-      
+
       // Second call: organizations query
       // db.select().from().where()
       mockDb.where.mockResolvedValueOnce(mockOrgs);
@@ -90,10 +98,10 @@ describe("Organization Routes", () => {
     it("should return organization if user has access", async () => {
       mockSession({ id: "user-1", role: "user" });
       const mockOrg = { id: "org-1", name: "Org 1" };
-      
+
       // requireOrgAccess: db.select().from().where().limit(1)
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
-      
+
       // get organization: db.select().from().where().limit(1)
       mockDb.limit.mockResolvedValueOnce([mockOrg]);
 

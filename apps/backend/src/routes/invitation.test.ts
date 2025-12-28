@@ -19,17 +19,23 @@ describe("Invitation Routes", () => {
       // requireOrgAccess
       mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]);
       // Verify workspace belongs to org
-      mockDb.limit.mockResolvedValueOnce([{ id: "ws-1", organizationId: orgId }]);
-      
-      const mockInvitation = { id: "inv-1", email: "user@example.com", workspaceId: "ws-1" };
+      mockDb.limit.mockResolvedValueOnce([
+        { id: "ws-1", organizationId: orgId },
+      ]);
+
+      const mockInvitation = {
+        id: "inv-1",
+        email: "user@example.com",
+        workspaceId: "ws-1",
+      };
       mockDb.returning.mockResolvedValueOnce([mockInvitation]);
 
       const res = await app.request(baseUrl, {
         method: "POST",
-        body: JSON.stringify({ 
-          email: "user@example.com", 
+        body: JSON.stringify({
+          email: "user@example.com",
           workspaceId: "ws-1",
-          role: "editor"
+          role: "editor",
         }),
         headers: { "Content-Type": "application/json" },
       });
@@ -45,16 +51,18 @@ describe("Invitation Routes", () => {
 
       const res = await app.request(baseUrl, {
         method: "POST",
-        body: JSON.stringify({ 
-          email: "admin@example.com", 
+        body: JSON.stringify({
+          email: "admin@example.com",
           workspaceId: "ws-1",
-          role: "editor"
+          role: "editor",
         }),
         headers: { "Content-Type": "application/json" },
       });
 
       expect(res.status).toBe(400);
-      expect(await res.json()).toEqual({ message: "You cannot invite yourself" });
+      expect(await res.json()).toEqual({
+        message: "You cannot invite yourself",
+      });
     });
   });
 
@@ -63,8 +71,10 @@ describe("Invitation Routes", () => {
       mockSession();
       // requireOrgAccess
       mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]);
-      
-      const mockInvitations = [{ id: "inv-1", email: "user@example.com", workspaceName: "WS 1" }];
+
+      const mockInvitations = [
+        { id: "inv-1", email: "user@example.com", workspaceName: "WS 1" },
+      ];
       mockDb.where
         .mockReturnValueOnce(mockDb)
         .mockResolvedValueOnce(mockInvitations);
@@ -80,10 +90,8 @@ describe("Invitation Routes", () => {
       mockSession();
       // requireOrgAccess
       mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]);
-      
-      mockDb.where
-        .mockReturnValueOnce(mockDb)
-        .mockReturnValueOnce(mockDb);
+
+      mockDb.where.mockReturnValueOnce(mockDb).mockReturnValueOnce(mockDb);
       mockDb.returning.mockResolvedValueOnce([{ id: "inv-1" }]);
 
       const res = await app.request(`${baseUrl}/inv-1`, {

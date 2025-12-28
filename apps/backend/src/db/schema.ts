@@ -119,9 +119,11 @@ export const provider = pgTable(
   "provider",
   (t) => ({
     id: t.text("id").primaryKey(),
-    organizationId: t.text("organization_id").references(() => organization.id, {
-      onDelete: "cascade",
-    }),
+    organizationId: t
+      .text("organization_id")
+      .references(() => organization.id, {
+        onDelete: "cascade",
+      }),
     workspaceId: t.text("workspace_id").references(() => workspace.id, {
       onDelete: "cascade",
     }),

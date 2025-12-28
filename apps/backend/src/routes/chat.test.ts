@@ -8,7 +8,9 @@ vi.mock("ai", async () => {
   return {
     ...actual,
     streamText: vi.fn().mockReturnValue({
-      toUIMessageStreamResponse: vi.fn().mockReturnValue(new Response("stream")),
+      toUIMessageStreamResponse: vi
+        .fn()
+        .mockReturnValue(new Response("stream")),
     }),
     generateObject: vi.fn().mockResolvedValue({
       object: { title: "Generated Title", tags: ["tag1", "tag2"] },
@@ -53,7 +55,7 @@ describe("Chat Routes", () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
       mockDb.limit.mockResolvedValueOnce([{ role: "viewer" }]); // requireWorkspaceAccess
-      
+
       const mockChats = [{ id: "chat-1", title: "Chat 1" }];
       mockDb.offset.mockResolvedValueOnce(mockChats);
 
@@ -68,7 +70,7 @@ describe("Chat Routes", () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
       mockDb.limit.mockResolvedValueOnce([{ role: "viewer" }]); // requireWorkspaceAccess
-      
+
       const mockTags = [{ tag: "tag1", count: 5 }];
       mockDb.execute.mockResolvedValueOnce({ rows: mockTags });
 
@@ -83,7 +85,7 @@ describe("Chat Routes", () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
       mockDb.limit.mockResolvedValueOnce([{ role: "viewer" }]); // requireWorkspaceAccess
-      
+
       const mockChat = { id: "chat-1", title: "Chat 1" };
       mockDb.limit.mockResolvedValueOnce([mockChat]);
 
@@ -98,14 +100,16 @@ describe("Chat Routes", () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
       mockDb.limit.mockResolvedValueOnce([{ role: "viewer" }]); // requireWorkspaceAccess
-      
+
       // resolveChatContext: fetch provider
-      mockDb.limit.mockResolvedValueOnce([{ 
-        id: "p1", 
-        providerType: "OpenAI", 
-        modelIds: ["m1"],
-        workspaceId
-      }]);
+      mockDb.limit.mockResolvedValueOnce([
+        {
+          id: "p1",
+          providerType: "OpenAI",
+          modelIds: ["m1"],
+          workspaceId,
+        },
+      ]);
 
       const res = await app.request(baseUrl, {
         method: "POST",
@@ -114,7 +118,7 @@ describe("Chat Routes", () => {
           workspaceId,
           providerId: "p1",
           modelId: "m1",
-          messages: [{ role: "user", content: "hello" }]
+          messages: [{ role: "user", content: "hello" }],
         }),
         headers: { "Content-Type": "application/json" },
       });
@@ -129,14 +133,16 @@ describe("Chat Routes", () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
       mockDb.limit.mockResolvedValueOnce([{ role: "viewer" }]); // requireWorkspaceAccess
-      
+
       mockDb.returning.mockResolvedValueOnce([{ id: "chat-1" }]);
 
       const res = await app.request(`${baseUrl}/chat-1`, {
         method: "DELETE",
       });
       expect(res.status).toBe(200);
-      expect(await res.json()).toEqual({ message: "Chat deleted successfully" });
+      expect(await res.json()).toEqual({
+        message: "Chat deleted successfully",
+      });
     });
   });
 
@@ -145,7 +151,7 @@ describe("Chat Routes", () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
       mockDb.limit.mockResolvedValueOnce([{ role: "viewer" }]); // requireWorkspaceAccess
-      
+
       const mockChat = { id: "chat-1", title: "Updated Title" };
       mockDb.returning.mockResolvedValueOnce([mockChat]);
 
@@ -154,7 +160,7 @@ describe("Chat Routes", () => {
         body: JSON.stringify({
           title: "Updated Title",
           workspaceId,
-          isStarred: true
+          isStarred: true,
         }),
         headers: { "Content-Type": "application/json" },
       });
@@ -168,13 +174,24 @@ describe("Chat Routes", () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
       mockDb.limit.mockResolvedValueOnce([{ role: "viewer" }]); // requireWorkspaceAccess
-      
+
       // Fetch chat
       mockDb.limit.mockResolvedValueOnce([{ id: "chat-1", messages: [] }]);
       // Fetch provider
-      mockDb.limit.mockResolvedValueOnce([{ id: "p1", providerType: "OpenAI", taskModelId: "m1", modelIds: ["m1"] }]);
-      
-      const mockUpdatedChat = { id: "chat-1", title: "Generated Title", tags: ["tag1", "tag2"] };
+      mockDb.limit.mockResolvedValueOnce([
+        {
+          id: "p1",
+          providerType: "OpenAI",
+          taskModelId: "m1",
+          modelIds: ["m1"],
+        },
+      ]);
+
+      const mockUpdatedChat = {
+        id: "chat-1",
+        title: "Generated Title",
+        tags: ["tag1", "tag2"],
+      };
       mockDb.returning.mockResolvedValueOnce([mockUpdatedChat]);
 
       const res = await app.request(`${baseUrl}/chat-1/generate-metadata`, {

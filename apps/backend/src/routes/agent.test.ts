@@ -1,5 +1,10 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import { mockDb, mockSession, mockNoSession, resetMockDb } from "../test-utils.ts";
+import {
+  mockDb,
+  mockSession,
+  mockNoSession,
+  resetMockDb,
+} from "../test-utils.ts";
 import app from "../server.ts";
 
 describe("Agent Routes", () => {
@@ -18,7 +23,11 @@ describe("Agent Routes", () => {
       mockNoSession();
       const res = await app.request(baseUrl, {
         method: "POST",
-        body: JSON.stringify({ name: "New Agent", providerId: "p1", modelId: "m1" }),
+        body: JSON.stringify({
+          name: "New Agent",
+          providerId: "p1",
+          modelId: "m1",
+        }),
         headers: { "Content-Type": "application/json" },
       });
       expect(res.status).toBe(401);
@@ -33,7 +42,11 @@ describe("Agent Routes", () => {
 
       const res = await app.request(baseUrl, {
         method: "POST",
-        body: JSON.stringify({ name: "New Agent", providerId: "p1", modelId: "m1" }),
+        body: JSON.stringify({
+          name: "New Agent",
+          providerId: "p1",
+          modelId: "m1",
+        }),
         headers: { "Content-Type": "application/json" },
       });
       expect(res.status).toBe(403);
@@ -45,17 +58,17 @@ describe("Agent Routes", () => {
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
       // requireWorkspaceAccess
       mockDb.limit.mockResolvedValueOnce([{ role: "editor" }]);
-      
+
       const mockAgent = { id: "agent-1", name: "New Agent", workspaceId };
       mockDb.returning.mockResolvedValueOnce([mockAgent]);
 
       const res = await app.request(baseUrl, {
         method: "POST",
-        body: JSON.stringify({ 
-          name: "New Agent", 
-          providerId: "p1", 
+        body: JSON.stringify({
+          name: "New Agent",
+          providerId: "p1",
           modelId: "m1",
-          workspaceId 
+          workspaceId,
         }),
         headers: { "Content-Type": "application/json" },
       });
@@ -106,7 +119,7 @@ describe("Agent Routes", () => {
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
       // requireWorkspaceAccess
       mockDb.limit.mockResolvedValueOnce([{ role: "viewer" }]);
-      
+
       const mockAgent = { id: "agent-1", name: "Agent 1" };
       mockDb.limit.mockResolvedValueOnce([mockAgent]);
 
@@ -123,7 +136,7 @@ describe("Agent Routes", () => {
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
       // requireWorkspaceAccess
       mockDb.limit.mockResolvedValueOnce([{ role: "editor" }]);
-      
+
       const mockAgent = { id: "agent-1", name: "Updated Agent" };
       mockDb.returning.mockResolvedValueOnce([mockAgent]);
 
@@ -132,7 +145,7 @@ describe("Agent Routes", () => {
         body: JSON.stringify({
           name: "Updated Agent",
           providerId: "p1",
-          modelId: "m1"
+          modelId: "m1",
         }),
         headers: { "Content-Type": "application/json" },
       });
@@ -162,7 +175,7 @@ describe("Agent Routes", () => {
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
       // requireWorkspaceAccess
       mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]);
-      
+
       mockDb.where
         .mockReturnValueOnce(mockDb)
         .mockReturnValueOnce(mockDb)
