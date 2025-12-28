@@ -243,7 +243,7 @@ const AgentForm = ({
       });
 
       if (response.ok) {
-        router.push(`/${orgId}/workspace/${workspaceId}/agents`);
+        router.push(`/${orgId}/workspace/${workspaceId}`);
       } else {
         // Parse standardschema.dev validation errors
         const errorData = await response.json();
@@ -274,7 +274,7 @@ const AgentForm = ({
       );
 
       if (response.ok) {
-        router.push(`/${orgId}/workspace/${workspaceId}/agents`);
+        router.push(`/${orgId}/workspace/${workspaceId}`);
       } else {
         console.error("Failed to delete agent");
         setIsDeleting(false);

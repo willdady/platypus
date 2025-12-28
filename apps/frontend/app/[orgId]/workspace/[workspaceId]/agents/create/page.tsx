@@ -38,7 +38,7 @@ const AgentCreatePage = async ({
     <div className="flex justify-center pb-8">
       <div className="xl:w-2/5">
         <BackButton
-          fallbackHref={`/${orgId}/workspace/${workspaceId}/agents`}
+          fallbackHref={`/${orgId}/workspace/${workspaceId}`}
         />
         <h1 className="text-2xl mb-4 font-bold">Create Agent</h1>
         <AgentForm
