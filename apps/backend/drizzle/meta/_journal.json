@@ -43,6 +43,13 @@
       "when": 1766713984004,
       "tag": "0005_mysterious_next_avengers",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1766883508957,
+      "tag": "0006_modern_warpath",
+      "breakpoints": true
     }
   ]
 }

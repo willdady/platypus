@@ -73,13 +73,21 @@ export function AuthProvider({
 
   // Fetch org membership when orgId changes
   useEffect(() => {
-    setOrgMembership(null);
-    setHasFetchedOrg(false);
     if (!data?.user || !orgId) {
+      setOrgMembership(null);
+      setHasFetchedOrg(false);
       setIsOrgMembershipLoading(false);
       return;
     }
 
+    // If we already have the membership for this org, don't reset it
+    // This prevents unmounting children in ProtectedRoute during revalidation
+    if (orgMembership?.organisationId === orgId) {
+      return;
+    }
+
+    setOrgMembership(null);
+    setHasFetchedOrg(false);
     setIsOrgMembershipLoading(true);
     fetch(`${backendUrl}/organisations/${orgId}/membership`, {
       credentials: "include",
@@ -95,17 +103,24 @@ export function AuthProvider({
         setIsOrgMembershipLoading(false);
         setHasFetchedOrg(true);
       });
-  }, [data?.user, orgId, backendUrl]);
+  }, [data?.user?.id, orgId, backendUrl]);
 
   // Fetch workspace membership when workspaceId changes
   useEffect(() => {
-    setWorkspaceMembership(null);
-    setHasFetchedWorkspace(false);
     if (!data?.user || !workspaceId || !orgId) {
+      setWorkspaceMembership(null);
+      setHasFetchedWorkspace(false);
       setIsWorkspaceMembershipLoading(false);
       return;
     }
 
+    // If we already have the membership for this workspace, don't reset it
+    if (workspaceMembership?.workspaceId === workspaceId) {
+      return;
+    }
+
+    setWorkspaceMembership(null);
+    setHasFetchedWorkspace(false);
     setIsWorkspaceMembershipLoading(true);
     fetch(
       `${backendUrl}/organisations/${orgId}/workspaces/${workspaceId}/membership`,
@@ -124,7 +139,7 @@ export function AuthProvider({
         setIsWorkspaceMembershipLoading(false);
         setHasFetchedWorkspace(true);
       });
-  }, [data?.user, orgId, workspaceId, backendUrl]);
+  }, [data?.user?.id, orgId, workspaceId, backendUrl]);
 
   // Computed permissions
   const isOrgAdmin = orgMembership?.role === "admin";

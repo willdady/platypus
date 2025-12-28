@@ -1,0 +1,16 @@
+meta {
+  name: Get Org Provider
+  type: http
+  seq: 3
+}
+
+get {
+  url: {{host}}/organisations/:orgId/providers/:providerId
+  body: none
+  auth: inherit
+}
+
+params:path {
+  orgId: {{orgId}}
+  providerId: 
+}

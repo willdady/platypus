@@ -33,7 +33,7 @@ import {
   chatUpdateSchema,
   type Provider,
 } from "@platypus/schemas";
-import { and, desc, eq, sql } from "drizzle-orm";
+import { and, desc, eq, or, sql } from "drizzle-orm";
 import { requireAuth } from "../middleware/authentication.ts";
 import {
   requireOrgAccess,
@@ -116,6 +116,7 @@ const createModel = (
  */
 const resolveChatContext = async (
   data: ChatSubmitData,
+  orgId: string,
   workspaceId: string,
 ): Promise<ChatContext> => {
   const { agentId, providerId, modelId, search } = data;
@@ -163,7 +164,10 @@ const resolveChatContext = async (
     .where(
       and(
         eq(providerTable.id, resolvedProviderId),
-        eq(providerTable.workspaceId, workspaceId),
+        or(
+          eq(providerTable.workspaceId, workspaceId),
+          eq(providerTable.organisationId, orgId),
+        ),
       ),
     )
     .limit(1);
@@ -481,12 +485,13 @@ chat.post(
   requireWorkspaceAccess(),
   sValidator("json", chatSubmitSchema),
   async (c) => {
+    const orgId = c.req.param("orgId")!;
     const workspaceId = c.req.param("workspaceId")!;
     const data = c.req.valid("json");
     const { messages = [] } = data;
 
     // 1. Resolve Context (Agent vs Direct) & Provider
-    const context = await resolveChatContext(data, workspaceId);
+    const context = await resolveChatContext(data, orgId, workspaceId);
     const { provider, agent, resolvedModelId } = context;
 
     // 2. Initialize Model
@@ -606,6 +611,7 @@ chat.post(
   requireWorkspaceAccess(),
   sValidator("json", chatGenerateMetadataSchema),
   async (c) => {
+    const orgId = c.req.param("orgId")!;
     const chatId = c.req.param("chatId");
     const workspaceId = c.req.param("workspaceId")!;
     const { providerId } = c.req.valid("json");
@@ -630,7 +636,10 @@ chat.post(
       .where(
         and(
           eq(providerTable.id, providerId),
-          eq(providerTable.workspaceId, workspaceId),
+          or(
+            eq(providerTable.workspaceId, workspaceId),
+            eq(providerTable.organisationId, orgId),
+          ),
         ),
       )
       .limit(1);

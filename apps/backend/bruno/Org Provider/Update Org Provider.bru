@@ -1,0 +1,26 @@
+meta {
+  name: Update Org Provider
+  type: http
+  seq: 4
+}
+
+put {
+  url: {{host}}/organisations/:orgId/providers/:providerId
+  body: json
+  auth: inherit
+}
+
+params:path {
+  orgId: {{orgId}}
+  providerId: 
+}
+
+body:json {
+  {
+    "name": "Org OpenAI Updated",
+    "providerType": "OpenAI",
+    "apiKey": "sk-...",
+    "modelIds": ["gpt-4o", "gpt-4o-mini"],
+    "taskModelId": "gpt-4o-mini"
+  }
+}

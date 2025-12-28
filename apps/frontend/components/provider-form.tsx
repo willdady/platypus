@@ -16,7 +16,7 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
-import { ChevronsUpDown, Trash2 } from "lucide-react";
+import { Building, ChevronsUpDown, OctagonX, Trash2 } from "lucide-react";
 import {
   Select,
   SelectContent,
@@ -34,7 +34,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { type Provider } from "@platypus/schemas";
 import useSWR from "swr";
@@ -57,11 +57,18 @@ const ProviderForm = ({
 }: {
   classNames?: string;
   orgId: string;
-  workspaceId: string;
+  workspaceId?: string;
   providerId?: string;
 }) => {
+  // Add scope to Provider type for this component
+  type ProviderWithScope = Provider & { scope: "organisation" | "workspace" };
+
   const { user } = useAuth();
   const backendUrl = useBackendUrl();
+  const router = useRouter();
+  const hasInitialized = useRef(false);
+
+  const formScope = workspaceId ? "workspace" : "organisation";
 
   const [formData, setFormData] = useState<ProviderFormData>({
     providerType: "OpenAI",
@@ -88,23 +95,28 @@ const ProviderForm = ({
   const [validationErrors, setValidationErrors] = useState<
     Record<string, string>
   >({});
-
-  const router = useRouter();
+  const [error, setError] = useState<string | null>(null);
 
   const fetcher = (url: string) =>
     fetch(url, { credentials: "include" }).then((res) => res.json());
-  const { data: provider, isLoading } = useSWR<Provider>(
+
+  const fetchUrl =
     providerId && user
-      ? joinUrl(
-          backendUrl,
-          `/organisations/${orgId}/workspaces/${workspaceId}/providers/${providerId}`,
-        )
-      : null,
+      ? formScope === "workspace"
+        ? joinUrl(
+            backendUrl,
+            `/organisations/${orgId}/workspaces/${workspaceId}/providers/${providerId}`,
+          )
+        : joinUrl(backendUrl, `/organisations/${orgId}/providers/${providerId}`)
+      : null;
+
+  const { data: provider, isLoading } = useSWR<ProviderWithScope>(
+    fetchUrl,
     fetcher,
   );
 
   useEffect(() => {
-    if (provider) {
+    if (provider && !hasInitialized.current) {
       setFormData({
         providerType: provider.providerType,
         name: provider.name,
@@ -121,6 +133,7 @@ const ProviderForm = ({
       setHeadersString(JSON.stringify(provider.headers || {}, null, 2));
       setExtraBodyString(JSON.stringify(provider.extraBody || {}, null, 2));
       setModelIdsString((provider.modelIds || []).join("\n"));
+      hasInitialized.current = true;
     }
   }, [provider]);
 
@@ -137,6 +150,7 @@ const ProviderForm = ({
         return newErrors;
       });
     }
+    setError(null);
 
     if (id === "headers") {
       setHeadersString(value);
@@ -189,6 +203,7 @@ const ProviderForm = ({
         return newErrors;
       });
     }
+    setError(null);
 
     setFormData((prevData) => {
       const newData = { ...prevData, [id]: value };
@@ -199,9 +214,11 @@ const ProviderForm = ({
   const handleSubmit = async () => {
     setIsSubmitting(true);
     setValidationErrors({});
+    setError(null);
     try {
       const payload: Omit<Provider, "id" | "createdAt" | "updatedAt"> = {
-        workspaceId,
+        workspaceId: workspaceId || undefined,
+        organisationId: !workspaceId ? orgId : undefined,
         name: formData.name,
         providerType: formData.providerType,
         apiKey: formData.apiKey,
@@ -216,14 +233,21 @@ const ProviderForm = ({
       };
 
       const url = providerId
-        ? joinUrl(
-            backendUrl,
-            `/organisations/${orgId}/workspaces/${workspaceId}/providers/${providerId}`,
-          )
-        : joinUrl(
-            backendUrl,
-            `/organisations/${orgId}/workspaces/${workspaceId}/providers`,
-          );
+        ? formScope === "workspace"
+          ? joinUrl(
+              backendUrl,
+              `/organisations/${orgId}/workspaces/${workspaceId}/providers/${providerId}`,
+            )
+          : joinUrl(
+              backendUrl,
+              `/organisations/${orgId}/providers/${providerId}`,
+            )
+        : formScope === "workspace"
+          ? joinUrl(
+              backendUrl,
+              `/organisations/${orgId}/workspaces/${workspaceId}/providers`,
+            )
+          : joinUrl(backendUrl, `/organisations/${orgId}/providers`);
 
       const method = providerId ? "PUT" : "POST";
 
@@ -237,12 +261,19 @@ const ProviderForm = ({
       });
 
       if (response.ok) {
-        router.push(`/${orgId}/workspace/${workspaceId}/settings/providers`);
+        if (formScope === "workspace") {
+          router.push(`/${orgId}/workspace/${workspaceId}/settings/providers`);
+        } else {
+          router.push(`/${orgId}/settings/providers`);
+        }
       } else {
-        // Parse standardschema.dev validation errors
         const errorData = await response.json();
-        setValidationErrors(parseValidationErrors(errorData));
-        console.error("Failed to save provider");
+        if (response.status === 409) {
+          setError(errorData.message || "A conflict occurred");
+        } else {
+          // Parse standardschema.dev validation errors
+          setValidationErrors(parseValidationErrors(errorData));
+        }
       }
     } catch (error) {
       console.error("Error saving provider:", error);
@@ -256,19 +287,28 @@ const ProviderForm = ({
 
     setIsDeleting(true);
     try {
-      const response = await fetch(
-        joinUrl(
-          backendUrl,
-          `/organisations/${orgId}/workspaces/${workspaceId}/providers/${providerId}`,
-        ),
-        {
-          method: "DELETE",
-          credentials: "include",
-        },
-      );
+      const deleteUrl =
+        formScope === "workspace"
+          ? joinUrl(
+              backendUrl,
+              `/organisations/${orgId}/workspaces/${workspaceId}/providers/${providerId}`,
+            )
+          : joinUrl(
+              backendUrl,
+              `/organisations/${orgId}/providers/${providerId}`,
+            );
+
+      const response = await fetch(deleteUrl, {
+        method: "DELETE",
+        credentials: "include",
+      });
 
       if (response.ok) {
-        router.push(`/${orgId}/workspace/${workspaceId}/settings/providers`);
+        if (formScope === "workspace") {
+          router.push(`/${orgId}/workspace/${workspaceId}/settings/providers`);
+        } else {
+          router.push(`/${orgId}/settings/providers`);
+        }
       } else {
         console.error("Failed to delete provider");
         setIsDeleting(false);
@@ -285,8 +325,23 @@ const ProviderForm = ({
     return <div className={classNames}>Loading...</div>;
   }
 
+  const isReadOnly = formScope === "workspace" && provider?.scope === "organisation";
+
   return (
     <div className={classNames}>
+      {error && (
+        <div className="mb-6 p-4 rounded-lg bg-destructive/10 border border-destructive/20 text-sm text-destructive flex items-center gap-2">
+          <OctagonX className="size-4" />
+          {error}
+        </div>
+      )}
+      {isReadOnly && (
+        <div className="mb-6 p-4 rounded-lg bg-secondary/50 border border-secondary text-sm text-secondary-foreground flex items-center gap-2">
+          <Building className="size-4" />
+          This provider is managed at the organisation level and cannot be
+          edited from this workspace.
+        </div>
+      )}
       <FieldSet className="mb-6">
         <FieldGroup>
           <Field>
@@ -296,9 +351,9 @@ const ProviderForm = ({
               onValueChange={(value) =>
                 handleSelectChange("providerType", value)
               }
-              disabled={isSubmitting}
+              disabled={isSubmitting || isReadOnly}
             >
-              <SelectTrigger disabled={isSubmitting}>
+              <SelectTrigger disabled={isSubmitting || isReadOnly}>
                 <SelectValue placeholder="Select a provider type" />
               </SelectTrigger>
               <SelectContent>
@@ -320,7 +375,7 @@ const ProviderForm = ({
               placeholder="Name"
               value={formData.name}
               onChange={handleChange}
-              disabled={isSubmitting}
+              disabled={isSubmitting || isReadOnly}
               aria-invalid={!!validationErrors.name}
               autoFocus
             />
@@ -337,7 +392,7 @@ const ProviderForm = ({
               placeholder="sk-..."
               value={formData.apiKey}
               onChange={handleChange}
-              disabled={isSubmitting}
+              disabled={isSubmitting || isReadOnly}
               aria-invalid={!!validationErrors.apiKey}
             />
             {validationErrors.apiKey && (
@@ -353,7 +408,7 @@ const ProviderForm = ({
                 placeholder="us-east-1"
                 value={formData.region}
                 onChange={handleChange}
-                disabled={isSubmitting}
+                disabled={isSubmitting || isReadOnly}
                 aria-invalid={!!validationErrors.region}
               />
               <FieldDescription>
@@ -373,7 +428,7 @@ const ProviderForm = ({
               placeholder="https://api.example.com/"
               value={formData.baseUrl}
               onChange={handleChange}
-              disabled={isSubmitting}
+              disabled={isSubmitting || isReadOnly}
               aria-invalid={!!validationErrors.baseUrl}
             />
             <FieldDescription>
@@ -391,7 +446,7 @@ const ProviderForm = ({
               placeholder={["gpt-4", "gpt-3.5-turbo"].join("\n")}
               value={modelIdsString}
               onChange={handleChange}
-              disabled={isSubmitting}
+              disabled={isSubmitting || isReadOnly}
               aria-invalid={!!validationErrors.modelIds}
             />
             <FieldDescription>
@@ -409,7 +464,7 @@ const ProviderForm = ({
               placeholder="gpt-4"
               value={formData.taskModelId}
               onChange={handleChange}
-              disabled={isSubmitting}
+              disabled={isSubmitting || isReadOnly}
               aria-invalid={!!validationErrors.taskModelId}
             />
             <FieldDescription>Model ID to use for tasks.</FieldDescription>
@@ -444,7 +499,7 @@ const ProviderForm = ({
                       placeholder="org-..."
                       value={formData.organization}
                       onChange={handleChange}
-                      disabled={isSubmitting}
+                      disabled={isSubmitting || isReadOnly}
                       aria-invalid={!!validationErrors.organization}
                     />
                     <FieldDescription>OpenAI organization ID.</FieldDescription>
@@ -460,7 +515,7 @@ const ProviderForm = ({
                       placeholder="proj_..."
                       value={formData.project}
                       onChange={handleChange}
-                      disabled={isSubmitting}
+                      disabled={isSubmitting || isReadOnly}
                       aria-invalid={!!validationErrors.project}
                     />
                     <FieldDescription>OpenAI project ID.</FieldDescription>
@@ -480,7 +535,7 @@ const ProviderForm = ({
                   placeholder='{"Header Name": "Header Value"}'
                   value={headersString}
                   onChange={handleChange}
-                  disabled={isSubmitting}
+                  disabled={isSubmitting || isReadOnly}
                   aria-invalid={!!headersError || !!validationErrors.headers}
                 />
                 <FieldDescription>
@@ -505,7 +560,7 @@ const ProviderForm = ({
                     placeholder='{"customField": "value"}'
                     value={extraBodyString}
                     onChange={handleChange}
-                    disabled={isSubmitting}
+                    disabled={isSubmitting || isReadOnly}
                     aria-invalid={
                       !!extraBodyError || !!validationErrors.extraBody
                     }
@@ -525,31 +580,33 @@ const ProviderForm = ({
         </Collapsible>
       </FieldSet>
 
-      <div className="flex gap-2">
-        <Button
-          className="cursor-pointer"
-          onClick={handleSubmit}
-          disabled={
-            isSubmitting ||
-            !!headersError ||
-            !!extraBodyError ||
-            Object.keys(validationErrors).length > 0
-          }
-        >
-          {providerId ? "Update" : "Save"}
-        </Button>
-
-        {providerId && (
+      {!isReadOnly && (
+        <div className="flex gap-2">
           <Button
             className="cursor-pointer"
-            variant="outline"
-            onClick={() => setIsDeleteDialogOpen(true)}
-            disabled={isSubmitting}
+            onClick={handleSubmit}
+            disabled={
+              isSubmitting ||
+              !!headersError ||
+              !!extraBodyError ||
+              Object.keys(validationErrors).length > 0
+            }
           >
-            <Trash2 /> Delete
+            {providerId ? "Update" : "Save"}
           </Button>
-        )}
-      </div>
+
+          {providerId && (
+            <Button
+              className="cursor-pointer"
+              variant="outline"
+              onClick={() => setIsDeleteDialogOpen(true)}
+              disabled={isSubmitting}
+            >
+              <Trash2 /> Delete
+            </Button>
+          )}
+        </div>
+      )}
 
       <Dialog
         open={isDeleteDialogOpen}

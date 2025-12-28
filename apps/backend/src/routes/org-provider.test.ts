@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, vi } from "vitest";
 import { mockDb, mockSession, resetMockDb } from "../test-utils.ts";
 import app from "../server.ts";
 
-describe("Provider Routes", () => {
+describe("Organisation Provider Routes", () => {
   beforeEach(() => {
     resetMockDb();
     vi.clearAllMocks();
@@ -10,27 +10,30 @@ describe("Provider Routes", () => {
   });
 
   const orgId = "org-1";
-  const workspaceId = "ws-1";
-  const baseUrl = `/organisations/${orgId}/workspaces/${workspaceId}/providers`;
+  const baseUrl = `/organisations/${orgId}/providers`;
 
   describe("POST /", () => {
-    it("should create provider if workspace admin", async () => {
+    it("should create org provider if org admin", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
-      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]); // requireWorkspaceAccess
+      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]); // requireOrgAccess
 
-      const mockProvider = { id: "p1", name: "OpenAI", providerType: "OpenAI" };
+      const mockProvider = {
+        id: "p1",
+        name: "Org OpenAI",
+        providerType: "OpenAI",
+        organisationId: orgId,
+      };
       mockDb.returning.mockResolvedValueOnce([mockProvider]);
 
       const res = await app.request(baseUrl, {
         method: "POST",
         body: JSON.stringify({
-          name: "OpenAI",
+          name: "Org OpenAI",
           providerType: "OpenAI",
           apiKey: "sk-123",
           modelIds: ["gpt-4"],
           taskModelId: "gpt-4",
-          workspaceId,
+          organisationId: orgId,
         }),
         headers: { "Content-Type": "application/json" },
       });
@@ -39,16 +42,35 @@ describe("Provider Routes", () => {
       expect(await res.json()).toEqual(mockProvider);
     });
 
-    it("should return 409 if provider name already exists in workspace", async () => {
+    it("should fail if not org admin", async () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
-      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]); // requireWorkspaceAccess
+
+      const res = await app.request(baseUrl, {
+        method: "POST",
+        body: JSON.stringify({
+          name: "Org OpenAI",
+          providerType: "OpenAI",
+          apiKey: "sk-123",
+          modelIds: ["gpt-4"],
+          taskModelId: "gpt-4",
+          organisationId: orgId,
+        }),
+        headers: { "Content-Type": "application/json" },
+      });
+
+      expect(res.status).toBe(403);
+    });
+
+    it("should return 409 if provider name already exists in org", async () => {
+      mockSession();
+      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]); // requireOrgAccess
 
       const drizzleError = new Error("DrizzleQueryError: Failed query");
       (drizzleError as any).cause = {
         code: "23505",
         message:
-          'duplicate key value violates unique constraint "unique_provider_name_workspace"',
+          'duplicate key value violates unique constraint "unique_provider_name_org"',
       };
 
       mockDb.returning.mockRejectedValueOnce(drizzleError);
@@ -61,60 +83,49 @@ describe("Provider Routes", () => {
           apiKey: "sk-123",
           modelIds: ["gpt-4"],
           taskModelId: "gpt-4",
-          workspaceId,
+          organisationId: orgId,
         }),
         headers: { "Content-Type": "application/json" },
       });
 
       expect(res.status).toBe(409);
       expect(await res.json()).toEqual({
-        message: "A provider with this name already exists in this workspace",
+        message:
+          "A provider with this name already exists in this organisation",
       });
     });
   });
 
   describe("GET /", () => {
-    it("should list providers (workspace + org)", async () => {
+    it("should list org providers", async () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
-      mockDb.limit.mockResolvedValueOnce([{ role: "viewer" }]); // requireWorkspaceAccess
 
-      const workspaceProviders = [{ id: "p1", name: "WS OpenAI" }];
-      const orgProviders = [
-        { id: "p2", name: "Org OpenAI", organisationId: orgId },
-      ];
-
+      const mockProviders = [{ id: "p1", name: "Org OpenAI" }];
       mockDb.where
         .mockReturnValueOnce(mockDb) // requireOrgAccess
-        .mockReturnValueOnce(mockDb) // requireWorkspaceAccess
-        .mockResolvedValueOnce(workspaceProviders)
-        .mockResolvedValueOnce(orgProviders);
+        .mockResolvedValueOnce(mockProviders);
 
       const res = await app.request(baseUrl);
       expect(res.status).toBe(200);
-      const data = await res.json();
-      expect(data.results).toHaveLength(2);
-      expect(data.results).toEqual(
-        expect.arrayContaining([
-          expect.objectContaining({ id: "p1", scope: "workspace" }),
-          expect.objectContaining({ id: "p2", scope: "organisation" }),
-        ]),
-      );
+      expect(await res.json()).toEqual({ results: mockProviders });
     });
   });
 
   describe("GET /:providerId", () => {
-    it("should return provider with scope", async () => {
+    it("should return org provider", async () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
-      mockDb.limit.mockResolvedValueOnce([{ role: "viewer" }]); // requireWorkspaceAccess
 
-      const mockProvider = { id: "p1", name: "OpenAI", workspaceId };
-      mockDb.limit.mockResolvedValueOnce([mockProvider]);
+      const mockProvider = { id: "p1", name: "Org OpenAI" };
+      mockDb.where
+        .mockReturnValueOnce(mockDb) // requireOrgAccess
+        .mockReturnValueOnce(mockDb); // route
+      mockDb.limit.mockResolvedValueOnce([mockProvider]); // route
 
       const res = await app.request(`${baseUrl}/p1`);
       expect(res.status).toBe(200);
-      expect(await res.json()).toEqual({ ...mockProvider, scope: "workspace" });
+      expect(await res.json()).toEqual(mockProvider);
     });
   });
 });

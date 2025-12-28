@@ -119,12 +119,12 @@ export const provider = pgTable(
   "provider",
   (t) => ({
     id: t.text("id").primaryKey(),
-    workspaceId: t
-      .text("workspace_id")
-      .notNull()
-      .references(() => workspace.id, {
-        onDelete: "cascade",
-      }),
+    organisationId: t.text("organisation_id").references(() => organisation.id, {
+      onDelete: "cascade",
+    }),
+    workspaceId: t.text("workspace_id").references(() => workspace.id, {
+      onDelete: "cascade",
+    }),
     name: t.text("name").notNull(),
     providerType: t.text("provider_type").notNull(),
     apiKey: t.text("api_key").notNull(),
@@ -139,7 +139,12 @@ export const provider = pgTable(
     createdAt: t.timestamp("created_at").notNull().defaultNow(),
     updatedAt: t.timestamp("updated_at").notNull().defaultNow(),
   }),
-  (t) => [index("idx_provider_workspace_id").on(t.workspaceId)],
+  (t) => [
+    index("idx_provider_workspace_id").on(t.workspaceId),
+    index("idx_provider_organisation_id").on(t.organisationId),
+    unique("unique_provider_name_org").on(t.organisationId, t.name),
+    unique("unique_provider_name_workspace").on(t.workspaceId, t.name),
+  ],
 );
 
 // Organisation membership - links users to organisations with roles

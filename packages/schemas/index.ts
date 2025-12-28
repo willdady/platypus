@@ -266,7 +266,8 @@ export const mcpTestSchema = mcpSchema
 export const providerSchema = z
   .object({
     id: z.string(),
-    workspaceId: z.string(),
+    organisationId: z.string().optional(),
+    workspaceId: z.string().optional(),
     name: z.string().min(3).max(32),
     providerType: z.enum(["OpenAI", "OpenRouter", "Bedrock", "Google"]),
     apiKey: z.string().min(1),
@@ -295,11 +296,24 @@ export const providerSchema = z
       message: "Region is required for Bedrock providers",
       path: ["region"],
     },
+  )
+  .refine(
+    (data) => {
+      const hasOrg = Boolean(data.organisationId);
+      const hasWorkspace = Boolean(data.workspaceId);
+      return (hasOrg || hasWorkspace) && !(hasOrg && hasWorkspace);
+    },
+    {
+      message:
+        "Provider must have either organisationId or workspaceId, but not both",
+      path: ["organisationId"],
+    },
   );
 
 export type Provider = z.infer<typeof providerSchema>;
 
 export const providerCreateSchema = providerSchema.pick({
+  organisationId: true,
   workspaceId: true,
   name: true,
   providerType: true,

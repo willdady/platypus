@@ -1,0 +1,25 @@
+meta {
+  name: Create Org Provider
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{host}}/organisations/:orgId/providers
+  body: json
+  auth: inherit
+}
+
+params:path {
+  orgId: {{orgId}}
+}
+
+body:json {
+  {
+    "name": "Org OpenAI",
+    "providerType": "OpenAI",
+    "apiKey": "sk-...",
+    "modelIds": ["gpt-4o", "gpt-4o-mini"],
+    "taskModelId": "gpt-4o-mini"
+  }
+}

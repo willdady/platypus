@@ -1,0 +1,16 @@
+meta {
+  name: Delete Org Provider
+  type: http
+  seq: 5
+}
+
+delete {
+  url: {{host}}/organisations/:orgId/providers/:providerId
+  body: none
+  auth: inherit
+}
+
+params:path {
+  orgId: {{orgId}}
+  providerId: 
+}

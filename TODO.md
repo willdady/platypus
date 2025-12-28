@@ -28,4 +28,5 @@
 [x] Add AuthZ (better-auth)
 [x] Add proper logging (not just `console.log`) in backend service
 [x] Add testing framework (Vitest?, Jest?)
+[x] It should be possible to define org-scoped providers
 [ ] There should be a way to export and import agents, preferably as JSON.
