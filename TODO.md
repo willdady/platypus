@@ -32,7 +32,7 @@
 [x] Rename all ocurrences of "organisation" with "organization"
 [x] Show an Empty state on the Org picker when an Org has no Workspaces
 [x] Bug: The `generate-metadata` endpoint, sometimes returns a title with a length greater-than 30 characters.
-[ ] Consider adding a character limit to the Agent description field
+[x] Consider adding a character limit to the Agent description field
 [ ] Add setting system prompt at the Workspace level. Will also need to design a dynamic system prompt template, possibly using ejs?
 [ ] Bug: selecting an organization on the organization picker screen should update the browser URL to support deep-linking
 [ ] There should be a way to export and import agents, preferably as JSON.

@@ -306,7 +306,7 @@ const AgentForm = ({
               <FieldError>{validationErrors.name}</FieldError>
             )}
           </Field>
-          <Field>
+          <Field data-invalid={!!validationErrors.description}>
             <FieldLabel htmlFor="description">Description</FieldLabel>
             <Textarea
               id="description"
@@ -314,7 +314,19 @@ const AgentForm = ({
               value={formData.description}
               onChange={handleChange}
               disabled={isSubmitting}
+              maxLength={96}
+              aria-invalid={!!validationErrors.description}
             />
+            <div className="flex justify-between mt-1">
+              {validationErrors.description ? (
+                <FieldError>{validationErrors.description}</FieldError>
+              ) : (
+                <div />
+              )}
+              <p className="text-xs text-muted-foreground">
+                {formData.description.length}/96
+              </p>
+            </div>
           </Field>
           <Field>
             <FieldLabel htmlFor="systemPrompt">System prompt</FieldLabel>

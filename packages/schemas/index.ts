@@ -132,7 +132,7 @@ export const agentSchema = z.object({
   workspaceId: z.string(),
   providerId: z.string(),
   name: z.string().min(3).max(30),
-  description: z.string().optional(),
+  description: z.string().max(96).optional(),
   systemPrompt: z.string().optional(),
   modelId: z.string(),
   maxSteps: z.number().optional(),

@@ -77,6 +77,35 @@ describe("Agent Routes", () => {
       expect(await res.json()).toEqual(mockAgent);
       expect(mockDb.insert).toHaveBeenCalled();
     });
+
+    it("should return 400 if description is too long", async () => {
+      mockSession();
+      // requireOrgAccess
+      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
+      // requireWorkspaceAccess
+      mockDb.limit.mockResolvedValueOnce([{ role: "editor" }]);
+
+      const longDescription = "a".repeat(97);
+
+      const res = await app.request(baseUrl, {
+        method: "POST",
+        body: JSON.stringify({
+          name: "New Agent",
+          providerId: "p1",
+          modelId: "m1",
+          workspaceId,
+          description: longDescription,
+        }),
+        headers: { "Content-Type": "application/json" },
+      });
+
+      expect(res.status).toBe(400);
+      const body = await res.json();
+      expect(body.success).toBe(false);
+      expect(Array.isArray(body.error)).toBe(true);
+      expect(body.error[0].code).toBe("too_big");
+      expect(body.error[0].path).toContain("description");
+    });
   });
 
   describe("GET /", () => {
@@ -152,6 +181,34 @@ describe("Agent Routes", () => {
 
       expect(res.status).toBe(200);
       expect(await res.json()).toEqual([mockAgent]);
+    });
+
+    it("should return 400 if description is too long on update", async () => {
+      mockSession();
+      // requireOrgAccess
+      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
+      // requireWorkspaceAccess
+      mockDb.limit.mockResolvedValueOnce([{ role: "editor" }]);
+
+      const longDescription = "a".repeat(97);
+
+      const res = await app.request(`${baseUrl}/agent-1`, {
+        method: "PUT",
+        body: JSON.stringify({
+          name: "Updated Agent",
+          providerId: "p1",
+          modelId: "m1",
+          description: longDescription,
+        }),
+        headers: { "Content-Type": "application/json" },
+      });
+
+      expect(res.status).toBe(400);
+      const body = await res.json();
+      expect(body.success).toBe(false);
+      expect(Array.isArray(body.error)).toBe(true);
+      expect(body.error[0].code).toBe("too_big");
+      expect(body.error[0].path).toContain("description");
     });
   });
 
