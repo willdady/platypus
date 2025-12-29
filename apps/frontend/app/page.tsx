@@ -1,6 +1,6 @@
 "use client";
 
-import type { Organization } from "@platypus/schemas";
+import type { Organization, Workspace } from "@platypus/schemas";
 import { WorkspaceList } from "@/components/workspace-list";
 import { Button } from "@/components/ui/button";
 import {
@@ -13,7 +13,13 @@ import {
   SidebarProvider,
 } from "@/components/ui/sidebar";
 import Link from "next/link";
-import { AlertCircle, Building, Plus, Settings } from "lucide-react";
+import {
+  AlertCircle,
+  Building,
+  FolderClosed,
+  Plus,
+  Settings,
+} from "lucide-react";
 import useSWR from "swr";
 import { fetcher, joinUrl } from "@/lib/utils";
 import { useBackendUrl } from "./client-context";
@@ -42,6 +48,17 @@ export default function Home() {
   );
 
   const organizations = data?.results || [];
+
+  const { data: workspacesData, isLoading: isWorkspacesLoading } = useSWR<{
+    results: Workspace[];
+  }>(
+    backendUrl && user && selectedOrgId
+      ? joinUrl(backendUrl, `/organizations/${selectedOrgId}/workspaces`)
+      : null,
+    fetcher,
+  );
+
+  const workspaces = workspacesData?.results || [];
 
   useEffect(() => {
     if (organizations.length > 0 && !selectedOrgId) {
@@ -168,21 +185,50 @@ export default function Home() {
                     <h2 className="text-2xl font-bold flex items-center gap-2">
                       {selectedOrg.name}
                     </h2>
-                    <div className="space-y-4">
-                      <WorkspaceList orgId={selectedOrg.id} />
-                      <div className="flex items-center gap-2">
-                        <Button asChild>
-                          <Link href={`/${selectedOrg.id}/create`}>
-                            <Plus className="size-4" /> Add workspace
-                          </Link>
-                        </Button>
-                        <Button variant="outline" asChild>
-                          <Link href={`/${selectedOrg.id}/settings`}>
-                            <Settings className="size-4" /> Org settings
-                          </Link>
-                        </Button>
+                    {workspaces.length > 0 ? (
+                      <div className="space-y-4">
+                        <WorkspaceList orgId={selectedOrg.id} />
+                        <div className="flex items-center gap-2">
+                          <Button asChild>
+                            <Link href={`/${selectedOrg.id}/create`}>
+                              <Plus className="size-4" /> Add workspace
+                            </Link>
+                          </Button>
+                          <Button variant="outline" asChild>
+                            <Link href={`/${selectedOrg.id}/settings`}>
+                              <Settings className="size-4" /> Organization Settings
+                            </Link>
+                          </Button>
+                        </div>
                       </div>
-                    </div>
+                    ) : !isWorkspacesLoading ? (
+                      <Empty className="border-none">
+                        <EmptyHeader>
+                          <EmptyMedia variant="icon">
+                            <FolderClosed />
+                          </EmptyMedia>
+                          <EmptyTitle>No workspaces found</EmptyTitle>
+                          <EmptyDescription>
+                            Create your first workspace in this organization to
+                            start building agents.
+                          </EmptyDescription>
+                        </EmptyHeader>
+                        <EmptyContent>
+                          <div className="flex items-center gap-2">
+                            <Button asChild className="flex-1">
+                              <Link href={`/${selectedOrg.id}/create`}>
+                                <Plus className="h-4 w-4" /> Create Workspace
+                              </Link>
+                            </Button>
+                            <Button variant="outline" asChild>
+                              <Link href={`/${selectedOrg.id}/settings`}>
+                                <Settings className="size-4" /> Organization Settings
+                              </Link>
+                            </Button>
+                          </div>
+                        </EmptyContent>
+                      </Empty>
+                    ) : null}
                   </div>
                 ) : (
                   <div className="flex items-center justify-center h-64">
