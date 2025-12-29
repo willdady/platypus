@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.7.0](https://github.com/willdady/platypus/compare/v1.6.2...v1.7.0) (2025-12-29)
+
+
+### Features
+
+* **agents:** description field now limited to a maximum of 96 characters ([d82c53b](https://github.com/willdady/platypus/commit/d82c53b97e93c61904fafc9c7824dbd5b5407c7f))
+* **ui:** added dedicated empty state when an Org has no Workspaces ([8ee9262](https://github.com/willdady/platypus/commit/8ee926298ebc051b51fcdcf4e654db1157a29b3c))
+
+
+### Bug Fixes
+
+* **backend:** truncate generated chat titles before writing to database ([9211908](https://github.com/willdady/platypus/commit/9211908f78a4ec71c21ccfeaa6f990dee55abc5c))
+* **ui:** organization menu items now correctly show cursor pointer on hover ([72a1377](https://github.com/willdady/platypus/commit/72a13770766abb56666aae742b6270260e02b6e4))
+
 ## [1.6.2](https://github.com/willdady/platypus/compare/v1.6.1...v1.6.2) (2025-12-28)
 
 
