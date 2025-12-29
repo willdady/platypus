@@ -149,6 +149,7 @@ export default function Home() {
                         {organizations.map((org) => (
                           <SidebarMenuItem key={org.id}>
                             <SidebarMenuButton
+                              className="cursor-pointer"
                               isActive={selectedOrgId === org.id}
                               onClick={() => setSelectedOrgId(org.id)}
                             >
