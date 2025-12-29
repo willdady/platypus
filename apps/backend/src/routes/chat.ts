@@ -678,8 +678,14 @@ chat.post(
       ].join("\n"),
     });
 
-    const newTitle = result.object.title;
+    let newTitle = result.object.title;
     const newTags = result.object.tags;
+
+    // Truncate the title if it exceeds 30 characters. This is needed as some 
+    // models don't respect the limit mentioned in the above prompt :\
+    if (newTitle.length > 30) {
+      newTitle = newTitle.slice(0, 29) + "…";
+    }
 
     // Update chat title and tags
     const updateResult = await db
