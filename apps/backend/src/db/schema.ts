@@ -22,6 +22,7 @@ export const workspace = pgTable(
         onDelete: "cascade",
       }),
     name: t.text("name").notNull(),
+    context: t.text("context"),
     createdAt: t.timestamp("created_at").notNull().defaultNow(),
     updatedAt: t.timestamp("updated_at").notNull().defaultNow(),
   }),

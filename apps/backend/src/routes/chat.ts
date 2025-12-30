@@ -25,8 +25,10 @@ import {
   chat as chatTable,
   mcp as mcpTable,
   provider as providerTable,
+  workspace as workspaceTable,
 } from "../db/schema.ts";
 import { getToolSet } from "../tools/index.ts";
+import { renderSystemPrompt } from "../system-prompt.ts";
 import {
   chatGenerateMetadataSchema,
   chatSubmitSchema,
@@ -290,44 +292,40 @@ const createSearchTools = (
 
 /**
  * Resolves the generation configuration (system prompt, temperature, etc.)
- * by merging agent settings with request overrides.
+ * by merging agent settings with request overrides and workspace context.
  */
-const resolveGenerationConfig = (
+const resolveGenerationConfig = async (
   data: ChatSubmitData,
+  workspaceId: string,
   agent?: typeof agentTable.$inferSelect,
-): GenerationConfig => {
+  workspaceContext?: string,
+): Promise<GenerationConfig> => {
   const config: GenerationConfig = {};
+  const source = agent || data;
 
-  if (agent) {
-    Object.assign(
-      config,
-      agent.systemPrompt && { systemPrompt: agent.systemPrompt },
-      agent.temperature != null && { temperature: agent.temperature },
-      agent.topP != null && { topP: agent.topP },
-      agent.topK != null && { topK: agent.topK },
-      agent.frequencyPenalty != null && {
-        frequencyPenalty: agent.frequencyPenalty,
-      },
-      agent.presencePenalty != null && {
-        presencePenalty: agent.presencePenalty,
-      },
-    );
-  } else {
-    Object.assign(
-      config,
-      data.systemPrompt && { systemPrompt: data.systemPrompt },
-      data.temperature != null && { temperature: data.temperature },
-      data.topP != null && { topP: data.topP },
-      data.topK != null && { topK: data.topK },
-      data.frequencyPenalty != null && {
-        frequencyPenalty: data.frequencyPenalty,
-      },
-      data.presencePenalty != null && {
-        presencePenalty: data.presencePenalty,
-      },
-    );
-  }
+  Object.assign(
+    config,
+    source.temperature != null && { temperature: source.temperature },
+    source.topP != null && { topP: source.topP },
+    source.topK != null && { topK: source.topK },
+    source.frequencyPenalty != null && {
+      frequencyPenalty: source.frequencyPenalty,
+    },
+    source.presencePenalty != null && {
+      presencePenalty: source.presencePenalty,
+    },
+  );
 
+  const agentSystemPrompt = (agent ? agent.systemPrompt : data.systemPrompt) || undefined;
+
+  // Render the system prompt using the template
+  const systemPrompt = renderSystemPrompt({
+    workspaceId,
+    workspaceContext,
+    agentSystemPrompt,
+  });
+
+  config.systemPrompt = systemPrompt;
   return config;
 };
 
@@ -490,25 +488,37 @@ chat.post(
     const data = c.req.valid("json");
     const { messages = [] } = data;
 
-    // 1. Resolve Context (Agent vs Direct) & Provider
+    // 1. Fetch workspace to get system prompt
+    const workspaceRecord = await db
+      .select()
+      .from(workspaceTable)
+      .where(eq(workspaceTable.id, workspaceId))
+      .limit(1);
+
+    if (workspaceRecord.length === 0) {
+      throw new Error(`Workspace '${workspaceId}' not found`);
+    }
+    const workspace = workspaceRecord[0];
+
+    // 2. Resolve Context (Agent vs Direct) & Provider
     const context = await resolveChatContext(data, orgId, workspaceId);
     const { provider, agent, resolvedModelId } = context;
 
-    // 2. Initialize Model
+    // 3. Initialize Model
     const [aiProvider, model] = createModel(provider, resolvedModelId);
 
-    // 3. Load Tools (Static & MCP)
+    // 4. Load Tools (Static & MCP)
     const { tools, mcpClients } = await loadTools(agent, workspaceId);
 
-    // 4. Configure Search (if enabled)
+    // 5. Configure Search (if enabled)
     if (data.search) {
       Object.assign(tools, createSearchTools(provider, aiProvider));
     }
 
-    // 5. Prepare Generation Config (Merge Agent & Request params)
-    const config = resolveGenerationConfig(data, agent);
+    // 6. Prepare Generation Config (Merge Agent & Request params)
+    const config = await resolveGenerationConfig(data, workspaceId, agent, workspace.context || undefined);
 
-    // 6. Stream Response
+    // 7. Stream Response
     const { systemPrompt, ...restConfig } = config;
     const result = streamText({
       model,

@@ -52,7 +52,7 @@ const WorkspaceSettingsPage = () => {
         </div>
       </div>
 
-      <div className="max-w-md">
+      <div className="w-full">
         <WorkspaceForm orgId={orgId} workspaceId={workspaceId} />
       </div>
     </div>

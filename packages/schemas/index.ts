@@ -23,6 +23,7 @@ export const workspaceSchema = z.object({
   id: z.string(),
   organizationId: z.string(),
   name: z.string().min(3).max(30),
+  context: z.string().optional(),
   createdAt: z.date(),
   updatedAt: z.date(),
 });
@@ -32,9 +33,13 @@ export type Workspace = z.infer<typeof workspaceSchema>;
 export const workspaceCreateSchema = workspaceSchema.pick({
   name: true,
   organizationId: true,
+  context: true,
 });
 
-export const workspaceUpdateSchema = workspaceSchema.pick({ name: true });
+export const workspaceUpdateSchema = workspaceSchema.pick({
+  name: true,
+  context: true
+});
 
 // Chat
 

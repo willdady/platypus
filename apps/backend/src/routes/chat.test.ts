@@ -101,6 +101,14 @@ describe("Chat Routes", () => {
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
       mockDb.limit.mockResolvedValueOnce([{ role: "viewer" }]); // requireWorkspaceAccess
 
+      // fetch workspace
+      mockDb.limit.mockResolvedValueOnce([
+        {
+          id: workspaceId,
+          context: null,
+        },
+      ]);
+
       // resolveChatContext: fetch provider
       mockDb.limit.mockResolvedValueOnce([
         {

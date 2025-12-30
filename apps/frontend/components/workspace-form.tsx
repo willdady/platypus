@@ -8,6 +8,7 @@ import {
   FieldError,
 } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -52,6 +53,7 @@ const WorkspaceForm = ({
 
   const [formData, setFormData] = useState({
     name: "",
+    context: "",
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [validationErrors, setValidationErrors] = useState<
@@ -64,11 +66,14 @@ const WorkspaceForm = ({
 
   useEffect(() => {
     if (workspace) {
-      setFormData({ name: workspace.name });
+      setFormData({
+        name: workspace.name,
+        context: workspace.context || "",
+      });
     }
   }, [workspace]);
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement> | React.ChangeEvent<HTMLTextAreaElement>) => {
     const { id, value } = e.target;
 
     // Clear validation error for this field
@@ -100,8 +105,8 @@ const WorkspaceForm = ({
       const method = workspaceId ? "PUT" : "POST";
 
       const payload = workspaceId
-        ? { name: formData.name }
-        : { organizationId: orgId, name: formData.name };
+        ? { name: formData.name, context: formData.context || null }
+        : { organizationId: orgId, name: formData.name, context: formData.context || null };
 
       const response = await fetch(url, {
         method,
@@ -189,6 +194,22 @@ const WorkspaceForm = ({
             />
             {validationErrors.name && (
               <FieldError>{validationErrors.name}</FieldError>
+            )}
+          </Field>
+          
+          <Field data-invalid={!!validationErrors.context}>
+            <FieldLabel htmlFor="context">Context</FieldLabel>
+            <Textarea
+              id="context"
+              placeholder="Optional context for this workspace"
+              value={formData.context}
+              onChange={handleChange}
+              disabled={isSubmitting}
+              aria-invalid={!!validationErrors.context}
+              rows={4}
+            />
+            {validationErrors.context && (
+              <FieldError>{validationErrors.context}</FieldError>
             )}
           </Field>
         </FieldGroup>
