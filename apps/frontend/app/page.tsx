@@ -197,7 +197,8 @@ export default function Home() {
                           </Button>
                           <Button variant="outline" asChild>
                             <Link href={`/${selectedOrg.id}/settings`}>
-                              <Settings className="size-4" /> Organization Settings
+                              <Settings className="size-4" /> Organization
+                              Settings
                             </Link>
                           </Button>
                         </div>
@@ -223,7 +224,8 @@ export default function Home() {
                             </Button>
                             <Button variant="outline" asChild>
                               <Link href={`/${selectedOrg.id}/settings`}>
-                                <Settings className="size-4" /> Organization Settings
+                                <Settings className="size-4" /> Organization
+                                Settings
                               </Link>
                             </Button>
                           </div>

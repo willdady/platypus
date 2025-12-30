@@ -468,7 +468,9 @@ const ProviderForm = ({
               disabled={isSubmitting || isReadOnly}
               aria-invalid={!!validationErrors.taskModelId}
             />
-            <FieldDescription>Model to use for chat metadata generation.</FieldDescription>
+            <FieldDescription>
+              Model to use for chat metadata generation.
+            </FieldDescription>
             {validationErrors.taskModelId && (
               <FieldError>{validationErrors.taskModelId}</FieldError>
             )}

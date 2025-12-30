@@ -26,16 +26,19 @@ import {
   mcp as mcpTable,
   provider as providerTable,
   workspace as workspaceTable,
+  skill as skillTable,
 } from "../db/schema.ts";
 import { getToolSet } from "../tools/index.ts";
+import { createLoadSkillTool } from "../tools/skill.ts";
 import { renderSystemPrompt } from "../system-prompt.ts";
 import {
   chatGenerateMetadataSchema,
   chatSubmitSchema,
   chatUpdateSchema,
   type Provider,
+  type Skill,
 } from "@platypus/schemas";
-import { and, desc, eq, or, sql } from "drizzle-orm";
+import { and, desc, eq, or, sql, inArray } from "drizzle-orm";
 import { requireAuth } from "../middleware/authentication.ts";
 import {
   requireOrgAccess,
@@ -65,6 +68,7 @@ type GenerationConfig = {
   frequencyPenalty?: number;
   presencePenalty?: number;
   seed?: number;
+  skills?: Array<Pick<Skill, "name" | "description">>;
 };
 
 // --- Helper Functions ---
@@ -299,6 +303,7 @@ const resolveGenerationConfig = async (
   workspaceId: string,
   agent?: typeof agentTable.$inferSelect,
   workspaceContext?: string,
+  skills?: Array<Pick<Skill, "name" | "description">>,
 ): Promise<GenerationConfig> => {
   const config: GenerationConfig = {};
   const source = agent || data;
@@ -316,13 +321,15 @@ const resolveGenerationConfig = async (
     },
   );
 
-  const agentSystemPrompt = (agent ? agent.systemPrompt : data.systemPrompt) || undefined;
+  const agentSystemPrompt =
+    (agent ? agent.systemPrompt : data.systemPrompt) || undefined;
 
   // Render the system prompt using the template
   const systemPrompt = renderSystemPrompt({
     workspaceId,
     workspaceContext,
     agentSystemPrompt,
+    skills,
   });
 
   config.systemPrompt = systemPrompt;
@@ -515,10 +522,36 @@ chat.post(
       Object.assign(tools, createSearchTools(provider, aiProvider));
     }
 
-    // 6. Prepare Generation Config (Merge Agent & Request params)
-    const config = await resolveGenerationConfig(data, workspaceId, agent, workspace.context || undefined);
+    // 6. Fetch Skills (if any)
+    let skills: Array<Pick<Skill, "name" | "description">> = [];
+    if (agent?.skillIds && agent.skillIds.length > 0) {
+      const skillRecords = await db
+        .select({ name: skillTable.name, description: skillTable.description })
+        .from(skillTable)
+        .where(
+          and(
+            eq(skillTable.workspaceId, workspaceId),
+            inArray(skillTable.id, agent.skillIds),
+          ),
+        );
+      skills = skillRecords;
+    }
 
-    // 7. Stream Response
+    // 7. Prepare Generation Config (Merge Agent & Request params)
+    const config = await resolveGenerationConfig(
+      data,
+      workspaceId,
+      agent,
+      workspace.context || undefined,
+      skills,
+    );
+
+    // 8. Inject load_skill tool if skills exist
+    if (skills.length > 0) {
+      tools.load_skill = createLoadSkillTool(workspaceId);
+    }
+
+    // 9. Stream Response
     const { systemPrompt, ...restConfig } = config;
     const result = streamText({
       model,
@@ -691,7 +724,7 @@ chat.post(
     let newTitle = result.object.title;
     const newTags = result.object.tags;
 
-    // Truncate the title if it exceeds 30 characters. This is needed as some 
+    // Truncate the title if it exceeds 30 characters. This is needed as some
     // models don't respect the limit mentioned in the above prompt :\
     if (newTitle.length > 30) {
       newTitle = newTitle.slice(0, 29) + "…";

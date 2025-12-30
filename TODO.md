@@ -34,5 +34,7 @@
 [x] Bug: The `generate-metadata` endpoint, sometimes returns a title with a length greater-than 30 characters.
 [x] Consider adding a character limit to the Agent description field
 [x] Add setting system prompt at the Workspace level. Will also need to design a dynamic system prompt template, possibly using ejs?
+[x] Add "Skills" similar to Claude Code
+[ ] It should be possible to disable sign-ups (via an environment variable)
 [ ] Bug: selecting an organization on the organization picker screen should update the browser URL to support deep-linking
 [ ] There should be a way to export and import agents, preferably as JSON.

@@ -1,0 +1,22 @@
+meta {
+  name: Update Skill
+  type: http
+  seq: 4
+}
+
+put {
+  url: {{baseUrl}}/organizations/{{orgId}}/workspaces/{{workspaceId}}/skills/:skillId
+  body: json
+  auth: none
+}
+
+params:path {
+  skillId: 
+}
+
+body:json {
+  {
+    "name": "updated-skill-name",
+    "body": "Updated skill body content."
+  }
+}

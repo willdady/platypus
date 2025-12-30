@@ -1,6 +1,7 @@
 "use client";
 
 import { AgentsList } from "@/components/agents-list";
+import { SkillsList } from "@/components/skills-list";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
@@ -11,6 +12,7 @@ import {
   Plus,
   BotMessageSquare,
   FolderOpen,
+  Sparkles,
 } from "lucide-react";
 import Link from "next/link";
 import useSWR from "swr";
@@ -104,7 +106,7 @@ const Workspace = () => {
   const providerCount = providersData?.results?.length || 0;
 
   return (
-    <div className="flex flex-col gap-8 p-8 max-w-6xl mx-auto">
+    <div className="flex flex-col gap-8 p-8 pb-32 max-w-6xl mx-auto">
       {/* Header Section */}
       <div className="flex flex-col">
         <span className="text-sm font-medium text-muted-foreground mb-1">
@@ -189,15 +191,43 @@ const Workspace = () => {
           {/* Agents List Section */}
           <div className="space-y-4">
             <div className="flex items-center justify-between">
-              <h2 className="text-xl font-semibold tracking-tight">
-                Your Agents
-              </h2>
+              <div className="flex flex-col">
+                <h2 className="text-xl font-semibold tracking-tight flex items-center gap-2">
+                  <Bot className="size-5" /> Your Agents
+                </h2>
+                <p className="text-sm text-muted-foreground">
+                  Active AI assistants configured for this workspace.
+                </p>
+              </div>
             </div>
             {/* Reusing the existing AgentsList component which handles empty states */}
             <AgentsList orgId={orgId} workspaceId={workspaceId} />
             <Button variant="outline" asChild>
               <Link href={`/${orgId}/workspace/${workspaceId}/agents/create`}>
                 <Plus /> Create Agent
+              </Link>
+            </Button>
+          </div>
+
+          <Separator />
+
+          {/* Skills List Section */}
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex flex-col">
+                <h2 className="text-xl font-semibold tracking-tight flex items-center gap-2">
+                  <Sparkles className="size-5" /> Your Skills
+                </h2>
+                <p className="text-sm text-muted-foreground">
+                  Reusable instruction sets that help agents perform specific
+                  tasks.
+                </p>
+              </div>
+            </div>
+            <SkillsList orgId={orgId} workspaceId={workspaceId} />
+            <Button variant="outline" asChild className="cursor-pointer">
+              <Link href={`/${orgId}/workspace/${workspaceId}/skills/create`}>
+                <Plus /> Create Skill
               </Link>
             </Button>
           </div>

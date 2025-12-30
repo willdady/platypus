@@ -27,7 +27,13 @@ import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport } from "ai";
 import { GlobeIcon, Info, Settings2 } from "lucide-react";
 import { useRef, useEffect, useState } from "react";
-import { Chat as ChatType, Provider, Agent, ToolSet } from "@platypus/schemas";
+import {
+  Chat as ChatType,
+  Provider,
+  Agent,
+  ToolSet,
+  Skill,
+} from "@platypus/schemas";
 import useSWR from "swr";
 import { fetcher, joinUrl } from "@/lib/utils";
 import { useChatSettings } from "@/hooks/use-chat-settings";
@@ -101,6 +107,18 @@ export const Chat = ({
   );
 
   const toolSets = toolSetsData?.results || [];
+
+  // Fetch skills
+  const { data: skillsData } = useSWR<{ results: Skill[] }>(
+    backendUrl && user
+      ? joinUrl(
+          backendUrl,
+          `/organizations/${orgId}/workspaces/${workspaceId}/skills`,
+        )
+      : null,
+    fetcher,
+  );
+  const skills = skillsData?.results || [];
 
   // Fetch existing chat data
   const { data: chatData } = useSWR<ChatType>(
@@ -218,11 +236,7 @@ export const Chat = ({
 
   // Set initial agent if provided and no existing chat agent
   useEffect(() => {
-    if (
-      initialAgentId &&
-      !agentId &&
-      (!chatData || !chatData.agentId)
-    ) {
+    if (initialAgentId && !agentId && (!chatData || !chatData.agentId)) {
       modelSetters.setAgentId(initialAgentId);
     }
   }, [initialAgentId, agentId, chatData, modelSetters]);
@@ -380,6 +394,7 @@ export const Chat = ({
                         <AgentInfoDialog
                           agent={selectedAgent}
                           toolSets={toolSets}
+                          skills={skills}
                           providers={providers}
                           onClose={() => setIsAgentInfoDialogOpen(false)}
                         />

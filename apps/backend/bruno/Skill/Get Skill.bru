@@ -1,0 +1,15 @@
+meta {
+  name: Get Skill
+  type: http
+  seq: 3
+}
+
+get {
+  url: {{baseUrl}}/organizations/{{orgId}}/workspaces/{{workspaceId}}/skills/:skillId
+  body: none
+  auth: none
+}
+
+params:path {
+  skillId: 
+}

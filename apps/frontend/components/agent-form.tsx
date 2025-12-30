@@ -39,7 +39,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { type ToolSet, type Agent, type Provider } from "@platypus/schemas";
+import {
+  type ToolSet,
+  type Agent,
+  type Provider,
+  type Skill,
+} from "@platypus/schemas";
 import useSWR from "swr";
 import { fetcher, parseValidationErrors, joinUrl } from "@/lib/utils";
 import { useBackendUrl } from "@/app/client-context";
@@ -79,6 +84,18 @@ const AgentForm = ({
   );
   const providers = providersData?.results || [];
 
+  // Fetch skills
+  const { data: skillsData } = useSWR<{ results: Skill[] }>(
+    backendUrl && user
+      ? joinUrl(
+          backendUrl,
+          `/organizations/${orgId}/workspaces/${workspaceId}/skills`,
+        )
+      : null,
+    fetcher,
+  );
+  const skills = skillsData?.results || [];
+
   // Fetch existing agent data if editing
   const { data: agent, isLoading: agentLoading } = useSWR<Agent>(
     agentId && user
@@ -99,6 +116,7 @@ const AgentForm = ({
     maxSteps: 10,
     temperature: undefined as number | undefined,
     toolSetIds: [] as string[],
+    skillIds: [] as string[],
     topP: undefined as number | undefined,
     topK: undefined as number | undefined,
     seed: undefined as number | undefined,
@@ -145,6 +163,7 @@ const AgentForm = ({
         presencePenalty: agent.presencePenalty ?? undefined,
         frequencyPenalty: agent.frequencyPenalty ?? undefined,
         toolSetIds: agent.toolSetIds || [],
+        skillIds: agent.skillIds || [],
       });
     }
   }, [agent]);
@@ -219,6 +238,7 @@ const AgentForm = ({
         presencePenalty: formData.presencePenalty,
         frequencyPenalty: formData.frequencyPenalty,
         toolSetIds: formData.toolSetIds,
+        skillIds: formData.skillIds,
       };
 
       const url = agentId
@@ -450,6 +470,49 @@ const AgentForm = ({
                   </FieldSet>
                 ));
               })()}
+            </CardContent>
+          </Card>
+        )}
+
+        {skills.length > 0 && (
+          <Card className="mb-6">
+            <CardHeader>
+              <CardTitle>Skills</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <FieldGroup className="grid grid-cols-2 gap-4">
+                {skills.map((skill) => (
+                  <Field key={skill.id} orientation="horizontal">
+                    <Switch
+                      id={`skill-${skill.id}`}
+                      className="cursor-pointer"
+                      checked={formData.skillIds.includes(skill.id)}
+                      onCheckedChange={(checked) => {
+                        setFormData((prevData) => {
+                          const newSkillIds = checked
+                            ? [...prevData.skillIds, skill.id]
+                            : prevData.skillIds.filter(
+                                (id: string) => id !== skill.id,
+                              );
+                          return {
+                            ...prevData,
+                            skillIds: newSkillIds,
+                          };
+                        });
+                      }}
+                      disabled={isSubmitting}
+                    />
+                    <FieldLabel htmlFor={`skill-${skill.id}`}>
+                      <div className="flex flex-col">
+                        <p>{skill.name}</p>
+                        <p className="text-xs text-muted-foreground line-clamp-1">
+                          {skill.body}
+                        </p>
+                      </div>
+                    </FieldLabel>
+                  </Field>
+                ))}
+              </FieldGroup>
             </CardContent>
           </Card>
         )}

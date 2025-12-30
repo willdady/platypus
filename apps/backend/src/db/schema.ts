@@ -87,6 +87,7 @@ export const agent = pgTable(
     presencePenalty: t.real("presence_penalty"),
     frequencyPenalty: t.real("frequency_penalty"),
     toolSetIds: t.jsonb("tool_set_ids").$type<string[]>().default([]), // Array of tool set ids
+    skillIds: t.jsonb("skill_ids").$type<string[]>().default([]), // Array of skill ids
     createdAt: t.timestamp("created_at").notNull().defaultNow(),
     updatedAt: t.timestamp("updated_at").notNull().defaultNow(),
   }),
@@ -228,5 +229,27 @@ export const invitation = pgTable(
     index("idx_invitation_org_id").on(t.organizationId),
     index("idx_invitation_workspace_id").on(t.workspaceId),
     unique("unique_invitation_workspace_email").on(t.workspaceId, t.email),
+  ],
+);
+
+export const skill = pgTable(
+  "skill",
+  (t) => ({
+    id: t.text("id").primaryKey(),
+    workspaceId: t
+      .text("workspace_id")
+      .notNull()
+      .references(() => workspace.id, {
+        onDelete: "cascade",
+      }),
+    name: t.text("name").notNull(),
+    description: t.text("description").notNull(),
+    body: t.text("body").notNull(),
+    createdAt: t.timestamp("created_at").notNull().defaultNow(),
+    updatedAt: t.timestamp("updated_at").notNull().defaultNow(),
+  }),
+  (t) => [
+    index("idx_skill_workspace_id").on(t.workspaceId),
+    unique("unique_skill_name_workspace").on(t.workspaceId, t.name),
   ],
 );

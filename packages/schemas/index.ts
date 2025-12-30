@@ -38,7 +38,7 @@ export const workspaceCreateSchema = workspaceSchema.pick({
 
 export const workspaceUpdateSchema = workspaceSchema.pick({
   name: true,
-  context: true
+  context: true,
 });
 
 // Chat
@@ -148,6 +148,7 @@ export const agentSchema = z.object({
   presencePenalty: z.number().optional(),
   frequencyPenalty: z.number().optional(),
   toolSetIds: z.array(z.string()).optional(),
+  skillIds: z.array(z.string()).optional(),
   createdAt: z.date(),
   updatedAt: z.date(),
 });
@@ -169,6 +170,7 @@ export const agentCreateSchema = agentSchema.pick({
   presencePenalty: true,
   frequencyPenalty: true,
   toolSetIds: true,
+  skillIds: true,
 });
 
 export const agentUpdateSchema = agentSchema.pick({
@@ -185,6 +187,40 @@ export const agentUpdateSchema = agentSchema.pick({
   presencePenalty: true,
   frequencyPenalty: true,
   toolSetIds: true,
+  skillIds: true,
+});
+
+// Skill
+
+const skillNameRegex = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+
+export const skillSchema = z.object({
+  id: z.string(),
+  workspaceId: z.string(),
+  name: z
+    .string()
+    .min(5)
+    .max(64)
+    .regex(skillNameRegex, "Skill name must be kebab-case"),
+  description: z.string().min(16).max(128),
+  body: z.string().min(1).max(2000),
+  createdAt: z.date(),
+  updatedAt: z.date(),
+});
+
+export type Skill = z.infer<typeof skillSchema>;
+
+export const skillCreateSchema = skillSchema.pick({
+  workspaceId: true,
+  name: true,
+  description: true,
+  body: true,
+});
+
+export const skillUpdateSchema = skillSchema.pick({
+  name: true,
+  description: true,
+  body: true,
 });
 
 // Tool

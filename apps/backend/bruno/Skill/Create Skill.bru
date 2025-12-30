@@ -1,0 +1,19 @@
+meta {
+  name: Create Skill
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{baseUrl}}/organizations/{{orgId}}/workspaces/{{workspaceId}}/skills
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "workspaceId": "{{workspaceId}}",
+    "name": "my-new-skill",
+    "body": "This is a skill that helps with something."
+  }
+}

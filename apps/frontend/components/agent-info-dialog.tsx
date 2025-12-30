@@ -1,4 +1,4 @@
-import { Agent, ToolSet, Provider } from "@platypus/schemas";
+import { Agent, ToolSet, Provider, Skill } from "@platypus/schemas";
 import {
   DialogContent,
   DialogDescription,
@@ -21,6 +21,7 @@ import { useParams, useRouter } from "next/navigation";
 interface AgentInfoDialogProps {
   agent: Agent;
   toolSets: ToolSet[];
+  skills: Skill[];
   providers: Provider[];
   onClose?: () => void;
 }
@@ -28,6 +29,7 @@ interface AgentInfoDialogProps {
 export const AgentInfoDialog = ({
   agent,
   toolSets,
+  skills,
   providers,
   onClose,
 }: AgentInfoDialogProps) => {
@@ -101,6 +103,25 @@ export const AgentInfoDialog = ({
               </div>
             </div>
           )}
+        {skills.length > 0 && agent.skillIds && agent.skillIds.length > 0 && (
+          <div className="grid gap-2">
+            <Label>Skills</Label>
+            <div className="flex flex-wrap gap-2">
+              {agent.skillIds.map((id) => {
+                const skill = skills.find((s) => s.id === id);
+                return skill ? (
+                  <Badge
+                    key={id}
+                    className="cursor-default"
+                    variant="secondary"
+                  >
+                    {skill.name}
+                  </Badge>
+                ) : null;
+              })}
+            </div>
+          </div>
+        )}
         <Collapsible open={isAdvancedOpen} onOpenChange={setIsAdvancedOpen}>
           <CollapsibleTrigger asChild>
             <div className="flex text-sm justify-between items-center">

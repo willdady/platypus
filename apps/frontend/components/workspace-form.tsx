@@ -73,7 +73,11 @@ const WorkspaceForm = ({
     }
   }, [workspace]);
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement> | React.ChangeEvent<HTMLTextAreaElement>) => {
+  const handleChange = (
+    e:
+      | React.ChangeEvent<HTMLInputElement>
+      | React.ChangeEvent<HTMLTextAreaElement>,
+  ) => {
     const { id, value } = e.target;
 
     // Clear validation error for this field
@@ -106,7 +110,11 @@ const WorkspaceForm = ({
 
       const payload = workspaceId
         ? { name: formData.name, context: formData.context || null }
-        : { organizationId: orgId, name: formData.name, context: formData.context || null };
+        : {
+            organizationId: orgId,
+            name: formData.name,
+            context: formData.context || null,
+          };
 
       const response = await fetch(url, {
         method,
@@ -196,7 +204,7 @@ const WorkspaceForm = ({
               <FieldError>{validationErrors.name}</FieldError>
             )}
           </Field>
-          
+
           <Field data-invalid={!!validationErrors.context}>
             <FieldLabel htmlFor="context">Context</FieldLabel>
             <Textarea

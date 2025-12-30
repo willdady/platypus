@@ -28,6 +28,9 @@ agent.post(
     if (data.toolSetIds) {
       data.toolSetIds = dedupeArray(data.toolSetIds);
     }
+    if (data.skillIds) {
+      data.skillIds = dedupeArray(data.skillIds);
+    }
     const record = await db
       .insert(agentTable)
       .values({
@@ -87,6 +90,9 @@ agent.put(
     const data = c.req.valid("json");
     if (data.toolSetIds) {
       data.toolSetIds = dedupeArray(data.toolSetIds);
+    }
+    if (data.skillIds) {
+      data.skillIds = dedupeArray(data.skillIds);
     }
     const record = await db
       .update(agentTable)
