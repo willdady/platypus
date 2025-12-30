@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.9.0](https://github.com/willdady/platypus/compare/v1.8.0...v1.9.0) (2025-12-30)
+
+
+### Features
+
+* **skills:** can now create skills and assign them to agents! ([dc8c7c3](https://github.com/willdady/platypus/commit/dc8c7c307ef0b2de6a5c1905d80a153cc116d166))
+
+
+### Bug Fixes
+
+* **ui:** regression where chat model select was unselected when starting a new chat ([6f1bfd1](https://github.com/willdady/platypus/commit/6f1bfd1858626e6ca89ed2af21fc5f4a55fbd219))
+
 ## [1.8.0](https://github.com/willdady/platypus/compare/v1.7.0...v1.8.0) (2025-12-30)
 
 
