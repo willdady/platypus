@@ -121,7 +121,7 @@ export const Chat = ({
   const skills = skillsData?.results || [];
 
   // Fetch existing chat data
-  const { data: chatData } = useSWR<ChatType>(
+  const { data: chatData, isLoading: isChatLoading } = useSWR<ChatType>(
     backendUrl && user
       ? joinUrl(
           backendUrl,
@@ -152,7 +152,7 @@ export const Chat = ({
     selection,
     handleModelChange,
     setters: modelSetters,
-  } = useModelSelection(chatData, providers, agents);
+  } = useModelSelection(chatData, providers, agents, isChatLoading);
   const { settings, setters } = useChatSettings(chatData, selection.agentId);
   const chatUI = useChatUI(error);
 
@@ -270,6 +270,11 @@ export const Chat = ({
     const hasText = Boolean(message.text);
     const hasAttachments = Boolean(message.files?.length);
     if (!(hasText || hasAttachments)) {
+      return;
+    }
+
+    if (!agentId && (!modelId || !providerId)) {
+      toast.error("Please select a model or agent to start the chat");
       return;
     }
 

@@ -11,6 +11,7 @@ export const useModelSelection = (
   chatData: Chat | undefined,
   providers: Provider[],
   agents: Agent[],
+  isLoading: boolean = false,
 ) => {
   const [agentId, setAgentId] = useState("");
   const [modelId, setModelId] = useState("");
@@ -35,13 +36,12 @@ export const useModelSelection = (
 
   // Restore persisted agent/provider/model from chat data, with validation and fallback
   useEffect(() => {
-    if (
-      chatData &&
-      providers.length > 0 &&
-      !modelId &&
-      !providerId &&
-      !agentId
-    ) {
+    if (isLoading || providers.length === 0) return;
+
+    // If we already have a selection, do nothing
+    if (modelId || providerId || agentId) return;
+
+    if (chatData) {
       // Check if chat has an agent
       if (chatData.agentId && agents.length > 0) {
         const agent = agents.find((a) => a.id === chatData.agentId);
@@ -85,12 +85,12 @@ export const useModelSelection = (
           );
         }
       }
-
-      // Fall back to first provider's first model (for new chats or invalid persisted data)
-      setModelId(providers[0].modelIds[0]);
-      setProviderId(providers[0].id);
     }
-  }, [chatData, providers, agents, modelId, providerId, agentId]);
+
+    // Fall back to first provider's first model (for new chats, invalid persisted data, or missing chatData)
+    setModelId(providers[0].modelIds[0]);
+    setProviderId(providers[0].id);
+  }, [chatData, providers, agents, modelId, providerId, agentId, isLoading]);
 
   const selection: ModelSelection = {
     agentId,
