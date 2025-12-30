@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.8.0](https://github.com/willdady/platypus/compare/v1.7.0...v1.8.0) (2025-12-30)
+
+
+### Features
+
+* **workspace:** added "context" field to workspace ([8d2a113](https://github.com/willdady/platypus/commit/8d2a113dbb7746ffce86dd5003e5d708fa0e0183))
+
 ## [1.7.0](https://github.com/willdady/platypus/compare/v1.6.2...v1.7.0) (2025-12-29)
 
 
