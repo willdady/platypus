@@ -215,6 +215,7 @@ const WorkspaceForm = ({
               disabled={isSubmitting}
               aria-invalid={!!validationErrors.context}
               rows={4}
+              className="!font-mono"
             />
             {validationErrors.context && (
               <FieldError>{validationErrors.context}</FieldError>
