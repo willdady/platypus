@@ -35,6 +35,15 @@
 [x] Consider adding a character limit to the Agent description field
 [x] Add setting system prompt at the Workspace level. Will also need to design a dynamic system prompt template, possibly using ejs?
 [x] Add "Skills" similar to Claude Code
+[x] Remove the "New Chat" and "Configure Providers" buttons from the Workspace home page
+[x] Reduce the vertical spacing between fields on the Skill form
+[x] Make sure "prompt" fields like the skill "body" and agent "system prompt" fields use a mono-spaced font
+[x] Create a reusable component for Textarea fields which show character counts
+[ ] On the agents list, show which tools and skills are enabled. Use badges with appropriate icons.
+[ ] Add the ability to make certain Textareas expandable to full-screen. This is needed for more ergonomic Markdown editing.
+[x] Bug: The `generate-metadata` endpoint, sometimes returns tags which are not kebab-case. Add a post-processing step to enforce this.
+[x] Bug: It's incorrectly showing as an error when updating a Workspace with an empty context. This field should be optional.
+[x] Add "New Agent" and "New Skill" options the command menu
 [ ] It should be possible to disable sign-ups (via an environment variable)
 [ ] Bug: selecting an organization on the organization picker screen should update the browser URL to support deep-linking
 [ ] There should be a way to export and import agents, preferably as JSON.
