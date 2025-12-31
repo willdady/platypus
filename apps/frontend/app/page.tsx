@@ -141,7 +141,7 @@ export default function Home() {
           <div className="flex-1 flex flex-col items-center overflow-y-auto">
             <div className="flex flex-col md:flex-row w-full md:w-full lg:w-4/5 max-w-3xl py-8 px-4 md:px-0">
               {/* Left Column: Organization Navigation */}
-              <div className="w-full md:w-48 md:fixed md:top-16 pt-4 mb-8 md:mb-0">
+              <div className="w-full md:w-64 md:fixed md:top-16 pt-3.5 mb-8 md:mb-0">
                 <SidebarContent>
                   <SidebarGroup>
                     <SidebarGroupContent>
@@ -180,12 +180,9 @@ export default function Home() {
               </div>
 
               {/* Right Column: Workspace List */}
-              <div className="flex-1 p-2 md:ml-48">
+              <div className="flex-1 px-3 md:ml-64">
                 {selectedOrg ? (
                   <div className="space-y-6">
-                    <h2 className="text-2xl font-bold flex items-center gap-2">
-                      {selectedOrg.name}
-                    </h2>
                     {workspaces.length > 0 ? (
                       <div className="space-y-4">
                         <WorkspaceList orgId={selectedOrg.id} />
