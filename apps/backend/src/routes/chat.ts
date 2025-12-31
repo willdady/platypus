@@ -20,6 +20,7 @@ import {
 import { experimental_createMCPClient as createMCPClient } from "@ai-sdk/mcp";
 import { type Provider as AIProvider, stepCountIs } from "ai";
 import { db } from "../index.ts";
+import { dedupeArray, toKebabCase } from "../utils.ts";
 import {
   agent as agentTable,
   chat as chatTable,
@@ -722,13 +723,14 @@ chat.post(
     });
 
     let newTitle = result.object.title;
-    const newTags = result.object.tags;
-
     // Truncate the title if it exceeds 30 characters. This is needed as some
     // models don't respect the limit mentioned in the above prompt :\
     if (newTitle.length > 30) {
       newTitle = newTitle.slice(0, 29) + "…";
     }
+
+    // Enforce kebab-case tags and dedupe
+    const newTags = dedupeArray(result.object.tags.map(toKebabCase));
 
     // Update chat title and tags
     const updateResult = await db
