@@ -10,6 +10,8 @@ import {
   ArrowLeftRight,
   Home,
   Info,
+  Bot,
+  Sparkles,
 } from "lucide-react";
 
 import {
@@ -83,6 +85,28 @@ export function CommandMenu({ orgId, workspaceId }: CommandMenuProps) {
           >
             <BotMessageSquare />
             <span>New Chat</span>
+          </CommandItem>
+          <CommandItem
+            className="cursor-pointer"
+            onSelect={() => {
+              runCommand(() =>
+                router.push(`/${orgId}/workspace/${workspaceId}/agents/create`),
+              );
+            }}
+          >
+            <Bot />
+            <span>New Agent</span>
+          </CommandItem>
+          <CommandItem
+            className="cursor-pointer"
+            onSelect={() => {
+              runCommand(() =>
+                router.push(`/${orgId}/workspace/${workspaceId}/skills/create`),
+              );
+            }}
+          >
+            <Sparkles />
+            <span>New Skill</span>
           </CommandItem>
           <CommandItem
             className="cursor-pointer"
