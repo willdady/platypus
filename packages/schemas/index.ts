@@ -23,7 +23,7 @@ export const workspaceSchema = z.object({
   id: z.string(),
   organizationId: z.string(),
   name: z.string().min(3).max(30),
-  context: z.string().optional(),
+  context: z.string().nullable().optional(),
   createdAt: z.date(),
   updatedAt: z.date(),
 });
