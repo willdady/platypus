@@ -1,5 +1,21 @@
 # Changelog
 
+## [1.10.0](https://github.com/willdady/platypus/compare/v1.9.0...v1.10.0) (2025-12-31)
+
+
+### Features
+
+* **frontend:** add new agent and skill options to command menu ([02a030f](https://github.com/willdady/platypus/commit/02a030f25bdabac3aae200de831be1bca52af8ba))
+* **frontend:** create reusable TextareaWithCounter component and use in forms ([dc98771](https://github.com/willdady/platypus/commit/dc98771f427108acb8e91b3e7b3f722e25ca1c57))
+* **frontend:** fix font variables and apply mono-spaced font to workspace context ([965a54e](https://github.com/willdady/platypus/commit/965a54e950524349bff6eefd47e629364a4662c0))
+* **frontend:** remove quick action buttons from workspace home ([5f8b784](https://github.com/willdady/platypus/commit/5f8b784f7b7774fa7ef90ea69b3a48144be4c2e2))
+
+
+### Bug Fixes
+
+* **backend:** enforce kebab-case and deduplicate tags in generate-metadata ([cbe87d7](https://github.com/willdady/platypus/commit/cbe87d798f6364cddba2060eab3e7cacd1f35999))
+* **schemas:** allow null for optional workspace context ([2ea8903](https://github.com/willdady/platypus/commit/2ea8903b5a22377b7a09e962388a5a0227b2d2ba))
+
 ## [1.9.0](https://github.com/willdady/platypus/compare/v1.8.0...v1.9.0) (2025-12-30)
 
 
