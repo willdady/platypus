@@ -8,7 +8,7 @@ import {
   FieldError,
 } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { TextareaWithCounter } from "@/components/ui/textarea-with-counter";
+import { ExpandableTextarea } from "@/components/expandable-textarea";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -211,9 +211,10 @@ const SkillForm = ({
             </div>
           </Field>
           <Field data-invalid={!!validationErrors.description}>
-            <FieldLabel htmlFor="description">Description</FieldLabel>
-            <TextareaWithCounter
+            <ExpandableTextarea
               id="description"
+              label="Description"
+              expandable={false}
               placeholder="A brief description of what this skill does..."
               value={formData.description}
               onChange={handleChange}
@@ -224,9 +225,9 @@ const SkillForm = ({
             />
           </Field>
           <Field data-invalid={!!validationErrors.body}>
-            <FieldLabel htmlFor="body">Body</FieldLabel>
-            <TextareaWithCounter
+            <ExpandableTextarea
               id="body"
+              label="Body"
               placeholder="Instructions for this skill..."
               value={formData.body}
               onChange={handleChange}

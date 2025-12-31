@@ -8,7 +8,7 @@ import {
   FieldError,
 } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
+import { ExpandableTextarea } from "@/components/expandable-textarea";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -206,15 +206,14 @@ const WorkspaceForm = ({
           </Field>
 
           <Field data-invalid={!!validationErrors.context}>
-            <FieldLabel htmlFor="context">Context</FieldLabel>
-            <Textarea
+            <ExpandableTextarea
               id="context"
+              label="Context"
               placeholder="Optional context for this workspace"
               value={formData.context}
               onChange={handleChange}
               disabled={isSubmitting}
               aria-invalid={!!validationErrors.context}
-              rows={4}
               className="!font-mono"
             />
             {validationErrors.context && (

@@ -10,8 +10,7 @@ import {
   FieldError,
 } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
-import { TextareaWithCounter } from "@/components/ui/textarea-with-counter";
+import { ExpandableTextarea } from "@/components/expandable-textarea";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
@@ -328,9 +327,10 @@ const AgentForm = ({
             )}
           </Field>
           <Field data-invalid={!!validationErrors.description}>
-            <FieldLabel htmlFor="description">Description</FieldLabel>
-            <TextareaWithCounter
+            <ExpandableTextarea
               id="description"
+              label="Description"
+              expandable={false}
               placeholder="Optional description of the agent..."
               value={formData.description}
               onChange={handleChange}
@@ -341,9 +341,9 @@ const AgentForm = ({
             />
           </Field>
           <Field>
-            <FieldLabel htmlFor="systemPrompt">System prompt</FieldLabel>
-            <Textarea
+            <ExpandableTextarea
               id="systemPrompt"
+              label="System prompt"
               placeholder="You are a helpful agent..."
               value={formData.systemPrompt}
               onChange={handleChange}
