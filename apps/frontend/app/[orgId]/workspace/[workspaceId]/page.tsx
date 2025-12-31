@@ -170,22 +170,6 @@ const Workspace = () => {
 
           <TagCloud orgId={orgId} workspaceId={workspaceId} />
 
-          {/* Quick Actions */}
-          <div className="flex gap-4">
-            <Button asChild>
-              <Link href={`/${orgId}/workspace/${workspaceId}/chat`}>
-                <BotMessageSquare /> New Chat
-              </Link>
-            </Button>
-            <Button variant="outline" asChild>
-              <Link
-                href={`/${orgId}/workspace/${workspaceId}/settings/providers`}
-              >
-                <Settings /> Configure Providers
-              </Link>
-            </Button>
-          </div>
-
           <Separator />
 
           {/* Agents List Section */}
