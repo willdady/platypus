@@ -8,7 +8,7 @@ import {
   FieldError,
 } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
+import { TextareaWithCounter } from "@/components/ui/textarea-with-counter";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -187,7 +187,7 @@ const SkillForm = ({
   return (
     <div className={classNames}>
       <FieldSet className="mb-6">
-        <FieldGroup>
+        <FieldGroup className="gap-4">
           <Field data-invalid={!!validationErrors.name}>
             <FieldLabel htmlFor="name">Name</FieldLabel>
             <Input
@@ -212,7 +212,7 @@ const SkillForm = ({
           </Field>
           <Field data-invalid={!!validationErrors.description}>
             <FieldLabel htmlFor="description">Description</FieldLabel>
-            <Textarea
+            <TextareaWithCounter
               id="description"
               placeholder="A brief description of what this skill does..."
               value={formData.description}
@@ -220,39 +220,22 @@ const SkillForm = ({
               disabled={isSubmitting}
               maxLength={128}
               aria-invalid={!!validationErrors.description}
+              error={validationErrors.description}
             />
-            <div className="flex justify-between mt-1">
-              {validationErrors.description ? (
-                <FieldError>{validationErrors.description}</FieldError>
-              ) : (
-                <div />
-              )}
-              <p className="text-xs text-muted-foreground">
-                {formData.description.length}/128
-              </p>
-            </div>
           </Field>
           <Field data-invalid={!!validationErrors.body}>
             <FieldLabel htmlFor="body">Body</FieldLabel>
-            <Textarea
+            <TextareaWithCounter
               id="body"
               placeholder="Instructions for this skill..."
               value={formData.body}
               onChange={handleChange}
               disabled={isSubmitting}
-              className="min-h-[200px]"
+              className="min-h-[200px] !font-mono"
               aria-invalid={!!validationErrors.body}
+              maxLength={2000}
+              error={validationErrors.body}
             />
-            <div className="flex justify-between mt-1">
-              {validationErrors.body ? (
-                <FieldError>{validationErrors.body}</FieldError>
-              ) : (
-                <div />
-              )}
-              <p className="text-xs text-muted-foreground">
-                {formData.body.length}/2000
-              </p>
-            </div>
           </Field>
         </FieldGroup>
       </FieldSet>

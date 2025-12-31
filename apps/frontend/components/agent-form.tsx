@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { TextareaWithCounter } from "@/components/ui/textarea-with-counter";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
@@ -328,7 +329,7 @@ const AgentForm = ({
           </Field>
           <Field data-invalid={!!validationErrors.description}>
             <FieldLabel htmlFor="description">Description</FieldLabel>
-            <Textarea
+            <TextareaWithCounter
               id="description"
               placeholder="Optional description of the agent..."
               value={formData.description}
@@ -336,17 +337,8 @@ const AgentForm = ({
               disabled={isSubmitting}
               maxLength={96}
               aria-invalid={!!validationErrors.description}
+              error={validationErrors.description}
             />
-            <div className="flex justify-between mt-1">
-              {validationErrors.description ? (
-                <FieldError>{validationErrors.description}</FieldError>
-              ) : (
-                <div />
-              )}
-              <p className="text-xs text-muted-foreground">
-                {formData.description.length}/96
-              </p>
-            </div>
           </Field>
           <Field>
             <FieldLabel htmlFor="systemPrompt">System prompt</FieldLabel>
@@ -356,6 +348,7 @@ const AgentForm = ({
               value={formData.systemPrompt}
               onChange={handleChange}
               disabled={isSubmitting}
+              className="!font-mono"
             />
           </Field>
           <Field>
