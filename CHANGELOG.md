@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.11.0](https://github.com/willdady/platypus/compare/v1.10.0...v1.11.0) (2025-12-31)
+
+
+### Features
+
+* **frontend:** add ExpandableTextarea component with full-screen mode ([820f6b3](https://github.com/willdady/platypus/commit/820f6b3b256cde03ab6cd76812b31b5620099017))
+* **frontend:** style tweaks on Org picker screen ([60bb48b](https://github.com/willdady/platypus/commit/60bb48b41bc713fd867276978f9982bb372d880b))
+* **frontend:** updated CSS theme ([316965f](https://github.com/willdady/platypus/commit/316965f818e0cfbac78bf7df0964fc752adf90eb))
+
+
+### Bug Fixes
+
+* **frontend:** mode toggle dropdown now uses cursor pointer ([c62c34c](https://github.com/willdady/platypus/commit/c62c34c7ba7a5eb19675f4f51f59526df2193b2a))
+
 ## [1.10.0](https://github.com/willdady/platypus/compare/v1.9.0...v1.10.0) (2025-12-31)
 
 
