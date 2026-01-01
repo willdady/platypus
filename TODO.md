@@ -47,7 +47,8 @@
 [ ] Super admins need to be able to reset a user's password
 [x] Users need to be able to edit their name via the profile settings screen
 [ ] Create a custom UI for "load_skill" tool
-[ ] Change the "Rename" option to "Edit" under the chat drop-down menu and make it possible to edit and delete tags
+[x] Change the "Rename" option to "Edit" under the chat drop-down menu and make it possible to edit and delete tags
 [ ] It should be possible to disable sign-ups (via an environment variable)
 [ ] Bug: selecting an organization on the organization picker screen should update the browser URL to support deep-linking
+[ ] Add a built-in tool which allows the LLM to ask the user a qualifying question with suggested responses.
 [ ] There should be a way to export and import agents, preferably as JSON.

@@ -61,6 +61,7 @@ import { Input } from "@/components/ui/input";
 import { Field, FieldLabel, FieldError } from "@/components/ui/field";
 import { parseValidationErrors } from "@/lib/utils";
 import { useBackendUrl } from "@/app/client-context";
+import { TagInput } from "@/components/tag-input";
 
 export function AppSidebar({
   orgId,
@@ -77,6 +78,7 @@ export function AppSidebar({
 
   const [renameChatId, setRenameChatId] = useState<string | null>(null);
   const [renameTitle, setRenameTitle] = useState("");
+  const [renameTags, setRenameTags] = useState<string[]>([]);
   const [isRenaming, setIsRenaming] = useState(false);
   const [renameValidationErrors, setRenameValidationErrors] = useState<
     Record<string, string>
@@ -170,7 +172,7 @@ export function AppSidebar({
             workspaceId,
             title: renameTitle,
             isStarred: currentChat.isStarred,
-            tags: currentChat.tags ?? [],
+            tags: renameTags,
           }),
           credentials: "include",
         },
@@ -180,6 +182,7 @@ export function AppSidebar({
         // Close the dialog
         setRenameChatId(null);
         setRenameTitle("");
+        setRenameTags([]);
 
         // Revalidate the chat list
         await mutate(
@@ -422,10 +425,11 @@ export function AppSidebar({
                               onSelect={() => {
                                 setRenameChatId(chat.id);
                                 setRenameTitle(chat.title);
+                                setRenameTags(chat.tags ?? []);
                                 setRenameValidationErrors({});
                               }}
                             >
-                              <Pencil className="mr-2 h-4 w-4" /> Rename
+                              <Pencil className="mr-2 h-4 w-4" /> Edit
                             </DropdownMenuItem>
                             <DropdownMenuItem
                               className="cursor-pointer"
@@ -486,6 +490,7 @@ export function AppSidebar({
           if (!open) {
             setRenameChatId(null);
             setRenameTitle("");
+            setRenameTags([]);
           }
         }}
       >
@@ -503,12 +508,12 @@ export function AppSidebar({
           showCloseButton={false}
         >
           <DialogHeader>
-            <DialogTitle>Rename Chat</DialogTitle>
+            <DialogTitle>Edit Chat</DialogTitle>
             <DialogDescription>
-              Enter a new name for this chat.
+              Update the chat title and tags.
             </DialogDescription>
           </DialogHeader>
-          <div className="py-4">
+          <div className="py-4 space-y-4">
             <Field data-invalid={!!renameValidationErrors.title}>
               <FieldLabel htmlFor="title">Title</FieldLabel>
               <Input
@@ -523,6 +528,18 @@ export function AppSidebar({
                 <FieldError>{renameValidationErrors.title}</FieldError>
               )}
             </Field>
+
+            <Field data-invalid={!!renameValidationErrors.tags}>
+              <FieldLabel>Tags</FieldLabel>
+              <TagInput
+                value={renameTags}
+                onChange={setRenameTags}
+                disabled={isRenaming}
+              />
+              {renameValidationErrors.tags && (
+                <FieldError>{renameValidationErrors.tags}</FieldError>
+              )}
+            </Field>
           </div>
           <DialogFooter>
             <Button
@@ -530,6 +547,7 @@ export function AppSidebar({
               onClick={() => {
                 setRenameChatId(null);
                 setRenameTitle("");
+                setRenameTags([]);
               }}
               disabled={isRenaming}
               className="cursor-pointer"
@@ -541,7 +559,7 @@ export function AppSidebar({
               disabled={isRenaming || !renameTitle.trim()}
               className="cursor-pointer"
             >
-              Rename
+              Save Changes
             </Button>
           </DialogFooter>
         </DialogContent>

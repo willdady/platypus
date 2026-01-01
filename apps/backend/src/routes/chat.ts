@@ -36,6 +36,7 @@ import {
   chatGenerateMetadataSchema,
   chatSubmitSchema,
   chatUpdateSchema,
+  type ChatSubmitData,
   type Provider,
   type Skill,
 } from "@platypus/schemas";
@@ -49,8 +50,6 @@ import type { Variables } from "../server.ts";
 import { logger } from "../logger.ts";
 
 // --- Types ---
-
-type ChatSubmitData = z.infer<typeof chatSubmitSchema>;
 
 type ChatContext = {
   provider: Provider;

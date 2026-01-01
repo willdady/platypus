@@ -51,6 +51,7 @@ export const chatSchema = z.object({
   isStarred: z.boolean(),
   tags: z
     .array(z.string().regex(kebabCaseRegex, "Tags must be kebab-case"))
+    .max(5, "A chat can have at most 5 tags")
     .optional(),
   agentId: z.string().optional(),
   providerId: z.string().optional(),
@@ -105,6 +106,10 @@ export const chatUpdateSchema = chatSchema.pick({
   isStarred: true,
   tags: true,
 });
+
+export type ChatUpdateData = z.infer<typeof chatUpdateSchema>;
+
+export type ChatSubmitData = z.infer<typeof chatSubmitSchema>;
 
 export const chatGenerateMetadataSchema = z.object({
   providerId: z.string(),
