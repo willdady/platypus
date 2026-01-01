@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.12.0](https://github.com/willdady/platypus/compare/v1.11.0...v1.12.0) (2026-01-01)
+
+
+### Features
+
+* **frontend:** add support for editing chat tags with TagInput component ([6dc7862](https://github.com/willdady/platypus/commit/6dc78622979d25a8778b12997a33ac4779b6ba95))
+* **frontend:** users can now change their name via settings screen ([aa6ee9d](https://github.com/willdady/platypus/commit/aa6ee9d3b7b54f10fffe21a22e4554c0f0b2e330))
+
 ## [1.11.0](https://github.com/willdady/platypus/compare/v1.10.0...v1.11.0) (2025-12-31)
 
 
