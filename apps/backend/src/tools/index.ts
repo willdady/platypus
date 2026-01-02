@@ -4,6 +4,7 @@ import {
   convertCelsiusToFahrenheit,
   calculateCircleArea,
 } from "./math.ts";
+import { askFollowupQuestion } from "./elicitation.ts";
 
 type ToolSet = {
   id: string;
@@ -56,5 +57,14 @@ registerToolSet("math-geometry", {
   description: "Geometric calculations and formulas",
   tools: {
     calculateCircleArea,
+  },
+});
+
+registerToolSet("elicitation", {
+  name: "Elicitation",
+  category: "Elicitation",
+  description: "Tools for eliciting information from the user.",
+  tools: {
+    askFollowupQuestion,
   },
 });
