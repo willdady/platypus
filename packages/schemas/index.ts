@@ -317,7 +317,7 @@ const providerBaseSchema = z.object({
   organizationId: z.string().optional(),
   workspaceId: z.string().optional(),
   name: z.string().min(3).max(32),
-  providerType: z.enum(["OpenAI", "OpenRouter", "Bedrock", "Google"]),
+  providerType: z.enum(["OpenAI", "OpenRouter", "Bedrock", "Google", "Anthropic"]),
   apiKey: z.string().min(1),
   region: z
     .string()

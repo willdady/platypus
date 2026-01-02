@@ -23,6 +23,9 @@ importers:
       '@ai-sdk/amazon-bedrock':
         specifier: ^4.0.4
         version: 4.0.4(zod@4.3.4)
+      '@ai-sdk/anthropic':
+        specifier: ^3.0.2
+        version: 3.0.2(zod@4.3.4)
       '@ai-sdk/google':
         specifier: ^3.0.2
         version: 3.0.2(zod@4.3.4)

@@ -364,6 +364,7 @@ const ProviderForm = ({
                   <SelectItem value="Google">Google</SelectItem>
                   <SelectItem value="OpenAI">OpenAI</SelectItem>
                   <SelectItem value="OpenRouter">OpenRouter</SelectItem>
+                  <SelectItem value="Anthropic">Anthropic</SelectItem>
                 </SelectGroup>
               </SelectContent>
             </Select>

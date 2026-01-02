@@ -14,6 +14,10 @@ import { createOpenAI, type OpenAIProvider } from "@ai-sdk/openai";
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 import { createAmazonBedrock } from "@ai-sdk/amazon-bedrock";
 import {
+  createAnthropic,
+  type AnthropicProvider,
+} from "@ai-sdk/anthropic";
+import {
   createGoogleGenerativeAI,
   type GoogleGenerativeAIProvider,
 } from "@ai-sdk/google";
@@ -109,6 +113,13 @@ const createModel = (provider: Provider, modelId: string) => {
       headers: provider.headers ?? undefined,
     });
     return [google, google(modelId)] as const;
+  } else if (provider.providerType === "Anthropic") {
+    const anthropic = createAnthropic({
+      baseURL: provider.baseUrl ?? undefined,
+      apiKey: provider.apiKey ?? undefined,
+      headers: provider.headers ?? undefined,
+    });
+    return [anthropic, anthropic(modelId)] as const;
   } else {
     throw new Error(`Unrecognized provider type '${provider.providerType}'`);
   }
@@ -286,6 +297,12 @@ const createSearchTools = (
     tools.google_search = (
       aiProvider as GoogleGenerativeAIProvider
     ).tools.googleSearch({});
+  } else if (provider.providerType === "Anthropic") {
+    tools.web_search = (aiProvider as AnthropicProvider).tools.webSearch_20250305(
+      {
+        maxUses: 5,
+      },
+    );
   }
 
   return tools;
