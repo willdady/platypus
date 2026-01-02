@@ -4,8 +4,8 @@ import { Agent } from "@platypus/schemas";
 import { mutate } from "swr";
 import { joinUrl } from "@/lib/utils";
 
-export const useChatMetadata = (
-  messages: UIMessage[],
+export const useChatMetadata = <T extends UIMessage = UIMessage>(
+  messages: T[],
   status: string,
   chatId: string,
   orgId: string,

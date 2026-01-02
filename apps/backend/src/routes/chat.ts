@@ -557,9 +557,9 @@ chat.post(
       skills,
     );
 
-    // 8. Inject load_skill tool if skills exist
+    // 8. Inject loadSkill tool if skills exist
     if (skills.length > 0) {
-      tools.load_skill = createLoadSkillTool(workspaceId);
+      tools.loadSkill = createLoadSkillTool(workspaceId);
     }
 
     // 9. Stream Response

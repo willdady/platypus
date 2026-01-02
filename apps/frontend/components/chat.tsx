@@ -34,6 +34,7 @@ import {
   ToolSet,
   Skill,
 } from "@platypus/schemas";
+import { type PlatypusUIMessage } from "@platypus/backend/src/types";
 import useSWR from "swr";
 import { fetcher, joinUrl } from "@/lib/utils";
 import { useChatSettings } from "@/hooks/use-chat-settings";
@@ -132,7 +133,7 @@ export const Chat = ({
   );
 
   const { messages, setMessages, sendMessage, status, regenerate, error } =
-    useChat({
+    useChat<PlatypusUIMessage>({
       id: chatId,
       transport: new DefaultChatTransport({
         api: joinUrl(
@@ -331,6 +332,18 @@ export const Chat = ({
                     setTimeout(() => setCopiedMessageId(null), 2000);
                   }}
                   copiedMessageId={copiedMessageId}
+                  onAppendToPrompt={(text) => {
+                    if (textareaRef.current) {
+                      textareaRef.current.value = text;
+                      textareaRef.current.focus();
+                      textareaRef.current.dispatchEvent(
+                        new Event("input", { bubbles: true }),
+                      );
+                    }
+                  }}
+                  onSubmitMessage={(text) => {
+                    handleSubmit({ text, files: [] });
+                  }}
                 />
               ))}
             </div>

@@ -1,9 +1,9 @@
 import { useState, useRef, useEffect } from "react";
 import { UIMessage } from "ai";
 
-export const useMessageEditing = (
-  messages: UIMessage[],
-  setMessages: (messages: UIMessage[]) => void,
+export const useMessageEditing = <T extends UIMessage = UIMessage>(
+  messages: T[],
+  setMessages: (messages: T[]) => void,
   sendMessage: (message: { text: string }, options?: { body?: any }) => void,
   getRequestBody: () => any,
 ) => {

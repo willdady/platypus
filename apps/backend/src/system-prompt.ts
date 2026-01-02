@@ -39,7 +39,7 @@ export function renderSkillsFragment(
     .join("\n");
 
   return `
-You have access to the following skills. When a user's request relates to one of these skills, use the load_skill tool to retrieve the full skill content before responding.
+You have access to the following skills. When a user's request relates to one of these skills, use the loadSkill tool to retrieve the full skill content before responding.
 
 <skills>
 ${skillsXml}

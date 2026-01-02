@@ -1,5 +1,7 @@
 import { Fragment } from "react";
-import { UIMessage } from "ai";
+import {
+  type PlatypusUIMessage,
+} from "@platypus/backend/src/types";
 import {
   Message,
   MessageContent,
@@ -38,10 +40,11 @@ import {
   XIcon,
 } from "lucide-react";
 import { Textarea } from "./ui/textarea";
+import { AskFollowupQuestionTool } from "./ask-followup-question-tool";
 
 interface ChatMessageProps {
   /** The message object to render */
-  message: UIMessage;
+  message: PlatypusUIMessage;
   /** Whether this is the last message in the conversation */
   isLastMessage: boolean;
   /** Current chat status (e.g., "streaming", "idle") */
@@ -68,6 +71,10 @@ interface ChatMessageProps {
   onCopyMessage: (content: string, messageId: string) => void;
   /** ID of the message that was recently copied, or null */
   copiedMessageId: string | null;
+  /** Callback to append text to the chat prompt */
+  onAppendToPrompt?: (text: string) => void;
+  /** Callback to submit a message to the chat */
+  onSubmitMessage?: (text: string) => void;
 }
 
 export const ChatMessage = ({
@@ -85,6 +92,8 @@ export const ChatMessage = ({
   onRegenerate,
   onCopyMessage,
   copiedMessageId,
+  onAppendToPrompt,
+  onSubmitMessage,
 }: ChatMessageProps) => {
   const fileParts = message.parts?.filter(
     (part): part is FileUIPart =>
@@ -179,6 +188,18 @@ export const ChatMessage = ({
                 />
               </ToolContent>
             </Tool>
+          );
+        } else if (part.type === "tool-askFollowupQuestion") {
+          return (
+            <AskFollowupQuestionTool
+              key={`${message.id}-${i}`}
+              toolPart={part as ToolUIPart}
+              onAppendToPrompt={onAppendToPrompt}
+              onSubmitMessage={onSubmitMessage}
+              messageId={message.id}
+              role={message.role}
+              index={i}
+            />
           );
         } else if (part.type.startsWith("tool-")) {
           const toolPart = part as ToolUIPart;
