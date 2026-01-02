@@ -28,7 +28,7 @@ import {
   ToolOutput,
 } from "./ai-elements/tool";
 import { DynamicToolHeader } from "./dynamic-tool-header";
-import { DynamicToolUIPart, ToolUIPart } from "ai";
+import { DynamicToolUIPart, ToolUIPart, FileUIPart, TextUIPart } from "ai";
 import {
   CheckIcon,
   PencilIcon,
@@ -86,10 +86,19 @@ export const ChatMessage = ({
   onCopyMessage,
   copiedMessageId,
 }: ChatMessageProps) => {
-  const fileParts = message.parts?.filter((part) => part.type === "file");
+  const fileParts = message.parts?.filter(
+    (part): part is FileUIPart =>
+      part.type === "file" && !part.mediaType?.startsWith("image/"),
+  );
   const sourceUrlParts = message.parts?.filter(
     (part) => part.type === "source-url",
   );
+
+  const textContent =
+    message.parts
+      ?.filter((part): part is TextUIPart => part.type === "text")
+      .map((part) => part.text)
+      .join("") || "";
 
   return (
     <Fragment key={message.id}>
@@ -112,99 +121,32 @@ export const ChatMessage = ({
       )}
       {message.parts?.map((part, i) => {
         if (part.type === "text") {
-          const textContent =
-            message.parts
-              ?.filter((part) => part.type === "text")
-              .map((part) => part.text)
-              .join("") || "";
+          if (isEditing) {
+            const isFirstTextPart =
+              i === message.parts.findIndex((p) => p.type === "text");
+            if (!isFirstTextPart) return null;
 
-          return (
-            <Fragment key={`${message.id}-${i}`}>
-              <Message key={message.id} from={message.role}>
+            return (
+              <Message key={`${message.id}-${i}`} from={message.role}>
                 <MessageContent className="max-w-full">
-                  {isEditing ? (
-                    <Textarea
-                      ref={editTextareaRef}
-                      value={editContent}
-                      onChange={(e) => setEditContent(e.target.value)}
-                      className="min-h-[100px]"
-                      autoFocus
-                    />
-                  ) : (
-                    <MessageResponse>{part.text}</MessageResponse>
-                  )}
+                  <Textarea
+                    ref={editTextareaRef}
+                    value={editContent}
+                    onChange={(e) => setEditContent(e.target.value)}
+                    className="min-h-[100px]"
+                    autoFocus
+                  />
                 </MessageContent>
               </Message>
-              {isEditing ? (
-                <MessageActions className="justify-end">
-                  <MessageAction
-                    className="cursor-pointer text-muted-foreground"
-                    onClick={onEditSubmit}
-                    variant="ghost"
-                    size="icon"
-                    label="Save"
-                  >
-                    <CheckIcon className="size-4" />
-                  </MessageAction>
-                  <MessageAction
-                    className="cursor-pointer text-muted-foreground"
-                    onClick={onEditCancel}
-                    variant="ghost"
-                    size="icon"
-                    label="Cancel"
-                  >
-                    <XIcon className="size-4" />
-                  </MessageAction>
-                </MessageActions>
-              ) : (
-                <MessageActions
-                  className={message.role === "user" ? "justify-end" : ""}
-                >
-                  {message.role === "user" && (
-                    <MessageAction
-                      className="cursor-pointer text-muted-foreground"
-                      onClick={() => onEditStart(message.id, textContent)}
-                      variant="ghost"
-                      size="icon"
-                      label="Edit"
-                    >
-                      <PencilIcon className="size-4" />
-                    </MessageAction>
-                  )}
-                  <MessageAction
-                    className="cursor-pointer text-muted-foreground"
-                    onClick={() => onCopyMessage(textContent, message.id)}
-                    variant={
-                      copiedMessageId === message.id ? "secondary" : "ghost"
-                    }
-                    size="icon"
-                    label="Copy"
-                  >
-                    <CopyIcon className="size-4" />
-                  </MessageAction>
-                  <MessageAction
-                    className="cursor-pointer text-muted-foreground"
-                    onClick={() => onMessageDelete(message.id)}
-                    variant="ghost"
-                    size="icon"
-                    label="Delete"
-                  >
-                    <TrashIcon className="size-4" />
-                  </MessageAction>
-                  {message.role === "assistant" && isLastMessage && (
-                    <MessageAction
-                      className="cursor-pointer text-muted-foreground"
-                      onClick={onRegenerate}
-                      variant="ghost"
-                      size="icon"
-                      label="Regenerate"
-                    >
-                      <RefreshCwIcon className="size-4" />
-                    </MessageAction>
-                  )}
-                </MessageActions>
-              )}
-            </Fragment>
+            );
+          }
+
+          return (
+            <Message key={`${message.id}-${i}`} from={message.role}>
+              <MessageContent className="max-w-full">
+                <MessageResponse>{(part as TextUIPart).text}</MessageResponse>
+              </MessageContent>
+            </Message>
           );
         } else if (part.type === "reasoning") {
           return (
@@ -252,10 +194,93 @@ export const ChatMessage = ({
               </ToolContent>
             </Tool>
           );
+        } else if (
+          part.type === "file" &&
+          (part as FileUIPart).mediaType?.startsWith("image/")
+        ) {
+          const filePart = part as FileUIPart;
+          return (
+            <Message key={`${message.id}-${i}`} from={message.role}>
+              <MessageContent className="max-w-full">
+                <img
+                  src={filePart.url}
+                  alt={filePart.filename || "Generated image"}
+                  className="max-w-full rounded-lg border"
+                />
+              </MessageContent>
+            </Message>
+          );
         } else {
           return null;
         }
       })}
+      {isEditing ? (
+        <MessageActions className="justify-end">
+          <MessageAction
+            className="cursor-pointer text-muted-foreground"
+            onClick={onEditSubmit}
+            variant="ghost"
+            size="icon"
+            label="Save"
+          >
+            <CheckIcon className="size-4" />
+          </MessageAction>
+          <MessageAction
+            className="cursor-pointer text-muted-foreground"
+            onClick={onEditCancel}
+            variant="ghost"
+            size="icon"
+            label="Cancel"
+          >
+            <XIcon className="size-4" />
+          </MessageAction>
+        </MessageActions>
+      ) : (
+        <MessageActions
+          className={message.role === "user" ? "justify-end" : ""}
+        >
+          {message.role === "user" && (
+            <MessageAction
+              className="cursor-pointer text-muted-foreground"
+              onClick={() => onEditStart(message.id, textContent)}
+              variant="ghost"
+              size="icon"
+              label="Edit"
+            >
+              <PencilIcon className="size-4" />
+            </MessageAction>
+          )}
+          <MessageAction
+            className="cursor-pointer text-muted-foreground"
+            onClick={() => onCopyMessage(textContent, message.id)}
+            variant={copiedMessageId === message.id ? "secondary" : "ghost"}
+            size="icon"
+            label="Copy"
+          >
+            <CopyIcon className="size-4" />
+          </MessageAction>
+          <MessageAction
+            className="cursor-pointer text-muted-foreground"
+            onClick={() => onMessageDelete(message.id)}
+            variant="ghost"
+            size="icon"
+            label="Delete"
+          >
+            <TrashIcon className="size-4" />
+          </MessageAction>
+          {message.role === "assistant" && isLastMessage && (
+            <MessageAction
+              className="cursor-pointer text-muted-foreground"
+              onClick={onRegenerate}
+              variant="ghost"
+              size="icon"
+              label="Regenerate"
+            >
+              <RefreshCwIcon className="size-4" />
+            </MessageAction>
+          )}
+        </MessageActions>
+      )}
     </Fragment>
   );
 };
