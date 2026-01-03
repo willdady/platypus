@@ -41,6 +41,7 @@ import {
 } from "lucide-react";
 import { Textarea } from "./ui/textarea";
 import { AskFollowupQuestionTool } from "./ask-followup-question-tool";
+import { LoadSkillTool } from "./load-skill-tool";
 
 interface ChatMessageProps {
   /** The message object to render */
@@ -199,6 +200,13 @@ export const ChatMessage = ({
               messageId={message.id}
               role={message.role}
               index={i}
+            />
+          );
+        } else if (part.type === "tool-loadSkill") {
+          return (
+            <LoadSkillTool
+              key={`${message.id}-${i}`}
+              toolPart={part as ToolUIPart}
             />
           );
         } else if (part.type.startsWith("tool-")) {
