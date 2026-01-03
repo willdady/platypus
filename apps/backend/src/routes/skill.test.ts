@@ -26,7 +26,7 @@ describe("Skill Routes", () => {
         body: JSON.stringify({
           name: "new-skill",
           description: "This is a long enough description for the skill.",
-          body: "Skill body",
+          body: "This is a long enough body for the skill to pass the validation requirements.",
           workspaceId,
         }),
         headers: { "Content-Type": "application/json" },
@@ -46,7 +46,7 @@ describe("Skill Routes", () => {
         body: JSON.stringify({
           name: "new-skill",
           description: "This is a long enough description for the skill.",
-          body: "Skill body",
+          body: "This is a long enough body for the skill to pass the validation requirements.",
           workspaceId,
         }),
         headers: { "Content-Type": "application/json" },
@@ -65,7 +65,7 @@ describe("Skill Routes", () => {
         id: "skill-1",
         name: "new-skill",
         description: "This is a long enough description for the skill.",
-        body: "Skill body",
+        body: "This is a long enough body for the skill to pass the validation requirements.",
         workspaceId,
       };
       mockDb.returning.mockResolvedValueOnce([mockSkill]);
@@ -75,7 +75,7 @@ describe("Skill Routes", () => {
         body: JSON.stringify({
           name: "new-skill",
           description: "This is a long enough description for the skill.",
-          body: "Skill body",
+          body: "This is a long enough body for the skill to pass the validation requirements.",
           workspaceId,
         }),
         headers: { "Content-Type": "application/json" },
@@ -97,7 +97,7 @@ describe("Skill Routes", () => {
         method: "POST",
         body: JSON.stringify({
           name: "Invalid Name",
-          body: "Skill body",
+          body: "This is a long enough body for the skill to pass the validation requirements.",
           workspaceId,
         }),
         headers: { "Content-Type": "application/json" },
