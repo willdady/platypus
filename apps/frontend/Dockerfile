@@ -15,6 +15,7 @@ RUN corepack enable pnpm
 COPY pnpm-workspace.yaml pnpm-lock.yaml package.json turbo.json ./
 # Copy package.json files for all workspaces
 COPY apps/frontend/package.json ./apps/frontend/
+COPY apps/backend/package.json ./apps/backend/
 COPY packages/schemas/package.json ./packages/schemas/
 
 # Install dependencies
@@ -30,12 +31,9 @@ RUN corepack enable pnpm
 
 # Copy installed dependencies
 COPY --from=deps app/ ./
-# COPY --from=deps app/node_modules ./node_modules
-# COPY --from=deps app/apps/frontend/node_modules ./apps/frontend/node_modules
-# Copy monorepo files
-# COPY pnpm-workspace.yaml package.json turbo.json ./
 # Copy source code for frontend and its dependencies
 COPY apps/frontend ./apps/frontend
+COPY apps/backend ./apps/backend
 COPY packages/schemas ./packages/schemas
 
 # Next.js collects completely anonymous telemetry data about general usage.

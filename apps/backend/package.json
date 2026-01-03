@@ -28,7 +28,7 @@
     "@hono/standard-validator": "^0.2.1",
     "@openrouter/ai-sdk-provider": "^1.5.4",
     "@platypus/schemas": "workspace:*",
-    "ai": "^6.0.5",
+    "ai": "^6.0.6",
     "better-auth": "^1.4.10",
     "drizzle-orm": "^0.45.1",
     "hono": "^4.11.3",
