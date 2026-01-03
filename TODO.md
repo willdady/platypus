@@ -39,16 +39,16 @@
 [x] Reduce the vertical spacing between fields on the Skill form
 [x] Make sure "prompt" fields like the skill "body" and agent "system prompt" fields use a mono-spaced font
 [x] Create a reusable component for Textarea fields which show character counts
-[ ] On the agents list, show which tools and skills are enabled. Use badges with appropriate icons.
+[x] On the agents list, show which tools and skills are enabled. Use badges with appropriate icons.
 [x] Add the ability to make certain Textareas expandable to full-screen. This is needed for more ergonomic Markdown editing.
 [x] Bug: The `generate-metadata` endpoint, sometimes returns tags which are not kebab-case. Add a post-processing step to enforce this.
 [x] Bug: It's incorrectly showing as an error when updating a Workspace with an empty context. This field should be optional.
 [x] Add "New Agent" and "New Skill" options the command menu
-[ ] Super admins need to be able to reset a user's password
 [x] Users need to be able to edit their name via the profile settings screen
-[ ] Create a custom UI for "load_skill" tool
+[x] Create a custom UI for "load_skill" tool
 [x] Change the "Rename" option to "Edit" under the chat drop-down menu and make it possible to edit and delete tags
+[x] Add a built-in tool which allows the LLM to ask the user a qualifying question with suggested responses.
+[ ] Super admins need to be able to reset a user's password
 [ ] It should be possible to disable sign-ups (via an environment variable)
 [ ] Bug: selecting an organization on the organization picker screen should update the browser URL to support deep-linking
-[ ] Add a built-in tool which allows the LLM to ask the user a qualifying question with suggested responses.
 [ ] There should be a way to export and import agents, preferably as JSON.

@@ -18,6 +18,7 @@ Platypus is an open-source, full-stack application designed to help you build AI
 - **🔌 MCP Support:** First-class support for the **Model Context Protocol** (MCP), allowing agents to securely connect to local and remote data sources.
 - **⚡ Modern Tech Stack:** Built on the bleeding edge with **Next.js**, **Hono.js**, **Drizzle ORM**, and **Tailwind CSS**.
 - **🌐 Provider Agnostic:** Powered by the Vercel AI SDK, supporting OpenAI, Anthropic, Google, Amazon Bedrock, and OpenRouter.
+- **⚖️ MIT Licensed:** Open source and free to use.
 
 ## 🏗️ Architecture
 
@@ -33,7 +34,7 @@ The fastest way to get Platypus running is using Docker Compose.
 
 1.  **Configure environment:**
 
-    Create a `compose.override.yaml` file (or edit `compose.yaml` directly) and set the following environment variables:
+    Clone the repository, create a `compose.override.yaml` file (or edit `compose.yaml` directly) and set the following environment variables:
     - `BETTER_AUTH_SECRET`: A secure random string (minimum 32 characters).
     - `ADMIN_EMAIL`: The email address for the initial admin user.
     - `ADMIN_PASSWORD`: A secure password for the initial admin user.
