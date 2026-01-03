@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.13.1](https://github.com/willdady/platypus/compare/v1.13.0...v1.13.1) (2026-01-03)
+
+
+### Bug Fixes
+
+* **frontend:** frontend docker image failing to build ([c87315d](https://github.com/willdady/platypus/commit/c87315d4faa1226ca74cbb589493b25175398c0f))
+
 ## [1.13.0](https://github.com/willdady/platypus/compare/v1.12.0...v1.13.0) (2026-01-03)
 
 
