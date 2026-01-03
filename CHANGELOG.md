@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.13.0](https://github.com/willdady/platypus/compare/v1.12.0...v1.13.0) (2026-01-03)
+
+
+### Features
+
+* **ai-sdk:** upgrading to latest version ([6ca4598](https://github.com/willdady/platypus/commit/6ca459844ce8c5722f84510ad0960b3bebced6b4))
+* **backend:** add askFollowupQuestion elicitation tool ([858c12f](https://github.com/willdady/platypus/commit/858c12f5c6f9626425e80587cf2054a652be6f95))
+* **frontend:** added UI for the loadSkill tool ([a6d5688](https://github.com/willdady/platypus/commit/a6d5688582ec6567d6748bef3c871c37bad2cfe7))
+* **frontend:** implement AskFollowupQuestionTool component and integration ([3a76fe0](https://github.com/willdady/platypus/commit/3a76fe04badcf684d76193bcc3c92a21e940c205))
+* **frontend:** support rendering images in chat messages and unify message actions ([beb3dbe](https://github.com/willdady/platypus/commit/beb3dbe9174eb0ea6fd497c88ddd78b3931eeb1c))
+* **provider:** added Anthropic ([8fced03](https://github.com/willdady/platypus/commit/8fced0373c480a648a8426b4571f5e990490ad4b))
+* **schemas:** minor tweaks to skill field length requirements ([e2a04b9](https://github.com/willdady/platypus/commit/e2a04b9a9c7227a51293deae3cc48fdb3e94b6a8))
+
 ## [1.12.0](https://github.com/willdady/platypus/compare/v1.11.0...v1.12.0) (2026-01-01)
 
 
