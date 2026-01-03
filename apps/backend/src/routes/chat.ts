@@ -312,9 +312,10 @@ const createSearchTools = (
 const resolveGenerationConfig = async (
   data: ChatSubmitData,
   workspaceId: string,
-  agent?: typeof agentTable.$inferSelect,
-  workspaceContext?: string,
-  skills?: Array<Pick<Skill, "name" | "description">>,
+  agent: typeof agentTable.$inferSelect | undefined = undefined,
+  workspaceContext: string | undefined = undefined,
+  skills: Array<Pick<Skill, "name" | "description">> | undefined = undefined,
+  user: { id: string; name: string },
 ): Promise<GenerationConfig> => {
   const config: GenerationConfig = {};
   const source = agent || data;
@@ -335,12 +336,12 @@ const resolveGenerationConfig = async (
   const agentSystemPrompt =
     (agent ? agent.systemPrompt : data.systemPrompt) || undefined;
 
-  // Render the system prompt using the template
   const systemPrompt = renderSystemPrompt({
     workspaceId,
     workspaceContext,
     agentSystemPrompt,
     skills,
+    user,
   });
 
   config.systemPrompt = systemPrompt;
@@ -549,12 +550,14 @@ chat.post(
     }
 
     // 7. Prepare Generation Config (Merge Agent & Request params)
+    const user = c.get("user")!;
     const config = await resolveGenerationConfig(
       data,
       workspaceId,
       agent,
       workspace.context || undefined,
       skills,
+      { id: user.id, name: user.name },
     );
 
     // 8. Inject loadSkill tool if skills exist
@@ -758,3 +761,4 @@ chat.post(
 );
 
 export { chat };
+

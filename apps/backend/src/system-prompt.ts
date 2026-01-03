@@ -5,6 +5,10 @@ interface SystemPromptTemplateData {
   workspaceContext?: string;
   agentSystemPrompt?: string;
   skills?: Array<Pick<Skill, "name" | "description">>;
+  user: {
+    id: string;
+    name: string;
+  };
 }
 
 /**
@@ -48,6 +52,13 @@ ${skillsXml}
 }
 
 /**
+ * Renders user information as XML tags for the system prompt.
+ */
+export function renderUserFragment(user: { id: string; name: string }): string {
+  return `The current user's name is "${user.name}" and their id is "${user.id}".`;
+}
+
+/**
  * Renders the system prompt by combining workspace context and agent prompt.
  */
 export function renderSystemPrompt(data: SystemPromptTemplateData): string {
@@ -60,6 +71,8 @@ export function renderSystemPrompt(data: SystemPromptTemplateData): string {
   }
 
   parts.push(renderWorkspaceFragment(data.workspaceId, data.workspaceContext));
+
+  parts.push(renderUserFragment(data.user));
 
   if (data.skills && data.skills.length > 0) {
     parts.push(renderSkillsFragment(data.skills));
