@@ -6,6 +6,7 @@ import {
   FieldGroup,
   FieldSet,
   FieldError,
+  FieldDescription,
 } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { ExpandableTextarea } from "@/components/expandable-textarea";
@@ -216,6 +217,9 @@ const WorkspaceForm = ({
               aria-invalid={!!validationErrors.context}
               className="!font-mono"
             />
+            <FieldDescription>
+              Additional context about this workspace included in all chats in this workspace
+            </FieldDescription>
             {validationErrors.context && (
               <FieldError>{validationErrors.context}</FieldError>
             )}

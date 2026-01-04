@@ -49,9 +49,9 @@
 [x] Change the "Rename" option to "Edit" under the chat drop-down menu and make it possible to edit and delete tags
 [x] Add a built-in tool which allows the LLM to ask the user a qualifying question with suggested responses.
 [x] Always include the current user's name and id in the system prompt
+[x] Bug: selecting an organization on the organization picker screen should update the browser URL to support deep-linking
 [ ] User should be able to provide context about themselves. This context should be injected into the system prompt.
 [ ] Super admins need to be able to reset a user's password
 [ ] It should be possible to disable sign-ups (via an environment variable)
-[x] Bug: selecting an organization on the organization picker screen should update the browser URL to support deep-linking
 [ ] Consider the ability to import and export agents as JSON
 [ ] Add built-in memory tool. Memory should be per-agent. Consider a workspace scoped memory tool also?
