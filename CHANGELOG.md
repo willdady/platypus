@@ -1,5 +1,21 @@
 # Changelog
 
+## [1.14.0](https://github.com/willdady/platypus/compare/v1.13.1...v1.14.0) (2026-01-04)
+
+
+### Features
+
+* **backend:** the user's name and id and now included in the system prompt ([a021f82](https://github.com/willdady/platypus/commit/a021f82527644f0f40186fbaeb4974313b9efbb8))
+* **frontend:** add description to workspace context field ([7bfab80](https://github.com/willdady/platypus/commit/7bfab80fdad48a758b637241811ea22fba5087e3))
+* **frontend:** implement route-based organization selection and fix layout flicker ([3015c71](https://github.com/willdady/platypus/commit/3015c711d0029bc7215cb96dd9df1131fe300fd0))
+* **frontend:** reduced backdrop blur on ExpandableTextarea ([aadde9e](https://github.com/willdady/platypus/commit/aadde9ee597e0948e10c3d829872c2afb7e1b869))
+
+
+### Bug Fixes
+
+* **frontend:** organizations are sorted alphabetically ([b8421cd](https://github.com/willdady/platypus/commit/b8421cd98dc3152e0933029740ed732c341b38bf))
+* **frontend:** workspaces are sorted alphabetically ([93e4dc5](https://github.com/willdady/platypus/commit/93e4dc5de7623fe76ddbf4f675b20c450994a7ca))
+
 ## [1.13.1](https://github.com/willdady/platypus/compare/v1.13.0...v1.13.1) (2026-01-03)
 
 
