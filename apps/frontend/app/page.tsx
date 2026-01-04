@@ -1,25 +1,9 @@
 "use client";
 
-import type { Organization, Workspace } from "@platypus/schemas";
-import { WorkspaceList } from "@/components/workspace-list";
+import type { Organization } from "@platypus/schemas";
 import { Button } from "@/components/ui/button";
-import {
-  SidebarContent,
-  SidebarGroup,
-  SidebarGroupContent,
-  SidebarMenu,
-  SidebarMenuButton,
-  SidebarMenuItem,
-  SidebarProvider,
-} from "@/components/ui/sidebar";
 import Link from "next/link";
-import {
-  AlertCircle,
-  Building,
-  FolderClosed,
-  Plus,
-  Settings,
-} from "lucide-react";
+import { AlertCircle, Building, Plus } from "lucide-react";
 import useSWR from "swr";
 import { fetcher, joinUrl } from "@/lib/utils";
 import { useBackendUrl } from "./client-context";
@@ -35,12 +19,13 @@ import {
   EmptyTitle,
 } from "@/components/ui/empty";
 import { useAuth } from "@/components/auth-provider";
-import { useState, useEffect } from "react";
+import { useEffect } from "react";
+import { useRouter } from "next/navigation";
 
 export default function Home() {
   const { user, isAuthLoading: isAuthLoadingUser } = useAuth();
   const backendUrl = useBackendUrl();
-  const [selectedOrgId, setSelectedOrgId] = useState<string | null>(null);
+  const router = useRouter();
 
   const { data, error, isLoading } = useSWR<{ results: Organization[] }>(
     backendUrl && user ? joinUrl(backendUrl, "/organizations") : null,
@@ -49,22 +34,12 @@ export default function Home() {
 
   const organizations = data?.results || [];
 
-  const { data: workspacesData, isLoading: isWorkspacesLoading } = useSWR<{
-    results: Workspace[];
-  }>(
-    backendUrl && user && selectedOrgId
-      ? joinUrl(backendUrl, `/organizations/${selectedOrgId}/workspaces`)
-      : null,
-    fetcher,
-  );
-
-  const workspaces = workspacesData?.results || [];
-
+  // Redirect to first organization if available
   useEffect(() => {
-    if (organizations.length > 0 && !selectedOrgId) {
-      setSelectedOrgId(organizations[0].id);
+    if (organizations.length > 0) {
+      router.replace(`/${organizations[0].id}`);
     }
-  }, [organizations, selectedOrgId]);
+  }, [organizations, router]);
 
   if (!backendUrl) {
     return (
@@ -100,13 +75,14 @@ export default function Home() {
     );
   }
 
+  // Only show empty state if no organizations
   if (organizations.length === 0) {
     return (
       <ProtectedRoute>
         <div className="min-h-screen flex flex-col">
           <Header />
           <div className="flex-1 flex flex-col items-center justify-center p-8">
-            <Empty className="border-none">
+            <Empty className="border-2 border-dashed">
               <EmptyHeader>
                 <EmptyMedia variant="icon">
                   <Building />
@@ -131,118 +107,10 @@ export default function Home() {
     );
   }
 
-  const selectedOrg = organizations.find((org) => org.id === selectedOrgId);
-
+  // Show loading while redirecting
   return (
-    <ProtectedRoute>
-      <SidebarProvider>
-        <div className="h-screen flex flex-col w-full overflow-hidden">
-          <Header />
-          <div className="flex-1 flex flex-col items-center overflow-y-auto">
-            <div className="flex flex-col md:flex-row w-full md:w-full lg:w-4/5 max-w-3xl py-8 px-4 md:px-0">
-              {/* Left Column: Organization Navigation */}
-              <div className="w-full md:w-64 md:fixed md:top-16 pt-3.5 mb-8 md:mb-0">
-                <SidebarContent>
-                  <SidebarGroup>
-                    <SidebarGroupContent>
-                      <SidebarMenu>
-                        {organizations.map((org) => (
-                          <SidebarMenuItem key={org.id}>
-                            <SidebarMenuButton
-                              className="cursor-pointer"
-                              isActive={selectedOrgId === org.id}
-                              onClick={() => setSelectedOrgId(org.id)}
-                            >
-                              <Building className="size-4" />
-                              <span>{org.name}</span>
-                            </SidebarMenuButton>
-                          </SidebarMenuItem>
-                        ))}
-                      </SidebarMenu>
-                    </SidebarGroupContent>
-                  </SidebarGroup>
-
-                  <SidebarGroup>
-                    <SidebarGroupContent>
-                      <SidebarMenu>
-                        <SidebarMenuItem>
-                          <SidebarMenuButton asChild>
-                            <Link href="/create">
-                              <Plus className="size-4" />
-                              <span>Add Organization</span>
-                            </Link>
-                          </SidebarMenuButton>
-                        </SidebarMenuItem>
-                      </SidebarMenu>
-                    </SidebarGroupContent>
-                  </SidebarGroup>
-                </SidebarContent>
-              </div>
-
-              {/* Right Column: Workspace List */}
-              <div className="flex-1 px-3 md:ml-64">
-                {selectedOrg ? (
-                  <div className="space-y-6">
-                    {workspaces.length > 0 ? (
-                      <div className="space-y-4">
-                        <WorkspaceList orgId={selectedOrg.id} />
-                        <div className="flex items-center gap-2">
-                          <Button asChild>
-                            <Link href={`/${selectedOrg.id}/create`}>
-                              <Plus className="size-4" /> Add workspace
-                            </Link>
-                          </Button>
-                          <Button variant="outline" asChild>
-                            <Link href={`/${selectedOrg.id}/settings`}>
-                              <Settings className="size-4" /> Organization
-                              Settings
-                            </Link>
-                          </Button>
-                        </div>
-                      </div>
-                    ) : !isWorkspacesLoading ? (
-                      <Empty className="border-none">
-                        <EmptyHeader>
-                          <EmptyMedia variant="icon">
-                            <FolderClosed />
-                          </EmptyMedia>
-                          <EmptyTitle>No workspaces found</EmptyTitle>
-                          <EmptyDescription>
-                            Create your first workspace in this organization to
-                            start building agents.
-                          </EmptyDescription>
-                        </EmptyHeader>
-                        <EmptyContent>
-                          <div className="flex items-center gap-2">
-                            <Button asChild className="flex-1">
-                              <Link href={`/${selectedOrg.id}/create`}>
-                                <Plus className="h-4 w-4" /> Create Workspace
-                              </Link>
-                            </Button>
-                            <Button variant="outline" asChild>
-                              <Link href={`/${selectedOrg.id}/settings`}>
-                                <Settings className="size-4" /> Organization
-                                Settings
-                              </Link>
-                            </Button>
-                          </div>
-                        </EmptyContent>
-                      </Empty>
-                    ) : null}
-                  </div>
-                ) : (
-                  <div className="flex items-center justify-center h-64">
-                    <p className="text-muted-foreground">
-                      Select an organization from the menu.
-                    </p>
-                  </div>
-                )}
-              </div>
-            </div>
-            <div className="h-1 shrink-0" />
-          </div>
-        </div>
-      </SidebarProvider>
-    </ProtectedRoute>
+    <div className="flex items-center justify-center min-h-screen">
+      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
+    </div>
   );
 }

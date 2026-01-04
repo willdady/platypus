@@ -52,6 +52,6 @@
 [ ] User should be able to provide context about themselves. This context should be injected into the system prompt.
 [ ] Super admins need to be able to reset a user's password
 [ ] It should be possible to disable sign-ups (via an environment variable)
-[ ] Bug: selecting an organization on the organization picker screen should update the browser URL to support deep-linking
+[x] Bug: selecting an organization on the organization picker screen should update the browser URL to support deep-linking
 [ ] Consider the ability to import and export agents as JSON
 [ ] Add built-in memory tool. Memory should be per-agent. Consider a workspace scoped memory tool also?

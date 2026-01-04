@@ -148,12 +148,10 @@ export function ProtectedRoute({
     requiredOrgRole,
   ]);
 
+  // If actively loading auth, still show children to avoid layout flicker
+  // The useEffect above will redirect if needed
   if (isAuthLoading) {
-    return (
-      <div className="flex min-h-screen items-center justify-center">
-        <div className="animate-pulse">Loading...</div>
-      </div>
-    );
+    return <>{children}</>;
   }
 
   if (!user) {
