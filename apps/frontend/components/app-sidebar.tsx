@@ -110,7 +110,7 @@ export function AppSidebar({
     fetcher,
   );
 
-  const workspaces = data?.results ?? [];
+  const workspaces = (data?.results ?? []).sort((a, b) => a.name.localeCompare(b.name));
   const chats = chatData?.results ?? [];
   const currentWorkspace = workspaces.find((w) => w.id === workspaceId);
 

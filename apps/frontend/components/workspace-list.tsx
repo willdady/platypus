@@ -36,7 +36,7 @@ const WorkspaceList = ({
 
   return (
     <ItemGroup className={cn("mb-4", className)}>
-      {data?.results?.map((workspace) => (
+      {(data?.results || []).sort((a, b) => a.name.localeCompare(b.name)).map((workspace) => (
         <Item key={workspace.id} variant="outline" asChild className="mb-2">
           <Link href={`/${orgId}/workspace/${workspace.id}`}>
             <ItemContent>
