@@ -218,7 +218,8 @@ const WorkspaceForm = ({
               className="!font-mono"
             />
             <FieldDescription>
-              Additional context about this workspace included in all chats in this workspace
+              Additional context about this workspace included in all chats in
+              this workspace
             </FieldDescription>
             {validationErrors.context && (
               <FieldError>{validationErrors.context}</FieldError>

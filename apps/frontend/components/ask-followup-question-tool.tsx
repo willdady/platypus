@@ -10,17 +10,8 @@ import {
 } from "./ai-elements/message";
 import { type ToolUIPart } from "ai";
 import { ClipboardPasteIcon, Loader2Icon } from "lucide-react";
-import {
-  Item,
-  ItemContent,
-  ItemGroup,
-  ItemTitle,
-} from "./ui/item";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "./ui/tooltip";
+import { Item, ItemContent, ItemGroup, ItemTitle } from "./ui/item";
+import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip";
 
 export interface AskFollowupQuestionToolProps {
   toolPart: ToolUIPart;
@@ -40,14 +31,17 @@ export const AskFollowupQuestionTool = ({
   index,
 }: AskFollowupQuestionToolProps) => {
   const input = toolPart.input as PlatypusTools["askFollowupQuestion"]["input"];
-  const output = toolPart.output as PlatypusTools["askFollowupQuestion"]["output"];
+  const output =
+    toolPart.output as PlatypusTools["askFollowupQuestion"]["output"];
 
   if (toolPart.state === "output-error") {
     return (
       <Message key={`${messageId}-${index}`} from={role}>
         <MessageContent className="max-w-full">
           <div className="text-destructive text-sm">
-            Error: {toolPart.errorText || "An error occurred while asking the follow-up question."}
+            Error:{" "}
+            {toolPart.errorText ||
+              "An error occurred while asking the follow-up question."}
           </div>
         </MessageContent>
       </Message>

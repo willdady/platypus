@@ -1,7 +1,5 @@
 import { Fragment } from "react";
-import {
-  type PlatypusUIMessage,
-} from "@platypus/backend/src/types";
+import { type PlatypusUIMessage } from "@platypus/backend/src/types";
 import {
   Message,
   MessageContent,

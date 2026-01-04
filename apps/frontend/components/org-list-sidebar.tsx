@@ -29,7 +29,9 @@ export function OrgListSidebar({ currentOrgId }: OrgListSidebarProps) {
     fetcher,
   );
 
-  const organizations = (data?.results || []).sort((a, b) => a.name.localeCompare(b.name));
+  const organizations = (data?.results || []).sort((a, b) =>
+    a.name.localeCompare(b.name),
+  );
 
   return (
     <SidebarContent>

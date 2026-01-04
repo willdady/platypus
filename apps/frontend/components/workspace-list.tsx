@@ -36,20 +36,22 @@ const WorkspaceList = ({
 
   return (
     <ItemGroup className={cn("mb-4", className)}>
-      {(data?.results || []).sort((a, b) => a.name.localeCompare(b.name)).map((workspace) => (
-        <Item key={workspace.id} variant="outline" asChild className="mb-2">
-          <Link href={`/${orgId}/workspace/${workspace.id}`}>
-            <ItemContent>
-              <ItemTitle>
-                <FolderClosed size={18} /> {workspace.name}
-              </ItemTitle>
-            </ItemContent>
-            <ItemActions>
-              <ChevronRight className="size-4" />
-            </ItemActions>
-          </Link>
-        </Item>
-      ))}
+      {(data?.results || [])
+        .sort((a, b) => a.name.localeCompare(b.name))
+        .map((workspace) => (
+          <Item key={workspace.id} variant="outline" asChild className="mb-2">
+            <Link href={`/${orgId}/workspace/${workspace.id}`}>
+              <ItemContent>
+                <ItemTitle>
+                  <FolderClosed size={18} /> {workspace.name}
+                </ItemTitle>
+              </ItemContent>
+              <ItemActions>
+                <ChevronRight className="size-4" />
+              </ItemActions>
+            </Link>
+          </Item>
+        ))}
     </ItemGroup>
   );
 };

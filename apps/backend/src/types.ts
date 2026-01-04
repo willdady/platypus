@@ -1,4 +1,9 @@
-import { type UIMessage, type InferUITool, type InferUITools, type UIDataTypes } from "ai";
+import {
+  type UIMessage,
+  type InferUITool,
+  type InferUITools,
+  type UIDataTypes,
+} from "ai";
 import * as mathTools from "./tools/math";
 import * as elicitationTools from "./tools/elicitation";
 import { createLoadSkillTool } from "./tools/skill";
