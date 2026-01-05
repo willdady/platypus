@@ -50,8 +50,11 @@
 [x] Add a built-in tool which allows the LLM to ask the user a qualifying question with suggested responses.
 [x] Always include the current user's name and id in the system prompt
 [x] Bug: selecting an organization on the organization picker screen should update the browser URL to support deep-linking
+[x] Bug: Only display message actions on the last message once streaming stops
 [ ] User should be able to provide context about themselves. This context should be injected into the system prompt.
 [ ] Super admins need to be able to reset a user's password
-[ ] It should be possible to disable sign-ups (via an environment variable)
+[ ] It should be possible to disable sign-ups (via an environment variable?)
 [ ] Consider the ability to import and export agents as JSON
 [ ] Add built-in memory tool. Memory should be per-agent. Consider a workspace scoped memory tool also?
+[ ] Consider always injecting the current date and time (ISO 8601) into the system prompt. Timezone should be configurable via env var.
+[ ] Consider configuring the "task" model at the workspace level
