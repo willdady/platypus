@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.14.1](https://github.com/willdady/platypus/compare/v1.14.0...v1.14.1) (2026-01-06)
+
+
+### Bug Fixes
+
+* **frontend:** message actions only appear on last message once streaming stops ([1640921](https://github.com/willdady/platypus/commit/164092120aa364602b9e201a3669d8831b8129fa))
+
 ## [1.14.0](https://github.com/willdady/platypus/compare/v1.13.1...v1.14.0) (2026-01-04)
 
 
