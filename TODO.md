@@ -58,3 +58,4 @@
 [ ] Add built-in memory tool. Memory should be per-agent. Consider a workspace scoped memory tool also?
 [ ] Consider always injecting the current date and time (ISO 8601) into the system prompt. Timezone should be configurable via env var.
 [ ] Consider configuring the "task" model at the workspace level
+[ ] The currently selected agent/model should persist when starting a new chat via the sidebar "New Chat" button
