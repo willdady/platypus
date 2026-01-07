@@ -247,8 +247,8 @@ export const ChatMessage = ({
           return null;
         }
       })}
-      {!(isLastMessage && status === "streaming") && (
-        isEditing ? (
+      {!(isLastMessage && status === "streaming") &&
+        (isEditing ? (
           <MessageActions className="justify-end">
             <MessageAction
               className="cursor-pointer text-muted-foreground"
@@ -314,8 +314,7 @@ export const ChatMessage = ({
               </MessageAction>
             )}
           </MessageActions>
-        )
-      )}
+        ))}
     </Fragment>
   );
 };

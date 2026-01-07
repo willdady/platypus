@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { Provider, Agent, Chat } from "@platypus/schemas";
+import { setWithExpiry, getWithExpiry } from "@/lib/local-storage";
 
 export interface ModelSelection {
   agentId: string;
@@ -12,10 +13,13 @@ export const useModelSelection = (
   providers: Provider[],
   agents: Agent[],
   isLoading: boolean = false,
+  workspaceId: string,
 ) => {
   const [agentId, setAgentId] = useState("");
   const [modelId, setModelId] = useState("");
   const [providerId, setProviderId] = useState("");
+
+  const STORAGE_KEY = `platypus:workspace:${workspaceId}:lastSelection`;
 
   const handleModelChange = (value: string) => {
     if (value.startsWith("agent:")) {
@@ -34,13 +38,14 @@ export const useModelSelection = (
     }
   };
 
-  // Restore persisted agent/provider/model from chat data, with validation and fallback
+  // Restore persisted agent/provider/model from chat data or localStorage, with validation and fallback
   useEffect(() => {
     if (isLoading || providers.length === 0) return;
 
     // If we already have a selection, do nothing
     if (modelId || providerId || agentId) return;
 
+    // PRIORITY 1: Restore from chatData (existing chat)
     if (chatData) {
       // Check if chat has an agent
       if (chatData.agentId && agents.length > 0) {
@@ -55,7 +60,7 @@ export const useModelSelection = (
         }
       }
 
-      // Restore provider/model (existing logic)
+      // Restore provider/model from chatData
       const persistedProviderId = chatData.providerId;
       const persistedModelId = chatData.modelId;
 
@@ -87,10 +92,68 @@ export const useModelSelection = (
       }
     }
 
-    // Fall back to first provider's first model (for new chats, invalid persisted data, or missing chatData)
+    // PRIORITY 2: Try to restore from localStorage (for NEW chats only)
+    if (!chatData) {
+      const lastSelection = getWithExpiry<{
+        type: "agent" | "provider";
+        id?: string;
+        providerId?: string;
+        modelId?: string;
+      }>(STORAGE_KEY);
+
+      if (lastSelection) {
+        if (lastSelection.type === "agent" && lastSelection.id) {
+          const agent = agents.find((a) => a.id === lastSelection.id);
+          if (agent) {
+            setAgentId(lastSelection.id);
+            return;
+          }
+          console.warn(
+            `Agent '${lastSelection.id}' from localStorage no longer exists`,
+          );
+        } else if (
+          lastSelection.type === "provider" &&
+          lastSelection.providerId &&
+          lastSelection.modelId
+        ) {
+          const provider = providers.find(
+            (p) => p.id === lastSelection.providerId,
+          );
+          if (provider?.modelIds.includes(lastSelection.modelId)) {
+            setProviderId(lastSelection.providerId);
+            setModelId(lastSelection.modelId);
+            return;
+          }
+          console.warn(`Provider/model from localStorage no longer valid`);
+        }
+      }
+    }
+
+    // PRIORITY 3: Fall back to first provider's first model (for new chats, invalid persisted data, or missing chatData)
     setModelId(providers[0].modelIds[0]);
     setProviderId(providers[0].id);
-  }, [chatData, providers, agents, modelId, providerId, agentId, isLoading]);
+  }, [
+    chatData,
+    providers,
+    agents,
+    modelId,
+    providerId,
+    agentId,
+    isLoading,
+    workspaceId,
+    STORAGE_KEY,
+  ]);
+
+  // Persist selection to localStorage when it changes
+  useEffect(() => {
+    if (!agentId && !providerId && !modelId) return; // Don't save empty state
+
+    if (agentId) {
+      setWithExpiry(STORAGE_KEY, { type: "agent", id: agentId });
+    } else if (providerId && modelId) {
+      setWithExpiry(STORAGE_KEY, { type: "provider", providerId, modelId });
+    }
+  }, [agentId, providerId, modelId, STORAGE_KEY]);
 
   const selection: ModelSelection = {
     agentId,

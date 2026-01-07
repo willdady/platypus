@@ -153,7 +153,13 @@ export const Chat = ({
     selection,
     handleModelChange,
     setters: modelSetters,
-  } = useModelSelection(chatData, providers, agents, isChatLoading);
+  } = useModelSelection(
+    chatData,
+    providers,
+    agents,
+    isChatLoading,
+    workspaceId,
+  );
   const { settings, setters } = useChatSettings(chatData, selection.agentId);
   const chatUI = useChatUI(error);
 
