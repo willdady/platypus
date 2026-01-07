@@ -5,6 +5,7 @@ import {
   calculateCircleArea,
 } from "./math.ts";
 import { askFollowupQuestion } from "./elicitation.ts";
+import { getCurrentTime, convertTimezone } from "./time.ts";
 
 type ToolSet = {
   id: string;
@@ -66,5 +67,15 @@ registerToolSet("elicitation", {
   description: "Tools for eliciting information from the user.",
   tools: {
     askFollowupQuestion,
+  },
+});
+
+registerToolSet("time", {
+  name: "Time",
+  category: "Utilities",
+  description: "Tools for getting current time and converting between timezones",
+  tools: {
+    getCurrentTime,
+    convertTimezone,
   },
 });

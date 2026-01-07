@@ -38,6 +38,7 @@ The fastest way to get Platypus running is using Docker Compose.
     - `BETTER_AUTH_SECRET`: A secure random string (minimum 32 characters).
     - `ADMIN_EMAIL`: The email address for the initial admin user.
     - `ADMIN_PASSWORD`: A secure password for the initial admin user.
+    - `TIMEZONE` (optional): IANA timezone name for e.g., "America/New_York", "Europe/London". Defaults to UTC.
 
     ```yaml
     services:
@@ -46,6 +47,7 @@ The fastest way to get Platypus running is using Docker Compose.
           BETTER_AUTH_SECRET: "your-secure-random-string-here"
           ADMIN_EMAIL: "admin@example.com"
           ADMIN_PASSWORD: "your-secure-password-here"
+          TIMEZONE: "UTC"
     ```
 
 2.  **Start the application:**
@@ -90,11 +92,13 @@ The fastest way to get Platypus running is using Docker Compose.
     - `BETTER_AUTH_SECRET`: A secure random string (minimum 32 characters).
     - `ADMIN_EMAIL`: The email address for the initial admin user.
     - `ADMIN_PASSWORD`: A secure password for the initial admin user.
+    - `TIMEZONE` (optional): IANA timezone name for e.g., "America/New_York", "Europe/London". Defaults to UTC.
 
     ```env
     BETTER_AUTH_SECRET: "your-secure-random-string-here"
     ADMIN_EMAIL: "admin@example.com"
     ADMIN_PASSWORD: "your-secure-password-here"
+    TIMEZONE: "UTC"
     ```
 
 3.  **Start Development Server:**

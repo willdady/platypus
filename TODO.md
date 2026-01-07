@@ -53,10 +53,10 @@
 [x] Bug: Only display message actions on the last message once streaming stops
 [x] The currently selected agent/model should persist when starting a new chat via the sidebar "New Chat" button
 [x] Should be able to start a chat with an agent from the command pallete
+[x] Consider always injecting the current date and time (ISO 8601) into the system prompt. Timezone should be configurable via env var.
 [ ] User should be able to provide context about themselves. This context should be injected into the system prompt.
 [ ] Super admins need to be able to reset a user's password
 [ ] It should be possible to disable sign-ups (via an environment variable?)
 [ ] Consider the ability to import and export agents as JSON
 [ ] Add built-in memory tool. Memory should be per-agent. Consider a workspace scoped memory tool also?
-[ ] Consider always injecting the current date and time (ISO 8601) into the system prompt. Timezone should be configurable via env var.
 [ ] Consider configuring the "task" model at the workspace level
