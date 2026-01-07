@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.16.0](https://github.com/willdady/platypus/compare/v1.15.0...v1.16.0) (2026-01-07)
+
+
+### Features
+
+* **backend:** add time tools ([60e8186](https://github.com/willdady/platypus/commit/60e81864116f92156f02c695df34da638fcf2c9a))
+* **frontend:** agents now appear in command menu ([f176f97](https://github.com/willdady/platypus/commit/f176f976fedd9f6957ea2004f5ff74ef7e283b68))
+
 ## [1.15.0](https://github.com/willdady/platypus/compare/v1.14.1...v1.15.0) (2026-01-07)
 
 
