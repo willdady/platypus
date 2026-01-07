@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.15.0](https://github.com/willdady/platypus/compare/v1.14.1...v1.15.0) (2026-01-07)
+
+
+### Features
+
+* **frontend:** new chats now default to the previously used agent or model ([cb78842](https://github.com/willdady/platypus/commit/cb78842a0964c4a0dd87cee3e520fce84e586967))
+
 ## [1.14.1](https://github.com/willdady/platypus/compare/v1.14.0...v1.14.1) (2026-01-06)
 
 
