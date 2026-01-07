@@ -1,7 +1,8 @@
 "use client";
 
-import * as React from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
+import useSWR from "swr";
 import {
   BotMessageSquare,
   Unplug,
@@ -22,6 +23,10 @@ import {
   CommandItem,
   CommandList,
 } from "@/components/ui/command";
+import { Agent } from "@platypus/schemas";
+import { fetcher, joinUrl } from "@/lib/utils";
+import { useBackendUrl } from "@/app/client-context";
+import { useAuth } from "@/components/auth-provider";
 
 interface CommandMenuProps {
   orgId: string;
@@ -29,10 +34,25 @@ interface CommandMenuProps {
 }
 
 export function CommandMenu({ orgId, workspaceId }: CommandMenuProps) {
-  const [open, setOpen] = React.useState(false);
+  const [open, setOpen] = useState(false);
   const router = useRouter();
+  const backendUrl = useBackendUrl();
+  const { user } = useAuth();
 
-  React.useEffect(() => {
+  // Fetch agents for the workspace
+  const { data: agentsData } = useSWR<{ results: Agent[] }>(
+    backendUrl && user
+      ? joinUrl(
+          backendUrl,
+          `/organizations/${orgId}/workspaces/${workspaceId}/agents`,
+        )
+      : null,
+    fetcher,
+  );
+
+  const agents = agentsData?.results || [];
+
+  useEffect(() => {
     const down = (e: KeyboardEvent) => {
       if (e.key === "k" && (e.metaKey || e.ctrlKey)) {
         e.preventDefault();
@@ -44,7 +64,7 @@ export function CommandMenu({ orgId, workspaceId }: CommandMenuProps) {
     return () => document.removeEventListener("keydown", down);
   }, []);
 
-  const runCommand = React.useCallback((command: () => unknown) => {
+  const runCommand = useCallback((command: () => unknown) => {
     setOpen(false);
     command();
   }, []);
@@ -166,6 +186,26 @@ export function CommandMenu({ orgId, workspaceId }: CommandMenuProps) {
             <span>About</span>
           </CommandItem>
         </CommandGroup>
+        {agents.length > 0 && (
+          <CommandGroup heading="Agents">
+            {agents.map((agent) => (
+              <CommandItem
+                key={agent.id}
+                className="cursor-pointer"
+                onSelect={() => {
+                  runCommand(() =>
+                    router.push(
+                      `/${orgId}/workspace/${workspaceId}/chat?agentId=${agent.id}`,
+                    ),
+                  );
+                }}
+              >
+                <Bot />
+                <span>{agent.name}</span>
+              </CommandItem>
+            ))}
+          </CommandGroup>
+        )}
       </CommandList>
     </CommandDialog>
   );

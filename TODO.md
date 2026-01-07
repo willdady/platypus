@@ -52,6 +52,7 @@
 [x] Bug: selecting an organization on the organization picker screen should update the browser URL to support deep-linking
 [x] Bug: Only display message actions on the last message once streaming stops
 [x] The currently selected agent/model should persist when starting a new chat via the sidebar "New Chat" button
+[x] Should be able to start a chat with an agent from the command pallete
 [ ] User should be able to provide context about themselves. This context should be injected into the system prompt.
 [ ] Super admins need to be able to reset a user's password
 [ ] It should be possible to disable sign-ups (via an environment variable?)
