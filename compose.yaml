@@ -20,7 +20,7 @@ services:
     environment:
       NODE_OPTIONS: "--disable-warning=ExperimentalWarning"
       PORT: "4000"
-      ALLOWED_ORIGINS: "http://localhost:3001"
+      ALLOWED_ORIGINS: "http://localhost:3000"
       DATABASE_URL: postgres://postgres:mypassword@database:5432/postgres
       BETTER_AUTH_SECRET: "g532b5Ede8hpeUxuCETPD7vUlAjb10Ts"
       BETTER_AUTH_URL: "http://localhost:4000"
@@ -47,7 +47,7 @@ services:
       BACKEND_URL: http://localhost:4000
       INTERNAL_BACKEND_URL: http://backend:4000
     ports:
-      - "3001:3000"
+      - "3000:3000"
     depends_on:
       backend:
         condition: service_healthy
