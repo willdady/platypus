@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.17.0](https://github.com/willdady/platypus/compare/v1.16.0...v1.17.0) (2026-01-08)
+
+
+### Features
+
+* changed default ports for frontend and backend ([1670146](https://github.com/willdady/platypus/commit/167014669103cdb5f7775f09a3f771e9a7661930))
+* **frontend:** active workspace name now appears in browser title ([a4864ba](https://github.com/willdady/platypus/commit/a4864ba02d0cf9e50085bb36ec0cf80665c1ccd7))
+* **skills:** body max length increased from 2000 to 5000 characters ([e432efb](https://github.com/willdady/platypus/commit/e432efb5e5995b54ceacc7cef8701e6cedbcb5b2))
+* **tool:** optimised askFollowupQuestion to spend fewer tokens ([a4f2dcb](https://github.com/willdady/platypus/commit/a4f2dcb412348bbe1684432ddc7c93a82df842c4))
+
 ## [1.16.0](https://github.com/willdady/platypus/compare/v1.15.0...v1.16.0) (2026-01-07)
 
 
