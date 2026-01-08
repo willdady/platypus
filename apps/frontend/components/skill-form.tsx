@@ -234,7 +234,7 @@ const SkillForm = ({
               disabled={isSubmitting}
               className="min-h-[200px] !font-mono"
               aria-invalid={!!validationErrors.body}
-              maxLength={2000}
+              maxLength={5000}
               error={validationErrors.body}
             />
           </Field>

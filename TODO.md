@@ -54,6 +54,7 @@
 [x] The currently selected agent/model should persist when starting a new chat via the sidebar "New Chat" button
 [x] Should be able to start a chat with an agent from the command pallete
 [x] Consider always injecting the current date and time (ISO 8601) into the system prompt. Timezone should be configurable via env var.
+[x] Increase skill body max length to 5000 characters
 [ ] User should be able to provide context about themselves. This context should be injected into the system prompt.
 [ ] Super admins need to be able to reset a user's password
 [ ] It should be possible to disable sign-ups (via an environment variable?)
