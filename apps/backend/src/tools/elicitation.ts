@@ -12,7 +12,7 @@ export const askFollowupQuestion = tool({
       .optional()
       .describe("A list of 2-4 suggested answers."),
   }),
-  execute: async ({ question, followUp }) => {
-    return { question, followUp };
+  execute: async () => {
+    return true;
   },
 });

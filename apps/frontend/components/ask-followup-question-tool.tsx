@@ -31,8 +31,6 @@ export const AskFollowupQuestionTool = ({
   index,
 }: AskFollowupQuestionToolProps) => {
   const input = toolPart.input as PlatypusTools["askFollowupQuestion"]["input"];
-  const output =
-    toolPart.output as PlatypusTools["askFollowupQuestion"]["output"];
 
   if (toolPart.state === "output-error") {
     return (
@@ -48,10 +46,9 @@ export const AskFollowupQuestionTool = ({
     );
   }
 
-  const data = output || input;
   const isStreaming = toolPart.state === "input-streaming";
 
-  if (!data?.question && isStreaming) {
+  if (!input?.question && isStreaming) {
     return (
       <Message key={`${messageId}-${index}`} from={role}>
         <MessageContent className="max-w-full">
@@ -64,16 +61,16 @@ export const AskFollowupQuestionTool = ({
     );
   }
 
-  if (!data?.question) return null;
+  if (!input?.question) return null;
 
   return (
     <Message key={`${messageId}-${index}`} from={role}>
       <MessageContent className="max-w-full">
         <div className="flex flex-col gap-3">
-          <MessageResponse>{data.question}</MessageResponse>
-          {data.followUp && data.followUp.length > 0 && (
+          <MessageResponse>{input.question}</MessageResponse>
+          {input.followUp && input.followUp.length > 0 && (
             <ItemGroup className="gap-2">
-              {data.followUp.map((text, idx) => (
+              {input.followUp.map((text, idx) => (
                 <Item
                   key={idx}
                   variant="outline"
