@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import { headers } from "next/headers";
+import type { Metadata } from "next";
 import { ModeToggle } from "@/components/mode-toggle";
 import { NotificationsDropdown } from "@/components/notifications-dropdown";
 import { CommandMenu } from "@/components/command-menu";
@@ -16,6 +17,39 @@ import { Button } from "@/components/ui/button";
 import { joinUrl } from "@/lib/utils";
 import { UserMenu } from "@/components/user-menu";
 import { ProtectedRoute } from "@/components/protected-route";
+import type { Workspace } from "@platypus/schemas";
+
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ orgId: string; workspaceId: string }>;
+}): Promise<Metadata> {
+  const { orgId, workspaceId } = await params;
+
+  const backendUrl =
+    process.env.INTERNAL_BACKEND_URL || process.env.BACKEND_URL || "";
+  const headersList = await headers();
+  const response = await fetch(
+    joinUrl(backendUrl, `/organizations/${orgId}/workspaces/${workspaceId}`),
+    {
+      headers: {
+        cookie: headersList.get("cookie") || "",
+      },
+    },
+  );
+
+  if (!response.ok) {
+    return {
+      title: "Platypus",
+    };
+  }
+
+  const workspace: Workspace = await response.json();
+
+  return {
+    title: `${workspace.name} | Platypus`,
+  };
+}
 
 export default async function WorkspaceLayout({
   children,
@@ -42,8 +76,6 @@ export default async function WorkspaceLayout({
   if (response.status === 404) {
     notFound();
   }
-
-  // const workspace: Workspace = await response.json();
 
   return (
     <ProtectedRoute requireOrgAccess requireWorkspaceAccess>
