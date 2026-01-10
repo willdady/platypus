@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.18.0](https://github.com/willdady/platypus/compare/v1.17.0...v1.18.0) (2026-01-10)
+
+
+### Features
+
+* **frontend:** agents can now be cloned easily ([c175e49](https://github.com/willdady/platypus/commit/c175e49682dad3062a769338fc83a9fbb662653e))
+
+
+### Bug Fixes
+
+* **frontend:** clicking the chat submit button when in the streaming state now correctly cancels the stream ([b03f2eb](https://github.com/willdady/platypus/commit/b03f2eb3e4f695b512cd81daace69f51cf04cdeb))
+
 ## [1.17.0](https://github.com/willdady/platypus/compare/v1.16.0...v1.17.0) (2026-01-08)
 
 
