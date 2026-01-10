@@ -132,21 +132,28 @@ export const Chat = ({
     fetcher,
   );
 
-  const { messages, setMessages, sendMessage, status, regenerate, error } =
-    useChat<PlatypusUIMessage>({
-      id: chatId,
-      transport: new DefaultChatTransport({
-        api: joinUrl(
-          backendUrl || "",
-          `/organizations/${orgId}/workspaces/${workspaceId}/chat`,
-        ),
-        body: {
-          orgId,
-          workspaceId,
-        },
-        credentials: "include",
-      }),
-    });
+  const {
+    messages,
+    setMessages,
+    sendMessage,
+    status,
+    regenerate,
+    error,
+    stop,
+  } = useChat<PlatypusUIMessage>({
+    id: chatId,
+    transport: new DefaultChatTransport({
+      api: joinUrl(
+        backendUrl || "",
+        `/organizations/${orgId}/workspaces/${workspaceId}/chat`,
+      ),
+      body: {
+        orgId,
+        workspaceId,
+      },
+      credentials: "include",
+    }),
+  });
 
   // Custom hooks for state management (must be called before any conditional returns)
   const {
@@ -274,6 +281,11 @@ export const Chat = ({
   const currentProviderType = currentProvider?.providerType;
 
   const handleSubmit = (message: PromptInputMessage) => {
+    // Stop the stream if currently streaming or submitted
+    if (status === "streaming" || status === "submitted") {
+      return stop();
+    }
+
     const hasText = Boolean(message.text);
     const hasAttachments = Boolean(message.files?.length);
     if (!(hasText || hasAttachments)) {
@@ -361,7 +373,7 @@ export const Chat = ({
         <div className="flex justify-center">
           <div className="w-full xl:w-4/5 max-w-4xl">
             <PromptInputProvider>
-              <PromptInput globalDrop multiple onSubmit={handleSubmit}>
+              <PromptInput onSubmit={handleSubmit} globalDrop multiple>
                 <PromptInputAttachments className="w-full">
                   {(attachment) => <PromptInputAttachment data={attachment} />}
                 </PromptInputAttachments>
