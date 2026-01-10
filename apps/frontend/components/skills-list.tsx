@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import {
   Item,
   ItemTitle,
@@ -8,13 +9,14 @@ import {
   ItemContent,
 } from "@/components/ui/item";
 import { Button } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/confirm-dialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { EllipsisVertical, Pencil } from "lucide-react";
+import { EllipsisVertical, Trash2 } from "lucide-react";
 import { type Skill } from "@platypus/schemas";
 import useSWR from "swr";
 import { fetcher, joinUrl } from "@/lib/utils";
@@ -39,8 +41,10 @@ export const SkillsList = ({
 }) => {
   const { user } = useAuth();
   const backendUrl = useBackendUrl();
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [skillToDelete, setSkillToDelete] = useState<Skill | null>(null);
 
-  const { data: skillsData, isLoading } = useSWR<{
+  const { data: skillsData, isLoading, mutate } = useSWR<{
     results: Skill[];
   }>(
     backendUrl && user
@@ -54,6 +58,36 @@ export const SkillsList = ({
 
   const skills = skillsData?.results || [];
 
+  const handleDeleteClick = (skill: Skill) => {
+    setSkillToDelete(skill);
+    setDeleteDialogOpen(true);
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!skillToDelete || !backendUrl) return;
+
+    try {
+      const response = await fetch(
+        joinUrl(
+          backendUrl,
+          `/organizations/${orgId}/workspaces/${workspaceId}/skills/${skillToDelete.id}`,
+        ),
+        {
+          method: "DELETE",
+          credentials: "include",
+        },
+      );
+
+      if (response.ok) {
+        mutate();
+        setDeleteDialogOpen(false);
+        setSkillToDelete(null);
+      }
+    } catch (error) {
+      console.error("Failed to delete skill:", error);
+    }
+  };
+
   if (isLoading) {
     return <div>Loading...</div>;
   }
@@ -63,42 +97,55 @@ export const SkillsList = ({
   }
 
   return (
-    <ul className="grid grid-cols-1 lg:grid-cols-2 grid-rows-1 gap-4">
-      {skills.map((skill) => (
-        <li key={skill.id}>
-          <Item variant="outline" className="h-full">
-            <ItemContent>
-              <ItemTitle>{skill.name}</ItemTitle>
-              <ItemDescription className="text-xs line-clamp-2">
-                {skill.description}
-              </ItemDescription>
-            </ItemContent>
-            <ItemActions>
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button
-                    className="cursor-pointer text-muted-foreground"
-                    variant="ghost"
-                    size="icon"
-                  >
-                    <EllipsisVertical className="h-4 w-4" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent>
-                  <DropdownMenuItem asChild>
-                    <Link
-                      className="cursor-pointer"
-                      href={`/${orgId}/workspace/${workspaceId}/skills/${skill.id}`}
-                    >
-                      <Pencil /> Edit
-                    </Link>
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </ItemActions>
-          </Item>
-        </li>
-      ))}
-    </ul>
+    <>
+      <ul className="grid grid-cols-1 lg:grid-cols-2 grid-rows-1 gap-4">
+        {skills.map((skill) => (
+          <li key={skill.id}>
+            <Item variant="outline" className="h-full cursor-pointer" asChild>
+              <Link href={`/${orgId}/workspace/${workspaceId}/skills/${skill.id}`}>
+                <ItemContent>
+                  <ItemTitle>{skill.name}</ItemTitle>
+                  <ItemDescription className="text-xs line-clamp-2">
+                    {skill.description}
+                  </ItemDescription>
+                </ItemContent>
+                <ItemActions>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button
+                        className="cursor-pointer text-muted-foreground"
+                        variant="ghost"
+                        size="icon"
+                        onClick={(e) => e.preventDefault()}
+                      >
+                        <EllipsisVertical className="h-4 w-4" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent>
+                      <DropdownMenuItem
+                        className="cursor-pointer"
+                        onSelect={() => handleDeleteClick(skill)}
+                      >
+                        <Trash2 /> Delete
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </ItemActions>
+              </Link>
+            </Item>
+          </li>
+        ))}
+      </ul>
+
+      <ConfirmDialog
+        open={deleteDialogOpen}
+        onOpenChange={setDeleteDialogOpen}
+        title="Delete Skill"
+        description={`Are you sure you want to delete "${skillToDelete?.name}"? This action cannot be undone.`}
+        confirmLabel="Delete"
+        confirmVariant="destructive"
+        onConfirm={handleDeleteConfirm}
+      />
+    </>
   );
 };

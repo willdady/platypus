@@ -10,14 +10,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { ExpandableTextarea } from "@/components/expandable-textarea";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { ConfirmDialog } from "@/components/confirm-dialog";
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Trash2 } from "lucide-react";
@@ -262,60 +255,20 @@ const SkillForm = ({
         )}
       </div>
 
-      <Dialog
+      <ConfirmDialog
         open={isDeleteDialogOpen}
         onOpenChange={(open) => {
-          if (!isDeleting) {
-            setIsDeleteDialogOpen(open);
-            if (!open) setDeleteError(null);
-          }
+          setIsDeleteDialogOpen(open);
+          if (!open) setDeleteError(null);
         }}
-      >
-        <DialogContent
-          onPointerDownOutside={(e) => {
-            if (isDeleting) {
-              e.preventDefault();
-            }
-          }}
-          onEscapeKeyDown={(e) => {
-            if (isDeleting) {
-              e.preventDefault();
-            }
-          }}
-          showCloseButton={false}
-        >
-          <DialogHeader>
-            <DialogTitle>Delete Skill</DialogTitle>
-            <DialogDescription>
-              Are you sure you want to delete this skill? This action cannot be
-              undone.
-            </DialogDescription>
-          </DialogHeader>
-          {deleteError && (
-            <div className="py-2 px-4 bg-destructive/10 text-destructive text-sm rounded">
-              {deleteError}
-            </div>
-          )}
-          <DialogFooter>
-            <Button
-              className="cursor-pointer"
-              variant="outline"
-              onClick={() => setIsDeleteDialogOpen(false)}
-              disabled={isDeleting}
-            >
-              Cancel
-            </Button>
-            <Button
-              className="cursor-pointer"
-              variant="destructive"
-              onClick={handleDelete}
-              disabled={isDeleting}
-            >
-              Delete
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+        title="Delete Skill"
+        description="Are you sure you want to delete this skill? This action cannot be undone."
+        confirmLabel="Delete"
+        confirmVariant="destructive"
+        onConfirm={handleDelete}
+        loading={isDeleting}
+        error={deleteError}
+      />
     </div>
   );
 };

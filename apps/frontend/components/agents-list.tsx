@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import {
   Item,
   ItemTitle,
@@ -9,16 +10,27 @@ import {
 } from "@/components/ui/item";
 import { Button } from "@/components/ui/button";
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { ConfirmDialog } from "@/components/confirm-dialog";
+import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { BotMessageSquare, EllipsisVertical, Pencil } from "lucide-react";
+import { BotMessageSquare, Copy, EllipsisVertical, Pencil, Trash2 } from "lucide-react";
 import { type Agent, type Provider } from "@platypus/schemas";
 import useSWR from "swr";
 import { fetcher, joinUrl } from "@/lib/utils";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useBackendUrl } from "@/app/client-context";
 import { useAuth } from "@/components/auth-provider";
 import { NoProvidersEmptyState } from "@/components/no-providers-empty-state";
@@ -32,8 +44,15 @@ export const AgentsList = ({
 }) => {
   const { user } = useAuth();
   const backendUrl = useBackendUrl();
+  const router = useRouter();
+  const [cloneDialogOpen, setCloneDialogOpen] = useState(false);
+  const [agentToClone, setAgentToClone] = useState<Agent | null>(null);
+  const [cloneName, setCloneName] = useState("");
+  const [cloneError, setCloneError] = useState<string | null>(null);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [agentToDelete, setAgentToDelete] = useState<Agent | null>(null);
 
-  const { data: agentsData, isLoading: isLoadingAgents } = useSWR<{
+  const { data: agentsData, isLoading: isLoadingAgents, mutate } = useSWR<{
     results: Agent[];
   }>(
     backendUrl && user
@@ -60,6 +79,96 @@ export const AgentsList = ({
   const agents = agentsData?.results || [];
   const providers = providersData?.results || [];
 
+  const handleCloneClick = (agent: Agent) => {
+    setAgentToClone(agent);
+    setCloneName(`${agent.name} (Copy)`);
+    setCloneError(null);
+    setCloneDialogOpen(true);
+  };
+
+  const handleDeleteClick = (agent: Agent) => {
+    setAgentToDelete(agent);
+    setDeleteDialogOpen(true);
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!agentToDelete || !backendUrl) return;
+
+    try {
+      const response = await fetch(
+        joinUrl(
+          backendUrl,
+          `/organizations/${orgId}/workspaces/${workspaceId}/agents/${agentToDelete.id}`,
+        ),
+        {
+          method: "DELETE",
+          credentials: "include",
+        },
+      );
+
+      if (response.ok) {
+        mutate();
+        setDeleteDialogOpen(false);
+        setAgentToDelete(null);
+      }
+    } catch (error) {
+      console.error("Failed to delete agent:", error);
+    }
+  };
+
+  const handleCloneConfirm = async () => {
+    if (!agentToClone || !backendUrl) return;
+
+    setCloneError(null);
+
+    const { id, createdAt, updatedAt, ...cloneData } = agentToClone;
+
+    const sanitizedData = Object.fromEntries(
+      Object.entries({
+        ...cloneData,
+        name: cloneName,
+      }).map(([key, value]) => [key, value === null ? undefined : value]),
+    );
+
+    try {
+      const response = await fetch(
+        joinUrl(
+          backendUrl,
+          `/organizations/${orgId}/workspaces/${workspaceId}/agents`,
+        ),
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          credentials: "include",
+          body: JSON.stringify(sanitizedData),
+        },
+      );
+
+      if (response.ok) {
+        const newAgent = await response.json();
+        mutate();
+        setCloneDialogOpen(false);
+        setAgentToClone(null);
+        setCloneName("");
+        router.push(
+          `/${orgId}/workspace/${workspaceId}/agents/${newAgent.id}`,
+        );
+      } else {
+        const errorData = await response.json();
+        if (errorData.error && Array.isArray(errorData.error)) {
+          setCloneError(errorData.error[0]?.message || "Failed to clone agent");
+        } else {
+          setCloneError("Failed to clone agent");
+        }
+      }
+    } catch (error) {
+      console.error("Failed to clone agent:", error);
+      setCloneError("Failed to clone agent");
+    }
+  };
+
   if (isLoadingAgents || isLoadingProviders) {
     return <div>Loading...</div>;
   }
@@ -79,51 +188,114 @@ export const AgentsList = ({
   }
 
   return (
-    <ul className="grid grid-cols-1 lg:grid-cols-2 grid-rows-1 gap-4">
-      {agents.map((agent) => (
-        <li key={agent.id}>
-          <Item variant="outline" className="h-full">
-            <ItemContent>
-              <ItemTitle>{agent.name}</ItemTitle>
-              {agent.description && (
-                <ItemDescription className="text-xs">
-                  {agent.description}
-                </ItemDescription>
-              )}
-            </ItemContent>
-            <ItemActions className="gap-1">
-              <Button size="sm" asChild>
-                <Link
-                  href={`/${orgId}/workspace/${workspaceId}/chat?agentId=${agent.id}`}
-                >
-                  <BotMessageSquare /> New Chat
-                </Link>
-              </Button>
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button
-                    className="cursor-pointer text-muted-foreground"
-                    variant="ghost"
-                    size="icon"
+    <>
+      <ul className="grid grid-cols-1 lg:grid-cols-2 grid-rows-1 gap-4">
+        {agents.map((agent) => (
+          <li key={agent.id}>
+            <Item variant="outline" className="h-full">
+              <ItemContent>
+                <ItemTitle>{agent.name}</ItemTitle>
+                {agent.description && (
+                  <ItemDescription className="text-xs">
+                    {agent.description}
+                  </ItemDescription>
+                )}
+              </ItemContent>
+              <ItemActions className="gap-1">
+                <Button size="sm" asChild>
+                  <Link
+                    href={`/${orgId}/workspace/${workspaceId}/chat?agentId=${agent.id}`}
                   >
-                    <EllipsisVertical className="h-4 w-4" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent>
-                  <DropdownMenuItem asChild>
-                    <Link
-                      className="cursor-pointer"
-                      href={`/${orgId}/workspace/${workspaceId}/agents/${agent.id}`}
+                    <BotMessageSquare /> New Chat
+                  </Link>
+                </Button>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      className="cursor-pointer text-muted-foreground"
+                      variant="ghost"
+                      size="icon"
                     >
-                      <Pencil /> Edit
-                    </Link>
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </ItemActions>
-          </Item>
-        </li>
-      ))}
-    </ul>
+                      <EllipsisVertical className="h-4 w-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent>
+                    <DropdownMenuItem asChild>
+                      <Link
+                        className="cursor-pointer"
+                        href={`/${orgId}/workspace/${workspaceId}/agents/${agent.id}`}
+                      >
+                        <Pencil /> Edit
+                      </Link>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      className="cursor-pointer"
+                      onSelect={() => handleCloneClick(agent)}
+                    >
+                      <Copy /> Clone
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      className="cursor-pointer"
+                      onSelect={() => handleDeleteClick(agent)}
+                    >
+                      <Trash2 /> Delete
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </ItemActions>
+            </Item>
+          </li>
+        ))}
+      </ul>
+
+      <Dialog open={cloneDialogOpen} onOpenChange={setCloneDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Clone Agent</DialogTitle>
+            <DialogDescription>
+              Enter a name for the cloned agent.
+            </DialogDescription>
+          </DialogHeader>
+          <Input
+            value={cloneName}
+            onChange={(e) => {
+              setCloneName(e.target.value);
+              setCloneError(null);
+            }}
+            placeholder="Agent name"
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                handleCloneConfirm();
+              }
+            }}
+          />
+          {cloneError && (
+            <p className="text-destructive text-sm">{cloneError}</p>
+          )}
+          <DialogFooter>
+            <Button
+              className="cursor-pointer"
+              variant="ghost"
+              onClick={() => setCloneDialogOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button className="cursor-pointer" onClick={handleCloneConfirm}>
+              Clone
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <ConfirmDialog
+        open={deleteDialogOpen}
+        onOpenChange={setDeleteDialogOpen}
+        title="Delete Agent"
+        description={`Are you sure you want to delete "${agentToDelete?.name}"? This action cannot be undone.`}
+        confirmLabel="Delete"
+        confirmVariant="destructive"
+        onConfirm={handleDeleteConfirm}
+      />
+    </>
   );
 };
