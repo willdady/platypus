@@ -7,7 +7,6 @@ import {
   generateText,
   Output,
   streamText,
-  type UIMessage,
   type Tool,
 } from "ai";
 import { createOpenAI, type OpenAIProvider } from "@ai-sdk/openai";
@@ -50,6 +49,7 @@ import {
 } from "../middleware/authorization.ts";
 import type { Variables } from "../server.ts";
 import { logger } from "../logger.ts";
+import { type PlatypusUIMessage } from "../types.ts";
 
 // --- Types ---
 
@@ -359,7 +359,7 @@ const resolveGenerationConfig = async (
 const upsertChatRecord = async (
   id: string,
   workspaceId: string,
-  messages: any[],
+  messages: PlatypusUIMessage[],
   context: ChatContext,
   config: GenerationConfig,
   data: ChatSubmitData,
@@ -610,7 +610,7 @@ chat.post(
       ...restConfig,
     });
 
-    return result.toUIMessageStreamResponse({
+    return result.toUIMessageStreamResponse<PlatypusUIMessage>({
       originalMessages: messages,
       generateMessageId: createIdGenerator({
         prefix: "msg",
@@ -759,7 +759,7 @@ chat.post(
     let [_, model] = createModel(provider, provider.taskModelId);
 
     // Generate title
-    const messages = (chat.messages as UIMessage[]) || [];
+    const messages = (chat.messages as PlatypusUIMessage[]) || [];
     const conversationText = messages
       .map((m) => {
         const message = m.parts.map((p) => {

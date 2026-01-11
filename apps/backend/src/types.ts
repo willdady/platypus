@@ -4,9 +4,9 @@ import {
   type InferUITools,
   type UIDataTypes,
 } from "ai";
-import * as mathTools from "./tools/math";
-import * as elicitationTools from "./tools/elicitation";
-import { createLoadSkillTool } from "./tools/skill";
+import * as mathTools from "./tools/math.ts";
+import * as elicitationTools from "./tools/elicitation.ts";
+import { createLoadSkillTool } from "./tools/skill.ts";
 
 export type MathTools = InferUITools<typeof mathTools>;
 
