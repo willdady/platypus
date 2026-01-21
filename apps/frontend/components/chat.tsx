@@ -16,7 +16,6 @@ import {
   PromptInputBody,
   PromptInputButton,
   PromptInputFooter,
-  PromptInputProvider,
   PromptInputSpeechButton,
   PromptInputSubmit,
   PromptInputTextarea,
@@ -69,6 +68,7 @@ export const Chat = ({
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [search, setSearch] = useState(false);
+  const [inputValue, setInputValue] = useState("");
 
   // Fetch providers
   const { data: providersData, isLoading } = useSWR<{ results: Provider[] }>(
@@ -351,13 +351,8 @@ export const Chat = ({
                   }}
                   copiedMessageId={copiedMessageId}
                   onAppendToPrompt={(text) => {
-                    if (textareaRef.current) {
-                      textareaRef.current.value = text;
-                      textareaRef.current.focus();
-                      textareaRef.current.dispatchEvent(
-                        new Event("input", { bubbles: true }),
-                      );
-                    }
+                    setInputValue(text);
+                    setTimeout(() => textareaRef.current?.focus(), 0);
                   }}
                   onSubmitMessage={(text) => {
                     handleSubmit({ text, files: [] });
@@ -372,14 +367,25 @@ export const Chat = ({
       <div className="grid shrink-0 gap-4 p-4">
         <div className="flex justify-center">
           <div className="w-full xl:w-4/5 max-w-4xl">
-            <PromptInputProvider>
-              <PromptInput onSubmit={handleSubmit} globalDrop multiple>
-                <PromptInputAttachments className="w-full">
-                  {(attachment) => <PromptInputAttachment data={attachment} />}
-                </PromptInputAttachments>
-                <PromptInputBody>
-                  <PromptInputTextarea ref={textareaRef} autoFocus />
-                </PromptInputBody>
+            <PromptInput
+              onSubmit={(message, event) => {
+                handleSubmit(message);
+                setInputValue("");
+              }}
+              globalDrop
+              multiple
+            >
+              <PromptInputAttachments className="w-full">
+                {(attachment) => <PromptInputAttachment data={attachment} />}
+              </PromptInputAttachments>
+              <PromptInputBody>
+                <PromptInputTextarea
+                  ref={textareaRef}
+                  value={inputValue}
+                  onChange={(e) => setInputValue(e.target.value)}
+                  autoFocus
+                />
+              </PromptInputBody>
                 <PromptInputFooter>
                   <PromptInputTools>
                     <PromptInputActionMenu>
@@ -391,6 +397,7 @@ export const Chat = ({
                     <PromptInputSpeechButton
                       className="cursor-pointer"
                       textareaRef={textareaRef}
+                      onTranscriptionChange={setInputValue}
                     />
                     {(!currentProviderType ||
                       currentProviderType !== "Bedrock") && (
@@ -469,7 +476,6 @@ export const Chat = ({
                   <PromptInputSubmit status={status} />
                 </PromptInputFooter>
               </PromptInput>
-            </PromptInputProvider>
           </div>
         </div>
       </div>
