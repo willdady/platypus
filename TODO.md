@@ -56,9 +56,9 @@
 [x] Consider always injecting the current date and time (ISO 8601) into the system prompt. Timezone should be configurable via env var.
 [x] Increase skill body max length to 5000 characters
 [x] Need to be able to clone an existing agent
+[x] Bug: when clicking the "paste to prompt" button and then the chat submit button the prompt input simply disappears and doesn't send the message as expected
 [ ] User should be able to provide context about themselves. This context should be injected into the system prompt.
     A user may provider general context about themselves ("I'm a 40 year old white male") but also context about themselves relevant to a specific workspace!
-[ ] Bug: when clicking the "paste to prompt" button and then the chat submit button the prompt input simply disappears and doesn't send the message as expected
 [ ] Super admins need to be able to reset a user's password
 [ ] It should be possible to disable sign-ups (via an environment variable?)
 [ ] Consider the ability to import and export agents as JSON
