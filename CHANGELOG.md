@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.18.1](https://github.com/willdady/platypus/compare/v1.18.0...v1.18.1) (2026-01-21)
+
+
+### Bug Fixes
+
+* clicking submit immediately after paste-to-prompt now works as expected ([1aaf361](https://github.com/willdady/platypus/commit/1aaf361983ebf4f1eb671def1c37e71ea58e9e52))
+
 ## [1.18.0](https://github.com/willdady/platypus/compare/v1.17.0...v1.18.0) (2026-01-10)
 
 
