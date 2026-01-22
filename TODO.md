@@ -67,3 +67,4 @@
 [ ] Bug: consider sanitising file names when using the Bedrock provider - https://github.com/vercel/ai/issues/11518#issuecomment-3731765347
 [ ] Make it possible to configure prompt placeholder text (which is shown when the chat prompt is empty) per agent e.g. "Ask me about financial advice!"
 [ ] Add a Skills count panel to the workspace homepage
+[ ] Bug: Skill toggle on the Agent edit page is incorrectly showing the skill body, not the description
