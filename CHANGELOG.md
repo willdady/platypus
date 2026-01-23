@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.19.0](https://github.com/willdady/platypus/compare/v1.18.1...v1.19.0) (2026-01-23)
+
+
+### Features
+
+* **agent:** add configurable input placeholder text ([36c21f0](https://github.com/willdady/platypus/commit/36c21f05567a75a9bf32bc2fe2868fcd350f1ac5))
+* **frontend:** add Skills count panel to workspace home page ([8c26afa](https://github.com/willdady/platypus/commit/8c26afa95d73ea03ba4b047ae3f945f9cda5b4f5))
+
+
+### Bug Fixes
+
+* **frontend:** Skill toggle on the Agent edit page now correctly shows the Skill description instead of the body ([bc19036](https://github.com/willdady/platypus/commit/bc1903639e463c8fc57623f7271b6356f7201ce8))
+
 ## [1.18.1](https://github.com/willdady/platypus/compare/v1.18.0...v1.18.1) (2026-01-21)
 
 
