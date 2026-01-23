@@ -59,6 +59,7 @@
 [x] Bug: when clicking the "paste to prompt" button and then the chat submit button the prompt input simply disappears and doesn't send the message as expected
 [x] Bug: Skill toggle on the Agent edit page is incorrectly showing the skill body, not the description
 [x] Make it possible to configure prompt placeholder text (which is shown when the chat prompt is empty) per agent e.g. "Ask me about financial advice!"
+[x] Add a Skills count panel to the workspace homepage
 [ ] User should be able to provide context about themselves. This context should be injected into the system prompt.
     A user may provider general context about themselves ("I'm a 40 year old white male") but also context about themselves relevant to a specific workspace!
 [ ] Super admins need to be able to reset a user's password
@@ -67,4 +68,3 @@
 [ ] Add built-in memory tool. Memory should be per-agent. Consider a workspace scoped memory tool also?
 [ ] Consider configuring the "task" model at the workspace level
 [ ] Bug: consider sanitising file names when using the Bedrock provider - https://github.com/vercel/ai/issues/11518#issuecomment-3731765347
-[ ] Add a Skills count panel to the workspace homepage

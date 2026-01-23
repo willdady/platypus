@@ -81,6 +81,18 @@ const Workspace = () => {
     fetcher,
   );
 
+  const { data: skillsData, isLoading: isLoadingSkills } = useSWR<{
+    results: [];
+  }>(
+    backendUrl && user
+      ? joinUrl(
+          backendUrl,
+          `/organizations/${orgId}/workspaces/${workspaceId}/skills`,
+        )
+      : null,
+    fetcher,
+  );
+
   const { data: orgData, isLoading: isLoadingOrg } = useSWR<Organization>(
     backendUrl && user ? joinUrl(backendUrl, `/organizations/${orgId}`) : null,
     fetcher,
@@ -91,6 +103,7 @@ const Workspace = () => {
     isLoadingAgents ||
     isLoadingChats ||
     isLoadingProviders ||
+    isLoadingSkills ||
     isLoadingOrg
   ) {
     return <div>Loading...</div>;
@@ -104,6 +117,7 @@ const Workspace = () => {
   const agentCount = agentsData?.results?.length || 0;
   const chatCount = chatsData?.results?.length || 0;
   const providerCount = providersData?.results?.length || 0;
+  const skillCount = skillsData?.results?.length || 0;
 
   return (
     <div className="flex flex-col gap-8 p-8 pb-32 max-w-6xl mx-auto">
@@ -129,6 +143,20 @@ const Workspace = () => {
             <Card className="gap-2">
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-0">
                 <CardTitle className="text-sm font-medium">
+                  Total Chats
+                </CardTitle>
+                <MessageSquare className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">{chatCount}</div>
+                <p className="text-xs text-muted-foreground">
+                  Conversations started
+                </p>
+              </CardContent>
+            </Card>
+            <Card className="gap-2">
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-0">
+                <CardTitle className="text-sm font-medium">
                   Total Agents
                 </CardTitle>
                 <Bot className="h-4 w-4 text-muted-foreground" />
@@ -143,26 +171,14 @@ const Workspace = () => {
             <Card className="gap-2">
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-0">
                 <CardTitle className="text-sm font-medium">
-                  Total Chats
+                  Total Skills
                 </CardTitle>
-                <MessageSquare className="h-4 w-4 text-muted-foreground" />
+                <Sparkles className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">{chatCount}</div>
+                <div className="text-2xl font-bold">{skillCount}</div>
                 <p className="text-xs text-muted-foreground">
-                  Conversations started
-                </p>
-              </CardContent>
-            </Card>
-            <Card className="gap-2">
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-0">
-                <CardTitle className="text-sm font-medium">Providers</CardTitle>
-                <Settings className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{providerCount}</div>
-                <p className="text-xs text-muted-foreground">
-                  Configured model providers
+                  Reusable instruction sets
                 </p>
               </CardContent>
             </Card>
