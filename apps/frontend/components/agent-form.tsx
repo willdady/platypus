@@ -492,7 +492,7 @@ const AgentForm = ({
                       <div className="flex flex-col">
                         <p>{skill.name}</p>
                         <p className="text-xs text-muted-foreground line-clamp-1">
-                          {skill.body}
+                          {skill.description}
                         </p>
                       </div>
                     </FieldLabel>
