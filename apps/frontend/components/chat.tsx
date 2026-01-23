@@ -383,6 +383,10 @@ export const Chat = ({
                   ref={textareaRef}
                   value={inputValue}
                   onChange={(e) => setInputValue(e.target.value)}
+                  placeholder={
+                    selectedAgent?.inputPlaceholder ||
+                    "What would you like to know?"
+                  }
                   autoFocus
                 />
               </PromptInputBody>

@@ -82,6 +82,14 @@ export const AgentInfoDialog = ({
             {agent.maxSteps ?? "Not set"}
           </div>
         </div>
+        {agent.inputPlaceholder && (
+          <div className="grid gap-2">
+            <Label>Input Placeholder</Label>
+            <div className="text-sm bg-muted p-2 rounded cursor-default">
+              {agent.inputPlaceholder}
+            </div>
+          </div>
+        )}
         {toolSets.length > 0 &&
           agent.toolSetIds &&
           agent.toolSetIds.length > 0 && (

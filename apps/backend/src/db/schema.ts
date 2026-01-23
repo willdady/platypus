@@ -88,6 +88,7 @@ export const agent = pgTable(
     frequencyPenalty: t.real("frequency_penalty"),
     toolSetIds: t.jsonb("tool_set_ids").$type<string[]>().default([]), // Array of tool set ids
     skillIds: t.jsonb("skill_ids").$type<string[]>().default([]), // Array of skill ids
+    inputPlaceholder: t.text("input_placeholder"),
     createdAt: t.timestamp("created_at").notNull().defaultNow(),
     updatedAt: t.timestamp("updated_at").notNull().defaultNow(),
   }),

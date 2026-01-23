@@ -103,6 +103,7 @@ const AgentForm = ({
   const [formData, setFormData] = useState({
     name: "",
     description: "",
+    inputPlaceholder: "",
     systemPrompt: "",
     providerId: "",
     modelId: "",
@@ -145,6 +146,7 @@ const AgentForm = ({
       setFormData({
         name: agent.name,
         description: agent.description || "",
+        inputPlaceholder: agent.inputPlaceholder || "",
         systemPrompt: agent.systemPrompt || "",
         providerId: agent.providerId,
         modelId: agent.modelId,
@@ -221,6 +223,7 @@ const AgentForm = ({
         providerId: formData.providerId,
         name: formData.name,
         description: formData.description,
+        inputPlaceholder: formData.inputPlaceholder || undefined,
         systemPrompt: formData.systemPrompt,
         modelId: formData.modelId,
         maxSteps: formData.maxSteps,
@@ -332,6 +335,25 @@ const AgentForm = ({
               aria-invalid={!!validationErrors.description}
               error={validationErrors.description}
             />
+          </Field>
+          <Field data-invalid={!!validationErrors.inputPlaceholder}>
+            <FieldLabel htmlFor="inputPlaceholder">Input Placeholder</FieldLabel>
+            <Input
+              id="inputPlaceholder"
+              placeholder="What would you like to know?"
+              value={formData.inputPlaceholder}
+              onChange={handleChange}
+              disabled={isSubmitting}
+              maxLength={100}
+              aria-invalid={!!validationErrors.inputPlaceholder}
+            />
+            <FieldDescription>
+              Custom placeholder text shown in the chat input when this agent is
+              selected
+            </FieldDescription>
+            {validationErrors.inputPlaceholder && (
+              <FieldError>{validationErrors.inputPlaceholder}</FieldError>
+            )}
           </Field>
           <Field>
             <ExpandableTextarea

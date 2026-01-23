@@ -154,6 +154,7 @@ export const agentSchema = z.object({
   frequencyPenalty: z.number().optional(),
   toolSetIds: z.array(z.string()).optional(),
   skillIds: z.array(z.string()).optional(),
+  inputPlaceholder: z.string().max(100).optional(),
   createdAt: z.date(),
   updatedAt: z.date(),
 });
@@ -176,6 +177,7 @@ export const agentCreateSchema = agentSchema.pick({
   frequencyPenalty: true,
   toolSetIds: true,
   skillIds: true,
+  inputPlaceholder: true,
 });
 
 export const agentUpdateSchema = agentSchema.pick({
@@ -193,6 +195,7 @@ export const agentUpdateSchema = agentSchema.pick({
   frequencyPenalty: true,
   toolSetIds: true,
   skillIds: true,
+  inputPlaceholder: true,
 });
 
 // Skill
