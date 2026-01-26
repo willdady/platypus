@@ -9,6 +9,8 @@ Platypus is an open-source, full-stack application designed to help you build AI
 > [!NOTE]
 > Platypus is currently a Work In Progress. Features are being added rapidly.
 
+![](assets/00_screenshot.png)
+
 ## ✨ Key Features
 
 - **🏢 Multi-Tenancy:** Built-in support for Organizations and Workspaces to isolate data and manage teams.
