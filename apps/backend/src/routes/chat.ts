@@ -19,7 +19,7 @@ import {
   type GoogleGenerativeAIProvider,
 } from "@ai-sdk/google";
 import { experimental_createMCPClient as createMCPClient } from "@ai-sdk/mcp";
-import { stepCountIs } from "ai";
+import { stepCountIs, hasToolCall } from "ai";
 import { db } from "../index.ts";
 import { dedupeArray, toKebabCase } from "../utils.ts";
 import {
@@ -567,10 +567,17 @@ chat.post(
 
     // 9. Stream Response
     const { systemPrompt, ...restConfig } = config;
+
+    // Combine stop conditions: maxSteps and askFollowupQuestion tool call
+    const stopConditions = [stepCountIs(context.resolvedMaxSteps)];
+    if (tools.askFollowupQuestion) {
+      stopConditions.push(hasToolCall("askFollowupQuestion"));
+    }
+
     const result = streamText({
       model: model as any,
       messages: await convertToModelMessages(messages),
-      stopWhen: stepCountIs(context.resolvedMaxSteps),
+      stopWhen: stopConditions,
       tools,
       system: systemPrompt,
       ...restConfig,
