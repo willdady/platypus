@@ -29,6 +29,13 @@
       "when": 1769148810102,
       "tag": "0003_loose_fenris",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1769552603236,
+      "tag": "0004_thick_bastion",
+      "breakpoints": true
     }
   ]
 }

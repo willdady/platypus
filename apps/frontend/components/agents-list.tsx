@@ -25,8 +25,13 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { BotMessageSquare, Copy, EllipsisVertical, Pencil, Trash2 } from "lucide-react";
-import { type Agent, type Provider } from "@platypus/schemas";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { BotMessageSquare, Copy, EllipsisVertical, Pencil, Trash2, Wrench, Sparkles } from "lucide-react";
+import { type Agent, type Provider, type ToolSet, type Skill } from "@platypus/schemas";
 import useSWR from "swr";
 import { fetcher, joinUrl } from "@/lib/utils";
 import Link from "next/link";
@@ -76,8 +81,48 @@ export const AgentsList = ({
     fetcher,
   );
 
+  const { data: toolSetsData } = useSWR<{
+    results: ToolSet[];
+  }>(
+    backendUrl && user
+      ? joinUrl(
+          backendUrl,
+          `/organizations/${orgId}/workspaces/${workspaceId}/tools`,
+        )
+      : null,
+    fetcher,
+  );
+
+  const { data: skillsData } = useSWR<{
+    results: Skill[];
+  }>(
+    backendUrl && user
+      ? joinUrl(
+          backendUrl,
+          `/organizations/${orgId}/workspaces/${workspaceId}/skills`,
+        )
+      : null,
+    fetcher,
+  );
+
   const agents = agentsData?.results || [];
   const providers = providersData?.results || [];
+  const toolSets = toolSetsData?.results || [];
+  const skills = skillsData?.results || [];
+
+  const getToolSetNames = (toolSetIds: string[] | undefined) => {
+    if (!toolSetIds?.length) return [];
+    return toolSetIds
+      .map((id) => toolSets.find((ts) => ts.id === id)?.name)
+      .filter(Boolean) as string[];
+  };
+
+  const getSkillNames = (skillIds: string[] | undefined) => {
+    if (!skillIds?.length) return [];
+    return skillIds
+      .map((id) => skills.find((s) => s.id === id)?.name)
+      .filter(Boolean) as string[];
+  };
 
   const handleCloneClick = (agent: Agent) => {
     setAgentToClone(agent);
@@ -195,11 +240,55 @@ export const AgentsList = ({
             <Item variant="outline" className="h-full">
               <ItemContent>
                 <ItemTitle>{agent.name}</ItemTitle>
-                {agent.description && (
-                  <ItemDescription className="text-xs">
-                    {agent.description}
-                  </ItemDescription>
-                )}
+                <ItemDescription className="text-xs">
+                  {agent.description}
+                </ItemDescription>
+                <div className="flex gap-3 mt-1.5 text-xs text-muted-foreground">
+                  {agent.toolSetIds?.length ? (
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <span className="flex items-center gap-1 cursor-default">
+                          <Wrench className="h-3 w-3" />
+                          {agent.toolSetIds.length} tool set{agent.toolSetIds.length !== 1 && "s"}
+                        </span>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <ul className="text-left">
+                          {getToolSetNames(agent.toolSetIds).map((name) => (
+                            <li key={name}>{name}</li>
+                          ))}
+                        </ul>
+                      </TooltipContent>
+                    </Tooltip>
+                  ) : (
+                    <span className="flex items-center gap-1 cursor-default">
+                      <Wrench className="h-3 w-3" />
+                      0 tool sets
+                    </span>
+                  )}
+                  {agent.skillIds?.length ? (
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <span className="flex items-center gap-1 cursor-default">
+                          <Sparkles className="h-3 w-3" />
+                          {agent.skillIds.length} skill{agent.skillIds.length !== 1 && "s"}
+                        </span>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <ul className="text-left">
+                          {getSkillNames(agent.skillIds).map((name) => (
+                            <li key={name}>{name}</li>
+                          ))}
+                        </ul>
+                      </TooltipContent>
+                    </Tooltip>
+                  ) : (
+                    <span className="flex items-center gap-1 cursor-default">
+                      <Sparkles className="h-3 w-3" />
+                      0 skills
+                    </span>
+                  )}
+                </div>
               </ItemContent>
               <ItemActions className="gap-1">
                 <Button size="sm" asChild>

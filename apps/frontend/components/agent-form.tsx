@@ -145,7 +145,7 @@ const AgentForm = ({
     if (agent) {
       setFormData({
         name: agent.name,
-        description: agent.description || "",
+        description: agent.description,
         inputPlaceholder: agent.inputPlaceholder || "",
         systemPrompt: agent.systemPrompt || "",
         providerId: agent.providerId,
@@ -327,7 +327,7 @@ const AgentForm = ({
               id="description"
               label="Description"
               expandable={false}
-              placeholder="Optional description of the agent..."
+              placeholder="Description of the agent..."
               value={formData.description}
               onChange={handleChange}
               disabled={isSubmitting}
