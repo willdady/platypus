@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.20.0](https://github.com/willdady/platypus/compare/v1.19.0...v1.20.0) (2026-01-27)
+
+
+### Features
+
+* **backend:** chat loop now ends when the `askFollowupQuestion` tool is called. ([4d12b08](https://github.com/willdady/platypus/commit/4d12b0877784231f157f009c4d8d02b89eac01cb))
+* **frontend:** display tool set and skill counts on agent cards ([66ea7b3](https://github.com/willdady/platypus/commit/66ea7b31188a1e2de2cea47e3db805f9a46c143a))
+
 ## [1.19.0](https://github.com/willdady/platypus/compare/v1.18.1...v1.19.0) (2026-01-23)
 
 
