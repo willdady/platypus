@@ -337,7 +337,9 @@ const AgentForm = ({
             />
           </Field>
           <Field data-invalid={!!validationErrors.inputPlaceholder}>
-            <FieldLabel htmlFor="inputPlaceholder">Input Placeholder</FieldLabel>
+            <FieldLabel htmlFor="inputPlaceholder">
+              Input Placeholder
+            </FieldLabel>
             <Input
               id="inputPlaceholder"
               placeholder="What would you like to know?"

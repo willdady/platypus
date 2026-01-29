@@ -1,5 +1,6 @@
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
+import { admin } from "better-auth/plugins";
 import { db } from "./index.ts";
 import * as authSchema from "./db/auth-schema.ts";
 
@@ -23,14 +24,5 @@ export const auth = betterAuth({
     },
   },
   trustedOrigins: process.env.ALLOWED_ORIGINS?.split(",") || [],
-  user: {
-    additionalFields: {
-      role: {
-        type: ["user", "admin"],
-        required: true,
-        defaultValue: "user",
-        input: false,
-      },
-    },
-  },
+  plugins: [admin()],
 });

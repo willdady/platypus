@@ -390,96 +390,96 @@ export const Chat = ({
                   autoFocus
                 />
               </PromptInputBody>
-                <PromptInputFooter>
-                  <PromptInputTools>
-                    <PromptInputActionMenu>
-                      <PromptInputActionMenuTrigger className="cursor-pointer" />
-                      <PromptInputActionMenuContent>
-                        <PromptInputActionAddAttachments className="cursor-pointer" />
-                      </PromptInputActionMenuContent>
-                    </PromptInputActionMenu>
-                    <PromptInputSpeechButton
+              <PromptInputFooter>
+                <PromptInputTools>
+                  <PromptInputActionMenu>
+                    <PromptInputActionMenuTrigger className="cursor-pointer" />
+                    <PromptInputActionMenuContent>
+                      <PromptInputActionAddAttachments className="cursor-pointer" />
+                    </PromptInputActionMenuContent>
+                  </PromptInputActionMenu>
+                  <PromptInputSpeechButton
+                    className="cursor-pointer"
+                    textareaRef={textareaRef}
+                    onTranscriptionChange={setInputValue}
+                  />
+                  {(!currentProviderType ||
+                    currentProviderType !== "Bedrock") && (
+                    <PromptInputButton
                       className="cursor-pointer"
-                      textareaRef={textareaRef}
-                      onTranscriptionChange={setInputValue}
-                    />
-                    {(!currentProviderType ||
-                      currentProviderType !== "Bedrock") && (
-                      <PromptInputButton
-                        className="cursor-pointer"
-                        onClick={() => setSearch(!search)}
-                        variant={search ? "default" : "ghost"}
-                      >
-                        <GlobeIcon size={16} />
-                        <span>Search</span>
-                      </PromptInputButton>
-                    )}
-                    <ModelSelectorDialog
-                      agents={agents}
-                      providers={providers}
-                      agentId={agentId}
-                      modelId={modelId}
-                      isOpen={isModelSelectorOpen}
-                      onOpenChange={(open) => {
-                        setIsModelSelectorOpen(open);
-                        if (!open) {
-                          setTimeout(() => textareaRef.current?.focus(), 250);
-                        }
-                      }}
-                      onModelChange={handleModelChange}
-                    />
-                    {agentId && selectedAgent && (
-                      <Dialog
-                        open={isAgentInfoDialogOpen}
-                        onOpenChange={setIsAgentInfoDialogOpen}
-                      >
-                        <DialogTrigger asChild>
-                          <PromptInputButton className="cursor-pointer">
-                            <Info />
-                          </PromptInputButton>
-                        </DialogTrigger>
-                        <AgentInfoDialog
-                          agent={selectedAgent}
-                          toolSets={toolSets}
-                          skills={skills}
-                          providers={providers}
-                          onClose={() => setIsAgentInfoDialogOpen(false)}
-                        />
-                      </Dialog>
-                    )}
-                    {!agentId && (
-                      <Dialog
-                        open={isSettingsDialogOpen}
-                        onOpenChange={setIsSettingsDialogOpen}
-                      >
-                        <DialogTrigger asChild>
-                          <PromptInputButton className="cursor-pointer">
-                            <Settings2 />
-                          </PromptInputButton>
-                        </DialogTrigger>
-                        <ChatSettingsDialog
-                          systemPrompt={systemPrompt}
-                          onSystemPromptChange={setters.setSystemPrompt}
-                          temperature={temperature}
-                          onTemperatureChange={setters.setTemperature}
-                          seed={seed}
-                          onSeedChange={setters.setSeed}
-                          topP={topP}
-                          onTopPChange={setters.setTopP}
-                          topK={topK}
-                          onTopKChange={setters.setTopK}
-                          presencePenalty={presencePenalty}
-                          onPresencePenaltyChange={setters.setPresencePenalty}
-                          frequencyPenalty={frequencyPenalty}
-                          onFrequencyPenaltyChange={setters.setFrequencyPenalty}
-                          onClose={() => setIsSettingsDialogOpen(false)}
-                        />
-                      </Dialog>
-                    )}
-                  </PromptInputTools>
-                  <PromptInputSubmit status={status} />
-                </PromptInputFooter>
-              </PromptInput>
+                      onClick={() => setSearch(!search)}
+                      variant={search ? "default" : "ghost"}
+                    >
+                      <GlobeIcon size={16} />
+                      <span>Search</span>
+                    </PromptInputButton>
+                  )}
+                  <ModelSelectorDialog
+                    agents={agents}
+                    providers={providers}
+                    agentId={agentId}
+                    modelId={modelId}
+                    isOpen={isModelSelectorOpen}
+                    onOpenChange={(open) => {
+                      setIsModelSelectorOpen(open);
+                      if (!open) {
+                        setTimeout(() => textareaRef.current?.focus(), 250);
+                      }
+                    }}
+                    onModelChange={handleModelChange}
+                  />
+                  {agentId && selectedAgent && (
+                    <Dialog
+                      open={isAgentInfoDialogOpen}
+                      onOpenChange={setIsAgentInfoDialogOpen}
+                    >
+                      <DialogTrigger asChild>
+                        <PromptInputButton className="cursor-pointer">
+                          <Info />
+                        </PromptInputButton>
+                      </DialogTrigger>
+                      <AgentInfoDialog
+                        agent={selectedAgent}
+                        toolSets={toolSets}
+                        skills={skills}
+                        providers={providers}
+                        onClose={() => setIsAgentInfoDialogOpen(false)}
+                      />
+                    </Dialog>
+                  )}
+                  {!agentId && (
+                    <Dialog
+                      open={isSettingsDialogOpen}
+                      onOpenChange={setIsSettingsDialogOpen}
+                    >
+                      <DialogTrigger asChild>
+                        <PromptInputButton className="cursor-pointer">
+                          <Settings2 />
+                        </PromptInputButton>
+                      </DialogTrigger>
+                      <ChatSettingsDialog
+                        systemPrompt={systemPrompt}
+                        onSystemPromptChange={setters.setSystemPrompt}
+                        temperature={temperature}
+                        onTemperatureChange={setters.setTemperature}
+                        seed={seed}
+                        onSeedChange={setters.setSeed}
+                        topP={topP}
+                        onTopPChange={setters.setTopP}
+                        topK={topK}
+                        onTopKChange={setters.setTopK}
+                        presencePenalty={presencePenalty}
+                        onPresencePenaltyChange={setters.setPresencePenalty}
+                        frequencyPenalty={frequencyPenalty}
+                        onFrequencyPenaltyChange={setters.setFrequencyPenalty}
+                        onClose={() => setIsSettingsDialogOpen(false)}
+                      />
+                    </Dialog>
+                  )}
+                </PromptInputTools>
+                <PromptInputSubmit status={status} />
+              </PromptInputFooter>
+            </PromptInput>
           </div>
         </div>
       </div>

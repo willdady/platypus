@@ -73,7 +73,8 @@ registerToolSet("elicitation", {
 registerToolSet("time", {
   name: "Time",
   category: "Utilities",
-  description: "Tools for getting current time and converting between timezones",
+  description:
+    "Tools for getting current time and converting between timezones",
   tools: {
     getCurrentTime,
     convertTimezone,

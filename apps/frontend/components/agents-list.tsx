@@ -30,8 +30,21 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { BotMessageSquare, Copy, EllipsisVertical, Pencil, Trash2, Wrench, Sparkles } from "lucide-react";
-import { type Agent, type Provider, type ToolSet, type Skill } from "@platypus/schemas";
+import {
+  BotMessageSquare,
+  Copy,
+  EllipsisVertical,
+  Pencil,
+  Trash2,
+  Wrench,
+  Sparkles,
+} from "lucide-react";
+import {
+  type Agent,
+  type Provider,
+  type ToolSet,
+  type Skill,
+} from "@platypus/schemas";
 import useSWR from "swr";
 import { fetcher, joinUrl } from "@/lib/utils";
 import Link from "next/link";
@@ -57,7 +70,11 @@ export const AgentsList = ({
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [agentToDelete, setAgentToDelete] = useState<Agent | null>(null);
 
-  const { data: agentsData, isLoading: isLoadingAgents, mutate } = useSWR<{
+  const {
+    data: agentsData,
+    isLoading: isLoadingAgents,
+    mutate,
+  } = useSWR<{
     results: Agent[];
   }>(
     backendUrl && user
@@ -197,9 +214,7 @@ export const AgentsList = ({
         setCloneDialogOpen(false);
         setAgentToClone(null);
         setCloneName("");
-        router.push(
-          `/${orgId}/workspace/${workspaceId}/agents/${newAgent.id}`,
-        );
+        router.push(`/${orgId}/workspace/${workspaceId}/agents/${newAgent.id}`);
       } else {
         const errorData = await response.json();
         if (errorData.error && Array.isArray(errorData.error)) {
@@ -249,7 +264,8 @@ export const AgentsList = ({
                       <TooltipTrigger asChild>
                         <span className="flex items-center gap-1 cursor-default">
                           <Wrench className="h-3 w-3" />
-                          {agent.toolSetIds.length} tool set{agent.toolSetIds.length !== 1 && "s"}
+                          {agent.toolSetIds.length} tool set
+                          {agent.toolSetIds.length !== 1 && "s"}
                         </span>
                       </TooltipTrigger>
                       <TooltipContent>
@@ -262,8 +278,7 @@ export const AgentsList = ({
                     </Tooltip>
                   ) : (
                     <span className="flex items-center gap-1 cursor-default">
-                      <Wrench className="h-3 w-3" />
-                      0 tool sets
+                      <Wrench className="h-3 w-3" />0 tool sets
                     </span>
                   )}
                   {agent.skillIds?.length ? (
@@ -271,7 +286,8 @@ export const AgentsList = ({
                       <TooltipTrigger asChild>
                         <span className="flex items-center gap-1 cursor-default">
                           <Sparkles className="h-3 w-3" />
-                          {agent.skillIds.length} skill{agent.skillIds.length !== 1 && "s"}
+                          {agent.skillIds.length} skill
+                          {agent.skillIds.length !== 1 && "s"}
                         </span>
                       </TooltipTrigger>
                       <TooltipContent>
@@ -284,8 +300,7 @@ export const AgentsList = ({
                     </Tooltip>
                   ) : (
                     <span className="flex items-center gap-1 cursor-default">
-                      <Sparkles className="h-3 w-3" />
-                      0 skills
+                      <Sparkles className="h-3 w-3" />0 skills
                     </span>
                   )}
                 </div>

@@ -23,14 +23,6 @@ import { fetcher, joinUrl } from "@/lib/utils";
 import Link from "next/link";
 import { useBackendUrl } from "@/app/client-context";
 import { useAuth } from "@/components/auth-provider";
-import {
-  Empty,
-  EmptyHeader,
-  EmptyTitle,
-  EmptyDescription,
-  EmptyContent,
-  EmptyMedia,
-} from "@/components/ui/empty";
 
 export const SkillsList = ({
   orgId,
@@ -44,7 +36,11 @@ export const SkillsList = ({
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [skillToDelete, setSkillToDelete] = useState<Skill | null>(null);
 
-  const { data: skillsData, isLoading, mutate } = useSWR<{
+  const {
+    data: skillsData,
+    isLoading,
+    mutate,
+  } = useSWR<{
     results: Skill[];
   }>(
     backendUrl && user
@@ -102,7 +98,9 @@ export const SkillsList = ({
         {skills.map((skill) => (
           <li key={skill.id}>
             <Item variant="outline" className="h-full cursor-pointer" asChild>
-              <Link href={`/${orgId}/workspace/${workspaceId}/skills/${skill.id}`}>
+              <Link
+                href={`/${orgId}/workspace/${workspaceId}/skills/${skill.id}`}
+              >
                 <ItemContent>
                   <ItemTitle>{skill.name}</ItemTitle>
                   <ItemDescription className="text-xs line-clamp-2">
