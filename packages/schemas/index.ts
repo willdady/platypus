@@ -48,7 +48,7 @@ export const chatSchema = z.object({
   workspaceId: z.string(),
   title: z.string().min(3).max(30),
   messages: z.any().optional(),
-  isStarred: z.boolean(),
+  isPinned: z.boolean(),
   tags: z
     .array(z.string().regex(kebabCaseRegex, "Tags must be kebab-case"))
     .max(5, "A chat can have at most 5 tags")
@@ -103,7 +103,7 @@ export const chatSubmitSchema = chatSchema
 export const chatUpdateSchema = chatSchema.pick({
   workspaceId: true,
   title: true,
-  isStarred: true,
+  isPinned: true,
   tags: true,
 });
 
@@ -118,7 +118,7 @@ export const chatGenerateMetadataSchema = z.object({
 export const chatListItemSchema = chatSchema.pick({
   id: true,
   title: true,
-  isStarred: true,
+  isPinned: true,
   tags: true,
   agentId: true,
   providerId: true,

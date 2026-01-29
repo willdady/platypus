@@ -43,6 +43,13 @@
       "when": 1769662343728,
       "tag": "0005_fixed_proteus",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1769664516771,
+      "tag": "0006_hot_pete_wisdom",
+      "breakpoints": true
     }
   ]
 }

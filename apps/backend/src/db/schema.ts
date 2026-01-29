@@ -41,7 +41,7 @@ export const chat = pgTable(
       }),
     title: t.text("title").notNull(),
     messages: t.jsonb("messages"),
-    isStarred: t.boolean("is_starred").notNull().default(false),
+    isPinned: t.boolean("is_pinned").notNull().default(false),
     tags: t.jsonb("tags").$type<string[]>().default([]),
     agentId: t.text("agent_id"),
     providerId: t.text("provider_id"),

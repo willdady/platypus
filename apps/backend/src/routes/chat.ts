@@ -434,7 +434,7 @@ chat.get(
       .select({
         id: chatTable.id,
         title: chatTable.title,
-        isStarred: chatTable.isStarred,
+        isPinned: chatTable.isPinned,
         tags: chatTable.tags,
         agentId: chatTable.agentId,
         providerId: chatTable.providerId,
@@ -650,11 +650,11 @@ chat.put(
   async (c) => {
     const chatId = c.req.param("chatId");
     const workspaceId = c.req.param("workspaceId")!;
-    const { title, isStarred, tags } = c.req.valid("json");
+    const { title, isPinned, tags } = c.req.valid("json");
 
     const result = await db
       .update(chatTable)
-      .set({ title, isStarred, tags, updatedAt: new Date() })
+      .set({ title, isPinned, tags, updatedAt: new Date() })
       .where(
         and(eq(chatTable.id, chatId), eq(chatTable.workspaceId, workspaceId)),
       )

@@ -1,0 +1,1 @@
+ALTER TABLE "chat" RENAME COLUMN "is_starred" TO "is_pinned";

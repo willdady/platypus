@@ -48,8 +48,8 @@ import {
   EllipsisVertical,
   Trash2,
   Pencil,
-  Star,
-  StarOff,
+  Pin,
+  PinOff,
   FolderClosed,
   ChevronsUpDown,
   Plus,
@@ -85,7 +85,7 @@ export function AppSidebar({
   >({});
   const [deleteChatId, setDeleteChatId] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
-  const [isTogglingStar, setIsTogglingStar] = useState(false);
+  const [isTogglingPin, setIsTogglingPin] = useState(false);
 
   const { mutate } = useSWRConfig();
   const { data } = useSWR<{ results: Workspace[] }>(
@@ -116,9 +116,9 @@ export function AppSidebar({
   const chats = chatData?.results ?? [];
   const currentWorkspace = workspaces.find((w) => w.id === workspaceId);
 
-  // Separate starred chats from regular chats
-  const starredChats = chats.filter((chat) => chat.isStarred);
-  const regularChats = chats.filter((chat) => !chat.isStarred);
+  // Separate pinned chats from regular chats
+  const pinnedChats = chats.filter((chat) => chat.isPinned);
+  const regularChats = chats.filter((chat) => !chat.isPinned);
 
   // Group regular chats by time periods
   const now = new Date();
@@ -134,8 +134,8 @@ export function AppSidebar({
   const hasRecent = last7Days.length > 0;
 
   const chatGroups = [
-    ...(starredChats.length > 0
-      ? [{ label: "Starred", chats: starredChats, icon: Star }]
+    ...(pinnedChats.length > 0
+      ? [{ label: "Pinned", chats: pinnedChats, icon: Pin }]
       : []),
     ...(hasRecent
       ? [{ label: "Last 7 days", chats: last7Days, icon: ClockFading }]
@@ -173,7 +173,7 @@ export function AppSidebar({
           body: JSON.stringify({
             workspaceId,
             title: renameTitle,
-            isStarred: currentChat.isStarred,
+            isPinned: currentChat.isPinned,
             tags: renameTags,
           }),
           credentials: "include",
@@ -252,11 +252,11 @@ export function AppSidebar({
     }
   };
 
-  const handleToggleStar = async (chatId: string) => {
+  const handleTogglePin = async (chatId: string) => {
     const currentChat = chats.find((chat) => chat.id === chatId);
     if (!currentChat) return;
 
-    setIsTogglingStar(true);
+    setIsTogglingPin(true);
     try {
       const response = await fetch(
         joinUrl(
@@ -271,7 +271,7 @@ export function AppSidebar({
           body: JSON.stringify({
             workspaceId,
             title: currentChat.title,
-            isStarred: !currentChat.isStarred,
+            isPinned: !currentChat.isPinned,
             tags: currentChat.tags ?? [],
           }),
           credentials: "include",
@@ -279,7 +279,7 @@ export function AppSidebar({
       );
 
       if (!response.ok) {
-        throw new Error("Failed to toggle star status");
+        throw new Error("Failed to toggle pin status");
       }
 
       // Revalidate the chat list
@@ -290,9 +290,9 @@ export function AppSidebar({
         ),
       );
     } catch (error) {
-      console.error("Error toggling star status:", error);
+      console.error("Error toggling pin status:", error);
     } finally {
-      setIsTogglingStar(false);
+      setIsTogglingPin(false);
     }
   };
 
@@ -409,16 +409,16 @@ export function AppSidebar({
                           >
                             <DropdownMenuItem
                               className="cursor-pointer"
-                              onSelect={() => handleToggleStar(chat.id)}
-                              disabled={isTogglingStar}
+                              onSelect={() => handleTogglePin(chat.id)}
+                              disabled={isTogglingPin}
                             >
-                              {chat.isStarred ? (
+                              {chat.isPinned ? (
                                 <>
-                                  <StarOff className="mr-2 h-4 w-4" /> Unstar
+                                  <PinOff className="mr-2 h-4 w-4" /> Unpin
                                 </>
                               ) : (
                                 <>
-                                  <Star className="mr-2 h-4 w-4" /> Star
+                                  <Pin className="mr-2 h-4 w-4" /> Pin
                                 </>
                               )}
                             </DropdownMenuItem>
