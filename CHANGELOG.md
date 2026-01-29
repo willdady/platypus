@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.22.0](https://github.com/willdady/platypus/compare/v1.21.1...v1.22.0) (2026-01-29)
+
+
+### Features
+
+* chats are now "pinned" instead of "starred" ([a4cd0ae](https://github.com/willdady/platypus/commit/a4cd0ae28a5b94ae974f35cb8705a85563eca705))
+
 ## [1.21.1](https://github.com/willdady/platypus/compare/v1.21.0...v1.21.1) (2026-01-29)
 
 
