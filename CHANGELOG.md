@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.21.1](https://github.com/willdady/platypus/compare/v1.21.0...v1.21.1) (2026-01-29)
+
+
+### Bug Fixes
+
+* **backend:** missing migration files ([98ca688](https://github.com/willdady/platypus/commit/98ca6888efc3b23a3d36265103c0b9b05ee257c2))
+
 ## [1.21.0](https://github.com/willdady/platypus/compare/v1.20.0...v1.21.0) (2026-01-29)
 
 
