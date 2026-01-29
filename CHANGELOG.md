@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.21.0](https://github.com/willdady/platypus/compare/v1.20.0...v1.21.0) (2026-01-29)
+
+
+### Features
+
+* admins can now change passwords and delete users ([379aef3](https://github.com/willdady/platypus/commit/379aef31405c019299b2d3b18b02f9e27b8683eb))
+
+
+### Bug Fixes
+
+* failing tests after making Agent description field mandatory ([f1a44ac](https://github.com/willdady/platypus/commit/f1a44ac46b17d2b443c78c3e9da762a70ed879b6))
+
 ## [1.20.0](https://github.com/willdady/platypus/compare/v1.19.0...v1.20.0) (2026-01-27)
 
 
