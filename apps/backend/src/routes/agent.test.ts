@@ -66,6 +66,7 @@ describe("Agent Routes", () => {
         method: "POST",
         body: JSON.stringify({
           name: "New Agent",
+          description: "A test agent",
           providerId: "p1",
           modelId: "m1",
           workspaceId,
@@ -173,6 +174,7 @@ describe("Agent Routes", () => {
         method: "PUT",
         body: JSON.stringify({
           name: "Updated Agent",
+          description: "An updated agent",
           providerId: "p1",
           modelId: "m1",
         }),

@@ -74,6 +74,7 @@ describe("Agent Schema", () => {
       workspaceId: "456",
       providerId: "provider-123",
       name: "Test Agent",
+      description: "A test agent",
       modelId: "gpt-4",
       createdAt: new Date(),
       updatedAt: new Date(),
