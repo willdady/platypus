@@ -62,7 +62,7 @@
 [x] Add a Skills count panel to the workspace homepage
 [x] Super admins need to be able to reset a user's password
 [x] Bug: links in chat messages don't show pointer on hover
-[ ] User should be able to provide context about themselves. This context should be injected into the system prompt.
+[x] User should be able to provide context about themselves. This context should be injected into the system prompt.
     A user may provider general context about themselves ("I'm a 40 year old white male") but also context about themselves relevant to a specific workspace!
 [ ] It should be possible to disable sign-ups (via an environment variable?)
 [ ] Consider the ability to import and export agents as JSON

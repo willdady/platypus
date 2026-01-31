@@ -29,6 +29,7 @@ import {
   provider as providerTable,
   workspace as workspaceTable,
   skill as skillTable,
+  context as contextTable,
 } from "../db/schema.ts";
 import { getToolSet } from "../tools/index.ts";
 import { createLoadSkillTool } from "../tools/skill.ts";
@@ -316,6 +317,8 @@ const resolveGenerationConfig = async (
   workspaceContext: string | undefined = undefined,
   skills: Array<Pick<Skill, "name" | "description">> | undefined = undefined,
   user: { id: string; name: string },
+  userGlobalContext?: string,
+  userWorkspaceContext?: string,
 ): Promise<GenerationConfig> => {
   const config: GenerationConfig = {};
   const source = agent || data;
@@ -342,6 +345,8 @@ const resolveGenerationConfig = async (
     agentSystemPrompt,
     skills,
     user,
+    userGlobalContext,
+    userWorkspaceContext,
   });
 
   config.systemPrompt = systemPrompt;
@@ -549,8 +554,28 @@ chat.post(
       skills = skillRecords;
     }
 
-    // 7. Prepare Generation Config (Merge Agent & Request params)
+    // 7. Fetch User Contexts (global and workspace-specific)
     const user = c.get("user")!;
+    let userGlobalContext: string | undefined;
+    let userWorkspaceContext: string | undefined;
+
+    const userContexts = await db
+      .select({
+        content: contextTable.content,
+        workspaceId: contextTable.workspaceId,
+      })
+      .from(contextTable)
+      .where(eq(contextTable.userId, user.id));
+
+    for (const ctx of userContexts) {
+      if (ctx.workspaceId === null) {
+        userGlobalContext = ctx.content;
+      } else if (ctx.workspaceId === workspaceId) {
+        userWorkspaceContext = ctx.content;
+      }
+    }
+
+    // 8. Prepare Generation Config (Merge Agent & Request params)
     const config = await resolveGenerationConfig(
       data,
       workspaceId,
@@ -558,14 +583,16 @@ chat.post(
       workspace.context || undefined,
       skills,
       { id: user.id, name: user.name },
+      userGlobalContext,
+      userWorkspaceContext,
     );
 
-    // 8. Inject loadSkill tool if skills exist
+    // 9. Inject loadSkill tool if skills exist
     if (skills.length > 0) {
       tools.loadSkill = createLoadSkillTool(workspaceId);
     }
 
-    // 9. Stream Response
+    // 10. Stream Response
     const { systemPrompt, ...restConfig } = config;
 
     // Combine stop conditions: maxSteps and askFollowupQuestion tool call

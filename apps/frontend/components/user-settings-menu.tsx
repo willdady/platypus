@@ -8,7 +8,7 @@ import {
   SidebarMenuItem,
   SidebarMenu,
 } from "@/components/ui/sidebar";
-import { User, ShieldCheck, Mail, Users } from "lucide-react";
+import { User, ShieldCheck, Mail, Users, BookText } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useAuth } from "@/components/auth-provider";
@@ -17,6 +17,7 @@ export function UserSettingsMenu() {
   const pathname = usePathname();
   const { user } = useAuth();
   const profileHref = `/settings`;
+  const contextsHref = `/settings/contexts`;
   const securityHref = `/settings/security`;
   const invitationsHref = `/settings/invitations`;
   const usersHref = `/settings/users`;
@@ -32,6 +33,16 @@ export function UserSettingsMenu() {
               <SidebarMenuButton asChild isActive={pathname === profileHref}>
                 <Link href={profileHref}>
                   <User /> Profile
+                </Link>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+            <SidebarMenuItem>
+              <SidebarMenuButton
+                asChild
+                isActive={pathname.startsWith(contextsHref)}
+              >
+                <Link href={contextsHref}>
+                  <BookText /> Contexts
                 </Link>
               </SidebarMenuButton>
             </SidebarMenuItem>

@@ -9,6 +9,8 @@ interface SystemPromptTemplateData {
     id: string;
     name: string;
   };
+  userGlobalContext?: string;
+  userWorkspaceContext?: string;
 }
 
 /**
@@ -59,6 +61,42 @@ export function renderUserFragment(user: { id: string; name: string }): string {
 }
 
 /**
+ * Renders user context fragments (global and workspace-specific) for the system prompt.
+ */
+export function renderUserContextFragment(
+  globalContext?: string,
+  workspaceContext?: string,
+): string {
+  const parts: string[] = [];
+
+  if (globalContext) {
+    parts.push(
+      `
+The following is general context about the user, provided inside the <userContext></userContext> XML tags. Use this context to personalize your responses.
+
+<userContext>
+${globalContext}
+</userContext>
+    `.trim(),
+    );
+  }
+
+  if (workspaceContext) {
+    parts.push(
+      `
+The following is workspace-specific context about the user, provided inside the <userWorkspaceContext></userWorkspaceContext> XML tags. Use this context when relevant to this workspace.
+
+<userWorkspaceContext>
+${workspaceContext}
+</userWorkspaceContext>
+    `.trim(),
+    );
+  }
+
+  return parts.join("\n\n");
+}
+
+/**
  * Renders the system prompt by combining workspace context and agent prompt.
  */
 export function renderSystemPrompt(data: SystemPromptTemplateData): string {
@@ -73,6 +111,14 @@ export function renderSystemPrompt(data: SystemPromptTemplateData): string {
   parts.push(renderWorkspaceFragment(data.workspaceId, data.workspaceContext));
 
   parts.push(renderUserFragment(data.user));
+
+  const userContextFragment = renderUserContextFragment(
+    data.userGlobalContext,
+    data.userWorkspaceContext,
+  );
+  if (userContextFragment) {
+    parts.push(userContextFragment);
+  }
 
   if (data.skills && data.skills.length > 0) {
     parts.push(renderSkillsFragment(data.skills));

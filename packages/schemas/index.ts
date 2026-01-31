@@ -516,3 +516,25 @@ export const orgMemberListSchema = z.object({
 });
 
 export type OrgMemberList = z.infer<typeof orgMemberListSchema>;
+
+// Context
+
+export const contextSchema = z.object({
+  id: z.string(),
+  userId: z.string(),
+  workspaceId: z.string().nullable().optional(),
+  content: z.string().min(1).max(10000),
+  createdAt: z.date(),
+  updatedAt: z.date(),
+});
+
+export type Context = z.infer<typeof contextSchema>;
+
+export const contextCreateSchema = contextSchema.pick({
+  workspaceId: true,
+  content: true,
+});
+
+export const contextUpdateSchema = contextSchema.pick({
+  content: true,
+});

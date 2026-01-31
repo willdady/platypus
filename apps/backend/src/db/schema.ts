@@ -254,3 +254,25 @@ export const skill = pgTable(
     unique("unique_skill_name_workspace").on(t.workspaceId, t.name),
   ],
 );
+
+export const context = pgTable(
+  "context",
+  (t) => ({
+    id: t.text("id").primaryKey(),
+    userId: t
+      .text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    workspaceId: t
+      .text("workspace_id")
+      .references(() => workspace.id, { onDelete: "cascade" }),
+    content: t.text("content").notNull(),
+    createdAt: t.timestamp("created_at").notNull().defaultNow(),
+    updatedAt: t.timestamp("updated_at").notNull().defaultNow(),
+  }),
+  (t) => [
+    index("idx_context_user_id").on(t.userId),
+    index("idx_context_workspace_id").on(t.workspaceId),
+    unique("unique_context_user_workspace").on(t.userId, t.workspaceId),
+  ],
+);

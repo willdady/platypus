@@ -14,6 +14,7 @@ import { orgProvider } from "./routes/org-provider.ts";
 import { invitation } from "./routes/invitation.ts";
 import { userInvitation } from "./routes/user-invitation.ts";
 import { member } from "./routes/member.ts";
+import { context } from "./routes/context.ts";
 import { organizationMember, workspaceMember } from "./db/schema.ts";
 import { logger } from "./logger.ts";
 
@@ -134,5 +135,6 @@ app.route("/organizations/:orgId/workspaces/:workspaceId/tools", tool);
 app.route("/organizations/:orgId/invitations", invitation);
 app.route("/organizations/:orgId/members", member);
 app.route("/users/me/invitations", userInvitation);
+app.route("/users/me/contexts", context);
 
 export default app;
