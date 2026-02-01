@@ -124,10 +124,6 @@ export const WorkspaceContextForm = ({ contextId }: { contextId?: string }) => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!formData.content.trim()) {
-      toast.error("Content is required");
-      return;
-    }
 
     if (!formData.workspaceId) {
       toast.error("Please select a workspace");
@@ -295,6 +291,7 @@ export const WorkspaceContextForm = ({ contextId }: { contextId?: string }) => {
             setFormData({ ...formData, content: e.target.value })
           }
           className="!font-mono"
+          maxLength={1000}
         />
       </div>
 

@@ -21,13 +21,13 @@ export function renderWorkspaceFragment(
   workspaceContext?: string,
 ): string {
   const preamble = `You are operating within the context of a workspace. The workspace id is "${workspaceId}".`;
-  if (!workspaceContext) return preamble;
+  if (!workspaceContext || !workspaceContext.trim()) return preamble;
   return `
 ${preamble}
 Context about the workspace is provided inside the <workspace></workspace> XML tags below. Use this context to inform your responses only when relevant to the user's request.
 
 <workspace>
-${workspaceContext}
+${workspaceContext.trim()}
 </workspace>
   `.trim();
 }
@@ -69,25 +69,25 @@ export function renderUserContextFragment(
 ): string {
   const parts: string[] = [];
 
-  if (globalContext) {
+  if (globalContext && globalContext.trim()) {
     parts.push(
       `
 The following is general context about the user, provided inside the <userContext></userContext> XML tags. Use this context to personalize your responses.
 
 <userContext>
-${globalContext}
+${globalContext.trim()}
 </userContext>
     `.trim(),
     );
   }
 
-  if (workspaceContext) {
+  if (workspaceContext && workspaceContext.trim()) {
     parts.push(
       `
-The following is workspace-specific context about the user, provided inside the <userWorkspaceContext></userWorkspaceContext> XML tags. Use this context when relevant to this workspace.
+The following is workspace-specific context about the user, provided inside the <userWorkspaceContext></userWorkspaceContext> XML tags. Use this context to personalize your responses.
 
 <userWorkspaceContext>
-${workspaceContext}
+${workspaceContext.trim()}
 </userWorkspaceContext>
     `.trim(),
     );

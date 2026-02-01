@@ -23,7 +23,7 @@ export const workspaceSchema = z.object({
   id: z.string(),
   organizationId: z.string(),
   name: z.string().min(3).max(30),
-  context: z.string().nullable().optional(),
+  context: z.string().max(1000).nullable().optional(),
   createdAt: z.date(),
   updatedAt: z.date(),
 });
@@ -523,7 +523,7 @@ export const contextSchema = z.object({
   id: z.string(),
   userId: z.string(),
   workspaceId: z.string().nullable().optional(),
-  content: z.string().min(1).max(10000),
+  content: z.string().min(0).max(1000),
   createdAt: z.date(),
   updatedAt: z.date(),
 });

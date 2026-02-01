@@ -216,6 +216,7 @@ const WorkspaceForm = ({
               disabled={isSubmitting}
               aria-invalid={!!validationErrors.context}
               className="!font-mono"
+              maxLength={1000}
             />
             <FieldDescription>
               Additional context about this workspace included in all chats in

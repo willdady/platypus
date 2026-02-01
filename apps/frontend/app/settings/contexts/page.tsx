@@ -8,15 +8,7 @@ import { fetcher, joinUrl } from "@/lib/utils";
 import { useBackendUrl } from "@/app/client-context";
 import { type Context } from "@platypus/schemas";
 import { ExpandableTextarea } from "@/components/expandable-textarea";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { Trash2, Globe, BookText } from "lucide-react";
+import { Globe } from "lucide-react";
 import useSWR from "swr";
 import { ContextsList } from "@/components/contexts-list";
 
@@ -38,19 +30,10 @@ const ContextsPage = () => {
     setGlobalContextContent(globalCtx?.content || "");
   }, [contexts]);
 
-  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
-  const [selectedContext, setSelectedContext] =
-    useState<ContextWithWorkspaceName | null>(null);
   const [globalContextContent, setGlobalContextContent] = useState("");
-  const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSavingGlobal, setIsSavingGlobal] = useState(false);
 
   const handleSaveGlobal = async () => {
-    if (!globalContextContent.trim()) {
-      toast.error("Content is required");
-      return;
-    }
-
     const globalCtx = contexts?.results.find((c) => !c.workspaceId);
     setIsSavingGlobal(true);
 
@@ -104,39 +87,6 @@ const ContextsPage = () => {
     }
   };
 
-  const handleDelete = async () => {
-    if (!selectedContext) return;
-
-    setIsSubmitting(true);
-    try {
-      const response = await fetch(
-        joinUrl(backendUrl, `/users/me/contexts/${selectedContext.id}`),
-        {
-          method: "DELETE",
-          credentials: "include",
-        },
-      );
-
-      if (response.ok) {
-        toast.success("Context deleted");
-        mutate();
-        setIsDeleteDialogOpen(false);
-        setSelectedContext(null);
-      } else {
-        toast.error("Failed to delete context");
-      }
-    } catch (error) {
-      toast.error("Error deleting context");
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  const openDeleteDialog = (ctx: ContextWithWorkspaceName) => {
-    setSelectedContext(ctx);
-    setIsDeleteDialogOpen(true);
-  };
-
   const globalContext = contexts?.results.find((c) => !c.workspaceId);
 
   return (
@@ -167,22 +117,12 @@ const ContextsPage = () => {
                   value={globalContextContent}
                   onChange={(e) => setGlobalContextContent(e.target.value)}
                   className="!font-mono"
+                  maxLength={1000}
                 />
                 <div className="flex items-center justify-between">
                   <Button onClick={handleSaveGlobal} disabled={isSavingGlobal}>
                     Save
                   </Button>
-                  {globalContext && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="text-destructive hover:text-destructive"
-                      onClick={() => openDeleteDialog(globalContext)}
-                    >
-                      <Trash2 className="w-4 h-4" />
-                      Delete
-                    </Button>
-                  )}
                 </div>
               </div>
             </div>
@@ -203,34 +143,6 @@ const ContextsPage = () => {
         </div>
       </div>
 
-      {/* Delete Dialog */}
-      <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Delete Context</DialogTitle>
-            <DialogDescription>
-              Are you sure you want to delete this context? This action cannot
-              be undone.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setIsDeleteDialogOpen(false)}
-              disabled={isSubmitting}
-            >
-              Cancel
-            </Button>
-            <Button
-              variant="destructive"
-              onClick={handleDelete}
-              disabled={isSubmitting}
-            >
-              Delete
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 };
