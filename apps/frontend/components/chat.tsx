@@ -362,7 +362,7 @@ export const Chat = ({
             </div>
           </div>
         </ConversationContent>
-        <ConversationScrollButton className="cursor-pointer" />
+        <ConversationScrollButton />
       </Conversation>
       <div className="grid shrink-0 gap-4 p-4">
         <div className="flex justify-center">
@@ -434,7 +434,7 @@ export const Chat = ({
                       onOpenChange={setIsAgentInfoDialogOpen}
                     >
                       <DialogTrigger asChild>
-                        <PromptInputButton className="cursor-pointer">
+                        <PromptInputButton>
                           <Info />
                         </PromptInputButton>
                       </DialogTrigger>
@@ -453,7 +453,7 @@ export const Chat = ({
                       onOpenChange={setIsSettingsDialogOpen}
                     >
                       <DialogTrigger asChild>
-                        <PromptInputButton className="cursor-pointer">
+                        <PromptInputButton>
                           <Settings2 />
                         </PromptInputButton>
                       </DialogTrigger>

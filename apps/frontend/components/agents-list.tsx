@@ -384,9 +384,7 @@ export const AgentsList = ({
             >
               Cancel
             </Button>
-            <Button className="cursor-pointer" onClick={handleCloneConfirm}>
-              Clone
-            </Button>
+            <Button onClick={handleCloneConfirm}>Clone</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

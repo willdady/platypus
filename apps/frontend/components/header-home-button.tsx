@@ -11,7 +11,7 @@ export function HeaderHomeButton() {
     <Button
       variant="ghost"
       size="icon"
-      className="size-7 cursor-pointer"
+      className="size-7"
       onClick={() => router.push("/")}
     >
       <Home className="size-4" />

@@ -204,7 +204,6 @@ const OrgInvitationsPage = () => {
               variant="outline"
               onClick={() => setInvitationToDelete(null)}
               disabled={isDeleting}
-              className="cursor-pointer"
             >
               Cancel
             </Button>
@@ -212,7 +211,6 @@ const OrgInvitationsPage = () => {
               variant="destructive"
               onClick={handleDelete}
               disabled={isDeleting}
-              className="cursor-pointer"
             >
               {isDeleting ? "Deleting..." : "Delete"}
             </Button>

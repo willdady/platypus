@@ -101,7 +101,6 @@ export function RemoveMemberDialog({
             variant="outline"
             onClick={() => onOpenChange(false)}
             disabled={isSubmitting}
-            className="cursor-pointer"
           >
             Cancel
           </Button>
@@ -109,7 +108,6 @@ export function RemoveMemberDialog({
             variant="destructive"
             onClick={handleSubmit}
             disabled={isSubmitting}
-            className="cursor-pointer"
           >
             {isSubmitting ? "Removing..." : "Remove Member"}
           </Button>

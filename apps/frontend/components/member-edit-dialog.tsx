@@ -107,14 +107,13 @@ export function MemberEditDialog({
             variant="outline"
             onClick={() => onOpenChange(false)}
             disabled={isSubmitting}
-            className="cursor-pointer"
           >
             Cancel
           </Button>
           <Button
             onClick={handleSubmit}
             disabled={isSubmitting || role === member.role}
-            className={`cursor-pointer ${isSubmitting ? "opacity-50" : ""}`}
+            className={isSubmitting ? "opacity-50" : ""}
           >
             {isSubmitting ? "Saving..." : "Save Changes"}
           </Button>

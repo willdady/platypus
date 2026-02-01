@@ -77,11 +77,7 @@ export const ChatSettingsDialog = ({
           <CollapsibleTrigger asChild>
             <div className="flex text-sm justify-between items-center">
               <span className="cursor-default">Advanced settings</span>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="cursor-pointer size-8"
-              >
+              <Button variant="ghost" size="icon" className="size-8">
                 <ChevronsUpDown />
               </Button>
             </div>
@@ -195,9 +191,7 @@ export const ChatSettingsDialog = ({
         </Collapsible>
       </div>
       <DialogFooter>
-        <Button className="cursor-pointer" onClick={onClose}>
-          Done
-        </Button>
+        <Button onClick={onClose}>Done</Button>
       </DialogFooter>
     </DialogContent>
   );

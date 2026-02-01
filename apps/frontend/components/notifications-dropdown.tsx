@@ -32,7 +32,7 @@ export function NotificationsDropdown() {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="icon" className="relative cursor-pointer">
+        <Button variant="ghost" size="icon" className="relative">
           <Bell className="h-5 w-5" />
           {count > 0 && (
             <span className="absolute -top-0 -right-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-destructive text-[10px] font-medium text-destructive-foreground">

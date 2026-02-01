@@ -40,12 +40,7 @@ export const ErrorDialog = ({
           </Alert>
         </div>
         <DialogFooter>
-          <Button
-            className="cursor-pointer"
-            onClick={() => onOpenChange(false)}
-          >
-            Ok
-          </Button>
+          <Button onClick={() => onOpenChange(false)}>Ok</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

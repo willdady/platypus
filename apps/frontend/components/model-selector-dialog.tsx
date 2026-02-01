@@ -35,7 +35,7 @@ export const ModelSelectorDialog = ({
   return (
     <ModelSelector open={isOpen} onOpenChange={onOpenChange}>
       <ModelSelectorTrigger asChild>
-        <Button variant="outline" size="sm" className="cursor-pointer">
+        <Button variant="outline" size="sm">
           {agentId
             ? selectedAgent?.name || "Select model"
             : modelId || "Select model"}

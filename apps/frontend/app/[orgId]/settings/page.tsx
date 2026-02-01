@@ -20,7 +20,7 @@ const OrgSettingsPage = () => {
           <div className="flex items-center justify-between">
             <p className="font-mono">{orgId}</p>
             <Button
-              className="cursor-pointer text-muted-foreground"
+              className="text-muted-foreground"
               variant="ghost"
               size="icon"
               onClick={() => {

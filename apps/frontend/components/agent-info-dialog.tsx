@@ -134,11 +134,7 @@ export const AgentInfoDialog = ({
           <CollapsibleTrigger asChild>
             <div className="flex text-sm justify-between items-center">
               <span className="cursor-default">Advanced settings</span>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="cursor-pointer size-8"
-              >
+              <Button variant="ghost" size="icon" className="size-8">
                 <ChevronsUpDown />
               </Button>
             </div>
@@ -186,16 +182,10 @@ export const AgentInfoDialog = ({
         </Collapsible>
       </div>
       <DialogFooter className="sm:justify-between">
-        <Button
-          variant="outline"
-          className="cursor-pointer"
-          onClick={handleEdit}
-        >
+        <Button variant="outline" onClick={handleEdit}>
           <Pencil className="size-4" /> Edit Agent
         </Button>
-        <Button className="cursor-pointer" onClick={onClose}>
-          Close
-        </Button>
+        <Button onClick={onClose}>Close</Button>
       </DialogFooter>
     </DialogContent>
   );

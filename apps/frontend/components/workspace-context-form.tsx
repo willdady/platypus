@@ -34,11 +34,7 @@ interface WorkspaceWithOrg extends Workspace {
   organizationName?: string;
 }
 
-export const WorkspaceContextForm = ({
-  contextId,
-}: {
-  contextId?: string;
-}) => {
+export const WorkspaceContextForm = ({ contextId }: { contextId?: string }) => {
   const router = useRouter();
   const backendUrl = useBackendUrl();
   const { user } = useAuth();
@@ -303,11 +299,7 @@ export const WorkspaceContextForm = ({
       </div>
 
       <div className="flex gap-2">
-        <Button
-          type="submit"
-          disabled={isSubmitting}
-          className="cursor-pointer"
-        >
+        <Button type="submit" disabled={isSubmitting}>
           {contextId ? "Update" : "Create"}
         </Button>
         {contextId && (
@@ -316,7 +308,6 @@ export const WorkspaceContextForm = ({
             variant="outline"
             onClick={() => setIsDeleteDialogOpen(true)}
             disabled={isSubmitting}
-            className="cursor-pointer"
           >
             <Trash2 className="w-4 h-4" />
             Delete
@@ -339,7 +330,6 @@ export const WorkspaceContextForm = ({
               variant="outline"
               onClick={() => setIsDeleteDialogOpen(false)}
               disabled={isDeleting}
-              className="cursor-pointer"
             >
               Cancel
             </Button>
@@ -347,7 +337,6 @@ export const WorkspaceContextForm = ({
               variant="destructive"
               onClick={handleDelete}
               disabled={isDeleting}
-              className="cursor-pointer"
             >
               Delete
             </Button>

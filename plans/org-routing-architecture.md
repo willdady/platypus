@@ -94,7 +94,7 @@ graph TD
     C --> D[Fetch workspaces for selectedOrgId]
     D --> E[Render workspace list]
     F[User clicks org in sidebar] --> C
-    
+
     style C fill:#f9f,stroke:#333
     style F fill:#ff9,stroke:#333
 ```
@@ -114,7 +114,7 @@ graph TD
     G --> H[Render workspace list]
     I[User clicks org in sidebar] --> J[Navigate to /{newOrgId}]
     J --> F
-    
+
     style D fill:#9f9,stroke:#333
     style J fill:#9f9,stroke:#333
 ```
@@ -148,6 +148,7 @@ graph TD
 ```
 
 **Key Differences from Modifying `/[orgId]/layout.tsx`**:
+
 - Using route group `(home)` keeps layout isolated
 - Won't affect `/[orgId]/workspace/*` or `/[orgId]/settings/*`
 - Clean separation - each route section has its own layout
@@ -229,34 +230,38 @@ Responsibilities:
 
 ### Supported URLs
 
-| URL Pattern | Behavior | Use Case |
-|------------|----------|----------|
-| `/` | Redirects to `/{firstOrgId}` or shows empty state | Landing page, bookmarks |
-| `/{orgId}` | Shows workspaces for org (via route group) | Direct org access |
-| `/{orgId}/create` | Create workspace form | New workspace |
-| `/{orgId}/settings` | Org settings (own layout) | Manage org |
-| `/{orgId}/workspace/{workspaceId}` | Workspace chat (own layout) | Work in workspace |
+| URL Pattern                        | Behavior                                          | Use Case                |
+| ---------------------------------- | ------------------------------------------------- | ----------------------- |
+| `/`                                | Redirects to `/{firstOrgId}` or shows empty state | Landing page, bookmarks |
+| `/{orgId}`                         | Shows workspaces for org (via route group)        | Direct org access       |
+| `/{orgId}/create`                  | Create workspace form                             | New workspace           |
+| `/{orgId}/settings`                | Org settings (own layout)                         | Manage org              |
+| `/{orgId}/workspace/{workspaceId}` | Workspace chat (own layout)                       | Work in workspace       |
 
 **Important**: The `/[orgId]` URL actually renders the `(home)/page.tsx` content, but the route group is invisible in the URL.
 
 ### Navigation Flows
 
 #### First-time User
+
 ```
 / → (no orgs) → Empty state → /create → / → /{newOrgId}
 ```
 
 #### Returning User
+
 ```
 / → /{orgId} (redirect to first/last org)
 ```
 
 #### Direct Link
+
 ```
 /{orgId} → Shows that org's workspaces immediately
 ```
 
 #### Org Switching
+
 ```
 /{orgA} → Click orgB in sidebar → /{orgB}
 ```
@@ -321,6 +326,7 @@ Responsibilities:
 ### Sidebar Behavior
 
 The [`OrgListSidebar`](apps/frontend/components/org-list-sidebar.tsx:1) only shows organizations the user has access to:
+
 - Fetches from `/organizations` (filtered by backend)
 - No client-side filtering needed
 - Backend enforces access control
@@ -328,12 +334,14 @@ The [`OrgListSidebar`](apps/frontend/components/org-list-sidebar.tsx:1) only sho
 ## State Management
 
 ### Before: Local Component State
+
 - `useState` for `selectedOrgId`
 - Lost on refresh
 - Not shareable
 - Managed by page component
 
 ### After: URL State
+
 - `params.orgId` from route
 - Persists across refreshes
 - Shareable via URL
@@ -342,29 +350,32 @@ The [`OrgListSidebar`](apps/frontend/components/org-list-sidebar.tsx:1) only sho
 ## Loading States
 
 ### Root Page `/`
+
 ```
 Loading → Fetch orgs → Redirect to first org OR show empty state
 ```
 
 ### Org Page `/[orgId]`
+
 ```
 Layout loads (with sidebar) → Page loads → Fetch workspaces → Render
 ```
 
 ### Sidebar
+
 ```
 Shows skeleton/loading → Fetch orgs → Render list with current highlighted
 ```
 
 ## Error Handling
 
-| Scenario | Handling |
-|----------|----------|
-| Invalid orgId | ProtectedRoute returns 404 |
-| No orgs | Root page shows empty state |
-| Fetch error (orgs) | Alert message at root |
-| Fetch error (workspaces) | Alert in org page |
-| Network error | Toast error message |
+| Scenario                 | Handling                    |
+| ------------------------ | --------------------------- |
+| Invalid orgId            | ProtectedRoute returns 404  |
+| No orgs                  | Root page shows empty state |
+| Fetch error (orgs)       | Alert message at root       |
+| Fetch error (workspaces) | Alert in org page           |
+| Network error            | Toast error message         |
 
 ## Implementation Sequence
 

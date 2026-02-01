@@ -29,7 +29,7 @@ export function UserMenu() {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="icon" className="size-7 cursor-pointer">
+        <Button variant="ghost" size="icon" className="size-7">
           <User className="size-4" />
         </Button>
       </DropdownMenuTrigger>

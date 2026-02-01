@@ -119,7 +119,6 @@ export function DeleteUserDialog({
             variant="outline"
             onClick={() => handleOpenChange(false)}
             disabled={isSubmitting}
-            className="cursor-pointer"
           >
             Cancel
           </Button>
@@ -127,7 +126,7 @@ export function DeleteUserDialog({
             variant="destructive"
             onClick={handleSubmit}
             disabled={isSubmitting || !isConfirmed}
-            className={`cursor-pointer ${isSubmitting ? "opacity-50" : ""}`}
+            className={isSubmitting ? "opacity-50" : ""}
           >
             {isSubmitting ? "Deleting..." : "Delete User"}
           </Button>

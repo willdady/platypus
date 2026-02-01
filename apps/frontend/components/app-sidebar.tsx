@@ -311,7 +311,7 @@ export function AppSidebar({
           <SidebarMenuItem>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <SidebarMenuButton className="cursor-pointer h-auto py-2">
+                <SidebarMenuButton className="h-auto py-2">
                   <div className="flex flex-col flex-1 items-start leading-none">
                     <span className="text-xs text-muted-foreground mb-1">
                       {orgData?.name}

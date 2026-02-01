@@ -9,7 +9,7 @@ export function BackButton({ fallbackHref }: { fallbackHref: string }) {
 
   return (
     <Button
-      className="mb-8 cursor-pointer"
+      className="mb-8"
       variant="outline"
       size="sm"
       onClick={() => {

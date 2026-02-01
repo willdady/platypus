@@ -11,7 +11,7 @@ export function HeaderBackButton() {
     <Button
       variant="ghost"
       size="icon"
-      className="size-7 cursor-pointer"
+      className="size-7"
       onClick={() => router.back()}
     >
       <ArrowLeft className="size-4" />

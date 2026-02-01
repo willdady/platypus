@@ -169,18 +169,14 @@ const ContextsPage = () => {
                   className="!font-mono"
                 />
                 <div className="flex items-center justify-between">
-                  <Button
-                    onClick={handleSaveGlobal}
-                    disabled={isSavingGlobal}
-                    className="cursor-pointer"
-                  >
+                  <Button onClick={handleSaveGlobal} disabled={isSavingGlobal}>
                     Save
                   </Button>
                   {globalContext && (
                     <Button
                       variant="ghost"
                       size="sm"
-                      className="cursor-pointer text-destructive hover:text-destructive"
+                      className="text-destructive hover:text-destructive"
                       onClick={() => openDeleteDialog(globalContext)}
                     >
                       <Trash2 className="w-4 h-4" />
@@ -198,9 +194,9 @@ const ContextsPage = () => {
           <div className="mb-4">
             <h2 className="text-lg font-semibold mb-2">Workspace Contexts</h2>
             <p className="text-sm text-muted-foreground">
-              Similar to global context, workspace context is specific to a single workspace.
-              Use them to provide information about yourself which should only apply when 
-              working in that workspace.
+              Similar to global context, workspace context is specific to a
+              single workspace. Use them to provide information about yourself
+              which should only apply when working in that workspace.
             </p>
           </div>
           <ContextsList />
@@ -222,7 +218,6 @@ const ContextsPage = () => {
               variant="outline"
               onClick={() => setIsDeleteDialogOpen(false)}
               disabled={isSubmitting}
-              className="cursor-pointer"
             >
               Cancel
             </Button>
@@ -230,7 +225,6 @@ const ContextsPage = () => {
               variant="destructive"
               onClick={handleDelete}
               disabled={isSubmitting}
-              className="cursor-pointer"
             >
               Delete
             </Button>

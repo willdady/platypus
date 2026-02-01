@@ -225,7 +225,7 @@ const Workspace = () => {
               </div>
             </div>
             <SkillsList orgId={orgId} workspaceId={workspaceId} />
-            <Button variant="outline" asChild className="cursor-pointer">
+            <Button variant="outline" asChild>
               <Link href={`/${orgId}/workspace/${workspaceId}/skills/create`}>
                 <Plus /> Create Skill
               </Link>

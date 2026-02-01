@@ -76,16 +76,10 @@ export const ConfirmDialog = ({
           </div>
         )}
         <DialogFooter>
-          <Button
-            className="cursor-pointer"
-            variant="ghost"
-            onClick={handleCancel}
-            disabled={loading}
-          >
+          <Button variant="ghost" onClick={handleCancel} disabled={loading}>
             {cancelLabel}
           </Button>
           <Button
-            className="cursor-pointer"
             variant={confirmVariant}
             onClick={onConfirm}
             disabled={loading}

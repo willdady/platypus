@@ -136,14 +136,13 @@ export function ChangePasswordDialog({
             variant="outline"
             onClick={() => handleOpenChange(false)}
             disabled={isSubmitting}
-            className="cursor-pointer"
           >
             Cancel
           </Button>
           <Button
             onClick={handleSubmit}
             disabled={isSubmitting || !newPassword}
-            className={`cursor-pointer ${isSubmitting ? "opacity-50" : ""}`}
+            className={isSubmitting ? "opacity-50" : ""}
           >
             {isSubmitting ? "Updating..." : "Update Password"}
           </Button>

@@ -7,14 +7,16 @@ Refactor the home page routing structure so that organization selection is part 
 ## Current State
 
 ### Route: `/` (Home Page)
+
 - **Component**: [`apps/frontend/app/page.tsx`](apps/frontend/app/page.tsx:1)
-- **Behavior**: 
+- **Behavior**:
   - Selected organization ID stored in local component state (`selectedOrgId`)
   - Displays organization list sidebar and workspace list
   - Cannot link directly to a specific organization
   - Currently redirects from `[orgId]/page.tsx` back to `/`
 
 ### Problems
+
 1. Organization selection state is lost on page refresh or when sharing URLs
 2. Cannot deep-link to a specific organization's workspace list
 3. Inconsistent with existing routing patterns used elsewhere in the app
@@ -22,6 +24,7 @@ Refactor the home page routing structure so that organization selection is part 
 ## Desired State
 
 ### Route: `/[orgId]` (using route group)
+
 - **Behavior**:
   - Organization is passed as route parameter
   - Isolated layout (via route group) includes organization list sidebar
@@ -30,6 +33,7 @@ Refactor the home page routing structure so that organization selection is part 
   - Does NOT affect child routes like `/[orgId]/workspace/*` or `/[orgId]/settings/*`
 
 ### Route: `/`
+
 - **Behavior**:
   - Redirects to first available organization
   - Shows empty state if no organizations exist
@@ -74,6 +78,7 @@ Root Layout (app/layout.tsx)
 **Purpose**: Display list of organizations with selection state based on route parameter
 
 **Features**:
+
 - Fetch organizations using SWR
 - Render organization list with [`SidebarMenu`](apps/frontend/components/org-settings-menu.tsx:9)
 - Highlight active organization based on [`orgId`](apps/frontend/app/[orgId]/layout.tsx:3) route param
@@ -90,6 +95,7 @@ Root Layout (app/layout.tsx)
 Route groups (using parentheses) allow us to create a layout that only applies to the org home page without affecting child routes like `/[orgId]/workspace/*` or `/[orgId]/settings/*`. The parentheses don't appear in the URL - `/[orgId]` still works as expected.
 
 **Implementation**:
+
 ```tsx
 import { Header } from "@/components/header";
 import { HeaderHomeButton } from "@/components/header-home-button";
@@ -110,9 +116,7 @@ export default async function OrgLayout({
     <ProtectedRoute requireOrgAccess>
       <SidebarProvider>
         <div className="h-screen flex flex-col w-full overflow-hidden">
-          <Header
-            leftContent={<HeaderHomeButton />}
-          />
+          <Header leftContent={<HeaderHomeButton />} />
           <div className="flex-1 flex flex-col items-center overflow-y-auto">
             <div className="flex flex-col md:flex-row w-full md:w-full lg:w-4/5 max-w-3xl py-8 px-4 md:px-0">
               {/* Fixed sidebar on desktop */}
@@ -120,9 +124,7 @@ export default async function OrgLayout({
                 <OrgListSidebar currentOrgId={orgId} />
               </div>
               {/* Content area with left margin to account for fixed sidebar */}
-              <div className="flex-1 px-3 md:ml-64">
-                {children}
-              </div>
+              <div className="flex-1 px-3 md:ml-64">{children}</div>
             </div>
             <div className="h-1 shrink-0" />
           </div>
@@ -134,9 +136,10 @@ export default async function OrgLayout({
 ```
 
 **Key Points**:
+
 - Add [`SidebarProvider`](apps/frontend/app/[orgId]/settings/layout.tsx:19) wrapper
 - Add [`Header`](apps/frontend/components/header.tsx:1) component
-- Include new [`OrgListSidebar`](apps/frontend/app/[orgId]/(home)/layout.tsx:1) component
+- Include new [`OrgListSidebar`](<apps/frontend/app/[orgId]/(home)/layout.tsx:1>) component
 - Extract `orgId` from params and pass to sidebar
 - Mirror layout structure from [`org settings layout`](apps/frontend/app/[orgId]/settings/layout.tsx:1)
 - **Isolated to home page only** - won't affect `/[orgId]/workspace/*` or `/[orgId]/settings/*`
@@ -170,17 +173,13 @@ import {
 } from "@/components/ui/empty";
 import type { Workspace, Organization } from "@platypus/schemas";
 
-export default function OrgPage({
-  params,
-}: {
-  params: { orgId: string };
-}) {
+export default function OrgPage({ params }: { params: { orgId: string } }) {
   const backendUrl = useBackendUrl();
-  
+
   // Fetch organization details
   const { data: orgData } = useSWR<Organization>(
     backendUrl ? joinUrl(backendUrl, `/organizations/${params.orgId}`) : null,
-    fetcher
+    fetcher,
   );
 
   // Fetch workspaces for this org
@@ -190,7 +189,7 @@ export default function OrgPage({
     backendUrl
       ? joinUrl(backendUrl, `/organizations/${params.orgId}/workspaces`)
       : null,
-    fetcher
+    fetcher,
   );
 
   const workspaces = workspacesData?.results || [];
@@ -221,8 +220,8 @@ export default function OrgPage({
             </EmptyMedia>
             <EmptyTitle>No workspaces found</EmptyTitle>
             <EmptyDescription>
-              Create your first workspace in this organization to start
-              building agents.
+              Create your first workspace in this organization to start building
+              agents.
             </EmptyDescription>
           </EmptyHeader>
           <EmptyContent>
@@ -247,6 +246,7 @@ export default function OrgPage({
 ```
 
 **Key Changes**:
+
 - Remove redirect
 - Move workspace list rendering from root page
 - Use `params.orgId` from route instead of state
@@ -258,6 +258,7 @@ export default function OrgPage({
 **File**: [`apps/frontend/app/page.tsx`](apps/frontend/app/page.tsx:1)
 
 **New Implementation**:
+
 ```tsx
 "use client";
 
@@ -290,7 +291,7 @@ export default function Home() {
 
   const { data, error, isLoading } = useSWR<{ results: Organization[] }>(
     backendUrl && user ? joinUrl(backendUrl, "/organizations") : null,
-    fetcher
+    fetcher,
   );
 
   const organizations = data?.results || [];
@@ -350,8 +351,8 @@ export default function Home() {
                 </EmptyMedia>
                 <EmptyTitle>No organizations found</EmptyTitle>
                 <EmptyDescription>
-                  Get started by creating your first organization to manage
-                  your workspaces and agents.
+                  Get started by creating your first organization to manage your
+                  workspaces and agents.
                 </EmptyDescription>
               </EmptyHeader>
               <EmptyContent>
@@ -378,6 +379,7 @@ export default function Home() {
 ```
 
 **Key Changes**:
+
 - Remove organization sidebar and workspace list rendering
 - Add redirect to first organization when organizations exist
 - Keep empty state for when user has no organizations
@@ -387,6 +389,7 @@ export default function Home() {
 ### 5. Check for Navigation Link Updates
 
 **Files to Review**:
+
 - Any components linking to root `/` that should link to specific org
 - Verify all org-based navigation still works
 
@@ -395,33 +398,40 @@ export default function Home() {
 ### 6. Edge Cases & Error Handling
 
 #### No Organizations
+
 - **Current**: Shows empty state at `/`
 - **New**: Same behavior at `/`, attempts to access `/[orgId]` return 404
 
 #### Invalid orgId
+
 - **Handled by**: Existing [`ProtectedRoute`](apps/frontend/components/protected-route.tsx:1) with `requireOrgAccess`
 - Shows 404 if orgId doesn't exist or user lacks access
 
 #### Loading States
+
 - **Root page**: Shows spinner while checking for orgs, then redirects
 - **Org page**: Layout loads first, sidebar shows loading state while fetching orgs
 - **Workspace list**: Shows loading state while fetching workspaces
 
 #### Direct Links
+
 - **`/[orgId]`**: Works immediately, shows selected org's workspaces
 - **`/`**: Redirects to first org (consistent behavior)
 
 ## File Changes Summary
 
 ### New Files
+
 - [`apps/frontend/components/org-list-sidebar.tsx`](apps/frontend/components/org-list-sidebar.tsx:1) - Organization list sidebar component
 
 ### Modified Files
+
 - [`apps/frontend/app/page.tsx`](apps/frontend/app/page.tsx:1) - Simplified to redirect or show empty state
 - [`apps/frontend/app/[orgId]/layout.tsx`](apps/frontend/app/[orgId]/layout.tsx:1) - Add sidebar and header structure
 - [`apps/frontend/app/[orgId]/page.tsx`](apps/frontend/app/[orgId]/page.tsx:1) - Display workspace list (moved from root)
 
 ### Navigation Impact
+
 - Links to `/` in workspace breadcrumbs should work (redirects to first org)
 - Links to `/${orgId}` now work as expected
 - Direct deep links to specific orgs now possible

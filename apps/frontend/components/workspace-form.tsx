@@ -230,7 +230,6 @@ const WorkspaceForm = ({
 
       <div className="flex gap-2">
         <Button
-          className="cursor-pointer"
           onClick={handleSubmit}
           disabled={isSubmitting || Object.keys(validationErrors).length > 0}
         >
@@ -239,7 +238,6 @@ const WorkspaceForm = ({
 
         {workspaceId && (
           <Button
-            className="cursor-pointer"
             variant="outline"
             onClick={() => {
               setIsDeleteDialogOpen(true);
@@ -290,7 +288,6 @@ const WorkspaceForm = ({
           </DialogHeader>
           <DialogFooter>
             <Button
-              className="cursor-pointer"
               variant="outline"
               onClick={() => setIsDeleteDialogOpen(false)}
               disabled={isDeleting}
@@ -298,7 +295,6 @@ const WorkspaceForm = ({
               Cancel
             </Button>
             <Button
-              className="cursor-pointer"
               variant="destructive"
               onClick={handleDelete}
               disabled={

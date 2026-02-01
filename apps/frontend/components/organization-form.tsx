@@ -174,7 +174,6 @@ const OrganizationForm = ({ classNames, orgId }: OrganizationFormProps) => {
 
       <div className="flex gap-2">
         <Button
-          className="cursor-pointer"
           onClick={handleSubmit}
           disabled={isSubmitting || Object.keys(validationErrors).length > 0}
         >
@@ -183,7 +182,6 @@ const OrganizationForm = ({ classNames, orgId }: OrganizationFormProps) => {
 
         {orgId && (
           <Button
-            className="cursor-pointer"
             variant="outline"
             onClick={() => {
               setIsDeleteDialogOpen(true);
@@ -234,7 +232,6 @@ const OrganizationForm = ({ classNames, orgId }: OrganizationFormProps) => {
           </DialogHeader>
           <DialogFooter>
             <Button
-              className="cursor-pointer"
               variant="outline"
               onClick={() => setIsDeleteDialogOpen(false)}
               disabled={isDeleting}
@@ -242,7 +239,6 @@ const OrganizationForm = ({ classNames, orgId }: OrganizationFormProps) => {
               Cancel
             </Button>
             <Button
-              className="cursor-pointer"
               variant="destructive"
               onClick={handleDelete}
               disabled={
