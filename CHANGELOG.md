@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.23.1](https://github.com/willdady/platypus/compare/v1.23.0...v1.23.1) (2026-02-01)
+
+
+### Bug Fixes
+
+* add missing database migration files ([a7e42f8](https://github.com/willdady/platypus/commit/a7e42f859975c8fec18dd410f0754ed4ed790e78))
+
 ## [1.23.0](https://github.com/willdady/platypus/compare/v1.22.0...v1.23.0) (2026-02-01)
 
 
