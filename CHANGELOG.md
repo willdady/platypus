@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.24.0](https://github.com/willdady/platypus/compare/v1.23.1...v1.24.0) (2026-02-01)
+
+
+### Features
+
+* allow empty context and enforce 1000 char limit ([c4e1398](https://github.com/willdady/platypus/commit/c4e13981b08982c8fb3a84d659c284fb1a58f088))
+
 ## [1.23.1](https://github.com/willdady/platypus/compare/v1.23.0...v1.23.1) (2026-02-01)
 
 
