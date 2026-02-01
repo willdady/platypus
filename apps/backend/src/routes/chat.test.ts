@@ -100,7 +100,7 @@ describe("Chat Routes", () => {
 
   describe("POST /", () => {
     it("should start a chat stream", async () => {
-      mockSession();
+      mockSession({ id: "user-1", name: "Test User", email: "test@example.com" });
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
       mockDb.limit.mockResolvedValueOnce([{ role: "viewer" }]); // requireWorkspaceAccess
 
@@ -121,6 +121,13 @@ describe("Chat Routes", () => {
           workspaceId,
         },
       ]);
+
+      // Mock .where() calls in sequence - first 4 return mockDb for chaining, 5th returns the promise
+      mockDb.where.mockReturnValueOnce(mockDb); // requireOrgAccess
+      mockDb.where.mockReturnValueOnce(mockDb); // requireWorkspaceAccess
+      mockDb.where.mockReturnValueOnce(mockDb); // fetch workspace
+      mockDb.where.mockReturnValueOnce(mockDb); // resolveChatContext
+      mockDb.where.mockReturnValueOnce(Promise.resolve([])); // fetch user contexts (final call)
 
       const res = await app.request(baseUrl, {
         method: "POST",
@@ -171,7 +178,7 @@ describe("Chat Routes", () => {
         body: JSON.stringify({
           title: "Updated Title",
           workspaceId,
-          isStarred: true,
+          isPinned: true,
         }),
         headers: { "Content-Type": "application/json" },
       });
