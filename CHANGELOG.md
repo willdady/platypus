@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.23.0](https://github.com/willdady/platypus/compare/v1.22.0...v1.23.0) (2026-02-01)
+
+
+### Features
+
+* add user context management system ([1bce7c3](https://github.com/willdady/platypus/commit/1bce7c308e6b7cf9475ac5c9b23e0a5b374b7747))
+
+
+### Bug Fixes
+
+* **backend:** failing test ([ba88e2d](https://github.com/willdady/platypus/commit/ba88e2d6242bb481bd3421016059c7e9686a7e29))
+* **frontend:** links in chat messages now render with cursor pointer ([2fb183c](https://github.com/willdady/platypus/commit/2fb183cd72080a6ae97da4c5f39e2daa53147f32))
+* **frontend:** now setting button cursor style globally ([7700fca](https://github.com/willdady/platypus/commit/7700fca7d9cec6b9f81b6a36d16d10294b362570))
+
 ## [1.22.0](https://github.com/willdady/platypus/compare/v1.21.1...v1.22.0) (2026-01-29)
 
 
