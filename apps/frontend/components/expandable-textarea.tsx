@@ -30,7 +30,6 @@ function ExpandableTextarea({
 }: ExpandableTextareaProps) {
   const [isExpanded, setIsExpanded] = React.useState(false);
   const textareaRef = React.useRef<HTMLTextAreaElement>(null);
-  const layoutId = React.useId();
   const currentLength = typeof value === "string" ? value.length : 0;
 
   const toggleExpand = () => setIsExpanded(!isExpanded);
@@ -93,12 +92,7 @@ function ExpandableTextarea({
           </div>
         )}
         {!isExpanded && (
-          <motion.div
-            layoutId={layoutId}
-            initial={false}
-            transition={{ duration: 0.2 }}
-            className="w-full relative"
-          >
+          <div className="w-full relative">
             {renderTextarea(false)}
             {!label && expandable && (
               <div className="absolute top-2 right-2 flex gap-1">
@@ -115,7 +109,7 @@ function ExpandableTextarea({
               </div>
             )}
             {counterElement}
-          </motion.div>
+          </div>
         )}
         {isExpanded && (
           <div className="invisible">
@@ -146,9 +140,11 @@ function ExpandableTextarea({
                   onClick={toggleExpand}
                 />
                 <motion.div
-                  layoutId={layoutId}
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.95 }}
                   transition={{ duration: 0.2 }}
-                  onLayoutAnimationComplete={() => {
+                  onAnimationComplete={() => {
                     if (isExpanded) {
                       textareaRef.current?.focus();
                     }
