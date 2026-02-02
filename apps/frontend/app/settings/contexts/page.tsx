@@ -51,7 +51,7 @@ const ContextsPage = () => {
         );
 
         if (response.ok) {
-          toast.success("Global context updated");
+          toast.success("Global context saved");
           mutate();
         } else {
           toast.error("Failed to update context");
@@ -72,7 +72,7 @@ const ContextsPage = () => {
         );
 
         if (response.ok) {
-          toast.success("Global context created");
+          toast.success("Global context saved");
           mutate();
         } else if (response.status === 409) {
           toast.error("You already have a global context");

@@ -4,7 +4,12 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { Label } from "@/components/ui/label";
+import {
+  Field,
+  FieldLabel,
+  FieldGroup,
+  FieldSet,
+} from "@/components/ui/field";
 import {
   Select,
   SelectContent,
@@ -214,86 +219,89 @@ export const WorkspaceContextForm = ({ contextId }: { contextId?: string }) => {
   );
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-6">
-      {contextId ? (
-        <>
-          <div className="space-y-2">
-            <Label>Organization</Label>
-            <div className="text-sm font-medium">
-              {selectedWorkspace?.organizationName || "Unknown Organization"}
-            </div>
-          </div>
-          <div className="space-y-2">
-            <Label>Workspace</Label>
-            <div className="text-sm font-medium">
-              {selectedWorkspace?.name || "Unknown Workspace"}
-            </div>
-          </div>
-        </>
-      ) : (
-        <div className="space-y-2">
-          <Label htmlFor="workspace">Workspace</Label>
-          <Select
-            value={formData.workspaceId}
-            onValueChange={(value) =>
-              setFormData({ ...formData, workspaceId: value })
-            }
-          >
-            <SelectTrigger className="cursor-pointer">
-              <SelectValue placeholder="Select workspace" />
-            </SelectTrigger>
-            <SelectContent>
-              {(() => {
-                // Group workspaces by organization
-                const groupedWorkspaces = availableWorkspaces.reduce(
-                  (acc, workspace) => {
-                    const orgName =
-                      workspace.organizationName || "Unknown Organization";
-                    if (!acc[orgName]) {
-                      acc[orgName] = [];
-                    }
-                    acc[orgName].push(workspace);
-                    return acc;
-                  },
-                  {} as Record<string, WorkspaceWithOrg[]>,
-                );
+    <form onSubmit={handleSubmit}>
+      <FieldSet className="mb-6">
+        <FieldGroup className="gap-4">
+          {contextId ? (
+            <>
+              <Field>
+                <FieldLabel>Organization</FieldLabel>
+                <div className="text-sm font-medium">
+                  {selectedWorkspace?.organizationName || "Unknown Organization"}
+                </div>
+              </Field>
+              <Field>
+                <FieldLabel>Workspace</FieldLabel>
+                <div className="text-sm font-medium">
+                  {selectedWorkspace?.name || "Unknown Workspace"}
+                </div>
+              </Field>
+            </>
+          ) : (
+            <Field>
+              <FieldLabel htmlFor="workspace">Workspace</FieldLabel>
+              <Select
+                value={formData.workspaceId}
+                onValueChange={(value) =>
+                  setFormData({ ...formData, workspaceId: value })
+                }
+              >
+                <SelectTrigger className="cursor-pointer">
+                  <SelectValue placeholder="Select workspace" />
+                </SelectTrigger>
+                <SelectContent>
+                  {(() => {
+                    // Group workspaces by organization
+                    const groupedWorkspaces = availableWorkspaces.reduce(
+                      (acc, workspace) => {
+                        const orgName =
+                          workspace.organizationName || "Unknown Organization";
+                        if (!acc[orgName]) {
+                          acc[orgName] = [];
+                        }
+                        acc[orgName].push(workspace);
+                        return acc;
+                      },
+                      {} as Record<string, WorkspaceWithOrg[]>,
+                    );
 
-                return Object.entries(groupedWorkspaces).map(
-                  ([orgName, orgWorkspaces]) => (
-                    <SelectGroup key={orgName}>
-                      <SelectLabel>{orgName}</SelectLabel>
-                      {orgWorkspaces.map((workspace) => (
-                        <SelectItem
-                          key={workspace.id}
-                          value={workspace.id}
-                          className="cursor-pointer"
-                        >
-                          {workspace.name}
-                        </SelectItem>
-                      ))}
-                    </SelectGroup>
-                  ),
-                );
-              })()}
-            </SelectContent>
-          </Select>
-        </div>
-      )}
+                    return Object.entries(groupedWorkspaces).map(
+                      ([orgName, orgWorkspaces]) => (
+                        <SelectGroup key={orgName}>
+                          <SelectLabel>{orgName}</SelectLabel>
+                          {orgWorkspaces.map((workspace) => (
+                            <SelectItem
+                              key={workspace.id}
+                              value={workspace.id}
+                              className="cursor-pointer"
+                            >
+                              {workspace.name}
+                            </SelectItem>
+                          ))}
+                        </SelectGroup>
+                      ),
+                    );
+                  })()}
+                </SelectContent>
+              </Select>
+            </Field>
+          )}
 
-      <div className="space-y-2">
-        <Label htmlFor="content">Content</Label>
-        <ExpandableTextarea
-          id="content"
-          label=""
-          placeholder="Enter project-specific context, team conventions, or workspace instructions..."
-          value={formData.content}
-          onChange={(e) =>
-            setFormData({ ...formData, content: e.target.value })
-          }
-          className="!font-mono"
-          maxLength={1000}
-        />
-      </div>
+          <Field>
+            <ExpandableTextarea
+              id="content"
+              label="Content"
+              placeholder="Enter project-specific context, team conventions, or workspace instructions..."
+              value={formData.content}
+              onChange={(e) =>
+                setFormData({ ...formData, content: e.target.value })
+              }
+              className="!font-mono"
+              maxLength={1000}
+            />
+          </Field>
+        </FieldGroup>
+      </FieldSet>
 
       <div className="flex gap-2">
         <Button type="submit" disabled={isSubmitting}>

@@ -95,6 +95,7 @@ function ExpandableTextarea({
         {!isExpanded && (
           <motion.div
             layoutId={layoutId}
+            initial={false}
             transition={{ duration: 0.2 }}
             className="w-full relative"
           >
