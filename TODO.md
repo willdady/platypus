@@ -69,3 +69,5 @@
 [ ] Add built-in memory tool. Memory should be per-agent. Consider a workspace scoped memory tool also?
 [ ] Consider configuring the "task" model at the workspace level
 [ ] Bug: consider sanitising file names when using the Bedrock provider - https://github.com/vercel/ai/issues/11518#issuecomment-3731765347
+[ ] Bug: Textarea expand button currently overlaps text in the Textarea
+[ ] Bug: When clicking Save on the global context field the toast popup says "created" the first time the "updated" on subsequent saves. It should be the same text in both cases.
