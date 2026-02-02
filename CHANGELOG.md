@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.24.1](https://github.com/willdady/platypus/compare/v1.24.0...v1.24.1) (2026-02-02)
+
+
+### Bug Fixes
+
+* **frontend:** expandable textareas no longer occaisionally animate on mount ([d2d8c5e](https://github.com/willdady/platypus/commit/d2d8c5e32a25159dd65f0b4e7c35f5dfa740ae45))
+* resolve multiple UI issues and improve form components ([11937d5](https://github.com/willdady/platypus/commit/11937d5b46713508061b5dbd8de74937104b0da7))
+
 ## [1.24.0](https://github.com/willdady/platypus/compare/v1.23.1...v1.24.0) (2026-02-01)
 
 
