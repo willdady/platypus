@@ -70,3 +70,4 @@
 [ ] Add built-in memory tool. Memory should be per-agent. Consider a workspace scoped memory tool also?
 [ ] Consider configuring the "task" model at the workspace level
 [ ] Bug: consider sanitising file names when using the Bedrock provider - https://github.com/vercel/ai/issues/11518#issuecomment-3731765347
+[ ] Update tagging prompt to remove low-quality or ambiguous words
