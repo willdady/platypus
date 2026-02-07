@@ -213,6 +213,29 @@ On first startup, the backend automatically creates:
 
 These credentials allow immediate access without requiring sign-up. The password should be changed after first login.
 
+### Git Commit Standards
+
+This project follows [Conventional Commits](https://www.conventionalcommits.org/) standards with **strict type restrictions**:
+
+**Allowed commit types:**
+- `feat`: New features or functionality
+- `fix`: Bug fixes
+- `chore`: Maintenance tasks (formatting, dependencies, etc.)
+
+**Format:** `<type>[optional scope]: <description>`
+
+**Examples:**
+```
+feat: add user authentication
+feat(backend): implement JWT token refresh
+fix: resolve memory leak in chat component
+fix(frontend): correct workspace navigation
+chore: update dependencies
+chore(tests): add missing test coverage
+```
+
+**Important:** Only use `feat`, `fix`, or `chore` as commit type prefixes. Optional scopes (e.g., `backend`, `frontend`, `api`) may be added in parentheses.
+
 ## Known Constraints
 
 - Postgres 18 is NOT supported due to Drizzle ORM compatibility issues
