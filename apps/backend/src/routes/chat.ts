@@ -720,13 +720,28 @@ chat.post(
     }
     const chat = chatRecord[0];
 
+    // Fetch workspace to check for task model provider override
+    const workspaceRecord = await db
+      .select()
+      .from(workspaceTable)
+      .where(eq(workspaceTable.id, workspaceId))
+      .limit(1);
+
+    if (workspaceRecord.length === 0) {
+      return c.json({ message: "Workspace not found" }, 404);
+    }
+    const workspace = workspaceRecord[0];
+
+    // Use workspace task model provider if set, otherwise use request providerId
+    const effectiveProviderId = workspace.taskModelProviderId || providerId;
+
     // Fetch provider record
     const providerRecord = await db
       .select()
       .from(providerTable)
       .where(
         and(
-          eq(providerTable.id, providerId),
+          eq(providerTable.id, effectiveProviderId),
           or(
             eq(providerTable.workspaceId, workspaceId),
             eq(providerTable.organizationId, orgId),

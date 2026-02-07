@@ -12,6 +12,13 @@ import { Input } from "@/components/ui/input";
 import { ExpandableTextarea } from "@/components/expandable-textarea";
 import { Button } from "@/components/ui/button";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -21,7 +28,7 @@ import {
 } from "@/components/ui/dialog";
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { type Workspace } from "@platypus/schemas";
+import { type Workspace, type Provider } from "@platypus/schemas";
 import { fetcher, parseValidationErrors, joinUrl } from "@/lib/utils";
 import { useBackendUrl } from "@/app/client-context";
 import { useAuth } from "@/components/auth-provider";
@@ -52,9 +59,22 @@ const WorkspaceForm = ({
     fetcher,
   );
 
+  // Fetch providers
+  const { data: providersData } = useSWR<{ results: Provider[] }>(
+    workspaceId && user
+      ? joinUrl(
+          backendUrl,
+          `/organizations/${orgId}/workspaces/${workspaceId}/providers`,
+        )
+      : null,
+    fetcher,
+  );
+  const providers = providersData?.results || [];
+
   const [formData, setFormData] = useState({
     name: "",
     context: "",
+    taskModelProviderId: null as string | null,
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [validationErrors, setValidationErrors] = useState<
@@ -70,6 +90,7 @@ const WorkspaceForm = ({
       setFormData({
         name: workspace.name,
         context: workspace.context || "",
+        taskModelProviderId: workspace.taskModelProviderId || null,
       });
     }
   }, [workspace]);
@@ -110,7 +131,11 @@ const WorkspaceForm = ({
       const method = workspaceId ? "PUT" : "POST";
 
       const payload = workspaceId
-        ? { name: formData.name, context: formData.context || null }
+        ? {
+            name: formData.name,
+            context: formData.context || null,
+            taskModelProviderId: formData.taskModelProviderId,
+          }
         : {
             organizationId: orgId,
             name: formData.name,
@@ -226,6 +251,43 @@ const WorkspaceForm = ({
               <FieldError>{validationErrors.context}</FieldError>
             )}
           </Field>
+
+          {workspaceId && (
+            <Field data-invalid={!!validationErrors.taskModelProviderId}>
+              <FieldLabel htmlFor="taskModelProviderId">
+                Task Model Provider
+              </FieldLabel>
+              <Select
+                value={formData.taskModelProviderId || "none"}
+                onValueChange={(value) => {
+                  setFormData((prevData) => ({
+                    ...prevData,
+                    taskModelProviderId: value === "none" ? null : value,
+                  }));
+                }}
+                disabled={isSubmitting}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select a provider" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">None (use chat provider)</SelectItem>
+                  {providers.map((provider) => (
+                    <SelectItem key={provider.id} value={provider.id}>
+                      {provider.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <FieldDescription>
+                Provider to use for generating chat titles and tags. If not set,
+                each chat will use its own provider for metadata generation.
+              </FieldDescription>
+              {validationErrors.taskModelProviderId && (
+                <FieldError>{validationErrors.taskModelProviderId}</FieldError>
+              )}
+            </Field>
+          )}
         </FieldGroup>
       </FieldSet>
 

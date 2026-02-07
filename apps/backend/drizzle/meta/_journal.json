@@ -57,6 +57,13 @@
       "when": 1769921086784,
       "tag": "0007_round_whistler",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1770427655289,
+      "tag": "0008_dry_major_mapleleaf",
+      "breakpoints": true
     }
   ]
 }

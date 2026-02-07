@@ -24,6 +24,7 @@ export const workspaceSchema = z.object({
   organizationId: z.string(),
   name: z.string().min(3).max(30),
   context: z.string().max(1000).nullable().optional(),
+  taskModelProviderId: z.string().nullable().optional(),
   createdAt: z.date(),
   updatedAt: z.date(),
 });
@@ -39,6 +40,7 @@ export const workspaceCreateSchema = workspaceSchema.pick({
 export const workspaceUpdateSchema = workspaceSchema.pick({
   name: true,
   context: true,
+  taskModelProviderId: true,
 });
 
 // Chat

@@ -11,6 +11,40 @@ export const organization = pgTable("organization", (t) => ({
   updatedAt: t.timestamp("updated_at").notNull().defaultNow(),
 }));
 
+// Provider defined before workspace to avoid circular reference with task_model_provider_id
+// The workspace_id FK will be added after workspace is defined
+export const provider = pgTable(
+  "provider",
+  (t) => ({
+    id: t.text("id").primaryKey(),
+    organizationId: t
+      .text("organization_id")
+      .references(() => organization.id, {
+        onDelete: "cascade",
+      }),
+    workspaceId: t.text("workspace_id"),
+    name: t.text("name").notNull(),
+    providerType: t.text("provider_type").notNull(),
+    apiKey: t.text("api_key").notNull(),
+    region: t.text("region"),
+    baseUrl: t.text("base_url"),
+    headers: t.jsonb().$type<Record<string, string>>(),
+    extraBody: t.jsonb().$type<Record<string, unknown>>(),
+    organization: t.text("organization"),
+    project: t.text("project"),
+    modelIds: t.jsonb().$type<string[]>().notNull(),
+    taskModelId: t.text("task_model_id").notNull(),
+    createdAt: t.timestamp("created_at").notNull().defaultNow(),
+    updatedAt: t.timestamp("updated_at").notNull().defaultNow(),
+  }),
+  (t) => [
+    index("idx_provider_workspace_id").on(t.workspaceId),
+    index("idx_provider_organization_id").on(t.organizationId),
+    unique("unique_provider_name_org").on(t.organizationId, t.name),
+    unique("unique_provider_name_workspace").on(t.workspaceId, t.name),
+  ],
+);
+
 export const workspace = pgTable(
   "workspace",
   (t) => ({
@@ -23,6 +57,11 @@ export const workspace = pgTable(
       }),
     name: t.text("name").notNull(),
     context: t.text("context"),
+    taskModelProviderId: t
+      .text("task_model_provider_id")
+      .references(() => provider.id, {
+        onDelete: "set null",
+      }),
     createdAt: t.timestamp("created_at").notNull().defaultNow(),
     updatedAt: t.timestamp("updated_at").notNull().defaultNow(),
   }),
@@ -116,40 +155,6 @@ export const mcp = pgTable(
     updatedAt: t.timestamp("updated_at").notNull().defaultNow(),
   }),
   (t) => [index("idx_mcp_workspace_id").on(t.workspaceId)],
-);
-
-export const provider = pgTable(
-  "provider",
-  (t) => ({
-    id: t.text("id").primaryKey(),
-    organizationId: t
-      .text("organization_id")
-      .references(() => organization.id, {
-        onDelete: "cascade",
-      }),
-    workspaceId: t.text("workspace_id").references(() => workspace.id, {
-      onDelete: "cascade",
-    }),
-    name: t.text("name").notNull(),
-    providerType: t.text("provider_type").notNull(),
-    apiKey: t.text("api_key").notNull(),
-    region: t.text("region"),
-    baseUrl: t.text("base_url"),
-    headers: t.jsonb().$type<Record<string, string>>(),
-    extraBody: t.jsonb().$type<Record<string, unknown>>(),
-    organization: t.text("organization"),
-    project: t.text("project"),
-    modelIds: t.jsonb().$type<string[]>().notNull(),
-    taskModelId: t.text("task_model_id").notNull(),
-    createdAt: t.timestamp("created_at").notNull().defaultNow(),
-    updatedAt: t.timestamp("updated_at").notNull().defaultNow(),
-  }),
-  (t) => [
-    index("idx_provider_workspace_id").on(t.workspaceId),
-    index("idx_provider_organization_id").on(t.organizationId),
-    unique("unique_provider_name_org").on(t.organizationId, t.name),
-    unique("unique_provider_name_workspace").on(t.workspaceId, t.name),
-  ],
 );
 
 // Organization membership - links users to organizations with roles

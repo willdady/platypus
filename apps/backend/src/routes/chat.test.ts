@@ -100,7 +100,11 @@ describe("Chat Routes", () => {
 
   describe("POST /", () => {
     it("should start a chat stream", async () => {
-      mockSession({ id: "user-1", name: "Test User", email: "test@example.com" });
+      mockSession({
+        id: "user-1",
+        name: "Test User",
+        email: "test@example.com",
+      });
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
       mockDb.limit.mockResolvedValueOnce([{ role: "viewer" }]); // requireWorkspaceAccess
 
@@ -195,6 +199,10 @@ describe("Chat Routes", () => {
 
       // Fetch chat
       mockDb.limit.mockResolvedValueOnce([{ id: "chat-1", messages: [] }]);
+      // Fetch workspace (no task model provider override)
+      mockDb.limit.mockResolvedValueOnce([
+        { id: workspaceId, taskModelProviderId: null },
+      ]);
       // Fetch provider
       mockDb.limit.mockResolvedValueOnce([
         {
@@ -202,6 +210,44 @@ describe("Chat Routes", () => {
           providerType: "OpenAI",
           taskModelId: "m1",
           modelIds: ["m1"],
+        },
+      ]);
+
+      const mockUpdatedChat = {
+        id: "chat-1",
+        title: "Generated Title",
+        tags: ["tag1", "tag2"],
+      };
+      mockDb.returning.mockResolvedValueOnce([mockUpdatedChat]);
+
+      const res = await app.request(`${baseUrl}/chat-1/generate-metadata`, {
+        method: "POST",
+        body: JSON.stringify({ providerId: "p1" }),
+        headers: { "Content-Type": "application/json" },
+      });
+
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual(mockUpdatedChat);
+    });
+
+    it("should use workspace taskModelProviderId when set", async () => {
+      mockSession();
+      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
+      mockDb.limit.mockResolvedValueOnce([{ role: "viewer" }]); // requireWorkspaceAccess
+
+      // Fetch chat
+      mockDb.limit.mockResolvedValueOnce([{ id: "chat-1", messages: [] }]);
+      // Fetch workspace (with task model provider override)
+      mockDb.limit.mockResolvedValueOnce([
+        { id: workspaceId, taskModelProviderId: "p2" },
+      ]);
+      // Fetch provider - should use p2 from workspace, not p1 from request
+      mockDb.limit.mockResolvedValueOnce([
+        {
+          id: "p2",
+          providerType: "OpenAI",
+          taskModelId: "m2",
+          modelIds: ["m2"],
         },
       ]);
 
