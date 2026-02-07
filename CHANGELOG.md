@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.25.0](https://github.com/willdady/platypus/compare/v1.24.1...v1.25.0) (2026-02-07)
+
+
+### Features
+
+* add workspace-level task model provider configuration ([3dc91aa](https://github.com/willdady/platypus/commit/3dc91aa8715b58ec0427aef0d8defa2f9c7f9279))
+* **backend:** updated metadata prompt to avoid ambiguous tag words ([a392ee1](https://github.com/willdady/platypus/commit/a392ee10a666d5f88dcf348ea71fb5732f0bf562))
+
 ## [1.24.1](https://github.com/willdady/platypus/compare/v1.24.0...v1.24.1) (2026-02-02)
 
 
