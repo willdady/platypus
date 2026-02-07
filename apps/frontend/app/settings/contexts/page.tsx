@@ -142,7 +142,6 @@ const ContextsPage = () => {
           <ContextsList />
         </div>
       </div>
-
     </div>
   );
 };

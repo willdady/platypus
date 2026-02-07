@@ -4,12 +4,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import {
-  Field,
-  FieldLabel,
-  FieldGroup,
-  FieldSet,
-} from "@/components/ui/field";
+import { Field, FieldLabel, FieldGroup, FieldSet } from "@/components/ui/field";
 import {
   Select,
   SelectContent,
@@ -129,7 +124,6 @@ export const WorkspaceContextForm = ({ contextId }: { contextId?: string }) => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-
     if (!formData.workspaceId) {
       toast.error("Please select a workspace");
       return;
@@ -227,7 +221,8 @@ export const WorkspaceContextForm = ({ contextId }: { contextId?: string }) => {
               <Field>
                 <FieldLabel>Organization</FieldLabel>
                 <div className="text-sm font-medium">
-                  {selectedWorkspace?.organizationName || "Unknown Organization"}
+                  {selectedWorkspace?.organizationName ||
+                    "Unknown Organization"}
                 </div>
               </Field>
               <Field>
