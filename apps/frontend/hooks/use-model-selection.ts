@@ -14,6 +14,7 @@ export const useModelSelection = (
   agents: Agent[],
   isLoading: boolean = false,
   workspaceId: string,
+  isSubAgentMode: boolean = false,
 ) => {
   const [agentId, setAgentId] = useState("");
   const [modelId, setModelId] = useState("");
@@ -144,8 +145,9 @@ export const useModelSelection = (
     STORAGE_KEY,
   ]);
 
-  // Persist selection to localStorage when it changes
+  // Persist selection to localStorage when it changes (skip for sub-agent chats)
   useEffect(() => {
+    if (isSubAgentMode) return;
     if (!agentId && !providerId && !modelId) return; // Don't save empty state
 
     if (agentId) {
@@ -153,7 +155,7 @@ export const useModelSelection = (
     } else if (providerId && modelId) {
       setWithExpiry(STORAGE_KEY, { type: "provider", providerId, modelId });
     }
-  }, [agentId, providerId, modelId, STORAGE_KEY]);
+  }, [agentId, providerId, modelId, STORAGE_KEY, isSubAgentMode]);
 
   const selection: ModelSelection = {
     agentId,

@@ -12,6 +12,7 @@ import {
   requireWorkspaceAccess,
 } from "../middleware/authorization.ts";
 import type { Variables } from "../server.ts";
+import { validateSubAgentAssignment } from "../services/sub-agent-validation.ts";
 
 const agent = new Hono<{ Variables: Variables }>();
 
@@ -24,12 +25,31 @@ agent.post(
   sValidator("json", agentCreateSchema),
   async (c) => {
     const data = c.req.valid("json");
+    const workspaceId = c.req.param("workspaceId")!;
+
+    // Deduplicate arrays
     if (data.toolSetIds) {
       data.toolSetIds = dedupeArray(data.toolSetIds);
     }
     if (data.skillIds) {
       data.skillIds = dedupeArray(data.skillIds);
     }
+    if (data.subAgentIds) {
+      data.subAgentIds = dedupeArray(data.subAgentIds);
+    }
+
+    // Validate sub-agent assignments
+    if (data.subAgentIds && data.subAgentIds.length > 0) {
+      const validation = await validateSubAgentAssignment(
+        workspaceId,
+        "", // No ID yet for new agent
+        data.subAgentIds
+      );
+      if (!validation.valid) {
+        return c.json({ message: validation.error }, 400);
+      }
+    }
+
     const record = await db
       .insert(agentTable)
       .values({
@@ -87,12 +107,31 @@ agent.put(
   async (c) => {
     const agentId = c.req.param("agentId");
     const data = c.req.valid("json");
+    const workspaceId = c.req.param("workspaceId")!;
+
+    // Deduplicate arrays
     if (data.toolSetIds) {
       data.toolSetIds = dedupeArray(data.toolSetIds);
     }
     if (data.skillIds) {
       data.skillIds = dedupeArray(data.skillIds);
     }
+    if (data.subAgentIds) {
+      data.subAgentIds = dedupeArray(data.subAgentIds);
+    }
+
+    // Validate sub-agent assignments
+    if (data.subAgentIds) {
+      const validation = await validateSubAgentAssignment(
+        workspaceId,
+        agentId,
+        data.subAgentIds
+      );
+      if (!validation.valid) {
+        return c.json({ message: validation.error }, 400);
+      }
+    }
+
     const record = await db
       .update(agentTable)
       .set({

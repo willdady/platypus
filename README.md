@@ -17,6 +17,7 @@ Platypus is an open-source, full-stack application designed to help you build AI
 - **🤖 Agentic Workflows:** Create sophisticated agents with custom system prompts, model configurations, and tool assignments.
 - **🛠️ Extensible Tool System:** Register custom tools that agents can invoke intelligently to perform complex tasks.
 - **✨ Skills:** Create reusable instruction sets that agents can dynamically load on-demand to handle specialized tasks.
+- **🧩 Sub-Agents (Experimental):** Agents can delegate specialized tasks to other agents, enabling hierarchical multi-agent workflows with isolated contexts and result streaming.
 - **🔌 MCP Support:** First-class support for the **Model Context Protocol** (MCP), allowing agents to securely connect to local and remote data sources.
 - **⚡ Modern Tech Stack:** Built on the bleeding edge with **Next.js**, **Hono.js**, **Drizzle ORM**, and **Tailwind CSS**.
 - **🌐 Provider Agnostic:** Powered by the Vercel AI SDK, supporting OpenAI, Anthropic, Google, Amazon Bedrock, and OpenRouter.

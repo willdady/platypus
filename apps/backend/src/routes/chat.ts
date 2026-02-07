@@ -32,6 +32,7 @@ import {
 } from "../db/schema.ts";
 import { getToolSet } from "../tools/index.ts";
 import { createLoadSkillTool } from "../tools/skill.ts";
+import { createNewTaskTool, createTaskResultTool } from "../tools/sub-agent.ts";
 import { renderSystemPrompt } from "../system-prompt.ts";
 import {
   chatGenerateMetadataSchema,
@@ -41,7 +42,7 @@ import {
   type Provider,
   type Skill,
 } from "@platypus/schemas";
-import { and, desc, eq, or, sql, inArray } from "drizzle-orm";
+import { and, desc, eq, or, sql, inArray, isNull } from "drizzle-orm";
 import { requireAuth } from "../middleware/authentication.ts";
 import {
   requireOrgAccess,
@@ -319,6 +320,8 @@ const resolveGenerationConfig = async (
   user: { id: string; name: string },
   userGlobalContext?: string,
   userWorkspaceContext?: string,
+  isSubAgentChat: boolean = false,
+  subAgents?: Array<{ id: string; name: string; description?: string | null }>,
 ): Promise<GenerationConfig> => {
   const config: GenerationConfig = {};
   const source = agent || data;
@@ -347,6 +350,8 @@ const resolveGenerationConfig = async (
     user,
     userGlobalContext,
     userWorkspaceContext,
+    isSubAgentMode: isSubAgentChat,
+    subAgents: subAgents?.map(sa => ({ ...sa, description: sa.description || undefined })),
   });
 
   config.systemPrompt = systemPrompt;
@@ -363,6 +368,7 @@ const upsertChatRecord = async (
   context: ChatContext,
   config: GenerationConfig,
   data: ChatSubmitData,
+  parentChatId?: string,
 ) => {
   const { resolvedAgentId, resolvedProviderId, resolvedModelId } = context;
 
@@ -379,6 +385,7 @@ const upsertChatRecord = async (
     seed: resolvedAgentId ? null : data.seed || null,
     presencePenalty: resolvedAgentId ? null : config.presencePenalty || null,
     frequencyPenalty: resolvedAgentId ? null : config.frequencyPenalty || null,
+    parentChatId: parentChatId || null,
     updatedAt: new Date(),
   };
 
@@ -448,7 +455,12 @@ chat.get(
         updatedAt: chatTable.updatedAt,
       })
       .from(chatTable)
-      .where(eq(chatTable.workspaceId, workspaceId))
+      .where(
+        and(
+          eq(chatTable.workspaceId, workspaceId),
+          isNull(chatTable.parentChatId) // Only top-level chats
+        )
+      )
       .orderBy(desc(chatTable.createdAt))
       .limit(limit)
       .offset(offset);
@@ -510,7 +522,8 @@ chat.post(
     const orgId = c.req.param("orgId")!;
     const workspaceId = c.req.param("workspaceId")!;
     const data = c.req.valid("json");
-    const { messages = [] } = data;
+    const { messages = [], parentChatId } = data;
+    const isSubAgentChat = Boolean(parentChatId);
 
     // 1. Fetch workspace to get system prompt
     const workspaceRecord = await db
@@ -526,7 +539,7 @@ chat.post(
 
     // 2. Resolve Context (Agent vs Direct) & Provider
     const context = await resolveChatContext(data, orgId, workspaceId);
-    const { provider, agent, resolvedModelId } = context;
+    const { provider, agent, resolvedModelId, resolvedMaxSteps } = context;
 
     // 3. Initialize Model
     const [aiProvider, model] = createModel(provider, resolvedModelId);
@@ -554,7 +567,26 @@ chat.post(
       skills = skillRecords;
     }
 
-    // 7. Fetch User Contexts (global and workspace-specific)
+    // 7. Fetch sub-agent details and inject newTask tool (only for parent agents, not sub-agents)
+    let subAgents: Array<{ id: string; name: string; description?: string | null }> = [];
+    if (agent?.subAgentIds && agent.subAgentIds.length > 0 && !isSubAgentChat) {
+      subAgents = await db
+        .select({ id: agentTable.id, name: agentTable.name, description: agentTable.description })
+        .from(agentTable)
+        .where(inArray(agentTable.id, agent.subAgentIds));
+
+      tools.newTask = createNewTaskTool(subAgents.map(sa => ({
+        ...sa,
+        description: sa.description || undefined,
+      })));
+    }
+
+    // 8. Inject taskResult tool if this is a sub-agent chat
+    if (isSubAgentChat) {
+      tools.taskResult = createTaskResultTool();
+    }
+
+    // 9. Fetch User Contexts (global and workspace-specific)
     const user = c.get("user")!;
     let userGlobalContext: string | undefined;
     let userWorkspaceContext: string | undefined;
@@ -575,7 +607,7 @@ chat.post(
       }
     }
 
-    // 8. Prepare Generation Config (Merge Agent & Request params)
+    // 10. Prepare Generation Config (Merge Agent & Request params)
     const config = await resolveGenerationConfig(
       data,
       workspaceId,
@@ -585,20 +617,31 @@ chat.post(
       { id: user.id, name: user.name },
       userGlobalContext,
       userWorkspaceContext,
+      isSubAgentChat,
+      subAgents,
     );
 
-    // 9. Inject loadSkill tool if skills exist
+    // 11. Inject loadSkill tool if skills exist
     if (skills.length > 0) {
       tools.loadSkill = createLoadSkillTool(workspaceId);
     }
 
-    // 10. Stream Response
+    // 12. Stream Response
     const { systemPrompt, ...restConfig } = config;
 
-    // Combine stop conditions: maxSteps and askFollowupQuestion tool call
-    const stopConditions = [stepCountIs(context.resolvedMaxSteps)];
-    if (tools.askFollowupQuestion) {
-      stopConditions.push(hasToolCall("askFollowupQuestion"));
+    // Prepare stop conditions
+    const stopConditions = [];
+
+    // For sub-agents: stop when taskResult tool is called OR after 100 steps
+    if (isSubAgentChat) {
+      stopConditions.push(hasToolCall("taskResult"));
+      stopConditions.push(stepCountIs(100)); // Force safety limit for sub-agents
+    } else {
+      // For regular chats: stop at maxSteps and optionally askFollowupQuestion
+      stopConditions.push(stepCountIs(resolvedMaxSteps));
+      if (tools.askFollowupQuestion) {
+        stopConditions.push(hasToolCall("askFollowupQuestion"));
+      }
     }
 
     const result = streamText({
@@ -607,6 +650,10 @@ chat.post(
       stopWhen: stopConditions,
       tools,
       system: systemPrompt,
+      // Force sub-agents to always call a tool (rather than ending with a
+      // text-only response). This ensures the model eventually calls taskResult,
+      // which is a stop condition, returning control to the parent agent.
+      ...(isSubAgentChat && { toolChoice: "required" }),
       ...restConfig,
     });
 
@@ -627,7 +674,7 @@ chat.post(
             }
           }
 
-          // Upsert chat record
+          // Upsert chat record with parentChatId if applicable
           await upsertChatRecord(
             data.id,
             workspaceId,
@@ -635,6 +682,7 @@ chat.post(
             context,
             config,
             data,
+            parentChatId
           );
         } catch (error) {
           logger.error({ error }, "Error in onFinish");

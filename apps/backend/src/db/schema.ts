@@ -92,10 +92,16 @@ export const chat = pgTable(
     seed: t.real("seed"),
     presencePenalty: t.real("presence_penalty"),
     frequencyPenalty: t.real("frequency_penalty"),
+    parentChatId: t.text("parent_chat_id").references((): any => chat.id, {
+      onDelete: "cascade",
+    }),
     createdAt: t.timestamp("created_at").notNull().defaultNow(),
     updatedAt: t.timestamp("updated_at").notNull().defaultNow(),
   }),
-  (t) => [index("idx_chat_workspace_id").on(t.workspaceId)],
+  (t) => [
+    index("idx_chat_workspace_id").on(t.workspaceId),
+    index("idx_chat_parent_chat_id").on(t.parentChatId),
+  ],
 );
 
 export const agent = pgTable(
@@ -127,6 +133,7 @@ export const agent = pgTable(
     frequencyPenalty: t.real("frequency_penalty"),
     toolSetIds: t.jsonb("tool_set_ids").$type<string[]>().default([]), // Array of tool set ids
     skillIds: t.jsonb("skill_ids").$type<string[]>().default([]), // Array of skill ids
+    subAgentIds: t.jsonb("sub_agent_ids").$type<string[]>().default([]), // Array of sub-agent ids
     inputPlaceholder: t.text("input_placeholder"),
     createdAt: t.timestamp("created_at").notNull().defaultNow(),
     updatedAt: t.timestamp("updated_at").notNull().defaultNow(),
