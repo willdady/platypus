@@ -767,6 +767,7 @@ chat.post(
         `Generate a short, descriptive title for this chat conversation. You MAY use at most one emoji. The complete title MUST NOT exceed 30 characters.`,
         `Also generate between 1 and 5 kebab-case tags relevant to the chat.`,
         `Each tag should ideally be a single word but no more than two words.`,
+        `IMPORTANT: Avoid ambiguous words that lack context when viewed alone. For example, prefer "web-browser" over "chrome", "metal-finish" over "chrome", "programming-language" over "python", or "file-format" over "pdf". Tags should be descriptive enough to be understood without seeing the conversation.`,
         `Conversation:\n${conversationText}`,
       ].join("\n"),
     });

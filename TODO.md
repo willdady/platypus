@@ -66,8 +66,8 @@
     A user may provider general context about themselves ("I'm a 40 year old white male") but also context about themselves relevant to a specific workspace!
 [x] Bug: When clicking Save on the global context field the toast popup says "created" the first time the "updated" on subsequent saves. It should be the same text in both cases.
 [x] Add home button to the right of the back button on the user settings screens
+[x] Update tagging prompt to remove low-quality or ambiguous words
 [ ] It should be possible to disable sign-ups (via an environment variable?)
 [ ] Add built-in memory tool. Memory should be per-agent. Consider a workspace scoped memory tool also?
 [ ] Consider configuring the "task" model at the workspace level
 [ ] Bug: consider sanitising file names when using the Bedrock provider - https://github.com/vercel/ai/issues/11518#issuecomment-3731765347
-[ ] Update tagging prompt to remove low-quality or ambiguous words
