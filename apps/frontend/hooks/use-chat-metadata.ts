@@ -14,6 +14,7 @@ export const useChatMetadata = <T extends UIMessage = UIMessage>(
   agentId: string,
   agents: Agent[],
   backendUrl: string,
+  isSubAgentMode?: boolean,
 ) => {
   const hasMutatedRef = useRef(false);
 
@@ -25,7 +26,9 @@ export const useChatMetadata = <T extends UIMessage = UIMessage>(
   // Revalidate the chat list (visible in AppSidebar) when our message array contains exactly 2 messages.
   // This will be true after the first successful response from the backend for a new chat.
   // Only generate a title if the chat has "Untitled" as the title.
+  // Skip metadata generation for sub-agent chats.
   useEffect(() => {
+    if (isSubAgentMode) return; // Don't generate metadata for sub-agent chats
     if (messages.length === 2 && !hasMutatedRef.current && status === "ready") {
       hasMutatedRef.current = true;
       // First, revalidate chat data to ensure we have the latest chat record from the backend
@@ -103,5 +106,6 @@ export const useChatMetadata = <T extends UIMessage = UIMessage>(
     agentId,
     agents,
     backendUrl,
+    isSubAgentMode,
   ]);
 };

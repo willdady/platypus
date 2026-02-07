@@ -49,12 +49,14 @@ const AgentForm = ({
   workspaceId,
   agentId,
   toolSets,
+  agents: propAgents,
 }: {
   classNames?: string;
   orgId: string;
   workspaceId: string;
   agentId?: string;
   toolSets: ToolSet[];
+  agents?: Agent[];
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
@@ -89,6 +91,18 @@ const AgentForm = ({
   );
   const skills = skillsData?.results || [];
 
+  // Fetch agents for sub-agent selection
+  const { data: agentsData } = useSWR<{ results: Agent[] }>(
+    backendUrl && user
+      ? joinUrl(
+          backendUrl,
+          `/organizations/${orgId}/workspaces/${workspaceId}/agents`,
+        )
+      : null,
+    fetcher,
+  );
+  const agents = propAgents || agentsData?.results || [];
+
   // Fetch existing agent data if editing
   const { data: agent, isLoading: agentLoading } = useSWR<Agent>(
     agentId && user
@@ -111,6 +125,7 @@ const AgentForm = ({
     temperature: undefined as number | undefined,
     toolSetIds: [] as string[],
     skillIds: [] as string[],
+    subAgentIds: [] as string[],
     topP: undefined as number | undefined,
     topK: undefined as number | undefined,
     seed: undefined as number | undefined,
@@ -159,6 +174,7 @@ const AgentForm = ({
         frequencyPenalty: agent.frequencyPenalty ?? undefined,
         toolSetIds: agent.toolSetIds || [],
         skillIds: agent.skillIds || [],
+        subAgentIds: agent.subAgentIds || [],
       });
     }
   }, [agent]);
@@ -235,6 +251,7 @@ const AgentForm = ({
         frequencyPenalty: formData.frequencyPenalty,
         toolSetIds: formData.toolSetIds,
         skillIds: formData.skillIds,
+        subAgentIds: formData.subAgentIds,
       };
 
       const url = agentId
@@ -522,6 +539,50 @@ const AgentForm = ({
                     </FieldLabel>
                   </Field>
                 ))}
+              </FieldGroup>
+            </CardContent>
+          </Card>
+        )}
+
+        {agents.filter((a) => a.id !== agentId).length > 0 && (
+          <Card className="mb-6">
+            <CardHeader>
+              <CardTitle>Sub-Agents</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <FieldDescription className="mb-4">
+                Select agents that this agent can delegate tasks to.
+                When running as a sub-agent, these agents will not be able to delegate further.
+              </FieldDescription>
+              <FieldGroup className="grid grid-cols-2 gap-4">
+                {agents
+                  .filter((a) => a.id !== agentId) // Only exclude self-assignment
+                  .map((agent) => (
+                    <Field key={agent.id} orientation="horizontal">
+                      <Switch
+                        id={`subagent-${agent.id}`}
+                        className="cursor-pointer"
+                        checked={formData.subAgentIds.includes(agent.id)}
+                        onCheckedChange={(checked) => {
+                          setFormData((prevData) => ({
+                            ...prevData,
+                            subAgentIds: checked
+                              ? [...prevData.subAgentIds, agent.id]
+                              : prevData.subAgentIds.filter((id) => id !== agent.id),
+                          }));
+                        }}
+                        disabled={isSubmitting}
+                      />
+                      <FieldLabel htmlFor={`subagent-${agent.id}`}>
+                        <div className="flex flex-col">
+                          <p>{agent.name}</p>
+                          <p className="text-xs text-muted-foreground line-clamp-1">
+                            {agent.description || "No description"}
+                          </p>
+                        </div>
+                      </FieldLabel>
+                    </Field>
+                  ))}
               </FieldGroup>
             </CardContent>
           </Card>
