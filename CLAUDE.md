@@ -1,7 +1,3 @@
-# CLAUDE.md
-
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
-
 ## Project Overview
 
 Platypus is a full-stack application for building and managing AI agents with tool support and multi-provider capabilities. It uses a monorepo structure with pnpm workspaces and Turborepo.

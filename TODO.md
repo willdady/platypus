@@ -68,7 +68,7 @@
 [x] Add home button to the right of the back button on the user settings screens
 [x] Update tagging prompt to remove low-quality or ambiguous words
 [x] Consider configuring the "task" model at the workspace level
-[ ] Add a skill for adding new tools to both the backend and frontend
+[x] Add a skill for adding new tools to both the backend and frontend
 [ ] It should be possible to disable sign-ups (via an environment variable?)
 [ ] Add built-in memory tool. Memory should be per-agent. Consider a workspace scoped memory tool also?
 [ ] Bug: consider sanitising file names when using the Bedrock provider - https://github.com/vercel/ai/issues/11518#issuecomment-3731765347
