@@ -72,3 +72,6 @@
 [ ] It should be possible to disable sign-ups (via an environment variable?)
 [ ] Add built-in memory tool. Memory should be per-agent. Consider a workspace scoped memory tool also?
 [ ] Bug: consider sanitising file names when using the Bedrock provider - https://github.com/vercel/ai/issues/11518#issuecomment-3731765347
+[ ] Bug: there is noticable lag when opening and closing the sub-agent pane. It is not very responsive.
+[ ] Bug: Global Context has an icon but Workspace Contexts does not
+[ ] Tags are currently not very useful. There should be a way to filter chats by tags.
