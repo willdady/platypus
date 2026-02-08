@@ -8,7 +8,7 @@ import { fetcher, joinUrl } from "@/lib/utils";
 import { useBackendUrl } from "@/app/client-context";
 import { type Context } from "@platypus/schemas";
 import { ExpandableTextarea } from "@/components/expandable-textarea";
-import { Globe } from "lucide-react";
+import { Globe, FolderClosed } from "lucide-react";
 import useSWR from "swr";
 import { ContextsList } from "@/components/contexts-list";
 
@@ -132,7 +132,10 @@ const ContextsPage = () => {
         {/* Workspace Contexts Section */}
         <div>
           <div className="mb-4">
-            <h2 className="text-lg font-semibold mb-2">Workspace Contexts</h2>
+            <h2 className="text-lg font-semibold mb-2 flex items-center gap-2">
+              <FolderClosed className="w-5 h-5" />
+              Workspace Contexts
+            </h2>
             <p className="text-sm text-muted-foreground">
               Similar to global context, workspace context is specific to a
               single workspace. Use them to provide information about yourself
