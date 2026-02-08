@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.26.2](https://github.com/willdady/platypus/compare/v1.26.1...v1.26.2) (2026-02-08)
+
+
+### Bug Fixes
+
+* add missing icon to workspace contexts header ([9adb35a](https://github.com/willdady/platypus/commit/9adb35ad6553474e37aba744426609e274a9ce18))
+* resolve performance issues with chat refetching and sub-agent panel ([b9a116b](https://github.com/willdady/platypus/commit/b9a116b5b493fe6ad49d83cb922b36d2564a2228))
+
 ## [1.26.1](https://github.com/willdady/platypus/compare/v1.26.0...v1.26.1) (2026-02-08)
 
 
