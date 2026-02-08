@@ -26,7 +26,7 @@ import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, lastAssistantMessageIsCompleteWithToolCalls } from "ai";
 import { GlobeIcon, Info, Settings2 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { useRef, useEffect, useState, useCallback } from "react";
+import { useRef, useEffect, useState, useCallback, useMemo } from "react";
 import {
   Chat as ChatType,
   Provider,
@@ -89,7 +89,11 @@ export const Chat = ({
     fetcher,
   );
 
-  const providers = providersData?.results || [];
+  // Memoize providers to prevent unnecessary re-renders
+  const providers = useMemo(
+    () => providersData?.results || [],
+    [providersData?.results]
+  );
 
   // Fetch agents
   const { data: agentsData } = useSWR<{ results: Agent[] }>(
@@ -102,7 +106,11 @@ export const Chat = ({
     fetcher,
   );
 
-  const agents = agentsData?.results || [];
+  // Memoize agents to prevent unnecessary re-renders
+  const agents = useMemo(
+    () => agentsData?.results || [],
+    [agentsData?.results]
+  );
 
   // Fetch tool sets
   const { data: toolSetsData } = useSWR<{ results: ToolSet[] }>(
@@ -115,7 +123,11 @@ export const Chat = ({
     fetcher,
   );
 
-  const toolSets = toolSetsData?.results || [];
+  // Memoize tool sets to prevent unnecessary re-renders
+  const toolSets = useMemo(
+    () => toolSetsData?.results || [],
+    [toolSetsData?.results]
+  );
 
   // Fetch skills
   const { data: skillsData } = useSWR<{ results: Skill[] }>(
@@ -127,7 +139,11 @@ export const Chat = ({
       : null,
     fetcher,
   );
-  const skills = skillsData?.results || [];
+  // Memoize skills to prevent unnecessary re-renders
+  const skills = useMemo(
+    () => skillsData?.results || [],
+    [skillsData?.results]
+  );
 
   // Fetch existing chat data
   const { data: chatData, isLoading: isChatLoading } = useSWR<ChatType>(
@@ -138,6 +154,10 @@ export const Chat = ({
         )
       : null,
     fetcher,
+    {
+      revalidateOnFocus: false,
+      revalidateOnReconnect: false,
+    },
   );
 
   const {

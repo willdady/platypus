@@ -1,5 +1,6 @@
 "use client";
 
+import { useMemo, useCallback } from "react";
 import { useSubAgent } from "@/components/sub-agent-context";
 import { SubAgentSessionProvider } from "@/components/sub-agent-session-context";
 import { Chat } from "@/components/chat";
@@ -23,23 +24,33 @@ export const SubAgentPane = ({
   const { sessions, activeSessionId, openSession, closePane } = useSubAgent();
 
   const isOpen = activeSessionId !== null;
-  const sessionsArray = Array.from(sessions.values());
-  const activeSession = activeSessionId
-    ? sessions.get(activeSessionId)
-    : undefined;
+
+  const sessionsArray = useMemo(() => Array.from(sessions.values()), [sessions]);
+
+  const activeSession = useMemo(
+    () => (activeSessionId ? sessions.get(activeSessionId) : undefined),
+    [activeSessionId, sessions]
+  );
+
+  const getAgentName = useCallback(
+    (subAgentId: string) =>
+      agents.find((a) => a.id === subAgentId)?.name || "Sub-Agent",
+    [agents]
+  );
 
   if (sessionsArray.length === 0) return null;
-
-  const getAgentName = (subAgentId: string) =>
-    agents.find((a) => a.id === subAgentId)?.name || "Sub-Agent";
 
   return (
     <div
       className={cn(
-        "flex flex-col h-full w-[450px] border-l bg-background transition-all duration-300",
-        !isOpen &&
-          "w-0 border-l-0 overflow-hidden opacity-0 pointer-events-none",
+        "flex flex-col h-full border-l bg-background transition-[width,opacity] duration-200 ease-out",
+        isOpen ? "w-[450px] opacity-100" : "w-0 opacity-0 border-l-0 overflow-hidden pointer-events-none",
       )}
+      style={{
+        willChange: isOpen ? "width, opacity" : "auto",
+        contain: "layout style paint",
+        backfaceVisibility: "hidden",
+      }}
     >
       {/* Header */}
       <div className="flex items-center justify-between p-4 border-b min-w-[450px]">
@@ -75,27 +86,33 @@ export const SubAgentPane = ({
           Using CSS hidden (not conditional rendering) preserves each Chat's
           mounted state, scroll position, and streaming connection. */}
       <div className="flex-1 overflow-hidden min-w-[450px] relative">
-        {sessionsArray.map((session) => (
-          <div
-            key={session.toolCallId}
-            className={cn(
-              "absolute inset-0",
-              session.toolCallId !== activeSessionId && "hidden",
-            )}
-          >
-            <SubAgentSessionProvider toolCallId={session.toolCallId}>
-              <Chat
-                orgId={orgId}
-                workspaceId={workspaceId}
-                chatId={session.subChatId}
-                initialAgentId={session.subAgentId}
-                parentChatId={session.parentChatId}
-                initialTask={session.task}
-                isSubAgentMode
-              />
-            </SubAgentSessionProvider>
-          </div>
-        ))}
+        {sessionsArray.map((session) => {
+          const isActive = session.toolCallId === activeSessionId;
+          return (
+            <div
+              key={session.toolCallId}
+              className={cn(
+                "absolute inset-0",
+                !isActive && "hidden",
+              )}
+              style={{
+                contentVisibility: isActive ? "auto" : "hidden",
+              }}
+            >
+              <SubAgentSessionProvider toolCallId={session.toolCallId}>
+                <Chat
+                  orgId={orgId}
+                  workspaceId={workspaceId}
+                  chatId={session.subChatId}
+                  initialAgentId={session.subAgentId}
+                  parentChatId={session.parentChatId}
+                  initialTask={session.task}
+                  isSubAgentMode
+                />
+              </SubAgentSessionProvider>
+            </div>
+          );
+        })}
       </div>
     </div>
   );

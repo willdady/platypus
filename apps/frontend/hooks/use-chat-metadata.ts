@@ -17,6 +17,12 @@ export const useChatMetadata = <T extends UIMessage = UIMessage>(
   isSubAgentMode?: boolean,
 ) => {
   const hasMutatedRef = useRef(false);
+  const agentsRef = useRef(agents);
+
+  // Keep agents ref updated
+  useEffect(() => {
+    agentsRef.current = agents;
+  }, [agents]);
 
   // Reset hasMutated when chatId changes
   useEffect(() => {
@@ -25,7 +31,7 @@ export const useChatMetadata = <T extends UIMessage = UIMessage>(
 
   // Revalidate the chat list (visible in AppSidebar) when our message array contains exactly 2 messages.
   // This will be true after the first successful response from the backend for a new chat.
-  // Only generate a title if the chat has "Untitled" as the title.
+  // Only generate a title if the chat has "Untitled" as its title.
   // Skip metadata generation for sub-agent chats.
   useEffect(() => {
     if (isSubAgentMode) return; // Don't generate metadata for sub-agent chats
@@ -48,7 +54,7 @@ export const useChatMetadata = <T extends UIMessage = UIMessage>(
 
             if (agentId) {
               // Agent is selected - use the agent's providerId
-              const agent = agents.find((a) => a.id === agentId);
+              const agent = agentsRef.current.find((a) => a.id === agentId);
               if (agent?.providerId) {
                 providerIdForMetadata = agent.providerId;
               } else {
@@ -104,7 +110,6 @@ export const useChatMetadata = <T extends UIMessage = UIMessage>(
     workspaceId,
     providerId,
     agentId,
-    agents,
     backendUrl,
     isSubAgentMode,
   ]);

@@ -1,6 +1,6 @@
 "use client";
 
-import { use } from "react";
+import { use, useMemo } from "react";
 import { Chat } from "@/components/chat";
 import { SubAgentPane } from "@/components/sub-agent-pane";
 import { SubAgentProvider } from "@/components/sub-agent-context";
@@ -30,7 +30,11 @@ const ChatWithIdPage = ({
       : null,
     fetcher,
   );
-  const agents = agentsData?.results || [];
+  // Memoize agents to prevent unnecessary re-renders of Chat components
+  const agents = useMemo(
+    () => agentsData?.results || [],
+    [agentsData?.results]
+  );
 
   return (
     <SubAgentProvider key={chatId}>
