@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.26.0](https://github.com/willdady/platypus/compare/v1.25.0...v1.26.0) (2026-02-08)
+
+
+### Features
+
+* added experimental sub-agents feature ([57a096e](https://github.com/willdady/platypus/commit/57a096e7a7abf0ad7b4b738b7b9c5c1081eca54c))
+
 ## [1.25.0](https://github.com/willdady/platypus/compare/v1.24.1...v1.25.0) (2026-02-07)
 
 
