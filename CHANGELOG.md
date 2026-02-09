@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.26.3](https://github.com/willdady/platypus/compare/v1.26.2...v1.26.3) (2026-02-09)
+
+
+### Bug Fixes
+
+* make askFollowupQuestion a client-side tool to prevent infinite resubmission ([537337e](https://github.com/willdady/platypus/commit/537337ec1a6023c3f9f4b2accb642dbe84d1ea08))
+
 ## [1.26.2](https://github.com/willdady/platypus/compare/v1.26.1...v1.26.2) (2026-02-08)
 
 
