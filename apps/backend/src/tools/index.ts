@@ -4,7 +4,6 @@ import {
   convertCelsiusToFahrenheit,
   calculateCircleArea,
 } from "./math.ts";
-import { askFollowupQuestion } from "./elicitation.ts";
 import { getCurrentTime, convertTimezone } from "./time.ts";
 
 type ToolSet = {
@@ -58,15 +57,6 @@ registerToolSet("math-geometry", {
   description: "Geometric calculations and formulas",
   tools: {
     calculateCircleArea,
-  },
-});
-
-registerToolSet("elicitation", {
-  name: "Elicitation",
-  category: "Elicitation",
-  description: "Tools for eliciting information from the user.",
-  tools: {
-    askFollowupQuestion,
   },
 });
 

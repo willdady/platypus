@@ -45,7 +45,6 @@ import {
   XIcon,
 } from "lucide-react";
 import { Textarea } from "./ui/textarea";
-import { AskFollowupQuestionTool } from "./ask-followup-question-tool";
 import { LoadSkillTool } from "./load-skill-tool";
 import { NewTaskTool } from "./new-task-tool";
 import { TaskResultTool } from "./task-result-tool";
@@ -205,18 +204,6 @@ export const ChatMessage = ({
                 />
               </ToolContent>
             </Tool>
-          );
-        } else if (part.type === "tool-askFollowupQuestion") {
-          return (
-            <AskFollowupQuestionTool
-              key={`${message.id}-${i}`}
-              toolPart={part as ToolUIPart}
-              onAppendToPrompt={onAppendToPrompt}
-              onSubmitMessage={onSubmitMessage}
-              messageId={message.id}
-              role={message.role}
-              index={i}
-            />
           );
         } else if (part.type === "tool-loadSkill") {
           return (

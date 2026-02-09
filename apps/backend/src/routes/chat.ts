@@ -637,11 +637,8 @@ chat.post(
       stopConditions.push(hasToolCall("taskResult"));
       stopConditions.push(stepCountIs(100)); // Force safety limit for sub-agents
     } else {
-      // For regular chats: stop at maxSteps and optionally askFollowupQuestion
+      // For regular chats: stop at maxSteps
       stopConditions.push(stepCountIs(resolvedMaxSteps));
-      if (tools.askFollowupQuestion) {
-        stopConditions.push(hasToolCall("askFollowupQuestion"));
-      }
     }
 
     const result = streamText({
