@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.27.0](https://github.com/willdady/platypus/compare/v1.26.3...v1.27.0) (2026-02-09)
+
+
+### Features
+
+* removed the elicitation toolset ([0b12ac9](https://github.com/willdady/platypus/commit/0b12ac9e548edf3ef7d50bbf7f2b33bc5271df76))
+
 ## [1.26.3](https://github.com/willdady/platypus/compare/v1.26.2...v1.26.3) (2026-02-09)
 
 
