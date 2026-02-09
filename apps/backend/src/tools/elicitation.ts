@@ -12,7 +12,7 @@ export const askFollowupQuestion = tool({
       .optional()
       .describe("A list of 2-4 suggested answers."),
   }),
-  execute: async () => {
-    return true;
-  },
+  // No execute function - this is a client-side tool. Omitting execute
+  // ensures the agent loop stops here (can't continue without a result)
+  // and prevents sendAutomaticallyWhen from triggering a resubmission.
 });
