@@ -63,7 +63,7 @@
 [x] Super admins need to be able to reset a user's password
 [x] Bug: links in chat messages don't show pointer on hover
 [x] User should be able to provide context about themselves. This context should be injected into the system prompt.
-    A user may provider general context about themselves ("I'm a 40 year old white male") but also context about themselves relevant to a specific workspace!
+A user may provider general context about themselves ("I'm a 40 year old white male") but also context about themselves relevant to a specific workspace!
 [x] Bug: When clicking Save on the global context field the toast popup says "created" the first time the "updated" on subsequent saves. It should be the same text in both cases.
 [x] Add home button to the right of the back button on the user settings screens
 [x] Update tagging prompt to remove low-quality or ambiguous words

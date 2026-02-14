@@ -80,6 +80,9 @@ describe("Authorization Middleware", () => {
 
   describe("requireWorkspaceAccess", () => {
     it("should allow super admin to bypass workspace checks", async () => {
+      // Mock workspace lookup for super admin
+      mockDb.limit.mockResolvedValueOnce([{ ownerId: "other-user" }]);
+
       const app = new Hono<{
         Variables: {
           user: any;

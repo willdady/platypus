@@ -39,6 +39,12 @@ vi.mock("@ai-sdk/mcp", () => ({
   }),
 }));
 
+vi.mock("../services/memory-retrieval.ts", () => ({
+  retrieveUserLevelMemories: vi.fn().mockResolvedValue([]),
+  retrieveWorkspaceLevelMemories: vi.fn().mockResolvedValue([]),
+  formatMemoriesForSystemPrompt: vi.fn().mockReturnValue(""),
+}));
+
 describe("Chat Routes", () => {
   beforeEach(() => {
     resetMockDb();
