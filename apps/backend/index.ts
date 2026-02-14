@@ -12,7 +12,7 @@ import { count, eq } from "drizzle-orm";
 import { auth } from "./src/auth.ts";
 import { logger } from "./src/logger.ts";
 
-const PORT = process.env.PORT || "3000";
+const PORT = process.env.PORT || "4001";
 
 const main = async () => {
   logger.info(`Serving on port: ${PORT}`);
