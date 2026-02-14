@@ -4,6 +4,8 @@
 
 This plan implements an automatic memory extraction system for Platypus that builds persistent knowledge from user conversations. The problem we're solving: agents currently have no memory across chat sessions, leading to repetitive questions and loss of context. Users must repeatedly provide the same information about their preferences, projects, and work style.
 
+**Workspace Model**: Workspaces are single-user owned entities. Each workspace has an `ownerId` and belongs to exactly one user. Org admins and super admins can view any workspace for oversight but cannot create or contribute to chats — only the workspace owner can do that. There is no workspace membership table — access is determined by ownership, org admin status, or super admin status.
+
 The memory system will:
 
 - **Automatically extract** important facts from conversations using AI
@@ -29,7 +31,8 @@ This will significantly improve the user experience by making agents feel more c
 
 **Key Design Decisions**:
 
-- **User-owned memories** - ALL memories belong to a specific user (never shared between users)
+- **User-owned memories** - ALL memories belong to a specific user (never shared between users). Since workspaces are single-user owned and only the owner can chat, workspace-level memories always belong to the workspace owner.
+- **Read-only admin access** - Org admins and super admins can view chats in any workspace but cannot create new chats or submit messages. This means memory extraction only ever processes the workspace owner's conversations.
 - **Two scopes** - User-level (relevant across all workspaces) and workspace-level (relevant only in specific workspace)
 - **Individual memory records** (not combined documents) for granular control and efficient indexing
 - **LLM-based deduplication** - The extraction LLM is given existing memories and told to only return new/updated information. No embeddings needed.
@@ -109,7 +112,8 @@ export const memory = pgTable(
     // Scope determines where memory is relevant:
     //   - User-level: workspaceId = NULL (applies across all workspaces for this user)
     //   - Workspace-level: workspaceId set (applies only in this workspace for this user)
-    // Memories are NEVER shared between users, even in same workspace
+    // Since workspaces are single-user owned and only the owner can chat,
+    // workspace-level memories always belong to the workspace owner.
     userId: t
       .text("user_id")
       .notNull()
@@ -187,17 +191,18 @@ Add memory extraction configuration to `workspace` table:
 export const workspace = pgTable("workspace", (t) => ({
   // ... existing fields ...
 
-  // Memory extraction configuration
-  memoryExtractionEnabled: t.boolean("memory_extraction_enabled").default(true),
+  // Memory extraction configuration (null = disabled, non-null = enabled)
   memoryExtractionProviderId: t
     .text("memory_extraction_provider_id")
     .references(() => provider.id, { onDelete: "set null" }),
 }));
 ```
 
-This is separate from `taskModelProviderId` (used for title/tag generation) because memory extraction benefits from a more capable model that can reason about what's worth remembering and avoid duplicates, whereas title/tag generation is a simpler task suited to cheap models.
+Memory extraction is enabled when `memoryExtractionProviderId` is non-null, and disabled when null. No separate boolean flag needed.
 
-**Validation**: When `memoryExtractionEnabled` is set to `true`, the backend must validate that `memoryExtractionProviderId` is also set and that the referenced provider has a `memoryExtractionModelId` configured. If not, return a validation error rather than silently failing during extraction.
+This is separate from `taskModelProviderId` (used for title/tag generation) because memory extraction benefits from a more capable model that can reason about what's worth remembering and avoid duplicates, whereas title/tag generation is a simpler task suited to cheap models. Since workspaces are single-user owned, the workspace owner has full control over their memory extraction configuration.
+
+**Validation**: When setting `memoryExtractionProviderId`, the backend must validate that the referenced provider has a `memoryExtractionModelId` configured. If not, return a validation error. The extraction cron job skips workspaces where `memoryExtractionProviderId` is null.
 
 ## Core Implementation
 
@@ -265,8 +270,8 @@ The user's existing memories are provided below. You MUST:
 Entity types: "preference", "fact", "goal", "constraint", "style", "person"
 
 Scope determination:
-- "user": Personal facts, general preferences, identity (applies across all workspaces)
-- "workspace": Project-specific context, workspace preferences, user's role in this workspace
+- "user": Personal facts, general preferences, identity (applies across all of this user's workspaces)
+- "workspace": Project-specific context, workspace-specific preferences (applies only in this workspace for this user)
 
 Conversation:
 {conversationText}
@@ -279,7 +284,7 @@ Conversation:
 3. Send conversation window + existing memories to task model
 4. Parse response: insert new memories, update changed ones
 
-**Note**: Need to add `userId` column to chat table to associate chats with users for extraction.
+**Note**: Since only the workspace owner can create and contribute to chats, the user can be derived from `workspace.ownerId` via a join. No explicit `userId` column is needed on the chat table.
 
 ### 2. Memory Retrieval
 
@@ -425,7 +430,27 @@ startScheduler();
 
 4. **Scale-up**: New instances immediately align to the same schedule. No coordination or leader election required beyond the database lock.
 
-### 5. Memory Injection into Chats
+### 5. Read-Only Admin Access to Chats
+
+Enforce that only the workspace owner can create and contribute to chats. Org admins and super admins get read-only access.
+
+**Backend** (`apps/backend/src/routes/chat.ts`):
+
+- Chat submission (POST `/chat`) and chat creation: check that the authenticated user is the workspace owner (`workspace.ownerId === user.id`). Return 403 for non-owners.
+- Chat list and chat detail (GET endpoints): remain accessible to anyone with workspace access (owner, org admin, super admin).
+- Chat update (PATCH) and delete (DELETE): owner only.
+
+**Frontend** (`apps/frontend`):
+
+- Hide the chat input/submit UI when the user is not the workspace owner (use `isWorkspaceOwner` from auth context).
+- Show chats in read-only mode for admins viewing other users' workspaces.
+
+**Authorization middleware** (`apps/backend/src/middleware/authorization.ts`):
+
+- Add a `requireWorkspaceOwner` middleware that checks `workspace.ownerId === user.id` (no admin bypass). Use this for chat write operations.
+- Existing `requireWorkspaceAccess` (which allows owner + admin) remains for read operations.
+
+### 6. Memory Injection into Chats
 
 Modify `apps/backend/src/routes/chat.ts` to retrieve relevant memories and `apps/backend/src/system-prompt.ts` to format and inject memories into the system prompt.
 
@@ -446,7 +471,7 @@ Add memory schemas to `packages/schemas/index.ts` and extend workspace update sc
 
 ### Limitations
 
-1. **No userId on Chat**: Current chat schema doesn't store userId. Need to add this column for the extraction job to know which user's memories to load.
+1. **No userId on Chat**: Chat doesn't store userId directly. Since only the workspace owner can chat, the user is derived from `workspace.ownerId` via a join. This is sufficient for the current model.
 
 2. **All memories injected**: Every memory for a user (user-level + workspace-level) is included in the system prompt. This works well for typical volumes (tens to low hundreds) but may need semantic retrieval with embeddings if memory counts grow very large.
 
@@ -478,6 +503,7 @@ Add memory schemas to `packages/schemas/index.ts` and extend workspace update sc
 6. Start new chat and verify memories are injected into responses
 7. Test deduplication by repeating preferences
 8. Test scope isolation across workspaces and users
+9. Test that org admins can view chats but cannot create or submit messages in workspaces they don't own
 
 ### Monitoring
 
@@ -496,19 +522,11 @@ Add memory schemas to `packages/schemas/index.ts` and extend workspace update sc
 ### Modified Files
 
 - `apps/backend/src/db/schema.ts`
+- `apps/backend/src/middleware/authorization.ts` (add `requireWorkspaceOwner`)
 - `apps/backend/index.ts`
-- `apps/backend/src/routes/chat.ts`
+- `apps/backend/src/routes/chat.ts` (read-only admin access + memory injection)
 - `apps/backend/src/system-prompt.ts`
 - `packages/schemas/index.ts`
 - `apps/backend/.env`
-
-## Cost Estimates
-
-### Extraction Costs (using workspace task model, e.g. GPT-4o-mini)
-
-- **Average extraction**: ~3000 input tokens (conversation + existing memories) + ~500 output tokens
-- **High-volume workspace** (2,880 extractions/day): ~$1.50/day
-- **Typical workspace** (100-500 extractions/day): ~$0.05-0.25/day
-- **Mitigation**: Configurable per workspace via `memoryExtractionEnabled`, adjust cron interval
-
-No embedding costs since we rely on the extraction LLM for deduplication.
+- `apps/frontend/components/chat.tsx` (read-only mode for non-owners)
+- `apps/frontend/components/auth-provider.tsx` (already has `isWorkspaceOwner`)
