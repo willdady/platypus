@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.29.0](https://github.com/willdady/platypus/compare/v1.28.0...v1.29.0) (2026-02-14)
+
+
+### Features
+
+* implement automatic memory extraction system ([d563b73](https://github.com/willdady/platypus/commit/d563b7327f353ff1a8fa5076934c9fb7629c8539))
+
+
+### Bug Fixes
+
+* **tests:** update tests for memory feature and provider schema ([6db28bb](https://github.com/willdady/platypus/commit/6db28bb90c023f6e31955e8640ed16bc6406bd3c))
+
 ## [1.28.0](https://github.com/willdady/platypus/compare/v1.27.0...v1.28.0) (2026-02-14)
 
 
