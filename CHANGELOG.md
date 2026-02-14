@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.28.0](https://github.com/willdady/platypus/compare/v1.27.0...v1.28.0) (2026-02-14)
+
+
+### Features
+
+* change workspaces to single-user ownership model ([e1a3e9f](https://github.com/willdady/platypus/commit/e1a3e9fc28ef7d424baabb512f5f1a1e5f31de08))
+
 ## [1.27.0](https://github.com/willdady/platypus/compare/v1.26.3...v1.27.0) (2026-02-09)
 
 
