@@ -7,17 +7,23 @@ import { z } from "zod";
  * The frontend handles the tool call by opening the side pane.
  */
 export const createNewTaskTool = (
-  subAgents: Array<{ id: string; name: string; description?: string }>
+  subAgents: Array<{ id: string; name: string; description?: string }>,
 ) => {
   const subAgentDescriptions = subAgents
-    .map((sa) => `- ${sa.name} (${sa.id}): ${sa.description || "No description"}`)
+    .map(
+      (sa) => `- ${sa.name} (${sa.id}): ${sa.description || "No description"}`,
+    )
     .join("\n");
 
   return tool({
     description: `Delegate a task to a specialized sub-agent. Available sub-agents:\n${subAgentDescriptions}`,
     inputSchema: z.object({
       subAgentId: z.string().describe("The ID of the sub-agent to delegate to"),
-      task: z.string().describe("A fully self-contained task description. The sub-agent has NO access to the parent conversation or other tasks, so include ALL necessary context, constraints, and requirements directly. Never reference other tasks or prior context."),
+      task: z
+        .string()
+        .describe(
+          "A fully self-contained task description. The sub-agent has NO access to the parent conversation or other tasks, so include ALL necessary context, constraints, and requirements directly. Never reference other tasks or prior context.",
+        ),
     }),
     // No execute function - this is a client-side tool
   });
@@ -31,10 +37,13 @@ export const createNewTaskTool = (
  */
 export const createTaskResultTool = () => {
   return tool({
-    description: "Call this tool when you have completed your assigned task. This will return control to the parent agent.",
+    description:
+      "Call this tool when you have completed your assigned task. This will return control to the parent agent.",
     inputSchema: z.object({
       result: z.string().describe("The complete result of your task"),
-      status: z.enum(["success", "error"]).describe("Whether the task was completed successfully"),
+      status: z
+        .enum(["success", "error"])
+        .describe("Whether the task was completed successfully"),
     }),
     // No execute function - this is a client-side tool
   });

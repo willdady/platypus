@@ -12,6 +12,7 @@ This guide explains how to add custom tools that AI agents can use during chat s
 ## Overview
 
 Tools in Platypus are defined using the AI SDK's `tool()` function with three components:
+
 - **description**: What the tool does (helps AI decide when to invoke it)
 - **inputSchema**: Zod schema defining parameters with descriptions
 - **execute**: Async function that performs the operation
@@ -21,6 +22,7 @@ Tools in Platypus are defined using the AI SDK's `tool()` function with three co
 ## Step 1: Create Backend Tool Definition
 
 ### File Location
+
 Create a new file in `/apps/backend/src/tools/` or add to an existing category file.
 
 ### Tool Structure
@@ -74,6 +76,7 @@ export const convertFahrenheitToCelsius = tool({
 ## Step 2: Register Tool in Tool Set
 
 ### File Location
+
 Edit `/apps/backend/src/tools/index.ts`
 
 ### Registration Pattern
@@ -102,7 +105,8 @@ import { getCurrentTime, convertTimezone } from "./time.ts";
 registerToolSet("time", {
   name: "Time",
   category: "Utilities",
-  description: "Tools for getting current time and converting between timezones",
+  description:
+    "Tools for getting current time and converting between timezones",
   tools: {
     getCurrentTime,
     convertTimezone,
@@ -147,6 +151,7 @@ Tools render with default JSON formatting for input/output. For custom UI (inter
 ### Tool Display Example
 
 When you register `math-conversions` tool set:
+
 - **Category**: "Math"
 - **Display**: "Math Conversions" with description
 - **Assignment**: Users toggle switch to assign to agents
@@ -248,7 +253,7 @@ export const fetchWeather = tool({
   execute: async ({ city, country }) => {
     try {
       const response = await fetch(
-        `https://api.weather.com?city=${city}&country=${country}`
+        `https://api.weather.com?city=${city}&country=${country}`,
       );
       const data = await response.json();
       return { weather: data };
@@ -284,6 +289,7 @@ export const askFollowupQuestion = tool({
 By default, tools display input/output as formatted JSON. For better UX, you can create custom React components.
 
 **When to use custom UI:**
+
 - Interactive elements (buttons, clickable suggestions)
 - Special formatting (images, charts, structured data)
 - User interaction during execution
@@ -381,6 +387,7 @@ export const AskFollowupQuestionTool = ({
 4. **Handle tool states**: `input-streaming`, `input-available`, `output-available`, `output-error`
 
 **Existing custom tool components:**
+
 - `AskFollowupQuestionTool` - Interactive question suggestions
 - `LoadSkillTool` - Skill loading status display
 
@@ -403,9 +410,11 @@ Choose an existing category or create a new one as needed.
 ## Tool Set vs Individual Tools
 
 **Tool Set**: A collection of related tools registered together
+
 - Example: `math-conversions` contains `convertFahrenheitToCelsius` and `convertCelsiusToFahrenheit`
 
 **Individual Tool**: A single executable function
+
 - Example: `convertFahrenheitToCelsius` is one tool within the set
 
 **Assignment**: Agents are assigned entire tool sets, not individual tools.
@@ -447,7 +456,8 @@ import { tool } from "ai";
 import { z } from "zod";
 
 export const convertCurrency = tool({
-  description: "Convert amount from one currency to another using live exchange rates",
+  description:
+    "Convert amount from one currency to another using live exchange rates",
   inputSchema: z.object({
     amount: z.number().describe("Amount to convert"),
     from: z.string().describe("Source currency code (e.g., USD)"),
@@ -510,18 +520,18 @@ Result: { "converted": { "amount": 109, "currency": "EUR" }, "rate": 1.09 }
 
 ## Key Files Reference
 
-| File | Purpose |
-|------|---------|
-| `apps/backend/src/tools/index.ts` | Tool set registry and registration |
-| `apps/backend/src/tools/*.ts` | Individual tool implementations |
-| `apps/backend/src/routes/chat.ts` | Tool loading and execution logic |
-| `apps/backend/src/routes/tool.ts` | API endpoint for listing tools |
-| `packages/schemas/index.ts` | ToolSet and Tool schemas |
-| `apps/frontend/components/agent-form.tsx` | Tool assignment UI |
-| `apps/frontend/components/chat-message.tsx` | Tool rendering logic and custom component routing |
-| `apps/frontend/components/ai-elements/tool.tsx` | Default tool execution display components |
-| `apps/frontend/components/ask-followup-question-tool.tsx` | Custom UI for followup questions tool |
-| `apps/frontend/components/load-skill-tool.tsx` | Custom UI for skill loading tool |
+| File                                                      | Purpose                                           |
+| --------------------------------------------------------- | ------------------------------------------------- |
+| `apps/backend/src/tools/index.ts`                         | Tool set registry and registration                |
+| `apps/backend/src/tools/*.ts`                             | Individual tool implementations                   |
+| `apps/backend/src/routes/chat.ts`                         | Tool loading and execution logic                  |
+| `apps/backend/src/routes/tool.ts`                         | API endpoint for listing tools                    |
+| `packages/schemas/index.ts`                               | ToolSet and Tool schemas                          |
+| `apps/frontend/components/agent-form.tsx`                 | Tool assignment UI                                |
+| `apps/frontend/components/chat-message.tsx`               | Tool rendering logic and custom component routing |
+| `apps/frontend/components/ai-elements/tool.tsx`           | Default tool execution display components         |
+| `apps/frontend/components/ask-followup-question-tool.tsx` | Custom UI for followup questions tool             |
+| `apps/frontend/components/load-skill-tool.tsx`            | Custom UI for skill loading tool                  |
 
 ---
 

@@ -11,7 +11,7 @@ export default async function WorkspaceSettingsLayout({
   const { orgId, workspaceId } = await params;
 
   return (
-    <ProtectedRoute requireWorkspaceAccess={true} requiredWorkspaceRole="admin">
+    <ProtectedRoute requireWorkspaceAccess={true}>
       <div className="flex justify-center">
         <div className="flex flex-col md:flex-row w-full sm:w-full lg:w-4/5 max-w-3xl py-8 px-4 md:px-0">
           <div className="w-full md:w-48 md:fixed md:top-16 pt-4 mb-8 md:mb-0">

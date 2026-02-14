@@ -38,9 +38,7 @@ export const TaskResultTool = ({ toolPart }: TaskResultToolProps) => {
         ) : (
           <XCircle className="size-4 text-red-500" />
         )}
-        <Badge
-          variant={input.status === "success" ? "default" : "destructive"}
-        >
+        <Badge variant={input.status === "success" ? "default" : "destructive"}>
           Task {input.status === "success" ? "Completed" : "Failed"}
         </Badge>
       </div>

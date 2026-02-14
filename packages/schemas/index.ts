@@ -22,6 +22,7 @@ export const organizationUpdateSchema = organizationSchema.pick({ name: true });
 export const workspaceSchema = z.object({
   id: z.string(),
   organizationId: z.string(),
+  ownerId: z.string(),
   name: z.string().min(3).max(30),
   context: z.string().max(1000).nullable().optional(),
   taskModelProviderId: z.string().nullable().optional(),
@@ -409,8 +410,6 @@ export const invitationSchema = z.object({
   id: z.string(),
   email: z.string().email(),
   organizationId: z.string(),
-  workspaceId: z.string(),
-  role: z.enum(["admin", "editor", "viewer"]),
   invitedBy: z.string(),
   status: invitationStatusSchema,
   expiresAt: z.date(),
@@ -421,13 +420,10 @@ export type Invitation = z.infer<typeof invitationSchema>;
 
 export const invitationCreateSchema = invitationSchema.pick({
   email: true,
-  workspaceId: true,
-  role: true,
 });
 
 export const invitationListItemSchema = invitationSchema.extend({
   organizationName: z.string().optional(),
-  workspaceName: z.string().optional(),
   invitedByName: z.string().optional(),
 });
 
@@ -479,40 +475,9 @@ export type OrganizationMemberWithUser = z.infer<
   typeof organizationMemberWithUserSchema
 >;
 
-// Workspace Member
-
-export const workspaceMemberSchema = z.object({
-  id: z.string(),
-  workspaceId: z.string(),
-  userId: z.string(),
-  orgMemberId: z.string(),
-  role: z.enum(["admin", "editor", "viewer"]),
-  createdAt: z.date(),
-  updatedAt: z.date(),
-});
-
-export type WorkspaceMember = z.infer<typeof workspaceMemberSchema>;
-
-export const workspaceMemberCreateSchema = workspaceMemberSchema.pick({
-  workspaceId: true,
-  role: true,
-});
-
-export const workspaceMemberUpdateSchema = workspaceMemberSchema.pick({
-  role: true,
-});
-
 // Combined Org Member for List
 
 export const orgMemberListItemSchema = organizationMemberWithUserSchema.extend({
-  workspaces: z.array(
-    z.object({
-      workspaceMemberId: z.string(),
-      workspaceId: z.string(),
-      workspaceName: z.string(),
-      role: z.enum(["admin", "editor", "viewer"]),
-    }),
-  ),
   isSuperAdmin: z.boolean(),
 });
 
@@ -528,14 +493,18 @@ export type OrgMemberList = z.infer<typeof orgMemberListSchema>;
 
 export const newTaskToolInputSchema = z.object({
   subAgentId: z.string().describe("The ID of the sub-agent to delegate to"),
-  task: z.string().describe("The task description and context for the sub-agent"),
+  task: z
+    .string()
+    .describe("The task description and context for the sub-agent"),
 });
 
 export type NewTaskToolInput = z.infer<typeof newTaskToolInputSchema>;
 
 export const taskResultToolInputSchema = z.object({
   result: z.string().describe("The result of the completed task"),
-  status: z.enum(["success", "error"]).describe("Whether the task succeeded or failed"),
+  status: z
+    .enum(["success", "error"])
+    .describe("Whether the task succeeded or failed"),
 });
 
 export type TaskResultToolInput = z.infer<typeof taskResultToolInputSchema>;

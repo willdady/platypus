@@ -20,7 +20,7 @@ provider.post(
   "/",
   requireAuth,
   requireOrgAccess(),
-  requireWorkspaceAccess(["admin"]),
+  requireWorkspaceAccess,
   sValidator("json", providerCreateSchema),
   async (c) => {
     const data = c.req.valid("json");
@@ -62,7 +62,7 @@ provider.get(
   "/",
   requireAuth,
   requireOrgAccess(),
-  requireWorkspaceAccess(),
+  requireWorkspaceAccess,
   async (c) => {
     const orgId = c.req.param("orgId")!;
     const workspaceId = c.req.param("workspaceId")!;
@@ -94,7 +94,7 @@ provider.get(
   "/:providerId",
   requireAuth,
   requireOrgAccess(),
-  requireWorkspaceAccess(),
+  requireWorkspaceAccess,
   async (c) => {
     const orgId = c.req.param("orgId")!;
     const workspaceId = c.req.param("workspaceId")!;
@@ -130,7 +130,7 @@ provider.put(
   "/:providerId",
   requireAuth,
   requireOrgAccess(),
-  requireWorkspaceAccess(["admin"]),
+  requireWorkspaceAccess,
   sValidator("json", providerUpdateSchema),
   async (c) => {
     const workspaceId = c.req.param("workspaceId")!;
@@ -180,7 +180,7 @@ provider.delete(
   "/:providerId",
   requireAuth,
   requireOrgAccess(),
-  requireWorkspaceAccess(["admin"]),
+  requireWorkspaceAccess,
   async (c) => {
     const workspaceId = c.req.param("workspaceId")!;
     const providerId = c.req.param("providerId");

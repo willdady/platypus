@@ -25,7 +25,7 @@ mcp.post(
   "/",
   requireAuth,
   requireOrgAccess(),
-  requireWorkspaceAccess(["admin"]),
+  requireWorkspaceAccess,
   sValidator("json", mcpCreateSchema),
   async (c) => {
     const data = c.req.valid("json");
@@ -45,7 +45,7 @@ mcp.get(
   "/",
   requireAuth,
   requireOrgAccess(),
-  requireWorkspaceAccess(),
+  requireWorkspaceAccess,
   async (c) => {
     const workspaceId = c.req.param("workspaceId")!;
     const results = await db
@@ -61,7 +61,7 @@ mcp.get(
   "/:mcpId",
   requireAuth,
   requireOrgAccess(),
-  requireWorkspaceAccess(),
+  requireWorkspaceAccess,
   async (c) => {
     const mcpId = c.req.param("mcpId");
     const record = await db
@@ -81,7 +81,7 @@ mcp.put(
   "/:mcpId",
   requireAuth,
   requireOrgAccess(),
-  requireWorkspaceAccess(["admin"]),
+  requireWorkspaceAccess,
   sValidator("json", mcpUpdateSchema),
   async (c) => {
     const mcpId = c.req.param("mcpId");
@@ -103,7 +103,7 @@ mcp.delete(
   "/:mcpId",
   requireAuth,
   requireOrgAccess(),
-  requireWorkspaceAccess(["admin"]),
+  requireWorkspaceAccess,
   async (c) => {
     const mcpId = c.req.param("mcpId");
     await db.delete(mcpTable).where(eq(mcpTable.id, mcpId));
@@ -116,7 +116,7 @@ mcp.post(
   "/test",
   requireAuth,
   requireOrgAccess(),
-  requireWorkspaceAccess(["admin"]),
+  requireWorkspaceAccess,
   sValidator("json", mcpTestSchema),
   async (c) => {
     const data = c.req.valid("json");

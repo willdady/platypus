@@ -30,7 +30,7 @@ describe("Tool Routes", () => {
     it("should list all tool sets including MCPs", async () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
-      mockDb.limit.mockResolvedValueOnce([{ role: "viewer" }]); // requireWorkspaceAccess
+      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]); // requireWorkspaceAccess
 
       const mockMcps = [{ id: "mcp-1", name: "MCP 1" }];
       mockDb.where

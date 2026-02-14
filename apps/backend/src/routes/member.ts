@@ -1,18 +1,8 @@
 import { Hono } from "hono";
 import { sValidator } from "@hono/standard-validator";
-import { nanoid } from "nanoid";
 import { db } from "../index.ts";
-import {
-  organizationMember,
-  workspaceMember,
-  user as userTable,
-  workspace as workspaceTable,
-} from "../db/schema.ts";
-import {
-  organizationMemberUpdateSchema,
-  workspaceMemberCreateSchema,
-  workspaceMemberUpdateSchema,
-} from "@platypus/schemas";
+import { organizationMember, user as userTable } from "../db/schema.ts";
+import { organizationMemberUpdateSchema } from "@platypus/schemas";
 import { eq, and, count } from "drizzle-orm";
 import { requireAuth } from "../middleware/authentication.ts";
 import { requireOrgAccess, isSuperAdmin } from "../middleware/authorization.ts";
@@ -20,7 +10,7 @@ import type { Variables } from "../server.ts";
 
 const member = new Hono<{ Variables: Variables }>();
 
-/** List all organization members with their workspace assignments */
+/** List all organization members */
 member.get("/", requireAuth, requireOrgAccess(["admin"]), async (c) => {
   const orgId = c.req.param("orgId")!;
 
@@ -44,34 +34,10 @@ member.get("/", requireAuth, requireOrgAccess(["admin"]), async (c) => {
     .innerJoin(userTable, eq(organizationMember.userId, userTable.id))
     .where(eq(organizationMember.organizationId, orgId));
 
-  const results = await Promise.all(
-    members.map(async (m) => {
-      const workspaces = await db
-        .select({
-          workspaceMemberId: workspaceMember.id,
-          workspaceId: workspaceMember.workspaceId,
-          workspaceName: workspaceTable.name,
-          role: workspaceMember.role,
-        })
-        .from(workspaceMember)
-        .innerJoin(
-          workspaceTable,
-          eq(workspaceMember.workspaceId, workspaceTable.id),
-        )
-        .where(
-          and(
-            eq(workspaceMember.userId, m.userId),
-            eq(workspaceTable.organizationId, orgId),
-          ),
-        );
-
-      return {
-        ...m,
-        workspaces,
-        isSuperAdmin: isSuperAdmin(m.user),
-      };
-    }),
-  );
+  const results = members.map((m) => ({
+    ...m,
+    isSuperAdmin: isSuperAdmin(m.user),
+  }));
 
   return c.json({ results });
 });
@@ -115,28 +81,8 @@ member.get(
       return c.json({ message: "Member not found" }, 404);
     }
 
-    const workspaces = await db
-      .select({
-        workspaceMemberId: workspaceMember.id,
-        workspaceId: workspaceMember.workspaceId,
-        workspaceName: workspaceTable.name,
-        role: workspaceMember.role,
-      })
-      .from(workspaceMember)
-      .innerJoin(
-        workspaceTable,
-        eq(workspaceMember.workspaceId, workspaceTable.id),
-      )
-      .where(
-        and(
-          eq(workspaceMember.userId, m.userId),
-          eq(workspaceTable.organizationId, orgId),
-        ),
-      );
-
     return c.json({
       ...m,
-      workspaces,
       isSuperAdmin: isSuperAdmin(m.user),
     });
   },
@@ -257,179 +203,12 @@ member.delete(
       }
     }
 
+    // Deleting org membership will cascade delete their workspaces via ownerId FK
     await db
       .delete(organizationMember)
       .where(eq(organizationMember.id, memberId));
 
     return c.json({ message: "Member removed from organization" });
-  },
-);
-
-/** Add member to a workspace */
-member.post(
-  "/:memberId/workspaces",
-  requireAuth,
-  requireOrgAccess(["admin"]),
-  sValidator("json", workspaceMemberCreateSchema),
-  async (c) => {
-    const orgId = c.req.param("orgId")!;
-    const memberId = c.req.param("memberId");
-    const { workspaceId, role } = c.req.valid("json");
-
-    const [m] = await db
-      .select()
-      .from(organizationMember)
-      .where(
-        and(
-          eq(organizationMember.id, memberId),
-          eq(organizationMember.organizationId, orgId),
-        ),
-      )
-      .limit(1);
-
-    if (!m) {
-      return c.json({ message: "Member not found" }, 404);
-    }
-
-    // Verify workspace belongs to org
-    const [ws] = await db
-      .select()
-      .from(workspaceTable)
-      .where(
-        and(
-          eq(workspaceTable.id, workspaceId),
-          eq(workspaceTable.organizationId, orgId),
-        ),
-      )
-      .limit(1);
-
-    if (!ws) {
-      return c.json(
-        { message: "Workspace not found in this organization" },
-        404,
-      );
-    }
-
-    // Check if already a member
-    const [existing] = await db
-      .select()
-      .from(workspaceMember)
-      .where(
-        and(
-          eq(workspaceMember.workspaceId, workspaceId),
-          eq(workspaceMember.userId, m.userId),
-        ),
-      )
-      .limit(1);
-
-    if (existing) {
-      return c.json(
-        { message: "User is already a member of this workspace" },
-        409,
-      );
-    }
-
-    const [record] = await db
-      .insert(workspaceMember)
-      .values({
-        id: nanoid(),
-        workspaceId,
-        userId: m.userId,
-        orgMemberId: m.id,
-        role,
-      })
-      .returning();
-
-    return c.json(record, 201);
-  },
-);
-
-/** Update workspace role */
-member.patch(
-  "/:memberId/workspaces/:workspaceId",
-  requireAuth,
-  requireOrgAccess(["admin"]),
-  sValidator("json", workspaceMemberUpdateSchema),
-  async (c) => {
-    const orgId = c.req.param("orgId")!;
-    const memberId = c.req.param("memberId");
-    const workspaceId = c.req.param("workspaceId");
-    const { role } = c.req.valid("json");
-
-    const [m] = await db
-      .select()
-      .from(organizationMember)
-      .where(
-        and(
-          eq(organizationMember.id, memberId),
-          eq(organizationMember.organizationId, orgId),
-        ),
-      )
-      .limit(1);
-
-    if (!m) {
-      return c.json({ message: "Member not found" }, 404);
-    }
-
-    const [updated] = await db
-      .update(workspaceMember)
-      .set({ role, updatedAt: new Date() })
-      .where(
-        and(
-          eq(workspaceMember.workspaceId, workspaceId),
-          eq(workspaceMember.userId, m.userId),
-        ),
-      )
-      .returning();
-
-    if (!updated) {
-      return c.json({ message: "Workspace membership not found" }, 404);
-    }
-
-    return c.json(updated);
-  },
-);
-
-/** Remove member from workspace */
-member.delete(
-  "/:memberId/workspaces/:workspaceId",
-  requireAuth,
-  requireOrgAccess(["admin"]),
-  async (c) => {
-    const orgId = c.req.param("orgId")!;
-    const memberId = c.req.param("memberId");
-    const workspaceId = c.req.param("workspaceId");
-
-    const [m] = await db
-      .select()
-      .from(organizationMember)
-      .where(
-        and(
-          eq(organizationMember.id, memberId),
-          eq(organizationMember.organizationId, orgId),
-        ),
-      )
-      .limit(1);
-
-    if (!m) {
-      return c.json({ message: "Member not found" }, 404);
-    }
-
-    const result = await db
-      .delete(workspaceMember)
-      .where(
-        and(
-          eq(workspaceMember.workspaceId, workspaceId),
-          eq(workspaceMember.userId, m.userId),
-        ),
-      )
-      .returning();
-
-    if (result.length === 0) {
-      return c.json({ message: "Workspace membership not found" }, 404);
-    }
-
-    return c.json({ message: "Member removed from workspace" });
   },
 );
 

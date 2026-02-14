@@ -75,25 +75,9 @@ export function RemoveMemberDialog({
 
         <div className="py-4">
           <p className="text-sm text-muted-foreground">
-            This will immediately revoke their access to all workspaces in this
-            organization:
+            This will immediately revoke their access and delete all their
+            workspaces in this organization.
           </p>
-          <ul className="mt-2 space-y-1">
-            {member.workspaces.map((ws) => (
-              <li
-                key={ws.workspaceId}
-                className="text-sm font-medium flex items-center gap-2"
-              >
-                <div className="h-1.5 w-1.5 rounded-full bg-muted-foreground" />
-                {ws.workspaceName}
-              </li>
-            ))}
-            {member.workspaces.length === 0 && (
-              <li className="text-sm text-muted-foreground italic">
-                No workspaces assigned
-              </li>
-            )}
-          </ul>
         </div>
 
         <DialogFooter>

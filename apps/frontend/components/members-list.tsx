@@ -9,16 +9,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
-import {
-  MoreHorizontal,
-  Shield,
-  User,
-  Trash2,
-  Layout,
-  Edit,
-  Lock,
-  Infinity,
-} from "lucide-react";
+import { MoreHorizontal, Shield, User, Trash2, Edit } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -31,7 +22,6 @@ import { Badge } from "@/components/ui/badge";
 import { type OrgMemberListItem } from "@platypus/schemas";
 import { useState } from "react";
 import { MemberEditDialog } from "@/components/member-edit-dialog";
-import { WorkspaceAccessDialog } from "@/components/workspace-access-dialog";
 import { RemoveMemberDialog } from "@/components/remove-member-dialog";
 
 interface MembersListProps {
@@ -44,20 +34,17 @@ export function MembersList({ orgId, members, onUpdate }: MembersListProps) {
   const [editingMember, setEditingMember] = useState<OrgMemberListItem | null>(
     null,
   );
-  const [managingAccess, setManagingAccess] =
-    useState<OrgMemberListItem | null>(null);
   const [removingMember, setRemovingMember] =
     useState<OrgMemberListItem | null>(null);
 
   return (
     <div className="border rounded-lg overflow-hidden">
       <div className="overflow-x-auto">
-        <Table className="min-w-[800px]">
+        <Table className="min-w-[600px]">
           <TableHeader>
             <TableRow>
               <TableHead>User</TableHead>
               <TableHead>Org Role</TableHead>
-              <TableHead>Workspaces</TableHead>
               <TableHead className="text-right">Actions</TableHead>
             </TableRow>
           </TableHeader>
@@ -100,21 +87,6 @@ export function MembersList({ orgId, members, onUpdate }: MembersListProps) {
                     {member.isSuperAdmin ? "Super Admin" : member.role}
                   </Badge>
                 </TableCell>
-                <TableCell>
-                  <div className="flex items-center gap-2">
-                    {member.isSuperAdmin ? (
-                      <>
-                        <Infinity className="h-4 w-4 text-muted-foreground" />
-                        <span>All Workspaces</span>
-                      </>
-                    ) : (
-                      <>
-                        <Layout className="h-4 w-4 text-muted-foreground" />
-                        <span>{member.workspaces.length}</span>
-                      </>
-                    )}
-                  </div>
-                </TableCell>
                 <TableCell className="text-right">
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
@@ -135,12 +107,6 @@ export function MembersList({ orgId, members, onUpdate }: MembersListProps) {
                             className="cursor-pointer"
                           >
                             <Edit className="h-4 w-4" /> Edit Org Role
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            onClick={() => setManagingAccess(member)}
-                            className="cursor-pointer"
-                          >
-                            <Lock className="h-4 w-4" /> Manage Workspace Access
                           </DropdownMenuItem>
                           <DropdownMenuSeparator />
                           <DropdownMenuItem
@@ -177,19 +143,6 @@ export function MembersList({ orgId, members, onUpdate }: MembersListProps) {
           onOpenChange={(open: boolean) => !open && setEditingMember(null)}
           onSuccess={() => {
             setEditingMember(null);
-            onUpdate();
-          }}
-        />
-      )}
-
-      {managingAccess && (
-        <WorkspaceAccessDialog
-          orgId={orgId}
-          member={managingAccess}
-          open={!!managingAccess}
-          onOpenChange={(open: boolean) => !open && setManagingAccess(null)}
-          onSuccess={() => {
-            setManagingAccess(null);
             onUpdate();
           }}
         />

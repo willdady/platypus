@@ -3,12 +3,10 @@ import { db } from "../index.ts";
 import {
   invitation as invitationTable,
   organization as organizationTable,
-  workspace as workspaceTable,
   organizationMember,
-  workspaceMember,
   user as userTable,
 } from "../db/schema.ts";
-import { eq, and, or, lt } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 import { requireAuth } from "../middleware/authentication.ts";
 import type { Variables } from "../server.ts";
 import { nanoid } from "nanoid";
@@ -25,14 +23,11 @@ userInvitation.get("/", requireAuth, async (c) => {
       id: invitationTable.id,
       email: invitationTable.email,
       organizationId: invitationTable.organizationId,
-      workspaceId: invitationTable.workspaceId,
-      role: invitationTable.role,
       invitedBy: invitationTable.invitedBy,
       status: invitationTable.status,
       expiresAt: invitationTable.expiresAt,
       createdAt: invitationTable.createdAt,
       organizationName: organizationTable.name,
-      workspaceName: workspaceTable.name,
       invitedByName: userTable.name,
     })
     .from(invitationTable)
@@ -40,20 +35,14 @@ userInvitation.get("/", requireAuth, async (c) => {
       organizationTable,
       eq(invitationTable.organizationId, organizationTable.id),
     )
-    .innerJoin(
-      workspaceTable,
-      eq(invitationTable.workspaceId, workspaceTable.id),
-    )
     .innerJoin(userTable, eq(invitationTable.invitedBy, userTable.id))
     .where(
       and(
         eq(invitationTable.email, user.email),
         eq(invitationTable.status, "pending"),
-        // We'll handle expiration filtering in JS or add the correct Drizzle op
       ),
     );
 
-  // Filter out expired ones in JS for simplicity or use gt(invitationTable.expiresAt, now)
   const activeResults = results.filter((r) => new Date(r.expiresAt) > now);
 
   return c.json({ results: activeResults });
@@ -95,8 +84,8 @@ userInvitation.post("/:invitationId/accept", requireAuth, async (c) => {
   const invite = invitation[0];
 
   await db.transaction(async (tx) => {
-    // 1. Ensure org membership exists
-    let orgMember = await tx
+    // Ensure org membership exists
+    const orgMember = await tx
       .select()
       .from(organizationMember)
       .where(
@@ -107,30 +96,16 @@ userInvitation.post("/:invitationId/accept", requireAuth, async (c) => {
       )
       .limit(1);
 
-    let orgMemberId: string;
-
     if (orgMember.length === 0) {
-      orgMemberId = nanoid();
       await tx.insert(organizationMember).values({
-        id: orgMemberId,
+        id: nanoid(),
         organizationId: invite.organizationId,
         userId: user.id,
         role: "member",
       });
-    } else {
-      orgMemberId = orgMember[0].id;
     }
 
-    // 2. Create workspace membership
-    await tx.insert(workspaceMember).values({
-      id: nanoid(),
-      workspaceId: invite.workspaceId,
-      userId: user.id,
-      orgMemberId: orgMemberId,
-      role: invite.role as any,
-    });
-
-    // 3. Update invitation status
+    // Update invitation status
     await tx
       .update(invitationTable)
       .set({ status: "accepted" })

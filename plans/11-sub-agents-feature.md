@@ -6,18 +6,18 @@ This document outlines the design for implementing a "Sub-Agents" feature that a
 
 ## Key Decisions Summary
 
-| Decision | Choice |
-|----------|--------|
-| Sub-agent depth | Limited to 1 level at runtime (sub-agents don't get `newTask` tool) |
-| Sub-agent assignment | Static - explicitly assigned to parent agent |
-| Context passing | Fresh context with task-specific information from parent |
-| Tool injection | Single auto-injected `newTask` tool when sub-agents assigned |
-| Result tool | `taskResult` with `{ result: string, status: 'success' \| 'error' }` |
-| Sub-agent stop condition | `taskResult` tool call OR 100 steps (safety limit) |
-| UI presentation | **Side pane to the right of the main chat area** |
-| Persistence | Save sub-chats with `parentChatId` reference |
-| Execution | Client-side tool execution renders side pane with Chat component |
-| Validation | Self-assignment prevention at agent create/update time |
+| Decision                 | Choice                                                               |
+| ------------------------ | -------------------------------------------------------------------- |
+| Sub-agent depth          | Limited to 1 level at runtime (sub-agents don't get `newTask` tool)  |
+| Sub-agent assignment     | Static - explicitly assigned to parent agent                         |
+| Context passing          | Fresh context with task-specific information from parent             |
+| Tool injection           | Single auto-injected `newTask` tool when sub-agents assigned         |
+| Result tool              | `taskResult` with `{ result: string, status: 'success' \| 'error' }` |
+| Sub-agent stop condition | `taskResult` tool call OR 100 steps (safety limit)                   |
+| UI presentation          | **Side pane to the right of the main chat area**                     |
+| Persistence              | Save sub-chats with `parentChatId` reference                         |
+| Execution                | Client-side tool execution renders side pane with Chat component     |
+| Validation               | Self-assignment prevention at agent create/update time               |
 
 ---
 
@@ -160,7 +160,7 @@ export const agentCreateSchema = agentSchema.pick({
   toolSetIds: true,
   skillIds: true,
   inputPlaceholder: true,
-  subAgentIds: true,  // <-- ADDED
+  subAgentIds: true, // <-- ADDED
 });
 
 export const agentUpdateSchema = agentSchema.pick({
@@ -179,7 +179,7 @@ export const agentUpdateSchema = agentSchema.pick({
   toolSetIds: true,
   skillIds: true,
   inputPlaceholder: true,
-  subAgentIds: true,  // <-- ADDED
+  subAgentIds: true, // <-- ADDED
 });
 ```
 
@@ -212,7 +212,7 @@ export const chatSubmitSchema = chatSchema
     providerId: z.string().optional(),
     modelId: z.string().optional(),
     search: z.boolean().optional(),
-    parentChatId: z.string().optional(),  // <-- ADDED
+    parentChatId: z.string().optional(), // <-- ADDED
   })
   .refine(
     (data) => {
@@ -234,14 +234,18 @@ export const chatSubmitSchema = chatSchema
 
 export const newTaskToolInputSchema = z.object({
   subAgentId: z.string().describe("The ID of the sub-agent to delegate to"),
-  task: z.string().describe("The task description and context for the sub-agent"),
+  task: z
+    .string()
+    .describe("The task description and context for the sub-agent"),
 });
 
 export type NewTaskToolInput = z.infer<typeof newTaskToolInputSchema>;
 
 export const taskResultToolInputSchema = z.object({
   result: z.string().describe("The result of the completed task"),
-  status: z.enum(["success", "error"]).describe("Whether the task succeeded or failed"),
+  status: z
+    .enum(["success", "error"])
+    .describe("Whether the task succeeded or failed"),
 });
 
 export type TaskResultToolInput = z.infer<typeof taskResultToolInputSchema>;
@@ -265,11 +269,14 @@ import { and, eq, inArray } from "drizzle-orm";
 export const validateSubAgentAssignment = async (
   workspaceId: string,
   agentId: string,
-  subAgentIds: string[]
+  subAgentIds: string[],
 ): Promise<{ valid: boolean; error?: string }> => {
   // 1. Check self-assignment
   if (subAgentIds.includes(agentId)) {
-    return { valid: false, error: "An agent cannot assign itself as a sub-agent" };
+    return {
+      valid: false,
+      error: "An agent cannot assign itself as a sub-agent",
+    };
   }
 
   // 2. Fetch all proposed sub-agents
@@ -279,13 +286,16 @@ export const validateSubAgentAssignment = async (
     .where(
       and(
         eq(agentTable.workspaceId, workspaceId),
-        inArray(agentTable.id, subAgentIds)
-      )
+        inArray(agentTable.id, subAgentIds),
+      ),
     );
 
   // 3. Verify all sub-agents exist in workspace
   if (subAgents.length !== subAgentIds.length) {
-    return { valid: false, error: "One or more sub-agents not found in workspace" };
+    return {
+      valid: false,
+      error: "One or more sub-agents not found in workspace",
+    };
   }
 
   // Note: We allow agents that have their own sub-agents to BE sub-agents.
@@ -306,82 +316,96 @@ Modify the agent create/update routes to include validation:
 import { validateSubAgentAssignment } from "../services/sub-agent-validation.ts";
 
 // In agent.post("/", ...)
-agent.post("/", requireAuth, requireOrgAccess(), requireWorkspaceAccess(["admin", "editor"]), sValidator("json", agentCreateSchema), async (c) => {
-  const data = c.req.valid("json");
-  const workspaceId = c.req.param("workspaceId")!;
+agent.post(
+  "/",
+  requireAuth,
+  requireOrgAccess(),
+  requireWorkspaceAccess(["admin", "editor"]),
+  sValidator("json", agentCreateSchema),
+  async (c) => {
+    const data = c.req.valid("json");
+    const workspaceId = c.req.param("workspaceId")!;
 
-  // Deduplicate arrays
-  if (data.toolSetIds) {
-    data.toolSetIds = dedupeArray(data.toolSetIds);
-  }
-  if (data.skillIds) {
-    data.skillIds = dedupeArray(data.skillIds);
-  }
-  if (data.subAgentIds) {
-    data.subAgentIds = dedupeArray(data.subAgentIds);
-  }
-
-  // Validate sub-agent assignments
-  if (data.subAgentIds && data.subAgentIds.length > 0) {
-    const validation = await validateSubAgentAssignment(
-      workspaceId,
-      "", // No ID yet for new agent
-      data.subAgentIds
-    );
-    if (!validation.valid) {
-      return c.json({ message: validation.error }, 400);
+    // Deduplicate arrays
+    if (data.toolSetIds) {
+      data.toolSetIds = dedupeArray(data.toolSetIds);
     }
-  }
+    if (data.skillIds) {
+      data.skillIds = dedupeArray(data.skillIds);
+    }
+    if (data.subAgentIds) {
+      data.subAgentIds = dedupeArray(data.subAgentIds);
+    }
 
-  const record = await db
-    .insert(agentTable)
-    .values({
-      id: nanoid(),
-      ...data,
-    })
-    .returning();
-  return c.json(record[0], 201);
-});
+    // Validate sub-agent assignments
+    if (data.subAgentIds && data.subAgentIds.length > 0) {
+      const validation = await validateSubAgentAssignment(
+        workspaceId,
+        "", // No ID yet for new agent
+        data.subAgentIds,
+      );
+      if (!validation.valid) {
+        return c.json({ message: validation.error }, 400);
+      }
+    }
+
+    const record = await db
+      .insert(agentTable)
+      .values({
+        id: nanoid(),
+        ...data,
+      })
+      .returning();
+    return c.json(record[0], 201);
+  },
+);
 
 // In agent.put("/:agentId", ...)
-agent.put("/:agentId", requireAuth, requireOrgAccess(), requireWorkspaceAccess(["admin", "editor"]), sValidator("json", agentUpdateSchema), async (c) => {
-  const agentId = c.req.param("agentId");
-  const data = c.req.valid("json");
+agent.put(
+  "/:agentId",
+  requireAuth,
+  requireOrgAccess(),
+  requireWorkspaceAccess(["admin", "editor"]),
+  sValidator("json", agentUpdateSchema),
+  async (c) => {
+    const agentId = c.req.param("agentId");
+    const data = c.req.valid("json");
 
-  // Deduplicate arrays
-  if (data.toolSetIds) {
-    data.toolSetIds = dedupeArray(data.toolSetIds);
-  }
-  if (data.skillIds) {
-    data.skillIds = dedupeArray(data.skillIds);
-  }
-  if (data.subAgentIds) {
-    data.subAgentIds = dedupeArray(data.subAgentIds);
-  }
-
-  // Validate sub-agent assignments
-  if (data.subAgentIds) {
-    const workspaceId = c.req.param("workspaceId")!;
-    const validation = await validateSubAgentAssignment(
-      workspaceId,
-      agentId,
-      data.subAgentIds
-    );
-    if (!validation.valid) {
-      return c.json({ message: validation.error }, 400);
+    // Deduplicate arrays
+    if (data.toolSetIds) {
+      data.toolSetIds = dedupeArray(data.toolSetIds);
     }
-  }
+    if (data.skillIds) {
+      data.skillIds = dedupeArray(data.skillIds);
+    }
+    if (data.subAgentIds) {
+      data.subAgentIds = dedupeArray(data.subAgentIds);
+    }
 
-  const record = await db
-    .update(agentTable)
-    .set({
-      ...data,
-      updatedAt: new Date(),
-    })
-    .where(eq(agentTable.id, agentId))
-    .returning();
-  return c.json(record, 200);
-});
+    // Validate sub-agent assignments
+    if (data.subAgentIds) {
+      const workspaceId = c.req.param("workspaceId")!;
+      const validation = await validateSubAgentAssignment(
+        workspaceId,
+        agentId,
+        data.subAgentIds,
+      );
+      if (!validation.valid) {
+        return c.json({ message: validation.error }, 400);
+      }
+    }
+
+    const record = await db
+      .update(agentTable)
+      .set({
+        ...data,
+        updatedAt: new Date(),
+      })
+      .where(eq(agentTable.id, agentId))
+      .returning();
+    return c.json(record, 200);
+  },
+);
 ```
 
 ### 3. Create Sub-Agent Tools
@@ -398,17 +422,21 @@ import { z } from "zod";
  * The frontend handles the tool call by opening the side pane.
  */
 export const createNewTaskTool = (
-  subAgents: Array<{ id: string; name: string; description?: string }>
+  subAgents: Array<{ id: string; name: string; description?: string }>,
 ) => {
   const subAgentDescriptions = subAgents
-    .map((sa) => `- ${sa.name} (${sa.id}): ${sa.description || "No description"}`)
+    .map(
+      (sa) => `- ${sa.name} (${sa.id}): ${sa.description || "No description"}`,
+    )
     .join("\n");
 
   return tool({
     description: `Delegate a task to a specialized sub-agent. Available sub-agents:\n${subAgentDescriptions}`,
     inputSchema: z.object({
       subAgentId: z.string().describe("The ID of the sub-agent to delegate to"),
-      task: z.string().describe("Complete task description with all necessary context"),
+      task: z
+        .string()
+        .describe("Complete task description with all necessary context"),
     }),
     // No execute function - this is a client-side tool
   });
@@ -422,10 +450,13 @@ export const createNewTaskTool = (
  */
 export const createTaskResultTool = () => {
   return tool({
-    description: "Call this tool when you have completed your assigned task. This will return control to the parent agent.",
+    description:
+      "Call this tool when you have completed your assigned task. This will return control to the parent agent.",
     inputSchema: z.object({
       result: z.string().describe("The complete result of your task"),
-      status: z.enum(["success", "error"]).describe("Whether the task was completed successfully"),
+      status: z
+        .enum(["success", "error"])
+        .describe("Whether the task was completed successfully"),
     }),
     // No execute function - this is a client-side tool
   });
@@ -440,143 +471,154 @@ Modify the chat POST endpoint to handle sub-agent mode:
 // apps/backend/src/routes/chat.ts
 
 // Add imports
-import { or } from "ai";  // for combining stop conditions
+import { or } from "ai"; // for combining stop conditions
 import { createNewTaskTool, createTaskResultTool } from "../tools/sub-agent.ts";
 import { agent as agentTable } from "../db/schema.ts";
 
 // In chat.post("/", ...) - after loadTools
 
-chat.post("/", requireAuth, requireOrgAccess(), requireWorkspaceAccess(), sValidator("json", chatSubmitSchema), async (c) => {
-  const orgId = c.req.param("orgId")!;
-  const workspaceId = c.req.param("workspaceId")!;
-  const data = c.req.valid("json");
-  const { messages = [], parentChatId } = data;
-  const isSubAgentChat = Boolean(parentChatId);
+chat.post(
+  "/",
+  requireAuth,
+  requireOrgAccess(),
+  requireWorkspaceAccess(),
+  sValidator("json", chatSubmitSchema),
+  async (c) => {
+    const orgId = c.req.param("orgId")!;
+    const workspaceId = c.req.param("workspaceId")!;
+    const data = c.req.valid("json");
+    const { messages = [], parentChatId } = data;
+    const isSubAgentChat = Boolean(parentChatId);
 
-  // ... existing workspace fetch and context resolution ...
-  const context = await resolveChatContext(data, orgId, workspaceId);
-  const { provider, agent, resolvedModelId, resolvedMaxSteps } = context;
+    // ... existing workspace fetch and context resolution ...
+    const context = await resolveChatContext(data, orgId, workspaceId);
+    const { provider, agent, resolvedModelId, resolvedMaxSteps } = context;
 
-  // Initialize Model
-  const [aiProvider, model] = createModel(provider, resolvedModelId);
+    // Initialize Model
+    const [aiProvider, model] = createModel(provider, resolvedModelId);
 
-  // Load Tools (Static & MCP)
-  const { tools, mcpClients } = await loadTools(agent, workspaceId);
+    // Load Tools (Static & MCP)
+    const { tools, mcpClients } = await loadTools(agent, workspaceId);
 
-  // Configure Search (if enabled)
-  if (data.search) {
-    Object.assign(tools, createSearchTools(provider, aiProvider));
-  }
-
-  // Inject sub-agent tools if applicable (only for parent agents, not sub-agents)
-  if (agent?.subAgentIds && agent.subAgentIds.length > 0 && !isSubAgentChat) {
-    // Fetch sub-agent details for tool descriptions
-    const subAgents = await db
-      .select({ id: agentTable.id, name: agentTable.name, description: agentTable.description })
-      .from(agentTable)
-      .where(inArray(agentTable.id, agent.subAgentIds));
-
-    tools.newTask = createNewTaskTool(subAgents);
-  }
-
-  // Inject taskResult tool if this is a sub-agent chat
-  if (isSubAgentChat) {
-    tools.taskResult = createTaskResultTool();
-  }
-
-  // Fetch Skills (if any)
-  let skills: Array<Pick<Skill, "name" | "description">> = [];
-  if (agent?.skillIds && agent.skillIds.length > 0) {
-    const skillRecords = await db
-      .select({ name: skillTable.name, description: skillTable.description })
-      .from(skillTable)
-      .where(
-        and(
-          eq(skillTable.workspaceId, workspaceId),
-          inArray(skillTable.id, agent.skillIds),
-        ),
-      );
-    skills = skillRecords;
-  }
-
-  // ... existing user context fetch ...
-
-  // Prepare Generation Config
-  const config = await resolveGenerationConfig(
-    data,
-    workspaceId,
-    agent,
-    workspace.context || undefined,
-    skills,
-    { id: user.id, name: user.name },
-    userGlobalContext,
-    userWorkspaceContext,
-  );
-
-  // Inject loadSkill tool if skills exist
-  if (skills.length > 0) {
-    tools.loadSkill = createLoadSkillTool(workspaceId);
-  }
-
-  // Prepare stop conditions
-  const { systemPrompt, ...restConfig } = config;
-  const stopConditions = [];
-
-  // For sub-agents: stop when taskResult tool is called OR after 100 steps
-  if (isSubAgentChat) {
-    stopConditions.push(hasToolCall("taskResult"));
-    stopConditions.push(stepCountIs(100));  // Force safety limit for sub-agents
-  } else {
-    // For regular chats: stop at maxSteps and optionally askFollowupQuestion
-    stopConditions.push(stepCountIs(resolvedMaxSteps));
-    if (tools.askFollowupQuestion) {
-      stopConditions.push(hasToolCall("askFollowupQuestion"));
+    // Configure Search (if enabled)
+    if (data.search) {
+      Object.assign(tools, createSearchTools(provider, aiProvider));
     }
-  }
 
-  // Stream Response
-  const result = streamText({
-    model: model as any,
-    messages: await convertToModelMessages(messages),
-    stopWhen: stopConditions,
-    tools,
-    system: systemPrompt,
-    ...restConfig,
-  });
+    // Inject sub-agent tools if applicable (only for parent agents, not sub-agents)
+    if (agent?.subAgentIds && agent.subAgentIds.length > 0 && !isSubAgentChat) {
+      // Fetch sub-agent details for tool descriptions
+      const subAgents = await db
+        .select({
+          id: agentTable.id,
+          name: agentTable.name,
+          description: agentTable.description,
+        })
+        .from(agentTable)
+        .where(inArray(agentTable.id, agent.subAgentIds));
 
-  return result.toUIMessageStreamResponse<PlatypusUIMessage>({
-    originalMessages: messages,
-    generateMessageId: createIdGenerator({
-      prefix: "msg",
-      size: 16,
-    }),
-    onFinish: async ({ messages }) => {
-      try {
-        // Close all MCP clients
-        for (const mcpClient of mcpClients) {
-          try {
-            await mcpClient.close();
-          } catch (error) {
-            logger.error({ error }, "Error closing MCP client");
-          }
-        }
+      tools.newTask = createNewTaskTool(subAgents);
+    }
 
-        // Upsert chat record with parentChatId if applicable
-        await upsertChatRecord(
-          data.id,
-          workspaceId,
-          messages,
-          context,
-          config,
-          data,
-          parentChatId  // Pass parentChatId for sub-agent chats
+    // Inject taskResult tool if this is a sub-agent chat
+    if (isSubAgentChat) {
+      tools.taskResult = createTaskResultTool();
+    }
+
+    // Fetch Skills (if any)
+    let skills: Array<Pick<Skill, "name" | "description">> = [];
+    if (agent?.skillIds && agent.skillIds.length > 0) {
+      const skillRecords = await db
+        .select({ name: skillTable.name, description: skillTable.description })
+        .from(skillTable)
+        .where(
+          and(
+            eq(skillTable.workspaceId, workspaceId),
+            inArray(skillTable.id, agent.skillIds),
+          ),
         );
-      } catch (error) {
-        logger.error({ error }, "Error in onFinish");
+      skills = skillRecords;
+    }
+
+    // ... existing user context fetch ...
+
+    // Prepare Generation Config
+    const config = await resolveGenerationConfig(
+      data,
+      workspaceId,
+      agent,
+      workspace.context || undefined,
+      skills,
+      { id: user.id, name: user.name },
+      userGlobalContext,
+      userWorkspaceContext,
+    );
+
+    // Inject loadSkill tool if skills exist
+    if (skills.length > 0) {
+      tools.loadSkill = createLoadSkillTool(workspaceId);
+    }
+
+    // Prepare stop conditions
+    const { systemPrompt, ...restConfig } = config;
+    const stopConditions = [];
+
+    // For sub-agents: stop when taskResult tool is called OR after 100 steps
+    if (isSubAgentChat) {
+      stopConditions.push(hasToolCall("taskResult"));
+      stopConditions.push(stepCountIs(100)); // Force safety limit for sub-agents
+    } else {
+      // For regular chats: stop at maxSteps and optionally askFollowupQuestion
+      stopConditions.push(stepCountIs(resolvedMaxSteps));
+      if (tools.askFollowupQuestion) {
+        stopConditions.push(hasToolCall("askFollowupQuestion"));
       }
-    },
-  });
-});
+    }
+
+    // Stream Response
+    const result = streamText({
+      model: model as any,
+      messages: await convertToModelMessages(messages),
+      stopWhen: stopConditions,
+      tools,
+      system: systemPrompt,
+      ...restConfig,
+    });
+
+    return result.toUIMessageStreamResponse<PlatypusUIMessage>({
+      originalMessages: messages,
+      generateMessageId: createIdGenerator({
+        prefix: "msg",
+        size: 16,
+      }),
+      onFinish: async ({ messages }) => {
+        try {
+          // Close all MCP clients
+          for (const mcpClient of mcpClients) {
+            try {
+              await mcpClient.close();
+            } catch (error) {
+              logger.error({ error }, "Error closing MCP client");
+            }
+          }
+
+          // Upsert chat record with parentChatId if applicable
+          await upsertChatRecord(
+            data.id,
+            workspaceId,
+            messages,
+            context,
+            config,
+            data,
+            parentChatId, // Pass parentChatId for sub-agent chats
+          );
+        } catch (error) {
+          logger.error({ error }, "Error in onFinish");
+        }
+      },
+    });
+  },
+);
 ```
 
 ### 5. Update Chat List Endpoint
@@ -588,38 +630,48 @@ Filter out sub-agent chats from the main list:
 
 import { isNull } from "drizzle-orm";
 
-chat.get("/", requireAuth, requireOrgAccess(), requireWorkspaceAccess(), sValidator("query", z.object({ limit: z.string().optional(), offset: z.string().optional() })), async (c) => {
-  const workspaceId = c.req.param("workspaceId")!;
-  const { limit: limitStr, offset: offsetStr } = c.req.valid("query");
+chat.get(
+  "/",
+  requireAuth,
+  requireOrgAccess(),
+  requireWorkspaceAccess(),
+  sValidator(
+    "query",
+    z.object({ limit: z.string().optional(), offset: z.string().optional() }),
+  ),
+  async (c) => {
+    const workspaceId = c.req.param("workspaceId")!;
+    const { limit: limitStr, offset: offsetStr } = c.req.valid("query");
 
-  const limit = Math.min(parseInt(limitStr ?? "100") || 100, 100);
-  const offset = parseInt(offsetStr ?? "0") || 0;
+    const limit = Math.min(parseInt(limitStr ?? "100") || 100, 100);
+    const offset = parseInt(offsetStr ?? "0") || 0;
 
-  const records = await db
-    .select({
-      id: chatTable.id,
-      title: chatTable.title,
-      isPinned: chatTable.isPinned,
-      tags: chatTable.tags,
-      agentId: chatTable.agentId,
-      providerId: chatTable.providerId,
-      modelId: chatTable.modelId,
-      createdAt: chatTable.createdAt,
-      updatedAt: chatTable.updatedAt,
-    })
-    .from(chatTable)
-    .where(
-      and(
-        eq(chatTable.workspaceId, workspaceId),
-        isNull(chatTable.parentChatId)  // Only top-level chats
+    const records = await db
+      .select({
+        id: chatTable.id,
+        title: chatTable.title,
+        isPinned: chatTable.isPinned,
+        tags: chatTable.tags,
+        agentId: chatTable.agentId,
+        providerId: chatTable.providerId,
+        modelId: chatTable.modelId,
+        createdAt: chatTable.createdAt,
+        updatedAt: chatTable.updatedAt,
+      })
+      .from(chatTable)
+      .where(
+        and(
+          eq(chatTable.workspaceId, workspaceId),
+          isNull(chatTable.parentChatId), // Only top-level chats
+        ),
       )
-    )
-    .orderBy(desc(chatTable.createdAt))
-    .limit(limit)
-    .offset(offset);
+      .orderBy(desc(chatTable.createdAt))
+      .limit(limit)
+      .offset(offset);
 
-  return c.json({ results: records });
-});
+    return c.json({ results: records });
+  },
+);
 ```
 
 ### 6. Update upsertChatRecord helper
@@ -639,7 +691,7 @@ const upsertChatRecord = async (
   context: ChatContext,
   config: GenerationConfig,
   data: ChatSubmitData,
-  parentChatId?: string,  // <-- ADDED parameter
+  parentChatId?: string, // <-- ADDED parameter
 ) => {
   const { resolvedAgentId, resolvedProviderId, resolvedModelId } = context;
 
@@ -656,7 +708,7 @@ const upsertChatRecord = async (
     seed: resolvedAgentId ? null : data.seed || null,
     presencePenalty: resolvedAgentId ? null : config.presencePenalty || null,
     frequencyPenalty: resolvedAgentId ? null : config.frequencyPenalty || null,
-    parentChatId: parentChatId || null,  // <-- ADDED
+    parentChatId: parentChatId || null, // <-- ADDED
     updatedAt: new Date(),
   };
 
@@ -722,7 +774,10 @@ export type SubAgentTools = {
   taskResult: InferUITool<ReturnType<typeof createTaskResultTool>>;
 };
 
-export type PlatypusTools = MathTools & ElicitationTools & SkillTools & SubAgentTools;
+export type PlatypusTools = MathTools &
+  ElicitationTools &
+  SkillTools &
+  SubAgentTools;
 
 export type PlatypusUIMessage = UIMessage<any, UIDataTypes, PlatypusTools>;
 ```
@@ -1019,9 +1074,9 @@ export const Chat = ({
   workspaceId,
   chatId,
   initialAgentId,
-  parentChatId,      // New prop
-  initialTask,       // New prop
-  isSubAgentMode,    // New prop
+  parentChatId, // New prop
+  initialTask, // New prop
+  isSubAgentMode, // New prop
 }: {
   orgId: string;
   workspaceId: string;
@@ -1043,12 +1098,19 @@ export const Chat = ({
         {
           body: {
             agentId,
-            parentChatId,  // Include parentChatId in request
+            parentChatId, // Include parentChatId in request
           },
-        }
+        },
       );
     }
-  }, [isSubAgentMode, initialTask, messages.length, agentId, sendMessage, parentChatId]);
+  }, [
+    isSubAgentMode,
+    initialTask,
+    messages.length,
+    agentId,
+    sendMessage,
+    parentChatId,
+  ]);
 
   // ... rest of component ...
 };
@@ -1253,7 +1315,7 @@ Add sub-agent information to the system prompt:
 interface SystemPromptTemplateData {
   // ... existing params ...
   subAgents?: Array<{ id: string; name: string; description?: string }>;
-  isSubAgentMode?: boolean;  // <-- ADDED
+  isSubAgentMode?: boolean; // <-- ADDED
 }
 
 export function renderSystemPrompt(data: SystemPromptTemplateData): string {
@@ -1369,6 +1431,7 @@ const resolveGenerationConfig = async (
 ## Implementation Checklist
 
 ### Phase 1: Database & Schema
+
 - [ ] Add `subAgentIds` field to agent table
 - [ ] Add `parentChatId` field to chat table
 - [ ] Create database index for `parentChatId`
@@ -1378,12 +1441,14 @@ const resolveGenerationConfig = async (
 - [ ] Run `pnpm drizzle-kit-push` to apply changes
 
 ### Phase 2: Backend Services
+
 - [ ] Create `apps/backend/src/services/sub-agent-validation.ts`
 - [ ] Create `apps/backend/src/tools/sub-agent.ts`
 - [ ] Update agent POST route with validation
 - [ ] Update agent PUT route with validation
 
 ### Phase 3: Backend Integration
+
 - [ ] Update chat POST endpoint for sub-agent mode
 - [ ] Update chat GET list endpoint to filter sub-chats
 - [ ] Update `upsertChatRecord` to include `parentChatId`
@@ -1392,10 +1457,12 @@ const resolveGenerationConfig = async (
 - [ ] Add sub-agent tool types to `PlatypusTools`
 
 ### Phase 4: Frontend Context & State
+
 - [ ] Create `apps/frontend/components/sub-agent-context.tsx`
 - [ ] Wrap chat page with `SubAgentProvider`
 
 ### Phase 5: Frontend Components
+
 - [ ] Create `apps/frontend/components/new-task-tool.tsx`
 - [ ] Create `apps/frontend/components/task-result-tool.tsx`
 - [ ] Create `apps/frontend/components/sub-agent-pane.tsx`
@@ -1404,9 +1471,11 @@ const resolveGenerationConfig = async (
 - [ ] Update chat page layout with side pane
 
 ### Phase 6: Frontend Forms
+
 - [ ] Update `AgentForm` with sub-agent selection UI
 
 ### Phase 7: Testing & Polish
+
 - [ ] Test self-assignment prevention
 - [ ] Test sub-agent delegation flow
 - [ ] Test taskResult tool completion
@@ -1438,6 +1507,7 @@ const resolveGenerationConfig = async (
 ## Files to Create/Modify
 
 ### New Files
+
 - `apps/backend/src/services/sub-agent-validation.ts`
 - `apps/backend/src/tools/sub-agent.ts`
 - `apps/frontend/components/sub-agent-context.tsx`
@@ -1446,6 +1516,7 @@ const resolveGenerationConfig = async (
 - `apps/frontend/components/sub-agent-pane.tsx`
 
 ### Modified Files
+
 - `apps/backend/src/db/schema.ts` - Add fields
 - `apps/backend/src/routes/agent.ts` - Add validation
 - `apps/backend/src/routes/chat.ts` - Add sub-agent logic

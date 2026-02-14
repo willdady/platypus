@@ -17,11 +17,8 @@ interface OrgMembership {
   role: "admin" | "member";
 }
 
-interface WorkspaceMembership {
-  id: string;
-  workspaceId: string;
-  role: "admin" | "editor" | "viewer";
-  inherited?: boolean;
+interface WorkspaceData {
+  ownerId: string;
 }
 
 interface AuthContextType {
@@ -32,11 +29,9 @@ interface AuthContextType {
   error: any;
   authClient: ReturnType<typeof createAuthClient>;
   orgMembership: OrgMembership | null;
-  workspaceMembership: WorkspaceMembership | null;
-  workspaceRole: "admin" | "editor" | "viewer" | null;
   isOrgAdmin: boolean;
-  canEdit: boolean;
-  canManage: boolean;
+  isWorkspaceOwner: boolean;
+  hasWorkspaceAccess: boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -60,11 +55,11 @@ export function AuthProvider({
   const [orgMembership, setOrgMembership] = useState<OrgMembership | null>(
     null,
   );
-  const [workspaceMembership, setWorkspaceMembership] =
-    useState<WorkspaceMembership | null>(null);
+  const [workspaceData, setWorkspaceData] = useState<WorkspaceData | null>(
+    null,
+  );
   const [isOrgMembershipLoading, setIsOrgMembershipLoading] = useState(false);
-  const [isWorkspaceMembershipLoading, setIsWorkspaceMembershipLoading] =
-    useState(false);
+  const [isWorkspaceLoading, setIsWorkspaceLoading] = useState(false);
   const [hasFetchedOrg, setHasFetchedOrg] = useState(false);
   const [hasFetchedWorkspace, setHasFetchedWorkspace] = useState(false);
 
@@ -81,7 +76,6 @@ export function AuthProvider({
     }
 
     // If we already have the membership for this org, don't reset it
-    // This prevents unmounting children in ProtectedRoute during revalidation
     if (orgMembership?.organizationId === orgId) {
       return;
     }
@@ -105,49 +99,39 @@ export function AuthProvider({
       });
   }, [data?.user?.id, orgId, backendUrl]);
 
-  // Fetch workspace membership when workspaceId changes
+  // Fetch workspace data when workspaceId changes (to determine ownership)
   useEffect(() => {
     if (!data?.user || !workspaceId || !orgId) {
-      setWorkspaceMembership(null);
+      setWorkspaceData(null);
       setHasFetchedWorkspace(false);
-      setIsWorkspaceMembershipLoading(false);
+      setIsWorkspaceLoading(false);
       return;
     }
 
-    // If we already have the membership for this workspace, don't reset it
-    if (workspaceMembership?.workspaceId === workspaceId) {
-      return;
-    }
-
-    setWorkspaceMembership(null);
+    setWorkspaceData(null);
     setHasFetchedWorkspace(false);
-    setIsWorkspaceMembershipLoading(true);
-    fetch(
-      `${backendUrl}/organizations/${orgId}/workspaces/${workspaceId}/membership`,
-      {
-        credentials: "include",
-      },
-    )
+    setIsWorkspaceLoading(true);
+    fetch(`${backendUrl}/organizations/${orgId}/workspaces/${workspaceId}`, {
+      credentials: "include",
+    })
       .then((res) => (res.ok ? res.json() : null))
-      .then((membership) => {
-        setWorkspaceMembership(membership);
-        setIsWorkspaceMembershipLoading(false);
+      .then((ws) => {
+        setWorkspaceData(ws ? { ownerId: ws.ownerId } : null);
+        setIsWorkspaceLoading(false);
         setHasFetchedWorkspace(true);
       })
       .catch(() => {
-        setWorkspaceMembership(null);
-        setIsWorkspaceMembershipLoading(false);
+        setWorkspaceData(null);
+        setIsWorkspaceLoading(false);
         setHasFetchedWorkspace(true);
       });
   }, [data?.user?.id, orgId, workspaceId, backendUrl]);
 
   // Computed permissions
   const isOrgAdmin = orgMembership?.role === "admin";
-  const workspaceRole = isOrgAdmin
-    ? "admin"
-    : (workspaceMembership?.role ?? null);
-  const canEdit = workspaceRole === "admin" || workspaceRole === "editor";
-  const canManage = workspaceRole === "admin";
+  const isSuperAdmin = (data?.user as any)?.role === "admin";
+  const isWorkspaceOwner = workspaceData?.ownerId === data?.user?.id;
+  const hasWorkspaceAccess = isSuperAdmin || isOrgAdmin || isWorkspaceOwner;
 
   return (
     <AuthContext.Provider
@@ -159,16 +143,13 @@ export function AuthProvider({
           isPending ||
           (!!data?.user &&
             ((!!orgId && (isOrgMembershipLoading || !hasFetchedOrg)) ||
-              (!!workspaceId &&
-                (isWorkspaceMembershipLoading || !hasFetchedWorkspace)))),
+              (!!workspaceId && (isWorkspaceLoading || !hasFetchedWorkspace)))),
         error,
         authClient,
         orgMembership,
-        workspaceMembership,
-        workspaceRole,
         isOrgAdmin,
-        canEdit,
-        canManage,
+        isWorkspaceOwner,
+        hasWorkspaceAccess,
       }}
     >
       {children}

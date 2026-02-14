@@ -59,11 +59,10 @@ export function NotificationsDropdown() {
                   >
                     <div className="flex items-center gap-2 font-medium">
                       <Mail className="h-4 w-4" />
-                      Workspace Invitation
+                      Organization Invitation
                     </div>
                     <div className="text-xs text-muted-foreground line-clamp-2">
                       You've been invited to join{" "}
-                      <strong>{invite.workspaceName}</strong> in{" "}
                       <strong>{invite.organizationName}</strong>.
                     </div>
                   </Link>

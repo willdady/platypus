@@ -124,7 +124,7 @@ const OrgInvitationsPage = () => {
       <div>
         <h1 className="text-2xl font-bold mb-4">Invitations</h1>
         <p className="text-muted-foreground mb-6">
-          Manage invitations for users to join workspaces in{" "}
+          Manage invitations for users to join{" "}
           <span className="font-bold">
             {orgData?.name || "this organization"}
           </span>
@@ -149,8 +149,6 @@ const OrgInvitationsPage = () => {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Email</TableHead>
-                    <TableHead>Workspace</TableHead>
-                    <TableHead>Role</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead>Expires</TableHead>
                     <TableHead className="text-right">Actions</TableHead>
@@ -160,10 +158,6 @@ const OrgInvitationsPage = () => {
                   {data?.results.map((invite) => (
                     <TableRow key={invite.id}>
                       <TableCell>{invite.email}</TableCell>
-                      <TableCell>{invite.workspaceName}</TableCell>
-                      <TableCell className="capitalize">
-                        {invite.role}
-                      </TableCell>
                       <TableCell>{getStatusBadge(invite.status)}</TableCell>
                       <TableCell className="text-muted-foreground">
                         {format(new Date(invite.expiresAt), "MMM d, yyyy")}

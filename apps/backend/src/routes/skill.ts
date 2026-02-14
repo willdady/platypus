@@ -19,7 +19,7 @@ skill.get(
   "/",
   requireAuth,
   requireOrgAccess(),
-  requireWorkspaceAccess(),
+  requireWorkspaceAccess,
   async (c) => {
     const workspaceId = c.req.param("workspaceId")!;
     const results = await db
@@ -36,7 +36,7 @@ skill.get(
   "/:skillId",
   requireAuth,
   requireOrgAccess(),
-  requireWorkspaceAccess(),
+  requireWorkspaceAccess,
   async (c) => {
     const workspaceId = c.req.param("workspaceId")!;
     const skillId = c.req.param("skillId");
@@ -65,7 +65,7 @@ skill.post(
   "/",
   requireAuth,
   requireOrgAccess(),
-  requireWorkspaceAccess(["admin", "editor"]),
+  requireWorkspaceAccess,
   sValidator("json", skillCreateSchema),
   async (c) => {
     const data = c.req.valid("json");
@@ -103,7 +103,7 @@ skill.put(
   "/:skillId",
   requireAuth,
   requireOrgAccess(),
-  requireWorkspaceAccess(["admin", "editor"]),
+  requireWorkspaceAccess,
   sValidator("json", skillUpdateSchema),
   async (c) => {
     const workspaceId = c.req.param("workspaceId")!;
@@ -155,7 +155,7 @@ skill.delete(
   "/:skillId",
   requireAuth,
   requireOrgAccess(),
-  requireWorkspaceAccess(["admin", "editor"]),
+  requireWorkspaceAccess,
   async (c) => {
     const workspaceId = c.req.param("workspaceId")!;
     const skillId = c.req.param("skillId");

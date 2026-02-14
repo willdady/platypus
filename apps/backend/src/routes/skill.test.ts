@@ -34,12 +34,12 @@ describe("Skill Routes", () => {
       expect(res.status).toBe(401);
     });
 
-    it("should return 403 if user is viewer", async () => {
+    it("should return 403 if user is not workspace owner", async () => {
       mockSession();
       // requireOrgAccess
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
-      // requireWorkspaceAccess
-      mockDb.limit.mockResolvedValueOnce([{ role: "viewer" }]);
+      // requireWorkspaceAccess: workspace owned by someone else
+      mockDb.limit.mockResolvedValueOnce([{ ownerId: "other-user" }]);
 
       const res = await app.request(baseUrl, {
         method: "POST",
@@ -59,7 +59,7 @@ describe("Skill Routes", () => {
       // requireOrgAccess
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
       // requireWorkspaceAccess
-      mockDb.limit.mockResolvedValueOnce([{ role: "editor" }]);
+      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]);
 
       const mockSkill = {
         id: "skill-1",
@@ -91,7 +91,7 @@ describe("Skill Routes", () => {
       // requireOrgAccess
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
       // requireWorkspaceAccess
-      mockDb.limit.mockResolvedValueOnce([{ role: "editor" }]);
+      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]);
 
       const res = await app.request(baseUrl, {
         method: "POST",
@@ -113,7 +113,7 @@ describe("Skill Routes", () => {
       // requireOrgAccess
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
       // requireWorkspaceAccess
-      mockDb.limit.mockResolvedValueOnce([{ role: "viewer" }]);
+      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]);
 
       const mockSkills = [{ id: "skill-1", name: "skill-1" }];
       mockDb.where
@@ -133,7 +133,7 @@ describe("Skill Routes", () => {
       // requireOrgAccess
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
       // requireWorkspaceAccess
-      mockDb.limit.mockResolvedValueOnce([{ role: "editor" }]);
+      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]);
       // check referencing agents
       mockDb.limit.mockResolvedValueOnce([{ id: "agent-1" }]);
 
@@ -152,7 +152,7 @@ describe("Skill Routes", () => {
       // requireOrgAccess
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
       // requireWorkspaceAccess
-      mockDb.limit.mockResolvedValueOnce([{ role: "editor" }]);
+      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]);
       // check referencing agents (none)
       mockDb.limit.mockResolvedValueOnce([]);
       // delete skill

@@ -551,8 +551,9 @@ const AgentForm = ({
             </CardHeader>
             <CardContent>
               <FieldDescription className="mb-4">
-                Select agents that this agent can delegate tasks to.
-                When running as a sub-agent, these agents will not be able to delegate further.
+                Select agents that this agent can delegate tasks to. When
+                running as a sub-agent, these agents will not be able to
+                delegate further.
               </FieldDescription>
               <FieldGroup className="grid grid-cols-2 gap-4">
                 {agents
@@ -568,7 +569,9 @@ const AgentForm = ({
                             ...prevData,
                             subAgentIds: checked
                               ? [...prevData.subAgentIds, agent.id]
-                              : prevData.subAgentIds.filter((id) => id !== agent.id),
+                              : prevData.subAgentIds.filter(
+                                  (id) => id !== agent.id,
+                                ),
                           }));
                         }}
                         disabled={isSubmitting}

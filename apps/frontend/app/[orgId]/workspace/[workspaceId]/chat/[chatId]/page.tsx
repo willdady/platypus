@@ -26,14 +26,17 @@ const ChatWithIdPage = ({
   // Fetch agents for the sub-agent pane
   const { data: agentsData } = useSWR<{ results: Agent[] }>(
     backendUrl && user
-      ? joinUrl(backendUrl, `/organizations/${orgId}/workspaces/${workspaceId}/agents`)
+      ? joinUrl(
+          backendUrl,
+          `/organizations/${orgId}/workspaces/${workspaceId}/agents`,
+        )
       : null,
     fetcher,
   );
   // Memoize agents to prevent unnecessary re-renders of Chat components
   const agents = useMemo(
     () => agentsData?.results || [],
-    [agentsData?.results]
+    [agentsData?.results],
   );
 
   return (

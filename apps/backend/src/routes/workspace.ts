@@ -2,16 +2,12 @@ import { Hono } from "hono";
 import { sValidator } from "@hono/standard-validator";
 import { nanoid } from "nanoid";
 import { db } from "../index.ts";
-import {
-  workspace as workspaceTable,
-  workspaceMember,
-  organizationMember,
-} from "../db/schema.ts";
+import { workspace as workspaceTable } from "../db/schema.ts";
 import {
   workspaceCreateSchema,
   workspaceUpdateSchema,
 } from "@platypus/schemas";
-import { eq, and, inArray } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 import { requireAuth } from "../middleware/authentication.ts";
 import {
   requireOrgAccess,
@@ -21,19 +17,21 @@ import type { Variables } from "../server.ts";
 
 const workspace = new Hono<{ Variables: Variables }>();
 
-/** Create a new workspace (org admin only) */
+/** Create a new workspace (any org member) */
 workspace.post(
   "/",
   requireAuth,
-  requireOrgAccess(["admin"]),
+  requireOrgAccess(),
   sValidator("json", workspaceCreateSchema),
   async (c) => {
+    const user = c.get("user")!;
     const data = c.req.valid("json");
     const record = await db
       .insert(workspaceTable)
       .values({
         id: nanoid(),
         ...data,
+        ownerId: user.id,
       })
       .returning();
     return c.json(record[0], 201);
@@ -55,49 +53,45 @@ workspace.get("/", requireAuth, requireOrgAccess(), async (c) => {
     return c.json({ results });
   }
 
-  // If regular member, return only workspaces they are a member of
-  const memberWorkspaces = await db
-    .select({ workspaceId: workspaceMember.workspaceId })
-    .from(workspaceMember)
-    .where(eq(workspaceMember.userId, user.id));
-
-  const workspaceIds = memberWorkspaces.map((w) => w.workspaceId);
-
-  if (workspaceIds.length === 0) {
-    return c.json({ results: [] });
-  }
-
+  // If regular member, return only workspaces they own
   const results = await db
     .select()
     .from(workspaceTable)
     .where(
       and(
         eq(workspaceTable.organizationId, orgId),
-        inArray(workspaceTable.id, workspaceIds),
+        eq(workspaceTable.ownerId, user.id),
       ),
     );
   return c.json({ results });
 });
 
 /** Get a workspace by ID */
-workspace.get("/:workspaceId", requireAuth, requireOrgAccess(), async (c) => {
-  const workspaceId = c.req.param("workspaceId");
-  const record = await db
-    .select()
-    .from(workspaceTable)
-    .where(eq(workspaceTable.id, workspaceId))
-    .limit(1);
-  if (record.length === 0) {
-    return c.json({ message: "Workspace not found" }, 404);
-  }
-  return c.json(record[0]);
-});
+workspace.get(
+  "/:workspaceId",
+  requireAuth,
+  requireOrgAccess(),
+  requireWorkspaceAccess,
+  async (c) => {
+    const workspaceId = c.req.param("workspaceId");
+    const record = await db
+      .select()
+      .from(workspaceTable)
+      .where(eq(workspaceTable.id, workspaceId))
+      .limit(1);
+    if (record.length === 0) {
+      return c.json({ message: "Workspace not found" }, 404);
+    }
+    return c.json(record[0]);
+  },
+);
 
-/** Update a workspace by ID (org admin only) */
+/** Update a workspace by ID (owner or org admin) */
 workspace.put(
   "/:workspaceId",
   requireAuth,
-  requireOrgAccess(["admin"]),
+  requireOrgAccess(),
+  requireWorkspaceAccess,
   sValidator("json", workspaceUpdateSchema),
   async (c) => {
     const workspaceId = c.req.param("workspaceId");
@@ -119,40 +113,16 @@ workspace.put(
   },
 );
 
-/** Delete a workspace by ID (org admin only) */
+/** Delete a workspace by ID (owner or org admin) */
 workspace.delete(
   "/:workspaceId",
   requireAuth,
-  requireOrgAccess(["admin"]),
+  requireOrgAccess(),
+  requireWorkspaceAccess,
   async (c) => {
     const workspaceId = c.req.param("workspaceId");
     await db.delete(workspaceTable).where(eq(workspaceTable.id, workspaceId));
     return c.json({ message: "Workspace deleted" });
-  },
-);
-
-/** Get user's membership for a workspace */
-workspace.get(
-  "/:workspaceId/membership",
-  requireAuth,
-  requireOrgAccess(),
-  requireWorkspaceAccess(),
-  async (c) => {
-    const workspaceId = c.req.param("workspaceId")!;
-    const workspaceRole = c.get("workspaceRole");
-    const workspaceMembership = c.get("workspaceMembership");
-
-    if (workspaceMembership) {
-      return c.json(workspaceMembership);
-    }
-
-    // If no explicit membership but has role (e.g. org admin or super admin), return inherited membership
-    return c.json({
-      id: "inherited",
-      workspaceId,
-      role: workspaceRole,
-      inherited: true,
-    });
   },
 );
 

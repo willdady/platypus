@@ -319,17 +319,19 @@ export const ChatMessage = ({
                 <TrashIcon className="size-4" />
               </MessageAction>
             )}
-            {!isSubAgentMode && message.role === "assistant" && isLastMessage && (
-              <MessageAction
-                className="cursor-pointer text-muted-foreground"
-                onClick={onRegenerate}
-                variant="ghost"
-                size="icon"
-                label="Regenerate"
-              >
-                <RefreshCwIcon className="size-4" />
-              </MessageAction>
-            )}
+            {!isSubAgentMode &&
+              message.role === "assistant" &&
+              isLastMessage && (
+                <MessageAction
+                  className="cursor-pointer text-muted-foreground"
+                  onClick={onRegenerate}
+                  variant="ghost"
+                  size="icon"
+                  label="Regenerate"
+                >
+                  <RefreshCwIcon className="size-4" />
+                </MessageAction>
+              )}
           </MessageActions>
         ))}
     </Fragment>

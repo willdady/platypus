@@ -10,7 +10,7 @@ const WorkspaceCreatePage = async ({
   const { orgId } = await params;
 
   return (
-    <ProtectedRoute requireOrgAccess={true} requiredOrgRole="admin">
+    <ProtectedRoute requireOrgAccess={true}>
       <div className="flex justify-center w-full p-4">
         <div className="w-lg">
           <BackButton fallbackHref={`/${orgId}`} />

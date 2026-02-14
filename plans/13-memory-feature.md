@@ -5,6 +5,7 @@
 This plan implements an automatic memory extraction system for Platypus that builds persistent knowledge from user conversations. The problem we're solving: agents currently have no memory across chat sessions, leading to repetitive questions and loss of context. Users must repeatedly provide the same information about their preferences, projects, and work style.
 
 The memory system will:
+
 - **Automatically extract** important facts from conversations using AI
 - **Store memories** at two scopes: user-level (global preferences, identity) and workspace-level (project context)
 - **Inject relevant memories** into future chats to provide personalization and continuity
@@ -18,14 +19,16 @@ This will significantly improve the user experience by making agents feel more c
 **Memory Model**: Entity-based with observations (structured, categorized facts)
 
 **Processing Flow**:
+
 1. Cron job polls for chats updated since last memory extraction (every 5 minutes)
 2. Loads the user's existing memories (both user-level and workspace-level)
 3. Sends conversation + existing memories to the extraction LLM
-4. LLM returns only *new or updated* memories (deduplication happens at extraction time)
+4. LLM returns only _new or updated_ memories (deduplication happens at extraction time)
 5. Stores new memories and updates changed ones in database
 6. On future chats, loads all user memories for the relevant scopes and injects into system prompt
 
 **Key Design Decisions**:
+
 - **User-owned memories** - ALL memories belong to a specific user (never shared between users)
 - **Two scopes** - User-level (relevant across all workspaces) and workspace-level (relevant only in specific workspace)
 - **Individual memory records** (not combined documents) for granular control and efficient indexing
@@ -37,6 +40,7 @@ This will significantly improve the user experience by making agents feel more c
 ## Horizontal Scaling Architecture
 
 **Problem**: When the backend scales horizontally (multiple Docker containers/Kubernetes pods), each instance runs its own `setInterval` cron job. This causes:
+
 - Race conditions: Multiple instances processing the same chats simultaneously
 - Duplicate API calls: Wasted cost and rate limit issues
 - Data corruption: Concurrent writes to the same memory records
@@ -48,7 +52,7 @@ Advisory locks are Postgres-native distributed locks that allow only one process
 ```typescript
 // Try to acquire lock (non-blocking)
 const lockAcquired = await db.execute(
-  sql`SELECT pg_try_advisory_lock(123456789) as acquired`
+  sql`SELECT pg_try_advisory_lock(123456789) as acquired`,
 );
 
 if (!lockAcquired) {
@@ -66,6 +70,7 @@ try {
 ```
 
 **Benefits**:
+
 - ✅ No additional infrastructure (Redis, etc.)
 - ✅ Automatic lock release on process crash/restart
 - ✅ Non-blocking: instances skip if lock is held
@@ -79,6 +84,7 @@ try {
 2. **Advisory lock contention**: When all instances fire at the same wall-clock moment, only one acquires the lock. The rest skip and try again at the next aligned tick.
 
 **Lock Behavior**:
+
 - All instances attempt at the same wall-clock times (e.g., :00, :05, :10, :15...)
 - If acquired: Process memory extraction, then release lock
 - If not acquired: Skip this run, try again at next aligned tick
@@ -131,7 +137,7 @@ export const memory = pgTable(
 
     // Source tracking
     index("idx_memory_chat_id").on(t.chatId),
-  ]
+  ],
 );
 ```
 
@@ -155,8 +161,8 @@ Add index for efficient processing queries:
 index("idx_chat_memory_processing").on(
   t.memoryExtractionStatus,
   t.lastMemoryProcessedAt,
-  t.updatedAt
-)
+  t.updatedAt,
+);
 ```
 
 ### Provider Table Update
@@ -183,7 +189,8 @@ export const workspace = pgTable("workspace", (t) => ({
 
   // Memory extraction configuration
   memoryExtractionEnabled: t.boolean("memory_extraction_enabled").default(true),
-  memoryExtractionProviderId: t.text("memory_extraction_provider_id")
+  memoryExtractionProviderId: t
+    .text("memory_extraction_provider_id")
     .references(() => provider.id, { onDelete: "set null" }),
 }));
 ```
@@ -207,16 +214,27 @@ import { generateText } from "ai";
 import { z } from "zod";
 
 const memoryExtractionSchema = z.object({
-  new: z.array(z.object({
-    entityType: z.enum(["preference", "fact", "goal", "constraint", "style", "person"]),
-    entityName: z.string(),
-    observation: z.string(),
-    scope: z.enum(["user", "workspace"]),
-  })),
-  updates: z.array(z.object({
-    id: z.string(),
-    observation: z.string(),
-  })),
+  new: z.array(
+    z.object({
+      entityType: z.enum([
+        "preference",
+        "fact",
+        "goal",
+        "constraint",
+        "style",
+        "person",
+      ]),
+      entityName: z.string(),
+      observation: z.string(),
+      scope: z.enum(["user", "workspace"]),
+    }),
+  ),
+  updates: z.array(
+    z.object({
+      id: z.string(),
+      observation: z.string(),
+    }),
+  ),
 });
 
 const result = await generateText({
@@ -272,7 +290,7 @@ Retrieval is a simple database query — load all of the user's memories for the
 ```typescript
 async function retrieveMemories(
   userId: string,
-  workspaceId: string
+  workspaceId: string,
 ): Promise<Array<typeof memoryTable.$inferSelect>> {
   return db
     .select()
@@ -281,10 +299,10 @@ async function retrieveMemories(
       and(
         eq(memoryTable.userId, userId),
         or(
-          isNull(memoryTable.workspaceId),         // User-level memories
-          eq(memoryTable.workspaceId, workspaceId)  // Workspace-level memories
-        )
-      )
+          isNull(memoryTable.workspaceId), // User-level memories
+          eq(memoryTable.workspaceId, workspaceId), // Workspace-level memories
+        ),
+      ),
     )
     .orderBy(memoryTable.createdAt);
 }
@@ -306,7 +324,7 @@ import { sql } from "drizzle-orm";
 import { processMemoryExtractionBatch } from "../services/memory-extraction.ts";
 
 const MEMORY_EXTRACTION_INTERVAL_MS = parseInt(
-  process.env.MEMORY_EXTRACTION_INTERVAL_MS || "300000" // 5 minutes
+  process.env.MEMORY_EXTRACTION_INTERVAL_MS || "300000", // 5 minutes
 );
 
 // Advisory lock ID for memory extraction (arbitrary unique number)
@@ -315,13 +333,15 @@ const MEMORY_EXTRACTION_LOCK_ID = 123456789;
 async function runWithLock(fn: () => Promise<void>): Promise<void> {
   // Try to acquire advisory lock (non-blocking)
   const lockResult = await db.execute(
-    sql`SELECT pg_try_advisory_lock(${MEMORY_EXTRACTION_LOCK_ID}) as acquired`
+    sql`SELECT pg_try_advisory_lock(${MEMORY_EXTRACTION_LOCK_ID}) as acquired`,
   );
 
   const acquired = lockResult.rows[0]?.acquired;
 
   if (!acquired) {
-    console.log("Another backend instance is processing memories, skipping this run");
+    console.log(
+      "Another backend instance is processing memories, skipping this run",
+    );
     return;
   }
 
@@ -330,7 +350,7 @@ async function runWithLock(fn: () => Promise<void>): Promise<void> {
   } finally {
     // Always release lock, even if processing fails
     await db.execute(
-      sql`SELECT pg_advisory_unlock(${MEMORY_EXTRACTION_LOCK_ID})`
+      sql`SELECT pg_advisory_unlock(${MEMORY_EXTRACTION_LOCK_ID})`,
     );
   }
 }
@@ -347,10 +367,7 @@ async function runWithLock(fn: () => Promise<void>): Promise<void> {
  * to the same schedule, so the advisory lock contention is predictable
  * and only one instance wins each cycle.
  */
-function scheduleAligned(
-  intervalMs: number,
-  fn: () => Promise<void>
-): void {
+function scheduleAligned(intervalMs: number, fn: () => Promise<void>): void {
   function scheduleNext() {
     const now = Date.now();
     const nextTick = Math.ceil(now / intervalMs) * intervalMs;
@@ -371,7 +388,7 @@ function scheduleAligned(
 
 export function startScheduler() {
   console.log(
-    `Starting memory extraction scheduler (interval: ${MEMORY_EXTRACTION_INTERVAL_MS}ms, wall-clock aligned)`
+    `Starting memory extraction scheduler (interval: ${MEMORY_EXTRACTION_INTERVAL_MS}ms, wall-clock aligned)`,
   );
 
   // Schedule at wall-clock-aligned intervals with advisory lock
@@ -471,11 +488,13 @@ Add memory schemas to `packages/schemas/index.ts` and extend workspace update sc
 ## Critical Files
 
 ### New Files
+
 - `apps/backend/src/services/memory-extraction.ts`
 - `apps/backend/src/services/memory-retrieval.ts`
 - `apps/backend/src/jobs/scheduler.ts`
 
 ### Modified Files
+
 - `apps/backend/src/db/schema.ts`
 - `apps/backend/index.ts`
 - `apps/backend/src/routes/chat.ts`
@@ -486,6 +505,7 @@ Add memory schemas to `packages/schemas/index.ts` and extend workspace update sc
 ## Cost Estimates
 
 ### Extraction Costs (using workspace task model, e.g. GPT-4o-mini)
+
 - **Average extraction**: ~3000 input tokens (conversation + existing memories) + ~500 output tokens
 - **High-volume workspace** (2,880 extractions/day): ~$1.50/day
 - **Typical workspace** (100-500 extractions/day): ~$0.05-0.25/day

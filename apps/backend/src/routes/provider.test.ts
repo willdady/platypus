@@ -17,7 +17,7 @@ describe("Provider Routes", () => {
     it("should create provider if workspace admin", async () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
-      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]); // requireWorkspaceAccess
+      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]); // requireWorkspaceAccess
 
       const mockProvider = { id: "p1", name: "OpenAI", providerType: "OpenAI" };
       mockDb.returning.mockResolvedValueOnce([mockProvider]);
@@ -42,7 +42,7 @@ describe("Provider Routes", () => {
     it("should return 409 if provider name already exists in workspace", async () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
-      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]); // requireWorkspaceAccess
+      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]); // requireWorkspaceAccess
 
       const drizzleError = new Error("DrizzleQueryError: Failed query");
       (drizzleError as any).cause = {
@@ -77,7 +77,7 @@ describe("Provider Routes", () => {
     it("should list providers (workspace + org)", async () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
-      mockDb.limit.mockResolvedValueOnce([{ role: "viewer" }]); // requireWorkspaceAccess
+      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]); // requireWorkspaceAccess
 
       const workspaceProviders = [{ id: "p1", name: "WS OpenAI" }];
       const orgProviders = [
@@ -107,7 +107,7 @@ describe("Provider Routes", () => {
     it("should return provider with scope", async () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
-      mockDb.limit.mockResolvedValueOnce([{ role: "viewer" }]); // requireWorkspaceAccess
+      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]); // requireWorkspaceAccess
 
       const mockProvider = { id: "p1", name: "OpenAI", workspaceId };
       mockDb.limit.mockResolvedValueOnce([mockProvider]);

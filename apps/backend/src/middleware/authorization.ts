@@ -1,11 +1,10 @@
 import { createMiddleware } from "hono/factory";
 import { eq, and } from "drizzle-orm";
-import { organizationMember, workspaceMember } from "../db/schema.ts";
-import type {
-  WorkspaceRole,
-  SuperAdminOrgMembership,
-  OrgRole,
-} from "../server.ts";
+import {
+  organizationMember,
+  workspace as workspaceTable,
+} from "../db/schema.ts";
+import type { SuperAdminOrgMembership, OrgRole } from "../server.ts";
 
 /**
  * Checks if a user is a super admin based on their role field.
@@ -131,93 +130,69 @@ export const requireOrgAccess = (requiredRoles?: OrgRole[]) =>
  * - Must be used AFTER `requireOrgAccess` middleware (requires orgMembership in context)
  *
  * **Access Control:**
- * - Super admins bypass all checks and are granted admin access
- * - Org admins automatically get admin access to all workspaces in their organization
- * - Regular org members need explicit workspace membership
- * - Optional role restrictions can be enforced (e.g., admin/editor-only operations)
+ * - Super admins bypass all checks
+ * - Org admins have access to all workspaces in their organization
+ * - Regular org members can only access workspaces they own
  *
  * **Behavior:**
- * - Extracts workspaceId using smart detection (URL params → query → body)
+ * - Extracts workspaceId from URL params
  * - Returns 400 if workspace ID not found in request
- * - Returns 403 if user doesn't have access to the workspace
- * - Returns 403 if user's role doesn't meet the required roles
- * - Sets `workspaceRole` and `workspaceMembership` in context
- *
- * @param requiredRoles - Optional array of roles required to access the resource.
- *                        If provided, user must have one of these roles.
- *                        Valid roles: "admin", "editor", "viewer"
- *                        Role hierarchy: admin > editor > viewer
+ * - Returns 404 if workspace not found
+ * - Returns 403 if user doesn't have access
+ * - Sets `isWorkspaceOwner` in context
  *
  * @example
  * ```typescript
- * // Allow any workspace member (viewer+)
- * app.get("/chats", requireAuth, requireOrgAccess(), requireWorkspaceAccess(), handler);
- *
- * // Require editor or admin
- * app.post("/agents", requireAuth, requireOrgAccess(),
- *   requireWorkspaceAccess(["admin", "editor"]), handler);
- *
- * // Require admin only
- * app.delete("/providers/:id", requireAuth, requireOrgAccess(),
- *   requireWorkspaceAccess(["admin"]), handler);
+ * app.get("/chats", requireAuth, requireOrgAccess(), requireWorkspaceAccess, handler);
  * ```
  */
-export const requireWorkspaceAccess = (requiredRoles?: WorkspaceRole[]) =>
-  createMiddleware(async (c, next) => {
-    const user = c.get("user");
-    const db = c.get("db");
-    const orgMembership = c.get("orgMembership");
+export const requireWorkspaceAccess = createMiddleware(async (c, next) => {
+  const user = c.get("user");
+  const db = c.get("db");
+  const orgMembership = c.get("orgMembership");
 
-    // Super admins bypass all checks
-    if (isSuperAdmin(user)) {
-      c.set("workspaceRole", "admin");
-      c.set("workspaceMembership", null);
-      await next();
-      return;
-    }
-
-    // Get workspaceId from path parameters
-    const workspaceId = c.req.param("workspaceId");
-
-    if (!workspaceId) {
-      return c.json({ error: "Workspace ID required" }, 400);
-    }
-
-    // Org admins have automatic admin access to all workspaces
-    if (orgMembership.role === "admin") {
-      c.set("workspaceRole", "admin");
-      c.set("workspaceMembership", null); // No explicit membership needed
-      await next();
-      return;
-    }
-
-    // For regular members, check workspace-specific membership
-    const [wsMembership] = await db
-      .select()
-      .from(workspaceMember)
-      .where(
-        and(
-          eq(workspaceMember.userId, user.id),
-          eq(workspaceMember.workspaceId, workspaceId),
-        ),
-      )
-      .limit(1);
-
-    if (!wsMembership) {
-      return c.json({ error: "No access to this workspace" }, 403);
-    }
-
-    if (
-      requiredRoles &&
-      !requiredRoles.includes(wsMembership.role as WorkspaceRole)
-    ) {
-      return c.json({ error: "Insufficient workspace permissions" }, 403);
-    }
-
-    c.set("workspaceRole", wsMembership.role);
-    c.set("workspaceMembership", wsMembership);
+  // Super admins bypass all checks
+  if (isSuperAdmin(user)) {
+    c.set("isWorkspaceOwner", false);
     await next();
-  });
+    return;
+  }
+
+  // Get workspaceId from path parameters
+  const workspaceId = c.req.param("workspaceId");
+
+  if (!workspaceId) {
+    return c.json({ error: "Workspace ID required" }, 400);
+  }
+
+  // Fetch workspace to check ownership
+  const [ws] = await db
+    .select()
+    .from(workspaceTable)
+    .where(eq(workspaceTable.id, workspaceId))
+    .limit(1);
+
+  if (!ws) {
+    return c.json({ error: "Workspace not found" }, 404);
+  }
+
+  const isOwner = ws.ownerId === user.id;
+
+  // Org admins have access to all workspaces
+  if (orgMembership.role === "admin") {
+    c.set("isWorkspaceOwner", isOwner);
+    await next();
+    return;
+  }
+
+  // Regular members can only access their own workspaces
+  if (!isOwner) {
+    return c.json({ error: "No access to this workspace" }, 403);
+  }
+
+  c.set("isWorkspaceOwner", true);
+  await next();
+});
 
 /**
  * Middleware that restricts access to super admins only.

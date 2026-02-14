@@ -57,7 +57,7 @@ describe("Chat Routes", () => {
     it("should list chats", async () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
-      mockDb.limit.mockResolvedValueOnce([{ role: "viewer" }]); // requireWorkspaceAccess
+      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]); // requireWorkspaceAccess
 
       const mockChats = [{ id: "chat-1", title: "Chat 1" }];
       mockDb.offset.mockResolvedValueOnce(mockChats);
@@ -72,7 +72,7 @@ describe("Chat Routes", () => {
     it("should list tags", async () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
-      mockDb.limit.mockResolvedValueOnce([{ role: "viewer" }]); // requireWorkspaceAccess
+      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]); // requireWorkspaceAccess
 
       const mockTags = [{ tag: "tag1", count: 5 }];
       mockDb.execute.mockResolvedValueOnce({ rows: mockTags });
@@ -87,7 +87,7 @@ describe("Chat Routes", () => {
     it("should return chat", async () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
-      mockDb.limit.mockResolvedValueOnce([{ role: "viewer" }]); // requireWorkspaceAccess
+      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]); // requireWorkspaceAccess
 
       const mockChat = { id: "chat-1", title: "Chat 1" };
       mockDb.limit.mockResolvedValueOnce([mockChat]);
@@ -106,7 +106,7 @@ describe("Chat Routes", () => {
         email: "test@example.com",
       });
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
-      mockDb.limit.mockResolvedValueOnce([{ role: "viewer" }]); // requireWorkspaceAccess
+      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]); // requireWorkspaceAccess
 
       // fetch workspace
       mockDb.limit.mockResolvedValueOnce([
@@ -154,7 +154,7 @@ describe("Chat Routes", () => {
     it("should delete chat", async () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
-      mockDb.limit.mockResolvedValueOnce([{ role: "viewer" }]); // requireWorkspaceAccess
+      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]); // requireWorkspaceAccess
 
       mockDb.returning.mockResolvedValueOnce([{ id: "chat-1" }]);
 
@@ -172,7 +172,7 @@ describe("Chat Routes", () => {
     it("should update chat", async () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
-      mockDb.limit.mockResolvedValueOnce([{ role: "viewer" }]); // requireWorkspaceAccess
+      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]); // requireWorkspaceAccess
 
       const mockChat = { id: "chat-1", title: "Updated Title" };
       mockDb.returning.mockResolvedValueOnce([mockChat]);
@@ -195,7 +195,7 @@ describe("Chat Routes", () => {
     it("should generate metadata", async () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
-      mockDb.limit.mockResolvedValueOnce([{ role: "viewer" }]); // requireWorkspaceAccess
+      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]); // requireWorkspaceAccess
 
       // Fetch chat
       mockDb.limit.mockResolvedValueOnce([{ id: "chat-1", messages: [] }]);
@@ -233,7 +233,7 @@ describe("Chat Routes", () => {
     it("should use workspace taskModelProviderId when set", async () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
-      mockDb.limit.mockResolvedValueOnce([{ role: "viewer" }]); // requireWorkspaceAccess
+      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]); // requireWorkspaceAccess
 
       // Fetch chat
       mockDb.limit.mockResolvedValueOnce([{ id: "chat-1", messages: [] }]);

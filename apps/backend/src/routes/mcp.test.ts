@@ -24,7 +24,7 @@ describe("MCP Routes", () => {
     it("should create MCP if workspace admin", async () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
-      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]); // requireWorkspaceAccess
+      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]); // requireWorkspaceAccess
 
       const mockMcp = { id: "mcp-1", name: "New MCP", url: "http://mcp.com" };
       mockDb.returning.mockResolvedValueOnce([mockMcp]);
@@ -49,7 +49,7 @@ describe("MCP Routes", () => {
     it("should list MCPs", async () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
-      mockDb.limit.mockResolvedValueOnce([{ role: "viewer" }]); // requireWorkspaceAccess
+      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]); // requireWorkspaceAccess
 
       const mockMcps = [{ id: "mcp-1", name: "MCP 1" }];
       mockDb.where
@@ -67,7 +67,7 @@ describe("MCP Routes", () => {
     it("should test MCP connection", async () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
-      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]); // requireWorkspaceAccess
+      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]); // requireWorkspaceAccess
 
       const res = await app.request(`${baseUrl}/test`, {
         method: "POST",

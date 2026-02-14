@@ -37,8 +37,8 @@ describe("Agent Routes", () => {
       mockSession();
       // requireOrgAccess: returns membership
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
-      // requireWorkspaceAccess: returns no membership
-      mockDb.limit.mockResolvedValueOnce([]);
+      // requireWorkspaceAccess: workspace not owned by user
+      mockDb.limit.mockResolvedValueOnce([{ ownerId: "other-user" }]);
 
       const res = await app.request(baseUrl, {
         method: "POST",
@@ -57,7 +57,7 @@ describe("Agent Routes", () => {
       // requireOrgAccess
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
       // requireWorkspaceAccess
-      mockDb.limit.mockResolvedValueOnce([{ role: "editor" }]);
+      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]);
 
       const mockAgent = { id: "agent-1", name: "New Agent", workspaceId };
       mockDb.returning.mockResolvedValueOnce([mockAgent]);
@@ -84,7 +84,7 @@ describe("Agent Routes", () => {
       // requireOrgAccess
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
       // requireWorkspaceAccess
-      mockDb.limit.mockResolvedValueOnce([{ role: "editor" }]);
+      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]);
 
       const longDescription = "a".repeat(97);
 
@@ -115,7 +115,7 @@ describe("Agent Routes", () => {
       // requireOrgAccess
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
       // requireWorkspaceAccess
-      mockDb.limit.mockResolvedValueOnce([{ role: "viewer" }]);
+      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]);
 
       const mockAgents = [{ id: "agent-1", name: "Agent 1" }];
       mockDb.where
@@ -135,7 +135,7 @@ describe("Agent Routes", () => {
       // requireOrgAccess
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
       // requireWorkspaceAccess
-      mockDb.limit.mockResolvedValueOnce([{ role: "viewer" }]);
+      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]);
       // get agent
       mockDb.limit.mockResolvedValueOnce([]);
 
@@ -148,7 +148,7 @@ describe("Agent Routes", () => {
       // requireOrgAccess
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
       // requireWorkspaceAccess
-      mockDb.limit.mockResolvedValueOnce([{ role: "viewer" }]);
+      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]);
 
       const mockAgent = { id: "agent-1", name: "Agent 1" };
       mockDb.limit.mockResolvedValueOnce([mockAgent]);
@@ -165,7 +165,7 @@ describe("Agent Routes", () => {
       // requireOrgAccess
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
       // requireWorkspaceAccess
-      mockDb.limit.mockResolvedValueOnce([{ role: "editor" }]);
+      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]);
 
       const mockAgent = { id: "agent-1", name: "Updated Agent" };
       mockDb.returning.mockResolvedValueOnce([mockAgent]);
@@ -190,7 +190,7 @@ describe("Agent Routes", () => {
       // requireOrgAccess
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
       // requireWorkspaceAccess
-      mockDb.limit.mockResolvedValueOnce([{ role: "editor" }]);
+      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]);
 
       const longDescription = "a".repeat(97);
 
@@ -215,25 +215,12 @@ describe("Agent Routes", () => {
   });
 
   describe("DELETE /:agentId", () => {
-    it("should return 403 if user is only editor", async () => {
+    it("should delete agent if user is workspace owner", async () => {
       mockSession();
       // requireOrgAccess
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
       // requireWorkspaceAccess
-      mockDb.limit.mockResolvedValueOnce([{ role: "editor" }]);
-
-      const res = await app.request(`${baseUrl}/agent-1`, {
-        method: "DELETE",
-      });
-      expect(res.status).toBe(403);
-    });
-
-    it("should delete agent if user is admin", async () => {
-      mockSession();
-      // requireOrgAccess
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
-      // requireWorkspaceAccess
-      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]);
+      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]);
 
       mockDb.where
         .mockReturnValueOnce(mockDb)

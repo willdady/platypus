@@ -21,7 +21,7 @@ agent.post(
   "/",
   requireAuth,
   requireOrgAccess(),
-  requireWorkspaceAccess(["admin", "editor"]),
+  requireWorkspaceAccess,
   sValidator("json", agentCreateSchema),
   async (c) => {
     const data = c.req.valid("json");
@@ -43,7 +43,7 @@ agent.post(
       const validation = await validateSubAgentAssignment(
         workspaceId,
         "", // No ID yet for new agent
-        data.subAgentIds
+        data.subAgentIds,
       );
       if (!validation.valid) {
         return c.json({ message: validation.error }, 400);
@@ -66,7 +66,7 @@ agent.get(
   "/",
   requireAuth,
   requireOrgAccess(),
-  requireWorkspaceAccess(),
+  requireWorkspaceAccess,
   async (c) => {
     const workspaceId = c.req.param("workspaceId")!;
     const results = await db
@@ -82,7 +82,7 @@ agent.get(
   "/:agentId",
   requireAuth,
   requireOrgAccess(),
-  requireWorkspaceAccess(),
+  requireWorkspaceAccess,
   async (c) => {
     const agentId = c.req.param("agentId");
     const record = await db
@@ -102,7 +102,7 @@ agent.put(
   "/:agentId",
   requireAuth,
   requireOrgAccess(),
-  requireWorkspaceAccess(["admin", "editor"]),
+  requireWorkspaceAccess,
   sValidator("json", agentUpdateSchema),
   async (c) => {
     const agentId = c.req.param("agentId");
@@ -125,7 +125,7 @@ agent.put(
       const validation = await validateSubAgentAssignment(
         workspaceId,
         agentId,
-        data.subAgentIds
+        data.subAgentIds,
       );
       if (!validation.valid) {
         return c.json({ message: validation.error }, 400);
@@ -149,7 +149,7 @@ agent.delete(
   "/:agentId",
   requireAuth,
   requireOrgAccess(),
-  requireWorkspaceAccess(["admin"]),
+  requireWorkspaceAccess,
   async (c) => {
     const agentId = c.req.param("agentId");
     await db.delete(agentTable).where(eq(agentTable.id, agentId));

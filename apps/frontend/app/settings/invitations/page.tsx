@@ -80,7 +80,7 @@ const UserInvitationsPage = () => {
     <div>
       <h1 className="text-2xl font-bold mb-4">Invitations</h1>
       <p className="text-muted-foreground mb-8">
-        Pending invitations to join organizations and workspaces.
+        Pending invitations to join organizations.
       </p>
 
       {isLoading ? (
@@ -98,13 +98,8 @@ const UserInvitationsPage = () => {
               className="p-4 border rounded-lg flex flex-col md:flex-row md:items-center justify-between gap-4 bg-card"
             >
               <div className="space-y-1">
-                <h3 className="font-semibold">
-                  {invite.organizationName} / {invite.workspaceName}
-                </h3>
+                <h3 className="font-semibold">{invite.organizationName}</h3>
                 <div className="text-sm text-muted-foreground space-y-1">
-                  <p>
-                    Role: <span className="capitalize">{invite.role}</span>
-                  </p>
                   <p>Invited by: {invite.invitedByName}</p>
                   <p>
                     Expires: {format(new Date(invite.expiresAt), "MMM d, yyyy")}

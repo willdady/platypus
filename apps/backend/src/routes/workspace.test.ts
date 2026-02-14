@@ -17,25 +17,11 @@ describe("Workspace Routes", () => {
   });
 
   describe("POST /organizations/:orgId/workspaces", () => {
-    it("should return 403 if not org admin", async () => {
+    it("should create workspace for any org member", async () => {
       mockSession({ id: "user-1", role: "user" });
 
       // Mock requireOrgAccess: return member role
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
-
-      const res = await app.request("/organizations/org-1/workspaces", {
-        method: "POST",
-        body: JSON.stringify({ name: "New Workspace" }),
-        headers: { "Content-Type": "application/json" },
-      });
-      expect(res.status).toBe(403);
-    });
-
-    it("should create workspace if org admin", async () => {
-      mockSession({ id: "user-1", role: "user" });
-
-      // Mock requireOrgAccess: return admin role
-      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]);
 
       // Mock insert
       const mockWorkspace = { id: "ws-1", name: "New Workspace" };
@@ -64,8 +50,6 @@ describe("Workspace Routes", () => {
       mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]);
 
       // Mock list workspaces
-      // This query ends in where(), so we mock where()
-      // First call is for requireOrgAccess (returns mockDb), second is for list workspaces (returns data)
       mockDb.where
         .mockReturnValueOnce(mockDb)
         .mockResolvedValueOnce(mockWorkspaces);
@@ -75,22 +59,17 @@ describe("Workspace Routes", () => {
       expect(await res.json()).toEqual({ results: mockWorkspaces });
     });
 
-    it("should return only member workspaces for regular member", async () => {
+    it("should return only owned workspaces for regular member", async () => {
       mockSession({ id: "user-1", role: "user" });
       const mockWorkspaces = [{ id: "ws-1", name: "WS 1" }];
-      const mockMemberships = [{ workspaceId: "ws-1" }];
 
       // Mock requireOrgAccess: return member role
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
 
-      // Mock get workspace memberships (ends in where)
-      // First call is for requireOrgAccess (returns mockDb)
-      // Second call is for get workspace memberships (returns data)
-      // Third call is for get workspaces by IDs (returns data)
+      // Mock get owned workspaces (single query with and(orgId, ownerId))
       mockDb.where
-        .mockReturnValueOnce(mockDb)
-        .mockResolvedValueOnce(mockMemberships)
-        .mockResolvedValueOnce(mockWorkspaces);
+        .mockReturnValueOnce(mockDb) // requireOrgAccess
+        .mockResolvedValueOnce(mockWorkspaces); // owned workspaces
 
       const res = await app.request("/organizations/org-1/workspaces");
       expect(res.status).toBe(200);
@@ -105,8 +84,9 @@ describe("Workspace Routes", () => {
 
       // Mock requireOrgAccess: return member role
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
-
-      // Mock get workspace (ends in limit)
+      // Mock requireWorkspaceAccess: workspace owned by user
+      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]);
+      // Mock get workspace
       mockDb.limit.mockResolvedValueOnce([mockWorkspace]);
 
       const res = await app.request("/organizations/org-1/workspaces/ws-1");
@@ -119,8 +99,7 @@ describe("Workspace Routes", () => {
 
       // Mock requireOrgAccess: return member role
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
-
-      // Mock get workspace (empty)
+      // Mock requireWorkspaceAccess: workspace not found
       mockDb.limit.mockResolvedValueOnce([]);
 
       const res = await app.request("/organizations/org-1/workspaces/ws-1");
@@ -129,12 +108,14 @@ describe("Workspace Routes", () => {
   });
 
   describe("PUT /organizations/:orgId/workspaces/:workspaceId", () => {
-    it("should update workspace if org admin", async () => {
+    it("should update workspace if owner", async () => {
       mockSession({ id: "user-1", role: "user" });
       const mockWorkspace = { id: "ws-1", name: "Updated WS" };
 
-      // Mock requireOrgAccess: return admin role
-      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]);
+      // Mock requireOrgAccess: return member role
+      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
+      // Mock requireWorkspaceAccess: workspace owned by user
+      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]);
 
       // Mock update
       mockDb.returning.mockResolvedValueOnce([mockWorkspace]);
@@ -151,16 +132,20 @@ describe("Workspace Routes", () => {
   });
 
   describe("DELETE /organizations/:orgId/workspaces/:workspaceId", () => {
-    it("should delete workspace if org admin", async () => {
+    it("should delete workspace if owner", async () => {
       mockSession({ id: "user-1", role: "user" });
 
-      // Mock requireOrgAccess: return admin role
-      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]);
+      // Mock requireOrgAccess: return member role
+      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
+      // Mock requireWorkspaceAccess: workspace owned by user
+      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]);
 
-      // Mock delete (returns nothing or whatever)
-      // First call is for requireOrgAccess (returns mockDb)
-      // Second call is for delete (returns data)
-      mockDb.where.mockReturnValueOnce(mockDb).mockResolvedValueOnce([]);
+      // Mock delete
+      mockDb.where
+        .mockReturnValueOnce(mockDb)
+        .mockReturnValueOnce(mockDb)
+        .mockReturnValueOnce(mockDb)
+        .mockResolvedValueOnce([]);
 
       const res = await app.request("/organizations/org-1/workspaces/ws-1", {
         method: "DELETE",

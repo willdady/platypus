@@ -13,8 +13,9 @@ interface SubAgentSessionContextType {
   toolCallId: string;
 }
 
-const SubAgentSessionContext =
-  createContext<SubAgentSessionContextType | null>(null);
+const SubAgentSessionContext = createContext<SubAgentSessionContextType | null>(
+  null,
+);
 
 export const SubAgentSessionProvider = ({
   toolCallId,

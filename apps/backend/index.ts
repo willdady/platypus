@@ -29,15 +29,6 @@ const main = async () => {
       });
       logger.info(`- Organization created: ${orgId}`);
 
-      logger.info("Creating initial workspace...");
-      const workspaceId = nanoid();
-      await db.insert(workspace).values({
-        id: workspaceId,
-        organizationId: orgId,
-        name: "Default Workspace",
-      });
-      logger.info(`- Workspace created: ${workspaceId}`);
-
       logger.info("Creating default user...");
       const defaultEmail = process.env.ADMIN_EMAIL;
       const defaultPassword = process.env.ADMIN_PASSWORD;
@@ -80,6 +71,17 @@ const main = async () => {
           role: "admin",
         });
         logger.info(`- Organization membership created for ${defaultEmail}`);
+
+        // Create default workspace owned by the admin user
+        logger.info("Creating initial workspace...");
+        const workspaceId = nanoid();
+        await db.insert(workspace).values({
+          id: workspaceId,
+          organizationId: orgId,
+          ownerId: result.user.id,
+          name: "Default Workspace",
+        });
+        logger.info(`- Workspace created: ${workspaceId}`);
 
         logger.info(
           `- Default credentials: ${defaultEmail} / ${defaultPassword}`,

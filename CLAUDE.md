@@ -214,6 +214,7 @@ These credentials allow immediate access without requiring sign-up. The password
 This project follows [Conventional Commits](https://www.conventionalcommits.org/) standards with **strict type restrictions**:
 
 **Allowed commit types:**
+
 - `feat`: New features or functionality
 - `fix`: Bug fixes
 - `chore`: Maintenance tasks (formatting, dependencies, etc.)
@@ -221,6 +222,7 @@ This project follows [Conventional Commits](https://www.conventionalcommits.org/
 **Format:** `<type>[optional scope]: <description>`
 
 **Examples:**
+
 ```
 feat: add user authentication
 feat(backend): implement JWT token refresh

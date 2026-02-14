@@ -351,7 +351,10 @@ const resolveGenerationConfig = async (
     userGlobalContext,
     userWorkspaceContext,
     isSubAgentMode: isSubAgentChat,
-    subAgents: subAgents?.map(sa => ({ ...sa, description: sa.description || undefined })),
+    subAgents: subAgents?.map((sa) => ({
+      ...sa,
+      description: sa.description || undefined,
+    })),
   });
 
   config.systemPrompt = systemPrompt;
@@ -427,7 +430,7 @@ chat.get(
   "/",
   requireAuth,
   requireOrgAccess(),
-  requireWorkspaceAccess(),
+  requireWorkspaceAccess,
   sValidator(
     "query",
     z.object({
@@ -458,8 +461,8 @@ chat.get(
       .where(
         and(
           eq(chatTable.workspaceId, workspaceId),
-          isNull(chatTable.parentChatId) // Only top-level chats
-        )
+          isNull(chatTable.parentChatId), // Only top-level chats
+        ),
       )
       .orderBy(desc(chatTable.createdAt))
       .limit(limit)
@@ -473,7 +476,7 @@ chat.get(
   "/tags",
   requireAuth,
   requireOrgAccess(),
-  requireWorkspaceAccess(),
+  requireWorkspaceAccess,
   async (c) => {
     const workspaceId = c.req.param("workspaceId")!;
 
@@ -493,7 +496,7 @@ chat.get(
   "/:chatId",
   requireAuth,
   requireOrgAccess(),
-  requireWorkspaceAccess(),
+  requireWorkspaceAccess,
   async (c) => {
     const chatId = c.req.param("chatId");
     const workspaceId = c.req.param("workspaceId")!;
@@ -516,7 +519,7 @@ chat.post(
   "/",
   requireAuth,
   requireOrgAccess(),
-  requireWorkspaceAccess(),
+  requireWorkspaceAccess,
   sValidator("json", chatSubmitSchema),
   async (c) => {
     const orgId = c.req.param("orgId")!;
@@ -568,17 +571,27 @@ chat.post(
     }
 
     // 7. Fetch sub-agent details and inject newTask tool (only for parent agents, not sub-agents)
-    let subAgents: Array<{ id: string; name: string; description?: string | null }> = [];
+    let subAgents: Array<{
+      id: string;
+      name: string;
+      description?: string | null;
+    }> = [];
     if (agent?.subAgentIds && agent.subAgentIds.length > 0 && !isSubAgentChat) {
       subAgents = await db
-        .select({ id: agentTable.id, name: agentTable.name, description: agentTable.description })
+        .select({
+          id: agentTable.id,
+          name: agentTable.name,
+          description: agentTable.description,
+        })
         .from(agentTable)
         .where(inArray(agentTable.id, agent.subAgentIds));
 
-      tools.newTask = createNewTaskTool(subAgents.map(sa => ({
-        ...sa,
-        description: sa.description || undefined,
-      })));
+      tools.newTask = createNewTaskTool(
+        subAgents.map((sa) => ({
+          ...sa,
+          description: sa.description || undefined,
+        })),
+      );
     }
 
     // 8. Inject taskResult tool if this is a sub-agent chat
@@ -679,7 +692,7 @@ chat.post(
             context,
             config,
             data,
-            parentChatId
+            parentChatId,
           );
         } catch (error) {
           logger.error({ error }, "Error in onFinish");
@@ -693,7 +706,7 @@ chat.delete(
   "/:chatId",
   requireAuth,
   requireOrgAccess(),
-  requireWorkspaceAccess(),
+  requireWorkspaceAccess,
   async (c) => {
     const chatId = c.req.param("chatId");
     const workspaceId = c.req.param("workspaceId")!;
@@ -717,7 +730,7 @@ chat.put(
   "/:chatId",
   requireAuth,
   requireOrgAccess(),
-  requireWorkspaceAccess(),
+  requireWorkspaceAccess,
   sValidator("json", chatUpdateSchema),
   async (c) => {
     const chatId = c.req.param("chatId");
@@ -744,7 +757,7 @@ chat.post(
   "/:chatId/generate-metadata",
   requireAuth,
   requireOrgAccess(),
-  requireWorkspaceAccess(),
+  requireWorkspaceAccess,
   sValidator("json", chatGenerateMetadataSchema),
   async (c) => {
     const orgId = c.req.param("orgId")!;

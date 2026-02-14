@@ -15,7 +15,7 @@ import { invitation } from "./routes/invitation.ts";
 import { userInvitation } from "./routes/user-invitation.ts";
 import { member } from "./routes/member.ts";
 import { context } from "./routes/context.ts";
-import { organizationMember, workspaceMember } from "./db/schema.ts";
+import { organizationMember } from "./db/schema.ts";
 import { logger } from "./logger.ts";
 
 const ALLOWED_ORIGINS = process.env.ALLOWED_ORIGINS!.split(",");
@@ -36,22 +36,11 @@ export type SuperAdminOrgMembership = {
 };
 
 /**
- * Workspace membership type inferred from the database schema.
- * Represents a user's explicit membership and role within a workspace.
- */
-export type WorkspaceMembership = typeof workspaceMember.$inferSelect;
-
-/**
  * Valid organization roles.
  * - admin: Can manage the organization and all workspaces within it
- * - member: Regular member who needs explicit workspace access
+ * - member: Regular member who creates and owns their own workspaces
  */
 export type OrgRole = "admin" | "member";
-
-/**
- * Valid workspace roles in hierarchical order: admin > editor > viewer
- */
-export type WorkspaceRole = "admin" | "editor" | "viewer";
 
 /**
  * Hono context variables available throughout the request lifecycle.
@@ -74,16 +63,9 @@ export type Variables = {
   orgMembership?: OrganizationMembership | SuperAdminOrgMembership;
 
   /**
-   * Workspace membership data (set by requireWorkspaceAccess middleware).
-   * Null for super admins and org admins (who have implicit access).
+   * Whether the current user owns the workspace (set by requireWorkspaceAccess middleware).
    */
-  workspaceMembership?: WorkspaceMembership | null;
-
-  /**
-   * Effective workspace role (set by requireWorkspaceAccess middleware).
-   * Computed based on super admin status, org admin status, or explicit workspace membership.
-   */
-  workspaceRole?: WorkspaceRole;
+  isWorkspaceOwner?: boolean;
 };
 
 const app = new Hono<{ Variables: Variables }>();

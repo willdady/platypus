@@ -23,7 +23,10 @@ import {
   type PromptInputMessage,
 } from "@/components/ai-elements/prompt-input";
 import { useChat } from "@ai-sdk/react";
-import { DefaultChatTransport, lastAssistantMessageIsCompleteWithToolCalls } from "ai";
+import {
+  DefaultChatTransport,
+  lastAssistantMessageIsCompleteWithToolCalls,
+} from "ai";
 import { GlobeIcon, Info, Settings2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useRef, useEffect, useState, useCallback, useMemo } from "react";
@@ -92,7 +95,7 @@ export const Chat = ({
   // Memoize providers to prevent unnecessary re-renders
   const providers = useMemo(
     () => providersData?.results || [],
-    [providersData?.results]
+    [providersData?.results],
   );
 
   // Fetch agents
@@ -109,7 +112,7 @@ export const Chat = ({
   // Memoize agents to prevent unnecessary re-renders
   const agents = useMemo(
     () => agentsData?.results || [],
-    [agentsData?.results]
+    [agentsData?.results],
   );
 
   // Fetch tool sets
@@ -126,7 +129,7 @@ export const Chat = ({
   // Memoize tool sets to prevent unnecessary re-renders
   const toolSets = useMemo(
     () => toolSetsData?.results || [],
-    [toolSetsData?.results]
+    [toolSetsData?.results],
   );
 
   // Fetch skills
@@ -142,7 +145,7 @@ export const Chat = ({
   // Memoize skills to prevent unnecessary re-renders
   const skills = useMemo(
     () => skillsData?.results || [],
-    [skillsData?.results]
+    [skillsData?.results],
   );
 
   // Fetch existing chat data
@@ -208,7 +211,14 @@ export const Chat = ({
     sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithToolCalls,
   });
 
-  const { sessions, getCompletedSessions, consumeSession, completeSession, restoreSession, isToolCallCompleted } = useSubAgent();
+  const {
+    sessions,
+    getCompletedSessions,
+    consumeSession,
+    completeSession,
+    restoreSession,
+    isToolCallCompleted,
+  } = useSubAgent();
   const completedSessions = getCompletedSessions();
   // Tracks which tool call IDs have already been fed back to addToolOutput
   // within this component's lifetime, preventing duplicate submissions.
@@ -336,7 +346,14 @@ export const Chat = ({
       // Mark as consumed so it won't be reprocessed on subsequent renders
       setTimeout(() => consumeSession(session.toolCallId), 100);
     }
-  }, [isSubAgentMode, completedSessions, status, addToolOutput, consumeSession, isToolCallCompleted]);
+  }, [
+    isSubAgentMode,
+    completedSessions,
+    status,
+    addToolOutput,
+    consumeSession,
+    isToolCallCompleted,
+  ]);
 
   // Propagate sub-agent errors back to the parent session so the parent chat
   // doesn't wait forever for a result. Handles two failure modes:
@@ -386,7 +403,15 @@ export const Chat = ({
       }, 3000);
       return () => clearTimeout(timer);
     }
-  }, [isSubAgentMode, error, status, messages.length, chatId, sessions, completeSession]);
+  }, [
+    isSubAgentMode,
+    error,
+    status,
+    messages.length,
+    chatId,
+    sessions,
+    completeSession,
+  ]);
 
   // Message editing hook (needs getRequestBody to be defined)
   const messageEditing = useMessageEditing(
@@ -486,12 +511,19 @@ export const Chat = ({
     ) {
       initialTaskSentRef.current = true;
       const body = getRequestBody();
-      sendMessage(
-        { text: initialTask, files: [] },
-        { body },
-      );
+      sendMessage({ text: initialTask, files: [] }, { body });
     }
-  }, [isSubAgentMode, initialTask, messages.length, agentId, status, sendMessage, getRequestBody, isChatLoading, chatData]);
+  }, [
+    isSubAgentMode,
+    initialTask,
+    messages.length,
+    agentId,
+    status,
+    sendMessage,
+    getRequestBody,
+    isChatLoading,
+    chatData,
+  ]);
 
   // TODO: Ideally show a loading indicator here
   if (isLoading) return null;
@@ -560,40 +592,45 @@ export const Chat = ({
       >
         <ConversationContent>
           <div className="flex justify-center">
-            <div className={cn("w-full flex flex-col gap-2", !isSubAgentMode && "xl:w-4/5 max-w-4xl")}>
+            <div
+              className={cn(
+                "w-full flex flex-col gap-2",
+                !isSubAgentMode && "xl:w-4/5 max-w-4xl",
+              )}
+            >
               {messages.map((message, messageIndex) => (
-              <ChatMessage
-                key={message.id}
-                message={message}
-                isLastMessage={messageIndex === messages.length - 1}
-                status={status}
-                isEditing={editingMessageId === message.id}
-                editContent={editContent}
-                editTextareaRef={editTextareaRef}
-                setEditContent={messageEditing.setEditContent}
-                onEditStart={handleMessageEditStart}
-                onEditCancel={handleMessageEditCancel}
-                onEditSubmit={handleMessageEditSubmit}
-                onMessageDelete={handleMessageDelete}
-                onRegenerate={handleRegenerate}
-                onCopyMessage={(content, messageId) => {
-                  navigator.clipboard.writeText(content);
-                  toast.info("Copied to clipboard");
-                  setCopiedMessageId(messageId);
-                  setTimeout(() => setCopiedMessageId(null), 2000);
-                }}
-                copiedMessageId={copiedMessageId}
-                onAppendToPrompt={(text) => {
-                  setInputValue(text);
-                  setTimeout(() => textareaRef.current?.focus(), 0);
-                }}
-                onSubmitMessage={(text) => {
-                  handleSubmit({ text, files: [] });
-                }}
-                chatId={chatId}
-                agents={agents}
-                isSubAgentMode={isSubAgentMode}
-              />
+                <ChatMessage
+                  key={message.id}
+                  message={message}
+                  isLastMessage={messageIndex === messages.length - 1}
+                  status={status}
+                  isEditing={editingMessageId === message.id}
+                  editContent={editContent}
+                  editTextareaRef={editTextareaRef}
+                  setEditContent={messageEditing.setEditContent}
+                  onEditStart={handleMessageEditStart}
+                  onEditCancel={handleMessageEditCancel}
+                  onEditSubmit={handleMessageEditSubmit}
+                  onMessageDelete={handleMessageDelete}
+                  onRegenerate={handleRegenerate}
+                  onCopyMessage={(content, messageId) => {
+                    navigator.clipboard.writeText(content);
+                    toast.info("Copied to clipboard");
+                    setCopiedMessageId(messageId);
+                    setTimeout(() => setCopiedMessageId(null), 2000);
+                  }}
+                  copiedMessageId={copiedMessageId}
+                  onAppendToPrompt={(text) => {
+                    setInputValue(text);
+                    setTimeout(() => textareaRef.current?.focus(), 0);
+                  }}
+                  onSubmitMessage={(text) => {
+                    handleSubmit({ text, files: [] });
+                  }}
+                  chatId={chatId}
+                  agents={agents}
+                  isSubAgentMode={isSubAgentMode}
+                />
               ))}
             </div>
           </div>

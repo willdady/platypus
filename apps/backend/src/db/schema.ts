@@ -55,6 +55,12 @@ export const workspace = pgTable(
       .references(() => organization.id, {
         onDelete: "cascade",
       }),
+    ownerId: t
+      .text("owner_id")
+      .notNull()
+      .references(() => user.id, {
+        onDelete: "cascade",
+      }),
     name: t.text("name").notNull(),
     context: t.text("context"),
     taskModelProviderId: t
@@ -65,7 +71,10 @@ export const workspace = pgTable(
     createdAt: t.timestamp("created_at").notNull().defaultNow(),
     updatedAt: t.timestamp("updated_at").notNull().defaultNow(),
   }),
-  (t) => [index("idx_workspace_organization_id").on(t.organizationId)],
+  (t) => [
+    index("idx_workspace_organization_id").on(t.organizationId),
+    index("idx_workspace_owner_id").on(t.ownerId),
+  ],
 );
 
 export const chat = pgTable(
@@ -187,34 +196,7 @@ export const organizationMember = pgTable(
   ],
 );
 
-// Workspace membership - links users to specific workspaces with granular roles
-export const workspaceMember = pgTable(
-  "workspace_member",
-  (t) => ({
-    id: t.text("id").primaryKey(),
-    workspaceId: t
-      .text("workspace_id")
-      .notNull()
-      .references(() => workspace.id, { onDelete: "cascade" }),
-    userId: t
-      .text("user_id")
-      .notNull()
-      .references(() => user.id, { onDelete: "cascade" }),
-    orgMemberId: t
-      .text("org_member_id")
-      .notNull()
-      .references(() => organizationMember.id, { onDelete: "cascade" }),
-    role: t.text("role").notNull().default("viewer"), // admin | editor | viewer
-    createdAt: t.timestamp("created_at").notNull().defaultNow(),
-    updatedAt: t.timestamp("updated_at").notNull().defaultNow(),
-  }),
-  (t) => [
-    index("idx_ws_member_workspace_id").on(t.workspaceId),
-    index("idx_ws_member_user_id").on(t.userId),
-  ],
-);
-
-// Invitations for both org and workspace levels
+// Invitations for organization membership
 export const invitation = pgTable(
   "invitation",
   (t) => ({
@@ -224,11 +206,6 @@ export const invitation = pgTable(
       .text("organization_id")
       .notNull()
       .references(() => organization.id, { onDelete: "cascade" }),
-    workspaceId: t
-      .text("workspace_id")
-      .notNull()
-      .references(() => workspace.id, { onDelete: "cascade" }),
-    role: t.text("role").notNull(),
     invitedBy: t
       .text("invited_by")
       .notNull()
@@ -240,8 +217,7 @@ export const invitation = pgTable(
   (t) => [
     index("idx_invitation_email").on(t.email),
     index("idx_invitation_org_id").on(t.organizationId),
-    index("idx_invitation_workspace_id").on(t.workspaceId),
-    unique("unique_invitation_workspace_email").on(t.workspaceId, t.email),
+    unique("unique_invitation_org_email").on(t.organizationId, t.email),
   ],
 );
 

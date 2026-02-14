@@ -25,17 +25,20 @@ export const SubAgentPane = ({
 
   const isOpen = activeSessionId !== null;
 
-  const sessionsArray = useMemo(() => Array.from(sessions.values()), [sessions]);
+  const sessionsArray = useMemo(
+    () => Array.from(sessions.values()),
+    [sessions],
+  );
 
   const activeSession = useMemo(
     () => (activeSessionId ? sessions.get(activeSessionId) : undefined),
-    [activeSessionId, sessions]
+    [activeSessionId, sessions],
   );
 
   const getAgentName = useCallback(
     (subAgentId: string) =>
       agents.find((a) => a.id === subAgentId)?.name || "Sub-Agent",
-    [agents]
+    [agents],
   );
 
   if (sessionsArray.length === 0) return null;
@@ -44,7 +47,9 @@ export const SubAgentPane = ({
     <div
       className={cn(
         "flex flex-col h-full border-l bg-background transition-[width,opacity] duration-200 ease-out",
-        isOpen ? "w-[450px] opacity-100" : "w-0 opacity-0 border-l-0 overflow-hidden pointer-events-none",
+        isOpen
+          ? "w-[450px] opacity-100"
+          : "w-0 opacity-0 border-l-0 overflow-hidden pointer-events-none",
       )}
       style={{
         willChange: isOpen ? "width, opacity" : "auto",
@@ -91,10 +96,7 @@ export const SubAgentPane = ({
           return (
             <div
               key={session.toolCallId}
-              className={cn(
-                "absolute inset-0",
-                !isActive && "hidden",
-              )}
+              className={cn("absolute inset-0", !isActive && "hidden")}
               style={{
                 contentVisibility: isActive ? "auto" : "hidden",
               }}

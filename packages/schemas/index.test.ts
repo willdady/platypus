@@ -58,6 +58,7 @@ describe("Workspace Schema", () => {
     const validWorkspace = {
       id: "456",
       organizationId: "123",
+      ownerId: "user-1",
       name: "Test Workspace",
       createdAt: new Date(),
       updatedAt: new Date(),
