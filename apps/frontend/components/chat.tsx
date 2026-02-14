@@ -74,7 +74,7 @@ export const Chat = ({
   initialTask?: string | null;
   isSubAgentMode?: boolean;
 }) => {
-  const { user } = useAuth();
+  const { user, isWorkspaceOwner } = useAuth();
   const backendUrl = useBackendUrl();
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -640,119 +640,127 @@ export const Chat = ({
       <div className="grid shrink-0 gap-4 p-4">
         <div className="flex justify-center">
           <div className="w-full xl:w-4/5 max-w-4xl">
-            <PromptInput
-              onSubmit={(message, event) => {
-                handleSubmit(message);
-                setInputValue("");
-              }}
-              globalDrop
-              multiple
-            >
-              <PromptInputAttachments className="w-full">
-                {(attachment) => <PromptInputAttachment data={attachment} />}
-              </PromptInputAttachments>
-              <PromptInputBody>
-                <PromptInputTextarea
-                  ref={textareaRef}
-                  value={inputValue}
-                  onChange={(e) => setInputValue(e.target.value)}
-                  placeholder={
-                    selectedAgent?.inputPlaceholder ||
-                    "What would you like to know?"
-                  }
-                  autoFocus
-                />
-              </PromptInputBody>
-              <PromptInputFooter>
-                <PromptInputTools>
-                  <PromptInputActionMenu>
-                    <PromptInputActionMenuTrigger className="cursor-pointer" />
-                    <PromptInputActionMenuContent>
-                      <PromptInputActionAddAttachments className="cursor-pointer" />
-                    </PromptInputActionMenuContent>
-                  </PromptInputActionMenu>
-                  <PromptInputSpeechButton
-                    className="cursor-pointer"
-                    textareaRef={textareaRef}
-                    onTranscriptionChange={setInputValue}
+            {isWorkspaceOwner ? (
+              <PromptInput
+                onSubmit={(message, event) => {
+                  handleSubmit(message);
+                  setInputValue("");
+                }}
+                globalDrop
+                multiple
+              >
+                <PromptInputAttachments className="w-full">
+                  {(attachment) => <PromptInputAttachment data={attachment} />}
+                </PromptInputAttachments>
+                <PromptInputBody>
+                  <PromptInputTextarea
+                    ref={textareaRef}
+                    value={inputValue}
+                    onChange={(e) => setInputValue(e.target.value)}
+                    placeholder={
+                      selectedAgent?.inputPlaceholder ||
+                      "What would you like to know?"
+                    }
+                    autoFocus
                   />
-                  {(!currentProviderType ||
-                    currentProviderType !== "Bedrock") && (
-                    <PromptInputButton
+                </PromptInputBody>
+                <PromptInputFooter>
+                  <PromptInputTools>
+                    <PromptInputActionMenu>
+                      <PromptInputActionMenuTrigger className="cursor-pointer" />
+                      <PromptInputActionMenuContent>
+                        <PromptInputActionAddAttachments className="cursor-pointer" />
+                      </PromptInputActionMenuContent>
+                    </PromptInputActionMenu>
+                    <PromptInputSpeechButton
                       className="cursor-pointer"
-                      onClick={() => setSearch(!search)}
-                      variant={search ? "default" : "ghost"}
-                    >
-                      <GlobeIcon size={16} />
-                      <span>Search</span>
-                    </PromptInputButton>
-                  )}
-                  <ModelSelectorDialog
-                    agents={agents}
-                    providers={providers}
-                    agentId={agentId}
-                    modelId={modelId}
-                    isOpen={isModelSelectorOpen}
-                    onOpenChange={(open) => {
-                      setIsModelSelectorOpen(open);
-                      if (!open) {
-                        setTimeout(() => textareaRef.current?.focus(), 250);
-                      }
-                    }}
-                    onModelChange={handleModelChange}
-                  />
-                  {agentId && selectedAgent && (
-                    <Dialog
-                      open={isAgentInfoDialogOpen}
-                      onOpenChange={setIsAgentInfoDialogOpen}
-                    >
-                      <DialogTrigger asChild>
-                        <PromptInputButton>
-                          <Info />
-                        </PromptInputButton>
-                      </DialogTrigger>
-                      <AgentInfoDialog
-                        agent={selectedAgent}
-                        toolSets={toolSets}
-                        skills={skills}
-                        providers={providers}
-                        onClose={() => setIsAgentInfoDialogOpen(false)}
-                      />
-                    </Dialog>
-                  )}
-                  {!agentId && (
-                    <Dialog
-                      open={isSettingsDialogOpen}
-                      onOpenChange={setIsSettingsDialogOpen}
-                    >
-                      <DialogTrigger asChild>
-                        <PromptInputButton>
-                          <Settings2 />
-                        </PromptInputButton>
-                      </DialogTrigger>
-                      <ChatSettingsDialog
-                        systemPrompt={systemPrompt}
-                        onSystemPromptChange={setters.setSystemPrompt}
-                        temperature={temperature}
-                        onTemperatureChange={setters.setTemperature}
-                        seed={seed}
-                        onSeedChange={setters.setSeed}
-                        topP={topP}
-                        onTopPChange={setters.setTopP}
-                        topK={topK}
-                        onTopKChange={setters.setTopK}
-                        presencePenalty={presencePenalty}
-                        onPresencePenaltyChange={setters.setPresencePenalty}
-                        frequencyPenalty={frequencyPenalty}
-                        onFrequencyPenaltyChange={setters.setFrequencyPenalty}
-                        onClose={() => setIsSettingsDialogOpen(false)}
-                      />
-                    </Dialog>
-                  )}
-                </PromptInputTools>
-                <PromptInputSubmit status={status} />
-              </PromptInputFooter>
-            </PromptInput>
+                      textareaRef={textareaRef}
+                      onTranscriptionChange={setInputValue}
+                    />
+                    {(!currentProviderType ||
+                      currentProviderType !== "Bedrock") && (
+                      <PromptInputButton
+                        className="cursor-pointer"
+                        onClick={() => setSearch(!search)}
+                        variant={search ? "default" : "ghost"}
+                      >
+                        <GlobeIcon size={16} />
+                        <span>Search</span>
+                      </PromptInputButton>
+                    )}
+                    <ModelSelectorDialog
+                      agents={agents}
+                      providers={providers}
+                      agentId={agentId}
+                      modelId={modelId}
+                      isOpen={isModelSelectorOpen}
+                      onOpenChange={(open) => {
+                        setIsModelSelectorOpen(open);
+                        if (!open) {
+                          setTimeout(() => textareaRef.current?.focus(), 250);
+                        }
+                      }}
+                      onModelChange={handleModelChange}
+                    />
+                    {agentId && selectedAgent && (
+                      <Dialog
+                        open={isAgentInfoDialogOpen}
+                        onOpenChange={setIsAgentInfoDialogOpen}
+                      >
+                        <DialogTrigger asChild>
+                          <PromptInputButton>
+                            <Info />
+                          </PromptInputButton>
+                        </DialogTrigger>
+                        <AgentInfoDialog
+                          agent={selectedAgent}
+                          toolSets={toolSets}
+                          skills={skills}
+                          providers={providers}
+                          onClose={() => setIsAgentInfoDialogOpen(false)}
+                        />
+                      </Dialog>
+                    )}
+                    {!agentId && (
+                      <Dialog
+                        open={isSettingsDialogOpen}
+                        onOpenChange={setIsSettingsDialogOpen}
+                      >
+                        <DialogTrigger asChild>
+                          <PromptInputButton>
+                            <Settings2 />
+                          </PromptInputButton>
+                        </DialogTrigger>
+                        <ChatSettingsDialog
+                          systemPrompt={systemPrompt}
+                          onSystemPromptChange={setters.setSystemPrompt}
+                          temperature={temperature}
+                          onTemperatureChange={setters.setTemperature}
+                          seed={seed}
+                          onSeedChange={setters.setSeed}
+                          topP={topP}
+                          onTopPChange={setters.setTopP}
+                          topK={topK}
+                          onTopKChange={setters.setTopK}
+                          presencePenalty={presencePenalty}
+                          onPresencePenaltyChange={setters.setPresencePenalty}
+                          frequencyPenalty={frequencyPenalty}
+                          onFrequencyPenaltyChange={setters.setFrequencyPenalty}
+                          onClose={() => setIsSettingsDialogOpen(false)}
+                        />
+                      </Dialog>
+                    )}
+                  </PromptInputTools>
+                  <PromptInputSubmit status={status} />
+                </PromptInputFooter>
+              </PromptInput>
+            ) : (
+              <div className="flex items-center justify-center py-4 px-6 border rounded-lg bg-muted/50">
+                <p className="text-sm text-muted-foreground">
+                  Read-only mode. Only the workspace owner can send messages.
+                </p>
+              </div>
+            )}
           </div>
         </div>
       </div>

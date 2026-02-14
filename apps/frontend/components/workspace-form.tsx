@@ -75,6 +75,7 @@ const WorkspaceForm = ({
     name: "",
     context: "",
     taskModelProviderId: null as string | null,
+    memoryExtractionProviderId: null as string | null,
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [validationErrors, setValidationErrors] = useState<
@@ -91,6 +92,8 @@ const WorkspaceForm = ({
         name: workspace.name,
         context: workspace.context || "",
         taskModelProviderId: workspace.taskModelProviderId || null,
+        memoryExtractionProviderId:
+          (workspace as any).memoryExtractionProviderId || null,
       });
     }
   }, [workspace]);
@@ -135,6 +138,7 @@ const WorkspaceForm = ({
             name: formData.name,
             context: formData.context || null,
             taskModelProviderId: formData.taskModelProviderId,
+            memoryExtractionProviderId: formData.memoryExtractionProviderId,
           }
         : {
             organizationId: orgId,
@@ -285,6 +289,47 @@ const WorkspaceForm = ({
               </FieldDescription>
               {validationErrors.taskModelProviderId && (
                 <FieldError>{validationErrors.taskModelProviderId}</FieldError>
+              )}
+            </Field>
+          )}
+
+          {workspaceId && (
+            <Field data-invalid={!!validationErrors.memoryExtractionProviderId}>
+              <FieldLabel htmlFor="memoryExtractionProviderId">
+                Memory Extraction Provider
+              </FieldLabel>
+              <Select
+                value={formData.memoryExtractionProviderId || "none"}
+                onValueChange={(value) => {
+                  setFormData((prevData) => ({
+                    ...prevData,
+                    memoryExtractionProviderId: value === "none" ? null : value,
+                  }));
+                }}
+                disabled={isSubmitting}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select a provider" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Disabled</SelectItem>
+                  {providers
+                    .filter((p) => p.memoryExtractionModelId)
+                    .map((provider) => (
+                      <SelectItem key={provider.id} value={provider.id}>
+                        {provider.name}
+                      </SelectItem>
+                    ))}
+                </SelectContent>
+              </Select>
+              <FieldDescription>
+                Provider to use for extracting memories from conversations.
+                Enable memory extraction on a provider to see it here.
+              </FieldDescription>
+              {validationErrors.memoryExtractionProviderId && (
+                <FieldError>
+                  {validationErrors.memoryExtractionProviderId}
+                </FieldError>
               )}
             </Field>
           )}

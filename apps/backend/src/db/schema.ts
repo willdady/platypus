@@ -34,6 +34,7 @@ export const provider = pgTable(
     project: t.text("project"),
     modelIds: t.jsonb().$type<string[]>().notNull(),
     taskModelId: t.text("task_model_id").notNull(),
+    memoryExtractionModelId: t.text("memory_extraction_model_id").notNull(),
     createdAt: t.timestamp("created_at").notNull().defaultNow(),
     updatedAt: t.timestamp("updated_at").notNull().defaultNow(),
   }),
@@ -68,6 +69,12 @@ export const workspace = pgTable(
       .references(() => provider.id, {
         onDelete: "set null",
       }),
+
+    // Memory extraction configuration (null = disabled, non-null = enabled)
+    memoryExtractionProviderId: t
+      .text("memory_extraction_provider_id")
+      .references(() => provider.id, { onDelete: "set null" }),
+
     createdAt: t.timestamp("created_at").notNull().defaultNow(),
     updatedAt: t.timestamp("updated_at").notNull().defaultNow(),
   }),
@@ -104,12 +111,24 @@ export const chat = pgTable(
     parentChatId: t.text("parent_chat_id").references((): any => chat.id, {
       onDelete: "cascade",
     }),
+
+    // Memory processing tracking
+    lastMemoryProcessedAt: t.timestamp("last_memory_processed_at"),
+    memoryExtractionStatus: t
+      .text("memory_extraction_status")
+      .default("pending"), // "pending" | "processing" | "completed" | "failed"
+
     createdAt: t.timestamp("created_at").notNull().defaultNow(),
     updatedAt: t.timestamp("updated_at").notNull().defaultNow(),
   }),
   (t) => [
     index("idx_chat_workspace_id").on(t.workspaceId),
     index("idx_chat_parent_chat_id").on(t.parentChatId),
+    index("idx_chat_memory_processing").on(
+      t.memoryExtractionStatus,
+      t.lastMemoryProcessedAt,
+      t.updatedAt,
+    ),
   ],
 );
 
@@ -262,5 +281,46 @@ export const context = pgTable(
     index("idx_context_user_id").on(t.userId),
     index("idx_context_workspace_id").on(t.workspaceId),
     unique("unique_context_user_workspace").on(t.userId, t.workspaceId),
+  ],
+);
+
+export const memory = pgTable(
+  "memory",
+  (t) => ({
+    id: t.text("id").primaryKey(),
+
+    // IMPORTANT: All memories are user-owned (userId always set)
+    // Scope determines where memory is relevant:
+    //   - User-level: workspaceId = NULL (applies across all workspaces for this user)
+    //   - Workspace-level: workspaceId set (applies only in this workspace for this user)
+    // Since workspaces are single-user owned and only the owner can chat,
+    // workspace-level memories always belong to the workspace owner.
+    userId: t
+      .text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    workspaceId: t
+      .text("workspace_id")
+      .references(() => workspace.id, { onDelete: "cascade" }),
+
+    // Source tracking
+    chatId: t
+      .text("chat_id")
+      .references(() => chat.id, { onDelete: "set null" }),
+
+    // Entity-based memory structure
+    entityType: t.text("entity_type").notNull(), // "preference" | "fact" | "goal" | "constraint" | "style" | "person"
+    entityName: t.text("entity_name").notNull(), // e.g., "communication style", "project framework"
+    observation: t.text("observation").notNull(), // The actual memory content
+
+    createdAt: t.timestamp("created_at").notNull().defaultNow(),
+    updatedAt: t.timestamp("updated_at").notNull().defaultNow(),
+  }),
+  (t) => [
+    // Primary index for scope-based retrieval (most common query pattern)
+    index("idx_memory_user_workspace").on(t.userId, t.workspaceId),
+
+    // Source tracking
+    index("idx_memory_chat_id").on(t.chatId),
   ],
 );

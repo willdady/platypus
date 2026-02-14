@@ -26,6 +26,7 @@ export const workspaceSchema = z.object({
   name: z.string().min(3).max(30),
   context: z.string().max(1000).nullable().optional(),
   taskModelProviderId: z.string().nullable().optional(),
+  memoryExtractionProviderId: z.string().nullable().optional(),
   createdAt: z.date(),
   updatedAt: z.date(),
 });
@@ -42,6 +43,7 @@ export const workspaceUpdateSchema = workspaceSchema.pick({
   name: true,
   context: true,
   taskModelProviderId: true,
+  memoryExtractionProviderId: true,
 });
 
 // Chat
@@ -347,6 +349,7 @@ const providerBaseSchema = z.object({
   project: z.string().optional(),
   modelIds: z.array(z.string()).min(1),
   taskModelId: z.string(),
+  memoryExtractionModelId: z.string(),
   createdAt: z.date(),
   updatedAt: z.date(),
 });
@@ -393,6 +396,7 @@ export const providerCreateSchema = providerBaseSchema.pick({
   project: true,
   modelIds: true,
   taskModelId: true,
+  memoryExtractionModelId: true,
 });
 
 // Invitation
@@ -441,6 +445,7 @@ export const providerUpdateSchema = providerBaseSchema.pick({
   project: true,
   modelIds: true,
   taskModelId: true,
+  memoryExtractionModelId: true,
 });
 
 // Organization Member
@@ -530,3 +535,85 @@ export const contextCreateSchema = contextSchema.pick({
 export const contextUpdateSchema = contextSchema.pick({
   content: true,
 });
+
+// Memory
+
+export const memoryEntityTypeSchema = z.enum([
+  "preference",
+  "fact",
+  "goal",
+  "constraint",
+  "style",
+  "person",
+]);
+
+export type MemoryEntityType = z.infer<typeof memoryEntityTypeSchema>;
+
+export const memoryScopeSchema = z.enum(["user", "workspace"]);
+
+export type MemoryScope = z.infer<typeof memoryScopeSchema>;
+
+export const memorySchema = z.object({
+  id: z.string(),
+  userId: z.string(),
+  workspaceId: z.string().nullable().optional(),
+  chatId: z.string().nullable().optional(),
+  entityType: memoryEntityTypeSchema,
+  entityName: z.string(),
+  observation: z.string(),
+  createdAt: z.date(),
+  updatedAt: z.date(),
+});
+
+export type Memory = z.infer<typeof memorySchema>;
+
+export const memoryCreateSchema = z.object({
+  userId: z.string(),
+  workspaceId: z.string().nullable().optional(),
+  chatId: z.string().optional(),
+  entityType: memoryEntityTypeSchema,
+  entityName: z.string(),
+  observation: z.string(),
+});
+
+export type MemoryCreateData = z.infer<typeof memoryCreateSchema>;
+
+export const memoryUpdateSchema = z.object({
+  entityType: memoryEntityTypeSchema.optional(),
+  entityName: z.string().optional(),
+  observation: z.string().optional(),
+});
+
+export type MemoryUpdateData = z.infer<typeof memoryUpdateSchema>;
+
+// Memory Extraction (for LLM structured output)
+
+export const memoryExtractionNewMemorySchema = z.object({
+  entityType: memoryEntityTypeSchema,
+  entityName: z.string(),
+  observation: z.string(),
+  scope: memoryScopeSchema,
+});
+
+export type MemoryExtractionNewMemory = z.infer<
+  typeof memoryExtractionNewMemorySchema
+>;
+
+export const memoryExtractionUpdateSchema = z.object({
+  id: z.string(),
+  observation: z.string(),
+});
+
+export type MemoryExtractionUpdate = z.infer<
+  typeof memoryExtractionUpdateSchema
+>;
+
+export const memoryExtractionOutputSchema = z.object({
+  new: z.array(memoryExtractionNewMemorySchema),
+  updates: z.array(memoryExtractionUpdateSchema),
+  deletes: z.array(z.string()), // Memory IDs to delete
+});
+
+export type MemoryExtractionOutput = z.infer<
+  typeof memoryExtractionOutputSchema
+>;

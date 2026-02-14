@@ -11,6 +11,7 @@ import { nanoid } from "nanoid";
 import { count, eq } from "drizzle-orm";
 import { auth } from "./src/auth.ts";
 import { logger } from "./src/logger.ts";
+import { startScheduler } from "./src/jobs/scheduler.ts";
 
 const PORT = process.env.PORT || "4001";
 
@@ -100,6 +101,9 @@ const main = async () => {
     fetch: app.fetch,
     port: parseInt(PORT),
   });
+
+  // Start background jobs (safe for horizontal scaling)
+  startScheduler();
 };
 
 const exponentialBackoff = async <T>(

@@ -35,6 +35,11 @@ import { createLoadSkillTool } from "../tools/skill.ts";
 import { createNewTaskTool, createTaskResultTool } from "../tools/sub-agent.ts";
 import { renderSystemPrompt } from "../system-prompt.ts";
 import {
+  retrieveUserLevelMemories,
+  retrieveWorkspaceLevelMemories,
+  formatMemoriesForSystemPrompt,
+} from "../services/memory-retrieval.ts";
+import {
   chatGenerateMetadataSchema,
   chatSubmitSchema,
   chatUpdateSchema,
@@ -47,6 +52,7 @@ import { requireAuth } from "../middleware/authentication.ts";
 import {
   requireOrgAccess,
   requireWorkspaceAccess,
+  requireWorkspaceOwner,
 } from "../middleware/authorization.ts";
 import type { Variables } from "../server.ts";
 import { logger } from "../logger.ts";
@@ -322,6 +328,7 @@ const resolveGenerationConfig = async (
   userWorkspaceContext?: string,
   isSubAgentChat: boolean = false,
   subAgents?: Array<{ id: string; name: string; description?: string | null }>,
+  memoriesFormatted?: string,
 ): Promise<GenerationConfig> => {
   const config: GenerationConfig = {};
   const source = agent || data;
@@ -355,6 +362,7 @@ const resolveGenerationConfig = async (
       ...sa,
       description: sa.description || undefined,
     })),
+    memoriesFormatted,
   });
 
   config.systemPrompt = systemPrompt;
@@ -520,6 +528,7 @@ chat.post(
   requireAuth,
   requireOrgAccess(),
   requireWorkspaceAccess,
+  requireWorkspaceOwner,
   sValidator("json", chatSubmitSchema),
   async (c) => {
     const orgId = c.req.param("orgId")!;
@@ -620,7 +629,15 @@ chat.post(
       }
     }
 
-    // 10. Prepare Generation Config (Merge Agent & Request params)
+    // 10. Fetch memories for the user (user-level + workspace-level)
+    const [userLevelMemories, workspaceLevelMemories] = await Promise.all([
+      retrieveUserLevelMemories(user.id),
+      retrieveWorkspaceLevelMemories(user.id, workspaceId),
+    ]);
+    const memories = [...userLevelMemories, ...workspaceLevelMemories];
+    const memoriesFormatted = formatMemoriesForSystemPrompt(memories);
+
+    // 11. Prepare Generation Config (Merge Agent & Request params)
     const config = await resolveGenerationConfig(
       data,
       workspaceId,
@@ -632,15 +649,18 @@ chat.post(
       userWorkspaceContext,
       isSubAgentChat,
       subAgents,
+      memoriesFormatted,
     );
 
-    // 11. Inject loadSkill tool if skills exist
+    // 12. Inject loadSkill tool if skills exist
     if (skills.length > 0) {
       tools.loadSkill = createLoadSkillTool(workspaceId);
     }
 
-    // 12. Stream Response
+    // 13. Stream Response
     const { systemPrompt, ...restConfig } = config;
+
+    logger.debug({ systemPrompt }, "System prompt for chat");
 
     // Prepare stop conditions
     const stopConditions = [];
@@ -707,6 +727,7 @@ chat.delete(
   requireAuth,
   requireOrgAccess(),
   requireWorkspaceAccess,
+  requireWorkspaceOwner,
   async (c) => {
     const chatId = c.req.param("chatId");
     const workspaceId = c.req.param("workspaceId")!;
@@ -731,6 +752,7 @@ chat.put(
   requireAuth,
   requireOrgAccess(),
   requireWorkspaceAccess,
+  requireWorkspaceOwner,
   sValidator("json", chatUpdateSchema),
   async (c) => {
     const chatId = c.req.param("chatId");

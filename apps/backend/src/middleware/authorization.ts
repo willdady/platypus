@@ -151,18 +151,27 @@ export const requireWorkspaceAccess = createMiddleware(async (c, next) => {
   const db = c.get("db");
   const orgMembership = c.get("orgMembership");
 
-  // Super admins bypass all checks
-  if (isSuperAdmin(user)) {
-    c.set("isWorkspaceOwner", false);
-    await next();
-    return;
-  }
-
-  // Get workspaceId from path parameters
   const workspaceId = c.req.param("workspaceId");
 
   if (!workspaceId) {
     return c.json({ error: "Workspace ID required" }, 400);
+  }
+
+  // Super admins bypass all checks but still check ownership
+  if (isSuperAdmin(user)) {
+    const [ws] = await db
+      .select()
+      .from(workspaceTable)
+      .where(eq(workspaceTable.id, workspaceId))
+      .limit(1);
+
+    if (!ws) {
+      return c.json({ error: "Workspace not found" }, 404);
+    }
+
+    c.set("isWorkspaceOwner", ws.ownerId === user.id);
+    await next();
+    return;
   }
 
   // Fetch workspace to check ownership
@@ -225,6 +234,48 @@ export const requireSuperAdmin = createMiddleware(async (c, next) => {
 
   if (!isSuperAdmin(user)) {
     return c.json({ error: "Super admin access required" }, 403);
+  }
+
+  await next();
+});
+
+/**
+ * Middleware that validates the user is the workspace owner.
+ *
+ * **Prerequisites:**
+ * - Must be used AFTER `requireOrgAccess` and `requireWorkspaceAccess` middleware
+ *
+ * **Access Control:**
+ * - Only the workspace owner can access the resource
+ * - Super admins and org admins are NOT allowed (they only have read access)
+ *
+ * **Behavior:**
+ * - Checks if authenticated user is the workspace owner
+ * - Returns 403 if user is not the owner
+ * - Allows request to proceed if user is the owner
+ *
+ * **Use Cases:**
+ * - Creating new chats
+ * - Submitting chat messages
+ * - Updating or deleting chats
+ *
+ * @example
+ * ```typescript
+ * // Only workspace owner can create chats
+ * app.post("/chats", requireAuth, requireOrgAccess(), requireWorkspaceAccess, requireWorkspaceOwner, handler);
+ *
+ * // Only workspace owner can submit messages
+ * app.post("/chats/:id/messages", requireAuth, requireOrgAccess(), requireWorkspaceAccess, requireWorkspaceOwner, handler);
+ * ```
+ */
+export const requireWorkspaceOwner = createMiddleware(async (c, next) => {
+  const isWorkspaceOwner = c.get("isWorkspaceOwner");
+
+  if (!isWorkspaceOwner) {
+    return c.json(
+      { error: "Only the workspace owner can perform this action" },
+      403,
+    );
   }
 
   await next();

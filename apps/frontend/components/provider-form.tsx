@@ -63,6 +63,11 @@ const ProviderForm = ({
 
   const formScope = workspaceId ? "workspace" : "organization";
 
+  // Reset initialization when providerId changes
+  useEffect(() => {
+    hasInitialized.current = false;
+  }, [providerId]);
+
   const [formData, setFormData] = useState<ProviderFormData>({
     providerType: "OpenAI",
     name: "",
@@ -75,6 +80,7 @@ const ProviderForm = ({
     project: "",
     modelIds: [],
     taskModelId: "",
+    memoryExtractionModelId: "",
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [headersError, setHeadersError] = useState<string | null>(null);
@@ -122,6 +128,7 @@ const ProviderForm = ({
         project: provider.project || "",
         modelIds: provider.modelIds || [],
         taskModelId: provider.taskModelId,
+        memoryExtractionModelId: provider.memoryExtractionModelId,
       });
       setHeadersString(JSON.stringify(provider.headers || {}, null, 2));
       setExtraBodyString(JSON.stringify(provider.extraBody || {}, null, 2));
@@ -223,6 +230,7 @@ const ProviderForm = ({
         project: formData.project || undefined,
         modelIds: formData.modelIds,
         taskModelId: formData.taskModelId,
+        memoryExtractionModelId: formData.memoryExtractionModelId,
       };
 
       const url = providerId
@@ -467,6 +475,28 @@ const ProviderForm = ({
             </FieldDescription>
             {validationErrors.taskModelId && (
               <FieldError>{validationErrors.taskModelId}</FieldError>
+            )}
+          </Field>
+
+          <Field data-invalid={!!validationErrors.memoryExtractionModelId}>
+            <FieldLabel htmlFor="memoryExtractionModelId">
+              Memory Extraction Model ID
+            </FieldLabel>
+            <Input
+              id="memoryExtractionModelId"
+              placeholder="gpt-4"
+              value={formData.memoryExtractionModelId}
+              onChange={handleChange}
+              disabled={isSubmitting || isReadOnly}
+              aria-invalid={!!validationErrors.memoryExtractionModelId}
+            />
+            <FieldDescription>
+              Model to use for extracting memories from conversations.
+            </FieldDescription>
+            {validationErrors.memoryExtractionModelId && (
+              <FieldError>
+                {validationErrors.memoryExtractionModelId}
+              </FieldError>
             )}
           </Field>
         </FieldGroup>

@@ -2,7 +2,10 @@ import { Hono } from "hono";
 import { sValidator } from "@hono/standard-validator";
 import { nanoid } from "nanoid";
 import { db } from "../index.ts";
-import { workspace as workspaceTable } from "../db/schema.ts";
+import {
+  workspace as workspaceTable,
+  provider as providerTable,
+} from "../db/schema.ts";
 import {
   workspaceCreateSchema,
   workspaceUpdateSchema,
@@ -96,6 +99,30 @@ workspace.put(
   async (c) => {
     const workspaceId = c.req.param("workspaceId");
     const data = c.req.valid("json");
+
+    // Validate memoryExtractionProviderId if set
+    if (data.memoryExtractionProviderId) {
+      const provider = await db
+        .select()
+        .from(providerTable)
+        .where(eq(providerTable.id, data.memoryExtractionProviderId))
+        .limit(1);
+
+      if (provider.length === 0) {
+        return c.json({ message: "Memory extraction provider not found" }, 404);
+      }
+
+      if (!provider[0].memoryExtractionModelId) {
+        return c.json(
+          {
+            message:
+              "Selected provider does not have a memory extraction model configured",
+          },
+          400,
+        );
+      }
+    }
+
     const record = await db
       .update(workspaceTable)
       .set({

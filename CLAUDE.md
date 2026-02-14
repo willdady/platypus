@@ -209,7 +209,19 @@ On first startup, the backend automatically creates:
 
 These credentials allow immediate access without requiring sign-up. The password should be changed after first login.
 
-### Git Commit Standards
+### Git Branch Standards
+
+Branch names MUST be prefixed with `feature/`, `fix/` or `chore/` only.
+
+**Examples:**
+
+```
+feature/user-authentication
+fix/memory-leak-in-chat
+chore/update-dependencies
+```
+
+## Git Commit Standards
 
 This project follows [Conventional Commits](https://www.conventionalcommits.org/) standards with **strict type restrictions**:
 

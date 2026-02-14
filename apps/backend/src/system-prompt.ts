@@ -13,6 +13,7 @@ interface SystemPromptTemplateData {
   userWorkspaceContext?: string;
   isSubAgentMode?: boolean;
   subAgents?: Array<{ id: string; name: string; description?: string }>;
+  memoriesFormatted?: string;
 }
 
 /**
@@ -134,6 +135,11 @@ CRITICAL INSTRUCTIONS:
   );
   if (userContextFragment) {
     parts.push(userContextFragment);
+  }
+
+  // Add memories if available
+  if (data.memoriesFormatted) {
+    parts.push(data.memoriesFormatted);
   }
 
   if (data.skills && data.skills.length > 0) {
