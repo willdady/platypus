@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.31.0](https://github.com/willdady/platypus/compare/v1.30.0...v1.31.0) (2026-02-15)
+
+
+### Features
+
+* migrate sub-agents to AI SDK native implementation ([c54990c](https://github.com/willdady/platypus/commit/c54990c7f5c3bf1b5db4b2af4c4688dc594b787a))
+
 ## [1.30.0](https://github.com/willdady/platypus/compare/v1.29.0...v1.30.0) (2026-02-15)
 
 
