@@ -92,6 +92,17 @@ export function AppSidebar({
 
   const { selectedTags } = useChatFilter();
 
+  // Helper to revalidate the chat list (handles query params in SWR key)
+  const revalidateChatList = () => {
+    const chatListUrl = joinUrl(
+      backendUrl,
+      `/organizations/${orgId}/workspaces/${workspaceId}/chat`,
+    );
+    return mutate(
+      (key: unknown) => typeof key === "string" && key.startsWith(chatListUrl),
+    );
+  };
+
   const { data } = useSWR<{ results: Workspace[] }>(
     backendUrl && user
       ? joinUrl(backendUrl, `/organizations/${orgId}/workspaces`)
@@ -193,12 +204,7 @@ export function AppSidebar({
         setRenameTags([]);
 
         // Revalidate the chat list
-        await mutate(
-          joinUrl(
-            backendUrl,
-            `/organizations/${orgId}/workspaces/${workspaceId}/chat`,
-          ),
-        );
+        await revalidateChatList();
       } else {
         // Parse standardschema.dev validation errors
         const errorData = await response.json();
@@ -245,12 +251,7 @@ export function AppSidebar({
       }
 
       // Revalidate the chat list
-      await mutate(
-        joinUrl(
-          backendUrl,
-          `/organizations/${orgId}/workspaces/${workspaceId}/chat`,
-        ),
-      );
+      await revalidateChatList();
     } catch (error) {
       console.error("Error deleting chat:", error);
     } finally {
@@ -289,12 +290,7 @@ export function AppSidebar({
       }
 
       // Revalidate the chat list
-      await mutate(
-        joinUrl(
-          backendUrl,
-          `/organizations/${orgId}/workspaces/${workspaceId}/chat`,
-        ),
-      );
+      await revalidateChatList();
     } catch (error) {
       console.error("Error toggling pin status:", error);
     } finally {

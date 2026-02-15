@@ -82,12 +82,14 @@ export const useChatMetadata = <T extends UIMessage = UIMessage>(
                 },
               )
                 .then(() => {
-                  // Revalidate the chat list
+                  // Revalidate the chat list (use filter function to match keys with query params)
+                  const chatListUrl = joinUrl(
+                    backendUrl,
+                    `/organizations/${orgId}/workspaces/${workspaceId}/chat`,
+                  );
                   mutate(
-                    joinUrl(
-                      backendUrl,
-                      `/organizations/${orgId}/workspaces/${workspaceId}/chat`,
-                    ),
+                    (key) =>
+                      typeof key === "string" && key.startsWith(chatListUrl),
                   );
                 })
                 .catch((error) => {
