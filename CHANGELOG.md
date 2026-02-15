@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.30.0](https://github.com/willdady/platypus/compare/v1.29.0...v1.30.0) (2026-02-15)
+
+
+### Features
+
+* add tag-based chat filtering ([c16253d](https://github.com/willdady/platypus/commit/c16253d41ba86adb02d1435d1eb2aff21d5117ca))
+* include existing workspace tags in generate-metadata prompt ([cf26e1a](https://github.com/willdady/platypus/commit/cf26e1a861fbad1bf24633e55d3fc38923f11d61))
+
+
+### Bug Fixes
+
+* revalidate chat list in sidebar after mutations ([2b3fbdc](https://github.com/willdady/platypus/commit/2b3fbdc3be2ea2d95aff4db078ed23417ceb6e51))
+
 ## [1.29.0](https://github.com/willdady/platypus/compare/v1.28.0...v1.29.0) (2026-02-14)
 
 
