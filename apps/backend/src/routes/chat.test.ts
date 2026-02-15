@@ -280,6 +280,8 @@ describe("Chat Routes", () => {
           modelIds: ["m1"],
         },
       ]);
+      // Fetch existing tags
+      mockDb.execute.mockResolvedValueOnce({ rows: [] });
 
       const mockUpdatedChat = {
         id: "chat-1",
@@ -318,6 +320,8 @@ describe("Chat Routes", () => {
           modelIds: ["m2"],
         },
       ]);
+      // Fetch existing tags
+      mockDb.execute.mockResolvedValueOnce({ rows: [] });
 
       const mockUpdatedChat = {
         id: "chat-1",

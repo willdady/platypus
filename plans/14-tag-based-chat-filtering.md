@@ -5,6 +5,7 @@
 Currently, the workspace home screen displays a tag cloud showing all tags used across chats, but these tags are purely informational with no interaction. Users cannot filter chats by tags, making it difficult to find related conversations. This implementation adds clickable tag filtering to help users quickly locate chats with specific tags.
 
 **Current State:**
+
 - TagCloud component displays tags with counts (not clickable)
 - AppSidebar shows chats grouped by "Pinned", "Last 7 days", "Other"
 - Chats fetched via SWR from `/organizations/${orgId}/workspaces/${workspaceId}/chat`
@@ -12,6 +13,7 @@ Currently, the workspace home screen displays a tag cloud showing all tags used 
 - GIN index on `chat.tags` for performance ✅
 
 **Desired State:**
+
 - Clicking a tag in TagCloud toggles the tag filter (adds if not selected, removes if selected)
 - Selected tags are visually highlighted in the TagCloud
 - URL-based filter state for shareable links
@@ -21,18 +23,21 @@ Currently, the workspace home screen displays a tag cloud showing all tags used 
 **Server-side filtering with URL state management**
 
 ### Why server-side?
+
 - Better scalability with large chat datasets
 - Consistent with existing pagination pattern
 - GIN index on tags for fast lookups ✅
 - Reduces client memory footprint
 
 ### Why URL parameters?
+
 - Shareable filter URLs (e.g., `?tags=project-alpha,urgent`)
 - Browser history support (back button works)
 - Persists across page refreshes
 - Already used in codebase (see `apps/frontend/app/[orgId]/workspace/[workspaceId]/chat/page.tsx`)
 
 ### Tag selection model
+
 Multiple tags with OR logic (union) - shows chats containing ANY of the selected tags. Clicking a tag toggles its selection (adds if not selected, removes if already selected). Selected tags are visually highlighted in the TagCloud.
 
 ## Implementation
@@ -55,11 +60,12 @@ export const useChatFilter = () => {
   const router = useRouter();
   const pathname = usePathname();
 
-  const selectedTags = searchParams.get('tags')?.split(',').filter(Boolean) ?? [];
+  const selectedTags =
+    searchParams.get("tags")?.split(",").filter(Boolean) ?? [];
 
   const toggleFilterTag = (tag: string) => {
     const newTags = selectedTags.includes(tag)
-      ? selectedTags.filter(t => t !== tag)
+      ? selectedTags.filter((t) => t !== tag)
       : [...selectedTags, tag];
     updateUrl(newTags);
   };
@@ -67,9 +73,9 @@ export const useChatFilter = () => {
   const updateUrl = (tags: string[]) => {
     const params = new URLSearchParams(searchParams);
     if (tags.length > 0) {
-      params.set('tags', tags.join(','));
+      params.set("tags", tags.join(","));
     } else {
-      params.delete('tags');
+      params.delete("tags");
     }
     router.replace(`${pathname}?${params.toString()}`);
   };
@@ -97,7 +103,8 @@ Integrate filtering:
 2. Update SWR fetch to include tags parameter:
 
 ```typescript
-const tagsParam = selectedTags.length > 0 ? `&tags=${selectedTags.join(',')}` : '';
+const tagsParam =
+  selectedTags.length > 0 ? `&tags=${selectedTags.join(",")}` : "";
 const { data: chatData } = useSWR<{ results: ChatListItem[] }>(
   backendUrl && user
     ? joinUrl(
@@ -154,11 +161,13 @@ Backend tag filtering has been implemented and tested via Bruno API client.
 ## Files Modified
 
 ### Backend ✅ COMPLETE
+
 - `apps/backend/src/routes/chat.ts` - Add tag filtering to GET endpoint
 - `apps/backend/src/db/schema.ts` - Add GIN index for performance
 - `apps/backend/drizzle/0012_icy_xavin.sql` - Migration for GIN index
 
 ### Frontend (TODO)
+
 - `apps/frontend/hooks/use-chat-filter.ts` (NEW) - Filter state management with toggle
 - `apps/frontend/components/tag-cloud.tsx` - Make tags clickable with toggle and visual highlight
 - `apps/frontend/components/app-sidebar.tsx` - Update chat fetching to include tags parameter
@@ -167,6 +176,7 @@ Backend tag filtering has been implemented and tested via Bruno API client.
 ## Tests (TODO)
 
 ### Backend Tests
+
 - `apps/backend/src/routes/chat.test.ts` - Add tests for tag filtering:
   - GET with single tag returns chats containing that tag
   - GET with multiple tags returns chats containing any of the tags (OR logic)
@@ -174,6 +184,7 @@ Backend tag filtering has been implemented and tested via Bruno API client.
   - GET without tags param returns all chats (backward compatible)
 
 ### Frontend Tests
+
 - `apps/frontend/hooks/use-chat-filter.test.ts` - Test the hook:
   - `selectedTags` extracts tags from URL correctly
   - `toggleFilterTag` adds tag when not present

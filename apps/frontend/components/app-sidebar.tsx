@@ -99,7 +99,8 @@ export function AppSidebar({
     fetcher,
   );
 
-  const tagsParam = selectedTags.length > 0 ? `&tags=${selectedTags.join(",")}` : "";
+  const tagsParam =
+    selectedTags.length > 0 ? `&tags=${selectedTags.join(",")}` : "";
   const { data: chatData } = useSWR<{ results: ChatListItem[] }>(
     backendUrl && user
       ? joinUrl(

@@ -449,8 +449,11 @@ chat.get(
   ),
   async (c) => {
     const workspaceId = c.req.param("workspaceId")!;
-    const { limit: limitStr, offset: offsetStr, tags: tagsStr } =
-      c.req.valid("query");
+    const {
+      limit: limitStr,
+      offset: offsetStr,
+      tags: tagsStr,
+    } = c.req.valid("query");
 
     const limit = Math.min(parseInt(limitStr ?? "100") || 100, 100);
     const offset = parseInt(offsetStr ?? "0") || 0;
@@ -458,7 +461,12 @@ chat.get(
     // Build tag filter condition using PostgreSQL ?| operator (OR logic)
     const tagsFilter =
       tagsStr && tagsStr.trim() !== ""
-        ? sql`${chatTable.tags} ?| ${sql.raw(`ARRAY[${tagsStr.split(",").map((t) => `'${t.trim()}'`).join(",")}]`)}`
+        ? sql`${chatTable.tags} ?| ${sql.raw(
+            `ARRAY[${tagsStr
+              .split(",")
+              .map((t) => `'${t.trim()}'`)
+              .join(",")}]`,
+          )}`
         : undefined;
 
     const records = await db
@@ -844,6 +852,16 @@ chat.post(
     }
     const provider = providerRecord[0] as Provider;
 
+    // Fetch existing tags from all chats in the workspace
+    const existingTagsResult = await db.execute(sql`
+      SELECT DISTINCT value as tag
+      FROM ${chatTable}, jsonb_array_elements_text(${chatTable.tags})
+      WHERE ${chatTable.workspaceId} = ${workspaceId}
+    `);
+    const existingTags = existingTagsResult.rows.map(
+      (row) => row.tag as string,
+    );
+
     // Instantiate model
     let [_, model] = createModel(provider, provider.taskModelId);
 
@@ -859,6 +877,25 @@ chat.post(
       })
       .join("\n");
 
+    const promptParts = [
+      `Generate a short, descriptive title for this chat conversation. You MAY use at most one emoji. The complete title MUST NOT exceed 30 characters.`,
+      `Also generate between 1 and 5 kebab-case tags relevant to the chat.`,
+      `Each tag should ideally be a single word but no more than two words.`,
+      `IMPORTANT: Avoid ambiguous words that lack context when viewed alone. For example, prefer "web-browser" over "chrome", "metal-finish" over "chrome", "programming-language" over "python", or "file-format" over "pdf". Tags should be descriptive enough to be understood without seeing the conversation.`,
+    ];
+
+    // Add existing tags context if available
+    if (existingTags.length > 0) {
+      promptParts.push(
+        `Existing tags in this workspace: ${existingTags.join(", ")}`,
+      );
+      promptParts.push(
+        `Prefer using tags from the existing list when they accurately describe the conversation. Only create new tags if none of the existing tags are applicable.`,
+      );
+    }
+
+    promptParts.push(`Conversation:\n${conversationText}`);
+
     const { output } = await generateText({
       model: model as any,
       output: Output.object({
@@ -867,13 +904,7 @@ chat.post(
           tags: z.array(z.string()),
         }),
       }),
-      prompt: [
-        `Generate a short, descriptive title for this chat conversation. You MAY use at most one emoji. The complete title MUST NOT exceed 30 characters.`,
-        `Also generate between 1 and 5 kebab-case tags relevant to the chat.`,
-        `Each tag should ideally be a single word but no more than two words.`,
-        `IMPORTANT: Avoid ambiguous words that lack context when viewed alone. For example, prefer "web-browser" over "chrome", "metal-finish" over "chrome", "programming-language" over "python", or "file-format" over "pdf". Tags should be descriptive enough to be understood without seeing the conversation.`,
-        `Conversation:\n${conversationText}`,
-      ].join("\n"),
+      prompt: promptParts.join("\n"),
     });
 
     let newTitle = output.title;

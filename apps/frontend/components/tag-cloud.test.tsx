@@ -67,7 +67,9 @@ describe("TagCloud", () => {
       />,
     );
 
-    const reactTag = screen.getByText("react").closest("span[data-slot='badge']");
+    const reactTag = screen
+      .getByText("react")
+      .closest("span[data-slot='badge']");
     expect(reactTag).toBeInTheDocument();
     fireEvent.click(reactTag!);
 
@@ -94,7 +96,9 @@ describe("TagCloud", () => {
     );
 
     // Find the badge containing "react" text
-    const reactBadge = screen.getByText("react").closest("span[data-slot='badge']");
+    const reactBadge = screen
+      .getByText("react")
+      .closest("span[data-slot='badge']");
 
     // Selected tags should have bg-primary class (variant="default")
     expect(reactBadge).toHaveClass("bg-primary");
@@ -120,8 +124,12 @@ describe("TagCloud", () => {
     );
 
     // Find unselected tags (typescript and testing)
-    const typescriptBadge = screen.getByText("typescript").closest("span[data-slot='badge']");
-    const testingBadge = screen.getByText("testing").closest("span[data-slot='badge']");
+    const typescriptBadge = screen
+      .getByText("typescript")
+      .closest("span[data-slot='badge']");
+    const testingBadge = screen
+      .getByText("testing")
+      .closest("span[data-slot='badge']");
 
     // Unselected tags should have bg-secondary class (variant="secondary")
     expect(typescriptBadge).toHaveClass("bg-secondary");
@@ -148,8 +156,12 @@ describe("TagCloud", () => {
       />,
     );
 
-    const reactBadge = screen.getByText("react").closest("span[data-slot='badge']");
-    const typescriptBadge = screen.getByText("typescript").closest("span[data-slot='badge']");
+    const reactBadge = screen
+      .getByText("react")
+      .closest("span[data-slot='badge']");
+    const typescriptBadge = screen
+      .getByText("typescript")
+      .closest("span[data-slot='badge']");
 
     // All tags should have cursor-pointer class
     expect(reactBadge).toHaveClass("cursor-pointer");
@@ -276,8 +288,12 @@ describe("TagCloud", () => {
       />,
     );
 
-    const reactBadge = screen.getByText("react").closest("span[data-slot='badge']");
-    const testingBadge = screen.getByText("testing").closest("span[data-slot='badge']");
+    const reactBadge = screen
+      .getByText("react")
+      .closest("span[data-slot='badge']");
+    const testingBadge = screen
+      .getByText("testing")
+      .closest("span[data-slot='badge']");
 
     // React has count 10 (max), testing has count 2 (min)
     // React should have larger font size
