@@ -23,12 +23,8 @@ import {
   type PromptInputMessage,
 } from "@/components/ai-elements/prompt-input";
 import { useChat } from "@ai-sdk/react";
-import {
-  DefaultChatTransport,
-  lastAssistantMessageIsCompleteWithToolCalls,
-} from "ai";
+import { DefaultChatTransport } from "ai";
 import { GlobeIcon, Info, Settings2 } from "lucide-react";
-import { cn } from "@/lib/utils";
 import { useRef, useEffect, useState, useCallback, useMemo } from "react";
 import {
   Chat as ChatType,
@@ -55,24 +51,17 @@ import { ErrorDialog } from "./error-dialog";
 import { ChatMessage } from "./chat-message";
 import { ModelSelectorDialog } from "./model-selector-dialog";
 import { toast } from "sonner";
-import { useSubAgent } from "@/components/sub-agent-context";
 
 export const Chat = ({
   orgId,
   workspaceId,
   chatId,
   initialAgentId,
-  parentChatId,
-  initialTask,
-  isSubAgentMode,
 }: {
   orgId: string;
   workspaceId: string;
   chatId: string;
   initialAgentId?: string;
-  parentChatId?: string;
-  initialTask?: string | null;
-  isSubAgentMode?: boolean;
 }) => {
   const { user, isWorkspaceOwner } = useAuth();
   const backendUrl = useBackendUrl();
@@ -171,11 +160,9 @@ export const Chat = ({
     regenerate,
     error,
     stop,
-    addToolOutput,
   } = useChat<PlatypusUIMessage>({
     id: chatId,
-    // Transport: `body` is a function so it's re-evaluated on every request,
-    // including automatic resubmissions triggered by `sendAutomaticallyWhen`.
+    // Transport: `body` is a function so it's re-evaluated on every request.
     // This ensures dynamic values like agentId and model config are always current.
     // We use `getRequestBodyRef` (a ref) to avoid stale closures since this
     // transport instance is created once and captured by useChat.
@@ -206,23 +193,7 @@ export const Chat = ({
         };
       },
     }),
-    // Auto-resubmit when all client-side tool outputs (e.g. newTask results)
-    // have been provided, so the parent agent continues its response.
-    sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithToolCalls,
   });
-
-  const {
-    sessions,
-    getCompletedSessions,
-    consumeSession,
-    completeSession,
-    restoreSession,
-    isToolCallCompleted,
-  } = useSubAgent();
-  const completedSessions = getCompletedSessions();
-  // Tracks which tool call IDs have already been fed back to addToolOutput
-  // within this component's lifetime, preventing duplicate submissions.
-  const processedRef = useRef<Set<string>>(new Set());
 
   // Custom hooks for state management (must be called before any conditional returns)
   const {
@@ -235,7 +206,6 @@ export const Chat = ({
     agents,
     isChatLoading,
     workspaceId,
-    isSubAgentMode,
   );
   const { settings, setters } = useChatSettings(chatData, selection.agentId);
   const chatUI = useChatUI(error);
@@ -284,11 +254,6 @@ export const Chat = ({
           search,
         };
 
-    // Include parentChatId for sub-agent mode
-    if (isSubAgentMode && parentChatId) {
-      return { ...baseBody, parentChatId };
-    }
-
     return baseBody;
   }, [
     agentId,
@@ -302,116 +267,10 @@ export const Chat = ({
     presencePenalty,
     frequencyPenalty,
     search,
-    isSubAgentMode,
-    parentChatId,
   ]);
 
   // Update ref whenever getRequestBody changes
   getRequestBodyRef.current = getRequestBody;
-
-  // Feed completed sub-agent results back to the parent chat as tool outputs.
-  // Each sub-agent session corresponds to a `newTask` client-side tool call.
-  // When a session completes, we provide the result via `addToolOutput` which,
-  // combined with `sendAutomaticallyWhen`, causes the parent chat to
-  // automatically resubmit and continue the agent loop.
-  //
-  // Guards:
-  //  - Skip in sub-agent mode (sub-agents don't have sub-agents of their own)
-  //  - Wait for status "ready" to avoid injecting outputs mid-stream
-  //  - Skip sessions restored from history (already yielded in a prior page load)
-  //  - Use processedRef to prevent duplicate addToolOutput calls across re-renders
-  useEffect(() => {
-    if (isSubAgentMode) return;
-    if (status !== "ready") return;
-
-    for (const session of completedSessions) {
-      if (processedRef.current.has(session.toolCallId)) continue;
-
-      // Restored sessions already had their results yielded before page reload
-      if (isToolCallCompleted(session.toolCallId)) {
-        processedRef.current.add(session.toolCallId);
-        continue;
-      }
-
-      processedRef.current.add(session.toolCallId);
-
-      // Cast required: newTask is a client-side tool (no execute fn) so its
-      // output type is `never` in TypeScript, but we need to provide a string.
-      (addToolOutput as any)({
-        tool: "newTask",
-        toolCallId: session.toolCallId,
-        output: session.result?.result || "",
-      });
-
-      // Mark as consumed so it won't be reprocessed on subsequent renders
-      setTimeout(() => consumeSession(session.toolCallId), 100);
-    }
-  }, [
-    isSubAgentMode,
-    completedSessions,
-    status,
-    addToolOutput,
-    consumeSession,
-    isToolCallCompleted,
-  ]);
-
-  // Propagate sub-agent errors back to the parent session so the parent chat
-  // doesn't wait forever for a result. Handles two failure modes:
-  //  1. useChat error (network failure, backend 500, etc.)
-  //  2. Stream ended without taskResult being called (e.g. step limit reached)
-  //
-  // Uses a ref for status so the debounced timeout in case (2) reads the
-  // latest value rather than a stale closure.
-  const statusRef = useRef(status);
-  statusRef.current = status;
-
-  useEffect(() => {
-    if (!isSubAgentMode) return;
-
-    // Find the session that corresponds to this sub-agent Chat's chatId
-    const mySession = [...sessions.values()].find(
-      (s) => s.subChatId === chatId,
-    );
-    if (!mySession || mySession.result !== null) return;
-
-    // Case 1: useChat reported an error
-    if (error) {
-      completeSession(mySession.toolCallId, {
-        result: `Sub-agent error: ${error.message}`,
-        status: "error",
-      });
-      return;
-    }
-
-    // Case 2: Stream ended (status "ready") without calling taskResult.
-    // Use a short debounce to avoid false triggers during the brief "ready"
-    // state between auto-resubmissions via sendAutomaticallyWhen.
-    if (status === "ready" && messages.length > 1) {
-      const timer = setTimeout(() => {
-        // Re-check status via ref — if it moved back to "streaming"
-        // then an auto-resubmit fired and this isn't a terminal state.
-        if (statusRef.current !== "ready") return;
-
-        // Re-read the session — taskResult may have completed it while we waited
-        const currentSession = sessions.get(mySession.toolCallId);
-        if (currentSession?.result !== null) return;
-
-        completeSession(mySession.toolCallId, {
-          result: "Sub-agent ended without returning a result",
-          status: "error",
-        });
-      }, 3000);
-      return () => clearTimeout(timer);
-    }
-  }, [
-    isSubAgentMode,
-    error,
-    status,
-    messages.length,
-    chatId,
-    sessions,
-    completeSession,
-  ]);
 
   // Message editing hook (needs getRequestBody to be defined)
   const messageEditing = useMessageEditing(
@@ -430,36 +289,11 @@ export const Chat = ({
   } = messageEditing;
 
   // Hydrate chat from persisted data on load (or when chatData changes).
-  // Before calling setMessages, we scan for any prior newTask tool calls and
-  // restore their sessions as already-completed. This prevents NewTaskTool's
-  // useEffect from re-launching sub-agents that already ran, while still
-  // allowing users to click them to view the sub-agent's chat history.
   useEffect(() => {
     if (chatData?.messages && chatData.messages.length > 0) {
-      for (const msg of chatData.messages) {
-        for (const part of msg.parts || []) {
-          if (
-            part.type === "tool-newTask" &&
-            "toolCallId" in part &&
-            (part as any).toolCallId
-          ) {
-            const toolPart = part as any;
-            const input = toolPart.input as {
-              subAgentId?: string;
-              task?: string;
-            };
-            restoreSession(
-              chatId,
-              toolPart.toolCallId,
-              input?.subAgentId || "",
-              input?.task || "",
-            );
-          }
-        }
-      }
       setMessages(chatData.messages);
     }
-  }, [chatData, setMessages, restoreSession, chatId]);
+  }, [chatData, setMessages]);
 
   // Use chat metadata hook
   useChatMetadata(
@@ -472,7 +306,6 @@ export const Chat = ({
     agentId,
     agents,
     backendUrl,
-    isSubAgentMode,
   );
 
   // Set initial agent if provided and no existing chat agent
@@ -486,44 +319,6 @@ export const Chat = ({
   useEffect(() => {
     setSearch(false);
   }, [modelId, providerId]);
-
-  // Track if we've sent the initial task to prevent duplicates
-  const initialTaskSentRef = useRef(false);
-
-  // Auto-send initial task for sub-agent mode
-  useEffect(() => {
-    // Only send initial task if:
-    // - We're in sub-agent mode
-    // - We have an initial task
-    // - No messages exist yet
-    // - Agent is selected and chat is ready
-    // - Haven't sent yet
-    // - Chat data has been loaded (to avoid sending when history exists)
-    if (
-      isSubAgentMode &&
-      initialTask &&
-      messages.length === 0 &&
-      agentId &&
-      status === "ready" &&
-      !initialTaskSentRef.current &&
-      !isChatLoading && // Wait for chat data to load first
-      (!chatData || !chatData.messages || chatData.messages.length === 0) // Only send if no history
-    ) {
-      initialTaskSentRef.current = true;
-      const body = getRequestBody();
-      sendMessage({ text: initialTask, files: [] }, { body });
-    }
-  }, [
-    isSubAgentMode,
-    initialTask,
-    messages.length,
-    agentId,
-    status,
-    sendMessage,
-    getRequestBody,
-    isChatLoading,
-    chatData,
-  ]);
 
   // TODO: Ideally show a loading indicator here
   if (isLoading) return null;
@@ -592,12 +387,7 @@ export const Chat = ({
       >
         <ConversationContent>
           <div className="flex justify-center">
-            <div
-              className={cn(
-                "w-full flex flex-col gap-2",
-                !isSubAgentMode && "xl:w-4/5 max-w-4xl",
-              )}
-            >
+            <div className="w-full flex flex-col gap-2 xl:w-4/5 max-w-4xl">
               {messages.map((message, messageIndex) => (
                 <ChatMessage
                   key={message.id}
@@ -620,16 +410,6 @@ export const Chat = ({
                     setTimeout(() => setCopiedMessageId(null), 2000);
                   }}
                   copiedMessageId={copiedMessageId}
-                  onAppendToPrompt={(text) => {
-                    setInputValue(text);
-                    setTimeout(() => textareaRef.current?.focus(), 0);
-                  }}
-                  onSubmitMessage={(text) => {
-                    handleSubmit({ text, files: [] });
-                  }}
-                  chatId={chatId}
-                  agents={agents}
-                  isSubAgentMode={isSubAgentMode}
                 />
               ))}
             </div>

@@ -18,7 +18,7 @@ import {
   type GoogleGenerativeAIProvider,
 } from "@ai-sdk/google";
 import { experimental_createMCPClient as createMCPClient } from "@ai-sdk/mcp";
-import { stepCountIs, hasToolCall } from "ai";
+import { stepCountIs } from "ai";
 import { db } from "../index.ts";
 import { dedupeArray, toKebabCase } from "../utils.ts";
 import {
@@ -32,7 +32,7 @@ import {
 } from "../db/schema.ts";
 import { getToolSet } from "../tools/index.ts";
 import { createLoadSkillTool } from "../tools/skill.ts";
-import { createNewTaskTool, createTaskResultTool } from "../tools/sub-agent.ts";
+import { createSubAgentTools } from "../tools/sub-agent.ts";
 import { renderSystemPrompt } from "../system-prompt.ts";
 import {
   retrieveUserLevelMemories,
@@ -47,7 +47,7 @@ import {
   type Provider,
   type Skill,
 } from "@platypus/schemas";
-import { and, desc, eq, or, sql, inArray, isNull } from "drizzle-orm";
+import { and, desc, eq, or, sql, inArray } from "drizzle-orm";
 import { requireAuth } from "../middleware/authentication.ts";
 import {
   requireOrgAccess,
@@ -326,7 +326,6 @@ const resolveGenerationConfig = async (
   user: { id: string; name: string },
   userGlobalContext?: string,
   userWorkspaceContext?: string,
-  isSubAgentChat: boolean = false,
   subAgents?: Array<{ id: string; name: string; description?: string | null }>,
   memoriesFormatted?: string,
 ): Promise<GenerationConfig> => {
@@ -357,7 +356,6 @@ const resolveGenerationConfig = async (
     user,
     userGlobalContext,
     userWorkspaceContext,
-    isSubAgentMode: isSubAgentChat,
     subAgents: subAgents?.map((sa) => ({
       ...sa,
       description: sa.description || undefined,
@@ -379,7 +377,6 @@ const upsertChatRecord = async (
   context: ChatContext,
   config: GenerationConfig,
   data: ChatSubmitData,
-  parentChatId?: string,
 ) => {
   const { resolvedAgentId, resolvedProviderId, resolvedModelId } = context;
 
@@ -396,7 +393,6 @@ const upsertChatRecord = async (
     seed: resolvedAgentId ? null : data.seed || null,
     presencePenalty: resolvedAgentId ? null : config.presencePenalty || null,
     frequencyPenalty: resolvedAgentId ? null : config.frequencyPenalty || null,
-    parentChatId: parentChatId || null,
     updatedAt: new Date(),
   };
 
@@ -482,13 +478,7 @@ chat.get(
         updatedAt: chatTable.updatedAt,
       })
       .from(chatTable)
-      .where(
-        and(
-          eq(chatTable.workspaceId, workspaceId),
-          isNull(chatTable.parentChatId), // Only top-level chats
-          tagsFilter,
-        ),
-      )
+      .where(and(eq(chatTable.workspaceId, workspaceId), tagsFilter))
       .orderBy(desc(chatTable.createdAt))
       .limit(limit)
       .offset(offset);
@@ -551,8 +541,7 @@ chat.post(
     const orgId = c.req.param("orgId")!;
     const workspaceId = c.req.param("workspaceId")!;
     const data = c.req.valid("json");
-    const { messages = [], parentChatId } = data;
-    const isSubAgentChat = Boolean(parentChatId);
+    const { messages = [] } = data;
 
     // 1. Fetch workspace to get system prompt
     const workspaceRecord = await db
@@ -596,36 +585,69 @@ chat.post(
       skills = skillRecords;
     }
 
-    // 7. Fetch sub-agent details and inject newTask tool (only for parent agents, not sub-agents)
+    // 7. Fetch sub-agent details and create delegate tools (only for parent agents)
     let subAgents: Array<{
       id: string;
       name: string;
       description?: string | null;
     }> = [];
-    if (agent?.subAgentIds && agent.subAgentIds.length > 0 && !isSubAgentChat) {
-      subAgents = await db
-        .select({
-          id: agentTable.id,
-          name: agentTable.name,
-          description: agentTable.description,
-        })
+    if (agent?.subAgentIds && agent.subAgentIds.length > 0) {
+      // Fetch full sub-agent configs including provider/model/tool info
+      const subAgentRecords = await db
+        .select()
         .from(agentTable)
         .where(inArray(agentTable.id, agent.subAgentIds));
 
-      tools.newTask = createNewTaskTool(
-        subAgents.map((sa) => ({
-          ...sa,
-          description: sa.description || undefined,
-        })),
+      subAgents = subAgentRecords.map((sa) => ({
+        id: sa.id,
+        name: sa.name,
+        description: sa.description,
+      }));
+
+      // Create sub-agent tools with their own models and tools
+      const subAgentTools = await createSubAgentTools(
+        subAgentRecords,
+        async (providerId: string, modelId: string) => {
+          // Resolve provider for the sub-agent
+          const subProviderRecord = await db
+            .select()
+            .from(providerTable)
+            .where(
+              and(
+                eq(providerTable.id, providerId),
+                or(
+                  eq(providerTable.workspaceId, workspaceId),
+                  eq(providerTable.organizationId, orgId),
+                ),
+              ),
+            )
+            .limit(1);
+
+          if (subProviderRecord.length === 0) {
+            throw new Error(`Provider '${providerId}' not found for sub-agent`);
+          }
+
+          const [, model] = createModel(
+            subProviderRecord[0] as Provider,
+            modelId,
+          );
+          return model;
+        },
+        async (toolSetIds: string[]) => {
+          // Load tools for the sub-agent
+          const { tools: subTools } = await loadTools(
+            { toolSetIds } as any,
+            workspaceId,
+          );
+          return subTools;
+        },
       );
+
+      // Add the sub-agent delegate tools to the parent's tools
+      Object.assign(tools, subAgentTools);
     }
 
-    // 8. Inject taskResult tool if this is a sub-agent chat
-    if (isSubAgentChat) {
-      tools.taskResult = createTaskResultTool();
-    }
-
-    // 9. Fetch User Contexts (global and workspace-specific)
+    // 8. Fetch User Contexts (global and workspace-specific)
     const user = c.get("user")!;
     let userGlobalContext: string | undefined;
     let userWorkspaceContext: string | undefined;
@@ -664,7 +686,6 @@ chat.post(
       { id: user.id, name: user.name },
       userGlobalContext,
       userWorkspaceContext,
-      isSubAgentChat,
       subAgents,
       memoriesFormatted,
     );
@@ -679,28 +700,12 @@ chat.post(
 
     logger.debug({ systemPrompt }, "System prompt for chat");
 
-    // Prepare stop conditions
-    const stopConditions = [];
-
-    // For sub-agents: stop when taskResult tool is called OR after 100 steps
-    if (isSubAgentChat) {
-      stopConditions.push(hasToolCall("taskResult"));
-      stopConditions.push(stepCountIs(100)); // Force safety limit for sub-agents
-    } else {
-      // For regular chats: stop at maxSteps
-      stopConditions.push(stepCountIs(resolvedMaxSteps));
-    }
-
     const result = streamText({
       model: model as any,
       messages: await convertToModelMessages(messages),
-      stopWhen: stopConditions,
+      stopWhen: [stepCountIs(resolvedMaxSteps)],
       tools,
       system: systemPrompt,
-      // Force sub-agents to always call a tool (rather than ending with a
-      // text-only response). This ensures the model eventually calls taskResult,
-      // which is a stop condition, returning control to the parent agent.
-      ...(isSubAgentChat && { toolChoice: "required" }),
       ...restConfig,
     });
 
@@ -721,7 +726,7 @@ chat.post(
             }
           }
 
-          // Upsert chat record with parentChatId if applicable
+          // Upsert chat record
           await upsertChatRecord(
             data.id,
             workspaceId,
@@ -729,7 +734,6 @@ chat.post(
             context,
             config,
             data,
-            parentChatId,
           );
         } catch (error) {
           logger.error({ error }, "Error in onFinish");

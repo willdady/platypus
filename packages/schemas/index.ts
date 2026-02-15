@@ -68,7 +68,6 @@ export const chatSchema = z.object({
   seed: z.number().optional(),
   presencePenalty: z.number().optional(),
   frequencyPenalty: z.number().optional(),
-  parentChatId: z.string().optional(),
   createdAt: z.date(),
   updatedAt: z.date(),
 });
@@ -93,7 +92,6 @@ export const chatSubmitSchema = chatSchema
     providerId: z.string().optional(),
     modelId: z.string().optional(),
     search: z.boolean().optional(),
-    parentChatId: z.string().optional(),
   })
   .refine(
     (data) => {
@@ -493,26 +491,6 @@ export const orgMemberListSchema = z.object({
 });
 
 export type OrgMemberList = z.infer<typeof orgMemberListSchema>;
-
-// Sub-Agent Tools
-
-export const newTaskToolInputSchema = z.object({
-  subAgentId: z.string().describe("The ID of the sub-agent to delegate to"),
-  task: z
-    .string()
-    .describe("The task description and context for the sub-agent"),
-});
-
-export type NewTaskToolInput = z.infer<typeof newTaskToolInputSchema>;
-
-export const taskResultToolInputSchema = z.object({
-  result: z.string().describe("The result of the completed task"),
-  status: z
-    .enum(["success", "error"])
-    .describe("Whether the task succeeded or failed"),
-});
-
-export type TaskResultToolInput = z.infer<typeof taskResultToolInputSchema>;
 
 // Context
 

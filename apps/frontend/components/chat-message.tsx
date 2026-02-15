@@ -1,6 +1,5 @@
 import { Fragment } from "react";
 import { type PlatypusUIMessage } from "@platypus/backend/src/types";
-import { type Agent } from "@platypus/schemas";
 import {
   Message,
   MessageContent,
@@ -46,8 +45,7 @@ import {
 } from "lucide-react";
 import { Textarea } from "./ui/textarea";
 import { LoadSkillTool } from "./load-skill-tool";
-import { NewTaskTool } from "./new-task-tool";
-import { TaskResultTool } from "./task-result-tool";
+import { SubAgentTool } from "./sub-agent-tool";
 
 interface ChatMessageProps {
   /** The message object to render */
@@ -78,16 +76,6 @@ interface ChatMessageProps {
   onCopyMessage: (content: string, messageId: string) => void;
   /** ID of the message that was recently copied, or null */
   copiedMessageId: string | null;
-  /** Callback to append text to the chat prompt */
-  onAppendToPrompt?: (text: string) => void;
-  /** Callback to submit a message to the chat */
-  onSubmitMessage?: (text: string) => void;
-  /** The chat ID for sub-agent delegation */
-  chatId?: string;
-  /** Available agents for sub-agent name lookup */
-  agents?: Agent[];
-  /** Whether this chat is running as a sub-agent (hides edit/delete/regenerate actions) */
-  isSubAgentMode?: boolean;
 }
 
 export const ChatMessage = ({
@@ -105,11 +93,6 @@ export const ChatMessage = ({
   onRegenerate,
   onCopyMessage,
   copiedMessageId,
-  onAppendToPrompt,
-  onSubmitMessage,
-  chatId,
-  agents,
-  isSubAgentMode,
 }: ChatMessageProps) => {
   const fileParts = message.parts?.filter(
     (part): part is FileUIPart =>
@@ -212,18 +195,10 @@ export const ChatMessage = ({
               toolPart={part as ToolUIPart}
             />
           );
-        } else if (part.type === "tool-newTask") {
+        } else if (part.type.startsWith("tool-delegate_to_")) {
+          // Sub-agent tools get custom UI with robot icon and nested chat
           return (
-            <NewTaskTool
-              key={`${message.id}-${i}`}
-              toolPart={part as ToolUIPart}
-              parentChatId={chatId || ""}
-              agents={agents || []}
-            />
-          );
-        } else if (part.type === "tool-taskResult") {
-          return (
-            <TaskResultTool
+            <SubAgentTool
               key={`${message.id}-${i}`}
               toolPart={part as ToolUIPart}
             />
@@ -288,7 +263,7 @@ export const ChatMessage = ({
           <MessageActions
             className={message.role === "user" ? "justify-end" : ""}
           >
-            {!isSubAgentMode && message.role === "user" && (
+            {message.role === "user" && (
               <MessageAction
                 className="cursor-pointer text-muted-foreground"
                 onClick={() => onEditStart(message.id, textContent)}
@@ -308,30 +283,26 @@ export const ChatMessage = ({
             >
               <CopyIcon className="size-4" />
             </MessageAction>
-            {!isSubAgentMode && (
+            <MessageAction
+              className="cursor-pointer text-muted-foreground"
+              onClick={() => onMessageDelete(message.id)}
+              variant="ghost"
+              size="icon"
+              label="Delete"
+            >
+              <TrashIcon className="size-4" />
+            </MessageAction>
+            {message.role === "assistant" && isLastMessage && (
               <MessageAction
                 className="cursor-pointer text-muted-foreground"
-                onClick={() => onMessageDelete(message.id)}
+                onClick={onRegenerate}
                 variant="ghost"
                 size="icon"
-                label="Delete"
+                label="Regenerate"
               >
-                <TrashIcon className="size-4" />
+                <RefreshCwIcon className="size-4" />
               </MessageAction>
             )}
-            {!isSubAgentMode &&
-              message.role === "assistant" &&
-              isLastMessage && (
-                <MessageAction
-                  className="cursor-pointer text-muted-foreground"
-                  onClick={onRegenerate}
-                  variant="ghost"
-                  size="icon"
-                  label="Regenerate"
-                >
-                  <RefreshCwIcon className="size-4" />
-                </MessageAction>
-              )}
           </MessageActions>
         ))}
     </Fragment>

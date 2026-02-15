@@ -108,9 +108,6 @@ export const chat = pgTable(
     seed: t.real("seed"),
     presencePenalty: t.real("presence_penalty"),
     frequencyPenalty: t.real("frequency_penalty"),
-    parentChatId: t.text("parent_chat_id").references((): any => chat.id, {
-      onDelete: "cascade",
-    }),
 
     // Memory processing tracking
     lastMemoryProcessedAt: t.timestamp("last_memory_processed_at"),
@@ -123,7 +120,6 @@ export const chat = pgTable(
   }),
   (t) => [
     index("idx_chat_workspace_id").on(t.workspaceId),
-    index("idx_chat_parent_chat_id").on(t.parentChatId),
     index("idx_chat_tags").using("gin", t.tags),
     index("idx_chat_memory_processing").on(
       t.memoryExtractionStatus,

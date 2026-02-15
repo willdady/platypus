@@ -73,4 +73,3 @@ A user may provider general context about themselves ("I'm a 40 year old white m
 [x] Bug: Global Context has an icon but Workspace Contexts does not
 [x] Tags are currently not very useful. There should be a way to filter chats by tags.
 [ ] It should be possible to disable sign-ups (via an environment variable?)
-[ ] Bug: there is noticable lag when opening and closing the sub-agent pane. It is not very responsive.

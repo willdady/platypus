@@ -35,8 +35,8 @@ export const validateSubAgentAssignment = async (
   }
 
   // Note: We allow agents that have their own sub-agents to BE sub-agents.
-  // The depth limit is enforced at runtime - when an agent runs as a sub-agent,
-  // the newTask tool is NOT injected, preventing nested delegation.
+  // The depth limit is enforced at runtime - sub-agent tools are only created
+  // for parent agents, so sub-agents cannot delegate to further sub-agents.
 
   return { valid: true };
 };

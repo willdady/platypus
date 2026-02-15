@@ -11,7 +11,6 @@ interface SystemPromptTemplateData {
   };
   userGlobalContext?: string;
   userWorkspaceContext?: string;
-  isSubAgentMode?: boolean;
   subAgents?: Array<{ id: string; name: string; description?: string }>;
   memoriesFormatted?: string;
 }
@@ -105,20 +104,6 @@ ${workspaceContext.trim()}
 export function renderSystemPrompt(data: SystemPromptTemplateData): string {
   const parts: string[] = [];
 
-  if (data.isSubAgentMode) {
-    parts.push(`## Important: Sub-Agent Mode
-
-You are running as a sub-agent delegated a specific task.
-
-CRITICAL INSTRUCTIONS:
-- Focus ONLY on the task you have been assigned
-- When you have completed the task, you MUST call the \`taskResult\` tool
-- The \`taskResult\` tool is the ONLY way to return control to the parent agent
-- Include all relevant findings and outputs in your result
-- Set status to "success" if you completed the task, "error" if you could not
-`);
-  }
-
   if (data.agentSystemPrompt) {
     parts.push(data.agentSystemPrompt.trim());
   } else {
@@ -150,9 +135,20 @@ CRITICAL INSTRUCTIONS:
   if (data.subAgents && data.subAgents.length > 0) {
     parts.push(`## Available Sub-Agents
 
-You can delegate specialized tasks to the following sub-agents using the \`newTask\` tool:
+You can delegate specialized tasks to the following sub-agents. Each sub-agent has its own dedicated tool:
 
-${data.subAgents.map((sa) => `- **${sa.name}** (ID: ${sa.id}): ${sa.description || "No description provided"}`).join("\n")}
+${data.subAgents
+  .map(
+    (sa) =>
+      `- **${sa.name}**: Use the \`delegate_to_${sa.name
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "_")
+        .replace(
+          /^_|_$/g,
+          "",
+        )}\` tool. ${sa.description || "No description provided"}`,
+  )
+  .join("\n")}
 
 When delegating to a sub-agent:
 1. Each task description MUST be entirely self-contained. Sub-agents cannot see the parent conversation, other sub-agent tasks, or any prior context. Never use references like "the first one", "the other task", "as mentioned above", etc.
