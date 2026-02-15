@@ -1,0 +1,1 @@
+CREATE INDEX "idx_chat_tags" ON "chat" USING gin ("tags");

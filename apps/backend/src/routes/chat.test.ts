@@ -72,6 +72,68 @@ describe("Chat Routes", () => {
       expect(res.status).toBe(200);
       expect(await res.json()).toEqual({ results: mockChats });
     });
+
+    it("should filter chats by single tag", async () => {
+      mockSession();
+      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
+      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]); // requireWorkspaceAccess
+
+      const mockChats = [
+        { id: "chat-1", title: "Chat 1", tags: ["typescript"] },
+        { id: "chat-2", title: "Chat 2", tags: ["typescript", "react"] },
+      ];
+      mockDb.offset.mockResolvedValueOnce(mockChats);
+
+      const res = await app.request(`${baseUrl}?tags=typescript`);
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({ results: mockChats });
+    });
+
+    it("should filter chats by multiple tags (OR logic)", async () => {
+      mockSession();
+      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
+      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]); // requireWorkspaceAccess
+
+      const mockChats = [
+        { id: "chat-1", title: "Chat 1", tags: ["typescript"] },
+        { id: "chat-2", title: "Chat 2", tags: ["react"] },
+        { id: "chat-3", title: "Chat 3", tags: ["typescript", "react"] },
+      ];
+      mockDb.offset.mockResolvedValueOnce(mockChats);
+
+      const res = await app.request(`${baseUrl}?tags=typescript,react`);
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({ results: mockChats });
+    });
+
+    it("should return empty array when tag filter has no matches", async () => {
+      mockSession();
+      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
+      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]); // requireWorkspaceAccess
+
+      mockDb.offset.mockResolvedValueOnce([]);
+
+      const res = await app.request(`${baseUrl}?tags=nonexistent-tag`);
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({ results: [] });
+    });
+
+    it("should return all chats when tags param is not provided (backward compatible)", async () => {
+      mockSession();
+      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
+      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]); // requireWorkspaceAccess
+
+      const mockChats = [
+        { id: "chat-1", title: "Chat 1", tags: ["typescript"] },
+        { id: "chat-2", title: "Chat 2", tags: ["react"] },
+        { id: "chat-3", title: "Chat 3", tags: [] },
+      ];
+      mockDb.offset.mockResolvedValueOnce(mockChats);
+
+      const res = await app.request(baseUrl);
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({ results: mockChats });
+    });
   });
 
   describe("GET /tags", () => {

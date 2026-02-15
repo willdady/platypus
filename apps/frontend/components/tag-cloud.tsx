@@ -11,6 +11,8 @@ import { Tag } from "lucide-react";
 interface TagCloudProps {
   orgId: string;
   workspaceId: string;
+  selectedTags?: string[];
+  onTagToggle?: (tag: string) => void;
 }
 
 interface TagData {
@@ -18,7 +20,12 @@ interface TagData {
   count: number;
 }
 
-export const TagCloud = ({ orgId, workspaceId }: TagCloudProps) => {
+export const TagCloud = ({
+  orgId,
+  workspaceId,
+  selectedTags = [],
+  onTagToggle,
+}: TagCloudProps) => {
   const { user } = useAuth();
   const backendUrl = useBackendUrl();
   const { data, isLoading } = useSWR<{ results: TagData[] }>(
@@ -82,19 +89,23 @@ export const TagCloud = ({ orgId, workspaceId }: TagCloudProps) => {
       </CardHeader>
       <CardContent>
         <div className="flex flex-wrap gap-3 items-center">
-          {tags.map((tagData) => (
-            <Badge
-              key={tagData.tag}
-              variant="secondary"
-              className="hover:bg-primary hover:text-primary-foreground transition-colors cursor-default font-mono inline-flex items-center"
-              style={{ fontSize: getFontSize(tagData.count) }}
-            >
-              <span>{tagData.tag}</span>
-              <span className="ml-1.5 opacity-50 text-[0.7em] leading-none">
-                {tagData.count}
-              </span>
-            </Badge>
-          ))}
+          {tags.map((tagData) => {
+            const isSelected = selectedTags.includes(tagData.tag);
+            return (
+              <Badge
+                key={tagData.tag}
+                variant={isSelected ? "default" : "secondary"}
+                className="cursor-pointer font-mono inline-flex items-center"
+                style={{ fontSize: getFontSize(tagData.count) }}
+                onClick={() => onTagToggle?.(tagData.tag)}
+              >
+                <span>{tagData.tag}</span>
+                <span className="ml-1.5 opacity-50 text-[0.7em] leading-none">
+                  {tagData.count}
+                </span>
+              </Badge>
+            );
+          })}
         </div>
       </CardContent>
     </Card>

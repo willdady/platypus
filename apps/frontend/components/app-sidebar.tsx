@@ -62,6 +62,7 @@ import { Field, FieldLabel, FieldError } from "@/components/ui/field";
 import { parseValidationErrors } from "@/lib/utils";
 import { useBackendUrl } from "@/app/client-context";
 import { TagInput } from "@/components/tag-input";
+import { useChatFilter } from "@/hooks/use-chat-filter";
 
 export function AppSidebar({
   orgId,
@@ -88,6 +89,9 @@ export function AppSidebar({
   const [isTogglingPin, setIsTogglingPin] = useState(false);
 
   const { mutate } = useSWRConfig();
+
+  const { selectedTags } = useChatFilter();
+
   const { data } = useSWR<{ results: Workspace[] }>(
     backendUrl && user
       ? joinUrl(backendUrl, `/organizations/${orgId}/workspaces`)
@@ -95,11 +99,12 @@ export function AppSidebar({
     fetcher,
   );
 
+  const tagsParam = selectedTags.length > 0 ? `&tags=${selectedTags.join(",")}` : "";
   const { data: chatData } = useSWR<{ results: ChatListItem[] }>(
     backendUrl && user
       ? joinUrl(
           backendUrl,
-          `/organizations/${orgId}/workspaces/${workspaceId}/chat`,
+          `/organizations/${orgId}/workspaces/${workspaceId}/chat?limit=100${tagsParam}`,
         )
       : null,
     fetcher,

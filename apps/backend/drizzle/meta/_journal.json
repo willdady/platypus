@@ -85,6 +85,13 @@
       "when": 1771037117826,
       "tag": "0011_curly_enchantress",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1771120739659,
+      "tag": "0012_icy_xavin",
+      "breakpoints": true
     }
   ]
 }

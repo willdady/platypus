@@ -124,6 +124,7 @@ export const chat = pgTable(
   (t) => [
     index("idx_chat_workspace_id").on(t.workspaceId),
     index("idx_chat_parent_chat_id").on(t.parentChatId),
+    index("idx_chat_tags").using("gin", t.tags),
     index("idx_chat_memory_processing").on(
       t.memoryExtractionStatus,
       t.lastMemoryProcessedAt,

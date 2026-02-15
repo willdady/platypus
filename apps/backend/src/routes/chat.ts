@@ -444,14 +444,22 @@ chat.get(
     z.object({
       limit: z.string().optional(),
       offset: z.string().optional(),
+      tags: z.string().optional(), // Comma-separated tags for filtering
     }),
   ),
   async (c) => {
     const workspaceId = c.req.param("workspaceId")!;
-    const { limit: limitStr, offset: offsetStr } = c.req.valid("query");
+    const { limit: limitStr, offset: offsetStr, tags: tagsStr } =
+      c.req.valid("query");
 
     const limit = Math.min(parseInt(limitStr ?? "100") || 100, 100);
     const offset = parseInt(offsetStr ?? "0") || 0;
+
+    // Build tag filter condition using PostgreSQL ?| operator (OR logic)
+    const tagsFilter =
+      tagsStr && tagsStr.trim() !== ""
+        ? sql`${chatTable.tags} ?| ${sql.raw(`ARRAY[${tagsStr.split(",").map((t) => `'${t.trim()}'`).join(",")}]`)}`
+        : undefined;
 
     const records = await db
       .select({
@@ -470,6 +478,7 @@ chat.get(
         and(
           eq(chatTable.workspaceId, workspaceId),
           isNull(chatTable.parentChatId), // Only top-level chats
+          tagsFilter,
         ),
       )
       .orderBy(desc(chatTable.createdAt))

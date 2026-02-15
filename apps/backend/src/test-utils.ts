@@ -90,14 +90,24 @@ vi.mock("./index.ts", () => ({
 // Mock drizzle-orm
 vi.mock("drizzle-orm", async () => {
   const actual = await vi.importActual("drizzle-orm");
+  const sqlMock = Object.assign(
+    vi.fn((strings: TemplateStringsArray, ...values: any[]) => ({
+      getSQL: () => ({ query: strings.join("?") }),
+      mapWith: vi.fn(),
+    })),
+    {
+      raw: vi.fn((query: string) => ({ getSQL: () => ({ query }) })),
+    },
+  );
   return {
     ...actual,
     eq: vi.fn(),
-    and: vi.fn(),
+    and: vi.fn((...args) => args.filter(Boolean)), // Return non-null args
     or: vi.fn(),
     inArray: vi.fn(),
     desc: vi.fn(),
-    sql: vi.fn(),
+    isNull: vi.fn(),
+    sql: sqlMock,
   };
 });
 
