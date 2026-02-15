@@ -70,8 +70,7 @@ A user may provider general context about themselves ("I'm a 40 year old white m
 [x] Consider configuring the "task" model at the workspace level
 [x] Add a skill for adding new tools to both the backend and frontend
 [x] Add built-in memory tool. Memory should be per-agent. Consider a workspace scoped memory tool also?
+[x] Bug: Global Context has an icon but Workspace Contexts does not
+[x] Tags are currently not very useful. There should be a way to filter chats by tags.
 [ ] It should be possible to disable sign-ups (via an environment variable?)
-[ ] Bug: consider sanitising file names when using the Bedrock provider - https://github.com/vercel/ai/issues/11518#issuecomment-3731765347
 [ ] Bug: there is noticable lag when opening and closing the sub-agent pane. It is not very responsive.
-[ ] Bug: Global Context has an icon but Workspace Contexts does not
-[ ] Tags are currently not very useful. There should be a way to filter chats by tags.
