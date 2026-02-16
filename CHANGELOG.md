@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.31.1](https://github.com/willdady/platypus/compare/v1.31.0...v1.31.1) (2026-02-16)
+
+
+### Bug Fixes
+
+* delete orphaned workspaces before setting owner_id NOT NULL constraint ([872dbed](https://github.com/willdady/platypus/commit/872dbedec07b513be0892c653eebd3386f6ce541))
+
 ## [1.31.0](https://github.com/willdady/platypus/compare/v1.30.0...v1.31.0) (2026-02-15)
 
 
