@@ -9,18 +9,21 @@ SET "owner_id" = COALESCE(
   (SELECT om."user_id" FROM "organization_member" om WHERE om."organization_id" = w."organization_id" AND om."role" = 'admin' LIMIT 1)
 );--> statement-breakpoint
 
--- Step 3: Make owner_id NOT NULL now that data is backfilled
+-- Step 3: Delete orphaned workspaces that could not be assigned an owner
+DELETE FROM "workspace" WHERE "owner_id" IS NULL;--> statement-breakpoint
+
+-- Step 4: Make owner_id NOT NULL now that data is backfilled
 ALTER TABLE "workspace" ALTER COLUMN "owner_id" SET NOT NULL;--> statement-breakpoint
 
--- Step 4: Add FK constraint and index for owner_id
+-- Step 5: Add FK constraint and index for owner_id
 ALTER TABLE "workspace" ADD CONSTRAINT "workspace_owner_id_user_id_fk" FOREIGN KEY ("owner_id") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 CREATE INDEX "idx_workspace_owner_id" ON "workspace" USING btree ("owner_id");--> statement-breakpoint
 
--- Step 5: Drop workspace_member table
+-- Step 6: Drop workspace_member table
 ALTER TABLE "workspace_member" DISABLE ROW LEVEL SECURITY;--> statement-breakpoint
 DROP TABLE "workspace_member" CASCADE;--> statement-breakpoint
 
--- Step 6: Simplify invitation table (remove workspace references)
+-- Step 7: Simplify invitation table (remove workspace references)
 ALTER TABLE "invitation" DROP CONSTRAINT "unique_invitation_workspace_email";--> statement-breakpoint
 ALTER TABLE "invitation" DROP CONSTRAINT "invitation_workspace_id_workspace_id_fk";--> statement-breakpoint
 DROP INDEX "idx_invitation_workspace_id";--> statement-breakpoint
