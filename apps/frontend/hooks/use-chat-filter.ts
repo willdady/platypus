@@ -27,5 +27,9 @@ export const useChatFilter = () => {
     router.replace(`${pathname}?${params.toString()}`);
   };
 
-  return { selectedTags, toggleFilterTag };
+  const clearFilters = () => {
+    updateUrl([]);
+  };
+
+  return { selectedTags, toggleFilterTag, clearFilters };
 };

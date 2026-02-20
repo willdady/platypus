@@ -90,7 +90,7 @@ export function AppSidebar({
 
   const { mutate } = useSWRConfig();
 
-  const { selectedTags } = useChatFilter();
+  const { selectedTags, clearFilters } = useChatFilter();
 
   // Helper to revalidate the chat list (handles query params in SWR key)
   const revalidateChatList = () => {
@@ -240,6 +240,11 @@ export function AppSidebar({
 
       // Close the dialog
       setDeleteChatId(null);
+
+      // Clear tag filters if the deleted chat was the last one in the filtered list
+      if (selectedTags.length > 0 && chats.length <= 1) {
+        clearFilters();
+      }
 
       // Navigate to the main chat page if we were on the deleted chat
       if (
