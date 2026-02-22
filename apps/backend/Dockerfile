@@ -47,6 +47,9 @@ ENV NODE_ENV=production
 RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 hono
 
+# Create data directory for file storage
+RUN mkdir -p /data/files && chown hono:nodejs /data/files
+
 # Copy prod dependencies (includes root node_modules and workspace node_modules)
 COPY --from=prod-deps /app .
 

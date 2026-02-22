@@ -3,6 +3,7 @@ import { cors } from "hono/cors";
 import { db } from "./index.ts";
 import { auth } from "./auth.ts";
 import { chat } from "./routes/chat.ts";
+import { files } from "./routes/files.ts";
 import { organization } from "./routes/organization.ts";
 import { workspace } from "./routes/workspace.ts";
 import { agent } from "./routes/agent.ts";
@@ -105,6 +106,7 @@ app.use("*", async (c, next) => {
 
 app.get("/health", (c) => c.json({ status: "ok" }));
 
+app.route("/files", files);
 app.route("/organizations", organization);
 app.route("/organizations/:orgId/workspaces", workspace);
 app.route("/organizations/:orgId/workspaces/:workspaceId/agents", agent);

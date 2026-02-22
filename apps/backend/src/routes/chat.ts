@@ -59,6 +59,11 @@ import {
 import type { Variables } from "../server.ts";
 import { logger } from "../logger.ts";
 import { type PlatypusUIMessage } from "../types.ts";
+import {
+  extractFiles,
+  rewriteStorageUrls,
+  deleteFiles,
+} from "../storage/utils.ts";
 
 // --- Types ---
 
@@ -374,6 +379,7 @@ const resolveGenerationConfig = async (
  */
 const upsertChatRecord = async (
   id: string,
+  orgId: string,
   workspaceId: string,
   messages: PlatypusUIMessage[],
   context: ChatContext,
@@ -382,9 +388,16 @@ const upsertChatRecord = async (
 ) => {
   const { resolvedAgentId, resolvedProviderId, resolvedModelId } = context;
 
+  // Extract files from messages and store them
+  const processedMessages = await extractFiles(messages, {
+    orgId,
+    workspaceId,
+    chatId: id,
+  });
+
   // Prepare values for DB
   const dbValues = {
-    messages,
+    messages: processedMessages,
     agentId: resolvedAgentId || null,
     providerId: resolvedAgentId ? null : resolvedProviderId,
     modelId: resolvedAgentId ? null : resolvedModelId,
@@ -528,7 +541,18 @@ chat.get(
     if (record.length === 0) {
       return c.json({ message: "Chat not found" }, 404);
     }
-    return c.json(record[0]);
+
+    // Rewrite storage:// URLs to HTTP URLs
+    const chat = record[0];
+    const origin = new URL(c.req.url).origin;
+    if (chat.messages) {
+      chat.messages = rewriteStorageUrls(
+        chat.messages as PlatypusUIMessage[],
+        origin,
+      );
+    }
+
+    return c.json(chat);
   },
 );
 
@@ -753,6 +777,7 @@ chat.post(
           // Upsert chat record
           await upsertChatRecord(
             data.id,
+            orgId,
             workspaceId,
             messages,
             context,
@@ -777,16 +802,30 @@ chat.delete(
     const chatId = c.req.param("chatId");
     const workspaceId = c.req.param("workspaceId")!;
 
-    const result = await db
-      .delete(chatTable)
+    // First fetch the chat to get its messages for file cleanup
+    const chatRecord = await db
+      .select()
+      .from(chatTable)
       .where(
         and(eq(chatTable.id, chatId), eq(chatTable.workspaceId, workspaceId)),
       )
-      .returning();
+      .limit(1);
 
-    if (result.length === 0) {
+    if (chatRecord.length === 0) {
       return c.json({ message: "Chat not found" }, 404);
     }
+
+    // Delete associated files from storage (best-effort)
+    if (chatRecord[0].messages) {
+      await deleteFiles(chatRecord[0].messages as PlatypusUIMessage[]);
+    }
+
+    // Delete the chat record
+    await db
+      .delete(chatTable)
+      .where(
+        and(eq(chatTable.id, chatId), eq(chatTable.workspaceId, workspaceId)),
+      );
 
     return c.json({ message: "Chat deleted successfully" }, 200);
   },

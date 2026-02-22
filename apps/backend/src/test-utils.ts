@@ -3,6 +3,7 @@ import { vi } from "vitest";
 // Set environment variables for tests
 process.env.ALLOWED_ORIGINS = "http://localhost:3000";
 process.env.DATABASE_URL = "postgres://localhost:5432/test";
+process.env.STORAGE_BACKEND = "disk";
 
 const { mockDb, mockAuth } = vi.hoisted(() => {
   // Create a mock db object that allows chaining

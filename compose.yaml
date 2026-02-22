@@ -26,6 +26,10 @@ services:
       BETTER_AUTH_URL: "http://localhost:4000"
       ADMIN_EMAIL: "admin@example.com"
       ADMIN_PASSWORD: "admin123"
+      STORAGE_BACKEND: disk
+      STORAGE_DISK_PATH: /data/files
+    volumes:
+      - ./data:/data
     ports:
       - "4000:4000"
     depends_on:

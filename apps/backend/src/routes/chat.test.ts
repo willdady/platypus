@@ -224,7 +224,8 @@ describe("Chat Routes", () => {
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
       mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]); // requireWorkspaceAccess
 
-      mockDb.returning.mockResolvedValueOnce([{ id: "chat-1" }]);
+      // Mock for fetching chat record before delete (for file cleanup)
+      mockDb.limit.mockResolvedValueOnce([{ id: "chat-1", messages: [] }]);
 
       const res = await app.request(`${baseUrl}/chat-1`, {
         method: "DELETE",
