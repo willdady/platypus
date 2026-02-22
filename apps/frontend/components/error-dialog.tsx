@@ -1,3 +1,4 @@
+import { useState } from "react";
 import {
   Dialog,
   DialogContent,
@@ -8,7 +9,7 @@ import {
 } from "./ui/dialog";
 import { Button } from "./ui/button";
 import { Alert, AlertTitle, AlertDescription } from "./ui/alert";
-import { TriangleAlert } from "lucide-react";
+import { TriangleAlert, Copy, Check } from "lucide-react";
 
 interface ErrorDialogProps {
   isOpen: boolean;
@@ -21,6 +22,15 @@ export const ErrorDialog = ({
   onOpenChange,
   error,
 }: ErrorDialogProps) => {
+  const [copied, setCopied] = useState(false);
+  const message = error?.message || "An unknown error occurred.";
+
+  const handleCopy = () => {
+    navigator.clipboard.writeText(message);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
       <DialogContent showCloseButton={false}>
@@ -34,12 +44,13 @@ export const ErrorDialog = ({
           <Alert variant="destructive">
             <TriangleAlert />
             <AlertTitle>Error Details</AlertTitle>
-            <AlertDescription>
-              {error?.message || "An unknown error occurred."}
-            </AlertDescription>
+            <AlertDescription>{message}</AlertDescription>
           </Alert>
         </div>
         <DialogFooter>
+          <Button variant="outline" size="icon" onClick={handleCopy}>
+            {copied ? <Check /> : <Copy />}
+          </Button>
           <Button onClick={() => onOpenChange(false)}>Ok</Button>
         </DialogFooter>
       </DialogContent>

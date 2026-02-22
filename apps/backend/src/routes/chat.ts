@@ -8,6 +8,8 @@ import {
   Output,
   streamText,
   type Tool,
+  APICallError,
+  LoadAPIKeyError,
 } from "ai";
 import { createOpenAI, type OpenAIProvider } from "@ai-sdk/openai";
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
@@ -715,6 +717,28 @@ chat.post(
         prefix: "msg",
         size: 16,
       }),
+      onError: (error) => {
+        logger.error({ error }, "Chat stream error");
+        if (LoadAPIKeyError.isInstance(error)) {
+          return "AI provider API key is missing or not configured.";
+        }
+        if (APICallError.isInstance(error)) {
+          if (error.statusCode === 401 || error.statusCode === 403) {
+            return "AI provider authentication failed. Your API key may be invalid or expired.";
+          }
+          if (error.statusCode === 429) {
+            return "AI provider rate limit exceeded. Please try again later.";
+          }
+          if (error.statusCode != null && error.statusCode >= 500) {
+            return "AI provider is currently unavailable. Please try again later.";
+          }
+          return `AI provider error: ${error.message}`;
+        }
+        if (error instanceof Error) {
+          return error.message;
+        }
+        return "An unexpected error occurred.";
+      },
       onFinish: async ({ messages }) => {
         try {
           // Close all MCP clients
