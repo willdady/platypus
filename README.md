@@ -19,6 +19,7 @@ Platypus is an open-source, full-stack application designed to help you build AI
 - **✨ Skills:** Create reusable instruction sets that agents can dynamically load on-demand to handle specialized tasks.
 - **🧩 Sub-Agents (Experimental):** Agents can delegate specialized tasks to other agents, enabling hierarchical multi-agent workflows with isolated contexts and result streaming.
 - **🔌 MCP Support:** First-class support for the **Model Context Protocol** (MCP), allowing agents to securely connect to local and remote data sources.
+- **🧠 Memory:** Platypus automatically extracts facts and preferences from your conversations in the background and injects them into future chats, so agents remember things about you over time.
 - **⚡ Modern Tech Stack:** Built on the bleeding edge with **Next.js**, **Hono.js**, **Drizzle ORM**, and **Tailwind CSS**.
 - **🌐 Provider Agnostic:** Powered by the Vercel AI SDK, supporting OpenAI, Anthropic, Google, Amazon Bedrock, and OpenRouter.
 - **⚖️ MIT Licensed:** Open source and free to use.
@@ -42,6 +43,7 @@ The fastest way to get Platypus running is using Docker Compose.
     - `ADMIN_EMAIL`: The email address for the initial admin user.
     - `ADMIN_PASSWORD`: A secure password for the initial admin user.
     - `TIMEZONE` (optional): IANA timezone name for e.g., "America/New_York", "Europe/London". Defaults to UTC.
+    - `MEMORY_EXTRACTION_INTERVAL_MS` (optional): How often (in milliseconds) the background memory extraction job runs. Defaults to `300000` (5 minutes).
 
     ```yaml
     services:
