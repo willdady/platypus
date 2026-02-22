@@ -5,6 +5,7 @@ import {
   calculateCircleArea,
 } from "./math.ts";
 import { getCurrentTime, convertTimezone } from "./time.ts";
+import { fetchUrl } from "./fetch.ts";
 
 type ToolSet = {
   id: string;
@@ -68,5 +69,14 @@ registerToolSet("time", {
   tools: {
     getCurrentTime,
     convertTimezone,
+  },
+});
+
+registerToolSet("web-fetch", {
+  name: "Web Fetch",
+  category: "Web",
+  description: "Fetch content from URLs on the web",
+  tools: {
+    fetchUrl,
   },
 });
