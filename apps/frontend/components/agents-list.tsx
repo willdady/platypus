@@ -31,6 +31,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import {
+  Bot,
   BotMessageSquare,
   Copy,
   EllipsisVertical,
@@ -138,6 +139,13 @@ export const AgentsList = ({
     if (!skillIds?.length) return [];
     return skillIds
       .map((id) => skills.find((s) => s.id === id)?.name)
+      .filter(Boolean) as string[];
+  };
+
+  const getSubAgentNames = (subAgentIds: string[] | undefined) => {
+    if (!subAgentIds?.length) return [];
+    return subAgentIds
+      .map((id) => agents.find((a) => a.id === id)?.name)
       .filter(Boolean) as string[];
   };
 
@@ -301,6 +309,28 @@ export const AgentsList = ({
                   ) : (
                     <span className="flex items-center gap-1 cursor-default">
                       <Sparkles className="h-3 w-3" />0 skills
+                    </span>
+                  )}
+                  {agent.subAgentIds?.length ? (
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <span className="flex items-center gap-1 cursor-default">
+                          <Bot className="h-3 w-3" />
+                          {agent.subAgentIds.length} sub-agent
+                          {agent.subAgentIds.length !== 1 && "s"}
+                        </span>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <ul className="text-left">
+                          {getSubAgentNames(agent.subAgentIds).map((name) => (
+                            <li key={name}>{name}</li>
+                          ))}
+                        </ul>
+                      </TooltipContent>
+                    </Tooltip>
+                  ) : (
+                    <span className="flex items-center gap-1 cursor-default">
+                      <Bot className="h-3 w-3" />0 sub-agents
                     </span>
                   )}
                 </div>
