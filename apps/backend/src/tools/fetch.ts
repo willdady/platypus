@@ -5,8 +5,7 @@ import { Readability } from "@mozilla/readability";
 import TurndownService from "turndown";
 import robotsParser from "robots-parser";
 
-const IGNORE_ROBOTS_TXT =
-  process.env.FETCH_TOOL_IGNORE_ROBOTS_TXT === "true";
+const IGNORE_ROBOTS_TXT = process.env.FETCH_TOOL_IGNORE_ROBOTS_TXT === "true";
 
 const USER_AGENT = "PlatypusBot/1.0";
 

@@ -5,6 +5,7 @@
 Users need the ability to schedule agents to run automatically at specific times — either as one-off executions or on a repeating schedule. The agent runs headless (no browser streaming) and produces a chat record that can be reviewed later. This enables automation use cases like daily report generation, periodic data checks, or scheduled content creation.
 
 Key constraints:
+
 - Backend may be horizontally scaled — only one instance should execute each cron job per tick
 - Cron-triggered chats are separate from regular chats (no sidebar pollution, no tag generation, no memory extraction)
 - Instructions are sent as the initial user message (not injected into system prompt)
@@ -22,9 +23,13 @@ export const cronJob = pgTable(
   "cron_job",
   (t) => ({
     id: t.text("id").primaryKey(),
-    workspaceId: t.text("workspace_id").notNull()
+    workspaceId: t
+      .text("workspace_id")
+      .notNull()
       .references(() => workspace.id, { onDelete: "cascade" }),
-    agentId: t.text("agent_id").notNull()
+    agentId: t
+      .text("agent_id")
+      .notNull()
       .references(() => agent.id, { onDelete: "restrict" }),
     name: t.text("name").notNull(),
     description: t.text("description"),
@@ -81,6 +86,7 @@ Update `chatSchema` and `chatListItemSchema` to include optional `cronJobId`.
 **New file:** `apps/backend/src/services/chat-execution.ts`
 
 Extract from `apps/backend/src/routes/chat.ts`:
+
 - `createModel()` — creates AI SDK provider instance from provider config
 - `resolveChatContext()` — resolves agent → provider/model/maxSteps
 - `loadTools()` — loads tool sets + MCP tools
@@ -100,20 +106,23 @@ Middleware chain: `requireAuth → requireOrgAccess() → requireWorkspaceAccess
 
 ### Endpoints
 
-| Method | Path | Description |
-|--------|------|-------------|
-| `GET /` | List cron jobs in workspace |
-| `POST /` | Create cron job. Validate cron expression with croner. Compute `nextRunAt`. |
-| `GET /:cronJobId` | Get single cron job |
-| `PUT /:cronJobId` | Update cron job. Recompute `nextRunAt`. |
-| `DELETE /:cronJobId` | Delete cron job (cascades to its chats) |
-| `GET /:cronJobId/chats` | List chats for this cron job, ordered by `createdAt DESC` |
-| `POST /:cronJobId/trigger` | Manually trigger the cron job (runs immediately, useful for testing) |
+| Method                     | Path                                                                        | Description |
+| -------------------------- | --------------------------------------------------------------------------- | ----------- |
+| `GET /`                    | List cron jobs in workspace                                                 |
+| `POST /`                   | Create cron job. Validate cron expression with croner. Compute `nextRunAt`. |
+| `GET /:cronJobId`          | Get single cron job                                                         |
+| `PUT /:cronJobId`          | Update cron job. Recompute `nextRunAt`.                                     |
+| `DELETE /:cronJobId`       | Delete cron job (cascades to its chats)                                     |
+| `GET /:cronJobId/chats`    | List chats for this cron job, ordered by `createdAt DESC`                   |
+| `POST /:cronJobId/trigger` | Manually trigger the cron job (runs immediately, useful for testing)        |
 
 ### Mount in `apps/backend/src/server.ts`
 
 ```typescript
-app.route("/organizations/:orgId/workspaces/:workspaceId/cron-jobs", cronJobRoute);
+app.route(
+  "/organizations/:orgId/workspaces/:workspaceId/cron-jobs",
+  cronJobRoute,
+);
 ```
 
 ---
@@ -137,16 +146,16 @@ Check interval: 60 seconds (1 minute)
    b. Fetch the workspace (need `ownerId` for user context — the workspace owner is used as the "user" for system prompt rendering, memory retrieval, etc.)
    c. Use extracted helpers: `createModel()`, `loadTools()`, `renderSystemPrompt()`
    d. Call `generateText()` (NOT `streamText()`) with:
-      - The instruction as a single user message
-      - All agent tools loaded
-      - `maxSteps` from agent config
-   e. Save result as a new chat via `upsertChatRecord()` with:
-      - `cronJobId` set
-      - `memoryExtractionStatus = "completed"` (skip memory extraction)
-      - Empty `tags` array
-   f. Update `cronJob.lastRunAt = NOW()`
-   g. Compute next run via croner and update `nextRunAt`. If `isOneOff`, set `enabled = false`
-   h. **Retention cleanup:** Delete oldest chats for this cronJobId beyond `maxChatsToKeep`
+   - The instruction as a single user message
+   - All agent tools loaded
+   - `maxSteps` from agent config
+     e. Save result as a new chat via `upsertChatRecord()` with:
+   - `cronJobId` set
+   - `memoryExtractionStatus = "completed"` (skip memory extraction)
+   - Empty `tags` array
+     f. Update `cronJob.lastRunAt = NOW()`
+     g. Compute next run via croner and update `nextRunAt`. If `isOneOff`, set `enabled = false`
+     h. **Retention cleanup:** Delete oldest chats for this cronJobId beyond `maxChatsToKeep`
 
 ### Error handling
 
@@ -200,6 +209,7 @@ Add a "Schedules" link in the sidebar footer (alongside the existing Settings li
 ### Cron Job List (`apps/frontend/components/cron-job-list.tsx`)
 
 Grid layout matching agents-list.tsx pattern. Each card shows:
+
 - Name, description
 - Agent name (linked)
 - Schedule (human-readable, e.g., "Every day at 9:00 AM UTC")
@@ -229,6 +239,7 @@ Follow `agent-form.tsx` patterns. Fields:
 ### Cron Job Detail Page
 
 The edit page (`/cron-jobs/[cronJobId]/`) shows:
+
 1. The edit form (top)
 2. A "Run History" section (below) — table of chats from `GET /cron-jobs/:cronJobId/chats`
    - Columns: Title/ID, Created at, Duration (if tracked), Actions (View)
@@ -280,19 +291,19 @@ pnpm --filter frontend add croner
 
 ## Key Files to Modify/Create
 
-| File | Action |
-|------|--------|
-| `apps/backend/src/db/schema.ts` | Add `cronJob` table, add `cronJobId` to `chat` |
-| `packages/schemas/index.ts` | Add cron job schemas, update chat schemas |
-| `apps/backend/src/services/chat-execution.ts` | **New** — extracted shared helpers |
-| `apps/backend/src/routes/chat.ts` | Import from shared helpers, filter cron chats from list |
-| `apps/backend/src/routes/cron-job.ts` | **New** — CRUD routes |
-| `apps/backend/src/server.ts` | Mount cron-job routes |
-| `apps/backend/src/jobs/cron-scheduler.ts` | **New** — scheduler with advisory lock |
-| `apps/backend/src/jobs/scheduler.ts` | Extract `runWithLock` and `scheduleAligned` to be reusable |
-| `apps/backend/index.ts` | Start cron scheduler |
-| `apps/backend/src/services/memory-extraction.ts` | Exclude cron chats from extraction query |
-| `apps/frontend/components/cron-job-form.tsx` | **New** — form component |
-| `apps/frontend/components/cron-job-list.tsx` | **New** — list component |
-| `apps/frontend/app/[orgId]/workspace/[workspaceId]/cron-jobs/` | **New** — route pages |
-| `apps/frontend/components/app-sidebar.tsx` | Add "Schedules" nav link |
+| File                                                           | Action                                                     |
+| -------------------------------------------------------------- | ---------------------------------------------------------- |
+| `apps/backend/src/db/schema.ts`                                | Add `cronJob` table, add `cronJobId` to `chat`             |
+| `packages/schemas/index.ts`                                    | Add cron job schemas, update chat schemas                  |
+| `apps/backend/src/services/chat-execution.ts`                  | **New** — extracted shared helpers                         |
+| `apps/backend/src/routes/chat.ts`                              | Import from shared helpers, filter cron chats from list    |
+| `apps/backend/src/routes/cron-job.ts`                          | **New** — CRUD routes                                      |
+| `apps/backend/src/server.ts`                                   | Mount cron-job routes                                      |
+| `apps/backend/src/jobs/cron-scheduler.ts`                      | **New** — scheduler with advisory lock                     |
+| `apps/backend/src/jobs/scheduler.ts`                           | Extract `runWithLock` and `scheduleAligned` to be reusable |
+| `apps/backend/index.ts`                                        | Start cron scheduler                                       |
+| `apps/backend/src/services/memory-extraction.ts`               | Exclude cron chats from extraction query                   |
+| `apps/frontend/components/cron-job-form.tsx`                   | **New** — form component                                   |
+| `apps/frontend/components/cron-job-list.tsx`                   | **New** — list component                                   |
+| `apps/frontend/app/[orgId]/workspace/[workspaceId]/cron-jobs/` | **New** — route pages                                      |
+| `apps/frontend/components/app-sidebar.tsx`                     | Add "Schedules" nav link                                   |

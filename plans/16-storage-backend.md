@@ -18,15 +18,16 @@ Existing chats with inline data URLs remain backwards compatible — the fronten
 
 All under `apps/backend/src/storage/`:
 
-| File | Purpose |
-|---|---|
-| `types.ts` | `StorageBackend` interface |
-| `disk.ts` | Local filesystem implementation |
-| `s3.ts` | S3-compatible implementation |
-| `index.ts` | Factory + singleton |
+| File       | Purpose                                             |
+| ---------- | --------------------------------------------------- |
+| `types.ts` | `StorageBackend` interface                          |
+| `disk.ts`  | Local filesystem implementation                     |
+| `s3.ts`    | S3-compatible implementation                        |
+| `index.ts` | Factory + singleton                                 |
 | `utils.ts` | `extractFiles()` and `rewriteStorageUrls()` helpers |
 
 Plus:
+
 - `apps/backend/src/routes/files.ts` — file-serving endpoint (proxy mode)
 
 ## Storage Interface
@@ -80,23 +81,32 @@ interface StorageBackend {
 ### 4. Integrate into chat routes (`routes/chat.ts`)
 
 **Save** — in `upsertChatRecord` (~line 386), before setting `dbValues.messages`:
+
 ```typescript
-const processedMessages = await extractFiles(messages, { orgId, workspaceId, chatId: id });
+const processedMessages = await extractFiles(messages, {
+  orgId,
+  workspaceId,
+  chatId: id,
+});
 ```
+
 Add `orgId` as a parameter to `upsertChatRecord` (currently not passed).
 
 **Load** — in `GET /:chatId` handler (~line 517-532), before returning:
+
 ```typescript
 record[0].messages = rewriteStorageUrls(record[0].messages, baseUrl);
 ```
 
 **Delete** — in `DELETE /:chatId` handler (~line 770-793), before deleting from DB:
+
 - Extract all `storage://` keys from the chat's messages
 - Call `storage.delete()` for each (best-effort, don't fail the delete if cleanup fails)
 
 ### 5. Environment variables
 
 Add to `apps/backend/.example.env`:
+
 ```
 # Storage backend: "disk" (default) or "s3"
 STORAGE_BACKEND=disk
@@ -119,6 +129,7 @@ STORAGE_DISK_PATH=./data/files
 ### 6. Docker — add volume mount to Dockerfile
 
 In `apps/backend/Dockerfile`, add to the runner stage:
+
 ```dockerfile
 RUN mkdir -p /data/files && chown hono:nodejs /data/files
 ```
@@ -128,6 +139,7 @@ And document that users should mount a volume: `-v ./data:/data`
 ### 7. Update README
 
 Add a "Storage" section to `README.md` explaining:
+
 - Default disk storage and how it works
 - How to configure S3-compatible storage
 - `STORAGE_PUBLIC_URL` for direct serving
