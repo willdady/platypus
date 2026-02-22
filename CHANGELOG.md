@@ -1,5 +1,20 @@
 # Changelog
 
+## [1.32.0](https://github.com/willdady/platypus/compare/v1.31.1...v1.32.0) (2026-02-22)
+
+
+### Features
+
+* **backend:** add web-fetch tool set ([dbb66f5](https://github.com/willdady/platypus/commit/dbb66f512aefe2365fedfeb36bd595aec38cda8f))
+* **frontend:** add reveal/hide toggle for API key field in provider form ([5aa81cf](https://github.com/willdady/platypus/commit/5aa81cff4f7d9233cd3a97f15b2053facc746b5c))
+* **frontend:** show sub-agent count on agents list items ([42c47fe](https://github.com/willdady/platypus/commit/42c47fe55aa65b5c33ed81265ac10dd0e8c0a300))
+
+
+### Bug Fixes
+
+* **frontend:** clear tag filters when last filtered chat is deleted ([eb1a12d](https://github.com/willdady/platypus/commit/eb1a12dccf6c92d9e44a26f526b78701ccd91411))
+* improve chat error handling and error dialog UX ([6b61f57](https://github.com/willdady/platypus/commit/6b61f577d2508319258ebd6cda7b8237c9c1e37e))
+
 ## [1.31.1](https://github.com/willdady/platypus/compare/v1.31.0...v1.31.1) (2026-02-16)
 
 
