@@ -10,13 +10,26 @@ import {
 } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupButton,
+  InputGroupInput,
+} from "@/components/ui/input-group";
 import { Button } from "@/components/ui/button";
 import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
-import { Building, ChevronsUpDown, OctagonX, Trash2 } from "lucide-react";
+import {
+  Building,
+  ChevronsUpDown,
+  Eye,
+  EyeOff,
+  OctagonX,
+  Trash2,
+} from "lucide-react";
 import {
   Select,
   SelectContent,
@@ -95,6 +108,7 @@ const ProviderForm = ({
     Record<string, string>
   >({});
   const [error, setError] = useState<string | null>(null);
+  const [showApiKey, setShowApiKey] = useState(false);
 
   const fetcher = (url: string) =>
     fetch(url, { credentials: "include" }).then((res) => res.json());
@@ -389,15 +403,28 @@ const ProviderForm = ({
 
           <Field data-invalid={!!validationErrors.apiKey}>
             <FieldLabel htmlFor="apiKey">API Key</FieldLabel>
-            <Input
-              id="apiKey"
-              type="password"
-              placeholder="sk-..."
-              value={formData.apiKey}
-              onChange={handleChange}
-              disabled={isSubmitting || isReadOnly}
-              aria-invalid={!!validationErrors.apiKey}
-            />
+            <InputGroup>
+              <InputGroupInput
+                id="apiKey"
+                type={showApiKey ? "text" : "password"}
+                placeholder="sk-..."
+                value={formData.apiKey}
+                onChange={handleChange}
+                disabled={isSubmitting || isReadOnly}
+                aria-invalid={!!validationErrors.apiKey}
+              />
+              <InputGroupAddon align="inline-end">
+                <InputGroupButton
+                  type="button"
+                  size="icon-xs"
+                  onClick={() => setShowApiKey(!showApiKey)}
+                  disabled={isSubmitting || isReadOnly}
+                  aria-label={showApiKey ? "Hide API key" : "Show API key"}
+                >
+                  {showApiKey ? <EyeOff /> : <Eye />}
+                </InputGroupButton>
+              </InputGroupAddon>
+            </InputGroup>
             {validationErrors.apiKey && (
               <FieldError>{validationErrors.apiKey}</FieldError>
             )}
