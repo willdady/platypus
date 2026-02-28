@@ -115,6 +115,11 @@ export const chat = pgTable(
       .text("memory_extraction_status")
       .default("pending"), // "pending" | "processing" | "completed" | "failed"
 
+    // Cron job association
+    cronJobId: t
+      .text("cron_job_id")
+      .references(() => cronJob.id, { onDelete: "cascade" }),
+
     createdAt: t.timestamp("created_at").notNull().defaultNow(),
     updatedAt: t.timestamp("updated_at").notNull().defaultNow(),
   }),
@@ -126,6 +131,7 @@ export const chat = pgTable(
       t.lastMemoryProcessedAt,
       t.updatedAt,
     ),
+    index("idx_chat_cron_job_id").on(t.cronJobId),
   ],
 );
 
@@ -319,5 +325,36 @@ export const memory = pgTable(
 
     // Source tracking
     index("idx_memory_chat_id").on(t.chatId),
+  ],
+);
+
+export const cronJob = pgTable(
+  "cron_job",
+  (t) => ({
+    id: t.text("id").primaryKey(),
+    workspaceId: t
+      .text("workspace_id")
+      .notNull()
+      .references(() => workspace.id, { onDelete: "cascade" }),
+    agentId: t
+      .text("agent_id")
+      .notNull()
+      .references(() => agent.id, { onDelete: "restrict" }),
+    name: t.text("name").notNull(),
+    description: t.text("description"),
+    instruction: t.text("instruction").notNull(),
+    cronExpression: t.text("cron_expression").notNull(),
+    timezone: t.text("timezone").notNull().default("UTC"),
+    isOneOff: t.boolean("is_one_off").notNull().default(false),
+    enabled: t.boolean("enabled").notNull().default(true),
+    maxChatsToKeep: t.integer("max_chats_to_keep").notNull().default(50),
+    lastRunAt: t.timestamp("last_run_at"),
+    nextRunAt: t.timestamp("next_run_at"),
+    createdAt: t.timestamp("created_at").notNull().defaultNow(),
+    updatedAt: t.timestamp("updated_at").notNull().defaultNow(),
+  }),
+  (t) => [
+    index("idx_cron_job_workspace_id").on(t.workspaceId),
+    index("idx_cron_job_next_run_at").on(t.nextRunAt),
   ],
 );

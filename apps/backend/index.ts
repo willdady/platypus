@@ -12,6 +12,7 @@ import { count, eq } from "drizzle-orm";
 import { auth } from "./src/auth.ts";
 import { logger } from "./src/logger.ts";
 import { startScheduler } from "./src/jobs/scheduler.ts";
+import { startCronScheduler } from "./src/jobs/cron-scheduler.ts";
 
 const PORT = process.env.PORT || "4001";
 
@@ -104,6 +105,7 @@ const main = async () => {
 
   // Start background jobs (safe for horizontal scaling)
   startScheduler();
+  startCronScheduler();
 };
 
 const exponentialBackoff = async <T>(
