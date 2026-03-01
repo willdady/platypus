@@ -175,6 +175,10 @@ services:
 
 This allows browsers to fetch files directly from S3 (or via CDN) instead of going through the backend `/files` endpoint.
 
+## Known Issues
+
+- When chatting with Google's image generation models (Nano Banana) you MAY get more than one image returned. See https://blog.laozhang.ai/en/posts/temporary-images-nano-banana-bug
+
 ## 🤝 Contributing
 
 Contributions are welcome! Please feel free to submit a Pull Request.
