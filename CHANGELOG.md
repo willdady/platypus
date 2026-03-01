@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.33.0](https://github.com/willdady/platypus/compare/v1.32.0...v1.33.0) (2026-03-01)
+
+
+### Features
+
+* add schedule feature for automated agent execution ([9d6086e](https://github.com/willdady/platypus/commit/9d6086e0dcafc81e90c144d877e58981a0e83934))
+* **backend:** add storage backend for chat file attachments ([42112b1](https://github.com/willdady/platypus/commit/42112b1c34da9c83c52e78af44ab925c34cc4562))
+
 ## [1.32.0](https://github.com/willdady/platypus/compare/v1.31.1...v1.32.0) (2026-02-22)
 
 
