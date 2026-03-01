@@ -56,6 +56,7 @@ import {
   ClockFading,
   CalendarDays,
   ArrowLeftRight,
+  Timer,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Field, FieldLabel, FieldError } from "@/components/ui/field";
@@ -304,6 +305,11 @@ export function AppSidebar({
   };
 
   const footerItems = [
+    {
+      title: "Schedules",
+      url: `/${orgId}/workspace/${workspaceId}/schedules`,
+      icon: Timer,
+    },
     {
       title: "Settings",
       url: `/${orgId}/workspace/${workspaceId}/settings`,

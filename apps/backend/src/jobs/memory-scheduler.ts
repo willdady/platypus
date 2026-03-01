@@ -10,7 +10,9 @@ const MEMORY_EXTRACTION_INTERVAL_MS = parseInt(
 // Advisory lock ID for memory extraction (arbitrary unique number)
 const MEMORY_EXTRACTION_LOCK_ID = 123456789;
 
-async function runWithLock(fn: () => Promise<void>): Promise<void> {
+async function runMemoryExtractionWithLock(
+  fn: () => Promise<void>,
+): Promise<void> {
   // Try to acquire advisory lock (non-blocking)
   const lockResult = await db.execute(
     sql`SELECT pg_try_advisory_lock(${MEMORY_EXTRACTION_LOCK_ID}) as acquired`,
@@ -47,7 +49,10 @@ async function runWithLock(fn: () => Promise<void>): Promise<void> {
  * to the same schedule, so the advisory lock contention is predictable
  * and only one instance wins each cycle.
  */
-function scheduleAligned(intervalMs: number, fn: () => Promise<void>): void {
+function scheduleMemoryExtractionAligned(
+  intervalMs: number,
+  fn: () => Promise<void>,
+): void {
   function scheduleNext() {
     const now = Date.now();
     const nextTick = Math.ceil(now / intervalMs) * intervalMs;
@@ -57,7 +62,7 @@ function scheduleAligned(intervalMs: number, fn: () => Promise<void>): void {
       try {
         await fn();
       } catch (error) {
-        logger.error({ error }, "Scheduled job failed");
+        logger.error({ error }, "Memory extraction job failed");
       }
       scheduleNext();
     }, delay);
@@ -66,14 +71,14 @@ function scheduleAligned(intervalMs: number, fn: () => Promise<void>): void {
   scheduleNext();
 }
 
-export function startScheduler() {
+export function startMemoryScheduler() {
   logger.info(
     `Starting memory extraction scheduler (interval: ${MEMORY_EXTRACTION_INTERVAL_MS}ms, wall-clock aligned)`,
   );
 
   // Schedule at wall-clock-aligned intervals with advisory lock
-  scheduleAligned(MEMORY_EXTRACTION_INTERVAL_MS, async () => {
-    await runWithLock(async () => {
+  scheduleMemoryExtractionAligned(MEMORY_EXTRACTION_INTERVAL_MS, async () => {
+    await runMemoryExtractionWithLock(async () => {
       await processMemoryExtractionBatch();
     });
   });

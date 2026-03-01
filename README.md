@@ -20,6 +20,7 @@ Platypus is an open-source, full-stack application designed to help you build AI
 - **🧩 Sub-Agents (Experimental):** Agents can delegate specialized tasks to other agents, enabling hierarchical multi-agent workflows with isolated contexts and result streaming.
 - **🔌 MCP Support:** First-class support for the **Model Context Protocol** (MCP), allowing agents to securely connect to local and remote data sources.
 - **🧠 Memory:** Platypus automatically extracts facts and preferences from your conversations in the background and injects them into future chats, so agents remember things about you over time.
+- **⏰ Schedules:** Schedule agents to run automatically at specified times using cron expressions, with support for timezones and one-off executions.
 - **⚡ Modern Tech Stack:** Built on the bleeding edge with **Next.js**, **Hono.js**, **Drizzle ORM**, and **Tailwind CSS**.
 - **🌐 Provider Agnostic:** Powered by the Vercel AI SDK, supporting OpenAI, Anthropic, Google, Amazon Bedrock, and OpenRouter.
 - **⚖️ MIT Licensed:** Open source and free to use.
@@ -44,6 +45,7 @@ The fastest way to get Platypus running is using Docker Compose.
     - `ADMIN_PASSWORD`: A secure password for the initial admin user.
     - `TIMEZONE` (optional): IANA timezone name for e.g., "America/New_York", "Europe/London". Defaults to UTC.
     - `MEMORY_EXTRACTION_INTERVAL_MS` (optional): How often (in milliseconds) the background memory extraction job runs. Defaults to `300000` (5 minutes).
+    - `SCHEDULE_MAX_CONCURRENT` (optional): Maximum number of schedules to execute in parallel. Defaults to `5`.
 
     ```yaml
     services:
@@ -175,7 +177,7 @@ services:
 
 This allows browsers to fetch files directly from S3 (or via CDN) instead of going through the backend `/files` endpoint.
 
-## Known Issues
+## ⚠️ Known Issues
 
 - When chatting with Google's image generation models (Nano Banana) you MAY get more than one image returned. See https://blog.laozhang.ai/en/posts/temporary-images-nano-banana-bug
 

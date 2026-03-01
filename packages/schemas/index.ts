@@ -68,6 +68,7 @@ export const chatSchema = z.object({
   seed: z.number().optional(),
   presencePenalty: z.number().optional(),
   frequencyPenalty: z.number().optional(),
+  scheduleId: z.string().nullable().optional(),
   createdAt: z.date(),
   updatedAt: z.date(),
 });
@@ -128,6 +129,7 @@ export const chatListItemSchema = chatSchema.pick({
   agentId: true,
   providerId: true,
   modelId: true,
+  scheduleId: true,
   createdAt: true,
   updatedAt: true,
 });
@@ -595,3 +597,82 @@ export const memoryExtractionOutputSchema = z.object({
 export type MemoryExtractionOutput = z.infer<
   typeof memoryExtractionOutputSchema
 >;
+
+// Schedule
+
+export const scheduleSchema = z.object({
+  id: z.string(),
+  workspaceId: z.string(),
+  agentId: z.string(),
+  name: z.string().min(1).max(100),
+  description: z.string().max(500).nullable().optional(),
+  instruction: z.string().min(1).max(10000),
+  cronExpression: z.string().min(1),
+  timezone: z.string().default("UTC"),
+  isOneOff: z.boolean().default(false),
+  enabled: z.boolean().default(true),
+  maxChatsToKeep: z.number().int().min(1).max(1000).default(50),
+  lastRunAt: z.date().nullable().optional(),
+  nextRunAt: z.date().nullable().optional(),
+  createdAt: z.date(),
+  updatedAt: z.date(),
+});
+
+export type Schedule = z.infer<typeof scheduleSchema>;
+
+export const scheduleCreateSchema = scheduleSchema.pick({
+  workspaceId: true,
+  agentId: true,
+  name: true,
+  description: true,
+  instruction: true,
+  cronExpression: true,
+  timezone: true,
+  isOneOff: true,
+  enabled: true,
+  maxChatsToKeep: true,
+});
+
+export const scheduleUpdateSchema = scheduleSchema
+  .pick({
+    name: true,
+    description: true,
+    instruction: true,
+    cronExpression: true,
+    timezone: true,
+    isOneOff: true,
+    enabled: true,
+    maxChatsToKeep: true,
+    agentId: true,
+  })
+  .partial();
+
+// Schedule Run
+
+export const scheduleRunStatusSchema = z.enum([
+  "pending",
+  "running",
+  "success",
+  "failed",
+]);
+
+export type ScheduleRunStatus = z.infer<typeof scheduleRunStatusSchema>;
+
+export const scheduleRunSchema = z.object({
+  id: z.string(),
+  scheduleId: z.string(),
+  chatId: z.string().nullable().optional(),
+  status: scheduleRunStatusSchema,
+  startedAt: z.date(),
+  completedAt: z.date().nullable().optional(),
+  errorMessage: z.string().nullable().optional(),
+  createdAt: z.date(),
+});
+
+export type ScheduleRun = z.infer<typeof scheduleRunSchema>;
+
+export const scheduleRunListSchema = z.object({
+  results: z.array(scheduleRunSchema),
+});
+
+export type ScheduleRunList = z.infer<typeof scheduleRunListSchema>;

@@ -81,11 +81,12 @@ export const createSubAgentTool = (options: SubAgentToolOptions) => {
         if (output && typeof output === "object") {
           // For UI messages, find the last text part
           if ("parts" in output && Array.isArray(output.parts)) {
-            const lastText = output.parts
-              .filter((p: any) => p.type === "text")
-              .pop();
-            if (lastText?.text) {
-              return { type: "text", value: lastText.text };
+            const textParts = output.parts.filter(
+              (p: any) => p.type === "text" && "text" in p,
+            );
+            const lastText = textParts.pop();
+            if (lastText && "text" in lastText) {
+              return { type: "text", value: lastText.text as string };
             }
           }
           // Fallback for other message formats

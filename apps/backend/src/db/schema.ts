@@ -115,6 +115,11 @@ export const chat = pgTable(
       .text("memory_extraction_status")
       .default("pending"), // "pending" | "processing" | "completed" | "failed"
 
+    // Schedule association
+    scheduleId: t
+      .text("schedule_id")
+      .references(() => schedule.id, { onDelete: "cascade" }),
+
     createdAt: t.timestamp("created_at").notNull().defaultNow(),
     updatedAt: t.timestamp("updated_at").notNull().defaultNow(),
   }),
@@ -126,6 +131,7 @@ export const chat = pgTable(
       t.lastMemoryProcessedAt,
       t.updatedAt,
     ),
+    index("idx_chat_schedule_id").on(t.scheduleId),
   ],
 );
 
@@ -319,5 +325,59 @@ export const memory = pgTable(
 
     // Source tracking
     index("idx_memory_chat_id").on(t.chatId),
+  ],
+);
+
+export const schedule = pgTable(
+  "schedule",
+  (t) => ({
+    id: t.text("id").primaryKey(),
+    workspaceId: t
+      .text("workspace_id")
+      .notNull()
+      .references(() => workspace.id, { onDelete: "cascade" }),
+    agentId: t
+      .text("agent_id")
+      .notNull()
+      .references(() => agent.id, { onDelete: "restrict" }),
+    name: t.text("name").notNull(),
+    description: t.text("description"),
+    instruction: t.text("instruction").notNull(),
+    cronExpression: t.text("cron_expression").notNull(),
+    timezone: t.text("timezone").notNull().default("UTC"),
+    isOneOff: t.boolean("is_one_off").notNull().default(false),
+    enabled: t.boolean("enabled").notNull().default(true),
+    maxChatsToKeep: t.integer("max_chats_to_keep").notNull().default(50),
+    lastRunAt: t.timestamp("last_run_at"),
+    nextRunAt: t.timestamp("next_run_at"),
+    createdAt: t.timestamp("created_at").notNull().defaultNow(),
+    updatedAt: t.timestamp("updated_at").notNull().defaultNow(),
+  }),
+  (t) => [
+    index("idx_schedule_workspace_id").on(t.workspaceId),
+    index("idx_schedule_next_run_at").on(t.nextRunAt),
+  ],
+);
+
+export const scheduleRun = pgTable(
+  "schedule_run",
+  (t) => ({
+    id: t.text("id").primaryKey(),
+    scheduleId: t
+      .text("schedule_id")
+      .notNull()
+      .references(() => schedule.id, { onDelete: "cascade" }),
+    chatId: t
+      .text("chat_id")
+      .references(() => chat.id, { onDelete: "set null" }),
+    status: t.text("status").notNull().default("pending"), // pending | running | success | failed
+    startedAt: t.timestamp("started_at").notNull().defaultNow(),
+    completedAt: t.timestamp("completed_at"),
+    errorMessage: t.text("error_message"),
+    createdAt: t.timestamp("created_at").notNull().defaultNow(),
+  }),
+  (t) => [
+    index("idx_schedule_run_schedule_id").on(t.scheduleId),
+    index("idx_schedule_run_started_at").on(t.startedAt),
   ],
 );

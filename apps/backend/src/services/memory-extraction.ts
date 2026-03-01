@@ -330,6 +330,7 @@ const findChatsToProcess = async (): Promise<
     .where(
       and(
         inArray(chatTable.workspaceId, workspaceIds),
+        isNull(chatTable.scheduleId), // Exclude scheduled chats
         or(
           eq(chatTable.memoryExtractionStatus, "pending"),
           and(
@@ -378,7 +379,7 @@ const findChatsToProcess = async (): Promise<
 
 /**
  * Processes a batch of chats for memory extraction.
- * This is the main entry point called by the scheduler.
+ * This is the main entry point called by the memory scheduler.
  */
 export const processMemoryExtractionBatch = async (): Promise<void> => {
   logger.info("Starting memory extraction batch");

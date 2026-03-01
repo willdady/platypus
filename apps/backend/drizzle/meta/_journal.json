@@ -99,6 +99,13 @@
       "when": 1771142532538,
       "tag": "0013_rapid_leader",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1772341231697,
+      "tag": "0014_closed_thundra",
+      "breakpoints": true
     }
   ]
 }
