@@ -1,5 +1,6 @@
 @import "tailwindcss";
 @import "tw-animate-css";
+@plugin "@tailwindcss/typography";
 
 /* See https://ai-sdk.dev/elements/components/message */
 @source "../node_modules/streamdown/dist/*.js";

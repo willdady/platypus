@@ -1,4 +1,4 @@
-import { pgTable, index, unique } from "drizzle-orm/pg-core";
+import { pgTable, index, unique, type AnyPgColumn } from "drizzle-orm/pg-core";
 
 // Import and re-export auth schema
 export * from "./auth-schema.ts";
@@ -379,5 +379,82 @@ export const scheduleRun = pgTable(
   (t) => [
     index("idx_schedule_run_schedule_id").on(t.scheduleId),
     index("idx_schedule_run_started_at").on(t.startedAt),
+  ],
+);
+
+// Kanban Board
+
+export const kanbanBoard = pgTable(
+  "kanban_board",
+  (t) => ({
+    id: t.text("id").primaryKey(),
+    workspaceId: t
+      .text("workspace_id")
+      .notNull()
+      .references(() => workspace.id, { onDelete: "cascade" }),
+    name: t.text("name").notNull(),
+    description: t.text("description"),
+    labels: t
+      .jsonb("labels")
+      .$type<{ id: string; name: string; color: string }[]>()
+      .notNull()
+      .default([]),
+    createdAt: t.timestamp("created_at").notNull().defaultNow(),
+    updatedAt: t.timestamp("updated_at").notNull().defaultNow(),
+  }),
+  (t) => [
+    index("idx_kanban_board_workspace_id").on(t.workspaceId),
+    unique("unique_kanban_board_name_workspace").on(t.workspaceId, t.name),
+  ],
+);
+
+export const kanbanColumn = pgTable(
+  "kanban_column",
+  (t) => ({
+    id: t.text("id").primaryKey(),
+    boardId: t
+      .text("board_id")
+      .notNull()
+      .references(() => kanbanBoard.id, { onDelete: "cascade" }),
+    name: t.text("name").notNull(),
+    position: t.real("position").notNull(),
+    createdAt: t.timestamp("created_at").notNull().defaultNow(),
+    updatedAt: t.timestamp("updated_at").notNull().defaultNow(),
+  }),
+  (t) => [index("idx_kanban_column_board_id").on(t.boardId)],
+);
+
+
+export const kanbanCard = pgTable(
+  "kanban_card",
+  (t) => ({
+    id: t.text("id").primaryKey(),
+    columnId: t
+      .text("column_id")
+      .notNull()
+      .references(() => kanbanColumn.id, { onDelete: "cascade" }),
+    title: t.text("title").notNull(),
+    body: t.text("body"),
+    labelIds: t.jsonb("label_ids").$type<string[]>().notNull().default([]),
+    position: t.real("position").notNull(),
+    createdByUserId: t
+      .text("created_by_user_id")
+      .references(() => user.id, { onDelete: "set null" }),
+    createdByAgentId: t
+      .text("created_by_agent_id")
+      .references(() => agent.id, { onDelete: "set null" }),
+    lastEditedByUserId: t
+      .text("last_edited_by_user_id")
+      .references(() => user.id, { onDelete: "set null" }),
+    lastEditedByAgentId: t
+      .text("last_edited_by_agent_id")
+      .references(() => agent.id, { onDelete: "set null" }),
+    createdAt: t.timestamp("created_at").notNull().defaultNow(),
+    updatedAt: t.timestamp("updated_at").notNull().defaultNow(),
+  }),
+  (t) => [
+    index("idx_kanban_card_column_id").on(t.columnId),
+    index("idx_kanban_card_label_ids").using("gin", t.labelIds),
+    index("idx_kanban_card_column_position").on(t.columnId, t.position),
   ],
 );

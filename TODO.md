@@ -72,4 +72,9 @@ A user may provider general context about themselves ("I'm a 40 year old white m
 [x] Add built-in memory tool. Memory should be per-agent. Consider a workspace scoped memory tool also?
 [x] Bug: Global Context has an icon but Workspace Contexts does not
 [x] Tags are currently not very useful. There should be a way to filter chats by tags.
+[ ] Bug: layout broken when columns are wider than the available screen space. Horizontal scroll not quite right.
+[ ] Edit card dialog needs a lot of improvement. When clicking the title or description UI changes to edit fields but there's no way to switch back?
+[ ] Might be useful to allow adding comments to cards? Might be useful for agents to add commentary related to task progress?
+[ ] Edit board form needs work. Need color picker component. Save button should comes before the labels, probably because label are their own table? Do they really need to be?
+[ ] Allow setting avatars for agents
 [ ] It should be possible to disable sign-ups (via an environment variable?)

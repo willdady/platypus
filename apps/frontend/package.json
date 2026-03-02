@@ -16,6 +16,9 @@
   },
   "dependencies": {
     "@ai-sdk/react": "^3.0.88",
+    "@dnd-kit/core": "^6.3.1",
+    "@dnd-kit/sortable": "^10.0.0",
+    "@dnd-kit/utilities": "^3.2.2",
     "@icons-pack/react-simple-icons": "^13.11.2",
     "@platypus/backend": "workspace:*",
     "@platypus/schemas": "workspace:*",
@@ -35,6 +38,7 @@
     "@radix-ui/react-tooltip": "^1.2.8",
     "@radix-ui/react-use-controllable-state": "^1.2.2",
     "@shikijs/transformers": "^3.22.0",
+    "@tailwindcss/typography": "^0.5.19",
     "ai": "^6.0.86",
     "better-auth": "^1.4.18",
     "class-variance-authority": "^0.7.1",

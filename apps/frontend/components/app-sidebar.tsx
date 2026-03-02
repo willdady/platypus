@@ -56,7 +56,6 @@ import {
   ClockFading,
   CalendarDays,
   ArrowLeftRight,
-  Timer,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Field, FieldLabel, FieldError } from "@/components/ui/field";
@@ -306,11 +305,6 @@ export function AppSidebar({
 
   const footerItems = [
     {
-      title: "Schedules",
-      url: `/${orgId}/workspace/${workspaceId}/schedules`,
-      icon: Timer,
-    },
-    {
       title: "Settings",
       url: `/${orgId}/workspace/${workspaceId}/settings`,
       icon: Settings,
@@ -427,11 +421,11 @@ export function AppSidebar({
                             >
                               {chat.isPinned ? (
                                 <>
-                                  <PinOff className="mr-2 h-4 w-4" /> Unpin
+                                  <PinOff className="h-4 w-4" /> Unpin
                                 </>
                               ) : (
                                 <>
-                                  <Pin className="mr-2 h-4 w-4" /> Pin
+                                  <Pin className="h-4 w-4" /> Pin
                                 </>
                               )}
                             </DropdownMenuItem>
@@ -444,13 +438,13 @@ export function AppSidebar({
                                 setRenameValidationErrors({});
                               }}
                             >
-                              <Pencil className="mr-2 h-4 w-4" /> Edit
+                              <Pencil className="h-4 w-4" /> Edit
                             </DropdownMenuItem>
                             <DropdownMenuItem
                               className="cursor-pointer"
                               onSelect={() => setDeleteChatId(chat.id)}
                             >
-                              <Trash2 className="mr-2 h-4 w-4" /> Delete
+                              <Trash2 className="h-4 w-4" /> Delete
                             </DropdownMenuItem>
                             {chat.tags && chat.tags.length > 0 && (
                               <>
