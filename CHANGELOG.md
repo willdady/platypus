@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.34.0](https://github.com/willdady/platypus/compare/v1.33.0...v1.34.0) (2026-03-02)
+
+
+### Features
+
+* add kanban board feature for visual work management ([eff4e56](https://github.com/willdady/platypus/commit/eff4e5613225bedf400b9f3a53eedd8d0e77b968))
+
 ## [1.33.0](https://github.com/willdady/platypus/compare/v1.32.0...v1.33.0) (2026-03-01)
 
 
