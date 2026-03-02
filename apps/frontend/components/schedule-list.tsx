@@ -22,12 +22,12 @@ import {
   Timer,
   Play,
   EllipsisVertical,
-  Pencil,
   Trash2,
   Pause,
   List,
 } from "lucide-react";
 import { type Schedule } from "@platypus/schemas";
+import useSWR from "swr";
 import { fetcher, joinUrl } from "@/lib/utils";
 import Link from "next/link";
 import { useBackendUrl } from "@/app/client-context";
@@ -36,19 +36,13 @@ import { format } from "date-fns";
 import { describeSchedule } from "@/lib/cron-utils";
 import { toast } from "sonner";
 
-interface ScheduleListProps {
-  orgId: string;
-  workspaceId: string;
-  schedules: Schedule[];
-  onMutate: () => void;
-}
-
 export const ScheduleList = ({
   orgId,
   workspaceId,
-  schedules,
-  onMutate,
-}: ScheduleListProps) => {
+}: {
+  orgId: string;
+  workspaceId: string;
+}) => {
   const { user } = useAuth();
   const backendUrl = useBackendUrl();
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -60,6 +54,24 @@ export const ScheduleList = ({
   );
   const [isToggling, setIsToggling] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+
+  const {
+    data: schedulesData,
+    isLoading,
+    mutate,
+  } = useSWR<{
+    results: Schedule[];
+  }>(
+    backendUrl && user
+      ? joinUrl(
+          backendUrl,
+          `/organizations/${orgId}/workspaces/${workspaceId}/schedules`,
+        )
+      : null,
+    fetcher,
+  );
+
+  const schedules = schedulesData?.results || [];
 
   const handleDeleteClick = (schedule: Schedule) => {
     setScheduleToDelete(schedule);
@@ -83,7 +95,7 @@ export const ScheduleList = ({
       );
 
       if (response.ok) {
-        onMutate();
+        mutate();
         setDeleteDialogOpen(false);
         setScheduleToDelete(null);
       }
@@ -118,7 +130,7 @@ export const ScheduleList = ({
       );
 
       if (response.ok) {
-        onMutate();
+        mutate();
       }
     } catch (error) {
       toast.error("Failed to toggle schedule");
@@ -127,6 +139,10 @@ export const ScheduleList = ({
       setScheduleToToggle(null);
     }
   };
+
+  if (isLoading) {
+    return <div>Loading...</div>;
+  }
 
   if (!schedules.length) {
     return null;
@@ -137,8 +153,11 @@ export const ScheduleList = ({
       <ul className="grid grid-cols-1 lg:grid-cols-2 grid-rows-1 gap-4">
         {schedules.map((schedule) => (
           <li key={schedule.id}>
-            <Item variant="outline" className="h-full">
-              <ItemContent>
+            <Item variant="outline" className="h-full cursor-pointer" asChild>
+              <Link
+                href={`/${orgId}/workspace/${workspaceId}/schedules/${schedule.id}`}
+              >
+                <ItemContent>
                 <div className="flex items-center gap-2">
                   <ItemTitle>{schedule.name}</ItemTitle>
                   {schedule.isOneOff && (
@@ -184,19 +203,12 @@ export const ScheduleList = ({
                       className="cursor-pointer text-muted-foreground"
                       variant="ghost"
                       size="icon"
+                      onClick={(e) => e.preventDefault()}
                     >
                       <EllipsisVertical className="h-4 w-4" />
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent>
-                    <DropdownMenuItem asChild>
-                      <Link
-                        className="cursor-pointer"
-                        href={`/${orgId}/workspace/${workspaceId}/schedules/${schedule.id}`}
-                      >
-                        <Pencil /> Edit
-                      </Link>
-                    </DropdownMenuItem>
                     <DropdownMenuItem asChild>
                       <Link
                         className="cursor-pointer"
@@ -232,6 +244,7 @@ export const ScheduleList = ({
                   </DropdownMenuContent>
                 </DropdownMenu>
               </ItemActions>
+              </Link>
             </Item>
           </li>
         ))}

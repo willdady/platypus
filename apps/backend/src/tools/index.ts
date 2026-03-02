@@ -80,3 +80,10 @@ registerToolSet("web-fetch", {
     fetchUrl,
   },
 });
+
+registerToolSet("kanban", {
+  name: "Kanban",
+  category: "Productivity",
+  description: "Manage kanban boards in this workspace",
+  tools: {},
+});

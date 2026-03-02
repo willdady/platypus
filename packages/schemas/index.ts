@@ -676,3 +676,134 @@ export const scheduleRunListSchema = z.object({
 });
 
 export type ScheduleRunList = z.infer<typeof scheduleRunListSchema>;
+
+// Kanban Label Colors
+
+export const KANBAN_LABEL_COLORS = [
+  { name: "Red", value: "#ef4444" },
+  { name: "Orange", value: "#f97316" },
+  { name: "Amber", value: "#f59e0b" },
+  { name: "Green", value: "#22c55e" },
+  { name: "Teal", value: "#14b8a6" },
+  { name: "Blue", value: "#3b82f6" },
+  { name: "Indigo", value: "#6366f1" },
+  { name: "Purple", value: "#a855f7" },
+  { name: "Pink", value: "#ec4899" },
+  { name: "Gray", value: "#6b7280" },
+] as const;
+
+// Kanban Label
+
+export const kanbanLabelSchema = z.object({
+  id: z.string(),
+  name: z.string().min(1).max(50),
+  color: z.enum(
+    KANBAN_LABEL_COLORS.map((c) => c.value) as [string, ...string[]],
+  ),
+});
+
+export type KanbanLabel = z.infer<typeof kanbanLabelSchema>;
+
+// Kanban Board
+
+export const kanbanBoardSchema = z.object({
+  id: z.string(),
+  workspaceId: z.string(),
+  name: z.string().min(1).max(100),
+  description: z.string().max(500).nullable().optional(),
+  labels: z.array(kanbanLabelSchema).default([]),
+  createdAt: z.date(),
+  updatedAt: z.date(),
+});
+
+export type KanbanBoard = z.infer<typeof kanbanBoardSchema>;
+
+export const kanbanBoardCreateSchema = kanbanBoardSchema.pick({
+  name: true,
+  description: true,
+  labels: true,
+});
+
+export const kanbanBoardUpdateSchema = kanbanBoardSchema.pick({
+  name: true,
+  description: true,
+  labels: true,
+});
+
+// Kanban Column
+
+export const kanbanColumnSchema = z.object({
+  id: z.string(),
+  boardId: z.string(),
+  name: z.string().min(1).max(100),
+  position: z.number(),
+  createdAt: z.date(),
+  updatedAt: z.date(),
+});
+
+export type KanbanColumn = z.infer<typeof kanbanColumnSchema>;
+
+export const kanbanColumnCreateSchema = kanbanColumnSchema.pick({
+  name: true,
+});
+
+export const kanbanColumnUpdateSchema = kanbanColumnSchema.pick({
+  name: true,
+});
+
+export const kanbanColumnReorderSchema = z.object({
+  columnIds: z.array(z.string()).min(1),
+});
+
+// Kanban Card
+
+export const kanbanCardSchema = z.object({
+  id: z.string(),
+  columnId: z.string(),
+  title: z.string().min(1).max(200),
+  body: z.string().nullable().optional(),
+  labelIds: z.array(z.string()).default([]),
+  position: z.number(),
+  createdByUserId: z.string().nullable().optional(),
+  createdByAgentId: z.string().nullable().optional(),
+  lastEditedByUserId: z.string().nullable().optional(),
+  lastEditedByAgentId: z.string().nullable().optional(),
+  createdByName: z.string().nullable().optional(),
+  lastEditedByName: z.string().nullable().optional(),
+  createdAt: z.date(),
+  updatedAt: z.date(),
+});
+
+export type KanbanCard = z.infer<typeof kanbanCardSchema>;
+
+export const kanbanCardCreateSchema = kanbanCardSchema.pick({
+  title: true,
+  body: true,
+  labelIds: true,
+});
+
+export const kanbanCardUpdateSchema = kanbanCardSchema
+  .pick({
+    title: true,
+    body: true,
+    labelIds: true,
+  })
+  .partial();
+
+export const kanbanCardMoveSchema = z.object({
+  columnId: z.string(),
+  afterCardId: z.string().nullable(),
+});
+
+// Kanban Board State (nested response)
+
+export const kanbanBoardStateSchema = z.object({
+  board: kanbanBoardSchema,
+  columns: z.array(
+    kanbanColumnSchema.extend({
+      cards: z.array(kanbanCardSchema),
+    }),
+  ),
+});
+
+export type KanbanBoardState = z.infer<typeof kanbanBoardStateSchema>;

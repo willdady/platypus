@@ -81,7 +81,7 @@ export default async function WorkspaceLayout({
     <ProtectedRoute requireOrgAccess requireWorkspaceAccess>
       <SidebarProvider>
         <AppSidebar orgId={orgId} workspaceId={workspaceId} />
-        <SidebarInset>
+        <SidebarInset className="min-w-0">
           <header className="flex justify-between p-2">
             <div className="flex items-center gap-2">
               <SidebarTrigger className="cursor-pointer" />
@@ -105,7 +105,7 @@ export default async function WorkspaceLayout({
               <UserMenu />
             </div>
           </header>
-          <div className="h-[calc(100vh-2.75rem)] overflow-y-auto">
+          <div className="h-[calc(100vh-2.75rem)] min-w-0 overflow-y-auto overflow-x-hidden">
             {children}
           </div>
           <CommandMenu orgId={orgId} workspaceId={workspaceId} />

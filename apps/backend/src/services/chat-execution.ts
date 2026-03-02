@@ -221,6 +221,17 @@ export const loadTools = async (
   }
 
   for (const toolSetId of agent.toolSetIds) {
+    // Special handling for dynamic tool sets
+    if (toolSetId === "kanban") {
+      const { createKanbanTools } = await import("../tools/kanban.ts");
+      const kanbanTools = createKanbanTools(
+        workspaceId,
+        agent?.id ?? "unknown",
+      );
+      Object.assign(tools, kanbanTools);
+      continue;
+    }
+
     try {
       // Try to load as static tool set first
       const toolSet = getToolSet(toolSetId);
