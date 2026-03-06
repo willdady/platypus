@@ -6,13 +6,54 @@ import {
   kanbanBoard as kanbanBoardTable,
   kanbanColumn as kanbanColumnTable,
   kanbanCard as kanbanCardTable,
+  kanbanCardComment as kanbanCardCommentTable,
+  agent as agentTable,
 } from "../db/schema.ts";
+import { user } from "../db/auth-schema.ts";
 import { calculateCardPosition } from "../utils/kanban-positioning.ts";
 
 export function createKanbanTools(
   workspaceId: string,
   agentId: string,
 ): Record<string, Tool> {
+  /** Returns true only if the card exists AND belongs to a board in this workspace. */
+  async function verifyCard(cardId: string): Promise<boolean> {
+    const result = await db
+      .select({ id: kanbanCardTable.id })
+      .from(kanbanCardTable)
+      .innerJoin(
+        kanbanColumnTable,
+        eq(kanbanCardTable.columnId, kanbanColumnTable.id),
+      )
+      .innerJoin(
+        kanbanBoardTable,
+        and(
+          eq(kanbanColumnTable.boardId, kanbanBoardTable.id),
+          eq(kanbanBoardTable.workspaceId, workspaceId),
+        ),
+      )
+      .where(eq(kanbanCardTable.id, cardId))
+      .limit(1);
+    return result.length > 0;
+  }
+
+  /** Returns true only if the column exists AND belongs to a board in this workspace. */
+  async function verifyColumn(columnId: string): Promise<boolean> {
+    const result = await db
+      .select({ id: kanbanColumnTable.id })
+      .from(kanbanColumnTable)
+      .innerJoin(
+        kanbanBoardTable,
+        and(
+          eq(kanbanColumnTable.boardId, kanbanBoardTable.id),
+          eq(kanbanBoardTable.workspaceId, workspaceId),
+        ),
+      )
+      .where(eq(kanbanColumnTable.id, columnId))
+      .limit(1);
+    return result.length > 0;
+  }
+
   const listBoards = tool({
     description: "List all kanban boards in the current workspace.",
     inputSchema: z.object({}),
@@ -105,15 +146,15 @@ export function createKanbanTools(
       cardId: z.string().describe("The ID of the card to get"),
     }),
     execute: async ({ cardId }) => {
+      if (!(await verifyCard(cardId))) {
+        return { error: "Card not found" };
+      }
+
       const card = await db
         .select()
         .from(kanbanCardTable)
         .where(eq(kanbanCardTable.id, cardId))
         .limit(1);
-
-      if (card.length === 0) {
-        return { error: "Card not found" };
-      }
 
       return card[0];
     },
@@ -141,6 +182,10 @@ export function createKanbanTools(
     execute: async ({ cardId, columnId, title, body, labelIds }) => {
       // Update existing card
       if (cardId) {
+        if (!(await verifyCard(cardId))) {
+          return { error: "Card not found" };
+        }
+
         const updateData: Record<string, unknown> = {
           lastEditedByAgentId: agentId,
           updatedAt: new Date(),
@@ -164,6 +209,10 @@ export function createKanbanTools(
       // Create new card
       if (!columnId || !title) {
         return { error: "columnId and title are required when creating a new card" };
+      }
+
+      if (!(await verifyColumn(columnId))) {
+        return { error: "Column not found" };
       }
 
       const { nanoid } = await import("nanoid");
@@ -210,6 +259,13 @@ export function createKanbanTools(
         ),
     }),
     execute: async ({ cardId, columnId, afterCardId }) => {
+      if (!(await verifyCard(cardId))) {
+        return { error: "Card not found" };
+      }
+      if (!(await verifyColumn(columnId))) {
+        return { error: "Column not found" };
+      }
+
       const cardsInColumn = await db
         .select()
         .from(kanbanCardTable)
@@ -279,43 +335,96 @@ export function createKanbanTools(
       cardId: z.string().describe("The card ID to delete"),
     }),
     execute: async ({ cardId }) => {
-      // Verify card belongs to a board in this workspace
-      const cardRecord = await db
-        .select({ columnId: kanbanCardTable.columnId })
-        .from(kanbanCardTable)
-        .where(eq(kanbanCardTable.id, cardId))
-        .limit(1);
-
-      if (cardRecord.length === 0) {
+      if (!(await verifyCard(cardId))) {
         return { error: "Card not found" };
-      }
-
-      const columnRecord = await db
-        .select({ boardId: kanbanColumnTable.boardId })
-        .from(kanbanColumnTable)
-        .where(eq(kanbanColumnTable.id, cardRecord[0].columnId))
-        .limit(1);
-
-      if (columnRecord.length > 0) {
-        const boardRecord = await db
-          .select()
-          .from(kanbanBoardTable)
-          .where(
-            and(
-              eq(kanbanBoardTable.id, columnRecord[0].boardId),
-              eq(kanbanBoardTable.workspaceId, workspaceId),
-            ),
-          )
-          .limit(1);
-
-        if (boardRecord.length === 0) {
-          return { error: "Card does not belong to a board in this workspace" };
-        }
       }
 
       await db.delete(kanbanCardTable).where(eq(kanbanCardTable.id, cardId));
 
       return { success: true };
+    },
+  });
+
+  const listComments = tool({
+    description: "List all comments on a kanban card, ordered oldest first.",
+    inputSchema: z.object({
+      cardId: z.string().describe("The ID of the card to list comments for"),
+    }),
+    execute: async ({ cardId }) => {
+      if (!(await verifyCard(cardId))) {
+        return { error: "Card not found" };
+      }
+
+      const comments = await db
+        .select()
+        .from(kanbanCardCommentTable)
+        .where(eq(kanbanCardCommentTable.cardId, cardId))
+        .orderBy(asc(kanbanCardCommentTable.createdAt));
+
+      const userIds = new Set<string>();
+      const agentIds = new Set<string>();
+      for (const comment of comments) {
+        if (comment.createdByUserId) userIds.add(comment.createdByUserId);
+        if (comment.createdByAgentId) agentIds.add(comment.createdByAgentId);
+      }
+
+      const users =
+        userIds.size > 0
+          ? await db
+              .select({ id: user.id, name: user.name })
+              .from(user)
+              .where(inArray(user.id, Array.from(userIds)))
+          : [];
+      const userMap = new Map(users.map((u) => [u.id, u.name]));
+
+      const agents =
+        agentIds.size > 0
+          ? await db
+              .select({ id: agentTable.id, name: agentTable.name })
+              .from(agentTable)
+              .where(inArray(agentTable.id, Array.from(agentIds)))
+          : [];
+      const agentMap = new Map(agents.map((a) => [a.id, a.name]));
+
+      return comments.map((comment) => ({
+        ...comment,
+        createdByName: comment.createdByUserId
+          ? (userMap.get(comment.createdByUserId) ?? null)
+          : comment.createdByAgentId
+            ? (agentMap.get(comment.createdByAgentId) ?? null)
+            : null,
+      }));
+    },
+  });
+
+  const addComment = tool({
+    description: "Add a comment to a kanban card.",
+    inputSchema: z.object({
+      cardId: z.string().describe("The ID of the card to comment on"),
+      body: z.string().min(1).describe("The comment text (supports markdown)"),
+    }),
+    execute: async ({ cardId, body }) => {
+      if (!(await verifyCard(cardId))) {
+        return { error: "Card not found" };
+      }
+
+      const { nanoid } = await import("nanoid");
+      const id = nanoid();
+      const now = new Date();
+
+      const inserted = await db
+        .insert(kanbanCardCommentTable)
+        .values({
+          id,
+          cardId,
+          body,
+          createdByAgentId: agentId,
+          createdAt: now,
+          updatedAt: now,
+        })
+        .returning();
+
+      return inserted[0];
     },
   });
 
@@ -326,5 +435,7 @@ export function createKanbanTools(
     upsertCard,
     moveCard,
     deleteCard,
+    listComments,
+    addComment,
   };
 }

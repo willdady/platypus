@@ -637,6 +637,9 @@ export function KanbanBoard({
         onOpenChange={setDialogOpen}
         onSave={handleCardSave}
         onDelete={handleCardDelete}
+        orgId={orgId}
+        workspaceId={workspaceId}
+        boardId={boardId}
       />
     </div>
   );

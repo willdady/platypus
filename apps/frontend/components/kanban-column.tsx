@@ -88,7 +88,6 @@ const KanbanColumnComponentInner = function KanbanColumnComponent({
             </DropdownMenuItem>
             <DropdownMenuItem
               onSelect={() => onDeleteColumn(column.id, hasCards)}
-              className="text-destructive hover:text-destructive focus:text-destructive"
             >
               <Trash2 className="h-4 w-4" />Delete
             </DropdownMenuItem>

@@ -636,4 +636,213 @@ describe("Kanban Routes", () => {
       expect(res.status).toBe(404);
     });
   });
+
+  // Card comments — shared constants
+  const cardId = "card-1";
+  const commentId = "comment-1";
+  const commentsUrl = `${baseUrl}/${boardId}/cards/${cardId}/comments`;
+
+  // A comment with null attribution avoids user/agent name-resolution queries
+  const mockComment = {
+    id: commentId,
+    cardId,
+    body: "Test comment",
+    createdByUserId: null,
+    createdByAgentId: null,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  };
+
+  describe("GET /:boardId/cards/:cardId/comments", () => {
+    it("should return 401 if not authenticated", async () => {
+      mockNoSession();
+      const res = await app.request(commentsUrl);
+      expect(res.status).toBe(401);
+    });
+
+    it("should return 404 if card not found", async () => {
+      mockSession();
+      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
+      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]); // requireWorkspaceAccess
+      mockDb.limit.mockResolvedValueOnce([]); // card verification → not found
+
+      const res = await app.request(commentsUrl);
+      expect(res.status).toBe(404);
+    });
+
+    it("should return comments for card with createdByName resolved", async () => {
+      mockSession();
+      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
+      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]); // requireWorkspaceAccess
+      mockDb.limit.mockResolvedValueOnce([{ id: cardId }]); // card verification → found
+      mockDb.orderBy.mockResolvedValueOnce([mockComment]); // comments query
+
+      const res = await app.request(commentsUrl);
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.results).toHaveLength(1);
+      expect(body.results[0].body).toBe("Test comment");
+      expect(body.results[0].createdByName).toBeNull();
+    });
+
+    it("should return empty results when card has no comments", async () => {
+      mockSession();
+      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
+      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]); // requireWorkspaceAccess
+      mockDb.limit.mockResolvedValueOnce([{ id: cardId }]); // card found
+      mockDb.orderBy.mockResolvedValueOnce([]); // no comments
+
+      const res = await app.request(commentsUrl);
+      expect(res.status).toBe(200);
+      expect((await res.json()).results).toHaveLength(0);
+    });
+  });
+
+  describe("POST /:boardId/cards/:cardId/comments", () => {
+    it("should return 401 if not authenticated", async () => {
+      mockNoSession();
+      const res = await app.request(commentsUrl, {
+        method: "POST",
+        body: JSON.stringify({ body: "A comment" }),
+        headers: { "Content-Type": "application/json" },
+      });
+      expect(res.status).toBe(401);
+    });
+
+    it("should return 404 if card not found", async () => {
+      mockSession();
+      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
+      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]); // requireWorkspaceAccess
+      mockDb.limit.mockResolvedValueOnce([]); // card verification → not found
+
+      const res = await app.request(commentsUrl, {
+        method: "POST",
+        body: JSON.stringify({ body: "A comment" }),
+        headers: { "Content-Type": "application/json" },
+      });
+      expect(res.status).toBe(404);
+    });
+
+    it("should create comment and return 201", async () => {
+      mockSession();
+      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
+      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]); // requireWorkspaceAccess
+      mockDb.limit.mockResolvedValueOnce([{ id: cardId }]); // card found
+      mockDb.returning.mockResolvedValueOnce([mockComment]); // insert
+
+      const res = await app.request(commentsUrl, {
+        method: "POST",
+        body: JSON.stringify({ body: "Test comment" }),
+        headers: { "Content-Type": "application/json" },
+      });
+      expect(res.status).toBe(201);
+      const body = await res.json();
+      expect(body.body).toBe("Test comment");
+      expect(body.id).toBe(commentId);
+    });
+
+    it("should return 400 if body is empty string", async () => {
+      mockSession();
+      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
+      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]); // requireWorkspaceAccess
+
+      const res = await app.request(commentsUrl, {
+        method: "POST",
+        body: JSON.stringify({ body: "" }),
+        headers: { "Content-Type": "application/json" },
+      });
+      expect(res.status).toBe(400);
+    });
+
+    it("should return 400 if body field is missing", async () => {
+      mockSession();
+      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
+      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]); // requireWorkspaceAccess
+
+      const res = await app.request(commentsUrl, {
+        method: "POST",
+        body: JSON.stringify({}),
+        headers: { "Content-Type": "application/json" },
+      });
+      expect(res.status).toBe(400);
+    });
+  });
+
+  describe("PUT /:boardId/cards/:cardId/comments/:commentId", () => {
+    it("should return 401 if not authenticated", async () => {
+      mockNoSession();
+      const res = await app.request(`${commentsUrl}/${commentId}`, {
+        method: "PUT",
+        body: JSON.stringify({ body: "Updated" }),
+        headers: { "Content-Type": "application/json" },
+      });
+      expect(res.status).toBe(401);
+    });
+
+    it("should update comment and return enriched result", async () => {
+      mockSession();
+      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
+      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]); // requireWorkspaceAccess
+
+      const updatedComment = { ...mockComment, body: "Updated" };
+      mockDb.returning.mockResolvedValueOnce([updatedComment]); // update
+
+      const res = await app.request(`${commentsUrl}/${commentId}`, {
+        method: "PUT",
+        body: JSON.stringify({ body: "Updated" }),
+        headers: { "Content-Type": "application/json" },
+      });
+      expect(res.status).toBe(200);
+      expect((await res.json()).body).toBe("Updated");
+    });
+
+    it("should return 404 if comment not found", async () => {
+      mockSession();
+      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
+      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]); // requireWorkspaceAccess
+      mockDb.returning.mockResolvedValueOnce([]); // not found
+
+      const res = await app.request(`${commentsUrl}/${commentId}`, {
+        method: "PUT",
+        body: JSON.stringify({ body: "Updated" }),
+        headers: { "Content-Type": "application/json" },
+      });
+      expect(res.status).toBe(404);
+    });
+  });
+
+  describe("DELETE /:boardId/cards/:cardId/comments/:commentId", () => {
+    it("should return 401 if not authenticated", async () => {
+      mockNoSession();
+      const res = await app.request(`${commentsUrl}/${commentId}`, {
+        method: "DELETE",
+      });
+      expect(res.status).toBe(401);
+    });
+
+    it("should delete comment and return success", async () => {
+      mockSession();
+      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
+      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]); // requireWorkspaceAccess
+      mockDb.returning.mockResolvedValueOnce([{ id: commentId }]); // delete
+
+      const res = await app.request(`${commentsUrl}/${commentId}`, {
+        method: "DELETE",
+      });
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({ success: true });
+    });
+
+    it("should return 404 if comment not found", async () => {
+      mockSession();
+      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
+      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]); // requireWorkspaceAccess
+      mockDb.returning.mockResolvedValueOnce([]); // not found
+
+      const res = await app.request(`${commentsUrl}/${commentId}`, {
+        method: "DELETE",
+      });
+      expect(res.status).toBe(404);
+    });
+  });
 });

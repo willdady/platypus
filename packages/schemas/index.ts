@@ -770,6 +770,7 @@ export const kanbanCardSchema = z.object({
   lastEditedByAgentId: z.string().nullable().optional(),
   createdByName: z.string().nullable().optional(),
   lastEditedByName: z.string().nullable().optional(),
+  commentCount: z.number().int().default(0),
   createdAt: z.date(),
   updatedAt: z.date(),
 });
@@ -794,6 +795,29 @@ export const kanbanCardMoveSchema = z.object({
   columnId: z.string(),
   afterCardId: z.string().nullable(),
 });
+
+// Kanban Card Comment
+
+export const kanbanCardCommentSchema = z.object({
+  id: z.string(),
+  cardId: z.string(),
+  body: z.string().min(1),
+  createdByUserId: z.string().nullable().optional(),
+  createdByAgentId: z.string().nullable().optional(),
+  createdByName: z.string().nullable().optional(),
+  createdAt: z.date(),
+  updatedAt: z.date(),
+});
+
+export const kanbanCardCommentCreateSchema = kanbanCardCommentSchema.pick({
+  body: true,
+});
+
+export const kanbanCardCommentUpdateSchema = kanbanCardCommentSchema
+  .pick({ body: true })
+  .partial();
+
+export type KanbanCardComment = z.infer<typeof kanbanCardCommentSchema>;
 
 // Kanban Board State (nested response)
 

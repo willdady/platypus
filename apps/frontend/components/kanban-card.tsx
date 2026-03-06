@@ -3,6 +3,7 @@
 import { memo } from "react";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
+import { MessageCircle } from "lucide-react";
 import type { KanbanCard, KanbanLabel } from "@platypus/schemas";
 import { KanbanLabelBadge } from "@/components/kanban-label-badge";
 
@@ -54,6 +55,12 @@ const KanbanCardComponentInner = function KanbanCardComponent({
               color={label.color}
             />
           ))}
+        </div>
+      )}
+      {card.commentCount > 0 && (
+        <div className="flex items-center gap-1 mt-2 text-muted-foreground">
+          <MessageCircle className="size-3.5" />
+          <span className="text-xs">{card.commentCount}</span>
         </div>
       )}
     </div>

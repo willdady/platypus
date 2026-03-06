@@ -458,3 +458,24 @@ export const kanbanCard = pgTable(
     index("idx_kanban_card_column_position").on(t.columnId, t.position),
   ],
 );
+
+export const kanbanCardComment = pgTable(
+  "kanban_card_comment",
+  (t) => ({
+    id: t.text("id").primaryKey(),
+    cardId: t
+      .text("card_id")
+      .notNull()
+      .references(() => kanbanCard.id, { onDelete: "cascade" }),
+    body: t.text("body").notNull(),
+    createdByUserId: t
+      .text("created_by_user_id")
+      .references(() => user.id, { onDelete: "set null" }),
+    createdByAgentId: t
+      .text("created_by_agent_id")
+      .references(() => agent.id, { onDelete: "set null" }),
+    createdAt: t.timestamp("created_at").notNull().defaultNow(),
+    updatedAt: t.timestamp("updated_at").notNull().defaultNow(),
+  }),
+  (t) => [index("idx_kanban_card_comment_card_id").on(t.cardId)],
+);
