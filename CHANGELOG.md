@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.35.0](https://github.com/willdady/platypus/compare/v1.34.0...v1.35.0) (2026-03-07)
+
+
+### Features
+
+* add kanban card comments with agent tool support ([6362598](https://github.com/willdady/platypus/commit/6362598fb08dda1cc5f6209a6758d351c2ab537f))
+
 ## [1.34.0](https://github.com/willdady/platypus/compare/v1.33.0...v1.34.0) (2026-03-02)
 
 
