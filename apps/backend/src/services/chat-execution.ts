@@ -221,21 +221,13 @@ export const loadTools = async (
   }
 
   for (const toolSetId of agent.toolSetIds) {
-    // Special handling for dynamic tool sets
-    if (toolSetId === "kanban") {
-      const { createKanbanTools } = await import("../tools/kanban.ts");
-      const kanbanTools = createKanbanTools(
-        workspaceId,
-        agent.id,
-      );
-      Object.assign(tools, kanbanTools);
-      continue;
-    }
-
     try {
-      // Try to load as static tool set first
       const toolSet = getToolSet(toolSetId);
-      Object.assign(tools, toolSet.tools);
+      const resolvedTools =
+        typeof toolSet.tools === "function"
+          ? toolSet.tools({ workspaceId, agentId: agent.id })
+          : toolSet.tools;
+      Object.assign(tools, resolvedTools);
     } catch (error) {
       // If static tool set not found, try to load as MCP
       const mcpRecord = await db

@@ -26,10 +26,13 @@ tool.get(
       name: toolSet.name,
       category: toolSet.category,
       description: toolSet.description,
-      tools: Object.entries(toolSet.tools).map(([toolId, tool]) => ({
-        id: toolId,
-        description: tool.description || "No description",
-      })),
+      tools:
+        typeof toolSet.tools === "function"
+          ? []
+          : Object.entries(toolSet.tools).map(([toolId, tool]) => ({
+              id: toolId,
+              description: tool.description || "No description",
+            })),
     }));
 
     // Get MCPs

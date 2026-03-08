@@ -23,12 +23,6 @@ import {
   context as contextTable,
 } from "../db/schema.ts";
 import { createLoadSkillTool } from "../tools/skill.ts";
-import {
-  createListAgentsTool,
-  createListSchedulesTool,
-  createScheduleTool,
-  createEditScheduleTool,
-} from "../tools/schedule.ts";
 import { createSubAgentTools } from "../tools/sub-agent.ts";
 import {
   retrieveUserLevelMemories,
@@ -424,12 +418,6 @@ chat.post(
     if (skills.length > 0) {
       tools.loadSkill = createLoadSkillTool(workspaceId);
     }
-
-    // 12b. Inject schedule management tools
-    tools.listAgents = createListAgentsTool(workspaceId);
-    tools.listSchedules = createListSchedulesTool(workspaceId);
-    tools.createSchedule = createScheduleTool(workspaceId);
-    tools.editSchedule = createEditScheduleTool(workspaceId);
 
     // 13. Stream Response
     const { systemPrompt, ...restConfig } = config;

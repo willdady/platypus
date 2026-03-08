@@ -6,13 +6,19 @@ import {
 } from "./math.ts";
 import { getCurrentTime, convertTimezone } from "./time.ts";
 import { fetchUrl } from "./fetch.ts";
+import { createKanbanTools } from "./kanban.ts";
+import { createScheduleTools } from "./schedule.ts";
+
+export type ToolSetContext = { workspaceId: string; agentId: string };
 
 type ToolSet = {
   id: string;
   name: string;
   category: string;
   description?: string;
-  tools: { [toolId: string]: Tool<any, any> };
+  tools:
+    | { [toolId: string]: Tool<any, any> }
+    | ((context: ToolSetContext) => Record<string, Tool>);
 };
 
 const TOOL_SETS_REGISTRY: {
@@ -85,5 +91,13 @@ registerToolSet("kanban", {
   name: "Kanban",
   category: "Productivity",
   description: "Manage kanban boards in this workspace",
-  tools: {},
+  tools: ({ workspaceId, agentId }) => createKanbanTools(workspaceId, agentId),
+});
+
+registerToolSet("schedule", {
+  name: "Schedule",
+  category: "Automation",
+  description:
+    "Manage scheduled tasks including listing agents, creating, editing, and viewing schedules",
+  tools: ({ workspaceId }) => createScheduleTools(workspaceId),
 });

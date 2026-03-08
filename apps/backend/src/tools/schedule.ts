@@ -1,4 +1,4 @@
-import { tool } from "ai";
+import { tool, type Tool } from "ai";
 import { z } from "zod";
 import { nanoid } from "nanoid";
 import { and, desc, eq } from "drizzle-orm";
@@ -9,9 +9,10 @@ import {
 } from "../db/schema.ts";
 import { validateCronExpression } from "../utils/cron.ts";
 
-// Tool 1: List agents (needed to get agent IDs for createSchedule/editSchedule)
-export const createListAgentsTool = (workspaceId: string) =>
-  tool({
+export function createScheduleTools(
+  workspaceId: string,
+): Record<string, Tool> {
+  const listAgents = tool({
     description:
       "List all agents available in this workspace. Returns agent IDs, names, and descriptions. Use this to find agent IDs when creating or editing schedules.",
     inputSchema: z.object({}),
@@ -30,9 +31,7 @@ export const createListAgentsTool = (workspaceId: string) =>
     },
   });
 
-// Tool 2: List schedules
-export const createListSchedulesTool = (workspaceId: string) =>
-  tool({
+  const listSchedules = tool({
     description:
       "List all schedules in the current workspace. Use this to see what scheduled tasks exist, their cron expressions, and when they will run next.",
     inputSchema: z.object({
@@ -72,52 +71,62 @@ export const createListSchedulesTool = (workspaceId: string) =>
     },
   });
 
-// Tool 3: Create schedule
-export const createScheduleTool = (workspaceId: string) =>
-  tool({
+  const upsertSchedule = tool({
     description:
-      "Create a new schedule that runs an agent at specified times. Requires an agent ID, instruction, and cron expression.",
+      "Create a new schedule or update an existing schedule. If scheduleId is provided, updates the existing schedule. If scheduleId is not provided, creates a new schedule (requires name, agentId, instruction, and cronExpression).",
     inputSchema: z.object({
+      scheduleId: z
+        .string()
+        .optional()
+        .describe(
+          "The schedule ID to update. If not provided, a new schedule will be created.",
+        ),
       name: z
         .string()
         .min(1)
         .max(100)
-        .describe("A descriptive name for the schedule"),
+        .optional()
+        .describe(
+          "A descriptive name for the schedule (required when creating)",
+        ),
       agentId: z
         .string()
+        .optional()
         .describe(
-          "The ID of the agent to run (use list-agents to find available IDs)",
+          "The ID of the agent to run (required when creating, use list-agents to find available IDs)",
         ),
       instruction: z
         .string()
         .min(1)
         .max(10000)
+        .optional()
         .describe(
-          "The instruction/prompt to send to the agent when the schedule runs",
+          "The instruction/prompt to send to the agent when the schedule runs (required when creating)",
         ),
       cronExpression: z
         .string()
         .min(1)
-        .describe("Cron expression (e.g., '0 9 * * *' for daily at 9 AM UTC)"),
+        .optional()
+        .describe(
+          "Cron expression (required when creating, e.g., '0 9 * * *' for daily at 9 AM UTC)",
+        ),
       description: z
         .string()
         .max(500)
+        .nullable()
         .optional()
-        .describe("Optional description of what this schedule does"),
+        .describe("Optional description of what this schedule does (null to clear)"),
       timezone: z
         .string()
         .optional()
-        .default("UTC")
-        .describe("IANA timezone (e.g., 'America/New_York', 'Europe/London')"),
+        .describe("IANA timezone (e.g., 'America/New_York', 'Europe/London'). Defaults to 'UTC' when creating."),
       isOneOff: z
         .boolean()
         .optional()
-        .default(false)
         .describe("If true, runs once then automatically disables"),
       enabled: z
         .boolean()
         .optional()
-        .default(true)
         .describe("Whether the schedule is enabled"),
       maxChatsToKeep: z
         .number()
@@ -125,23 +134,123 @@ export const createScheduleTool = (workspaceId: string) =>
         .min(1)
         .max(1000)
         .optional()
-        .default(50)
         .describe("Maximum number of chat histories to retain"),
     }),
     execute: async (params) => {
-      const {
-        name,
-        agentId,
-        instruction,
-        cronExpression,
-        description,
-        timezone = "UTC",
-        isOneOff = false,
-        enabled = true,
-        maxChatsToKeep = 50,
-      } = params;
+      const { scheduleId, ...fields } = params;
 
-      // 1. Verify agent exists in workspace
+      // Update existing schedule
+      if (scheduleId) {
+        const existing = await db
+          .select()
+          .from(scheduleTable)
+          .where(
+            and(
+              eq(scheduleTable.id, scheduleId),
+              eq(scheduleTable.workspaceId, workspaceId),
+            ),
+          )
+          .limit(1);
+
+        if (existing.length === 0) {
+          return {
+            success: false,
+            error:
+              "Schedule not found in this workspace. Use list-schedules to find valid IDs.",
+          };
+        }
+
+        const currentSchedule = existing[0];
+
+        // If agentId is being changed, verify new agent exists
+        if (fields.agentId && fields.agentId !== currentSchedule.agentId) {
+          const agentRecord = await db
+            .select()
+            .from(agentTable)
+            .where(
+              and(
+                eq(agentTable.id, fields.agentId),
+                eq(agentTable.workspaceId, workspaceId),
+              ),
+            )
+            .limit(1);
+
+          if (agentRecord.length === 0) {
+            return {
+              success: false,
+              error:
+                "Agent not found in this workspace. Use list-agents to find valid agent IDs.",
+            };
+          }
+        }
+
+        // Recompute nextRunAt if cron expression or timezone changed
+        let nextRunAt: Date | null = null;
+        const cronExpression =
+          fields.cronExpression ?? currentSchedule.cronExpression;
+        const timezone = fields.timezone ?? currentSchedule.timezone;
+
+        if (fields.cronExpression || fields.timezone) {
+          nextRunAt = validateCronExpression(cronExpression, timezone);
+          if (!nextRunAt) {
+            return {
+              success: false,
+              error:
+                "Invalid cron expression or timezone. Example: '0 9 * * *' for daily at 9 AM.",
+            };
+          }
+        }
+
+        // Build update object with only provided fields
+        const updateData: Record<string, unknown> = {
+          updatedAt: new Date(),
+        };
+
+        if (fields.name !== undefined) updateData.name = fields.name;
+        if (fields.agentId !== undefined) updateData.agentId = fields.agentId;
+        if (fields.instruction !== undefined)
+          updateData.instruction = fields.instruction;
+        if (fields.cronExpression !== undefined)
+          updateData.cronExpression = fields.cronExpression;
+        if (fields.description !== undefined)
+          updateData.description = fields.description;
+        if (fields.timezone !== undefined)
+          updateData.timezone = fields.timezone;
+        if (fields.isOneOff !== undefined)
+          updateData.isOneOff = fields.isOneOff;
+        if (fields.enabled !== undefined) updateData.enabled = fields.enabled;
+        if (fields.maxChatsToKeep !== undefined)
+          updateData.maxChatsToKeep = fields.maxChatsToKeep;
+        if (nextRunAt) updateData.nextRunAt = nextRunAt;
+
+        const record = await db
+          .update(scheduleTable)
+          .set(updateData)
+          .where(eq(scheduleTable.id, scheduleId))
+          .returning();
+
+        return {
+          success: true,
+          schedule: record[0],
+        };
+      }
+
+      // Create new schedule — validate required fields
+      const { name, agentId, instruction, cronExpression } = fields;
+
+      if (!name || !agentId || !instruction || !cronExpression) {
+        return {
+          error:
+            "name, agentId, instruction, and cronExpression are required when creating a new schedule",
+        };
+      }
+
+      const timezone = fields.timezone ?? "UTC";
+      const isOneOff = fields.isOneOff ?? false;
+      const enabled = fields.enabled ?? true;
+      const maxChatsToKeep = fields.maxChatsToKeep ?? 50;
+
+      // Verify agent exists in workspace
       const agentRecord = await db
         .select()
         .from(agentTable)
@@ -161,7 +270,7 @@ export const createScheduleTool = (workspaceId: string) =>
         };
       }
 
-      // 2. Validate cron expression
+      // Validate cron expression
       const nextRunAt = validateCronExpression(cronExpression, timezone);
       if (!nextRunAt) {
         return {
@@ -171,7 +280,6 @@ export const createScheduleTool = (workspaceId: string) =>
         };
       }
 
-      // 3. Insert schedule
       const id = nanoid();
       const now = new Date();
 
@@ -182,7 +290,7 @@ export const createScheduleTool = (workspaceId: string) =>
           workspaceId,
           agentId,
           name,
-          description: description || null,
+          description: fields.description || null,
           instruction,
           cronExpression,
           timezone,
@@ -202,151 +310,38 @@ export const createScheduleTool = (workspaceId: string) =>
     },
   });
 
-// Tool 4: Edit schedule
-export const createEditScheduleTool = (workspaceId: string) =>
-  tool({
-    description:
-      "Update an existing schedule's properties. Provide the schedule ID and the fields to update.",
+  const deleteSchedule = tool({
+    description: "Delete a schedule.",
     inputSchema: z.object({
       scheduleId: z
         .string()
         .describe(
-          "The ID of the schedule to update (use list-schedules to find IDs)",
+          "The ID of the schedule to delete (use list-schedules to find IDs)",
         ),
-      name: z
-        .string()
-        .min(1)
-        .max(100)
-        .optional()
-        .describe("New name for the schedule"),
-      agentId: z
-        .string()
-        .optional()
-        .describe("New agent ID (use list-agents to find available IDs)"),
-      instruction: z
-        .string()
-        .min(1)
-        .max(10000)
-        .optional()
-        .describe("New instruction/prompt"),
-      cronExpression: z
-        .string()
-        .min(1)
-        .optional()
-        .describe("New cron expression"),
-      description: z
-        .string()
-        .max(500)
-        .nullable()
-        .optional()
-        .describe("New description (null to clear)"),
-      timezone: z.string().optional().describe("New IANA timezone"),
-      isOneOff: z.boolean().optional().describe("New one-off setting"),
-      enabled: z.boolean().optional().describe("New enabled status"),
-      maxChatsToKeep: z
-        .number()
-        .int()
-        .min(1)
-        .max(1000)
-        .optional()
-        .describe("New max chats to keep"),
     }),
-    execute: async (params) => {
-      const { scheduleId, ...updates } = params;
-
-      // 1. Verify schedule exists in workspace
-      const existing = await db
-        .select()
-        .from(scheduleTable)
+    execute: async ({ scheduleId }) => {
+      const result = await db
+        .delete(scheduleTable)
         .where(
           and(
             eq(scheduleTable.id, scheduleId),
             eq(scheduleTable.workspaceId, workspaceId),
           ),
         )
-        .limit(1);
+        .returning({ id: scheduleTable.id });
 
-      if (existing.length === 0) {
-        return {
-          success: false,
-          error:
-            "Schedule not found in this workspace. Use list-schedules to find valid IDs.",
-        };
+      if (result.length === 0) {
+        return { error: "Schedule not found" };
       }
 
-      const currentSchedule = existing[0];
-
-      // 2. If agentId is being changed, verify new agent exists
-      if (updates.agentId && updates.agentId !== currentSchedule.agentId) {
-        const agentRecord = await db
-          .select()
-          .from(agentTable)
-          .where(
-            and(
-              eq(agentTable.id, updates.agentId),
-              eq(agentTable.workspaceId, workspaceId),
-            ),
-          )
-          .limit(1);
-
-        if (agentRecord.length === 0) {
-          return {
-            success: false,
-            error:
-              "Agent not found in this workspace. Use list-agents to find valid agent IDs.",
-          };
-        }
-      }
-
-      // 3. Recompute nextRunAt if cron expression or timezone changed
-      let nextRunAt: Date | null = null;
-      const cronExpression =
-        updates.cronExpression ?? currentSchedule.cronExpression;
-      const timezone = updates.timezone ?? currentSchedule.timezone;
-
-      if (updates.cronExpression || updates.timezone) {
-        nextRunAt = validateCronExpression(cronExpression, timezone);
-        if (!nextRunAt) {
-          return {
-            success: false,
-            error:
-              "Invalid cron expression or timezone. Example: '0 9 * * *' for daily at 9 AM.",
-          };
-        }
-      }
-
-      // 4. Build update object with only provided fields
-      const updateData: Record<string, unknown> = {
-        updatedAt: new Date(),
-      };
-
-      if (updates.name !== undefined) updateData.name = updates.name;
-      if (updates.agentId !== undefined) updateData.agentId = updates.agentId;
-      if (updates.instruction !== undefined)
-        updateData.instruction = updates.instruction;
-      if (updates.cronExpression !== undefined)
-        updateData.cronExpression = updates.cronExpression;
-      if (updates.description !== undefined)
-        updateData.description = updates.description;
-      if (updates.timezone !== undefined)
-        updateData.timezone = updates.timezone;
-      if (updates.isOneOff !== undefined)
-        updateData.isOneOff = updates.isOneOff;
-      if (updates.enabled !== undefined) updateData.enabled = updates.enabled;
-      if (updates.maxChatsToKeep !== undefined)
-        updateData.maxChatsToKeep = updates.maxChatsToKeep;
-      if (nextRunAt) updateData.nextRunAt = nextRunAt;
-
-      // 5. Update schedule
-      const record = await db
-        .update(scheduleTable)
-        .set(updateData)
-        .where(eq(scheduleTable.id, scheduleId))
-        .returning();
-
-      return {
-        success: true,
-        schedule: record[0],
-      };
+      return { success: true };
     },
   });
+
+  return {
+    listAgents,
+    listSchedules,
+    upsertSchedule,
+    deleteSchedule,
+  };
+}
