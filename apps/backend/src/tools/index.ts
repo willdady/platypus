@@ -1,8 +1,9 @@
 import { type Tool } from "ai";
 import {
-  convertFahrenheitToCelsius,
-  convertCelsiusToFahrenheit,
-  calculateCircleArea,
+  convertTemperature,
+  convertDistance,
+  convertWeight,
+  convertVolume,
 } from "./math.ts";
 import { getCurrentTime, convertTimezone } from "./time.ts";
 import { fetchUrl } from "./fetch.ts";
@@ -53,17 +54,10 @@ registerToolSet("math-conversions", {
   category: "Math",
   description: "Temperature and unit conversions",
   tools: {
-    convertFahrenheitToCelsius,
-    convertCelsiusToFahrenheit,
-  },
-});
-
-registerToolSet("math-geometry", {
-  name: "Math Geometry",
-  category: "Math",
-  description: "Geometric calculations and formulas",
-  tools: {
-    calculateCircleArea,
+    convertTemperature,
+    convertDistance,
+    convertWeight,
+    convertVolume,
   },
 });
 
