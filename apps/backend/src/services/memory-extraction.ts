@@ -16,62 +16,7 @@ import {
 import { memoryExtractionOutputSchema, type Provider } from "@platypus/schemas";
 import { logger } from "../logger.ts";
 import type { PlatypusUIMessage } from "../types.ts";
-
-// Import AI provider factories (same pattern as chat.ts)
-import { createOpenAI } from "@ai-sdk/openai";
-import { createOpenRouter } from "@openrouter/ai-sdk-provider";
-import { createAmazonBedrock } from "@ai-sdk/amazon-bedrock";
-import { createAnthropic } from "@ai-sdk/anthropic";
-import { createGoogleGenerativeAI } from "@ai-sdk/google";
-
-/**
- * Creates a LanguageModel instance based on the provider configuration.
- * (Same pattern as in chat.ts)
- */
-const createModel = (provider: Provider, modelId: string) => {
-  if (provider.providerType === "OpenAI") {
-    const openai = createOpenAI({
-      baseURL: provider.baseUrl ?? undefined,
-      apiKey: provider.apiKey ?? undefined,
-      headers: provider.headers ?? undefined,
-      organization: provider.organization ?? undefined,
-      project: provider.project ?? undefined,
-    });
-    return openai(modelId);
-  } else if (provider.providerType === "OpenRouter") {
-    const openRouter = createOpenRouter({
-      baseURL: provider.baseUrl ?? undefined,
-      apiKey: provider.apiKey ?? undefined,
-      headers: provider.headers ?? undefined,
-      extraBody: provider.extraBody ?? undefined,
-    });
-    return openRouter(modelId);
-  } else if (provider.providerType === "Bedrock") {
-    const bedrock = createAmazonBedrock({
-      baseURL: provider.baseUrl ?? undefined,
-      region: provider.region ?? undefined,
-      apiKey: provider.apiKey ?? undefined,
-      headers: provider.headers ?? undefined,
-    });
-    return bedrock(modelId);
-  } else if (provider.providerType === "Google") {
-    const google = createGoogleGenerativeAI({
-      baseURL: provider.baseUrl ?? undefined,
-      apiKey: provider.apiKey ?? undefined,
-      headers: provider.headers ?? undefined,
-    });
-    return google(modelId);
-  } else if (provider.providerType === "Anthropic") {
-    const anthropic = createAnthropic({
-      baseURL: provider.baseUrl ?? undefined,
-      apiKey: provider.apiKey ?? undefined,
-      headers: provider.headers ?? undefined,
-    });
-    return anthropic(modelId);
-  } else {
-    throw new Error(`Unrecognized provider type '${provider.providerType}'`);
-  }
-};
+import { createModel } from "./chat-execution.ts";
 
 /**
  * Formats conversation messages for the extraction prompt.
@@ -184,7 +129,7 @@ const processChat = async (
   );
 
   // Create the model
-  const model = createModel(
+  const [, model] = createModel(
     provider as Provider,
     provider.memoryExtractionModelId,
   );

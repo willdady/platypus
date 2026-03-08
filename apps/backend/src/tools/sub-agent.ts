@@ -121,7 +121,10 @@ export const createSubAgentTools = async (
     maxSteps?: number | null;
   }>,
   createModelFn: (providerId: string, modelId: string) => Promise<any>,
-  loadToolsFn: (toolSetIds: string[]) => Promise<Record<string, Tool>>,
+  loadToolsFn: (
+    subAgentId: string,
+    toolSetIds: string[],
+  ) => Promise<Record<string, Tool>>,
 ): Promise<Record<string, Tool>> => {
   const tools: Record<string, Tool> = {};
 
@@ -131,7 +134,10 @@ export const createSubAgentTools = async (
       const model = await createModelFn(subAgent.providerId, subAgent.modelId);
 
       // Load the sub-agent's tools
-      const subAgentTools = await loadToolsFn(subAgent.toolSetIds || []);
+      const subAgentTools = await loadToolsFn(
+        subAgent.id,
+        subAgent.toolSetIds || [],
+      );
 
       // Create the tool
       const { toolName, tool } = createSubAgentTool({

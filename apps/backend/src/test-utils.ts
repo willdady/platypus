@@ -27,6 +27,7 @@ const { mockDb, mockAuth } = vi.hoisted(() => {
     "returning",
     "execute",
     "inArray",
+    "groupBy",
   ];
 
   methods.forEach((method) => {
@@ -73,6 +74,7 @@ export const resetMockDb = () => {
     "returning",
     "execute",
     "inArray",
+    "groupBy",
   ];
 
   methods.forEach((method) => {
@@ -106,6 +108,8 @@ vi.mock("drizzle-orm", async () => {
     and: vi.fn((...args) => args.filter(Boolean)), // Return non-null args
     or: vi.fn(),
     inArray: vi.fn(),
+    asc: vi.fn(),
+    count: vi.fn(),
     desc: vi.fn(),
     isNull: vi.fn(),
     sql: sqlMock,

@@ -16,7 +16,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { EllipsisVertical, Trash2 } from "lucide-react";
+import { EllipsisVertical, Pencil, Trash2 } from "lucide-react";
 import { type KanbanBoard } from "@platypus/schemas";
 import useSWR from "swr";
 import { fetcher, joinUrl } from "@/lib/utils";
@@ -122,6 +122,13 @@ export const BoardsList = ({
                       </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent>
+                      <DropdownMenuItem className="cursor-pointer" asChild>
+                        <Link
+                          href={`/${orgId}/workspace/${workspaceId}/boards/${board.id}/settings`}
+                        >
+                          <Pencil /> Edit
+                        </Link>
+                      </DropdownMenuItem>
                       <DropdownMenuItem
                         className="cursor-pointer"
                         onSelect={() => handleDeleteClick(board)}

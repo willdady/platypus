@@ -232,6 +232,7 @@ describe("Kanban Routes", () => {
         },
       ];
       mockDb.orderBy.mockResolvedValueOnce(mockCards); // cards query
+      mockDb.groupBy.mockResolvedValueOnce([]); // comment counts query
 
       const res = await app.request(`${baseUrl}/${boardId}/state`);
       expect(res.status).toBe(200);
