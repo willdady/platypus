@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.37.0](https://github.com/willdady/platypus/compare/v1.36.0...v1.37.0) (2026-03-08)
+
+
+### Features
+
+* **backend:** refactor toolset registration to support factory functions ([a32939b](https://github.com/willdady/platypus/commit/a32939b3f21ca2d30d15d8840c861096de7727e7))
+* **backend:** replace conversion tool pairs with bi-directional tools and remove geometry toolset ([395a3de](https://github.com/willdady/platypus/commit/395a3de9c126991cae5bd022da977689c8d69114))
+* **frontend:** add kanban boards and schedules to command palette ([2b4ed1c](https://github.com/willdady/platypus/commit/2b4ed1ceb0b90c678c8e7dfe787d3736ec3e6f31))
+
 ## [1.36.0](https://github.com/willdady/platypus/compare/v1.35.0...v1.36.0) (2026-03-08)
 
 
