@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.36.0](https://github.com/willdady/platypus/compare/v1.35.0...v1.36.0) (2026-03-08)
+
+
+### Features
+
+* **backend:** replace addComment with upsertComment and add deleteComment kanban tools ([6ccf1c2](https://github.com/willdady/platypus/commit/6ccf1c25b3d60c8a670e8a8c428db201f5faacee))
+
+
+### Bug Fixes
+
+* **backend:** pass correct agent ID when loading sub-agent tools ([6829a94](https://github.com/willdady/platypus/commit/6829a94804b01ad916d246bb6b85b3fc4da6a34d))
+
 ## [1.35.0](https://github.com/willdady/platypus/compare/v1.34.0...v1.35.0) (2026-03-07)
 
 
