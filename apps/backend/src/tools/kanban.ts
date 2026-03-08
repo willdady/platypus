@@ -54,12 +54,43 @@ export function createKanbanTools(
     return result.length > 0;
   }
 
+  /** Returns true only if the comment exists AND belongs to a card on a board in this workspace. */
+  async function verifyComment(commentId: string): Promise<boolean> {
+    const result = await db
+      .select({ id: kanbanCardCommentTable.id })
+      .from(kanbanCardCommentTable)
+      .innerJoin(
+        kanbanCardTable,
+        eq(kanbanCardCommentTable.cardId, kanbanCardTable.id),
+      )
+      .innerJoin(
+        kanbanColumnTable,
+        eq(kanbanCardTable.columnId, kanbanColumnTable.id),
+      )
+      .innerJoin(
+        kanbanBoardTable,
+        and(
+          eq(kanbanColumnTable.boardId, kanbanBoardTable.id),
+          eq(kanbanBoardTable.workspaceId, workspaceId),
+        ),
+      )
+      .where(eq(kanbanCardCommentTable.id, commentId))
+      .limit(1);
+    return result.length > 0;
+  }
+
   const listBoards = tool({
     description: "List all kanban boards in the current workspace.",
     inputSchema: z.object({}),
     execute: async () => {
       const boards = await db
-        .select()
+        .select({
+          id: kanbanBoardTable.id,
+          name: kanbanBoardTable.name,
+          description: kanbanBoardTable.description,
+          labels: kanbanBoardTable.labels,
+          createdAt: kanbanBoardTable.createdAt,
+        })
         .from(kanbanBoardTable)
         .where(eq(kanbanBoardTable.workspaceId, workspaceId));
       return boards;
@@ -397,13 +428,41 @@ export function createKanbanTools(
     },
   });
 
-  const addComment = tool({
-    description: "Add a comment to a kanban card.",
+  const upsertComment = tool({
+    description:
+      "Create a new comment or update an existing comment. If commentId is provided, updates the existing comment. If commentId is not provided, creates a new comment (requires cardId and body).",
     inputSchema: z.object({
-      cardId: z.string().describe("The ID of the card to comment on"),
+      commentId: z
+        .string()
+        .optional()
+        .describe("The comment ID to update. If not provided, a new comment will be created."),
+      cardId: z
+        .string()
+        .optional()
+        .describe("The card ID to comment on (required when creating a new comment)"),
       body: z.string().min(1).describe("The comment text (supports markdown)"),
     }),
-    execute: async ({ cardId, body }) => {
+    execute: async ({ commentId, cardId, body }) => {
+      // Update existing comment
+      if (commentId) {
+        if (!(await verifyComment(commentId))) {
+          return { error: "Comment not found" };
+        }
+
+        const record = await db
+          .update(kanbanCardCommentTable)
+          .set({ body, updatedAt: new Date() })
+          .where(eq(kanbanCardCommentTable.id, commentId))
+          .returning();
+
+        return record[0];
+      }
+
+      // Create new comment
+      if (!cardId) {
+        return { error: "cardId is required when creating a new comment" };
+      }
+
       if (!(await verifyCard(cardId))) {
         return { error: "Card not found" };
       }
@@ -428,6 +487,24 @@ export function createKanbanTools(
     },
   });
 
+  const deleteComment = tool({
+    description: "Delete a kanban card comment.",
+    inputSchema: z.object({
+      commentId: z.string().describe("The comment ID to delete"),
+    }),
+    execute: async ({ commentId }) => {
+      if (!(await verifyComment(commentId))) {
+        return { error: "Comment not found" };
+      }
+
+      await db
+        .delete(kanbanCardCommentTable)
+        .where(eq(kanbanCardCommentTable.id, commentId));
+
+      return { success: true };
+    },
+  });
+
   return {
     listBoards,
     getBoardState,
@@ -436,6 +513,7 @@ export function createKanbanTools(
     moveCard,
     deleteCard,
     listComments,
-    addComment,
+    upsertComment,
+    deleteComment,
   };
 }
