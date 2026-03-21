@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.38.0](https://github.com/willdady/platypus/compare/v1.37.0...v1.38.0) (2026-03-21)
+
+
+### Features
+
+* **frontend:** improve tag cloud UX on workspace home page ([c9af11c](https://github.com/willdady/platypus/commit/c9af11ca6fcdee0b4999322086187a83fe8148fe))
+* **skills:** move agent-skill association logic to backend ([117d49a](https://github.com/willdady/platypus/commit/117d49a96d0a1b26131d92aaba7c03e6d1b9af4f))
+
+
+### Bug Fixes
+
+* **frontend:** clear tag filter when edited chat no longer matches active filter ([0208181](https://github.com/willdady/platypus/commit/0208181ff98705962924d3cce69a5353497efa46))
+* **frontend:** revalidate SWR cache after provider update to prevent stale form data ([a1b7f2b](https://github.com/willdady/platypus/commit/a1b7f2b1625a005859e8baa7f25d3195460fd2f9))
+
 ## [1.37.0](https://github.com/willdady/platypus/compare/v1.36.0...v1.37.0) (2026-03-08)
 
 
