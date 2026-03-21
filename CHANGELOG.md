@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.39.0](https://github.com/willdady/platypus/compare/v1.38.0...v1.39.0) (2026-03-21)
+
+
+### Features
+
+* **agents:** add avatar upload support ([09fc4bb](https://github.com/willdady/platypus/commit/09fc4bbbe3034b5c746e7123d2de85174a1fcea3))
+* **frontend:** add board switcher dropdown to Kanban board header ([5a0bfc1](https://github.com/willdady/platypus/commit/5a0bfc13532824bc2923cb2f9589055a2d52e7da))
+
 ## [1.38.0](https://github.com/willdady/platypus/compare/v1.37.0...v1.38.0) (2026-03-21)
 
 
