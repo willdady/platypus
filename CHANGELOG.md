@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.39.1](https://github.com/willdady/platypus/compare/v1.39.0...v1.39.1) (2026-03-21)
+
+
+### Bug Fixes
+
+* **frontend:** remove invalid props spread on Streamdown in ReasoningContent ([15a184d](https://github.com/willdady/platypus/commit/15a184df432ef7385dde445a425697a42d454282))
+
 ## [1.39.0](https://github.com/willdady/platypus/compare/v1.38.0...v1.39.0) (2026-03-21)
 
 
