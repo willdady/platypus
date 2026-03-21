@@ -33,7 +33,7 @@ import { useAuth } from "@/components/auth-provider";
 import { KanbanColumnComponent } from "@/components/kanban-column";
 import { KanbanCardComponent } from "@/components/kanban-card";
 import { KanbanCardDialog } from "@/components/kanban-card-dialog";
-import { Plus, Settings } from "lucide-react";
+import { Plus, Settings, ChevronDown, KanbanSquare } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -44,6 +44,13 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+  DropdownMenuSeparator,
+} from "@/components/ui/dropdown-menu";
 
 type ColumnWithCards = KanbanColumn & { cards: KanbanCard[] };
 
@@ -68,6 +75,18 @@ export function KanbanBoard({
     backendUrl && user ? joinUrl(baseUrl, "/state") : null,
     fetcher,
     { refreshInterval: 10000 },
+  );
+
+  const { data: boardsData } = useSWR<{
+    results: { id: string; name: string }[];
+  }>(
+    backendUrl && user
+      ? joinUrl(
+          backendUrl,
+          `/organizations/${orgId}/workspaces/${workspaceId}/boards`,
+        )
+      : null,
+    fetcher,
   );
 
   const [localColumns, setLocalColumns] = useState<ColumnWithCards[] | null>(
@@ -420,7 +439,46 @@ export function KanbanBoard({
     <div className="flex flex-col h-full min-w-0 overflow-hidden">
       <div className="flex items-center justify-between px-4 py-2 border-b shrink-0">
         <div className="flex items-center gap-4 min-w-0">
-          <h1 className="text-xl font-bold truncate">{data.board.name}</h1>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button className="flex items-center gap-2 text-xl font-bold truncate hover:text-muted-foreground transition-colors cursor-pointer min-w-0 max-w-[300px]">
+                <span className="truncate">{data.board.name}</span>
+                <ChevronDown className="h-4 w-4 shrink-0" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" className="w-64">
+              {boardsData?.results
+                .filter((b) => b.id !== boardId)
+                .map((board) => (
+                  <DropdownMenuItem key={board.id} asChild>
+                    <Link
+                      href={`/${orgId}/workspace/${workspaceId}/boards/${board.id}`}
+                      className="flex items-center gap-2 cursor-pointer"
+                    >
+                      <KanbanSquare className="h-4 w-4" />
+                      <span className="truncate">{board.name}</span>
+                    </Link>
+                  </DropdownMenuItem>
+                ))}
+              <DropdownMenuSeparator />
+              <DropdownMenuItem asChild>
+                <Link
+                  href={`/${orgId}/workspace/${workspaceId}/boards/create`}
+                  className="flex items-center gap-2 cursor-pointer"
+                >
+                  <Plus className="h-4 w-4" />
+                  <span>Create new board</span>
+                </Link>
+              </DropdownMenuItem>
+              {(!boardsData?.results ||
+                boardsData.results.filter((b) => b.id !== boardId).length ===
+                  0) && (
+                <div className="px-2 py-4 text-center text-sm text-muted-foreground">
+                  No other boards
+                </div>
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
         <Link
           href={`/${orgId}/workspace/${workspaceId}/boards/${boardId}/settings`}
