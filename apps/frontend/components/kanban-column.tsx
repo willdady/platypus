@@ -84,12 +84,14 @@ const KanbanColumnComponentInner = function KanbanColumnComponent({
           </DropdownMenuTrigger>
           <DropdownMenuContent>
             <DropdownMenuItem onSelect={() => onEditColumn(column.id)}>
-              <Pencil className="h-4 w-4" />Edit
+              <Pencil className="h-4 w-4" />
+              Edit
             </DropdownMenuItem>
             <DropdownMenuItem
               onSelect={() => onDeleteColumn(column.id, hasCards)}
             >
-              <Trash2 className="h-4 w-4" />Delete
+              <Trash2 className="h-4 w-4" />
+              Delete
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>

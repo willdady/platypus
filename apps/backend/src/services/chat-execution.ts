@@ -434,9 +434,7 @@ export const loadSubAgents = async (
     async (subAgentId: string, toolSetIds: string[]) => {
       // Load tools for the sub-agent, passing the full record so dynamic
       // tool sets (e.g. kanban) can resolve the correct agent ID.
-      const subAgentRecord = subAgentRecords.find(
-        (sa) => sa.id === subAgentId,
-      );
+      const subAgentRecord = subAgentRecords.find((sa) => sa.id === subAgentId);
       const { tools: subTools } = await loadTools(
         subAgentRecord ?? ({ id: subAgentId, toolSetIds } as any),
         workspaceId,

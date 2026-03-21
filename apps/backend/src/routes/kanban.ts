@@ -552,9 +552,7 @@ kanban.post(
         .limit(1);
 
       const boardLabelIds = new Set(
-        (boardRecord[0]?.labels ?? []).map(
-          (l: { id: string }) => l.id,
-        ),
+        (boardRecord[0]?.labels ?? []).map((l: { id: string }) => l.id),
       );
       const allValid = data.labelIds.every((id: string) =>
         boardLabelIds.has(id),
@@ -614,9 +612,7 @@ kanban.put(
         .limit(1);
 
       const boardLabelIds = new Set(
-        (boardRecord[0]?.labels ?? []).map(
-          (l: { id: string }) => l.id,
-        ),
+        (boardRecord[0]?.labels ?? []).map((l: { id: string }) => l.id),
       );
       const allValid = data.labelIds.every((id: string) =>
         boardLabelIds.has(id),

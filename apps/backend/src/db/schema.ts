@@ -424,7 +424,6 @@ export const kanbanColumn = pgTable(
   (t) => [index("idx_kanban_column_board_id").on(t.boardId)],
 );
 
-
 export const kanbanCard = pgTable(
   "kanban_card",
   (t) => ({

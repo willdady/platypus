@@ -62,17 +62,12 @@ export const convertWeight = tool({
     "Convert weight between kilograms and pounds. Specify the value and the units to convert from and to.",
   inputSchema: z.object({
     value: z.number().describe("The weight value to convert"),
-    from: z
-      .enum(["kilograms", "pounds"])
-      .describe("The unit to convert from"),
-    to: z
-      .enum(["kilograms", "pounds"])
-      .describe("The unit to convert to"),
+    from: z.enum(["kilograms", "pounds"]).describe("The unit to convert from"),
+    to: z.enum(["kilograms", "pounds"]).describe("The unit to convert to"),
   }),
   execute: async ({ value, from, to }) => {
     if (from === to) return { result: value, unit: to };
-    const result =
-      from === "kilograms" ? value * 2.20462 : value / 2.20462;
+    const result = from === "kilograms" ? value * 2.20462 : value / 2.20462;
     return { result: Math.round(result * 100) / 100, unit: to };
   },
 });
@@ -82,17 +77,12 @@ export const convertVolume = tool({
     "Convert volume between liters and gallons. Specify the value and the units to convert from and to.",
   inputSchema: z.object({
     value: z.number().describe("The volume value to convert"),
-    from: z
-      .enum(["liters", "gallons"])
-      .describe("The unit to convert from"),
-    to: z
-      .enum(["liters", "gallons"])
-      .describe("The unit to convert to"),
+    from: z.enum(["liters", "gallons"]).describe("The unit to convert from"),
+    to: z.enum(["liters", "gallons"]).describe("The unit to convert to"),
   }),
   execute: async ({ value, from, to }) => {
     if (from === to) return { result: value, unit: to };
-    const result =
-      from === "liters" ? value * 0.264172 : value / 0.264172;
+    const result = from === "liters" ? value * 0.264172 : value / 0.264172;
     return { result: Math.round(result * 100) / 100, unit: to };
   },
 });

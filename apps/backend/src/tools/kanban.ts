@@ -198,7 +198,9 @@ export function createKanbanTools(
       cardId: z
         .string()
         .optional()
-        .describe("The card ID to update. If not provided, a new card will be created."),
+        .describe(
+          "The card ID to update. If not provided, a new card will be created.",
+        ),
       columnId: z
         .string()
         .optional()
@@ -239,7 +241,9 @@ export function createKanbanTools(
 
       // Create new card
       if (!columnId || !title) {
-        return { error: "columnId and title are required when creating a new card" };
+        return {
+          error: "columnId and title are required when creating a new card",
+        };
       }
 
       if (!(await verifyColumn(columnId))) {
@@ -435,11 +439,15 @@ export function createKanbanTools(
       commentId: z
         .string()
         .optional()
-        .describe("The comment ID to update. If not provided, a new comment will be created."),
+        .describe(
+          "The comment ID to update. If not provided, a new comment will be created.",
+        ),
       cardId: z
         .string()
         .optional()
-        .describe("The card ID to comment on (required when creating a new comment)"),
+        .describe(
+          "The card ID to comment on (required when creating a new comment)",
+        ),
       body: z.string().min(1).describe("The comment text (supports markdown)"),
     }),
     execute: async ({ commentId, cardId, body }) => {

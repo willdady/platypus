@@ -123,10 +123,11 @@ const ProviderForm = ({
         : joinUrl(backendUrl, `/organizations/${orgId}/providers/${providerId}`)
       : null;
 
-  const { data: provider, isLoading, mutate } = useSWR<ProviderWithScope>(
-    fetchUrl,
-    fetcher,
-  );
+  const {
+    data: provider,
+    isLoading,
+    mutate,
+  } = useSWR<ProviderWithScope>(fetchUrl, fetcher);
 
   useEffect(() => {
     if (provider && !hasInitialized.current) {

@@ -126,9 +126,7 @@ export function KanbanBoard({
       const type = active.data.current?.type;
       setActiveId(active.id as string);
       setActiveType(type);
-      setLocalColumns([
-        ...columns.map((c) => ({ ...c, cards: [...c.cards] })),
-      ]);
+      setLocalColumns([...columns.map((c) => ({ ...c, cards: [...c.cards] }))]);
     },
     [columns],
   );
@@ -233,8 +231,7 @@ export function KanbanBoard({
       }
 
       const cardIndex = column.cards.findIndex((c) => c.id === active.id);
-      const afterCardId =
-        cardIndex > 0 ? column.cards[cardIndex - 1].id : null;
+      const afterCardId = cardIndex > 0 ? column.cards[cardIndex - 1].id : null;
 
       try {
         await fetch(joinUrl(baseUrl, `/cards/${active.id}/move`), {

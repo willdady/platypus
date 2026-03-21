@@ -61,9 +61,7 @@ export function KanbanBoardForm({
   };
 
   const handleLabelColorChange = (id: string, color: string) => {
-    setLabels((prev) =>
-      prev.map((l) => (l.id === id ? { ...l, color } : l)),
-    );
+    setLabels((prev) => prev.map((l) => (l.id === id ? { ...l, color } : l)));
   };
 
   const handleDeleteLabel = (id: string) => {
@@ -200,7 +198,10 @@ export function KanbanBoardForm({
       </div>
 
       <div className="flex gap-2">
-        <Button type="submit" disabled={isSubmitting || isDeleting || !name.trim()}>
+        <Button
+          type="submit"
+          disabled={isSubmitting || isDeleting || !name.trim()}
+        >
           {isEditing ? "Update" : "Create Board"}
         </Button>
         {isEditing && onDelete && (

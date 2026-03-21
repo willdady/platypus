@@ -9,9 +9,7 @@ import {
 } from "../db/schema.ts";
 import { validateCronExpression } from "../utils/cron.ts";
 
-export function createScheduleTools(
-  workspaceId: string,
-): Record<string, Tool> {
+export function createScheduleTools(workspaceId: string): Record<string, Tool> {
   const listAgents = tool({
     description:
       "List all agents available in this workspace. Returns agent IDs, names, and descriptions. Use this to find agent IDs when creating or editing schedules.",
@@ -115,11 +113,15 @@ export function createScheduleTools(
         .max(500)
         .nullable()
         .optional()
-        .describe("Optional description of what this schedule does (null to clear)"),
+        .describe(
+          "Optional description of what this schedule does (null to clear)",
+        ),
       timezone: z
         .string()
         .optional()
-        .describe("IANA timezone (e.g., 'America/New_York', 'Europe/London'). Defaults to 'UTC' when creating."),
+        .describe(
+          "IANA timezone (e.g., 'America/New_York', 'Europe/London'). Defaults to 'UTC' when creating.",
+        ),
       isOneOff: z
         .boolean()
         .optional()

@@ -54,7 +54,9 @@ const BoardSettingsPage = ({
   };
 
   if (error) {
-    return <div className="text-destructive">Failed to load board settings.</div>;
+    return (
+      <div className="text-destructive">Failed to load board settings.</div>
+    );
   }
   if (!data) {
     return <div>Loading...</div>;

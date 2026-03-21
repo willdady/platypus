@@ -95,50 +95,50 @@ export const TagCloud = ({
     <>
       <Separator />
       <div className="space-y-4">
-      <div className="flex flex-col">
-        <h2 className="text-xl font-semibold tracking-tight flex items-center gap-2">
-          <Tag className="size-5" /> Tags
-        </h2>
-        <p className="text-sm text-muted-foreground">
-          Browse and filter chats by tag.
-        </p>
-      </div>
-      <Card className="bg-transparent shadow-none py-0">
-        <CardContent className="p-4">
-          <div className="flex flex-wrap gap-2 items-center">
-            {tags.map((tagData) => {
-              const isSelected = selectedTags.includes(tagData.tag);
-              return (
-                <Badge
-                  key={tagData.tag}
-                  variant={isSelected ? "default" : "secondary"}
-                  className="cursor-pointer font-mono inline-flex items-center"
-                  style={{ fontSize: getFontSize(tagData.count) }}
-                  onClick={() => onTagToggle?.(tagData.tag)}
+        <div className="flex flex-col">
+          <h2 className="text-xl font-semibold tracking-tight flex items-center gap-2">
+            <Tag className="size-5" /> Tags
+          </h2>
+          <p className="text-sm text-muted-foreground">
+            Browse and filter chats by tag.
+          </p>
+        </div>
+        <Card className="bg-transparent shadow-none py-0">
+          <CardContent className="p-4">
+            <div className="flex flex-wrap gap-2 items-center">
+              {tags.map((tagData) => {
+                const isSelected = selectedTags.includes(tagData.tag);
+                return (
+                  <Badge
+                    key={tagData.tag}
+                    variant={isSelected ? "default" : "secondary"}
+                    className="cursor-pointer font-mono inline-flex items-center"
+                    style={{ fontSize: getFontSize(tagData.count) }}
+                    onClick={() => onTagToggle?.(tagData.tag)}
+                  >
+                    <span>{tagData.tag}</span>
+                    <span className="ml-1.5 opacity-50 text-[0.7em] leading-none">
+                      {tagData.count}
+                    </span>
+                  </Badge>
+                );
+              })}
+              {hasMore && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="text-xs text-muted-foreground h-auto py-0.5 px-2"
+                  onClick={() => setShowAll((v) => !v)}
                 >
-                  <span>{tagData.tag}</span>
-                  <span className="ml-1.5 opacity-50 text-[0.7em] leading-none">
-                    {tagData.count}
-                  </span>
-                </Badge>
-              );
-            })}
-            {hasMore && (
-              <Button
-                variant="ghost"
-                size="sm"
-                className="text-xs text-muted-foreground h-auto py-0.5 px-2"
-                onClick={() => setShowAll((v) => !v)}
-              >
-                {showAll
-                  ? "Show less"
-                  : `+${allTags.length - DEFAULT_LIMIT} more`}
-              </Button>
-            )}
-          </div>
-        </CardContent>
-      </Card>
-    </div>
+                  {showAll
+                    ? "Show less"
+                    : `+${allTags.length - DEFAULT_LIMIT} more`}
+                </Button>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
     </>
   );
 };

@@ -158,92 +158,92 @@ export const ScheduleList = ({
                 href={`/${orgId}/workspace/${workspaceId}/schedules/${schedule.id}`}
               >
                 <ItemContent>
-                <div className="flex items-center gap-2">
-                  <ItemTitle>{schedule.name}</ItemTitle>
-                  {schedule.isOneOff && (
-                    <Badge variant="outline" className="text-xs">
-                      One-off
-                    </Badge>
-                  )}
-                  {!schedule.enabled && (
-                    <Badge variant="secondary" className="text-xs">
-                      Disabled
-                    </Badge>
-                  )}
-                </div>
-                {schedule.description && (
-                  <ItemDescription className="text-xs">
-                    {schedule.description}
-                  </ItemDescription>
-                )}
-                <div className="flex flex-col gap-1 mt-1.5 text-xs text-muted-foreground">
-                  <span className="flex items-center gap-1">
-                    <Timer className="h-3 w-3" />
-                    {describeSchedule(
-                      schedule.cronExpression,
-                      schedule.timezone,
+                  <div className="flex items-center gap-2">
+                    <ItemTitle>{schedule.name}</ItemTitle>
+                    {schedule.isOneOff && (
+                      <Badge variant="outline" className="text-xs">
+                        One-off
+                      </Badge>
                     )}
-                  </span>
-                  {schedule.nextRunAt && schedule.enabled && (
-                    <span>
-                      Next run: {format(new Date(schedule.nextRunAt), "PPp")}
-                    </span>
+                    {!schedule.enabled && (
+                      <Badge variant="secondary" className="text-xs">
+                        Disabled
+                      </Badge>
+                    )}
+                  </div>
+                  {schedule.description && (
+                    <ItemDescription className="text-xs">
+                      {schedule.description}
+                    </ItemDescription>
                   )}
-                  {schedule.lastRunAt && (
-                    <span>
-                      Last run: {format(new Date(schedule.lastRunAt), "PPp")}
-                    </span>
-                  )}
-                </div>
-              </ItemContent>
-              <ItemActions className="gap-1">
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button
-                      className="cursor-pointer text-muted-foreground"
-                      variant="ghost"
-                      size="icon"
-                      onClick={(e) => e.preventDefault()}
-                    >
-                      <EllipsisVertical className="h-4 w-4" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent>
-                    <DropdownMenuItem asChild>
-                      <Link
-                        className="cursor-pointer"
-                        href={`/${orgId}/workspace/${workspaceId}/schedules/${schedule.id}/runs`}
-                      >
-                        <List /> View Runs
-                      </Link>
-                    </DropdownMenuItem>
-                    <DropdownMenuItem
-                      className="cursor-pointer"
-                      onSelect={() => handleToggleEnabled(schedule)}
-                      disabled={
-                        isToggling && scheduleToToggle?.id === schedule.id
-                      }
-                    >
-                      {schedule.enabled ? (
-                        <>
-                          <Pause /> Disable
-                        </>
-                      ) : (
-                        <>
-                          <Play /> Enable
-                        </>
+                  <div className="flex flex-col gap-1 mt-1.5 text-xs text-muted-foreground">
+                    <span className="flex items-center gap-1">
+                      <Timer className="h-3 w-3" />
+                      {describeSchedule(
+                        schedule.cronExpression,
+                        schedule.timezone,
                       )}
-                    </DropdownMenuItem>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem
-                      className="cursor-pointer text-destructive focus:text-destructive"
-                      onSelect={() => handleDeleteClick(schedule)}
-                    >
-                      <Trash2 /> Delete
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              </ItemActions>
+                    </span>
+                    {schedule.nextRunAt && schedule.enabled && (
+                      <span>
+                        Next run: {format(new Date(schedule.nextRunAt), "PPp")}
+                      </span>
+                    )}
+                    {schedule.lastRunAt && (
+                      <span>
+                        Last run: {format(new Date(schedule.lastRunAt), "PPp")}
+                      </span>
+                    )}
+                  </div>
+                </ItemContent>
+                <ItemActions className="gap-1">
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button
+                        className="cursor-pointer text-muted-foreground"
+                        variant="ghost"
+                        size="icon"
+                        onClick={(e) => e.preventDefault()}
+                      >
+                        <EllipsisVertical className="h-4 w-4" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent>
+                      <DropdownMenuItem asChild>
+                        <Link
+                          className="cursor-pointer"
+                          href={`/${orgId}/workspace/${workspaceId}/schedules/${schedule.id}/runs`}
+                        >
+                          <List /> View Runs
+                        </Link>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        className="cursor-pointer"
+                        onSelect={() => handleToggleEnabled(schedule)}
+                        disabled={
+                          isToggling && scheduleToToggle?.id === schedule.id
+                        }
+                      >
+                        {schedule.enabled ? (
+                          <>
+                            <Pause /> Disable
+                          </>
+                        ) : (
+                          <>
+                            <Play /> Enable
+                          </>
+                        )}
+                      </DropdownMenuItem>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem
+                        className="cursor-pointer text-destructive focus:text-destructive"
+                        onSelect={() => handleDeleteClick(schedule)}
+                      >
+                        <Trash2 /> Delete
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </ItemActions>
               </Link>
             </Item>
           </li>

@@ -270,7 +270,12 @@ describe("Kanban Routes", () => {
 
       mockDb.orderBy.mockResolvedValueOnce([{ maxPos: 1.0 }]);
 
-      const mockColumn = { id: "test-id-123", boardId, name: "New Column", position: 2.0 };
+      const mockColumn = {
+        id: "test-id-123",
+        boardId,
+        name: "New Column",
+        position: 2.0,
+      };
       mockDb.returning.mockResolvedValueOnce([mockColumn]);
 
       const res = await app.request(`${baseUrl}/${boardId}/columns`, {
@@ -373,10 +378,7 @@ describe("Kanban Routes", () => {
       mockDb.limit.mockResolvedValueOnce([mockBoard]);
 
       // board columns validation
-      mockDb.orderBy.mockResolvedValueOnce([
-        { id: "col-1" },
-        { id: "col-2" },
-      ]);
+      mockDb.orderBy.mockResolvedValueOnce([{ id: "col-1" }, { id: "col-2" }]);
 
       const res = await app.request(`${baseUrl}/${boardId}/columns/reorder`, {
         method: "PUT",
@@ -398,10 +400,7 @@ describe("Kanban Routes", () => {
       mockDb.limit.mockResolvedValueOnce([mockBoard]); // board found
 
       // board columns
-      mockDb.orderBy.mockResolvedValueOnce([
-        { id: "col-1" },
-        { id: "col-2" },
-      ]);
+      mockDb.orderBy.mockResolvedValueOnce([{ id: "col-1" }, { id: "col-2" }]);
 
       const res = await app.request(`${baseUrl}/${boardId}/columns/reorder`, {
         method: "PUT",
@@ -428,11 +427,14 @@ describe("Kanban Routes", () => {
       };
       mockDb.returning.mockResolvedValueOnce([mockCard]);
 
-      const res = await app.request(`${baseUrl}/${boardId}/columns/col-1/cards`, {
-        method: "POST",
-        body: JSON.stringify({ title: "New Card" }),
-        headers: { "Content-Type": "application/json" },
-      });
+      const res = await app.request(
+        `${baseUrl}/${boardId}/columns/col-1/cards`,
+        {
+          method: "POST",
+          body: JSON.stringify({ title: "New Card" }),
+          headers: { "Content-Type": "application/json" },
+        },
+      );
 
       expect(res.status).toBe(201);
       expect(await res.json()).toEqual(mockCard);
@@ -557,14 +559,11 @@ describe("Kanban Routes", () => {
       const updatedCard = { id: "card-1", columnId: "col-1", position: 2.0 };
       mockDb.limit.mockResolvedValueOnce([updatedCard]);
 
-      const res = await app.request(
-        `${baseUrl}/${boardId}/cards/card-1/move`,
-        {
-          method: "POST",
-          body: JSON.stringify({ columnId: "col-1", afterCardId: "card-2" }),
-          headers: { "Content-Type": "application/json" },
-        },
-      );
+      const res = await app.request(`${baseUrl}/${boardId}/cards/card-1/move`, {
+        method: "POST",
+        body: JSON.stringify({ columnId: "col-1", afterCardId: "card-2" }),
+        headers: { "Content-Type": "application/json" },
+      });
 
       expect(res.status).toBe(200);
       expect(mockDb.transaction).toHaveBeenCalled();
@@ -582,7 +581,10 @@ describe("Kanban Routes", () => {
 
       const res = await app.request(`${baseUrl}/${boardId}/cards/card-1/move`, {
         method: "POST",
-        body: JSON.stringify({ columnId: "col-2", afterCardId: "non-existent" }),
+        body: JSON.stringify({
+          columnId: "col-2",
+          afterCardId: "non-existent",
+        }),
         headers: { "Content-Type": "application/json" },
       });
 

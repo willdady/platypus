@@ -160,9 +160,7 @@ export function CommandMenu({ orgId, workspaceId }: CommandMenuProps) {
             className="cursor-pointer"
             onSelect={() => {
               runCommand(() =>
-                router.push(
-                  `/${orgId}/workspace/${workspaceId}/boards/create`,
-                ),
+                router.push(`/${orgId}/workspace/${workspaceId}/boards/create`),
               );
             }}
           >
