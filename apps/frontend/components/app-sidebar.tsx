@@ -198,6 +198,21 @@ export function AppSidebar({
       );
 
       if (response.ok) {
+        // Clear tag filters if the edited chat no longer matches the active filter
+        if (selectedTags.length > 0) {
+          const otherChatsMatchFilter = chats.some(
+            (chat) =>
+              chat.id !== renameChatId &&
+              chat.tags?.some((tag: string) => selectedTags.includes(tag)),
+          );
+          const editedChatStillMatches = renameTags.some((tag) =>
+            selectedTags.includes(tag),
+          );
+          if (!otherChatsMatchFilter && !editedChatStillMatches) {
+            clearFilters();
+          }
+        }
+
         // Close the dialog
         setRenameChatId(null);
         setRenameTitle("");
