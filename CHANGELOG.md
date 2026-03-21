@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.39.2](https://github.com/willdady/platypus/compare/v1.39.1...v1.39.2) (2026-03-21)
+
+
+### Bug Fixes
+
+* **backend:** install optional deps to fix sharp on linuxmusl-arm64 ([88ccea3](https://github.com/willdady/platypus/commit/88ccea301406b8f644a2be2869138892fdf824ee))
+
 ## [1.39.1](https://github.com/willdady/platypus/compare/v1.39.0...v1.39.1) (2026-03-21)
 
 
