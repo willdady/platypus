@@ -19,6 +19,7 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarSeparator,
+  useSidebar,
 } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -75,6 +76,7 @@ export function AppSidebar({
   const { user } = useAuth();
   const backendUrl = useBackendUrl();
   const isMobile = useIsMobile();
+  const { setOpenMobile } = useSidebar();
 
   const pathname = usePathname();
   const router = useRouter();
@@ -393,7 +395,14 @@ export function AppSidebar({
           </SidebarMenuItem>
           <SidebarMenuItem>
             <Button asChild className="w-full">
-              <Link href={`/${orgId}/workspace/${workspaceId}/chat`}>
+              <Link
+                href={`/${orgId}/workspace/${workspaceId}/chat`}
+                onClick={() => {
+                  if (isMobile) {
+                    setOpenMobile(false);
+                  }
+                }}
+              >
                 <BotMessageSquare /> New Chat
               </Link>
             </Button>
