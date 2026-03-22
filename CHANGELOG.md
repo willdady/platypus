@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.40.1](https://github.com/willdady/platypus/compare/v1.40.0...v1.40.1) (2026-03-22)
+
+
+### Bug Fixes
+
+* **frontend:** standardise create/edit page layout across breakpoints ([fd776fd](https://github.com/willdady/platypus/commit/fd776fdd1a283b29ef9e6e8c654fb2fdaa10c515))
+* **frontend:** truncate long model ids in selector button on mobile ([eb79b69](https://github.com/willdady/platypus/commit/eb79b69eeaa2e8de6e2a975c6a05c2dd889035c1))
+* **frontend:** wrap sidebar header items in SidebarMenu to fix list marker artifacts on Android Chrome ([2590bfd](https://github.com/willdady/platypus/commit/2590bfdc84fdb878976a7f28471379198ad54324))
+
 ## [1.40.0](https://github.com/willdady/platypus/compare/v1.39.2...v1.40.0) (2026-03-22)
 
 
