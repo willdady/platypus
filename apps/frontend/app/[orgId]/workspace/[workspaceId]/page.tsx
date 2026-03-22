@@ -173,7 +173,7 @@ const Workspace = () => {
       ) : (
         <>
           {/* Stats Overview */}
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
+          <div className="grid gap-4 grid-cols-2 lg:grid-cols-5">
             <Card className="gap-2">
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-0">
                 <CardTitle className="text-sm font-medium">

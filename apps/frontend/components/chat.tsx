@@ -48,6 +48,11 @@ import { NoProvidersEmptyState } from "./no-providers-empty-state";
 import { AgentInfoDialog } from "./agent-info-dialog";
 import { ChatSettingsDialog } from "./chat-settings-dialog";
 import { ErrorDialog } from "./error-dialog";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { ChatMessage } from "./chat-message";
 import { ModelSelectorDialog } from "./model-selector-dialog";
 import { toast } from "sonner";
@@ -452,21 +457,30 @@ export const Chat = ({
                         <PromptInputActionAddAttachments className="cursor-pointer" />
                       </PromptInputActionMenuContent>
                     </PromptInputActionMenu>
-                    <PromptInputSpeechButton
-                      className="cursor-pointer"
-                      textareaRef={textareaRef}
-                      onTranscriptionChange={setInputValue}
-                    />
+                    <Tooltip delayDuration={1000}>
+                      <TooltipTrigger asChild>
+                        <PromptInputSpeechButton
+                          className="cursor-pointer"
+                          textareaRef={textareaRef}
+                          onTranscriptionChange={setInputValue}
+                        />
+                      </TooltipTrigger>
+                      <TooltipContent>Microphone</TooltipContent>
+                    </Tooltip>
                     {(!currentProviderType ||
                       currentProviderType !== "Bedrock") && (
-                      <PromptInputButton
-                        className="cursor-pointer"
-                        onClick={() => setSearch(!search)}
-                        variant={search ? "default" : "ghost"}
-                      >
-                        <GlobeIcon size={16} />
-                        <span>Search</span>
-                      </PromptInputButton>
+                      <Tooltip delayDuration={1000}>
+                        <TooltipTrigger asChild>
+                          <PromptInputButton
+                            className="cursor-pointer mr-2"
+                            onClick={() => setSearch(!search)}
+                            variant={search ? "default" : "ghost"}
+                          >
+                            <GlobeIcon size={16} />
+                          </PromptInputButton>
+                        </TooltipTrigger>
+                        <TooltipContent>Search</TooltipContent>
+                      </Tooltip>
                     )}
                     <ModelSelectorDialog
                       agents={agents}
@@ -506,11 +520,16 @@ export const Chat = ({
                         open={isSettingsDialogOpen}
                         onOpenChange={setIsSettingsDialogOpen}
                       >
-                        <DialogTrigger asChild>
-                          <PromptInputButton>
-                            <Settings2 />
-                          </PromptInputButton>
-                        </DialogTrigger>
+                        <Tooltip delayDuration={1000}>
+                          <DialogTrigger asChild>
+                            <TooltipTrigger asChild>
+                              <PromptInputButton>
+                                <Settings2 />
+                              </PromptInputButton>
+                            </TooltipTrigger>
+                          </DialogTrigger>
+                          <TooltipContent>Settings</TooltipContent>
+                        </Tooltip>
                         <ChatSettingsDialog
                           systemPrompt={systemPrompt}
                           onSystemPromptChange={setters.setSystemPrompt}
