@@ -1,5 +1,21 @@
 # Changelog
 
+## [1.40.0](https://github.com/willdady/platypus/compare/v1.39.2...v1.40.0) (2026-03-22)
+
+
+### Features
+
+* **frontend:** add tooltips to chat input buttons ([9fcf275](https://github.com/willdady/platypus/commit/9fcf275119d5b513fcf784021ff2a9fdc5fe1708))
+* **frontend:** collapse sidebar on mobile when clicking New Chat ([b5dbb7a](https://github.com/willdady/platypus/commit/b5dbb7aa8da698de895f14670f1ff1cf30e5b207))
+
+
+### Bug Fixes
+
+* **frontend:** hide Kbd component on mobile ([139e189](https://github.com/willdady/platypus/commit/139e189f9a039b2151fa292297893ae8c8cf6966))
+* **frontend:** position workspace dropdown at bottom on mobile ([8cf69ce](https://github.com/willdady/platypus/commit/8cf69ce8e0c2949f6ed09a192f627348317f8f13))
+* **frontend:** show summary panels in two columns at md breakpoint ([12e4abb](https://github.com/willdady/platypus/commit/12e4abb2edfe0f474c1ee67c962f0ca04563ed96))
+* reduce horizontal padding on mobile workspace home ([4665383](https://github.com/willdady/platypus/commit/46653831001ba559b76f158b5327b829e6db9cd2))
+
 ## [1.39.2](https://github.com/willdady/platypus/compare/v1.39.1...v1.39.2) (2026-03-21)
 
 
