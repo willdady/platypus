@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.40.2](https://github.com/willdady/platypus/compare/v1.40.1...v1.40.2) (2026-03-22)
+
+
+### Bug Fixes
+
+* **frontend:** use dynamic viewport height to fix mobile scroll and hidden header ([5722f8d](https://github.com/willdady/platypus/commit/5722f8dcfaf4f3e190a9f2d67a97bf7856d5f92f))
+
 ## [1.40.1](https://github.com/willdady/platypus/compare/v1.40.0...v1.40.1) (2026-03-22)
 
 
