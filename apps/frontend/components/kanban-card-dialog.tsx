@@ -173,10 +173,10 @@ export function KanbanCardDialog({
         <DialogHeader className="shrink-0">
           <DialogTitle>&nbsp;</DialogTitle>
         </DialogHeader>
-        <div className="flex gap-4 min-h-0 flex-1">
+        <div className="flex flex-col sm:flex-row gap-4 min-h-0 flex-1 overflow-y-auto sm:overflow-hidden">
           {/* Main content - Title, Body, and Comments */}
           <div
-            className="flex-1 min-w-0 space-y-4 overflow-y-auto pr-3"
+            className="flex-1 min-w-0 space-y-4 sm:overflow-y-auto sm:pr-3"
             onBlur={(e) => {
               if (!e.currentTarget.contains(e.relatedTarget)) {
                 setIsEditing(false);
@@ -336,7 +336,7 @@ export function KanbanCardDialog({
           </div>
 
           {/* Sidebar - Labels and Metadata */}
-          <div className="w-48 shrink-0 space-y-4">
+          <div className="sm:w-48 shrink-0 space-y-4 border-t sm:border-t-0 pt-4 sm:pt-0">
             {labels.length > 0 && (
               <div>
                 <p className="text-xs font-medium text-muted-foreground mb-2">

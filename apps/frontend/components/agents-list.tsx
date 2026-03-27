@@ -8,6 +8,7 @@ import {
   ItemDescription,
   ItemContent,
   ItemMedia,
+  ItemFooter,
 } from "@/components/ui/item";
 import { Button } from "@/components/ui/button";
 import {
@@ -289,8 +290,7 @@ export const AgentsList = ({
                       <TooltipTrigger asChild>
                         <span className="flex items-center gap-1 cursor-default">
                           <Wrench className="h-3 w-3" />
-                          {agent.toolSetIds.length} tool set
-                          {agent.toolSetIds.length !== 1 && "s"}
+                          {agent.toolSetIds.length} tool sets
                         </span>
                       </TooltipTrigger>
                       <TooltipContent>
@@ -352,7 +352,7 @@ export const AgentsList = ({
                   )}
                 </div>
               </ItemContent>
-              <ItemActions className="gap-1">
+              <ItemActions className="hidden xl:flex">
                 <Button size="sm" asChild>
                   <Link
                     href={`/${orgId}/workspace/${workspaceId}/chat?agentId=${agent.id}`}
@@ -394,6 +394,48 @@ export const AgentsList = ({
                   </DropdownMenuContent>
                 </DropdownMenu>
               </ItemActions>
+              <ItemFooter className="xl:hidden mt-0 pl-16">
+                <Button size="sm" asChild>
+                  <Link
+                    href={`/${orgId}/workspace/${workspaceId}/chat?agentId=${agent.id}`}
+                  >
+                    <BotMessageSquare /> New Chat
+                  </Link>
+                </Button>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      className="cursor-pointer text-muted-foreground"
+                      variant="ghost"
+                      size="icon"
+                    >
+                      <EllipsisVertical className="h-4 w-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent>
+                    <DropdownMenuItem asChild>
+                      <Link
+                        className="cursor-pointer"
+                        href={`/${orgId}/workspace/${workspaceId}/agents/${agent.id}`}
+                      >
+                        <Pencil /> Edit
+                      </Link>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      className="cursor-pointer"
+                      onSelect={() => handleCloneClick(agent)}
+                    >
+                      <Copy /> Clone
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      className="cursor-pointer"
+                      onSelect={() => handleDeleteClick(agent)}
+                    >
+                      <Trash2 /> Delete
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </ItemFooter>
             </Item>
           </li>
         ))}
