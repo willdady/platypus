@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.42.0](https://github.com/willdady/platypus/compare/v1.41.0...v1.42.0) (2026-03-28)
+
+
+### Features
+
+* add human-friendly tool names, per-toolset icons, and labels to tool UI ([15b5017](https://github.com/willdady/platypus/commit/15b50171c34f84b026e9504cca48f1f8a42b5127))
+* **frontend:** replace workspace loading text with skeleton UI ([b73a242](https://github.com/willdady/platypus/commit/b73a2428414070aab0c3a5e5485f779886ede068))
+
+
+### Bug Fixes
+
+* **frontend:** remove extra margin between icon and text on Add Label button ([6ecf892](https://github.com/willdady/platypus/commit/6ecf892412cb96e978cef577cbcf541cbfb8bb1c))
+* **frontend:** replace full page reload with client-side navigation after auth ([c968b98](https://github.com/willdady/platypus/commit/c968b984226d54b150f6d60b9fbc227ea547aa57))
+
 ## [1.41.0](https://github.com/willdady/platypus/compare/v1.40.2...v1.41.0) (2026-03-28)
 
 
