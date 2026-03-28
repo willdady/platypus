@@ -1,5 +1,24 @@
 # Changelog
 
+## [1.41.0](https://github.com/willdady/platypus/compare/v1.40.2...v1.41.0) (2026-03-28)
+
+
+### Features
+
+* **backend:** add skill management tool set for agents ([3e510dc](https://github.com/willdady/platypus/commit/3e510dcabf109402b0dfb20ce56856b5b5da017e))
+* **backend:** combine skill and agent management into single tool set ([45b2808](https://github.com/willdady/platypus/commit/45b28089147689bdcd487c67a03b21ce69a3c3a0))
+* **frontend:** add column selector to kanban card edit dialog ([75c564a](https://github.com/willdady/platypus/commit/75c564a6082e4b985a6b4d9096c3745bf1026025))
+* **frontend:** add label selection to kanban Add Card dialog ([728f875](https://github.com/willdady/platypus/commit/728f8758fb18cce252ec5b73ee27051129bac8db))
+* show agent avatar next to assistant messages in chat ([e7748a5](https://github.com/willdady/platypus/commit/e7748a50f3a37cb6e410b2d9dfed2a0993a39720))
+
+
+### Bug Fixes
+
+* **frontend:** fix board deletion UX and standardise confirmation dialogs ([e249279](https://github.com/willdady/platypus/commit/e249279922d9d328e492774ecbf7aa1c63590e66))
+* **frontend:** fix mobile sidebar closing on workspace switch ([911e80d](https://github.com/willdady/platypus/commit/911e80d0a058369d0d03e2c01eabaf2a66c04b37))
+* **frontend:** improve agent card responsive layout and kanban dialog mobile view ([3019a53](https://github.com/willdady/platypus/commit/3019a53f2092edf74a1201da0625dd0ca24eca30))
+* **frontend:** make Enter key insert newline on mobile chat input ([c3998d8](https://github.com/willdady/platypus/commit/c3998d8f34d49de779e39cbb5bf60057595c9fef))
+
 ## [1.40.2](https://github.com/willdady/platypus/compare/v1.40.1...v1.40.2) (2026-03-22)
 
 
