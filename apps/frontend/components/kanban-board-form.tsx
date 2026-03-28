@@ -125,6 +125,7 @@ export function KanbanBoardForm({
           placeholder="Board name"
           disabled={isSubmitting}
           required
+          autoFocus={!isEditing}
         />
         {validationErrors.name && (
           <FieldError>{validationErrors.name}</FieldError>
