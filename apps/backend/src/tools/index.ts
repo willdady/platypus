@@ -9,6 +9,7 @@ import { getCurrentTime, convertTimezone } from "./time.ts";
 import { fetchUrl } from "./fetch.ts";
 import { createKanbanTools } from "./kanban.ts";
 import { createScheduleTools } from "./schedule.ts";
+import { createSkillManagementTools } from "./skill-management.ts";
 
 export type ToolSetContext = { workspaceId: string; agentId: string };
 
@@ -94,4 +95,11 @@ registerToolSet("schedule", {
   description:
     "Manage scheduled tasks including listing agents, creating, editing, and viewing schedules",
   tools: ({ workspaceId }) => createScheduleTools(workspaceId),
+});
+
+registerToolSet("skill-management", {
+  name: "Skill Management",
+  category: "Productivity",
+  description: "Create, update, and delete skills in this workspace",
+  tools: ({ workspaceId }) => createSkillManagementTools(workspaceId),
 });
