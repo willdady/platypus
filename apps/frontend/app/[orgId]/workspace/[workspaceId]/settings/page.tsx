@@ -15,7 +15,7 @@ const WorkspaceSettingsPage = () => {
   return (
     <div>
       <h1 className="text-2xl font-bold mb-4">Workspace Settings</h1>
-      <div className="grid grid-cols-2 gap-6 mb-4">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-4">
         <div>
           <p className="text-sm text-muted-foreground mb-2">Organization ID</p>
           <div className="flex items-center justify-between">
