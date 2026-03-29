@@ -9,7 +9,7 @@ import {
   mcpUpdateSchema,
   mcpTestSchema,
 } from "@platypus/schemas";
-import { eq } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 import { requireAuth } from "../middleware/authentication.ts";
 import {
   requireOrgAccess,
@@ -64,10 +64,11 @@ mcp.get(
   requireWorkspaceAccess,
   async (c) => {
     const mcpId = c.req.param("mcpId");
+    const workspaceId = c.req.param("workspaceId")!;
     const record = await db
       .select()
       .from(mcpTable)
-      .where(eq(mcpTable.id, mcpId))
+      .where(and(eq(mcpTable.id, mcpId), eq(mcpTable.workspaceId, workspaceId)))
       .limit(1);
     if (record.length === 0) {
       return c.json({ message: "MCP not found" }, 404);
@@ -85,6 +86,7 @@ mcp.put(
   sValidator("json", mcpUpdateSchema),
   async (c) => {
     const mcpId = c.req.param("mcpId");
+    const workspaceId = c.req.param("workspaceId")!;
     const data = c.req.valid("json");
     const record = await db
       .update(mcpTable)
@@ -92,9 +94,12 @@ mcp.put(
         ...data,
         updatedAt: new Date(),
       })
-      .where(eq(mcpTable.id, mcpId))
+      .where(and(eq(mcpTable.id, mcpId), eq(mcpTable.workspaceId, workspaceId)))
       .returning();
-    return c.json(record, 200);
+    if (record.length === 0) {
+      return c.json({ message: "MCP not found" }, 404);
+    }
+    return c.json(record[0], 200);
   },
 );
 
@@ -106,7 +111,14 @@ mcp.delete(
   requireWorkspaceAccess,
   async (c) => {
     const mcpId = c.req.param("mcpId");
-    await db.delete(mcpTable).where(eq(mcpTable.id, mcpId));
+    const workspaceId = c.req.param("workspaceId")!;
+    const result = await db
+      .delete(mcpTable)
+      .where(and(eq(mcpTable.id, mcpId), eq(mcpTable.workspaceId, workspaceId)))
+      .returning();
+    if (result.length === 0) {
+      return c.json({ message: "MCP not found" }, 404);
+    }
     return c.json({ message: "MCP deleted" });
   },
 );

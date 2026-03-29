@@ -7,7 +7,6 @@ import {
   generateText,
   Output,
   streamText,
-  type Tool,
   APICallError,
   LoadAPIKeyError,
 } from "ai";
@@ -15,26 +14,21 @@ import { stepCountIs } from "ai";
 import { db } from "../index.ts";
 import { dedupeArray, toKebabCase } from "../utils.ts";
 import {
-  agent as agentTable,
   chat as chatTable,
   provider as providerTable,
   workspace as workspaceTable,
-  skill as skillTable,
-  context as contextTable,
 } from "../db/schema.ts";
-import { createLoadSkillTool } from "../tools/skill.ts";
-import { createSubAgentTools } from "../tools/sub-agent.ts";
-import {
-  retrieveUserLevelMemories,
-  retrieveWorkspaceLevelMemories,
-  formatMemoriesForSystemPrompt,
-} from "../services/memory-retrieval.ts";
 import {
   createModel,
   resolveChatContext,
   loadTools,
+  loadSkills,
+  loadSubAgents,
   createSearchTools,
   resolveGenerationConfig,
+  fetchUserContexts,
+  fetchFormattedMemories,
+  prepareAgentTools,
   type ChatContext,
   type GenerationConfig,
 } from "../services/chat-execution.ts";
@@ -44,9 +38,8 @@ import {
   chatUpdateSchema,
   type ChatSubmitData,
   type Provider,
-  type Skill,
 } from "@platypus/schemas";
-import { and, desc, eq, or, sql, inArray, isNull } from "drizzle-orm";
+import { and, desc, eq, or, sql, isNull } from "drizzle-orm";
 import { requireAuth } from "../middleware/authentication.ts";
 import {
   requireOrgAccess,
@@ -265,122 +258,56 @@ chat.post(
     // 4. Load Tools (Static & MCP)
     const { tools, mcpClients } = await loadTools(agent, workspaceId);
 
+    // 4b. MCP client lifecycle management - close on abort to prevent leaks
+    let mcpClientsClosed = false;
+    const closeMcpClients = async () => {
+      if (mcpClientsClosed) return;
+      mcpClientsClosed = true;
+      for (const client of mcpClients) {
+        try {
+          await client.close();
+        } catch (e) {
+          logger.error({ error: e }, "Error closing MCP client");
+        }
+      }
+    };
+
+    if (mcpClients.length > 0) {
+      c.req.raw.signal.addEventListener("abort", () => {
+        closeMcpClients();
+      });
+    }
+
     // 5. Configure Search (if enabled)
     if (data.search) {
       Object.assign(tools, createSearchTools(provider, aiProvider));
     }
 
-    // 6. Fetch Skills (if any)
-    let skills: Array<Pick<Skill, "name" | "description">> = [];
-    if (agent?.skillIds && agent.skillIds.length > 0) {
-      const skillRecords = await db
-        .select({ name: skillTable.name, description: skillTable.description })
-        .from(skillTable)
-        .where(
-          and(
-            eq(skillTable.workspaceId, workspaceId),
-            inArray(skillTable.id, agent.skillIds),
-          ),
-        );
-      skills = skillRecords;
-    }
+    // 6. Fetch Skills
+    const skills = await loadSkills(agent, workspaceId);
 
     // 7. Fetch sub-agent details and create delegate tools (only for parent agents)
-    let subAgents: Array<{
-      id: string;
-      name: string;
-      description?: string | null;
-    }> = [];
-    if (agent?.subAgentIds && agent.subAgentIds.length > 0) {
-      // Fetch full sub-agent configs including provider/model/tool info
-      const subAgentRecords = await db
-        .select()
-        .from(agentTable)
-        .where(inArray(agentTable.id, agent.subAgentIds));
-
-      subAgents = subAgentRecords.map((sa) => ({
-        id: sa.id,
-        name: sa.name,
-        description: sa.description,
-      }));
-
-      // Create sub-agent tools with their own models and tools
-      const subAgentTools = await createSubAgentTools(
-        subAgentRecords,
-        async (providerId: string, modelId: string) => {
-          // Resolve provider for the sub-agent
-          const subProviderRecord = await db
-            .select()
-            .from(providerTable)
-            .where(
-              and(
-                eq(providerTable.id, providerId),
-                or(
-                  eq(providerTable.workspaceId, workspaceId),
-                  eq(providerTable.organizationId, orgId),
-                ),
-              ),
-            )
-            .limit(1);
-
-          if (subProviderRecord.length === 0) {
-            throw new Error(`Provider '${providerId}' not found for sub-agent`);
-          }
-
-          const [, model] = createModel(
-            subProviderRecord[0] as Provider,
-            modelId,
-          );
-          return model;
-        },
-        async (subAgentId: string, toolSetIds: string[]) => {
-          // Load tools for the sub-agent, passing the full record so dynamic
-          // tool sets (e.g. kanban) can resolve the correct agent ID.
-          const subAgentRecord = subAgentRecords.find(
-            (sa) => sa.id === subAgentId,
-          );
-          const { tools: subTools } = await loadTools(
-            subAgentRecord ?? ({ id: subAgentId, toolSetIds } as any),
-            workspaceId,
-          );
-          return subTools;
-        },
-      );
-
-      // Add the sub-agent delegate tools to the parent's tools
-      Object.assign(tools, subAgentTools);
-    }
+    const { subAgents, subAgentTools } = await loadSubAgents(
+      agent,
+      orgId,
+      workspaceId,
+    );
+    Object.assign(tools, subAgentTools);
 
     // 8. Fetch User Contexts (global and workspace-specific)
     const user = c.get("user")!;
-    let userGlobalContext: string | undefined;
-    let userWorkspaceContext: string | undefined;
+    const { userGlobalContext, userWorkspaceContext } = await fetchUserContexts(
+      user.id,
+      workspaceId,
+    );
 
-    const userContexts = await db
-      .select({
-        content: contextTable.content,
-        workspaceId: contextTable.workspaceId,
-      })
-      .from(contextTable)
-      .where(eq(contextTable.userId, user.id));
+    // 9. Fetch memories for the user (user-level + workspace-level)
+    const memoriesFormatted = await fetchFormattedMemories(
+      user.id,
+      workspaceId,
+    );
 
-    for (const ctx of userContexts) {
-      if (ctx.workspaceId === null) {
-        userGlobalContext = ctx.content;
-      } else if (ctx.workspaceId === workspaceId) {
-        userWorkspaceContext = ctx.content;
-      }
-    }
-
-    // 10. Fetch memories for the user (user-level + workspace-level)
-    const [userLevelMemories, workspaceLevelMemories] = await Promise.all([
-      retrieveUserLevelMemories(user.id),
-      retrieveWorkspaceLevelMemories(user.id, workspaceId),
-    ]);
-    const memories = [...userLevelMemories, ...workspaceLevelMemories];
-    const memoriesFormatted = formatMemoriesForSystemPrompt(memories);
-
-    // 11. Prepare Generation Config (Merge Agent & Request params)
+    // 10. Prepare Generation Config (Merge Agent & Request params)
     const config = await resolveGenerationConfig(
       data,
       workspaceId,
@@ -394,10 +321,8 @@ chat.post(
       memoriesFormatted,
     );
 
-    // 12. Inject loadSkill tool if skills exist
-    if (skills.length > 0) {
-      tools.loadSkill = createLoadSkillTool(workspaceId);
-    }
+    // 11. Inject loadSkill tool if skills exist
+    prepareAgentTools(tools, skills, workspaceId);
 
     // 13. Stream Response
     const { systemPrompt, ...restConfig } = config;
@@ -446,13 +371,7 @@ chat.post(
       onFinish: async ({ messages }) => {
         try {
           // Close all MCP clients
-          for (const mcpClient of mcpClients) {
-            try {
-              await mcpClient.close();
-            } catch (error) {
-              logger.error({ error }, "Error closing MCP client");
-            }
-          }
+          await closeMcpClients();
 
           // Upsert chat record
           await upsertChatRecord(

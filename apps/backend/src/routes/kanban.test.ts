@@ -786,6 +786,9 @@ describe("Kanban Routes", () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
       mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]); // requireWorkspaceAccess
+      mockDb.limit.mockResolvedValueOnce([
+        { ...mockComment, createdByUserId: "user-1" },
+      ]); // ownership check
 
       const updatedComment = { ...mockComment, body: "Updated" };
       mockDb.returning.mockResolvedValueOnce([updatedComment]); // update
@@ -803,7 +806,7 @@ describe("Kanban Routes", () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
       mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]); // requireWorkspaceAccess
-      mockDb.returning.mockResolvedValueOnce([]); // not found
+      mockDb.limit.mockResolvedValueOnce([]); // ownership check - not found
 
       const res = await app.request(`${commentsUrl}/${commentId}`, {
         method: "PUT",
@@ -811,6 +814,52 @@ describe("Kanban Routes", () => {
         headers: { "Content-Type": "application/json" },
       });
       expect(res.status).toBe(404);
+    });
+
+    it("should return 403 if user does not own comment", async () => {
+      mockSession({
+        id: "other-user",
+        email: "other@example.com",
+        role: "user",
+      });
+      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
+      mockDb.limit.mockResolvedValueOnce([{ ownerId: "other-user" }]); // requireWorkspaceAccess
+      mockDb.limit.mockResolvedValueOnce([
+        { ...mockComment, createdByUserId: "user-1" },
+      ]); // ownership check - owned by different user
+
+      const res = await app.request(`${commentsUrl}/${commentId}`, {
+        method: "PUT",
+        body: JSON.stringify({ body: "Updated" }),
+        headers: { "Content-Type": "application/json" },
+      });
+      expect(res.status).toBe(403);
+      expect((await res.json()).message).toBe(
+        "You can only edit your own comments",
+      );
+    });
+
+    it("should allow org admin to edit another user's comment", async () => {
+      mockSession({
+        id: "admin-user",
+        email: "admin@example.com",
+        role: "user",
+      });
+      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]); // requireOrgAccess - org admin
+      mockDb.limit.mockResolvedValueOnce([{ ownerId: "admin-user" }]); // requireWorkspaceAccess
+      mockDb.limit.mockResolvedValueOnce([
+        { ...mockComment, createdByUserId: "user-1" },
+      ]); // ownership check - owned by different user
+
+      const updatedComment = { ...mockComment, body: "Admin edit" };
+      mockDb.returning.mockResolvedValueOnce([updatedComment]); // update
+
+      const res = await app.request(`${commentsUrl}/${commentId}`, {
+        method: "PUT",
+        body: JSON.stringify({ body: "Admin edit" }),
+        headers: { "Content-Type": "application/json" },
+      });
+      expect(res.status).toBe(200);
     });
   });
 
@@ -827,7 +876,9 @@ describe("Kanban Routes", () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
       mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]); // requireWorkspaceAccess
-      mockDb.returning.mockResolvedValueOnce([{ id: commentId }]); // delete
+      mockDb.limit.mockResolvedValueOnce([
+        { ...mockComment, createdByUserId: "user-1" },
+      ]); // ownership check
 
       const res = await app.request(`${commentsUrl}/${commentId}`, {
         method: "DELETE",
@@ -840,12 +891,52 @@ describe("Kanban Routes", () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
       mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]); // requireWorkspaceAccess
-      mockDb.returning.mockResolvedValueOnce([]); // not found
+      mockDb.limit.mockResolvedValueOnce([]); // ownership check - not found
 
       const res = await app.request(`${commentsUrl}/${commentId}`, {
         method: "DELETE",
       });
       expect(res.status).toBe(404);
+    });
+
+    it("should return 403 if user does not own comment", async () => {
+      mockSession({
+        id: "other-user",
+        email: "other@example.com",
+        role: "user",
+      });
+      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
+      mockDb.limit.mockResolvedValueOnce([{ ownerId: "other-user" }]); // requireWorkspaceAccess
+      mockDb.limit.mockResolvedValueOnce([
+        { ...mockComment, createdByUserId: "user-1" },
+      ]); // ownership check
+
+      const res = await app.request(`${commentsUrl}/${commentId}`, {
+        method: "DELETE",
+      });
+      expect(res.status).toBe(403);
+      expect((await res.json()).message).toBe(
+        "You can only delete your own comments",
+      );
+    });
+
+    it("should allow org admin to delete another user's comment", async () => {
+      mockSession({
+        id: "admin-user",
+        email: "admin@example.com",
+        role: "user",
+      });
+      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]); // requireOrgAccess - org admin
+      mockDb.limit.mockResolvedValueOnce([{ ownerId: "admin-user" }]); // requireWorkspaceAccess
+      mockDb.limit.mockResolvedValueOnce([
+        { ...mockComment, createdByUserId: "user-1" },
+      ]); // ownership check
+
+      const res = await app.request(`${commentsUrl}/${commentId}`, {
+        method: "DELETE",
+      });
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({ success: true });
     });
   });
 });

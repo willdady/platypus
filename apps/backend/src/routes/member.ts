@@ -117,7 +117,7 @@ member.patch(
 
     // Self-demotion protection
     if (targetMember.userId === currentUser.id && newRole === "member") {
-      return c.json({ error: "You cannot demote yourself from admin" }, 400);
+      return c.json({ message: "You cannot demote yourself from admin" }, 400);
     }
 
     // Last admin protection
@@ -134,7 +134,7 @@ member.patch(
 
       if (adminCountResult.value <= 1) {
         return c.json(
-          { error: "Cannot demote the last organization admin" },
+          { message: "Cannot demote the last organization admin" },
           400,
         );
       }
@@ -178,7 +178,7 @@ member.delete(
     // Self-removal protection
     if (targetMember.userId === currentUser.id) {
       return c.json(
-        { error: "You cannot remove yourself from the organization" },
+        { message: "You cannot remove yourself from the organization" },
         400,
       );
     }
@@ -197,7 +197,7 @@ member.delete(
 
       if (adminCountResult.value <= 1) {
         return c.json(
-          { error: "Cannot remove the last organization admin" },
+          { message: "Cannot remove the last organization admin" },
           400,
         );
       }

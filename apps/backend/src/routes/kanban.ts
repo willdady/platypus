@@ -28,6 +28,7 @@ import {
   requireOrgAccess,
   requireWorkspaceAccess,
   requireWorkspaceOwner,
+  isSuperAdmin,
 } from "../middleware/authorization.ts";
 import type { Variables } from "../server.ts";
 import { calculateCardPosition } from "../utils/kanban-positioning.ts";
@@ -915,6 +916,31 @@ kanban.put(
     const cardId = c.req.param("cardId");
     const commentId = c.req.param("commentId");
     const data = c.req.valid("json");
+    const currentUser = c.get("user")!;
+    const orgMembership = c.get("orgMembership");
+
+    // Fetch the comment to check ownership
+    const [existingComment] = await db
+      .select()
+      .from(kanbanCardCommentTable)
+      .where(
+        and(
+          eq(kanbanCardCommentTable.id, commentId),
+          eq(kanbanCardCommentTable.cardId, cardId),
+        ),
+      )
+      .limit(1);
+
+    if (!existingComment) {
+      return c.json({ message: "Comment not found" }, 404);
+    }
+
+    // Check ownership: super admins, org admins can moderate; others must own the comment
+    const canModerate =
+      isSuperAdmin(currentUser) || orgMembership.role === "admin";
+    if (!canModerate && existingComment.createdByUserId !== currentUser.id) {
+      return c.json({ message: "You can only edit your own comments" }, 403);
+    }
 
     const updated = await db
       .update(kanbanCardCommentTable)
@@ -926,10 +952,6 @@ kanban.put(
         ),
       )
       .returning();
-
-    if (updated.length === 0) {
-      return c.json({ message: "Comment not found" }, 404);
-    }
 
     const [enriched] = await resolveCommentNames(updated);
     return c.json(enriched);
@@ -945,20 +967,40 @@ kanban.delete(
   async (c) => {
     const cardId = c.req.param("cardId");
     const commentId = c.req.param("commentId");
+    const currentUser = c.get("user")!;
+    const orgMembership = c.get("orgMembership");
 
-    const result = await db
-      .delete(kanbanCardCommentTable)
+    // Fetch the comment to check ownership
+    const [existingComment] = await db
+      .select()
+      .from(kanbanCardCommentTable)
       .where(
         and(
           eq(kanbanCardCommentTable.id, commentId),
           eq(kanbanCardCommentTable.cardId, cardId),
         ),
       )
-      .returning();
+      .limit(1);
 
-    if (result.length === 0) {
+    if (!existingComment) {
       return c.json({ message: "Comment not found" }, 404);
     }
+
+    // Check ownership: super admins, org admins can moderate; others must own the comment
+    const canModerate =
+      isSuperAdmin(currentUser) || orgMembership.role === "admin";
+    if (!canModerate && existingComment.createdByUserId !== currentUser.id) {
+      return c.json({ message: "You can only delete your own comments" }, 403);
+    }
+
+    await db
+      .delete(kanbanCardCommentTable)
+      .where(
+        and(
+          eq(kanbanCardCommentTable.id, commentId),
+          eq(kanbanCardCommentTable.cardId, cardId),
+        ),
+      );
 
     return c.json({ success: true });
   },
