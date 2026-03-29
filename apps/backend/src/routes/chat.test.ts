@@ -136,21 +136,6 @@ describe("Chat Routes", () => {
     });
   });
 
-  describe("GET /tags", () => {
-    it("should list tags", async () => {
-      mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
-      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]); // requireWorkspaceAccess
-
-      const mockTags = [{ tag: "tag1", count: 5 }];
-      mockDb.execute.mockResolvedValueOnce({ rows: mockTags });
-
-      const res = await app.request(`${baseUrl}/tags`);
-      expect(res.status).toBe(200);
-      expect(await res.json()).toEqual({ results: mockTags });
-    });
-  });
-
   describe("GET /:chatId", () => {
     it("should return chat", async () => {
       mockSession();

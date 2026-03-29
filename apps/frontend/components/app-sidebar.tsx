@@ -39,7 +39,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   Settings,
   Bot,
@@ -56,13 +56,14 @@ import {
   ClockFading,
   CalendarDays,
   ArrowLeftRight,
+  Search,
+  X,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Field, FieldLabel, FieldError } from "@/components/ui/field";
 import { parseValidationErrors } from "@/lib/utils";
 import { useBackendUrl } from "@/app/client-context";
 import { TagInput } from "@/components/tag-input";
-import { useChatFilter } from "@/hooks/use-chat-filter";
 import { useIsMobile } from "@/hooks/use-mobile";
 
 export function AppSidebar() {
@@ -90,7 +91,15 @@ export function AppSidebar() {
 
   const { mutate } = useSWRConfig();
 
-  const { selectedTags, clearFilters } = useChatFilter();
+  const [searchInput, setSearchInput] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(searchInput);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [searchInput]);
 
   // Helper to revalidate the chat list (handles query params in SWR key)
   const revalidateChatList = () => {
@@ -110,13 +119,14 @@ export function AppSidebar() {
     fetcher,
   );
 
-  const tagsParam =
-    selectedTags.length > 0 ? `&tags=${selectedTags.join(",")}` : "";
+  const searchParam = debouncedSearch
+    ? `&search=${encodeURIComponent(debouncedSearch)}`
+    : "";
   const { data: chatData } = useSWR<{ results: ChatListItem[] }>(
     backendUrl && user
       ? joinUrl(
           backendUrl,
-          `/organizations/${orgId}/workspaces/${workspaceId}/chat?limit=100${tagsParam}`,
+          `/organizations/${orgId}/workspaces/${workspaceId}/chat?limit=100${searchParam}`,
         )
       : null,
     fetcher,
@@ -198,21 +208,6 @@ export function AppSidebar() {
       );
 
       if (response.ok) {
-        // Clear tag filters if the edited chat no longer matches the active filter
-        if (selectedTags.length > 0) {
-          const otherChatsMatchFilter = chats.some(
-            (chat) =>
-              chat.id !== renameChatId &&
-              chat.tags?.some((tag: string) => selectedTags.includes(tag)),
-          );
-          const editedChatStillMatches = renameTags.some((tag) =>
-            selectedTags.includes(tag),
-          );
-          if (!otherChatsMatchFilter && !editedChatStillMatches) {
-            clearFilters();
-          }
-        }
-
         // Close the dialog
         setRenameChatId(null);
         setRenameTitle("");
@@ -255,11 +250,6 @@ export function AppSidebar() {
 
       // Close the dialog
       setDeleteChatId(null);
-
-      // Clear tag filters if the deleted chat was the last one in the filtered list
-      if (selectedTags.length > 0 && chats.length <= 1) {
-        clearFilters();
-      }
 
       // Navigate to the main chat page if we were on the deleted chat
       if (
@@ -403,7 +393,33 @@ export function AppSidebar() {
           </SidebarMenu>
         </SidebarHeader>
         <SidebarSeparator className="mx-0 mt-1" />
+        <div className="px-2 py-2">
+          <div className="relative">
+            <Search className="absolute left-2 top-1/2 -translate-y-1/2 size-4 text-muted-foreground pointer-events-none" />
+            <Input
+              type="search"
+              placeholder="Search chats..."
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
+              className="h-8 pl-8 pr-8"
+            />
+            {searchInput && (
+              <button
+                type="button"
+                onClick={() => setSearchInput("")}
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground cursor-pointer"
+              >
+                <X className="size-4" />
+              </button>
+            )}
+          </div>
+        </div>
         <SidebarContent>
+          {chatGroups.length === 0 && debouncedSearch && (
+            <div className="px-4 py-6 text-center text-sm text-muted-foreground">
+              No chats match &ldquo;{debouncedSearch}&rdquo;
+            </div>
+          )}
           {chatGroups.map((group) => (
             <SidebarGroup key={group.label}>
               <SidebarGroupLabel>

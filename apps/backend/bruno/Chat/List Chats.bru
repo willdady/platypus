@@ -10,8 +10,11 @@ get {
   auth: inherit
 }
 
+params:query {
+  ~search:
+}
+
 params:path {
   orgId: {{orgId}}
   workspaceId: {{workspaceId}}
 }
-

@@ -29,8 +29,6 @@ import {
   type Organization,
 } from "@platypus/schemas";
 import { useParams } from "next/navigation";
-import { TagCloud } from "@/components/tag-cloud";
-import { useChatFilter } from "@/hooks/use-chat-filter";
 
 const Workspace = () => {
   const params = useParams();
@@ -126,8 +124,6 @@ const Workspace = () => {
     backendUrl && user ? joinUrl(backendUrl, `/organizations/${orgId}`) : null,
     fetcher,
   );
-
-  const { selectedTags, toggleFilterTag } = useChatFilter();
 
   if (
     !backendUrl ||
@@ -439,12 +435,6 @@ const Workspace = () => {
             </Button>
           </div>
 
-          <TagCloud
-            orgId={orgId}
-            workspaceId={workspaceId}
-            selectedTags={selectedTags}
-            onTagToggle={toggleFilterTag}
-          />
         </>
       )}
     </div>

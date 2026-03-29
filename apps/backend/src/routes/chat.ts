@@ -143,7 +143,7 @@ chat.get(
     z.object({
       limit: z.string().optional(),
       offset: z.string().optional(),
-      tags: z.string().optional(), // Comma-separated tags for filtering
+      search: z.string().optional(),
     }),
   ),
   async (c) => {
@@ -151,21 +151,19 @@ chat.get(
     const {
       limit: limitStr,
       offset: offsetStr,
-      tags: tagsStr,
+      search,
     } = c.req.valid("query");
 
     const limit = Math.min(parseInt(limitStr ?? "100") || 100, 100);
     const offset = parseInt(offsetStr ?? "0") || 0;
 
-    // Build tag filter condition using PostgreSQL ?| operator (OR logic)
-    const tagsFilter =
-      tagsStr && tagsStr.trim() !== ""
-        ? sql`${chatTable.tags} ?| ${sql.raw(
-            `ARRAY[${tagsStr
-              .split(",")
-              .map((t) => `'${t.trim()}'`)
-              .join(",")}]`,
-          )}`
+    // Build search filter using ILIKE on title and tags
+    const searchFilter =
+      search && search.trim() !== ""
+        ? or(
+            sql`${chatTable.title} ILIKE ${"%" + search.trim() + "%"}`,
+            sql`EXISTS (SELECT 1 FROM jsonb_array_elements_text(${chatTable.tags}) AS t WHERE t ILIKE ${"%" + search.trim() + "%"})`,
+          )
         : undefined;
 
     const records = await db
@@ -185,7 +183,7 @@ chat.get(
         and(
           eq(chatTable.workspaceId, workspaceId),
           isNull(chatTable.scheduleId),
-          tagsFilter,
+          searchFilter,
         ),
       )
       .orderBy(desc(chatTable.createdAt))
@@ -193,26 +191,6 @@ chat.get(
       .offset(offset);
 
     return c.json({ results: records });
-  },
-);
-
-chat.get(
-  "/tags",
-  requireAuth,
-  requireOrgAccess(),
-  requireWorkspaceAccess,
-  async (c) => {
-    const workspaceId = c.req.param("workspaceId")!;
-
-    const result = await db.execute(sql`
-      SELECT value as tag, count(*)::int as count
-      FROM ${chatTable}, jsonb_array_elements_text(${chatTable.tags})
-      WHERE ${chatTable.workspaceId} = ${workspaceId}
-      GROUP BY tag
-      ORDER BY count DESC
-    `);
-
-    return c.json({ results: result.rows });
   },
 );
 
