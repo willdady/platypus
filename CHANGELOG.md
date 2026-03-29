@@ -1,5 +1,23 @@
 # Changelog
 
+## [1.44.0](https://github.com/willdady/platypus/compare/v1.43.0...v1.44.0) (2026-03-29)
+
+
+### Features
+
+* **frontend:** make app installable as a PWA ([c7b9f4d](https://github.com/willdady/platypus/commit/c7b9f4d5623a4300ebbb0502c61382a7d0695cd1))
+* replace tag cloud filtering with search input in sidebar ([111731b](https://github.com/willdady/platypus/commit/111731bf97d18831a774812907f7184dfd85c150))
+
+
+### Bug Fixes
+
+* **backend:** scope agent CRUD queries by workspaceId to prevent cross-workspace access ([60f3bf6](https://github.com/willdady/platypus/commit/60f3bf62e3146ff37bca4c94993f83ff4c976f02))
+* **frontend:** address critical and warning code quality issues ([21e3209](https://github.com/willdady/platypus/commit/21e3209e4e0cd98cad13b3cad6a20a898e29c31d))
+* **frontend:** disable autofocus on kanban card edit dialog comment input ([424d9a3](https://github.com/willdady/platypus/commit/424d9a32a7e730703bdd28b932329f28a4b64dfc))
+* **frontend:** make workspace home stats compact on mobile ([6e72901](https://github.com/willdady/platypus/commit/6e72901b7dd15905a68c53b5d7002920882aecb8))
+* **frontend:** navigate to workspace home after schedule save/delete ([d434c9f](https://github.com/willdady/platypus/commit/d434c9f4a91e82929a335dfb1903d3ee69905d4e))
+* **frontend:** use dvh instead of vh for mobile viewport height ([13c5a86](https://github.com/willdady/platypus/commit/13c5a86a769f2e3ef56ceb652497b5861016aba0))
+
 ## [1.43.0](https://github.com/willdady/platypus/compare/v1.42.0...v1.43.0) (2026-03-29)
 
 
