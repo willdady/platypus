@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.44.1](https://github.com/willdady/platypus/compare/v1.44.0...v1.44.1) (2026-03-29)
+
+
+### Bug Fixes
+
+* **backend:** address security, quality, and testing issues ([edf0c98](https://github.com/willdady/platypus/commit/edf0c980137a3c0d6df71729f1b9b7c0705ae172))
+* **frontend:** hide scrollbar on workspace stats overflow ([cf0c1a4](https://github.com/willdady/platypus/commit/cf0c1a40569adbc707a170818e08f1b0289a4b60))
+* **frontend:** prevent stale SWR data from overwriting streamed messages ([5454289](https://github.com/willdady/platypus/commit/54542892514e82c873f04283a8418c68e66fc848))
+
 ## [1.44.0](https://github.com/willdady/platypus/compare/v1.43.0...v1.44.0) (2026-03-29)
 
 
