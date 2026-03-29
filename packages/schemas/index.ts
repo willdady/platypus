@@ -686,6 +686,40 @@ export const scheduleRunListSchema = z.object({
 
 export type ScheduleRunList = z.infer<typeof scheduleRunListSchema>;
 
+// Notification
+
+export const notificationSchema = z.object({
+  id: z.string(),
+  workspaceId: z.string(),
+  agentId: z.string(),
+  title: z.string().nullable().optional(),
+  body: z.string().min(1).max(2000),
+  createdAt: z.date(),
+  updatedAt: z.date(),
+});
+
+export type Notification = z.infer<typeof notificationSchema>;
+
+export const notificationCreateSchema = notificationSchema.pick({
+  title: true,
+  body: true,
+});
+
+export const notificationUpdateSchema = notificationSchema
+  .pick({
+    title: true,
+    body: true,
+  })
+  .partial();
+
+export const notificationListItemSchema = notificationSchema.extend({
+  agentName: z.string(),
+  agentAvatarUrl: z.string().optional(),
+  isRead: z.boolean(),
+});
+
+export type NotificationListItem = z.infer<typeof notificationListItemSchema>;
+
 // Kanban Label Colors
 
 export const KANBAN_LABEL_COLORS = [

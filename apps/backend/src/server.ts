@@ -18,6 +18,7 @@ import { member } from "./routes/member.ts";
 import { context } from "./routes/context.ts";
 import { schedule } from "./routes/schedule.ts";
 import { kanban } from "./routes/kanban.ts";
+import { notification } from "./routes/notification.ts";
 import { organizationMember } from "./db/schema.ts";
 import { logger } from "./logger.ts";
 
@@ -120,6 +121,10 @@ app.route("/organizations/:orgId/providers", orgProvider);
 app.route("/organizations/:orgId/workspaces/:workspaceId/tools", tool);
 app.route("/organizations/:orgId/workspaces/:workspaceId/schedules", schedule);
 app.route("/organizations/:orgId/workspaces/:workspaceId/boards", kanban);
+app.route(
+  "/organizations/:orgId/workspaces/:workspaceId/notifications",
+  notification,
+);
 app.route("/organizations/:orgId/invitations", invitation);
 app.route("/organizations/:orgId/members", member);
 app.route("/users/me/invitations", userInvitation);

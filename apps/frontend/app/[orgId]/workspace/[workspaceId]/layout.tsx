@@ -93,7 +93,7 @@ export default async function WorkspaceLayout({
             <Kbd className="hidden text-sm font-sans md:flex">
               <Search className="size-4" /> ⌘K
             </Kbd>
-            <NotificationsDropdown />
+            <NotificationsDropdown orgId={orgId} workspaceId={workspaceId} />
             <ModeToggle />
             <UserMenu />
           </div>

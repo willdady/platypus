@@ -10,6 +10,7 @@ import { cn } from "@/lib/utils";
 import type { ToolUIPart } from "ai";
 import {
   ArrowRightLeftIcon,
+  BellIcon,
   BotIcon,
   CheckCircleIcon,
   ChevronDownIcon,
@@ -80,6 +81,11 @@ const toolToToolSet: Record<string, string> = {
   convertVolume: "math-conversions",
   // web-fetch
   fetchUrl: "web-fetch",
+  // notifications
+  createNotification: "notifications",
+  listNotifications: "notifications",
+  updateNotification: "notifications",
+  deleteNotification: "notifications",
 };
 
 /** One icon per toolset, matching the workspace home page. */
@@ -90,6 +96,7 @@ const toolSetIcons: Record<string, LucideIcon> = {
   time: ClockIcon,
   "math-conversions": ArrowRightLeftIcon,
   "web-fetch": GlobeIcon,
+  notifications: BellIcon,
 };
 
 /** Returns an appropriate icon component for a given tool type string. */

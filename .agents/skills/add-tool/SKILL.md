@@ -123,11 +123,35 @@ registerToolSet("time", {
 
 ---
 
-## Step 3: Frontend Integration (Automatic)
+## Step 3: Set the Chat UI Icon for Your Tool Set
 
-The frontend automatically displays new tools once registered. No code changes needed!
+When tools execute in the chat, each tool displays an icon based on its owning tool set. By default, unrecognised tools show a wrench icon. To show a custom icon you must update two maps in `/apps/frontend/components/ai-elements/tool.tsx`:
 
-Tools render with default JSON formatting for input/output. For custom UI (interactive elements, special formatting), see "Advanced Patterns" section below.
+### 1. Map tool names → tool set ID
+
+Add every tool name exported by your tool set to the `toolToToolSet` lookup:
+
+```typescript
+// apps/frontend/components/ai-elements/tool.tsx
+const toolToToolSet: Record<string, string> = {
+  // ... existing entries
+  // currency
+  convertCurrency: "currency",
+};
+```
+
+### 2. Map tool set ID → icon
+
+Add an entry to `toolSetIcons` with a Lucide icon import:
+
+```typescript
+import { CoinsIcon } from "lucide-react";
+
+const toolSetIcons: Record<string, LucideIcon> = {
+  // ... existing entries
+  currency: CoinsIcon,
+};
+```
 
 ### Where Tools Appear
 
@@ -147,6 +171,7 @@ Tools render with default JSON formatting for input/output. For custom UI (inter
    - Real-time tool execution display
    - Status indicators (pending, running, completed, error)
    - Input/output JSON rendering
+   - Tool set icon shown next to tool name (configured above)
 
 ### Tool Display Example
 
@@ -155,7 +180,7 @@ When you register `math-conversions` tool set:
 - **Category**: "Math"
 - **Display**: "Math Conversions" with description
 - **Assignment**: Users toggle switch to assign to agents
-- **Chat**: Shows "convertFahrenheitToCelsius" executing during chat
+- **Chat**: Shows "convertFahrenheitToCelsius" executing during chat with the tool set icon
 
 ---
 
@@ -191,28 +216,45 @@ Result: { "celsius": 24 }
 
 ### 1. Dynamic/Workspace-Scoped Tools
 
-For tools that need workspace-specific data:
+For tools that need workspace or agent context, use a factory function and register with `tools` as a function instead of an object:
 
 ```typescript
-// Factory function that returns a tool
-export const createLoadSkillTool = (workspaceId: string) => {
-  return tool({
-    description: `Load a skill definition for workspace ${workspaceId}`,
+// apps/backend/src/tools/your-tool.ts
+export function createYourTools(
+  workspaceId: string,
+  agentId: string,
+): Record<string, Tool> {
+  const yourTool = tool({
+    description: "Do something scoped to this workspace",
     inputSchema: z.object({
-      name: z.string().describe("Skill name"),
+      name: z.string().describe("Name"),
     }),
     execute: async ({ name }) => {
-      // Access workspace-specific data
-      const skill = await db
+      const result = await db
         .select()
-        .from(skillTable)
-        .where(eq(skillTable.workspaceId, workspaceId))
+        .from(someTable)
+        .where(eq(someTable.workspaceId, workspaceId))
         .limit(1);
-
-      return { skill };
+      return { result };
     },
   });
-};
+
+  return { yourTool };
+}
+```
+
+```typescript
+// apps/backend/src/tools/index.ts
+registerToolSet("your-toolset", {
+  name: "Your Toolset",
+  category: "Category",
+  description: "Description",
+  tools: ({ workspaceId, agentId }) =>
+    createYourTools(workspaceId, agentId),
+});
+```
+
+The `tools` property accepts either a static object or a function receiving `{ workspaceId, agentId }`. Use the function form when tools need runtime context.
 ```
 
 ### 2. Tools with Database Access
@@ -399,9 +441,11 @@ Current categories used in Platypus:
 
 - **Math**: Mathematical operations and conversions
 - **Utilities**: General-purpose tools (time, formatting, etc.)
-- **Elicitation**: Tools for gathering user information
+- **Web**: Web-related tools (fetching URLs, etc.)
+- **Productivity**: Kanban boards, agent management
+- **Automation**: Scheduled tasks and cron jobs
+- **Communication**: Notifications and messaging
 - **MCP**: Model Context Protocol integrations (dynamic)
-- **Uncategorized**: Default for tools without category
 
 Choose an existing category or create a new one as needed.
 
@@ -502,7 +546,26 @@ registerToolSet("currency", {
 });
 ```
 
-### 3. Test
+### 3. Set Chat UI Icon
+
+```typescript
+// apps/frontend/components/ai-elements/tool.tsx
+import { CoinsIcon } from "lucide-react";
+
+// Add to toolToToolSet:
+const toolToToolSet: Record<string, string> = {
+  // ... existing entries
+  convertCurrency: "currency",
+};
+
+// Add to toolSetIcons:
+const toolSetIcons: Record<string, LucideIcon> = {
+  // ... existing entries
+  currency: CoinsIcon,
+};
+```
+
+### 4. Test
 
 ```bash
 pnpm dev
@@ -529,7 +592,7 @@ Result: { "converted": { "amount": 109, "currency": "EUR" }, "rate": 1.09 }
 | `packages/schemas/index.ts`                               | ToolSet and Tool schemas                          |
 | `apps/frontend/components/agent-form.tsx`                 | Tool assignment UI                                |
 | `apps/frontend/components/chat-message.tsx`               | Tool rendering logic and custom component routing |
-| `apps/frontend/components/ai-elements/tool.tsx`           | Default tool execution display components         |
+| `apps/frontend/components/ai-elements/tool.tsx`           | Default tool display, icon mapping, and toolset lookup |
 | `apps/frontend/components/ask-followup-question-tool.tsx` | Custom UI for followup questions tool             |
 | `apps/frontend/components/load-skill-tool.tsx`            | Custom UI for skill loading tool                  |
 

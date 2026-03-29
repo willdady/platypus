@@ -459,6 +459,53 @@ export const kanbanCard = pgTable(
   ],
 );
 
+// Notifications
+
+export const notification = pgTable(
+  "notification",
+  (t) => ({
+    id: t.text("id").primaryKey(),
+    workspaceId: t
+      .text("workspace_id")
+      .notNull()
+      .references(() => workspace.id, { onDelete: "cascade" }),
+    agentId: t
+      .text("agent_id")
+      .notNull()
+      .references(() => agent.id, { onDelete: "cascade" }),
+    title: t.text("title"),
+    body: t.text("body").notNull(),
+    createdAt: t.timestamp("created_at").notNull().defaultNow(),
+    updatedAt: t.timestamp("updated_at").notNull().defaultNow(),
+  }),
+  (t) => [
+    index("idx_notification_workspace_id").on(t.workspaceId),
+    index("idx_notification_agent_id").on(t.agentId),
+    index("idx_notification_created_at").on(t.createdAt),
+  ],
+);
+
+export const notificationRead = pgTable(
+  "notification_read",
+  (t) => ({
+    id: t.text("id").primaryKey(),
+    notificationId: t
+      .text("notification_id")
+      .notNull()
+      .references(() => notification.id, { onDelete: "cascade" }),
+    userId: t
+      .text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    readAt: t.timestamp("read_at").notNull().defaultNow(),
+  }),
+  (t) => [
+    index("idx_notification_read_user_id").on(t.userId),
+    index("idx_notification_read_notification_id").on(t.notificationId),
+    unique("unique_notification_read").on(t.notificationId, t.userId),
+  ],
+);
+
 export const kanbanCardComment = pgTable(
   "kanban_card_comment",
   (t) => ({

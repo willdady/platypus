@@ -10,6 +10,7 @@ import { fetchUrl } from "./fetch.ts";
 import { createKanbanTools } from "./kanban.ts";
 import { createScheduleTools } from "./schedule.ts";
 import { createAgentManagementTools } from "./agent-management.ts";
+import { createNotificationTools } from "./notification.ts";
 
 export type ToolSetContext = { workspaceId: string; agentId: string };
 
@@ -102,4 +103,12 @@ registerToolSet("agent-management", {
   category: "Productivity",
   description: "Create, update, and delete agents and skills in this workspace",
   tools: ({ workspaceId }) => createAgentManagementTools(workspaceId),
+});
+
+registerToolSet("notifications", {
+  name: "Notifications",
+  category: "Communication",
+  description: "Post notifications visible to users in this workspace",
+  tools: ({ workspaceId, agentId }) =>
+    createNotificationTools(workspaceId, agentId),
 });
