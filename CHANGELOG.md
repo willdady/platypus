@@ -1,5 +1,21 @@
 # Changelog
 
+## [1.43.0](https://github.com/willdady/platypus/compare/v1.42.0...v1.43.0) (2026-03-29)
+
+
+### Features
+
+* add notifications toolset for agent-to-user communication ([7b94549](https://github.com/willdady/platypus/commit/7b94549b1a2a7528c41c72b32461b6b27631b361))
+* **frontend:** disable kanban drag on touch devices and add column move menu ([91bf2b2](https://github.com/willdady/platypus/commit/91bf2b27b27ba291cd145f2d1b19ca461acede40))
+* **frontend:** increase default agent max steps to 30 and auto-focus board name input ([2e5bfca](https://github.com/willdady/platypus/commit/2e5bfca2b238a4976f7c133823497f0837082ed6))
+* **frontend:** sort workspace home lists alphabetically by name ([c27acb9](https://github.com/willdady/platypus/commit/c27acb98f82f5ed20d6552a41f09cdb0d8f26f95))
+
+
+### Bug Fixes
+
+* **frontend:** fix mobile scroll disabled after switching org ([8fb4946](https://github.com/willdady/platypus/commit/8fb494637a9f2f642f1af8d38516a0c1ee74fdf9))
+* **frontend:** use single column layout for workspace IDs on small screens ([07d7ae8](https://github.com/willdady/platypus/commit/07d7ae833a07304d09d3d24a89822a405cb62862))
+
 ## [1.42.0](https://github.com/willdady/platypus/compare/v1.41.0...v1.42.0) (2026-03-28)
 
 
