@@ -10,10 +10,12 @@ import { KanbanLabelBadge } from "@/components/kanban-label-badge";
 const KanbanCardComponentInner = function KanbanCardComponent({
   card,
   labels,
+  draggable = true,
   onClick,
 }: {
   card: KanbanCard;
   labels: KanbanLabel[];
+  draggable?: boolean;
   onClick: () => void;
 }) {
   const {
@@ -41,8 +43,8 @@ const KanbanCardComponentInner = function KanbanCardComponent({
       ref={setNodeRef}
       style={style}
       {...attributes}
-      {...listeners}
-      className="border rounded-lg bg-card p-3 shadow-sm cursor-grab"
+      {...(draggable ? listeners : {})}
+      className={`border rounded-lg bg-card p-3 shadow-sm ${draggable ? "cursor-grab" : "cursor-pointer"}`}
       onClick={onClick}
     >
       <p className="text-sm font-medium">{card.title}</p>

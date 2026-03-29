@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import useSWR from "swr";
 import {
   DndContext,
@@ -126,6 +126,16 @@ export function KanbanBoard({
     prevDataRef.current = data;
     if (localColumns) setLocalColumns(null);
   }
+
+  // Detect desktop via pointer: fine media query to disable drag on touch devices
+  const [isDesktop, setIsDesktop] = useState(false);
+  useEffect(() => {
+    const mql = window.matchMedia("(pointer: fine)");
+    setIsDesktop(mql.matches);
+    const onChange = () => setIsDesktop(mql.matches);
+    mql.addEventListener("change", onChange);
+    return () => mql.removeEventListener("change", onChange);
+  }, []);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
@@ -378,6 +388,33 @@ export function KanbanBoard({
     }
   }, [deleteColumnId, deleteColumnHasCards, baseUrl, mutate]);
 
+  const handleMoveColumn = useCallback(
+    async (columnId: string, direction: "left" | "right") => {
+      const currentColumns = data?.columns ?? [];
+      const index = currentColumns.findIndex((c) => c.id === columnId);
+      if (index < 0) return;
+      const newIndex = direction === "left" ? index - 1 : index + 1;
+      if (newIndex < 0 || newIndex >= currentColumns.length) return;
+      const reordered = arrayMove(currentColumns, index, newIndex);
+      setLocalColumns(reordered);
+      try {
+        await fetch(joinUrl(baseUrl, "/columns/reorder"), {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            columnIds: reordered.map((c) => c.id),
+          }),
+          credentials: "include",
+        });
+        await mutate();
+      } catch {
+        toast.error("Failed to move column");
+        setLocalColumns(null);
+      }
+    },
+    [data?.columns, baseUrl, mutate],
+  );
+
   const handleCardSave = useCallback(
     async (
       cardId: string,
@@ -524,11 +561,14 @@ export function KanbanBoard({
               items={columns.map((c) => c.id)}
               strategy={horizontalListSortingStrategy}
             >
-              {columns.map((column) => (
+              {columns.map((column, index) => (
                 <KanbanColumnComponent
                   key={column.id}
                   column={column}
                   labels={labels}
+                  draggable={isDesktop}
+                  isFirst={index === 0}
+                  isLast={index === columns.length - 1}
                   onCardClick={(card) => {
                     setSelectedCard(card);
                     setDialogOpen(true);
@@ -536,6 +576,7 @@ export function KanbanBoard({
                   onAddCard={handleAddCard}
                   onEditColumn={handleEditColumn}
                   onDeleteColumn={handleDeleteColumn}
+                  onMoveColumn={handleMoveColumn}
                 />
               ))}
             </SortableContext>
@@ -568,6 +609,7 @@ export function KanbanBoard({
               <KanbanColumnComponent
                 column={activeColumn}
                 labels={labels}
+                draggable={false}
                 onCardClick={() => {}}
                 onAddCard={() => {}}
                 onEditColumn={() => {}}

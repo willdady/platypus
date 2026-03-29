@@ -10,12 +10,20 @@ import { useDroppable } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
 import type { KanbanCard, KanbanColumn, KanbanLabel } from "@platypus/schemas";
 import { KanbanCardComponent } from "@/components/kanban-card";
-import { Plus, MoreVertical, Pencil, Trash2 } from "lucide-react";
+import {
+  Plus,
+  MoreVertical,
+  Pencil,
+  Trash2,
+  ArrowLeft,
+  ArrowRight,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
@@ -23,17 +31,25 @@ import { cn } from "@/lib/utils";
 const KanbanColumnComponentInner = function KanbanColumnComponent({
   column,
   labels,
+  draggable = true,
+  isFirst = false,
+  isLast = false,
   onCardClick,
   onAddCard,
   onEditColumn,
   onDeleteColumn,
+  onMoveColumn,
 }: {
   column: KanbanColumn & { cards: KanbanCard[] };
   labels: KanbanLabel[];
+  draggable?: boolean;
+  isFirst?: boolean;
+  isLast?: boolean;
   onCardClick: (card: KanbanCard) => void;
   onAddCard: (columnId: string) => void;
   onEditColumn: (columnId: string) => void;
   onDeleteColumn: (columnId: string, hasCards: boolean) => void;
+  onMoveColumn?: (columnId: string, direction: "left" | "right") => void;
 }) {
   const {
     attributes,
@@ -68,9 +84,12 @@ const KanbanColumnComponentInner = function KanbanColumnComponent({
       className="flex flex-col w-80 min-w-80 shrink-0 bg-muted/50 rounded-lg"
     >
       <div
-        className="flex items-center justify-between p-3 cursor-grab"
+        className={cn(
+          "flex items-center justify-between p-3",
+          draggable && "cursor-grab",
+        )}
         {...attributes}
-        {...listeners}
+        {...(draggable ? listeners : {})}
       >
         <span className="font-semibold">{column.name}</span>
         <DropdownMenu>
@@ -83,6 +102,21 @@ const KanbanColumnComponentInner = function KanbanColumnComponent({
             </button>
           </DropdownMenuTrigger>
           <DropdownMenuContent>
+            <DropdownMenuItem
+              disabled={isFirst}
+              onSelect={() => onMoveColumn?.(column.id, "left")}
+            >
+              <ArrowLeft className="h-4 w-4" />
+              Move column left
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              disabled={isLast}
+              onSelect={() => onMoveColumn?.(column.id, "right")}
+            >
+              <ArrowRight className="h-4 w-4" />
+              Move column right
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
             <DropdownMenuItem onSelect={() => onEditColumn(column.id)}>
               <Pencil className="h-4 w-4" />
               Edit
@@ -109,6 +143,7 @@ const KanbanColumnComponentInner = function KanbanColumnComponent({
               key={card.id}
               card={card}
               labels={labels}
+              draggable={draggable}
               onClick={() => onCardClick(card)}
             />
           ))}
