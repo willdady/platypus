@@ -252,7 +252,7 @@ const Workspace = () => {
       ) : (
         <>
           {/* Stats Overview - compact on mobile, full cards on desktop */}
-          <div className="flex gap-2 overflow-x-auto pb-1 lg:hidden">
+          <div className="flex gap-2 overflow-x-auto scrollbar-none pb-1 lg:hidden">
             {[
               { label: "Chats", value: chatCount, icon: MessageSquare },
               { label: "Agents", value: agentCount, icon: Bot },
