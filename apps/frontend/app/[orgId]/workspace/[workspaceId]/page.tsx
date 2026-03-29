@@ -255,8 +255,28 @@ const Workspace = () => {
         <NoProvidersEmptyState orgId={orgId} workspaceId={workspaceId} />
       ) : (
         <>
-          {/* Stats Overview */}
-          <div className="grid gap-4 grid-cols-2 lg:grid-cols-5">
+          {/* Stats Overview - compact on mobile, full cards on desktop */}
+          <div className="flex gap-2 overflow-x-auto pb-1 lg:hidden">
+            {[
+              { label: "Chats", value: chatCount, icon: MessageSquare },
+              { label: "Agents", value: agentCount, icon: Bot },
+              { label: "Skills", value: skillCount, icon: Sparkles },
+              { label: "Schedules", value: scheduleCount, icon: Timer },
+              { label: "Boards", value: boardCount, icon: KanbanSquare },
+            ].map(({ label, value, icon: Icon }) => (
+              <Card
+                key={label}
+                className="flex flex-row items-center gap-2 px-3 py-2 min-w-fit"
+              >
+                <Icon className="h-4 w-4 text-muted-foreground shrink-0" />
+                <span className="text-lg font-bold">{value}</span>
+                <span className="text-xs text-muted-foreground whitespace-nowrap">
+                  {label}
+                </span>
+              </Card>
+            ))}
+          </div>
+          <div className="hidden lg:grid gap-4 grid-cols-5">
             <Card className="gap-2">
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-0">
                 <CardTitle className="text-sm font-medium">
