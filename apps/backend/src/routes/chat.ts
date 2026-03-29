@@ -148,11 +148,7 @@ chat.get(
   ),
   async (c) => {
     const workspaceId = c.req.param("workspaceId")!;
-    const {
-      limit: limitStr,
-      offset: offsetStr,
-      search,
-    } = c.req.valid("query");
+    const { limit: limitStr, offset: offsetStr, search } = c.req.valid("query");
 
     const limit = Math.min(parseInt(limitStr ?? "100") || 100, 100);
     const offset = parseInt(offsetStr ?? "0") || 0;

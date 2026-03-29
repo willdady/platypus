@@ -129,7 +129,10 @@ agent.get(
       .select()
       .from(agentTable)
       .where(
-        and(eq(agentTable.id, agentId), eq(agentTable.workspaceId, workspaceId)),
+        and(
+          eq(agentTable.id, agentId),
+          eq(agentTable.workspaceId, workspaceId),
+        ),
       )
       .limit(1);
     if (record.length === 0) {
@@ -184,7 +187,10 @@ agent.put(
         updatedAt: new Date(),
       })
       .where(
-        and(eq(agentTable.id, agentId), eq(agentTable.workspaceId, workspaceId)),
+        and(
+          eq(agentTable.id, agentId),
+          eq(agentTable.workspaceId, workspaceId),
+        ),
       )
       .returning();
     return c.json(agentWithAvatarUrl(record[0], baseUrl), 200);
@@ -253,7 +259,10 @@ agent.post(
       .select({ avatarKey: agentTable.avatarKey })
       .from(agentTable)
       .where(
-        and(eq(agentTable.id, agentId), eq(agentTable.workspaceId, workspaceId)),
+        and(
+          eq(agentTable.id, agentId),
+          eq(agentTable.workspaceId, workspaceId),
+        ),
       )
       .limit(1);
 
@@ -273,7 +282,10 @@ agent.post(
       .update(agentTable)
       .set({ avatarKey: key, updatedAt: new Date() })
       .where(
-        and(eq(agentTable.id, agentId), eq(agentTable.workspaceId, workspaceId)),
+        and(
+          eq(agentTable.id, agentId),
+          eq(agentTable.workspaceId, workspaceId),
+        ),
       )
       .returning();
 
@@ -298,7 +310,10 @@ agent.delete(
       .select({ avatarKey: agentTable.avatarKey })
       .from(agentTable)
       .where(
-        and(eq(agentTable.id, agentId), eq(agentTable.workspaceId, workspaceId)),
+        and(
+          eq(agentTable.id, agentId),
+          eq(agentTable.workspaceId, workspaceId),
+        ),
       )
       .limit(1);
 
@@ -315,7 +330,10 @@ agent.delete(
       .update(agentTable)
       .set({ avatarKey: null, updatedAt: new Date() })
       .where(
-        and(eq(agentTable.id, agentId), eq(agentTable.workspaceId, workspaceId)),
+        and(
+          eq(agentTable.id, agentId),
+          eq(agentTable.workspaceId, workspaceId),
+        ),
       )
       .returning();
 
@@ -337,7 +355,10 @@ agent.delete(
       .select({ avatarKey: agentTable.avatarKey })
       .from(agentTable)
       .where(
-        and(eq(agentTable.id, agentId), eq(agentTable.workspaceId, workspaceId)),
+        and(
+          eq(agentTable.id, agentId),
+          eq(agentTable.workspaceId, workspaceId),
+        ),
       )
       .limit(1);
 
@@ -353,7 +374,10 @@ agent.delete(
     await db
       .delete(agentTable)
       .where(
-        and(eq(agentTable.id, agentId), eq(agentTable.workspaceId, workspaceId)),
+        and(
+          eq(agentTable.id, agentId),
+          eq(agentTable.workspaceId, workspaceId),
+        ),
       );
     return c.json({ message: "Agent deleted" });
   },

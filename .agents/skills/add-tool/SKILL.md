@@ -249,13 +249,13 @@ registerToolSet("your-toolset", {
   name: "Your Toolset",
   category: "Category",
   description: "Description",
-  tools: ({ workspaceId, agentId }) =>
-    createYourTools(workspaceId, agentId),
+  tools: ({ workspaceId, agentId }) => createYourTools(workspaceId, agentId),
 });
 ```
 
 The `tools` property accepts either a static object or a function receiving `{ workspaceId, agentId }`. Use the function form when tools need runtime context.
-```
+
+````
 
 ### 2. Tools with Database Access
 
@@ -281,7 +281,7 @@ export const getUserInfo = tool({
     return { user: user[0] || null };
   },
 });
-```
+````
 
 ### 3. Tools with External API Calls
 
@@ -583,18 +583,18 @@ Result: { "converted": { "amount": 109, "currency": "EUR" }, "rate": 1.09 }
 
 ## Key Files Reference
 
-| File                                                      | Purpose                                           |
-| --------------------------------------------------------- | ------------------------------------------------- |
-| `apps/backend/src/tools/index.ts`                         | Tool set registry and registration                |
-| `apps/backend/src/tools/*.ts`                             | Individual tool implementations                   |
-| `apps/backend/src/routes/chat.ts`                         | Tool loading and execution logic                  |
-| `apps/backend/src/routes/tool.ts`                         | API endpoint for listing tools                    |
-| `packages/schemas/index.ts`                               | ToolSet and Tool schemas                          |
-| `apps/frontend/components/agent-form.tsx`                 | Tool assignment UI                                |
-| `apps/frontend/components/chat-message.tsx`               | Tool rendering logic and custom component routing |
+| File                                                      | Purpose                                                |
+| --------------------------------------------------------- | ------------------------------------------------------ |
+| `apps/backend/src/tools/index.ts`                         | Tool set registry and registration                     |
+| `apps/backend/src/tools/*.ts`                             | Individual tool implementations                        |
+| `apps/backend/src/routes/chat.ts`                         | Tool loading and execution logic                       |
+| `apps/backend/src/routes/tool.ts`                         | API endpoint for listing tools                         |
+| `packages/schemas/index.ts`                               | ToolSet and Tool schemas                               |
+| `apps/frontend/components/agent-form.tsx`                 | Tool assignment UI                                     |
+| `apps/frontend/components/chat-message.tsx`               | Tool rendering logic and custom component routing      |
 | `apps/frontend/components/ai-elements/tool.tsx`           | Default tool display, icon mapping, and toolset lookup |
-| `apps/frontend/components/ask-followup-question-tool.tsx` | Custom UI for followup questions tool             |
-| `apps/frontend/components/load-skill-tool.tsx`            | Custom UI for skill loading tool                  |
+| `apps/frontend/components/ask-followup-question-tool.tsx` | Custom UI for followup questions tool                  |
+| `apps/frontend/components/load-skill-tool.tsx`            | Custom UI for skill loading tool                       |
 
 ---
 
@@ -604,7 +604,7 @@ After adding your tool:
 
 1. Consider writing tests in `apps/backend/src/tools/__tests__/`
 2. Document complex tools with JSDoc comments
-4. Create custom frontend UI if needed (see "Advanced Patterns" section above)
+3. Create custom frontend UI if needed (see "Advanced Patterns" section above)
    - Reference `ask-followup-question-tool.tsx` for interactive examples
    - Reference `load-skill-tool.tsx` for status display examples
 

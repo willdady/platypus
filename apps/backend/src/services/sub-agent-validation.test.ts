@@ -53,13 +53,19 @@ describe("validateSubAgentAssignment", () => {
 
   it("returns valid for single sub-agent", async () => {
     mockDb.where.mockResolvedValueOnce([{ id: "agent-2" }]);
-    const result = await validateSubAgentAssignment("workspace-1", "agent-1", ["agent-2"]);
+    const result = await validateSubAgentAssignment("workspace-1", "agent-1", [
+      "agent-2",
+    ]);
     expect(result).toEqual({ valid: true });
   });
 
   it("returns valid for empty subAgentIds array", async () => {
     mockDb.where.mockResolvedValueOnce([]);
-    const result = await validateSubAgentAssignment("workspace-1", "agent-1", []);
+    const result = await validateSubAgentAssignment(
+      "workspace-1",
+      "agent-1",
+      [],
+    );
     expect(result).toEqual({ valid: true });
   });
 });

@@ -43,7 +43,9 @@ describe("convertTimezone", () => {
       ctx,
     );
     // ISO format with offset: yyyy-MM-dd'T'HH:mm:ssXXX
-    expect(result.isoDateTime).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}[+-]\d{2}:\d{2}$/);
+    expect(result.isoDateTime).toMatch(
+      /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}[+-]\d{2}:\d{2}$/,
+    );
   });
 
   it("throws for invalid date string", async () => {

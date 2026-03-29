@@ -204,24 +204,34 @@ describe("chat-execution", () => {
     });
 
     it("throws when neither agentId nor providerId+modelId", async () => {
-      await expect(
-        resolveChatContext({}, "org-1", "ws-1"),
-      ).rejects.toThrow("Must provide either agentId or (providerId and modelId)");
+      await expect(resolveChatContext({}, "org-1", "ws-1")).rejects.toThrow(
+        "Must provide either agentId or (providerId and modelId)",
+      );
     });
 
     it("throws when provider not found", async () => {
       mockDb.limit.mockResolvedValueOnce([]);
 
       await expect(
-        resolveChatContext({ providerId: "p-missing", modelId: "gpt-4" }, "org-1", "ws-1"),
+        resolveChatContext(
+          { providerId: "p-missing", modelId: "gpt-4" },
+          "org-1",
+          "ws-1",
+        ),
       ).rejects.toThrow("Provider with id 'p-missing' not found");
     });
 
     it("throws when modelId not in provider's modelIds", async () => {
-      mockDb.limit.mockResolvedValueOnce([{ ...providerRecord, modelIds: ["gpt-3"] }]);
+      mockDb.limit.mockResolvedValueOnce([
+        { ...providerRecord, modelIds: ["gpt-3"] },
+      ]);
 
       await expect(
-        resolveChatContext({ providerId: "p1", modelId: "gpt-4" }, "org-1", "ws-1"),
+        resolveChatContext(
+          { providerId: "p1", modelId: "gpt-4" },
+          "org-1",
+          "ws-1",
+        ),
       ).rejects.toThrow("Model id 'gpt-4' not enabled for provider 'p1'");
     });
 

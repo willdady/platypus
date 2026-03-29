@@ -195,13 +195,7 @@ export function NotificationsDropdown({
                       >
                         <ReactMarkdown
                           remarkPlugins={[remarkGfm]}
-                          allowedElements={[
-                            "p",
-                            "a",
-                            "strong",
-                            "em",
-                            "code",
-                          ]}
+                          allowedElements={["p", "a", "strong", "em", "code"]}
                           components={{
                             a: ({ children, href }) => (
                               <a
