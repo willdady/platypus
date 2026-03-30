@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.45.0](https://github.com/willdady/platypus/compare/v1.44.1...v1.45.0) (2026-03-30)
+
+
+### Features
+
+* **frontend:** show agent count on skill items with warning styling ([3c2866f](https://github.com/willdady/platypus/commit/3c2866f1a12927eb17a68087753c2b4c68e80219))
+
+
+### Bug Fixes
+
+* **frontend:** hide scrollbar on mobile workspace stats ([9c85f3d](https://github.com/willdady/platypus/commit/9c85f3d78a1775a9ceb57f6f318d1868748eec5b))
+
 ## [1.44.1](https://github.com/willdady/platypus/compare/v1.44.0...v1.44.1) (2026-03-29)
 
 
