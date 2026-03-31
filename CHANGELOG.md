@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.45.1](https://github.com/willdady/platypus/compare/v1.45.0...v1.45.1) (2026-03-31)
+
+
+### Bug Fixes
+
+* **backend:** return proper error response when chat context resolution fails ([aa1739f](https://github.com/willdady/platypus/commit/aa1739f2b0e9a3148b3c2b163baf26914b55542e))
+
 ## [1.45.0](https://github.com/willdady/platypus/compare/v1.44.1...v1.45.0) (2026-03-30)
 
 
