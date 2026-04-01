@@ -232,7 +232,7 @@ export function NotificationsDropdown({
                       </div>
                     </div>
                     <button
-                      className="absolute top-2 right-2 p-0.5 rounded-sm opacity-0 group-hover/notif:opacity-100 hover:bg-muted-foreground/20 text-muted-foreground hover:text-foreground transition-opacity"
+                      className="absolute top-2 right-2 p-0.5 rounded-sm hover:bg-muted-foreground/20 text-muted-foreground hover:text-foreground"
                       onClick={(e) => {
                         e.stopPropagation();
                         handleDismiss(notif.id);
