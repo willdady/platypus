@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.46.0](https://github.com/willdady/platypus/compare/v1.45.1...v1.46.0) (2026-04-01)
+
+
+### Features
+
+* add resource URLs to tool responses ([7f1fa3f](https://github.com/willdady/platypus/commit/7f1fa3f9e9d2a65ec543ba84acb945289790b61b))
+
+
+### Bug Fixes
+
+* **frontend:** allow dropping cards onto empty kanban columns ([f2b6e2e](https://github.com/willdady/platypus/commit/f2b6e2e7c6103ec2f353ed58b2bb397190edce04))
+* **frontend:** make notification dismiss button always visible ([e0c69e1](https://github.com/willdady/platypus/commit/e0c69e1d5e40ba0fbf2a797e954d454be0c60c26))
+* **frontend:** make toggle grids single column on mobile ([7582093](https://github.com/willdady/platypus/commit/7582093bebe59e2b1725f24d9764aca6aa728ddf))
+
 ## [1.45.1](https://github.com/willdady/platypus/compare/v1.45.0...v1.45.1) (2026-03-31)
 
 
