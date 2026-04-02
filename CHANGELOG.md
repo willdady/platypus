@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.47.0](https://github.com/willdady/platypus/compare/v1.46.0...v1.47.0) (2026-04-02)
+
+
+### Features
+
+* **frontend:** add tabbed layout for kanban card dialog on mobile ([b267365](https://github.com/willdady/platypus/commit/b2673653e96c47f0e7ee47920dea41885a051e56))
+
 ## [1.46.0](https://github.com/willdady/platypus/compare/v1.45.1...v1.46.0) (2026-04-01)
 
 
