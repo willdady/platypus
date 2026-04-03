@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.48.0](https://github.com/willdady/platypus/compare/v1.47.0...v1.48.0) (2026-04-03)
+
+
+### Features
+
+* add OAuth 2.1 authentication for MCP servers ([c258068](https://github.com/willdady/platypus/commit/c258068018cf4d10935f81399f3c1fd4cd8da3f3))
+
 ## [1.47.0](https://github.com/willdady/platypus/compare/v1.46.0...v1.47.0) (2026-04-02)
 
 
