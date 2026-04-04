@@ -13,7 +13,6 @@ import { auth } from "./src/auth.ts";
 import { logger } from "./src/logger.ts";
 import { startMemoryScheduler } from "./src/jobs/memory-scheduler.ts";
 import { startScheduleScheduler } from "./src/jobs/schedule-scheduler.ts";
-import { initWebPush } from "./src/services/push-notification.ts";
 
 const PORT = process.env.PORT || "4001";
 
@@ -103,12 +102,6 @@ const main = async () => {
     fetch: app.fetch,
     port: parseInt(PORT),
   });
-
-  // Initialize web push notifications
-  const pushEnabled = initWebPush();
-  logger.info(
-    `Web push notifications: ${pushEnabled ? "enabled" : "disabled"}`,
-  );
 
   // Start background jobs (safe for horizontal scaling)
   startMemoryScheduler();

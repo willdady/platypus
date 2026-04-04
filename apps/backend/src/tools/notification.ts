@@ -6,8 +6,6 @@ import {
   notification as notificationTable,
   agent as agentTable,
 } from "../db/schema.ts";
-import { sendPushForWorkspaceNotification } from "../services/push-notification.ts";
-import { logger } from "../logger.ts";
 
 export function createNotificationTools(
   workspaceId: string,
@@ -60,14 +58,6 @@ export function createNotificationTools(
           updatedAt: now,
         })
         .returning();
-
-      sendPushForWorkspaceNotification(workspaceId, {
-        title: title ?? "New Notification",
-        body: body.length > 200 ? body.slice(0, 197) + "..." : body,
-        data: { workspaceId, notificationId: id },
-      }).catch((err) =>
-        logger.error({ err }, "Failed to send push notifications"),
-      );
 
       return record[0];
     },

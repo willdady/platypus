@@ -528,25 +528,6 @@ export const notificationRead = pgTable(
   ],
 );
 
-export const pushSubscription = pgTable(
-  "push_subscription",
-  (t) => ({
-    id: t.text("id").primaryKey(),
-    userId: t
-      .text("user_id")
-      .notNull()
-      .references(() => user.id, { onDelete: "cascade" }),
-    endpoint: t.text("endpoint").notNull(),
-    keysP256dh: t.text("keys_p256dh").notNull(),
-    keysAuth: t.text("keys_auth").notNull(),
-    createdAt: t.timestamp("created_at").notNull().defaultNow(),
-  }),
-  (t) => [
-    index("idx_push_subscription_user_id").on(t.userId),
-    unique("unique_push_subscription_endpoint").on(t.endpoint),
-  ],
-);
-
 export const kanbanCardComment = pgTable(
   "kanban_card_comment",
   (t) => ({

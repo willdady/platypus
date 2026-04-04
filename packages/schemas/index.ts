@@ -747,20 +747,6 @@ export const notificationListItemSchema = notificationSchema.extend({
 
 export type NotificationListItem = z.infer<typeof notificationListItemSchema>;
 
-// Push Subscription
-
-export const pushSubscriptionCreateSchema = z.object({
-  endpoint: z.url(),
-  keys: z.object({
-    p256dh: z.string().min(1),
-    auth: z.string().min(1),
-  }),
-});
-
-export type PushSubscriptionCreate = z.infer<
-  typeof pushSubscriptionCreateSchema
->;
-
 // Kanban Label Colors
 
 export const KANBAN_LABEL_COLORS = [

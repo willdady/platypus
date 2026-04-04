@@ -67,26 +67,6 @@ Platypus is a monorepo managed by [Turborepo](https://turbo.build/) with the fol
 | `apps/backend`     | Hono.js REST API server                       |
 | `packages/schemas` | Shared Zod schemas for end-to-end type safety |
 
-## Web Push Notifications (Optional)
-
-Platypus supports browser push notifications. To enable them in your development environment:
-
-1. Generate VAPID keys:
-
-   ```bash
-   npx web-push generate-vapid-keys
-   ```
-
-2. Add the keys to `apps/backend/.env`:
-
-   ```
-   VAPID_PUBLIC_KEY=<your-public-key>
-   VAPID_PRIVATE_KEY=<your-private-key>
-   VAPID_SUBJECT=mailto:admin@example.com
-   ```
-
-3. Restart the backend server. Push notifications are entirely optional — the app works normally without them.
-
 ## Reporting Issues
 
 If you find a bug or have a feature request, please [open an issue](https://github.com/willdady/platypus/issues) with a clear description and, if applicable, steps to reproduce.

@@ -29,10 +29,6 @@ services:
       STORAGE_BACKEND: disk
       STORAGE_DISK_PATH: /data/files
       FRONTEND_URL: "http://localhost:3000"
-      # Web Push notifications (optional) - generate keys with: npx web-push generate-vapid-keys
-      # VAPID_PUBLIC_KEY: ""
-      # VAPID_PRIVATE_KEY: ""
-      # VAPID_SUBJECT: "mailto:admin@example.com"
     volumes:
       - ./data:/data
     ports:

@@ -5,7 +5,6 @@ import { ThemeProvider } from "@/components/theme-provider";
 import { Toaster } from "@/components/ui/sonner";
 import ClientProvider from "./client-context";
 import { AuthProvider } from "@/components/auth-provider";
-import { ServiceWorkerRegister } from "@/components/service-worker-register";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -54,7 +53,6 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased h-dvh overflow-hidden`}
       >
-        <ServiceWorkerRegister />
         <AuthProvider backendUrl={backendUrl}>
           <ThemeProvider
             attribute="class"

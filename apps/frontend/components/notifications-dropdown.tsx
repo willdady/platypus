@@ -2,16 +2,7 @@
 
 import { useState } from "react";
 import { useAuth } from "@/components/auth-provider";
-import {
-  Bell,
-  Mail,
-  Bot,
-  ChevronDown,
-  ChevronUp,
-  X,
-  BellRing,
-} from "lucide-react";
-import { usePushNotifications } from "@/hooks/use-push-notifications";
+import { Bell, Mail, Bot, ChevronDown, ChevronUp, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -63,8 +54,6 @@ export function NotificationsDropdown({
   const { user } = useAuth();
   const backendUrl = useBackendUrl();
   const [expandedId, setExpandedId] = useState<string | null>(null);
-  const { state: pushState, subscribe: subscribePush } = usePushNotifications();
-
   const notificationsUrl =
     backendUrl && user && orgId && workspaceId
       ? joinUrl(
@@ -284,39 +273,6 @@ export function NotificationsDropdown({
                 >
                   Mark all as read
                 </DropdownMenuItem>
-              </>
-            )}
-            {pushState === "unsubscribed" && (
-              <>
-                <DropdownMenuSeparator />
-                <div className="p-3 text-center">
-                  <p className="text-xs text-muted-foreground mb-2">
-                    Get notified when agents send you updates
-                  </p>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="w-full gap-2"
-                    onClick={(e) => {
-                      e.preventDefault();
-                      subscribePush();
-                    }}
-                  >
-                    <BellRing className="h-3.5 w-3.5" />
-                    Enable push notifications
-                  </Button>
-                </div>
-              </>
-            )}
-            {pushState === "denied" && (
-              <>
-                <DropdownMenuSeparator />
-                <div className="p-3 text-center">
-                  <p className="text-xs text-muted-foreground">
-                    Push notifications are blocked. Enable them in your browser
-                    settings.
-                  </p>
-                </div>
               </>
             )}
           </>

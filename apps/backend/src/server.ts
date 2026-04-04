@@ -20,7 +20,6 @@ import { schedule } from "./routes/schedule.ts";
 import { kanban } from "./routes/kanban.ts";
 import { notification } from "./routes/notification.ts";
 import { mcpOauthCallback } from "./routes/mcp-oauth-callback.ts";
-import { push } from "./routes/push-subscription.ts";
 import { organizationMember } from "./db/schema.ts";
 import { logger } from "./logger.ts";
 
@@ -131,7 +130,6 @@ app.route("/organizations/:orgId/invitations", invitation);
 app.route("/organizations/:orgId/members", member);
 app.route("/users/me/invitations", userInvitation);
 app.route("/users/me/contexts", context);
-app.route("/push", push);
 app.route("/oauth/mcp/callback", mcpOauthCallback);
 
 export default app;
