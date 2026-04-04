@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.49.0](https://github.com/willdady/platypus/compare/v1.48.0...v1.49.0) (2026-04-04)
+
+
+### Features
+
+* add Web Push notification support ([1498311](https://github.com/willdady/platypus/commit/14983111ef3ec33c992bbc758d2785603f069f40))
+
 ## [1.48.0](https://github.com/willdady/platypus/compare/v1.47.0...v1.48.0) (2026-04-03)
 
 
