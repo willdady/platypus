@@ -71,12 +71,20 @@ export const Chat = ({
   const { user, isWorkspaceOwner } = useAuth();
   const backendUrl = useBackendUrl();
 
+  // Client-side mount flag. During SSR, SWR's module-level cache can retain
+  // stale data between requests, causing the server to render data-dependent
+  // content that differs from the client's initial render. Gating on mount
+  // ensures both server and client produce the same empty shell during
+  // hydration, then the real content appears once client state is reliable.
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [search, setSearch] = useState(false);
   const [inputValue, setInputValue] = useState("");
 
   // Fetch providers
-  const { data: providersData, isLoading } = useSWR<{ results: Provider[] }>(
+  const { data: providersData } = useSWR<{ results: Provider[] }>(
     backendUrl && user
       ? joinUrl(
           backendUrl,
@@ -363,19 +371,12 @@ export const Chat = ({
     [messages, setMessages],
   );
 
-  // TODO: Ideally show a loading indicator here
-  if (isLoading) return null;
-
-  // Show alert if no providers are configured
-  if (providers.length === 0) {
-    return (
-      <div className="flex items-center justify-center h-full p-8">
-        <div className="w-full xl:w-4/5 max-w-4xl">
-          <NoProvidersEmptyState orgId={orgId} workspaceId={workspaceId} />
-        </div>
-      </div>
-    );
-  }
+  // Only evaluate data-dependent states after mount to avoid SSR/CSR
+  // mismatches. Before mount (and during SSR), these are always false,
+  // so the component renders an empty shell consistently.
+  const hasNoProviders =
+    mounted && providersData !== undefined && providers.length === 0;
+  const isReady = mounted && providersData !== undefined && !hasNoProviders;
 
   const selectedAgent = agentId ? agents.find((a) => a.id === agentId) : null;
   const currentProvider = providerId
@@ -411,190 +412,210 @@ export const Chat = ({
     );
   };
 
+  // Always render a consistent outer shell to avoid hydration mismatches.
+  // Content inside the shell switches based on data readiness.
   return (
-    <div
-      className={`relative size-full flex flex-col overflow-hidden h-full ${messages.length === 0 ? "justify-center" : ""}`}
-    >
-      <Conversation
-        className={`overflow-y-hidden ${messages.length === 0 ? "flex-none" : ""}`}
-        data-conversation
-      >
-        <ConversationContent>
-          <div className="flex justify-center">
-            <div className="w-full flex flex-col gap-2 xl:w-4/5 max-w-4xl">
-              {messages.map((message, messageIndex) => (
-                <ChatMessage
-                  key={message.id}
-                  message={message}
-                  isLastMessage={messageIndex === messages.length - 1}
-                  status={status}
-                  isEditing={editingMessageId === message.id}
-                  editContent={editContent}
-                  editTextareaRef={editTextareaRef}
-                  agents={agents}
-                  setEditContent={messageEditing.setEditContent}
-                  onEditStart={handleMessageEditStart}
-                  onEditCancel={handleMessageEditCancel}
-                  onEditSubmit={handleMessageEditSubmit}
-                  onMessageDelete={handleMessageDelete}
-                  onRegenerate={handleRegenerate}
-                  onCopyMessage={handleCopyMessage}
-                  copiedMessageId={copiedMessageId}
-                />
-              ))}
-            </div>
-          </div>
-        </ConversationContent>
-        <ConversationScrollButton />
-      </Conversation>
-      <div className="grid shrink-0 gap-4 p-4">
-        <div className="flex justify-center">
+    <div className="relative size-full flex flex-col overflow-hidden h-full">
+      {hasNoProviders ? (
+        <div className="flex items-center justify-center h-full p-8">
           <div className="w-full xl:w-4/5 max-w-4xl">
-            {isWorkspaceOwner ? (
-              <PromptInput
-                onSubmit={(message, event) => {
-                  handleSubmit(message);
-                  setInputValue("");
-                }}
-                globalDrop
-                multiple
-              >
-                <PromptInputAttachments className="w-full">
-                  {(attachment) => <PromptInputAttachment data={attachment} />}
-                </PromptInputAttachments>
-                <PromptInputBody>
-                  <PromptInputTextarea
-                    ref={textareaRef}
-                    value={inputValue}
-                    onChange={(e) => setInputValue(e.target.value)}
-                    placeholder={
-                      selectedAgent?.inputPlaceholder ||
-                      "What would you like to know?"
-                    }
-                    autoFocus
-                  />
-                </PromptInputBody>
-                <PromptInputFooter>
-                  <PromptInputTools>
-                    <PromptInputActionMenu>
-                      <PromptInputActionMenuTrigger className="cursor-pointer" />
-                      <PromptInputActionMenuContent>
-                        <PromptInputActionAddAttachments className="cursor-pointer" />
-                      </PromptInputActionMenuContent>
-                    </PromptInputActionMenu>
-                    <Tooltip delayDuration={1000}>
-                      <TooltipTrigger asChild>
-                        <PromptInputSpeechButton
-                          className="cursor-pointer"
-                          textareaRef={textareaRef}
-                          onTranscriptionChange={setInputValue}
-                        />
-                      </TooltipTrigger>
-                      <TooltipContent>Microphone</TooltipContent>
-                    </Tooltip>
-                    {(!currentProviderType ||
-                      currentProviderType !== "Bedrock") && (
-                      <Tooltip delayDuration={1000}>
-                        <TooltipTrigger asChild>
-                          <PromptInputButton
-                            className="cursor-pointer mr-2"
-                            onClick={() => setSearch(!search)}
-                            variant={search ? "default" : "ghost"}
-                          >
-                            <GlobeIcon size={16} />
-                          </PromptInputButton>
-                        </TooltipTrigger>
-                        <TooltipContent>Search</TooltipContent>
-                      </Tooltip>
-                    )}
-                    <ModelSelectorDialog
-                      agents={agents}
-                      providers={providers}
-                      agentId={agentId}
-                      modelId={modelId}
-                      isOpen={isModelSelectorOpen}
-                      onOpenChange={(open) => {
-                        setIsModelSelectorOpen(open);
-                        if (!open) {
-                          setTimeout(() => textareaRef.current?.focus(), 250);
-                        }
-                      }}
-                      onModelChange={handleModelChange}
-                    />
-                    {agentId && selectedAgent && (
-                      <Dialog
-                        open={isAgentInfoDialogOpen}
-                        onOpenChange={setIsAgentInfoDialogOpen}
-                      >
-                        <DialogTrigger asChild>
-                          <PromptInputButton>
-                            <Info />
-                          </PromptInputButton>
-                        </DialogTrigger>
-                        <AgentInfoDialog
-                          agent={selectedAgent}
-                          toolSets={toolSets}
-                          skills={skills}
-                          providers={providers}
-                          onClose={() => setIsAgentInfoDialogOpen(false)}
-                        />
-                      </Dialog>
-                    )}
-                    {!agentId && (
-                      <Dialog
-                        open={isSettingsDialogOpen}
-                        onOpenChange={setIsSettingsDialogOpen}
-                      >
-                        <Tooltip delayDuration={1000}>
-                          <DialogTrigger asChild>
-                            <TooltipTrigger asChild>
-                              <PromptInputButton>
-                                <Settings2 />
-                              </PromptInputButton>
-                            </TooltipTrigger>
-                          </DialogTrigger>
-                          <TooltipContent>Settings</TooltipContent>
-                        </Tooltip>
-                        <ChatSettingsDialog
-                          systemPrompt={systemPrompt}
-                          onSystemPromptChange={setters.setSystemPrompt}
-                          temperature={temperature}
-                          onTemperatureChange={setters.setTemperature}
-                          seed={seed}
-                          onSeedChange={setters.setSeed}
-                          topP={topP}
-                          onTopPChange={setters.setTopP}
-                          topK={topK}
-                          onTopKChange={setters.setTopK}
-                          presencePenalty={presencePenalty}
-                          onPresencePenaltyChange={setters.setPresencePenalty}
-                          frequencyPenalty={frequencyPenalty}
-                          onFrequencyPenaltyChange={setters.setFrequencyPenalty}
-                          onClose={() => setIsSettingsDialogOpen(false)}
-                        />
-                      </Dialog>
-                    )}
-                  </PromptInputTools>
-                  <PromptInputSubmit status={status} />
-                </PromptInputFooter>
-              </PromptInput>
-            ) : (
-              <div className="flex items-center justify-center py-4 px-6 border rounded-lg bg-muted/50">
-                <p className="text-sm text-muted-foreground">
-                  Read-only mode. Only the workspace owner can send messages.
-                </p>
-              </div>
-            )}
+            <NoProvidersEmptyState orgId={orgId} workspaceId={workspaceId} />
           </div>
         </div>
-      </div>
+      ) : isReady ? (
+        <>
+          <Conversation
+            className={`overflow-y-hidden ${messages.length === 0 ? "flex-1 justify-end" : ""}`}
+            data-conversation
+          >
+            <ConversationContent>
+              <div className="flex justify-center">
+                <div className="w-full flex flex-col gap-2 xl:w-4/5 max-w-4xl">
+                  {messages.map((message, messageIndex) => (
+                    <ChatMessage
+                      key={message.id}
+                      message={message}
+                      isLastMessage={messageIndex === messages.length - 1}
+                      status={status}
+                      isEditing={editingMessageId === message.id}
+                      editContent={editContent}
+                      editTextareaRef={editTextareaRef}
+                      agents={agents}
+                      setEditContent={messageEditing.setEditContent}
+                      onEditStart={handleMessageEditStart}
+                      onEditCancel={handleMessageEditCancel}
+                      onEditSubmit={handleMessageEditSubmit}
+                      onMessageDelete={handleMessageDelete}
+                      onRegenerate={handleRegenerate}
+                      onCopyMessage={handleCopyMessage}
+                      copiedMessageId={copiedMessageId}
+                    />
+                  ))}
+                </div>
+              </div>
+            </ConversationContent>
+            <ConversationScrollButton />
+          </Conversation>
+          <div className="grid shrink-0 gap-4 p-4">
+            <div className="flex justify-center">
+              <div className="w-full xl:w-4/5 max-w-4xl">
+                {isWorkspaceOwner ? (
+                  <PromptInput
+                    onSubmit={(message, event) => {
+                      handleSubmit(message);
+                      setInputValue("");
+                    }}
+                    globalDrop
+                    multiple
+                  >
+                    <PromptInputAttachments className="w-full">
+                      {(attachment) => (
+                        <PromptInputAttachment data={attachment} />
+                      )}
+                    </PromptInputAttachments>
+                    <PromptInputBody>
+                      <PromptInputTextarea
+                        ref={textareaRef}
+                        value={inputValue}
+                        onChange={(e) => setInputValue(e.target.value)}
+                        placeholder={
+                          selectedAgent?.inputPlaceholder ||
+                          "What would you like to know?"
+                        }
+                        autoFocus
+                      />
+                    </PromptInputBody>
+                    <PromptInputFooter>
+                      <PromptInputTools>
+                        <PromptInputActionMenu>
+                          <PromptInputActionMenuTrigger className="cursor-pointer" />
+                          <PromptInputActionMenuContent>
+                            <PromptInputActionAddAttachments className="cursor-pointer" />
+                          </PromptInputActionMenuContent>
+                        </PromptInputActionMenu>
+                        <Tooltip delayDuration={1000}>
+                          <TooltipTrigger asChild>
+                            <PromptInputSpeechButton
+                              className="cursor-pointer"
+                              textareaRef={textareaRef}
+                              onTranscriptionChange={setInputValue}
+                            />
+                          </TooltipTrigger>
+                          <TooltipContent>Microphone</TooltipContent>
+                        </Tooltip>
+                        {(!currentProviderType ||
+                          currentProviderType !== "Bedrock") && (
+                          <Tooltip delayDuration={1000}>
+                            <TooltipTrigger asChild>
+                              <PromptInputButton
+                                className="cursor-pointer mr-2"
+                                onClick={() => setSearch(!search)}
+                                variant={search ? "default" : "ghost"}
+                              >
+                                <GlobeIcon size={16} />
+                              </PromptInputButton>
+                            </TooltipTrigger>
+                            <TooltipContent>Search</TooltipContent>
+                          </Tooltip>
+                        )}
+                        <ModelSelectorDialog
+                          agents={agents}
+                          providers={providers}
+                          agentId={agentId}
+                          modelId={modelId}
+                          isOpen={isModelSelectorOpen}
+                          onOpenChange={(open) => {
+                            setIsModelSelectorOpen(open);
+                            if (!open) {
+                              setTimeout(
+                                () => textareaRef.current?.focus(),
+                                250,
+                              );
+                            }
+                          }}
+                          onModelChange={handleModelChange}
+                        />
+                        {agentId && selectedAgent && (
+                          <Dialog
+                            open={isAgentInfoDialogOpen}
+                            onOpenChange={setIsAgentInfoDialogOpen}
+                          >
+                            <DialogTrigger asChild>
+                              <PromptInputButton>
+                                <Info />
+                              </PromptInputButton>
+                            </DialogTrigger>
+                            <AgentInfoDialog
+                              agent={selectedAgent}
+                              toolSets={toolSets}
+                              skills={skills}
+                              providers={providers}
+                              onClose={() => setIsAgentInfoDialogOpen(false)}
+                            />
+                          </Dialog>
+                        )}
+                        {!agentId && (
+                          <Dialog
+                            open={isSettingsDialogOpen}
+                            onOpenChange={setIsSettingsDialogOpen}
+                          >
+                            <Tooltip delayDuration={1000}>
+                              <DialogTrigger asChild>
+                                <TooltipTrigger asChild>
+                                  <PromptInputButton>
+                                    <Settings2 />
+                                  </PromptInputButton>
+                                </TooltipTrigger>
+                              </DialogTrigger>
+                              <TooltipContent>Settings</TooltipContent>
+                            </Tooltip>
+                            <ChatSettingsDialog
+                              systemPrompt={systemPrompt}
+                              onSystemPromptChange={setters.setSystemPrompt}
+                              temperature={temperature}
+                              onTemperatureChange={setters.setTemperature}
+                              seed={seed}
+                              onSeedChange={setters.setSeed}
+                              topP={topP}
+                              onTopPChange={setters.setTopP}
+                              topK={topK}
+                              onTopKChange={setters.setTopK}
+                              presencePenalty={presencePenalty}
+                              onPresencePenaltyChange={
+                                setters.setPresencePenalty
+                              }
+                              frequencyPenalty={frequencyPenalty}
+                              onFrequencyPenaltyChange={
+                                setters.setFrequencyPenalty
+                              }
+                              onClose={() => setIsSettingsDialogOpen(false)}
+                            />
+                          </Dialog>
+                        )}
+                      </PromptInputTools>
+                      <PromptInputSubmit status={status} />
+                    </PromptInputFooter>
+                  </PromptInput>
+                ) : (
+                  <div className="flex items-center justify-center py-4 px-6 border rounded-lg bg-muted/50">
+                    <p className="text-sm text-muted-foreground">
+                      Read-only mode. Only the workspace owner can send
+                      messages.
+                    </p>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
 
-      {/* Error Dialog */}
-      <ErrorDialog
-        isOpen={showErrorDialog}
-        onOpenChange={setShowErrorDialog}
-        error={error}
-      />
+          {/* Error Dialog */}
+          <ErrorDialog
+            isOpen={showErrorDialog}
+            onOpenChange={setShowErrorDialog}
+            error={error}
+          />
+        </>
+      ) : null}
     </div>
   );
 };
