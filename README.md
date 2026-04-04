@@ -12,9 +12,9 @@ Platypus is an open-source, full-stack application designed to help you build AI
 
 - **🏢 Multi-Tenancy:** Built-in support for Organizations and Workspaces to isolate data and manage teams.
 - **🤖 Agentic Workflows:** Create sophisticated agents with custom system prompts, model configurations, and tool assignments.
-- **🛠️ Extensible Tool System:** Register custom tools that agents can invoke intelligently to perform complex tasks.
 - **✨ Skills:** Create reusable instruction sets that agents can dynamically load on-demand to handle specialized tasks.
-- **🧩 Sub-Agents (Experimental):** Agents can delegate specialized tasks to other agents, enabling hierarchical multi-agent workflows with isolated contexts and result streaming.
+- **🧩 Sub-Agents:** Agents can delegate specialized tasks to other agents, enabling hierarchical multi-agent workflows with isolated contexts and result streaming.
+- **📱 Responsive Design:** A fully responsive interface that works seamlessly across desktop, tablet, and mobile devices.
 - **🔌 MCP Support:** First-class support for the **Model Context Protocol** (MCP), allowing agents to securely connect to local and remote data sources.
 - **🧠 Memory:** Platypus automatically extracts facts and preferences from your conversations in the background and injects them into future chats, so agents remember things about you over time.
 - **📋 Kanban Boards:** Organize work visually with drag-and-drop Kanban boards. Agents can create, move, and update cards autonomously via built-in Kanban tools.
