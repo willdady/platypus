@@ -364,7 +364,7 @@ export const Chat = ({
   );
 
   // TODO: Ideally show a loading indicator here
-  if (isLoading) return null;
+  if (isLoading || !providersData) return null;
 
   // Show alert if no providers are configured
   if (providers.length === 0) {
