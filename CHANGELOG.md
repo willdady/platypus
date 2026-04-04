@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.50.0](https://github.com/willdady/platypus/compare/v1.49.0...v1.50.0) (2026-04-04)
+
+
+### Features
+
+* remove Web Push notification feature ([ad9d3ba](https://github.com/willdady/platypus/commit/ad9d3ba3584b2c512067c7a4e3da5fe7a4936d22))
+
+
+### Bug Fixes
+
+* **frontend:** prevent flash of empty providers state on page refresh ([b3de713](https://github.com/willdady/platypus/commit/b3de713b378b40459c8d48959fa3a61737063ce6))
+
 ## [1.49.0](https://github.com/willdady/platypus/compare/v1.48.0...v1.49.0) (2026-04-04)
 
 
