@@ -1,12 +1,10 @@
 import { nanoid } from "nanoid";
 import { and, eq } from "drizzle-orm";
 import { generateText, stepCountIs } from "ai";
-import type { LanguageModelV1 } from "ai";
+import type { LanguageModel } from "ai";
 import { db } from "../index.ts";
 import {
   messagingSession as sessionTable,
-  messagingPairing as pairingTable,
-  messagingChannel as channelTable,
   chat as chatTable,
   agent as agentTable,
   workspace as workspaceTable,
@@ -58,7 +56,8 @@ export const handleIncomingMessage = async (
   }
 
   // 2. Find or create active session
-  let session = await findActiveSession(channelId, message.externalChatId);
+  let session: { id: string; chatId: string; agentId: string | null } | null =
+    await findActiveSession(channelId, message.externalChatId);
 
   if (!session) {
     session = await createSession(channelId, workspaceId, message, userId);
@@ -426,7 +425,7 @@ const executeChatMessage = async (
 
     // 12. Execute with generateText
     const result = await generateText({
-      model: model as LanguageModelV1,
+      model: model as LanguageModel,
       messages: aiMessages,
       tools,
       system: config.systemPrompt,
