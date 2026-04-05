@@ -68,13 +68,15 @@ const MessagingChannelsList = ({
         ))}
       </ul>
 
-      <Link
-        href={`/${orgId}/workspace/${workspaceId}/settings/messaging/create`}
-      >
-        <Button>
-          <Plus /> Add Channel
-        </Button>
-      </Link>
+      {channels.length === 0 && (
+        <Link
+          href={`/${orgId}/workspace/${workspaceId}/settings/messaging/create`}
+        >
+          <Button>
+            <Plus /> Add Channel
+          </Button>
+        </Link>
+      )}
     </>
   );
 };
