@@ -10,6 +10,7 @@ import app from "../server.ts";
 // Mock nanoid to return predictable IDs
 vi.mock("nanoid", () => ({
   nanoid: vi.fn(() => "test-id-123"),
+  customAlphabet: vi.fn(() => vi.fn(() => "ABC123")),
 }));
 
 describe("Kanban Routes", () => {

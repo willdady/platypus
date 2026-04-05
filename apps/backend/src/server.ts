@@ -20,6 +20,8 @@ import { schedule } from "./routes/schedule.ts";
 import { kanban } from "./routes/kanban.ts";
 import { notification } from "./routes/notification.ts";
 import { mcpOauthCallback } from "./routes/mcp-oauth-callback.ts";
+import { messagingChannel } from "./routes/messaging-channels.ts";
+import { messagingPairing } from "./routes/messaging-pairings.ts";
 import { organizationMember } from "./db/schema.ts";
 import { logger } from "./logger.ts";
 
@@ -131,5 +133,13 @@ app.route("/organizations/:orgId/members", member);
 app.route("/users/me/invitations", userInvitation);
 app.route("/users/me/contexts", context);
 app.route("/oauth/mcp/callback", mcpOauthCallback);
+app.route(
+  "/organizations/:orgId/workspaces/:workspaceId/messaging/channels",
+  messagingChannel,
+);
+app.route(
+  "/organizations/:orgId/workspaces/:workspaceId/messaging/pairings",
+  messagingPairing,
+);
 
 export default app;

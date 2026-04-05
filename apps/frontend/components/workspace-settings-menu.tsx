@@ -8,7 +8,7 @@ import {
   SidebarMenuItem,
   SidebarMenu,
 } from "@/components/ui/sidebar";
-import { Info, Settings, Unplug, Wrench } from "lucide-react";
+import { Info, MessageSquare, Settings, Unplug, Wrench } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
@@ -25,6 +25,7 @@ export function WorkspaceSettingsMenu({
   const workspaceHref = `/${orgId}/workspace/${workspaceId}/settings`;
   const providersHref = `/${orgId}/workspace/${workspaceId}/settings/providers`;
   const mcpHref = `/${orgId}/workspace/${workspaceId}/settings/mcp`;
+  const messagingHref = `/${orgId}/workspace/${workspaceId}/settings/messaging`;
   const aboutHref = `/${orgId}/workspace/${workspaceId}/settings/about`;
 
   return (
@@ -56,6 +57,16 @@ export function WorkspaceSettingsMenu({
               >
                 <Link href={mcpHref}>
                   <Wrench /> MCP
+                </Link>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+            <SidebarMenuItem>
+              <SidebarMenuButton
+                asChild
+                isActive={pathname.startsWith(messagingHref)}
+              >
+                <Link href={messagingHref}>
+                  <MessageSquare /> Messaging
                 </Link>
               </SidebarMenuButton>
             </SidebarMenuItem>

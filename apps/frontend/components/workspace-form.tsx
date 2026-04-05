@@ -28,7 +28,7 @@ import {
 } from "@/components/ui/dialog";
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { type Workspace, type Provider } from "@platypus/schemas";
+import { type Workspace, type Provider, type Agent } from "@platypus/schemas";
 import { fetcher, parseValidationErrors, joinUrl } from "@/lib/utils";
 import { useBackendUrl } from "@/app/client-context";
 import { useAuth } from "@/components/auth-provider";
@@ -71,11 +71,24 @@ const WorkspaceForm = ({
   );
   const providers = providersData?.results || [];
 
+  // Fetch agents
+  const { data: agentsData } = useSWR<{ results: Agent[] }>(
+    workspaceId && user
+      ? joinUrl(
+          backendUrl,
+          `/organizations/${orgId}/workspaces/${workspaceId}/agents`,
+        )
+      : null,
+    fetcher,
+  );
+  const agents = agentsData?.results || [];
+
   const [formData, setFormData] = useState({
     name: "",
     context: "",
     taskModelProviderId: null as string | null,
     memoryExtractionProviderId: null as string | null,
+    primaryAgentId: null as string | null,
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [validationErrors, setValidationErrors] = useState<
@@ -94,6 +107,7 @@ const WorkspaceForm = ({
         taskModelProviderId: workspace.taskModelProviderId || null,
         memoryExtractionProviderId:
           (workspace as any).memoryExtractionProviderId || null,
+        primaryAgentId: workspace.primaryAgentId || null,
       });
     }
   }, [workspace]);
@@ -139,6 +153,7 @@ const WorkspaceForm = ({
             context: formData.context || null,
             taskModelProviderId: formData.taskModelProviderId,
             memoryExtractionProviderId: formData.memoryExtractionProviderId,
+            primaryAgentId: formData.primaryAgentId,
           }
         : {
             organizationId: orgId,
@@ -330,6 +345,41 @@ const WorkspaceForm = ({
                 <FieldError>
                   {validationErrors.memoryExtractionProviderId}
                 </FieldError>
+              )}
+            </Field>
+          )}
+
+          {workspaceId && (
+            <Field data-invalid={!!validationErrors.primaryAgentId}>
+              <FieldLabel htmlFor="primaryAgentId">Primary Agent</FieldLabel>
+              <Select
+                value={formData.primaryAgentId || "none"}
+                onValueChange={(value) => {
+                  setFormData((prevData) => ({
+                    ...prevData,
+                    primaryAgentId: value === "none" ? null : value,
+                  }));
+                }}
+                disabled={isSubmitting}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select an agent" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">None</SelectItem>
+                  {agents.map((agent) => (
+                    <SelectItem key={agent.id} value={agent.id}>
+                      {agent.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <FieldDescription>
+                Default agent for messaging channels (e.g., Telegram). Messages
+                are routed to this agent unless overridden per session.
+              </FieldDescription>
+              {validationErrors.primaryAgentId && (
+                <FieldError>{validationErrors.primaryAgentId}</FieldError>
               )}
             </Field>
           )}

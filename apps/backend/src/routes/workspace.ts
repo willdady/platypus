@@ -5,6 +5,7 @@ import { db } from "../index.ts";
 import {
   workspace as workspaceTable,
   provider as providerTable,
+  agent as agentTable,
 } from "../db/schema.ts";
 import {
   workspaceCreateSchema,
@@ -99,6 +100,27 @@ workspace.put(
   async (c) => {
     const workspaceId = c.req.param("workspaceId");
     const data = c.req.valid("json");
+
+    // Validate primaryAgentId if set
+    if (data.primaryAgentId) {
+      const agentRecord = await db
+        .select()
+        .from(agentTable)
+        .where(
+          and(
+            eq(agentTable.id, data.primaryAgentId),
+            eq(agentTable.workspaceId, workspaceId),
+          ),
+        )
+        .limit(1);
+
+      if (agentRecord.length === 0) {
+        return c.json(
+          { message: "Primary agent not found in this workspace" },
+          404,
+        );
+      }
+    }
 
     // Validate memoryExtractionProviderId if set
     if (data.memoryExtractionProviderId) {

@@ -1,3 +1,11 @@
+import dns from "node:dns";
+import net from "node:net";
+// Prefer IPv4 to avoid ETIMEDOUT when IPv6 isn't properly routed
+dns.setDefaultResultOrder("ipv4first");
+// Disable Happy Eyeballs (auto-select-family) — on networks where IPv6 hangs
+// instead of rejecting, the algorithm stalls even with ipv4first DNS order.
+net.setDefaultAutoSelectFamily(false);
+
 import { serve } from "@hono/node-server";
 import app from "./src/server.ts";
 import { db } from "./src/index.ts";
@@ -13,6 +21,7 @@ import { auth } from "./src/auth.ts";
 import { logger } from "./src/logger.ts";
 import { startMemoryScheduler } from "./src/jobs/memory-scheduler.ts";
 import { startScheduleScheduler } from "./src/jobs/schedule-scheduler.ts";
+import { messagingProviderManager } from "./src/messaging/manager.ts";
 
 const PORT = process.env.PORT || "4001";
 
@@ -106,7 +115,20 @@ const main = async () => {
   // Start background jobs (safe for horizontal scaling)
   startMemoryScheduler();
   startScheduleScheduler();
+
+  // Initialize messaging channels from database
+  await messagingProviderManager.initializeFromDatabase();
 };
+
+// Graceful shutdown
+const shutdown = async () => {
+  logger.info("Shutting down messaging channels...");
+  await messagingProviderManager.stopAll();
+  process.exit(0);
+};
+
+process.on("SIGTERM", shutdown);
+process.on("SIGINT", shutdown);
 
 const exponentialBackoff = async <T>(
   fn: () => Promise<T>,

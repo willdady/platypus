@@ -27,6 +27,7 @@ export const workspaceSchema = z.object({
   context: z.string().max(1000).nullable().optional(),
   taskModelProviderId: z.string().nullable().optional(),
   memoryExtractionProviderId: z.string().nullable().optional(),
+  primaryAgentId: z.string().nullable().optional(),
   createdAt: z.date(),
   updatedAt: z.date(),
 });
@@ -44,6 +45,7 @@ export const workspaceUpdateSchema = workspaceSchema.pick({
   context: true,
   taskModelProviderId: true,
   memoryExtractionProviderId: true,
+  primaryAgentId: true,
 });
 
 // Chat
@@ -901,3 +903,56 @@ export const kanbanBoardStateSchema = z.object({
 });
 
 export type KanbanBoardState = z.infer<typeof kanbanBoardStateSchema>;
+
+// Messaging Channel
+
+export const telegramChannelConfigSchema = z.object({
+  botToken: z.string().min(1),
+});
+
+export type TelegramChannelConfig = z.infer<typeof telegramChannelConfigSchema>;
+
+export const messagingChannelSchema = z.object({
+  id: z.string(),
+  workspaceId: z.string(),
+  type: z.string(),
+  config: z.record(z.string(), z.unknown()),
+  enabled: z.boolean(),
+  createdAt: z.date(),
+  updatedAt: z.date(),
+});
+
+export type MessagingChannel = z.infer<typeof messagingChannelSchema>;
+
+export const messagingChannelCreateSchema = z.object({
+  type: z.enum(["telegram"]),
+  config: telegramChannelConfigSchema,
+  enabled: z.boolean().optional(),
+});
+
+export const messagingChannelUpdateSchema = z
+  .object({
+    config: telegramChannelConfigSchema,
+    enabled: z.boolean(),
+  })
+  .partial();
+
+// Messaging Pairing
+
+export const messagingPairingSchema = z.object({
+  id: z.string(),
+  channelId: z.string(),
+  externalChatId: z.string(),
+  externalUserId: z.string(),
+  externalUsername: z.string().nullable().optional(),
+  userId: z.string().nullable().optional(),
+  pairedAt: z.date().nullable().optional(),
+  expiresAt: z.date(),
+  createdAt: z.date(),
+});
+
+export type MessagingPairing = z.infer<typeof messagingPairingSchema>;
+
+export const messagingPairingConfirmSchema = z.object({
+  code: z.string().length(6),
+});

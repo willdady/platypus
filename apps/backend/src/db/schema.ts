@@ -1,4 +1,11 @@
-import { pgTable, index, unique, type AnyPgColumn } from "drizzle-orm/pg-core";
+import {
+  pgTable,
+  index,
+  unique,
+  uniqueIndex,
+  type AnyPgColumn,
+} from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 
 // Import and re-export auth schema
 export * from "./auth-schema.ts";
@@ -74,6 +81,11 @@ export const workspace = pgTable(
     memoryExtractionProviderId: t
       .text("memory_extraction_provider_id")
       .references(() => provider.id, { onDelete: "set null" }),
+
+    // Primary agent for messaging channels
+    primaryAgentId: t
+      .text("primary_agent_id")
+      .references((): AnyPgColumn => agent.id, { onDelete: "set null" }),
 
     createdAt: t.timestamp("created_at").notNull().defaultNow(),
     updatedAt: t.timestamp("updated_at").notNull().defaultNow(),
@@ -547,4 +559,80 @@ export const kanbanCardComment = pgTable(
     updatedAt: t.timestamp("updated_at").notNull().defaultNow(),
   }),
   (t) => [index("idx_kanban_card_comment_card_id").on(t.cardId)],
+);
+
+// Messaging
+
+export const messagingChannel = pgTable(
+  "messaging_channel",
+  (t) => ({
+    id: t.text("id").primaryKey(),
+    workspaceId: t
+      .text("workspace_id")
+      .notNull()
+      .references(() => workspace.id, { onDelete: "cascade" }),
+    type: t.text("type").notNull(), // "telegram"
+    config: t.jsonb("config").notNull(), // e.g. { botToken: string } for Telegram
+    enabled: t.boolean("enabled").notNull().default(false),
+    createdAt: t.timestamp("created_at").notNull().defaultNow(),
+    updatedAt: t.timestamp("updated_at").notNull().defaultNow(),
+  }),
+  (t) => [
+    index("idx_messaging_channel_workspace_id").on(t.workspaceId),
+    unique("unique_messaging_channel_workspace_type").on(t.workspaceId, t.type),
+  ],
+);
+
+export const messagingPairing = pgTable(
+  "messaging_pairing",
+  (t) => ({
+    id: t.text("id").primaryKey(),
+    code: t.text("code").notNull().unique(),
+    channelId: t
+      .text("channel_id")
+      .notNull()
+      .references(() => messagingChannel.id, { onDelete: "cascade" }),
+    externalChatId: t.text("external_chat_id").notNull(),
+    externalUserId: t.text("external_user_id").notNull(),
+    externalUsername: t.text("external_username"),
+    userId: t
+      .text("user_id")
+      .references(() => user.id, { onDelete: "set null" }),
+    pairedAt: t.timestamp("paired_at"),
+    expiresAt: t.timestamp("expires_at").notNull(),
+    createdAt: t.timestamp("created_at").notNull().defaultNow(),
+  }),
+  (t) => [index("idx_messaging_pairing_channel_id").on(t.channelId)],
+);
+
+export const messagingSession = pgTable(
+  "messaging_session",
+  (t) => ({
+    id: t.text("id").primaryKey(),
+    channelId: t
+      .text("channel_id")
+      .notNull()
+      .references(() => messagingChannel.id, { onDelete: "cascade" }),
+    externalChatId: t.text("external_chat_id").notNull(),
+    userId: t
+      .text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    chatId: t
+      .text("chat_id")
+      .notNull()
+      .references(() => chat.id, { onDelete: "cascade" }),
+    agentId: t
+      .text("agent_id")
+      .references(() => agent.id, { onDelete: "set null" }),
+    isActive: t.boolean("is_active").notNull().default(true),
+    createdAt: t.timestamp("created_at").notNull().defaultNow(),
+    updatedAt: t.timestamp("updated_at").notNull().defaultNow(),
+  }),
+  (t) => [
+    index("idx_messaging_session_channel_id").on(t.channelId),
+    uniqueIndex("unique_messaging_session_active")
+      .on(t.channelId, t.externalChatId)
+      .where(sql`${t.isActive} = true`),
+  ],
 );

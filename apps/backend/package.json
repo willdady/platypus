@@ -36,6 +36,7 @@
     "date-fns": "4.1.0",
     "date-fns-tz": "^3.2.0",
     "drizzle-orm": "^0.45.2",
+    "grammy": "^1.42.0",
     "hono": "^4.12.10",
     "jsdom": "^29.0.1",
     "nanoid": "^5.1.7",
