@@ -901,3 +901,52 @@ export const kanbanBoardStateSchema = z.object({
 });
 
 export type KanbanBoardState = z.infer<typeof kanbanBoardStateSchema>;
+
+// Webhook
+
+export const webhookEventSchema = z.enum([
+  "notification.created",
+  "notification.updated",
+  "notification.read",
+  "notification.dismissed",
+]);
+
+export type WebhookEvent = z.infer<typeof webhookEventSchema>;
+
+export const webhookSchema = z.object({
+  id: z.string(),
+  workspaceId: z.string(),
+  url: z.string().url().refine((url) => url.startsWith("https://"), {
+    message: "Webhook URL must use HTTPS",
+  }),
+  signingSecret: z.string(),
+  headers: z.record(z.string(), z.string()).nullable().optional(),
+  enabled: z.boolean(),
+  events: z.array(webhookEventSchema).min(1),
+  createdAt: z.date(),
+  updatedAt: z.date(),
+});
+
+export type Webhook = z.infer<typeof webhookSchema>;
+
+export const webhookCreateSchema = z.object({
+  url: z.string().url().refine((url) => url.startsWith("https://"), {
+    message: "Webhook URL must use HTTPS",
+  }),
+  headers: z.record(z.string(), z.string()).nullable().optional(),
+  enabled: z.boolean().optional(),
+  events: z.array(webhookEventSchema).min(1).optional(),
+});
+
+export const webhookUpdateSchema = z.object({
+  url: z
+    .string()
+    .url()
+    .refine((url) => url.startsWith("https://"), {
+      message: "Webhook URL must use HTTPS",
+    })
+    .optional(),
+  headers: z.record(z.string(), z.string()).nullable().optional(),
+  enabled: z.boolean().optional(),
+  events: z.array(webhookEventSchema).min(1).optional(),
+});

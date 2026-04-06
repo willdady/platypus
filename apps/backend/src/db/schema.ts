@@ -528,6 +528,37 @@ export const notificationRead = pgTable(
   ],
 );
 
+// Webhook (one per workspace)
+
+export const webhook = pgTable(
+  "webhook",
+  (t) => ({
+    id: t.text("id").primaryKey(),
+    workspaceId: t
+      .text("workspace_id")
+      .notNull()
+      .references(() => workspace.id, { onDelete: "cascade" })
+      .unique(),
+    url: t.text("url").notNull(),
+    signingSecret: t.text("signing_secret").notNull(),
+    headers: t.jsonb().$type<Record<string, string>>(),
+    enabled: t.boolean("enabled").notNull().default(true),
+    events: t
+      .jsonb("events")
+      .$type<string[]>()
+      .notNull()
+      .default([
+        "notification.created",
+        "notification.updated",
+        "notification.read",
+        "notification.dismissed",
+      ]),
+    createdAt: t.timestamp("created_at").notNull().defaultNow(),
+    updatedAt: t.timestamp("updated_at").notNull().defaultNow(),
+  }),
+  (t) => [index("idx_webhook_workspace_id").on(t.workspaceId)],
+);
+
 export const kanbanCardComment = pgTable(
   "kanban_card_comment",
   (t) => ({

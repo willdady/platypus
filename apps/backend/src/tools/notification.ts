@@ -6,6 +6,7 @@ import {
   notification as notificationTable,
   agent as agentTable,
 } from "../db/schema.ts";
+import { dispatchWebhook } from "../services/webhook-delivery.ts";
 
 export function createNotificationTools(
   workspaceId: string,
@@ -58,6 +59,8 @@ export function createNotificationTools(
           updatedAt: now,
         })
         .returning();
+
+      dispatchWebhook(workspaceId, "notification.created", record[0]);
 
       return record[0];
     },
@@ -128,6 +131,9 @@ export function createNotificationTools(
       if (record.length === 0) {
         return { error: "Notification not found" };
       }
+
+      dispatchWebhook(workspaceId, "notification.updated", record[0]);
+
       return record[0];
     },
   });
@@ -147,6 +153,10 @@ export function createNotificationTools(
       await db
         .delete(notificationTable)
         .where(eq(notificationTable.id, notificationId));
+
+      dispatchWebhook(workspaceId, "notification.dismissed", {
+        notificationId,
+      });
 
       return { success: true };
     },

@@ -13,6 +13,7 @@ import {
   requireWorkspaceAccess,
 } from "../middleware/authorization.ts";
 import type { Variables } from "../server.ts";
+import { dispatchWebhook } from "../services/webhook-delivery.ts";
 
 function agentAvatarUrl(
   avatarKey: string | null | undefined,
@@ -158,6 +159,11 @@ notification.post(
       })
       .onConflictDoNothing();
 
+    dispatchWebhook(workspaceId, "notification.read", {
+      notificationId,
+      userId: user.id,
+    });
+
     return c.json({ success: true });
   },
 );
@@ -198,6 +204,12 @@ notification.post(
           userId: user.id,
         })),
       );
+
+      dispatchWebhook(workspaceId, "notification.read", {
+        notificationIds: unread.map((n) => n.id),
+        userId: user.id,
+        bulk: true,
+      });
     }
 
     return c.json({ success: true });
@@ -227,6 +239,10 @@ notification.delete(
     if (result.length === 0) {
       return c.json({ message: "Notification not found" }, 404);
     }
+
+    dispatchWebhook(workspaceId, "notification.dismissed", {
+      notificationId,
+    });
 
     return c.json({ message: "Notification deleted" });
   },
