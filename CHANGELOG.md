@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.52.0](https://github.com/willdady/platypus/compare/v1.51.0...v1.52.0) (2026-04-06)
+
+
+### Features
+
+* add web search support for scheduled agents ([56a541f](https://github.com/willdady/platypus/commit/56a541f035b73824a00f9451d92dcc66f28b4281))
+
 ## [1.51.0](https://github.com/willdady/platypus/compare/v1.50.0...v1.51.0) (2026-04-06)
 
 
