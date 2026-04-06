@@ -141,6 +141,13 @@
       "when": 1775433942291,
       "tag": "0019_known_xavin",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1775441146296,
+      "tag": "0020_wise_bloodscream",
+      "breakpoints": true
     }
   ]
 }

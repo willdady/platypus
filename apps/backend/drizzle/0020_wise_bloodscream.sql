@@ -1,0 +1,1 @@
+ALTER TABLE "schedule" ADD COLUMN "search" boolean DEFAULT false NOT NULL;

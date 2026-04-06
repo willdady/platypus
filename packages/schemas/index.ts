@@ -648,6 +648,7 @@ export const scheduleSchema = z.object({
   isOneOff: z.boolean().default(false),
   enabled: z.boolean().default(true),
   maxChatsToKeep: z.number().int().min(1).max(1000).default(50),
+  search: z.boolean().default(false),
   lastRunAt: z.date().nullable().optional(),
   nextRunAt: z.date().nullable().optional(),
   createdAt: z.date(),
@@ -667,6 +668,7 @@ export const scheduleCreateSchema = scheduleSchema.pick({
   isOneOff: true,
   enabled: true,
   maxChatsToKeep: true,
+  search: true,
 });
 
 export const scheduleUpdateSchema = scheduleSchema
@@ -680,6 +682,7 @@ export const scheduleUpdateSchema = scheduleSchema
     enabled: true,
     maxChatsToKeep: true,
     agentId: true,
+    search: true,
   })
   .partial();
 
@@ -916,9 +919,12 @@ export type WebhookEvent = z.infer<typeof webhookEventSchema>;
 export const webhookSchema = z.object({
   id: z.string(),
   workspaceId: z.string(),
-  url: z.string().url().refine((url) => url.startsWith("https://"), {
-    message: "Webhook URL must use HTTPS",
-  }),
+  url: z
+    .string()
+    .url()
+    .refine((url) => url.startsWith("https://"), {
+      message: "Webhook URL must use HTTPS",
+    }),
   signingSecret: z.string(),
   headers: z.record(z.string(), z.string()).nullable().optional(),
   enabled: z.boolean(),
@@ -930,9 +936,12 @@ export const webhookSchema = z.object({
 export type Webhook = z.infer<typeof webhookSchema>;
 
 export const webhookCreateSchema = z.object({
-  url: z.string().url().refine((url) => url.startsWith("https://"), {
-    message: "Webhook URL must use HTTPS",
-  }),
+  url: z
+    .string()
+    .url()
+    .refine((url) => url.startsWith("https://"), {
+      message: "Webhook URL must use HTTPS",
+    }),
   headers: z.record(z.string(), z.string()).nullable().optional(),
   enabled: z.boolean().optional(),
   events: z.array(webhookEventSchema).min(1).optional(),

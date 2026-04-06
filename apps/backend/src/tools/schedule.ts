@@ -147,6 +147,10 @@ export function createScheduleTools(
         .max(1000)
         .optional()
         .describe("Maximum number of chat histories to retain"),
+      search: z
+        .boolean()
+        .optional()
+        .describe("If true, enables web search for the LLM"),
     }),
     execute: async (params) => {
       const { scheduleId, label: _label, ...fields } = params;
@@ -233,6 +237,7 @@ export function createScheduleTools(
         if (fields.enabled !== undefined) updateData.enabled = fields.enabled;
         if (fields.maxChatsToKeep !== undefined)
           updateData.maxChatsToKeep = fields.maxChatsToKeep;
+        if (fields.search !== undefined) updateData.search = fields.search;
         if (nextRunAt) updateData.nextRunAt = nextRunAt;
 
         const record = await db
@@ -269,6 +274,7 @@ export function createScheduleTools(
       const isOneOff = fields.isOneOff ?? false;
       const enabled = fields.enabled ?? true;
       const maxChatsToKeep = fields.maxChatsToKeep ?? 50;
+      const search = fields.search ?? false;
 
       // Verify agent exists in workspace
       const agentRecord = await db
@@ -317,6 +323,7 @@ export function createScheduleTools(
           isOneOff,
           enabled,
           maxChatsToKeep,
+          search,
           nextRunAt,
           createdAt: now,
           updatedAt: now,

@@ -1,6 +1,6 @@
 import { nanoid } from "nanoid";
 import { and, desc, eq, notInArray } from "drizzle-orm";
-import { generateText, stepCountIs, type LanguageModelV1 } from "ai";
+import { generateText, stepCountIs, type LanguageModel } from "ai";
 import { db } from "../index.ts";
 import {
   schedule as scheduleTable,
@@ -18,6 +18,7 @@ import {
   fetchUserContexts,
   fetchFormattedMemories,
   prepareAgentTools,
+  createSearchTools,
 } from "./chat-execution.ts";
 import { logger } from "../logger.ts";
 import { validateCronExpression } from "../utils/cron.ts";
@@ -103,7 +104,7 @@ export const triggerSchedule = async (
   const provider = providerRecord[0];
 
   // 4. Create model
-  const [, model] = createModel(provider as Provider, agent.modelId);
+  const [aiProvider, model] = createModel(provider as Provider, agent.modelId);
 
   // 5. Load tools
   const orgId = workspace.organizationId;
@@ -114,6 +115,11 @@ export const triggerSchedule = async (
     orgId,
     frontendUrl,
   );
+
+  // 5b. Configure Search (if enabled)
+  if (schedule.search) {
+    Object.assign(tools, createSearchTools(provider as Provider, aiProvider));
+  }
 
   // 6. Load skills
   const skills = await loadSkills(agent, workspaceId);
@@ -168,7 +174,7 @@ export const triggerSchedule = async (
     );
 
     const result = await generateText({
-      model: model as LanguageModelV1,
+      model: model as LanguageModel,
       prompt: instruction,
       tools,
       system: config.systemPrompt,

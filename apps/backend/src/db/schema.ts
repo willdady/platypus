@@ -371,6 +371,7 @@ export const schedule = pgTable(
     isOneOff: t.boolean("is_one_off").notNull().default(false),
     enabled: t.boolean("enabled").notNull().default(true),
     maxChatsToKeep: t.integer("max_chats_to_keep").notNull().default(50),
+    search: t.boolean("search").notNull().default(false),
     lastRunAt: t.timestamp("last_run_at"),
     nextRunAt: t.timestamp("next_run_at"),
     createdAt: t.timestamp("created_at").notNull().defaultNow(),

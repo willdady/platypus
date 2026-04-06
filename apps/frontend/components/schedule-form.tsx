@@ -334,6 +334,7 @@ const ScheduleForm = ({
     isOneOff: false,
     enabled: true,
     maxChatsToKeep: 50,
+    search: false,
   });
 
   // Simple mode state
@@ -374,6 +375,7 @@ const ScheduleForm = ({
         isOneOff: schedule.isOneOff,
         enabled: schedule.enabled,
         maxChatsToKeep: schedule.maxChatsToKeep,
+        search: schedule.search ?? false,
       });
 
       // Try to parse existing cron expression for simple mode
@@ -478,6 +480,7 @@ const ScheduleForm = ({
         isOneOff: formData.isOneOff,
         enabled: formData.enabled,
         maxChatsToKeep: formData.maxChatsToKeep,
+        search: formData.search,
       };
 
       const url = scheduleId
@@ -920,6 +923,26 @@ const ScheduleForm = ({
                 <p>One-off Schedule</p>
                 <p className="text-xs text-muted-foreground">
                   Run once and then disable
+                </p>
+              </div>
+            </FieldLabel>
+          </Field>
+
+          <Field orientation="horizontal">
+            <Switch
+              id="search"
+              className="cursor-pointer"
+              checked={formData.search}
+              onCheckedChange={(checked) =>
+                setFormData((prev) => ({ ...prev, search: checked }))
+              }
+              disabled={isSubmitting}
+            />
+            <FieldLabel htmlFor="search">
+              <div className="flex flex-col">
+                <p>Web Search</p>
+                <p className="text-xs text-muted-foreground">
+                  Allow agent to search the web
                 </p>
               </div>
             </FieldLabel>
