@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.51.0](https://github.com/willdady/platypus/compare/v1.50.0...v1.51.0) (2026-04-06)
+
+
+### Features
+
+* add webhook support with per-event toggles ([830e288](https://github.com/willdady/platypus/commit/830e2885872f51af9e07f5bda8a702917a01e3c1))
+
 ## [1.50.0](https://github.com/willdady/platypus/compare/v1.49.0...v1.50.0) (2026-04-04)
 
 
