@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.53.0](https://github.com/willdady/platypus/compare/v1.52.0...v1.53.0) (2026-04-07)
+
+
+### Features
+
+* display sub-agents in agent info dialog ([081d143](https://github.com/willdady/platypus/commit/081d143f4cf11d70ae5279a5ae26e55d57054618))
+
+
+### Bug Fixes
+
+* inline file URLs before convertToModelMessages to fix follow-up chat attachments ([d2f318a](https://github.com/willdady/platypus/commit/d2f318ac37e656841133d6abf490788d916ca11e))
+* prevent long strings from overflowing error dialog ([0648446](https://github.com/willdady/platypus/commit/06484466bc07ea8ec18ffcab1548590ef9146338))
+* skip external link warning for same-domain links ([0c421ff](https://github.com/willdady/platypus/commit/0c421ff87f634e4e2a208f41fc6789d1cf66a03c))
+
 ## [1.52.0](https://github.com/willdady/platypus/compare/v1.51.0...v1.52.0) (2026-04-06)
 
 
