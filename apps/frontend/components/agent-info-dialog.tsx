@@ -20,6 +20,7 @@ import { useParams, useRouter } from "next/navigation";
 
 interface AgentInfoDialogProps {
   agent: Agent;
+  agents: Agent[];
   toolSets: ToolSet[];
   skills: Skill[];
   providers: Provider[];
@@ -28,6 +29,7 @@ interface AgentInfoDialogProps {
 
 export const AgentInfoDialog = ({
   agent,
+  agents,
   toolSets,
   skills,
   providers,
@@ -130,6 +132,27 @@ export const AgentInfoDialog = ({
             </div>
           </div>
         )}
+        {agents.length > 0 &&
+          agent.subAgentIds &&
+          agent.subAgentIds.length > 0 && (
+            <div className="grid gap-2">
+              <Label>Sub-Agents</Label>
+              <div className="flex flex-wrap gap-2">
+                {agent.subAgentIds.map((id) => {
+                  const subAgent = agents.find((a) => a.id === id);
+                  return subAgent ? (
+                    <Badge
+                      key={id}
+                      className="cursor-default"
+                      variant="secondary"
+                    >
+                      {subAgent.name}
+                    </Badge>
+                  ) : null;
+                })}
+              </div>
+            </div>
+          )}
         <Collapsible open={isAdvancedOpen} onOpenChange={setIsAdvancedOpen}>
           <CollapsibleTrigger asChild>
             <div className="flex text-sm justify-between items-center">

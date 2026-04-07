@@ -533,6 +533,7 @@ export const Chat = ({
                         </DialogTrigger>
                         <AgentInfoDialog
                           agent={selectedAgent}
+                          agents={agents}
                           toolSets={toolSets}
                           skills={skills}
                           providers={providers}
