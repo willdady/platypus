@@ -11,11 +11,13 @@ const KanbanCardComponentInner = function KanbanCardComponent({
   card,
   labels,
   draggable = true,
+  disabled = false,
   onClick,
 }: {
   card: KanbanCard;
   labels: KanbanLabel[];
   draggable?: boolean;
+  disabled?: boolean;
   onClick: () => void;
 }) {
   const {
@@ -28,6 +30,7 @@ const KanbanCardComponentInner = function KanbanCardComponent({
   } = useSortable({
     id: card.id,
     data: { type: "card", card },
+    disabled,
   });
 
   const style = {

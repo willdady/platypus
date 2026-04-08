@@ -5,6 +5,8 @@ import useSWR from "swr";
 import {
   DndContext,
   closestCorners,
+  closestCenter,
+  CollisionDetection,
   DragStartEvent,
   DragEndEvent,
   DragOverlay,
@@ -95,6 +97,7 @@ export function KanbanBoard({
   );
   const [activeId, setActiveId] = useState<string | null>(null);
   const [activeType, setActiveType] = useState<"column" | "card" | null>(null);
+  const activeTypeRef = useRef<"column" | "card" | null>(null);
   const [selectedCard, setSelectedCard] = useState<KanbanCard | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
 
@@ -144,6 +147,24 @@ export function KanbanBoard({
     }),
   );
 
+  const columnIds = columns.map((c) => c.id);
+  const collisionDetection: CollisionDetection = useCallback(
+    (args) => {
+      if (activeTypeRef.current === "column") {
+        // Only consider column sortable containers, ignore cards and card droppables
+        const filtered = {
+          ...args,
+          droppableContainers: args.droppableContainers.filter((container) =>
+            columnIds.includes(container.id as string),
+          ),
+        };
+        return closestCenter(filtered);
+      }
+      return closestCorners(args);
+    },
+    [columnIds],
+  );
+
   const findColumnByCardId = useCallback(
     (cardId: string): ColumnWithCards | undefined => {
       return columns.find((col) => col.cards.some((c) => c.id === cardId));
@@ -157,6 +178,7 @@ export function KanbanBoard({
       const type = active.data.current?.type;
       setActiveId(active.id as string);
       setActiveType(type);
+      activeTypeRef.current = type;
       setLocalColumns([...columns.map((c) => ({ ...c, cards: [...c.cards] }))]);
     },
     [columns],
@@ -227,6 +249,7 @@ export function KanbanBoard({
       const { active, over } = event;
       setActiveId(null);
       setActiveType(null);
+      activeTypeRef.current = null;
 
       if (!over || !localColumns) {
         setLocalColumns(null);
@@ -235,8 +258,14 @@ export function KanbanBoard({
 
       if (active.data.current?.type === "column") {
         const oldIndex = localColumns.findIndex((c) => c.id === active.id);
-        const newIndex = localColumns.findIndex((c) => c.id === over.id);
-        if (oldIndex !== newIndex) {
+        // over.id may be a column id or a card id within that column
+        let newIndex = localColumns.findIndex((c) => c.id === over.id);
+        if (newIndex === -1) {
+          newIndex = localColumns.findIndex((c) =>
+            c.cards.some((card) => card.id === over.id),
+          );
+        }
+        if (oldIndex !== newIndex && newIndex !== -1) {
           const reordered = arrayMove(localColumns, oldIndex, newIndex);
           setLocalColumns(reordered);
           try {
@@ -558,7 +587,7 @@ export function KanbanBoard({
       </div>
       <DndContext
         sensors={sensors}
-        collisionDetection={closestCorners}
+        collisionDetection={collisionDetection}
         onDragStart={handleDragStart}
         onDragOver={handleDragOver}
         onDragEnd={handleDragEnd}
@@ -575,6 +604,7 @@ export function KanbanBoard({
                   column={column}
                   labels={labels}
                   draggable={isDesktop}
+                  isDraggingColumn={activeType === "column"}
                   isFirst={index === 0}
                   isLast={index === columns.length - 1}
                   onCardClick={(card) => {
@@ -618,6 +648,7 @@ export function KanbanBoard({
                 column={activeColumn}
                 labels={labels}
                 draggable={false}
+                overlay
                 onCardClick={() => {}}
                 onAddCard={() => {}}
                 onEditColumn={() => {}}
