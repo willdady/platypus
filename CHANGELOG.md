@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.53.1](https://github.com/willdady/platypus/compare/v1.53.0...v1.53.1) (2026-04-08)
+
+
+### Bug Fixes
+
+* **frontend:** fix inconsistent kanban column drag-and-drop reordering ([ae6a9d0](https://github.com/willdady/platypus/commit/ae6a9d0c86ac5bf89f13bc5f881f9d358b57b74d))
+* **frontend:** prevent 'Unknown Organization' flash on contexts settings page ([b6d714e](https://github.com/willdady/platypus/commit/b6d714ee2ab5a5a36135adf8439acc1a0f1d5e20))
+* **frontend:** prevent agent info dialog footer from being clipped on mobile ([b9de935](https://github.com/willdady/platypus/commit/b9de9354b927759b7e3fb01953ec8ac2a5794929))
+* **frontend:** simplify workspace home skeleton and match final layout ([2f15729](https://github.com/willdady/platypus/commit/2f1572992192eb182d86140c92366efab4348ccf))
+* **frontend:** use muted foreground color for context form field values ([7c0b54b](https://github.com/willdady/platypus/commit/7c0b54b2257668d497d36df1ae7b78a43a0406bd))
+
 ## [1.53.0](https://github.com/willdady/platypus/compare/v1.52.0...v1.53.0) (2026-04-07)
 
 
