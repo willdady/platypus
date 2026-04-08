@@ -35,6 +35,7 @@ const ContextsList = ({ className }: { className?: string }) => {
 
   // Fetch workspaces for all orgs
   const [workspaces, setWorkspaces] = useState<WorkspaceWithOrg[]>([]);
+  const [workspacesLoaded, setWorkspacesLoaded] = useState(false);
 
   useEffect(() => {
     if (!orgs?.results || !backendUrl) return;
@@ -62,12 +63,13 @@ const ContextsList = ({ className }: { className?: string }) => {
       }
 
       setWorkspaces(allWorkspaces);
+      setWorkspacesLoaded(true);
     };
 
     fetchWorkspaces();
   }, [orgs, backendUrl]);
 
-  if (isLoading || error) return null;
+  if (isLoading || !workspacesLoaded || error) return null;
 
   const contexts = data?.results ?? [];
   const workspaceContexts = contexts.filter((c) => c.workspaceId);
