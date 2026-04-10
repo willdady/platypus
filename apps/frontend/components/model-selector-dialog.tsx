@@ -48,7 +48,7 @@ export const ModelSelectorDialog = ({
         </Button>
       </ModelSelectorTrigger>
       <ModelSelectorContent>
-        <ModelSelectorInput placeholder="Search models..." />
+        <ModelSelectorInput placeholder="Search agents and models..." />
         <ModelSelectorList>
           <ModelSelectorEmpty>No results found.</ModelSelectorEmpty>
           {/* Agents Group */}
