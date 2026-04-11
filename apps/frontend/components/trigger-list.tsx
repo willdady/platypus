@@ -20,13 +20,18 @@ import {
 import { Badge } from "@/components/ui/badge";
 import {
   Timer,
+  Zap,
   Play,
   EllipsisVertical,
   Trash2,
   Pause,
   List,
 } from "lucide-react";
-import { type Schedule } from "@platypus/schemas";
+import {
+  type Trigger,
+  type CronTriggerConfig,
+  type EventTriggerConfig,
+} from "@platypus/schemas";
 import useSWR from "swr";
 import { fetcher, joinUrl } from "@/lib/utils";
 import Link from "next/link";
@@ -36,7 +41,7 @@ import { format } from "date-fns";
 import { describeSchedule } from "@/lib/cron-utils";
 import { toast } from "sonner";
 
-export const ScheduleList = ({
+export const TriggerList = ({
   orgId,
   workspaceId,
 }: {
@@ -46,49 +51,45 @@ export const ScheduleList = ({
   const { user } = useAuth();
   const backendUrl = useBackendUrl();
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-  const [scheduleToDelete, setScheduleToDelete] = useState<Schedule | null>(
-    null,
-  );
-  const [scheduleToToggle, setScheduleToToggle] = useState<Schedule | null>(
-    null,
-  );
+  const [triggerToDelete, setTriggerToDelete] = useState<Trigger | null>(null);
+  const [triggerToToggle, setTriggerToToggle] = useState<Trigger | null>(null);
   const [isToggling, setIsToggling] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
 
   const {
-    data: schedulesData,
+    data: triggersData,
     isLoading,
     mutate,
   } = useSWR<{
-    results: Schedule[];
+    results: Trigger[];
   }>(
     backendUrl && user
       ? joinUrl(
           backendUrl,
-          `/organizations/${orgId}/workspaces/${workspaceId}/schedules`,
+          `/organizations/${orgId}/workspaces/${workspaceId}/triggers`,
         )
       : null,
     fetcher,
   );
 
-  const schedules = [...(schedulesData?.results || [])].sort((a, b) =>
+  const triggers = [...(triggersData?.results || [])].sort((a, b) =>
     a.name.localeCompare(b.name),
   );
 
-  const handleDeleteClick = (schedule: Schedule) => {
-    setScheduleToDelete(schedule);
+  const handleDeleteClick = (trigger: Trigger) => {
+    setTriggerToDelete(trigger);
     setDeleteDialogOpen(true);
   };
 
   const handleDeleteConfirm = async () => {
-    if (!scheduleToDelete || !backendUrl) return;
+    if (!triggerToDelete || !backendUrl) return;
 
     setIsDeleting(true);
     try {
       const response = await fetch(
         joinUrl(
           backendUrl,
-          `/organizations/${orgId}/workspaces/${workspaceId}/schedules/${scheduleToDelete.id}`,
+          `/organizations/${orgId}/workspaces/${workspaceId}/triggers/${triggerToDelete.id}`,
         ),
         {
           method: "DELETE",
@@ -99,25 +100,25 @@ export const ScheduleList = ({
       if (response.ok) {
         mutate();
         setDeleteDialogOpen(false);
-        setScheduleToDelete(null);
+        setTriggerToDelete(null);
       }
     } catch (error) {
-      toast.error("Failed to delete schedule");
+      toast.error("Failed to delete trigger");
     } finally {
       setIsDeleting(false);
     }
   };
 
-  const handleToggleEnabled = async (schedule: Schedule) => {
+  const handleToggleEnabled = async (trigger: Trigger) => {
     if (!backendUrl) return;
 
-    setScheduleToToggle(schedule);
+    setTriggerToToggle(trigger);
     setIsToggling(true);
     try {
       const response = await fetch(
         joinUrl(
           backendUrl,
-          `/organizations/${orgId}/workspaces/${workspaceId}/schedules/${schedule.id}`,
+          `/organizations/${orgId}/workspaces/${workspaceId}/triggers/${trigger.id}`,
         ),
         {
           method: "PUT",
@@ -126,7 +127,7 @@ export const ScheduleList = ({
           },
           credentials: "include",
           body: JSON.stringify({
-            enabled: !schedule.enabled,
+            enabled: !trigger.enabled,
           }),
         },
       );
@@ -135,10 +136,10 @@ export const ScheduleList = ({
         mutate();
       }
     } catch (error) {
-      toast.error("Failed to toggle schedule");
+      toast.error("Failed to toggle trigger");
     } finally {
       setIsToggling(false);
-      setScheduleToToggle(null);
+      setTriggerToToggle(null);
     }
   };
 
@@ -146,54 +147,80 @@ export const ScheduleList = ({
     return <div>Loading...</div>;
   }
 
-  if (!schedules.length) {
+  if (!triggers.length) {
     return null;
   }
 
   return (
     <>
       <ul className="grid grid-cols-1 lg:grid-cols-2 grid-rows-1 gap-4">
-        {schedules.map((schedule) => (
-          <li key={schedule.id}>
+        {triggers.map((trigger) => (
+          <li key={trigger.id}>
             <Item variant="outline" className="h-full cursor-pointer" asChild>
               <Link
-                href={`/${orgId}/workspace/${workspaceId}/schedules/${schedule.id}`}
+                href={`/${orgId}/workspace/${workspaceId}/triggers/${trigger.id}`}
               >
                 <ItemContent>
                   <div className="flex items-center gap-2">
-                    <ItemTitle>{schedule.name}</ItemTitle>
-                    {schedule.isOneOff && (
-                      <Badge variant="outline" className="text-xs">
-                        One-off
-                      </Badge>
-                    )}
-                    {!schedule.enabled && (
+                    <ItemTitle>{trigger.name}</ItemTitle>
+                    <Badge variant="outline" className="text-xs">
+                      {trigger.type === "cron" ? "Cron" : "Event"}
+                    </Badge>
+                    {trigger.type === "cron" &&
+                      (trigger.config as CronTriggerConfig).isOneOff && (
+                        <Badge variant="outline" className="text-xs">
+                          One-off
+                        </Badge>
+                      )}
+                    {!trigger.enabled && (
                       <Badge variant="secondary" className="text-xs">
                         Disabled
                       </Badge>
                     )}
                   </div>
-                  {schedule.description && (
+                  {trigger.description && (
                     <ItemDescription className="text-xs">
-                      {schedule.description}
+                      {trigger.description}
                     </ItemDescription>
                   )}
                   <div className="flex flex-col gap-1 mt-1.5 text-xs text-muted-foreground">
-                    <span className="flex items-center gap-1">
-                      <Timer className="h-3 w-3" />
-                      {describeSchedule(
-                        schedule.cronExpression,
-                        schedule.timezone,
-                      )}
-                    </span>
-                    {schedule.nextRunAt && schedule.enabled && (
-                      <span>
-                        Next run: {format(new Date(schedule.nextRunAt), "PPp")}
-                      </span>
-                    )}
-                    {schedule.lastRunAt && (
-                      <span>
-                        Last run: {format(new Date(schedule.lastRunAt), "PPp")}
+                    {trigger.type === "cron" ? (
+                      <>
+                        <span className="flex items-center gap-1">
+                          <Timer className="h-3 w-3" />
+                          {describeSchedule(
+                            (trigger.config as CronTriggerConfig)
+                              .cronExpression,
+                            (trigger.config as CronTriggerConfig).timezone,
+                          )}
+                        </span>
+                        {trigger.nextRunAt && trigger.enabled && (
+                          <span>
+                            Next run:{" "}
+                            {format(new Date(trigger.nextRunAt), "PPp")}
+                          </span>
+                        )}
+                        {trigger.lastRunAt && (
+                          <span>
+                            Last run:{" "}
+                            {format(new Date(trigger.lastRunAt), "PPp")}
+                          </span>
+                        )}
+                      </>
+                    ) : (
+                      <span className="flex items-center gap-1 flex-wrap">
+                        <Zap className="h-3 w-3" />
+                        {(
+                          trigger.config as EventTriggerConfig
+                        ).events.map((event) => (
+                          <Badge
+                            key={event}
+                            variant="secondary"
+                            className="text-xs"
+                          >
+                            {event}
+                          </Badge>
+                        ))}
                       </span>
                     )}
                   </div>
@@ -214,19 +241,19 @@ export const ScheduleList = ({
                       <DropdownMenuItem asChild>
                         <Link
                           className="cursor-pointer"
-                          href={`/${orgId}/workspace/${workspaceId}/schedules/${schedule.id}/runs`}
+                          href={`/${orgId}/workspace/${workspaceId}/triggers/${trigger.id}/runs`}
                         >
                           <List /> View Runs
                         </Link>
                       </DropdownMenuItem>
                       <DropdownMenuItem
                         className="cursor-pointer"
-                        onSelect={() => handleToggleEnabled(schedule)}
+                        onSelect={() => handleToggleEnabled(trigger)}
                         disabled={
-                          isToggling && scheduleToToggle?.id === schedule.id
+                          isToggling && triggerToToggle?.id === trigger.id
                         }
                       >
-                        {schedule.enabled ? (
+                        {trigger.enabled ? (
                           <>
                             <Pause /> Disable
                           </>
@@ -239,7 +266,7 @@ export const ScheduleList = ({
                       <DropdownMenuSeparator />
                       <DropdownMenuItem
                         className="cursor-pointer text-destructive focus:text-destructive"
-                        onSelect={() => handleDeleteClick(schedule)}
+                        onSelect={() => handleDeleteClick(trigger)}
                       >
                         <Trash2 /> Delete
                       </DropdownMenuItem>
@@ -255,8 +282,8 @@ export const ScheduleList = ({
       <ConfirmDialog
         open={deleteDialogOpen}
         onOpenChange={setDeleteDialogOpen}
-        title="Delete Schedule"
-        description={`Are you sure you want to delete "${scheduleToDelete?.name}"? This will also delete all chat history for this schedule. This action cannot be undone.`}
+        title="Delete Trigger"
+        description={`Are you sure you want to delete "${triggerToDelete?.name}"? This will also delete all chat history for this trigger. This action cannot be undone.`}
         confirmLabel="Delete"
         confirmVariant="destructive"
         onConfirm={handleDeleteConfirm}

@@ -16,7 +16,7 @@ import { invitation } from "./routes/invitation.ts";
 import { userInvitation } from "./routes/user-invitation.ts";
 import { member } from "./routes/member.ts";
 import { context } from "./routes/context.ts";
-import { schedule } from "./routes/schedule.ts";
+import { trigger } from "./routes/trigger.ts";
 import { kanban } from "./routes/kanban.ts";
 import { notification } from "./routes/notification.ts";
 import { webhook } from "./routes/webhook.ts";
@@ -121,7 +121,7 @@ app.route("/organizations/:orgId/workspaces/:workspaceId/skills", skill);
 app.route("/organizations/:orgId/workspaces/:workspaceId/providers", provider);
 app.route("/organizations/:orgId/providers", orgProvider);
 app.route("/organizations/:orgId/workspaces/:workspaceId/tools", tool);
-app.route("/organizations/:orgId/workspaces/:workspaceId/schedules", schedule);
+app.route("/organizations/:orgId/workspaces/:workspaceId/triggers", trigger);
 app.route("/organizations/:orgId/workspaces/:workspaceId/boards", kanban);
 app.route(
   "/organizations/:orgId/workspaces/:workspaceId/notifications",

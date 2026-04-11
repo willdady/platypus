@@ -6,7 +6,7 @@ import {
   notification as notificationTable,
   agent as agentTable,
 } from "../db/schema.ts";
-import { dispatchWebhook } from "../services/webhook-delivery.ts";
+import { dispatchEvent } from "../services/webhook-delivery.ts";
 
 export function createNotificationTools(
   workspaceId: string,
@@ -60,7 +60,7 @@ export function createNotificationTools(
         })
         .returning();
 
-      dispatchWebhook(workspaceId, "notification.created", record[0]);
+      dispatchEvent(workspaceId, "notification.created", record[0]);
 
       return record[0];
     },
@@ -132,7 +132,7 @@ export function createNotificationTools(
         return { error: "Notification not found" };
       }
 
-      dispatchWebhook(workspaceId, "notification.updated", record[0]);
+      dispatchEvent(workspaceId, "notification.updated", record[0]);
 
       return record[0];
     },
@@ -154,7 +154,7 @@ export function createNotificationTools(
         .delete(notificationTable)
         .where(eq(notificationTable.id, notificationId));
 
-      dispatchWebhook(workspaceId, "notification.dismissed", {
+      dispatchEvent(workspaceId, "notification.dismissed", {
         notificationId,
       });
 

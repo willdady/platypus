@@ -2,7 +2,7 @@
 
 import { AgentsList } from "@/components/agents-list";
 import { SkillsList } from "@/components/skills-list";
-import { ScheduleList } from "@/components/schedule-list";
+import { TriggerList } from "@/components/trigger-list";
 import { BoardsList } from "@/components/boards-list";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -14,7 +14,7 @@ import {
   BotMessageSquare,
   FolderOpen,
   Sparkles,
-  Timer,
+  Zap,
   KanbanSquare,
 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -96,13 +96,13 @@ const Workspace = () => {
     fetcher,
   );
 
-  const { data: schedulesData, isLoading: isLoadingSchedules } = useSWR<{
+  const { data: triggersData, isLoading: isLoadingTriggers } = useSWR<{
     results: [];
   }>(
     backendUrl && user
       ? joinUrl(
           backendUrl,
-          `/organizations/${orgId}/workspaces/${workspaceId}/schedules`,
+          `/organizations/${orgId}/workspaces/${workspaceId}/triggers`,
         )
       : null,
     fetcher,
@@ -133,7 +133,7 @@ const Workspace = () => {
     isLoadingChats ||
     isLoadingProviders ||
     isLoadingSkills ||
-    isLoadingSchedules ||
+    isLoadingTriggers ||
     isLoadingBoards ||
     isLoadingOrg
   ) {
@@ -203,7 +203,7 @@ const Workspace = () => {
 
         <Separator />
 
-        {/* Schedules Section */}
+        {/* Triggers Section */}
         <div className="space-y-4">
           <div className="flex flex-col">
             <Skeleton className="h-6 w-32 mb-1" />
@@ -226,7 +226,7 @@ const Workspace = () => {
   const chatCount = chatsData?.results?.length || 0;
   const providerCount = providersData?.results?.length || 0;
   const skillCount = skillsData?.results?.length || 0;
-  const scheduleCount = schedulesData?.results?.length || 0;
+  const triggerCount = triggersData?.results?.length || 0;
   const boardCount = boardsData?.results?.length || 0;
 
   return (
@@ -254,7 +254,7 @@ const Workspace = () => {
               { label: "Chats", value: chatCount, icon: MessageSquare },
               { label: "Agents", value: agentCount, icon: Bot },
               { label: "Skills", value: skillCount, icon: Sparkles },
-              { label: "Schedules", value: scheduleCount, icon: Timer },
+              { label: "Triggers", value: triggerCount, icon: Zap },
               { label: "Boards", value: boardCount, icon: KanbanSquare },
             ].map(({ label, value, icon: Icon }) => (
               <Card
@@ -315,12 +315,12 @@ const Workspace = () => {
             <Card className="gap-2">
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-0">
                 <CardTitle className="text-sm font-medium">
-                  Total Schedules
+                  Total Triggers
                 </CardTitle>
-                <Timer className="h-4 w-4 text-muted-foreground" />
+                <Zap className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">{scheduleCount}</div>
+                <div className="text-2xl font-bold">{triggerCount}</div>
                 <p className="text-xs text-muted-foreground">
                   Automated agent runs
                 </p>
@@ -410,24 +410,24 @@ const Workspace = () => {
 
           <Separator />
 
-          {/* Schedules List Section */}
+          {/* Triggers List Section */}
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <div className="flex flex-col">
                 <h2 className="text-xl font-semibold tracking-tight flex items-center gap-2">
-                  <Timer className="size-5" /> Schedules
+                  <Zap className="size-5" /> Triggers
                 </h2>
                 <p className="text-sm text-muted-foreground">
                   Automated agent runs configured for this workspace.
                 </p>
               </div>
             </div>
-            <ScheduleList orgId={orgId} workspaceId={workspaceId} />
+            <TriggerList orgId={orgId} workspaceId={workspaceId} />
             <Button variant="outline" asChild>
               <Link
-                href={`/${orgId}/workspace/${workspaceId}/schedules/create`}
+                href={`/${orgId}/workspace/${workspaceId}/triggers/create`}
               >
-                <Plus /> Create Schedule
+                <Plus /> Create Trigger
               </Link>
             </Button>
           </div>

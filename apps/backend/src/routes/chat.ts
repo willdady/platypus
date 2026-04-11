@@ -172,7 +172,7 @@ chat.get(
       .where(
         and(
           eq(chatTable.workspaceId, workspaceId),
-          isNull(chatTable.scheduleId),
+          isNull(chatTable.triggerId),
           searchFilter,
         ),
       )

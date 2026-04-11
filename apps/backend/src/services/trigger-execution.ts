@@ -1,10 +1,11 @@
 import { nanoid } from "nanoid";
-import { and, desc, eq, notInArray } from "drizzle-orm";
+import { and, desc, eq, notInArray, type Column } from "drizzle-orm";
+import type { PgTable, PgColumn } from "drizzle-orm/pg-core";
 import { generateText, stepCountIs, type LanguageModel } from "ai";
 import { db } from "../index.ts";
 import {
-  schedule as scheduleTable,
-  scheduleRun as scheduleRunTable,
+  trigger as triggerTable,
+  triggerRun as triggerRunTable,
   chat as chatTable,
   agent as agentTable,
   workspace as workspaceTable,
@@ -23,23 +24,71 @@ import {
 import { logger } from "../logger.ts";
 import { validateCronExpression } from "../utils/cron.ts";
 import type { PlatypusUIMessage } from "../types.ts";
-import type { Provider } from "@platypus/schemas";
+import type {
+  Provider,
+  CronTriggerConfig,
+  WebhookEvent,
+} from "@platypus/schemas";
 
 /**
- * Executes a schedule by running the agent with the configured instruction.
+ * Retains the newest N rows for a given foreign key and deletes the rest.
+ */
+async function retainNewest(
+  table: PgTable,
+  fkColumn: PgColumn,
+  idColumn: PgColumn,
+  orderColumn: Column,
+  fkValue: string,
+  limit: number,
+  label: string,
+): Promise<void> {
+  const toKeep = await db
+    .select({ id: idColumn })
+    .from(table)
+    .where(eq(fkColumn, fkValue))
+    .orderBy(desc(orderColumn))
+    .limit(limit);
+
+  if (toKeep.length < limit) return;
+
+  const idsToKeep = toKeep.map((r) => r.id as string);
+  const deleted = await db
+    .delete(table)
+    .where(and(eq(fkColumn, fkValue), notInArray(idColumn, idsToKeep)))
+    .returning({ id: idColumn });
+
+  if (deleted.length > 0) {
+    logger.info(
+      { triggerId: fkValue, deletedCount: deleted.length, maxChatsToKeep: limit },
+      `Cleaned up old ${label}`,
+    );
+  }
+}
+
+export type EventContext = {
+  eventType: WebhookEvent;
+  eventData: unknown;
+};
+
+/**
+ * Executes a trigger by running the agent with the configured instruction.
+ * For event triggers, event context is prepended to the instruction.
  * Returns the created chat ID.
  */
-export const triggerSchedule = async (
-  schedule: typeof scheduleTable.$inferSelect,
+export const executeTrigger = async (
+  trigger: typeof triggerTable.$inferSelect,
+  eventContext?: EventContext,
 ): Promise<string> => {
-  const { id, workspaceId, agentId, instruction } = schedule;
+  const { id, workspaceId, agentId, instruction } = trigger;
 
-  // Create a schedule run record
+  // Create a trigger run record (starts as "running" since execution begins immediately)
   const runId = nanoid();
-  await db.insert(scheduleRunTable).values({
+  await db.insert(triggerRunTable).values({
     id: runId,
-    scheduleId: id,
-    status: "pending",
+    triggerId: id,
+    status: "running",
+    eventType: eventContext?.eventType ?? null,
+    eventData: eventContext?.eventData ?? null,
     startedAt: new Date(),
     createdAt: new Date(),
   });
@@ -50,7 +99,7 @@ export const triggerSchedule = async (
     data?: { chatId?: string; errorMessage?: string },
   ) => {
     await db
-      .update(scheduleRunTable)
+      .update(triggerRunTable)
       .set({
         status,
         chatId: data?.chatId ?? null,
@@ -58,38 +107,34 @@ export const triggerSchedule = async (
         completedAt:
           status === "success" || status === "failed" ? new Date() : null,
       })
-      .where(eq(scheduleRunTable.id, runId));
+      .where(eq(triggerRunTable.id, runId));
   };
 
-  // 1. Fetch the agent
-  const agentRecord = await db
-    .select()
-    .from(agentTable)
-    .where(eq(agentTable.id, agentId))
-    .limit(1);
+  // 1. Fetch agent and workspace in parallel
+  const [agentRecord, workspaceRecord] = await Promise.all([
+    db.select().from(agentTable).where(eq(agentTable.id, agentId)).limit(1),
+    db
+      .select()
+      .from(workspaceTable)
+      .where(eq(workspaceTable.id, workspaceId))
+      .limit(1),
+  ]);
 
   if (agentRecord.length === 0) {
-    const errorMsg = `Agent '${agentId}' not found for schedule '${id}'`;
+    const errorMsg = `Agent '${agentId}' not found for trigger '${id}'`;
     await updateRunStatus("failed", { errorMessage: errorMsg });
     throw new Error(errorMsg);
   }
   const agent = agentRecord[0];
 
-  // 2. Fetch the workspace to get owner info
-  const workspaceRecord = await db
-    .select()
-    .from(workspaceTable)
-    .where(eq(workspaceTable.id, workspaceId))
-    .limit(1);
-
   if (workspaceRecord.length === 0) {
-    const errorMsg = `Workspace '${workspaceId}' not found for schedule '${id}'`;
+    const errorMsg = `Workspace '${workspaceId}' not found for trigger '${id}'`;
     await updateRunStatus("failed", { errorMessage: errorMsg });
     throw new Error(errorMsg);
   }
   const workspace = workspaceRecord[0];
 
-  // 3. Get provider from agent
+  // 2. Get provider from agent
   const providerRecord = await db
     .select()
     .from(providerTable)
@@ -117,15 +162,15 @@ export const triggerSchedule = async (
   );
 
   // 5b. Configure Search (if enabled)
-  if (schedule.search) {
+  if (trigger.search) {
     Object.assign(tools, createSearchTools(provider as Provider, aiProvider));
   }
 
   // 6. Load skills
   const skills = await loadSkills(agent, workspaceId);
 
-  // 7. Fetch user contexts (workspace owner is the "user" for scheduled runs)
-  const user = { id: workspace.ownerId, name: "Schedule User" };
+  // 7. Fetch user contexts (workspace owner is the "user" for triggered runs)
+  const user = { id: workspace.ownerId, name: "Trigger User" };
   const { userGlobalContext, userWorkspaceContext } = await fetchUserContexts(
     workspace.ownerId,
     workspaceId,
@@ -147,35 +192,39 @@ export const triggerSchedule = async (
     user,
     userGlobalContext,
     userWorkspaceContext,
-    undefined, // no sub-agents for scheduled runs
+    undefined, // no sub-agents for triggered runs
     memoriesFormatted,
   );
 
   // 10. Prepare tools
   prepareAgentTools(tools, skills, workspaceId);
 
-  // 11. Execute agent with instruction
+  // 11. Build the effective prompt
+  let effectiveInstruction = instruction;
+  if (eventContext) {
+    effectiveInstruction = `Event: ${eventContext.eventType}\nEvent Data:\n${JSON.stringify(eventContext.eventData, null, 2)}\n---\n${instruction}`;
+  }
+
+  // 12. Execute agent with instruction
   const chatId = nanoid();
   const startTime = Date.now();
-
-  // Mark as running
-  await updateRunStatus("running");
 
   try {
     logger.info(
       {
-        scheduleId: id,
+        triggerId: id,
         runId,
         chatId,
         agentId,
-        instruction: instruction.substring(0, 100) + "...",
+        type: trigger.type,
+        instruction: effectiveInstruction.substring(0, 100) + "...",
       },
-      "Starting schedule execution",
+      "Starting trigger execution",
     );
 
     const result = await generateText({
       model: model as LanguageModel,
-      prompt: instruction,
+      prompt: effectiveInstruction,
       tools,
       system: config.systemPrompt,
       stopWhen: [stepCountIs(agent.maxSteps ?? 1)],
@@ -197,7 +246,7 @@ export const triggerSchedule = async (
       {
         id: nanoid(),
         role: "user",
-        parts: [{ type: "text", text: instruction }],
+        parts: [{ type: "text", text: effectiveInstruction }],
       },
       {
         id: nanoid(),
@@ -206,15 +255,15 @@ export const triggerSchedule = async (
       },
     ];
 
-    // 12. Save chat record
+    // 13. Save chat record
     await db.insert(chatTable).values({
       id: chatId,
       workspaceId,
-      title: `Scheduled: ${schedule.name}`,
+      title: `Triggered: ${trigger.name}`,
       messages,
       agentId: agent.id,
-      scheduleId: id,
-      memoryExtractionStatus: "completed", // Skip memory extraction for scheduled chats
+      triggerId: id,
+      memoryExtractionStatus: "completed", // Skip memory extraction for triggered chats
       tags: [],
       createdAt: new Date(),
       updatedAt: new Date(),
@@ -225,13 +274,13 @@ export const triggerSchedule = async (
 
     logger.info(
       {
-        scheduleId: id,
+        triggerId: id,
         runId,
         chatId,
         duration,
         responseLength: result.text.length,
       },
-      "Schedule execution completed",
+      "Trigger execution completed",
     );
 
     return chatId;
@@ -241,12 +290,12 @@ export const triggerSchedule = async (
     logger.error(
       {
         error,
-        scheduleId: id,
+        triggerId: id,
         runId,
         chatId,
         duration: Date.now() - startTime,
       },
-      "Schedule execution failed",
+      "Trigger execution failed",
     );
 
     // Update run status to failed
@@ -266,124 +315,68 @@ export const triggerSchedule = async (
 };
 
 /**
- * Updates the schedule after execution:
+ * Updates the trigger after execution:
  * - Sets lastRunAt
- * - Computes nextRunAt
- * - If one-off, disables the schedule
+ * - For cron: computes nextRunAt, handles one-off disable
+ * - For event: just updates lastRunAt
  * - Performs retention cleanup
  */
-export const updateScheduleAfterRun = async (
-  scheduleId: string,
-  maxChatsToKeep: number,
-  isOneOff: boolean,
-  cronExpression: string,
-  timezone: string,
+export const updateTriggerAfterRun = async (
+  triggerId: string,
+  trigger: typeof triggerTable.$inferSelect,
 ): Promise<void> => {
   const now = new Date();
+  const { maxChatsToKeep, type, config } = trigger;
 
-  // Compute next run
   let nextRunAt: Date | null = null;
   let enabled = true;
 
-  if (isOneOff) {
-    // One-off schedules are disabled after first run
-    enabled = false;
-  } else {
-    nextRunAt = validateCronExpression(cronExpression, timezone);
-    if (!nextRunAt) {
-      logger.error(
-        { scheduleId, cronExpression },
-        "Failed to compute next run for schedule",
+  if (type === "cron") {
+    const cronConfig = config as CronTriggerConfig;
+    if (cronConfig.isOneOff) {
+      // One-off triggers are disabled after first run
+      enabled = false;
+    } else {
+      nextRunAt = validateCronExpression(
+        cronConfig.cronExpression,
+        cronConfig.timezone,
       );
+      if (!nextRunAt) {
+        logger.error(
+          { triggerId, cronExpression: cronConfig.cronExpression },
+          "Failed to compute next run for trigger",
+        );
+      }
     }
   }
+  // For event triggers, nextRunAt stays null and enabled stays true
 
-  // Update the schedule
+  // Update the trigger
   await db
-    .update(scheduleTable)
+    .update(triggerTable)
     .set({
       lastRunAt: now,
       nextRunAt,
       enabled,
       updatedAt: now,
     })
-    .where(eq(scheduleTable.id, scheduleId));
+    .where(eq(triggerTable.id, triggerId));
 
-  // Retention cleanup: delete old chats beyond maxChatsToKeep
+  // Retention cleanup: delete old chats and runs beyond maxChatsToKeep (in parallel)
   if (maxChatsToKeep > 0) {
-    const chatsToKeep = await db
-      .select({ id: chatTable.id })
-      .from(chatTable)
-      .where(eq(chatTable.scheduleId, scheduleId))
-      .orderBy(desc(chatTable.createdAt))
-      .limit(maxChatsToKeep);
-
-    if (chatsToKeep.length === maxChatsToKeep) {
-      const idsToKeep = chatsToKeep.map((c) => c.id);
-
-      const deleted = await db
-        .delete(chatTable)
-        .where(
-          and(
-            eq(chatTable.scheduleId, scheduleId),
-            notInArray(chatTable.id, idsToKeep),
-          ),
-        )
-        .returning({ id: chatTable.id });
-
-      if (deleted.length > 0) {
-        logger.info(
-          {
-            scheduleId,
-            deletedCount: deleted.length,
-            maxChatsToKeep,
-          },
-          "Cleaned up old schedule chats",
-        );
-      }
-    }
-
-    // Retention cleanup: delete old runs beyond maxChatsToKeep
-    const runsToKeep = await db
-      .select({ id: scheduleRunTable.id })
-      .from(scheduleRunTable)
-      .where(eq(scheduleRunTable.scheduleId, scheduleId))
-      .orderBy(desc(scheduleRunTable.startedAt))
-      .limit(maxChatsToKeep);
-
-    if (runsToKeep.length === maxChatsToKeep) {
-      const runIdsToKeep = runsToKeep.map((r) => r.id);
-
-      const deletedRuns = await db
-        .delete(scheduleRunTable)
-        .where(
-          and(
-            eq(scheduleRunTable.scheduleId, scheduleId),
-            notInArray(scheduleRunTable.id, runIdsToKeep),
-          ),
-        )
-        .returning({ id: scheduleRunTable.id });
-
-      if (deletedRuns.length > 0) {
-        logger.info(
-          {
-            scheduleId,
-            deletedCount: deletedRuns.length,
-            maxChatsToKeep,
-          },
-          "Cleaned up old schedule runs",
-        );
-      }
-    }
+    await Promise.all([
+      retainNewest(chatTable, chatTable.triggerId, chatTable.id, chatTable.createdAt, triggerId, maxChatsToKeep, "trigger chats"),
+      retainNewest(triggerRunTable, triggerRunTable.triggerId, triggerRunTable.id, triggerRunTable.startedAt, triggerId, maxChatsToKeep, "trigger runs"),
+    ]);
   }
 
   logger.info(
     {
-      scheduleId,
-      isOneOff,
+      triggerId,
+      type,
       enabled,
       nextRunAt: nextRunAt?.toISOString(),
     },
-    "Updated schedule after run",
+    "Updated trigger after run",
   );
 };

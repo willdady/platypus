@@ -1,23 +1,24 @@
 import { sql, and, eq, lte, inArray } from "drizzle-orm";
 import { db } from "../index.ts";
-import { schedule as scheduleTable } from "../db/schema.ts";
+import { trigger as triggerTable } from "../db/schema.ts";
 import {
-  triggerSchedule,
-  updateScheduleAfterRun,
-} from "../services/schedule-execution.ts";
+  executeTrigger,
+  updateTriggerAfterRun,
+} from "../services/trigger-execution.ts";
 import { logger } from "../logger.ts";
 import { validateCronExpression } from "../utils/cron.ts";
+import type { CronTriggerConfig } from "@platypus/schemas";
 
-// Advisory lock ID for schedule scheduler (distinct from memory extraction's 123456789)
-const SCHEDULE_SCHEDULER_LOCK_ID = 987654321;
+// Advisory lock ID for trigger scheduler (same as old schedule scheduler)
+const TRIGGER_SCHEDULER_LOCK_ID = 987654321;
 
 // Check interval: 60 seconds (1 minute)
-const SCHEDULE_SCHEDULER_INTERVAL_MS = parseInt(
+const TRIGGER_SCHEDULER_INTERVAL_MS = parseInt(
   process.env.SCHEDULE_SCHEDULER_INTERVAL_MS || "60000",
 );
 
-// Maximum concurrent schedule executions
-const MAX_CONCURRENT_SCHEDULES = parseInt(
+// Maximum concurrent trigger executions
+const MAX_CONCURRENT_TRIGGERS = parseInt(
   process.env.SCHEDULE_MAX_CONCURRENT || "5",
 );
 
@@ -45,19 +46,19 @@ async function withConcurrencyLimit<T>(
 
 /**
  * Attempts to acquire an advisory lock and runs the given function if successful.
- * This ensures only one backend instance processes schedules at a time.
+ * This ensures only one backend instance processes triggers at a time.
  */
 async function runWithLock(fn: () => Promise<void>): Promise<void> {
   // Try to acquire advisory lock (non-blocking)
   const lockResult = await db.execute(
-    sql`SELECT pg_try_advisory_lock(${SCHEDULE_SCHEDULER_LOCK_ID}) as acquired`,
+    sql`SELECT pg_try_advisory_lock(${TRIGGER_SCHEDULER_LOCK_ID}) as acquired`,
   );
 
   const acquired = lockResult.rows[0]?.acquired;
 
   if (!acquired) {
     logger.debug(
-      "Another backend instance is processing schedules, skipping this run",
+      "Another backend instance is processing triggers, skipping this run",
     );
     return;
   }
@@ -67,7 +68,7 @@ async function runWithLock(fn: () => Promise<void>): Promise<void> {
   } finally {
     // Always release lock, even if processing fails
     await db.execute(
-      sql`SELECT pg_advisory_unlock(${SCHEDULE_SCHEDULER_LOCK_ID})`,
+      sql`SELECT pg_advisory_unlock(${TRIGGER_SCHEDULER_LOCK_ID})`,
     );
   }
 }
@@ -104,138 +105,137 @@ function scheduleAligned(intervalMs: number, fn: () => Promise<void>): void {
 }
 
 /**
- * Processes a single schedule execution.
+ * Processes a single trigger execution.
  * Handles errors independently so one failure doesn't block others.
  */
-async function processSingleSchedule(
-  job: typeof scheduleTable.$inferSelect,
+async function processSingleTrigger(
+  job: typeof triggerTable.$inferSelect,
 ): Promise<void> {
   const now = new Date();
 
   try {
     logger.info(
       {
-        scheduleId: job.id,
+        triggerId: job.id,
         name: job.name,
         agentId: job.agentId,
       },
-      "Processing schedule",
+      "Processing cron trigger",
     );
 
-    // Execute the schedule
-    await triggerSchedule(job);
+    // Execute the trigger
+    await executeTrigger(job);
 
-    // Update the schedule state after successful execution
-    await updateScheduleAfterRun(
-      job.id,
-      job.maxChatsToKeep,
-      job.isOneOff,
-      job.cronExpression,
-      job.timezone,
-    );
+    // Update the trigger state after successful execution
+    await updateTriggerAfterRun(job.id, job);
 
     logger.info(
       {
-        scheduleId: job.id,
+        triggerId: job.id,
         name: job.name,
       },
-      "Schedule processed successfully",
+      "Cron trigger processed successfully",
     );
   } catch (error) {
     logger.error(
-      { error, scheduleId: job.id, name: job.name },
-      "Failed to process schedule",
+      { error, triggerId: job.id, name: job.name },
+      "Failed to process cron trigger",
     );
 
     try {
-      if (job.isOneOff) {
-        // One-off schedules should be disabled on failure to prevent infinite retry
+      const cronConfig = job.config as CronTriggerConfig;
+      if (cronConfig.isOneOff) {
+        // One-off triggers should be disabled on failure to prevent infinite retry
         await db
-          .update(scheduleTable)
+          .update(triggerTable)
           .set({
             lastRunAt: now,
             enabled: false,
             nextRunAt: null,
             updatedAt: now,
           })
-          .where(eq(scheduleTable.id, job.id));
+          .where(eq(triggerTable.id, job.id));
       } else {
-        // Recompute nextRunAt so the schedule retries on the next cycle
+        // Recompute nextRunAt so the trigger retries on the next cycle
         const nextRunAt = validateCronExpression(
-          job.cronExpression,
-          job.timezone,
+          cronConfig.cronExpression,
+          cronConfig.timezone,
         );
         await db
-          .update(scheduleTable)
+          .update(triggerTable)
           .set({
             lastRunAt: now,
             nextRunAt,
             updatedAt: now,
           })
-          .where(eq(scheduleTable.id, job.id));
+          .where(eq(triggerTable.id, job.id));
       }
     } catch (updateError) {
       logger.error(
-        { error: updateError, scheduleId: job.id },
-        "Failed to update schedule after failure",
+        { error: updateError, triggerId: job.id },
+        "Failed to update trigger after failure",
       );
     }
   }
 }
 
 /**
- * Processes all due schedules.
- * Queries for schedules where enabled = true AND nextRunAt <= NOW(),
- * executes each one with controlled concurrency, and updates the schedule state.
+ * Processes all due cron triggers.
+ * Queries for triggers where type = 'cron' AND enabled = true AND nextRunAt <= NOW(),
+ * executes each one with controlled concurrency, and updates the trigger state.
  */
-async function processDueSchedules(): Promise<void> {
+async function processDueTriggers(): Promise<void> {
   const now = new Date();
 
-  // Find all due schedules
+  // Find all due cron triggers
   const dueJobs = await db
     .select()
-    .from(scheduleTable)
+    .from(triggerTable)
     .where(
-      and(eq(scheduleTable.enabled, true), lte(scheduleTable.nextRunAt, now)),
+      and(
+        eq(triggerTable.type, "cron"),
+        eq(triggerTable.enabled, true),
+        lte(triggerTable.nextRunAt, now),
+      ),
     );
 
   if (dueJobs.length === 0) {
-    logger.debug("No schedules due for execution");
+    logger.debug("No cron triggers due for execution");
     return;
   }
 
   logger.info(
-    `Found ${dueJobs.length} schedule(s) due, max concurrent: ${MAX_CONCURRENT_SCHEDULES}`,
+    `Found ${dueJobs.length} cron trigger(s) due, max concurrent: ${MAX_CONCURRENT_TRIGGERS}`,
   );
 
   // Immediately claim all due jobs by nulling nextRunAt to prevent re-pickup
   const dueJobIds = dueJobs.map((j) => j.id);
   await db
-    .update(scheduleTable)
+    .update(triggerTable)
     .set({ nextRunAt: null })
-    .where(inArray(scheduleTable.id, dueJobIds));
+    .where(inArray(triggerTable.id, dueJobIds));
 
-  // Process schedules in parallel with controlled concurrency
+  // Process triggers in parallel with controlled concurrency
   await withConcurrencyLimit(
     dueJobs,
-    MAX_CONCURRENT_SCHEDULES,
-    processSingleSchedule,
+    MAX_CONCURRENT_TRIGGERS,
+    processSingleTrigger,
   );
 }
 
 /**
- * Starts the schedule scheduler.
+ * Starts the trigger scheduler.
  * This should be called after the database is initialized.
  */
-export function startScheduleScheduler(): void {
+export function startTriggerScheduler(): void {
   logger.info(
-    `Starting schedule scheduler (interval: ${SCHEDULE_SCHEDULER_INTERVAL_MS}ms, wall-clock aligned)`,
+    `Starting trigger scheduler (interval: ${TRIGGER_SCHEDULER_INTERVAL_MS}ms, wall-clock aligned)`,
   );
 
   // Schedule at wall-clock-aligned intervals with advisory lock
-  scheduleAligned(SCHEDULE_SCHEDULER_INTERVAL_MS, async () => {
+  scheduleAligned(TRIGGER_SCHEDULER_INTERVAL_MS, async () => {
     await runWithLock(async () => {
-      await processDueSchedules();
+      await processDueTriggers();
     });
   });
 }

@@ -14,7 +14,7 @@ import {
   Bot,
   Sparkles,
   KanbanSquare,
-  Timer,
+  Zap,
 } from "lucide-react";
 
 import {
@@ -25,7 +25,7 @@ import {
   CommandItem,
   CommandList,
 } from "@/components/ui/command";
-import { Agent, KanbanBoard, Schedule } from "@platypus/schemas";
+import { Agent, KanbanBoard, Trigger } from "@platypus/schemas";
 import { fetcher, joinUrl } from "@/lib/utils";
 import { useBackendUrl } from "@/app/client-context";
 import { useAuth } from "@/components/auth-provider";
@@ -67,18 +67,18 @@ export function CommandMenu({ orgId, workspaceId }: CommandMenuProps) {
 
   const boards = boardsData?.results || [];
 
-  // Fetch schedules for the workspace
-  const { data: schedulesData } = useSWR<{ results: Schedule[] }>(
+  // Fetch triggers for the workspace
+  const { data: triggersData } = useSWR<{ results: Trigger[] }>(
     backendUrl && user
       ? joinUrl(
           backendUrl,
-          `/organizations/${orgId}/workspaces/${workspaceId}/schedules`,
+          `/organizations/${orgId}/workspaces/${workspaceId}/triggers`,
         )
       : null,
     fetcher,
   );
 
-  const schedules = schedulesData?.results || [];
+  const triggers = triggersData?.results || [];
 
   useEffect(() => {
     const down = (e: KeyboardEvent) => {
@@ -172,13 +172,13 @@ export function CommandMenu({ orgId, workspaceId }: CommandMenuProps) {
             onSelect={() => {
               runCommand(() =>
                 router.push(
-                  `/${orgId}/workspace/${workspaceId}/schedules/create`,
+                  `/${orgId}/workspace/${workspaceId}/triggers/create`,
                 ),
               );
             }}
           >
-            <Timer />
-            <span>New Schedule</span>
+            <Zap />
+            <span>New Trigger</span>
           </CommandItem>
           <CommandItem
             className="cursor-pointer"
@@ -278,22 +278,22 @@ export function CommandMenu({ orgId, workspaceId }: CommandMenuProps) {
             ))}
           </CommandGroup>
         )}
-        {schedules.length > 0 && (
-          <CommandGroup heading="Schedules">
-            {schedules.map((schedule) => (
+        {triggers.length > 0 && (
+          <CommandGroup heading="Triggers">
+            {triggers.map((trigger) => (
               <CommandItem
-                key={schedule.id}
+                key={trigger.id}
                 className="cursor-pointer"
                 onSelect={() => {
                   runCommand(() =>
                     router.push(
-                      `/${orgId}/workspace/${workspaceId}/schedules/${schedule.id}`,
+                      `/${orgId}/workspace/${workspaceId}/triggers/${trigger.id}`,
                     ),
                   );
                 }}
               >
-                <Timer />
-                <span>{schedule.name}</span>
+                <Zap />
+                <span>{trigger.name}</span>
               </CommandItem>
             ))}
           </CommandGroup>

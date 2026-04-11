@@ -8,7 +8,7 @@ import {
 import { getCurrentTime, convertTimezone } from "./time.ts";
 import { fetchUrl } from "./fetch.ts";
 import { createKanbanTools } from "./kanban.ts";
-import { createScheduleTools } from "./schedule.ts";
+import { createTriggerTools } from "./trigger.ts";
 import { createAgentManagementTools } from "./agent-management.ts";
 import { createNotificationTools } from "./notification.ts";
 
@@ -96,13 +96,13 @@ registerToolSet("kanban", {
     createKanbanTools(workspaceId, agentId, orgId, frontendUrl),
 });
 
-registerToolSet("schedule", {
-  name: "Schedule",
+registerToolSet("triggers", {
+  name: "Triggers",
   category: "Automation",
   description:
-    "Manage scheduled tasks including listing agents, creating, editing, and viewing schedules",
+    "Manage triggers (cron schedules and event-based) including listing agents, creating, editing, and viewing triggers",
   tools: ({ workspaceId, orgId, frontendUrl }) =>
-    createScheduleTools(workspaceId, orgId, frontendUrl),
+    createTriggerTools(workspaceId, orgId, frontendUrl),
 });
 
 registerToolSet("agent-management", {

@@ -2,7 +2,7 @@
 
 import { use } from "react";
 import { BackButton } from "@/components/back-button";
-import { type Schedule, type ScheduleRun } from "@platypus/schemas";
+import { type Trigger, type TriggerRun } from "@platypus/schemas";
 import useSWR from "swr";
 import { fetcher, joinUrl } from "@/lib/utils";
 import Link from "next/link";
@@ -12,33 +12,31 @@ import { format, formatDistanceToNow } from "date-fns";
 import { Badge } from "@/components/ui/badge";
 import { Loader2 } from "lucide-react";
 
-const ScheduleRunsPage = ({
+const TriggerRunsPage = ({
   params,
 }: {
-  params: Promise<{ orgId: string; workspaceId: string; scheduleId: string }>;
+  params: Promise<{ orgId: string; workspaceId: string; triggerId: string }>;
 }) => {
-  const { orgId, workspaceId, scheduleId } = use(params);
+  const { orgId, workspaceId, triggerId } = use(params);
 
   const { user } = useAuth();
   const backendUrl = useBackendUrl();
 
-  // Fetch schedule details
-  const { data: schedule } = useSWR<Schedule>(
+  const { data: trigger } = useSWR<Trigger>(
     backendUrl && user
       ? joinUrl(
           backendUrl,
-          `/organizations/${orgId}/workspaces/${workspaceId}/schedules/${scheduleId}`,
+          `/organizations/${orgId}/workspaces/${workspaceId}/triggers/${triggerId}`,
         )
       : null,
     fetcher,
   );
 
-  // Fetch runs for this schedule
-  const { data: runsData, isLoading } = useSWR<{ results: ScheduleRun[] }>(
+  const { data: runsData, isLoading } = useSWR<{ results: TriggerRun[] }>(
     backendUrl && user
       ? joinUrl(
           backendUrl,
-          `/organizations/${orgId}/workspaces/${workspaceId}/schedules/${scheduleId}/runs`,
+          `/organizations/${orgId}/workspaces/${workspaceId}/triggers/${triggerId}/runs`,
         )
       : null,
     fetcher,
@@ -46,7 +44,7 @@ const ScheduleRunsPage = ({
 
   const runs = runsData?.results || [];
 
-  const getStatusBadge = (status: ScheduleRun["status"]) => {
+  const getStatusBadge = (status: TriggerRun["status"]) => {
     switch (status) {
       case "success":
         return <Badge variant="default">Success</Badge>;
@@ -65,7 +63,7 @@ const ScheduleRunsPage = ({
     }
   };
 
-  const getDuration = (run: ScheduleRun) => {
+  const getDuration = (run: TriggerRun) => {
     if (!run.completedAt) return null;
     const ms =
       new Date(run.completedAt).getTime() - new Date(run.startedAt).getTime();
@@ -78,15 +76,15 @@ const ScheduleRunsPage = ({
     <div className="flex justify-center pb-8">
       <div className="w-full xl:w-4/5 max-w-4xl">
         <BackButton
-          fallbackHref={`/${orgId}/workspace/${workspaceId}/schedules/${scheduleId}`}
+          fallbackHref={`/${orgId}/workspace/${workspaceId}/triggers/${triggerId}`}
         />
         <h1 className="text-2xl mb-1 font-bold">
-          {schedule ? schedule.name : "Run History"}
+          {trigger ? trigger.name : "Run History"}
         </h1>
-        {schedule?.description && (
-          <p className="text-muted-foreground mb-4">{schedule.description}</p>
+        {trigger?.description && (
+          <p className="text-muted-foreground mb-4">{trigger.description}</p>
         )}
-        {!schedule?.description && <div className="mb-4" />}
+        {!trigger?.description && <div className="mb-4" />}
 
         {isLoading ? (
           <div className="flex items-center justify-center py-8">
@@ -94,7 +92,7 @@ const ScheduleRunsPage = ({
           </div>
         ) : runs.length === 0 ? (
           <p className="text-muted-foreground">
-            No runs yet. The schedule will appear here after it runs.
+            No runs yet. Runs will appear here after the trigger fires.
           </p>
         ) : (
           <div className="border rounded-lg divide-y">
@@ -114,6 +112,11 @@ const ScheduleRunsPage = ({
                         addSuffix: true,
                       })}
                     </p>
+                    {run.eventType && (
+                      <p className="text-sm text-muted-foreground">
+                        Event: {run.eventType}
+                      </p>
+                    )}
                     {run.completedAt && (
                       <p className="text-sm text-muted-foreground">
                         Duration: {getDuration(run)}
@@ -143,4 +146,4 @@ const ScheduleRunsPage = ({
   );
 };
 
-export default ScheduleRunsPage;
+export default TriggerRunsPage;

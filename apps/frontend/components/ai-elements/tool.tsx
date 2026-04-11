@@ -18,7 +18,7 @@ import {
   ClockIcon,
   GlobeIcon,
   KanbanSquareIcon,
-  TimerIcon,
+  ZapIcon,
   WrenchIcon,
   XCircleIcon,
   type LucideIcon,
@@ -57,10 +57,10 @@ const toolToToolSet: Record<string, string> = {
   listComments: "kanban",
   upsertComment: "kanban",
   deleteComment: "kanban",
-  // schedule
-  listSchedules: "schedule",
-  upsertSchedule: "schedule",
-  deleteSchedule: "schedule",
+  // triggers
+  listTriggers: "triggers",
+  upsertTrigger: "triggers",
+  deleteTrigger: "triggers",
   // agent-management
   listSkills: "agent-management",
   getSkill: "agent-management",
@@ -91,7 +91,7 @@ const toolToToolSet: Record<string, string> = {
 /** One icon per toolset, matching the workspace home page. */
 const toolSetIcons: Record<string, LucideIcon> = {
   kanban: KanbanSquareIcon,
-  schedule: TimerIcon,
+  triggers: ZapIcon,
   "agent-management": BotIcon,
   time: ClockIcon,
   "math-conversions": ArrowRightLeftIcon,

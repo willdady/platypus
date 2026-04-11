@@ -12,7 +12,7 @@ import { count, eq } from "drizzle-orm";
 import { auth } from "./src/auth.ts";
 import { logger } from "./src/logger.ts";
 import { startMemoryScheduler } from "./src/jobs/memory-scheduler.ts";
-import { startScheduleScheduler } from "./src/jobs/schedule-scheduler.ts";
+import { startTriggerScheduler } from "./src/jobs/trigger-scheduler.ts";
 
 const PORT = process.env.PORT || "4001";
 
@@ -105,7 +105,7 @@ const main = async () => {
 
   // Start background jobs (safe for horizontal scaling)
   startMemoryScheduler();
-  startScheduleScheduler();
+  startTriggerScheduler();
 };
 
 const exponentialBackoff = async <T>(
