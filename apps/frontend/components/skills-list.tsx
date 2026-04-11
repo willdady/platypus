@@ -177,7 +177,9 @@ export const SkillsList = ({
                           <EllipsisVertical className="h-4 w-4" />
                         </Button>
                       </DropdownMenuTrigger>
-                      <DropdownMenuContent>
+                      <DropdownMenuContent
+                        onClick={(e) => e.preventDefault()}
+                      >
                         <DropdownMenuItem
                           className="cursor-pointer"
                           onSelect={() => handleDeleteClick(skill)}
