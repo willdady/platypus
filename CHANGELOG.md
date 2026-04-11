@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.55.1](https://github.com/willdady/platypus/compare/v1.55.0...v1.55.1) (2026-04-11)
+
+
+### Bug Fixes
+
+* reorder migration to drop constraint before cascade dropping schedule table ([975eaa4](https://github.com/willdady/platypus/commit/975eaa4de4013bfc609d60d9e3dc6b7a4b2488bc))
+
 ## [1.55.0](https://github.com/willdady/platypus/compare/v1.54.0...v1.55.0) (2026-04-11)
 
 
