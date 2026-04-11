@@ -26,7 +26,6 @@ export function renderWorkspaceFragment(
   if (!workspaceContext || !workspaceContext.trim()) return preamble;
   return `
 ${preamble}
-Context about the workspace is provided inside the <workspace></workspace> XML tags below. Use this context to inform your responses only when relevant to the user's request.
 
 <workspace>
 ${workspaceContext.trim()}
@@ -69,29 +68,24 @@ export function renderUserContextFragment(
   globalContext?: string,
   workspaceContext?: string,
 ): string {
-  const parts: string[] = [];
+  const hasGlobal = globalContext && globalContext.trim();
+  const hasWorkspace = workspaceContext && workspaceContext.trim();
 
-  if (globalContext && globalContext.trim()) {
+  if (!hasGlobal && !hasWorkspace) return "";
+
+  const parts: string[] = [
+    "Use the following context about the user to personalize your responses.",
+  ];
+
+  if (hasGlobal) {
     parts.push(
-      `
-The following is general context about the user, provided inside the <userContext></userContext> XML tags. Use this context to personalize your responses.
-
-<userContext>
-${globalContext.trim()}
-</userContext>
-    `.trim(),
+      `<userContext>\n${globalContext!.trim()}\n</userContext>`,
     );
   }
 
-  if (workspaceContext && workspaceContext.trim()) {
+  if (hasWorkspace) {
     parts.push(
-      `
-The following is workspace-specific context about the user, provided inside the <userWorkspaceContext></userWorkspaceContext> XML tags. Use this context to personalize your responses.
-
-<userWorkspaceContext>
-${workspaceContext.trim()}
-</userWorkspaceContext>
-    `.trim(),
+      `<userWorkspaceContext>\n${workspaceContext!.trim()}\n</userWorkspaceContext>`,
     );
   }
 
@@ -150,12 +144,7 @@ ${data.subAgents
   )
   .join("\n")}
 
-When delegating to a sub-agent:
-1. Each task description MUST be entirely self-contained. Sub-agents cannot see the parent conversation, other sub-agent tasks, or any prior context. Never use references like "the first one", "the other task", "as mentioned above", etc.
-2. Include all relevant information, constraints, and requirements directly in the task description
-3. If delegating multiple related tasks, make each task independently understandable without knowledge of the others
-4. Wait for the sub-agent to complete before continuing
-5. Use the result returned by the sub-agent to continue your work`);
+Each task description MUST be entirely self-contained — sub-agents cannot see the parent conversation, other tasks, or any prior context. Include all relevant information directly in each task description. Wait for the sub-agent to complete before using its result.`);
   }
 
   return parts.filter(Boolean).join("\n\n");
