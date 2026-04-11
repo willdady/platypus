@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.55.2](https://github.com/willdady/platypus/compare/v1.55.1...v1.55.2) (2026-04-11)
+
+
+### Bug Fixes
+
+* make schedule-to-trigger migration idempotent for half-migrated databases ([92027e9](https://github.com/willdady/platypus/commit/92027e9bbbb87f65d3251e8dd62666f6d9c38234))
+
 ## [1.55.1](https://github.com/willdady/platypus/compare/v1.55.0...v1.55.1) (2026-04-11)
 
 
