@@ -162,6 +162,13 @@
       "when": 1775885613549,
       "tag": "0022_easy_wallop",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1775896822827,
+      "tag": "0023_pretty_the_enforcers",
+      "breakpoints": true
     }
   ]
 }
