@@ -1067,7 +1067,7 @@ const TriggerForm = ({
               <div className="flex flex-col">
                 <p>Web Search</p>
                 <p className="text-xs text-muted-foreground">
-                  Allow agent to search the web
+                  Model native web search (if supported by provider)
                 </p>
               </div>
             </FieldLabel>
