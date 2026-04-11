@@ -81,9 +81,7 @@ function sanitizeTSVField(value: string): string {
 /**
  * Formats a single memory as a TSV row including scope column.
  */
-function formatMemoryAsTSVRow(
-  memory: typeof memoryTable.$inferSelect,
-): string {
+function formatMemoryAsTSVRow(memory: typeof memoryTable.$inferSelect): string {
   const scope = memory.workspaceId ? "workspace" : "user";
   return [
     memory.id,

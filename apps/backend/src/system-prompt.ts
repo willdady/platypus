@@ -78,9 +78,7 @@ export function renderUserContextFragment(
   ];
 
   if (hasGlobal) {
-    parts.push(
-      `<userContext>\n${globalContext!.trim()}\n</userContext>`,
-    );
+    parts.push(`<userContext>\n${globalContext!.trim()}\n</userContext>`);
   }
 
   if (hasWorkspace) {

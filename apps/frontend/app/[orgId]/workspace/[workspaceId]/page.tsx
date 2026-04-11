@@ -424,9 +424,7 @@ const Workspace = () => {
             </div>
             <TriggerList orgId={orgId} workspaceId={workspaceId} />
             <Button variant="outline" asChild>
-              <Link
-                href={`/${orgId}/workspace/${workspaceId}/triggers/create`}
-              >
+              <Link href={`/${orgId}/workspace/${workspaceId}/triggers/create`}>
                 <Plus /> Create Trigger
               </Link>
             </Button>

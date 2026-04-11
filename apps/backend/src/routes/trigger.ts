@@ -106,10 +106,7 @@ trigger.post(
       nextRunAt = validateCronExpression(cronExpression, timezone);
 
       if (!nextRunAt) {
-        return c.json(
-          { message: "Invalid cron expression or timezone" },
-          400,
-        );
+        return c.json({ message: "Invalid cron expression or timezone" }, 400);
       }
     } else if (data.type === "event") {
       const events = config.events as unknown[];

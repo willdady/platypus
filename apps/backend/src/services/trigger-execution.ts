@@ -59,7 +59,11 @@ async function retainNewest(
 
   if (deleted.length > 0) {
     logger.info(
-      { triggerId: fkValue, deletedCount: deleted.length, maxChatsToKeep: limit },
+      {
+        triggerId: fkValue,
+        deletedCount: deleted.length,
+        maxChatsToKeep: limit,
+      },
       `Cleaned up old ${label}`,
     );
   }
@@ -365,8 +369,24 @@ export const updateTriggerAfterRun = async (
   // Retention cleanup: delete old chats and runs beyond maxChatsToKeep (in parallel)
   if (maxChatsToKeep > 0) {
     await Promise.all([
-      retainNewest(chatTable, chatTable.triggerId, chatTable.id, chatTable.createdAt, triggerId, maxChatsToKeep, "trigger chats"),
-      retainNewest(triggerRunTable, triggerRunTable.triggerId, triggerRunTable.id, triggerRunTable.startedAt, triggerId, maxChatsToKeep, "trigger runs"),
+      retainNewest(
+        chatTable,
+        chatTable.triggerId,
+        chatTable.id,
+        chatTable.createdAt,
+        triggerId,
+        maxChatsToKeep,
+        "trigger chats",
+      ),
+      retainNewest(
+        triggerRunTable,
+        triggerRunTable.triggerId,
+        triggerRunTable.id,
+        triggerRunTable.startedAt,
+        triggerId,
+        maxChatsToKeep,
+        "trigger runs",
+      ),
     ]);
   }
 

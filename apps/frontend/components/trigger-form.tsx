@@ -423,7 +423,8 @@ const TriggerForm = ({
   }, [scheduleMode, simpleSchedule, formData.cronExpression]);
 
   const { isCronValid, nextRunPreview } = useMemo(() => {
-    if (triggerType !== "cron") return { isCronValid: true, nextRunPreview: null };
+    if (triggerType !== "cron")
+      return { isCronValid: true, nextRunPreview: null };
     try {
       const cron = new Cron(effectiveCronExpression, {
         timezone: formData.timezone,
@@ -512,7 +513,9 @@ const TriggerForm = ({
               type: "event" as const,
               config: {
                 events: selectedEvents,
-                ...(filterBoardId ? { filters: { boardId: filterBoardId } } : {}),
+                ...(filterBoardId
+                  ? { filters: { boardId: filterBoardId } }
+                  : {}),
               },
             };
 
@@ -816,10 +819,7 @@ const TriggerForm = ({
                             <SelectContent>
                               <SelectGroup>
                                 {MINUTE_OPTIONS.map((opt) => (
-                                  <SelectItem
-                                    key={opt.value}
-                                    value={opt.value}
-                                  >
+                                  <SelectItem key={opt.value} value={opt.value}>
                                     {opt.label}
                                   </SelectItem>
                                 ))}
@@ -993,9 +993,7 @@ const TriggerForm = ({
                       onCheckedChange={() => handleEventToggle(event)}
                       disabled={isSubmitting}
                     />
-                    <FieldLabel htmlFor={`event-${event}`}>
-                      {event}
-                    </FieldLabel>
+                    <FieldLabel htmlFor={`event-${event}`}>{event}</FieldLabel>
                   </Field>
                 ))}
               </div>

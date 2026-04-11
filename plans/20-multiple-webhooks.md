@@ -28,14 +28,14 @@ Currently, each workspace can only have one webhook (enforced by a `UNIQUE` cons
 
 Rewrite to use `:webhookId` params, following the provider/agent pattern (`and(eq(id), eq(workspaceId))`):
 
-| Method | Path | Description |
-|--------|------|-------------|
-| GET `/` | List all webhooks for workspace | Returns `{ results: [...] }` |
-| POST `/` | Create a new webhook | No 409 check needed anymore |
-| GET `/:webhookId` | Get single webhook | |
-| PUT `/:webhookId` | Update webhook | |
-| DELETE `/:webhookId` | Delete webhook | |
-| POST `/:webhookId/regenerate-secret` | Regenerate signing secret | |
+| Method                               | Path                            | Description                  |
+| ------------------------------------ | ------------------------------- | ---------------------------- |
+| GET `/`                              | List all webhooks for workspace | Returns `{ results: [...] }` |
+| POST `/`                             | Create a new webhook            | No 409 check needed anymore  |
+| GET `/:webhookId`                    | Get single webhook              |                              |
+| PUT `/:webhookId`                    | Update webhook                  |                              |
+| DELETE `/:webhookId`                 | Delete webhook                  |                              |
+| POST `/:webhookId/regenerate-secret` | Regenerate signing secret       |                              |
 
 - Import `and` from `drizzle-orm`
 - Remove the 409/unique-constraint error handling from POST
@@ -63,6 +63,7 @@ Rewrite to use `:webhookId` params, following the provider/agent pattern (`and(e
 **Create:** `apps/frontend/components/webhooks-list.tsx`
 
 Follow `providers-list.tsx` pattern:
+
 - SWR fetch from `/organizations/${orgId}/workspaces/${workspaceId}/webhooks`
 - Expect `{ results: Webhook[] }` response
 - Render each webhook using `Item`/`ItemTitle`/`ItemContent` components with name as title, URL as subtitle

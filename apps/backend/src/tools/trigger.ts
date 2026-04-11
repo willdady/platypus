@@ -3,10 +3,7 @@ import { z } from "zod";
 import { nanoid } from "nanoid";
 import { and, desc, eq } from "drizzle-orm";
 import { db } from "../index.ts";
-import {
-  trigger as triggerTable,
-  agent as agentTable,
-} from "../db/schema.ts";
+import { trigger as triggerTable, agent as agentTable } from "../db/schema.ts";
 import { validateCronExpression } from "../utils/cron.ts";
 import { buildResourceUrl } from "../utils/resource-url.ts";
 
@@ -227,12 +224,17 @@ export function createTriggerTools(
 
         const effectiveType = fields.type ?? currentTrigger.type;
         const effectiveConfig = fields.config
-          ? { ...(currentTrigger.config as Record<string, unknown>), ...fields.config }
+          ? {
+              ...(currentTrigger.config as Record<string, unknown>),
+              ...fields.config,
+            }
           : (currentTrigger.config as Record<string, unknown>);
 
         // Validate config based on type
         if (effectiveType === "cron") {
-          const cronExpression = effectiveConfig.cronExpression as string | undefined;
+          const cronExpression = effectiveConfig.cronExpression as
+            | string
+            | undefined;
           if (!cronExpression) {
             return {
               success: false,
@@ -253,7 +255,8 @@ export function createTriggerTools(
           if (!events || events.length === 0) {
             return {
               success: false,
-              error: "Event triggers require config.events array with at least one event.",
+              error:
+                "Event triggers require config.events array with at least one event.",
             };
           }
         } else {
@@ -285,7 +288,10 @@ export function createTriggerTools(
           const cronExpression = effectiveConfig.cronExpression as string;
           const timezone = (effectiveConfig.timezone as string) ?? "UTC";
           if (fields.config?.cronExpression || fields.config?.timezone)
-            updateData.nextRunAt = validateCronExpression(cronExpression, timezone);
+            updateData.nextRunAt = validateCronExpression(
+              cronExpression,
+              timezone,
+            );
         } else {
           updateData.nextRunAt = null;
         }
@@ -404,7 +410,8 @@ export function createTriggerTools(
         if (!events || events.length === 0) {
           return {
             success: false,
-            error: "Event triggers require config.events array with at least one event.",
+            error:
+              "Event triggers require config.events array with at least one event.",
           };
         }
 

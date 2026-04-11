@@ -109,7 +109,8 @@ const processChat = async (
 
   // Format for the prompt
   const conversationText = formatConversation(messages);
-  const existingMemoriesFormatted = formatMemoriesForExtractionPrompt(existingMemories);
+  const existingMemoriesFormatted =
+    formatMemoriesForExtractionPrompt(existingMemories);
 
   // Build the extraction prompt
   const extractionPrompt = buildExtractionPrompt(

@@ -179,9 +179,7 @@ const WebhookForm = ({ orgId, workspaceId, webhookId }: WebhookFormProps) => {
         } else {
           toast.success("Webhook created");
         }
-        router.push(
-          `/${orgId}/workspace/${workspaceId}/settings/webhooks`,
-        );
+        router.push(`/${orgId}/workspace/${workspaceId}/settings/webhooks`);
       } else {
         const errorData = await response.json();
         setValidationErrors(parseValidationErrors(errorData));
@@ -197,19 +195,14 @@ const WebhookForm = ({ orgId, workspaceId, webhookId }: WebhookFormProps) => {
   const handleDelete = async () => {
     setIsDeleting(true);
     try {
-      const response = await fetch(
-        joinUrl(webhooksBaseUrl, `/${webhookId}`),
-        {
-          method: "DELETE",
-          credentials: "include",
-        },
-      );
+      const response = await fetch(joinUrl(webhooksBaseUrl, `/${webhookId}`), {
+        method: "DELETE",
+        credentials: "include",
+      });
 
       if (response.ok) {
         toast.success("Webhook deleted");
-        router.push(
-          `/${orgId}/workspace/${workspaceId}/settings/webhooks`,
-        );
+        router.push(`/${orgId}/workspace/${workspaceId}/settings/webhooks`);
       } else {
         console.error("Failed to delete webhook");
         toast.error("Failed to delete webhook");

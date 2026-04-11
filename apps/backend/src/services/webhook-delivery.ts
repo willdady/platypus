@@ -149,8 +149,7 @@ export function dispatchEvent(
               {
                 triggerId: trigger.id,
                 event,
-                error:
-                  error instanceof Error ? error.message : String(error),
+                error: error instanceof Error ? error.message : String(error),
               },
               "Event trigger execution failed",
             );
