@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.54.0](https://github.com/willdady/platypus/compare/v1.53.1...v1.54.0) (2026-04-11)
+
+
+### Features
+
+* **backend:** replace NDJSON memory format with TSV for token efficiency ([5cc542c](https://github.com/willdady/platypus/commit/5cc542c7bc5b3d8231f859d532f2ff09df0b44d5))
+* support multiple webhooks per workspace ([0170dc1](https://github.com/willdady/platypus/commit/0170dc12331348403ca8c1d76396aad0892e469a))
+
+
+### Bug Fixes
+
+* **backend:** remove deprecated OpenRouter :online search suffix ([4adb852](https://github.com/willdady/platypus/commit/4adb852fc5389c415acf9dd5942249e772a2e8ce))
+* **frontend:** update model selector placeholder to mention agents and models ([0fd0f75](https://github.com/willdady/platypus/commit/0fd0f750b7efea8ce57582f5c28e2f8dbfc4a46e))
+
 ## [1.53.1](https://github.com/willdady/platypus/compare/v1.53.0...v1.53.1) (2026-04-08)
 
 
