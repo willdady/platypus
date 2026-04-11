@@ -1,5 +1,20 @@
 # Changelog
 
+## [1.56.0](https://github.com/willdady/platypus/compare/v1.55.2...v1.56.0) (2026-04-11)
+
+
+### Features
+
+* **backend:** add listToolSets tool to agent management ([8393359](https://github.com/willdady/platypus/commit/8393359dff6c31af809a36bcd2568f02cd9180e6))
+* **frontend:** add Edit option and consistent Delete styling to list dropdowns ([3f78500](https://github.com/willdady/platypus/commit/3f7850081e1350423b3275b674291ebe55f9784e))
+
+
+### Bug Fixes
+
+* **frontend:** prevent navigation when clicking delete in skills dropdown ([dddacef](https://github.com/willdady/platypus/commit/dddacef3abe72d2a425f8577ff6a7d7034a80da7))
+* **frontend:** prevent navigation when clicking dropdown items in trigger list ([9605821](https://github.com/willdady/platypus/commit/96058217dd61ae2fc82376e1c55ff1c2bf8b4e37))
+* **frontend:** update web search toggle description in trigger form ([aeb66cf](https://github.com/willdady/platypus/commit/aeb66cf96bf38d7b462fb72366d7bec3b7dfada7))
+
 ## [1.55.2](https://github.com/willdady/platypus/compare/v1.55.1...v1.55.2) (2026-04-11)
 
 
