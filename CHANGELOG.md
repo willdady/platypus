@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.55.0](https://github.com/willdady/platypus/compare/v1.54.0...v1.55.0) (2026-04-11)
+
+
+### Features
+
+* add event filters to triggers with board-scoped card events ([a4765ac](https://github.com/willdady/platypus/commit/a4765acf0046916581fd13c8c57bbed15a40ed6c))
+* add webhook events for kanban card changes ([7393c51](https://github.com/willdady/platypus/commit/7393c51678c8b7587a6df0f1078d227f3fcc4c36))
+* rename schedules to triggers across the full stack ([b0a2a64](https://github.com/willdady/platypus/commit/b0a2a64ddffb995d780802e0028c7d20b1254e9d))
+
+
+### Bug Fixes
+
+* **backend:** resolve TypeScript errors in isSuperAdmin calls ([8ebb472](https://github.com/willdady/platypus/commit/8ebb472f9648b0485ec05b68ce34aed99a25df80))
+
 ## [1.54.0](https://github.com/willdady/platypus/compare/v1.53.1...v1.54.0) (2026-04-11)
 
 
