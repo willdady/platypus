@@ -50,6 +50,31 @@ export default function RootLayout({
 
   return (
     <html lang="en" suppressHydrationWarning>
+      <head>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `console.log(${JSON.stringify(
+              [
+                "",
+                "╔══════════════════════════════════════════════════════════╗",
+                "║                                                          ║",
+                "║   🦆 Well, well, well... a fellow source code explorer!  ║",
+                "║                                                          ║",
+                "║   You found the secret platypus den.                     ║",
+                "║   Since you're clearly a person of refined taste,        ║",
+                "║   come say hello on GitHub:                              ║",
+                "║                                                          ║",
+                "║   https://github.com/willdady/platypus                   ║",
+                "║                                                          ║",
+                "║   Stars, forks, and pull requests welcome! ⭐            ║",
+                "║                                                          ║",
+                "╚══════════════════════════════════════════════════════════╝",
+                "",
+              ].join("\n"),
+            )});`,
+          }}
+        />
+      </head>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased h-dvh overflow-hidden`}
       >
