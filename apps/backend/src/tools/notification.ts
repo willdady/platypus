@@ -6,7 +6,7 @@ import {
   notification as notificationTable,
   agent as agentTable,
 } from "../db/schema.ts";
-import { dispatchEvent } from "../services/webhook-delivery.ts";
+import { dispatchEvent } from "../services/event-dispatch.ts";
 
 export function createNotificationTools(
   workspaceId: string,

@@ -12,7 +12,7 @@ import {
   organizationMember as organizationMemberTable,
 } from "../db/schema.ts";
 import { user } from "../db/auth-schema.ts";
-import { dispatchEvent } from "../services/webhook-delivery.ts";
+import { dispatchEvent } from "../services/event-dispatch.ts";
 import { avatarKeyToUrl } from "../utils/avatar-url.ts";
 import {
   kanbanBoardCreateSchema,
@@ -900,7 +900,7 @@ kanban.delete(
     }
 
     const workspaceId = c.req.param("workspaceId")!;
-    dispatchEvent(workspaceId, "card.deleted", { cardId, boardId });
+    dispatchEvent(workspaceId, "card.deleted", { cardId, boardId, columnId: result[0].columnId });
 
     return c.json({ message: "Card deleted" });
   },

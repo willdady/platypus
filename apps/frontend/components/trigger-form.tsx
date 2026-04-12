@@ -31,6 +31,7 @@ import {
   type CronTriggerConfig,
   type EventTriggerConfig,
   type KanbanBoard,
+  type KanbanBoardState,
 } from "@platypus/schemas";
 import useSWR from "swr";
 import { fetcher, parseValidationErrors, joinUrl } from "@/lib/utils";
@@ -324,6 +325,18 @@ const TriggerForm = ({
   const [triggerType, setTriggerType] = useState<"cron" | "event">("cron");
   const [selectedEvents, setSelectedEvents] = useState<string[]>([]);
   const [filterBoardId, setFilterBoardId] = useState<string>("");
+  const [filterColumnId, setFilterColumnId] = useState<string>("");
+
+  const { data: boardStateData } = useSWR<KanbanBoardState>(
+    backendUrl && user && filterBoardId
+      ? joinUrl(
+          backendUrl,
+          `/organizations/${orgId}/workspaces/${workspaceId}/boards/${filterBoardId}/state`,
+        )
+      : null,
+    fetcher,
+  );
+  const columns = boardStateData?.columns || [];
 
   const [formData, setFormData] = useState({
     name: "",
@@ -400,6 +413,7 @@ const TriggerForm = ({
         const eventConfig = trigger.config as EventTriggerConfig;
         setSelectedEvents(eventConfig.events);
         setFilterBoardId(eventConfig.filters?.boardId || "");
+        setFilterColumnId(eventConfig.filters?.columnId || "");
       }
     } else if (agents.length > 0) {
       setFormData((prev) => ({
@@ -474,9 +488,10 @@ const TriggerForm = ({
       const next = prev.includes(event)
         ? prev.filter((e) => e !== event)
         : [...prev, event];
-      // Clear board filter if no card events remain
+      // Clear board and column filters if no card events remain
       if (!next.some((e) => e.startsWith("card."))) {
         setFilterBoardId("");
+        setFilterColumnId("");
       }
       return next;
     });
@@ -514,7 +529,12 @@ const TriggerForm = ({
               config: {
                 events: selectedEvents,
                 ...(filterBoardId
-                  ? { filters: { boardId: filterBoardId } }
+                  ? {
+                      filters: {
+                        boardId: filterBoardId,
+                        ...(filterColumnId ? { columnId: filterColumnId } : {}),
+                      },
+                    }
                   : {}),
               },
             };
@@ -1003,34 +1023,62 @@ const TriggerForm = ({
             </Field>
           )}
 
-          {/* Board filter for card events */}
+          {/* Board and column filters for card events */}
           {triggerType === "event" &&
             selectedEvents.some((e) => e.startsWith("card.")) && (
-              <Field>
-                <FieldLabel>Filter by Board</FieldLabel>
-                <Select
-                  value={filterBoardId || "__all__"}
-                  onValueChange={(value) =>
-                    setFilterBoardId(value === "__all__" ? "" : value)
-                  }
-                  disabled={isSubmitting}
-                >
-                  <SelectTrigger disabled={isSubmitting}>
-                    <SelectValue placeholder="All boards" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="__all__">All boards</SelectItem>
-                    {boards.map((board) => (
-                      <SelectItem key={board.id} value={board.id}>
-                        {board.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <FieldDescription>
-                  Optionally restrict card events to a specific board.
-                </FieldDescription>
-              </Field>
+              <div className="flex flex-col sm:flex-row gap-4">
+                <Field className="flex-1">
+                  <FieldLabel>Filter by Board</FieldLabel>
+                  <Select
+                    value={filterBoardId || "__all__"}
+                    onValueChange={(value) => {
+                      setFilterBoardId(value === "__all__" ? "" : value);
+                      setFilterColumnId("");
+                    }}
+                    disabled={isSubmitting}
+                  >
+                    <SelectTrigger disabled={isSubmitting}>
+                      <SelectValue placeholder="All boards" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__all__">All boards</SelectItem>
+                      {boards.map((board) => (
+                        <SelectItem key={board.id} value={board.id}>
+                          {board.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <FieldDescription>
+                    Optionally restrict card events to a specific board.
+                  </FieldDescription>
+                </Field>
+                <Field className="flex-1">
+                  <FieldLabel>Filter by Column</FieldLabel>
+                  <Select
+                    value={filterColumnId || "__all__"}
+                    onValueChange={(value) =>
+                      setFilterColumnId(value === "__all__" ? "" : value)
+                    }
+                    disabled={isSubmitting || !filterBoardId}
+                  >
+                    <SelectTrigger disabled={isSubmitting || !filterBoardId}>
+                      <SelectValue placeholder="All columns" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__all__">All columns</SelectItem>
+                      {columns.map((col) => (
+                        <SelectItem key={col.id} value={col.id}>
+                          {col.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <FieldDescription>
+                    Optionally restrict card events to a specific column.
+                  </FieldDescription>
+                </Field>
+              </div>
             )}
 
           <Field className="w-1/2">

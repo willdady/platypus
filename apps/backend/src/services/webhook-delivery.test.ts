@@ -22,7 +22,12 @@ vi.mock("../logger.ts", () => ({
   },
 }));
 
-import { dispatchEvent } from "./webhook-delivery.ts";
+vi.mock("./trigger-execution.ts", () => ({
+  executeTrigger: vi.fn(),
+  updateTriggerAfterRun: vi.fn(),
+}));
+
+import { dispatchEvent } from "./event-dispatch.ts";
 import { logger } from "../logger.ts";
 
 describe("Webhook Delivery Service", () => {

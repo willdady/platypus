@@ -13,7 +13,7 @@ import {
   requireWorkspaceAccess,
 } from "../middleware/authorization.ts";
 import type { Variables } from "../server.ts";
-import { dispatchEvent } from "../services/webhook-delivery.ts";
+import { dispatchEvent } from "../services/event-dispatch.ts";
 import { avatarKeyToUrl } from "../utils/avatar-url.ts";
 
 const notification = new Hono<{ Variables: Variables }>();

@@ -12,7 +12,7 @@ import {
 import { user } from "../db/auth-schema.ts";
 import { calculateCardPosition } from "../utils/kanban-positioning.ts";
 import { buildResourceUrl } from "../utils/resource-url.ts";
-import { dispatchEvent } from "../services/webhook-delivery.ts";
+import { dispatchEvent } from "../services/event-dispatch.ts";
 
 export function createKanbanTools(
   workspaceId: string,
@@ -485,9 +485,15 @@ export function createKanbanTools(
       }
 
       const boardId = await getBoardIdForCard(cardId);
+      const cardRecord = await db
+        .select({ columnId: kanbanCardTable.columnId })
+        .from(kanbanCardTable)
+        .where(eq(kanbanCardTable.id, cardId))
+        .limit(1);
+      const columnId = cardRecord[0]?.columnId;
       await db.delete(kanbanCardTable).where(eq(kanbanCardTable.id, cardId));
 
-      dispatchEvent(workspaceId, "card.deleted", { cardId, boardId });
+      dispatchEvent(workspaceId, "card.deleted", { cardId, boardId, columnId });
 
       return { success: true };
     },
