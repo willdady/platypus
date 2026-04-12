@@ -368,7 +368,7 @@ export const trigger = pgTable(
     description: t.text("description"),
     instruction: t.text("instruction").notNull(),
     enabled: t.boolean("enabled").notNull().default(true),
-    maxChatsToKeep: t.integer("max_chats_to_keep").notNull().default(50),
+    maxChatsToKeep: t.integer("max_chats_to_keep").notNull().default(10),
     search: t.boolean("search").notNull().default(false),
     config: t.jsonb("config").notNull(),
     lastRunAt: t.timestamp("last_run_at"),

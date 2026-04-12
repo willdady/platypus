@@ -334,7 +334,7 @@ const TriggerForm = ({
     timezone: getBrowserTimezone(),
     isOneOff: false,
     enabled: true,
-    maxChatsToKeep: 50,
+    maxChatsToKeep: 10,
     search: false,
   });
 

@@ -347,7 +347,7 @@ export function createTriggerTools(
       }
 
       const enabled = fields.enabled ?? true;
-      const maxChatsToKeep = fields.maxChatsToKeep ?? 50;
+      const maxChatsToKeep = fields.maxChatsToKeep ?? 10;
       const search = fields.search ?? false;
       const id = nanoid();
       const now = new Date();

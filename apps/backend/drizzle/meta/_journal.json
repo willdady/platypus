@@ -169,6 +169,13 @@
       "when": 1775896822827,
       "tag": "0023_pretty_the_enforcers",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1775977254651,
+      "tag": "0024_numerous_nehzno",
+      "breakpoints": true
     }
   ]
 }
