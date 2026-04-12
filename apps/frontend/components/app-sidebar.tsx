@@ -10,7 +10,6 @@ import { useAuth } from "@/components/auth-provider";
 import {
   Sidebar,
   SidebarContent,
-  SidebarFooter,
   SidebarGroup,
   SidebarGroupContent,
   SidebarGroupLabel,
@@ -42,7 +41,6 @@ import {
 } from "@/components/ui/dialog";
 import { useState, useEffect } from "react";
 import {
-  Settings,
   Bot,
   FolderOpen,
   BotMessageSquare,
@@ -312,14 +310,6 @@ export function AppSidebar() {
     }
   };
 
-  const footerItems = [
-    {
-      title: "Settings",
-      url: `/${orgId}/workspace/${workspaceId}/settings`,
-      icon: Settings,
-    },
-  ];
-
   return (
     <>
       <Sidebar>
@@ -419,7 +409,8 @@ export function AppSidebar() {
             )}
           </div>
         </div>
-        <SidebarContent>
+        <div className="relative min-h-0 flex flex-col flex-1 overflow-hidden">
+        <SidebarContent className="pb-16">
           {chatGroups.length === 0 && debouncedSearch && (
             <div className="px-4 py-6 text-center text-sm text-muted-foreground">
               No chats match &ldquo;{debouncedSearch}&rdquo;
@@ -517,24 +508,8 @@ export function AppSidebar() {
             </SidebarGroup>
           ))}
         </SidebarContent>
-        <SidebarSeparator className="mx-0 mt-1" />
-        <SidebarFooter>
-          <SidebarMenu>
-            {footerItems.map((item) => (
-              <SidebarMenuItem key={item.title}>
-                <SidebarMenuButton
-                  asChild
-                  isActive={pathname.startsWith(item.url)}
-                >
-                  <Link href={item.url}>
-                    <item.icon />
-                    <span>{item.title}</span>
-                  </Link>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-            ))}
-          </SidebarMenu>
-        </SidebarFooter>
+        <div className="pointer-events-none absolute bottom-0 left-0 right-0 h-16 bg-gradient-to-t from-sidebar to-transparent" />
+        </div>
       </Sidebar>
 
       {/* Rename Chat Dialog */}
