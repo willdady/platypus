@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.56.1](https://github.com/willdady/platypus/compare/v1.56.0...v1.56.1) (2026-04-12)
+
+
+### Bug Fixes
+
+* enable sub-agent delegation for triggered runs and use camelCase tool names ([43b510f](https://github.com/willdady/platypus/commit/43b510f4b20fa7e67bd30e6b2cefa73ff1963a11))
+* **frontend:** add horizontal padding to trigger runs page on mobile ([6ea4fae](https://github.com/willdady/platypus/commit/6ea4faee1a096d0746fc630f9471d4a6c1a61122))
+* **frontend:** fix kanban card drop positioning and optimize drag handlers ([3ce469d](https://github.com/willdady/platypus/commit/3ce469d1df87aef020e0495b9b040c562a3841ee))
+* **frontend:** use text-pretty instead of text-balance for item descriptions ([4ab8144](https://github.com/willdady/platypus/commit/4ab81440ef291b3730af93da48e18fb267c6a282))
+
 ## [1.56.0](https://github.com/willdady/platypus/compare/v1.55.2...v1.56.0) (2026-04-11)
 
 
