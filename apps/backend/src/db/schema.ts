@@ -461,6 +461,17 @@ export const kanbanCard = pgTable(
     title: t.text("title").notNull(),
     body: t.text("body"),
     labelIds: t.jsonb("label_ids").$type<string[]>().notNull().default([]),
+    assignees: t
+      .jsonb("assignees")
+      .$type<{ type: "user" | "agent"; id: string }[]>()
+      .notNull()
+      .default([]),
+    dueDate: t.timestamp("due_date"),
+    priority: t
+      .text("priority")
+      .$type<"none" | "low" | "medium" | "high" | "urgent">()
+      .notNull()
+      .default("none"),
     position: t.real("position").notNull(),
     createdByUserId: t
       .text("created_by_user_id")
@@ -480,6 +491,9 @@ export const kanbanCard = pgTable(
   (t) => [
     index("idx_kanban_card_column_id").on(t.columnId),
     index("idx_kanban_card_label_ids").using("gin", t.labelIds),
+    index("idx_kanban_card_assignees").using("gin", t.assignees),
+    index("idx_kanban_card_due_date").on(t.dueDate),
+    index("idx_kanban_card_priority").on(t.priority),
     index("idx_kanban_card_column_position").on(t.columnId, t.position),
   ],
 );

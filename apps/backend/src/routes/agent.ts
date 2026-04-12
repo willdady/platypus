@@ -15,6 +15,7 @@ import type { Variables } from "../server.ts";
 import { validateSubAgentAssignment } from "../services/sub-agent-validation.ts";
 import { getStorage } from "../storage/index.ts";
 import sharp from "sharp";
+import { avatarKeyToUrl } from "../utils/avatar-url.ts";
 
 const ALLOWED_AVATAR_TYPES = [
   "image/jpeg",
@@ -30,16 +31,9 @@ function agentWithAvatarUrl(
   agent: Record<string, unknown>,
   baseUrl: string,
 ): Record<string, unknown> {
-  const avatarKey = agent.avatarKey as string | null | undefined;
+  const key = agent.avatarKey as string | null | undefined;
   const { avatarKey: _avatarKey, ...rest } = agent;
-  if (!avatarKey) {
-    return { ...rest, avatarUrl: undefined };
-  }
-  const publicUrl = process.env.STORAGE_PUBLIC_URL;
-  const avatarUrl = publicUrl
-    ? `${publicUrl}/${avatarKey}`
-    : `${baseUrl}/files/${avatarKey}`;
-  return { ...rest, avatarUrl };
+  return { ...rest, avatarUrl: avatarKeyToUrl(key, baseUrl) ?? undefined };
 }
 
 const agent = new Hono<{ Variables: Variables }>();

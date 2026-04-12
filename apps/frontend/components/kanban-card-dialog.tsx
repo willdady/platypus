@@ -3,13 +3,17 @@
 import { useState, useEffect } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { format } from "date-fns";
 import useSWR from "swr";
 import type {
   KanbanCard,
   KanbanCardComment,
   KanbanColumn,
   KanbanLabel,
+  KanbanCardAssignee,
+  KanbanCardPriority,
 } from "@platypus/schemas";
+import { KANBAN_CARD_PRIORITIES } from "@platypus/schemas";
 import {
   Dialog,
   DialogContent,
@@ -34,11 +38,13 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Trash2 } from "lucide-react";
-import { cn, fetcher, joinUrl } from "@/lib/utils";
+import { Trash2, Calendar as CalendarIcon, Check, Users } from "lucide-react";
+import { cn, fetcher, getInitials, joinUrl } from "@/lib/utils";
 import { useBackendUrl } from "@/app/client-context";
 import { useAuth } from "@/components/auth-provider";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Calendar } from "@/components/ui/calendar";
 import { toast } from "sonner";
 
 function formatRelativeTime(date: Date): string {
@@ -52,6 +58,137 @@ function formatRelativeTime(date: Date): string {
   const days = Math.floor(hours / 24);
   if (days < 30) return `${days}d ago`;
   return date.toLocaleDateString();
+}
+
+import { ScrollArea } from "@/components/ui/scroll-area";
+
+function AssigneePicker({
+  user,
+  agents,
+  selectedAssignees,
+  onToggle,
+}: {
+  user: { id: string; name: string; image?: string | null } | null;
+  agents?: { id: string; name: string; avatarUrl?: string }[];
+  selectedAssignees: KanbanCardAssignee[];
+  onToggle: (type: "user" | "agent", id: string) => void;
+}) {
+  const isAssigned = (type: "user" | "agent", id: string) =>
+    selectedAssignees.some((a) => a.type === type && a.id === id);
+  const assigned = selectedAssignees[0] ?? null;
+  let assignedName: string | null = null;
+  let assignedImage: string | null = null;
+  if (assigned) {
+    if (assigned.type === "user" && user && user.id === assigned.id) {
+      assignedName = user.name;
+      assignedImage = user.image ?? null;
+    } else if (assigned.type === "agent") {
+      const agent = agents?.find((a) => a.id === assigned.id);
+      if (agent) {
+        assignedName = agent.name;
+        assignedImage = agent.avatarUrl ?? null;
+      }
+    }
+  }
+
+  const [open, setOpen] = useState(false);
+
+  const handleSelect = (type: "user" | "agent", id: string) => {
+    onToggle(type, id);
+    setOpen(false);
+  };
+
+  return (
+    <div>
+      <p className="text-xs font-medium text-muted-foreground mb-2">Assignee</p>
+      <Popover open={open} onOpenChange={setOpen}>
+        <PopoverTrigger asChild>
+          <Button
+            variant="outline"
+            className={cn(
+              "w-full justify-start text-left font-normal px-3",
+              !assigned && "text-muted-foreground",
+            )}
+          >
+            {assigned && assignedName ? (
+              <>
+                <span className="relative flex size-5 shrink-0 overflow-hidden rounded-full">
+                  {assignedImage ? (
+                    <img
+                      src={assignedImage}
+                      alt={assignedName}
+                      className="aspect-square size-full object-cover"
+                    />
+                  ) : (
+                    <span className="flex size-full items-center justify-center rounded-full bg-muted-foreground/20 text-[8px]">
+                      {getInitials(assignedName)}
+                    </span>
+                  )}
+                </span>
+                <span className="truncate">{assignedName}</span>
+              </>
+            ) : (
+              <>
+                <Users className="size-3.5" />
+                Assign...
+              </>
+            )}
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent className="w-56 p-0" align="start">
+          <ScrollArea className="max-h-64">
+            <div className="p-1">
+              {user && (
+                <button
+                  className={cn(
+                    "flex items-center gap-2 w-full rounded-md px-2 py-1.5 text-sm hover:bg-muted transition-colors",
+                  )}
+                  onClick={() => handleSelect("user", user.id)}
+                >
+                  <Avatar className="size-5">
+                    {user.image && (
+                      <AvatarImage src={user.image} alt={user.name} />
+                    )}
+                    <AvatarFallback className="text-[8px]">
+                      {getInitials(user.name)}
+                    </AvatarFallback>
+                  </Avatar>
+                  <span className="truncate flex-1 text-left">{user.name}</span>
+                  {isAssigned("user", user.id) && (
+                    <Check className="size-3.5 text-primary shrink-0" />
+                  )}
+                </button>
+              )}
+              {agents?.map((agent) => (
+                <button
+                  key={agent.id}
+                  className={cn(
+                    "flex items-center gap-2 w-full rounded-md px-2 py-1.5 text-sm hover:bg-muted transition-colors",
+                  )}
+                  onClick={() => handleSelect("agent", agent.id)}
+                >
+                  <Avatar className="size-5">
+                    {agent.avatarUrl && (
+                      <AvatarImage src={agent.avatarUrl} alt={agent.name} />
+                    )}
+                    <AvatarFallback className="text-[8px]">
+                      {getInitials(agent.name)}
+                    </AvatarFallback>
+                  </Avatar>
+                  <span className="truncate flex-1 text-left">
+                    {agent.name}
+                  </span>
+                  {isAssigned("agent", agent.id) && (
+                    <Check className="size-3.5 text-primary shrink-0" />
+                  )}
+                </button>
+              ))}
+            </div>
+          </ScrollArea>
+        </PopoverContent>
+      </Popover>
+    </div>
+  );
 }
 
 export function KanbanCardDialog({
@@ -80,6 +217,9 @@ export function KanbanCardDialog({
       body?: string;
       labelIds?: string[];
       columnId?: string;
+      assignees?: KanbanCardAssignee[];
+      dueDate?: string | null;
+      priority?: KanbanCardPriority;
     },
   ) => void;
   onDelete: (cardId: string) => void;
@@ -95,6 +235,12 @@ export function KanbanCardDialog({
   const [body, setBody] = useState("");
   const [selectedLabelIds, setSelectedLabelIds] = useState<string[]>([]);
   const [selectedColumnId, setSelectedColumnId] = useState<string | null>(null);
+  const [selectedAssignees, setSelectedAssignees] = useState<
+    KanbanCardAssignee[]
+  >([]);
+  const [selectedDueDate, setSelectedDueDate] = useState<string | null>(null);
+  const [selectedPriority, setSelectedPriority] =
+    useState<KanbanCardPriority>("none");
   const [isEditing, setIsEditing] = useState(false);
   const [focusField, setFocusField] = useState<"title" | "body">("title");
 
@@ -116,6 +262,22 @@ export function KanbanCardDialog({
 
   const comments = commentsData?.results ?? [];
 
+  // Fetch workspace agents for assignee picker
+  const agentsUrl =
+    backendUrl && user
+      ? joinUrl(
+          backendUrl,
+          `/organizations/${orgId}/workspaces/${workspaceId}/agents`,
+        )
+      : null;
+  const { data: agentsData } = useSWR<{
+    results: {
+      id: string;
+      name: string;
+      avatarUrl?: string;
+    }[];
+  }>(agentsUrl, fetcher);
+
   const enterEditing = (field: "title" | "body") => {
     setFocusField(field);
     setIsEditing(true);
@@ -126,6 +288,9 @@ export function KanbanCardDialog({
       setTitle(card.title);
       setBody(card.body ?? "");
       setSelectedLabelIds(card.labelIds ?? []);
+      setSelectedAssignees(card.assignees ?? []);
+      setSelectedDueDate((card.dueDate as string) ?? null);
+      setSelectedPriority(card.priority ?? "none");
       setSelectedColumnId(initialColumnId);
       setIsEditing(false);
       setNewCommentBody("");
@@ -141,6 +306,14 @@ export function KanbanCardDialog({
         ? prev.filter((id) => id !== labelId)
         : [...prev, labelId],
     );
+  };
+
+  const toggleAssignee = (type: "user" | "agent", id: string) => {
+    setSelectedAssignees((prev) => {
+      const exists = prev.some((a) => a.type === type && a.id === id);
+      if (exists) return [];
+      return [{ type, id }];
+    });
   };
 
   const handleAddComment = async () => {
@@ -308,6 +481,82 @@ export function KanbanCardDialog({
                     </div>
                   </div>
                 )}
+
+                {/* Priority */}
+                <div>
+                  <p className="text-xs font-medium text-muted-foreground mb-2">
+                    Priority
+                  </p>
+                  <Select
+                    value={selectedPriority}
+                    onValueChange={(v) =>
+                      setSelectedPriority(v as KanbanCardPriority)
+                    }
+                  >
+                    <SelectTrigger className="w-full">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {KANBAN_CARD_PRIORITIES.map((p) => (
+                        <SelectItem key={p.value} value={p.value}>
+                          <div className="flex items-center gap-2">
+                            {p.color && (
+                              <span
+                                className="size-2 rounded-full shrink-0"
+                                style={{ backgroundColor: p.color }}
+                              />
+                            )}
+                            <span>{p.label}</span>
+                          </div>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Due Date */}
+                <div>
+                  <p className="text-xs font-medium text-muted-foreground mb-2">
+                    Due Date
+                  </p>
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline"
+                        className={cn(
+                          "w-full justify-start text-left font-normal",
+                          !selectedDueDate && "text-muted-foreground",
+                        )}
+                      >
+                        <CalendarIcon className="size-3.5" />
+                        {selectedDueDate
+                          ? format(new Date(selectedDueDate), "MMM d, yyyy")
+                          : "Set due date"}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0" align="start">
+                      <Calendar
+                        mode="single"
+                        selected={
+                          selectedDueDate
+                            ? new Date(selectedDueDate)
+                            : undefined
+                        }
+                        onSelect={(date) =>
+                          setSelectedDueDate(date ? date.toISOString() : null)
+                        }
+                      />
+                    </PopoverContent>
+                  </Popover>
+                </div>
+
+                {/* Assignees */}
+                <AssigneePicker
+                  user={user}
+                  agents={agentsData?.results}
+                  selectedAssignees={selectedAssignees}
+                  onToggle={toggleAssignee}
+                />
 
                 <div className="text-xs text-muted-foreground space-y-1.5">
                   {card.createdByName && (
@@ -600,8 +849,8 @@ export function KanbanCardDialog({
               </div>
             </div>
 
-            {/* Sidebar - Column, Labels, and Metadata */}
-            <div className="w-48 shrink-0 space-y-4">
+            {/* Sidebar - Column, Labels, Assignees, Due Date, Priority, and Metadata */}
+            <div className="w-52 shrink-0 space-y-4 overflow-y-auto">
               {columns.length > 1 && selectedColumnId && (
                 <div>
                   <p className="text-xs font-medium text-muted-foreground mb-2">
@@ -650,6 +899,80 @@ export function KanbanCardDialog({
                 </div>
               )}
 
+              {/* Priority */}
+              <div>
+                <p className="text-xs font-medium text-muted-foreground mb-2">
+                  Priority
+                </p>
+                <Select
+                  value={selectedPriority}
+                  onValueChange={(v) =>
+                    setSelectedPriority(v as KanbanCardPriority)
+                  }
+                >
+                  <SelectTrigger className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {KANBAN_CARD_PRIORITIES.map((p) => (
+                      <SelectItem key={p.value} value={p.value}>
+                        <div className="flex items-center gap-2">
+                          {p.color && (
+                            <span
+                              className="size-2 rounded-full shrink-0"
+                              style={{ backgroundColor: p.color }}
+                            />
+                          )}
+                          <span>{p.label}</span>
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Due Date */}
+              <div>
+                <p className="text-xs font-medium text-muted-foreground mb-2">
+                  Due Date
+                </p>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      className={cn(
+                        "w-full justify-start text-left font-normal",
+                        !selectedDueDate && "text-muted-foreground",
+                      )}
+                    >
+                      <CalendarIcon className="size-3.5" />
+                      {selectedDueDate
+                        ? format(new Date(selectedDueDate), "MMM d, yyyy")
+                        : "Set due date"}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0" align="start">
+                    <Calendar
+                      mode="single"
+                      selected={
+                        selectedDueDate ? new Date(selectedDueDate) : undefined
+                      }
+                      onSelect={(date) =>
+                        setSelectedDueDate(date ? date.toISOString() : null)
+                      }
+                    />
+                  </PopoverContent>
+                </Popover>
+              </div>
+
+              {/* Assignees */}
+              <AssigneePicker
+                user={user}
+                agents={agentsData?.results}
+                selectedAssignees={selectedAssignees}
+                onToggle={toggleAssignee}
+              />
+
               <div className="text-xs text-muted-foreground space-y-1.5">
                 {card.createdByName && (
                   <p>
@@ -693,6 +1016,9 @@ export function KanbanCardDialog({
                 title,
                 body,
                 labelIds: selectedLabelIds,
+                assignees: selectedAssignees,
+                dueDate: selectedDueDate,
+                priority: selectedPriority,
                 ...(selectedColumnId &&
                   selectedColumnId !== initialColumnId && {
                     columnId: selectedColumnId,

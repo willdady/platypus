@@ -27,6 +27,8 @@ import { toast } from "sonner";
 import type {
   KanbanBoardState,
   KanbanCard,
+  KanbanCardAssignee,
+  KanbanCardPriority,
   KanbanColumn,
 } from "@platypus/schemas";
 import { cn, fetcher, joinUrl } from "@/lib/utils";
@@ -567,6 +569,9 @@ export function KanbanBoard({
         body?: string;
         labelIds?: string[];
         columnId?: string;
+        assignees?: KanbanCardAssignee[];
+        dueDate?: string | null;
+        priority?: KanbanCardPriority;
       },
     ) => {
       const column = columns.find((col) =>

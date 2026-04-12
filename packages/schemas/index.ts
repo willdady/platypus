@@ -866,6 +866,46 @@ export const kanbanColumnReorderSchema = z.object({
   columnIds: z.array(z.string()).min(1),
 });
 
+// Kanban Card Priority
+
+export const kanbanCardPrioritySchema = z.enum([
+  "none",
+  "low",
+  "medium",
+  "high",
+  "urgent",
+]);
+
+export type KanbanCardPriority = z.infer<typeof kanbanCardPrioritySchema>;
+
+export const KANBAN_CARD_PRIORITIES = [
+  { value: "none" as const, label: "None", color: null },
+  { value: "low" as const, label: "Low", color: "#3b82f6" },
+  { value: "medium" as const, label: "Medium", color: "#f59e0b" },
+  { value: "high" as const, label: "High", color: "#f97316" },
+  { value: "urgent" as const, label: "Urgent", color: "#ef4444" },
+] as const;
+
+// Kanban Card Assignee
+
+export const kanbanCardAssigneeSchema = z.object({
+  type: z.enum(["user", "agent"]),
+  id: z.string(),
+});
+
+export type KanbanCardAssignee = z.infer<typeof kanbanCardAssigneeSchema>;
+
+export const kanbanResolvedAssigneeSchema = z.object({
+  type: z.enum(["user", "agent"]),
+  id: z.string(),
+  name: z.string(),
+  image: z.string().nullable().optional(),
+});
+
+export type KanbanResolvedAssignee = z.infer<
+  typeof kanbanResolvedAssigneeSchema
+>;
+
 // Kanban Card
 
 export const kanbanCardSchema = z.object({
@@ -874,6 +914,9 @@ export const kanbanCardSchema = z.object({
   title: z.string().min(1).max(200),
   body: z.string().nullable().optional(),
   labelIds: z.array(z.string()).default([]),
+  assignees: z.array(kanbanCardAssigneeSchema).max(1).default([]),
+  dueDate: z.string().nullable().optional(),
+  priority: kanbanCardPrioritySchema.default("none"),
   position: z.number(),
   createdByUserId: z.string().nullable().optional(),
   createdByAgentId: z.string().nullable().optional(),
@@ -881,6 +924,7 @@ export const kanbanCardSchema = z.object({
   lastEditedByAgentId: z.string().nullable().optional(),
   createdByName: z.string().nullable().optional(),
   lastEditedByName: z.string().nullable().optional(),
+  resolvedAssignees: z.array(kanbanResolvedAssigneeSchema).optional(),
   commentCount: z.number().int().default(0),
   createdAt: z.date(),
   updatedAt: z.date(),
@@ -892,6 +936,9 @@ export const kanbanCardCreateSchema = kanbanCardSchema.pick({
   title: true,
   body: true,
   labelIds: true,
+  assignees: true,
+  dueDate: true,
+  priority: true,
 });
 
 export const kanbanCardUpdateSchema = kanbanCardSchema
@@ -899,6 +946,9 @@ export const kanbanCardUpdateSchema = kanbanCardSchema
     title: true,
     body: true,
     labelIds: true,
+    assignees: true,
+    dueDate: true,
+    priority: true,
   })
   .partial();
 

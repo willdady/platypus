@@ -14,17 +14,7 @@ import {
 } from "../middleware/authorization.ts";
 import type { Variables } from "../server.ts";
 import { dispatchEvent } from "../services/webhook-delivery.ts";
-
-function agentAvatarUrl(
-  avatarKey: string | null | undefined,
-  baseUrl: string,
-): string | undefined {
-  if (!avatarKey) return undefined;
-  const publicUrl = process.env.STORAGE_PUBLIC_URL;
-  return publicUrl
-    ? `${publicUrl}/${avatarKey}`
-    : `${baseUrl}/files/${avatarKey}`;
-}
+import { avatarKeyToUrl } from "../utils/avatar-url.ts";
 
 const notification = new Hono<{ Variables: Variables }>();
 
@@ -83,7 +73,7 @@ notification.get(
         createdAt: r.createdAt,
         updatedAt: r.updatedAt,
         agentName: r.agentName,
-        agentAvatarUrl: agentAvatarUrl(r.agentAvatarKey, baseUrl),
+        agentAvatarUrl: avatarKeyToUrl(r.agentAvatarKey, baseUrl) ?? undefined,
         isRead: r.readAt !== null,
       })),
     });

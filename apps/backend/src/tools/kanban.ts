@@ -153,6 +153,9 @@ export function createKanbanTools(
         title: string;
         position: number;
         labelIds: string[];
+        assignees: { type: "user" | "agent"; id: string }[];
+        dueDate: Date | null;
+        priority: string;
       };
 
       let cards: CardSummary[] = [];
@@ -164,6 +167,9 @@ export function createKanbanTools(
             title: kanbanCardTable.title,
             position: kanbanCardTable.position,
             labelIds: kanbanCardTable.labelIds,
+            assignees: kanbanCardTable.assignees,
+            dueDate: kanbanCardTable.dueDate,
+            priority: kanbanCardTable.priority,
           })
           .from(kanbanCardTable)
           .where(inArray(kanbanCardTable.columnId, columnIds))
@@ -250,8 +256,37 @@ export function createKanbanTools(
         .describe("The card title (required when creating a new card)"),
       body: z.string().optional().describe("The card body/description"),
       labelIds: z.array(z.string()).optional().describe("Label IDs to apply"),
+      assignees: z
+        .array(
+          z.object({
+            type: z.enum(["user", "agent"]),
+            id: z.string(),
+          }),
+        )
+        .max(1)
+        .optional()
+        .describe(
+          "Card assignee - array with at most one {type, id} object, or empty to unassign",
+        ),
+      dueDate: z
+        .string()
+        .optional()
+        .describe("Due date as ISO 8601 string, or null to clear"),
+      priority: z
+        .enum(["none", "low", "medium", "high", "urgent"])
+        .optional()
+        .describe("Priority level"),
     }),
-    execute: async ({ cardId, columnId, title, body, labelIds }) => {
+    execute: async ({
+      cardId,
+      columnId,
+      title,
+      body,
+      labelIds,
+      assignees,
+      dueDate,
+      priority,
+    }) => {
       // Update existing card
       if (cardId) {
         if (!(await verifyCard(cardId))) {
@@ -265,6 +300,10 @@ export function createKanbanTools(
         if (title !== undefined) updateData.title = title;
         if (body !== undefined) updateData.body = body;
         if (labelIds !== undefined) updateData.labelIds = labelIds;
+        if (assignees !== undefined) updateData.assignees = assignees;
+        if (dueDate !== undefined)
+          updateData.dueDate = dueDate ? new Date(dueDate) : null;
+        if (priority !== undefined) updateData.priority = priority;
 
         const record = await db
           .update(kanbanCardTable)
@@ -323,6 +362,9 @@ export function createKanbanTools(
           title,
           body: body ?? null,
           labelIds: labelIds ?? [],
+          assignees: assignees ?? [],
+          dueDate: dueDate ? new Date(dueDate) : null,
+          priority: priority ?? "none",
           position,
           createdByAgentId: agentId,
           createdAt: now,

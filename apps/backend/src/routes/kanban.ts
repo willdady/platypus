@@ -9,9 +9,11 @@ import {
   kanbanCard as kanbanCardTable,
   kanbanCardComment as kanbanCardCommentTable,
   agent as agentTable,
+  organizationMember as organizationMemberTable,
 } from "../db/schema.ts";
 import { user } from "../db/auth-schema.ts";
 import { dispatchEvent } from "../services/webhook-delivery.ts";
+import { avatarKeyToUrl } from "../utils/avatar-url.ts";
 import {
   kanbanBoardCreateSchema,
   kanbanBoardUpdateSchema,
@@ -33,6 +35,48 @@ import {
 } from "../middleware/authorization.ts";
 import type { Variables } from "../server.ts";
 import { calculateCardPosition } from "../utils/kanban-positioning.ts";
+
+/**
+ * Validates that all assignees reference valid org members (users) or
+ * workspace agents. Returns an error message string if invalid, or null if OK.
+ */
+async function validateAssignees(
+  assignees: { type: string; id: string }[],
+  orgId: string,
+  workspaceId: string,
+): Promise<string | null> {
+  const userIds = assignees.filter((a) => a.type === "user").map((a) => a.id);
+  const agentIds = assignees.filter((a) => a.type === "agent").map((a) => a.id);
+
+  const [members, agentRecords] = await Promise.all([
+    userIds.length > 0
+      ? db
+          .select({ userId: organizationMemberTable.userId })
+          .from(organizationMemberTable)
+          .where(
+            and(
+              eq(organizationMemberTable.organizationId, orgId),
+              inArray(organizationMemberTable.userId, userIds),
+            ),
+          )
+      : Promise.resolve([]),
+    agentIds.length > 0
+      ? db
+          .select({ id: agentTable.id })
+          .from(agentTable)
+          .where(
+            and(
+              eq(agentTable.workspaceId, workspaceId),
+              inArray(agentTable.id, agentIds),
+            ),
+          )
+      : Promise.resolve([]),
+  ]);
+
+  if (members.length !== userIds.length) return "Invalid user assignee";
+  if (agentRecords.length !== agentIds.length) return "Invalid agent assignee";
+  return null;
+}
 
 const kanban = new Hono<{ Variables: Variables }>();
 
@@ -272,45 +316,96 @@ kanban.get(
       if (card.lastEditedByUserId) userIds.add(card.lastEditedByUserId);
       if (card.createdByAgentId) agentIds.add(card.createdByAgentId);
       if (card.lastEditedByAgentId) agentIds.add(card.lastEditedByAgentId);
+      // Collect assignee IDs
+      const assignees = (card.assignees ?? []) as {
+        type: "user" | "agent";
+        id: string;
+      }[];
+      for (const a of assignees) {
+        if (a.type === "user") userIds.add(a.id);
+        else if (a.type === "agent") agentIds.add(a.id);
+      }
     }
 
-    // Fetch user names
+    // Fetch user names and images
     const users =
       userIds.size > 0
         ? await db
-            .select({ id: user.id, name: user.name })
+            .select({ id: user.id, name: user.name, image: user.image })
             .from(user)
             .where(inArray(user.id, Array.from(userIds)))
         : [];
 
     const userMap = new Map(users.map((u) => [u.id, u.name]));
+    const userImageMap = new Map(users.map((u) => [u.id, u.image ?? null]));
 
-    // Fetch agent names
+    // Fetch agent names and avatar keys
     const agents =
       agentIds.size > 0
         ? await db
-            .select({ id: agentTable.id, name: agentTable.name })
+            .select({
+              id: agentTable.id,
+              name: agentTable.name,
+              avatarKey: agentTable.avatarKey,
+            })
             .from(agentTable)
             .where(inArray(agentTable.id, Array.from(agentIds)))
         : [];
 
     const agentMap = new Map(agents.map((a) => [a.id, a.name]));
 
-    // Add user and agent names to cards
-    const cardsWithNames = cards.map((card) => ({
-      ...card,
-      createdByName: card.createdByUserId
-        ? (userMap.get(card.createdByUserId) ?? null)
-        : card.createdByAgentId
-          ? (agentMap.get(card.createdByAgentId) ?? null)
-          : null,
-      lastEditedByName: card.lastEditedByUserId
-        ? (userMap.get(card.lastEditedByUserId) ?? null)
-        : card.lastEditedByAgentId
-          ? (agentMap.get(card.lastEditedByAgentId) ?? null)
-          : null,
-      commentCount: commentCountMap.get(card.id) ?? 0,
-    }));
+    const baseUrl = new URL(c.req.url).origin;
+    const agentAvatarUrlMap = new Map(
+      agents.map((a) => [a.id, avatarKeyToUrl(a.avatarKey, baseUrl)]),
+    );
+
+    // Add user and agent names to cards, plus resolved assignees
+    const cardsWithNames = cards.map((card) => {
+      const assignees = (card.assignees ?? []) as {
+        type: "user" | "agent";
+        id: string;
+      }[];
+      const resolvedAssignees = assignees
+        .map((a) => {
+          if (a.type === "user") {
+            const name = userMap.get(a.id);
+            if (!name) return null;
+            return {
+              type: "user" as const,
+              id: a.id,
+              name,
+              image: userImageMap.get(a.id) ?? null,
+            };
+          } else {
+            const name = agentMap.get(a.id);
+            if (!name) return null;
+            return {
+              type: "agent" as const,
+              id: a.id,
+              name,
+              image: agentAvatarUrlMap.get(a.id) ?? null,
+            };
+          }
+        })
+        .filter(Boolean);
+
+      return {
+        ...card,
+        dueDate: card.dueDate ? card.dueDate.toISOString() : null,
+        createdByName: card.createdByUserId
+          ? (userMap.get(card.createdByUserId) ?? null)
+          : card.createdByAgentId
+            ? (agentMap.get(card.createdByAgentId) ?? null)
+            : null,
+        lastEditedByName: card.lastEditedByUserId
+          ? (userMap.get(card.lastEditedByUserId) ?? null)
+          : card.lastEditedByAgentId
+            ? (agentMap.get(card.lastEditedByAgentId) ?? null)
+            : null,
+        resolvedAssignees,
+        commentCount: commentCountMap.get(card.id) ?? 0,
+      };
+    });
 
     // Nest cards into columns
     const cardsByColumn = new Map<string, typeof cardsWithNames>();
@@ -564,6 +659,18 @@ kanban.post(
       }
     }
 
+    // Validate assignees if provided
+    if (data.assignees && data.assignees.length > 0) {
+      const assigneeError = await validateAssignees(
+        data.assignees,
+        c.req.param("orgId")!,
+        c.req.param("workspaceId")!,
+      );
+      if (assigneeError) {
+        return c.json({ message: assigneeError }, 400);
+      }
+    }
+
     const maxResult = await db
       .select({ maxPos: max(kanbanCardTable.position) })
       .from(kanbanCardTable)
@@ -574,11 +681,15 @@ kanban.post(
     const id = nanoid();
     const now = new Date();
 
+    const { dueDate: dueDateStr, ...restData } = data;
     const record = await db
       .insert(kanbanCardTable)
       .values({
         id,
-        ...data,
+        ...restData,
+        ...(dueDateStr !== undefined && {
+          dueDate: dueDateStr ? new Date(dueDateStr) : null,
+        }),
         columnId,
         position,
         createdByUserId: user.id,
@@ -627,10 +738,26 @@ kanban.put(
       }
     }
 
+    // Validate assignees if provided
+    if (data.assignees && data.assignees.length > 0) {
+      const assigneeError = await validateAssignees(
+        data.assignees,
+        c.req.param("orgId")!,
+        c.req.param("workspaceId")!,
+      );
+      if (assigneeError) {
+        return c.json({ message: assigneeError }, 400);
+      }
+    }
+
+    const { dueDate: dueDateStr, ...restData } = data;
     const record = await db
       .update(kanbanCardTable)
       .set({
-        ...data,
+        ...restData,
+        ...(dueDateStr !== undefined && {
+          dueDate: dueDateStr ? new Date(dueDateStr) : null,
+        }),
         lastEditedByUserId: user.id,
         updatedAt: new Date(),
       })

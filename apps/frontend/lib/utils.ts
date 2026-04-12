@@ -36,6 +36,15 @@ export const fetcher = async (input: RequestInfo | URL, init?: RequestInit) => {
  * @param errorData - The error response data from the API
  * @returns An object mapping field names to error messages
  */
+export function getInitials(name: string): string {
+  return name
+    .split(" ")
+    .map((n) => n[0])
+    .join("")
+    .toUpperCase()
+    .slice(0, 2);
+}
+
 export function parseValidationErrors(
   errorData: unknown,
 ): Record<string, string> {
