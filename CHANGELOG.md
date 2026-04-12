@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.58.1](https://github.com/willdady/platypus/compare/v1.58.0...v1.58.1) (2026-04-12)
+
+
+### Bug Fixes
+
+* **frontend:** convert blob URLs to data URLs before sending attachments to backend ([388beb2](https://github.com/willdady/platypus/commit/388beb26606bb09d3f480f126caac16ce712558a))
+
 ## [1.58.0](https://github.com/willdady/platypus/compare/v1.57.0...v1.58.0) (2026-04-12)
 
 
