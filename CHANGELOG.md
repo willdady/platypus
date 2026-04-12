@@ -1,5 +1,24 @@
 # Changelog
 
+## [1.57.0](https://github.com/willdady/platypus/compare/v1.56.1...v1.57.0) (2026-04-12)
+
+
+### Features
+
+* **frontend:** add "Add Webhook" option to command menu ([e502cfb](https://github.com/willdady/platypus/commit/e502cfbcc8923bf4d2783edf645cbc12a9006ae8))
+* **frontend:** add delete confirmation popover to kanban card dialog ([dc8613d](https://github.com/willdady/platypus/commit/dc8613d81d988b419dbab9bad6d66477a5c61338))
+* **frontend:** add fun console message with GitHub link ([6e41ac8](https://github.com/willdady/platypus/commit/6e41ac8e8d50bd399c41bf3358937aa6f934b046))
+* **frontend:** move workspace settings to header and add sidebar scroll gradient ([fde703a](https://github.com/willdady/platypus/commit/fde703a83fe297f119a7971ac8c000ea06b874f0))
+* **frontend:** redesign Add Column button with stacked layout and half width ([95c370f](https://github.com/willdady/platypus/commit/95c370f912ba55af900dda46a17771932972ffc4))
+* **frontend:** widen kanban card dialog ([34c51fc](https://github.com/willdady/platypus/commit/34c51fc2e85c9a903ad00f37501baa5ade05ad1f))
+
+
+### Bug Fixes
+
+* **frontend:** improve kanban card dialog spacing between content and scrollbar ([5fcfcdb](https://github.com/willdady/platypus/commit/5fcfcdb7ed85b9bbb40631cb3bb08a57637647c8))
+* **frontend:** swap label and value colors on org settings ID field ([8ea1ff9](https://github.com/willdady/platypus/commit/8ea1ff96eb1de5cdcba8c0da7cfeab2e4c395c8b))
+* **frontend:** swap label and value colors on workspace settings ID fields ([428d88e](https://github.com/willdady/platypus/commit/428d88edd33b2718448598b7395ab087c46d1284))
+
 ## [1.56.1](https://github.com/willdady/platypus/compare/v1.56.0...v1.56.1) (2026-04-12)
 
 
