@@ -47,7 +47,7 @@ export const ErrorDialog = ({
             <AlertDescription className="break-all">{message}</AlertDescription>
           </Alert>
         </div>
-        <DialogFooter>
+        <DialogFooter className="flex-row justify-end">
           <Button variant="outline" size="icon" onClick={handleCopy}>
             {copied ? <Check /> : <Copy />}
           </Button>
