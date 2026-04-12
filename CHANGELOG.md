@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.58.0](https://github.com/willdady/platypus/compare/v1.57.0...v1.58.0) (2026-04-12)
+
+
+### Features
+
+* add card assignee, due date, and priority to kanban ([5c915e9](https://github.com/willdady/platypus/commit/5c915e9591deccbfea4da8a941c0e57a5bc85a80))
+* add column filter to event triggers and extract event dispatch module ([be0e9fd](https://github.com/willdady/platypus/commit/be0e9fdd4d29da7a2cd0256ed5fc1a51ec8f13b9))
+* **frontend:** group users and agents in kanban assignee picker ([750c118](https://github.com/willdady/platypus/commit/750c118a9784aac30083398728b1362e0bc17810))
+
 ## [1.57.0](https://github.com/willdady/platypus/compare/v1.56.1...v1.57.0) (2026-04-12)
 
 
