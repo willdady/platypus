@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.59.0](https://github.com/willdady/platypus/compare/v1.58.1...v1.59.0) (2026-04-13)
+
+
+### Features
+
+* add execution stats to trigger runs and stop creating chat records ([155ba28](https://github.com/willdady/platypus/commit/155ba28f380af4d1aab7d5e9d551258f97f14f96))
+
+
+### Bug Fixes
+
+* **frontend:** fix error dialog copy button layout on mobile viewports ([b63f8da](https://github.com/willdady/platypus/commit/b63f8da34e4225853cc7aebceb95beb7fa4e653b))
+* **frontend:** prevent long unbroken strings from overflowing agent info dialog on mobile ([79e12fa](https://github.com/willdady/platypus/commit/79e12faee5536e0256302585e0e3b25e5c7038a6))
+
 ## [1.58.1](https://github.com/willdady/platypus/compare/v1.58.0...v1.58.1) (2026-04-12)
 
 
