@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.60.0](https://github.com/willdady/platypus/compare/v1.59.0...v1.60.0) (2026-04-13)
+
+
+### Features
+
+* **frontend:** display agent avatars in model/agent picker dropdown and trigger ([3b359db](https://github.com/willdady/platypus/commit/3b359db22f1397dc6e4466a8040bd885c116166c))
+* **frontend:** display created/updated timestamps in kanban card dialog ([9d0d984](https://github.com/willdady/platypus/commit/9d0d984b6cbaa2d1f394fd580fb51cb2a9f84b01))
+* **frontend:** improve agent list card layout with 3-line descriptions ([16ed27a](https://github.com/willdady/platypus/commit/16ed27abb808b8e51ebd9facedd9f4fdf577d760))
+
 ## [1.59.0](https://github.com/willdady/platypus/compare/v1.58.1...v1.59.0) (2026-04-13)
 
 
