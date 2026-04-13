@@ -38,7 +38,13 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Trash2, Calendar as CalendarIcon, Check, Users } from "lucide-react";
+import {
+  Trash2,
+  Calendar as CalendarIcon,
+  Check,
+  Users,
+  Pencil,
+} from "lucide-react";
 import { cn, fetcher, getInitials, joinUrl } from "@/lib/utils";
 import { useBackendUrl } from "@/app/client-context";
 import { useAuth } from "@/components/auth-provider";
@@ -402,46 +408,50 @@ export function KanbanCardDialog({
                 }}
               >
                 {isEditing ? (
-                  <Input
-                    autoFocus={focusField === "title"}
-                    value={title}
-                    onChange={(e) => setTitle(e.target.value)}
-                    className="text-lg font-semibold"
-                    placeholder="Card title"
-                  />
+                  <>
+                    <Input
+                      autoFocus={focusField === "title"}
+                      value={title}
+                      onChange={(e) => setTitle(e.target.value)}
+                      className="text-lg font-semibold"
+                      placeholder="Card title"
+                    />
+                    <Textarea
+                      autoFocus={focusField === "body"}
+                      value={body}
+                      onChange={(e) => setBody(e.target.value)}
+                      placeholder="Add a description..."
+                      rows={6}
+                      className="min-h-[150px]"
+                    />
+                  </>
                 ) : (
-                  <h2
-                    className="text-lg font-semibold cursor-pointer"
-                    onClick={() => enterEditing("title")}
-                  >
-                    {title}
-                  </h2>
-                )}
-                {isEditing ? (
-                  <Textarea
-                    autoFocus={focusField === "body"}
-                    value={body}
-                    onChange={(e) => setBody(e.target.value)}
-                    placeholder="Add a description..."
-                    rows={6}
-                    className="min-h-[150px]"
-                  />
-                ) : body ? (
-                  <div
-                    className="prose prose-sm dark:prose-invert max-w-none cursor-pointer min-h-[150px]"
-                    onClick={() => enterEditing("body")}
-                  >
-                    <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                      {body}
-                    </ReactMarkdown>
-                  </div>
-                ) : (
-                  <p
-                    className="text-sm text-muted-foreground cursor-pointer min-h-[150px] hover:text-foreground"
-                    onClick={() => enterEditing("body")}
-                  >
-                    Click to add a description...
-                  </p>
+                  <>
+                    <div className="flex items-center justify-between">
+                      <h2 className="text-lg font-semibold">{title}</h2>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8"
+                        onClick={() => enterEditing("title")}
+                      >
+                        <Pencil className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
+                    <div className="min-h-[150px]">
+                      {body ? (
+                        <div className="prose prose-sm dark:prose-invert max-w-none">
+                          <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                            {body}
+                          </ReactMarkdown>
+                        </div>
+                      ) : (
+                        <p className="text-sm text-muted-foreground">
+                          No description.
+                        </p>
+                      )}
+                    </div>
+                  </>
                 )}
               </div>
 
@@ -716,46 +726,50 @@ export function KanbanCardDialog({
               }}
             >
               {isEditing ? (
-                <Input
-                  autoFocus={focusField === "title"}
-                  value={title}
-                  onChange={(e) => setTitle(e.target.value)}
-                  className="text-lg font-semibold"
-                  placeholder="Card title"
-                />
+                <>
+                  <Input
+                    autoFocus={focusField === "title"}
+                    value={title}
+                    onChange={(e) => setTitle(e.target.value)}
+                    className="text-lg font-semibold"
+                    placeholder="Card title"
+                  />
+                  <Textarea
+                    autoFocus={focusField === "body"}
+                    value={body}
+                    onChange={(e) => setBody(e.target.value)}
+                    placeholder="Add a description..."
+                    rows={6}
+                    className="min-h-[150px]"
+                  />
+                </>
               ) : (
-                <h2
-                  className="text-lg font-semibold cursor-pointer"
-                  onClick={() => enterEditing("title")}
-                >
-                  {title}
-                </h2>
-              )}
-              {isEditing ? (
-                <Textarea
-                  autoFocus={focusField === "body"}
-                  value={body}
-                  onChange={(e) => setBody(e.target.value)}
-                  placeholder="Add a description..."
-                  rows={6}
-                  className="min-h-[150px]"
-                />
-              ) : body ? (
-                <div
-                  className="prose prose-sm dark:prose-invert max-w-none cursor-pointer min-h-[150px]"
-                  onClick={() => enterEditing("body")}
-                >
-                  <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                    {body}
-                  </ReactMarkdown>
-                </div>
-              ) : (
-                <p
-                  className="text-sm text-muted-foreground cursor-pointer min-h-[150px] hover:text-foreground"
-                  onClick={() => enterEditing("body")}
-                >
-                  Click to add a description...
-                </p>
+                <>
+                  <div className="flex items-center justify-between">
+                    <h2 className="text-lg font-semibold">{title}</h2>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => enterEditing("title")}
+                    >
+                      <Pencil className="h-3.5 w-3.5 mr-0.5" />
+                      Edit
+                    </Button>
+                  </div>
+                  <div className="min-h-[150px]">
+                    {body ? (
+                      <div className="prose prose-sm dark:prose-invert max-w-none">
+                        <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                          {body}
+                        </ReactMarkdown>
+                      </div>
+                    ) : (
+                      <p className="text-sm text-muted-foreground">
+                        No description.
+                      </p>
+                    )}
+                  </div>
+                </>
               )}
 
               {/* Comments section */}
@@ -1014,7 +1028,7 @@ export function KanbanCardDialog({
             </div>
           </div>
         )}
-        <DialogFooter className="shrink-0">
+        <DialogFooter className="shrink-0 flex-row justify-end">
           <Popover>
             <PopoverTrigger asChild>
               <Button variant="secondary">
