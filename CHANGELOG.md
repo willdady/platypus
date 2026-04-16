@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.61.0](https://github.com/willdady/platypus/compare/v1.60.0...v1.61.0) (2026-04-16)
+
+
+### Features
+
+* add deep linking for kanban cards via ?cardId query param ([7bf14bb](https://github.com/willdady/platypus/commit/7bf14bbe6b6682733b0c91ee9e756772bcda893a))
+* add OpenRouter web search support and fix search flag for agents ([0b790a7](https://github.com/willdady/platypus/commit/0b790a754c0182d5fb9de496704bc379f877ae59))
+* **frontend:** extract AgentAvatar component and replace initials with icons ([c6e6d29](https://github.com/willdady/platypus/commit/c6e6d2924e7a620ec730818114ec1c6defeb6440))
+* **frontend:** improve kanban card dialog edit UX and mobile layout ([dc07a8a](https://github.com/willdady/platypus/commit/dc07a8a46ea4706d3e8b06bbf4d816ae41766f0b))
+
 ## [1.60.0](https://github.com/willdady/platypus/compare/v1.59.0...v1.60.0) (2026-04-13)
 
 
