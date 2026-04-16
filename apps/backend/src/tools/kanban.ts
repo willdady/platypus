@@ -224,7 +224,12 @@ export function createKanbanTools(
 
       const boardId = await getBoardIdForCard(cardId);
       const url = boardId
-        ? buildResourceUrl(frontendUrl, orgId, workspaceId, `boards/${boardId}`)
+        ? buildResourceUrl(
+            frontendUrl,
+            orgId,
+            workspaceId,
+            `boards/${boardId}`,
+          ) + `?cardId=${cardId}`
         : undefined;
 
       return { ...card[0], ...(url && { url }) };
@@ -326,7 +331,7 @@ export function createKanbanTools(
               orgId,
               workspaceId,
               `boards/${boardId}`,
-            )
+            ) + `?cardId=${cardId}`
           : undefined;
 
         return { ...record[0], ...(url && { url }) };
@@ -375,7 +380,12 @@ export function createKanbanTools(
       const boardId = await getBoardIdForCard(id);
       dispatchEvent(workspaceId, "card.created", { ...record[0], boardId });
       const url = boardId
-        ? buildResourceUrl(frontendUrl, orgId, workspaceId, `boards/${boardId}`)
+        ? buildResourceUrl(
+            frontendUrl,
+            orgId,
+            workspaceId,
+            `boards/${boardId}`,
+          ) + `?cardId=${id}`
         : undefined;
 
       return { ...record[0], ...(url && { url }) };
@@ -466,7 +476,12 @@ export function createKanbanTools(
       const boardId = await getBoardIdForCard(cardId);
       dispatchEvent(workspaceId, "card.updated", { ...updated[0], boardId });
       const url = boardId
-        ? buildResourceUrl(frontendUrl, orgId, workspaceId, `boards/${boardId}`)
+        ? buildResourceUrl(
+            frontendUrl,
+            orgId,
+            workspaceId,
+            `boards/${boardId}`,
+          ) + `?cardId=${cardId}`
         : undefined;
 
       return { ...updated[0], ...(url && { url }) };

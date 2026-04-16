@@ -23,6 +23,7 @@ import {
 } from "@dnd-kit/sortable";
 import { motion } from "motion/react";
 import Link from "next/link";
+import { useSearchParams, useRouter, usePathname } from "next/navigation";
 import { toast } from "sonner";
 import type {
   KanbanBoardState,
@@ -78,6 +79,9 @@ export function KanbanBoard({
 }) {
   const backendUrl = useBackendUrl();
   const { user } = useAuth();
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const pathname = usePathname();
 
   const baseUrl = joinUrl(
     backendUrl,
@@ -170,6 +174,38 @@ export function KanbanBoard({
     mql.addEventListener("change", onChange);
     return () => mql.removeEventListener("change", onChange);
   }, []);
+
+  const updateCardIdParam = useCallback(
+    (cardId: string | null) => {
+      const params = new URLSearchParams(searchParams.toString());
+      if (cardId) {
+        params.set("cardId", cardId);
+      } else {
+        params.delete("cardId");
+      }
+      const qs = params.toString();
+      router.replace(`${pathname}${qs ? `?${qs}` : ""}`, { scroll: false });
+    },
+    [searchParams, router, pathname],
+  );
+
+  // Open card dialog from URL query param on initial data load
+  const deepLinkHandledRef = useRef(false);
+  useEffect(() => {
+    if (deepLinkHandledRef.current || !data) return;
+    deepLinkHandledRef.current = true;
+    const cardId = searchParams.get("cardId");
+    if (!cardId) return;
+    const card = data.columns
+      .flatMap((col) => col.cards)
+      .find((c) => c.id === cardId);
+    if (card) {
+      setSelectedCard(card);
+      setDialogOpen(true);
+    } else {
+      updateCardIdParam(null);
+    }
+  }, [data, searchParams, updateCardIdParam]);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
@@ -599,12 +635,13 @@ export function KanbanBoard({
         }
         setDialogOpen(false);
         setSelectedCard(null);
+        updateCardIdParam(null);
         await mutate();
       } catch {
         toast.error("Failed to update card");
       }
     },
-    [columns, baseUrl, mutate],
+    [columns, baseUrl, mutate, updateCardIdParam],
   );
 
   const handleCardDelete = useCallback(
@@ -620,12 +657,13 @@ export function KanbanBoard({
         });
         setDialogOpen(false);
         setSelectedCard(null);
+        updateCardIdParam(null);
         await mutate();
       } catch {
         toast.error("Failed to delete card");
       }
     },
-    [columns, baseUrl, mutate],
+    [columns, baseUrl, mutate, updateCardIdParam],
   );
 
   const activeCard =
@@ -723,6 +761,7 @@ export function KanbanBoard({
                   onCardClick={(card) => {
                     setSelectedCard(card);
                     setDialogOpen(true);
+                    updateCardIdParam(card.id);
                   }}
                   onAddCard={handleAddCard}
                   onEditColumn={handleEditColumn}
@@ -947,7 +986,13 @@ export function KanbanBoard({
             : null
         }
         open={dialogOpen}
-        onOpenChange={setDialogOpen}
+        onOpenChange={(open) => {
+          setDialogOpen(open);
+          if (!open) {
+            setSelectedCard(null);
+            updateCardIdParam(null);
+          }
+        }}
         onSave={handleCardSave}
         onDelete={handleCardDelete}
         orgId={orgId}
