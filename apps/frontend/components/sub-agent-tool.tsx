@@ -37,7 +37,12 @@ import { DynamicToolHeader } from "./dynamic-tool-header";
 import { LoadSkillTool } from "./load-skill-tool";
 import type { ReactNode } from "react";
 
-const getStatusBadge = (status: ToolUIPart["state"]) => {
+const getStatusBadge = (status: ToolUIPart["state"], preliminary?: boolean) => {
+  // When the state is "output-available" but the result is preliminary,
+  // the sub-agent is still streaming — treat it as "Running".
+  const effectiveStatus =
+    status === "output-available" && preliminary ? "input-available" : status;
+
   const labels: Record<ToolUIPart["state"], string> = {
     "input-streaming": "Pending",
     "input-available": "Running",
@@ -60,8 +65,8 @@ const getStatusBadge = (status: ToolUIPart["state"]) => {
 
   return (
     <Badge className="gap-1.5 rounded-full text-xs" variant="secondary">
-      {icons[status]}
-      {labels[status]}
+      {icons[effectiveStatus]}
+      {labels[effectiveStatus]}
     </Badge>
   );
 };
@@ -182,7 +187,12 @@ export const SubAgentTool = ({ toolPart }: SubAgentToolProps) => {
         <div className="flex items-center gap-2">
           <BotIcon className="size-4 text-muted-foreground" />
           <span className="font-medium text-sm">{subAgentName}</span>
-          {getStatusBadge(errorText ? "output-error" : toolPart.state)}
+          {getStatusBadge(
+            errorText ? "output-error" : toolPart.state,
+            toolPart.state === "output-available"
+              ? toolPart.preliminary
+              : undefined,
+          )}
         </div>
         <ChevronDownIcon className="size-4 text-muted-foreground transition-transform group-data-[state=open]/subagent:rotate-180" />
       </CollapsibleTrigger>
