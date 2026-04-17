@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.61.1](https://github.com/willdady/platypus/compare/v1.61.0...v1.61.1) (2026-04-17)
+
+
+### Bug Fixes
+
+* **frontend:** prevent long unbroken strings from overflowing kanban card dialog on mobile ([2f79921](https://github.com/willdady/platypus/commit/2f7992141518982c90f901df2e5433c443c8fbda))
+* **frontend:** prevent sub-agent UI from showing "Completed" while still streaming ([b5e5122](https://github.com/willdady/platypus/commit/b5e5122a5cdd98fedf1b9591cb1ae156183f63df))
+* **frontend:** remove superfluous next/last run metadata from trigger list items ([527a082](https://github.com/willdady/platypus/commit/527a0822ea11185ee1454778ad5a3f77fb8a2a94))
+
 ## [1.61.0](https://github.com/willdady/platypus/compare/v1.60.0...v1.61.0) (2026-04-16)
 
 
