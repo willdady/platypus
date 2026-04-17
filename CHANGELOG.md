@@ -1,5 +1,22 @@
 # Changelog
 
+## [1.62.0](https://github.com/willdady/platypus/compare/v1.61.1...v1.62.0) (2026-04-17)
+
+
+### Features
+
+* **backend:** add listModelProviders tool to agent-management toolset ([169bdb5](https://github.com/willdady/platypus/commit/169bdb5a0b6fd7081eb66d76cb3e0158026405f7))
+* **frontend:** add markdown preview tab to expanded textarea modal ([ffe4448](https://github.com/willdady/platypus/commit/ffe44480036fde14f0d05378e4f9124c7a0001ee))
+* **frontend:** replace kanban board loading text with skeleton layout ([db60b3c](https://github.com/willdady/platypus/commit/db60b3c2b94fb14e936bd771943747cf84961431))
+* **frontend:** show agent avatar in agent and skill form toggle lists ([6d39f17](https://github.com/willdady/platypus/commit/6d39f17e0aaaff85bd6839005ad1cf158553c61f))
+* **frontend:** show agent avatar in trigger form agent select ([3e0b995](https://github.com/willdady/platypus/commit/3e0b9956df4e8657bc655546d366f01a240b12ac))
+
+
+### Bug Fixes
+
+* **frontend:** defer expanded textarea changes until modal closes ([1ddcc83](https://github.com/willdady/platypus/commit/1ddcc83417bc06bc3811683606cc8ea9ed8fb8e4))
+* **frontend:** show full descriptions in skills and sub-agent toggle lists ([9329b55](https://github.com/willdady/platypus/commit/9329b55ca9acdb6bdb891be0f86b383aab051a11))
+
 ## [1.61.1](https://github.com/willdady/platypus/compare/v1.61.0...v1.61.1) (2026-04-17)
 
 
