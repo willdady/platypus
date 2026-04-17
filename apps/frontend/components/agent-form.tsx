@@ -673,7 +673,7 @@ const AgentForm = ({
                     <FieldLabel htmlFor={`skill-${skill.id}`}>
                       <div className="flex flex-col">
                         <p>{skill.name}</p>
-                        <p className="text-xs text-muted-foreground line-clamp-1">
+                        <p className="text-xs text-muted-foreground">
                           {skill.description}
                         </p>
                       </div>
@@ -720,7 +720,7 @@ const AgentForm = ({
                       <FieldLabel htmlFor={`subagent-${agent.id}`}>
                         <div className="flex flex-col">
                           <p>{agent.name}</p>
-                          <p className="text-xs text-muted-foreground line-clamp-1">
+                          <p className="text-xs text-muted-foreground">
                             {agent.description || "No description"}
                           </p>
                         </div>
