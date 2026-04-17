@@ -43,6 +43,7 @@ import { fetcher, parseValidationErrors, joinUrl } from "@/lib/utils";
 import { toast } from "sonner";
 import { useBackendUrl } from "@/app/client-context";
 import { useAuth } from "@/components/auth-provider";
+import { AgentAvatar } from "@/components/agent-avatar";
 
 const AgentForm = ({
   classNames,
@@ -718,11 +719,14 @@ const AgentForm = ({
                         disabled={isSubmitting}
                       />
                       <FieldLabel htmlFor={`subagent-${agent.id}`}>
-                        <div className="flex flex-col">
-                          <p>{agent.name}</p>
-                          <p className="text-xs text-muted-foreground">
-                            {agent.description || "No description"}
-                          </p>
+                        <div className="flex items-center gap-2">
+                          <AgentAvatar agent={agent} className="size-6" />
+                          <div className="flex flex-col">
+                            <p>{agent.name}</p>
+                            <p className="text-xs text-muted-foreground">
+                              {agent.description || "No description"}
+                            </p>
+                          </div>
                         </div>
                       </FieldLabel>
                     </Field>
