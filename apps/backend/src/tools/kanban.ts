@@ -489,26 +489,36 @@ export function createKanbanTools(
   });
 
   const deleteCard = tool({
-    description: "Delete a kanban card.",
+    description: "Delete one or more kanban cards.",
     inputSchema: z.object({
-      cardId: z.string().describe("The card ID to delete"),
-      label: z.string().describe("The card title (for display purposes)"),
+      cardIds: z
+        .array(z.string())
+        .min(1)
+        .describe("One or more card IDs to delete"),
+      label: z.string().describe("The card title(s) (for display purposes)"),
     }),
-    execute: async ({ cardId }) => {
-      if (!(await verifyCard(cardId))) {
-        return { error: "Card not found" };
+    execute: async ({ cardIds }) => {
+      for (const cardId of cardIds) {
+        if (!(await verifyCard(cardId))) {
+          return { error: `Card not found: ${cardId}` };
+        }
       }
 
-      const boardId = await getBoardIdForCard(cardId);
-      const cardRecord = await db
-        .select({ columnId: kanbanCardTable.columnId })
-        .from(kanbanCardTable)
-        .where(eq(kanbanCardTable.id, cardId))
-        .limit(1);
-      const columnId = cardRecord[0]?.columnId;
-      await db.delete(kanbanCardTable).where(eq(kanbanCardTable.id, cardId));
-
-      dispatchEvent(workspaceId, "card.deleted", { cardId, boardId, columnId });
+      for (const cardId of cardIds) {
+        const boardId = await getBoardIdForCard(cardId);
+        const cardRecord = await db
+          .select({ columnId: kanbanCardTable.columnId })
+          .from(kanbanCardTable)
+          .where(eq(kanbanCardTable.id, cardId))
+          .limit(1);
+        const columnId = cardRecord[0]?.columnId;
+        await db.delete(kanbanCardTable).where(eq(kanbanCardTable.id, cardId));
+        dispatchEvent(workspaceId, "card.deleted", {
+          cardId,
+          boardId,
+          columnId,
+        });
+      }
 
       return { success: true };
     },
