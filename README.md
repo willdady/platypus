@@ -45,27 +45,15 @@ Platypus is a monorepo managed by [Turborepo](https://turbo.build/), ensuring a 
 
 The fastest way to get Platypus running is using Docker Compose.
 
-1.  **Configure environment:**
+1.  **Clone and configure:**
 
-    Clone the repository, create a `compose.override.yaml` file (or edit `compose.yaml` directly) and set the following environment variables:
-    - `BETTER_AUTH_SECRET`: A secure random string (minimum 32 characters).
-    - `ADMIN_EMAIL`: The email address for the initial admin user.
-    - `ADMIN_PASSWORD`: A secure password for the initial admin user.
-    - `TIMEZONE` (optional): IANA timezone name for e.g., "America/New_York", "Europe/London". Defaults to UTC.
-    - `MEMORY_EXTRACTION_INTERVAL_MS` (optional): How often (in milliseconds) the background memory extraction job runs. Defaults to `300000` (5 minutes).
-    - `SCHEDULE_MAX_CONCURRENT` (optional): Maximum number of schedules to execute in parallel. Defaults to `5`.
-    - `FRONTEND_URL` (optional): The URL of the frontend application, used for generating resource links in tool responses. Defaults to `http://localhost:3000`.
-
-    ```yaml
-    services:
-      backend:
-        environment:
-          BETTER_AUTH_SECRET: "your-secure-random-string-here"
-          ADMIN_EMAIL: "admin@example.com"
-          ADMIN_PASSWORD: "your-secure-password-here"
-          TIMEZONE: "UTC"
-          FRONTEND_URL: "http://localhost:3000"
+    ```bash
+    git clone https://github.com/willdady/platypus.git
+    cd platypus
+    cp .env.example .env
     ```
+
+    Edit `.env` and set `BETTER_AUTH_SECRET` to a secure random string and update the admin credentials. See the comments in `.env.example` for all available options.
 
 2.  **Start the application:**
 
@@ -75,7 +63,7 @@ The fastest way to get Platypus running is using Docker Compose.
 
 3.  **Sign in:**
 
-    Navigate to `http://localhost:3000` and sign in with the default credentials configured via the `ADMIN_EMAIL` and `ADMIN_PASSWORD` environment variables.
+    Navigate to `http://localhost:3000` and sign in with the credentials you configured in `.env`.
 
 > [!CAUTION]
 > Change the default password after your first login!
