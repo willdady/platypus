@@ -55,6 +55,7 @@ import {
   rewriteStorageUrls,
   deleteFiles,
 } from "../storage/utils.ts";
+import { getOrigin } from "../utils/get-origin.ts";
 
 /**
  * Upserts the chat record in the database.
@@ -200,7 +201,7 @@ chat.get(
 
     // Rewrite storage:// URLs to HTTP URLs
     const chat = record[0];
-    const origin = new URL(c.req.url).origin;
+    const origin = getOrigin(c);
     if (chat.messages) {
       chat.messages = rewriteStorageUrls(
         chat.messages as PlatypusUIMessage[],
@@ -340,10 +341,7 @@ chat.post(
 
     logger.debug({ systemPrompt }, "System prompt for chat");
 
-    const inlinedMessages = await inlineFileUrls(
-      messages,
-      new URL(c.req.url).origin,
-    );
+    const inlinedMessages = await inlineFileUrls(messages, getOrigin(c));
 
     const result = streamText({
       model: model as any,

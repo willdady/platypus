@@ -14,6 +14,7 @@ import {
 import { user } from "../db/auth-schema.ts";
 import { dispatchEvent } from "../services/event-dispatch.ts";
 import { avatarKeyToUrl } from "../utils/avatar-url.ts";
+import { getOrigin } from "../utils/get-origin.ts";
 import {
   kanbanBoardCreateSchema,
   kanbanBoardUpdateSchema,
@@ -354,7 +355,7 @@ kanban.get(
 
     const agentMap = new Map(agents.map((a) => [a.id, a.name]));
 
-    const baseUrl = new URL(c.req.url).origin;
+    const baseUrl = getOrigin(c);
     const agentAvatarUrlMap = new Map(
       agents.map((a) => [a.id, avatarKeyToUrl(a.avatarKey, baseUrl)]),
     );
