@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.63.1](https://github.com/willdady/platypus/compare/v1.63.0...v1.63.1) (2026-04-18)
+
+
+### Bug Fixes
+
+* **backend:** update kanban tests for deleteCard and bulkEditCards changes ([7568854](https://github.com/willdady/platypus/commit/7568854c54e926d8c435d2ad398e7bb800a36509))
+
 ## [1.63.0](https://github.com/willdady/platypus/compare/v1.62.0...v1.63.0) (2026-04-18)
 
 
