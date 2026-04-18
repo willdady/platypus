@@ -1,5 +1,20 @@
 # Changelog
 
+## [1.63.0](https://github.com/willdady/platypus/compare/v1.62.0...v1.63.0) (2026-04-18)
+
+
+### Features
+
+* add root .env file support for Docker Compose ([af25a0a](https://github.com/willdady/platypus/commit/af25a0a35b03396b3ffdcb105353522538b6908e))
+* **backend:** add bulkEditCards kanban tool ([8917110](https://github.com/willdady/platypus/commit/8917110f0ef6aee156719870dd5a76c08a418bed))
+* **backend:** update deleteCard tool to support bulk deletion ([b611feb](https://github.com/willdady/platypus/commit/b611feb5f00a6475014712777b4e0544760bc82b))
+* **frontend:** improve kanban card dialog title, copy button, and scroll behavior ([38d5696](https://github.com/willdady/platypus/commit/38d569697aa6845bef074276681688d8fc595181))
+
+
+### Bug Fixes
+
+* **backend:** respect X-Forwarded-Proto when constructing file URLs ([8c644f4](https://github.com/willdady/platypus/commit/8c644f44d97ddaf1c82b8ce62e9e4802f394d3a3))
+
 ## [1.62.0](https://github.com/willdady/platypus/compare/v1.61.1...v1.62.0) (2026-04-17)
 
 
