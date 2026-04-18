@@ -75,6 +75,7 @@ describe("createKanbanTools", () => {
       "upsertCard",
       "moveCard",
       "deleteCard",
+      "bulkEditCards",
       "listComments",
       "upsertComment",
       "deleteComment",
@@ -168,10 +169,10 @@ describe("createKanbanTools", () => {
       mockDb.limit.mockResolvedValue([]);
 
       const result = await tools.deleteCard.execute(
-        { cardId: "bad-id", label: "test" },
+        { cardIds: ["bad-id"], label: "test" },
         ctx,
       );
-      expect(result).toEqual({ error: "Card not found" });
+      expect(result).toEqual({ error: "Card not found: bad-id" });
     });
   });
 
