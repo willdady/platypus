@@ -8,8 +8,8 @@ Platypus is a full-stack application for building and managing AI agents with to
 
 ```bash
 pnpm install
-cp apps/frontend/.example.env apps/frontend/.env
-cp apps/backend/.example.env apps/backend/.env
+cp apps/frontend/.env.example apps/frontend/.env
+cp apps/backend/.env.example apps/backend/.env
 ```
 
 ### Running the Application
@@ -165,7 +165,7 @@ These schemas are imported by both frontend and backend to ensure type safety ac
 
 - `BACKEND_URL`: Backend API URL for server-side and client-side requests
 
-Default values work for local development after copying `.example.env` files
+Default values work for local development after copying `.env.example` files
 
 ### Default Credentials
 

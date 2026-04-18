@@ -89,8 +89,8 @@ The fastest way to get Platypus running is using Docker Compose.
     Create `.env` files for both apps:
 
     ```bash
-    cp apps/frontend/.example.env apps/frontend/.env
-    cp apps/backend/.example.env apps/backend/.env
+    cp apps/frontend/.env.example apps/frontend/.env
+    cp apps/backend/.env.example apps/backend/.env
     ```
 
     Edit `apps/backend/.env` and set the following environment variables:
