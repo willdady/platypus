@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.64.0](https://github.com/willdady/platypus/compare/v1.63.1...v1.64.0) (2026-04-18)
+
+
+### Features
+
+* add custom HTTP headers support for MCP server connections ([a0c6826](https://github.com/willdady/platypus/commit/a0c6826b8fa681ee6a054b984fae55986a37fee5))
+
 ## [1.63.1](https://github.com/willdady/platypus/compare/v1.63.0...v1.63.1) (2026-04-18)
 
 
