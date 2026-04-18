@@ -129,47 +129,36 @@ The fastest way to get Platypus running is using Docker Compose.
 
 Platypus stores file attachments (images, documents, etc.) separately from chat messages to keep the database efficient. When users attach files to messages, the binary data is extracted and stored in a pluggable storage backend, with only a reference stored in the database.
 
-The following environment variables are configured in the **backend** service.
+The following variables are configured in your `.env` file (see `.env.example` for defaults).
 
 ### Disk Storage (Default)
 
 By default, files are stored on the local filesystem at `./data/files`. This works well for single-server deployments and local development.
 
-```yaml
-services:
-  backend:
-    environment:
-      STORAGE_BACKEND: disk
-      STORAGE_DISK_PATH: /data/files
-    volumes:
-      - ./data:/data
+```env
+STORAGE_BACKEND=disk
+STORAGE_DISK_PATH=/data/files
 ```
 
 ### S3-Compatible Storage
 
 For production deployments, you can use any S3-compatible service (AWS S3, MinIO, Cloudflare R2, DigitalOcean Spaces, etc.):
 
-```yaml
-services:
-  backend:
-    environment:
-      STORAGE_BACKEND: s3
-      STORAGE_S3_BUCKET: my-bucket
-      STORAGE_S3_REGION: us-east-1
-      STORAGE_S3_ENDPOINT: https://s3.amazonaws.com
-      STORAGE_S3_ACCESS_KEY_ID: your-access-key
-      STORAGE_S3_SECRET_ACCESS_KEY: your-secret-key
+```env
+STORAGE_BACKEND=s3
+STORAGE_S3_BUCKET=my-bucket
+STORAGE_S3_REGION=us-east-1
+STORAGE_S3_ENDPOINT=https://s3.amazonaws.com
+STORAGE_S3_ACCESS_KEY_ID=your-access-key
+STORAGE_S3_SECRET_ACCESS_KEY=your-secret-key
 ```
 
 ### Direct File Access
 
 For better performance with cloud storage, you can configure a public URL to serve files directly from your storage provider instead of proxying through the backend:
 
-```yaml
-services:
-  backend:
-    environment:
-      STORAGE_PUBLIC_URL: https://my-bucket.s3.amazonaws.com
+```env
+STORAGE_PUBLIC_URL=https://my-bucket.s3.amazonaws.com
 ```
 
 This allows browsers to fetch files directly from S3 (or via CDN) instead of going through the backend `/files` endpoint.
