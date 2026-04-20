@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.65.0](https://github.com/willdady/platypus/compare/v1.64.0...v1.65.0) (2026-04-20)
+
+
+### Features
+
+* **frontend:** add collapsible sections to workspace home page ([399f093](https://github.com/willdady/platypus/commit/399f0933764ec6054ac01abcb79efb7bc68173f2))
+
+
+### Bug Fixes
+
+* **frontend:** reduce list item spacing on mobile viewports ([aad14c2](https://github.com/willdady/platypus/commit/aad14c2c3fe6b81ee3be3d1a2bca35df9e77d316))
+
 ## [1.64.0](https://github.com/willdady/platypus/compare/v1.63.1...v1.64.0) (2026-04-18)
 
 
