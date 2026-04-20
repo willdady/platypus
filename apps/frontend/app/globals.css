@@ -93,7 +93,27 @@
   --warning-foreground: oklch(0.90 0.10 75);
 }
 
+@keyframes collapsible-down {
+  from {
+    height: 0;
+  }
+  to {
+    height: var(--radix-collapsible-content-height);
+  }
+}
+
+@keyframes collapsible-up {
+  from {
+    height: var(--radix-collapsible-content-height);
+  }
+  to {
+    height: 0;
+  }
+}
+
 @theme inline {
+  --animate-collapsible-down: collapsible-down 0.2s ease-out;
+  --animate-collapsible-up: collapsible-up 0.2s ease-out;
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);

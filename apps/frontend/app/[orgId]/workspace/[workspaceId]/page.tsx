@@ -4,6 +4,7 @@ import { AgentsList } from "@/components/agents-list";
 import { SkillsList } from "@/components/skills-list";
 import { TriggerList } from "@/components/trigger-list";
 import { BoardsList } from "@/components/boards-list";
+import { CollapsibleSection } from "@/components/collapsible-section";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
@@ -376,69 +377,62 @@ const Workspace = () => {
           <Separator />
 
           {/* Skills List Section */}
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <div className="flex flex-col">
-                <h2 className="text-xl font-semibold tracking-tight flex items-center gap-2">
-                  <Sparkles className="size-5" /> Skills
-                </h2>
-                <p className="text-sm text-muted-foreground">
-                  Reusable instruction sets that help agents perform specific
-                  tasks.
-                </p>
-              </div>
-            </div>
+          <CollapsibleSection
+            title={
+              <>
+                <Sparkles className="size-5" /> Skills
+              </>
+            }
+            description="Reusable instruction sets that help agents perform specific tasks."
+            storageKey="section:skills:open"
+          >
             <SkillsList orgId={orgId} workspaceId={workspaceId} />
             <Button variant="outline" asChild>
               <Link href={`/${orgId}/workspace/${workspaceId}/skills/create`}>
                 <Plus /> Create Skill
               </Link>
             </Button>
-          </div>
+          </CollapsibleSection>
 
           <Separator />
 
           {/* Boards List Section */}
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <div className="flex flex-col">
-                <h2 className="text-xl font-semibold tracking-tight flex items-center gap-2">
-                  <KanbanSquare className="size-5" /> Boards
-                </h2>
-                <p className="text-sm text-muted-foreground">
-                  Visual work management boards for organizing tasks.
-                </p>
-              </div>
-            </div>
+          <CollapsibleSection
+            title={
+              <>
+                <KanbanSquare className="size-5" /> Boards
+              </>
+            }
+            description="Visual work management boards for organizing tasks."
+            storageKey="section:boards:open"
+          >
             <BoardsList orgId={orgId} workspaceId={workspaceId} />
             <Button variant="outline" asChild>
               <Link href={`/${orgId}/workspace/${workspaceId}/boards/create`}>
                 <Plus /> Create Board
               </Link>
             </Button>
-          </div>
+          </CollapsibleSection>
 
           <Separator />
 
           {/* Triggers List Section */}
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <div className="flex flex-col">
-                <h2 className="text-xl font-semibold tracking-tight flex items-center gap-2">
-                  <Zap className="size-5" /> Triggers
-                </h2>
-                <p className="text-sm text-muted-foreground">
-                  Automated agent runs configured for this workspace.
-                </p>
-              </div>
-            </div>
+          <CollapsibleSection
+            title={
+              <>
+                <Zap className="size-5" /> Triggers
+              </>
+            }
+            description="Automated agent runs configured for this workspace."
+            storageKey="section:triggers:open"
+          >
             <TriggerList orgId={orgId} workspaceId={workspaceId} />
             <Button variant="outline" asChild>
               <Link href={`/${orgId}/workspace/${workspaceId}/triggers/create`}>
                 <Plus /> Create Trigger
               </Link>
             </Button>
-          </div>
+          </CollapsibleSection>
         </>
       )}
     </div>
