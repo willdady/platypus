@@ -490,6 +490,7 @@ export const Chat = ({
                       "What would you like to know?"
                     }
                     autoFocus
+                    status={status}
                   />
                 </PromptInputBody>
                 <PromptInputFooter>

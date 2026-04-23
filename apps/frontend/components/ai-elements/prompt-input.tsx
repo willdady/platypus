@@ -780,12 +780,15 @@ export const PromptInputBody = ({
 
 export type PromptInputTextareaProps = ComponentProps<
   typeof InputGroupTextarea
->;
+> & {
+  status?: ChatStatus;
+};
 
 export const PromptInputTextarea = ({
   onChange,
   className,
   placeholder = "What would you like to know?",
+  status,
   ...props
 }: PromptInputTextareaProps) => {
   const controller = useOptionalPromptInputController();
@@ -803,6 +806,10 @@ export const PromptInputTextarea = ({
         return;
       }
       if (e.shiftKey) {
+        return;
+      }
+      // Block submission while a response is streaming or pending
+      if (status === "streaming" || status === "submitted") {
         return;
       }
       e.preventDefault();
