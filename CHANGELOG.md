@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.66.0](https://github.com/willdady/platypus/compare/v1.65.0...v1.66.0) (2026-04-23)
+
+
+### Features
+
+* **frontend:** improve org switcher UX with skeletons and correct pre-selection ([66632b8](https://github.com/willdady/platypus/commit/66632b89c3da48a78cc812cbd256e404294d4c96))
+* **skills:** increase maximum skill body length from 5000 to 20000 characters ([fb9d3f6](https://github.com/willdady/platypus/commit/fb9d3f6e47bc84dd17374de44679a7090e29603a))
+
+
+### Bug Fixes
+
+* **frontend:** block Enter key submission while response is streaming ([2400b35](https://github.com/willdady/platypus/commit/2400b3571ee41b5eeb3bbd03fbd818cf5377fdfc))
+
 ## [1.65.0](https://github.com/willdady/platypus/compare/v1.64.0...v1.65.0) (2026-04-20)
 
 
