@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.66.1](https://github.com/willdady/platypus/compare/v1.66.0...v1.66.1) (2026-04-23)
+
+
+### Bug Fixes
+
+* **backend:** fix MCP client leaks in sub-agents and parallelise chat setup ([58511c6](https://github.com/willdady/platypus/commit/58511c6bbad8441b607cd23319ad5a30d8ba9fe1))
+
 ## [1.66.0](https://github.com/willdady/platypus/compare/v1.65.0...v1.66.0) (2026-04-23)
 
 
