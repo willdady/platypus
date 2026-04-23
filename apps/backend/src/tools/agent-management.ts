@@ -143,7 +143,7 @@ export function createAgentManagementTools(
         .max(64)
         .regex(skillNameRegex, "Skill name must be kebab-case"),
       description: z.string().min(24).max(128),
-      body: z.string().min(48).max(5000),
+      body: z.string().min(48).max(20000),
     }),
     execute: async ({ name, description, body }) => {
       const { nanoid } = await import("nanoid");
