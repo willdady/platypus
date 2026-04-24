@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.66.2](https://github.com/willdady/platypus/compare/v1.66.1...v1.66.2) (2026-04-24)
+
+
+### Bug Fixes
+
+* **backend:** replace streaming sub-agent with generateText to fix OOM crash ([75dc71a](https://github.com/willdady/platypus/commit/75dc71a66e6cb503d4326e47b06d35393782859d))
+
 ## [1.66.1](https://github.com/willdady/platypus/compare/v1.66.0...v1.66.1) (2026-04-23)
 
 
