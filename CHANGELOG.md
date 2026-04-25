@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.67.2](https://github.com/willdady/platypus/compare/v1.67.1...v1.67.2) (2026-04-25)
+
+
+### Bug Fixes
+
+* **frontend:** exclude chat routes from pull-to-refresh to fix mobile keyboard ([9bdb3d7](https://github.com/willdady/platypus/commit/9bdb3d7820558eacbcd168fcef36a93b0a26e607))
+
 ## [1.67.1](https://github.com/willdady/platypus/compare/v1.67.0...v1.67.1) (2026-04-25)
 
 
