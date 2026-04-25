@@ -41,11 +41,7 @@ export function PullToRefresh({
               opacity: 1,
               y: isRefreshing ? 16 : pullDistance / 2 - 20,
             }}
-            exit={{
-              opacity: 0,
-              y: -40,
-              transition: { delay: 0.6, duration: 0.15 },
-            }}
+            exit={{ opacity: 0, y: -40 }}
             transition={{ duration: 0.15 }}
             className="absolute left-1/2 top-0 z-50 -translate-x-1/2"
           >
