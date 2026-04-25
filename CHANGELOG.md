@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.67.0](https://github.com/willdady/platypus/compare/v1.66.2...v1.67.0) (2026-04-25)
+
+
+### Features
+
+* add pull-to-refresh for mobile and fix LAN dev access ([247fa35](https://github.com/willdady/platypus/commit/247fa35fd318308831af9203923d025945f1d8ab))
+* **backend:** add bodyDiff parameter to upsertCard tool ([a711c32](https://github.com/willdady/platypus/commit/a711c329e0e4987ac81f944e9a74b12d88569b3e))
+
 ## [1.66.2](https://github.com/willdady/platypus/compare/v1.66.1...v1.66.2) (2026-04-24)
 
 
