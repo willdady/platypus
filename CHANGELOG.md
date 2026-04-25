@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.67.1](https://github.com/willdady/platypus/compare/v1.67.0...v1.67.1) (2026-04-25)
+
+
+### Bug Fixes
+
+* **frontend:** reduce pull-to-refresh sensitivity with settle-phase gesture detection ([e399f47](https://github.com/willdady/platypus/commit/e399f47355c07428c6d30ac241de606ec3008421))
+
 ## [1.67.0](https://github.com/willdady/platypus/compare/v1.66.2...v1.67.0) (2026-04-25)
 
 
