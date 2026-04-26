@@ -349,6 +349,7 @@ chat.post(
       stopWhen: [stepCountIs(resolvedMaxSteps)],
       tools,
       system: systemPrompt,
+      abortSignal: c.req.raw.signal,
       ...restConfig,
     });
 

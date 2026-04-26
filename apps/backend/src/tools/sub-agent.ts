@@ -1,6 +1,24 @@
-import { generateText, stepCountIs, tool, type Tool } from "ai";
+import { stepCountIs, tool, ToolLoopAgent, type Tool } from "ai";
 import { z } from "zod";
 import { logger } from "../logger.ts";
+
+/**
+ * Activity log entry for a sub-agent's execution.
+ */
+type SubAgentActivityEntry = {
+  type: "tool-call" | "thinking" | "generating";
+  toolName?: string;
+  status: "running" | "completed" | "error";
+  error?: string;
+};
+
+/**
+ * Activity log yielded by a sub-agent tool during execution.
+ */
+export type SubAgentActivity = {
+  entries: SubAgentActivityEntry[];
+  text?: string;
+};
 
 /**
  * Options for creating a sub-agent tool.
@@ -16,8 +34,9 @@ interface SubAgentToolOptions {
 }
 
 /**
- * Creates a server-side tool that executes a sub-agent using generateText.
- * The sub-agent runs within the parent's tool execution and returns results directly.
+ * Creates a server-side tool that executes a sub-agent using ToolLoopAgent.stream().
+ * The sub-agent streams an activity log back to the parent, keeping the SSE
+ * connection alive and giving users real-time visibility into sub-agent work.
  *
  * @param options Sub-agent configuration including model, tools, and prompts
  * @returns A tool that can be used by the parent agent to delegate tasks
@@ -39,6 +58,15 @@ export const createSubAgentTool = (options: SubAgentToolOptions) => {
     .replace(/[^a-zA-Z0-9]/g, "")
     .replace(/^./, (c) => c.toUpperCase())}`;
 
+  const agent = new ToolLoopAgent({
+    model,
+    instructions:
+      systemPrompt ||
+      `You are a specialized sub-agent named "${name}". Complete the task you are given thoroughly and accurately.`,
+    tools,
+    stopWhen: [stepCountIs(maxSteps)],
+  });
+
   return {
     toolName,
     tool: tool({
@@ -52,23 +80,70 @@ export const createSubAgentTool = (options: SubAgentToolOptions) => {
             "A fully self-contained task description. Include ALL necessary context, constraints, and requirements directly. The task must be understandable without any prior conversation context.",
           ),
       }),
-      execute: async ({ task }, { abortSignal }) => {
-        // Use generateText with maxSteps to run the sub-agent's tool-calling loop.
-        // This avoids the O(n²) memory pressure caused by streaming intermediate
-        // message states (readUIMessageStream yields the full accumulated message
-        // on every delta, creating thousands of large objects under GC pressure).
-        const { text } = await generateText({
-          model,
-          system:
-            systemPrompt ||
-            `You are a specialized sub-agent named "${name}". Complete the task you are given thoroughly and accurately.`,
-          prompt: task,
-          tools,
-          stopWhen: stepCountIs(maxSteps),
-          abortSignal,
-        });
-        return text;
+      execute: async function* ({ task }, { abortSignal }) {
+        const result = await agent.stream({ prompt: task, abortSignal });
+        const entries: SubAgentActivityEntry[] = [];
+
+        const completeLastRunning = (type: SubAgentActivityEntry["type"]) => {
+          const entry = entries.findLast(
+            (e) => e.type === type && e.status === "running",
+          );
+          if (entry) entry.status = "completed";
+        };
+
+        for await (const part of result.fullStream) {
+          let changed = true;
+
+          switch (part.type) {
+            case "tool-input-start":
+              entries.push({
+                type: "tool-call",
+                toolName: part.toolName,
+                status: "running",
+              });
+              break;
+            case "tool-result":
+              completeLastRunning("tool-call");
+              break;
+            case "tool-error": {
+              const entry = entries.findLast(
+                (e) => e.type === "tool-call" && e.status === "running",
+              );
+              if (entry) {
+                entry.status = "error";
+                entry.error = String(part.error);
+              }
+              break;
+            }
+            case "reasoning-start":
+              entries.push({ type: "thinking", status: "running" });
+              break;
+            case "reasoning-end":
+              completeLastRunning("thinking");
+              break;
+            case "text-start":
+              entries.push({ type: "generating", status: "running" });
+              break;
+            case "text-end":
+              completeLastRunning("generating");
+              break;
+            default:
+              changed = false;
+          }
+
+          if (changed) {
+            yield { entries } satisfies SubAgentActivity;
+          }
+        }
+
+        // Yield (not return) the final value with text — the SDK's executeTool
+        // uses for-await-of which discards generator return values.
+        yield { entries, text: await result.text } satisfies SubAgentActivity;
       },
+      toModelOutput: ({ output }) => ({
+        type: "text" as const,
+        value: (output as SubAgentActivity)?.text ?? "Task completed.",
+      }),
     }),
   };
 };
