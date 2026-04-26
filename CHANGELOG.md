@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.68.0](https://github.com/willdady/platypus/compare/v1.67.2...v1.68.0) (2026-04-26)
+
+
+### Features
+
+* stream sub-agent activity log and forward abort signal ([69cc92f](https://github.com/willdady/platypus/commit/69cc92ff18043c41f7e3d30a5e46dd62f226de92))
+
+
+### Bug Fixes
+
+* use totalCount from API for chat count on workspace home page ([f662ed9](https://github.com/willdady/platypus/commit/f662ed980d5b0a2f99813bdc060d46cd279fc5d8))
+
 ## [1.67.2](https://github.com/willdady/platypus/compare/v1.67.1...v1.67.2) (2026-04-25)
 
 
