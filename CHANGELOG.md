@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.69.1](https://github.com/willdady/platypus/compare/v1.69.0...v1.69.1) (2026-04-27)
+
+
+### Bug Fixes
+
+* add migration for memory daily summaries schema changes ([b95065e](https://github.com/willdady/platypus/commit/b95065e79d8fe4cdc96ba94cb8c6a05c5b1c51aa))
+
 ## [1.69.0](https://github.com/willdady/platypus/compare/v1.68.0...v1.69.0) (2026-04-27)
 
 
