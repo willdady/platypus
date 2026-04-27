@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.69.0](https://github.com/willdady/platypus/compare/v1.68.0...v1.69.0) (2026-04-27)
+
+
+### Features
+
+* replace per-observation memories with daily summaries and semantic search ([361cc48](https://github.com/willdady/platypus/commit/361cc48cc82c7d996f1a0dd17ea80c7faecf45bc))
+
 ## [1.68.0](https://github.com/willdady/platypus/compare/v1.67.2...v1.68.0) (2026-04-26)
 
 
