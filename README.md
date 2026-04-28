@@ -27,7 +27,7 @@ Platypus is an open-source, full-stack application designed to help you build AI
 - **📋 Kanban Boards:** Organize work visually with drag-and-drop Kanban boards. Agents can create, move, and update cards autonomously via built-in Kanban tools.
 - **🔔 Webhooks:** Receive real-time HTTP callbacks for notification events, with per-event filtering, custom headers, HMAC-SHA256 signing, and automatic retries.
 - **⏰ Schedules:** Schedule agents to run automatically at specified times using cron expressions, with support for timezones and one-off executions.
-- **⚡ Modern Tech Stack:** Built on the bleeding edge with **Next.js**, **Hono.js**, **Drizzle ORM**, and **Tailwind CSS**.
+- **⚡ Modern Tech Stack:** Built on the bleeding edge with **Next.js**, **Hono.js**, **Drizzle ORM**, **pgvector**, and **Tailwind CSS**.
 - **🌐 Provider Agnostic:** Powered by the Vercel AI SDK, supporting OpenAI, Anthropic, Google, Amazon Bedrock, and OpenRouter.
 - **⚖️ MIT Licensed:** Open source and free to use.
 
@@ -72,7 +72,7 @@ The fastest way to get Platypus running is using Docker Compose.
 
 ### Prerequisites
 
-- **Docker** (for the local Postgres database)
+- **Docker** (for the local Postgres database with [pgvector](https://github.com/pgvector/pgvector))
 - **Node.js v24+**
 - **pnpm**
 - An AI Provider API Key (e.g., OpenRouter, OpenAI)
