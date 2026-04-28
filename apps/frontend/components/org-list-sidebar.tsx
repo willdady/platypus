@@ -10,7 +10,8 @@ import {
 } from "@/components/ui/sidebar";
 import { Building, Plus } from "lucide-react";
 import Link from "next/link";
-import useSWR from "swr";
+import useSWR, { preload } from "swr";
+import { useEffect } from "react";
 import { fetcher, joinUrl } from "@/lib/utils";
 import { useBackendUrl } from "@/app/client-context";
 import { useAuth } from "@/components/auth-provider";
@@ -35,6 +36,17 @@ export function OrgListSidebar({ currentOrgId }: OrgListSidebarProps) {
   const organizations = (data?.results || []).sort((a, b) =>
     a.name.localeCompare(b.name),
   );
+
+  // Eagerly preload workspaces for all orgs so switching feels instant
+  useEffect(() => {
+    if (!backendUrl || !data?.results) return;
+    for (const org of data.results) {
+      preload(
+        joinUrl(backendUrl, `/organizations/${org.id}/workspaces`),
+        fetcher,
+      );
+    }
+  }, [backendUrl, data]);
 
   return (
     <SidebarContent>
