@@ -207,11 +207,6 @@ export const WorkspaceContextForm = ({ contextId }: { contextId?: string }) => {
     }
   };
 
-  // Find the selected workspace name for display when editing
-  const selectedWorkspace = workspaces.find(
-    (w) => w.id === formData.workspaceId,
-  );
-
   return (
     <form onSubmit={handleSubmit}>
       <FieldSet className="mb-6">
@@ -221,14 +216,13 @@ export const WorkspaceContextForm = ({ contextId }: { contextId?: string }) => {
               <Field>
                 <FieldLabel>Organization</FieldLabel>
                 <div className="text-sm text-muted-foreground">
-                  {selectedWorkspace?.organizationName ||
-                    "Unknown Organization"}
+                  {(contextData as any)?.organizationName || "\u00A0"}
                 </div>
               </Field>
               <Field>
                 <FieldLabel>Workspace</FieldLabel>
                 <div className="text-sm text-muted-foreground">
-                  {selectedWorkspace?.name || "Unknown Workspace"}
+                  {(contextData as any)?.workspaceName || "\u00A0"}
                 </div>
               </Field>
             </>

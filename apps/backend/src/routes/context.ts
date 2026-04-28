@@ -5,6 +5,7 @@ import { db } from "../index.ts";
 import {
   context as contextTable,
   workspace as workspaceTable,
+  organization as organizationTable,
 } from "../db/schema.ts";
 import { contextCreateSchema, contextUpdateSchema } from "@platypus/schemas";
 import { eq, and, isNull, sql } from "drizzle-orm";
@@ -27,9 +28,14 @@ context.get("/", requireAuth, async (c) => {
       createdAt: contextTable.createdAt,
       updatedAt: contextTable.updatedAt,
       workspaceName: workspaceTable.name,
+      organizationName: organizationTable.name,
     })
     .from(contextTable)
     .leftJoin(workspaceTable, eq(contextTable.workspaceId, workspaceTable.id))
+    .leftJoin(
+      organizationTable,
+      eq(workspaceTable.organizationId, organizationTable.id),
+    )
     .where(eq(contextTable.userId, user.id))
     .orderBy(sql`${contextTable.workspaceId} NULLS FIRST`);
 
@@ -50,9 +56,14 @@ context.get("/:contextId", requireAuth, async (c) => {
       createdAt: contextTable.createdAt,
       updatedAt: contextTable.updatedAt,
       workspaceName: workspaceTable.name,
+      organizationName: organizationTable.name,
     })
     .from(contextTable)
     .leftJoin(workspaceTable, eq(contextTable.workspaceId, workspaceTable.id))
+    .leftJoin(
+      organizationTable,
+      eq(workspaceTable.organizationId, organizationTable.id),
+    )
     .where(
       and(eq(contextTable.id, contextId), eq(contextTable.userId, user.id)),
     )
