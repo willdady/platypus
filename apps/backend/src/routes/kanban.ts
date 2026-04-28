@@ -49,7 +49,7 @@ async function validateAssignees(
   const userIds = assignees.filter((a) => a.type === "user").map((a) => a.id);
   const agentIds = assignees.filter((a) => a.type === "agent").map((a) => a.id);
 
-  const [members, agentRecords] = await Promise.all([
+  const [members, superAdmins, agentRecords] = await Promise.all([
     userIds.length > 0
       ? db
           .select({ userId: organizationMemberTable.userId })
@@ -60,6 +60,12 @@ async function validateAssignees(
               inArray(organizationMemberTable.userId, userIds),
             ),
           )
+      : Promise.resolve([]),
+    userIds.length > 0
+      ? db
+          .select({ id: user.id })
+          .from(user)
+          .where(and(eq(user.role, "admin"), inArray(user.id, userIds)))
       : Promise.resolve([]),
     agentIds.length > 0
       ? db
@@ -74,7 +80,12 @@ async function validateAssignees(
       : Promise.resolve([]),
   ]);
 
-  if (members.length !== userIds.length) return "Invalid user assignee";
+  // Combine org members and super admins (who may not have an org membership record)
+  const validUserIds = new Set([
+    ...members.map((m) => m.userId),
+    ...superAdmins.map((a) => a.id),
+  ]);
+  if (validUserIds.size < userIds.length) return "Invalid user assignee";
   if (agentRecords.length !== agentIds.length) return "Invalid agent assignee";
   return null;
 }
@@ -180,7 +191,7 @@ kanban.get(
       .limit(1);
 
     if (record.length === 0) {
-      return c.json({ message: "Board not found" }, 404);
+      return c.json({ error: "Board not found" }, 404);
     }
 
     return c.json(record[0]);
@@ -212,7 +223,7 @@ kanban.put(
       .returning();
 
     if (record.length === 0) {
-      return c.json({ message: "Board not found" }, 404);
+      return c.json({ error: "Board not found" }, 404);
     }
 
     return c.json(record[0]);
@@ -241,7 +252,7 @@ kanban.delete(
       .returning();
 
     if (result.length === 0) {
-      return c.json({ message: "Board not found" }, 404);
+      return c.json({ error: "Board not found" }, 404);
     }
 
     return c.json({ message: "Board deleted" });
@@ -272,7 +283,7 @@ kanban.get(
       .limit(1);
 
     if (boardRecord.length === 0) {
-      return c.json({ message: "Board not found" }, 404);
+      return c.json({ error: "Board not found" }, 404);
     }
 
     const columns = await db
@@ -456,7 +467,7 @@ kanban.put(
       .limit(1);
 
     if (boardRecord.length === 0) {
-      return c.json({ message: "Board not found" }, 404);
+      return c.json({ error: "Board not found" }, 404);
     }
 
     // Validate all columnIds belong to this board
@@ -519,7 +530,7 @@ kanban.post(
       .limit(1);
 
     if (boardRecord.length === 0) {
-      return c.json({ message: "Board not found" }, 404);
+      return c.json({ error: "Board not found" }, 404);
     }
 
     // Check for duplicate column name within the board
@@ -536,7 +547,7 @@ kanban.post(
 
     if (existingColumn.length > 0) {
       return c.json(
-        { message: "A column with this name already exists on the board" },
+        { error: "A column with this name already exists on the board" },
         409,
       );
     }
@@ -595,7 +606,7 @@ kanban.put(
 
     if (existingColumn.length > 0) {
       return c.json(
-        { message: "A column with this name already exists on the board" },
+        { error: "A column with this name already exists on the board" },
         409,
       );
     }
@@ -612,7 +623,7 @@ kanban.put(
       .returning();
 
     if (record.length === 0) {
-      return c.json({ message: "Column not found" }, 404);
+      return c.json({ error: "Column not found" }, 404);
     }
 
     return c.json(record[0]);
@@ -641,7 +652,7 @@ kanban.delete(
       .returning();
 
     if (result.length === 0) {
-      return c.json({ message: "Column not found" }, 404);
+      return c.json({ error: "Column not found" }, 404);
     }
 
     return c.json({ message: "Column deleted" });
@@ -677,7 +688,7 @@ kanban.post(
       .limit(1);
 
     if (columnRecord.length === 0) {
-      return c.json({ message: "Column not found" }, 404);
+      return c.json({ error: "Column not found" }, 404);
     }
 
     // Validate labelIds if provided
@@ -695,7 +706,7 @@ kanban.post(
         boardLabelIds.has(id),
       );
       if (!allValid) {
-        return c.json({ message: "Invalid label ID" }, 400);
+        return c.json({ error: "Invalid label ID" }, 400);
       }
     }
 
@@ -707,7 +718,7 @@ kanban.post(
         c.req.param("workspaceId")!,
       );
       if (assigneeError) {
-        return c.json({ message: assigneeError }, 400);
+        return c.json({ error: assigneeError }, 400);
       }
     }
 
@@ -774,7 +785,7 @@ kanban.put(
         boardLabelIds.has(id),
       );
       if (!allValid) {
-        return c.json({ message: "Invalid label ID" }, 400);
+        return c.json({ error: "Invalid label ID" }, 400);
       }
     }
 
@@ -786,7 +797,7 @@ kanban.put(
         c.req.param("workspaceId")!,
       );
       if (assigneeError) {
-        return c.json({ message: assigneeError }, 400);
+        return c.json({ error: assigneeError }, 400);
       }
     }
 
@@ -816,7 +827,7 @@ kanban.put(
       .returning();
 
     if (record.length === 0) {
-      return c.json({ message: "Card not found" }, 404);
+      return c.json({ error: "Card not found" }, 404);
     }
 
     const workspaceId = c.req.param("workspaceId")!;
@@ -853,7 +864,7 @@ kanban.post(
     try {
       result = calculateCardPosition(otherCards, afterCardId);
     } catch {
-      return c.json({ message: "afterCardId not found in column" }, 400);
+      return c.json({ error: "afterCardId not found in column" }, 400);
     }
 
     const { position, needsRebalance, afterIndex } = result;
@@ -936,7 +947,7 @@ kanban.delete(
       .returning();
 
     if (result.length === 0) {
-      return c.json({ message: "Card not found" }, 404);
+      return c.json({ error: "Card not found" }, 404);
     }
 
     const workspaceId = c.req.param("workspaceId")!;
@@ -1020,7 +1031,7 @@ kanban.get(
       .limit(1);
 
     if (cardRecord.length === 0) {
-      return c.json({ message: "Card not found" }, 404);
+      return c.json({ error: "Card not found" }, 404);
     }
 
     const comments = await db
@@ -1067,7 +1078,7 @@ kanban.post(
       .limit(1);
 
     if (cardRecord.length === 0) {
-      return c.json({ message: "Card not found" }, 404);
+      return c.json({ error: "Card not found" }, 404);
     }
 
     const id = nanoid();
@@ -1117,7 +1128,7 @@ kanban.put(
       .limit(1);
 
     if (!existingComment) {
-      return c.json({ message: "Comment not found" }, 404);
+      return c.json({ error: "Comment not found" }, 404);
     }
 
     // Check ownership: super admins, org admins can moderate; others must own the comment
@@ -1125,7 +1136,7 @@ kanban.put(
       isSuperAdmin(currentUser as { role: string }) ||
       orgMembership?.role === "admin";
     if (!canModerate && existingComment.createdByUserId !== currentUser.id) {
-      return c.json({ message: "You can only edit your own comments" }, 403);
+      return c.json({ error: "You can only edit your own comments" }, 403);
     }
 
     const updated = await db
@@ -1169,7 +1180,7 @@ kanban.delete(
       .limit(1);
 
     if (!existingComment) {
-      return c.json({ message: "Comment not found" }, 404);
+      return c.json({ error: "Comment not found" }, 404);
     }
 
     // Check ownership: super admins, org admins can moderate; others must own the comment
@@ -1177,7 +1188,7 @@ kanban.delete(
       isSuperAdmin(currentUser as { role: string }) ||
       orgMembership?.role === "admin";
     if (!canModerate && existingComment.createdByUserId !== currentUser.id) {
-      return c.json({ message: "You can only delete your own comments" }, 403);
+      return c.json({ error: "You can only delete your own comments" }, 403);
     }
 
     await db

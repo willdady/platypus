@@ -90,7 +90,7 @@ describe("User Invitation Routes", () => {
       });
 
       expect(res.status).toBe(410);
-      expect(await res.json()).toEqual({ message: "Invitation has expired" });
+      expect(await res.json()).toEqual({ error: "Invitation has expired" });
     });
   });
 

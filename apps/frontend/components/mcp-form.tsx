@@ -422,7 +422,7 @@ const McpForm = ({
           window.location.replace(data.authorizationUrl);
         }
       } else {
-        toast.error(data.message || "Failed to start OAuth authorization");
+        toast.error(data.error || "Failed to start OAuth authorization");
 
         // If we just created the MCP, redirect to the edit page so
         // subsequent actions (e.g. re-authorize) use the correct mcpId

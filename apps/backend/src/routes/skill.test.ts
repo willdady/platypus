@@ -142,7 +142,7 @@ describe("Skill Routes", () => {
       });
       expect(res.status).toBe(409);
       expect(await res.json()).toEqual({
-        message:
+        error:
           "Cannot delete skill because it is referenced by one or more agents",
       });
     });

@@ -78,7 +78,7 @@ describe("Member Routes", () => {
 
       expect(res.status).toBe(400);
       expect(await res.json()).toEqual({
-        message: "You cannot demote yourself from admin",
+        error: "You cannot demote yourself from admin",
       });
     });
   });

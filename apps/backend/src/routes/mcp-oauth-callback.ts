@@ -32,13 +32,13 @@ mcpOauthCallback.post(
       .limit(1);
 
     if (stateRecord.length === 0) {
-      return c.json({ message: "Invalid or expired OAuth state" }, 400);
+      return c.json({ error: "Invalid or expired OAuth state" }, 400);
     }
 
     // Check expiry
     if (stateRecord[0].expiresAt < new Date()) {
       await db.delete(mcpOauthState).where(eq(mcpOauthState.id, state));
-      return c.json({ message: "OAuth state has expired" }, 400);
+      return c.json({ error: "OAuth state has expired" }, 400);
     }
 
     const mcpRecord = await db
@@ -48,11 +48,11 @@ mcpOauthCallback.post(
       .limit(1);
 
     if (mcpRecord.length === 0) {
-      return c.json({ message: "MCP not found" }, 404);
+      return c.json({ error: "MCP not found" }, 404);
     }
 
     if (!mcpRecord[0].url) {
-      return c.json({ message: "MCP URL is not configured" }, 400);
+      return c.json({ error: "MCP URL is not configured" }, 400);
     }
 
     // Look up the workspace to get orgId for the redirect URL
@@ -63,7 +63,7 @@ mcpOauthCallback.post(
       .limit(1);
 
     if (wsRecord.length === 0) {
-      return c.json({ message: "Workspace not found" }, 404);
+      return c.json({ error: "Workspace not found" }, 404);
     }
 
     try {
@@ -93,12 +93,12 @@ mcpOauthCallback.post(
         });
       }
 
-      return c.json({ message: "Unexpected OAuth result" }, 500);
+      return c.json({ error: "Unexpected OAuth result" }, 500);
     } catch (error) {
       logger.error({ error }, "OAuth callback error");
       const errorMessage =
         error instanceof Error ? error.message : "OAuth token exchange failed";
-      return c.json({ message: errorMessage }, 500);
+      return c.json({ error: errorMessage }, 500);
     }
   },
 );

@@ -105,7 +105,7 @@ webhook.get(
       .limit(1);
 
     if (results.length === 0) {
-      return c.json({ message: "Webhook not found" }, 404);
+      return c.json({ error: "Webhook not found" }, 404);
     }
 
     return c.json(results[0]);
@@ -151,7 +151,7 @@ webhook.put(
       .returning();
 
     if (result.length === 0) {
-      return c.json({ message: "Webhook not found" }, 404);
+      return c.json({ error: "Webhook not found" }, 404);
     }
 
     return c.json(result[0]);
@@ -179,7 +179,7 @@ webhook.delete(
       .returning();
 
     if (result.length === 0) {
-      return c.json({ message: "Webhook not found" }, 404);
+      return c.json({ error: "Webhook not found" }, 404);
     }
 
     return c.json({ message: "Webhook deleted" });
@@ -211,7 +211,7 @@ webhook.post(
       .returning();
 
     if (result.length === 0) {
-      return c.json({ message: "Webhook not found" }, 404);
+      return c.json({ error: "Webhook not found" }, 404);
     }
 
     return c.json(result[0]);

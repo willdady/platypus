@@ -67,10 +67,7 @@ userInvitation.post("/:invitationId/accept", requireAuth, async (c) => {
     .limit(1);
 
   if (invitation.length === 0) {
-    return c.json(
-      { message: "Invitation not found or already processed" },
-      404,
-    );
+    return c.json({ error: "Invitation not found or already processed" }, 404);
   }
 
   if (new Date(invitation[0].expiresAt) < now) {
@@ -78,7 +75,7 @@ userInvitation.post("/:invitationId/accept", requireAuth, async (c) => {
       .update(invitationTable)
       .set({ status: "expired" })
       .where(eq(invitationTable.id, invitationId));
-    return c.json({ message: "Invitation has expired" }, 410);
+    return c.json({ error: "Invitation has expired" }, 410);
   }
 
   const invite = invitation[0];
@@ -133,10 +130,7 @@ userInvitation.post("/:invitationId/decline", requireAuth, async (c) => {
     .returning();
 
   if (result.length === 0) {
-    return c.json(
-      { message: "Invitation not found or already processed" },
-      404,
-    );
+    return c.json({ error: "Invitation not found or already processed" }, 404);
   }
 
   return c.json({ message: "Invitation declined" });

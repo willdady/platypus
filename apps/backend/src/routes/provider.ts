@@ -47,8 +47,7 @@ provider.post(
       if (isUniqueViolation) {
         return c.json(
           {
-            message:
-              "A provider with this name already exists in this workspace",
+            error: "A provider with this name already exists in this workspace",
           },
           409,
         );
@@ -116,7 +115,7 @@ provider.get(
       .limit(1);
 
     if (record.length === 0) {
-      return c.json({ message: "Provider not found" }, 404);
+      return c.json({ error: "Provider not found" }, 404);
     }
 
     const p = record[0];
@@ -170,8 +169,7 @@ provider.put(
       if (isUniqueViolation) {
         return c.json(
           {
-            message:
-              "A provider with this name already exists in this workspace",
+            error: "A provider with this name already exists in this workspace",
           },
           409,
         );

@@ -62,7 +62,7 @@ trigger.get(
       .limit(1);
 
     if (record.length === 0) {
-      return c.json({ message: "Trigger not found" }, 404);
+      return c.json({ error: "Trigger not found" }, 404);
     }
 
     return c.json(record[0]);
@@ -94,7 +94,7 @@ trigger.post(
       .limit(1);
 
     if (agentRecord.length === 0) {
-      return c.json({ message: "Agent not found in this workspace" }, 400);
+      return c.json({ error: "Agent not found in this workspace" }, 400);
     }
 
     let nextRunAt: Date | null = null;
@@ -106,7 +106,7 @@ trigger.post(
       nextRunAt = validateCronExpression(cronExpression, timezone);
 
       if (!nextRunAt) {
-        return c.json({ message: "Invalid cron expression or timezone" }, 400);
+        return c.json({ error: "Invalid cron expression or timezone" }, 400);
       }
     } else if (data.type === "event") {
       const events = config.events as unknown[];
@@ -168,7 +168,7 @@ trigger.put(
       .limit(1);
 
     if (existing.length === 0) {
-      return c.json({ message: "Trigger not found" }, 404);
+      return c.json({ error: "Trigger not found" }, 404);
     }
 
     // If agentId is being changed, verify new agent exists
@@ -185,7 +185,7 @@ trigger.put(
         .limit(1);
 
       if (agentRecord.length === 0) {
-        return c.json({ message: "Agent not found in this workspace" }, 400);
+        return c.json({ error: "Agent not found in this workspace" }, 400);
       }
     }
 
@@ -204,7 +204,7 @@ trigger.put(
         const events = config.events as unknown[];
         if (!events || !Array.isArray(events) || events.length === 0) {
           return c.json(
-            { message: "Event triggers must have at least one event" },
+            { error: "Event triggers must have at least one event" },
             400,
           );
         }
@@ -222,10 +222,7 @@ trigger.put(
       if (data.config || data.type) {
         const nextRunAt = validateCronExpression(cronExpression, timezone);
         if (!nextRunAt) {
-          return c.json(
-            { message: "Invalid cron expression or timezone" },
-            400,
-          );
+          return c.json({ error: "Invalid cron expression or timezone" }, 400);
         }
         updateData.nextRunAt = nextRunAt;
       }
@@ -265,7 +262,7 @@ trigger.delete(
       .returning();
 
     if (result.length === 0) {
-      return c.json({ message: "Trigger not found" }, 404);
+      return c.json({ error: "Trigger not found" }, 404);
     }
 
     logger.info(`Deleted trigger '${triggerId}'`);
@@ -297,7 +294,7 @@ trigger.get(
       .limit(1);
 
     if (triggerRecord.length === 0) {
-      return c.json({ message: "Trigger not found" }, 404);
+      return c.json({ error: "Trigger not found" }, 404);
     }
 
     const results = await db
@@ -349,7 +346,7 @@ trigger.get(
       .limit(1);
 
     if (triggerRecord.length === 0) {
-      return c.json({ message: "Trigger not found" }, 404);
+      return c.json({ error: "Trigger not found" }, 404);
     }
 
     const results = await db

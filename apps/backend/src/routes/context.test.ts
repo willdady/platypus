@@ -99,7 +99,7 @@ describe("Context Routes", () => {
 
       const res = await app.request(`${baseUrl}/ctx-999`);
       expect(res.status).toBe(404);
-      expect(await res.json()).toEqual({ message: "Context not found" });
+      expect(await res.json()).toEqual({ error: "Context not found" });
     });
 
     it("should return 404 if context belongs to another user", async () => {
@@ -110,7 +110,7 @@ describe("Context Routes", () => {
 
       const res = await app.request(`${baseUrl}/ctx-other-user`);
       expect(res.status).toBe(404);
-      expect(await res.json()).toEqual({ message: "Context not found" });
+      expect(await res.json()).toEqual({ error: "Context not found" });
     });
 
     it("should return 401 if not authenticated", async () => {
@@ -204,7 +204,7 @@ describe("Context Routes", () => {
 
       expect(res.status).toBe(409);
       expect(await res.json()).toEqual({
-        message: "You already have a context for this scope",
+        error: "You already have a context for this scope",
       });
     });
 
@@ -283,7 +283,7 @@ describe("Context Routes", () => {
       });
 
       expect(res.status).toBe(404);
-      expect(await res.json()).toEqual({ message: "Context not found" });
+      expect(await res.json()).toEqual({ error: "Context not found" });
     });
 
     it("should return 404 if context belongs to another user", async () => {
@@ -301,7 +301,7 @@ describe("Context Routes", () => {
       });
 
       expect(res.status).toBe(404);
-      expect(await res.json()).toEqual({ message: "Context not found" });
+      expect(await res.json()).toEqual({ error: "Context not found" });
     });
 
     it("should validate content is required", async () => {
@@ -365,7 +365,7 @@ describe("Context Routes", () => {
       });
 
       expect(res.status).toBe(404);
-      expect(await res.json()).toEqual({ message: "Context not found" });
+      expect(await res.json()).toEqual({ error: "Context not found" });
     });
 
     it("should return 404 if context belongs to another user", async () => {
@@ -379,7 +379,7 @@ describe("Context Routes", () => {
       });
 
       expect(res.status).toBe(404);
-      expect(await res.json()).toEqual({ message: "Context not found" });
+      expect(await res.json()).toEqual({ error: "Context not found" });
     });
 
     it("should return 401 if not authenticated", async () => {

@@ -83,7 +83,7 @@ workspace.get(
       .where(eq(workspaceTable.id, workspaceId))
       .limit(1);
     if (record.length === 0) {
-      return c.json({ message: "Workspace not found" }, 404);
+      return c.json({ error: "Workspace not found" }, 404);
     }
     return c.json(record[0]);
   },
@@ -109,13 +109,13 @@ workspace.put(
         .limit(1);
 
       if (provider.length === 0) {
-        return c.json({ message: "Memory extraction provider not found" }, 404);
+        return c.json({ error: "Memory extraction provider not found" }, 404);
       }
 
       if (!provider[0].memoryExtractionModelId) {
         return c.json(
           {
-            message:
+            error:
               "Selected provider does not have a memory extraction model configured",
           },
           400,
@@ -132,13 +132,13 @@ workspace.put(
         .limit(1);
 
       if (provider.length === 0) {
-        return c.json({ message: "Memory embedding provider not found" }, 404);
+        return c.json({ error: "Memory embedding provider not found" }, 404);
       }
 
       if (!provider[0].embeddingModelId) {
         return c.json(
           {
-            message:
+            error:
               "Selected provider does not have an embedding model configured",
           },
           400,
@@ -156,7 +156,7 @@ workspace.put(
       .returning();
 
     if (record.length === 0) {
-      return c.json({ message: "Workspace not found" }, 404);
+      return c.json({ error: "Workspace not found" }, 404);
     }
 
     return c.json(record[0], 200);

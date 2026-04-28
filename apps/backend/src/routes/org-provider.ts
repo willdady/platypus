@@ -49,7 +49,7 @@ orgProvider.post(
       if (isUniqueViolation) {
         return c.json(
           {
-            message:
+            error:
               "A provider with this name already exists in this organization",
           },
           409,
@@ -88,7 +88,7 @@ orgProvider.get("/:providerId", requireAuth, requireOrgAccess(), async (c) => {
     .limit(1);
 
   if (record.length === 0) {
-    return c.json({ message: "Provider not found" }, 404);
+    return c.json({ error: "Provider not found" }, 404);
   }
 
   return c.json(record[0]);
@@ -128,7 +128,7 @@ orgProvider.put(
         .returning();
 
       if (record.length === 0) {
-        return c.json({ message: "Provider not found" }, 404);
+        return c.json({ error: "Provider not found" }, 404);
       }
 
       return c.json(record[0], 200);
@@ -142,7 +142,7 @@ orgProvider.put(
       if (isUniqueViolation) {
         return c.json(
           {
-            message:
+            error:
               "A provider with this name already exists in this organization",
           },
           409,
@@ -173,7 +173,7 @@ orgProvider.delete(
       .returning();
 
     if (result.length === 0) {
-      return c.json({ message: "Provider not found" }, 404);
+      return c.json({ error: "Provider not found" }, 404);
     }
 
     return c.json({ message: "Provider deleted" });

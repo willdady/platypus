@@ -136,7 +136,7 @@ notification.post(
       .limit(1);
 
     if (existing.length === 0) {
-      return c.json({ message: "Notification not found" }, 404);
+      return c.json({ error: "Notification not found" }, 404);
     }
 
     await db
@@ -226,7 +226,7 @@ notification.delete(
       .returning();
 
     if (result.length === 0) {
-      return c.json({ message: "Notification not found" }, 404);
+      return c.json({ error: "Notification not found" }, 404);
     }
 
     dispatchEvent(workspaceId, "notification.dismissed", {

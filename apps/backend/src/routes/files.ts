@@ -46,13 +46,13 @@ files.get("/*", requireAuth, async (c) => {
   const key = c.req.path.slice("/files/".length);
 
   if (!key) {
-    return c.json({ message: "File key required" }, 400);
+    return c.json({ error: "File key required" }, 400);
   }
 
   // Parse org and workspace from the key
   const keyParts = parseStorageKey(key);
   if (!keyParts) {
-    return c.json({ message: "Invalid file key format" }, 400);
+    return c.json({ error: "Invalid file key format" }, 400);
   }
 
   const { orgId, workspaceId } = keyParts;
@@ -75,7 +75,7 @@ files.get("/*", requireAuth, async (c) => {
       .limit(1);
 
     if (!membership) {
-      return c.json({ message: "Access denied" }, 403);
+      return c.json({ error: "Access denied" }, 403);
     }
 
     // For non-admin members, check workspace ownership
@@ -87,11 +87,11 @@ files.get("/*", requireAuth, async (c) => {
         .limit(1);
 
       if (!ws) {
-        return c.json({ message: "Workspace not found" }, 404);
+        return c.json({ error: "Workspace not found" }, 404);
       }
 
       if (ws.ownerId !== user.id) {
-        return c.json({ message: "Access denied" }, 403);
+        return c.json({ error: "Access denied" }, 403);
       }
     }
   }
@@ -101,7 +101,7 @@ files.get("/*", requireAuth, async (c) => {
   const result = await storage.get(key);
 
   if (!result) {
-    return c.json({ message: "File not found" }, 404);
+    return c.json({ error: "File not found" }, 404);
   }
 
   const { data, contentType } = result;

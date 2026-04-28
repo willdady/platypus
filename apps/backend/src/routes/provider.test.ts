@@ -70,7 +70,7 @@ describe("Provider Routes", () => {
 
       expect(res.status).toBe(409);
       expect(await res.json()).toEqual({
-        message: "A provider with this name already exists in this workspace",
+        error: "A provider with this name already exists in this workspace",
       });
     });
   });

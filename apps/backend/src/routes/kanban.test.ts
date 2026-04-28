@@ -306,7 +306,7 @@ describe("Kanban Routes", () => {
 
       expect(res.status).toBe(409);
       const body = await res.json();
-      expect(body.message).toBe(
+      expect(body.error).toBe(
         "A column with this name already exists on the board",
       );
     });
@@ -363,7 +363,7 @@ describe("Kanban Routes", () => {
 
       expect(res.status).toBe(409);
       const body = await res.json();
-      expect(body.message).toBe(
+      expect(body.error).toBe(
         "A column with this name already exists on the board",
       );
     });
@@ -634,7 +634,7 @@ describe("Kanban Routes", () => {
 
       expect(res.status).toBe(400);
       const body = await res.json();
-      expect(body.message).toBe("afterCardId not found in column");
+      expect(body.error).toBe("afterCardId not found in column");
     });
   });
 
@@ -878,7 +878,7 @@ describe("Kanban Routes", () => {
         headers: { "Content-Type": "application/json" },
       });
       expect(res.status).toBe(403);
-      expect((await res.json()).message).toBe(
+      expect((await res.json()).error).toBe(
         "You can only edit your own comments",
       );
     });
@@ -959,7 +959,7 @@ describe("Kanban Routes", () => {
         method: "DELETE",
       });
       expect(res.status).toBe(403);
-      expect((await res.json()).message).toBe(
+      expect((await res.json()).error).toBe(
         "You can only delete your own comments",
       );
     });

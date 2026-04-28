@@ -28,7 +28,7 @@ invitation.post(
     const user = c.get("user")!;
 
     if (data.email.toLowerCase() === user.email.toLowerCase()) {
-      return c.json({ message: "You cannot invite yourself" }, 400);
+      return c.json({ error: "You cannot invite yourself" }, 400);
     }
 
     const expiresAt = new Date();
@@ -103,7 +103,7 @@ invitation.delete(
       .returning();
 
     if (result.length === 0) {
-      return c.json({ message: "Invitation not found" }, 404);
+      return c.json({ error: "Invitation not found" }, 404);
     }
 
     return c.json({ message: "Invitation deleted" });

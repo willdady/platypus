@@ -70,7 +70,7 @@ export const OAuthCallbackHandler = ({
         } else {
           const data = await response.json().catch(() => ({}));
           const message =
-            data.message || "Failed to complete OAuth authorization.";
+            data.error || "Failed to complete OAuth authorization.";
 
           // Notify opener of failure if in a popup
           if (notifyOpenerAndClose({ type: OAUTH_MCP_ERROR_EVENT, message }))

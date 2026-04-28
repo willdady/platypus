@@ -79,7 +79,7 @@ organization.get("/:orgId", requireAuth, requireOrgAccess(), async (c) => {
     .where(eq(organizationTable.id, orgId))
     .limit(1);
   if (record.length === 0) {
-    return c.json({ message: "Organization not found" }, 404);
+    return c.json({ error: "Organization not found" }, 404);
   }
   return c.json(record[0]);
 });

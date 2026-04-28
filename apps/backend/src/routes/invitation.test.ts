@@ -61,7 +61,7 @@ describe("Invitation Routes", () => {
 
       expect(res.status).toBe(400);
       expect(await res.json()).toEqual({
-        message: "You cannot invite yourself",
+        error: "You cannot invite yourself",
       });
     });
   });

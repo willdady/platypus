@@ -70,7 +70,7 @@ context.get("/:contextId", requireAuth, async (c) => {
     .limit(1);
 
   if (result.length === 0) {
-    return c.json({ message: "Context not found" }, 404);
+    return c.json({ error: "Context not found" }, 404);
   }
 
   return c.json(result[0]);
@@ -101,7 +101,7 @@ context.post(
       // Handle unique constraint violation
       if (error.code === "23505") {
         return c.json(
-          { message: "You already have a context for this scope" },
+          { error: "You already have a context for this scope" },
           409,
         );
       }
@@ -133,7 +133,7 @@ context.put(
       .returning();
 
     if (record.length === 0) {
-      return c.json({ message: "Context not found" }, 404);
+      return c.json({ error: "Context not found" }, 404);
     }
 
     return c.json(record[0]);
@@ -153,7 +153,7 @@ context.delete("/:contextId", requireAuth, async (c) => {
     .returning();
 
   if (result.length === 0) {
-    return c.json({ message: "Context not found" }, 404);
+    return c.json({ error: "Context not found" }, 404);
   }
 
   return c.json({ message: "Context deleted successfully" });

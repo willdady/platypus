@@ -207,7 +207,7 @@ chat.get(
       )
       .limit(1);
     if (record.length === 0) {
-      return c.json({ message: "Chat not found" }, 404);
+      return c.json({ error: "Chat not found" }, 404);
     }
 
     // Rewrite storage:// URLs to HTTP URLs
@@ -430,7 +430,7 @@ chat.delete(
       .limit(1);
 
     if (chatRecord.length === 0) {
-      return c.json({ message: "Chat not found" }, 404);
+      return c.json({ error: "Chat not found" }, 404);
     }
 
     // Delete associated files from storage (best-effort)
@@ -470,7 +470,7 @@ chat.put(
       .returning();
 
     if (result.length === 0) {
-      return c.json({ message: "Chat not found" }, 404);
+      return c.json({ error: "Chat not found" }, 404);
     }
 
     return c.json(result[0]);
@@ -498,7 +498,7 @@ chat.post(
       )
       .limit(1);
     if (chatRecord.length === 0) {
-      return c.json({ message: "Chat not found" }, 404);
+      return c.json({ error: "Chat not found" }, 404);
     }
     const chat = chatRecord[0];
 
@@ -510,7 +510,7 @@ chat.post(
       .limit(1);
 
     if (workspaceRecord.length === 0) {
-      return c.json({ message: "Workspace not found" }, 404);
+      return c.json({ error: "Workspace not found" }, 404);
     }
     const workspace = workspaceRecord[0];
 
@@ -533,7 +533,7 @@ chat.post(
       .limit(1);
 
     if (providerRecord.length === 0) {
-      return c.json({ message: "Provider not found" }, 404);
+      return c.json({ error: "Provider not found" }, 404);
     }
     const provider = providerRecord[0] as Provider;
 

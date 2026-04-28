@@ -106,7 +106,7 @@ mcp.get(
       .where(and(eq(mcpTable.id, mcpId), eq(mcpTable.workspaceId, workspaceId)))
       .limit(1);
     if (record.length === 0) {
-      return c.json({ message: "MCP not found" }, 404);
+      return c.json({ error: "MCP not found" }, 404);
     }
     return c.json(sanitizeMcpResponse(record[0]));
   },
@@ -147,7 +147,7 @@ mcp.put(
       .where(and(eq(mcpTable.id, mcpId), eq(mcpTable.workspaceId, workspaceId)))
       .returning();
     if (record.length === 0) {
-      return c.json({ message: "MCP not found" }, 404);
+      return c.json({ error: "MCP not found" }, 404);
     }
     return c.json(sanitizeMcpResponse(record[0]), 200);
   },
@@ -167,7 +167,7 @@ mcp.delete(
       .where(and(eq(mcpTable.id, mcpId), eq(mcpTable.workspaceId, workspaceId)))
       .returning();
     if (result.length === 0) {
-      return c.json({ message: "MCP not found" }, 404);
+      return c.json({ error: "MCP not found" }, 404);
     }
     return c.json({ message: "MCP deleted" });
   },
@@ -298,15 +298,15 @@ mcp.post(
       .limit(1);
 
     if (mcpRecord.length === 0) {
-      return c.json({ message: "MCP not found" }, 404);
+      return c.json({ error: "MCP not found" }, 404);
     }
 
     if (mcpRecord[0].authType !== "OAuth") {
-      return c.json({ message: "MCP auth type is not OAuth" }, 400);
+      return c.json({ error: "MCP auth type is not OAuth" }, 400);
     }
 
     if (!mcpRecord[0].url) {
-      return c.json({ message: "MCP URL is not configured" }, 400);
+      return c.json({ error: "MCP URL is not configured" }, 400);
     }
 
     try {
@@ -324,10 +324,7 @@ mcp.post(
       if (result === "REDIRECT") {
         const authUrl = provider.getPendingAuthUrl();
         if (!authUrl) {
-          return c.json(
-            { message: "Failed to generate authorization URL" },
-            500,
-          );
+          return c.json({ error: "Failed to generate authorization URL" }, 500);
         }
         return c.json({ authorizationUrl: authUrl.toString() });
       }
@@ -338,7 +335,7 @@ mcp.post(
       logger.error({ error }, "OAuth authorize error");
       const errorMessage =
         error instanceof Error ? error.message : "OAuth authorization failed";
-      return c.json({ message: errorMessage }, 500);
+      return c.json({ error: errorMessage }, 500);
     }
   },
 );
@@ -363,7 +360,7 @@ mcp.post(
       .returning();
 
     if (record.length === 0) {
-      return c.json({ message: "MCP not found" }, 404);
+      return c.json({ error: "MCP not found" }, 404);
     }
 
     return c.json({ success: true });

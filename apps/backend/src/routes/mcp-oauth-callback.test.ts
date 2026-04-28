@@ -64,7 +64,7 @@ describe("MCP OAuth Callback Route", () => {
 
     expect(res.status).toBe(400);
     expect(await res.json()).toEqual({
-      message: "Invalid or expired OAuth state",
+      error: "Invalid or expired OAuth state",
     });
   });
 
@@ -83,7 +83,7 @@ describe("MCP OAuth Callback Route", () => {
 
     expect(res.status).toBe(400);
     expect(await res.json()).toEqual({
-      message: "OAuth state has expired",
+      error: "OAuth state has expired",
     });
   });
 
@@ -103,7 +103,7 @@ describe("MCP OAuth Callback Route", () => {
     });
 
     expect(res.status).toBe(404);
-    expect(await res.json()).toEqual({ message: "MCP not found" });
+    expect(await res.json()).toEqual({ error: "MCP not found" });
   });
 
   it("should return 400 when MCP URL is not configured", async () => {
@@ -123,7 +123,7 @@ describe("MCP OAuth Callback Route", () => {
 
     expect(res.status).toBe(400);
     expect(await res.json()).toEqual({
-      message: "MCP URL is not configured",
+      error: "MCP URL is not configured",
     });
   });
 
@@ -146,7 +146,7 @@ describe("MCP OAuth Callback Route", () => {
     });
 
     expect(res.status).toBe(404);
-    expect(await res.json()).toEqual({ message: "Workspace not found" });
+    expect(await res.json()).toEqual({ error: "Workspace not found" });
   });
 
   it("should return success when OAuth completes successfully", async () => {
@@ -227,7 +227,7 @@ describe("MCP OAuth Callback Route", () => {
 
     expect(res.status).toBe(500);
     expect(await res.json()).toEqual({
-      message: "Token exchange failed",
+      error: "Token exchange failed",
     });
   });
 });

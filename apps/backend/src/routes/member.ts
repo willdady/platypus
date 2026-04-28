@@ -78,7 +78,7 @@ member.get(
       .limit(1);
 
     if (!m) {
-      return c.json({ message: "Member not found" }, 404);
+      return c.json({ error: "Member not found" }, 404);
     }
 
     return c.json({
@@ -112,12 +112,12 @@ member.patch(
       .limit(1);
 
     if (!targetMember) {
-      return c.json({ message: "Member not found" }, 404);
+      return c.json({ error: "Member not found" }, 404);
     }
 
     // Self-demotion protection
     if (targetMember.userId === currentUser.id && newRole === "member") {
-      return c.json({ message: "You cannot demote yourself from admin" }, 400);
+      return c.json({ error: "You cannot demote yourself from admin" }, 400);
     }
 
     // Last admin protection
@@ -134,7 +134,7 @@ member.patch(
 
       if (adminCountResult.value <= 1) {
         return c.json(
-          { message: "Cannot demote the last organization admin" },
+          { error: "Cannot demote the last organization admin" },
           400,
         );
       }
@@ -172,13 +172,13 @@ member.delete(
       .limit(1);
 
     if (!targetMember) {
-      return c.json({ message: "Member not found" }, 404);
+      return c.json({ error: "Member not found" }, 404);
     }
 
     // Self-removal protection
     if (targetMember.userId === currentUser.id) {
       return c.json(
-        { message: "You cannot remove yourself from the organization" },
+        { error: "You cannot remove yourself from the organization" },
         400,
       );
     }
@@ -197,7 +197,7 @@ member.delete(
 
       if (adminCountResult.value <= 1) {
         return c.json(
-          { message: "Cannot remove the last organization admin" },
+          { error: "Cannot remove the last organization admin" },
           400,
         );
       }

@@ -53,7 +53,7 @@ skill.get(
       .limit(1);
 
     if (record.length === 0) {
-      return c.json({ message: "Skill not found" }, 404);
+      return c.json({ error: "Skill not found" }, 404);
     }
 
     // Find agents that have this skill assigned
@@ -123,7 +123,7 @@ skill.post(
       if (isUniqueViolation) {
         return c.json(
           {
-            message: "A skill with this name already exists in this workspace",
+            error: "A skill with this name already exists in this workspace",
           },
           409,
         );
@@ -161,7 +161,7 @@ skill.put(
         .returning();
 
       if (record.length === 0) {
-        return c.json({ message: "Skill not found" }, 404);
+        return c.json({ error: "Skill not found" }, 404);
       }
 
       // Update agent associations if agentIds was provided
@@ -214,7 +214,7 @@ skill.put(
       if (isUniqueViolation) {
         return c.json(
           {
-            message: "A skill with this name already exists in this workspace",
+            error: "A skill with this name already exists in this workspace",
           },
           409,
         );
@@ -249,7 +249,7 @@ skill.delete(
     if (referencingAgents.length > 0) {
       return c.json(
         {
-          message:
+          error:
             "Cannot delete skill because it is referenced by one or more agents",
         },
         409,
@@ -267,7 +267,7 @@ skill.delete(
       .returning();
 
     if (result.length === 0) {
-      return c.json({ message: "Skill not found" }, 404);
+      return c.json({ error: "Skill not found" }, 404);
     }
 
     return c.json({ message: "Skill deleted" });

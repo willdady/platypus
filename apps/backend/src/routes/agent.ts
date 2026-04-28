@@ -69,7 +69,7 @@ agent.post(
         data.subAgentIds,
       );
       if (!validation.valid) {
-        return c.json({ message: validation.error }, 400);
+        return c.json({ error: validation.error }, 400);
       }
     }
 
@@ -125,7 +125,7 @@ agent.get(
       )
       .limit(1);
     if (record.length === 0) {
-      return c.json({ message: "Agent not found" }, 404);
+      return c.json({ error: "Agent not found" }, 404);
     }
     return c.json(agentWithAvatarUrl(record[0], baseUrl));
   },
@@ -162,7 +162,7 @@ agent.put(
         data.subAgentIds,
       );
       if (!validation.valid) {
-        return c.json({ message: validation.error }, 400);
+        return c.json({ error: validation.error }, 400);
       }
     }
 
@@ -199,15 +199,15 @@ agent.post(
     const body = await c.req.parseBody();
     const file = body["file"];
     if (!file || !(file instanceof File)) {
-      return c.json({ message: "No file provided" }, 400);
+      return c.json({ error: "No file provided" }, 400);
     }
 
     if (!ALLOWED_AVATAR_TYPES.includes(file.type)) {
-      return c.json({ message: "Invalid file type" }, 400);
+      return c.json({ error: "Invalid file type" }, 400);
     }
 
     if (file.size > MAX_AVATAR_SIZE) {
-      return c.json({ message: "File too large (max 5MB)" }, 400);
+      return c.json({ error: "File too large (max 5MB)" }, 400);
     }
 
     const buffer = Buffer.from(await file.arrayBuffer());
@@ -216,7 +216,7 @@ agent.post(
     try {
       metadata = await sharp(buffer).metadata();
     } catch {
-      return c.json({ message: "Invalid image" }, 400);
+      return c.json({ error: "Invalid image" }, 400);
     }
 
     if (metadata.width && metadata.height) {
@@ -226,7 +226,7 @@ agent.post(
       ) {
         return c.json(
           {
-            message: `Image must be at least ${MIN_AVATAR_DIMENSION}x${MIN_AVATAR_DIMENSION} pixels`,
+            error: `Image must be at least ${MIN_AVATAR_DIMENSION}x${MIN_AVATAR_DIMENSION} pixels`,
           },
           400,
         );

@@ -43,7 +43,7 @@ describe("Files Routes", () => {
       const res = await app.request("/files/");
       expect(res.status).toBe(400);
       const body = await res.json();
-      expect(body.message).toBe("File key required");
+      expect(body.error).toBe("File key required");
     });
 
     it("should return 400 for invalid key format with less than 2 segments", async () => {
@@ -51,7 +51,7 @@ describe("Files Routes", () => {
       const res = await app.request("/files/just-one-segment");
       expect(res.status).toBe(400);
       const body = await res.json();
-      expect(body.message).toBe("Invalid file key format");
+      expect(body.error).toBe("Invalid file key format");
     });
 
     it("should bypass access checks and serve file for super admin", async () => {
@@ -76,7 +76,7 @@ describe("Files Routes", () => {
       const res = await app.request(baseUrl);
       expect(res.status).toBe(403);
       const body = await res.json();
-      expect(body.message).toBe("Access denied");
+      expect(body.error).toBe("Access denied");
     });
 
     it("should serve file when user is org admin", async () => {
@@ -103,7 +103,7 @@ describe("Files Routes", () => {
       const res = await app.request(baseUrl);
       expect(res.status).toBe(404);
       const body = await res.json();
-      expect(body.message).toBe("Workspace not found");
+      expect(body.error).toBe("Workspace not found");
     });
 
     it("should return 403 when member does not own workspace", async () => {
@@ -116,7 +116,7 @@ describe("Files Routes", () => {
       const res = await app.request(baseUrl);
       expect(res.status).toBe(403);
       const body = await res.json();
-      expect(body.message).toBe("Access denied");
+      expect(body.error).toBe("Access denied");
     });
 
     it("should serve file when member owns workspace", async () => {
@@ -143,7 +143,7 @@ describe("Files Routes", () => {
       const res = await app.request(baseUrl);
       expect(res.status).toBe(404);
       const body = await res.json();
-      expect(body.message).toBe("File not found");
+      expect(body.error).toBe("File not found");
     });
 
     it("should return correct Content-Type header", async () => {
