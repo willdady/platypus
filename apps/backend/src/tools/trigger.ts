@@ -33,7 +33,7 @@ export function createTriggerTools(
 
   const listTriggers = tool({
     description:
-      "List all triggers in the current workspace. Use this to see what triggers exist, their type (cron or event), configuration, and when they will run next.",
+      "List all triggers in the current workspace. Returns summary information for each trigger. Use getTrigger to get full details including instruction and config.",
     inputSchema: z.object({
       enabledOnly: z
         .boolean()
@@ -54,13 +54,9 @@ export function createTriggerTools(
           description: triggerTable.description,
           agentId: triggerTable.agentId,
           type: triggerTable.type,
-          instruction: triggerTable.instruction,
           enabled: triggerTable.enabled,
-          maxRunsToKeep: triggerTable.maxRunsToKeep,
-          search: triggerTable.search,
-          config: triggerTable.config,
-          lastRunAt: triggerTable.lastRunAt,
           nextRunAt: triggerTable.nextRunAt,
+          lastRunAt: triggerTable.lastRunAt,
           createdAt: triggerTable.createdAt,
         })
         .from(triggerTable)
@@ -68,6 +64,34 @@ export function createTriggerTools(
         .orderBy(desc(triggerTable.createdAt));
 
       return { triggers, count: triggers.length };
+    },
+  });
+
+  const getTrigger = tool({
+    description: "Get the full details of a trigger by ID.",
+    inputSchema: z.object({
+      triggerId: z.string().describe("The ID of the trigger to retrieve"),
+    }),
+    execute: async ({ triggerId }) => {
+      const result = await db
+        .select()
+        .from(triggerTable)
+        .where(
+          and(
+            eq(triggerTable.id, triggerId),
+            eq(triggerTable.workspaceId, workspaceId),
+          ),
+        )
+        .limit(1);
+
+      if (result.length === 0) {
+        return {
+          error:
+            "Trigger not found in this workspace. Use listTriggers to find valid IDs.",
+        };
+      }
+
+      return { trigger: result[0] };
     },
   });
 
@@ -490,6 +514,7 @@ export function createTriggerTools(
   return {
     listAgents,
     listTriggers,
+    getTrigger,
     upsertTrigger,
     deleteTrigger,
   };

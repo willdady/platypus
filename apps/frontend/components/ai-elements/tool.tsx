@@ -12,6 +12,7 @@ import {
   ArrowRightLeftIcon,
   BellIcon,
   BotIcon,
+  BrainIcon,
   CheckCircleIcon,
   ChevronDownIcon,
   CircleIcon,
@@ -59,6 +60,7 @@ const toolToToolSet: Record<string, string> = {
   deleteComment: "kanban",
   // triggers
   listTriggers: "triggers",
+  getTrigger: "triggers",
   upsertTrigger: "triggers",
   deleteTrigger: "triggers",
   // agent-management
@@ -88,6 +90,9 @@ const toolToToolSet: Record<string, string> = {
   listNotifications: "notifications",
   updateNotification: "notifications",
   deleteNotification: "notifications",
+  // memory
+  memorySearch: "memory",
+  memoryGet: "memory",
 };
 
 /** One icon per toolset, matching the workspace home page. */
@@ -99,6 +104,7 @@ const toolSetIcons: Record<string, LucideIcon> = {
   "math-conversions": ArrowRightLeftIcon,
   "web-fetch": GlobeIcon,
   notifications: BellIcon,
+  memory: BrainIcon,
 };
 
 /** Returns an appropriate icon component for a given tool type string. */

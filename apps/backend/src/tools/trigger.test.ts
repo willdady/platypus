@@ -58,6 +58,7 @@ describe("createTriggerTools", () => {
     expect(Object.keys(tools)).toEqual([
       "listAgents",
       "listTriggers",
+      "getTrigger",
       "upsertTrigger",
       "deleteTrigger",
     ]);
@@ -83,6 +84,32 @@ describe("createTriggerTools", () => {
         ctx,
       );
       expect(result).toEqual({ triggers, count: 1 });
+    });
+  });
+
+  describe("getTrigger", () => {
+    it("returns full trigger details", async () => {
+      const trigger = {
+        id: "t1",
+        name: "Trigger 1",
+        instruction: "Do something",
+        config: { cronExpression: "0 9 * * *", timezone: "UTC" },
+      };
+      mockDb.limit.mockResolvedValue([trigger]);
+
+      const result = await tools.getTrigger.execute({ triggerId: "t1" }, ctx);
+      expect(result).toEqual({ trigger });
+    });
+
+    it("returns error when trigger not found", async () => {
+      mockDb.limit.mockResolvedValue([]);
+
+      const result = await tools.getTrigger.execute(
+        { triggerId: "bad-id" },
+        ctx,
+      );
+      expect(result).toHaveProperty("error");
+      expect(result.error).toContain("Trigger not found");
     });
   });
 
