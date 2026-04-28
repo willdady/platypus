@@ -1,5 +1,21 @@
 # Changelog
 
+## [1.70.0](https://github.com/willdady/platypus/compare/v1.69.1...v1.70.0) (2026-04-28)
+
+
+### Features
+
+* add copyCard kanban tool for single-operation card duplication ([ccb74a2](https://github.com/willdady/platypus/commit/ccb74a2956d00f9019d26719122533f2d5dffe1f))
+* add getTrigger tool and slim down listTriggers response ([12107ce](https://github.com/willdady/platypus/commit/12107cee9dfff139ae57e7d0d98325d6b837166d))
+* **frontend:** preload workspaces for all orgs on switcher mount ([50f6afe](https://github.com/willdady/platypus/commit/50f6afe78e33799dae6c8ba7e60466331f007072))
+
+
+### Bug Fixes
+
+* **frontend:** move Write/Preview tabs below dialog heading in expanded textarea ([0722fa7](https://github.com/willdady/platypus/commit/0722fa7007ca812c6acef3af544c53cbe3f6a033))
+* prevent duplicate kanban column names within a board ([3a62790](https://github.com/willdady/platypus/commit/3a62790c4acb3e716ed7523f10d0d4e651b2af3d))
+* resolve flash of placeholder names on edit workspace context screen ([9d4bf0b](https://github.com/willdady/platypus/commit/9d4bf0b31f1170ec43287b1df7e811598e47b1b3))
+
 ## [1.69.1](https://github.com/willdady/platypus/compare/v1.69.0...v1.69.1) (2026-04-27)
 
 
