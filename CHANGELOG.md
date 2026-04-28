@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.71.0](https://github.com/willdady/platypus/compare/v1.70.0...v1.71.0) (2026-04-28)
+
+
+### Features
+
+* add assignee validation tests and API conventions skill ([efbe687](https://github.com/willdady/platypus/commit/efbe68787ade671adbe79dcaac72bd86fe4c17f6))
+* **backend:** debounce event trigger execution to prevent stampedes ([864148a](https://github.com/willdady/platypus/commit/864148afbf8a01fb5d8d78b472d6fd1e7e20537b))
+
+
+### Bug Fixes
+
+* validate super admin assignees and standardize error response format ([c3eed03](https://github.com/willdady/platypus/commit/c3eed031b4041bdc06dbf125896e35bd7293729b))
+
 ## [1.70.0](https://github.com/willdady/platypus/compare/v1.69.1...v1.70.0) (2026-04-28)
 
 
