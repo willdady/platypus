@@ -1,6 +1,6 @@
 ---
 name: add-tool
-description: Guide for adding new tools to Platypus - covers backend implementation, frontend integration, and tool registration.
+description: Guide for adding new tools to Platypus - covers backend implementation, frontend integration, and tool registration. Always load this skill if the user mentions adding or updating tools.
 ---
 
 # Adding New Tools to Platypus
