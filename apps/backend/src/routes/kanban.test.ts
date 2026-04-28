@@ -539,6 +539,98 @@ describe("Kanban Routes", () => {
 
       expect(res.status).toBe(404);
     });
+
+    describe("Assignee validation", () => {
+      it("should return 400 for invalid user assignee", async () => {
+        mockSession();
+        mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
+        mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]); // requireWorkspaceAccess
+        // validateAssignees: org member query (empty) then super admin query (empty)
+        mockDb.where.mockReturnValueOnce(mockDb); // requireOrgAccess chain
+        mockDb.where.mockReturnValueOnce(mockDb); // requireWorkspaceAccess chain
+        mockDb.where.mockResolvedValueOnce([]); // org member lookup — not found
+        mockDb.where.mockResolvedValueOnce([]); // super admin lookup — not found
+
+        const res = await app.request(`${baseUrl}/${boardId}/cards/card-1`, {
+          method: "PUT",
+          body: JSON.stringify({
+            assignees: [{ type: "user", id: "nonexistent" }],
+          }),
+          headers: { "Content-Type": "application/json" },
+        });
+
+        expect(res.status).toBe(400);
+        const body = await res.json();
+        expect(body.error).toBe("Invalid user assignee");
+      });
+
+      it("should allow super admin to be assigned", async () => {
+        mockSession({
+          id: "admin-user",
+          email: "admin@example.com",
+          role: "admin",
+        });
+        // Super admin bypasses requireOrgAccess (no DB query)
+        mockDb.limit.mockResolvedValueOnce([{ ownerId: "admin-user" }]); // requireWorkspaceAccess
+        // validateAssignees queries
+        mockDb.where.mockReturnValueOnce(mockDb); // requireWorkspaceAccess chain
+        mockDb.where.mockResolvedValueOnce([]); // org member lookup — not found
+        mockDb.where.mockResolvedValueOnce([{ id: "admin-user" }]); // super admin lookup — found
+        mockDb.where.mockReturnValueOnce(mockDb); // update subquery chain
+        mockDb.where.mockReturnValueOnce(mockDb); // update main where chain
+
+        const mockCard = {
+          id: "card-1",
+          title: "Test",
+          assignees: [{ type: "user", id: "admin-user" }],
+        };
+        mockDb.returning.mockResolvedValueOnce([mockCard]);
+
+        const res = await app.request(`${baseUrl}/${boardId}/cards/card-1`, {
+          method: "PUT",
+          body: JSON.stringify({
+            assignees: [{ type: "user", id: "admin-user" }],
+          }),
+          headers: { "Content-Type": "application/json" },
+        });
+
+        expect(res.status).toBe(200);
+        const body = await res.json();
+        expect(body.assignees).toEqual([{ type: "user", id: "admin-user" }]);
+      });
+
+      it("should allow org member to be assigned", async () => {
+        mockSession();
+        mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
+        mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]); // requireWorkspaceAccess
+        // validateAssignees queries
+        mockDb.where.mockReturnValueOnce(mockDb); // requireOrgAccess chain
+        mockDb.where.mockReturnValueOnce(mockDb); // requireWorkspaceAccess chain
+        mockDb.where.mockResolvedValueOnce([{ userId: "user-1" }]); // org member lookup — found
+        mockDb.where.mockResolvedValueOnce([]); // super admin lookup — not found
+        mockDb.where.mockReturnValueOnce(mockDb); // update subquery chain
+        mockDb.where.mockReturnValueOnce(mockDb); // update main where chain
+
+        const mockCard = {
+          id: "card-1",
+          title: "Test",
+          assignees: [{ type: "user", id: "user-1" }],
+        };
+        mockDb.returning.mockResolvedValueOnce([mockCard]);
+
+        const res = await app.request(`${baseUrl}/${boardId}/cards/card-1`, {
+          method: "PUT",
+          body: JSON.stringify({
+            assignees: [{ type: "user", id: "user-1" }],
+          }),
+          headers: { "Content-Type": "application/json" },
+        });
+
+        expect(res.status).toBe(200);
+        const body = await res.json();
+        expect(body.assignees).toEqual([{ type: "user", id: "user-1" }]);
+      });
+    });
   });
 
   describe("POST /:boardId/cards/:cardId/move", () => {
