@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.72.0](https://github.com/willdady/platypus/compare/v1.71.0...v1.72.0) (2026-04-29)
+
+
+### Features
+
+* share listAgents tool across tool sets and update tools skill ([58fdc45](https://github.com/willdady/platypus/commit/58fdc455080ab6334b5c0309ca757e7b291dc7f4))
+
+
+### Bug Fixes
+
+* **frontend:** throttle kanban drag-over and broaden column highlight ([82ac856](https://github.com/willdady/platypus/commit/82ac8562579ab7e605aacdec041108751d359579))
+* **frontend:** use pointerWithin for kanban card drag collision ([17ca732](https://github.com/willdady/platypus/commit/17ca7320fad496fadc2861fbd5dbae7e8f06899f))
+
 ## [1.71.0](https://github.com/willdady/platypus/compare/v1.70.0...v1.71.0) (2026-04-28)
 
 
