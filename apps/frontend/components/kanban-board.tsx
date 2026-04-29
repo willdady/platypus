@@ -6,6 +6,7 @@ import {
   DndContext,
   closestCorners,
   closestCenter,
+  pointerWithin,
   CollisionDetection,
   DragStartEvent,
   DragEndEvent,
@@ -228,6 +229,13 @@ export function KanbanBoard({
           ),
         };
         return closestCenter(filtered);
+      }
+      // Card drags: pointerWithin gives a stable over-target tied to the
+      // cursor, so layout shifts during a cross-column move can't flip the
+      // over-target between columns and trigger an update loop.
+      const pointerCollisions = pointerWithin(args);
+      if (pointerCollisions.length > 0) {
+        return pointerCollisions;
       }
       return closestCorners(args);
     },
