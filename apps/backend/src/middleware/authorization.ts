@@ -5,6 +5,7 @@ import {
   workspace as workspaceTable,
 } from "../db/schema.ts";
 import type { SuperAdminOrgMembership, OrgRole } from "../server.ts";
+import { orgScope, userScope, workspaceScope } from "../scope.ts";
 
 /**
  * Checks if a user is a super admin based on their role field.
@@ -82,6 +83,8 @@ export const requireOrgAccess = (requiredRoles?: OrgRole[]) =>
     const user = c.get("user");
     const db = c.get("db");
 
+    const parentScope = c.get("userScope") ?? userScope(user);
+
     // Super admins bypass all checks
     if (isSuperAdmin(user)) {
       const superAdminMembership: SuperAdminOrgMembership = {
@@ -89,6 +92,10 @@ export const requireOrgAccess = (requiredRoles?: OrgRole[]) =>
         isSuperAdmin: true,
       };
       c.set("orgMembership", superAdminMembership);
+      const orgIdParam = c.req.param("orgId");
+      if (orgIdParam) {
+        c.set("orgScope", orgScope(parentScope, orgIdParam));
+      }
       await next();
       return;
     }
@@ -120,6 +127,7 @@ export const requireOrgAccess = (requiredRoles?: OrgRole[]) =>
     }
 
     c.set("orgMembership", membership);
+    c.set("orgScope", orgScope(parentScope, orgId));
     await next();
   });
 
@@ -169,7 +177,12 @@ export const requireWorkspaceAccess = createMiddleware(async (c, next) => {
       return c.json({ error: "Workspace not found" }, 404);
     }
 
-    c.set("isWorkspaceOwner", ws.ownerId === user.id);
+    const isOwner = ws.ownerId === user.id;
+    c.set("isWorkspaceOwner", isOwner);
+    const parent = c.get("orgScope");
+    if (parent) {
+      c.set("workspaceScope", workspaceScope(parent, workspaceId, isOwner));
+    }
     await next();
     return;
   }
@@ -190,6 +203,10 @@ export const requireWorkspaceAccess = createMiddleware(async (c, next) => {
   // Org admins have access to all workspaces
   if (orgMembership.role === "admin") {
     c.set("isWorkspaceOwner", isOwner);
+    const parent = c.get("orgScope");
+    if (parent) {
+      c.set("workspaceScope", workspaceScope(parent, workspaceId, isOwner));
+    }
     await next();
     return;
   }
@@ -200,6 +217,10 @@ export const requireWorkspaceAccess = createMiddleware(async (c, next) => {
   }
 
   c.set("isWorkspaceOwner", true);
+  const parent = c.get("orgScope");
+  if (parent) {
+    c.set("workspaceScope", workspaceScope(parent, workspaceId, true));
+  }
   await next();
 });
 

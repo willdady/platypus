@@ -1,5 +1,6 @@
 import { createMiddleware } from "hono/factory";
 import { auth } from "../auth.ts";
+import { userScope } from "../scope.ts";
 
 /**
  * Middleware that validates user authentication via session.
@@ -49,5 +50,6 @@ export const requireAuth = createMiddleware(async (c, next) => {
 
   c.set("user", session.user);
   c.set("session", session.session);
+  c.set("userScope", userScope(session.user));
   await next();
 });

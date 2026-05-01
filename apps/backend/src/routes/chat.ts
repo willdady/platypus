@@ -1,16 +1,7 @@
 import { Hono } from "hono";
 import { sValidator } from "@hono/standard-validator";
 import { z } from "zod";
-import {
-  convertToModelMessages,
-  createIdGenerator,
-  generateText,
-  Output,
-  streamText,
-  APICallError,
-  LoadAPIKeyError,
-} from "ai";
-import { stepCountIs } from "ai";
+import { generateText, Output } from "ai";
 import { db } from "../index.ts";
 import { dedupeArray, toKebabCase } from "../utils.ts";
 import {
@@ -18,18 +9,12 @@ import {
   provider as providerTable,
   workspace as workspaceTable,
 } from "../db/schema.ts";
-import {
-  prepareChatTurn,
-  NotFoundError,
-  ValidationError,
-  type ChatTurn,
-} from "../services/chat-execution.ts";
+import { NotFoundError, ValidationError } from "../services/chat-execution.ts";
 import { openProvider } from "../services/provider.ts";
 import {
   chatGenerateMetadataSchema,
   chatSubmitSchema,
   chatUpdateSchema,
-  type ChatSubmitData,
   type Provider,
 } from "@platypus/schemas";
 import { and, count, desc, eq, or, sql } from "drizzle-orm";
@@ -40,77 +25,12 @@ import {
   requireWorkspaceOwner,
 } from "../middleware/authorization.ts";
 import type { Variables } from "../server.ts";
-import { logger } from "../logger.ts";
 import { type PlatypusUIMessage } from "../types.ts";
-import {
-  extractFiles,
-  rewriteStorageUrls,
-  deleteFiles,
-} from "../storage/utils.ts";
+import { rewriteStorageUrls, deleteFiles } from "../storage/utils.ts";
 import { getOrigin } from "../utils/get-origin.ts";
-
-/**
- * Upserts the chat record in the database.
- */
-const upsertChatRecord = async (
-  id: string,
-  orgId: string,
-  workspaceId: string,
-  messages: PlatypusUIMessage[],
-  resolved: ChatTurn["resolved"],
-  data: ChatSubmitData,
-) => {
-  const { agentId } = resolved;
-
-  // Extract files from messages and store them
-  const processedMessages = await extractFiles(messages, {
-    orgId,
-    workspaceId,
-    chatId: id,
-  });
-
-  const dbValues = {
-    messages: processedMessages,
-    agentId: agentId ?? null,
-    providerId: agentId ? null : resolved.providerId,
-    modelId: agentId ? null : resolved.modelId,
-    systemPrompt: resolved.systemPrompt ?? null,
-    temperature: resolved.temperature ?? null,
-    topP: resolved.topP ?? null,
-    topK: resolved.topK ?? null,
-    seed: resolved.seed ?? data.seed ?? null,
-    presencePenalty: resolved.presencePenalty ?? null,
-    frequencyPenalty: resolved.frequencyPenalty ?? null,
-    updatedAt: new Date(),
-  };
-
-  try {
-    const updateResult = await db
-      .update(chatTable)
-      .set(dbValues)
-      .where(and(eq(chatTable.id, id), eq(chatTable.workspaceId, workspaceId)))
-      .returning();
-
-    if (updateResult.length === 0) {
-      await db.insert(chatTable).values({
-        id,
-        workspaceId,
-        title: "Untitled",
-        createdAt: new Date(),
-        ...dbValues,
-      });
-    }
-
-    logger.info(
-      `Successfully upserted chat '${id}' in workspace '${workspaceId}'`,
-    );
-  } catch (error) {
-    logger.error(
-      { error, chatId: id, workspaceId },
-      "Error upserting chat record",
-    );
-  }
-};
+import { agentRunner } from "../runs/agent-runner.ts";
+import { ChatSink } from "../runs/sinks/chat-sink.ts";
+import type { RunInput, RunInputSource } from "../runs/types.ts";
 
 // --- Routes ---
 
@@ -219,22 +139,48 @@ chat.post(
   requireWorkspaceOwner,
   sValidator("json", chatSubmitSchema),
   async (c) => {
-    const orgId = c.req.param("orgId")!;
-    const workspaceId = c.req.param("workspaceId")!;
+    const scope = c.get("workspaceScope")!;
     const data = c.req.valid("json");
-    const { messages = [] } = data;
-    const user = c.get("user")!;
 
-    let turn: ChatTurn;
+    const source: RunInputSource = data.agentId
+      ? { kind: "agent", agentId: data.agentId }
+      : {
+          kind: "adhoc",
+          providerId: data.providerId!,
+          modelId: data.modelId!,
+          systemPrompt: data.systemPrompt,
+        };
+
+    const input: RunInput = {
+      runId: data.id,
+      source,
+      messages: data.messages ?? [],
+      overrides: {
+        temperature: data.temperature,
+        topP: data.topP,
+        topK: data.topK,
+        seed: data.seed,
+        presencePenalty: data.presencePenalty,
+        frequencyPenalty: data.frequencyPenalty,
+        search: data.search,
+      },
+    };
+
+    const sink = new ChatSink({
+      orgId: scope.orgId,
+      workspaceId: scope.workspaceId,
+    });
+
     try {
-      turn = await prepareChatTurn({
-        orgId,
-        workspaceId,
-        user: { id: user.id, name: user.name },
-        request: data,
-        messages,
-        origin: getOrigin(c),
-        frontendUrl: process.env.FRONTEND_URL,
+      return await agentRunner.stream({
+        scope,
+        input,
+        sink,
+        options: {
+          abortSignal: c.req.raw.signal,
+          origin: getOrigin(c),
+          frontendUrl: process.env.FRONTEND_URL,
+        },
       });
     } catch (error) {
       if (error instanceof ValidationError) {
@@ -245,77 +191,6 @@ chat.post(
       }
       throw error;
     }
-
-    c.req.raw.signal.addEventListener("abort", () => {
-      void turn.dispose();
-    });
-
-    logger.debug(
-      { systemPrompt: turn.stream.system },
-      "System prompt for chat",
-    );
-
-    const result = streamText({
-      model: turn.stream.model as any,
-      messages: await convertToModelMessages(turn.stream.messages),
-      stopWhen: [stepCountIs(turn.stream.maxSteps)],
-      tools: turn.stream.tools,
-      system: turn.stream.system,
-      abortSignal: c.req.raw.signal,
-      temperature: turn.stream.temperature,
-      topP: turn.stream.topP,
-      topK: turn.stream.topK,
-      frequencyPenalty: turn.stream.frequencyPenalty,
-      presencePenalty: turn.stream.presencePenalty,
-      seed: turn.stream.seed,
-    });
-
-    return result.toUIMessageStreamResponse<PlatypusUIMessage>({
-      originalMessages: messages,
-      generateMessageId: createIdGenerator({
-        prefix: "msg",
-        size: 16,
-      }),
-      messageMetadata: () =>
-        turn.resolved.agentId ? { agentId: turn.resolved.agentId } : undefined,
-      onError: (error) => {
-        logger.error({ error }, "Chat stream error");
-        if (LoadAPIKeyError.isInstance(error)) {
-          return "AI provider API key is missing or not configured.";
-        }
-        if (APICallError.isInstance(error)) {
-          if (error.statusCode === 401 || error.statusCode === 403) {
-            return "AI provider authentication failed. Your API key may be invalid or expired.";
-          }
-          if (error.statusCode === 429) {
-            return "AI provider rate limit exceeded. Please try again later.";
-          }
-          if (error.statusCode != null && error.statusCode >= 500) {
-            return "AI provider is currently unavailable. Please try again later.";
-          }
-          return `AI provider error: ${error.message}`;
-        }
-        if (error instanceof Error) {
-          return error.message;
-        }
-        return "An unexpected error occurred.";
-      },
-      onFinish: async ({ messages: finalMessages }) => {
-        try {
-          await turn.dispose();
-          await upsertChatRecord(
-            data.id,
-            orgId,
-            workspaceId,
-            finalMessages,
-            turn.resolved,
-            data,
-          );
-        } catch (error) {
-          logger.error({ error }, "Error in onFinish");
-        }
-      },
-    });
   },
 );
 

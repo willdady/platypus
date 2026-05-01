@@ -1,49 +1,29 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { mockDb, resetMockDb } from "../test-utils.ts";
 
-const {
-  mockGenerateText,
-  mockOpenProvider,
-  mockSearchTools,
-  mockLoadTools,
-  mockLoadSkills,
-  mockLoadSubAgents,
-  mockFetchUserContexts,
-  mockFetchMemories,
-  mockResolveGenerationConfig,
-  mockPrepareAgentTools,
-  mockValidateCronExpression,
-} = vi.hoisted(() => ({
-  mockGenerateText: vi.fn(),
-  mockOpenProvider: vi.fn(),
-  mockSearchTools: vi.fn(),
-  mockLoadTools: vi.fn(),
-  mockLoadSkills: vi.fn(),
-  mockLoadSubAgents: vi.fn(),
-  mockFetchUserContexts: vi.fn(),
-  mockFetchMemories: vi.fn(),
-  mockResolveGenerationConfig: vi.fn(),
-  mockPrepareAgentTools: vi.fn(),
+const { mockGenerate, mockValidateCronExpression } = vi.hoisted(() => ({
+  mockGenerate: vi.fn(),
   mockValidateCronExpression: vi.fn(),
 }));
 
-vi.mock("ai", () => ({
-  generateText: mockGenerateText,
-  stepCountIs: vi.fn((n: number) => ({ type: "stepCount", value: n })),
+vi.mock("../runs/agent-runner.ts", () => ({
+  agentRunner: { generate: mockGenerate },
 }));
 
-vi.mock("./chat-execution.ts", () => ({
-  loadTools: mockLoadTools,
-  loadSkills: mockLoadSkills,
-  loadSubAgents: mockLoadSubAgents,
-  fetchUserContexts: mockFetchUserContexts,
-  fetchMemories: mockFetchMemories,
-  resolveGenerationConfig: mockResolveGenerationConfig,
-  prepareAgentTools: mockPrepareAgentTools,
+const { TriggerSinkSpy } = vi.hoisted(() => ({
+  TriggerSinkSpy: vi.fn(),
 }));
 
-vi.mock("./provider.ts", () => ({
-  openProvider: mockOpenProvider,
+vi.mock("../runs/sinks/trigger-sink.ts", () => ({
+  TriggerSink: class {
+    constructor(params: unknown) {
+      TriggerSinkSpy(params);
+    }
+    onStart() {}
+    onResolved() {}
+    onProgress() {}
+    onFinish() {}
+  },
 }));
 
 vi.mock("../utils/cron.ts", () => ({
@@ -82,28 +62,6 @@ const baseTrigger = {
   updatedAt: new Date(),
 };
 
-const mockAgent = {
-  id: "agent-1",
-  name: "Test Agent",
-  workspaceId: "ws-1",
-  providerId: "provider-1",
-  modelId: "gpt-4",
-  maxSteps: 3,
-  systemPrompt: null,
-  temperature: null,
-  topP: null,
-  topK: null,
-  frequencyPenalty: null,
-  presencePenalty: null,
-  seed: null,
-  toolSetIds: [],
-  skillIds: [],
-  subAgentIds: [],
-  description: null,
-  createdAt: new Date(),
-  updatedAt: new Date(),
-};
-
 const mockWorkspace = {
   id: "ws-1",
   organizationId: "org-1",
@@ -114,73 +72,6 @@ const mockWorkspace = {
   updatedAt: new Date(),
 };
 
-const mockProvider = {
-  id: "provider-1",
-  name: "Test Provider",
-  providerType: "OpenAI",
-  apiKey: "sk-test",
-  baseUrl: null,
-  modelIds: ["gpt-4"],
-  organizationId: "org-1",
-  workspaceId: "ws-1",
-  headers: null,
-  organization: null,
-  project: null,
-  region: null,
-  extraBody: null,
-  createdAt: new Date(),
-  updatedAt: new Date(),
-};
-
-const mockMcpClient = { close: vi.fn() };
-
-function setupDefaultMocks() {
-  // DB queries: agent, workspace (parallel), then provider
-  mockDb.limit
-    .mockResolvedValueOnce([mockAgent]) // agent query
-    .mockResolvedValueOnce([mockWorkspace]) // workspace query
-    .mockResolvedValueOnce([mockProvider]); // provider query
-
-  mockOpenProvider.mockReturnValue({
-    languageModel: vi.fn(() => ({ modelId: "gpt-4" })),
-    searchTools: mockSearchTools,
-  });
-  mockSearchTools.mockReturnValue({});
-  mockLoadTools.mockResolvedValue({
-    tools: { tool1: {} },
-    mcpClients: [mockMcpClient],
-  });
-  mockLoadSubAgents.mockResolvedValue({
-    subAgents: [],
-    subAgentTools: {},
-    subAgentMcpClients: [],
-  });
-  mockLoadSkills.mockResolvedValue([]);
-  mockFetchUserContexts.mockResolvedValue({
-    userGlobalContext: "global",
-    userWorkspaceContext: "workspace",
-  });
-  mockFetchMemories.mockResolvedValue([]);
-  mockResolveGenerationConfig.mockReturnValue({
-    systemPrompt: "You are helpful",
-    temperature: 0.7,
-  });
-  mockGenerateText.mockResolvedValue({
-    text: "Agent response",
-    steps: [
-      {
-        toolCalls: [
-          { toolName: "tool1", args: {} },
-          { toolName: "tool1", args: {} },
-        ],
-      },
-      { toolCalls: [{ toolName: "tool2", args: {} }] },
-    ],
-    totalUsage: { inputTokens: 100, outputTokens: 50 },
-  });
-  mockDb.returning.mockResolvedValue([{ id: "test-id" }]);
-}
-
 describe("trigger-execution", () => {
   beforeEach(() => {
     resetMockDb();
@@ -189,142 +80,84 @@ describe("trigger-execution", () => {
   });
 
   describe("executeTrigger", () => {
-    it("should execute a trigger and return a run ID", async () => {
-      setupDefaultMocks();
+    it("returns a runId and delegates execution to agentRunner.generate", async () => {
+      mockDb.limit.mockResolvedValueOnce([mockWorkspace]);
+      mockGenerate.mockResolvedValueOnce({ text: "ok", stats: {} });
 
       const runId = await executeTrigger(baseTrigger as any);
 
       expect(runId).toBe("test-id");
-      expect(mockGenerateText).toHaveBeenCalledWith(
-        expect.objectContaining({
-          prompt: "Do something",
-          system: "You are helpful",
-        }),
-      );
+      expect(mockGenerate).toHaveBeenCalledTimes(1);
+      const args = mockGenerate.mock.calls[0][0];
+      expect(args.scope.orgId).toBe("org-1");
+      expect(args.scope.workspaceId).toBe("ws-1");
+      expect(args.scope.principal.kind).toBe("trigger");
+      expect(args.scope.principal.triggerId).toBe("trigger-1");
+      expect(args.scope.principal.onBehalfOfUserId).toBe("user-1");
+      expect(args.input.runId).toBe("test-id");
+      expect(args.input.source).toEqual({ kind: "agent", agentId: "agent-1" });
+      expect(args.input.messages).toHaveLength(1);
+      expect(args.input.messages[0].parts[0].text).toBe("Do something");
     });
 
-    it("should prepend event context to instruction for event triggers", async () => {
-      setupDefaultMocks();
+    it("prepends event context to the instruction for event triggers", async () => {
+      mockDb.limit.mockResolvedValueOnce([mockWorkspace]);
+      mockGenerate.mockResolvedValueOnce({ text: "ok", stats: {} });
 
       await executeTrigger(baseTrigger as any, {
         eventType: "card.created",
         eventData: { cardId: "c1" },
       });
 
-      expect(mockGenerateText).toHaveBeenCalledWith(
-        expect.objectContaining({
-          prompt: expect.stringContaining("Event: card.created"),
-        }),
-      );
-      expect(mockGenerateText).toHaveBeenCalledWith(
-        expect.objectContaining({
-          prompt: expect.stringContaining("Do something"),
-        }),
-      );
+      const args = mockGenerate.mock.calls[0][0];
+      const text = args.input.messages[0].parts[0].text;
+      expect(text).toContain("Event: card.created");
+      expect(text).toContain('"cardId": "c1"');
+      expect(text).toContain("Do something");
     });
 
-    it("should throw and mark run as failed when agent not found", async () => {
-      mockDb.limit
-        .mockResolvedValueOnce([]) // agent not found
-        .mockResolvedValueOnce([mockWorkspace]);
+    it("constructs a TriggerSink with the trigger id and event metadata", async () => {
+      mockDb.limit.mockResolvedValueOnce([mockWorkspace]);
+      mockGenerate.mockResolvedValueOnce({ text: "ok", stats: {} });
 
-      await expect(executeTrigger(baseTrigger as any)).rejects.toThrow(
-        "Agent 'agent-1' not found",
-      );
-      // Should have updated run status to failed
-      expect(mockDb.update).toHaveBeenCalled();
-      expect(mockDb.set).toHaveBeenCalledWith(
-        expect.objectContaining({ status: "failed" }),
-      );
+      await executeTrigger(baseTrigger as any, {
+        eventType: "card.created",
+        eventData: { cardId: "c1" },
+      });
+
+      expect(TriggerSinkSpy).toHaveBeenCalledWith({
+        triggerId: "trigger-1",
+        eventType: "card.created",
+        eventData: { cardId: "c1" },
+      });
     });
 
-    it("should throw and mark run as failed when workspace not found", async () => {
-      mockDb.limit.mockResolvedValueOnce([mockAgent]).mockResolvedValueOnce([]); // workspace not found
+    it("propagates a search override from the trigger to the run input", async () => {
+      mockDb.limit.mockResolvedValueOnce([mockWorkspace]);
+      mockGenerate.mockResolvedValueOnce({ text: "ok", stats: {} });
+
+      const trigger = { ...baseTrigger, search: true };
+      await executeTrigger(trigger as any);
+
+      const args = mockGenerate.mock.calls[0][0];
+      expect(args.input.overrides.search).toBe(true);
+    });
+
+    it("throws when the workspace is not found, before invoking the runner", async () => {
+      mockDb.limit.mockResolvedValueOnce([]);
 
       await expect(executeTrigger(baseTrigger as any)).rejects.toThrow(
         "Workspace 'ws-1' not found",
       );
-      expect(mockDb.set).toHaveBeenCalledWith(
-        expect.objectContaining({ status: "failed" }),
-      );
+      expect(mockGenerate).not.toHaveBeenCalled();
     });
 
-    it("should throw and mark run as failed when provider not found", async () => {
-      mockDb.limit
-        .mockResolvedValueOnce([mockAgent])
-        .mockResolvedValueOnce([mockWorkspace])
-        .mockResolvedValueOnce([]); // provider not found
-
-      await expect(executeTrigger(baseTrigger as any)).rejects.toThrow(
-        "Provider 'provider-1' not found",
-      );
-      expect(mockDb.set).toHaveBeenCalledWith(
-        expect.objectContaining({ status: "failed" }),
-      );
-    });
-
-    it("should close MCP clients after execution", async () => {
-      setupDefaultMocks();
-
-      await executeTrigger(baseTrigger as any);
-
-      expect(mockMcpClient.close).toHaveBeenCalled();
-    });
-
-    it("should close MCP clients even when execution fails", async () => {
-      setupDefaultMocks();
-      mockGenerateText.mockRejectedValue(new Error("AI error"));
-
-      await expect(executeTrigger(baseTrigger as any)).rejects.toThrow(
-        "AI error",
-      );
-      expect(mockMcpClient.close).toHaveBeenCalled();
-    });
-
-    it("should enable search tools when trigger.search is true", async () => {
-      setupDefaultMocks();
-      mockSearchTools.mockReturnValue({ searchTool: {} });
-
-      const trigger = { ...baseTrigger, search: true } as any;
-      await executeTrigger(trigger);
-
-      expect(mockSearchTools).toHaveBeenCalled();
-    });
-
-    it("should mark run as success with stats on completion", async () => {
-      setupDefaultMocks();
-
-      await executeTrigger(baseTrigger as any);
-
-      // The success update should have been called with stats
-      expect(mockDb.set).toHaveBeenCalledWith(
-        expect.objectContaining({
-          status: "success",
-          stats: {
-            steps: 2,
-            toolCalls: [
-              { name: "tool1", count: 2 },
-              { name: "tool2", count: 1 },
-            ],
-            inputTokens: 100,
-            outputTokens: 50,
-          },
-        }),
-      );
-    });
-
-    it("should mark run as failed when generateText throws", async () => {
-      setupDefaultMocks();
-      mockGenerateText.mockRejectedValue(new Error("Model error"));
+    it("rethrows runner failures so callers can log/observe", async () => {
+      mockDb.limit.mockResolvedValueOnce([mockWorkspace]);
+      mockGenerate.mockRejectedValueOnce(new Error("Model error"));
 
       await expect(executeTrigger(baseTrigger as any)).rejects.toThrow(
         "Model error",
-      );
-      expect(mockDb.set).toHaveBeenCalledWith(
-        expect.objectContaining({
-          status: "failed",
-          errorMessage: "Model error",
-        }),
       );
     });
   });
@@ -333,7 +166,6 @@ describe("trigger-execution", () => {
     it("should update lastRunAt and compute nextRunAt for cron triggers", async () => {
       const nextRun = new Date("2026-01-01T01:00:00Z");
       mockValidateCronExpression.mockReturnValue(nextRun);
-      // Retention queries return fewer items than limit, so no deletes
       mockDb.limit.mockResolvedValue([]);
 
       await updateTriggerAfterRun("trigger-1", baseTrigger as any);
@@ -388,7 +220,6 @@ describe("trigger-execution", () => {
 
     it("should perform retention cleanup when maxRunsToKeep > 0", async () => {
       mockValidateCronExpression.mockReturnValue(new Date());
-      // Retention queries return enough items to trigger deletion
       mockDb.limit.mockResolvedValue(
         Array.from({ length: 10 }, (_, i) => ({ id: `item-${i}` })),
       );
@@ -396,7 +227,6 @@ describe("trigger-execution", () => {
 
       await updateTriggerAfterRun("trigger-1", baseTrigger as any);
 
-      // retainNewest should query runs
       expect(mockDb.select).toHaveBeenCalled();
     });
 
@@ -404,11 +234,9 @@ describe("trigger-execution", () => {
       mockValidateCronExpression.mockReturnValue(new Date());
       const trigger = { ...baseTrigger, maxRunsToKeep: 0 } as any;
 
-      // Reset to track calls after update
       resetMockDb();
       await updateTriggerAfterRun("trigger-1", trigger);
 
-      // Only the update call, no select for retention
       expect(mockDb.update).toHaveBeenCalled();
     });
   });

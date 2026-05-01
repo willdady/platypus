@@ -23,6 +23,7 @@ import { webhook } from "./routes/webhook.ts";
 import { mcpOauthCallback } from "./routes/mcp-oauth-callback.ts";
 import { organizationMember } from "./db/schema.ts";
 import { logger } from "./logger.ts";
+import type { UserScope, OrgScope, WorkspaceScope } from "./scope.ts";
 
 const ALLOWED_ORIGINS = process.env.ALLOWED_ORIGINS!.split(",");
 
@@ -72,6 +73,24 @@ export type Variables = {
    * Whether the current user owns the workspace (set by requireWorkspaceAccess middleware).
    */
   isWorkspaceOwner?: boolean;
+
+  /**
+   * User-level scope (set by requireAuth middleware).
+   * Carries the Principal identifying who is executing the request.
+   */
+  userScope?: UserScope;
+
+  /**
+   * Organization-level scope (set by requireOrgAccess middleware).
+   * Extends UserScope with orgId.
+   */
+  orgScope?: OrgScope;
+
+  /**
+   * Workspace-level scope (set by requireWorkspaceAccess middleware).
+   * Extends OrgScope with workspaceId and isWorkspaceOwner.
+   */
+  workspaceScope?: WorkspaceScope;
 };
 
 const app = new Hono<{ Variables: Variables }>();
