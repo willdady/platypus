@@ -7,7 +7,6 @@ import { db } from "../index.ts";
 import {
   trigger as triggerTable,
   triggerRun as triggerRunTable,
-  chat as chatTable,
   agent as agentTable,
 } from "../db/schema.ts";
 import { triggerCreateSchema, triggerUpdateSchema } from "@platypus/schemas";
@@ -268,47 +267,6 @@ trigger.delete(
     logger.info(`Deleted trigger '${triggerId}'`);
 
     return c.json({ message: "Trigger deleted" });
-  },
-);
-
-/** List chats for a trigger */
-trigger.get(
-  "/:triggerId/chats",
-  requireAuth,
-  requireOrgAccess(),
-  requireWorkspaceAccess,
-  async (c) => {
-    const triggerId = c.req.param("triggerId");
-    const workspaceId = c.req.param("workspaceId")!;
-
-    // Verify trigger exists in workspace
-    const triggerRecord = await db
-      .select()
-      .from(triggerTable)
-      .where(
-        and(
-          eq(triggerTable.id, triggerId),
-          eq(triggerTable.workspaceId, workspaceId),
-        ),
-      )
-      .limit(1);
-
-    if (triggerRecord.length === 0) {
-      return c.json({ error: "Trigger not found" }, 404);
-    }
-
-    const results = await db
-      .select({
-        id: chatTable.id,
-        title: chatTable.title,
-        createdAt: chatTable.createdAt,
-        updatedAt: chatTable.updatedAt,
-      })
-      .from(chatTable)
-      .where(eq(chatTable.triggerId, triggerId))
-      .orderBy(desc(chatTable.createdAt));
-
-    return c.json({ results });
   },
 );
 
