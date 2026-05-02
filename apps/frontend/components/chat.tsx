@@ -142,7 +142,10 @@ export const Chat = ({
     [skillsData?.results],
   );
 
-  // Fetch existing chat data
+  // Fetch existing chat data. Poll while the server reports the run is
+  // still in progress so users who reconnect mid-run see partial messages
+  // land without manually reloading. Stop polling once the run reaches a
+  // terminal status.
   const { data: chatData, isLoading: isChatLoading } = useSWR<ChatType>(
     backendUrl && user
       ? joinUrl(
@@ -154,6 +157,7 @@ export const Chat = ({
     {
       revalidateOnFocus: false,
       revalidateOnReconnect: false,
+      refreshInterval: (data) => (data?.status === "running" ? 3000 : 0),
     },
   );
 
@@ -383,9 +387,31 @@ export const Chat = ({
     : null;
   const currentProviderType = currentProvider?.providerType;
 
+  // Treat a server-side run-in-progress as if we were locally streaming,
+  // so a tab that reconnects mid-run (or an unrelated tab opened on the
+  // same chat) can't kick off a second concurrent run. The submit button
+  // becomes a stop button and Enter is blocked by PromptInputTextarea.
+  const isReconnectedToRunningRun =
+    chatData?.status === "running" && status === "ready";
+  const effectiveStatus = isReconnectedToRunningRun ? "streaming" : status;
+
   const handleSubmit = async (message: PromptInputMessage) => {
     // Stop the stream if currently streaming or submitted
-    if (status === "streaming" || status === "submitted") {
+    if (effectiveStatus === "streaming" || effectiveStatus === "submitted") {
+      // The server-side run is decoupled from the request lifecycle, so
+      // aborting the local fetch (what `stop()` does) no longer cancels
+      // the run. Send an explicit cancel POST so the server stops billing
+      // tokens and persists the partial result with status="cancelled".
+      void fetch(
+        joinUrl(
+          backendUrl || "",
+          `/organizations/${orgId}/workspaces/${workspaceId}/chat/${chatId}/cancel`,
+        ),
+        { method: "POST", credentials: "include" },
+      ).catch(() => {
+        // Swallow: the user can retry by pressing stop again, and the
+        // server treats repeated cancels as idempotent no-ops.
+      });
       return stop();
     }
 
@@ -486,11 +512,14 @@ export const Chat = ({
                     value={inputValue}
                     onChange={(e) => setInputValue(e.target.value)}
                     placeholder={
-                      selectedAgent?.inputPlaceholder ||
-                      "What would you like to know?"
+                      isReconnectedToRunningRun
+                        ? "Run in progress…"
+                        : selectedAgent?.inputPlaceholder ||
+                          "What would you like to know?"
                     }
                     autoFocus
-                    status={status}
+                    status={effectiveStatus}
+                    disabled={isReconnectedToRunningRun}
                   />
                 </PromptInputBody>
                 <PromptInputFooter>
@@ -595,7 +624,7 @@ export const Chat = ({
                       </Dialog>
                     )}
                   </PromptInputTools>
-                  <PromptInputSubmit status={status} />
+                  <PromptInputSubmit status={effectiveStatus} />
                 </PromptInputFooter>
               </PromptInput>
             ) : (

@@ -123,6 +123,9 @@ export const chat = pgTable(
       }),
     title: t.text("title").notNull(),
     messages: t.jsonb("messages"),
+    // Run lifecycle status. Existing rows backfill to "succeeded" — every
+    // chat row pre-status was the result of a completed run.
+    status: t.text("status").notNull().default("succeeded"),
     isPinned: t.boolean("is_pinned").notNull().default(false),
     tags: t.jsonb("tags").$type<string[]>().default([]),
     agentId: t.text("agent_id"),

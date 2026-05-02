@@ -56,6 +56,7 @@ import {
   CalendarDays,
   ArrowLeftRight,
   Search,
+  Loader2,
   X,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
@@ -436,6 +437,12 @@ export function AppSidebar() {
                             <Link
                               href={`/${orgId}/workspace/${workspaceId}/chat/${chat.id}`}
                             >
+                              {chat.status === "running" && (
+                                <Loader2
+                                  className="h-3 w-3 shrink-0 animate-spin text-muted-foreground"
+                                  aria-label="Run in progress"
+                                />
+                              )}
                               <p className="truncate">{chat.title}</p>
                             </Link>
                           </SidebarMenuButton>

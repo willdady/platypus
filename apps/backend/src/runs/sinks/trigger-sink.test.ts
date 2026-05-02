@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { mockDb, resetMockDb } from "../../test-utils.ts";
 import { TriggerSink } from "./trigger-sink.ts";
 import type { ResolvedRunPlan } from "../types.ts";
@@ -24,7 +24,7 @@ describe("TriggerSink", () => {
         eventData: { cardId: "c1" },
       });
 
-      await sink.onStart({ runId: "run-1" });
+      await sink.onStart({ runId: "run-1", messages: [] });
 
       expect(mockDb.insert).toHaveBeenCalledTimes(1);
       const inserted = mockDb.values.mock.calls[0][0];
@@ -40,7 +40,7 @@ describe("TriggerSink", () => {
     it("inserts a row with null event metadata when no event context is provided", async () => {
       const sink = new TriggerSink({ triggerId: "trigger-1" });
 
-      await sink.onStart({ runId: "run-1" });
+      await sink.onStart({ runId: "run-1", messages: [] });
 
       const inserted = mockDb.values.mock.calls[0][0];
       expect(inserted.eventType).toBeNull();
@@ -48,15 +48,82 @@ describe("TriggerSink", () => {
     });
   });
 
-  describe("onResolved / onProgress", () => {
-    it("are no-ops that do not touch the DB", async () => {
+  describe("onResolved", () => {
+    it("does not touch the DB", async () => {
       const sink = new TriggerSink({ triggerId: "trigger-1" });
 
       await sink.onResolved({ runId: "run-1", plan });
-      await sink.onProgress({ runId: "run-1", messages: [], stats: {} });
 
       expect(mockDb.update).not.toHaveBeenCalled();
       expect(mockDb.insert).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("onProgress + FlushScheduler", () => {
+    beforeEach(() => {
+      vi.useFakeTimers();
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it("writes incremental stats to the triggerRun row on the flush interval", async () => {
+      const sink = new TriggerSink({
+        triggerId: "trigger-1",
+        flushIntervalMs: 100,
+      });
+      await sink.onStart({ runId: "run-1", messages: [] });
+      await sink.onResolved({ runId: "run-1", plan });
+
+      // Multiple bumps within the window — coalesce to one write
+      await sink.onProgress({
+        runId: "run-1",
+        messages: [],
+        stats: {
+          steps: 1,
+          toolCalls: [{ name: "t1", count: 1 }],
+          inputTokens: 10,
+          outputTokens: 5,
+        },
+      });
+      await sink.onProgress({
+        runId: "run-1",
+        messages: [],
+        stats: {
+          steps: 2,
+          toolCalls: [{ name: "t1", count: 2 }],
+          inputTokens: 20,
+          outputTokens: 10,
+        },
+      });
+
+      expect(mockDb.update).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(100);
+
+      expect(mockDb.update).toHaveBeenCalledTimes(1);
+      const setArg = mockDb.set.mock.calls[0][0];
+      expect(setArg.stats).toEqual({
+        steps: 2,
+        toolCalls: [{ name: "t1", count: 2 }],
+        inputTokens: 20,
+        outputTokens: 10,
+      });
+      // No status flip on incremental writes — terminal status is for onFinish
+      expect(setArg.status).toBeUndefined();
+    });
+
+    it("does not write when no steps have been observed yet", async () => {
+      const sink = new TriggerSink({
+        triggerId: "trigger-1",
+        flushIntervalMs: 100,
+      });
+      await sink.onStart({ runId: "run-1", messages: [] });
+      await sink.onProgress({ runId: "run-1", messages: [], stats: {} });
+      await vi.advanceTimersByTimeAsync(200);
+
+      // No update call — stats with steps==null are skipped
+      expect(mockDb.update).not.toHaveBeenCalled();
     });
   });
 

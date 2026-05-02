@@ -74,6 +74,7 @@ chat.get(
       .select({
         id: chatTable.id,
         title: chatTable.title,
+        status: chatTable.status,
         isPinned: chatTable.isPinned,
         tags: chatTable.tags,
         agentId: chatTable.agentId,
@@ -159,7 +160,9 @@ chat.post(
         input,
         sink,
         options: {
-          abortSignal: c.req.raw.signal,
+          // c.req.raw.signal is intentionally NOT passed: chat runs
+          // continue server-side regardless of the client connection.
+          // The client cancels via POST /chat/:chatId/cancel.
           origin: getOrigin(c),
           frontendUrl: process.env.FRONTEND_URL,
         },
@@ -173,6 +176,39 @@ chat.post(
       }
       throw error;
     }
+  },
+);
+
+chat.post(
+  "/:chatId/cancel",
+  requireAuth,
+  requireOrgAccess(),
+  requireWorkspaceAccess,
+  requireWorkspaceOwner,
+  async (c) => {
+    const chatId = c.req.param("chatId");
+    const workspaceId = c.req.param("workspaceId")!;
+
+    // Verify the chat belongs to this workspace before signalling cancel.
+    // This is what makes a cross-workspace cancel return 404 rather than
+    // silently no-op — runIds (which equal chat IDs) are otherwise the
+    // only thing the registry sees.
+    const record = await db
+      .select({ id: chatTable.id })
+      .from(chatTable)
+      .where(
+        and(eq(chatTable.id, chatId), eq(chatTable.workspaceId, workspaceId)),
+      )
+      .limit(1);
+
+    if (record.length === 0) {
+      return c.json({ error: "Chat not found" }, 404);
+    }
+
+    // Idempotent: cancel returns false for unknown / already-finished
+    // runs, but we still respond 200 so flaky clients can safely retry.
+    agentRunner.cancel(chatId);
+    return c.json({ message: "Cancellation requested" }, 200);
   },
 );
 

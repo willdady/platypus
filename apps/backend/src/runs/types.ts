@@ -46,7 +46,7 @@ export type ResolvedRunPlan = {
  *   resolution failures.
  */
 export interface RunSink {
-  onStart(ctx: { runId: RunId }): Promise<void>;
+  onStart(ctx: { runId: RunId; messages: PlatypusUIMessage[] }): Promise<void>;
   onResolved(ctx: { runId: RunId; plan: ResolvedRunPlan }): Promise<void>;
   onProgress(ctx: {
     runId: RunId;

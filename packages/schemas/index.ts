@@ -52,11 +52,21 @@ export const workspaceUpdateSchema = workspaceSchema.pick({
 
 // Chat
 
+export const chatStatusSchema = z.enum([
+  "running",
+  "succeeded",
+  "failed",
+  "cancelled",
+]);
+
+export type ChatStatus = z.infer<typeof chatStatusSchema>;
+
 export const chatSchema = z.object({
   id: z.string(),
   workspaceId: z.string(),
   title: z.string().min(3).max(30),
   messages: z.any().optional(),
+  status: chatStatusSchema,
   isPinned: z.boolean(),
   tags: z
     .array(z.string().regex(kebabCaseRegex, "Tags must be kebab-case"))
@@ -127,6 +137,7 @@ export const chatGenerateMetadataSchema = z.object({
 export const chatListItemSchema = chatSchema.pick({
   id: true,
   title: true,
+  status: true,
   isPinned: true,
   tags: true,
   agentId: true,

@@ -34,6 +34,7 @@ vi.mock("../logger.ts", () => ({
 }));
 
 import { AgentRunner } from "./agent-runner.ts";
+import { runRegistry, TimeoutError } from "./run-registry.ts";
 import type { ResolvedRunPlan, RunInput, RunSink } from "./types.ts";
 import type { WorkspaceScope } from "../scope.ts";
 
@@ -223,5 +224,113 @@ describe("AgentRunner.stream — failure paths", () => {
     expect(finish.error).toBe("Workspace missing");
     // Stream was never invoked
     expect(mockStreamText).not.toHaveBeenCalled();
+  });
+});
+
+describe("AgentRunner.cancel", () => {
+  let runner: AgentRunner;
+  beforeEach(() => {
+    runner = new AgentRunner();
+    vi.clearAllMocks();
+  });
+
+  it("cancels an in-flight generate run with status=cancelled", async () => {
+    mockPrepareChatTurn.mockResolvedValueOnce(fakeTurn());
+    // Make generateText hang until aborted
+    mockGenerateText.mockImplementation(async ({ abortSignal }: any) => {
+      await new Promise<never>((_, reject) => {
+        if (abortSignal.aborted) {
+          reject(new Error("aborted"));
+          return;
+        }
+        abortSignal.addEventListener("abort", () =>
+          reject(new Error("aborted")),
+        );
+      });
+      throw new Error("unreachable");
+    });
+
+    const sink = new RecordingSink();
+    const inFlight = runner.generate({
+      scope,
+      input: { ...baseInput, runId: "cancel-1" },
+      sink,
+    });
+
+    // Wait a tick so the run registers
+    await new Promise((r) => setTimeout(r, 0));
+
+    expect(runner.cancel("cancel-1")).toBe(true);
+
+    await expect(inFlight).rejects.toThrow();
+
+    const finish = sink.events.at(-1) as Extract<
+      LifecycleEvent,
+      { name: "onFinish" }
+    >;
+    expect(finish.name).toBe("onFinish");
+    expect(finish.status).toBe("cancelled");
+  });
+
+  it("cancel(unknown) returns false", () => {
+    expect(runner.cancel("never-existed")).toBe(false);
+  });
+
+  it("per-run timeout produces onFinish with status=failed and TimeoutError", async () => {
+    mockPrepareChatTurn.mockResolvedValueOnce(fakeTurn());
+    mockGenerateText.mockImplementation(async ({ abortSignal }: any) => {
+      await new Promise<never>((_, reject) => {
+        abortSignal.addEventListener("abort", () =>
+          reject(abortSignal.reason ?? new Error("aborted")),
+        );
+      });
+      throw new Error("unreachable");
+    });
+
+    const sink = new RecordingSink();
+    const inFlight = runner.generate({
+      scope,
+      input: { ...baseInput, runId: "timeout-1" },
+      sink,
+      options: {
+        timeouts: { perRunTimeoutMs: 5, perStepTimeoutMs: 1_000_000 },
+      },
+    });
+
+    await expect(inFlight).rejects.toThrow();
+
+    const finish = sink.events.at(-1) as Extract<
+      LifecycleEvent,
+      { name: "onFinish" }
+    >;
+    expect(finish.status).toBe("failed");
+    expect(finish.error).toMatch(/per-run timeout/);
+    // Confirm it was specifically a TimeoutError (kind="run")
+    const finishEv = sink.events.at(-1)!;
+    expect((finishEv as any).error).toContain("run");
+  });
+
+  it("unregisters the run after generate succeeds", async () => {
+    mockPrepareChatTurn.mockResolvedValueOnce(fakeTurn());
+    mockGenerateText.mockResolvedValueOnce(fakeGenerateResult);
+
+    const sink = new RecordingSink();
+    await runner.generate({
+      scope,
+      input: { ...baseInput, runId: "ok-1" },
+      sink,
+    });
+
+    expect(runner.cancel("ok-1")).toBe(false);
+    expect(runRegistry.has("ok-1")).toBe(false);
+  });
+});
+
+// Smoke test the TimeoutError export so the type stays public-importable
+describe("AgentRunner timeout types", () => {
+  it("TimeoutError remains an Error subclass", () => {
+    const e = new TimeoutError("x", "run");
+    expect(e).toBeInstanceOf(Error);
+    expect(e.kind).toBe("run");
   });
 });

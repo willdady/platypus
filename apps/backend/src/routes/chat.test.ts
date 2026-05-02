@@ -1,5 +1,10 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import { mockDb, mockSession, resetMockDb } from "../test-utils.ts";
+import {
+  mockDb,
+  mockNoSession,
+  mockSession,
+  resetMockDb,
+} from "../test-utils.ts";
 import app from "../server.ts";
 
 // Mock AI SDK
@@ -8,10 +13,17 @@ vi.mock("ai", async () => {
   return {
     ...actual,
     streamText: vi.fn().mockReturnValue({
-      toUIMessageStreamResponse: vi
-        .fn()
-        .mockReturnValue(new Response("stream")),
+      toUIMessageStream: vi.fn().mockReturnValue(
+        new ReadableStream({
+          start(controller) {
+            controller.close();
+          },
+        }),
+      ),
     }),
+    createUIMessageStreamResponse: vi
+      .fn()
+      .mockReturnValue(new Response("stream")),
     generateText: vi.fn().mockResolvedValue({
       output: { title: "Generated Title", tags: ["tag1", "tag2"] },
     }),
@@ -204,9 +216,15 @@ describe("Chat Routes", () => {
         },
       ]);
 
-      // Mock .where() calls in sequence - first 4 return mockDb for chaining, 5th returns the promise
+      // ChatSink.onStart upserts the chat row with status=running before
+      // prepareChatTurn runs. Returning a non-empty array skips the insert
+      // fallback path.
+      mockDb.returning.mockResolvedValueOnce([{ id: "chat-1" }]);
+
+      // Mock .where() calls in sequence - first 5 return mockDb for chaining, 6th returns the promise
       mockDb.where.mockReturnValueOnce(mockDb); // requireOrgAccess
       mockDb.where.mockReturnValueOnce(mockDb); // requireWorkspaceAccess
+      mockDb.where.mockReturnValueOnce(mockDb); // ChatSink.onStart upsert
       mockDb.where.mockReturnValueOnce(mockDb); // fetch workspace
       mockDb.where.mockReturnValueOnce(mockDb); // resolveChatContext
       mockDb.where.mockReturnValueOnce(Promise.resolve([])); // fetch user contexts (final call)
@@ -244,6 +262,57 @@ describe("Chat Routes", () => {
       expect(await res.json()).toEqual({
         message: "Chat deleted successfully",
       });
+    });
+  });
+
+  describe("POST /:chatId/cancel", () => {
+    it("returns 200 when cancelling an existing chat (idempotent on inactive runs)", async () => {
+      mockSession();
+      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
+      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]); // requireWorkspaceAccess
+      // chat row lookup
+      mockDb.limit.mockResolvedValueOnce([{ id: "chat-1" }]);
+
+      const res = await app.request(`${baseUrl}/chat-1/cancel`, {
+        method: "POST",
+      });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.message).toMatch(/cancel/i);
+    });
+
+    it("returns 200 when called twice (idempotent)", async () => {
+      for (let i = 0; i < 2; i++) {
+        mockSession();
+        mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
+        mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]);
+        mockDb.limit.mockResolvedValueOnce([{ id: "chat-1" }]);
+
+        const res = await app.request(`${baseUrl}/chat-1/cancel`, {
+          method: "POST",
+        });
+        expect(res.status).toBe(200);
+      }
+    });
+
+    it("returns 404 when the chat does not belong to the workspace", async () => {
+      mockSession();
+      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
+      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]);
+      mockDb.limit.mockResolvedValueOnce([]); // chat lookup misses
+
+      const res = await app.request(`${baseUrl}/chat-other/cancel`, {
+        method: "POST",
+      });
+      expect(res.status).toBe(404);
+    });
+
+    it("returns 401 without a session", async () => {
+      mockNoSession();
+      const res = await app.request(`${baseUrl}/chat-1/cancel`, {
+        method: "POST",
+      });
+      expect(res.status).toBe(401);
     });
   });
 
