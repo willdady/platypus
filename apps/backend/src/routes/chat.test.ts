@@ -5,6 +5,32 @@ import {
   mockSession,
   resetMockDb,
 } from "../test-utils.ts";
+
+const { mockPrepareChatTurn } = vi.hoisted(() => ({
+  mockPrepareChatTurn: vi.fn(),
+}));
+
+vi.mock("../services/chat-execution.ts", () => {
+  class ValidationError extends Error {
+    constructor(message: string) {
+      super(message);
+      this.name = "ValidationError";
+    }
+  }
+  class NotFoundError extends Error {
+    constructor(message: string) {
+      super(message);
+      this.name = "NotFoundError";
+    }
+  }
+  return {
+    prepareChatTurn: mockPrepareChatTurn,
+    ValidationError,
+    NotFoundError,
+    drizzleChatTurnRepo: {},
+  };
+});
+
 import app from "../server.ts";
 
 // Mock AI SDK
@@ -198,36 +224,29 @@ describe("Chat Routes", () => {
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
       mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]); // requireWorkspaceAccess
 
-      // fetch workspace
-      mockDb.limit.mockResolvedValueOnce([
-        {
-          id: workspaceId,
-          context: null,
-        },
-      ]);
-
-      // resolveChatContext: fetch provider
-      mockDb.limit.mockResolvedValueOnce([
-        {
-          id: "p1",
-          providerType: "OpenAI",
-          modelIds: ["m1"],
-          workspaceId,
-        },
-      ]);
-
       // ChatSink.onStart upserts the chat row with status=running before
       // prepareChatTurn runs. Returning a non-empty array skips the insert
       // fallback path.
       mockDb.returning.mockResolvedValueOnce([{ id: "chat-1" }]);
 
-      // Mock .where() calls in sequence - first 5 return mockDb for chaining, 6th returns the promise
-      mockDb.where.mockReturnValueOnce(mockDb); // requireOrgAccess
-      mockDb.where.mockReturnValueOnce(mockDb); // requireWorkspaceAccess
-      mockDb.where.mockReturnValueOnce(mockDb); // ChatSink.onStart upsert
-      mockDb.where.mockReturnValueOnce(mockDb); // fetch workspace
-      mockDb.where.mockReturnValueOnce(mockDb); // resolveChatContext
-      mockDb.where.mockReturnValueOnce(Promise.resolve([])); // fetch user contexts (final call)
+      // The route under test does not exercise prepareChatTurn's internals —
+      // chat-execution.test.ts covers those against an in-memory repo. Here
+      // we just stub it to a stream-shaped result so the route can wire up
+      // streamText.
+      mockPrepareChatTurn.mockResolvedValueOnce({
+        stream: {
+          model: {},
+          tools: {},
+          system: "",
+          messages: [],
+          maxSteps: 1,
+        },
+        resolved: {
+          providerId: "p1",
+          modelId: "m1",
+        },
+        dispose: vi.fn().mockResolvedValue(undefined),
+      });
 
       const res = await app.request(baseUrl, {
         method: "POST",

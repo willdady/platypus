@@ -59,16 +59,20 @@ export class NotFoundError extends Error {
 
 // --- Types ---
 
-export type ChatContext = {
+type AgentRow = typeof agentTable.$inferSelect;
+type WorkspaceRow = typeof workspaceTable.$inferSelect;
+type McpRow = typeof mcpTable.$inferSelect;
+
+type ChatContext = {
   provider: Provider;
-  agent?: typeof agentTable.$inferSelect;
+  agent?: AgentRow;
   resolvedModelId: string;
   resolvedProviderId: string;
   resolvedAgentId?: string;
   resolvedMaxSteps: number;
 };
 
-export type GenerationConfig = {
+type GenerationConfig = {
   systemPrompt?: string;
   temperature?: number;
   topP?: number;
@@ -79,7 +83,7 @@ export type GenerationConfig = {
   skills?: Array<Pick<Skill, "name" | "description">>;
 };
 
-export type ChatSubmitData = {
+type ChatSubmitData = {
   agentId?: string;
   providerId?: string;
   modelId?: string;
@@ -143,6 +147,126 @@ export type PrepareChatTurnInput = {
   runMode?: "interactive" | "headless";
 };
 
+// --- Repository seam ---
+
+/**
+ * The data-access surface `prepareChatTurn` depends on. Production wires this
+ * to Drizzle (`drizzleChatTurnRepo`); tests pass an in-memory implementation
+ * from `chat-execution.test-fixtures.ts`. Methods are named after domain
+ * lookups, not query shapes — callers don't compose `where`/`limit` chains.
+ */
+export type ChatTurnRepo = {
+  getWorkspace(id: string): Promise<WorkspaceRow | null>;
+  getAgent(id: string, workspaceId: string): Promise<AgentRow | null>;
+  getProvider(
+    id: string,
+    orgId: string,
+    workspaceId: string,
+  ): Promise<Provider | null>;
+  getSkillsByIds(
+    ids: string[],
+    workspaceId: string,
+  ): Promise<Array<Pick<Skill, "name" | "description">>>;
+  getMcp(id: string, workspaceId: string): Promise<McpRow | null>;
+  getSubAgentsByIds(ids: string[]): Promise<AgentRow[]>;
+  getUserContexts(
+    userId: string,
+    workspaceId: string,
+  ): Promise<{ global?: string; workspace?: string }>;
+  getRecentMemories(
+    userId: string,
+    workspaceId: string,
+  ): Promise<MemorySummary[]>;
+};
+
+export const drizzleChatTurnRepo: ChatTurnRepo = {
+  async getWorkspace(id) {
+    const rows = await db
+      .select()
+      .from(workspaceTable)
+      .where(eq(workspaceTable.id, id))
+      .limit(1);
+    return rows[0] ?? null;
+  },
+
+  async getAgent(id, workspaceId) {
+    const rows = await db
+      .select()
+      .from(agentTable)
+      .where(
+        and(eq(agentTable.id, id), eq(agentTable.workspaceId, workspaceId)),
+      )
+      .limit(1);
+    return rows[0] ?? null;
+  },
+
+  async getProvider(id, orgId, workspaceId) {
+    const rows = await db
+      .select()
+      .from(providerTable)
+      .where(
+        and(
+          eq(providerTable.id, id),
+          or(
+            eq(providerTable.workspaceId, workspaceId),
+            eq(providerTable.organizationId, orgId),
+          ),
+        ),
+      )
+      .limit(1);
+    return (rows[0] as Provider) ?? null;
+  },
+
+  async getSkillsByIds(ids, workspaceId) {
+    if (ids.length === 0) return [];
+    return db
+      .select({ name: skillTable.name, description: skillTable.description })
+      .from(skillTable)
+      .where(
+        and(
+          eq(skillTable.workspaceId, workspaceId),
+          inArray(skillTable.id, ids),
+        ),
+      );
+  },
+
+  async getMcp(id, workspaceId) {
+    const rows = await db
+      .select()
+      .from(mcpTable)
+      .where(and(eq(mcpTable.id, id), eq(mcpTable.workspaceId, workspaceId)))
+      .limit(1);
+    return rows[0] ?? null;
+  },
+
+  async getSubAgentsByIds(ids) {
+    if (ids.length === 0) return [];
+    return db.select().from(agentTable).where(inArray(agentTable.id, ids));
+  },
+
+  async getUserContexts(userId, workspaceId) {
+    const rows = await db
+      .select({
+        content: contextTable.content,
+        workspaceId: contextTable.workspaceId,
+      })
+      .from(contextTable)
+      .where(eq(contextTable.userId, userId));
+
+    let global: string | undefined;
+    let workspace: string | undefined;
+    for (const ctx of rows) {
+      if (ctx.workspaceId === null) global = ctx.content;
+      else if (ctx.workspaceId === workspaceId) workspace = ctx.content;
+    }
+    return { global, workspace };
+  },
+
+  async getRecentMemories(userId, workspaceId) {
+    return retrieveRecentSummaries(userId, workspaceId);
+  },
+};
+
 // --- Public Module: prepare a Chat turn ---
 
 /**
@@ -153,9 +277,13 @@ export type PrepareChatTurnInput = {
  *
  * Caller passes the result to `streamText` and calls `dispose` on abort and
  * on `onFinish`. Persistence reads from `resolved`.
+ *
+ * The `repo` parameter defaults to the Drizzle adapter; tests pass an
+ * in-memory implementation.
  */
 export const prepareChatTurn = async (
   input: PrepareChatTurnInput,
+  repo: ChatTurnRepo = drizzleChatTurnRepo,
 ): Promise<ChatTurn> => {
   const {
     orgId,
@@ -168,8 +296,13 @@ export const prepareChatTurn = async (
     runMode = "interactive",
   } = input;
 
-  const workspace = await fetchWorkspace(workspaceId);
+  const workspace = await repo.getWorkspace(workspaceId);
+  if (!workspace) {
+    throw new NotFoundError(`Workspace '${workspaceId}' not found`);
+  }
+
   const context = await resolveChatContext(
+    repo,
     request as ChatSubmitData,
     orgId,
     workspaceId,
@@ -183,14 +316,14 @@ export const prepareChatTurn = async (
     { tools, mcpClients },
     skills,
     { subAgents, subAgentTools, subAgentMcpClients },
-    { userGlobalContext, userWorkspaceContext },
+    userContexts,
     memories,
   ] = await Promise.all([
-    loadTools(agent, workspaceId, orgId, frontendUrl, user.id),
-    loadSkills(agent, workspaceId),
-    loadSubAgents(agent, orgId, workspaceId, frontendUrl),
-    fetchUserContexts(user.id, workspaceId),
-    fetchMemories(user.id, workspaceId),
+    loadTools(repo, agent, workspaceId, orgId, frontendUrl, user.id),
+    loadSkills(repo, agent, workspaceId),
+    loadSubAgents(repo, agent, orgId, workspaceId, frontendUrl),
+    repo.getUserContexts(user.id, workspaceId),
+    repo.getRecentMemories(user.id, workspaceId),
   ]);
 
   const allMcpClients = [...mcpClients, ...subAgentMcpClients];
@@ -207,8 +340,8 @@ export const prepareChatTurn = async (
     user: {
       id: user.id,
       name: user.name,
-      globalContext: userGlobalContext,
-      workspaceContext: userWorkspaceContext,
+      globalContext: userContexts.global,
+      workspaceContext: userContexts.workspace,
     },
     memories,
     skills,
@@ -223,7 +356,9 @@ export const prepareChatTurn = async (
     promptCtx,
   );
 
-  prepareAgentTools(tools, skills, workspaceId);
+  if (skills.length > 0) {
+    tools.loadSkill = createLoadSkillTool(workspaceId);
+  }
 
   const inlinedMessages = origin
     ? await inlineFileUrls(messages, origin)
@@ -276,26 +411,10 @@ export const prepareChatTurn = async (
   };
 };
 
-// --- Helper Functions ---
+// --- Private helpers ---
 
-const fetchWorkspace = async (
-  workspaceId: string,
-): Promise<typeof workspaceTable.$inferSelect> => {
-  const rows = await db
-    .select()
-    .from(workspaceTable)
-    .where(eq(workspaceTable.id, workspaceId))
-    .limit(1);
-  if (rows.length === 0) {
-    throw new NotFoundError(`Workspace '${workspaceId}' not found`);
-  }
-  return rows[0];
-};
-
-/**
- * Resolves the chat context: determines the agent (if any), provider, and model to use.
- */
-export const resolveChatContext = async (
+const resolveChatContext = async (
+  repo: ChatTurnRepo,
   data: ChatSubmitData,
   orgId: string,
   workspaceId: string,
@@ -306,31 +425,17 @@ export const resolveChatContext = async (
   let resolvedModelId: string;
   let resolvedAgentId: string | undefined;
   let resolvedMaxSteps = 1;
-  let agent: typeof agentTable.$inferSelect | undefined;
+  let agent: AgentRow | undefined;
 
   if (agentId) {
-    // Agent selected - fetch agent and use its configuration
     resolvedAgentId = agentId;
-    const agentRecord = await db
-      .select()
-      .from(agentTable)
-      .where(
-        and(
-          eq(agentTable.id, agentId),
-          eq(agentTable.workspaceId, workspaceId),
-        ),
-      )
-      .limit(1);
-
-    if (agentRecord.length === 0) {
-      throw new NotFoundError(`Agent '${agentId}' not found`);
-    }
-    agent = agentRecord[0];
+    const found = await repo.getAgent(agentId, workspaceId);
+    if (!found) throw new NotFoundError(`Agent '${agentId}' not found`);
+    agent = found;
     resolvedProviderId = agent.providerId;
     resolvedModelId = agent.modelId;
     resolvedMaxSteps = agent.maxSteps ?? 1;
   } else if (providerId && modelId) {
-    // Direct provider/model selection
     resolvedProviderId = providerId;
     resolvedModelId = modelId;
     resolvedAgentId = undefined;
@@ -340,29 +445,17 @@ export const resolveChatContext = async (
     );
   }
 
-  // Get the provider record from the database
-  const providerRecord = await db
-    .select()
-    .from(providerTable)
-    .where(
-      and(
-        eq(providerTable.id, resolvedProviderId),
-        or(
-          eq(providerTable.workspaceId, workspaceId),
-          eq(providerTable.organizationId, orgId),
-        ),
-      ),
-    )
-    .limit(1);
-
-  if (providerRecord.length === 0) {
+  const provider = await repo.getProvider(
+    resolvedProviderId,
+    orgId,
+    workspaceId,
+  );
+  if (!provider) {
     throw new NotFoundError(
       `Provider with id '${resolvedProviderId}' not found`,
     );
   }
-  const provider = providerRecord[0] as Provider;
 
-  // Check the received modelId is enabled/defined on the provider
   if (!provider.modelIds.includes(resolvedModelId)) {
     throw new ValidationError(
       `Model id '${resolvedModelId}' not enabled for provider '${resolvedProviderId}'`,
@@ -379,11 +472,9 @@ export const resolveChatContext = async (
   };
 };
 
-/**
- * Loads tools for the chat session, including static tools and MCP clients.
- */
-export const loadTools = async (
-  agent: typeof agentTable.$inferSelect | undefined,
+const loadTools = async (
+  repo: ChatTurnRepo,
+  agent: AgentRow | undefined,
   workspaceId: string,
   orgId: string,
   frontendUrl: string | undefined,
@@ -410,31 +501,18 @@ export const loadTools = async (
             })
           : toolSet.tools;
       Object.assign(tools, resolvedTools);
-    } catch (error) {
-      // If static tool set not found, try to load as MCP
-      const mcpRecord = await db
-        .select()
-        .from(mcpTable)
-        .where(
-          and(
-            eq(mcpTable.id, toolSetId),
-            eq(mcpTable.workspaceId, workspaceId),
-          ),
-        )
-        .limit(1);
-
-      if (mcpRecord.length > 0) {
-        const mcp = mcpRecord[0];
-        if (mcp.url) {
-          const mcpClient = await createMCPClient({
-            transport: buildMcpTransportConfig(mcp),
-          });
-          const mcpTools = await mcpClient.tools();
-          Object.assign(tools, mcpTools);
-          mcpClients.push(mcpClient);
-        } else {
-          logger.warn(`MCP '${toolSetId}' has no URL configured`);
-        }
+    } catch {
+      // Static tool set not found — fall back to MCP lookup.
+      const mcp = await repo.getMcp(toolSetId, workspaceId);
+      if (mcp && mcp.url) {
+        const mcpClient = await createMCPClient({
+          transport: buildMcpTransportConfig(mcp),
+        });
+        const mcpTools = await mcpClient.tools();
+        Object.assign(tools, mcpTools);
+        mcpClients.push(mcpClient);
+      } else if (mcp) {
+        logger.warn(`MCP '${toolSetId}' has no URL configured`);
       } else {
         logger.warn(
           `Tool set with id '${toolSetId}' not found as static tool set or MCP`,
@@ -446,14 +524,9 @@ export const loadTools = async (
   return { tools, mcpClients };
 };
 
-/**
- * Resolves the generation configuration (system prompt, temperature, etc.)
- * by merging agent settings with request overrides and rendering the prompt
- * from the supplied SystemPromptContext.
- */
-export const resolveGenerationConfig = (
+const resolveGenerationConfig = (
   data: ChatSubmitData,
-  agent: typeof agentTable.$inferSelect | undefined,
+  agent: AgentRow | undefined,
   promptCtx: SystemPromptContext,
 ): GenerationConfig => {
   const config: GenerationConfig = {};
@@ -476,35 +549,18 @@ export const resolveGenerationConfig = (
   return config;
 };
 
-/**
- * Loads skills for an agent.
- */
-export const loadSkills = async (
-  agent: typeof agentTable.$inferSelect | undefined,
+const loadSkills = async (
+  repo: ChatTurnRepo,
+  agent: AgentRow | undefined,
   workspaceId: string,
 ): Promise<Array<Pick<Skill, "name" | "description">>> => {
-  if (!agent?.skillIds || agent.skillIds.length === 0) {
-    return [];
-  }
-
-  const skillRecords = await db
-    .select({ name: skillTable.name, description: skillTable.description })
-    .from(skillTable)
-    .where(
-      and(
-        eq(skillTable.workspaceId, workspaceId),
-        inArray(skillTable.id, agent.skillIds),
-      ),
-    );
-
-  return skillRecords;
+  if (!agent?.skillIds || agent.skillIds.length === 0) return [];
+  return repo.getSkillsByIds(agent.skillIds, workspaceId);
 };
 
-/**
- * Loads sub-agent details and creates delegate tools.
- */
-export const loadSubAgents = async (
-  agent: typeof agentTable.$inferSelect | undefined,
+const loadSubAgents = async (
+  repo: ChatTurnRepo,
+  agent: AgentRow | undefined,
   orgId: string,
   workspaceId: string,
   frontendUrl: string | undefined,
@@ -517,11 +573,7 @@ export const loadSubAgents = async (
     return { subAgents: [], subAgentTools: {}, subAgentMcpClients: [] };
   }
 
-  // Fetch full sub-agent configs including provider/model/tool info
-  const subAgentRecords = await db
-    .select()
-    .from(agentTable)
-    .where(inArray(agentTable.id, agent.subAgentIds));
+  const subAgentRecords = await repo.getSubAgentsByIds(agent.subAgentIds);
 
   const subAgents = subAgentRecords.map((sa) => ({
     id: sa.id,
@@ -529,41 +581,25 @@ export const loadSubAgents = async (
     description: sa.description,
   }));
 
-  // Collect MCP clients created for sub-agents so they can be closed on completion
   const subAgentMcpClients: any[] = [];
 
-  // Create sub-agent tools with their own models and tools
   const subAgentTools = await createSubAgentTools(
     subAgentRecords,
     async (providerId: string, modelId: string) => {
-      // Resolve provider for the sub-agent
-      const subProviderRecord = await db
-        .select()
-        .from(providerTable)
-        .where(
-          and(
-            eq(providerTable.id, providerId),
-            or(
-              eq(providerTable.workspaceId, workspaceId),
-              eq(providerTable.organizationId, orgId),
-            ),
-          ),
-        )
-        .limit(1);
-
-      if (subProviderRecord.length === 0) {
+      const subProvider = await repo.getProvider(
+        providerId,
+        orgId,
+        workspaceId,
+      );
+      if (!subProvider) {
         throw new Error(`Provider '${providerId}' not found for sub-agent`);
       }
-
-      return openProvider(subProviderRecord[0] as Provider).languageModel(
-        modelId,
-      );
+      return openProvider(subProvider).languageModel(modelId);
     },
     async (subAgentId: string, toolSetIds: string[]) => {
-      // Load tools for the sub-agent, passing the full record so dynamic
-      // tool sets (e.g. kanban) can resolve the correct agent ID.
       const subAgentRecord = subAgentRecords.find((sa) => sa.id === subAgentId);
       const { tools: subTools, mcpClients } = await loadTools(
+        repo,
         subAgentRecord ?? ({ id: subAgentId, toolSetIds } as any),
         workspaceId,
         orgId,
@@ -575,58 +611,4 @@ export const loadSubAgents = async (
   );
 
   return { subAgents, subAgentTools, subAgentMcpClients };
-};
-
-/**
- * Fetches user contexts (global and workspace-specific).
- */
-export const fetchUserContexts = async (
-  userId: string,
-  workspaceId: string,
-): Promise<{ userGlobalContext?: string; userWorkspaceContext?: string }> => {
-  let userGlobalContext: string | undefined;
-  let userWorkspaceContext: string | undefined;
-
-  const userContexts = await db
-    .select({
-      content: contextTable.content,
-      workspaceId: contextTable.workspaceId,
-    })
-    .from(contextTable)
-    .where(eq(contextTable.userId, userId));
-
-  for (const ctx of userContexts) {
-    if (ctx.workspaceId === null) {
-      userGlobalContext = ctx.content;
-    } else if (ctx.workspaceId === workspaceId) {
-      userWorkspaceContext = ctx.content;
-    }
-  }
-
-  return { userGlobalContext, userWorkspaceContext };
-};
-
-/**
- * Fetches recent daily summary rows for the user. Formatting happens inside
- * the system-prompt memories fragment.
- */
-export const fetchMemories = async (
-  userId: string,
-  workspaceId: string,
-): Promise<MemorySummary[]> => {
-  return retrieveRecentSummaries(userId, workspaceId);
-};
-
-/**
- * Prepares tools for an agent execution.
- */
-export const prepareAgentTools = (
-  tools: Record<string, Tool>,
-  skills: Array<Pick<Skill, "name" | "description">>,
-  workspaceId: string,
-): void => {
-  // Inject loadSkill tool if skills exist
-  if (skills.length > 0) {
-    tools.loadSkill = createLoadSkillTool(workspaceId);
-  }
 };

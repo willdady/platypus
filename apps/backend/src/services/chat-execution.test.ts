@@ -1,5 +1,4 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import { mockDb, resetMockDb } from "../test-utils.ts";
 
 const {
   mockCreateOpenAI,
@@ -46,6 +45,7 @@ import {
   NotFoundError,
   ValidationError,
 } from "./chat-execution.ts";
+import { createInMemoryChatTurnRepo } from "./chat-execution.test-fixtures.ts";
 
 const baseProvider = {
   id: "p1",
@@ -111,41 +111,30 @@ const baseInput = {
 
 describe("chat-execution", () => {
   beforeEach(() => {
-    resetMockDb();
     vi.clearAllMocks();
   });
 
   describe("prepareChatTurn", () => {
     it("Agent selection produces resolved IDs and a system prompt that surfaces the Agent's Skills", async () => {
-      const agentWithSkill = {
-        ...baseAgent,
-        skillIds: ["skill-1"],
-      };
-
-      // .limit() is the awaited terminal for fetchWorkspace + the two
-      // resolveChatContext queries (workspace, agent, provider).
-      mockDb.limit
-        .mockResolvedValueOnce([baseWorkspace])
-        .mockResolvedValueOnce([agentWithSkill])
-        .mockResolvedValueOnce([baseProvider]);
-
-      // .where() is mid-chain for those three queries (returns mockDb so
-      // .limit() can be called on it) and then terminal for loadSkills and
-      // fetchUserContexts in the parallel block.
-      mockDb.where
-        .mockReturnValueOnce(mockDb)
-        .mockReturnValueOnce(mockDb)
-        .mockReturnValueOnce(mockDb)
-        .mockResolvedValueOnce([
-          { name: "kanban-flow", description: "Manage kanban boards" },
-        ])
-        .mockResolvedValueOnce([]);
-      mockDb.orderBy.mockResolvedValueOnce([]); // retrieveRecentSummaries
-
-      const turn = await prepareChatTurn({
-        ...baseInput,
-        request: { id: "chat-1", agentId: agentWithSkill.id },
+      const agentWithSkill = { ...baseAgent, skillIds: ["skill-1"] };
+      const repo = createInMemoryChatTurnRepo({
+        workspaces: [baseWorkspace],
+        agents: [agentWithSkill as any],
+        providers: [baseProvider as any],
+        skills: [
+          {
+            id: "skill-1",
+            workspaceId: "ws-1",
+            name: "kanban-flow",
+            description: "Manage kanban boards",
+          },
+        ],
       });
+
+      const turn = await prepareChatTurn(
+        { ...baseInput, request: { id: "chat-1", agentId: agentWithSkill.id } },
+        repo,
+      );
 
       // resolved is what persistence will write
       expect(turn.resolved.agentId).toBe(agentWithSkill.id);
@@ -168,29 +157,24 @@ describe("chat-execution", () => {
     });
 
     it("Direct Provider+Model selection populates resolved.systemPrompt and merges request overrides", async () => {
-      mockDb.limit
-        .mockResolvedValueOnce([baseWorkspace]) // fetchWorkspace
-        .mockResolvedValueOnce([baseProvider]); // resolveChatContext: provider (no agent fetch)
-
-      // .where() mid-chain twice (workspace, provider lookups), then terminal
-      // for fetchUserContexts. No agent → loadTools/loadSkills/loadSubAgents
-      // all short-circuit before hitting the DB.
-      mockDb.where
-        .mockReturnValueOnce(mockDb)
-        .mockReturnValueOnce(mockDb)
-        .mockResolvedValueOnce([]);
-      mockDb.orderBy.mockResolvedValueOnce([]); // retrieveRecentSummaries
-
-      const turn = await prepareChatTurn({
-        ...baseInput,
-        request: {
-          id: "chat-2",
-          providerId: baseProvider.id,
-          modelId: "gpt-4",
-          systemPrompt: "Be terse.",
-          temperature: 0.7,
-        },
+      const repo = createInMemoryChatTurnRepo({
+        workspaces: [baseWorkspace],
+        providers: [baseProvider as any],
       });
+
+      const turn = await prepareChatTurn(
+        {
+          ...baseInput,
+          request: {
+            id: "chat-2",
+            providerId: baseProvider.id,
+            modelId: "gpt-4",
+            systemPrompt: "Be terse.",
+            temperature: 0.7,
+          },
+        },
+        repo,
+      );
 
       expect(turn.resolved.agentId).toBeUndefined();
       expect(turn.resolved.providerId).toBe(baseProvider.id);
@@ -208,75 +192,84 @@ describe("chat-execution", () => {
     });
 
     it("throws ValidationError when neither agentId nor providerId+modelId is supplied", async () => {
-      mockDb.limit.mockResolvedValueOnce([baseWorkspace]); // fetchWorkspace succeeds
+      const repo = createInMemoryChatTurnRepo({ workspaces: [baseWorkspace] });
 
       await expect(
-        prepareChatTurn({
-          ...baseInput,
-          request: { id: "chat-3" } as any,
-        }),
+        prepareChatTurn(
+          { ...baseInput, request: { id: "chat-3" } as any },
+          repo,
+        ),
       ).rejects.toBeInstanceOf(ValidationError);
     });
 
     it("throws NotFoundError when the Agent does not exist", async () => {
-      mockDb.limit
-        .mockResolvedValueOnce([baseWorkspace]) // fetchWorkspace
-        .mockResolvedValueOnce([]); // resolveChatContext: agent missing
+      const repo = createInMemoryChatTurnRepo({ workspaces: [baseWorkspace] });
 
       await expect(
-        prepareChatTurn({
-          ...baseInput,
-          request: { id: "chat-4", agentId: "agent-missing" },
-        }),
+        prepareChatTurn(
+          {
+            ...baseInput,
+            request: { id: "chat-4", agentId: "agent-missing" },
+          },
+          repo,
+        ),
       ).rejects.toBeInstanceOf(NotFoundError);
     });
 
     it("throws NotFoundError when the Provider does not exist", async () => {
-      mockDb.limit
-        .mockResolvedValueOnce([baseWorkspace]) // fetchWorkspace
-        .mockResolvedValueOnce([]); // resolveChatContext: provider missing
+      const repo = createInMemoryChatTurnRepo({ workspaces: [baseWorkspace] });
 
       await expect(
-        prepareChatTurn({
-          ...baseInput,
-          request: {
-            id: "chat-5",
-            providerId: "p-missing",
-            modelId: "gpt-4",
+        prepareChatTurn(
+          {
+            ...baseInput,
+            request: {
+              id: "chat-5",
+              providerId: "p-missing",
+              modelId: "gpt-4",
+            },
           },
-        }),
+          repo,
+        ),
       ).rejects.toBeInstanceOf(NotFoundError);
     });
 
     it("throws ValidationError when the model id is not enabled on the Provider", async () => {
-      mockDb.limit
-        .mockResolvedValueOnce([baseWorkspace]) // fetchWorkspace
-        .mockResolvedValueOnce([{ ...baseProvider, modelIds: ["gpt-3.5"] }]);
+      const repo = createInMemoryChatTurnRepo({
+        workspaces: [baseWorkspace],
+        providers: [{ ...baseProvider, modelIds: ["gpt-3.5"] } as any],
+      });
 
       await expect(
-        prepareChatTurn({
-          ...baseInput,
-          request: {
-            id: "chat-6",
-            providerId: baseProvider.id,
-            modelId: "gpt-4",
+        prepareChatTurn(
+          {
+            ...baseInput,
+            request: {
+              id: "chat-6",
+              providerId: baseProvider.id,
+              modelId: "gpt-4",
+            },
           },
-        }),
+          repo,
+        ),
       ).rejects.toBeInstanceOf(ValidationError);
     });
 
     it("throws NotFoundError when the Workspace does not exist", async () => {
-      mockDb.limit.mockResolvedValueOnce([]); // fetchWorkspace miss
+      const repo = createInMemoryChatTurnRepo({});
 
       await expect(
-        prepareChatTurn({
-          ...baseInput,
-          request: {
-            id: "chat-7",
-            providerId: baseProvider.id,
-            modelId: "gpt-4",
+        prepareChatTurn(
+          {
+            ...baseInput,
+            request: {
+              id: "chat-7",
+              providerId: baseProvider.id,
+              modelId: "gpt-4",
+            },
           },
-        }),
+          repo,
+        ),
       ).rejects.toBeInstanceOf(NotFoundError);
     });
   });
