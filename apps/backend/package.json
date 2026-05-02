@@ -44,7 +44,7 @@
     "robots-parser": "^3.0.1",
     "sharp": "^0.34.5",
     "turndown": "^7.2.4",
-    "zod": "^4.4.1"
+    "zod": ">=4.3.6 <4.4.0"
   },
   "devDependencies": {
     "@types/jsdom": "^28.0.1",

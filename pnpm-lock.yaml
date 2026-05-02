@@ -22,19 +22,19 @@ importers:
     dependencies:
       '@ai-sdk/amazon-bedrock':
         specifier: ^4.0.98
-        version: 4.0.98(zod@4.4.1)
+        version: 4.0.98(zod@4.3.6)
       '@ai-sdk/anthropic':
         specifier: ^3.0.73
-        version: 3.0.73(zod@4.4.1)
+        version: 3.0.73(zod@4.3.6)
       '@ai-sdk/google':
         specifier: ^3.0.66
-        version: 3.0.66(zod@4.4.1)
+        version: 3.0.66(zod@4.3.6)
       '@ai-sdk/mcp':
         specifier: ^1.0.38
-        version: 1.0.38(zod@4.4.1)
+        version: 1.0.38(zod@4.3.6)
       '@ai-sdk/openai':
         specifier: ^3.0.55
-        version: 3.0.55(zod@4.4.1)
+        version: 3.0.55(zod@4.3.6)
       '@aws-sdk/client-s3':
         specifier: ^3.1040.0
         version: 3.1040.0
@@ -49,13 +49,13 @@ importers:
         version: 0.6.0
       '@openrouter/ai-sdk-provider':
         specifier: ^2.9.0
-        version: 2.9.0(ai@6.0.172(zod@4.4.1))(zod@4.4.1)
+        version: 2.9.0(ai@6.0.172(zod@4.3.6))(zod@4.3.6)
       '@platypus/schemas':
         specifier: workspace:*
         version: link:../../packages/schemas
       ai:
         specifier: ^6.0.172
-        version: 6.0.172(zod@4.4.1)
+        version: 6.0.172(zod@4.3.6)
       better-auth:
         specifier: ^1.6.9
         version: 1.6.9(@opentelemetry/api@1.9.0)(drizzle-kit@0.31.10)(drizzle-orm@0.45.2(@opentelemetry/api@1.9.0)(@types/pg@8.20.0)(kysely@0.28.16)(pg@8.20.0))(mongodb@7.1.0)(next@16.2.4(@opentelemetry/api@1.9.0)(react-dom@19.2.5(react@19.2.5))(react@19.2.5))(pg@8.20.0)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)(vitest@4.1.5)
@@ -96,8 +96,8 @@ importers:
         specifier: ^7.2.4
         version: 7.2.4
       zod:
-        specifier: ^4.4.1
-        version: 4.4.1
+        specifier: '>=4.3.6 <4.4.0'
+        version: 4.3.6
     devDependencies:
       '@types/jsdom':
         specifier: ^28.0.1
@@ -344,8 +344,8 @@ importers:
   packages/schemas:
     dependencies:
       zod:
-        specifier: ^4.4.1
-        version: 4.4.1
+        specifier: '>=4.3.6 <4.4.0'
+        version: 4.3.6
     devDependencies:
       vitest:
         specifier: ^4.1.5
@@ -2525,6 +2525,7 @@ packages:
   '@smithy/util-retry@4.3.6':
     resolution: {integrity: sha512-p6/FO1n2KxMeQyna067i0uJ6TSbb165ZhnRtCpWh4Foxqbfc6oW+XITaL8QkFJj3KFnDe2URt4gOhgU06EP9ew==}
     engines: {node: '>=18.0.0'}
+    deprecated: '@smithy/util-retry v4.3.6 contains a bug in Adaptive Retry, see https://github.com/smithy-lang/smithy-typescript/issues/1993. Upgrade to 4.3.7+'
 
   '@smithy/util-stream@4.5.25':
     resolution: {integrity: sha512-/PFpG4k8Ze8Ei+mMKj3oiPICYekthuzePZMgZbCqMiXIHHf4n2aZ4Ps0aSRShycFTGuj/J6XldmC0x0DwednIA==}
@@ -5990,6 +5991,9 @@ packages:
     peerDependencies:
       zod: ^3.25.0 || ^4.0.0
 
+  zod@4.3.6:
+    resolution: {integrity: sha512-rftlrkhHZOcjDwkGlnUtZZkvaPHCsDATp4pGpuOOMDaTdDDXF91wuVDJoWoPsKX/3YPQ5fHuF3STjcYyKr+Qhg==}
+
   zod@4.4.1:
     resolution: {integrity: sha512-a6ENMBBGZBsnlSebQ/eKCguSBeGKSf4O7BPnqVPmYGtpBYI7VSqoVqw+QcB7kPRjbqPwhYTpFbVj/RqNz/CT0Q==}
 
@@ -6000,21 +6004,28 @@ snapshots:
 
   '@adobe/css-tools@4.4.4': {}
 
-  '@ai-sdk/amazon-bedrock@4.0.98(zod@4.4.1)':
+  '@ai-sdk/amazon-bedrock@4.0.98(zod@4.3.6)':
     dependencies:
-      '@ai-sdk/anthropic': 3.0.73(zod@4.4.1)
+      '@ai-sdk/anthropic': 3.0.73(zod@4.3.6)
       '@ai-sdk/provider': 3.0.10
-      '@ai-sdk/provider-utils': 4.0.25(zod@4.4.1)
+      '@ai-sdk/provider-utils': 4.0.25(zod@4.3.6)
       '@smithy/eventstream-codec': 4.2.14
       '@smithy/util-utf8': 4.2.2
       aws4fetch: 1.0.20
-      zod: 4.4.1
+      zod: 4.3.6
 
-  '@ai-sdk/anthropic@3.0.73(zod@4.4.1)':
+  '@ai-sdk/anthropic@3.0.73(zod@4.3.6)':
     dependencies:
       '@ai-sdk/provider': 3.0.10
-      '@ai-sdk/provider-utils': 4.0.25(zod@4.4.1)
-      zod: 4.4.1
+      '@ai-sdk/provider-utils': 4.0.25(zod@4.3.6)
+      zod: 4.3.6
+
+  '@ai-sdk/gateway@3.0.107(zod@4.3.6)':
+    dependencies:
+      '@ai-sdk/provider': 3.0.10
+      '@ai-sdk/provider-utils': 4.0.25(zod@4.3.6)
+      '@vercel/oidc': 3.2.0
+      zod: 4.3.6
 
   '@ai-sdk/gateway@3.0.107(zod@4.4.1)':
     dependencies:
@@ -6023,24 +6034,31 @@ snapshots:
       '@vercel/oidc': 3.2.0
       zod: 4.4.1
 
-  '@ai-sdk/google@3.0.66(zod@4.4.1)':
+  '@ai-sdk/google@3.0.66(zod@4.3.6)':
     dependencies:
       '@ai-sdk/provider': 3.0.10
-      '@ai-sdk/provider-utils': 4.0.25(zod@4.4.1)
-      zod: 4.4.1
+      '@ai-sdk/provider-utils': 4.0.25(zod@4.3.6)
+      zod: 4.3.6
 
-  '@ai-sdk/mcp@1.0.38(zod@4.4.1)':
+  '@ai-sdk/mcp@1.0.38(zod@4.3.6)':
     dependencies:
       '@ai-sdk/provider': 3.0.10
-      '@ai-sdk/provider-utils': 4.0.25(zod@4.4.1)
+      '@ai-sdk/provider-utils': 4.0.25(zod@4.3.6)
       pkce-challenge: 5.0.1
-      zod: 4.4.1
+      zod: 4.3.6
 
-  '@ai-sdk/openai@3.0.55(zod@4.4.1)':
+  '@ai-sdk/openai@3.0.55(zod@4.3.6)':
     dependencies:
       '@ai-sdk/provider': 3.0.10
-      '@ai-sdk/provider-utils': 4.0.25(zod@4.4.1)
-      zod: 4.4.1
+      '@ai-sdk/provider-utils': 4.0.25(zod@4.3.6)
+      zod: 4.3.6
+
+  '@ai-sdk/provider-utils@4.0.25(zod@4.3.6)':
+    dependencies:
+      '@ai-sdk/provider': 3.0.10
+      '@standard-schema/spec': 1.1.0
+      eventsource-parser: 3.0.8
+      zod: 4.3.6
 
   '@ai-sdk/provider-utils@4.0.25(zod@4.4.1)':
     dependencies:
@@ -6663,7 +6681,7 @@ snapshots:
       jose: 6.2.3
       kysely: 0.28.16
       nanostores: 1.3.0
-      zod: 4.4.1
+      zod: 4.3.6
     optionalDependencies:
       '@opentelemetry/api': 1.9.0
 
@@ -7305,10 +7323,10 @@ snapshots:
 
   '@nolyfill/is-core-module@1.0.39': {}
 
-  '@openrouter/ai-sdk-provider@2.9.0(ai@6.0.172(zod@4.4.1))(zod@4.4.1)':
+  '@openrouter/ai-sdk-provider@2.9.0(ai@6.0.172(zod@4.3.6))(zod@4.3.6)':
     dependencies:
-      ai: 6.0.172(zod@4.4.1)
-      zod: 4.4.1
+      ai: 6.0.172(zod@4.3.6)
+      zod: 4.3.6
 
   '@opentelemetry/api@1.9.0': {}
 
@@ -8876,6 +8894,14 @@ snapshots:
 
   acorn@8.16.0: {}
 
+  ai@6.0.172(zod@4.3.6):
+    dependencies:
+      '@ai-sdk/gateway': 3.0.107(zod@4.3.6)
+      '@ai-sdk/provider': 3.0.10
+      '@ai-sdk/provider-utils': 4.0.25(zod@4.3.6)
+      '@opentelemetry/api': 1.9.0
+      zod: 4.3.6
+
   ai@6.0.172(zod@4.4.1):
     dependencies:
       '@ai-sdk/gateway': 3.0.107(zod@4.4.1)
@@ -9810,8 +9836,8 @@ snapshots:
       '@babel/parser': 7.29.3
       eslint: 10.2.1(jiti@2.6.1)
       hermes-parser: 0.25.1
-      zod: 4.4.1
-      zod-validation-error: 4.0.2(zod@4.4.1)
+      zod: 4.3.6
+      zod-validation-error: 4.0.2(zod@4.3.6)
     transitivePeerDependencies:
       - supports-color
 
@@ -12354,9 +12380,11 @@ snapshots:
 
   yocto-queue@0.1.0: {}
 
-  zod-validation-error@4.0.2(zod@4.4.1):
+  zod-validation-error@4.0.2(zod@4.3.6):
     dependencies:
-      zod: 4.4.1
+      zod: 4.3.6
+
+  zod@4.3.6: {}
 
   zod@4.4.1: {}
 
