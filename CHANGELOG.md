@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.74.0](https://github.com/willdady/platypus/compare/v1.73.1...v1.74.0) (2026-05-02)
+
+
+### Features
+
+* **backend:** split agent-management toolset for finer assignment ([73633bd](https://github.com/willdady/platypus/commit/73633bd87c51af96309947ae7c7fb0b7efa0f396))
+
 ## [1.73.1](https://github.com/willdady/platypus/compare/v1.73.0...v1.73.1) (2026-05-02)
 
 
