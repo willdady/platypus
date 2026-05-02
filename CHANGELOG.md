@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.73.0](https://github.com/willdady/platypus/compare/v1.72.0...v1.73.0) (2026-05-02)
+
+
+### Features
+
+* **backend:** surface agent identity in headless runs ([f2b0055](https://github.com/willdady/platypus/commit/f2b0055103658da33303d464a71bee99be527c8c))
+* decouple chat run lifetime from HTTP request ([#113](https://github.com/willdady/platypus/issues/113)) ([b1c20c1](https://github.com/willdady/platypus/commit/b1c20c185b080203fa6036e3a22ddf470211e338))
+
+
+### Bug Fixes
+
+* **backend:** drop dead trigger /chats handler and restore trigger route tests ([f95f231](https://github.com/willdady/platypus/commit/f95f231e52c06aca856cb10d9ae5557ab228a7c7))
+
 ## [1.72.0](https://github.com/willdady/platypus/compare/v1.71.0...v1.72.0) (2026-04-29)
 
 
