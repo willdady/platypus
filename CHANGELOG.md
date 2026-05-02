@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.74.1](https://github.com/willdady/platypus/compare/v1.74.0...v1.74.1) (2026-05-02)
+
+
+### Bug Fixes
+
+* pin zod below 4.4.0 to restore Bedrock streaming ([936b0f0](https://github.com/willdady/platypus/commit/936b0f06cd542ca485319099140487ed6f19124b))
+
 ## [1.74.0](https://github.com/willdady/platypus/compare/v1.73.1...v1.74.0) (2026-05-02)
 
 
