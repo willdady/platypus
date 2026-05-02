@@ -1,4 +1,4 @@
-import type { ChatTurnRepo } from "./chat-execution.ts";
+import type { ChatTurnQueries } from "./chat-execution.ts";
 import type {
   agent as agentTable,
   mcp as mcpTable,
@@ -11,7 +11,7 @@ type AgentRow = typeof agentTable.$inferSelect;
 type WorkspaceRow = typeof workspaceTable.$inferSelect;
 type McpRow = typeof mcpTable.$inferSelect;
 
-export type ChatTurnRepoFixtures = {
+export type ChatTurnQueriesFixtures = {
   workspaces?: WorkspaceRow[];
   agents?: AgentRow[];
   providers?: Provider[];
@@ -31,12 +31,12 @@ export type ChatTurnRepoFixtures = {
 };
 
 /**
- * Returns an in-memory `ChatTurnRepo` populated from explicit fixtures. Tests
+ * Returns an in-memory `ChatTurnQueries` populated from explicit fixtures. Tests
  * specify only what they need; missing lookups return `null` / `[]`.
  */
-export const createInMemoryChatTurnRepo = (
-  fx: ChatTurnRepoFixtures = {},
-): ChatTurnRepo => ({
+export const createInMemoryChatTurnQueries = (
+  fx: ChatTurnQueriesFixtures = {},
+): ChatTurnQueries => ({
   async getWorkspace(id) {
     return fx.workspaces?.find((w) => w.id === id) ?? null;
   },

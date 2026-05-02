@@ -27,7 +27,7 @@ vi.mock("../services/chat-execution.ts", () => {
     prepareChatTurn: mockPrepareChatTurn,
     ValidationError,
     NotFoundError,
-    drizzleChatTurnRepo: {},
+    drizzleChatTurnQueries: {},
   };
 });
 
@@ -230,7 +230,7 @@ describe("Chat Routes", () => {
       mockDb.returning.mockResolvedValueOnce([{ id: "chat-1" }]);
 
       // The route under test does not exercise prepareChatTurn's internals —
-      // chat-execution.test.ts covers those against an in-memory repo. Here
+      // chat-execution.test.ts covers those against an in-memory queries adapter. Here
       // we just stub it to a stream-shaped result so the route can wire up
       // streamText.
       mockPrepareChatTurn.mockResolvedValueOnce({

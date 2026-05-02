@@ -45,7 +45,7 @@ import {
   NotFoundError,
   ValidationError,
 } from "./chat-execution.ts";
-import { createInMemoryChatTurnRepo } from "./chat-execution.test-fixtures.ts";
+import { createInMemoryChatTurnQueries } from "./chat-execution.test-fixtures.ts";
 
 const baseProvider = {
   id: "p1",
@@ -117,7 +117,7 @@ describe("chat-execution", () => {
   describe("prepareChatTurn", () => {
     it("Agent selection produces resolved IDs and a system prompt that surfaces the Agent's Skills", async () => {
       const agentWithSkill = { ...baseAgent, skillIds: ["skill-1"] };
-      const repo = createInMemoryChatTurnRepo({
+      const queries = createInMemoryChatTurnQueries({
         workspaces: [baseWorkspace],
         agents: [agentWithSkill as any],
         providers: [baseProvider as any],
@@ -133,7 +133,7 @@ describe("chat-execution", () => {
 
       const turn = await prepareChatTurn(
         { ...baseInput, request: { id: "chat-1", agentId: agentWithSkill.id } },
-        repo,
+        queries,
       );
 
       // resolved is what persistence will write
@@ -157,7 +157,7 @@ describe("chat-execution", () => {
     });
 
     it("Direct Provider+Model selection populates resolved.systemPrompt and merges request overrides", async () => {
-      const repo = createInMemoryChatTurnRepo({
+      const queries = createInMemoryChatTurnQueries({
         workspaces: [baseWorkspace],
         providers: [baseProvider as any],
       });
@@ -173,7 +173,7 @@ describe("chat-execution", () => {
             temperature: 0.7,
           },
         },
-        repo,
+        queries,
       );
 
       expect(turn.resolved.agentId).toBeUndefined();
@@ -192,18 +192,18 @@ describe("chat-execution", () => {
     });
 
     it("throws ValidationError when neither agentId nor providerId+modelId is supplied", async () => {
-      const repo = createInMemoryChatTurnRepo({ workspaces: [baseWorkspace] });
+      const queries = createInMemoryChatTurnQueries({ workspaces: [baseWorkspace] });
 
       await expect(
         prepareChatTurn(
           { ...baseInput, request: { id: "chat-3" } as any },
-          repo,
+          queries,
         ),
       ).rejects.toBeInstanceOf(ValidationError);
     });
 
     it("throws NotFoundError when the Agent does not exist", async () => {
-      const repo = createInMemoryChatTurnRepo({ workspaces: [baseWorkspace] });
+      const queries = createInMemoryChatTurnQueries({ workspaces: [baseWorkspace] });
 
       await expect(
         prepareChatTurn(
@@ -211,13 +211,13 @@ describe("chat-execution", () => {
             ...baseInput,
             request: { id: "chat-4", agentId: "agent-missing" },
           },
-          repo,
+          queries,
         ),
       ).rejects.toBeInstanceOf(NotFoundError);
     });
 
     it("throws NotFoundError when the Provider does not exist", async () => {
-      const repo = createInMemoryChatTurnRepo({ workspaces: [baseWorkspace] });
+      const queries = createInMemoryChatTurnQueries({ workspaces: [baseWorkspace] });
 
       await expect(
         prepareChatTurn(
@@ -229,13 +229,13 @@ describe("chat-execution", () => {
               modelId: "gpt-4",
             },
           },
-          repo,
+          queries,
         ),
       ).rejects.toBeInstanceOf(NotFoundError);
     });
 
     it("throws ValidationError when the model id is not enabled on the Provider", async () => {
-      const repo = createInMemoryChatTurnRepo({
+      const queries = createInMemoryChatTurnQueries({
         workspaces: [baseWorkspace],
         providers: [{ ...baseProvider, modelIds: ["gpt-3.5"] } as any],
       });
@@ -250,13 +250,13 @@ describe("chat-execution", () => {
               modelId: "gpt-4",
             },
           },
-          repo,
+          queries,
         ),
       ).rejects.toBeInstanceOf(ValidationError);
     });
 
     it("throws NotFoundError when the Workspace does not exist", async () => {
-      const repo = createInMemoryChatTurnRepo({});
+      const queries = createInMemoryChatTurnQueries({});
 
       await expect(
         prepareChatTurn(
@@ -268,7 +268,7 @@ describe("chat-execution", () => {
               modelId: "gpt-4",
             },
           },
-          repo,
+          queries,
         ),
       ).rejects.toBeInstanceOf(NotFoundError);
     });
