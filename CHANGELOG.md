@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.73.1](https://github.com/willdady/platypus/compare/v1.73.0...v1.73.1) (2026-05-02)
+
+
+### Bug Fixes
+
+* adding missing migration file ([c4fc808](https://github.com/willdady/platypus/commit/c4fc808aee72a5ebda13604cca6f5354dd22d9e2))
+
 ## [1.73.0](https://github.com/willdady/platypus/compare/v1.72.0...v1.73.0) (2026-05-02)
 
 
