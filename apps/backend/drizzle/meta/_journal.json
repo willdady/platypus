@@ -197,6 +197,13 @@
       "when": 1777276653846,
       "tag": "0027_loose_wallop",
       "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "7",
+      "when": 1777694606994,
+      "tag": "0028_bent_doctor_faustus",
+      "breakpoints": true
     }
   ]
 }
