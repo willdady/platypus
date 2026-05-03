@@ -282,13 +282,13 @@ const Workspace = () => {
               { label: "Chats", value: chatCount, icon: MessageSquare },
               { label: "Agents", value: agentCount, icon: Bot },
               { label: "Skills", value: skillCount, icon: Sparkles },
-              { label: "Triggers", value: triggerCount, icon: Zap },
               {
                 label: "Dashboards",
                 value: dashboardCount,
                 icon: LayoutDashboard,
               },
               { label: "Boards", value: boardCount, icon: KanbanSquare },
+              { label: "Triggers", value: triggerCount, icon: Zap },
             ].map(({ label, value, icon: Icon }) => (
               <Card
                 key={label}
@@ -341,18 +341,6 @@ const Workspace = () => {
             </Card>
             <Card className="gap-2">
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-0">
-                <CardTitle className="text-sm font-medium">Triggers</CardTitle>
-                <Zap className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{triggerCount}</div>
-                <p className="text-xs text-muted-foreground">
-                  Automated agent runs
-                </p>
-              </CardContent>
-            </Card>
-            <Card className="gap-2">
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-0">
                 <CardTitle className="text-sm font-medium">
                   Dashboards
                 </CardTitle>
@@ -374,6 +362,18 @@ const Workspace = () => {
                 <div className="text-2xl font-bold">{boardCount}</div>
                 <p className="text-xs text-muted-foreground">
                   Visual work management
+                </p>
+              </CardContent>
+            </Card>
+            <Card className="gap-2">
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-0">
+                <CardTitle className="text-sm font-medium">Triggers</CardTitle>
+                <Zap className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">{triggerCount}</div>
+                <p className="text-xs text-muted-foreground">
+                  Automated agent runs
                 </p>
               </CardContent>
             </Card>
