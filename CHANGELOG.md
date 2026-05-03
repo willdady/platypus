@@ -1,5 +1,22 @@
 # Changelog
 
+## [1.79.0](https://github.com/willdady/platypus/compare/v1.78.0...v1.79.0) (2026-05-03)
+
+
+### Features
+
+* **frontend:** add Dashboards status box to workspace home page ([b4fa4f0](https://github.com/willdady/platypus/commit/b4fa4f089c5064e64c13566c0814e3c5e5c30ccd))
+* **frontend:** move dashboards above boards on workspace home page ([2fcbbdf](https://github.com/willdady/platypus/commit/2fcbbdf9232befbc8158800314c69431d1978195))
+
+
+### Bug Fixes
+
+* **frontend:** prefetch board state in SWR cache before navigating after create ([12e6ce3](https://github.com/willdady/platypus/commit/12e6ce3e9da098cac402ad76e2b703fce54cf5d5))
+* **frontend:** reduce gap between workspace home status cards ([c23756c](https://github.com/willdady/platypus/commit/c23756c6b6f224d81536a0fc9b3e5ee86ca10a00))
+* **frontend:** reduce inner padding on desktop workspace home status cards ([60b1cde](https://github.com/willdady/platypus/commit/60b1cdefc089afb812e502acbd04feba77fe3044))
+* **frontend:** remove background tint from dashboard widget header ([c0a3b62](https://github.com/willdady/platypus/commit/c0a3b62873506dcbae62097ea116f15e9ede623f))
+* **frontend:** reorder status cards to match section order with triggers last ([ab9294c](https://github.com/willdady/platypus/commit/ab9294c0f8ce7c8e771431e5eb8712cd307f9698))
+
 ## [1.78.0](https://github.com/willdady/platypus/compare/v1.77.0...v1.78.0) (2026-05-03)
 
 
