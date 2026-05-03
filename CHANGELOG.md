@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.75.0](https://github.com/willdady/platypus/compare/v1.74.1...v1.75.0) (2026-05-03)
+
+
+### Features
+
+* **dashboards:** add dashboards feature ([a6432cb](https://github.com/willdady/platypus/commit/a6432cbef68dd731c9280d387c7097fb40d3cc9d))
+* increase skill body max length from 20000 to 50000 ([e2606f1](https://github.com/willdady/platypus/commit/e2606f1dd68b48e1aa59517ca11e37eb843c4434))
+
+
+### Bug Fixes
+
+* **backend:** normalize literal \n sequences in notification body ([a825649](https://github.com/willdady/platypus/commit/a8256498b6238ba57c56ae5cc56f753f9e86a23d))
+
 ## [1.74.1](https://github.com/willdady/platypus/compare/v1.74.0...v1.74.1) (2026-05-02)
 
 
