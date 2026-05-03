@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.77.0](https://github.com/willdady/platypus/compare/v1.76.0...v1.77.0) (2026-05-03)
+
+
+### Features
+
+* **frontend:** add New Dashboard to command menu ([3184a1a](https://github.com/willdady/platypus/commit/3184a1a58ac57e4c9d8c399bc54ac0d39a409860))
+
+
+### Bug Fixes
+
+* **dashboards:** eliminate skeleton flash on create and fix mobile skeleton layout ([94163ee](https://github.com/willdady/platypus/commit/94163ee40675de82bf7d26d4868316f5e8042f93))
+* **dashboards:** remove grid canvas edge padding on mobile ([0e17384](https://github.com/willdady/platypus/commit/0e17384372b6d0764b3601ce1e53db34f80ad507))
+
 ## [1.76.0](https://github.com/willdady/platypus/compare/v1.75.0...v1.76.0) (2026-05-03)
 
 
