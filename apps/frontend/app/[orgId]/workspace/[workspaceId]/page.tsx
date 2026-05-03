@@ -173,7 +173,7 @@ const Workspace = () => {
           ))}
         </div>
         {/* Stats Cards - desktop */}
-        <div className="hidden lg:grid gap-2 grid-cols-6">
+        <div className="hidden lg:grid gap-4 grid-cols-6">
           {Array.from({ length: 6 }).map((_, i) => (
             <Skeleton key={i} className="h-[104px] w-full rounded-xl" />
           ))}
@@ -302,75 +302,75 @@ const Workspace = () => {
               </Card>
             ))}
           </div>
-          <div className="hidden lg:grid gap-2 grid-cols-6">
-            <Card className="gap-2">
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-0">
+          <div className="hidden lg:grid gap-4 grid-cols-6">
+            <Card className="gap-2 py-4">
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-0 px-4">
                 <CardTitle className="text-sm font-medium">Chats</CardTitle>
                 <MessageSquare className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
-              <CardContent>
+              <CardContent className="px-4">
                 <div className="text-2xl font-bold">{chatCount}</div>
                 <p className="text-xs text-muted-foreground">
                   Conversations started
                 </p>
               </CardContent>
             </Card>
-            <Card className="gap-2">
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-0">
+            <Card className="gap-2 py-4">
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-0 px-4">
                 <CardTitle className="text-sm font-medium">Agents</CardTitle>
                 <Bot className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
-              <CardContent>
+              <CardContent className="px-4">
                 <div className="text-2xl font-bold">{agentCount}</div>
                 <p className="text-xs text-muted-foreground">
                   Active AI assistants
                 </p>
               </CardContent>
             </Card>
-            <Card className="gap-2">
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-0">
+            <Card className="gap-2 py-4">
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-0 px-4">
                 <CardTitle className="text-sm font-medium">Skills</CardTitle>
                 <Sparkles className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
-              <CardContent>
+              <CardContent className="px-4">
                 <div className="text-2xl font-bold">{skillCount}</div>
                 <p className="text-xs text-muted-foreground">
                   Reusable instruction sets
                 </p>
               </CardContent>
             </Card>
-            <Card className="gap-2">
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-0">
+            <Card className="gap-2 py-4">
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-0 px-4">
                 <CardTitle className="text-sm font-medium">
                   Dashboards
                 </CardTitle>
                 <LayoutDashboard className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
-              <CardContent>
+              <CardContent className="px-4">
                 <div className="text-2xl font-bold">{dashboardCount}</div>
                 <p className="text-xs text-muted-foreground">
                   Widget-based views
                 </p>
               </CardContent>
             </Card>
-            <Card className="gap-2">
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-0">
+            <Card className="gap-2 py-4">
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-0 px-4">
                 <CardTitle className="text-sm font-medium">Boards</CardTitle>
                 <KanbanSquare className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
-              <CardContent>
+              <CardContent className="px-4">
                 <div className="text-2xl font-bold">{boardCount}</div>
                 <p className="text-xs text-muted-foreground">
                   Visual work management
                 </p>
               </CardContent>
             </Card>
-            <Card className="gap-2">
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-0">
+            <Card className="gap-2 py-4">
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-0 px-4">
                 <CardTitle className="text-sm font-medium">Triggers</CardTitle>
                 <Zap className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
-              <CardContent>
+              <CardContent className="px-4">
                 <div className="text-2xl font-bold">{triggerCount}</div>
                 <p className="text-xs text-muted-foreground">
                   Automated agent runs
