@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.76.0](https://github.com/willdady/platypus/compare/v1.75.0...v1.76.0) (2026-05-03)
+
+
+### Features
+
+* **dashboards:** improve widget editing UX ([382589d](https://github.com/willdady/platypus/commit/382589de6cd824a29782029306003b12150744db))
+
 ## [1.75.0](https://github.com/willdady/platypus/compare/v1.74.1...v1.75.0) (2026-05-03)
 
 
