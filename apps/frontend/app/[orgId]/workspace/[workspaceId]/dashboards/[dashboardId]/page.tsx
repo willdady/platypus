@@ -836,6 +836,7 @@ const DashboardPage = ({
               // See the "Sizing chain" comment above effectiveGridWidth.
               breakpoints={{ lg: 736, sm: 0 }}
               cols={{ lg: 12, sm: 2 }}
+              containerPadding={[0, 0]}
               rowHeight={30}
               dragConfig={{
                 enabled: editMode && !isMobileViewport,
