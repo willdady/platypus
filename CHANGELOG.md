@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.78.0](https://github.com/willdady/platypus/compare/v1.77.0...v1.78.0) (2026-05-03)
+
+
+### Features
+
+* **backend:** make upsertTrigger description field required ([e0498af](https://github.com/willdady/platypus/commit/e0498afa345d1ed42249ef2a349d1db0b01d70ed))
+* **frontend:** replace agent form loading text with skeleton layout ([1221f46](https://github.com/willdady/platypus/commit/1221f466b4ce23197980227e8381bf6f20a5ecb4))
+
+
+### Bug Fixes
+
+* **dashboards:** extend degree symbol styling to °C and °F ([4dd5956](https://github.com/willdady/platypus/commit/4dd5956f079b45679f3da8fa0d3bcbc2a15a0f9a))
+
 ## [1.77.0](https://github.com/willdady/platypus/compare/v1.76.0...v1.77.0) (2026-05-03)
 
 
