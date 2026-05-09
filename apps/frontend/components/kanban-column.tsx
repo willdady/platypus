@@ -26,6 +26,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 
 type KanbanColumnProps = {
@@ -88,7 +89,10 @@ function ColumnContent({
         )}
         {...(dragHandleProps ?? {})}
       >
-        <span className="font-semibold">{column.name}</span>
+        <div className="flex items-center gap-2">
+          <span className="font-semibold">{column.name}</span>
+          <Badge variant="outline">{column.cards.length}</Badge>
+        </div>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <button
