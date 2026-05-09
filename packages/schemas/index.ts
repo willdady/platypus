@@ -1073,7 +1073,7 @@ export const weatherWidgetDataSchema = z.object({
   location: z.string(),
   date: z.string(),
   condition: weatherConditionSchema,
-  description: z.string(),
+  description: z.string().max(100),
   temperatureC: z.number(),
   highC: z.number(),
   lowC: z.number(),
