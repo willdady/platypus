@@ -1,5 +1,21 @@
 # Changelog
 
+## [1.80.0](https://github.com/willdady/platypus/compare/v1.79.0...v1.80.0) (2026-05-09)
+
+
+### Features
+
+* **frontend:** add expand/pop-out button to markdown dashboard widgets ([b335a95](https://github.com/willdady/platypus/commit/b335a95abab978fa9b048b6ad8c8cdc973937555))
+* **frontend:** add weather widget to dashboards ([707287f](https://github.com/willdady/platypus/commit/707287f7d41e3d685b5d79b89d38c928d067ca7c))
+* **frontend:** display assigned agent avatar and name on trigger list items ([1046cb0](https://github.com/willdady/platypus/commit/1046cb019df101c49bf166ac369269fe39189894))
+* **frontend:** increase centered chat input height by one line ([ec4001e](https://github.com/willdady/platypus/commit/ec4001e29aa19e6031086844da86f91c2f61303b))
+* **frontend:** show card count badge in kanban column header ([4e977e8](https://github.com/willdady/platypus/commit/4e977e8917fda1f6d7c26a5d163159ec356abb8f))
+
+
+### Bug Fixes
+
+* **frontend:** replace Popover with DropdownMenu in kanban assignee picker ([5cc3322](https://github.com/willdady/platypus/commit/5cc332249df3ad9ae381669e7e630d36bdd4abf9))
+
 ## [1.79.0](https://github.com/willdady/platypus/compare/v1.78.0...v1.79.0) (2026-05-03)
 
 
