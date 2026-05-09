@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.80.1](https://github.com/willdady/platypus/compare/v1.80.0...v1.80.1) (2026-05-09)
+
+
+### Bug Fixes
+
+* **schemas:** limit weather widget description to 100 characters ([be2cd70](https://github.com/willdady/platypus/commit/be2cd70dab4043ec52aa087545ad67b4a069e0ce))
+
 ## [1.80.0](https://github.com/willdady/platypus/compare/v1.79.0...v1.80.0) (2026-05-09)
 
 
