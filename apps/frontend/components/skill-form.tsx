@@ -292,8 +292,8 @@ const SkillForm = ({
                       <AgentAvatar agent={agent} className="size-6" />
                       <div className="flex flex-col">
                         <p>{agent.name}</p>
-                        <p className="text-xs text-muted-foreground line-clamp-1">
-                          {agent.description}
+                        <p className="text-xs text-muted-foreground">
+                          {agent.description || "No description"}
                         </p>
                       </div>
                     </div>
