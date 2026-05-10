@@ -527,7 +527,7 @@ const DashboardPage = ({
                 Cancel
               </Button>
               <Button size="sm" onClick={saveEdit}>
-                Done
+                Save
               </Button>
             </>
           ) : (
@@ -785,7 +785,9 @@ const DashboardPage = ({
                     return (
                       <SelectItem key={value} value={value}>
                         <span className="flex items-center gap-2">
-                          {Icon && <Icon className="h-4 w-4 shrink-0" />}
+                          {Icon && (
+                            <Icon className="h-4 w-4 shrink-0 text-muted-foreground" />
+                          )}
                           {label}
                         </span>
                       </SelectItem>
