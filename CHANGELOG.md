@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.81.0](https://github.com/willdady/platypus/compare/v1.80.1...v1.81.0) (2026-05-10)
+
+
+### Features
+
+* **dashboards:** add bar chart widget type ([3e3db05](https://github.com/willdady/platypus/commit/3e3db056cd0ed448458d33a14dc744d427bd61ea))
+* **dashboards:** add line chart widget type ([2de869d](https://github.com/willdady/platypus/commit/2de869d631d5e4cc34f2eadf583017eae3fe45d6))
+* **dashboards:** add pie chart widget type ([0d898a2](https://github.com/willdady/platypus/commit/0d898a2928a0c2e3e455d3f401f00e2040190f58))
+
+
+### Bug Fixes
+
+* **dashboards:** rename Done to Save and fix select icon colours ([7c6c16d](https://github.com/willdady/platypus/commit/7c6c16d7e9a7ea59ffb9eefabd9301bfd511b774))
+
 ## [1.80.1](https://github.com/willdady/platypus/compare/v1.80.0...v1.80.1) (2026-05-09)
 
 
