@@ -86,7 +86,7 @@ export default async function WorkspaceLayout({
             </Kbd>
             <NotificationsDropdown orgId={orgId} workspaceId={workspaceId} />
             <ModeToggle />
-            <UserMenu />
+            <UserMenu orgId={orgId} workspaceId={workspaceId} />
           </div>
         </header>
         <WorkspaceScrollContainer>{children}</WorkspaceScrollContainer>

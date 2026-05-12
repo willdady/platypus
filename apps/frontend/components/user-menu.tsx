@@ -13,7 +13,12 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
 
-export function UserMenu() {
+interface UserMenuProps {
+  orgId?: string;
+  workspaceId?: string;
+}
+
+export function UserMenu({ orgId, workspaceId }: UserMenuProps) {
   const { user, authClient } = useAuth();
   const router = useRouter();
 
@@ -47,8 +52,19 @@ export function UserMenu() {
           onClick={() => router.push(`/settings`)}
           className="cursor-pointer"
         >
-          <Settings className="size-4" /> Settings
+          <Settings className="size-4" /> My Settings
         </DropdownMenuItem>
+        {orgId && workspaceId && (
+          <DropdownMenuItem
+            onClick={() =>
+              router.push(`/${orgId}/workspace/${workspaceId}/settings`)
+            }
+            className="cursor-pointer"
+          >
+            <Settings className="size-4" /> Workspace Settings
+          </DropdownMenuItem>
+        )}
+        <DropdownMenuSeparator />
         <DropdownMenuItem onClick={handleSignOut} className="cursor-pointer">
           <LogOut className="size-4" /> Sign out
         </DropdownMenuItem>
