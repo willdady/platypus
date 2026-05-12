@@ -1,5 +1,20 @@
 # Changelog
 
+## [1.82.0](https://github.com/willdady/platypus/compare/v1.81.0...v1.82.0) (2026-05-12)
+
+
+### Features
+
+* **frontend:** add Workspace Settings link to user dropdown menu ([c7fdc12](https://github.com/willdady/platypus/commit/c7fdc12cbffc8295500875f9c82c1564a0ac82e1))
+* **frontend:** increase skill description max length to 1024 characters ([4289a39](https://github.com/willdady/platypus/commit/4289a39f2944381b15f569df0a0dcbe3a274cc71))
+
+
+### Bug Fixes
+
+* **backend:** reset per-step timeout during sub-agent activity ([18028a6](https://github.com/willdady/platypus/commit/18028a668fe51157b352d8b7f80aa57601b623de))
+* **frontend:** show full agent description in skill form ([c99550b](https://github.com/willdady/platypus/commit/c99550b1459941a0db1dc2471991a811d66f6c90))
+* **frontend:** show skeleton layout on trigger run history page during loading ([0cddb36](https://github.com/willdady/platypus/commit/0cddb36d6603f9d02390aaec4bd8ba4ae1f45ce4))
+
 ## [1.81.0](https://github.com/willdady/platypus/compare/v1.80.1...v1.81.0) (2026-05-10)
 
 
