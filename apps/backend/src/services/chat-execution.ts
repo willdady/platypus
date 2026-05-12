@@ -145,6 +145,12 @@ export type PrepareChatTurnInput = {
    * user line and surfaces the agent's own identity.
    */
   runMode?: "interactive" | "headless";
+  /**
+   * Called on each activity update from any sub-agent. Used by the agent
+   * runner to reset the parent run's per-step timeout while sub-agent work
+   * is actively in progress.
+   */
+  onSubAgentProgress?: () => void;
 };
 
 // --- Queries seam ---
@@ -294,6 +300,7 @@ export const prepareChatTurn = async (
     origin,
     frontendUrl,
     runMode = "interactive",
+    onSubAgentProgress,
   } = input;
 
   const workspace = await queries.getWorkspace(workspaceId);
@@ -321,7 +328,14 @@ export const prepareChatTurn = async (
   ] = await Promise.all([
     loadTools(queries, agent, workspaceId, orgId, frontendUrl, user.id),
     loadSkills(queries, agent, workspaceId),
-    loadSubAgents(queries, agent, orgId, workspaceId, frontendUrl),
+    loadSubAgents(
+      queries,
+      agent,
+      orgId,
+      workspaceId,
+      frontendUrl,
+      onSubAgentProgress,
+    ),
     queries.getUserContexts(user.id, workspaceId),
     queries.getRecentMemories(user.id, workspaceId),
   ]);
@@ -564,6 +578,7 @@ const loadSubAgents = async (
   orgId: string,
   workspaceId: string,
   frontendUrl: string | undefined,
+  onProgress?: () => void,
 ): Promise<{
   subAgents: Array<{ id: string; name: string; description?: string | null }>;
   subAgentTools: Record<string, Tool>;
@@ -608,6 +623,7 @@ const loadSubAgents = async (
       subAgentMcpClients.push(...mcpClients);
       return subTools;
     },
+    onProgress,
   );
 
   return { subAgents, subAgentTools, subAgentMcpClients };

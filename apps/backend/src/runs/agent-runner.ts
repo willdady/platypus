@@ -136,6 +136,7 @@ export class AgentRunner {
     input: RunInput,
     origin: string | undefined,
     frontendUrl?: string,
+    onSubAgentProgress?: () => void,
   ): Promise<ChatTurn> {
     return prepareChatTurn({
       orgId: scope.orgId,
@@ -146,6 +147,7 @@ export class AgentRunner {
       origin,
       frontendUrl,
       runMode: scope.principal.kind === "user" ? "interactive" : "headless",
+      onSubAgentProgress,
     });
   }
 
@@ -209,6 +211,7 @@ export class AgentRunner {
         input,
         options.origin,
         options.frontendUrl,
+        handle.bumpStep,
       );
     } catch (error) {
       const err = error instanceof Error ? error : new Error(String(error));
@@ -363,7 +366,13 @@ export class AgentRunner {
 
     try {
       // No `origin`: headless callers don't have file URLs to inline.
-      turn = await this.prepare(scope, input, undefined, options.frontendUrl);
+      turn = await this.prepare(
+        scope,
+        input,
+        undefined,
+        options.frontendUrl,
+        handle.bumpStep,
+      );
     } catch (error) {
       const err = error instanceof Error ? error : new Error(String(error));
       logger.error(

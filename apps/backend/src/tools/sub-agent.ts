@@ -41,6 +41,8 @@ interface SubAgentToolOptions {
   model: any; // LanguageModel from AI SDK
   tools: Record<string, Tool>;
   maxSteps?: number;
+  /** Called on each activity update from the sub-agent. Used to reset the parent run's per-step timeout. */
+  onProgress?: () => void;
 }
 
 /**
@@ -60,6 +62,7 @@ export const createSubAgentTool = (options: SubAgentToolOptions) => {
     model,
     tools,
     maxSteps = 50,
+    onProgress,
   } = options;
 
   const toolName = subAgentToolName({ name });
@@ -138,6 +141,7 @@ export const createSubAgentTool = (options: SubAgentToolOptions) => {
           }
 
           if (changed) {
+            onProgress?.();
             yield { entries } satisfies SubAgentActivity;
           }
         }
@@ -179,6 +183,7 @@ export const createSubAgentTools = async (
     subAgentId: string,
     toolSetIds: string[],
   ) => Promise<Record<string, Tool>>,
+  onProgress?: () => void,
 ): Promise<Record<string, Tool>> => {
   const tools: Record<string, Tool> = {};
 
@@ -202,6 +207,7 @@ export const createSubAgentTools = async (
         model,
         tools: subAgentTools,
         maxSteps: subAgent.maxSteps || 50,
+        onProgress,
       });
 
       tools[toolName] = tool;
