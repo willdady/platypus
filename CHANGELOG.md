@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.82.1](https://github.com/willdady/platypus/compare/v1.82.0...v1.82.1) (2026-05-12)
+
+
+### Bug Fixes
+
+* **backend:** bump per-step timeout on every tool call ([3888dce](https://github.com/willdady/platypus/commit/3888dce1295a203fe9a361baf8c175d9e7076699))
+* **frontend:** shrink metric widget value to fit container width ([936d643](https://github.com/willdady/platypus/commit/936d6438be49d084a80d0b50b2f1dcf0469825b4))
+
 ## [1.82.0](https://github.com/willdady/platypus/compare/v1.81.0...v1.82.0) (2026-05-12)
 
 
