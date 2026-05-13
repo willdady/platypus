@@ -149,9 +149,21 @@ export type PrepareChatTurnInput = {
    * Called whenever a tool call begins, completes, or yields activity.
    * The agent runner uses this to reset the per-step timeout so long-running
    * tool calls (e.g. MCP web search, sub-agent delegation) don't trip the
-   * stall detector while work is actively in progress.
+   * stall detector while work is actively in progress. The optional `event`
+   * carries tool-call boundary metadata that the runner logs; sub-agent
+   * yield bumps invoke with no event (timer-only).
    */
-  onActivity?: () => void;
+  onActivity?: (event?: ToolActivityEvent) => void;
+};
+
+/**
+ * Per-tool-call lifecycle event surfaced to the agent runner so it can log
+ * tool start/end with duration. `durationMs` is only set on `"end"` events.
+ */
+export type ToolActivityEvent = {
+  phase: "start" | "end";
+  toolName: string;
+  durationMs?: number;
 };
 
 // --- Queries seam ---
@@ -426,16 +438,18 @@ export const prepareChatTurn = async (
 // --- Private helpers ---
 
 /**
- * Wraps each tool's `execute` so a `bump()` fires when the call starts and
- * when its promise settles. Keeps the per-step stall detector aware of
- * long-running tool calls (MCP web search, fetch, etc.) that would otherwise
- * complete only at `onStepFinish`. Sub-agent tools whose `execute` is an
- * async generator are returned by reference; their internal yields already
- * bump via `onProgress`, and the start-of-call bump still applies.
+ * Wraps each tool's `execute` so the activity callback fires on call start
+ * and on call settle. Keeps the per-step stall detector aware of long-running
+ * tool calls (MCP web search, fetch, etc.) that would otherwise complete only
+ * at `onStepFinish`, and gives the runner per-tool boundary events it can log
+ * with `runId` + `toolName` + `durationMs` for post-mortem visibility.
+ * Sub-agent tools whose `execute` is an async generator are returned by
+ * reference; their internal yields already bump via `onProgress`, and the
+ * start/end events still fire from the wrapper.
  */
 const wrapToolsWithBump = (
   tools: Record<string, Tool>,
-  bump: () => void,
+  onActivity: (event?: ToolActivityEvent) => void,
 ): Record<string, Tool> => {
   const wrapped: Record<string, Tool> = {};
   for (const [name, t] of Object.entries(tools)) {
@@ -447,10 +461,17 @@ const wrapToolsWithBump = (
     wrapped[name] = {
       ...t,
       execute: function (args: any, options: any) {
-        bump();
+        const startedAt = Date.now();
+        onActivity({ phase: "start", toolName: name });
         const result = execute.call(t, args, options);
         if (result && typeof (result as any).then === "function") {
-          return (result as Promise<any>).finally(() => bump());
+          return (result as Promise<any>).finally(() =>
+            onActivity({
+              phase: "end",
+              toolName: name,
+              durationMs: Date.now() - startedAt,
+            }),
+          );
         }
         return result;
       },

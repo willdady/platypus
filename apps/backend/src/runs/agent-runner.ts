@@ -10,7 +10,11 @@ import {
   streamText,
   type LanguageModel,
 } from "ai";
-import { prepareChatTurn, type ChatTurn } from "../services/chat-execution.ts";
+import {
+  prepareChatTurn,
+  type ChatTurn,
+  type ToolActivityEvent,
+} from "../services/chat-execution.ts";
 import { logger } from "../logger.ts";
 import { actorUserId, type WorkspaceScope } from "../scope.ts";
 import type { PlatypusUIMessage } from "../types.ts";
@@ -116,6 +120,32 @@ const userFromScope = (scope: WorkspaceScope): { id: string; name: string } => {
 };
 
 /**
+ * Builds the activity callback handed to `prepareChatTurn`. Every invocation
+ * bumps the run's per-step stall timer. When the wrapper passes a tool
+ * boundary event we also emit a structured log line — start events at debug
+ * (noisy), end events at info with duration so post-mortem of a stalled run
+ * shows exactly which tool was slow.
+ */
+const makeActivityHandler =
+  (handle: RunHandle, runId: RunId) =>
+  (event?: ToolActivityEvent): void => {
+    handle.bumpStep();
+    if (!event) return;
+    if (event.phase === "start") {
+      logger.debug({ runId, toolName: event.toolName }, "Tool call started");
+    } else {
+      logger.info(
+        {
+          runId,
+          toolName: event.toolName,
+          durationMs: event.durationMs,
+        },
+        "Tool call finished",
+      );
+    }
+  };
+
+/**
  * Orchestrates an end-to-end agent run.
  *
  * The runner wraps `prepareChatTurn` with a `RunSink` lifecycle and offers
@@ -136,7 +166,7 @@ export class AgentRunner {
     input: RunInput,
     origin: string | undefined,
     frontendUrl?: string,
-    onActivity?: () => void,
+    onActivity?: (event?: ToolActivityEvent) => void,
   ): Promise<ChatTurn> {
     return prepareChatTurn({
       orgId: scope.orgId,
@@ -201,9 +231,20 @@ export class AgentRunner {
     const handle: RunHandle = runRegistry.register(input.runId, {
       ...options.timeouts,
       onTimeout: (error) => {
+        logger.error(
+          {
+            runId: input.runId,
+            kind: error.kind,
+            message: error.message,
+            stats: lastStats,
+          },
+          "Run timed out",
+        );
         void finalize("failed", error);
       },
     });
+
+    const onActivity = makeActivityHandler(handle, input.runId);
 
     try {
       turn = await this.prepare(
@@ -211,7 +252,7 @@ export class AgentRunner {
         input,
         options.origin,
         options.frontendUrl,
-        handle.bumpStep,
+        onActivity,
       );
     } catch (error) {
       const err = error instanceof Error ? error : new Error(String(error));
@@ -243,6 +284,15 @@ export class AgentRunner {
       onStepFinish: (step) => {
         handle.bumpStep();
         accumulateStepStats(lastStats, step);
+        logger.info(
+          {
+            runId: input.runId,
+            step: lastStats.steps,
+            toolCalls: step.toolCalls?.map((tc) => tc.toolName) ?? [],
+            stats: lastStats,
+          },
+          "Step finished",
+        );
         // Sink decides write cadence (FlushScheduler in ChatSink).
         void sink
           .onProgress({
@@ -360,9 +410,20 @@ export class AgentRunner {
     const handle: RunHandle = runRegistry.register(input.runId, {
       ...options.timeouts,
       onTimeout: (error) => {
+        logger.error(
+          {
+            runId: input.runId,
+            kind: error.kind,
+            message: error.message,
+            stats: lastStats,
+          },
+          "Run timed out",
+        );
         void finalize("failed", error);
       },
     });
+
+    const onActivity = makeActivityHandler(handle, input.runId);
 
     try {
       // No `origin`: headless callers don't have file URLs to inline.
@@ -371,7 +432,7 @@ export class AgentRunner {
         input,
         undefined,
         options.frontendUrl,
-        handle.bumpStep,
+        onActivity,
       );
     } catch (error) {
       const err = error instanceof Error ? error : new Error(String(error));
@@ -398,6 +459,15 @@ export class AgentRunner {
         onStepFinish: (step) => {
           handle.bumpStep();
           accumulateStepStats(lastStats, step);
+          logger.info(
+            {
+              runId: input.runId,
+              step: lastStats.steps,
+              toolCalls: step.toolCalls?.map((tc) => tc.toolName) ?? [],
+              stats: lastStats,
+            },
+            "Step finished",
+          );
           void sink
             .onProgress({
               runId: input.runId,
