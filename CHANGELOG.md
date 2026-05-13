@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.82.2](https://github.com/willdady/platypus/compare/v1.82.1...v1.82.2) (2026-05-13)
+
+
+### Bug Fixes
+
+* **backend:** log tool boundaries and recover orphaned trigger runs ([cdaa505](https://github.com/willdady/platypus/commit/cdaa505dfa6d43466cc47083eb52bd0b0a820026))
+
 ## [1.82.1](https://github.com/willdady/platypus/compare/v1.82.0...v1.82.1) (2026-05-12)
 
 
