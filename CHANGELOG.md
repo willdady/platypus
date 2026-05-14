@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.82.3](https://github.com/willdady/platypus/compare/v1.82.2...v1.82.3) (2026-05-14)
+
+
+### Bug Fixes
+
+* **backend:** heartbeat per-step timer and raise trigger timeouts ([e32e5af](https://github.com/willdady/platypus/commit/e32e5af79cc199eae3d754f26c3f078f93a548b1))
+
 ## [1.82.2](https://github.com/willdady/platypus/compare/v1.82.1...v1.82.2) (2026-05-13)
 
 
