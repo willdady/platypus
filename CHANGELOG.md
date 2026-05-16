@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.83.0](https://github.com/willdady/platypus/compare/v1.82.3...v1.83.0) (2026-05-16)
+
+
+### Features
+
+* **schemas:** raise agent description max length to 128 ([0115670](https://github.com/willdady/platypus/commit/0115670df7e87b5f74f435b78e996a4fa39903bd))
+
+
+### Bug Fixes
+
+* **frontend:** auto-lowercase skill name input to avoid kebab-case errors ([d10c38d](https://github.com/willdady/platypus/commit/d10c38d7c41061ced7b2121dd769445311742a34))
+* **frontend:** improve notification bubble contrast in light mode ([fe20494](https://github.com/willdady/platypus/commit/fe20494ef3b7130b83d0ccf8c1fb6f9069fb4ed0))
+
 ## [1.82.3](https://github.com/willdady/platypus/compare/v1.82.2...v1.82.3) (2026-05-14)
 
 
