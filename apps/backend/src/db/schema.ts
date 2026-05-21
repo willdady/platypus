@@ -225,6 +225,7 @@ export const mcp = pgTable(
     oauthRefreshToken: t.text("oauth_refresh_token"),
     oauthTokenExpiresAt: t.timestamp("oauth_token_expires_at"),
     oauthScope: t.text("oauth_scope"),
+    oauthRequestedScope: t.text("oauth_requested_scope"),
     oauthClientId: t.text("oauth_client_id"),
     oauthClientSecret: t.text("oauth_client_secret"),
     createdAt: t.timestamp("created_at").notNull().defaultNow(),

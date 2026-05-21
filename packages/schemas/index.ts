@@ -311,6 +311,7 @@ const mcpBaseSchema = z.object({
   bearerToken: z.string().optional(),
   oauthClientId: z.string().optional(),
   oauthClientSecret: z.string().optional(),
+  oauthRequestedScope: z.string().optional(),
   oauthAuthorized: z.boolean().optional(),
   createdAt: z.date(),
   updatedAt: z.date(),
@@ -338,6 +339,7 @@ export const mcpCreateSchema = mcpBaseSchema
     bearerToken: true,
     oauthClientId: true,
     oauthClientSecret: true,
+    oauthRequestedScope: true,
   })
   .refine(mcpBearerTokenRefine.validator, mcpBearerTokenRefine.params);
 
@@ -350,6 +352,7 @@ export const mcpUpdateSchema = mcpBaseSchema
     bearerToken: true,
     oauthClientId: true,
     oauthClientSecret: true,
+    oauthRequestedScope: true,
   })
   .refine(mcpBearerTokenRefine.validator, mcpBearerTokenRefine.params);
 

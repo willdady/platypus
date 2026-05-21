@@ -74,6 +74,7 @@ const McpForm = ({
     bearerToken: "",
     oauthClientId: "",
     oauthClientSecret: "",
+    oauthRequestedScope: "",
     headerRows: [],
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -125,6 +126,7 @@ const McpForm = ({
         bearerToken: mcp.bearerToken || "",
         oauthClientId: mcp.oauthClientId || "",
         oauthClientSecret: "",
+        oauthRequestedScope: mcp.oauthRequestedScope || "",
         headerRows,
       });
     }
@@ -206,6 +208,10 @@ const McpForm = ({
       oauthClientSecret:
         formData.authType === "OAuth" && formData.oauthClientSecret
           ? formData.oauthClientSecret
+          : undefined,
+      oauthRequestedScope:
+        formData.authType === "OAuth" && formData.oauthRequestedScope
+          ? formData.oauthRequestedScope
           : undefined,
     };
     return payload;
@@ -602,6 +608,33 @@ const McpForm = ({
               <FieldDescription className="col-span-2">
                 Leave blank if the server supports dynamic client registration.
               </FieldDescription>
+
+              <Field
+                className="col-span-2"
+                data-invalid={!!validationErrors.oauthRequestedScope}
+              >
+                <FieldLabel htmlFor="oauthRequestedScope">
+                  OAuth Scopes
+                </FieldLabel>
+                <Input
+                  id="oauthRequestedScope"
+                  placeholder="e.g. https://www.googleapis.com/auth/calendar"
+                  value={formData.oauthRequestedScope || ""}
+                  onChange={handleChange}
+                  disabled={isSubmitting}
+                  aria-invalid={!!validationErrors.oauthRequestedScope}
+                />
+                <FieldDescription>
+                  Space-separated list of OAuth scopes to request. Required by
+                  some providers (e.g. Google) that reject authorize requests
+                  without an explicit scope parameter.
+                </FieldDescription>
+                {validationErrors.oauthRequestedScope && (
+                  <FieldError>
+                    {validationErrors.oauthRequestedScope}
+                  </FieldError>
+                )}
+              </Field>
             </FieldGroup>
           )}
 

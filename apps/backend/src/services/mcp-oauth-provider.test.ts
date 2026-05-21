@@ -242,6 +242,25 @@ describe("mcp-oauth-provider", () => {
       });
     });
 
+    it("should include scope in clientMetadata when oauthRequestedScope is set", async () => {
+      const { DatabaseOAuthClientProvider } =
+        await import("./mcp-oauth-provider.ts");
+      const callbackUrl = "http://localhost:3001/oauth/mcp/callback";
+      const provider = new DatabaseOAuthClientProvider(
+        {
+          id: "mcp-1",
+          oauthRequestedScope: "https://www.googleapis.com/auth/calendar",
+        } as any,
+        callbackUrl,
+      );
+      expect(provider.clientMetadata).toEqual({
+        redirect_uris: [callbackUrl],
+        client_name: "Platypus",
+        token_endpoint_auth_method: "client_secret_post",
+        scope: "https://www.googleapis.com/auth/calendar",
+      });
+    });
+
     it("should return undefined tokens when no access token exists", async () => {
       const { DatabaseOAuthClientProvider } =
         await import("./mcp-oauth-provider.ts");

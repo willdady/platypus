@@ -1,0 +1,1 @@
+ALTER TABLE "mcp" ADD COLUMN "oauth_requested_scope" text;

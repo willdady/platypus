@@ -101,6 +101,12 @@ export class DatabaseOAuthClientProvider implements OAuthClientProvider {
       redirect_uris: [this.callbackUrl],
       client_name: "Platypus",
       token_endpoint_auth_method: "client_secret_post" as const,
+      // Authorization servers require an explicit `scope` parameter (e.g. Google
+      // returns 400 "Missing required parameter: scope" otherwise). The MCP
+      // library forwards `clientMetadata.scope` into the authorize URL.
+      ...(this.mcpRecord.oauthRequestedScope && {
+        scope: this.mcpRecord.oauthRequestedScope,
+      }),
     };
   }
 
