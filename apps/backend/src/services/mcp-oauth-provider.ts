@@ -190,7 +190,13 @@ export class DatabaseOAuthClientProvider implements OAuthClientProvider {
   }
 
   async redirectToAuthorization(authorizationUrl: URL) {
-    // Capture the URL so the endpoint can read it
+    // Google requires access_type=offline to return a refresh token.
+    // prompt=consent forces re-consent even if the user previously authorized,
+    // which is required when requesting offline access for the first time.
+    if (authorizationUrl.hostname.endsWith(".google.com") || authorizationUrl.hostname === "google.com") {
+      authorizationUrl.searchParams.set("access_type", "offline");
+      authorizationUrl.searchParams.set("prompt", "consent");
+    }
     this.pendingAuthUrl = authorizationUrl;
   }
 
