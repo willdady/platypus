@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.83.1](https://github.com/willdady/platypus/compare/v1.83.0...v1.83.1) (2026-05-23)
+
+
+### Bug Fixes
+
+* **backend:** include pinned chats in sidebar by ordering them first ([ee7401b](https://github.com/willdady/platypus/commit/ee7401b84512e3ccfde38a3f03a965e8e9d36c93))
+
 ## [1.83.0](https://github.com/willdady/platypus/compare/v1.82.3...v1.83.0) (2026-05-16)
 
 
