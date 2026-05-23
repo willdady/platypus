@@ -28,6 +28,7 @@ export type ChatTurnQueriesFixtures = {
     content: string;
   }>;
   memories?: Array<MemorySummary & { userId: string; workspaceId: string }>;
+  sandboxEnvKeys?: Record<string, string[]>;
 };
 
 /**
@@ -91,5 +92,9 @@ export const createInMemoryChatTurnQueries = (
     return (fx.memories ?? [])
       .filter((m) => m.userId === userId && m.workspaceId === workspaceId)
       .map(({ userId: _u, workspaceId: _w, ...rest }) => rest as MemorySummary);
+  },
+
+  async getSandboxEnvKeys(workspaceId) {
+    return fx.sandboxEnvKeys?.[workspaceId] ?? [];
   },
 });

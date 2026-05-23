@@ -89,4 +89,44 @@ describe("createSandboxTools", () => {
     await (tools.fsList.execute as any)({ recursive: true });
     expect(backend.fsList).toHaveBeenCalledWith(ctx, { recursive: true });
   });
+
+  it("does not touch input when workspace env is empty", async () => {
+    const backend = makeBackend();
+    const tools = createSandboxTools(backend, ctx, {});
+    await (tools.shellExec.execute as any)({ command: "ls", env: { A: "1" } });
+    expect(backend.shellExec).toHaveBeenCalledWith(ctx, {
+      command: "ls",
+      env: { A: "1" },
+    });
+  });
+
+  it("merges workspace env on top of input.env (workspace wins on collision)", async () => {
+    const backend = makeBackend();
+    const tools = createSandboxTools(backend, ctx, {
+      OPENAI_API_KEY: "sk-real",
+      NODE_ENV: "production",
+    });
+    await (tools.shellExec.execute as any)({
+      command: "node script.js",
+      env: { OPENAI_API_KEY: "sk-spoof", FOO: "bar" },
+    });
+    expect(backend.shellExec).toHaveBeenCalledWith(ctx, {
+      command: "node script.js",
+      env: {
+        FOO: "bar",
+        OPENAI_API_KEY: "sk-real",
+        NODE_ENV: "production",
+      },
+    });
+  });
+
+  it("injects workspace env when input has no env field", async () => {
+    const backend = makeBackend();
+    const tools = createSandboxTools(backend, ctx, { GITHUB_TOKEN: "ghp-x" });
+    await (tools.shellExec.execute as any)({ command: "gh repo list" });
+    expect(backend.shellExec).toHaveBeenCalledWith(ctx, {
+      command: "gh repo list",
+      env: { GITHUB_TOKEN: "ghp-x" },
+    });
+  });
 });

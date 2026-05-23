@@ -21,6 +21,12 @@ export type SystemPromptContext = {
   memories: MemorySummary[];
   skills: Array<Pick<Skill, "name" | "description">>;
   subAgents: Array<{ name: string; description?: string | null }>;
+  /**
+   * Names of workspace-default env vars that will be merged into every
+   * sandbox shell.exec call. Keys only — values never enter the system prompt
+   * (see docs/adr/0004-sandbox-workspace-default-env-vars.md).
+   */
+  sandboxEnvKeys?: string[];
   /** Used as the system prompt when `agent` is null. */
   fallbackSystemPrompt?: string;
   /**
@@ -123,7 +129,13 @@ You have access to a persistent Linux sandbox rooted at \`/workspace\`. All path
 
 Files you write persist across chat turns — the filesystem is the same one your earlier turns saw and the same one your next turns will see. Use this: stash work, leave notes, build incrementally.
 
-Each \`shellExec\` call starts a fresh shell. No working directory or environment carries across calls; pass \`cwd\` and \`env\` explicitly per call. To run multiple commands sharing state, combine them in one call (e.g. \`cd foo && make\`).
+Each \`shellExec\` call starts a fresh shell. No working directory or environment carries across calls; pass \`cwd\` and \`env\` explicitly per call. To run multiple commands sharing state, combine them in one call (e.g. \`cd foo && make\`).${
+    ctx.sandboxEnvKeys && ctx.sandboxEnvKeys.length > 0
+      ? `
+
+Available as \`$VAR\` in every \`shellExec\` (may be secrets — pass to programs, don't echo): ${ctx.sandboxEnvKeys.map((k) => `\`${k}\``).join(", ")}. Workspace defaults override any \`env\` you pass on the same key.`
+      : ""
+  }
 
 Tool output is bounded. When a response has \`truncated: true\`, narrow your view — \`grep\`, \`head\`, \`tail\`, or a specific \`lineRange\` on \`fsRead\` — rather than re-requesting the same output.
 

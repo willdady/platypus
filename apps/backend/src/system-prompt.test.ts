@@ -384,4 +384,27 @@ describe("renderSystemPrompt — sandbox fragment", () => {
     });
     expect(out).not.toMatch(/## Sandbox/);
   });
+
+  it("omits the env-vars line when sandboxEnvKeys is empty or absent", () => {
+    const out = renderSystemPrompt({
+      ...baseCtx(),
+      agent: agentRecord({ toolSetIds: ["sandbox"] }),
+      sandboxEnvKeys: [],
+    });
+    expect(out).toMatch(/## Sandbox/);
+    expect(out).not.toMatch(/pre-set in every/);
+  });
+
+  it("lists env var keys (only) when sandboxEnvKeys is non-empty", () => {
+    const out = renderSystemPrompt({
+      ...baseCtx(),
+      agent: agentRecord({ toolSetIds: ["sandbox"] }),
+      sandboxEnvKeys: ["OPENAI_API_KEY", "GITHUB_TOKEN"],
+    });
+    expect(out).toMatch(/Available as `\$VAR`/);
+    expect(out).toMatch(/pass to programs, don't echo/);
+    expect(out).toMatch(/`OPENAI_API_KEY`/);
+    expect(out).toMatch(/`GITHUB_TOKEN`/);
+    expect(out).toMatch(/Workspace defaults override/);
+  });
 });

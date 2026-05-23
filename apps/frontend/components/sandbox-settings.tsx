@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import useSWR from "swr";
 import { toast } from "sonner";
-import { Box, Plus, Trash2 } from "lucide-react";
+import { Box, Plus, Trash2, X } from "lucide-react";
 import { type Sandbox } from "@platypus/schemas";
 
 import { useAuth } from "@/components/auth-provider";
@@ -40,14 +40,45 @@ import { ConfirmDialog } from "@/components/confirm-dialog";
 
 type SandboxBackend = { backend: string; name: string };
 
+// Env rows are kept as an ordered array (not a Record) so a user can edit
+// keys, add empties, and tolerate duplicate-during-edit without the UI
+// reshuffling on every keystroke. Converted to Record<string,string> on save.
+type EnvRow = { key: string; value: string };
+
 type SandboxFormData = {
   name: string;
   backend: string;
+  env: EnvRow[];
 };
 
 const DEFAULT_FORM: SandboxFormData = {
   name: "",
   backend: "",
+  env: [],
+};
+
+const envRecordToRows = (env: Record<string, string> | undefined): EnvRow[] =>
+  Object.entries(env ?? {}).map(([key, value]) => ({ key, value }));
+
+const envRowsToRecord = (rows: EnvRow[]): Record<string, string> => {
+  const out: Record<string, string> = {};
+  for (const { key, value } of rows) {
+    const trimmedKey = key.trim();
+    if (trimmedKey === "") continue;
+    out[trimmedKey] = value;
+  }
+  return out;
+};
+
+const findDuplicateEnvKey = (rows: EnvRow[]): string | null => {
+  const seen = new Set<string>();
+  for (const { key } of rows) {
+    const trimmed = key.trim();
+    if (trimmed === "") continue;
+    if (seen.has(trimmed)) return trimmed;
+    seen.add(trimmed);
+  }
+  return null;
 };
 
 /**
@@ -123,7 +154,11 @@ const SandboxSettings = ({
   // available backend when creating fresh.
   useEffect(() => {
     if (data) {
-      setFormData({ name: data.name, backend: data.backend });
+      setFormData({
+        name: data.name,
+        backend: data.backend,
+        env: envRecordToRows(data.env),
+      });
     } else if (backends.length > 0) {
       setFormData((prev) =>
         prev.backend ? prev : { ...prev, backend: backends[0].backend },
@@ -174,6 +209,7 @@ const SandboxSettings = ({
       backend: formData.backend,
       config: {},
       credentials: {},
+      env: envRowsToRecord(formData.env),
     };
 
     const response = await fetch(url, {
@@ -209,6 +245,11 @@ const SandboxSettings = ({
   };
 
   const handleSave = async () => {
+    const dup = findDuplicateEnvKey(formData.env);
+    if (dup) {
+      setValidationErrors({ env: `Duplicate env key: ${dup}` });
+      return;
+    }
     setIsSubmitting(true);
     try {
       const result = await performSave();
@@ -408,6 +449,86 @@ const SandboxSettings = ({
             </FieldDescription>
             {validationErrors.backend && (
               <FieldError>{validationErrors.backend}</FieldError>
+            )}
+          </Field>
+
+          <Field data-invalid={!!validationErrors.env}>
+            <FieldLabel>Environment variables</FieldLabel>
+            <FieldDescription>
+              Merged into every shell command the agent runs in this sandbox.
+              Values are kept server-side and never sent to the model. Workspace
+              defaults override any env the agent passes on the same key.
+            </FieldDescription>
+            <div className="flex flex-col gap-2">
+              {formData.env.map((row, idx) => (
+                <div key={idx} className="flex gap-2 items-start">
+                  <Input
+                    placeholder="KEY"
+                    value={row.key}
+                    aria-label={`Env key ${idx + 1}`}
+                    disabled={isSubmitting}
+                    onChange={(e) => {
+                      const next = [...formData.env];
+                      next[idx] = { ...next[idx], key: e.target.value };
+                      setFormData((prev) => ({ ...prev, env: next }));
+                      if (validationErrors.env) {
+                        setValidationErrors((prev) => {
+                          const n = { ...prev };
+                          delete n.env;
+                          return n;
+                        });
+                      }
+                    }}
+                    className="font-mono"
+                  />
+                  <Input
+                    placeholder="value"
+                    value={row.value}
+                    aria-label={`Env value ${idx + 1}`}
+                    disabled={isSubmitting}
+                    type="password"
+                    autoComplete="off"
+                    onChange={(e) => {
+                      const next = [...formData.env];
+                      next[idx] = { ...next[idx], value: e.target.value };
+                      setFormData((prev) => ({ ...prev, env: next }));
+                    }}
+                    className="font-mono"
+                  />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    aria-label={`Remove env row ${idx + 1}`}
+                    disabled={isSubmitting}
+                    onClick={() => {
+                      const next = formData.env.filter((_, i) => i !== idx);
+                      setFormData((prev) => ({ ...prev, env: next }));
+                    }}
+                  >
+                    <X />
+                  </Button>
+                </div>
+              ))}
+              <div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={isSubmitting}
+                  onClick={() =>
+                    setFormData((prev) => ({
+                      ...prev,
+                      env: [...prev.env, { key: "", value: "" }],
+                    }))
+                  }
+                >
+                  <Plus /> Add variable
+                </Button>
+              </div>
+            </div>
+            {validationErrors.env && (
+              <FieldError>{validationErrors.env}</FieldError>
             )}
           </Field>
         </FieldGroup>

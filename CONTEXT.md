@@ -36,7 +36,7 @@ A Model Context Protocol server registered in a Workspace. Resolves to a Tool se
 A named capability with a description, attached to an Agent. Surfaced to the model so it can request the skill's instructions on demand via the `loadSkill` Tool.
 
 **Sandbox**:
-A configured, isolated execution environment registered in a Workspace, providing shell and filesystem tools that operate inside it. Resolves to a Tool set at Chat-turn time. The Sandbox interface is pluggable so different backends (local container, remote VM, hosted sandbox-as-a-service, …) can be contributed.
+A configured, isolated execution environment registered in a Workspace, providing shell and filesystem tools that operate inside it. Resolves to a Tool set at Chat-turn time. The Sandbox interface is pluggable so different backends (local container, remote VM, hosted sandbox-as-a-service, …) can be contributed. A Sandbox also carries workspace-default environment variables that are merged into every shell execution without transiting the model.
 
 **Memory**:
 A persisted summary of prior activity, retrieved per-User per-Workspace and rendered into the system prompt when the Agent's Tool sets include the memory tool set.

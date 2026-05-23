@@ -223,6 +223,10 @@ registerToolSet(SANDBOX_TOOLSET_ID, {
       configResult.data,
       credentialsResult.data,
     );
-    return createSandboxTools(backend, { orgId, workspaceId, userId });
+    return createSandboxTools(
+      backend,
+      { orgId, workspaceId, userId },
+      row.env ?? {},
+    );
   },
 });

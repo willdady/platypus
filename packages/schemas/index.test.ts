@@ -4,6 +4,9 @@ import {
   workspaceSchema,
   agentSchema,
   organizationCreateSchema,
+  sandboxEnvSchema,
+  SANDBOX_ENV_MAX_ENTRIES,
+  SANDBOX_ENV_MAX_VALUE_BYTES,
 } from "./index";
 
 describe("Organization Schema", () => {
@@ -100,5 +103,49 @@ describe("Agent Schema", () => {
     };
     const result = agentSchema.safeParse(agentWithOptionals);
     expect(result.success).toBe(true);
+  });
+});
+
+describe("sandboxEnvSchema", () => {
+  it("accepts an empty map", () => {
+    expect(sandboxEnvSchema.safeParse({}).success).toBe(true);
+  });
+
+  it("accepts valid POSIX keys and string values", () => {
+    const ok = sandboxEnvSchema.safeParse({
+      OPENAI_API_KEY: "sk-x",
+      _LEADING_UNDERSCORE: "ok",
+      NODE_ENV: "production",
+    });
+    expect(ok.success).toBe(true);
+  });
+
+  it("rejects keys starting with a digit", () => {
+    expect(sandboxEnvSchema.safeParse({ "1FOO": "x" }).success).toBe(false);
+  });
+
+  it("rejects keys with hyphens or dots", () => {
+    expect(sandboxEnvSchema.safeParse({ "FOO-BAR": "x" }).success).toBe(false);
+    expect(sandboxEnvSchema.safeParse({ "foo.bar": "x" }).success).toBe(false);
+  });
+
+  it("rejects empty keys", () => {
+    expect(sandboxEnvSchema.safeParse({ "": "x" }).success).toBe(false);
+  });
+
+  it("rejects values larger than the per-value byte cap", () => {
+    const oversize = "a".repeat(SANDBOX_ENV_MAX_VALUE_BYTES + 1);
+    expect(sandboxEnvSchema.safeParse({ FOO: oversize }).success).toBe(false);
+  });
+
+  it("accepts values at the per-value byte cap", () => {
+    const atCap = "a".repeat(SANDBOX_ENV_MAX_VALUE_BYTES);
+    expect(sandboxEnvSchema.safeParse({ FOO: atCap }).success).toBe(true);
+  });
+
+  it("rejects more than the max entry count", () => {
+    const tooMany: Record<string, string> = {};
+    for (let i = 0; i <= SANDBOX_ENV_MAX_ENTRIES; i++) tooMany[`K${i}`] = "v";
+    expect(sandboxEnvSchema.safeParse(tooMany).success).toBe(false);
   });
 });

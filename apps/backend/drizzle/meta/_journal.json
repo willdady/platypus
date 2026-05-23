@@ -246,6 +246,13 @@
       "when": 1779524840485,
       "tag": "0034_stiff_tigra",
       "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "7",
+      "when": 1779536662582,
+      "tag": "0035_skinny_rawhide_kid",
+      "breakpoints": true
     }
   ]
 }

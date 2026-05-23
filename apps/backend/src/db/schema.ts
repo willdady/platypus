@@ -275,6 +275,7 @@ export const sandbox = pgTable(
       .$type<Record<string, unknown>>()
       .notNull()
       .default({}),
+    env: t.jsonb("env").$type<Record<string, string>>().notNull().default({}),
     createdAt: t.timestamp("created_at").notNull().defaultNow(),
     updatedAt: t.timestamp("updated_at").notNull().defaultNow(),
   }),

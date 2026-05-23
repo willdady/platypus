@@ -7,6 +7,7 @@ import {
   context as contextTable,
   mcp as mcpTable,
   provider as providerTable,
+  sandbox as sandboxTable,
   skill as skillTable,
   workspace as workspaceTable,
 } from "../db/schema.ts";
@@ -196,6 +197,11 @@ export type ChatTurnQueries = {
     userId: string,
     workspaceId: string,
   ): Promise<MemorySummary[]>;
+  /**
+   * Returns the *keys* of the workspace's sandbox env vars (values omitted —
+   * see ADR-0004). Empty array if no sandbox is configured or env is empty.
+   */
+  getSandboxEnvKeys(workspaceId: string): Promise<string[]>;
 };
 
 export const drizzleChatTurnQueries: ChatTurnQueries = {
@@ -284,6 +290,16 @@ export const drizzleChatTurnQueries: ChatTurnQueries = {
   async getRecentMemories(userId, workspaceId) {
     return retrieveRecentSummaries(userId, workspaceId);
   },
+
+  async getSandboxEnvKeys(workspaceId) {
+    const rows = await db
+      .select({ env: sandboxTable.env })
+      .from(sandboxTable)
+      .where(eq(sandboxTable.workspaceId, workspaceId))
+      .limit(1);
+    if (rows.length === 0) return [];
+    return Object.keys(rows[0].env ?? {});
+  },
 };
 
 // --- Public Module: prepare a Chat turn ---
@@ -338,12 +354,14 @@ export const prepareChatTurn = async (
     { subAgents, subAgentTools, subAgentMcpClients },
     userContexts,
     memories,
+    sandboxEnvKeys,
   ] = await Promise.all([
     loadTools(queries, agent, workspaceId, orgId, frontendUrl, user.id),
     loadSkills(queries, agent, workspaceId),
     loadSubAgents(queries, agent, orgId, workspaceId, frontendUrl, onActivity),
     queries.getUserContexts(user.id, workspaceId),
     queries.getRecentMemories(user.id, workspaceId),
+    queries.getSandboxEnvKeys(workspaceId),
   ]);
 
   const allMcpClients = [...mcpClients, ...subAgentMcpClients];
@@ -366,6 +384,7 @@ export const prepareChatTurn = async (
     memories,
     skills,
     subAgents,
+    sandboxEnvKeys,
     fallbackSystemPrompt: request.systemPrompt,
     runMode,
   };

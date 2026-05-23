@@ -13,15 +13,27 @@ import {
 // per-turn context. Descriptions are intentionally terse; the higher-level
 // orientation (workspace root, persistence across turns, stateless shell) is
 // rendered into the system prompt by ./system-prompt-fragment.ts.
+//
+// `workspaceEnv` is the workspace-default env map (see ADR-0004). It is merged
+// on top of `input.env` for every `shell.exec` call (workspace wins), so secret
+// values never need to transit the LLM. Merge happens here, above the adapter,
+// to keep the SandboxBackend contract adapter-agnostic.
 export const createSandboxTools = (
   backend: SandboxBackend,
   ctx: SandboxContext,
+  workspaceEnv: Record<string, string> = {},
 ): Record<string, Tool> => ({
   shellExec: tool({
     description:
       "Run a shell command in the sandbox. Each call starts a fresh shell — there is no persistent shell state between calls. Pass `cwd` (relative to the workspace root) to choose the working directory. Output is capped; check the `truncated` flag.",
     inputSchema: shellExecInputSchema,
-    execute: (input) => backend.shellExec(ctx, input),
+    execute: (input) => {
+      if (Object.keys(workspaceEnv).length === 0) {
+        return backend.shellExec(ctx, input);
+      }
+      const mergedEnv = { ...(input.env ?? {}), ...workspaceEnv };
+      return backend.shellExec(ctx, { ...input, env: mergedEnv });
+    },
   }),
 
   fsRead: tool({

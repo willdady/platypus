@@ -474,6 +474,32 @@ export const providerCreateSchema = providerBaseSchema.pick({
 
 // Sandbox
 
+// Workspace-default environment variables merged into every sandbox shell.exec
+// call. See docs/adr/0004-sandbox-workspace-default-env-vars.md for rationale,
+// threat model, and merge precedence.
+export const SANDBOX_ENV_MAX_ENTRIES = 64;
+export const SANDBOX_ENV_MAX_VALUE_BYTES = 4 * 1024;
+const SANDBOX_ENV_KEY_REGEX = /^[A-Za-z_][A-Za-z0-9_]*$/;
+
+export const sandboxEnvSchema = z
+  .record(
+    z.string().regex(SANDBOX_ENV_KEY_REGEX, {
+      message:
+        "env keys must match POSIX env var rules: [A-Za-z_][A-Za-z0-9_]*",
+    }),
+    z
+      .string()
+      .refine(
+        (v) => Buffer.byteLength(v, "utf8") <= SANDBOX_ENV_MAX_VALUE_BYTES,
+        {
+          message: `env values must be at most ${SANDBOX_ENV_MAX_VALUE_BYTES} bytes`,
+        },
+      ),
+  )
+  .refine((rec) => Object.keys(rec).length <= SANDBOX_ENV_MAX_ENTRIES, {
+    message: `at most ${SANDBOX_ENV_MAX_ENTRIES} env entries are allowed`,
+  });
+
 const sandboxBaseSchema = z.object({
   id: z.string(),
   workspaceId: z.string(),
@@ -481,6 +507,7 @@ const sandboxBaseSchema = z.object({
   backend: z.string().min(1),
   config: z.record(z.string(), z.unknown()).optional(),
   credentials: z.record(z.string(), z.unknown()).optional(),
+  env: sandboxEnvSchema.optional(),
   createdAt: z.date(),
   updatedAt: z.date(),
 });
@@ -495,6 +522,7 @@ export const sandboxCreateSchema = sandboxBaseSchema.pick({
   backend: true,
   config: true,
   credentials: true,
+  env: true,
 });
 
 export const sandboxUpdateSchema = sandboxBaseSchema.pick({
@@ -502,6 +530,7 @@ export const sandboxUpdateSchema = sandboxBaseSchema.pick({
   backend: true,
   config: true,
   credentials: true,
+  env: true,
 });
 
 // Invitation
