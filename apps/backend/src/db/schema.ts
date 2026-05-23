@@ -224,7 +224,9 @@ export const mcp = pgTable(
     oauthAccessToken: t.text("oauth_access_token"),
     oauthRefreshToken: t.text("oauth_refresh_token"),
     oauthTokenExpiresAt: t.timestamp("oauth_token_expires_at"),
+    // Granted scope returned by the token endpoint after authorization.
     oauthScope: t.text("oauth_scope"),
+    // Scope sent to the authorize endpoint; some providers (e.g. Google) reject /authorize without it.
     oauthRequestedScope: t.text("oauth_requested_scope"),
     oauthClientId: t.text("oauth_client_id"),
     oauthClientSecret: t.text("oauth_client_secret"),

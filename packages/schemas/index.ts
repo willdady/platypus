@@ -311,7 +311,7 @@ const mcpBaseSchema = z.object({
   bearerToken: z.string().optional(),
   oauthClientId: z.string().optional(),
   oauthClientSecret: z.string().optional(),
-  oauthRequestedScope: z.string().optional(),
+  oauthRequestedScope: z.string().max(1024).optional(),
   oauthAuthorized: z.boolean().optional(),
   createdAt: z.date(),
   updatedAt: z.date(),
