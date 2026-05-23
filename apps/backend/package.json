@@ -35,6 +35,7 @@
     "croner": "^10.0.1",
     "date-fns": "4.1.0",
     "date-fns-tz": "^3.2.0",
+    "dockerode": "^5.0.0",
     "drizzle-orm": "^0.45.2",
     "hono": "^4.12.22",
     "jsdom": "^29.1.1",
@@ -47,6 +48,7 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@types/dockerode": "^4.0.1",
     "@types/jsdom": "^28.0.3",
     "@types/node": "^25.9.1",
     "@types/pg": "^8.20.0",

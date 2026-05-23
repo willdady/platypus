@@ -1,0 +1,23 @@
+# Sandbox overlay — opt-in Docker reference adapter.
+#
+# Compose this alongside the default stack to enable the "docker" Sandbox
+# backend:
+#
+#   docker compose -f compose.yaml -f compose.sandbox.yaml up
+#
+# SECURITY: This overlay bind-mounts the host Docker socket into the backend
+# container. The backend container therefore has effective root on the host —
+# any code it executes can control the host's Docker daemon. Use only on
+# single-node, single-operator deployments (your laptop, a personal VPS). Do
+# not enable on a host you share with anyone you don't trust.
+#
+# Horizontal-scaled deployments cannot use this adapter because sandbox state
+# lives on the host Docker daemon — pick a remote sandbox backend instead.
+# See docs/adr/0003-docker-reference-sandbox-adapter-socket-mount.md.
+
+services:
+  backend:
+    environment:
+      PLATYPUS_SANDBOX_DOCKER_ENABLED: "true"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
