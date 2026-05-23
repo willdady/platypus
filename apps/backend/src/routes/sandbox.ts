@@ -12,6 +12,7 @@ import {
 } from "../middleware/authorization.ts";
 import type { Variables } from "../server.ts";
 import { destroySandboxRow } from "../sandbox/teardown.ts";
+import { getSandboxBackends } from "../sandbox/index.ts";
 import { logger } from "../logger.ts";
 
 type SandboxRecord = typeof sandboxTable.$inferSelect;
@@ -25,6 +26,23 @@ const sanitizeSandboxResponse = (record: SandboxRecord) => {
   const { credentials: _credentials, ...rest } = record;
   return rest;
 };
+
+// List the Sandbox backends registered in this process. Returns metadata only
+// (no Zod schemas); the frontend renders forms per known backend type for v1.
+// Declared before "/" so the literal "/backends" path takes precedence.
+sandbox.get(
+  "/backends",
+  requireAuth,
+  requireOrgAccess(),
+  requireWorkspaceAccess,
+  async (c) => {
+    const results = getSandboxBackends().map((r) => ({
+      backend: r.backend,
+      name: r.name,
+    }));
+    return c.json({ results });
+  },
+);
 
 /** Get the workspace's sandbox (404 if none configured) */
 sandbox.get(

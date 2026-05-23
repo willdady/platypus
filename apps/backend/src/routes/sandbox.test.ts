@@ -21,6 +21,29 @@ describe("Sandbox Routes", () => {
     credentials: { token: "secret-123" },
   };
 
+  describe("GET /backends", () => {
+    it("returns the list of registered backends with name and id only", async () => {
+      mockSession();
+      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
+      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]);
+
+      const res = await app.request(`${baseUrl}/backends`);
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as {
+        results: Array<{ backend: string; name: string }>;
+      };
+      // The registry is process-wide; tests don't register the Docker adapter
+      // (no PLATYPUS_SANDBOX_DOCKER_ENABLED), so the list shape is what we
+      // assert — not specific entries.
+      expect(Array.isArray(body.results)).toBe(true);
+      for (const r of body.results) {
+        expect(typeof r.backend).toBe("string");
+        expect(typeof r.name).toBe("string");
+        expect(Object.keys(r).sort()).toEqual(["backend", "name"]);
+      }
+    });
+  });
+
   describe("POST /", () => {
     it("creates a sandbox and returns 201 with credentials stripped", async () => {
       mockSession();

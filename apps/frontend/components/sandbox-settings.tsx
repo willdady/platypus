@@ -8,7 +8,7 @@ import { type Sandbox } from "@platypus/schemas";
 
 import { useAuth } from "@/components/auth-provider";
 import { useBackendUrl } from "@/app/client-context";
-import { joinUrl, parseValidationErrors } from "@/lib/utils";
+import { fetcher, joinUrl, parseValidationErrors } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -38,7 +38,7 @@ import {
 } from "@/components/ui/empty";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 
-const SANDBOX_BACKENDS = [{ value: "docker", label: "Local Docker" }] as const;
+type SandboxBackend = { backend: string; name: string };
 
 type SandboxFormData = {
   name: string;
@@ -47,7 +47,7 @@ type SandboxFormData = {
 
 const DEFAULT_FORM: SandboxFormData = {
   name: "",
-  backend: SANDBOX_BACKENDS[0].value,
+  backend: "",
 };
 
 /**
@@ -95,6 +95,11 @@ const SandboxSettings = ({
     sandboxFetcher,
   );
 
+  const { data: backendsData, isLoading: backendsLoading } = useSWR<{
+    results: SandboxBackend[];
+  }>(backendUrl && user ? `${sandboxUrl}/backends` : null, fetcher);
+  const backends = backendsData?.results ?? [];
+
   const [isConfiguring, setIsConfiguring] = useState(false);
   const [formData, setFormData] = useState<SandboxFormData>(DEFAULT_FORM);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -114,12 +119,17 @@ const SandboxSettings = ({
   }>({ open: false, kind: null, message: "" });
   const [isForcing, setIsForcing] = useState(false);
 
-  // Sync form state with loaded sandbox data
+  // Sync form state with loaded sandbox data, or fall back to the first
+  // available backend when creating fresh.
   useEffect(() => {
     if (data) {
       setFormData({ name: data.name, backend: data.backend });
+    } else if (backends.length > 0) {
+      setFormData((prev) =>
+        prev.backend ? prev : { ...prev, backend: backends[0].backend },
+      );
     }
-  }, [data]);
+  }, [data, backends]);
 
   const handleNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (validationErrors.name) {
@@ -311,7 +321,7 @@ const SandboxSettings = ({
     }
   };
 
-  if (isLoading) {
+  if (isLoading || backendsLoading) {
     return null;
   }
 
@@ -327,6 +337,7 @@ const SandboxSettings = ({
 
   const hasSandbox = !!data;
   const showForm = hasSandbox || isConfiguring;
+  const noBackends = backends.length === 0;
 
   if (!showForm) {
     return (
@@ -337,11 +348,13 @@ const SandboxSettings = ({
           </EmptyMedia>
           <EmptyTitle>No sandbox configured</EmptyTitle>
           <EmptyDescription>
-            Configure a sandbox to run agent code in an isolated environment.
+            {noBackends
+              ? "No sandbox backends are registered on this server. Set PLATYPUS_SANDBOX_DOCKER_ENABLED=true (or register another backend) and restart the backend."
+              : "Configure a sandbox to run agent code in an isolated environment."}
           </EmptyDescription>
         </EmptyHeader>
         <EmptyContent>
-          <Button onClick={() => setIsConfiguring(true)}>
+          <Button onClick={() => setIsConfiguring(true)} disabled={noBackends}>
             <Plus /> Configure sandbox
           </Button>
         </EmptyContent>
@@ -382,9 +395,9 @@ const SandboxSettings = ({
               <SelectContent>
                 <SelectGroup>
                   <SelectLabel>Backend</SelectLabel>
-                  {SANDBOX_BACKENDS.map((option) => (
-                    <SelectItem key={option.value} value={option.value}>
-                      {option.label}
+                  {backends.map((option) => (
+                    <SelectItem key={option.backend} value={option.backend}>
+                      {option.name}
                     </SelectItem>
                   ))}
                 </SelectGroup>
