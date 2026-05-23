@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { PassThrough } from "node:stream";
 
 // ---------------------------------------------------------------------------
@@ -315,6 +315,59 @@ describe("DockerSandboxBackend — provisioning", () => {
     expect(opts.HostConfig.MemorySwap).toBe(opts.HostConfig.Memory);
     expect(opts.HostConfig.NanoCpus).toBe(2_000_000_000);
     expect(opts.HostConfig.SecurityOpt).toEqual(["no-new-privileges:true"]);
+    expect(opts.HostConfig.ExtraHosts).toEqual([
+      "host.docker.internal:host-gateway",
+    ]);
+  });
+
+  describe("PLATYPUS_SANDBOX_EXTRA_HOSTS", () => {
+    const originalEnv = process.env.PLATYPUS_SANDBOX_EXTRA_HOSTS;
+
+    afterEach(() => {
+      if (originalEnv === undefined) {
+        delete process.env.PLATYPUS_SANDBOX_EXTRA_HOSTS;
+      } else {
+        process.env.PLATYPUS_SANDBOX_EXTRA_HOSTS = originalEnv;
+      }
+    });
+
+    it("opts out of ExtraHosts entirely when set to empty string", async () => {
+      process.env.PLATYPUS_SANDBOX_EXTRA_HOSTS = "";
+      setupFreshProvision();
+      queueExec({ exitCode: 0 });
+
+      const backend = new DockerSandboxBackend({}, {});
+      await backend.shellExec(ctx, { command: "true" });
+
+      expect(mockState.createContainerCalls[0].HostConfig.ExtraHosts).toEqual(
+        [],
+      );
+    });
+
+    it("replaces default with a custom comma-separated list", async () => {
+      process.env.PLATYPUS_SANDBOX_EXTRA_HOSTS =
+        "host.docker.internal:host-gateway, internal.example:10.0.0.5";
+      setupFreshProvision();
+      queueExec({ exitCode: 0 });
+
+      const backend = new DockerSandboxBackend({}, {});
+      await backend.shellExec(ctx, { command: "true" });
+
+      expect(mockState.createContainerCalls[0].HostConfig.ExtraHosts).toEqual([
+        "host.docker.internal:host-gateway",
+        "internal.example:10.0.0.5",
+      ]);
+    });
+
+    it("throws on malformed entries", async () => {
+      process.env.PLATYPUS_SANDBOX_EXTRA_HOSTS = "not a valid entry";
+      setupFreshProvision();
+
+      const backend = new DockerSandboxBackend({}, {});
+      await expect(backend.shellExec(ctx, { command: "true" })).rejects.toThrow(
+        /PLATYPUS_SANDBOX_EXTRA_HOSTS/,
+      );
+    });
   });
 
   it("reuses an existing running container without re-creating", async () => {

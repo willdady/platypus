@@ -38,6 +38,50 @@ const MEMORY_BYTES = 2 * 1024 * 1024 * 1024; // 2 GB
 const NANO_CPUS = 2 * 1_000_000_000; // 2 CPUs
 const SECURITY_OPT = ["no-new-privileges:true"];
 
+// Default ExtraHosts entry: gives sandbox containers a Docker-convention
+// hostname (`host.docker.internal`) that resolves to the host's gateway IP,
+// so agent-written code can reach services the operator publishes on the
+// host (local model inference, transcription, the Platypus
+// internal-resource-proxy, etc.) without hardcoded IPs. See ADR-0005.
+//
+// Configurable via PLATYPUS_SANDBOX_EXTRA_HOSTS:
+//   - unset           → DEFAULT_EXTRA_HOSTS below
+//   - empty string    → no ExtraHosts at all (opt out)
+//   - "name:ip,..."   → exact comma-separated list (replaces default)
+//
+// Reads the env per call so operators can adjust without rebuilding the
+// image; only takes effect on newly-created containers (existing
+// containers keep their old config until destroyed and recreated, per
+// ADR-0003).
+const DEFAULT_EXTRA_HOSTS = ["host.docker.internal:host-gateway"];
+
+// Validate a single ExtraHosts entry. We accept the Docker daemon's own
+// format `host:ip-or-magic` where the right side is either an IPv4
+// address, an IPv6 address, or one of Docker's documented magic tokens
+// (currently `host-gateway`). Anything else is rejected — the daemon
+// would also reject it, but failing early gives a clearer error.
+const EXTRA_HOST_PATTERN =
+  /^[A-Za-z0-9.-]+:(?:host-gateway|[0-9.]+|[0-9A-Fa-f:]+)$/;
+
+function readExtraHosts(): string[] {
+  const raw = process.env.PLATYPUS_SANDBOX_EXTRA_HOSTS;
+  if (raw === undefined) return DEFAULT_EXTRA_HOSTS;
+  const trimmed = raw.trim();
+  if (trimmed === "") return [];
+  return trimmed
+    .split(",")
+    .map((entry) => entry.trim())
+    .filter((entry) => entry.length > 0)
+    .map((entry) => {
+      if (!EXTRA_HOST_PATTERN.test(entry)) {
+        throw new Error(
+          `Invalid PLATYPUS_SANDBOX_EXTRA_HOSTS entry: ${JSON.stringify(entry)}`,
+        );
+      }
+      return entry;
+    });
+}
+
 export const dockerSandboxConfigSchema = z.object({}).strict();
 export const dockerSandboxCredentialsSchema = z.object({}).strict();
 
@@ -327,6 +371,7 @@ export class DockerSandboxBackend implements SandboxBackend {
         MemorySwap: MEMORY_BYTES,
         NanoCpus: NANO_CPUS,
         SecurityOpt: SECURITY_OPT,
+        ExtraHosts: readExtraHosts(),
       },
     });
     await container.start();
