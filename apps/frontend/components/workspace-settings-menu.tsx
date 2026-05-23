@@ -8,7 +8,7 @@ import {
   SidebarMenuItem,
   SidebarMenu,
 } from "@/components/ui/sidebar";
-import { Info, Radio, Settings, Unplug, Wrench } from "lucide-react";
+import { Box, Info, Radio, Settings, Unplug, Wrench } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
@@ -25,6 +25,7 @@ export function WorkspaceSettingsMenu({
   const workspaceHref = `/${orgId}/workspace/${workspaceId}/settings`;
   const providersHref = `/${orgId}/workspace/${workspaceId}/settings/providers`;
   const mcpHref = `/${orgId}/workspace/${workspaceId}/settings/mcp`;
+  const sandboxHref = `/${orgId}/workspace/${workspaceId}/settings/sandbox`;
   const webhookHref = `/${orgId}/workspace/${workspaceId}/settings/webhooks`;
   const aboutHref = `/${orgId}/workspace/${workspaceId}/settings/about`;
 
@@ -57,6 +58,16 @@ export function WorkspaceSettingsMenu({
               >
                 <Link href={mcpHref}>
                   <Wrench /> MCP
+                </Link>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+            <SidebarMenuItem>
+              <SidebarMenuButton
+                asChild
+                isActive={pathname.startsWith(sandboxHref)}
+              >
+                <Link href={sandboxHref}>
+                  <Box /> Sandbox
                 </Link>
               </SidebarMenuButton>
             </SidebarMenuItem>
