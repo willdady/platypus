@@ -210,8 +210,8 @@ const McpForm = ({
           ? formData.oauthClientSecret
           : undefined,
       oauthRequestedScope:
-        formData.authType === "OAuth" && formData.oauthRequestedScope
-          ? formData.oauthRequestedScope
+        formData.authType === "OAuth" && formData.oauthRequestedScope?.trim()
+          ? formData.oauthRequestedScope.trim()
           : undefined,
     };
     return payload;
