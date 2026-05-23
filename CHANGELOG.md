@@ -1,5 +1,31 @@
 # Changelog
 
+## [1.84.0](https://github.com/willdady/platypus/compare/v1.83.2...v1.84.0) (2026-05-23)
+
+
+### Features
+
+* add Sandbox backend discovery endpoint and wire frontend to it ([7f0cd97](https://github.com/willdady/platypus/commit/7f0cd975415ceb0ad3d6a007db2a154fa16ca340))
+* **backend:** add Docker reference Sandbox adapter ([0bbd422](https://github.com/willdady/platypus/commit/0bbd422eca2d012b7549e633fd893d9f3ed1445c))
+* **backend:** add explicit apiMode flag to OpenAI provider ([#140](https://github.com/willdady/platypus/issues/140)) ([1b9ee1e](https://github.com/willdady/platypus/commit/1b9ee1ea4d66ff38c7f7afcf67f74d9c42dc2645))
+* **backend:** add Sandbox CRUD routes ([a454104](https://github.com/willdady/platypus/commit/a454104f4759e3a69182793a19a5055e9b14b5ec))
+* **backend:** add sandbox table schema ([d4f31cb](https://github.com/willdady/platypus/commit/d4f31cbc6398fd7455fdbe49df01bc22e42150e8))
+* **backend:** add SandboxBackend interface and registry ([75e597a](https://github.com/willdady/platypus/commit/75e597a0144417e9dc982630e8b4443ca5c3ae05))
+* **backend:** apply resource and security limits to Docker sandbox containers ([0095ca8](https://github.com/willdady/platypus/commit/0095ca8adeedd186058218c03d3529c67de3755b))
+* **backend:** harden Docker adapter against shell injection + add coverage ([2dc370d](https://github.com/willdady/platypus/commit/2dc370d4b08819ce2ce98287d24dea4afbf5d017))
+* **backend:** render Sandbox orientation in the system prompt ([3959a2c](https://github.com/willdady/platypus/commit/3959a2cd789ee5c56d0fa0843fde319829ad32f2))
+* **backend:** tear down old adapter on Sandbox backend change ([04c523a](https://github.com/willdady/platypus/commit/04c523aa84b49bbc12540ea7dd76e554a7e017ed))
+* **backend:** wire Sandbox teardown into row-delete and Workspace cascade ([9a75da0](https://github.com/willdady/platypus/commit/9a75da0888a69fd93bd7cc0702c91ea32926a5aa))
+* **backend:** wire Sandbox tool set into chat-turn resolution ([44b379a](https://github.com/willdady/platypus/commit/44b379a4fd35ad62699c24b861ac87f0ed5a38ec))
+* **frontend:** add per-tool icon overrides for Sandbox tools ([816eb19](https://github.com/willdady/platypus/commit/816eb1914d16f46ebc1f4045c45f63ceae35cde3))
+* **frontend:** add Sandbox settings UI ([e42d3b4](https://github.com/willdady/platypus/commit/e42d3b453fbfa11fdc7a64459ee41fe0aca5ad80))
+* **schemas:** add Sandbox model schemas ([4b3be4f](https://github.com/willdady/platypus/commit/4b3be4f627de730fdb5983ca5fb2ecfdf2de3bee))
+
+
+### Bug Fixes
+
+* **backend:** append access_type=offline for Google OAuth authorization URLs ([#139](https://github.com/willdady/platypus/issues/139)) ([d25cd7e](https://github.com/willdady/platypus/commit/d25cd7e9fb552e288cf4588589d804cf23f8d7d4))
+
 ## [1.83.2](https://github.com/willdady/platypus/compare/v1.83.1...v1.83.2) (2026-05-23)
 
 
