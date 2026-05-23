@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.83.2](https://github.com/willdady/platypus/compare/v1.83.1...v1.83.2) (2026-05-23)
+
+
+### Bug Fixes
+
+* **backend:** include configurable OAuth scope in MCP client metadata ([#134](https://github.com/willdady/platypus/issues/134)) ([7d40063](https://github.com/willdady/platypus/commit/7d40063e6e1963ba92ccfd934b2b34b2e28c8826))
+* **frontend:** avoid creating duplicate MCP rows on OAuth retry ([#132](https://github.com/willdady/platypus/issues/132)) ([c46714e](https://github.com/willdady/platypus/commit/c46714e861fcc9fdad1c525a97fcb2df54235931))
+* **frontend:** reset MCP OAuth authorize button when popup closes ([#131](https://github.com/willdady/platypus/issues/131)) ([9e7367b](https://github.com/willdady/platypus/commit/9e7367b597bdea358a4008b6cdce698b4f6f7303))
+
 ## [1.83.1](https://github.com/willdady/platypus/compare/v1.83.0...v1.83.1) (2026-05-23)
 
 
