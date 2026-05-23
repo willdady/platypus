@@ -31,6 +31,13 @@ const IMAGE = "debian:stable-slim";
 const LABEL_SANDBOX = "platypus.sandbox";
 const LABEL_WORKSPACE_ID = "platypus.sandbox.workspaceId";
 
+// Container resource and security limits. Hardcoded for v1; sane defaults
+// rather than configurable knobs. See ADR-0003 for rationale.
+const PIDS_LIMIT = 256;
+const MEMORY_BYTES = 2 * 1024 * 1024 * 1024; // 2 GB
+const NANO_CPUS = 2 * 1_000_000_000; // 2 CPUs
+const SECURITY_OPT = ["no-new-privileges:true"];
+
 export const dockerSandboxConfigSchema = z.object({}).strict();
 export const dockerSandboxCredentialsSchema = z.object({}).strict();
 
@@ -314,6 +321,11 @@ export class DockerSandboxBackend implements SandboxBackend {
       HostConfig: {
         Binds: [`${vol}:${SANDBOX_WORKSPACE_ROOT}`],
         AutoRemove: false,
+        PidsLimit: PIDS_LIMIT,
+        Memory: MEMORY_BYTES,
+        MemorySwap: MEMORY_BYTES,
+        NanoCpus: NANO_CPUS,
+        SecurityOpt: SECURITY_OPT,
       },
     });
     await container.start();
