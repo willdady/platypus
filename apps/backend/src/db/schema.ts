@@ -57,6 +57,7 @@ export const provider = pgTable(
     extraBody: t.jsonb().$type<Record<string, unknown>>(),
     organization: t.text("organization"),
     project: t.text("project"),
+    apiMode: t.text("api_mode").notNull().default("responses"),
     modelIds: t.jsonb().$type<string[]>().notNull(),
     taskModelId: t.text("task_model_id").notNull(),
     memoryExtractionModelId: t.text("memory_extraction_model_id").notNull(),

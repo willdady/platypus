@@ -22,8 +22,9 @@ export const openProvider = (provider: Provider): OpenedProvider => {
         organization: provider.organization ?? undefined,
         project: provider.project ?? undefined,
       });
+      const useChatCompletions = provider.apiMode === "chat";
       return {
-        languageModel: (id) => sdk(id),
+        languageModel: (id) => (useChatCompletions ? sdk.chat(id) : sdk(id)),
         embeddingModel: (id) => sdk.embeddingModel(id),
         searchTools: () => ({
           web_search: sdk.tools.webSearch({

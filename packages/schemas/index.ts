@@ -382,6 +382,10 @@ export const mcpTestSchema = mcpBaseSchema
 
 // Provider
 
+export const providerApiModeSchema = z.enum(["chat", "responses"]);
+
+export type ProviderApiMode = z.infer<typeof providerApiModeSchema>;
+
 const providerBaseSchema = z.object({
   id: z.string(),
   organizationId: z.string().optional(),
@@ -404,6 +408,7 @@ const providerBaseSchema = z.object({
   extraBody: z.record(z.string(), z.unknown()).optional(),
   organization: z.string().optional(),
   project: z.string().optional(),
+  apiMode: providerApiModeSchema.default("responses"),
   modelIds: z.array(z.string()).min(1),
   taskModelId: z.string(),
   memoryExtractionModelId: z.string(),
@@ -459,6 +464,7 @@ export const providerCreateSchema = providerBaseSchema.pick({
   extraBody: true,
   organization: true,
   project: true,
+  apiMode: true,
   modelIds: true,
   taskModelId: true,
   memoryExtractionModelId: true,
@@ -542,6 +548,7 @@ export const providerUpdateSchema = providerBaseSchema.pick({
   extraBody: true,
   organization: true,
   project: true,
+  apiMode: true,
   modelIds: true,
   taskModelId: true,
   memoryExtractionModelId: true,

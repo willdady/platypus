@@ -93,6 +93,7 @@ const ProviderForm = ({
     extraBody: {},
     organization: "",
     project: "",
+    apiMode: "responses",
     modelIds: [],
     taskModelId: "",
     memoryExtractionModelId: "",
@@ -150,6 +151,7 @@ const ProviderForm = ({
         extraBody: provider.extraBody || {},
         organization: provider.organization || "",
         project: provider.project || "",
+        apiMode: provider.apiMode ?? "responses",
         modelIds: provider.modelIds || [],
         taskModelId: provider.taskModelId,
         memoryExtractionModelId: provider.memoryExtractionModelId,
@@ -270,6 +272,7 @@ const ProviderForm = ({
         extraBody: formData.extraBody,
         organization: formData.organization || undefined,
         project: formData.project || undefined,
+        apiMode: formData.apiMode,
         modelIds: formData.modelIds,
         taskModelId: formData.taskModelId,
         memoryExtractionModelId: formData.memoryExtractionModelId,
@@ -636,6 +639,38 @@ const ProviderForm = ({
             <FieldGroup>
               {formData.providerType === "OpenAI" && (
                 <>
+                  <Field data-invalid={!!validationErrors.apiMode}>
+                    <FieldLabel htmlFor="apiMode">API Mode</FieldLabel>
+                    <Select
+                      value={formData.apiMode}
+                      onValueChange={(value) =>
+                        handleSelectChange("apiMode", value)
+                      }
+                      disabled={isSubmitting || isReadOnly}
+                    >
+                      <SelectTrigger disabled={isSubmitting || isReadOnly}>
+                        <SelectValue placeholder="Select API mode" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectGroup>
+                          <SelectLabel>API Mode</SelectLabel>
+                          <SelectItem value="chat">Chat Completions</SelectItem>
+                          <SelectItem value="responses">Responses</SelectItem>
+                        </SelectGroup>
+                      </SelectContent>
+                    </Select>
+                    <FieldDescription>
+                      Responses is OpenAI's default and supports hosted
+                      web_search, reasoning summaries, and previous_response_id.
+                      Switch to Chat Completions when pointing at an
+                      OpenAI-compatible server that does not implement
+                      /v1/responses (e.g. vLLM, Ollama, LiteLLM).
+                    </FieldDescription>
+                    {validationErrors.apiMode && (
+                      <FieldError>{validationErrors.apiMode}</FieldError>
+                    )}
+                  </Field>
+
                   <Field data-invalid={!!validationErrors.organization}>
                     <FieldLabel htmlFor="organization">Organization</FieldLabel>
                     <Input

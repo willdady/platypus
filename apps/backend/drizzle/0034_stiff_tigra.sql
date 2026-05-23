@@ -1,0 +1,1 @@
+ALTER TABLE "provider" ADD COLUMN "api_mode" text DEFAULT 'responses' NOT NULL;

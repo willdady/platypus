@@ -8,7 +8,15 @@ const {
   mockCreateAnthropic,
 } = vi.hoisted(() => {
   const makeMock = () => {
-    const instance = vi.fn((modelId: string) => ({ modelId, _sentinel: true }));
+    const instance: any = vi.fn((modelId: string) => ({
+      modelId,
+      _sentinel: true,
+    }));
+    instance.chat = vi.fn((modelId: string) => ({
+      modelId,
+      _sentinel: true,
+      _mode: "chat",
+    }));
     const creator = vi.fn(() => instance);
     return { creator, instance };
   };
@@ -45,6 +53,7 @@ const baseProvider = {
   providerType: "OpenAI" as const,
   modelIds: ["gpt-4"],
   apiKey: "sk-test",
+  apiMode: "chat" as const,
   baseUrl: null,
   headers: null,
   organization: null,

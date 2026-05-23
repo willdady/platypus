@@ -63,7 +63,9 @@ vi.mock("ai", async () => {
 });
 
 vi.mock("@ai-sdk/openai", () => ({
-  createOpenAI: vi.fn().mockReturnValue(vi.fn()),
+  createOpenAI: vi
+    .fn()
+    .mockReturnValue(Object.assign(vi.fn(), { chat: vi.fn() })),
 }));
 
 vi.mock("@openrouter/ai-sdk-provider", () => ({
