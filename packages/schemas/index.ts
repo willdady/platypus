@@ -466,6 +466,38 @@ export const providerCreateSchema = providerBaseSchema.pick({
   embeddingDimensions: true,
 });
 
+// Sandbox
+
+const sandboxBaseSchema = z.object({
+  id: z.string(),
+  workspaceId: z.string(),
+  name: z.string().min(3).max(30),
+  backend: z.string().min(1),
+  config: z.record(z.string(), z.unknown()).optional(),
+  credentials: z.record(z.string(), z.unknown()).optional(),
+  createdAt: z.date(),
+  updatedAt: z.date(),
+});
+
+export const sandboxSchema = sandboxBaseSchema;
+
+export type Sandbox = z.infer<typeof sandboxSchema>;
+
+export const sandboxCreateSchema = sandboxBaseSchema.pick({
+  workspaceId: true,
+  name: true,
+  backend: true,
+  config: true,
+  credentials: true,
+});
+
+export const sandboxUpdateSchema = sandboxBaseSchema.pick({
+  name: true,
+  backend: true,
+  config: true,
+  credentials: true,
+});
+
 // Invitation
 
 export const invitationStatusSchema = z.enum([
