@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.85.0](https://github.com/willdady/platypus/compare/v1.84.0...v1.85.0) (2026-05-23)
+
+
+### Features
+
+* **sandbox:** add workspace-default env vars ([6172bd7](https://github.com/willdady/platypus/commit/6172bd7ee45d540f32d04f863f690838504a3b6a))
+
 ## [1.84.0](https://github.com/willdady/platypus/compare/v1.83.2...v1.84.0) (2026-05-23)
 
 
