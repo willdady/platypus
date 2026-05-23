@@ -404,6 +404,15 @@ const McpForm = ({
       const data = await response.json();
 
       if (response.ok && data.authorizationUrl) {
+        // If we just created the MCP, redirect to the edit page so the URL
+        // reflects the new mcpId and any later actions (retries, save,
+        // re-authorize) update the existing record instead of creating
+        // duplicates.
+        if (!mcpId && resolvedMcpId) {
+          router.replace(
+            `/${orgId}/workspace/${workspaceId}/settings/mcp/${resolvedMcpId}`,
+          );
+        }
         // Open OAuth in a popup so the main page is never navigated away.
         // This avoids bfcache issues where the browser restores stale auth
         // state when the user clicks the Back button.
