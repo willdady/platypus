@@ -81,7 +81,16 @@ sandbox.post(
   },
 );
 
-/** Update the workspace's sandbox (404 if none configured) */
+// Update the workspace's sandbox. Hybrid semantics: `name` and `backend` are
+// required and always overwritten; `config` and `credentials` are optional
+// and preserved when omitted (Drizzle treats undefined as "skip column"),
+// which is necessary because GET responses strip credentials so the
+// frontend can't re-send them.
+//
+// Changing `backend` is treated as destroy-then-update per ADR-0001: the
+// previous adapter's destroy() is fired inline against the old row before
+// the new backend is written. Pass ?force=true to skip the destroy and
+// switch anyway (external resources may leak; logged as a warning).
 sandbox.put(
   "/",
   requireAuth,
@@ -91,6 +100,46 @@ sandbox.put(
   async (c) => {
     const workspaceId = c.req.param("workspaceId")!;
     const data = c.req.valid("json");
+    const force = c.req.query("force") === "true";
+
+    const existing = await db
+      .select()
+      .from(sandboxTable)
+      .where(eq(sandboxTable.workspaceId, workspaceId))
+      .limit(1);
+    if (existing.length === 0) {
+      return c.json({ error: "Sandbox not configured" }, 404);
+    }
+
+    const backendChanging = existing[0].backend !== data.backend;
+    if (backendChanging && !force) {
+      try {
+        await destroySandboxRow(existing[0]);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        logger.warn(
+          { workspaceId, sandboxId: existing[0].id, err },
+          "Sandbox backend change blocked: previous adapter's destroy() failed",
+        );
+        return c.json(
+          {
+            error: `Failed to destroy previous sandbox: ${message}. Pass ?force=true to switch backend anyway (external resources may leak).`,
+          },
+          500,
+        );
+      }
+    } else if (backendChanging && force) {
+      logger.warn(
+        {
+          workspaceId,
+          sandboxId: existing[0].id,
+          oldBackend: existing[0].backend,
+          newBackend: data.backend,
+        },
+        "Sandbox backend force-changed; previous adapter's destroy() was skipped — external resources may leak",
+      );
+    }
+
     const record = await db
       .update(sandboxTable)
       .set({
@@ -99,9 +148,6 @@ sandbox.put(
       })
       .where(eq(sandboxTable.workspaceId, workspaceId))
       .returning();
-    if (record.length === 0) {
-      return c.json({ error: "Sandbox not configured" }, 404);
-    }
     return c.json(sanitizeSandboxResponse(record[0]));
   },
 );

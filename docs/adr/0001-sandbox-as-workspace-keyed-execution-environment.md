@@ -14,6 +14,6 @@ A Sandbox is a configured, isolated execution environment registered on a Worksp
 
 - DB shape: `sandbox(id, workspaceId UNIQUE, backend, name, config jsonb, credentials jsonb, ...)`.
 - Adapter authors implement a fixed `SandboxBackend` interface (see ADR-0002).
-- `destroy(ctx, config, credentials)` is required on every adapter and must be idempotent. On user-initiated row delete: synchronous, fail-loud, with a force-delete escape hatch. On Workspace cascade: best-effort with a `sandbox_teardown_failure` ledger; never blocks Workspace deletion.
+- `destroy(ctx, config, credentials)` is required on every adapter and must be idempotent. On user-initiated row delete: synchronous, fail-loud, with a force-delete escape hatch. On user-initiated row update that changes `backend`: same fail-loud semantics — the previous adapter's `destroy()` fires inline against the old row before the new backend is written, with the same `?force=true` escape hatch. On Workspace cascade: best-effort with a `sandbox_teardown_failure` ledger; never blocks Workspace deletion.
 - Credentials are stored as plaintext, consistent with existing Provider/MCP patterns. Not encrypted at rest.
 - The Agent-side tool set id `"sandbox"` is registered unconditionally; if a Workspace has no Sandbox configured, the tools are absent that turn (same graceful-degradation pattern as Providers).
