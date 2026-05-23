@@ -23,7 +23,7 @@ export const openProvider = (provider: Provider): OpenedProvider => {
         project: provider.project ?? undefined,
       });
       return {
-        languageModel: (id) => sdk.chat(id),
+        languageModel: (id) => (provider.baseUrl ? sdk.chat(id) : sdk(id)),
         embeddingModel: (id) => sdk.embeddingModel(id),
         searchTools: () => ({
           web_search: sdk.tools.webSearch({
