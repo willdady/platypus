@@ -159,10 +159,10 @@ export class DatabaseOAuthClientProvider implements OAuthClientProvider {
    * the `Authorization: Basic ...` header, returning a misleading
    * `invalid_client / Missing client_id` 401.
    */
-  async addClientAuthentication(
+  addClientAuthentication = async (
     headers: Headers,
     params: URLSearchParams,
-  ): Promise<void> {
+  ): Promise<void> => {
     const records = await db
       .select({
         oauthClientId: mcpTable.oauthClientId,
@@ -179,7 +179,7 @@ export class DatabaseOAuthClientProvider implements OAuthClientProvider {
     }
     // Make sure we do not also send a stale Basic header.
     headers.delete("Authorization");
-  }
+  };
 
   get clientMetadata() {
     return {
