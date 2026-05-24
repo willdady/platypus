@@ -96,6 +96,21 @@ export class DatabaseOAuthClientProvider implements OAuthClientProvider {
     return this.callbackUrl;
   }
 
+  /**
+   * Trust the resource URL advertised by the MCP server even when its origin
+   * differs from the URL we use to reach it. This lets the backend talk to an
+   * MCP server through a different network path (docker hostname, host gateway,
+   * SSH tunnel) than the browser-facing URL the server advertises during OAuth
+   * discovery. Without this override, `@ai-sdk/mcp` rejects the mismatch as
+   * `Protected resource ... does not match expected ... (or origin)`.
+   */
+  async validateResourceURL(
+    _serverUrl: URL,
+    resource?: string,
+  ): Promise<URL | undefined> {
+    return resource ? new URL(resource) : undefined;
+  }
+
   get clientMetadata() {
     return {
       redirect_uris: [this.callbackUrl],
@@ -199,7 +214,10 @@ export class DatabaseOAuthClientProvider implements OAuthClientProvider {
     // Google requires access_type=offline to return a refresh token.
     // prompt=consent forces re-consent even if the user previously authorized,
     // which is required when requesting offline access for the first time.
-    if (authorizationUrl.hostname.endsWith(".google.com") || authorizationUrl.hostname === "google.com") {
+    if (
+      authorizationUrl.hostname.endsWith(".google.com") ||
+      authorizationUrl.hostname === "google.com"
+    ) {
       authorizationUrl.searchParams.set("access_type", "offline");
       authorizationUrl.searchParams.set("prompt", "consent");
     }
