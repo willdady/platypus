@@ -12,6 +12,15 @@ import {
 import { AgentAvatar } from "./agent-avatar";
 import { Button } from "./ui/button";
 
+const filterByKeywords = (
+  _value: string,
+  search: string,
+  keywords?: string[],
+) => {
+  const haystack = (keywords ?? []).join(" ").toLowerCase();
+  return haystack.includes(search.toLowerCase()) ? 1 : 0;
+};
+
 interface ModelSelectorDialogProps {
   agents: Agent[];
   providers: Provider[];
@@ -51,7 +60,7 @@ export const ModelSelectorDialog = ({
           </span>
         </Button>
       </ModelSelectorTrigger>
-      <ModelSelectorContent>
+      <ModelSelectorContent filter={filterByKeywords}>
         <ModelSelectorInput placeholder="Search agents and models..." />
         <ModelSelectorList>
           <ModelSelectorEmpty>No results found.</ModelSelectorEmpty>
@@ -62,6 +71,7 @@ export const ModelSelectorDialog = ({
                 <ModelSelectorItem
                   key={agent.id}
                   value={`agent:${agent.id}`}
+                  keywords={[agent.name]}
                   className="cursor-pointer"
                   onSelect={() => {
                     onModelChange(`agent:${agent.id}`);
@@ -83,6 +93,7 @@ export const ModelSelectorDialog = ({
                   key={`provider:${provider.id}:${model}`}
                   className="cursor-pointer"
                   value={`provider:${provider.id}:${model}`}
+                  keywords={[model, provider.name]}
                   onSelect={() => {
                     onModelChange(`provider:${provider.id}:${model}`);
                     onOpenChange(false);
