@@ -62,8 +62,48 @@ export const buildMcpTransportConfig = (mcp: McpRecord) => {
  * returns a fresh Response constructed from the original, ensuring the
  * `instanceof Response` check succeeds in the library's error handler.
  */
+/**
+ * Optional comma-separated list of `from=to` URL prefix substitutions applied
+ * to fetches issued by the MCP OAuth flow. Lets the backend reach a server
+ * that advertises a browser-only URL (e.g. `http://localhost:8765`) via a
+ * different network path (e.g. `http://workspace-mcp:8000`) without changing
+ * what the server advertises to the browser.
+ *
+ * Example:
+ *   MCP_OAUTH_HOST_REWRITES="http://localhost:8765=http://workspace-mcp:8000"
+ */
+const parseHostRewrites = (): Array<[string, string]> => {
+  const raw = process.env.MCP_OAUTH_HOST_REWRITES;
+  if (!raw) return [];
+  return raw
+    .split(",")
+    .map((entry) => entry.trim())
+    .filter(Boolean)
+    .map((entry) => {
+      const [from, to] = entry.split("=").map((s) => s.trim());
+      if (!from || !to) return undefined;
+      return [from, to] as [string, string];
+    })
+    .filter((pair): pair is [string, string] => pair !== undefined);
+};
+
+const HOST_REWRITES = parseHostRewrites();
+
+const rewriteUrl = (url: string): string => {
+  for (const [from, to] of HOST_REWRITES) {
+    if (url.startsWith(from)) return to + url.slice(from.length);
+  }
+  return url;
+};
+
 export const oauthFetchFn: typeof fetch = async (input, init) => {
-  const response = await fetch(input, init);
+  const rewrittenInput =
+    typeof input === "string"
+      ? rewriteUrl(input)
+      : input instanceof URL
+        ? new URL(rewriteUrl(input.href))
+        : input;
+  const response = await fetch(rewrittenInput, init);
   if (!response.ok) {
     // Work around @ai-sdk/mcp bug where `parseErrorResponse` fails the
     // `instanceof Response` check in Node.js (different Response realms).
