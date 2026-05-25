@@ -5,6 +5,7 @@ import { ThemeProvider } from "@/components/theme-provider";
 import { Toaster } from "@/components/ui/sonner";
 import ClientProvider from "./client-context";
 import { AuthProvider } from "@/components/auth-provider";
+import { headers } from "next/headers";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -41,12 +42,21 @@ export const viewport: Viewport = {
 // and not baked into the static output during build time.
 export const dynamic = "force-dynamic";
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const backendUrl = process.env.BACKEND_URL || "";
+  let backendUrl = process.env.BACKEND_URL || "";
+  // When BACKEND_PORT is set (without a fixed BACKEND_URL), derive the backend
+  // origin from the browser's actual Host header so the app works on any
+  // network — LAN, SSH tunnel, etc.
+  if (!backendUrl && process.env.BACKEND_PORT) {
+    const hdrs = await headers();
+    const host = hdrs.get("x-forwarded-host") ?? hdrs.get("host") ?? "";
+    const hostname = host.split(":")[0];
+    backendUrl = `http://${hostname}:${process.env.BACKEND_PORT}`;
+  }
 
   return (
     <html lang="en" suppressHydrationWarning>
