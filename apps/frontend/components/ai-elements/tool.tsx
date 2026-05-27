@@ -223,7 +223,7 @@ export const ToolHeader = ({
     >
       <div className="flex items-center gap-2 min-w-0">
         <Icon className="size-4 shrink-0 text-muted-foreground" />
-        <span className="font-medium text-sm truncate">
+        <span className="font-medium text-sm truncate select-text">
           {title ?? humanizeToolType(type)}
           {label && (
             <span className="font-normal text-muted-foreground">
