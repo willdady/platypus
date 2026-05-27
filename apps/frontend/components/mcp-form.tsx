@@ -396,18 +396,32 @@ const McpForm = ({
         }
       }
 
-      const response = await fetch(
-        joinUrl(
-          backendUrl,
-          `/organizations/${orgId}/workspaces/${workspaceId}/mcps/${resolvedMcpId}/oauth/authorize`,
-        ),
-        {
-          method: "POST",
-          credentials: "include",
-        },
+      // When the MCP already holds an access token, ask the backend to wipe
+      // it before running mcpAuth so the OAuth flow is always entered. Without
+      // ?force=true a valid refresh token causes mcpAuth to silently rotate
+      // and return alreadyAuthorized — which is fine on a normal page load
+      // but surprising when the user just clicked "Reauthorize".
+      const authorizeUrl = joinUrl(
+        backendUrl,
+        `/organizations/${orgId}/workspaces/${workspaceId}/mcps/${resolvedMcpId}/oauth/authorize${
+          oauthAuthorized ? "?force=true" : ""
+        }`,
       );
+      const response = await fetch(authorizeUrl, {
+        method: "POST",
+        credentials: "include",
+      });
 
       const data = await response.json();
+
+      if (response.ok && data.alreadyAuthorized) {
+        // Backend silently refreshed via stored refresh_token. Treat as
+        // success rather than an error toast.
+        toast.success("Already authorized");
+        mutateMcp();
+        setIsAuthorizing(false);
+        return;
+      }
 
       if (response.ok && data.authorizationUrl) {
         // If we just created the MCP, redirect to the edit page so the URL

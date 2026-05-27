@@ -309,6 +309,34 @@ mcp.post(
       return c.json({ error: "MCP URL is not configured" }, 400);
     }
 
+    // `force=true` clears stored tokens before running the OAuth flow so
+    // mcpAuth always returns REDIRECT. Lets the UI offer a single-click
+    // "Reauthorize" even when Platypus still holds a valid refresh token (the
+    // SDK would otherwise silently refresh and report AUTHORIZED, which the
+    // frontend currently shows as a failure because no authorizationUrl is
+    // returned). The DCR/static `oauthClientId`/`oauthClientSecret` are
+    // preserved so the same OAuth client is reused.
+    const force = c.req.query("force") === "true";
+    if (force) {
+      await db
+        .update(mcpTable)
+        .set({
+          oauthAccessToken: null,
+          oauthRefreshToken: null,
+          oauthTokenExpiresAt: null,
+          oauthScope: null,
+          updatedAt: new Date(),
+        })
+        .where(eq(mcpTable.id, mcpId));
+      mcpRecord[0] = {
+        ...mcpRecord[0],
+        oauthAccessToken: null,
+        oauthRefreshToken: null,
+        oauthTokenExpiresAt: null,
+        oauthScope: null,
+      };
+    }
+
     try {
       const callbackUrl = buildOAuthCallbackUrl();
       const provider = new DatabaseOAuthClientProvider(
@@ -329,8 +357,10 @@ mcp.post(
         return c.json({ authorizationUrl: authUrl.toString() });
       }
 
-      // Already authorized
-      return c.json({ message: "Already authorized" });
+      // Already authorized — refresh token still valid, SDK rotated silently.
+      // Reported as success so the frontend can treat it as a no-op rather
+      // than an error.
+      return c.json({ alreadyAuthorized: true });
     } catch (error) {
       logger.error({ error }, "OAuth authorize error");
       const errorMessage =
