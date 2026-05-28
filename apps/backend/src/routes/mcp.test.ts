@@ -1,12 +1,14 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { mockDb, mockSession, resetMockDb } from "../test-utils.ts";
 import app from "../server.ts";
+import { auth as mcpAuth } from "@ai-sdk/mcp";
 
 vi.mock("@ai-sdk/mcp", () => ({
   experimental_createMCPClient: vi.fn().mockResolvedValue({
     tools: vi.fn().mockResolvedValue({ tool1: {} }),
     close: vi.fn().mockResolvedValue(undefined),
   }),
+  auth: vi.fn(),
 }));
 
 describe("MCP Routes", () => {
@@ -80,6 +82,80 @@ describe("MCP Routes", () => {
 
       expect(res.status).toBe(200);
       expect(await res.json()).toEqual({ success: true, toolNames: ["tool1"] });
+    });
+  });
+
+  describe("POST /:mcpId/oauth/authorize", () => {
+    const mcpId = "mcp-1";
+    const authorizeUrl = `${baseUrl}/${mcpId}/oauth/authorize`;
+
+    const mcpRecord = {
+      id: mcpId,
+      workspaceId,
+      authType: "OAuth",
+      url: "http://mcp.example.com",
+      oauthAccessToken: "access-old",
+      oauthRefreshToken: "refresh-old",
+      oauthTokenExpiresAt: new Date(),
+      oauthScope: "read",
+      oauthClientId: "client-id",
+      oauthClientSecret: "client-secret",
+    };
+
+    it("force=true: clears the four oauth token columns in DB and returns authorizationUrl", async () => {
+      mockSession();
+      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
+      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]); // requireWorkspaceAccess
+      mockDb.limit.mockResolvedValueOnce([{ ...mcpRecord }]); // MCP lookup
+
+      (mcpAuth as any).mockImplementationOnce(async (provider: any) => {
+        await provider.redirectToAuthorization(
+          new URL("https://provider.example.com/authorize?x=1"),
+        );
+        return "REDIRECT";
+      });
+
+      const res = await app.request(`${authorizeUrl}?force=true`, {
+        method: "POST",
+      });
+
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({
+        authorizationUrl: "https://provider.example.com/authorize?x=1",
+      });
+
+      // Token-clear update was issued
+      expect(mockDb.update).toHaveBeenCalled();
+      expect(mockDb.set).toHaveBeenCalledWith(
+        expect.objectContaining({
+          oauthAccessToken: null,
+          oauthRefreshToken: null,
+          oauthTokenExpiresAt: null,
+          oauthScope: null,
+        }),
+      );
+
+      // DCR/static client credentials are deliberately preserved
+      const setPayload = (mockDb.set as any).mock.calls[0][0];
+      expect(setPayload).not.toHaveProperty("oauthClientId");
+      expect(setPayload).not.toHaveProperty("oauthClientSecret");
+    });
+
+    it("no force flag: leaves token columns untouched when SDK silently refreshes", async () => {
+      mockSession();
+      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
+      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]); // requireWorkspaceAccess
+      mockDb.limit.mockResolvedValueOnce([{ ...mcpRecord }]); // MCP lookup
+
+      (mcpAuth as any).mockResolvedValueOnce("AUTHORIZED");
+
+      const res = await app.request(authorizeUrl, { method: "POST" });
+
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({ alreadyAuthorized: true });
+
+      // No update issued → token columns untouched
+      expect(mockDb.update).not.toHaveBeenCalled();
     });
   });
 });
