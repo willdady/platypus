@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.85.1](https://github.com/willdady/platypus/compare/v1.85.0...v1.85.1) (2026-05-28)
+
+
+### Bug Fixes
+
+* **frontend:** filter model selector by name instead of UUID ([a3014f5](https://github.com/willdady/platypus/commit/a3014f5f924a3d349ec5231d2257996be2c3b822))
+* **mcp:** one-click Reauthorize via force flag, surface silent refresh as success ([#144](https://github.com/willdady/platypus/issues/144)) ([f5aa9c7](https://github.com/willdady/platypus/commit/f5aa9c760bfcafd59962f0408ccf5fdbabe1722c))
+
 ## [1.85.0](https://github.com/willdady/platypus/compare/v1.84.0...v1.85.0) (2026-05-23)
 
 
