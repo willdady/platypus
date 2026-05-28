@@ -195,7 +195,8 @@ export const agent = pgTable(
     frequencyPenalty: t.real("frequency_penalty"),
     toolSetIds: t.jsonb("tool_set_ids").$type<string[]>().default([]), // Array of tool set ids
     skillIds: t.jsonb("skill_ids").$type<string[]>().default([]), // Array of skill ids
-    subAgentIds: t.jsonb("sub_agent_ids").$type<string[]>().default([]), // Array of sub-agent ids
+    // Each entry is {id, parentOutput?} where parentOutput is "full"|"none"|"<positiveInt>"
+    subAgentIds: t.jsonb("sub_agent_ids").$type<{ id: string; parentOutput?: string }[]>().default([]),
     inputPlaceholder: t.text("input_placeholder"),
     avatarKey: t.text("avatar_key"),
     createdAt: t.timestamp("created_at").notNull().defaultNow(),

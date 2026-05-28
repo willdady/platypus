@@ -58,7 +58,10 @@ agent.post(
       data.skillIds = dedupeArray(data.skillIds);
     }
     if (data.subAgentIds) {
-      data.subAgentIds = dedupeArray(data.subAgentIds);
+      // Deduplicate by id, keeping the last entry for each id
+      const seen = new Map<string, { id: string; parentOutput?: string }>();
+      for (const ref of data.subAgentIds) seen.set(ref.id, ref);
+      data.subAgentIds = Array.from(seen.values());
     }
 
     // Validate sub-agent assignments
@@ -151,7 +154,10 @@ agent.put(
       data.skillIds = dedupeArray(data.skillIds);
     }
     if (data.subAgentIds) {
-      data.subAgentIds = dedupeArray(data.subAgentIds);
+      // Deduplicate by id, keeping the last entry for each id
+      const seen = new Map<string, { id: string; parentOutput?: string }>();
+      for (const ref of data.subAgentIds) seen.set(ref.id, ref);
+      data.subAgentIds = Array.from(seen.values());
     }
 
     // Validate sub-agent assignments

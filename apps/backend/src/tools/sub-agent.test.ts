@@ -1,5 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { createSubAgentTool, createSubAgentTools } from "./sub-agent.ts";
+import {
+  createSubAgentTool,
+  createSubAgentTools,
+  parseParentOutput,
+} from "./sub-agent.ts";
 
 // Helper to consume an async generator and collect all yielded values.
 // Deep-copies each yield since the generator reuses mutable objects.
@@ -378,5 +382,128 @@ describe("createSubAgentTools", () => {
     );
 
     expect(Object.keys(result)).toHaveLength(1);
+  });
+});
+
+describe("parseParentOutput", () => {
+  it("treats null and undefined as 'full'", () => {
+    expect(parseParentOutput(null)).toBe("full");
+    expect(parseParentOutput(undefined)).toBe("full");
+  });
+
+  it("treats empty string as 'full'", () => {
+    expect(parseParentOutput("")).toBe("full");
+  });
+
+  it("returns 'full' verbatim", () => {
+    expect(parseParentOutput("full")).toBe("full");
+  });
+
+  it("returns 'none' verbatim", () => {
+    expect(parseParentOutput("none")).toBe("none");
+  });
+
+  it("parses positive integer strings", () => {
+    expect(parseParentOutput("500")).toBe(500);
+    expect(parseParentOutput("1")).toBe(1);
+  });
+
+  it("falls back to 'full' for zero and negatives", () => {
+    expect(parseParentOutput("0")).toBe("full");
+    expect(parseParentOutput("-1")).toBe("full");
+  });
+
+  it("falls back to 'full' for non-numeric garbage", () => {
+    expect(parseParentOutput("nonsense")).toBe("full");
+  });
+
+  it("parses leading-digit floats by truncating (parseInt semantics)", () => {
+    expect(parseParentOutput("5.5")).toBe(5);
+  });
+});
+
+describe("createSubAgentTool — parentOutput", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("'full' returns the full response text", () => {
+    const { tool } = createSubAgentTool({
+      id: "a",
+      name: "A",
+      model: {},
+      tools: {},
+      parentOutput: "full",
+    });
+    const result = (tool as any).toModelOutput({
+      toolCallId: "tc",
+      input: { task: "x" },
+      output: { entries: [], text: "long response text" },
+    });
+    expect(result).toEqual({ type: "text", value: "long response text" });
+  });
+
+  it("'none' returns the task-completed sentinel", () => {
+    const { tool } = createSubAgentTool({
+      id: "a",
+      name: "A",
+      model: {},
+      tools: {},
+      parentOutput: "none",
+    });
+    const result = (tool as any).toModelOutput({
+      toolCallId: "tc",
+      input: { task: "x" },
+      output: { entries: [], text: "would be huge JSON" },
+    });
+    expect(result).toEqual({ type: "text", value: "Task completed." });
+  });
+
+  it("number returns trailing N chars", () => {
+    const { tool } = createSubAgentTool({
+      id: "a",
+      name: "A",
+      model: {},
+      tools: {},
+      parentOutput: 5,
+    });
+    const result = (tool as any).toModelOutput({
+      toolCallId: "tc",
+      input: { task: "x" },
+      output: { entries: [], text: "abcdefghij" },
+    });
+    expect(result).toEqual({ type: "text", value: "fghij" });
+  });
+
+  it("number larger than text length returns the whole text", () => {
+    const { tool } = createSubAgentTool({
+      id: "a",
+      name: "A",
+      model: {},
+      tools: {},
+      parentOutput: 100,
+    });
+    const result = (tool as any).toModelOutput({
+      toolCallId: "tc",
+      input: { task: "x" },
+      output: { entries: [], text: "short" },
+    });
+    expect(result).toEqual({ type: "text", value: "short" });
+  });
+
+  it("falls back to 'Task completed.' when truncated text is empty", () => {
+    const { tool } = createSubAgentTool({
+      id: "a",
+      name: "A",
+      model: {},
+      tools: {},
+      parentOutput: 5,
+    });
+    const result = (tool as any).toModelOutput({
+      toolCallId: "tc",
+      input: { task: "x" },
+      output: { entries: [], text: "" },
+    });
+    expect(result).toEqual({ type: "text", value: "Task completed." });
   });
 });

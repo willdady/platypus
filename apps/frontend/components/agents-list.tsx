@@ -147,10 +147,12 @@ export const AgentsList = ({
       .filter(Boolean) as string[];
   };
 
-  const getSubAgentNames = (subAgentIds: string[] | undefined) => {
+  const getSubAgentNames = (
+    subAgentIds: Array<{ id: string }> | undefined,
+  ) => {
     if (!subAgentIds?.length) return [];
     return subAgentIds
-      .map((id) => agents.find((a) => a.id === id)?.name)
+      .map((ref) => agents.find((a) => a.id === ref.id)?.name)
       .filter(Boolean) as string[];
   };
 

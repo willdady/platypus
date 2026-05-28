@@ -761,7 +761,9 @@ const loadSubAgents = async (
     return { subAgents: [], subAgentTools: {}, subAgentMcpClients: [] };
   }
 
-  const subAgentRecords = await queries.getSubAgentsByIds(agent.subAgentIds);
+  const subAgentRefs = agent.subAgentIds;
+  const subAgentIds = subAgentRefs.map((r) => r.id);
+  const subAgentRecords = await queries.getSubAgentsByIds(subAgentIds);
 
   const subAgents = subAgentRecords.map((sa) => ({
     id: sa.id,
@@ -769,10 +771,16 @@ const loadSubAgents = async (
     description: sa.description,
   }));
 
+  // Merge relationship-level parentOutput config into each record
+  const subAgentRecordsWithConfig = subAgentRecords.map((sa) => ({
+    ...sa,
+    parentOutput: subAgentRefs.find((r) => r.id === sa.id)?.parentOutput ?? null,
+  }));
+
   const subAgentMcpClients: any[] = [];
 
   const subAgentTools = await createSubAgentTools(
-    subAgentRecords,
+    subAgentRecordsWithConfig,
     async (providerId: string, modelId: string) => {
       const subProvider = await queries.getProvider(
         providerId,

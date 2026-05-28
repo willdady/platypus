@@ -46,6 +46,71 @@ import { useAuth } from "@/components/auth-provider";
 import { AgentAvatar } from "@/components/agent-avatar";
 import { Skeleton } from "@/components/ui/skeleton";
 
+type SubAgentRef = { id: string; parentOutput?: string };
+
+/**
+ * Compact dropdown + optional number input for picking how much of a
+ * sub-agent's response text is returned to the parent's context window.
+ * Three modes encoded in `parentOutput`:
+ *   - "full"   → entire response
+ *   - "none"   → "Task completed." only
+ *   - "<int>"  → last N chars (stringified positive integer)
+ */
+const OutputReturnedRow = ({
+  parentOutput,
+  onChange,
+  disabled,
+}: {
+  parentOutput: string | undefined;
+  onChange: (next: string) => void;
+  disabled?: boolean;
+}) => {
+  const raw = parentOutput ?? "full";
+  const isChars = raw !== "full" && raw !== "none";
+  const selectVal = isChars ? "chars" : raw;
+  const charsNum = isChars ? raw : "500";
+
+  return (
+    <div className="mt-2 flex items-center gap-2">
+      <span className="text-xs text-muted-foreground shrink-0">
+        Output returned:
+      </span>
+      <Select
+        value={selectVal}
+        onValueChange={(value) => onChange(value === "chars" ? charsNum : value)}
+        disabled={disabled}
+      >
+        <SelectTrigger className="text-xs w-44">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="full">Full response</SelectItem>
+          <SelectItem value="none">No output (state only)</SelectItem>
+          <SelectItem value="chars">Last N chars</SelectItem>
+        </SelectContent>
+      </Select>
+      {isChars && (
+        <Input
+          type="number"
+          min={1}
+          value={charsNum}
+          onChange={(e) => {
+            const digits = e.target.value.replace(/\D/g, "");
+            // Allow empty while typing; commit to a valid value on blur below.
+            onChange(digits || "");
+          }}
+          onBlur={(e) => {
+            const digits = e.target.value.replace(/\D/g, "");
+            if (!digits || parseInt(digits, 10) < 1) onChange("1");
+          }}
+          className="w-20 text-xs px-2"
+          disabled={disabled}
+        />
+      )}
+    </div>
+  );
+};
+
 const AgentForm = ({
   classNames,
   orgId,
@@ -129,7 +194,7 @@ const AgentForm = ({
     temperature: undefined as number | undefined,
     toolSetIds: [] as string[],
     skillIds: [] as string[],
-    subAgentIds: [] as string[],
+    subAgentIds: [] as Array<{ id: string; parentOutput?: string }>,
     topP: undefined as number | undefined,
     topK: undefined as number | undefined,
     seed: undefined as number | undefined,
@@ -182,7 +247,7 @@ const AgentForm = ({
         frequencyPenalty: agent.frequencyPenalty ?? undefined,
         toolSetIds: agent.toolSetIds || [],
         skillIds: agent.skillIds || [],
-        subAgentIds: agent.subAgentIds || [],
+        subAgentIds: agent.subAgentIds || ([] as Array<{ id: string; parentOutput?: string }>),
       });
       if (agent.avatarUrl) {
         setAvatarPreviewUrl(agent.avatarUrl);
@@ -735,41 +800,74 @@ const AgentForm = ({
                 running as a sub-agent, these agents will not be able to
                 delegate further.
               </FieldDescription>
-              <FieldGroup className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="flex flex-col gap-1">
                 {agents
                   .filter((a) => a.id !== agentId) // Only exclude self-assignment
-                  .map((agent) => (
-                    <Field key={agent.id} orientation="horizontal">
-                      <Switch
-                        id={`subagent-${agent.id}`}
-                        className="cursor-pointer"
-                        checked={formData.subAgentIds.includes(agent.id)}
-                        onCheckedChange={(checked) => {
-                          setFormData((prevData) => ({
-                            ...prevData,
-                            subAgentIds: checked
-                              ? [...prevData.subAgentIds, agent.id]
-                              : prevData.subAgentIds.filter(
-                                  (id) => id !== agent.id,
-                                ),
-                          }));
-                        }}
-                        disabled={isSubmitting}
-                      />
-                      <FieldLabel htmlFor={`subagent-${agent.id}`}>
-                        <div className="flex items-center gap-2">
-                          <AgentAvatar agent={agent} className="size-6" />
-                          <div className="flex flex-col">
-                            <p>{agent.name}</p>
-                            <p className="text-xs text-muted-foreground">
-                              {agent.description || "No description"}
-                            </p>
-                          </div>
+                  .map((agent) => {
+                    const ref = formData.subAgentIds.find(
+                      (r) => r.id === agent.id,
+                    );
+                    const isEnabled = Boolean(ref);
+                    return (
+                      <div key={agent.id} className="py-1">
+                        <div className="flex items-center gap-3">
+                          <Switch
+                            id={`subagent-${agent.id}`}
+                            className="cursor-pointer shrink-0"
+                            checked={isEnabled}
+                            onCheckedChange={(checked) => {
+                              setFormData((prevData) => ({
+                                ...prevData,
+                                subAgentIds: checked
+                                  ? [
+                                      ...prevData.subAgentIds,
+                                      { id: agent.id },
+                                    ]
+                                  : prevData.subAgentIds.filter(
+                                      (r) => r.id !== agent.id,
+                                    ),
+                              }));
+                            }}
+                            disabled={isSubmitting}
+                          />
+                          <label
+                            htmlFor={`subagent-${agent.id}`}
+                            className="flex items-center gap-2 cursor-pointer"
+                          >
+                            <AgentAvatar
+                              agent={agent}
+                              className="size-6 shrink-0"
+                            />
+                            <div>
+                              <p className="text-sm font-medium">
+                                {agent.name}
+                              </p>
+                              <p className="text-xs text-muted-foreground">
+                                {agent.description || "No description"}
+                              </p>
+                            </div>
+                          </label>
                         </div>
-                      </FieldLabel>
-                    </Field>
-                  ))}
-              </FieldGroup>
+                        {isEnabled && (
+                          <OutputReturnedRow
+                            parentOutput={ref?.parentOutput}
+                            disabled={isSubmitting}
+                            onChange={(val) =>
+                              setFormData((prevData) => ({
+                                ...prevData,
+                                subAgentIds: prevData.subAgentIds.map((r) =>
+                                  r.id === agent.id
+                                    ? { ...r, parentOutput: val }
+                                    : r,
+                                ),
+                              }))
+                            }
+                          />
+                        )}
+                      </div>
+                    );
+                  })}
+              </div>
             </CardContent>
           </Card>
         )}

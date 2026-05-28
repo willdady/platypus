@@ -5,10 +5,12 @@ import { and, eq, inArray } from "drizzle-orm";
 export const validateSubAgentAssignment = async (
   workspaceId: string,
   agentId: string,
-  subAgentIds: string[],
+  subAgentRefs: Array<{ id: string }>,
 ): Promise<{ valid: boolean; error?: string }> => {
+  const ids = subAgentRefs.map((r) => r.id);
+
   // 1. Check self-assignment
-  if (subAgentIds.includes(agentId)) {
+  if (ids.includes(agentId)) {
     return {
       valid: false,
       error: "An agent cannot assign itself as a sub-agent",
@@ -22,12 +24,12 @@ export const validateSubAgentAssignment = async (
     .where(
       and(
         eq(agentTable.workspaceId, workspaceId),
-        inArray(agentTable.id, subAgentIds),
+        inArray(agentTable.id, ids),
       ),
     );
 
   // 3. Verify all sub-agents exist in workspace
-  if (subAgents.length !== subAgentIds.length) {
+  if (subAgents.length !== ids.length) {
     return {
       valid: false,
       error: "One or more sub-agents not found in workspace",

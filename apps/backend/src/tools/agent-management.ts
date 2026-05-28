@@ -53,16 +53,17 @@ export function createAgentManagementTools(
       if (data.skillIds) {
         data.skillIds = dedupeArray(data.skillIds);
       }
-      if (data.subAgentIds) {
-        data.subAgentIds = dedupeArray(data.subAgentIds);
-      }
+      // Convert string[] → {id}[] and deduplicate
+      const subAgentRefs = data.subAgentIds
+        ? [...new Map(data.subAgentIds.map((id) => [id, { id }])).values()]
+        : undefined;
 
-      if (data.subAgentIds && data.subAgentIds.length > 0) {
+      if (subAgentRefs && subAgentRefs.length > 0) {
         const newId = nanoid();
         const validation = await validateSubAgentAssignment(
           workspaceId,
           newId,
-          data.subAgentIds,
+          subAgentRefs,
         );
         if (!validation.valid) {
           return { error: validation.error };
@@ -74,6 +75,7 @@ export function createAgentManagementTools(
             id: newId,
             workspaceId,
             ...data,
+            subAgentIds: subAgentRefs,
           })
           .returning();
 
@@ -94,6 +96,7 @@ export function createAgentManagementTools(
           id,
           workspaceId,
           ...data,
+          ...(subAgentRefs !== undefined && { subAgentIds: subAgentRefs }),
         })
         .returning();
 
@@ -152,15 +155,16 @@ export function createAgentManagementTools(
       if (data.skillIds) {
         data.skillIds = dedupeArray(data.skillIds);
       }
-      if (data.subAgentIds) {
-        data.subAgentIds = dedupeArray(data.subAgentIds);
-      }
+      // Convert string[] → {id}[] and deduplicate
+      const subAgentRefs = data.subAgentIds
+        ? [...new Map(data.subAgentIds.map((id) => [id, { id }])).values()]
+        : undefined;
 
-      if (data.subAgentIds) {
+      if (subAgentRefs) {
         const validation = await validateSubAgentAssignment(
           workspaceId,
           agentId,
-          data.subAgentIds,
+          subAgentRefs,
         );
         if (!validation.valid) {
           return { error: validation.error };
@@ -171,6 +175,7 @@ export function createAgentManagementTools(
         .update(agentTable)
         .set({
           ...data,
+          ...(subAgentRefs !== undefined && { subAgentIds: subAgentRefs }),
           updatedAt: new Date(),
         })
         .where(

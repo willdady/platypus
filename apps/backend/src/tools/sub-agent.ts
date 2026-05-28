@@ -33,6 +33,32 @@ export type SubAgentActivity = {
 /**
  * Options for creating a sub-agent tool.
  */
+/**
+ * Controls how the sub-agent's final response text is returned to the parent
+ * agent's context window after the tool call completes.
+ *
+ * - `'full'` (default): the complete response text. Use when the parent
+ *   agent reads and acts on the returned text.
+ * - `'none'`: always returns "Task completed." Sub-agents that communicate
+ *   results via shared state (files, board cards, databases) should use
+ *   this to prevent large outputs (transcripts, API payloads, etc.) from
+ *   bloating the parent's context window.
+ * - `number`: returns at most this many characters taken from the end of the
+ *   response, where agents typically place their summary or status line.
+ */
+export type SubAgentParentOutput = 'full' | 'none' | number;
+
+/**
+ * Parses the DB-stored text representation of parentOutput.
+ * Stored as "full", "none", or a stringified positive integer.
+ */
+export const parseParentOutput = (raw: string | null | undefined): SubAgentParentOutput => {
+  if (!raw || raw === 'full') return 'full';
+  if (raw === 'none') return 'none';
+  const n = parseInt(raw, 10);
+  return Number.isFinite(n) && n > 0 ? n : 'full';
+};
+
 interface SubAgentToolOptions {
   id: string;
   name: string;
@@ -41,6 +67,7 @@ interface SubAgentToolOptions {
   model: any; // LanguageModel from AI SDK
   tools: Record<string, Tool>;
   maxSteps?: number;
+  parentOutput?: SubAgentParentOutput;
   /** Called on each activity update from the sub-agent. Used to reset the parent run's per-step timeout. */
   onProgress?: () => void;
 }
@@ -62,6 +89,7 @@ export const createSubAgentTool = (options: SubAgentToolOptions) => {
     model,
     tools,
     maxSteps = 50,
+    parentOutput = 'full',
     onProgress,
   } = options;
 
@@ -150,10 +178,18 @@ export const createSubAgentTool = (options: SubAgentToolOptions) => {
         // uses for-await-of which discards generator return values.
         yield { entries, text: await result.text } satisfies SubAgentActivity;
       },
-      toModelOutput: ({ output }) => ({
-        type: "text" as const,
-        value: (output as SubAgentActivity)?.text ?? "Task completed.",
-      }),
+      toModelOutput: ({ output }) => {
+        const text = (output as SubAgentActivity)?.text ?? "";
+        let value: string;
+        if (parentOutput === 'none') {
+          value = "Task completed.";
+        } else if (typeof parentOutput === 'number') {
+          value = text.slice(-parentOutput) || "Task completed.";
+        } else {
+          value = text || "Task completed.";
+        }
+        return { type: "text" as const, value };
+      },
     }),
   };
 };
@@ -177,6 +213,7 @@ export const createSubAgentTools = async (
     modelId: string;
     toolSetIds?: string[] | null;
     maxSteps?: number | null;
+    parentOutput?: string | null;
   }>,
   createModelFn: (providerId: string, modelId: string) => Promise<any>,
   loadToolsFn: (
@@ -207,6 +244,7 @@ export const createSubAgentTools = async (
         model,
         tools: subAgentTools,
         maxSteps: subAgent.maxSteps || 50,
+        parentOutput: parseParentOutput(subAgent.parentOutput),
         onProgress,
       });
 

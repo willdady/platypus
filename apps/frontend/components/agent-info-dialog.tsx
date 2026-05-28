@@ -138,11 +138,11 @@ export const AgentInfoDialog = ({
             <div className="grid gap-2">
               <Label>Sub-Agents</Label>
               <div className="flex flex-wrap gap-2">
-                {agent.subAgentIds.map((id) => {
-                  const subAgent = agents.find((a) => a.id === id);
+                {agent.subAgentIds.map((ref) => {
+                  const subAgent = agents.find((a) => a.id === ref.id);
                   return subAgent ? (
                     <Badge
-                      key={id}
+                      key={ref.id}
                       className="cursor-default"
                       variant="secondary"
                     >

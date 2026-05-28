@@ -158,6 +158,22 @@ export type ChatList = z.infer<typeof chatListSchema>;
 
 // Agent
 
+/**
+ * Per-relationship sub-agent configuration stored inside a parent agent's
+ * subAgentIds array. `parentOutput` controls how much of the sub-agent's
+ * response text is returned to the parent's context window:
+ * - `'full'` (default): complete response text
+ * - `'none'`: always "Task completed." — for agents that communicate via
+ *   shared state (files, board cards) to avoid context bloat
+ * - positive integer string: at most that many characters from the end
+ */
+export const subAgentRefSchema = z.object({
+  id: z.string(),
+  parentOutput: z.string().optional(),
+});
+
+export type SubAgentRef = z.infer<typeof subAgentRefSchema>;
+
 export const agentSchema = z.object({
   id: z.string(),
   workspaceId: z.string(),
@@ -175,7 +191,7 @@ export const agentSchema = z.object({
   frequencyPenalty: z.number().optional(),
   toolSetIds: z.array(z.string()).optional(),
   skillIds: z.array(z.string()).optional(),
-  subAgentIds: z.array(z.string()).optional(),
+  subAgentIds: z.array(subAgentRefSchema).optional(),
   inputPlaceholder: z.string().max(100).optional(),
   avatarUrl: z.string().optional(),
   createdAt: z.date(),
