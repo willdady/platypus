@@ -100,6 +100,89 @@ describe("createAgentManagementTools", () => {
 
       expect(result).toEqual({ error: "Circular dependency detected" });
     });
+
+    it("converts string[] subAgentIds into {id}[] before validation", async () => {
+      vi.mocked(validateSubAgentAssignment).mockResolvedValueOnce({
+        valid: true,
+      });
+      mockDb.returning.mockResolvedValueOnce([{ id: "a1" }]);
+
+      await tools.updateAgent.execute(
+        { agentId: "a1", label: "test", subAgentIds: ["sa-1", "sa-2"] },
+        ctx,
+      );
+
+      expect(validateSubAgentAssignment).toHaveBeenCalledWith("ws-1", "a1", [
+        { id: "sa-1" },
+        { id: "sa-2" },
+      ]);
+    });
+
+    it("deduplicates duplicate sub-agent ids before validation", async () => {
+      vi.mocked(validateSubAgentAssignment).mockResolvedValueOnce({
+        valid: true,
+      });
+      mockDb.returning.mockResolvedValueOnce([{ id: "a1" }]);
+
+      await tools.updateAgent.execute(
+        { agentId: "a1", label: "test", subAgentIds: ["sa-1", "sa-1", "sa-2"] },
+        ctx,
+      );
+
+      expect(validateSubAgentAssignment).toHaveBeenCalledWith("ws-1", "a1", [
+        { id: "sa-1" },
+        { id: "sa-2" },
+      ]);
+    });
+
+    it("writes converted {id}[] shape to the database", async () => {
+      vi.mocked(validateSubAgentAssignment).mockResolvedValueOnce({
+        valid: true,
+      });
+      mockDb.returning.mockResolvedValueOnce([{ id: "a1" }]);
+
+      await tools.updateAgent.execute(
+        { agentId: "a1", label: "test", subAgentIds: ["sa-1"] },
+        ctx,
+      );
+
+      expect(mockDb.set).toHaveBeenCalledWith(
+        expect.objectContaining({
+          subAgentIds: [{ id: "sa-1" }],
+        }),
+      );
+    });
+  });
+
+  describe("createAgent", () => {
+    it("converts string[] subAgentIds into {id}[] before writing", async () => {
+      vi.mocked(validateSubAgentAssignment).mockResolvedValueOnce({
+        valid: true,
+      });
+      mockDb.returning.mockResolvedValueOnce([{ id: "new-id" }]);
+
+      await tools.createAgent.execute(
+        {
+          name: "Coord",
+          description: "test agent",
+          providerId: "p1",
+          modelId: "m1",
+          subAgentIds: ["sa-1", "sa-1", "sa-2"],
+        },
+        ctx,
+      );
+
+      expect(validateSubAgentAssignment).toHaveBeenCalledWith(
+        "ws-1",
+        expect.any(String),
+        [{ id: "sa-1" }, { id: "sa-2" }],
+      );
+      expect(mockDb.values).toHaveBeenCalledWith(
+        expect.objectContaining({
+          subAgentIds: [{ id: "sa-1" }, { id: "sa-2" }],
+        }),
+      );
+    });
   });
 
   describe("deleteAgent", () => {

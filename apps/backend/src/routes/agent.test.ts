@@ -5,7 +5,13 @@ import {
   mockNoSession,
   resetMockDb,
 } from "../test-utils.ts";
+
+vi.mock("../services/sub-agent-validation.ts", () => ({
+  validateSubAgentAssignment: vi.fn().mockResolvedValue({ valid: true }),
+}));
+
 import app from "../server.ts";
+import { validateSubAgentAssignment } from "../services/sub-agent-validation.ts";
 
 describe("Agent Routes", () => {
   beforeEach(() => {
@@ -211,6 +217,97 @@ describe("Agent Routes", () => {
       expect(Array.isArray(body.error)).toBe(true);
       expect(body.error[0].code).toBe("too_big");
       expect(body.error[0].path).toContain("description");
+    });
+  });
+
+  describe("subAgentIds dedup", () => {
+    it("deduplicates duplicate sub-agent ids on POST, keeping the last entry's parentOutput", async () => {
+      mockSession();
+      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
+      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]);
+      mockDb.returning.mockResolvedValueOnce([{ id: "agent-1" }]);
+
+      const res = await app.request(baseUrl, {
+        method: "POST",
+        body: JSON.stringify({
+          name: "Coord Agent",
+          description: "test",
+          providerId: "p1",
+          modelId: "m1",
+          workspaceId,
+          subAgentIds: [
+            { id: "sa-1" },
+            { id: "sa-1", parentOutput: "none" },
+            { id: "sa-2", parentOutput: "500" },
+          ],
+        }),
+        headers: { "Content-Type": "application/json" },
+      });
+
+      expect(res.status).toBe(201);
+      // The last entry for sa-1 wins (parentOutput: "none"); sa-2 unchanged
+      expect(validateSubAgentAssignment).toHaveBeenCalledWith(workspaceId, "", [
+        { id: "sa-1", parentOutput: "none" },
+        { id: "sa-2", parentOutput: "500" },
+      ]);
+      expect(mockDb.values).toHaveBeenCalledWith(
+        expect.objectContaining({
+          subAgentIds: [
+            { id: "sa-1", parentOutput: "none" },
+            { id: "sa-2", parentOutput: "500" },
+          ],
+        }),
+      );
+    });
+
+    it("deduplicates duplicate sub-agent ids on PUT", async () => {
+      mockSession();
+      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
+      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]);
+      mockDb.returning.mockResolvedValueOnce([{ id: "agent-1" }]);
+
+      await app.request(`${baseUrl}/agent-1`, {
+        method: "PUT",
+        body: JSON.stringify({
+          name: "Updated",
+          description: "test",
+          providerId: "p1",
+          modelId: "m1",
+          subAgentIds: [{ id: "sa-1" }, { id: "sa-1", parentOutput: "full" }],
+        }),
+        headers: { "Content-Type": "application/json" },
+      });
+
+      expect(mockDb.set).toHaveBeenCalledWith(
+        expect.objectContaining({
+          subAgentIds: [{ id: "sa-1", parentOutput: "full" }],
+        }),
+      );
+    });
+
+    it("rejects POST with 400 when validation fails", async () => {
+      vi.mocked(validateSubAgentAssignment).mockResolvedValueOnce({
+        valid: false,
+        error: "An agent cannot assign itself as a sub-agent",
+      });
+      mockSession();
+      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
+      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]);
+
+      const res = await app.request(baseUrl, {
+        method: "POST",
+        body: JSON.stringify({
+          name: "Bad Agent",
+          description: "test",
+          providerId: "p1",
+          modelId: "m1",
+          workspaceId,
+          subAgentIds: [{ id: "self" }],
+        }),
+        headers: { "Content-Type": "application/json" },
+      });
+
+      expect(res.status).toBe(400);
     });
   });
 
