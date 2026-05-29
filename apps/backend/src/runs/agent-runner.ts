@@ -33,6 +33,36 @@ import type {
   RunStatus,
 } from "./types.ts";
 
+/** Injects startedAt/finishedAt into tool-output-available chunks via toolMetadata. */
+function withToolTimestamps(
+  stream: ReadableStream<Record<string, unknown>>,
+): ReadableStream<Record<string, unknown>> {
+  const startedAt = new Map<string, string>();
+  return stream.pipeThrough(
+    new TransformStream({
+      transform(chunk, controller) {
+        if (chunk.type === "tool-input-available") {
+          startedAt.set(chunk.toolCallId as string, new Date().toISOString());
+          controller.enqueue(chunk);
+        } else if (chunk.type === "tool-output-available") {
+          const ts = startedAt.get(chunk.toolCallId as string);
+          startedAt.delete(chunk.toolCallId as string);
+          controller.enqueue({
+            ...chunk,
+            toolMetadata: {
+              ...(chunk.toolMetadata as Record<string, unknown>),
+              ...(ts && { startedAt: ts }),
+              finishedAt: new Date().toISOString(),
+            },
+          });
+        } else {
+          controller.enqueue(chunk);
+        }
+      },
+    }),
+  );
+}
+
 export type StreamOptions = {
   origin: string;
   frontendUrl?: string;
@@ -338,7 +368,9 @@ export class AgentRunner {
       },
     });
 
-    const [forResponse, forSnapshot] = uiStream.tee();
+    const [forResponse, forSnapshot] = withToolTimestamps(
+      uiStream as ReadableStream<Record<string, unknown>>,
+    ).tee();
 
     // Read the snapshot branch as message snapshots and keep `lastMessages`
     // up to date. ChatSink's FlushScheduler then writes the in-progress

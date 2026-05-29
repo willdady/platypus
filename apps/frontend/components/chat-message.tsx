@@ -1,4 +1,4 @@
-import { Fragment, memo } from "react";
+import { Fragment, memo, useRef } from "react";
 import { type PlatypusUIMessage } from "@platypus/backend/src/types";
 import {
   Message,
@@ -117,6 +117,19 @@ export const ChatMessage = memo(function ChatMessage({
         <BotIcon className="size-3.5 text-muted-foreground" />
       </div>
     ));
+  const stepTimestamps = useRef<Record<number, string>>({});
+  const finishTimestamp = useRef<string | null>(null);
+
+  const formatTime = (date: Date) =>
+    date.toLocaleTimeString([], {
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+    });
+
+  const isToolPart = (type: string) =>
+    type.startsWith("tool-") || type === "dynamic-tool";
+
   const fileParts = message.parts?.filter(
     (part): part is FileUIPart =>
       part.type === "file" && !part.mediaType?.startsWith("image/"),
@@ -152,6 +165,42 @@ export const ChatMessage = memo(function ChatMessage({
       )}
       {message.parts?.map((part, i) => {
         if (part.type === "text") {
+          const partText = (part as TextUIPart).text;
+          const nextMeaningfulPart = message.parts
+            .slice(i + 1)
+            .find((p) => p.type !== "step-start");
+          const isStepSeparator =
+            message.role === "assistant" &&
+            !partText.trim() &&
+            !!nextMeaningfulPart &&
+            isToolPart(nextMeaningfulPart.type);
+
+          if (isStepSeparator) {
+            // Prefer server-side startedAt stored in toolMetadata for accuracy
+            const serverStartedAt = (
+              nextMeaningfulPart as {
+                toolMetadata?: { startedAt?: string };
+              }
+            ).toolMetadata?.startedAt;
+
+            const timestamp = serverStartedAt
+              ? formatTime(new Date(serverStartedAt))
+              : (stepTimestamps.current[i] ??
+                (stepTimestamps.current[i] = formatTime(new Date())));
+
+            return (
+              <div
+                key={`${message.id}-${i}`}
+                className="flex items-center gap-2 py-1"
+              >
+                {assistantAvatar}
+                <span className="text-xs text-muted-foreground">
+                  {timestamp}
+                </span>
+              </div>
+            );
+          }
+
           if (isEditing) {
             const isFirstTextPart =
               i === message.parts.findIndex((p) => p.type === "text");
@@ -183,7 +232,7 @@ export const ChatMessage = memo(function ChatMessage({
               avatar={assistantAvatar}
             >
               <MessageContent className="max-w-full">
-                <MessageResponse>{(part as TextUIPart).text}</MessageResponse>
+                <MessageResponse>{partText}</MessageResponse>
               </MessageContent>
             </Message>
           );
@@ -283,6 +332,16 @@ export const ChatMessage = memo(function ChatMessage({
         }
       })}
       {!(isLastMessage && status === "streaming") &&
+        !isEditing &&
+        message.role === "assistant" &&
+        isLastMessage &&
+        (() => {
+          if (!finishTimestamp.current) {
+            finishTimestamp.current = formatTime(new Date());
+          }
+          return null;
+        })()}
+      {!(isLastMessage && status === "streaming") &&
         (isEditing ? (
           <MessageActions className="justify-end">
             <MessageAction
@@ -308,6 +367,13 @@ export const ChatMessage = memo(function ChatMessage({
           <MessageActions
             className={message.role === "user" ? "justify-end" : "pl-8"}
           >
+            {message.role === "assistant" &&
+              isLastMessage &&
+              finishTimestamp.current && (
+                <span className="text-xs text-muted-foreground mr-1">
+                  {finishTimestamp.current}
+                </span>
+              )}
             {message.role === "user" && (
               <MessageAction
                 className="cursor-pointer text-muted-foreground"
