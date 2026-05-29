@@ -33,26 +33,24 @@ import type {
   RunStatus,
 } from "./types.ts";
 
-/** Injects startedAt/finishedAt into tool-output-available chunks via toolMetadata. */
+/**
+ * Injects startedAt into tool-input-available chunks via toolMetadata.
+ * Must be on tool-input-available (not -output-available) because the AI SDK's
+ * tool-output-available handler ignores chunk.toolMetadata and reuses the
+ * invocation's existing toolMetadata from the input-available phase.
+ */
 function withToolTimestamps(
   stream: ReadableStream<Record<string, unknown>>,
 ): ReadableStream<Record<string, unknown>> {
-  const startedAt = new Map<string, string>();
   return stream.pipeThrough(
     new TransformStream({
       transform(chunk, controller) {
         if (chunk.type === "tool-input-available") {
-          startedAt.set(chunk.toolCallId as string, new Date().toISOString());
-          controller.enqueue(chunk);
-        } else if (chunk.type === "tool-output-available") {
-          const ts = startedAt.get(chunk.toolCallId as string);
-          startedAt.delete(chunk.toolCallId as string);
           controller.enqueue({
             ...chunk,
             toolMetadata: {
               ...(chunk.toolMetadata as Record<string, unknown>),
-              ...(ts && { startedAt: ts }),
-              finishedAt: new Date().toISOString(),
+              startedAt: new Date().toISOString(),
             },
           });
         } else {
@@ -226,6 +224,25 @@ export class AgentRunner {
     options: StreamOptions;
   }): Promise<Response> {
     const { scope, input, sink, options } = params;
+
+    // Stamp the latest user message with createdAt if not yet set, so the
+    // frontend can render a persistent timestamp in the message action bar.
+    const lastIdx = input.messages.length - 1;
+    if (
+      lastIdx >= 0 &&
+      input.messages[lastIdx].role === "user" &&
+      !(input.messages[lastIdx].metadata as Record<string, unknown> | undefined)
+        ?.createdAt
+    ) {
+      input.messages[lastIdx] = {
+        ...input.messages[lastIdx],
+        metadata: {
+          ...(input.messages[lastIdx].metadata as Record<string, unknown>),
+          createdAt: new Date().toISOString(),
+        },
+      };
+    }
+
     await sink.onStart({ runId: input.runId, messages: input.messages });
 
     let turn: ChatTurn | undefined;
@@ -348,8 +365,10 @@ export class AgentRunner {
     const uiStream = result.toUIMessageStream<PlatypusUIMessage>({
       originalMessages: input.messages,
       generateMessageId: createIdGenerator({ prefix: "msg", size: 16 }),
-      messageMetadata: () =>
-        turn.resolved.agentId ? { agentId: turn.resolved.agentId } : undefined,
+      messageMetadata: () => ({
+        ...(turn.resolved.agentId ? { agentId: turn.resolved.agentId } : {}),
+        createdAt: new Date().toISOString(),
+      }),
       onError: (error) => formatStreamError(error),
     });
 

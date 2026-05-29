@@ -1,4 +1,4 @@
-import { Fragment, memo, useRef } from "react";
+import { Fragment, memo } from "react";
 import { type PlatypusUIMessage } from "@platypus/backend/src/types";
 import {
   Message,
@@ -117,8 +117,8 @@ export const ChatMessage = memo(function ChatMessage({
         <BotIcon className="size-3.5 text-muted-foreground" />
       </div>
     ));
-  const finishTimestamp = useRef<string | null>(null);
-  const wasStreaming = useRef(false);
+  const messageCreatedAt = (message.metadata as Record<string, unknown>)
+    ?.createdAt as string | undefined;
 
   const formatTime = (date: Date) =>
     date.toLocaleTimeString([], {
@@ -129,10 +129,6 @@ export const ChatMessage = memo(function ChatMessage({
 
   const isToolPart = (type: string) =>
     type.startsWith("tool-") || type === "dynamic-tool";
-
-  if (isLastMessage && status === "streaming") {
-    wasStreaming.current = true;
-  }
 
   const fileParts = message.parts?.filter(
     (part): part is FileUIPart =>
@@ -332,17 +328,6 @@ export const ChatMessage = memo(function ChatMessage({
         }
       })}
       {!(isLastMessage && status === "streaming") &&
-        !isEditing &&
-        message.role === "assistant" &&
-        isLastMessage &&
-        wasStreaming.current &&
-        (() => {
-          if (!finishTimestamp.current) {
-            finishTimestamp.current = formatTime(new Date());
-          }
-          return null;
-        })()}
-      {!(isLastMessage && status === "streaming") &&
         (isEditing ? (
           <MessageActions className="justify-end">
             <MessageAction
@@ -368,13 +353,11 @@ export const ChatMessage = memo(function ChatMessage({
           <MessageActions
             className={message.role === "user" ? "justify-end" : "pl-8"}
           >
-            {message.role === "assistant" &&
-              isLastMessage &&
-              finishTimestamp.current && (
-                <span className="text-xs text-muted-foreground mr-1">
-                  {finishTimestamp.current}
-                </span>
-              )}
+            {message.role === "assistant" && messageCreatedAt && (
+              <span className="text-xs text-muted-foreground mr-1">
+                {formatTime(new Date(messageCreatedAt))}
+              </span>
+            )}
             {message.role === "user" && (
               <MessageAction
                 className="cursor-pointer text-muted-foreground"
@@ -414,6 +397,11 @@ export const ChatMessage = memo(function ChatMessage({
               >
                 <RefreshCwIcon className="size-4" />
               </MessageAction>
+            )}
+            {message.role === "user" && messageCreatedAt && (
+              <span className="text-xs text-muted-foreground ml-1">
+                {formatTime(new Date(messageCreatedAt))}
+              </span>
             )}
           </MessageActions>
         ))}
