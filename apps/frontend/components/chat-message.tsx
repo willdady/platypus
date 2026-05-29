@@ -117,8 +117,8 @@ export const ChatMessage = memo(function ChatMessage({
         <BotIcon className="size-3.5 text-muted-foreground" />
       </div>
     ));
-  const stepTimestamps = useRef<Record<number, string>>({});
   const finishTimestamp = useRef<string | null>(null);
+  const wasStreaming = useRef(false);
 
   const formatTime = (date: Date) =>
     date.toLocaleTimeString([], {
@@ -129,6 +129,10 @@ export const ChatMessage = memo(function ChatMessage({
 
   const isToolPart = (type: string) =>
     type.startsWith("tool-") || type === "dynamic-tool";
+
+  if (isLastMessage && status === "streaming") {
+    wasStreaming.current = true;
+  }
 
   const fileParts = message.parts?.filter(
     (part): part is FileUIPart =>
@@ -176,17 +180,11 @@ export const ChatMessage = memo(function ChatMessage({
             isToolPart(nextMeaningfulPart.type);
 
           if (isStepSeparator) {
-            // Prefer server-side startedAt stored in toolMetadata for accuracy
             const serverStartedAt = (
               nextMeaningfulPart as {
                 toolMetadata?: { startedAt?: string };
               }
             ).toolMetadata?.startedAt;
-
-            const timestamp = serverStartedAt
-              ? formatTime(new Date(serverStartedAt))
-              : (stepTimestamps.current[i] ??
-                (stepTimestamps.current[i] = formatTime(new Date())));
 
             return (
               <div
@@ -194,9 +192,11 @@ export const ChatMessage = memo(function ChatMessage({
                 className="flex items-center gap-2 py-1"
               >
                 {assistantAvatar}
-                <span className="text-xs text-muted-foreground">
-                  {timestamp}
-                </span>
+                {serverStartedAt && (
+                  <span className="text-xs text-muted-foreground">
+                    {formatTime(new Date(serverStartedAt))}
+                  </span>
+                )}
               </div>
             );
           }
@@ -335,6 +335,7 @@ export const ChatMessage = memo(function ChatMessage({
         !isEditing &&
         message.role === "assistant" &&
         isLastMessage &&
+        wasStreaming.current &&
         (() => {
           if (!finishTimestamp.current) {
             finishTimestamp.current = formatTime(new Date());
