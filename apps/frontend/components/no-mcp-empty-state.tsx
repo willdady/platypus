@@ -13,11 +13,14 @@ import Link from "next/link";
 interface NoMcpEmptyStateProps {
   orgId: string;
   workspaceId: string;
+  /** When false, hide the create CTA (caller lacks permission — ADR-0006). */
+  canManage?: boolean;
 }
 
 export const NoMcpEmptyState = ({
   orgId,
   workspaceId,
+  canManage = true,
 }: NoMcpEmptyStateProps) => {
   return (
     <Empty className="border-2 border-dashed">
@@ -28,15 +31,20 @@ export const NoMcpEmptyState = ({
         <EmptyTitle>No MCP servers configured</EmptyTitle>
         <EmptyDescription>
           There are currently no MCP servers configured for this workspace.
+          {!canManage && " Ask an organization admin to add one."}
         </EmptyDescription>
       </EmptyHeader>
-      <EmptyContent>
-        <Button asChild>
-          <Link href={`/${orgId}/workspace/${workspaceId}/settings/mcp/create`}>
-            <Plus /> Add MCP
-          </Link>
-        </Button>
-      </EmptyContent>
+      {canManage && (
+        <EmptyContent>
+          <Button asChild>
+            <Link
+              href={`/${orgId}/workspace/${workspaceId}/settings/mcp/create`}
+            >
+              <Plus /> Add MCP
+            </Link>
+          </Button>
+        </EmptyContent>
+      )}
     </Empty>
   );
 };

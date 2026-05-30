@@ -9,6 +9,7 @@ import {
   FieldDescription,
 } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import { Switch } from "@/components/ui/switch";
 import { ExpandableTextarea } from "@/components/expandable-textarea";
 import { Button } from "@/components/ui/button";
 import {
@@ -47,7 +48,7 @@ const WorkspaceForm = ({
   orgId,
   workspaceId,
 }: WorkspaceFormProps) => {
-  const { user } = useAuth();
+  const { user, isOrgAdmin } = useAuth();
   const backendUrl = useBackendUrl();
   const router = useRouter();
   const { mutate: globalMutate } = useSWRConfig();
@@ -78,6 +79,8 @@ const WorkspaceForm = ({
     memoryExtractionProviderId: null as string | null,
     memoryEmbeddingProviderId: null as string | null,
     maxDailySummaries: 90,
+    providerSelfManagement: false,
+    mcpSelfManagement: false,
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [validationErrors, setValidationErrors] = useState<
@@ -98,6 +101,8 @@ const WorkspaceForm = ({
           workspace.memoryExtractionProviderId || null,
         memoryEmbeddingProviderId: workspace.memoryEmbeddingProviderId || null,
         maxDailySummaries: workspace.maxDailySummaries ?? 90,
+        providerSelfManagement: workspace.providerSelfManagement ?? false,
+        mcpSelfManagement: workspace.mcpSelfManagement ?? false,
       });
     }
   }, [workspace]);
@@ -145,6 +150,9 @@ const WorkspaceForm = ({
             memoryExtractionProviderId: formData.memoryExtractionProviderId,
             memoryEmbeddingProviderId: formData.memoryEmbeddingProviderId,
             maxDailySummaries: formData.maxDailySummaries,
+            // Admin-only; the backend strips these for non-admins (ADR-0006).
+            providerSelfManagement: formData.providerSelfManagement,
+            mcpSelfManagement: formData.mcpSelfManagement,
           }
         : {
             organizationId: orgId,
@@ -410,6 +418,66 @@ const WorkspaceForm = ({
                 <FieldError>{validationErrors.maxDailySummaries}</FieldError>
               )}
             </Field>
+          )}
+
+          {/* Delegation flags (ADR-0006) — admin-only. When off, only org
+              admins may configure the respective resource; when on, the
+              workspace owner may self-manage it. */}
+          {workspaceId && isOrgAdmin && (
+            <>
+              <Field
+                orientation="horizontal"
+                className="items-center justify-between"
+              >
+                <div>
+                  <FieldLabel htmlFor="providerSelfManagement">
+                    Owner-managed providers
+                  </FieldLabel>
+                  <FieldDescription>
+                    Let the workspace owner create and edit workspace-scoped
+                    providers. Off by default (org admins only).
+                  </FieldDescription>
+                </div>
+                <Switch
+                  id="providerSelfManagement"
+                  checked={formData.providerSelfManagement}
+                  disabled={isSubmitting}
+                  onCheckedChange={(checked) =>
+                    setFormData((prev) => ({
+                      ...prev,
+                      providerSelfManagement: checked,
+                    }))
+                  }
+                />
+              </Field>
+
+              <Field
+                orientation="horizontal"
+                className="items-center justify-between"
+              >
+                <div>
+                  <FieldLabel htmlFor="mcpSelfManagement">
+                    Owner-managed MCP servers
+                  </FieldLabel>
+                  <FieldDescription>
+                    Let the workspace owner register and authorize their own MCP
+                    servers (e.g. personal-credential integrations). Off by
+                    default (org admins only).
+                  </FieldDescription>
+                </div>
+                <Switch
+                  id="mcpSelfManagement"
+                  checked={formData.mcpSelfManagement}
+                  disabled={isSubmitting}
+                  onCheckedChange={(checked) =>
+                    setFormData((prev) => ({
+                      ...prev,
+                      mcpSelfManagement: checked,
+                    }))
+                  }
+                />
+              </Field>
+            </>
           )}
         </FieldGroup>
       </FieldSet>

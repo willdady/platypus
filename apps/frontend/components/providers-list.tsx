@@ -1,6 +1,6 @@
 "use client";
 
-import { Provider } from "@platypus/schemas";
+import { Provider, type Workspace } from "@platypus/schemas";
 import { Item, ItemActions, ItemContent, ItemTitle } from "./ui/item";
 import useSWR from "swr";
 import { cn, fetcher, joinUrl } from "../lib/utils";
@@ -52,11 +52,30 @@ const ProvidersList = ({
     fetcher,
   );
 
+  // Workspace-scoped provider config is admin-only unless the workspace
+  // delegates it (ADR-0006). Org-level provider management lives behind an
+  // admin-only route, so it is always manageable here.
+  const { data: workspace } = useSWR<Workspace>(
+    backendUrl && user && workspaceId
+      ? joinUrl(backendUrl, `/organizations/${orgId}/workspaces/${workspaceId}`)
+      : null,
+    fetcher,
+  );
+  const canManage = workspaceId
+    ? isOrgAdmin || workspace?.providerSelfManagement === true
+    : true;
+
   if (isLoading || error) return null; // FIXME
 
   const providers: ProviderWithScope[] = data?.results ?? [];
   if (!providers.length && workspaceId) {
-    return <NoProvidersEmptyState orgId={orgId} workspaceId={workspaceId} />;
+    return (
+      <NoProvidersEmptyState
+        orgId={orgId}
+        workspaceId={workspaceId}
+        canManage={canManage}
+      />
+    );
   }
 
   return (
@@ -122,17 +141,19 @@ const ProvidersList = ({
           );
         })}
       </ul>
-      <Button asChild>
-        <Link
-          href={
-            workspaceId
-              ? `/${orgId}/workspace/${workspaceId}/settings/providers/create`
-              : `/${orgId}/settings/providers/create`
-          }
-        >
-          <Plus /> Add provider
-        </Link>
-      </Button>
+      {canManage && (
+        <Button asChild>
+          <Link
+            href={
+              workspaceId
+                ? `/${orgId}/workspace/${workspaceId}/settings/providers/create`
+                : `/${orgId}/settings/providers/create`
+            }
+          >
+            <Plus /> Add provider
+          </Link>
+        </Button>
+      )}
       <Dialog
         open={!!selectedOrgProvider}
         onOpenChange={(open) => !open && setSelectedOrgProvider(null)}

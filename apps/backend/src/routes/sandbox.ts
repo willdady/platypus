@@ -55,9 +55,17 @@ const envCollisions = (
 // Credentials are server-side only. Stripping here is a quiet improvement over
 // the Provider/MCP routes which still return their secret fields; revisit when
 // those routes adopt a similar redaction pattern.
-const sanitizeSandboxResponse = (record: SandboxRecord) => {
-  const { credentials: _credentials, ...rest } = record;
-  return rest;
+//
+// adminEnv holds admin-managed secrets. A non-admin owner may see the *keys*
+// (so the UI can show "managed by admin" and the orientation block stays
+// coherent) but never the values (ADR-0006). Admins get the values so the
+// settings form can edit them.
+const sanitizeSandboxResponse = (record: SandboxRecord, isAdmin: boolean) => {
+  const { credentials: _credentials, adminEnv, ...rest } = record;
+  const safeAdminEnv = isAdmin
+    ? adminEnv
+    : Object.fromEntries(Object.keys(adminEnv ?? {}).map((k) => [k, ""]));
+  return { ...rest, adminEnv: safeAdminEnv };
 };
 
 // List the Sandbox backends registered in this process. Returns metadata only
@@ -107,7 +115,8 @@ sandbox.get(
     if (record.length === 0) {
       return c.json({ error: "Sandbox not configured" }, 404);
     }
-    return c.json(sanitizeSandboxResponse(record[0]));
+    const isAdmin = c.get("orgMembership")?.role === "admin";
+    return c.json(sanitizeSandboxResponse(record[0], isAdmin));
   },
 );
 
@@ -158,7 +167,8 @@ sandbox.post(
         workspaceId,
       })
       .returning();
-    return c.json(sanitizeSandboxResponse(record[0]), 201);
+    // POST is admin-only (requireSandboxAdmin), so always full response.
+    return c.json(sanitizeSandboxResponse(record[0], true), 201);
   },
 );
 
@@ -224,7 +234,8 @@ sandbox.put(
         })
         .where(eq(sandboxTable.workspaceId, workspaceId))
         .returning();
-      return c.json(sanitizeSandboxResponse(record[0]));
+      // Non-admin owner — redact adminEnv values in the response.
+      return c.json(sanitizeSandboxResponse(record[0], false));
     }
 
     // Admin: full update.
@@ -282,7 +293,8 @@ sandbox.put(
       })
       .where(eq(sandboxTable.workspaceId, workspaceId))
       .returning();
-    return c.json(sanitizeSandboxResponse(record[0]));
+    // Reached only on the admin branch above.
+    return c.json(sanitizeSandboxResponse(record[0], true));
   },
 );
 

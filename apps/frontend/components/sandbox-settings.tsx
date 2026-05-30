@@ -11,6 +11,7 @@ import { useBackendUrl } from "@/app/client-context";
 import { fetcher, joinUrl, parseValidationErrors } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Switch } from "@/components/ui/switch";
 import {
   Field,
   FieldDescription,
@@ -40,27 +41,39 @@ import { ConfirmDialog } from "@/components/confirm-dialog";
 
 type SandboxBackend = { backend: string; name: string };
 
-// Env rows are kept as an ordered array (not a Record) so a user can edit
-// keys, add empties, and tolerate duplicate-during-edit without the UI
-// reshuffling on every keystroke. Converted to Record<string,string> on save.
-type EnvRow = { key: string; value: string };
+// The docker reference backend exposes host reachability via these two config
+// fields. See ADR-0005. Other backends ignore them.
+const DOCKER_BACKEND = "docker";
+
+// Rows are kept as an ordered array (not a Record) so a user can edit keys, add
+// empties, and tolerate duplicate-during-edit without the UI reshuffling on
+// every keystroke. Converted on save.
+type Row = { key: string; value: string };
 
 type SandboxFormData = {
   name: string;
   backend: string;
-  env: EnvRow[];
+  // Two-tier env (ADR-0006): admin-managed vs owner-managed.
+  adminEnv: Row[];
+  userEnv: Row[];
+  // Docker host reachability (ADR-0005), admin-only.
+  networks: string[];
+  extraHosts: Row[]; // key = hostname, value = ip / host-gateway
 };
 
 const DEFAULT_FORM: SandboxFormData = {
   name: "",
   backend: "",
-  env: [],
+  adminEnv: [],
+  userEnv: [],
+  networks: [],
+  extraHosts: [],
 };
 
-const envRecordToRows = (env: Record<string, string> | undefined): EnvRow[] =>
-  Object.entries(env ?? {}).map(([key, value]) => ({ key, value }));
+const recordToRows = (rec: Record<string, string> | undefined): Row[] =>
+  Object.entries(rec ?? {}).map(([key, value]) => ({ key, value }));
 
-const envRowsToRecord = (rows: EnvRow[]): Record<string, string> => {
+const rowsToRecord = (rows: Row[]): Record<string, string> => {
   const out: Record<string, string> = {};
   for (const { key, value } of rows) {
     const trimmedKey = key.trim();
@@ -70,7 +83,22 @@ const envRowsToRecord = (rows: EnvRow[]): Record<string, string> => {
   return out;
 };
 
-const findDuplicateEnvKey = (rows: EnvRow[]): string | null => {
+// extraHosts travel as `["hostname:target", ...]`. Split on the first colon so
+// IPv6 targets (which contain colons) survive intact.
+const extraHostsToRows = (entries: string[] | undefined): Row[] =>
+  (entries ?? []).map((entry) => {
+    const idx = entry.indexOf(":");
+    return idx === -1
+      ? { key: entry, value: "" }
+      : { key: entry.slice(0, idx), value: entry.slice(idx + 1) };
+  });
+
+const rowsToExtraHosts = (rows: Row[]): string[] =>
+  rows
+    .filter((r) => r.key.trim() !== "")
+    .map((r) => `${r.key.trim()}:${r.value.trim()}`);
+
+const findDuplicateKey = (rows: Row[]): string | null => {
   const seen = new Set<string>();
   for (const { key } of rows) {
     const trimmed = key.trim();
@@ -81,13 +109,87 @@ const findDuplicateEnvKey = (rows: EnvRow[]): string | null => {
   return null;
 };
 
-/**
- * Returns true when the backend's error message indicates the caller should
- * retry the request with `?force=true`. The backend signals this by including
- * the literal string "force=true" in the error message (see backend route).
- */
 const isForceRetryError = (errorMessage: unknown): boolean =>
   typeof errorMessage === "string" && errorMessage.includes("force=true");
+
+// Reusable key/value editor used for both env tiers and extraHosts.
+const RowsEditor = ({
+  rows,
+  onChange,
+  disabled,
+  readOnly,
+  keyPlaceholder,
+  valuePlaceholder,
+  maskValue,
+  addLabel,
+}: {
+  rows: Row[];
+  onChange: (rows: Row[]) => void;
+  disabled: boolean;
+  readOnly?: boolean;
+  keyPlaceholder: string;
+  valuePlaceholder: string;
+  maskValue?: boolean;
+  addLabel: string;
+}) => (
+  <div className="flex flex-col gap-2">
+    {rows.map((row, idx) => (
+      <div key={idx} className="flex gap-2 items-start">
+        <Input
+          placeholder={keyPlaceholder}
+          value={row.key}
+          aria-label={`${keyPlaceholder} ${idx + 1}`}
+          disabled={disabled || readOnly}
+          onChange={(e) => {
+            const next = [...rows];
+            next[idx] = { ...next[idx], key: e.target.value };
+            onChange(next);
+          }}
+          className="font-mono"
+        />
+        <Input
+          placeholder={valuePlaceholder}
+          value={row.value}
+          aria-label={`${valuePlaceholder} ${idx + 1}`}
+          disabled={disabled || readOnly}
+          type={maskValue ? "password" : "text"}
+          autoComplete="off"
+          onChange={(e) => {
+            const next = [...rows];
+            next[idx] = { ...next[idx], value: e.target.value };
+            onChange(next);
+          }}
+          className="font-mono"
+        />
+        {!readOnly && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            aria-label={`Remove row ${idx + 1}`}
+            disabled={disabled}
+            onClick={() => onChange(rows.filter((_, i) => i !== idx))}
+          >
+            <X />
+          </Button>
+        )}
+      </div>
+    ))}
+    {!readOnly && (
+      <div>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          disabled={disabled}
+          onClick={() => onChange([...rows, { key: "", value: "" }])}
+        >
+          <Plus /> {addLabel}
+        </Button>
+      </div>
+    )}
+  </div>
+);
 
 const SandboxSettings = ({
   orgId,
@@ -96,7 +198,7 @@ const SandboxSettings = ({
   orgId: string;
   workspaceId: string;
 }) => {
-  const { user } = useAuth();
+  const { user, isOrgAdmin } = useAuth();
   const backendUrl = useBackendUrl();
 
   const sandboxUrl = joinUrl(
@@ -104,10 +206,6 @@ const SandboxSettings = ({
     `/organizations/${orgId}/workspaces/${workspaceId}/sandbox`,
   );
 
-  /**
-   * Custom fetcher — treats 404 as "no sandbox configured" by returning null
-   * instead of throwing. Any other non-OK response throws.
-   */
   const sandboxFetcher = async (url: string): Promise<Sandbox | null> => {
     const res = await fetch(url, { credentials: "include" });
     if (res.status === 404) return null;
@@ -131,6 +229,13 @@ const SandboxSettings = ({
   }>(backendUrl && user ? `${sandboxUrl}/backends` : null, fetcher);
   const backends = backendsData?.results ?? [];
 
+  // Operator network allowlist — admin-only endpoint (ADR-0005).
+  const { data: networksData } = useSWR<{ results: string[] }>(
+    backendUrl && user && isOrgAdmin ? `${sandboxUrl}/networks` : null,
+    fetcher,
+  );
+  const allowedNetworks = networksData?.results ?? [];
+
   const [isConfiguring, setIsConfiguring] = useState(false);
   const [formData, setFormData] = useState<SandboxFormData>(DEFAULT_FORM);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -141,8 +246,6 @@ const SandboxSettings = ({
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
 
-  // Force-retry dialog state. Used both for failed teardown during backend
-  // change (PUT) and for failed destroy on DELETE.
   const [forceDialog, setForceDialog] = useState<{
     open: boolean;
     kind: "save" | "delete" | null;
@@ -150,14 +253,19 @@ const SandboxSettings = ({
   }>({ open: false, kind: null, message: "" });
   const [isForcing, setIsForcing] = useState(false);
 
-  // Sync form state with loaded sandbox data, or fall back to the first
-  // available backend when creating fresh.
   useEffect(() => {
     if (data) {
+      const config = (data.config ?? {}) as {
+        networks?: string[];
+        extraHosts?: string[];
+      };
       setFormData({
         name: data.name,
         backend: data.backend,
-        env: envRecordToRows(data.env),
+        adminEnv: recordToRows(data.adminEnv),
+        userEnv: recordToRows(data.userEnv),
+        networks: config.networks ?? [],
+        extraHosts: extraHostsToRows(config.extraHosts),
       });
     } else if (backends.length > 0) {
       setFormData((prev) =>
@@ -166,34 +274,18 @@ const SandboxSettings = ({
     }
   }, [data, backends]);
 
-  const handleNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (validationErrors.name) {
+  const clearError = (field: string) => {
+    if (validationErrors[field]) {
       setValidationErrors((prev) => {
         const next = { ...prev };
-        delete next.name;
+        delete next[field];
         return next;
       });
     }
-    setFormData((prev) => ({ ...prev, name: e.target.value }));
   };
 
-  const handleBackendChange = (value: string) => {
-    if (validationErrors.backend) {
-      setValidationErrors((prev) => {
-        const next = { ...prev };
-        delete next.backend;
-        return next;
-      });
-    }
-    setFormData((prev) => ({ ...prev, backend: value }));
-  };
+  const isDocker = formData.backend === DOCKER_BACKEND;
 
-  /**
-   * Performs the save (POST for create, PUT for update). Returns
-   * `{ ok: true }` on success, `{ ok: false, forceRetry: true }` when the
-   * backend reports a teardown failure that can be retried with force, and
-   * `{ ok: false }` for validation / other errors (validationErrors set).
-   */
   const performSave = async (
     options: { force?: boolean } = {},
   ): Promise<{ ok: boolean; forceRetry?: boolean; errorMessage?: string }> => {
@@ -203,14 +295,28 @@ const SandboxSettings = ({
     const url =
       isCreate || !options.force ? sandboxUrl : `${sandboxUrl}?force=true`;
 
-    const payload = {
-      ...(isCreate ? { workspaceId } : {}),
-      name: formData.name,
-      backend: formData.backend,
-      config: {},
-      credentials: {},
-      env: envRowsToRecord(formData.env),
-    };
+    // Non-admin owners may only change name + userEnv (ADR-0006); everything
+    // else is admin-controlled and ignored server-side, so we don't send it.
+    const payload = isOrgAdmin
+      ? {
+          ...(isCreate ? { workspaceId } : {}),
+          name: formData.name,
+          backend: formData.backend,
+          config: isDocker
+            ? {
+                networks: formData.networks,
+                extraHosts: rowsToExtraHosts(formData.extraHosts),
+              }
+            : {},
+          credentials: {},
+          adminEnv: rowsToRecord(formData.adminEnv),
+          userEnv: rowsToRecord(formData.userEnv),
+        }
+      : {
+          name: formData.name,
+          backend: formData.backend,
+          userEnv: rowsToRecord(formData.userEnv),
+        };
 
     const response = await fetch(url, {
       method,
@@ -223,7 +329,6 @@ const SandboxSettings = ({
 
     const errorData = await response.json().catch(() => ({}));
 
-    // Backend teardown failures surface as 500 with { error: "...force=true..." }
     if (
       response.status === 500 &&
       isForceRetryError((errorData as any)?.error)
@@ -245,9 +350,14 @@ const SandboxSettings = ({
   };
 
   const handleSave = async () => {
-    const dup = findDuplicateEnvKey(formData.env);
-    if (dup) {
-      setValidationErrors({ env: `Duplicate env key: ${dup}` });
+    const dupAdmin = findDuplicateKey(formData.adminEnv);
+    const dupUser = findDuplicateKey(formData.userEnv);
+    if (dupAdmin) {
+      setValidationErrors({ adminEnv: `Duplicate env key: ${dupAdmin}` });
+      return;
+    }
+    if (dupUser) {
+      setValidationErrors({ userEnv: `Duplicate env key: ${dupUser}` });
       return;
     }
     setIsSubmitting(true);
@@ -305,7 +415,6 @@ const SandboxSettings = ({
         setIsDeleteDialogOpen(false);
         setIsConfiguring(false);
         setFormData(DEFAULT_FORM);
-        // Revalidate in the background to ensure SWR cache is fresh
         mutate();
       } else if (result.forceRetry) {
         setIsDeleteDialogOpen(false);
@@ -389,16 +498,23 @@ const SandboxSettings = ({
           </EmptyMedia>
           <EmptyTitle>No sandbox configured</EmptyTitle>
           <EmptyDescription>
-            {noBackends
-              ? "No sandbox backends are registered on this server. Set PLATYPUS_SANDBOX_DOCKER_ENABLED=true (or register another backend) and restart the backend."
-              : "Configure a sandbox to run agent code in an isolated environment."}
+            {!isOrgAdmin
+              ? "No sandbox is configured for this workspace. Ask an organization admin to set one up."
+              : noBackends
+                ? "No sandbox backends are registered on this server. Set PLATYPUS_SANDBOX_DOCKER_ENABLED=true (or register another backend) and restart the backend."
+                : "Configure a sandbox to run agent code in an isolated environment."}
           </EmptyDescription>
         </EmptyHeader>
-        <EmptyContent>
-          <Button onClick={() => setIsConfiguring(true)} disabled={noBackends}>
-            <Plus /> Configure sandbox
-          </Button>
-        </EmptyContent>
+        {isOrgAdmin && (
+          <EmptyContent>
+            <Button
+              onClick={() => setIsConfiguring(true)}
+              disabled={noBackends}
+            >
+              <Plus /> Configure sandbox
+            </Button>
+          </EmptyContent>
+        )}
       </Empty>
     );
   }
@@ -413,7 +529,10 @@ const SandboxSettings = ({
               id="name"
               placeholder="My sandbox"
               value={formData.name}
-              onChange={handleNameChange}
+              onChange={(e) => {
+                clearError("name");
+                setFormData((prev) => ({ ...prev, name: e.target.value }));
+              }}
               disabled={isSubmitting}
               aria-invalid={!!validationErrors.name}
               autoFocus
@@ -427,10 +546,16 @@ const SandboxSettings = ({
             <FieldLabel htmlFor="backend">Backend</FieldLabel>
             <Select
               value={formData.backend}
-              onValueChange={handleBackendChange}
-              disabled={isSubmitting}
+              onValueChange={(value) => {
+                clearError("backend");
+                setFormData((prev) => ({ ...prev, backend: value }));
+              }}
+              disabled={isSubmitting || !isOrgAdmin}
             >
-              <SelectTrigger id="backend" disabled={isSubmitting}>
+              <SelectTrigger
+                id="backend"
+                disabled={isSubmitting || !isOrgAdmin}
+              >
                 <SelectValue placeholder="Select a backend" />
               </SelectTrigger>
               <SelectContent>
@@ -446,89 +571,157 @@ const SandboxSettings = ({
             </Select>
             <FieldDescription>
               The runtime that hosts the sandbox environment.
+              {!isOrgAdmin && " Managed by an organization admin."}
             </FieldDescription>
             {validationErrors.backend && (
               <FieldError>{validationErrors.backend}</FieldError>
             )}
           </Field>
 
-          <Field data-invalid={!!validationErrors.env}>
+          {/* Host reachability (ADR-0005) — admin-only, docker backend only. */}
+          {isOrgAdmin && isDocker && (
+            <>
+              <Field data-invalid={!!validationErrors.networks}>
+                <FieldLabel>Networks</FieldLabel>
+                <FieldDescription>
+                  Docker networks this sandbox may attach to. The list is
+                  declared by the operator via
+                  <span className="font-mono">
+                    {" "}
+                    PLATYPUS_SANDBOX_DOCKER_ALLOWED_NETWORKS
+                  </span>
+                  . Off by default.
+                </FieldDescription>
+                {allowedNetworks.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">
+                    No networks declared by the operator.
+                  </p>
+                ) : (
+                  <div className="flex flex-col gap-2">
+                    {allowedNetworks.map((net) => {
+                      const checked = formData.networks.includes(net);
+                      return (
+                        <div
+                          key={net}
+                          className="flex items-center justify-between gap-2"
+                        >
+                          <span className="font-mono text-sm">{net}</span>
+                          <Switch
+                            checked={checked}
+                            disabled={isSubmitting}
+                            onCheckedChange={(on) =>
+                              setFormData((prev) => ({
+                                ...prev,
+                                networks: on
+                                  ? [...prev.networks, net]
+                                  : prev.networks.filter((n) => n !== net),
+                              }))
+                            }
+                            aria-label={`Attach network ${net}`}
+                          />
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+                {validationErrors.networks && (
+                  <FieldError>{validationErrors.networks}</FieldError>
+                )}
+              </Field>
+
+              <Field data-invalid={!!validationErrors.config}>
+                <FieldLabel>Extra hosts</FieldLabel>
+                <FieldDescription>
+                  Extra <span className="font-mono">hostname → target</span>{" "}
+                  entries added to the container (target is an IP or{" "}
+                  <span className="font-mono">host-gateway</span>). Lets agent
+                  code reach host services. Off by default.
+                </FieldDescription>
+                <RowsEditor
+                  rows={formData.extraHosts}
+                  onChange={(rows) => {
+                    clearError("config");
+                    setFormData((prev) => ({ ...prev, extraHosts: rows }));
+                  }}
+                  disabled={isSubmitting}
+                  keyPlaceholder="hostname"
+                  valuePlaceholder="host-gateway"
+                  addLabel="Add host"
+                />
+                {validationErrors.config && (
+                  <FieldError>{validationErrors.config}</FieldError>
+                )}
+              </Field>
+            </>
+          )}
+
+          {/* Admin-managed env (ADR-0006). */}
+          {isOrgAdmin && (
+            <Field data-invalid={!!validationErrors.adminEnv}>
+              <FieldLabel>Admin environment variables</FieldLabel>
+              <FieldDescription>
+                Org-admin-managed. Merged into every shell command and take
+                precedence over workspace-owner variables. Kept server-side,
+                never sent to the model.
+              </FieldDescription>
+              <RowsEditor
+                rows={formData.adminEnv}
+                onChange={(rows) => {
+                  clearError("adminEnv");
+                  setFormData((prev) => ({ ...prev, adminEnv: rows }));
+                }}
+                disabled={isSubmitting}
+                keyPlaceholder="KEY"
+                valuePlaceholder="value"
+                maskValue
+                addLabel="Add variable"
+              />
+              {validationErrors.adminEnv && (
+                <FieldError>{validationErrors.adminEnv}</FieldError>
+              )}
+            </Field>
+          )}
+
+          {/* Owner-managed env (ADR-0006). Visible/editable to owner + admin. */}
+          <Field data-invalid={!!validationErrors.userEnv}>
             <FieldLabel>Environment variables</FieldLabel>
             <FieldDescription>
               Merged into every shell command the agent runs in this sandbox.
-              Values are kept server-side and never sent to the model. Workspace
-              defaults override any env the agent passes on the same key.
+              Values are kept server-side and never sent to the model. Cannot
+              override an admin-managed key.
             </FieldDescription>
-            <div className="flex flex-col gap-2">
-              {formData.env.map((row, idx) => (
-                <div key={idx} className="flex gap-2 items-start">
-                  <Input
-                    placeholder="KEY"
-                    value={row.key}
-                    aria-label={`Env key ${idx + 1}`}
-                    disabled={isSubmitting}
-                    onChange={(e) => {
-                      const next = [...formData.env];
-                      next[idx] = { ...next[idx], key: e.target.value };
-                      setFormData((prev) => ({ ...prev, env: next }));
-                      if (validationErrors.env) {
-                        setValidationErrors((prev) => {
-                          const n = { ...prev };
-                          delete n.env;
-                          return n;
-                        });
-                      }
-                    }}
-                    className="font-mono"
-                  />
-                  <Input
-                    placeholder="value"
-                    value={row.value}
-                    aria-label={`Env value ${idx + 1}`}
-                    disabled={isSubmitting}
-                    type="password"
-                    autoComplete="off"
-                    onChange={(e) => {
-                      const next = [...formData.env];
-                      next[idx] = { ...next[idx], value: e.target.value };
-                      setFormData((prev) => ({ ...prev, env: next }));
-                    }}
-                    className="font-mono"
-                  />
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    aria-label={`Remove env row ${idx + 1}`}
-                    disabled={isSubmitting}
-                    onClick={() => {
-                      const next = formData.env.filter((_, i) => i !== idx);
-                      setFormData((prev) => ({ ...prev, env: next }));
-                    }}
-                  >
-                    <X />
-                  </Button>
-                </div>
-              ))}
-              <div>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  disabled={isSubmitting}
-                  onClick={() =>
-                    setFormData((prev) => ({
-                      ...prev,
-                      env: [...prev.env, { key: "", value: "" }],
-                    }))
-                  }
-                >
-                  <Plus /> Add variable
-                </Button>
+            {/* Admin keys are shown read-only so the owner knows which names
+                are reserved (values are never returned to non-admins). */}
+            {!isOrgAdmin && formData.adminEnv.length > 0 && (
+              <div className="mb-2">
+                <p className="text-xs text-muted-foreground mb-1">
+                  Managed by admin (read-only):
+                </p>
+                <RowsEditor
+                  rows={formData.adminEnv}
+                  onChange={() => {}}
+                  disabled
+                  readOnly
+                  keyPlaceholder="KEY"
+                  valuePlaceholder="(hidden)"
+                  addLabel=""
+                />
               </div>
-            </div>
-            {validationErrors.env && (
-              <FieldError>{validationErrors.env}</FieldError>
+            )}
+            <RowsEditor
+              rows={formData.userEnv}
+              onChange={(rows) => {
+                clearError("userEnv");
+                setFormData((prev) => ({ ...prev, userEnv: rows }));
+              }}
+              disabled={isSubmitting}
+              keyPlaceholder="KEY"
+              valuePlaceholder="value"
+              maskValue
+              addLabel="Add variable"
+            />
+            {validationErrors.userEnv && (
+              <FieldError>{validationErrors.userEnv}</FieldError>
             )}
           </Field>
         </FieldGroup>
@@ -544,14 +737,16 @@ const SandboxSettings = ({
         </Button>
 
         {hasSandbox ? (
-          <Button
-            className="cursor-pointer"
-            variant="outline"
-            onClick={() => setIsDeleteDialogOpen(true)}
-            disabled={isSubmitting}
-          >
-            <Trash2 /> Delete
-          </Button>
+          isOrgAdmin && (
+            <Button
+              className="cursor-pointer"
+              variant="outline"
+              onClick={() => setIsDeleteDialogOpen(true)}
+              disabled={isSubmitting}
+            >
+              <Trash2 /> Delete
+            </Button>
+          )
         ) : (
           <Button
             className="cursor-pointer"

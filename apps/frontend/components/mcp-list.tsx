@@ -1,6 +1,6 @@
 "use client";
 
-import { MCP } from "@platypus/schemas";
+import { MCP, type Workspace } from "@platypus/schemas";
 import { Item, ItemActions, ItemContent, ItemTitle } from "./ui/item";
 import useSWR from "swr";
 import { cn, fetcher, joinUrl } from "../lib/utils";
@@ -20,7 +20,7 @@ const McpList = ({
   orgId: string;
   workspaceId: string;
 }) => {
-  const { user } = useAuth();
+  const { user, isOrgAdmin } = useAuth();
   const backendUrl = useBackendUrl();
 
   const { data, error, isLoading } = useSWR<{ results: MCP[] }>(
@@ -32,6 +32,15 @@ const McpList = ({
       : null,
     fetcher,
   );
+
+  // MCP config is admin-only unless the workspace delegates it (ADR-0006).
+  const { data: workspace } = useSWR<Workspace>(
+    backendUrl && user
+      ? joinUrl(backendUrl, `/organizations/${orgId}/workspaces/${workspaceId}`)
+      : null,
+    fetcher,
+  );
+  const canManage = isOrgAdmin || workspace?.mcpSelfManagement === true;
 
   if (isLoading) {
     return null;
@@ -49,7 +58,13 @@ const McpList = ({
 
   const mcps: MCP[] = data?.results ?? [];
   if (!mcps.length) {
-    return <NoMcpEmptyState orgId={orgId} workspaceId={workspaceId} />;
+    return (
+      <NoMcpEmptyState
+        orgId={orgId}
+        workspaceId={workspaceId}
+        canManage={canManage}
+      />
+    );
   }
 
   return (
@@ -72,11 +87,13 @@ const McpList = ({
           </li>
         ))}
       </ul>
-      <Button asChild>
-        <Link href={`/${orgId}/workspace/${workspaceId}/settings/mcp/create`}>
-          <Plus /> Add MCP
-        </Link>
-      </Button>
+      {canManage && (
+        <Button asChild>
+          <Link href={`/${orgId}/workspace/${workspaceId}/settings/mcp/create`}>
+            <Plus /> Add MCP
+          </Link>
+        </Button>
+      )}
     </>
   );
 };
