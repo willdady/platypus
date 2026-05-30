@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.86.0](https://github.com/willdady/platypus/compare/v1.85.1...v1.86.0) (2026-05-30)
+
+
+### Features
+
+* admin-managed sandbox reachability and credential-bearing config governance ([#151](https://github.com/willdady/platypus/issues/151)) ([417698e](https://github.com/willdady/platypus/commit/417698ef1de6bf71c1a6806fe43b6ba5e9005303))
+
+
+### Bug Fixes
+
+* **frontend:** make tool call headers and config labels text-selectable ([#145](https://github.com/willdady/platypus/issues/145)) ([129c6bb](https://github.com/willdady/platypus/commit/129c6bb7f4908d0626b958c83f01351e2aa26dea))
+
 ## [1.85.1](https://github.com/willdady/platypus/compare/v1.85.0...v1.85.1) (2026-05-28)
 
 
