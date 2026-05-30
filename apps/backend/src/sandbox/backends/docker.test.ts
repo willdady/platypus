@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { PassThrough } from "node:stream";
 
 // ---------------------------------------------------------------------------
@@ -40,6 +40,8 @@ type MockState = {
   putArchiveCalls: Array<{ buffer: Buffer; opts: any }>;
   execCalls: any[];
   pullCalls: any[];
+  // Recorded network.connect() calls (additional networks beyond the primary).
+  networkConnectCalls: Array<{ network: string; opts: any }>;
   // Per-container stop/remove handlers (keyed by container name).
   containerStop: () => Promise<any>;
   containerRemove: () => Promise<any>;
@@ -177,6 +179,14 @@ vi.mock("dockerode", () => {
       return {};
     }
 
+    getNetwork(name: string) {
+      return {
+        connect: vi.fn(async (opts: any) => {
+          mockState.networkConnectCalls.push({ network: name, opts });
+        }),
+      };
+    }
+
     pull(image: string) {
       mockState.pullCalls.push(image);
       // The production code only uses the returned stream as a token; the
@@ -199,7 +209,11 @@ vi.mock("../../logger.ts", () => ({
 }));
 
 // Import AFTER vi.mock so the adapter binds to our mocked dockerode.
-import { DockerSandboxBackend, buildSingleFileTar } from "./docker.ts";
+import {
+  DockerSandboxBackend,
+  buildSingleFileTar,
+  dockerSandboxConfigSchema,
+} from "./docker.ts";
 import { logger } from "../../logger.ts";
 import { MAX_SHELL_OUTPUT_BYTES, SANDBOX_WORKSPACE_ROOT } from "../index.ts";
 import type { SandboxContext } from "../types.ts";
@@ -221,6 +235,7 @@ function resetMockState() {
     putArchiveCalls: [],
     execCalls: [],
     pullCalls: [],
+    networkConnectCalls: [],
     containerStop: async () => undefined,
     containerRemove: async () => undefined,
     volumeRemove: async () => undefined,
@@ -315,6 +330,9 @@ describe("DockerSandboxBackend — provisioning", () => {
     expect(opts.HostConfig.MemorySwap).toBe(opts.HostConfig.Memory);
     expect(opts.HostConfig.NanoCpus).toBe(2_000_000_000);
     expect(opts.HostConfig.SecurityOpt).toEqual(["no-new-privileges:true"]);
+    // Default-deny host reachability (ADR-0005): empty config → no reachability.
+    expect(opts.HostConfig.ExtraHosts).toEqual([]);
+    expect(opts.HostConfig.NetworkMode).toBeUndefined();
   });
 
   it("reuses an existing running container without re-creating", async () => {
@@ -609,5 +627,95 @@ describe("DockerSandboxBackend — fsEdit error cases", () => {
         newString: "x",
       }),
     ).rejects.toThrow(/not unique/);
+  });
+});
+
+describe("DockerSandboxBackend — host reachability (ADR-0005)", () => {
+  it("applies configured extraHosts to HostConfig.ExtraHosts", async () => {
+    setupFreshProvision();
+    queueExec({ exitCode: 0 });
+
+    const backend = new DockerSandboxBackend(
+      { extraHosts: ["host.docker.internal:host-gateway"] },
+      {},
+    );
+    await backend.shellExec(ctx, { command: "true" });
+
+    expect(mockState.createContainerCalls[0].HostConfig.ExtraHosts).toEqual([
+      "host.docker.internal:host-gateway",
+    ]);
+  });
+
+  it("sets the first network as NetworkMode and connects the rest", async () => {
+    setupFreshProvision();
+    queueExec({ exitCode: 0 });
+
+    const backend = new DockerSandboxBackend(
+      { networks: ["primary", "secondary", "tertiary"] },
+      {},
+    );
+    await backend.shellExec(ctx, { command: "true" });
+
+    expect(mockState.createContainerCalls[0].HostConfig.NetworkMode).toBe(
+      "primary",
+    );
+    expect(mockState.networkConnectCalls.map((c) => c.network)).toEqual([
+      "secondary",
+      "tertiary",
+    ]);
+    // Each connect targets a container id via the Container option.
+    expect(
+      mockState.networkConnectCalls.every((c) => "Container" in c.opts),
+    ).toBe(true);
+  });
+
+  it("a single network sets NetworkMode and makes no connect calls", async () => {
+    setupFreshProvision();
+    queueExec({ exitCode: 0 });
+
+    const backend = new DockerSandboxBackend({ networks: ["only"] }, {});
+    await backend.shellExec(ctx, { command: "true" });
+
+    expect(mockState.createContainerCalls[0].HostConfig.NetworkMode).toBe(
+      "only",
+    );
+    expect(mockState.networkConnectCalls).toHaveLength(0);
+  });
+
+  describe("dockerSandboxConfigSchema", () => {
+    const original = process.env.PLATYPUS_SANDBOX_DOCKER_ALLOWED_NETWORKS;
+    afterEach(() => {
+      if (original === undefined) {
+        delete process.env.PLATYPUS_SANDBOX_DOCKER_ALLOWED_NETWORKS;
+      } else {
+        process.env.PLATYPUS_SANDBOX_DOCKER_ALLOWED_NETWORKS = original;
+      }
+    });
+
+    it("defaults to empty arrays for {}", () => {
+      const parsed = dockerSandboxConfigSchema.parse({});
+      expect(parsed).toEqual({ networks: [], extraHosts: [] });
+    });
+
+    it("accepts networks that are in the operator allowlist", () => {
+      process.env.PLATYPUS_SANDBOX_DOCKER_ALLOWED_NETWORKS = "shared, tools";
+      const parsed = dockerSandboxConfigSchema.parse({ networks: ["shared"] });
+      expect(parsed.networks).toEqual(["shared"]);
+    });
+
+    it("rejects networks outside the operator allowlist", () => {
+      process.env.PLATYPUS_SANDBOX_DOCKER_ALLOWED_NETWORKS = "shared";
+      const result = dockerSandboxConfigSchema.safeParse({
+        networks: ["not-allowed"],
+      });
+      expect(result.success).toBe(false);
+    });
+
+    it("rejects malformed extraHosts entries", () => {
+      const result = dockerSandboxConfigSchema.safeParse({
+        extraHosts: ["not a valid entry"],
+      });
+      expect(result.success).toBe(false);
+    });
   });
 });

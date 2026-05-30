@@ -16,7 +16,7 @@ describe("Provider Routes", () => {
   describe("POST /", () => {
     it("should create provider if workspace admin", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
+      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]); // requireOrgAccess
       mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]); // requireWorkspaceAccess
 
       const mockProvider = { id: "p1", name: "OpenAI", providerType: "OpenAI" };
@@ -42,7 +42,7 @@ describe("Provider Routes", () => {
 
     it("should return 409 if provider name already exists in workspace", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
+      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]); // requireOrgAccess
       mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]); // requireWorkspaceAccess
 
       const drizzleError = new Error("DrizzleQueryError: Failed query");
@@ -72,6 +72,47 @@ describe("Provider Routes", () => {
       expect(await res.json()).toEqual({
         error: "A provider with this name already exists in this workspace",
       });
+    });
+
+    // ADR-0006: workspace-provider config is admin-only unless the workspace's
+    // providerSelfManagement flag delegates it to the owner.
+    const createBody = {
+      name: "OpenAI",
+      providerType: "OpenAI",
+      apiKey: "sk-123",
+      modelIds: ["gpt-4"],
+      taskModelId: "gpt-4",
+      memoryExtractionModelId: "gpt-4",
+      workspaceId,
+    };
+
+    it("returns 403 for a non-admin owner when self-management is disabled", async () => {
+      mockSession();
+      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
+      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]); // requireWorkspaceAccess
+      mockDb.limit.mockResolvedValueOnce([{ flag: false }]); // delegation flag
+
+      const res = await app.request(baseUrl, {
+        method: "POST",
+        body: JSON.stringify(createBody),
+        headers: { "Content-Type": "application/json" },
+      });
+      expect(res.status).toBe(403);
+    });
+
+    it("allows a non-admin owner when self-management is enabled", async () => {
+      mockSession();
+      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
+      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]);
+      mockDb.limit.mockResolvedValueOnce([{ flag: true }]); // delegation flag set
+      mockDb.returning.mockResolvedValueOnce([{ id: "p1", name: "OpenAI" }]);
+
+      const res = await app.request(baseUrl, {
+        method: "POST",
+        body: JSON.stringify(createBody),
+        headers: { "Content-Type": "application/json" },
+      });
+      expect(res.status).toBe(201);
     });
   });
 

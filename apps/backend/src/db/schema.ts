@@ -109,6 +109,18 @@ export const workspace = pgTable(
       .references(() => provider.id, { onDelete: "set null" }),
     maxDailySummaries: t.integer("max_daily_summaries").default(90),
 
+    // Per-workspace delegation flags (ADR-0006). When true, the workspace
+    // owner may self-manage the respective credential/reach-bearing resource
+    // without org-admin. Settable only by an org admin. Default false.
+    providerSelfManagement: t
+      .boolean("provider_self_management")
+      .notNull()
+      .default(false),
+    mcpSelfManagement: t
+      .boolean("mcp_self_management")
+      .notNull()
+      .default(false),
+
     createdAt: t.timestamp("created_at").notNull().defaultNow(),
     updatedAt: t.timestamp("updated_at").notNull().defaultNow(),
   }),
@@ -275,7 +287,20 @@ export const sandbox = pgTable(
       .$type<Record<string, unknown>>()
       .notNull()
       .default({}),
-    env: t.jsonb("env").$type<Record<string, string>>().notNull().default({}),
+    // Workspace-default env split into two precedence tiers (ADR-0004 amendment,
+    // ADR-0006): adminEnv is org-admin-managed and wins; userEnv is
+    // workspace-owner-managed. Merge order at exec: adminEnv ▸ userEnv ▸
+    // model-provided input.env.
+    adminEnv: t
+      .jsonb("admin_env")
+      .$type<Record<string, string>>()
+      .notNull()
+      .default({}),
+    userEnv: t
+      .jsonb("user_env")
+      .$type<Record<string, string>>()
+      .notNull()
+      .default({}),
     createdAt: t.timestamp("created_at").notNull().defaultNow(),
     updatedAt: t.timestamp("updated_at").notNull().defaultNow(),
   }),

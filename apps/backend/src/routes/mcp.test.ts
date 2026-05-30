@@ -25,7 +25,7 @@ describe("MCP Routes", () => {
   describe("POST /", () => {
     it("should create MCP if workspace admin", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
+      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]); // requireOrgAccess
       mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]); // requireWorkspaceAccess
 
       const mockMcp = { id: "mcp-1", name: "New MCP", url: "http://mcp.com" };
@@ -44,6 +44,46 @@ describe("MCP Routes", () => {
 
       expect(res.status).toBe(201);
       expect(await res.json()).toEqual(mockMcp);
+    });
+
+    // ADR-0006: MCP config is admin-only unless the workspace's
+    // mcpSelfManagement flag delegates it to the owner.
+    const createBody = {
+      name: "New MCP",
+      url: "http://mcp.com",
+      authType: "None",
+      workspaceId,
+    };
+
+    it("returns 403 for a non-admin owner when self-management is disabled", async () => {
+      mockSession();
+      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
+      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]); // requireWorkspaceAccess
+      mockDb.limit.mockResolvedValueOnce([{ flag: false }]); // delegation flag
+
+      const res = await app.request(baseUrl, {
+        method: "POST",
+        body: JSON.stringify(createBody),
+        headers: { "Content-Type": "application/json" },
+      });
+      expect(res.status).toBe(403);
+    });
+
+    it("allows a non-admin owner when self-management is enabled", async () => {
+      mockSession();
+      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
+      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]);
+      mockDb.limit.mockResolvedValueOnce([{ flag: true }]); // delegation flag set
+      mockDb.returning.mockResolvedValueOnce([
+        { id: "mcp-1", name: "New MCP" },
+      ]);
+
+      const res = await app.request(baseUrl, {
+        method: "POST",
+        body: JSON.stringify(createBody),
+        headers: { "Content-Type": "application/json" },
+      });
+      expect(res.status).toBe(201);
     });
   });
 
@@ -68,7 +108,7 @@ describe("MCP Routes", () => {
   describe("POST /test", () => {
     it("should test MCP connection", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
+      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]); // requireOrgAccess
       mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]); // requireWorkspaceAccess
 
       const res = await app.request(`${baseUrl}/test`, {
@@ -104,7 +144,7 @@ describe("MCP Routes", () => {
 
     it("force=true: clears the four oauth token columns in DB and returns authorizationUrl", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
+      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]); // requireOrgAccess
       mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]); // requireWorkspaceAccess
       mockDb.limit.mockResolvedValueOnce([{ ...mcpRecord }]); // MCP lookup
 
@@ -143,7 +183,7 @@ describe("MCP Routes", () => {
 
     it("no force flag: leaves token columns untouched when SDK silently refreshes", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
+      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]); // requireOrgAccess
       mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]); // requireWorkspaceAccess
       mockDb.limit.mockResolvedValueOnce([{ ...mcpRecord }]); // MCP lookup
 

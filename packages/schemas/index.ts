@@ -29,6 +29,11 @@ export const workspaceSchema = z.object({
   memoryExtractionProviderId: z.string().nullable().optional(),
   memoryEmbeddingProviderId: z.string().nullable().optional(),
   maxDailySummaries: z.number().int().min(7).max(365).optional(),
+  // Per-workspace delegation flags (ADR-0006). Settable only by an org admin
+  // (enforced in the workspace route); when true the owner may self-manage the
+  // respective resource.
+  providerSelfManagement: z.boolean().optional(),
+  mcpSelfManagement: z.boolean().optional(),
   createdAt: z.date(),
   updatedAt: z.date(),
 });
@@ -48,6 +53,8 @@ export const workspaceUpdateSchema = workspaceSchema.pick({
   memoryExtractionProviderId: true,
   memoryEmbeddingProviderId: true,
   maxDailySummaries: true,
+  providerSelfManagement: true,
+  mcpSelfManagement: true,
 });
 
 // Chat
@@ -507,7 +514,11 @@ const sandboxBaseSchema = z.object({
   backend: z.string().min(1),
   config: z.record(z.string(), z.unknown()).optional(),
   credentials: z.record(z.string(), z.unknown()).optional(),
-  env: sandboxEnvSchema.optional(),
+  // Two-tier env (ADR-0004 amendment, ADR-0006): adminEnv is org-admin-managed
+  // and wins at merge; userEnv is workspace-owner-managed. See the sandbox
+  // route for field-level authorization and the admin/user collision check.
+  adminEnv: sandboxEnvSchema.optional(),
+  userEnv: sandboxEnvSchema.optional(),
   createdAt: z.date(),
   updatedAt: z.date(),
 });
@@ -522,7 +533,8 @@ export const sandboxCreateSchema = sandboxBaseSchema.pick({
   backend: true,
   config: true,
   credentials: true,
-  env: true,
+  adminEnv: true,
+  userEnv: true,
 });
 
 export const sandboxUpdateSchema = sandboxBaseSchema.pick({
@@ -530,7 +542,8 @@ export const sandboxUpdateSchema = sandboxBaseSchema.pick({
   backend: true,
   config: true,
   credentials: true,
-  env: true,
+  adminEnv: true,
+  userEnv: true,
 });
 
 // Invitation

@@ -293,12 +293,16 @@ export const drizzleChatTurnQueries: ChatTurnQueries = {
 
   async getSandboxEnvKeys(workspaceId) {
     const rows = await db
-      .select({ env: sandboxTable.env })
+      .select({
+        adminEnv: sandboxTable.adminEnv,
+        userEnv: sandboxTable.userEnv,
+      })
       .from(sandboxTable)
       .where(eq(sandboxTable.workspaceId, workspaceId))
       .limit(1);
     if (rows.length === 0) return [];
-    return Object.keys(rows[0].env ?? {});
+    // Union of both tiers; the orientation block lists keys only (ADR-0004).
+    return Object.keys({ ...rows[0].userEnv, ...rows[0].adminEnv });
   },
 };
 

@@ -101,6 +101,16 @@ workspace.put(
     const workspaceId = c.req.param("workspaceId");
     const data = c.req.valid("json");
 
+    // Delegation flags (ADR-0006) are admin-only. A non-admin owner may edit
+    // their workspace's other settings, but must not grant themselves
+    // self-management of credential-bearing resources, so strip these fields
+    // unless the caller is an org admin (super admins carry role "admin" too).
+    const isAdmin = c.get("orgMembership")?.role === "admin";
+    if (!isAdmin) {
+      delete data.providerSelfManagement;
+      delete data.mcpSelfManagement;
+    }
+
     // Validate memoryExtractionProviderId if set
     if (data.memoryExtractionProviderId) {
       const provider = await db

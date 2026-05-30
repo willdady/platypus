@@ -11,17 +11,23 @@ import { requireAuth } from "../middleware/authentication.ts";
 import {
   requireOrgAccess,
   requireWorkspaceAccess,
+  requireWorkspaceConfigAccess,
 } from "../middleware/authorization.ts";
 import type { Variables } from "../server.ts";
 
 const provider = new Hono<{ Variables: Variables }>();
 
-/** Create a new provider (admin only) */
+/**
+ * Create a workspace-scoped provider. Org-admin by default; a workspace owner
+ * may create one only when the workspace's `providerSelfManagement` flag is set
+ * (ADR-0006).
+ */
 provider.post(
   "/",
   requireAuth,
   requireOrgAccess(),
   requireWorkspaceAccess,
+  requireWorkspaceConfigAccess("providerSelfManagement"),
   sValidator("json", providerCreateSchema),
   async (c) => {
     const data = c.req.valid("json");
@@ -125,12 +131,13 @@ provider.get(
   },
 );
 
-/** Update a provider by ID (admin only) */
+/** Update a provider by ID (org-admin, or owner when delegated — ADR-0006) */
 provider.put(
   "/:providerId",
   requireAuth,
   requireOrgAccess(),
   requireWorkspaceAccess,
+  requireWorkspaceConfigAccess("providerSelfManagement"),
   sValidator("json", providerUpdateSchema),
   async (c) => {
     const workspaceId = c.req.param("workspaceId")!;
@@ -179,12 +186,13 @@ provider.put(
   },
 );
 
-/** Delete a provider by ID (admin only) */
+/** Delete a provider by ID (org-admin, or owner when delegated — ADR-0006) */
 provider.delete(
   "/:providerId",
   requireAuth,
   requireOrgAccess(),
   requireWorkspaceAccess,
+  requireWorkspaceConfigAccess("providerSelfManagement"),
   async (c) => {
     const workspaceId = c.req.param("workspaceId")!;
     const providerId = c.req.param("providerId");

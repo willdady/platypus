@@ -129,6 +129,51 @@ describe("Workspace Routes", () => {
       expect(res.status).toBe(200);
       expect(await res.json()).toEqual(mockWorkspace);
     });
+
+    // ADR-0006: delegation flags are admin-only; a non-admin owner's attempt
+    // to set them is silently stripped before the update.
+    it("strips delegation flags from a non-admin owner's update", async () => {
+      mockSession({ id: "user-1", role: "user" });
+      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
+      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]); // requireWorkspaceAccess
+      mockDb.returning.mockResolvedValueOnce([
+        { id: "ws-1", name: "My Workspace" },
+      ]);
+
+      const res = await app.request("/organizations/org-1/workspaces/ws-1", {
+        method: "PUT",
+        body: JSON.stringify({
+          name: "My Workspace",
+          providerSelfManagement: true,
+          mcpSelfManagement: true,
+        }),
+        headers: { "Content-Type": "application/json" },
+      });
+
+      expect(res.status).toBe(200);
+      const setArg = mockDb.set.mock.calls.at(-1)?.[0];
+      expect(setArg).not.toHaveProperty("providerSelfManagement");
+      expect(setArg).not.toHaveProperty("mcpSelfManagement");
+    });
+
+    it("lets an org admin set delegation flags", async () => {
+      mockSession({ id: "user-1", role: "user" });
+      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]); // requireOrgAccess
+      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-2" }]); // requireWorkspaceAccess (admin, not owner)
+      mockDb.returning.mockResolvedValueOnce([
+        { id: "ws-1", name: "My Workspace" },
+      ]);
+
+      const res = await app.request("/organizations/org-1/workspaces/ws-1", {
+        method: "PUT",
+        body: JSON.stringify({ name: "My Workspace", mcpSelfManagement: true }),
+        headers: { "Content-Type": "application/json" },
+      });
+
+      expect(res.status).toBe(200);
+      const setArg = mockDb.set.mock.calls.at(-1)?.[0];
+      expect(setArg).toMatchObject({ mcpSelfManagement: true });
+    });
   });
 
   describe("DELETE /organizations/:orgId/workspaces/:workspaceId", () => {

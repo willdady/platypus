@@ -225,6 +225,78 @@ export const requireWorkspaceAccess = createMiddleware(async (c, next) => {
 });
 
 /**
+ * Middleware that gates configuration of credential- and reach-bearing
+ * resources (Providers, Sandboxes, MCPs) per ADR-0006.
+ *
+ * **Prerequisites:**
+ * - Must run AFTER `requireOrgAccess` and `requireWorkspaceAccess` (relies on
+ *   `orgMembership` and `isWorkspaceOwner` in context).
+ *
+ * **Access Control:**
+ * - Super admins and org admins always pass.
+ * - A non-admin Workspace Owner passes only when a `delegationFlag` is supplied
+ *   AND that boolean column is `true` on the workspace row. Without a flag, the
+ *   resource is admin-only and never delegatable (e.g. Sandboxes).
+ *
+ * @param delegationFlag - Optional workspace column that, when true, lets the
+ *                         owner self-manage this resource. Omit for admin-only.
+ *
+ * @example
+ * ```typescript
+ * // Sandbox: admin-only, never delegatable
+ * sandbox.post("/", requireAuth, requireOrgAccess(), requireWorkspaceAccess, requireWorkspaceConfigAccess(), handler);
+ *
+ * // MCP: admin by default, owner if the workspace flag is set
+ * mcp.post("/", requireAuth, requireOrgAccess(), requireWorkspaceAccess, requireWorkspaceConfigAccess("mcpSelfManagement"), handler);
+ * ```
+ */
+export const requireWorkspaceConfigAccess = (
+  delegationFlag?: "providerSelfManagement" | "mcpSelfManagement",
+) =>
+  createMiddleware(async (c, next) => {
+    const user = c.get("user");
+    const orgMembership = c.get("orgMembership");
+
+    // Super admins and org admins always manage credential-bearing config.
+    if (isSuperAdmin(user) || orgMembership?.role === "admin") {
+      await next();
+      return;
+    }
+
+    // Past requireWorkspaceAccess, a non-admin can only be the workspace owner.
+    if (!c.get("isWorkspaceOwner")) {
+      return c.json({ error: "Admin access required" }, 403);
+    }
+
+    if (!delegationFlag) {
+      return c.json(
+        { error: "Only an organization admin can configure this resource" },
+        403,
+      );
+    }
+
+    const db = c.get("db");
+    const workspaceId = c.req.param("workspaceId");
+    const [ws] = await db
+      .select({ flag: workspaceTable[delegationFlag] })
+      .from(workspaceTable)
+      .where(eq(workspaceTable.id, workspaceId!))
+      .limit(1);
+
+    if (!ws?.flag) {
+      return c.json(
+        {
+          error:
+            "Self-management of this resource is not enabled for this workspace",
+        },
+        403,
+      );
+    }
+
+    await next();
+  });
+
+/**
  * Middleware that restricts access to super admins only.
  *
  * **Purpose:**

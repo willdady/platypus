@@ -47,7 +47,7 @@ describe("Sandbox Routes", () => {
   describe("POST /", () => {
     it("creates a sandbox and returns 201 with credentials stripped", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
+      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]); // requireOrgAccess
       mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]); // requireWorkspaceAccess
       mockDb.limit.mockResolvedValueOnce([]); // existing-row check
 
@@ -77,7 +77,7 @@ describe("Sandbox Routes", () => {
 
     it("returns 409 when a sandbox already exists for the workspace", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
+      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]);
       mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]);
       mockDb.limit.mockResolvedValueOnce([{ id: "existing-sbx" }]);
 
@@ -128,7 +128,7 @@ describe("Sandbox Routes", () => {
   describe("PUT /", () => {
     it("updates the sandbox when the backend is unchanged", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
+      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]);
       mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]);
       // Existence check — same backend, no destroy will fire
       mockDb.limit.mockResolvedValueOnce([
@@ -171,7 +171,7 @@ describe("Sandbox Routes", () => {
 
     it("returns 500 when changing backend and the previous adapter's destroy() fails", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
+      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]);
       mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]);
       // Existing row uses an unregistered backend → destroy throws
       mockDb.limit.mockResolvedValueOnce([
@@ -202,7 +202,7 @@ describe("Sandbox Routes", () => {
 
     it("skips destroy() and switches backend when ?force=true", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
+      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]);
       mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]);
       mockDb.limit.mockResolvedValueOnce([
         {
@@ -241,7 +241,7 @@ describe("Sandbox Routes", () => {
 
     it("returns 404 when no sandbox is configured", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
+      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]);
       mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]);
       // Existence check returns empty
       mockDb.limit.mockResolvedValueOnce([]);
@@ -264,7 +264,7 @@ describe("Sandbox Routes", () => {
   describe("DELETE /", () => {
     it("force-deletes the sandbox without invoking destroy()", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
+      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]);
       mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]);
       // Existence check
       mockDb.limit.mockResolvedValueOnce([
@@ -286,7 +286,7 @@ describe("Sandbox Routes", () => {
 
     it("returns 500 when destroy() fails and preserves the row", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
+      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]);
       mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]);
       // Existence check returns a row whose backend is not registered →
       // destroySandboxRow throws → 500.
@@ -309,13 +309,141 @@ describe("Sandbox Routes", () => {
 
     it("returns 404 when no sandbox is configured", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
+      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]);
       mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]);
       // Existence check returns empty
       mockDb.limit.mockResolvedValueOnce([]);
 
       const res = await app.request(baseUrl, { method: "DELETE" });
       expect(res.status).toBe(404);
+    });
+  });
+
+  // ADR-0006: Sandbox configuration is org-admin-only and never delegatable.
+  describe("authorization (ADR-0006)", () => {
+    it("POST / returns 403 for a non-admin workspace owner", async () => {
+      mockSession();
+      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
+      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]); // requireWorkspaceAccess (owner)
+
+      const res = await app.request(baseUrl, {
+        method: "POST",
+        body: JSON.stringify(validBody),
+        headers: { "Content-Type": "application/json" },
+      });
+      expect(res.status).toBe(403);
+    });
+
+    it("DELETE / returns 403 for a non-admin workspace owner", async () => {
+      mockSession();
+      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
+      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]);
+
+      const res = await app.request(baseUrl, { method: "DELETE" });
+      expect(res.status).toBe(403);
+    });
+
+    it("GET /networks returns 403 for a non-admin workspace owner", async () => {
+      mockSession();
+      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
+      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]);
+
+      const res = await app.request(`${baseUrl}/networks`);
+      expect(res.status).toBe(403);
+    });
+
+    it("POST / rejects userEnv keys that collide with adminEnv (400)", async () => {
+      mockSession();
+      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]);
+      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]);
+
+      const res = await app.request(baseUrl, {
+        method: "POST",
+        body: JSON.stringify({
+          ...validBody,
+          adminEnv: { SHARED: "a" },
+          userEnv: { SHARED: "b" },
+        }),
+        headers: { "Content-Type": "application/json" },
+      });
+      expect(res.status).toBe(400);
+      const body = await res.json();
+      expect(body.error).toMatch(/SHARED/);
+    });
+
+    it("PUT / lets a non-admin owner change name and userEnv only", async () => {
+      mockSession();
+      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
+      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]); // requireWorkspaceAccess
+      // Existing row: admin-owned backend/config plus an admin env key.
+      mockDb.limit.mockResolvedValueOnce([
+        {
+          id: "sbx-1",
+          workspaceId,
+          name: "Old",
+          backend: "docker",
+          config: { networks: ["shared"] },
+          adminEnv: { ADMIN_KEY: "x" },
+          userEnv: {},
+        },
+      ]);
+      mockDb.returning.mockResolvedValueOnce([
+        {
+          id: "sbx-1",
+          workspaceId,
+          name: "New",
+          backend: "docker",
+          config: { networks: ["shared"] },
+          adminEnv: { ADMIN_KEY: "x" },
+          userEnv: { MY_KEY: "y" },
+        },
+      ]);
+
+      const res = await app.request(baseUrl, {
+        method: "PUT",
+        // Owner attempts to also change backend — must be ignored, not 500/escalated.
+        body: JSON.stringify({
+          name: "New",
+          backend: "evil-backend",
+          userEnv: { MY_KEY: "y" },
+        }),
+        headers: { "Content-Type": "application/json" },
+      });
+      expect(res.status).toBe(200);
+      // Only name + userEnv were written.
+      const setArg = mockDb.set.mock.calls.at(-1)?.[0];
+      expect(setArg).toMatchObject({ name: "New", userEnv: { MY_KEY: "y" } });
+      expect(setArg).not.toHaveProperty("backend");
+      expect(setArg).not.toHaveProperty("config");
+    });
+
+    it("PUT / rejects a non-admin owner's userEnv that collides with stored adminEnv (400)", async () => {
+      mockSession();
+      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
+      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]);
+      mockDb.limit.mockResolvedValueOnce([
+        {
+          id: "sbx-1",
+          workspaceId,
+          name: "Old",
+          backend: "docker",
+          adminEnv: { ADMIN_KEY: "x" },
+          userEnv: {},
+        },
+      ]);
+
+      const res = await app.request(baseUrl, {
+        method: "PUT",
+        body: JSON.stringify({
+          name: "Old",
+          backend: "docker",
+          userEnv: { ADMIN_KEY: "hijack" },
+        }),
+        headers: { "Content-Type": "application/json" },
+      });
+      expect(res.status).toBe(400);
+      const body = await res.json();
+      expect(body.error).toMatch(/ADMIN_KEY/);
     });
   });
 });

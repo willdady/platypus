@@ -38,7 +38,52 @@ const MEMORY_BYTES = 2 * 1024 * 1024 * 1024; // 2 GB
 const NANO_CPUS = 2 * 1_000_000_000; // 2 CPUs
 const SECURITY_OPT = ["no-new-privileges:true"];
 
-export const dockerSandboxConfigSchema = z.object({}).strict();
+// Operator-declared allowlist of Docker networks a Sandbox may attach to
+// (ADR-0005). Comma-separated; unset/empty means no network is attachable. The
+// DOCKER segment in the name disambiguates from future backends' allowlists.
+export function readAllowedDockerNetworks(): string[] {
+  const raw = process.env.PLATYPUS_SANDBOX_DOCKER_ALLOWED_NETWORKS;
+  if (!raw) return [];
+  return raw
+    .split(",")
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0);
+}
+
+// A single ExtraHosts entry: `hostname:target` where target is `host-gateway`,
+// an IPv4 address, or an IPv6 address. Anything else is rejected (the daemon
+// would reject it too; failing at validation time gives a clearer error).
+const EXTRA_HOST_PATTERN =
+  /^[A-Za-z0-9.-]+:(?:host-gateway|[0-9.]+|[0-9A-Fa-f:]+)$/;
+
+// Per-Sandbox host reachability (ADR-0005). Both default to empty: a new
+// Sandbox reaches no host service until an org admin grants it. `networks` is
+// validated against the operator allowlist; out-of-allowlist entries fail.
+export const dockerSandboxConfigSchema = z
+  .object({
+    networks: z.array(z.string().min(1)).default([]),
+    extraHosts: z
+      .array(
+        z.string().regex(EXTRA_HOST_PATTERN, {
+          message:
+            "extraHosts entries must be `hostname:target` where target is `host-gateway`, an IPv4, or an IPv6 address",
+        }),
+      )
+      .default([]),
+  })
+  .strict()
+  .superRefine((cfg, ctx) => {
+    const allowed = new Set(readAllowedDockerNetworks());
+    for (const n of cfg.networks) {
+      if (!allowed.has(n)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["networks"],
+          message: `Network '${n}' is not in the operator allowlist (PLATYPUS_SANDBOX_DOCKER_ALLOWED_NETWORKS)`,
+        });
+      }
+    }
+  });
 export const dockerSandboxCredentialsSchema = z.object({}).strict();
 
 export type DockerSandboxConfig = z.infer<typeof dockerSandboxConfigSchema>;
@@ -261,13 +306,19 @@ async function runExec(
 export class DockerSandboxBackend implements SandboxBackend {
   private docker: Docker;
   private inflight: Map<string, Promise<Container>>;
+  private networks: string[];
+  private extraHosts: string[];
 
   constructor(
-    _config: DockerSandboxConfig,
+    config: Partial<DockerSandboxConfig>,
     _credentials: DockerSandboxCredentials,
   ) {
     this.docker = new Docker();
     this.inflight = new Map();
+    // Normalise defensively: the registry passes schema-parsed config (arrays
+    // present), but tolerate a bare object too.
+    this.networks = config?.networks ?? [];
+    this.extraHosts = config?.extraHosts ?? [];
   }
 
   // Idempotent, concurrency-safe provisioning. Concurrent callers for the
@@ -327,9 +378,19 @@ export class DockerSandboxBackend implements SandboxBackend {
         MemorySwap: MEMORY_BYTES,
         NanoCpus: NANO_CPUS,
         SecurityOpt: SECURITY_OPT,
+        // Host reachability (ADR-0005). Default-deny: empty unless an admin
+        // granted entries. The first network becomes the container's primary
+        // network; the rest are attached after start.
+        ExtraHosts: this.extraHosts,
+        ...(this.networks.length > 0 ? { NetworkMode: this.networks[0] } : {}),
       },
     });
     await container.start();
+
+    // Attach any additional networks beyond the primary one.
+    for (const net of this.networks.slice(1)) {
+      await this.docker.getNetwork(net).connect({ Container: container.id });
+    }
 
     // Make sure the workspace root exists with sane perms (volume-mount
     // creates it as the root of the mount, but `mkdir -p` is idempotent).

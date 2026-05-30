@@ -17,9 +17,16 @@ import { requireAuth } from "../middleware/authentication.ts";
 import {
   requireOrgAccess,
   requireWorkspaceAccess,
+  requireWorkspaceConfigAccess,
 } from "../middleware/authorization.ts";
 import type { Variables } from "../server.ts";
 import { logger } from "../logger.ts";
+
+// MCP mutations introduce credentials and external reach, so they are
+// org-admin by default and delegatable to the workspace owner via the
+// `mcpSelfManagement` flag (ADR-0006). Reused across every mutating route.
+const requireMcpConfigAccess =
+  requireWorkspaceConfigAccess("mcpSelfManagement");
 import {
   DatabaseOAuthClientProvider,
   oauthFetchFn,
@@ -55,12 +62,13 @@ const sanitizeMcpResponse = (record: McpRecord) => {
   };
 };
 
-/** Create a new MCP (admin only) */
+/** Create a new MCP (org-admin, or owner when delegated — ADR-0006) */
 mcp.post(
   "/",
   requireAuth,
   requireOrgAccess(),
   requireWorkspaceAccess,
+  requireMcpConfigAccess,
   sValidator("json", mcpCreateSchema),
   async (c) => {
     const data = c.req.valid("json");
@@ -112,12 +120,13 @@ mcp.get(
   },
 );
 
-/** Update a MCP by ID (admin only) */
+/** Update a MCP by ID (org-admin, or owner when delegated — ADR-0006) */
 mcp.put(
   "/:mcpId",
   requireAuth,
   requireOrgAccess(),
   requireWorkspaceAccess,
+  requireMcpConfigAccess,
   sValidator("json", mcpUpdateSchema),
   async (c) => {
     const mcpId = c.req.param("mcpId");
@@ -153,12 +162,13 @@ mcp.put(
   },
 );
 
-/** Delete a MCP by ID (admin only) */
+/** Delete a MCP by ID (org-admin, or owner when delegated — ADR-0006) */
 mcp.delete(
   "/:mcpId",
   requireAuth,
   requireOrgAccess(),
   requireWorkspaceAccess,
+  requireMcpConfigAccess,
   async (c) => {
     const mcpId = c.req.param("mcpId");
     const workspaceId = c.req.param("workspaceId")!;
@@ -173,12 +183,13 @@ mcp.delete(
   },
 );
 
-/** Test MCP connection (admin only) */
+/** Test MCP connection (org-admin, or owner when delegated — ADR-0006) */
 mcp.post(
   "/test",
   requireAuth,
   requireOrgAccess(),
   requireWorkspaceAccess,
+  requireMcpConfigAccess,
   sValidator("json", mcpTestSchema),
   async (c) => {
     const data = c.req.valid("json");
@@ -281,12 +292,13 @@ mcp.post(
   },
 );
 
-/** Initiate OAuth authorization for an MCP */
+/** Initiate OAuth authorization for an MCP (org-admin, or delegated owner) */
 mcp.post(
   "/:mcpId/oauth/authorize",
   requireAuth,
   requireOrgAccess(),
   requireWorkspaceAccess,
+  requireMcpConfigAccess,
   async (c) => {
     const mcpId = c.req.param("mcpId");
     const workspaceId = c.req.param("workspaceId")!;
@@ -370,12 +382,13 @@ mcp.post(
   },
 );
 
-/** Revoke OAuth tokens for an MCP */
+/** Revoke OAuth tokens for an MCP (org-admin, or delegated owner) */
 mcp.post(
   "/:mcpId/oauth/revoke",
   requireAuth,
   requireOrgAccess(),
   requireWorkspaceAccess,
+  requireMcpConfigAccess,
   async (c) => {
     const mcpId = c.req.param("mcpId");
     const workspaceId = c.req.param("workspaceId")!;

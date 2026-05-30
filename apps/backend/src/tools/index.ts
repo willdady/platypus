@@ -223,10 +223,15 @@ registerToolSet(SANDBOX_TOOLSET_ID, {
       configResult.data,
       credentialsResult.data,
     );
+    // Two-tier env (ADR-0004 amendment, ADR-0006): adminEnv wins over userEnv.
+    // The combined map is then merged over the model-provided input.env inside
+    // createSandboxTools (workspace wins), giving the full precedence order
+    // adminEnv ▸ userEnv ▸ input.env.
+    const workspaceEnv = { ...(row.userEnv ?? {}), ...(row.adminEnv ?? {}) };
     return createSandboxTools(
       backend,
       { orgId, workspaceId, userId },
-      row.env ?? {},
+      workspaceEnv,
     );
   },
 });

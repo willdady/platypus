@@ -9,15 +9,48 @@ import { requireAuth } from "../middleware/authentication.ts";
 import {
   requireOrgAccess,
   requireWorkspaceAccess,
+  requireWorkspaceConfigAccess,
 } from "../middleware/authorization.ts";
 import type { Variables } from "../server.ts";
 import { destroySandboxRow } from "../sandbox/teardown.ts";
-import { getSandboxBackends } from "../sandbox/index.ts";
+import { getSandboxBackend, getSandboxBackends } from "../sandbox/index.ts";
+import { readAllowedDockerNetworks } from "../sandbox/backends/docker.ts";
 import { logger } from "../logger.ts";
 
 type SandboxRecord = typeof sandboxTable.$inferSelect;
 
+// Sandboxes are admin-only and never delegatable to the workspace owner
+// (ADR-0006). Reused on create/delete; PUT applies field-level gating inline.
+const requireSandboxAdmin = requireWorkspaceConfigAccess();
+
 const sandbox = new Hono<{ Variables: Variables }>();
+
+// Validate adapter-specific config at write time when the backend is
+// registered, so errors (e.g. a network outside the operator allowlist, a
+// malformed extraHosts entry) surface as an immediate 400 instead of silently
+// degrading to "no sandbox tools" at chat-turn time. Returns an error message
+// string, or null when valid / backend not registered.
+const validateSandboxConfig = (
+  backend: string,
+  config: Record<string, unknown> | undefined,
+): string | null => {
+  const registration = getSandboxBackend(backend);
+  if (!registration) return null;
+  const result = registration.configSchema.safeParse(config ?? {});
+  if (result.success) return null;
+  return result.error.issues.map((i) => i.message).join("; ");
+};
+
+// The owner may never override an admin-set env key (ADR-0004 amendment).
+// Returns the colliding keys, or [] when there is no overlap.
+const envCollisions = (
+  adminEnv: Record<string, string> | undefined,
+  userEnv: Record<string, string> | undefined,
+): string[] => {
+  if (!adminEnv || !userEnv) return [];
+  const adminKeys = new Set(Object.keys(adminEnv));
+  return Object.keys(userEnv).filter((k) => adminKeys.has(k));
+};
 
 // Credentials are server-side only. Stripping here is a quiet improvement over
 // the Provider/MCP routes which still return their secret fields; revisit when
@@ -44,6 +77,20 @@ sandbox.get(
   },
 );
 
+// Operator-declared Docker network allowlist (ADR-0005) for the admin
+// multi-select. Admin-only — a non-admin owner has no business enumerating the
+// host's network topology. Declared before "/" so the literal path wins.
+sandbox.get(
+  "/networks",
+  requireAuth,
+  requireOrgAccess(),
+  requireWorkspaceAccess,
+  requireSandboxAdmin,
+  async (c) => {
+    return c.json({ results: readAllowedDockerNetworks() });
+  },
+);
+
 /** Get the workspace's sandbox (404 if none configured) */
 sandbox.get(
   "/",
@@ -64,16 +111,32 @@ sandbox.get(
   },
 );
 
-/** Create the workspace's sandbox (409 if one already exists) */
+/** Create the workspace's sandbox. Admin-only (ADR-0006). 409 if one exists. */
 sandbox.post(
   "/",
   requireAuth,
   requireOrgAccess(),
   requireWorkspaceAccess,
+  requireSandboxAdmin,
   sValidator("json", sandboxCreateSchema),
   async (c) => {
     const workspaceId = c.req.param("workspaceId")!;
     const data = c.req.valid("json");
+
+    const configError = validateSandboxConfig(data.backend, data.config);
+    if (configError) {
+      return c.json({ error: `Invalid sandbox config: ${configError}` }, 400);
+    }
+
+    const collisions = envCollisions(data.adminEnv, data.userEnv);
+    if (collisions.length > 0) {
+      return c.json(
+        {
+          error: `userEnv may not override admin-managed keys: ${collisions.join(", ")}`,
+        },
+        400,
+      );
+    }
 
     const existing = await db
       .select()
@@ -99,15 +162,25 @@ sandbox.post(
   },
 );
 
-// Update the workspace's sandbox. Hybrid semantics: `name` and `backend` are
-// required and always overwritten; `config` and `credentials` are optional
-// and preserved when omitted (Drizzle treats undefined as "skip column"),
-// which is necessary because GET responses strip credentials so the
-// frontend can't re-send them.
+// Update the workspace's sandbox. Field-level authorization (ADR-0006):
 //
-// Changing `backend` is treated as destroy-then-update per ADR-0001: the
-// previous adapter's destroy() is fired inline against the old row before
-// the new backend is written. Pass ?force=true to skip the destroy and
+//   - Org admins may change every field. `name`/`backend` are required and
+//     always overwritten; `config`/`credentials`/`adminEnv`/`userEnv` are
+//     optional and preserved when omitted (Drizzle treats undefined as "skip
+//     column"), which is necessary because GET strips credentials so the
+//     frontend can't re-send them.
+//   - A non-admin Workspace Owner may change only `name` and `userEnv`. Every
+//     reach/execution/credential field (`backend`, `config`, `credentials`,
+//     `adminEnv`) is ignored, even if present in the body — the owner's client
+//     does not surface them, and silently ignoring avoids false rejections
+//     from echoed-but-unchanged values.
+//
+// `userEnv` may never override an admin-managed key (checked against the
+// authoritative stored `adminEnv`).
+//
+// Changing `backend` (admin only) is treated as destroy-then-update per
+// ADR-0001: the previous adapter's destroy() fires inline against the old row
+// before the new backend is written. Pass ?force=true to skip the destroy and
 // switch anyway (external resources may leak; logged as a warning).
 sandbox.put(
   "/",
@@ -119,6 +192,7 @@ sandbox.put(
     const workspaceId = c.req.param("workspaceId")!;
     const data = c.req.valid("json");
     const force = c.req.query("force") === "true";
+    const isAdmin = c.get("orgMembership")?.role === "admin";
 
     const existing = await db
       .select()
@@ -128,15 +202,57 @@ sandbox.put(
     if (existing.length === 0) {
       return c.json({ error: "Sandbox not configured" }, 404);
     }
+    const current = existing[0];
 
-    const backendChanging = existing[0].backend !== data.backend;
+    // Non-admin owner: restrict to name + userEnv, no backend/config changes.
+    if (!isAdmin) {
+      const collisions = envCollisions(current.adminEnv, data.userEnv);
+      if (collisions.length > 0) {
+        return c.json(
+          {
+            error: `userEnv may not override admin-managed keys: ${collisions.join(", ")}`,
+          },
+          400,
+        );
+      }
+      const record = await db
+        .update(sandboxTable)
+        .set({
+          name: data.name,
+          ...(data.userEnv !== undefined ? { userEnv: data.userEnv } : {}),
+          updatedAt: new Date(),
+        })
+        .where(eq(sandboxTable.workspaceId, workspaceId))
+        .returning();
+      return c.json(sanitizeSandboxResponse(record[0]));
+    }
+
+    // Admin: full update.
+    const configError = validateSandboxConfig(data.backend, data.config);
+    if (configError) {
+      return c.json({ error: `Invalid sandbox config: ${configError}` }, 400);
+    }
+    const collisions = envCollisions(
+      data.adminEnv ?? current.adminEnv,
+      data.userEnv ?? current.userEnv,
+    );
+    if (collisions.length > 0) {
+      return c.json(
+        {
+          error: `userEnv may not override admin-managed keys: ${collisions.join(", ")}`,
+        },
+        400,
+      );
+    }
+
+    const backendChanging = current.backend !== data.backend;
     if (backendChanging && !force) {
       try {
-        await destroySandboxRow(existing[0]);
+        await destroySandboxRow(current);
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         logger.warn(
-          { workspaceId, sandboxId: existing[0].id, err },
+          { workspaceId, sandboxId: current.id, err },
           "Sandbox backend change blocked: previous adapter's destroy() failed",
         );
         return c.json(
@@ -150,8 +266,8 @@ sandbox.put(
       logger.warn(
         {
           workspaceId,
-          sandboxId: existing[0].id,
-          oldBackend: existing[0].backend,
+          sandboxId: current.id,
+          oldBackend: current.backend,
           newBackend: data.backend,
         },
         "Sandbox backend force-changed; previous adapter's destroy() was skipped — external resources may leak",
@@ -179,6 +295,7 @@ sandbox.delete(
   requireAuth,
   requireOrgAccess(),
   requireWorkspaceAccess,
+  requireSandboxAdmin,
   async (c) => {
     const workspaceId = c.req.param("workspaceId")!;
     const force = c.req.query("force") === "true";
