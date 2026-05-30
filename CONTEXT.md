@@ -44,6 +44,18 @@ A persisted summary of prior activity, retrieved per-User per-Workspace and rend
 **Context** (User Context):
 Free-text notes a User attaches at global or per-Workspace scope, rendered into the system prompt.
 
+**Operator**:
+The actor who controls a Platypus deployment — process environment, compose files, and infrastructure. Equivalent to the platform super-admin (`user.role = "admin"`), who bypasses all in-app authorization. Declares deployment-time allowlists (e.g. the eligible Docker Sandbox networks) that bound what an Org Admin can configure in-app.
+_Avoid_: sysadmin, root, host owner.
+
+**Org Admin**:
+A User with the `admin` role in an Organization. Configures credential- and reach-bearing resources (Providers, Sandboxes, MCPs) and may grant a Workspace Owner self-management of some of them.
+_Avoid_: organization owner.
+
+**Workspace Owner**:
+The single User who owns a Workspace. Always manages composition (Agents, Skills, Chats); manages credential- and reach-bearing resources only where an Org Admin has delegated it.
+_Avoid_: workspace user, member.
+
 ## Relationships
 
 - An **Organization** has many **Workspaces**.
@@ -52,6 +64,7 @@ Free-text notes a User attaches at global or per-Workspace scope, rendered into 
 - A **Chat turn** uses either an **Agent** or a direct **Provider** + model selection.
 - An **Agent** references one **Provider**, zero-or-more **Tool sets** (static or **MCP**-backed), zero-or-more **Skills**, and zero-or-more **Sub-Agents**.
 - A **Provider** belongs to either an **Organization** (shared) or a **Workspace** (private).
+- Authority over configuration runs **Operator** → **Org Admin** → **Workspace Owner**; each tier is bounded by the tier above it.
 
 ## Example dialogue
 

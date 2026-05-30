@@ -24,3 +24,12 @@ A Sandbox carries a workspace-default `env: Record<string, string>` (top-level c
   - No reserved-key denylist; users overriding `PATH`/`HOME` break their own Sandbox, not the security model. `no-new-privileges:true` (ADR-0003) already neuters `LD_PRELOAD`-style escalation.
 - Orientation block (`apps/backend/src/system-prompt.ts`) gains a fragment listing key names only when the workspace env is non-empty, plus a one-liner that workspace defaults override any `env:` the model passes.
 - Logging: the merged env map is never emitted in structured logs or error messages. The model-facing `input.env` continues to be echoed in tool-call transcripts (the model wrote it; no new exposure).
+
+## Amendment: two-tier admin/user env (see ADR-0006)
+
+The single workspace-default `env` map is split into two top-level columns — `adminEnv` (Org-Admin-managed) and `userEnv` (Workspace-Owner-managed) — to support the field-level authorization in ADR-0006: an Owner manages their own secrets without an admin round-trip, while an admin can pin secrets the Owner cannot touch.
+
+- **Exec-time precedence, highest wins:** `adminEnv` ▸ `userEnv` ▸ model-provided `input.env`. Implemented as the merge `{ ...input.env, ...userEnv, ...adminEnv }`. This preserves both original rules — values never transit the model, and the model's per-call env stays _lowest_ precedence — and inserts the admin/user split above the model layer.
+- **The Owner can never override an admin key.** Enforced twice: rejected at write (4xx) if `userEnv` would set a key already present in `adminEnv`, and `adminEnv` is spread last at merge as a runtime backstop against any stale collision.
+- **Visibility:** admin key _names_ are shown to the Owner read-only ("managed by admin"), consistent with the keys-only rule above; admin values never leave the server.
+- The existing validation (key regex, max entries, max value size) applies per map.
