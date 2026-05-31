@@ -12,6 +12,7 @@ import { validateCronExpression } from "../utils/cron.ts";
 import { agentRunner } from "../runs/agent-runner.ts";
 import { TriggerSink } from "../runs/sinks/trigger-sink.ts";
 import { workspaceScopeForTrigger } from "../scope.ts";
+import { resolveRunTimeouts } from "./agent-run-settings.ts";
 import type { RunInput } from "../runs/types.ts";
 import type { PlatypusUIMessage } from "../types.ts";
 import type { CronTriggerConfig, WebhookEvent } from "@platypus/schemas";
@@ -130,42 +131,23 @@ export const executeTrigger = async (
     "Starting trigger execution",
   );
 
+  const timeouts = await resolveRunTimeouts(
+    workspace.organizationId,
+    "trigger",
+  );
+
   await agentRunner.generate({
     scope,
     input,
     sink,
     options: {
       frontendUrl: process.env.FRONTEND_URL,
-      timeouts: triggerTimeouts(),
+      timeouts,
     },
   });
 
   return runId;
 };
-
-/**
- * Headless trigger runs aren't user-facing — there's no UX reason for a
- * 2-minute per-step / 10-minute per-run cap. Crons are allowed to do
- * substantial work (multi-step research, long MCP searches). Defaults aim
- * to bound runaway runs without tripping on legitimate workloads.
- *
- * Override via env when production workloads need more or less headroom:
- *  - `TRIGGER_PER_STEP_TIMEOUT_MS` (default 10 min)
- *  - `TRIGGER_PER_RUN_TIMEOUT_MS` (default 60 min)
- */
-const DEFAULT_TRIGGER_PER_STEP_TIMEOUT_MS = 10 * 60 * 1000;
-const DEFAULT_TRIGGER_PER_RUN_TIMEOUT_MS = 60 * 60 * 1000;
-
-const triggerTimeouts = () => ({
-  perStepTimeoutMs: parseInt(
-    process.env.TRIGGER_PER_STEP_TIMEOUT_MS ??
-      String(DEFAULT_TRIGGER_PER_STEP_TIMEOUT_MS),
-  ),
-  perRunTimeoutMs: parseInt(
-    process.env.TRIGGER_PER_RUN_TIMEOUT_MS ??
-      String(DEFAULT_TRIGGER_PER_RUN_TIMEOUT_MS),
-  ),
-});
 
 /**
  * Updates the trigger after execution:
