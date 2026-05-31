@@ -5,6 +5,7 @@ import {
   FieldLabel,
   FieldGroup,
   FieldSet,
+  FieldDescription,
   FieldError,
 } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
@@ -19,7 +20,7 @@ import {
 } from "@/components/ui/dialog";
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { type Organization } from "@platypus/schemas";
+import { type Organization, type AgentRunSettings } from "@platypus/schemas";
 import { fetcher, parseValidationErrors, joinUrl } from "@/lib/utils";
 import { useBackendUrl } from "@/app/client-context";
 import { useAuth } from "@/components/auth-provider";
@@ -32,6 +33,38 @@ interface OrganizationFormProps {
   orgId?: string;
 }
 
+type TimeoutCeilings = {
+  chat: { perRunTimeoutMs: number; perStepTimeoutMs: number };
+  trigger: { perRunTimeoutMs: number; perStepTimeoutMs: number };
+};
+
+type RunSettingsFormState = {
+  chatPerRunMin: string;
+  chatPerStepMin: string;
+  triggerPerRunMin: string;
+  triggerPerStepMin: string;
+};
+
+const EMPTY_RUN_SETTINGS: RunSettingsFormState = {
+  chatPerRunMin: "",
+  chatPerStepMin: "",
+  triggerPerRunMin: "",
+  triggerPerStepMin: "",
+};
+
+const msToMinutes = (ms: number | undefined | null): string =>
+  ms === undefined || ms === null || ms <= 0
+    ? ""
+    : String(Math.round(ms / 60000));
+
+const minutesToMs = (raw: string): number | undefined => {
+  const trimmed = raw.trim();
+  if (!trimmed) return undefined;
+  const n = Number(trimmed);
+  if (!Number.isFinite(n) || n <= 0) return undefined;
+  return Math.floor(n * 60_000);
+};
+
 const OrganizationForm = ({ classNames, orgId }: OrganizationFormProps) => {
   const { user } = useAuth();
   const backendUrl = useBackendUrl();
@@ -42,9 +75,21 @@ const OrganizationForm = ({ classNames, orgId }: OrganizationFormProps) => {
     fetcher,
   );
 
+  const { data: ceilings } = useSWR<TimeoutCeilings>(
+    orgId && user
+      ? joinUrl(
+          backendUrl,
+          `/organizations/${orgId}/agent-run-settings/ceilings`,
+        )
+      : null,
+    fetcher,
+  );
+
   const [formData, setFormData] = useState({
     name: "",
   });
+  const [runSettings, setRunSettings] =
+    useState<RunSettingsFormState>(EMPTY_RUN_SETTINGS);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [validationErrors, setValidationErrors] = useState<
     Record<string, string>
@@ -57,8 +102,43 @@ const OrganizationForm = ({ classNames, orgId }: OrganizationFormProps) => {
   useEffect(() => {
     if (organization) {
       setFormData({ name: organization.name });
+      const s: AgentRunSettings | undefined =
+        organization.agentRunSettings ?? undefined;
+      setRunSettings({
+        chatPerRunMin: msToMinutes(s?.chatPerRunTimeoutMs),
+        chatPerStepMin: msToMinutes(s?.chatPerStepTimeoutMs),
+        triggerPerRunMin: msToMinutes(s?.triggerPerRunTimeoutMs),
+        triggerPerStepMin: msToMinutes(s?.triggerPerStepTimeoutMs),
+      });
     }
   }, [organization]);
+
+  const handleRunSettingChange = (
+    id: keyof RunSettingsFormState,
+    value: string,
+  ) => {
+    setRunSettings((prev) => ({ ...prev, [id]: value }));
+    if (validationErrors[`agentRunSettings.${id}`]) {
+      setValidationErrors((prev) => {
+        const next = { ...prev };
+        delete next[`agentRunSettings.${id}`];
+        return next;
+      });
+    }
+  };
+
+  const buildAgentRunSettingsPayload = (): AgentRunSettings | null => {
+    const out: AgentRunSettings = {};
+    const chatRun = minutesToMs(runSettings.chatPerRunMin);
+    const chatStep = minutesToMs(runSettings.chatPerStepMin);
+    const trigRun = minutesToMs(runSettings.triggerPerRunMin);
+    const trigStep = minutesToMs(runSettings.triggerPerStepMin);
+    if (chatRun !== undefined) out.chatPerRunTimeoutMs = chatRun;
+    if (chatStep !== undefined) out.chatPerStepTimeoutMs = chatStep;
+    if (trigRun !== undefined) out.triggerPerRunTimeoutMs = trigRun;
+    if (trigStep !== undefined) out.triggerPerStepTimeoutMs = trigStep;
+    return Object.keys(out).length > 0 ? out : null;
+  };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { id, value } = e.target;
@@ -78,9 +158,46 @@ const OrganizationForm = ({ classNames, orgId }: OrganizationFormProps) => {
     }));
   };
 
+  /**
+   * Validate the timeout inputs against the deployer-supplied ceilings the
+   * server returned, so the user gets inline feedback before submitting (the
+   * server enforces the same ceilings authoritatively on save).
+   */
+  const validateAgainstCeilings = (): Record<string, string> => {
+    if (!ceilings) return {};
+    const checks: { field: keyof RunSettingsFormState; ceiling: number }[] = [
+      { field: "chatPerRunMin", ceiling: ceilings.chat.perRunTimeoutMs },
+      { field: "chatPerStepMin", ceiling: ceilings.chat.perStepTimeoutMs },
+      { field: "triggerPerRunMin", ceiling: ceilings.trigger.perRunTimeoutMs },
+      {
+        field: "triggerPerStepMin",
+        ceiling: ceilings.trigger.perStepTimeoutMs,
+      },
+    ];
+    const errors: Record<string, string> = {};
+    for (const { field, ceiling } of checks) {
+      const ms = minutesToMs(runSettings[field]);
+      if (ms !== undefined && ms > ceiling) {
+        errors[`agentRunSettings.${field}`] =
+          `Must be at most ${Math.round(ceiling / 60000)} minutes (deployer ceiling)`;
+      }
+    }
+    return errors;
+  };
+
   const handleSubmit = async () => {
-    setIsSubmitting(true);
     setValidationErrors({});
+
+    if (orgId) {
+      const ceilingErrors = validateAgainstCeilings();
+      if (Object.keys(ceilingErrors).length > 0) {
+        setValidationErrors(ceilingErrors);
+        toast.error("Timeout exceeds the deployer-allowed ceiling");
+        return;
+      }
+    }
+
+    setIsSubmitting(true);
     try {
       const url = orgId
         ? joinUrl(backendUrl, `/organizations/${orgId}`)
@@ -88,7 +205,13 @@ const OrganizationForm = ({ classNames, orgId }: OrganizationFormProps) => {
 
       const method = orgId ? "PUT" : "POST";
 
-      const payload = { name: formData.name };
+      const payload: {
+        name: string;
+        agentRunSettings?: AgentRunSettings | null;
+      } = { name: formData.name };
+      if (orgId) {
+        payload.agentRunSettings = buildAgentRunSettingsPayload();
+      }
 
       const response = await fetch(url, {
         method,
@@ -113,7 +236,11 @@ const OrganizationForm = ({ classNames, orgId }: OrganizationFormProps) => {
         // Parse standardschema.dev validation errors
         const errorData = await response.json();
         setValidationErrors(parseValidationErrors(errorData));
-        toast.error("Failed to save organization");
+        toast.error(
+          typeof errorData?.error === "string"
+            ? errorData.error
+            : "Failed to save organization",
+        );
       }
     } catch (error) {
       console.error("Error saving organization:", error);
@@ -171,6 +298,163 @@ const OrganizationForm = ({ classNames, orgId }: OrganizationFormProps) => {
           </Field>
         </FieldGroup>
       </FieldSet>
+
+      {orgId && (
+        <FieldSet className="mb-6">
+          <legend className="mb-2 text-sm font-semibold">
+            Agent run timeouts
+          </legend>
+          <p className="text-muted-foreground mb-4 text-sm">
+            Per-organization overrides for how long an agent run is allowed to
+            take. Values are in minutes. Leaving a field empty uses the
+            deployer-supplied ceiling shown next to each input. You can lower
+            the timeout but never raise it above the ceiling.
+          </p>
+          <FieldGroup>
+            <Field
+              data-invalid={
+                !!validationErrors["agentRunSettings.chatPerRunMin"]
+              }
+            >
+              <FieldLabel htmlFor="chatPerRunMin">
+                Chat — total run (min)
+              </FieldLabel>
+              <Input
+                id="chatPerRunMin"
+                type="number"
+                min={1}
+                placeholder={
+                  ceilings
+                    ? `≤ ${Math.round(
+                        ceilings.chat.perRunTimeoutMs / 60000,
+                      )} (ceiling)`
+                    : ""
+                }
+                value={runSettings.chatPerRunMin}
+                onChange={(e) =>
+                  handleRunSettingChange("chatPerRunMin", e.target.value)
+                }
+                disabled={isSubmitting}
+              />
+              <FieldDescription>
+                Hard wall-clock limit for a single chat-driven agent run.
+              </FieldDescription>
+              {validationErrors["agentRunSettings.chatPerRunMin"] && (
+                <FieldError>
+                  {validationErrors["agentRunSettings.chatPerRunMin"]}
+                </FieldError>
+              )}
+            </Field>
+
+            <Field
+              data-invalid={
+                !!validationErrors["agentRunSettings.chatPerStepMin"]
+              }
+            >
+              <FieldLabel htmlFor="chatPerStepMin">
+                Chat — per step (min)
+              </FieldLabel>
+              <Input
+                id="chatPerStepMin"
+                type="number"
+                min={1}
+                placeholder={
+                  ceilings
+                    ? `≤ ${Math.round(
+                        ceilings.chat.perStepTimeoutMs / 60000,
+                      )} (ceiling)`
+                    : ""
+                }
+                value={runSettings.chatPerStepMin}
+                onChange={(e) =>
+                  handleRunSettingChange("chatPerStepMin", e.target.value)
+                }
+                disabled={isSubmitting}
+              />
+              <FieldDescription>
+                Max time the model is given between two tool calls during a chat
+                run.
+              </FieldDescription>
+              {validationErrors["agentRunSettings.chatPerStepMin"] && (
+                <FieldError>
+                  {validationErrors["agentRunSettings.chatPerStepMin"]}
+                </FieldError>
+              )}
+            </Field>
+
+            <Field
+              data-invalid={
+                !!validationErrors["agentRunSettings.triggerPerRunMin"]
+              }
+            >
+              <FieldLabel htmlFor="triggerPerRunMin">
+                Trigger — total run (min)
+              </FieldLabel>
+              <Input
+                id="triggerPerRunMin"
+                type="number"
+                min={1}
+                placeholder={
+                  ceilings
+                    ? `≤ ${Math.round(
+                        ceilings.trigger.perRunTimeoutMs / 60000,
+                      )} (ceiling)`
+                    : ""
+                }
+                value={runSettings.triggerPerRunMin}
+                onChange={(e) =>
+                  handleRunSettingChange("triggerPerRunMin", e.target.value)
+                }
+                disabled={isSubmitting}
+              />
+              <FieldDescription>
+                Hard wall-clock limit for a single cron / webhook trigger run.
+              </FieldDescription>
+              {validationErrors["agentRunSettings.triggerPerRunMin"] && (
+                <FieldError>
+                  {validationErrors["agentRunSettings.triggerPerRunMin"]}
+                </FieldError>
+              )}
+            </Field>
+
+            <Field
+              data-invalid={
+                !!validationErrors["agentRunSettings.triggerPerStepMin"]
+              }
+            >
+              <FieldLabel htmlFor="triggerPerStepMin">
+                Trigger — per step (min)
+              </FieldLabel>
+              <Input
+                id="triggerPerStepMin"
+                type="number"
+                min={1}
+                placeholder={
+                  ceilings
+                    ? `≤ ${Math.round(
+                        ceilings.trigger.perStepTimeoutMs / 60000,
+                      )} (ceiling)`
+                    : ""
+                }
+                value={runSettings.triggerPerStepMin}
+                onChange={(e) =>
+                  handleRunSettingChange("triggerPerStepMin", e.target.value)
+                }
+                disabled={isSubmitting}
+              />
+              <FieldDescription>
+                Max time the model is given between two tool calls during a
+                trigger run.
+              </FieldDescription>
+              {validationErrors["agentRunSettings.triggerPerStepMin"] && (
+                <FieldError>
+                  {validationErrors["agentRunSettings.triggerPerStepMin"]}
+                </FieldError>
+              )}
+            </Field>
+          </FieldGroup>
+        </FieldSet>
+      )}
 
       <div className="flex gap-2">
         <Button

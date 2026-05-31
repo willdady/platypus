@@ -4,9 +4,23 @@ const kebabCaseRegex = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
 // Organization
 
+const positiveIntMs = z.number().int().positive();
+
+export const agentRunSettingsSchema = z
+  .object({
+    chatPerRunTimeoutMs: positiveIntMs.optional(),
+    chatPerStepTimeoutMs: positiveIntMs.optional(),
+    triggerPerRunTimeoutMs: positiveIntMs.optional(),
+    triggerPerStepTimeoutMs: positiveIntMs.optional(),
+  })
+  .strict();
+
+export type AgentRunSettings = z.infer<typeof agentRunSettingsSchema>;
+
 export const organizationSchema = z.object({
   id: z.string(),
   name: z.string().min(3).max(30),
+  agentRunSettings: agentRunSettingsSchema.nullable().optional(),
   createdAt: z.date(),
   updatedAt: z.date(),
 });
@@ -15,7 +29,10 @@ export type Organization = z.infer<typeof organizationSchema>;
 
 export const organizationCreateSchema = organizationSchema.pick({ name: true });
 
-export const organizationUpdateSchema = organizationSchema.pick({ name: true });
+export const organizationUpdateSchema = organizationSchema.pick({
+  name: true,
+  agentRunSettings: true,
+});
 
 // Workspace
 

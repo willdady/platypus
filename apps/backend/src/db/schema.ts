@@ -29,9 +29,27 @@ const unboundVector = customType<{
   },
 });
 
+export type AgentRunSettings = {
+  /** Wall-clock budget for a single chat-driven agent run (ms). */
+  chatPerRunTimeoutMs?: number;
+  /** Time the model has between two tool calls during a chat run (ms). */
+  chatPerStepTimeoutMs?: number;
+  /** Wall-clock budget for a trigger-driven agent run (ms). */
+  triggerPerRunTimeoutMs?: number;
+  /** Time the model has between two tool calls during a trigger run (ms). */
+  triggerPerStepTimeoutMs?: number;
+};
+
 export const organization = pgTable("organization", (t) => ({
   id: t.text("id").primaryKey(),
   name: t.text("name").notNull(),
+  /**
+   * Optional org-level override of the agent-run timeouts. Each value is
+   * clamped on the server to the environment-supplied ceiling (see
+   * `services/agent-run-settings.ts`), so an org admin cannot raise their
+   * own ceiling beyond what the deployer allows.
+   */
+  agentRunSettings: t.jsonb("agent_run_settings").$type<AgentRunSettings>(),
   createdAt: t.timestamp("created_at").notNull().defaultNow(),
   updatedAt: t.timestamp("updated_at").notNull().defaultNow(),
 }));
