@@ -26,7 +26,7 @@ export default function OrgPage({
 }) {
   const { orgId } = use(params);
   const backendUrl = useBackendUrl();
-  const { user } = useAuth();
+  const { user, isOrgAdmin } = useAuth();
 
   const { data: workspacesData } = useSWR<{
     results: Workspace[];
@@ -48,11 +48,14 @@ export default function OrgPage({
         <div className="space-y-4">
           <WorkspaceList orgId={orgId} />
           <div className="flex items-center gap-2">
-            <Button asChild>
-              <Link href={`/${orgId}/create`}>
-                <Plus className="size-4" /> Add workspace
-              </Link>
-            </Button>
+            {/* ADR-0008: Workspace creation is org-admin-only. */}
+            {isOrgAdmin && (
+              <Button asChild>
+                <Link href={`/${orgId}/create`}>
+                  <Plus className="size-4" /> Add workspace
+                </Link>
+              </Button>
+            )}
             <Button variant="outline" asChild>
               <Link href={`/${orgId}/settings`}>
                 <Settings className="size-4" /> Organization Settings
@@ -68,17 +71,21 @@ export default function OrgPage({
             </EmptyMedia>
             <EmptyTitle>No workspaces found</EmptyTitle>
             <EmptyDescription>
-              Create your first workspace in this organization to start building
-              agents.
+              {isOrgAdmin
+                ? "Create your first workspace in this organization to start building agents."
+                : "You don't have a workspace yet. An organization admin can provision one for you."}
             </EmptyDescription>
           </EmptyHeader>
           <EmptyContent>
             <div className="flex items-center gap-2">
-              <Button asChild className="flex-1">
-                <Link href={`/${orgId}/create`}>
-                  <Plus className="h-4 w-4" /> Create Workspace
-                </Link>
-              </Button>
+              {/* ADR-0008: Workspace creation is org-admin-only. */}
+              {isOrgAdmin && (
+                <Button asChild className="flex-1">
+                  <Link href={`/${orgId}/create`}>
+                    <Plus className="h-4 w-4" /> Create Workspace
+                  </Link>
+                </Button>
+              )}
               <Button variant="outline" asChild>
                 <Link href={`/${orgId}/settings`}>
                   <Settings className="size-4" /> Organization Settings

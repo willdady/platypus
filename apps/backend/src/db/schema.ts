@@ -372,6 +372,9 @@ export const invitation = pgTable(
       .notNull()
       .references(() => user.id),
     status: t.text("status").notNull().default("pending"), // pending | accepted | declined | expired
+    // Optional name for the Workspace provisioned on accept (ADR-0008). Null
+    // defaults to "<member name>'s Workspace" at accept time.
+    workspaceName: t.text("workspace_name"),
     expiresAt: t.timestamp("expires_at").notNull(),
     createdAt: t.timestamp("created_at").notNull().defaultNow(),
   }),

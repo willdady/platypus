@@ -25,6 +25,7 @@ export function InvitationForm({ orgId, onSuccess }: InvitationFormProps) {
   const backendUrl = useBackendUrl();
 
   const [email, setEmail] = useState("");
+  const [workspaceName, setWorkspaceName] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [validationErrors, setValidationErrors] = useState<
     Record<string, string>
@@ -41,7 +42,14 @@ export function InvitationForm({ orgId, onSuccess }: InvitationFormProps) {
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ email }),
+          body: JSON.stringify({
+            email,
+            // Optional; the workspace provisioned on accept defaults to
+            // "<member name>'s Workspace" when blank (ADR-0008).
+            ...(workspaceName.trim()
+              ? { workspaceName: workspaceName.trim() }
+              : {}),
+          }),
           credentials: "include",
         },
       );
@@ -49,6 +57,7 @@ export function InvitationForm({ orgId, onSuccess }: InvitationFormProps) {
       if (response.ok) {
         toast.success("Invitation created");
         setEmail("");
+        setWorkspaceName("");
         onSuccess?.();
       } else {
         const errorData = await response.json();
@@ -102,6 +111,30 @@ export function InvitationForm({ orgId, onSuccess }: InvitationFormProps) {
               />
               {validationErrors.email && (
                 <FieldError>{validationErrors.email}</FieldError>
+              )}
+            </Field>
+
+            <Field data-invalid={!!validationErrors.workspaceName}>
+              <FieldLabel htmlFor="workspaceName">Workspace name</FieldLabel>
+              <Input
+                id="workspaceName"
+                type="text"
+                placeholder="Defaults to the member's name"
+                value={workspaceName}
+                onChange={(e) => {
+                  setWorkspaceName(e.target.value);
+                  if (validationErrors.workspaceName) {
+                    setValidationErrors((prev) => {
+                      const next = { ...prev };
+                      delete next.workspaceName;
+                      return next;
+                    });
+                  }
+                }}
+                disabled={isSubmitting}
+              />
+              {validationErrors.workspaceName && (
+                <FieldError>{validationErrors.workspaceName}</FieldError>
               )}
             </Field>
           </div>

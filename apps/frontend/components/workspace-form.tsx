@@ -72,9 +72,22 @@ const WorkspaceForm = ({
   );
   const providers = providersData?.results || [];
 
+  // Org members, used to assign an owner when creating a workspace (ADR-0008).
+  // Only admins can create workspaces and the members endpoint is admin-only.
+  const { data: membersData } = useSWR<{
+    results: { userId: string; user: { name: string; email: string } }[];
+  }>(
+    !workspaceId && user && isOrgAdmin
+      ? joinUrl(backendUrl, `/organizations/${orgId}/members`)
+      : null,
+    fetcher,
+  );
+  const members = membersData?.results || [];
+
   const [formData, setFormData] = useState({
     name: "",
     context: "",
+    ownerId: "" as string,
     taskModelProviderId: null as string | null,
     memoryExtractionProviderId: null as string | null,
     memoryEmbeddingProviderId: null as string | null,
@@ -91,11 +104,22 @@ const WorkspaceForm = ({
   const [deleteInput, setDeleteInput] = useState("");
   const [isDeleting, setIsDeleting] = useState(false);
 
+  // When creating, default the owner to the current admin until they pick
+  // another member.
+  useEffect(() => {
+    if (!workspaceId && user) {
+      setFormData((prev) =>
+        prev.ownerId ? prev : { ...prev, ownerId: user.id },
+      );
+    }
+  }, [workspaceId, user]);
+
   useEffect(() => {
     if (workspace) {
       setFormData({
         name: workspace.name,
         context: workspace.context || "",
+        ownerId: workspace.ownerId,
         taskModelProviderId: workspace.taskModelProviderId || null,
         memoryExtractionProviderId:
           workspace.memoryExtractionProviderId || null,
@@ -158,6 +182,8 @@ const WorkspaceForm = ({
             organizationId: orgId,
             name: formData.name,
             context: formData.context || null,
+            // ADR-0008: an admin assigns the owner; defaults to themselves.
+            ownerId: formData.ownerId || user?.id,
           };
 
       const response = await fetch(url, {
@@ -248,6 +274,38 @@ const WorkspaceForm = ({
               <FieldError>{validationErrors.name}</FieldError>
             )}
           </Field>
+
+          {/* ADR-0008: on creation an admin assigns the workspace owner. */}
+          {!workspaceId && (
+            <Field data-invalid={!!validationErrors.ownerId}>
+              <FieldLabel htmlFor="ownerId">Owner</FieldLabel>
+              <Select
+                value={formData.ownerId || undefined}
+                onValueChange={(value) => {
+                  setFormData((prevData) => ({ ...prevData, ownerId: value }));
+                }}
+                disabled={isSubmitting}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select an owner" />
+                </SelectTrigger>
+                <SelectContent>
+                  {members.map((m) => (
+                    <SelectItem key={m.userId} value={m.userId}>
+                      {m.user.name || m.user.email}
+                      {m.userId === user?.id ? " (you)" : ""}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <FieldDescription>
+                The member who will own this workspace. Defaults to you.
+              </FieldDescription>
+              {validationErrors.ownerId && (
+                <FieldError>{validationErrors.ownerId}</FieldError>
+              )}
+            </Field>
+          )}
 
           <Field data-invalid={!!validationErrors.context}>
             <ExpandableTextarea

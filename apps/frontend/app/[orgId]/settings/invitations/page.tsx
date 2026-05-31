@@ -149,6 +149,7 @@ const OrgInvitationsPage = () => {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Email</TableHead>
+                    <TableHead>Workspace</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead>Expires</TableHead>
                     <TableHead className="text-right">Actions</TableHead>
@@ -158,6 +159,11 @@ const OrgInvitationsPage = () => {
                   {data?.results.map((invite) => (
                     <TableRow key={invite.id}>
                       <TableCell>{invite.email}</TableCell>
+                      <TableCell className="text-muted-foreground">
+                        {invite.workspaceName || (
+                          <span className="italic">Member's name</span>
+                        )}
+                      </TableCell>
                       <TableCell>{getStatusBadge(invite.status)}</TableCell>
                       <TableCell className="text-muted-foreground">
                         {format(new Date(invite.expiresAt), "MMM d, yyyy")}

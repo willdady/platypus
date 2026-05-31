@@ -43,6 +43,7 @@ invitation.post(
           organizationId: orgId,
           invitedBy: user.id,
           status: "pending",
+          workspaceName: data.workspaceName ?? null,
           expiresAt,
         })
         .returning();

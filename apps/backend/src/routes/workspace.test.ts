@@ -17,11 +17,12 @@ describe("Workspace Routes", () => {
   });
 
   describe("POST /organizations/:orgId/workspaces", () => {
-    it("should create workspace for any org member", async () => {
+    // ADR-0008: Workspace creation is org-admin-only.
+    it("should create workspace for an org admin", async () => {
       mockSession({ id: "user-1", role: "user" });
 
-      // Mock requireOrgAccess: return member role
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
+      // Mock requireOrgAccess: return admin role
+      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]);
 
       // Mock insert
       const mockWorkspace = { id: "ws-1", name: "New Workspace" };
@@ -38,6 +39,77 @@ describe("Workspace Routes", () => {
 
       expect(res.status).toBe(201);
       expect(await res.json()).toEqual(mockWorkspace);
+      // Owner defaults to the calling admin when no ownerId is supplied.
+      const insertedValues = mockDb.values.mock.calls.at(-1)?.[0];
+      expect(insertedValues).toMatchObject({ ownerId: "user-1" });
+    });
+
+    // ADR-0008: a regular member can no longer self-create Workspaces.
+    it("should return 403 for a regular member", async () => {
+      mockSession({ id: "user-1", role: "user" });
+
+      // Mock requireOrgAccess: return member role
+      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
+
+      const res = await app.request("/organizations/org-1/workspaces", {
+        method: "POST",
+        body: JSON.stringify({
+          name: "New Workspace",
+          organizationId: "org-1",
+        }),
+        headers: { "Content-Type": "application/json" },
+      });
+
+      expect(res.status).toBe(403);
+      expect(mockDb.insert).not.toHaveBeenCalled();
+    });
+
+    // ADR-0008: ownerId is admin-assignable to another org member.
+    it("should let an admin assign a different owner who is a member", async () => {
+      mockSession({ id: "admin-1", role: "user" });
+
+      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]); // requireOrgAccess
+      mockDb.limit.mockResolvedValueOnce([{ userId: "member-2" }]); // owner is a member
+      const mockWorkspace = { id: "ws-1", name: "Member Workspace" };
+      mockDb.returning.mockResolvedValueOnce([mockWorkspace]);
+
+      const res = await app.request("/organizations/org-1/workspaces", {
+        method: "POST",
+        body: JSON.stringify({
+          name: "Member Workspace",
+          organizationId: "org-1",
+          ownerId: "member-2",
+        }),
+        headers: { "Content-Type": "application/json" },
+      });
+
+      expect(res.status).toBe(201);
+      const insertedValues = mockDb.values.mock.calls.at(-1)?.[0];
+      expect(insertedValues).toMatchObject({ ownerId: "member-2" });
+    });
+
+    // Governance: an admin cannot hand a workspace to a non-member.
+    it("should return 400 when the assigned owner is not an org member", async () => {
+      mockSession({ id: "admin-1", role: "user" });
+
+      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]); // requireOrgAccess
+      mockDb.limit.mockResolvedValueOnce([]); // owner not a member
+
+      const res = await app.request("/organizations/org-1/workspaces", {
+        method: "POST",
+        body: JSON.stringify({
+          name: "Member Workspace",
+          organizationId: "org-1",
+          ownerId: "outsider",
+        }),
+        headers: { "Content-Type": "application/json" },
+      });
+
+      expect(res.status).toBe(400);
+      expect(await res.json()).toEqual({
+        error: "Owner must be a member of the organization",
+      });
+      expect(mockDb.insert).not.toHaveBeenCalled();
     });
   });
 

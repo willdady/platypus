@@ -267,6 +267,13 @@
       "when": 1780204416858,
       "tag": "0037_tearful_the_captain",
       "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "7",
+      "when": 1780205256807,
+      "tag": "0038_spooky_gabe_jones",
+      "breakpoints": true
     }
   ]
 }

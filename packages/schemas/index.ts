@@ -19,11 +19,19 @@ export const organizationUpdateSchema = organizationSchema.pick({ name: true });
 
 // Workspace
 
+// Workspace name length bounds, shared so the invite-time default-name
+// generator (ADR-0008) can guarantee a provisioned name stays editable.
+export const WORKSPACE_NAME_MIN_LENGTH = 3;
+export const WORKSPACE_NAME_MAX_LENGTH = 30;
+
 export const workspaceSchema = z.object({
   id: z.string(),
   organizationId: z.string(),
   ownerId: z.string(),
-  name: z.string().min(3).max(30),
+  name: z
+    .string()
+    .min(WORKSPACE_NAME_MIN_LENGTH)
+    .max(WORKSPACE_NAME_MAX_LENGTH),
   context: z.string().max(1000).nullable().optional(),
   taskModelProviderId: z.string().nullable().optional(),
   memoryExtractionProviderId: z.string().nullable().optional(),
@@ -40,11 +48,15 @@ export const workspaceSchema = z.object({
 
 export type Workspace = z.infer<typeof workspaceSchema>;
 
-export const workspaceCreateSchema = workspaceSchema.pick({
-  name: true,
-  organizationId: true,
-  context: true,
-});
+export const workspaceCreateSchema = workspaceSchema
+  .pick({
+    name: true,
+    organizationId: true,
+    context: true,
+  })
+  // ownerId is admin-assignable (ADR-0008). When omitted, the create handler
+  // defaults the owner to the calling admin.
+  .extend({ ownerId: z.string().optional() });
 
 export const workspaceUpdateSchema = workspaceSchema.pick({
   name: true,
@@ -575,6 +587,15 @@ export const invitationSchema = z.object({
   organizationId: z.string(),
   invitedBy: z.string(),
   status: invitationStatusSchema,
+  // Optional name for the Workspace provisioned when this invitation is
+  // accepted (ADR-0008). When null/omitted the accept handler defaults it to
+  // "<member name>'s Workspace".
+  workspaceName: z
+    .string()
+    .min(WORKSPACE_NAME_MIN_LENGTH)
+    .max(WORKSPACE_NAME_MAX_LENGTH)
+    .nullable()
+    .optional(),
   expiresAt: z.date(),
   createdAt: z.date(),
 });
@@ -583,6 +604,7 @@ export type Invitation = z.infer<typeof invitationSchema>;
 
 export const invitationCreateSchema = invitationSchema.pick({
   email: true,
+  workspaceName: true,
 });
 
 export const invitationListItemSchema = invitationSchema.extend({

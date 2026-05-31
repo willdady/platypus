@@ -44,6 +44,30 @@ describe("Invitation Routes", () => {
       expect(await res.json()).toEqual(mockInvitation);
     });
 
+    // ADR-0008: the invitation carries an optional Workspace name used to
+    // provision the acceptor's workspace.
+    it("should persist an optional workspaceName", async () => {
+      mockSession({ id: "admin-1", email: "admin@example.com", role: "user" });
+      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]); // requireOrgAccess
+      mockDb.returning.mockResolvedValueOnce([{ id: "inv-1" }]);
+
+      const res = await app.request(baseUrl, {
+        method: "POST",
+        body: JSON.stringify({
+          email: "user@example.com",
+          workspaceName: "Contractor Sandbox",
+        }),
+        headers: { "Content-Type": "application/json" },
+      });
+
+      expect(res.status).toBe(201);
+      const insertedValues = mockDb.values.mock.calls.at(-1)?.[0];
+      expect(insertedValues).toMatchObject({
+        email: "user@example.com",
+        workspaceName: "Contractor Sandbox",
+      });
+    });
+
     it("should return 400 if inviting self", async () => {
       mockSession({ id: "admin-1", email: "admin@example.com", role: "user" });
       // requireOrgAccess

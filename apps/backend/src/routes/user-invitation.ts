@@ -5,13 +5,34 @@ import {
   organization as organizationTable,
   organizationMember,
   user as userTable,
+  workspace as workspaceTable,
 } from "../db/schema.ts";
 import { eq, and } from "drizzle-orm";
 import { requireAuth } from "../middleware/authentication.ts";
 import type { Variables } from "../server.ts";
+import { WORKSPACE_NAME_MAX_LENGTH } from "@platypus/schemas";
 import { nanoid } from "nanoid";
 
 const userInvitation = new Hono<{ Variables: Variables }>();
+
+/**
+ * Possessive form of a name for the default Workspace name (ADR-0008).
+ * Names ending in "s" take a bare apostrophe ("James'"), others take "'s"
+ * ("Jane's").
+ */
+const possessive = (name: string): string =>
+  /s$/i.test(name) ? `${name}'` : `${name}'s`;
+
+/**
+ * Default Workspace name for an unnamed invite: "<member name>'s Workspace",
+ * clamped to the schema's max length so the provisioned workspace stays
+ * editable (a long member name could otherwise overflow the 30-char limit).
+ */
+const defaultWorkspaceName = (name: string): string => {
+  const suffix = " Workspace";
+  const room = WORKSPACE_NAME_MAX_LENGTH - suffix.length;
+  return `${possessive(name).slice(0, room).trimEnd()}${suffix}`;
+};
 
 /** List pending invitations for the current user */
 userInvitation.get("/", requireAuth, async (c) => {
@@ -25,6 +46,7 @@ userInvitation.get("/", requireAuth, async (c) => {
       organizationId: invitationTable.organizationId,
       invitedBy: invitationTable.invitedBy,
       status: invitationTable.status,
+      workspaceName: invitationTable.workspaceName,
       expiresAt: invitationTable.expiresAt,
       createdAt: invitationTable.createdAt,
       organizationName: organizationTable.name,
@@ -101,6 +123,16 @@ userInvitation.post("/:invitationId/accept", requireAuth, async (c) => {
         role: "member",
       });
     }
+
+    // Accepting an invitation always provisions a Workspace owned by the
+    // accepting member (ADR-0008). With no Blueprint it is empty; the invite's
+    // workspaceName defaults to "<member name>'s Workspace".
+    await tx.insert(workspaceTable).values({
+      id: nanoid(),
+      organizationId: invite.organizationId,
+      ownerId: user.id,
+      name: invite.workspaceName ?? defaultWorkspaceName(user.name),
+    });
 
     // Update invitation status
     await tx

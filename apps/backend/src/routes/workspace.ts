@@ -5,6 +5,7 @@ import { db } from "../index.ts";
 import {
   workspace as workspaceTable,
   provider as providerTable,
+  organizationMember,
 } from "../db/schema.ts";
 import {
   workspaceCreateSchema,
@@ -21,21 +22,48 @@ import { destroyWorkspaceSandboxes } from "../sandbox/teardown.ts";
 
 const workspace = new Hono<{ Variables: Variables }>();
 
-/** Create a new workspace (any org member) */
+/** Create a new workspace (org admin only, ADR-0008) */
 workspace.post(
   "/",
   requireAuth,
-  requireOrgAccess(),
+  requireOrgAccess(["admin"]),
   sValidator("json", workspaceCreateSchema),
   async (c) => {
     const user = c.get("user")!;
+    const orgId = c.req.param("orgId")!;
     const data = c.req.valid("json");
+
+    // ownerId is admin-assignable (ADR-0008); default to the calling admin
+    // when not supplied. A named owner must be a member of the organization —
+    // governance would be meaningless if an admin could hand a workspace to a
+    // non-member (or a typo'd / cross-org user id).
+    const ownerId = data.ownerId ?? user.id;
+    if (data.ownerId && data.ownerId !== user.id) {
+      const [member] = await db
+        .select({ userId: organizationMember.userId })
+        .from(organizationMember)
+        .where(
+          and(
+            eq(organizationMember.organizationId, orgId),
+            eq(organizationMember.userId, data.ownerId),
+          ),
+        )
+        .limit(1);
+
+      if (!member) {
+        return c.json(
+          { error: "Owner must be a member of the organization" },
+          400,
+        );
+      }
+    }
+
     const record = await db
       .insert(workspaceTable)
       .values({
         id: nanoid(),
         ...data,
-        ownerId: user.id,
+        ownerId,
       })
       .returning();
     return c.json(record[0], 201);

@@ -2,8 +2,10 @@ import { describe, it, expect } from "vitest";
 import {
   organizationSchema,
   workspaceSchema,
+  workspaceCreateSchema,
   agentSchema,
   organizationCreateSchema,
+  invitationCreateSchema,
   mcpSchema,
   sandboxEnvSchema,
   SANDBOX_ENV_MAX_ENTRIES,
@@ -103,6 +105,44 @@ describe("Workspace Schema", () => {
       updatedAt: new Date(),
     };
     const result = workspaceSchema.safeParse(validWorkspace);
+    expect(result.success).toBe(true);
+  });
+});
+
+describe("Workspace Create Schema", () => {
+  // ADR-0008: ownerId is admin-assignable but optional (defaults to caller).
+  it("accepts an optional ownerId", () => {
+    const result = workspaceCreateSchema.safeParse({
+      name: "Test Workspace",
+      organizationId: "org-1",
+      ownerId: "member-2",
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("is valid without an ownerId", () => {
+    const result = workspaceCreateSchema.safeParse({
+      name: "Test Workspace",
+      organizationId: "org-1",
+    });
+    expect(result.success).toBe(true);
+  });
+});
+
+describe("Invitation Create Schema", () => {
+  // ADR-0008: invitation carries an optional Workspace name.
+  it("accepts an optional workspaceName", () => {
+    const result = invitationCreateSchema.safeParse({
+      email: "user@example.com",
+      workspaceName: "Contractor Sandbox",
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("is valid with just an email", () => {
+    const result = invitationCreateSchema.safeParse({
+      email: "user@example.com",
+    });
     expect(result.success).toBe(true);
   });
 });
