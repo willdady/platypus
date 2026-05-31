@@ -7,6 +7,15 @@
 
 * attachment spine + locked references for shared resources ([#154](https://github.com/willdady/platypus/issues/154)) ([#163](https://github.com/willdady/platypus/issues/163)) ([8e634c1](https://github.com/willdady/platypus/commit/8e634c187122a5f175aee2eea8ea4a637c3721f9))
 
+
+### Upgrade notes
+
+Organization-scoped **Providers** and **MCPs** now appear in a Workspace only where they are explicitly **attached** (ADR-0007). On upgrade, a migration automatically attaches every existing org-scoped Provider and MCP to all current Workspaces, so existing setups are unchanged.
+
+**Going forward, a newly created org-scoped Provider/MCP must be attached to each Workspace** — as an org admin, open the workspace's Providers/MCP settings and use **Attach shared provider / Attach shared MCP** — before it will appear (and resolve at chat time) there.
+
+_Local development:_ `drizzle-kit push` does not execute migration files, so the auto-attach backfill does **not** run in a push-based dev environment. After pushing, attach org-scoped resources manually via the UI.
+
 ## [1.87.0](https://github.com/willdady/platypus/compare/v1.86.0...v1.87.0) (2026-05-31)
 
 
