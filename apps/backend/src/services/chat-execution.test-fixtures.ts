@@ -22,6 +22,13 @@ export type ChatTurnQueriesFixtures = {
     description: string;
   }>;
   mcps?: McpRow[];
+  // Attachments of org-scoped Shared resources to workspaces (ADR-0007). An
+  // org-scoped Provider/MCP resolves at Chat-turn time only where attached.
+  attachments?: Array<{
+    workspaceId: string;
+    resourceType: "mcp" | "provider";
+    resourceId: string;
+  }>;
   userContexts?: Array<{
     userId: string;
     workspaceId: string | null;
@@ -37,68 +44,100 @@ export type ChatTurnQueriesFixtures = {
  */
 export const createInMemoryChatTurnQueries = (
   fx: ChatTurnQueriesFixtures = {},
-): ChatTurnQueries => ({
-  async getWorkspace(id) {
-    return fx.workspaces?.find((w) => w.id === id) ?? null;
-  },
-
-  async getAgent(id, workspaceId) {
-    return (
-      fx.agents?.find((a) => a.id === id && a.workspaceId === workspaceId) ??
-      null
+): ChatTurnQueries => {
+  const isAttached = (
+    resourceType: "mcp" | "provider",
+    resourceId: string,
+    workspaceId: string,
+  ) =>
+    (fx.attachments ?? []).some(
+      (a) =>
+        a.resourceType === resourceType &&
+        a.resourceId === resourceId &&
+        a.workspaceId === workspaceId,
     );
-  },
 
-  async getProvider(id, orgId, workspaceId) {
-    return (
-      fx.providers?.find(
-        (p) =>
-          p.id === id &&
-          (p.workspaceId === workspaceId || p.organizationId === orgId),
-      ) ?? null
-    );
-  },
+  return {
+    async getWorkspace(id) {
+      return fx.workspaces?.find((w) => w.id === id) ?? null;
+    },
 
-  async getSkillsByIds(ids, workspaceId) {
-    if (ids.length === 0) return [];
-    return (fx.skills ?? [])
-      .filter((s) => s.workspaceId === workspaceId && ids.includes(s.id))
-      .map((s) => ({ name: s.name, description: s.description }));
-  },
+    async getAgent(id, workspaceId) {
+      return (
+        fx.agents?.find((a) => a.id === id && a.workspaceId === workspaceId) ??
+        null
+      );
+    },
 
-  async getMcp(id, orgId, workspaceId) {
-    return (
-      fx.mcps?.find(
-        (m) =>
-          m.id === id &&
-          (m.workspaceId === workspaceId || m.organizationId === orgId),
-      ) ?? null
-    );
-  },
+    async getProvider(id, orgId, workspaceId) {
+      const p =
+        fx.providers?.find(
+          (p) =>
+            p.id === id &&
+            (p.workspaceId === workspaceId || p.organizationId === orgId),
+        ) ?? null;
+      if (!p) return null;
+      // Org-scoped (no workspace) → resolves only where attached (ADR-0007).
+      if (
+        p.organizationId &&
+        !p.workspaceId &&
+        !isAttached("provider", id, workspaceId)
+      )
+        return null;
+      return p;
+    },
 
-  async getSubAgentsByIds(ids) {
-    if (ids.length === 0) return [];
-    return (fx.agents ?? []).filter((a) => ids.includes(a.id));
-  },
+    async getSkillsByIds(ids, workspaceId) {
+      if (ids.length === 0) return [];
+      return (fx.skills ?? [])
+        .filter((s) => s.workspaceId === workspaceId && ids.includes(s.id))
+        .map((s) => ({ name: s.name, description: s.description }));
+    },
 
-  async getUserContexts(userId, workspaceId) {
-    let global: string | undefined;
-    let workspace: string | undefined;
-    for (const ctx of fx.userContexts ?? []) {
-      if (ctx.userId !== userId) continue;
-      if (ctx.workspaceId === null) global = ctx.content;
-      else if (ctx.workspaceId === workspaceId) workspace = ctx.content;
-    }
-    return { global, workspace };
-  },
+    async getMcp(id, orgId, workspaceId) {
+      const m =
+        fx.mcps?.find(
+          (m) =>
+            m.id === id &&
+            (m.workspaceId === workspaceId || m.organizationId === orgId),
+        ) ?? null;
+      if (!m) return null;
+      // Org-scoped (no workspace) → resolves only where attached (ADR-0007).
+      if (
+        m.organizationId &&
+        !m.workspaceId &&
+        !isAttached("mcp", id, workspaceId)
+      )
+        return null;
+      return m;
+    },
 
-  async getRecentMemories(userId, workspaceId) {
-    return (fx.memories ?? [])
-      .filter((m) => m.userId === userId && m.workspaceId === workspaceId)
-      .map(({ userId: _u, workspaceId: _w, ...rest }) => rest as MemorySummary);
-  },
+    async getSubAgentsByIds(ids) {
+      if (ids.length === 0) return [];
+      return (fx.agents ?? []).filter((a) => ids.includes(a.id));
+    },
 
-  async getSandboxEnvKeys(workspaceId) {
-    return fx.sandboxEnvKeys?.[workspaceId] ?? [];
-  },
-});
+    async getUserContexts(userId, workspaceId) {
+      let global: string | undefined;
+      let workspace: string | undefined;
+      for (const ctx of fx.userContexts ?? []) {
+        if (ctx.userId !== userId) continue;
+        if (ctx.workspaceId === null) global = ctx.content;
+        else if (ctx.workspaceId === workspaceId) workspace = ctx.content;
+      }
+      return { global, workspace };
+    },
+
+    async getRecentMemories(userId, workspaceId) {
+      return (fx.memories ?? [])
+        .filter((m) => m.userId === userId && m.workspaceId === workspaceId)
+        .map(
+          ({ userId: _u, workspaceId: _w, ...rest }) => rest as MemorySummary,
+        );
+    },
+
+    async getSandboxEnvKeys(workspaceId) {
+      return fx.sandboxEnvKeys?.[workspaceId] ?? [];
+    },
+  };
+};

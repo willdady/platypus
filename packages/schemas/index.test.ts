@@ -7,6 +7,8 @@ import {
   organizationCreateSchema,
   invitationCreateSchema,
   mcpSchema,
+  attachmentSchema,
+  attachmentCreateSchema,
   sandboxEnvSchema,
   SANDBOX_ENV_MAX_ENTRIES,
   SANDBOX_ENV_MAX_VALUE_BYTES,
@@ -55,6 +57,43 @@ describe("Organization Create Schema", () => {
 
   it("should reject empty name", () => {
     const result = organizationCreateSchema.safeParse({ name: "" });
+    expect(result.success).toBe(false);
+  });
+});
+
+describe("Attachment Schema", () => {
+  it("validates a full attachment", () => {
+    const result = attachmentSchema.safeParse({
+      id: "att-1",
+      workspaceId: "ws-1",
+      resourceType: "mcp",
+      resourceId: "mcp-1",
+      createdAt: new Date(),
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("rejects an unknown resource type", () => {
+    const result = attachmentSchema.safeParse({
+      id: "att-1",
+      workspaceId: "ws-1",
+      resourceType: "agent",
+      resourceId: "agent-1",
+      createdAt: new Date(),
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("create schema accepts resourceType + resourceId", () => {
+    const result = attachmentCreateSchema.safeParse({
+      resourceType: "provider",
+      resourceId: "prov-1",
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("create schema rejects a missing resourceId", () => {
+    const result = attachmentCreateSchema.safeParse({ resourceType: "mcp" });
     expect(result.success).toBe(false);
   });
 });

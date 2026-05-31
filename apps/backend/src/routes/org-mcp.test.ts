@@ -128,14 +128,26 @@ describe("Organization MCP Routes", () => {
   });
 
   describe("DELETE /:mcpId", () => {
-    it("deletes an org MCP if org admin", async () => {
+    it("deletes an org MCP if org admin and not attached", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]); // requireOrgAccess
+      mockDb.limit
+        .mockResolvedValueOnce([{ role: "admin" }]) // requireOrgAccess
+        .mockResolvedValueOnce([]); // attachment guard: none
       mockDb.returning.mockResolvedValueOnce([{ id: "mcp-1" }]);
 
       const res = await app.request(`${baseUrl}/mcp-1`, { method: "DELETE" });
       expect(res.status).toBe(200);
       expect(await res.json()).toEqual({ message: "MCP deleted" });
+    });
+
+    it("returns 409 when the MCP is attached to a workspace", async () => {
+      mockSession();
+      mockDb.limit
+        .mockResolvedValueOnce([{ role: "admin" }]) // requireOrgAccess
+        .mockResolvedValueOnce([{ id: "att-1" }]); // attachment guard: attached
+
+      const res = await app.request(`${baseUrl}/mcp-1`, { method: "DELETE" });
+      expect(res.status).toBe(409);
     });
 
     it("returns 403 for a non-admin", async () => {

@@ -276,6 +276,33 @@ export const mcpOauthState = pgTable(
   (t) => [index("idx_mcp_oauth_state_mcp_id").on(t.mcpId)],
 );
 
+// Attachment — the explicit reference that makes an Organization-scoped Shared
+// resource appear inside a specific Workspace (ADR-0007). Polymorphic by design:
+// `resourceType` + `resourceId` point at an org-scoped resource (today an `mcp`
+// or `provider`; extensible to Agents/Skills and Blueprints). `resourceId` has no
+// FK — the relationship is enforced in application code, and deletion of a Shared
+// resource is blocked while any Attachment exists rather than cascaded. The
+// `workspace_id` FK cascades so a deleted Workspace drops its attachments.
+export const attachment = pgTable(
+  "attachment",
+  (t) => ({
+    id: t.text("id").primaryKey(),
+    workspaceId: t
+      .text("workspace_id")
+      .notNull()
+      .references(() => workspace.id, { onDelete: "cascade" }),
+    resourceType: t.text("resource_type").$type<"mcp" | "provider">().notNull(),
+    resourceId: t.text("resource_id").notNull(),
+    createdAt: t.timestamp("created_at").notNull().defaultNow(),
+  }),
+  (t) => [
+    index("idx_attachment_workspace").on(t.workspaceId, t.resourceType),
+    // Drives the deletion guard ("is this resource attached anywhere?")
+    index("idx_attachment_resource").on(t.resourceType, t.resourceId),
+    unique("unique_attachment").on(t.workspaceId, t.resourceType, t.resourceId),
+  ],
+);
+
 export const sandbox = pgTable(
   "sandbox",
   (t) => ({

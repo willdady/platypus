@@ -130,4 +130,36 @@ describe("Organization Provider Routes", () => {
       expect(await res.json()).toEqual(mockProvider);
     });
   });
+
+  describe("DELETE /:providerId", () => {
+    it("deletes an org provider if admin and not attached", async () => {
+      mockSession();
+      mockDb.limit
+        .mockResolvedValueOnce([{ role: "admin" }]) // requireOrgAccess
+        .mockResolvedValueOnce([]); // attachment guard: none
+      mockDb.returning.mockResolvedValueOnce([{ id: "p1" }]);
+
+      const res = await app.request(`${baseUrl}/p1`, { method: "DELETE" });
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({ message: "Provider deleted" });
+    });
+
+    it("returns 409 when the provider is attached to a workspace", async () => {
+      mockSession();
+      mockDb.limit
+        .mockResolvedValueOnce([{ role: "admin" }]) // requireOrgAccess
+        .mockResolvedValueOnce([{ id: "att-1" }]); // attachment guard: attached
+
+      const res = await app.request(`${baseUrl}/p1`, { method: "DELETE" });
+      expect(res.status).toBe(409);
+    });
+
+    it("returns 403 for a non-admin", async () => {
+      mockSession();
+      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
+
+      const res = await app.request(`${baseUrl}/p1`, { method: "DELETE" });
+      expect(res.status).toBe(403);
+    });
+  });
 });

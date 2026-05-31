@@ -117,14 +117,15 @@ describe("Provider Routes", () => {
   });
 
   describe("GET /", () => {
-    it("should list providers (workspace + org)", async () => {
+    it("should list workspace providers and only attached org providers", async () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
       mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]); // requireWorkspaceAccess
 
       const workspaceProviders = [{ id: "p1", name: "WS OpenAI" }];
+      // Org-scoped query is an inner join on attachment → rows nest under `provider`.
       const orgProviders = [
-        { id: "p2", name: "Org OpenAI", organizationId: orgId },
+        { provider: { id: "p2", name: "Org OpenAI", organizationId: orgId } },
       ];
 
       mockDb.where

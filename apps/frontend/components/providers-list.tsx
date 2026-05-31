@@ -5,7 +5,14 @@ import { Item, ItemActions, ItemContent, ItemTitle } from "./ui/item";
 import useSWR from "swr";
 import { cn, fetcher, joinUrl } from "../lib/utils";
 import { useAuth } from "@/components/auth-provider";
-import { Building, ExternalLink, Pencil, Plus } from "lucide-react";
+import {
+  Building,
+  ExternalLink,
+  Link2,
+  Pencil,
+  Plus,
+  Unlink,
+} from "lucide-react";
 import Link from "next/link";
 import { useBackendUrl } from "@/app/client-context";
 import { Button } from "./ui/button";
@@ -18,6 +25,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "./ui/dialog";
+import { AttachSharedResourceDialog } from "./attach-shared-resource-dialog";
 import { useState } from "react";
 
 const ProvidersList = ({
@@ -36,6 +44,8 @@ const ProvidersList = ({
   const backendUrl = useBackendUrl();
   const [selectedOrgProvider, setSelectedOrgProvider] =
     useState<ProviderWithScope | null>(null);
+  const [attachOpen, setAttachOpen] = useState(false);
+  const [detaching, setDetaching] = useState(false);
 
   const fetchUrl =
     backendUrl && user
@@ -47,10 +57,31 @@ const ProvidersList = ({
         : joinUrl(backendUrl, `/organizations/${orgId}/providers`)
       : null;
 
-  const { data, error, isLoading } = useSWR<{ results: ProviderWithScope[] }>(
-    fetchUrl,
-    fetcher,
-  );
+  const { data, error, isLoading, mutate } = useSWR<{
+    results: ProviderWithScope[];
+  }>(fetchUrl, fetcher);
+
+  // Attaching/detaching org-scoped Shared resources is an Org Admin action,
+  // available only inside a workspace (ADR-0007 / #154).
+  const canAttach = Boolean(workspaceId) && isOrgAdmin;
+
+  const detachOrgProvider = async (providerId: string) => {
+    if (!backendUrl || !workspaceId) return;
+    setDetaching(true);
+    try {
+      await fetch(
+        joinUrl(
+          backendUrl,
+          `/organizations/${orgId}/workspaces/${workspaceId}/attachments/provider/${providerId}`,
+        ),
+        { method: "DELETE", credentials: "include" },
+      );
+      setSelectedOrgProvider(null);
+      await mutate();
+    } finally {
+      setDetaching(false);
+    }
+  };
 
   // Workspace-scoped provider config is admin-only unless the workspace
   // delegates it (ADR-0006). Org-level provider management lives behind an
@@ -68,7 +99,12 @@ const ProvidersList = ({
   if (isLoading || error) return null; // FIXME
 
   const providers: ProviderWithScope[] = data?.results ?? [];
-  if (!providers.length && workspaceId) {
+  const attachedOrgIds = providers
+    .filter((p) => p.scope === "organization")
+    .map((p) => p.id);
+  // When an admin can attach Shared resources, fall through to the main render
+  // (which offers the Attach button) even if the workspace has no providers yet.
+  if (!providers.length && workspaceId && !canAttach) {
     return (
       <NoProvidersEmptyState
         orgId={orgId}
@@ -141,18 +177,39 @@ const ProvidersList = ({
           );
         })}
       </ul>
-      {canManage && (
-        <Button asChild>
-          <Link
-            href={
-              workspaceId
-                ? `/${orgId}/workspace/${workspaceId}/settings/providers/create`
-                : `/${orgId}/settings/providers/create`
-            }
-          >
-            <Plus /> Add provider
-          </Link>
-        </Button>
+      <div className="flex gap-2">
+        {canManage && (
+          <Button asChild>
+            <Link
+              href={
+                workspaceId
+                  ? `/${orgId}/workspace/${workspaceId}/settings/providers/create`
+                  : `/${orgId}/settings/providers/create`
+              }
+            >
+              <Plus /> Add provider
+            </Link>
+          </Button>
+        )}
+        {canAttach && (
+          <Button variant="outline" onClick={() => setAttachOpen(true)}>
+            <Link2 className="size-4" /> Attach shared provider
+          </Button>
+        )}
+      </div>
+      {canAttach && workspaceId && (
+        <AttachSharedResourceDialog
+          open={attachOpen}
+          onOpenChange={setAttachOpen}
+          orgId={orgId}
+          workspaceId={workspaceId}
+          resourceType="provider"
+          attachedIds={attachedOrgIds}
+          onAttached={() => {
+            setAttachOpen(false);
+            mutate();
+          }}
+        />
       )}
       <Dialog
         open={!!selectedOrgProvider}
@@ -174,13 +231,23 @@ const ProvidersList = ({
             >
               Close
             </Button>
+            {canAttach && selectedOrgProvider && (
+              <Button
+                variant="destructive"
+                disabled={detaching}
+                onClick={() => detachOrgProvider(selectedOrgProvider.id)}
+              >
+                <Unlink className="size-4" />
+                Detach
+              </Button>
+            )}
             {isOrgAdmin && (
               <Button asChild>
                 <Link
                   href={`/${orgId}/settings/providers/${selectedOrgProvider?.id}`}
                 >
                   <ExternalLink className="size-4" />
-                  Go to Organization Settings
+                  Org settings
                 </Link>
               </Button>
             )}

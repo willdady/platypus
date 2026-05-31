@@ -328,13 +328,21 @@ describe("chat-execution", () => {
       });
 
       // Org-scoped MCP: organizationId set, workspaceId null. The invoking
-      // workspace (ws-1) references it via the agent's tool sets.
+      // workspace (ws-1) references it via the agent's tool sets, and an
+      // Attachment makes it visible there (ADR-0007 / #154).
       const orgMcp = { ...baseMcp, organizationId: "org-1" };
       const queries = createInMemoryChatTurnQueries({
         workspaces: [baseWorkspace],
         agents: [agentWithMcp as any],
         providers: [baseProvider as any],
         mcps: [orgMcp as any],
+        attachments: [
+          {
+            workspaceId: baseWorkspace.id,
+            resourceType: "mcp",
+            resourceId: orgMcp.id,
+          },
+        ],
       });
 
       const turn = await prepareChatTurn(
@@ -343,6 +351,31 @@ describe("chat-execution", () => {
       );
 
       expect(turn.stream.tools).toHaveProperty("mcpTool");
+      await turn.dispose();
+    });
+
+    it("skips an org-scoped MCP that is not attached to the workspace", async () => {
+      // No MCP client is mocked: an unattached org-scoped MCP must never reach
+      // the connection step. (Queueing an unconsumed mockResolvedValueOnce here
+      // would leak into the next test, since vi.clearAllMocks keeps once-values.)
+
+      // Org-scoped MCP with NO attachment to the invoking workspace → it must
+      // not resolve, so its tools are absent (the tool-set id is unknown).
+      const orgMcp = { ...baseMcp, organizationId: "org-1" };
+      const queries = createInMemoryChatTurnQueries({
+        workspaces: [baseWorkspace],
+        agents: [agentWithMcp as any],
+        providers: [baseProvider as any],
+        mcps: [orgMcp as any],
+        // no attachments
+      });
+
+      const turn = await prepareChatTurn(
+        { ...baseInput, request: { id: "chat-mcp", agentId: agentWithMcp.id } },
+        queries,
+      );
+
+      expect(turn.stream.tools).not.toHaveProperty("mcpTool");
       await turn.dispose();
     });
 
@@ -357,6 +390,13 @@ describe("chat-execution", () => {
         agents: [agentWithMcp as any],
         providers: [baseProvider as any],
         mcps: [orgMcp as any],
+        attachments: [
+          {
+            workspaceId: baseWorkspace.id,
+            resourceType: "mcp",
+            resourceId: orgMcp.id,
+          },
+        ],
       });
 
       // The unreachable MCP must not kill the Chat turn.

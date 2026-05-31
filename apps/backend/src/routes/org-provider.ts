@@ -2,7 +2,10 @@ import { Hono } from "hono";
 import { sValidator } from "@hono/standard-validator";
 import { nanoid } from "nanoid";
 import { db } from "../index.ts";
-import { provider as providerTable } from "../db/schema.ts";
+import {
+  provider as providerTable,
+  attachment as attachmentTable,
+} from "../db/schema.ts";
 import { providerCreateSchema, providerUpdateSchema } from "@platypus/schemas";
 import { eq, and } from "drizzle-orm";
 import { handleEmbeddingConfigChange } from "../services/embedding-invalidation.ts";
@@ -161,6 +164,28 @@ orgProvider.delete(
   async (c) => {
     const orgId = c.req.param("orgId")!;
     const providerId = c.req.param("providerId");
+
+    // A Shared resource cannot be deleted while any Attachment references it
+    // (ADR-0007) — detach it from every Workspace first.
+    const [attached] = await db
+      .select()
+      .from(attachmentTable)
+      .where(
+        and(
+          eq(attachmentTable.resourceType, "provider"),
+          eq(attachmentTable.resourceId, providerId),
+        ),
+      )
+      .limit(1);
+    if (attached) {
+      return c.json(
+        {
+          error:
+            "Cannot delete: this provider is attached to one or more workspaces. Detach it first.",
+        },
+        409,
+      );
+    }
 
     const result = await db
       .delete(providerTable)

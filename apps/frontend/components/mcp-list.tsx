@@ -5,7 +5,14 @@ import { Item, ItemActions, ItemContent, ItemTitle } from "./ui/item";
 import useSWR from "swr";
 import { cn, fetcher, joinUrl } from "../lib/utils";
 import { useAuth } from "@/components/auth-provider";
-import { Building, ExternalLink, Pencil, Plus } from "lucide-react";
+import {
+  Building,
+  ExternalLink,
+  Link2,
+  Pencil,
+  Plus,
+  Unlink,
+} from "lucide-react";
 import Link from "next/link";
 import { useBackendUrl } from "@/app/client-context";
 import { NoMcpEmptyState } from "./no-mcp-empty-state";
@@ -18,6 +25,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "./ui/dialog";
+import { AttachSharedResourceDialog } from "./attach-shared-resource-dialog";
 import { useState } from "react";
 
 const McpList = ({
@@ -37,6 +45,8 @@ const McpList = ({
   const [selectedOrgMcp, setSelectedOrgMcp] = useState<McpWithScope | null>(
     null,
   );
+  const [attachOpen, setAttachOpen] = useState(false);
+  const [detaching, setDetaching] = useState(false);
 
   const fetchUrl =
     backendUrl && user
@@ -48,10 +58,31 @@ const McpList = ({
         : joinUrl(backendUrl, `/organizations/${orgId}/mcps`)
       : null;
 
-  const { data, error, isLoading } = useSWR<{ results: McpWithScope[] }>(
-    fetchUrl,
-    fetcher,
-  );
+  const { data, error, isLoading, mutate } = useSWR<{
+    results: McpWithScope[];
+  }>(fetchUrl, fetcher);
+
+  // Attaching/detaching org-scoped Shared resources is an Org Admin action,
+  // available only inside a workspace (ADR-0007 / #154).
+  const canAttach = Boolean(workspaceId) && isOrgAdmin;
+
+  const detachOrgMcp = async (mcpId: string) => {
+    if (!backendUrl || !workspaceId) return;
+    setDetaching(true);
+    try {
+      await fetch(
+        joinUrl(
+          backendUrl,
+          `/organizations/${orgId}/workspaces/${workspaceId}/attachments/mcp/${mcpId}`,
+        ),
+        { method: "DELETE", credentials: "include" },
+      );
+      setSelectedOrgMcp(null);
+      await mutate();
+    } finally {
+      setDetaching(false);
+    }
+  };
 
   // Workspace-scoped MCP config is admin-only unless the workspace delegates
   // it (ADR-0006). Org-level MCP management lives behind an admin-only route
@@ -82,7 +113,12 @@ const McpList = ({
   }
 
   const mcps: McpWithScope[] = data?.results ?? [];
-  if (!mcps.length && workspaceId) {
+  const attachedOrgIds = mcps
+    .filter((m) => m.scope === "organization")
+    .map((m) => m.id);
+  // When an admin can attach Shared resources, fall through to the main render
+  // (which offers the Attach button) even if the workspace has no MCPs yet.
+  if (!mcps.length && workspaceId && !canAttach) {
     return (
       <NoMcpEmptyState
         orgId={orgId}
@@ -157,18 +193,39 @@ const McpList = ({
           );
         })}
       </ul>
-      {canManage && (
-        <Button asChild>
-          <Link
-            href={
-              workspaceId
-                ? `/${orgId}/workspace/${workspaceId}/settings/mcp/create`
-                : `/${orgId}/settings/mcp/create`
-            }
-          >
-            <Plus /> Add MCP
-          </Link>
-        </Button>
+      <div className="flex gap-2">
+        {canManage && (
+          <Button asChild>
+            <Link
+              href={
+                workspaceId
+                  ? `/${orgId}/workspace/${workspaceId}/settings/mcp/create`
+                  : `/${orgId}/settings/mcp/create`
+              }
+            >
+              <Plus /> Add MCP
+            </Link>
+          </Button>
+        )}
+        {canAttach && (
+          <Button variant="outline" onClick={() => setAttachOpen(true)}>
+            <Link2 className="size-4" /> Attach shared MCP
+          </Button>
+        )}
+      </div>
+      {canAttach && workspaceId && (
+        <AttachSharedResourceDialog
+          open={attachOpen}
+          onOpenChange={setAttachOpen}
+          orgId={orgId}
+          workspaceId={workspaceId}
+          resourceType="mcp"
+          attachedIds={attachedOrgIds}
+          onAttached={() => {
+            setAttachOpen(false);
+            mutate();
+          }}
+        />
       )}
       <Dialog
         open={!!selectedOrgMcp}
@@ -187,11 +244,21 @@ const McpList = ({
             <Button variant="outline" onClick={() => setSelectedOrgMcp(null)}>
               Close
             </Button>
+            {canAttach && selectedOrgMcp && (
+              <Button
+                variant="destructive"
+                disabled={detaching}
+                onClick={() => detachOrgMcp(selectedOrgMcp.id)}
+              >
+                <Unlink className="size-4" />
+                Detach
+              </Button>
+            )}
             {isOrgAdmin && (
               <Button asChild>
                 <Link href={`/${orgId}/settings/mcp/${selectedOrgMcp?.id}`}>
                   <ExternalLink className="size-4" />
-                  Go to Organization Settings
+                  Org settings
                 </Link>
               </Button>
             )}

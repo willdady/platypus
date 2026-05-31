@@ -2,7 +2,10 @@ import { Hono } from "hono";
 import { sValidator } from "@hono/standard-validator";
 import { nanoid } from "nanoid";
 import { db } from "../index.ts";
-import { provider as providerTable } from "../db/schema.ts";
+import {
+  provider as providerTable,
+  attachment as attachmentTable,
+} from "../db/schema.ts";
 import { providerCreateSchema, providerUpdateSchema } from "@platypus/schemas";
 import { eq, and, or } from "drizzle-orm";
 import { handleEmbeddingConfigChange } from "../services/embedding-invalidation.ts";
@@ -79,11 +82,21 @@ provider.get(
       .from(providerTable)
       .where(eq(providerTable.workspaceId, workspaceId));
 
-    // Get org-scoped providers
-    const orgProviders = await db
+    // Org-scoped providers appear in a Workspace only where attached
+    // (ADR-0007 / #154) — gate by an inner join on the Attachment table.
+    const attachedOrgRows = await db
       .select()
       .from(providerTable)
+      .innerJoin(
+        attachmentTable,
+        and(
+          eq(attachmentTable.resourceId, providerTable.id),
+          eq(attachmentTable.resourceType, "provider"),
+          eq(attachmentTable.workspaceId, workspaceId),
+        ),
+      )
       .where(eq(providerTable.organizationId, orgId));
+    const orgProviders = attachedOrgRows.map((r) => r.provider);
 
     // Tag providers with their scope for frontend
     const results = [

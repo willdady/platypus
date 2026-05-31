@@ -37,11 +37,12 @@ export const NoProvidersEmptyState = ({
       </EmptyHeader>
       {canManage && (
         <EmptyContent>
-          <Button asChild>
+          <Button asChild className="gap-1">
             <Link
-              href={`/${orgId}/workspace/${workspaceId}/settings/providers/create`}
+              href={`/${orgId}/workspace/${workspaceId}/settings/providers`}
             >
-              <Plus /> Add Provider
+              <Plus />
+              Add Provider
             </Link>
           </Button>
         </EmptyContent>

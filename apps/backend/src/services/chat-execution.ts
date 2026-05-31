@@ -10,6 +10,7 @@ import {
   sandbox as sandboxTable,
   skill as skillTable,
   workspace as workspaceTable,
+  attachment as attachmentTable,
 } from "../db/schema.ts";
 import { getToolSet } from "../tools/index.ts";
 import { createLoadSkillTool } from "../tools/skill.ts";
@@ -208,6 +209,29 @@ export type ChatTurnQueries = {
   getSandboxEnvKeys(workspaceId: string): Promise<string[]>;
 };
 
+/**
+ * Whether an org-scoped Shared resource is attached to the given workspace
+ * (ADR-0007). Org-scoped resources resolve at Chat-turn time only where attached.
+ */
+const isAttached = async (
+  resourceType: "mcp" | "provider",
+  resourceId: string,
+  workspaceId: string,
+): Promise<boolean> => {
+  const rows = await db
+    .select()
+    .from(attachmentTable)
+    .where(
+      and(
+        eq(attachmentTable.workspaceId, workspaceId),
+        eq(attachmentTable.resourceType, resourceType),
+        eq(attachmentTable.resourceId, resourceId),
+      ),
+    )
+    .limit(1);
+  return rows.length > 0;
+};
+
 export const drizzleChatTurnQueries: ChatTurnQueries = {
   async getWorkspace(id) {
     const rows = await db
@@ -243,7 +267,17 @@ export const drizzleChatTurnQueries: ChatTurnQueries = {
         ),
       )
       .limit(1);
-    return (rows[0] as Provider) ?? null;
+    const row = rows[0];
+    if (!row) return null;
+    // An org-scoped (Shared) Provider resolves only where attached (ADR-0007).
+    if (
+      row.organizationId &&
+      !row.workspaceId &&
+      !(await isAttached("provider", id, workspaceId))
+    ) {
+      return null;
+    }
+    return row as Provider;
   },
 
   async getSkillsByIds(ids, workspaceId) {
@@ -275,7 +309,17 @@ export const drizzleChatTurnQueries: ChatTurnQueries = {
         ),
       )
       .limit(1);
-    return rows[0] ?? null;
+    const row = rows[0];
+    if (!row) return null;
+    // An org-scoped (Shared) MCP resolves only where attached (ADR-0007).
+    if (
+      row.organizationId &&
+      !row.workspaceId &&
+      !(await isAttached("mcp", id, workspaceId))
+    ) {
+      return null;
+    }
+    return row;
   },
 
   async getSubAgentsByIds(ids) {

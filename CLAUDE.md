@@ -30,6 +30,10 @@ Domain hierarchy: **Organization → Workspace → Chat / Agent / MCP / Provider
 
 ## Known Constraints
 
+- **`drizzle-kit push` applies DDL only — it does NOT run migration `.sql` files.** Data
+  migrations (e.g. custom backfills) run in production via `scripts/migrate.ts` (`drizzle-kit
+migrate`) but are skipped by the dev push flow. In dev, apply any needed data changes manually
+  (e.g. attach org-scoped Shared resources via the UI).
 - **Postgres 18 is not supported** (Drizzle ORM incompatibility).
 - **No TypeScript parameter properties.** Node's strip-only TS mode rejects `constructor(private x: T)` shorthand. Declare fields explicitly and assign in the constructor body.
 - Format with Prettier conventions.

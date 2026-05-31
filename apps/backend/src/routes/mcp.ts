@@ -6,7 +6,10 @@ import {
   auth as mcpAuth,
 } from "@ai-sdk/mcp";
 import { db } from "../index.ts";
-import { mcp as mcpTable } from "../db/schema.ts";
+import {
+  mcp as mcpTable,
+  attachment as attachmentTable,
+} from "../db/schema.ts";
 import {
   mcpCreateSchema,
   mcpUpdateSchema,
@@ -99,11 +102,21 @@ mcp.get(
       .from(mcpTable)
       .where(eq(mcpTable.workspaceId, workspaceId));
 
-    // Org-scoped (Shared) MCPs are referenceable across the org (ADR-0007)
-    const orgMcps = await db
+    // Org-scoped (Shared) MCPs appear in a Workspace only where attached
+    // (ADR-0007 / #154) — gate by an inner join on the Attachment table.
+    const attachedOrgRows = await db
       .select()
       .from(mcpTable)
+      .innerJoin(
+        attachmentTable,
+        and(
+          eq(attachmentTable.resourceId, mcpTable.id),
+          eq(attachmentTable.resourceType, "mcp"),
+          eq(attachmentTable.workspaceId, workspaceId),
+        ),
+      )
       .where(eq(mcpTable.organizationId, orgId));
+    const orgMcps = attachedOrgRows.map((r) => r.mcp);
 
     // Tag each MCP with its scope for the frontend
     const results = [

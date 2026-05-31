@@ -6,7 +6,10 @@ import {
   auth as mcpAuth,
 } from "@ai-sdk/mcp";
 import { db } from "../index.ts";
-import { mcp as mcpTable } from "../db/schema.ts";
+import {
+  mcp as mcpTable,
+  attachment as attachmentTable,
+} from "../db/schema.ts";
 import {
   mcpCreateSchema,
   mcpUpdateSchema,
@@ -151,6 +154,29 @@ orgMcp.delete(
   async (c) => {
     const orgId = c.req.param("orgId")!;
     const mcpId = c.req.param("mcpId");
+
+    // A Shared resource cannot be deleted while any Attachment references it
+    // (ADR-0007) — detach it from every Workspace first.
+    const [attached] = await db
+      .select()
+      .from(attachmentTable)
+      .where(
+        and(
+          eq(attachmentTable.resourceType, "mcp"),
+          eq(attachmentTable.resourceId, mcpId),
+        ),
+      )
+      .limit(1);
+    if (attached) {
+      return c.json(
+        {
+          error:
+            "Cannot delete: this MCP is attached to one or more workspaces. Detach it first.",
+        },
+        409,
+      );
+    }
+
     const result = await db
       .delete(mcpTable)
       .where(and(eq(mcpTable.id, mcpId), eq(mcpTable.organizationId, orgId)))

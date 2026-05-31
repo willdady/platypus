@@ -15,6 +15,7 @@ import "./sandbox/backends/index.ts";
 import { provider } from "./routes/provider.ts";
 import { orgProvider } from "./routes/org-provider.ts";
 import { orgMcp } from "./routes/org-mcp.ts";
+import { attachment } from "./routes/attachment.ts";
 import { invitation } from "./routes/invitation.ts";
 import { userInvitation } from "./routes/user-invitation.ts";
 import { member } from "./routes/member.ts";
@@ -145,6 +146,10 @@ app.route("/organizations/:orgId/workspaces/:workspaceId/skills", skill);
 app.route("/organizations/:orgId/workspaces/:workspaceId/providers", provider);
 app.route("/organizations/:orgId/providers", orgProvider);
 app.route("/organizations/:orgId/mcps", orgMcp);
+app.route(
+  "/organizations/:orgId/workspaces/:workspaceId/attachments",
+  attachment,
+);
 app.route("/organizations/:orgId/workspaces/:workspaceId/tools", tool);
 app.route("/organizations/:orgId/workspaces/:workspaceId/triggers", trigger);
 app.route("/organizations/:orgId/workspaces/:workspaceId/boards", kanban);

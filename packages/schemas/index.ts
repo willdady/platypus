@@ -411,6 +411,31 @@ export const mcpTestSchema = mcpBaseSchema
     },
   );
 
+// Attachment — the explicit link that surfaces an org-scoped Shared resource
+// inside a specific Workspace (ADR-0007 / #154). Polymorphic over resource type.
+
+export const attachmentResourceTypeSchema = z.enum(["mcp", "provider"]);
+export type AttachmentResourceType = z.infer<
+  typeof attachmentResourceTypeSchema
+>;
+
+const attachmentBaseSchema = z.object({
+  id: z.string(),
+  workspaceId: z.string(),
+  resourceType: attachmentResourceTypeSchema,
+  resourceId: z.string(),
+  createdAt: z.date(),
+});
+
+export const attachmentSchema = attachmentBaseSchema;
+export type Attachment = z.infer<typeof attachmentSchema>;
+
+export const attachmentCreateSchema = attachmentBaseSchema.pick({
+  resourceType: true,
+  resourceId: true,
+});
+export type AttachmentCreateData = z.infer<typeof attachmentCreateSchema>;
+
 // Provider
 
 export const providerApiModeSchema = z.enum(["chat", "responses"]);

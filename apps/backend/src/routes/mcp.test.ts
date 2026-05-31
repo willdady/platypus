@@ -88,7 +88,7 @@ describe("MCP Routes", () => {
   });
 
   describe("GET /", () => {
-    it("should list workspace-scoped and org-scoped MCPs tagged with scope", async () => {
+    it("should list workspace-scoped MCPs and only attached org-scoped MCPs", async () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
       mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]); // requireWorkspaceAccess
@@ -96,12 +96,15 @@ describe("MCP Routes", () => {
       const workspaceMcps = [
         { id: "mcp-ws", name: "Workspace MCP", authType: "None" },
       ];
-      const orgMcps = [{ id: "mcp-org", name: "Org MCP", authType: "None" }];
+      // Org-scoped query is an inner join on attachment → rows nest under `mcp`.
+      const orgMcps = [
+        { mcp: { id: "mcp-org", name: "Org MCP", authType: "None" } },
+      ];
       mockDb.where
         .mockReturnValueOnce(mockDb) // requireOrgAccess
         .mockReturnValueOnce(mockDb) // requireWorkspaceAccess
         .mockResolvedValueOnce(workspaceMcps) // route: workspace-scoped query
-        .mockResolvedValueOnce(orgMcps); // route: org-scoped query
+        .mockResolvedValueOnce(orgMcps); // route: attached org-scoped query
 
       const res = await app.request(baseUrl);
       expect(res.status).toBe(200);
