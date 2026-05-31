@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.89.0](https://github.com/willdady/platypus/compare/v1.88.0...v1.89.0) (2026-05-31)
+
+
+### Features
+
+* org-scoped Skills + Promote action for shared resources ([#155](https://github.com/willdady/platypus/issues/155)) ([#170](https://github.com/willdady/platypus/issues/170)) ([c865543](https://github.com/willdady/platypus/commit/c865543f2eb2d4b625af93a2c2eae8342fa26145))
+
 ## [1.88.0](https://github.com/willdady/platypus/compare/v1.87.0...v1.88.0) (2026-05-31)
 
 
