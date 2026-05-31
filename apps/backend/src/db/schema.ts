@@ -291,7 +291,10 @@ export const attachment = pgTable(
       .text("workspace_id")
       .notNull()
       .references(() => workspace.id, { onDelete: "cascade" }),
-    resourceType: t.text("resource_type").$type<"mcp" | "provider">().notNull(),
+    resourceType: t
+      .text("resource_type")
+      .$type<"mcp" | "provider" | "skill">()
+      .notNull(),
     resourceId: t.text("resource_id").notNull(),
     createdAt: t.timestamp("created_at").notNull().defaultNow(),
   }),
@@ -416,12 +419,18 @@ export const skill = pgTable(
   "skill",
   (t) => ({
     id: t.text("id").primaryKey(),
-    workspaceId: t
-      .text("workspace_id")
-      .notNull()
-      .references(() => workspace.id, {
+    // A Skill is scoped to either an Organization or a Workspace (mutually
+    // exclusive), mirroring the dual-scope shape of `provider`/`mcp`. Org-scoped
+    // Skills are Shared resources managed by Org Admins (ADR-0007); the XOR is
+    // enforced in the Zod schema and by the create routes.
+    organizationId: t
+      .text("organization_id")
+      .references(() => organization.id, {
         onDelete: "cascade",
       }),
+    workspaceId: t.text("workspace_id").references(() => workspace.id, {
+      onDelete: "cascade",
+    }),
     name: t.text("name").notNull(),
     description: t.text("description").notNull(),
     body: t.text("body").notNull(),
@@ -430,7 +439,9 @@ export const skill = pgTable(
   }),
   (t) => [
     index("idx_skill_workspace_id").on(t.workspaceId),
+    index("idx_skill_organization_id").on(t.organizationId),
     unique("unique_skill_name_workspace").on(t.workspaceId, t.name),
+    unique("unique_skill_name_org").on(t.organizationId, t.name),
   ],
 );
 

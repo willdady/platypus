@@ -28,6 +28,8 @@ const { mockDb, mockAuth } = vi.hoisted(() => {
     "execute",
     "inArray",
     "groupBy",
+    "onConflictDoNothing",
+    "onConflictDoUpdate",
   ];
 
   methods.forEach((method) => {
@@ -75,6 +77,8 @@ export const resetMockDb = () => {
     "execute",
     "inArray",
     "groupBy",
+    "onConflictDoNothing",
+    "onConflictDoUpdate",
   ];
 
   methods.forEach((method) => {

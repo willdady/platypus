@@ -48,6 +48,27 @@ describe("Attachment Routes", () => {
       expect(await res.json()).toEqual(record);
     });
 
+    it("attaches an org-scoped skill for an admin", async () => {
+      mockAdminAccess();
+      mockDb.limit.mockResolvedValueOnce([{ id: "skill-1" }]); // org-scope lookup
+      const record = {
+        id: "att-2",
+        workspaceId,
+        resourceType: "skill",
+        resourceId: "skill-1",
+      };
+      mockDb.returning.mockResolvedValueOnce([record]);
+
+      const res = await app.request(baseUrl, {
+        method: "POST",
+        body: JSON.stringify({ resourceType: "skill", resourceId: "skill-1" }),
+        headers: { "Content-Type": "application/json" },
+      });
+
+      expect(res.status).toBe(201);
+      expect(await res.json()).toEqual(record);
+    });
+
     it("returns 403 for a non-admin", async () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess

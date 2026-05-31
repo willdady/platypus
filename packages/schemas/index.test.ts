@@ -7,6 +7,7 @@ import {
   organizationCreateSchema,
   invitationCreateSchema,
   mcpSchema,
+  skillSchema,
   attachmentSchema,
   attachmentCreateSchema,
   sandboxEnvSchema,
@@ -92,6 +93,14 @@ describe("Attachment Schema", () => {
     expect(result.success).toBe(true);
   });
 
+  it("accepts a skill resource type", () => {
+    const result = attachmentCreateSchema.safeParse({
+      resourceType: "skill",
+      resourceId: "skill-1",
+    });
+    expect(result.success).toBe(true);
+  });
+
   it("create schema rejects a missing resourceId", () => {
     const result = attachmentCreateSchema.safeParse({ resourceType: "mcp" });
     expect(result.success).toBe(false);
@@ -129,6 +138,50 @@ describe("MCP Schema", () => {
 
   it("rejects an MCP scoped to neither", () => {
     const result = mcpSchema.safeParse(base);
+    expect(result.success).toBe(false);
+  });
+});
+
+describe("Skill Schema", () => {
+  const base = {
+    id: "skill-1",
+    name: "my-skill",
+    description: "A description that is at least twenty-four chars long.",
+    body: "A skill body that is comfortably longer than the forty-eight character minimum requirement.",
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  };
+
+  it("accepts a workspace-scoped Skill", () => {
+    const result = skillSchema.safeParse({ ...base, workspaceId: "ws-1" });
+    expect(result.success).toBe(true);
+  });
+
+  it("accepts an org-scoped Skill", () => {
+    const result = skillSchema.safeParse({ ...base, organizationId: "org-1" });
+    expect(result.success).toBe(true);
+  });
+
+  it("rejects a Skill scoped to both an organization and a workspace", () => {
+    const result = skillSchema.safeParse({
+      ...base,
+      organizationId: "org-1",
+      workspaceId: "ws-1",
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("rejects a Skill scoped to neither", () => {
+    const result = skillSchema.safeParse(base);
+    expect(result.success).toBe(false);
+  });
+
+  it("rejects a non-kebab-case name", () => {
+    const result = skillSchema.safeParse({
+      ...base,
+      workspaceId: "ws-1",
+      name: "Not Kebab",
+    });
     expect(result.success).toBe(false);
   });
 });

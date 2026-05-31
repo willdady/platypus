@@ -288,6 +288,13 @@
       "when": 1780215237579,
       "tag": "0040_backfill_org_attachments",
       "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "7",
+      "when": 1780220802520,
+      "tag": "0041_org_scoped_skills",
+      "breakpoints": true
     }
   ]
 }

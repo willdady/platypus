@@ -6,6 +6,7 @@ import {
   attachment as attachmentTable,
   mcp as mcpTable,
   provider as providerTable,
+  skill as skillTable,
 } from "../db/schema.ts";
 import { attachmentCreateSchema } from "@platypus/schemas";
 import { eq, and } from "drizzle-orm";
@@ -59,7 +60,12 @@ attachment.post(
 
     // The resource must be org-scoped and belong to this organization — you can
     // only attach a Shared resource, never a workspace-scoped one.
-    const table = resourceType === "mcp" ? mcpTable : providerTable;
+    const table =
+      resourceType === "mcp"
+        ? mcpTable
+        : resourceType === "skill"
+          ? skillTable
+          : providerTable;
     const resource = await db
       .select({ id: table.id })
       .from(table)
@@ -106,7 +112,10 @@ attachment.delete(
       .where(
         and(
           eq(attachmentTable.workspaceId, workspaceId),
-          eq(attachmentTable.resourceType, resourceType as "mcp" | "provider"),
+          eq(
+            attachmentTable.resourceType,
+            resourceType as "mcp" | "provider" | "skill",
+          ),
           eq(attachmentTable.resourceId, resourceId),
         ),
       )

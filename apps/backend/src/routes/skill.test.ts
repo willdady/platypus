@@ -108,22 +108,96 @@ describe("Skill Routes", () => {
   });
 
   describe("GET /", () => {
-    it("should list all skills in workspace", async () => {
+    it("should list workspace and attached org skills tagged with scope", async () => {
       mockSession();
       // requireOrgAccess
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
       // requireWorkspaceAccess
       mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]);
 
-      const mockSkills = [{ id: "skill-1", name: "skill-1" }];
+      const workspaceSkills = [{ id: "skill-1", name: "skill-1" }];
+      // The attached org-scoped Skills come back from an inner join, shaped
+      // { skill: {...} }.
+      const attachedOrgRows = [
+        { skill: { id: "org-skill-1", name: "org-skill-1" } },
+      ];
       mockDb.where
-        .mockReturnValueOnce(mockDb)
-        .mockReturnValueOnce(mockDb)
-        .mockResolvedValueOnce(mockSkills);
+        .mockReturnValueOnce(mockDb) // requireOrgAccess
+        .mockReturnValueOnce(mockDb) // requireWorkspaceAccess
+        .mockResolvedValueOnce(workspaceSkills) // workspace-scoped query
+        .mockResolvedValueOnce(attachedOrgRows); // attached org-scoped query
 
       const res = await app.request(baseUrl);
       expect(res.status).toBe(200);
-      expect(await res.json()).toEqual({ results: mockSkills });
+      expect(await res.json()).toEqual({
+        results: [
+          { id: "org-skill-1", name: "org-skill-1", scope: "organization" },
+          { id: "skill-1", name: "skill-1", scope: "workspace" },
+        ],
+      });
+    });
+  });
+
+  describe("POST /:skillId/promote", () => {
+    const promoteUrl = `${baseUrl}/skill-1/promote`;
+
+    it("returns 403 if not org admin", async () => {
+      mockSession();
+      // requireOrgAccess(["admin"]) → member rejected
+      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
+
+      const res = await app.request(promoteUrl, { method: "POST" });
+      expect(res.status).toBe(403);
+    });
+
+    it("returns 404 if the workspace skill does not exist", async () => {
+      mockSession();
+      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]); // requireOrgAccess
+      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]); // requireWorkspaceAccess
+      mockDb.limit.mockResolvedValueOnce([]); // skill lookup → not found
+
+      const res = await app.request(promoteUrl, { method: "POST" });
+      expect(res.status).toBe(404);
+    });
+
+    it("re-scopes the skill to org and auto-attaches the origin workspace", async () => {
+      mockSession();
+      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]); // requireOrgAccess
+      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]); // requireWorkspaceAccess
+      mockDb.limit.mockResolvedValueOnce([
+        { id: "skill-1", workspaceId, name: "my-skill" },
+      ]); // skill lookup
+      // transaction: update ... returning, then insert attachment
+      mockDb.returning.mockResolvedValueOnce([
+        { id: "skill-1", organizationId: orgId, workspaceId: null },
+      ]);
+
+      const res = await app.request(promoteUrl, { method: "POST" });
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({
+        id: "skill-1",
+        organizationId: orgId,
+        workspaceId: null,
+        scope: "organization",
+      });
+      expect(mockDb.insert).toHaveBeenCalled();
+      expect(mockDb.onConflictDoNothing).toHaveBeenCalled();
+    });
+
+    it("returns 404 (no orphan attachment) when a concurrent promote already re-scoped the skill", async () => {
+      mockSession();
+      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]); // requireOrgAccess
+      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]); // requireWorkspaceAccess
+      mockDb.limit.mockResolvedValueOnce([
+        { id: "skill-1", workspaceId, name: "my-skill" },
+      ]); // skill lookup (pre-transaction)
+      // Transaction update matches no row (skill already re-scoped) → rollback
+      mockDb.returning.mockResolvedValueOnce([]);
+
+      const res = await app.request(promoteUrl, { method: "POST" });
+      expect(res.status).toBe(404);
+      // The auto-attach insert must never run when the update found nothing.
+      expect(mockDb.onConflictDoNothing).not.toHaveBeenCalled();
     });
   });
 
