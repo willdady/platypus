@@ -61,11 +61,24 @@ const McpForm = ({
 }: {
   classNames?: string;
   orgId: string;
-  workspaceId: string;
+  workspaceId?: string;
   mcpId?: string;
 }) => {
   const { user } = useAuth();
   const backendUrl = useBackendUrl();
+
+  // An MCP is scoped to either a Workspace or the Organization (ADR-0007).
+  // The scope determines the backend collection and the settings/edit paths.
+  const collectionUrl = workspaceId
+    ? `/organizations/${orgId}/workspaces/${workspaceId}/mcps`
+    : `/organizations/${orgId}/mcps`;
+  const listPath = workspaceId
+    ? `/${orgId}/workspace/${workspaceId}/settings/mcp`
+    : `/${orgId}/settings/mcp`;
+  const editPath = (id: string) =>
+    workspaceId
+      ? `/${orgId}/workspace/${workspaceId}/settings/mcp/${id}`
+      : `/${orgId}/settings/mcp/${id}`;
 
   const [formData, setFormData] = useState<McpFormData>({
     name: "",
@@ -99,12 +112,7 @@ const McpForm = ({
     isLoading,
     mutate: mutateMcp,
   } = useSWR<MCP & { oauthAuthorized?: boolean }>(
-    mcpId && user
-      ? joinUrl(
-          backendUrl,
-          `/organizations/${orgId}/workspaces/${workspaceId}/mcps/${mcpId}`,
-        )
-      : null,
+    mcpId && user ? joinUrl(backendUrl, `${collectionUrl}/${mcpId}`) : null,
     fetcher,
   );
 
@@ -196,7 +204,9 @@ const McpForm = ({
   /** Builds the save payload from current form state */
   const buildPayload = () => {
     const payload: Record<string, unknown> = {
-      workspaceId,
+      // Scope discriminator — the backend routes also enforce this from the
+      // URL, but sending it keeps the create payload self-describing.
+      ...(workspaceId ? { workspaceId } : { organizationId: orgId }),
       name: formData.name,
       url: formData.url,
       headers: buildHeadersObject(),
@@ -226,14 +236,8 @@ const McpForm = ({
     const payload = buildPayload();
 
     const url = existingId
-      ? joinUrl(
-          backendUrl,
-          `/organizations/${orgId}/workspaces/${workspaceId}/mcps/${existingId}`,
-        )
-      : joinUrl(
-          backendUrl,
-          `/organizations/${orgId}/workspaces/${workspaceId}/mcps`,
-        );
+      ? joinUrl(backendUrl, `${collectionUrl}/${existingId}`)
+      : joinUrl(backendUrl, collectionUrl);
 
     const method = existingId ? "PUT" : "POST";
 
@@ -259,7 +263,7 @@ const McpForm = ({
     try {
       const savedId = await saveMcp(mcpId);
       if (savedId) {
-        router.push(`/${orgId}/workspace/${workspaceId}/settings/mcp`);
+        router.push(listPath);
       }
     } catch (error) {
       console.error("Error saving MCP:", error);
@@ -275,10 +279,7 @@ const McpForm = ({
     setIsDeleting(true);
     try {
       const response = await fetch(
-        joinUrl(
-          backendUrl,
-          `/organizations/${orgId}/workspaces/${workspaceId}/mcps/${mcpId}`,
-        ),
+        joinUrl(backendUrl, `${collectionUrl}/${mcpId}`),
         {
           method: "DELETE",
           credentials: "include",
@@ -286,7 +287,7 @@ const McpForm = ({
       );
 
       if (response.ok) {
-        router.push(`/${orgId}/workspace/${workspaceId}/settings/mcp`);
+        router.push(listPath);
       } else {
         console.error("Failed to delete MCP");
         toast.error("Failed to delete MCP server");
@@ -320,10 +321,7 @@ const McpForm = ({
       }
 
       const response = await fetch(
-        joinUrl(
-          backendUrl,
-          `/organizations/${orgId}/workspaces/${workspaceId}/mcps/test`,
-        ),
+        joinUrl(backendUrl, `${collectionUrl}/test`),
         {
           method: "POST",
           headers: {
@@ -403,7 +401,7 @@ const McpForm = ({
       // but surprising when the user just clicked "Reauthorize".
       const authorizeUrl = joinUrl(
         backendUrl,
-        `/organizations/${orgId}/workspaces/${workspaceId}/mcps/${resolvedMcpId}/oauth/authorize${
+        `${collectionUrl}/${resolvedMcpId}/oauth/authorize${
           oauthAuthorized ? "?force=true" : ""
         }`,
       );
@@ -429,9 +427,7 @@ const McpForm = ({
         // re-authorize) update the existing record instead of creating
         // duplicates.
         if (!mcpId && resolvedMcpId) {
-          router.replace(
-            `/${orgId}/workspace/${workspaceId}/settings/mcp/${resolvedMcpId}`,
-          );
+          router.replace(editPath(resolvedMcpId));
         }
         // Open OAuth in a popup so the main page is never navigated away.
         // This avoids bfcache issues where the browser restores stale auth
@@ -465,9 +461,7 @@ const McpForm = ({
         // If we just created the MCP, redirect to the edit page so
         // subsequent actions (e.g. re-authorize) use the correct mcpId
         if (!mcpId && resolvedMcpId) {
-          router.replace(
-            `/${orgId}/workspace/${workspaceId}/settings/mcp/${resolvedMcpId}`,
-          );
+          router.replace(editPath(resolvedMcpId));
         }
         setIsAuthorizing(false);
       }
@@ -484,10 +478,7 @@ const McpForm = ({
 
     try {
       const response = await fetch(
-        joinUrl(
-          backendUrl,
-          `/organizations/${orgId}/workspaces/${workspaceId}/mcps/${mcpId}/oauth/revoke`,
-        ),
+        joinUrl(backendUrl, `${collectionUrl}/${mcpId}/oauth/revoke`),
         {
           method: "POST",
           credentials: "include",

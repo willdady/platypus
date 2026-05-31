@@ -88,20 +88,29 @@ describe("MCP Routes", () => {
   });
 
   describe("GET /", () => {
-    it("should list MCPs", async () => {
+    it("should list workspace-scoped and org-scoped MCPs tagged with scope", async () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
       mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]); // requireWorkspaceAccess
 
-      const mockMcps = [{ id: "mcp-1", name: "MCP 1" }];
+      const workspaceMcps = [
+        { id: "mcp-ws", name: "Workspace MCP", authType: "None" },
+      ];
+      const orgMcps = [{ id: "mcp-org", name: "Org MCP", authType: "None" }];
       mockDb.where
-        .mockReturnValueOnce(mockDb)
-        .mockReturnValueOnce(mockDb)
-        .mockResolvedValueOnce(mockMcps);
+        .mockReturnValueOnce(mockDb) // requireOrgAccess
+        .mockReturnValueOnce(mockDb) // requireWorkspaceAccess
+        .mockResolvedValueOnce(workspaceMcps) // route: workspace-scoped query
+        .mockResolvedValueOnce(orgMcps); // route: org-scoped query
 
       const res = await app.request(baseUrl);
       expect(res.status).toBe(200);
-      expect(await res.json()).toEqual({ results: mockMcps });
+      const body = await res.json();
+      // Org-scoped MCPs are listed first, then workspace-scoped, each tagged.
+      expect(body.results).toEqual([
+        expect.objectContaining({ id: "mcp-org", scope: "organization" }),
+        expect.objectContaining({ id: "mcp-ws", scope: "workspace" }),
+      ]);
     });
   });
 

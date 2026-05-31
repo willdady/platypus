@@ -8,7 +8,7 @@ import {
   SidebarMenuItem,
   SidebarMenu,
 } from "@/components/ui/sidebar";
-import { Mail, Settings, Unplug, Users } from "lucide-react";
+import { Mail, Plug, Settings, Unplug, Users } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
@@ -22,6 +22,7 @@ export function OrgSettingsMenu({ orgId }: OrgSettingsMenuProps) {
   const membersHref = `/${orgId}/settings/members`;
   const invitationsHref = `/${orgId}/settings/invitations`;
   const providersHref = `/${orgId}/settings/providers`;
+  const mcpHref = `/${orgId}/settings/mcp`;
 
   return (
     <SidebarContent>
@@ -62,6 +63,16 @@ export function OrgSettingsMenu({ orgId }: OrgSettingsMenuProps) {
               >
                 <Link href={providersHref}>
                   <Unplug /> Providers
+                </Link>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+            <SidebarMenuItem>
+              <SidebarMenuButton
+                asChild
+                isActive={pathname.startsWith(mcpHref)}
+              >
+                <Link href={mcpHref}>
+                  <Plug /> MCP
                 </Link>
               </SidebarMenuButton>
             </SidebarMenuItem>

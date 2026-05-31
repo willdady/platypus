@@ -48,6 +48,14 @@ vi.mock("@ai-sdk/anthropic", () => ({
   createAnthropic: mockCreateAnthropic.creator,
 }));
 
+const { mockCreateMCPClient } = vi.hoisted(() => ({
+  mockCreateMCPClient: vi.fn(),
+}));
+vi.mock("@ai-sdk/mcp", () => ({
+  experimental_createMCPClient: mockCreateMCPClient,
+  auth: vi.fn(),
+}));
+
 import {
   prepareChatTurn,
   NotFoundError,
@@ -287,6 +295,78 @@ describe("chat-execution", () => {
           queries,
         ),
       ).rejects.toBeInstanceOf(NotFoundError);
+    });
+  });
+
+  describe("MCP tool-set resolution", () => {
+    const baseMcp = {
+      id: "mcp-1",
+      organizationId: null as string | null,
+      workspaceId: null as string | null,
+      name: "Test MCP",
+      url: "https://mcp.example.com",
+      headers: null,
+      authType: "None",
+      bearerToken: null,
+      oauthAccessToken: null,
+      oauthRefreshToken: null,
+      oauthTokenExpiresAt: null,
+      oauthScope: null,
+      oauthRequestedScope: null,
+      oauthClientId: null,
+      oauthClientSecret: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+
+    const agentWithMcp = { ...baseAgent, toolSetIds: ["mcp-1"] };
+
+    it("resolves an org-scoped (Shared) MCP at Chat-turn time", async () => {
+      mockCreateMCPClient.mockResolvedValueOnce({
+        tools: vi.fn().mockResolvedValue({ mcpTool: { description: "x" } }),
+        close: vi.fn().mockResolvedValue(undefined),
+      });
+
+      // Org-scoped MCP: organizationId set, workspaceId null. The invoking
+      // workspace (ws-1) references it via the agent's tool sets.
+      const orgMcp = { ...baseMcp, organizationId: "org-1" };
+      const queries = createInMemoryChatTurnQueries({
+        workspaces: [baseWorkspace],
+        agents: [agentWithMcp as any],
+        providers: [baseProvider as any],
+        mcps: [orgMcp as any],
+      });
+
+      const turn = await prepareChatTurn(
+        { ...baseInput, request: { id: "chat-mcp", agentId: agentWithMcp.id } },
+        queries,
+      );
+
+      expect(turn.stream.tools).toHaveProperty("mcpTool");
+      await turn.dispose();
+    });
+
+    it("fails soft when the MCP is unreachable — warns, adds no tools, does not throw", async () => {
+      mockCreateMCPClient.mockRejectedValueOnce(
+        new Error("ECONNREFUSED: connection refused"),
+      );
+
+      const orgMcp = { ...baseMcp, organizationId: "org-1" };
+      const queries = createInMemoryChatTurnQueries({
+        workspaces: [baseWorkspace],
+        agents: [agentWithMcp as any],
+        providers: [baseProvider as any],
+        mcps: [orgMcp as any],
+      });
+
+      // The unreachable MCP must not kill the Chat turn.
+      const turn = await prepareChatTurn(
+        { ...baseInput, request: { id: "chat-mcp", agentId: agentWithMcp.id } },
+        queries,
+      );
+
+      expect(turn.stream.tools).not.toHaveProperty("mcpTool");
+      await turn.dispose();
     });
   });
 

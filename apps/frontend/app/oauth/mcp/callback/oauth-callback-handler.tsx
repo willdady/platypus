@@ -64,8 +64,12 @@ export const OAuthCallbackHandler = ({
             return;
 
           // Fallback: if not a popup (e.g. popup was blocked and we fell
-          // back to same-window redirect), navigate to the MCP edit page
-          const mcpEditPath = `/${data.orgId}/workspace/${data.workspaceId}/settings/mcp/${data.mcpId}`;
+          // back to same-window redirect), navigate to the MCP edit page. An
+          // org-scoped (Shared) MCP has no workspaceId, so it edits under the
+          // organization settings surface.
+          const mcpEditPath = data.workspaceId
+            ? `/${data.orgId}/workspace/${data.workspaceId}/settings/mcp/${data.mcpId}`
+            : `/${data.orgId}/settings/mcp/${data.mcpId}`;
           window.location.replace(mcpEditPath);
         } else {
           const data = await response.json().catch(() => ({}));

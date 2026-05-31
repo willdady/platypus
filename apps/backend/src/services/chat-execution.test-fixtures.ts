@@ -66,9 +66,13 @@ export const createInMemoryChatTurnQueries = (
       .map((s) => ({ name: s.name, description: s.description }));
   },
 
-  async getMcp(id, workspaceId) {
+  async getMcp(id, orgId, workspaceId) {
     return (
-      fx.mcps?.find((m) => m.id === id && m.workspaceId === workspaceId) ?? null
+      fx.mcps?.find(
+        (m) =>
+          m.id === id &&
+          (m.workspaceId === workspaceId || m.organizationId === orgId),
+      ) ?? null
     );
   },
 

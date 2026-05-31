@@ -187,7 +187,11 @@ export type ChatTurnQueries = {
     ids: string[],
     workspaceId: string,
   ): Promise<Array<Pick<Skill, "name" | "description">>>;
-  getMcp(id: string, workspaceId: string): Promise<McpRow | null>;
+  getMcp(
+    id: string,
+    orgId: string,
+    workspaceId: string,
+  ): Promise<McpRow | null>;
   getSubAgentsByIds(ids: string[]): Promise<AgentRow[]>;
   getUserContexts(
     userId: string,
@@ -255,11 +259,21 @@ export const drizzleChatTurnQueries: ChatTurnQueries = {
       );
   },
 
-  async getMcp(id, workspaceId) {
+  async getMcp(id, orgId, workspaceId) {
+    // Resolve an MCP referenced by an Agent's tool sets at either scope: the
+    // invoking workspace, or the organization (a Shared MCP — ADR-0007).
     const rows = await db
       .select()
       .from(mcpTable)
-      .where(and(eq(mcpTable.id, id), eq(mcpTable.workspaceId, workspaceId)))
+      .where(
+        and(
+          eq(mcpTable.id, id),
+          or(
+            eq(mcpTable.workspaceId, workspaceId),
+            eq(mcpTable.organizationId, orgId),
+          ),
+        ),
+      )
       .limit(1);
     return rows[0] ?? null;
   },
@@ -694,14 +708,25 @@ const loadTools = async (
       Object.assign(tools, resolvedTools);
     } catch {
       // Static tool set not found — fall back to MCP lookup.
-      const mcp = await queries.getMcp(toolSetId, workspaceId);
+      const mcp = await queries.getMcp(toolSetId, orgId, workspaceId);
       if (mcp && mcp.url) {
-        const mcpClient = await createMCPClient({
-          transport: buildMcpTransportConfig(mcp),
-        });
-        const mcpTools = await mcpClient.tools();
-        Object.assign(tools, mcpTools);
-        mcpClients.push(mcpClient);
+        // An unreachable MCP must fail soft: log a warning and contribute no
+        // tools, rather than throwing and killing the whole Chat turn. A Shared
+        // (org-scoped) MCP has org-wide blast radius, so a single down server
+        // must not break every attached Workspace's chats at once (ADR-0007).
+        try {
+          const mcpClient = await createMCPClient({
+            transport: buildMcpTransportConfig(mcp),
+          });
+          const mcpTools = await mcpClient.tools();
+          Object.assign(tools, mcpTools);
+          mcpClients.push(mcpClient);
+        } catch (error) {
+          logger.warn(
+            { error, mcpId: mcp.id, scope: mcp.organizationId ? "org" : "ws" },
+            `MCP '${toolSetId}' is unreachable; skipping its tools`,
+          );
+        }
       } else if (mcp) {
         logger.warn(`MCP '${toolSetId}' has no URL configured`);
       } else {

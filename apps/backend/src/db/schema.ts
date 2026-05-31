@@ -223,12 +223,18 @@ export const mcp = pgTable(
   "mcp",
   (t) => ({
     id: t.text("id").primaryKey(),
-    workspaceId: t
-      .text("workspace_id")
-      .notNull()
-      .references(() => workspace.id, {
+    // An MCP is scoped to either an Organization or a Workspace (mutually
+    // exclusive), mirroring the dual-scope shape of `provider`. Org-scoped MCPs
+    // are Shared resources managed by Org Admins (ADR-0007); the XOR is enforced
+    // in the Zod schema and by the create routes.
+    organizationId: t
+      .text("organization_id")
+      .references(() => organization.id, {
         onDelete: "cascade",
       }),
+    workspaceId: t.text("workspace_id").references(() => workspace.id, {
+      onDelete: "cascade",
+    }),
     name: t.text("name").notNull(),
     url: t.text("url"),
     headers: t.jsonb("headers").$type<Record<string, string>>(),
@@ -246,7 +252,12 @@ export const mcp = pgTable(
     createdAt: t.timestamp("created_at").notNull().defaultNow(),
     updatedAt: t.timestamp("updated_at").notNull().defaultNow(),
   }),
-  (t) => [index("idx_mcp_workspace_id").on(t.workspaceId)],
+  (t) => [
+    index("idx_mcp_workspace_id").on(t.workspaceId),
+    index("idx_mcp_organization_id").on(t.organizationId),
+    unique("unique_mcp_name_org").on(t.organizationId, t.name),
+    unique("unique_mcp_name_workspace").on(t.workspaceId, t.name),
+  ],
 );
 
 export const mcpOauthState = pgTable(

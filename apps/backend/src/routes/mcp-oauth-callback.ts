@@ -55,15 +55,21 @@ mcpOauthCallback.post(
       return c.json({ error: "MCP URL is not configured" }, 400);
     }
 
-    // Look up the workspace to get orgId for the redirect URL
-    const wsRecord = await db
-      .select()
-      .from(workspace)
-      .where(eq(workspace.id, mcpRecord[0].workspaceId))
-      .limit(1);
+    // Resolve the orgId for the redirect URL. An org-scoped (Shared) MCP
+    // carries its orgId directly; a workspace-scoped MCP gets it from its
+    // workspace.
+    let redirectOrgId = mcpRecord[0].organizationId;
+    if (!redirectOrgId && mcpRecord[0].workspaceId) {
+      const wsRecord = await db
+        .select()
+        .from(workspace)
+        .where(eq(workspace.id, mcpRecord[0].workspaceId))
+        .limit(1);
 
-    if (wsRecord.length === 0) {
-      return c.json({ error: "Workspace not found" }, 404);
+      if (wsRecord.length === 0) {
+        return c.json({ error: "Workspace not found" }, 404);
+      }
+      redirectOrgId = wsRecord[0].organizationId;
     }
 
     try {
@@ -87,7 +93,7 @@ mcpOauthCallback.post(
       if (result === "AUTHORIZED") {
         return c.json({
           success: true,
-          orgId: wsRecord[0].organizationId,
+          orgId: redirectOrgId,
           workspaceId: mcpRecord[0].workspaceId,
           mcpId: mcpRecord[0].id,
         });

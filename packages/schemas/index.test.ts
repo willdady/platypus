@@ -4,6 +4,7 @@ import {
   workspaceSchema,
   agentSchema,
   organizationCreateSchema,
+  mcpSchema,
   sandboxEnvSchema,
   SANDBOX_ENV_MAX_ENTRIES,
   SANDBOX_ENV_MAX_VALUE_BYTES,
@@ -52,6 +53,41 @@ describe("Organization Create Schema", () => {
 
   it("should reject empty name", () => {
     const result = organizationCreateSchema.safeParse({ name: "" });
+    expect(result.success).toBe(false);
+  });
+});
+
+describe("MCP Schema", () => {
+  const base = {
+    id: "mcp-1",
+    name: "Test MCP",
+    url: "https://mcp.example.com",
+    authType: "None" as const,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  };
+
+  it("accepts a workspace-scoped MCP", () => {
+    const result = mcpSchema.safeParse({ ...base, workspaceId: "ws-1" });
+    expect(result.success).toBe(true);
+  });
+
+  it("accepts an org-scoped MCP", () => {
+    const result = mcpSchema.safeParse({ ...base, organizationId: "org-1" });
+    expect(result.success).toBe(true);
+  });
+
+  it("rejects an MCP scoped to both an organization and a workspace", () => {
+    const result = mcpSchema.safeParse({
+      ...base,
+      organizationId: "org-1",
+      workspaceId: "ws-1",
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("rejects an MCP scoped to neither", () => {
+    const result = mcpSchema.safeParse(base);
     expect(result.success).toBe(false);
   });
 });

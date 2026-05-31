@@ -12,7 +12,7 @@ import {
   mcpUpdateSchema,
   mcpTestSchema,
 } from "@platypus/schemas";
-import { eq, and } from "drizzle-orm";
+import { eq, and, or } from "drizzle-orm";
 import { requireAuth } from "../middleware/authentication.ts";
 import {
   requireOrgAccess,
@@ -36,7 +36,7 @@ import {
 } from "../services/mcp-oauth-provider.ts";
 
 /** Fields to null-out when clearing OAuth tokens. */
-const OAUTH_TOKEN_CLEAR_FIELDS = {
+export const OAUTH_TOKEN_CLEAR_FIELDS = {
   oauthAccessToken: null,
   oauthRefreshToken: null,
   oauthTokenExpiresAt: null,
@@ -46,7 +46,7 @@ const OAUTH_TOKEN_CLEAR_FIELDS = {
 const mcp = new Hono<{ Variables: Variables }>();
 
 /** Strips sensitive OAuth fields and adds computed oauthAuthorized flag */
-const sanitizeMcpResponse = (record: McpRecord) => {
+export const sanitizeMcpResponse = (record: McpRecord) => {
   const {
     oauthAccessToken,
     oauthRefreshToken,
@@ -83,23 +83,45 @@ mcp.post(
   },
 );
 
-/** List all MCPs */
+/** List MCPs visible in this workspace (workspace-scoped + org-scoped) */
 mcp.get(
   "/",
   requireAuth,
   requireOrgAccess(),
   requireWorkspaceAccess,
   async (c) => {
+    const orgId = c.req.param("orgId")!;
     const workspaceId = c.req.param("workspaceId")!;
-    const results = await db
+
+    // Workspace-scoped MCPs
+    const workspaceMcps = await db
       .select()
       .from(mcpTable)
       .where(eq(mcpTable.workspaceId, workspaceId));
-    return c.json({ results: results.map(sanitizeMcpResponse) });
+
+    // Org-scoped (Shared) MCPs are referenceable across the org (ADR-0007)
+    const orgMcps = await db
+      .select()
+      .from(mcpTable)
+      .where(eq(mcpTable.organizationId, orgId));
+
+    // Tag each MCP with its scope for the frontend
+    const results = [
+      ...orgMcps.map((m) => ({
+        ...sanitizeMcpResponse(m),
+        scope: "organization" as const,
+      })),
+      ...workspaceMcps.map((m) => ({
+        ...sanitizeMcpResponse(m),
+        scope: "workspace" as const,
+      })),
+    ];
+
+    return c.json({ results });
   },
 );
 
-/** Get a MCP by ID */
+/** Get a MCP by ID (workspace-scoped or org-scoped) */
 mcp.get(
   "/:mcpId",
   requireAuth,
@@ -107,16 +129,26 @@ mcp.get(
   requireWorkspaceAccess,
   async (c) => {
     const mcpId = c.req.param("mcpId");
+    const orgId = c.req.param("orgId")!;
     const workspaceId = c.req.param("workspaceId")!;
     const record = await db
       .select()
       .from(mcpTable)
-      .where(and(eq(mcpTable.id, mcpId), eq(mcpTable.workspaceId, workspaceId)))
+      .where(
+        and(
+          eq(mcpTable.id, mcpId),
+          or(
+            eq(mcpTable.workspaceId, workspaceId),
+            eq(mcpTable.organizationId, orgId),
+          ),
+        ),
+      )
       .limit(1);
     if (record.length === 0) {
       return c.json({ error: "MCP not found" }, 404);
     }
-    return c.json(sanitizeMcpResponse(record[0]));
+    const scope = record[0].organizationId ? "organization" : "workspace";
+    return c.json({ ...sanitizeMcpResponse(record[0]), scope });
   },
 );
 

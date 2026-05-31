@@ -310,7 +310,8 @@ const mcpBearerTokenRefine = {
 
 const mcpBaseSchema = z.object({
   id: z.string(),
-  workspaceId: z.string(),
+  organizationId: z.string().optional(),
+  workspaceId: z.string().optional(),
   name: z.string().min(3).max(30),
   url: z.url(),
   headers: z.record(z.string(), z.string()).optional(),
@@ -329,15 +330,26 @@ export const mcpOauthCallbackSchema = z.object({
   state: z.string(),
 });
 
-export const mcpSchema = mcpBaseSchema.refine(
-  mcpBearerTokenRefine.validator,
-  mcpBearerTokenRefine.params,
-);
+export const mcpSchema = mcpBaseSchema
+  .refine(mcpBearerTokenRefine.validator, mcpBearerTokenRefine.params)
+  .refine(
+    (data) => {
+      const hasOrg = Boolean(data.organizationId);
+      const hasWorkspace = Boolean(data.workspaceId);
+      return (hasOrg || hasWorkspace) && !(hasOrg && hasWorkspace);
+    },
+    {
+      message:
+        "MCP must have either organizationId or workspaceId, but not both",
+      path: ["organizationId"],
+    },
+  );
 
 export type MCP = z.infer<typeof mcpSchema>;
 
 export const mcpCreateSchema = mcpBaseSchema
   .pick({
+    organizationId: true,
     workspaceId: true,
     name: true,
     url: true,
