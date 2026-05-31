@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.87.0](https://github.com/willdady/platypus/compare/v1.86.0...v1.87.0) (2026-05-31)
+
+
+### Features
+
+* admin-only workspace creation + invite-time provisioning ([#161](https://github.com/willdady/platypus/issues/161)) ([8538f57](https://github.com/willdady/platypus/commit/8538f57327c80f49bfad161a1acfcb443df8269a))
+* org-scoped MCP (Shared resources prerequisite) ([#159](https://github.com/willdady/platypus/issues/159)) ([59f1f64](https://github.com/willdady/platypus/commit/59f1f649c194ac69eb5607c3cf8bf4ed59ddf017))
+
 ## [1.86.0](https://github.com/willdady/platypus/compare/v1.85.1...v1.86.0) (2026-05-30)
 
 
