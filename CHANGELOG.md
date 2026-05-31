@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.88.0](https://github.com/willdady/platypus/compare/v1.87.0...v1.88.0) (2026-05-31)
+
+
+### Features
+
+* attachment spine + locked references for shared resources ([#154](https://github.com/willdady/platypus/issues/154)) ([#163](https://github.com/willdady/platypus/issues/163)) ([8e634c1](https://github.com/willdady/platypus/commit/8e634c187122a5f175aee2eea8ea4a637c3721f9))
+
 ## [1.87.0](https://github.com/willdady/platypus/compare/v1.86.0...v1.87.0) (2026-05-31)
 
 
