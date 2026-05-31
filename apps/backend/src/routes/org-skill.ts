@@ -1,0 +1,173 @@
+import { Hono } from "hono";
+import { sValidator } from "@hono/standard-validator";
+import { nanoid } from "nanoid";
+import { db } from "../index.ts";
+import {
+  skill as skillTable,
+  attachment as attachmentTable,
+} from "../db/schema.ts";
+import { skillCreateSchema, skillUpdateSchema } from "@platypus/schemas";
+import { eq, and } from "drizzle-orm";
+import { requireAuth } from "../middleware/authentication.ts";
+import { requireOrgAccess } from "../middleware/authorization.ts";
+import type { Variables } from "../server.ts";
+
+// Org-scoped Skills are Shared resources (ADR-0007): a single source of truth
+// defined once at Organization scope and referenced by Workspaces through an
+// Attachment. They are managed only by Org Admins on the Organization surface,
+// so all mutations are org-admin-only; any member may read them.
+const orgSkill = new Hono<{ Variables: Variables }>();
+
+/** Detects a Postgres unique-constraint violation across driver shapes. */
+const isUniqueViolation = (error: any): boolean =>
+  error.code === "23505" ||
+  error.cause?.code === "23505" ||
+  error.message?.includes("unique constraint") ||
+  error.cause?.message?.includes("unique constraint");
+
+const NAME_CONFLICT = {
+  error: "A skill with this name already exists in this organization",
+} as const;
+
+/** Create an org-scoped Skill (admin only) */
+orgSkill.post(
+  "/",
+  requireAuth,
+  requireOrgAccess(["admin"]),
+  sValidator("json", skillCreateSchema),
+  async (c) => {
+    const orgId = c.req.param("orgId")!;
+    // Agent associations are a workspace concern; org-scoped Skills carry none.
+    const { agentIds: _agentIds, ...data } = c.req.valid("json");
+
+    try {
+      const record = await db
+        .insert(skillTable)
+        .values({
+          id: nanoid(),
+          name: data.name,
+          description: data.description,
+          body: data.body,
+          organizationId: orgId,
+          workspaceId: null,
+        })
+        .returning();
+      return c.json(record[0], 201);
+    } catch (error: any) {
+      if (isUniqueViolation(error)) {
+        return c.json(NAME_CONFLICT, 409);
+      }
+      throw error;
+    }
+  },
+);
+
+/** List org-scoped Skills */
+orgSkill.get("/", requireAuth, requireOrgAccess(), async (c) => {
+  const orgId = c.req.param("orgId")!;
+  const results = await db
+    .select()
+    .from(skillTable)
+    .where(eq(skillTable.organizationId, orgId));
+  return c.json({ results });
+});
+
+/** Get an org-scoped Skill by ID */
+orgSkill.get("/:skillId", requireAuth, requireOrgAccess(), async (c) => {
+  const orgId = c.req.param("orgId")!;
+  const skillId = c.req.param("skillId");
+  const record = await db
+    .select()
+    .from(skillTable)
+    .where(
+      and(eq(skillTable.id, skillId), eq(skillTable.organizationId, orgId)),
+    )
+    .limit(1);
+  if (record.length === 0) {
+    return c.json({ error: "Skill not found" }, 404);
+  }
+  return c.json(record[0]);
+});
+
+/** Update an org-scoped Skill by ID (admin only) */
+orgSkill.put(
+  "/:skillId",
+  requireAuth,
+  requireOrgAccess(["admin"]),
+  sValidator("json", skillUpdateSchema),
+  async (c) => {
+    const orgId = c.req.param("orgId")!;
+    const skillId = c.req.param("skillId");
+    const { agentIds: _agentIds, ...data } = c.req.valid("json");
+
+    try {
+      const record = await db
+        .update(skillTable)
+        .set({
+          name: data.name,
+          description: data.description,
+          body: data.body,
+          updatedAt: new Date(),
+        })
+        .where(
+          and(eq(skillTable.id, skillId), eq(skillTable.organizationId, orgId)),
+        )
+        .returning();
+      if (record.length === 0) {
+        return c.json({ error: "Skill not found" }, 404);
+      }
+      return c.json(record[0], 200);
+    } catch (error: any) {
+      if (isUniqueViolation(error)) {
+        return c.json(NAME_CONFLICT, 409);
+      }
+      throw error;
+    }
+  },
+);
+
+/** Delete an org-scoped Skill by ID (admin only) */
+orgSkill.delete(
+  "/:skillId",
+  requireAuth,
+  requireOrgAccess(["admin"]),
+  async (c) => {
+    const orgId = c.req.param("orgId")!;
+    const skillId = c.req.param("skillId");
+
+    // A Shared resource cannot be deleted while any Attachment references it
+    // (ADR-0007) — detach it from every Workspace first.
+    const [attached] = await db
+      .select()
+      .from(attachmentTable)
+      .where(
+        and(
+          eq(attachmentTable.resourceType, "skill"),
+          eq(attachmentTable.resourceId, skillId),
+        ),
+      )
+      .limit(1);
+    if (attached) {
+      return c.json(
+        {
+          error:
+            "Cannot delete: this skill is attached to one or more workspaces. Detach it first.",
+        },
+        409,
+      );
+    }
+
+    const result = await db
+      .delete(skillTable)
+      .where(
+        and(eq(skillTable.id, skillId), eq(skillTable.organizationId, orgId)),
+      )
+      .returning();
+    if (result.length === 0) {
+      return c.json({ error: "Skill not found" }, 404);
+    }
+    return c.json({ message: "Skill deleted" });
+  },
+);
+
+export { orgSkill };

@@ -174,6 +174,60 @@ describe("chat-execution", () => {
       await expect(turn.dispose()).resolves.toBeUndefined();
     });
 
+    it("resolves an org-scoped (Shared) Skill referenced by the Agent only where attached", async () => {
+      const agentWithSkill = { ...baseAgent, skillIds: ["org-skill-1"] };
+      const orgSkill = {
+        id: "org-skill-1",
+        organizationId: "org-1",
+        workspaceId: null,
+        name: "shared-skill",
+        description: "An organization-shared skill",
+      };
+
+      // Attached → the Skill surfaces in the system prompt.
+      const attached = createInMemoryChatTurnQueries({
+        workspaces: [baseWorkspace],
+        agents: [agentWithSkill as any],
+        providers: [baseProvider as any],
+        skills: [orgSkill],
+        attachments: [
+          {
+            workspaceId: "ws-1",
+            resourceType: "skill",
+            resourceId: "org-skill-1",
+          },
+        ],
+      });
+
+      const attachedTurn = await prepareChatTurn(
+        {
+          ...baseInput,
+          request: { id: "chat-os", agentId: agentWithSkill.id },
+        },
+        attached,
+      );
+      expect(attachedTurn.stream.system).toContain("shared-skill");
+      expect(attachedTurn.stream.tools).toHaveProperty("loadSkill");
+
+      // Not attached → the Skill is invisible to this workspace.
+      const detached = createInMemoryChatTurnQueries({
+        workspaces: [baseWorkspace],
+        agents: [agentWithSkill as any],
+        providers: [baseProvider as any],
+        skills: [orgSkill],
+      });
+
+      const detachedTurn = await prepareChatTurn(
+        {
+          ...baseInput,
+          request: { id: "chat-os2", agentId: agentWithSkill.id },
+        },
+        detached,
+      );
+      expect(detachedTurn.stream.system).not.toContain("shared-skill");
+      expect(detachedTurn.stream.tools).not.toHaveProperty("loadSkill");
+    });
+
     it("Direct Provider+Model selection populates resolved.systemPrompt and merges request overrides", async () => {
       const queries = createInMemoryChatTurnQueries({
         workspaces: [baseWorkspace],

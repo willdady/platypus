@@ -413,11 +413,6 @@ const Workspace = () => {
             storageKey="section:skills:open"
           >
             <SkillsList orgId={orgId} workspaceId={workspaceId} />
-            <Button variant="outline" asChild>
-              <Link href={`/${orgId}/workspace/${workspaceId}/skills/create`}>
-                <Plus /> Create Skill
-              </Link>
-            </Button>
           </CollapsibleSection>
 
           <Separator />

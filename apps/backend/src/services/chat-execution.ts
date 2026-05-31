@@ -186,6 +186,7 @@ export type ChatTurnQueries = {
   ): Promise<Provider | null>;
   getSkillsByIds(
     ids: string[],
+    orgId: string,
     workspaceId: string,
   ): Promise<Array<Pick<Skill, "name" | "description">>>;
   getMcp(
@@ -214,7 +215,7 @@ export type ChatTurnQueries = {
  * (ADR-0007). Org-scoped resources resolve at Chat-turn time only where attached.
  */
 const isAttached = async (
-  resourceType: "mcp" | "provider",
+  resourceType: "mcp" | "provider" | "skill",
   resourceId: string,
   workspaceId: string,
 ): Promise<boolean> => {
@@ -280,9 +281,10 @@ export const drizzleChatTurnQueries: ChatTurnQueries = {
     return row as Provider;
   },
 
-  async getSkillsByIds(ids, workspaceId) {
+  async getSkillsByIds(ids, orgId, workspaceId) {
     if (ids.length === 0) return [];
-    return db
+    // Workspace-scoped Skills referenced by the Agent.
+    const workspaceSkills = await db
       .select({ name: skillTable.name, description: skillTable.description })
       .from(skillTable)
       .where(
@@ -291,6 +293,30 @@ export const drizzleChatTurnQueries: ChatTurnQueries = {
           inArray(skillTable.id, ids),
         ),
       );
+
+    // Org-scoped (Shared) Skills resolve only where attached (ADR-0007) — gate
+    // by an inner join on the Attachment table for the invoking workspace.
+    const orgSkills = await db
+      .select({ name: skillTable.name, description: skillTable.description })
+      .from(skillTable)
+      .innerJoin(
+        attachmentTable,
+        and(
+          eq(attachmentTable.resourceId, skillTable.id),
+          eq(attachmentTable.resourceType, "skill"),
+          eq(attachmentTable.workspaceId, workspaceId),
+        ),
+      )
+      .where(
+        and(eq(skillTable.organizationId, orgId), inArray(skillTable.id, ids)),
+      );
+
+    // A workspace-scoped Skill wins a name collision with an attached org-scoped
+    // one, matching loadSkill's workspace-first resolution — so the advertised
+    // list and the tool agree on which body the model loads, with no duplicate
+    // entry in the system prompt.
+    const seen = new Set(workspaceSkills.map((s) => s.name));
+    return [...workspaceSkills, ...orgSkills.filter((s) => !seen.has(s.name))];
   },
 
   async getMcp(id, orgId, workspaceId) {
@@ -419,7 +445,7 @@ export const prepareChatTurn = async (
     sandboxEnvKeys,
   ] = await Promise.all([
     loadTools(queries, agent, workspaceId, orgId, frontendUrl, user.id),
-    loadSkills(queries, agent, workspaceId),
+    loadSkills(queries, agent, orgId, workspaceId),
     loadSubAgents(queries, agent, orgId, workspaceId, frontendUrl, onActivity),
     queries.getUserContexts(user.id, workspaceId),
     queries.getRecentMemories(user.id, workspaceId),
@@ -458,7 +484,7 @@ export const prepareChatTurn = async (
   );
 
   if (skills.length > 0) {
-    tools.loadSkill = createLoadSkillTool(workspaceId);
+    tools.loadSkill = createLoadSkillTool(orgId, workspaceId);
   }
 
   const heartbeat = onActivity ? createToolHeartbeat(onActivity) : null;
@@ -812,10 +838,11 @@ const resolveGenerationConfig = (
 const loadSkills = async (
   queries: ChatTurnQueries,
   agent: AgentRow | undefined,
+  orgId: string,
   workspaceId: string,
 ): Promise<Array<Pick<Skill, "name" | "description">>> => {
   if (!agent?.skillIds || agent.skillIds.length === 0) return [];
-  return queries.getSkillsByIds(agent.skillIds, workspaceId);
+  return queries.getSkillsByIds(agent.skillIds, orgId, workspaceId);
 };
 
 const loadSubAgents = async (

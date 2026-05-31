@@ -6,6 +6,7 @@ const { mockDb, dbMethods } = vi.hoisted(() => {
     "select",
     "from",
     "where",
+    "innerJoin",
     "limit",
     "orderBy",
     "insert",
@@ -30,6 +31,7 @@ import { createLoadSkillTool } from "./skill.ts";
 const ctx = { toolCallId: "test", messages: [] };
 
 describe("createLoadSkillTool", () => {
+  const orgId = "org-1";
   const workspaceId = "ws-1";
   let loadSkill: ReturnType<typeof createLoadSkillTool>;
 
@@ -38,16 +40,17 @@ describe("createLoadSkillTool", () => {
     dbMethods.forEach((method) => {
       mockDb[method] = vi.fn().mockReturnValue(mockDb);
     });
-    loadSkill = createLoadSkillTool(workspaceId);
+    loadSkill = createLoadSkillTool(orgId, workspaceId);
   });
 
   it("returns a tool with the correct description", () => {
     expect(loadSkill.description).toContain("skill");
   });
 
-  it("returns skill data when found", async () => {
+  it("returns workspace skill data when found", async () => {
     const skillData = { name: "my-skill", body: "Skill instructions here" };
-    mockDb.limit.mockResolvedValue([skillData]);
+    // First query (workspace-scoped) resolves with the skill.
+    mockDb.limit.mockResolvedValueOnce([skillData]);
 
     const result = await loadSkill.execute({ name: "my-skill" }, ctx);
     expect(result).toEqual({
@@ -56,7 +59,16 @@ describe("createLoadSkillTool", () => {
     });
   });
 
-  it("returns error when skill not found", async () => {
+  it("falls back to an attached org-scoped skill", async () => {
+    const orgSkill = { name: "shared-skill", body: "Shared instructions" };
+    // Workspace query empty, then the attached org-scoped query resolves.
+    mockDb.limit.mockResolvedValueOnce([]).mockResolvedValueOnce([orgSkill]);
+
+    const result = await loadSkill.execute({ name: "shared-skill" }, ctx);
+    expect(result).toEqual(orgSkill);
+  });
+
+  it("returns error when skill not found at either scope", async () => {
     mockDb.limit.mockResolvedValue([]);
 
     const result = await loadSkill.execute({ name: "nonexistent" }, ctx);
