@@ -19,6 +19,9 @@
       "persistent": true,
       "with": ["start-local-db"]
     },
+    "lint": {
+      "outputs": []
+    },
     "drizzle-kit-push": {
       "cache": false
     },
