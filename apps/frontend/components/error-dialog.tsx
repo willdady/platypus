@@ -14,7 +14,7 @@ import { TriangleAlert, Copy, Check } from "lucide-react";
 interface ErrorDialogProps {
   isOpen: boolean;
   onOpenChange: (open: boolean) => void;
-  error: any;
+  error: Error | undefined;
 }
 
 export const ErrorDialog = ({

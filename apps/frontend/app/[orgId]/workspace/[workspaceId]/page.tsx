@@ -13,7 +13,6 @@ import {
   Bot,
   MessageSquare,
   Plus,
-  BotMessageSquare,
   FolderOpen,
   Settings,
   Sparkles,

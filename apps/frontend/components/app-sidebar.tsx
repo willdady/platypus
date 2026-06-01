@@ -41,7 +41,6 @@ import {
 } from "@/components/ui/dialog";
 import { useState, useEffect } from "react";
 import {
-  Bot,
   FolderOpen,
   BotMessageSquare,
   EllipsisVertical,
@@ -173,10 +172,6 @@ export function AppSidebar() {
       icon: CalendarDays,
     },
   ].filter((group) => group.chats.length > 0);
-
-  const handleWorkspaceChange = (newWorkspaceId: string) => {
-    router.push(`/${orgId}/workspace/${newWorkspaceId}/chat`);
-  };
 
   const handleRenameChat = async () => {
     if (!renameChatId) return;

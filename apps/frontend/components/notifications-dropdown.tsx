@@ -257,7 +257,7 @@ export function NotificationsDropdown({
                       Organization Invitation
                     </div>
                     <div className="text-xs text-muted-foreground line-clamp-2">
-                      You've been invited to join{" "}
+                      You&apos;ve been invited to join{" "}
                       <strong>{invite.organizationName}</strong>.
                     </div>
                   </Link>

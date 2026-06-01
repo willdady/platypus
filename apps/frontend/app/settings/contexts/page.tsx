@@ -80,14 +80,12 @@ const ContextsPage = () => {
           toast.error("Failed to create context");
         }
       }
-    } catch (error) {
+    } catch {
       toast.error("Error saving context");
     } finally {
       setIsSavingGlobal(false);
     }
   };
-
-  const globalContext = contexts?.results.find((c) => !c.workspaceId);
 
   return (
     <div>

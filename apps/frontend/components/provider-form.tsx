@@ -660,7 +660,7 @@ const ProviderForm = ({
                       </SelectContent>
                     </Select>
                     <FieldDescription>
-                      Responses is OpenAI's default and supports hosted
+                      Responses is OpenAI&apos;s default and supports hosted
                       web_search, reasoning summaries, and previous_response_id.
                       Switch to Chat Completions when pointing at an
                       OpenAI-compatible server that does not implement

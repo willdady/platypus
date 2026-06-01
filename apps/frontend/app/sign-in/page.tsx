@@ -33,7 +33,7 @@ export default function SignInPage() {
       }
 
       router.push("/");
-    } catch (err) {
+    } catch {
       setError("An unexpected error occurred");
     } finally {
       setIsLoading(false);

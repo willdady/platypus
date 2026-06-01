@@ -14,7 +14,7 @@ export function textToSeriesValues(text: string): (number | null)[] {
 }
 
 export function yAxisLabelContent(label: string) {
-  return ({ viewBox }: { viewBox?: object }) => {
+  const YAxisLabel = ({ viewBox }: { viewBox?: object }) => {
     if (!viewBox || !("x" in viewBox)) return null;
     const { x, y, height } = viewBox as {
       x: number;
@@ -33,4 +33,5 @@ export function yAxisLabelContent(label: string) {
       </text>
     );
   };
+  return YAxisLabel;
 }

@@ -12,7 +12,7 @@ import {
   EmptyTitle,
 } from "@/components/ui/empty";
 import { Button } from "@/components/ui/button";
-import { OctagonX, Home, Layout, Building } from "lucide-react";
+import { OctagonX, Home, Building } from "lucide-react";
 import Link from "next/link";
 
 type RequiredOrgRole = "member" | "admin";

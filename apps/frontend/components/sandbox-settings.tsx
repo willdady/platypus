@@ -210,10 +210,12 @@ const SandboxSettings = ({
     const res = await fetch(url, { credentials: "include" });
     if (res.status === 404) return null;
     if (!res.ok) {
-      const error = new Error("Failed to load sandbox");
+      const error: Error & { info?: unknown; status?: number } = new Error(
+        "Failed to load sandbox",
+      );
       const info = await res.json().catch(() => ({}));
-      (error as any).info = info;
-      (error as any).status = res.status;
+      error.info = info;
+      error.status = res.status;
       throw error;
     }
     return res.json();
@@ -327,16 +329,15 @@ const SandboxSettings = ({
 
     if (response.ok) return { ok: true };
 
-    const errorData = await response.json().catch(() => ({}));
+    const errorData = (await response.json().catch(() => ({}))) as {
+      error?: string;
+    };
 
-    if (
-      response.status === 500 &&
-      isForceRetryError((errorData as any)?.error)
-    ) {
+    if (response.status === 500 && isForceRetryError(errorData?.error)) {
       return {
         ok: false,
         forceRetry: true,
-        errorMessage: (errorData as any).error,
+        errorMessage: errorData.error,
       };
     }
 
@@ -344,7 +345,7 @@ const SandboxSettings = ({
     if (Object.keys(fieldErrors).length > 0) {
       setValidationErrors(fieldErrors);
     } else {
-      toast.error((errorData as any)?.error || "Failed to save sandbox");
+      toast.error(errorData?.error || "Failed to save sandbox");
     }
     return { ok: false };
   };
@@ -394,14 +395,13 @@ const SandboxSettings = ({
 
     if (response.ok) return { ok: true };
 
-    const errorData = await response.json().catch(() => ({}));
-    if (
-      response.status === 500 &&
-      isForceRetryError((errorData as any)?.error)
-    ) {
+    const errorData = (await response.json().catch(() => ({}))) as {
+      error?: string;
+    };
+    if (response.status === 500 && isForceRetryError(errorData?.error)) {
       return { ok: false, forceRetry: true };
     }
-    toast.error((errorData as any)?.error || "Failed to delete sandbox");
+    toast.error(errorData?.error || "Failed to delete sandbox");
     return { ok: false };
   };
 

@@ -10,9 +10,8 @@ import {
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { useState } from "react";
-import { fetcher, parseValidationErrors, joinUrl } from "@/lib/utils";
+import { parseValidationErrors, joinUrl } from "@/lib/utils";
 import { useBackendUrl } from "@/app/client-context";
-import { useAuth } from "@/components/auth-provider";
 import { toast } from "sonner";
 
 interface InvitationFormProps {
@@ -21,7 +20,6 @@ interface InvitationFormProps {
 }
 
 export function InvitationForm({ orgId, onSuccess }: InvitationFormProps) {
-  const { user } = useAuth();
   const backendUrl = useBackendUrl();
 
   const [email, setEmail] = useState("");
@@ -72,7 +70,7 @@ export function InvitationForm({ orgId, onSuccess }: InvitationFormProps) {
           toast.error("Failed to send invitation");
         }
       }
-    } catch (error) {
+    } catch {
       toast.error("Error sending invitation");
     } finally {
       setIsSubmitting(false);

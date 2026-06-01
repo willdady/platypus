@@ -118,9 +118,8 @@ const McpForm = ({
 
   useEffect(() => {
     if (mcp) {
-      const existingHeaders = (mcp as any).headers as
-        | Record<string, string>
-        | undefined;
+      const existingHeaders = (mcp as { headers?: Record<string, string> })
+        .headers;
       const headerRows: HeaderRow[] = existingHeaders
         ? Object.entries(existingHeaders).map(([key, value]) => ({
             key,

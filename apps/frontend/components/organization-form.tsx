@@ -143,7 +143,7 @@ const OrganizationForm = ({ classNames, orgId }: OrganizationFormProps) => {
         setIsDeleting(false);
         setIsDeleteDialogOpen(false);
       }
-    } catch (error) {
+    } catch {
       toast.error("Error deleting organization");
       setIsDeleting(false);
       setIsDeleteDialogOpen(false);
