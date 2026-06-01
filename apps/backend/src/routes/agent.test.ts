@@ -38,7 +38,9 @@ describe("Agent Routes", () => {
       // requireOrgAccess: returns membership
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
       // requireWorkspaceAccess: workspace not owned by user
-      mockDb.limit.mockResolvedValueOnce([{ ownerId: "other-user" }]);
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "other-user", organizationId: "org-1" },
+      ]);
 
       const res = await app.request(baseUrl, {
         method: "POST",
@@ -57,7 +59,9 @@ describe("Agent Routes", () => {
       // requireOrgAccess
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
       // requireWorkspaceAccess
-      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]);
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-1", organizationId: "org-1" },
+      ]);
 
       const mockAgent = { id: "agent-1", name: "New Agent", workspaceId };
       mockDb.returning.mockResolvedValueOnce([mockAgent]);
@@ -84,7 +88,9 @@ describe("Agent Routes", () => {
       // requireOrgAccess
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
       // requireWorkspaceAccess
-      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]);
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-1", organizationId: "org-1" },
+      ]);
 
       const longDescription = "a".repeat(129);
 
@@ -115,7 +121,9 @@ describe("Agent Routes", () => {
       // requireOrgAccess
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
       // requireWorkspaceAccess
-      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]);
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-1", organizationId: "org-1" },
+      ]);
 
       const mockAgents = [{ id: "agent-1", name: "Agent 1" }];
       mockDb.where
@@ -135,7 +143,9 @@ describe("Agent Routes", () => {
       // requireOrgAccess
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
       // requireWorkspaceAccess
-      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]);
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-1", organizationId: "org-1" },
+      ]);
       // get agent
       mockDb.limit.mockResolvedValueOnce([]);
 
@@ -148,7 +158,9 @@ describe("Agent Routes", () => {
       // requireOrgAccess
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
       // requireWorkspaceAccess
-      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]);
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-1", organizationId: "org-1" },
+      ]);
 
       const mockAgent = { id: "agent-1", name: "Agent 1" };
       mockDb.limit.mockResolvedValueOnce([mockAgent]);
@@ -165,7 +177,9 @@ describe("Agent Routes", () => {
       // requireOrgAccess
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
       // requireWorkspaceAccess
-      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]);
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-1", organizationId: "org-1" },
+      ]);
 
       const mockAgent = { id: "agent-1", name: "Updated Agent" };
       mockDb.returning.mockResolvedValueOnce([mockAgent]);
@@ -190,7 +204,9 @@ describe("Agent Routes", () => {
       // requireOrgAccess
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
       // requireWorkspaceAccess
-      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]);
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-1", organizationId: "org-1" },
+      ]);
 
       const longDescription = "a".repeat(129);
 
@@ -220,7 +236,9 @@ describe("Agent Routes", () => {
       // requireOrgAccess
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
       // requireWorkspaceAccess
-      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]);
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-1", organizationId: "org-1" },
+      ]);
       // Avatar lookup (agent has no avatar)
       mockDb.limit.mockResolvedValueOnce([{ avatarKey: null }]);
 

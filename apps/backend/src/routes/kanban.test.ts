@@ -34,7 +34,9 @@ describe("Kanban Routes", () => {
     it("should list all boards in workspace", async () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
-      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]); // requireWorkspaceAccess
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-1", organizationId: "org-1" },
+      ]); // requireWorkspaceAccess
 
       const mockBoards = [{ id: "board-1", name: "Board 1", workspaceId }];
       mockDb.orderBy.mockResolvedValueOnce(mockBoards);
@@ -59,7 +61,9 @@ describe("Kanban Routes", () => {
     it("should return 403 if user is not workspace owner", async () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
-      mockDb.limit.mockResolvedValueOnce([{ ownerId: "other-user" }]); // requireWorkspaceAccess
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "other-user", organizationId: "org-1" },
+      ]); // requireWorkspaceAccess
 
       const res = await app.request(baseUrl, {
         method: "POST",
@@ -72,7 +76,9 @@ describe("Kanban Routes", () => {
     it("should create board with default columns", async () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
-      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]); // requireWorkspaceAccess
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-1", organizationId: "org-1" },
+      ]); // requireWorkspaceAccess
 
       const mockBoard = { id: "test-id-123", name: "New Board", workspaceId };
       mockDb.returning.mockResolvedValueOnce([mockBoard]);
@@ -90,7 +96,9 @@ describe("Kanban Routes", () => {
     it("should return 400 if name is missing", async () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
-      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]); // requireWorkspaceAccess
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-1", organizationId: "org-1" },
+      ]); // requireWorkspaceAccess
 
       const res = await app.request(baseUrl, {
         method: "POST",
@@ -106,7 +114,9 @@ describe("Kanban Routes", () => {
     it("should return 404 if board not found", async () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
-      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]); // requireWorkspaceAccess
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-1", organizationId: "org-1" },
+      ]); // requireWorkspaceAccess
       mockDb.limit.mockResolvedValueOnce([]); // get board
 
       const res = await app.request(`${baseUrl}/${boardId}`);
@@ -116,7 +126,9 @@ describe("Kanban Routes", () => {
     it("should return board if found", async () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
-      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]); // requireWorkspaceAccess
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-1", organizationId: "org-1" },
+      ]); // requireWorkspaceAccess
 
       const mockBoard = { id: boardId, name: "Board 1", workspaceId };
       mockDb.limit.mockResolvedValueOnce([mockBoard]);
@@ -131,7 +143,9 @@ describe("Kanban Routes", () => {
     it("should update board if user is workspace owner", async () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
-      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]); // requireWorkspaceAccess
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-1", organizationId: "org-1" },
+      ]); // requireWorkspaceAccess
 
       const mockBoard = { id: boardId, name: "Updated Board" };
       mockDb.returning.mockResolvedValueOnce([mockBoard]);
@@ -149,7 +163,9 @@ describe("Kanban Routes", () => {
     it("should return 404 if board not found", async () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
-      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]); // requireWorkspaceAccess
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-1", organizationId: "org-1" },
+      ]); // requireWorkspaceAccess
 
       mockDb.returning.mockResolvedValueOnce([]);
 
@@ -167,7 +183,9 @@ describe("Kanban Routes", () => {
     it("should delete board if user is workspace owner", async () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
-      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]); // requireWorkspaceAccess
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-1", organizationId: "org-1" },
+      ]); // requireWorkspaceAccess
 
       mockDb.returning.mockResolvedValueOnce([{ id: boardId }]);
 
@@ -181,7 +199,9 @@ describe("Kanban Routes", () => {
     it("should return 404 if board not found", async () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
-      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]); // requireWorkspaceAccess
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-1", organizationId: "org-1" },
+      ]); // requireWorkspaceAccess
 
       mockDb.returning.mockResolvedValueOnce([]);
 
@@ -196,7 +216,9 @@ describe("Kanban Routes", () => {
     it("should return 404 if board not found", async () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
-      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]); // requireWorkspaceAccess
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-1", organizationId: "org-1" },
+      ]); // requireWorkspaceAccess
       mockDb.limit.mockResolvedValueOnce([]); // get board
 
       const res = await app.request(`${baseUrl}/${boardId}/state`);
@@ -206,7 +228,9 @@ describe("Kanban Routes", () => {
     it("should return board state with columns and cards", async () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
-      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]); // requireWorkspaceAccess
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-1", organizationId: "org-1" },
+      ]); // requireWorkspaceAccess
 
       const mockBoard = {
         id: boardId,
@@ -249,7 +273,9 @@ describe("Kanban Routes", () => {
     it("should return 404 if board not found", async () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
-      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]); // requireWorkspaceAccess
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-1", organizationId: "org-1" },
+      ]); // requireWorkspaceAccess
       mockDb.limit.mockResolvedValueOnce([]); // get board
 
       const res = await app.request(`${baseUrl}/${boardId}/columns`, {
@@ -263,7 +289,9 @@ describe("Kanban Routes", () => {
     it("should create column", async () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
-      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]); // requireWorkspaceAccess
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-1", organizationId: "org-1" },
+      ]); // requireWorkspaceAccess
 
       const mockBoard = { id: boardId, name: "Board 1", workspaceId };
       mockDb.limit.mockResolvedValueOnce([mockBoard]);
@@ -292,7 +320,9 @@ describe("Kanban Routes", () => {
     it("should return 409 if column name already exists on board", async () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
-      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]); // requireWorkspaceAccess
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-1", organizationId: "org-1" },
+      ]); // requireWorkspaceAccess
 
       const mockBoard = { id: boardId, name: "Board 1", workspaceId };
       mockDb.limit.mockResolvedValueOnce([mockBoard]);
@@ -316,7 +346,9 @@ describe("Kanban Routes", () => {
     it("should update column", async () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
-      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]); // requireWorkspaceAccess
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-1", organizationId: "org-1" },
+      ]); // requireWorkspaceAccess
       mockDb.limit.mockResolvedValueOnce([]); // duplicate check
 
       const mockColumn = { id: "col-1", boardId, name: "Updated Column" };
@@ -335,7 +367,9 @@ describe("Kanban Routes", () => {
     it("should return 404 if column not found", async () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
-      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]); // requireWorkspaceAccess
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-1", organizationId: "org-1" },
+      ]); // requireWorkspaceAccess
       mockDb.limit.mockResolvedValueOnce([]); // duplicate check
 
       mockDb.returning.mockResolvedValueOnce([]);
@@ -352,7 +386,9 @@ describe("Kanban Routes", () => {
     it("should return 409 if renaming to an existing column name", async () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
-      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]); // requireWorkspaceAccess
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-1", organizationId: "org-1" },
+      ]); // requireWorkspaceAccess
       mockDb.limit.mockResolvedValueOnce([{ id: "other-col" }]); // duplicate check
 
       const res = await app.request(`${baseUrl}/${boardId}/columns/col-1`, {
@@ -373,7 +409,9 @@ describe("Kanban Routes", () => {
     it("should delete column", async () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
-      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]); // requireWorkspaceAccess
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-1", organizationId: "org-1" },
+      ]); // requireWorkspaceAccess
 
       mockDb.returning.mockResolvedValueOnce([{ id: "col-1" }]);
 
@@ -387,7 +425,9 @@ describe("Kanban Routes", () => {
     it("should return 404 if column not found", async () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
-      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]); // requireWorkspaceAccess
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-1", organizationId: "org-1" },
+      ]); // requireWorkspaceAccess
 
       mockDb.returning.mockResolvedValueOnce([]);
 
@@ -402,7 +442,9 @@ describe("Kanban Routes", () => {
     it("should return 404 if board not found", async () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
-      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]); // requireWorkspaceAccess
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-1", organizationId: "org-1" },
+      ]); // requireWorkspaceAccess
       mockDb.limit.mockResolvedValueOnce([]); // get board
 
       const res = await app.request(`${baseUrl}/${boardId}/columns/reorder`, {
@@ -416,7 +458,9 @@ describe("Kanban Routes", () => {
     it("should reorder columns", async () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
-      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]); // requireWorkspaceAccess
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-1", organizationId: "org-1" },
+      ]); // requireWorkspaceAccess
 
       const mockBoard = { id: boardId, name: "Board 1", workspaceId };
       mockDb.limit.mockResolvedValueOnce([mockBoard]);
@@ -438,7 +482,9 @@ describe("Kanban Routes", () => {
     it("should return 400 if columnIds contain IDs not belonging to board", async () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
-      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]); // requireWorkspaceAccess
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-1", organizationId: "org-1" },
+      ]); // requireWorkspaceAccess
 
       const mockBoard = { id: boardId, name: "Board 1", workspaceId };
       mockDb.limit.mockResolvedValueOnce([mockBoard]); // board found
@@ -459,7 +505,9 @@ describe("Kanban Routes", () => {
     it("should create card", async () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
-      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]); // requireWorkspaceAccess
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-1", organizationId: "org-1" },
+      ]); // requireWorkspaceAccess
 
       mockDb.orderBy.mockResolvedValueOnce([{ maxPos: 1.0 }]);
 
@@ -489,7 +537,9 @@ describe("Kanban Routes", () => {
     it("should return 404 when card does not belong to board", async () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
-      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]); // requireWorkspaceAccess
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-1", organizationId: "org-1" },
+      ]); // requireWorkspaceAccess
       // card update returns empty (card not in this board)
       mockDb.returning.mockResolvedValueOnce([]);
 
@@ -509,7 +559,9 @@ describe("Kanban Routes", () => {
     it("should update card", async () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
-      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]); // requireWorkspaceAccess
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-1", organizationId: "org-1" },
+      ]); // requireWorkspaceAccess
 
       const mockCard = { id: "card-1", title: "Updated Card" };
       mockDb.returning.mockResolvedValueOnce([mockCard]);
@@ -527,7 +579,9 @@ describe("Kanban Routes", () => {
     it("should return 404 if card not found", async () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
-      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]); // requireWorkspaceAccess
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-1", organizationId: "org-1" },
+      ]); // requireWorkspaceAccess
 
       mockDb.returning.mockResolvedValueOnce([]);
 
@@ -544,7 +598,9 @@ describe("Kanban Routes", () => {
       it("should return 400 for invalid user assignee", async () => {
         mockSession();
         mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
-        mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]); // requireWorkspaceAccess
+        mockDb.limit.mockResolvedValueOnce([
+          { ownerId: "user-1", organizationId: "org-1" },
+        ]); // requireWorkspaceAccess
         // validateAssignees: org member query (empty) then super admin query (empty)
         mockDb.where.mockReturnValueOnce(mockDb); // requireOrgAccess chain
         mockDb.where.mockReturnValueOnce(mockDb); // requireWorkspaceAccess chain
@@ -571,7 +627,9 @@ describe("Kanban Routes", () => {
           role: "admin",
         });
         // Super admin bypasses requireOrgAccess (no DB query)
-        mockDb.limit.mockResolvedValueOnce([{ ownerId: "admin-user" }]); // requireWorkspaceAccess
+        mockDb.limit.mockResolvedValueOnce([
+          { ownerId: "admin-user", organizationId: "org-1" },
+        ]); // requireWorkspaceAccess
         // validateAssignees queries
         mockDb.where.mockReturnValueOnce(mockDb); // requireWorkspaceAccess chain
         mockDb.where.mockResolvedValueOnce([]); // org member lookup — not found
@@ -602,7 +660,9 @@ describe("Kanban Routes", () => {
       it("should allow org member to be assigned", async () => {
         mockSession();
         mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
-        mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]); // requireWorkspaceAccess
+        mockDb.limit.mockResolvedValueOnce([
+          { ownerId: "user-1", organizationId: "org-1" },
+        ]); // requireWorkspaceAccess
         // validateAssignees queries
         mockDb.where.mockReturnValueOnce(mockDb); // requireOrgAccess chain
         mockDb.where.mockReturnValueOnce(mockDb); // requireWorkspaceAccess chain
@@ -637,7 +697,9 @@ describe("Kanban Routes", () => {
     it("should move card to beginning of column", async () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
-      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]); // requireWorkspaceAccess
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-1", organizationId: "org-1" },
+      ]); // requireWorkspaceAccess
 
       const existingCards = [
         { id: "card-2", columnId: "col-2", position: 1.0 },
@@ -660,7 +722,9 @@ describe("Kanban Routes", () => {
     it("should move card after another card", async () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
-      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]); // requireWorkspaceAccess
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-1", organizationId: "org-1" },
+      ]); // requireWorkspaceAccess
 
       const existingCards = [
         { id: "card-2", columnId: "col-2", position: 1.0 },
@@ -683,7 +747,9 @@ describe("Kanban Routes", () => {
     it("should trigger rebalancing when gap is too small", async () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
-      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]); // requireWorkspaceAccess
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-1", organizationId: "org-1" },
+      ]); // requireWorkspaceAccess
 
       // Cards with very small gap between positions 1 and 2
       const existingCards = [
@@ -708,7 +774,9 @@ describe("Kanban Routes", () => {
     it("should return 400 if afterCardId not found in column", async () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
-      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]); // requireWorkspaceAccess
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-1", organizationId: "org-1" },
+      ]); // requireWorkspaceAccess
 
       const existingCards = [
         { id: "card-2", columnId: "col-2", position: 1.0 },
@@ -734,7 +802,9 @@ describe("Kanban Routes", () => {
     it("should return 404 when card does not belong to board", async () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
-      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]); // requireWorkspaceAccess
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-1", organizationId: "org-1" },
+      ]); // requireWorkspaceAccess
       mockDb.returning.mockResolvedValueOnce([]); // delete returns empty
 
       const res = await app.request(
@@ -751,7 +821,9 @@ describe("Kanban Routes", () => {
     it("should delete card", async () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
-      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]); // requireWorkspaceAccess
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-1", organizationId: "org-1" },
+      ]); // requireWorkspaceAccess
 
       mockDb.returning.mockResolvedValueOnce([{ id: "card-1" }]);
 
@@ -765,7 +837,9 @@ describe("Kanban Routes", () => {
     it("should return 404 if card not found", async () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
-      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]); // requireWorkspaceAccess
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-1", organizationId: "org-1" },
+      ]); // requireWorkspaceAccess
 
       mockDb.returning.mockResolvedValueOnce([]);
 
@@ -802,7 +876,9 @@ describe("Kanban Routes", () => {
     it("should return 404 if card not found", async () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
-      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]); // requireWorkspaceAccess
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-1", organizationId: "org-1" },
+      ]); // requireWorkspaceAccess
       mockDb.limit.mockResolvedValueOnce([]); // card verification → not found
 
       const res = await app.request(commentsUrl);
@@ -812,7 +888,9 @@ describe("Kanban Routes", () => {
     it("should return comments for card with createdByName resolved", async () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
-      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]); // requireWorkspaceAccess
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-1", organizationId: "org-1" },
+      ]); // requireWorkspaceAccess
       mockDb.limit.mockResolvedValueOnce([{ id: cardId }]); // card verification → found
       mockDb.orderBy.mockResolvedValueOnce([mockComment]); // comments query
 
@@ -827,7 +905,9 @@ describe("Kanban Routes", () => {
     it("should return empty results when card has no comments", async () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
-      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]); // requireWorkspaceAccess
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-1", organizationId: "org-1" },
+      ]); // requireWorkspaceAccess
       mockDb.limit.mockResolvedValueOnce([{ id: cardId }]); // card found
       mockDb.orderBy.mockResolvedValueOnce([]); // no comments
 
@@ -851,7 +931,9 @@ describe("Kanban Routes", () => {
     it("should return 404 if card not found", async () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
-      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]); // requireWorkspaceAccess
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-1", organizationId: "org-1" },
+      ]); // requireWorkspaceAccess
       mockDb.limit.mockResolvedValueOnce([]); // card verification → not found
 
       const res = await app.request(commentsUrl, {
@@ -865,7 +947,9 @@ describe("Kanban Routes", () => {
     it("should create comment and return 201", async () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
-      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]); // requireWorkspaceAccess
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-1", organizationId: "org-1" },
+      ]); // requireWorkspaceAccess
       mockDb.limit.mockResolvedValueOnce([{ id: cardId }]); // card found
       mockDb.returning.mockResolvedValueOnce([mockComment]); // insert
 
@@ -883,7 +967,9 @@ describe("Kanban Routes", () => {
     it("should return 400 if body is empty string", async () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
-      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]); // requireWorkspaceAccess
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-1", organizationId: "org-1" },
+      ]); // requireWorkspaceAccess
 
       const res = await app.request(commentsUrl, {
         method: "POST",
@@ -896,7 +982,9 @@ describe("Kanban Routes", () => {
     it("should return 400 if body field is missing", async () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
-      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]); // requireWorkspaceAccess
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-1", organizationId: "org-1" },
+      ]); // requireWorkspaceAccess
 
       const res = await app.request(commentsUrl, {
         method: "POST",
@@ -921,7 +1009,9 @@ describe("Kanban Routes", () => {
     it("should update comment and return enriched result", async () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
-      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]); // requireWorkspaceAccess
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-1", organizationId: "org-1" },
+      ]); // requireWorkspaceAccess
       mockDb.limit.mockResolvedValueOnce([
         { ...mockComment, createdByUserId: "user-1" },
       ]); // ownership check
@@ -941,7 +1031,9 @@ describe("Kanban Routes", () => {
     it("should return 404 if comment not found", async () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
-      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]); // requireWorkspaceAccess
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-1", organizationId: "org-1" },
+      ]); // requireWorkspaceAccess
       mockDb.limit.mockResolvedValueOnce([]); // ownership check - not found
 
       const res = await app.request(`${commentsUrl}/${commentId}`, {
@@ -959,7 +1051,9 @@ describe("Kanban Routes", () => {
         role: "user",
       });
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
-      mockDb.limit.mockResolvedValueOnce([{ ownerId: "other-user" }]); // requireWorkspaceAccess
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "other-user", organizationId: "org-1" },
+      ]); // requireWorkspaceAccess
       mockDb.limit.mockResolvedValueOnce([
         { ...mockComment, createdByUserId: "user-1" },
       ]); // ownership check - owned by different user
@@ -982,7 +1076,9 @@ describe("Kanban Routes", () => {
         role: "user",
       });
       mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]); // requireOrgAccess - org admin
-      mockDb.limit.mockResolvedValueOnce([{ ownerId: "admin-user" }]); // requireWorkspaceAccess
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "admin-user", organizationId: "org-1" },
+      ]); // requireWorkspaceAccess
       mockDb.limit.mockResolvedValueOnce([
         { ...mockComment, createdByUserId: "user-1" },
       ]); // ownership check - owned by different user
@@ -1011,7 +1107,9 @@ describe("Kanban Routes", () => {
     it("should delete comment and return success", async () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
-      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]); // requireWorkspaceAccess
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-1", organizationId: "org-1" },
+      ]); // requireWorkspaceAccess
       mockDb.limit.mockResolvedValueOnce([
         { ...mockComment, createdByUserId: "user-1" },
       ]); // ownership check
@@ -1026,7 +1124,9 @@ describe("Kanban Routes", () => {
     it("should return 404 if comment not found", async () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
-      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]); // requireWorkspaceAccess
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-1", organizationId: "org-1" },
+      ]); // requireWorkspaceAccess
       mockDb.limit.mockResolvedValueOnce([]); // ownership check - not found
 
       const res = await app.request(`${commentsUrl}/${commentId}`, {
@@ -1042,7 +1142,9 @@ describe("Kanban Routes", () => {
         role: "user",
       });
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
-      mockDb.limit.mockResolvedValueOnce([{ ownerId: "other-user" }]); // requireWorkspaceAccess
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "other-user", organizationId: "org-1" },
+      ]); // requireWorkspaceAccess
       mockDb.limit.mockResolvedValueOnce([
         { ...mockComment, createdByUserId: "user-1" },
       ]); // ownership check
@@ -1063,7 +1165,9 @@ describe("Kanban Routes", () => {
         role: "user",
       });
       mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]); // requireOrgAccess - org admin
-      mockDb.limit.mockResolvedValueOnce([{ ownerId: "admin-user" }]); // requireWorkspaceAccess
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "admin-user", organizationId: "org-1" },
+      ]); // requireWorkspaceAccess
       mockDb.limit.mockResolvedValueOnce([
         { ...mockComment, createdByUserId: "user-1" },
       ]); // ownership check

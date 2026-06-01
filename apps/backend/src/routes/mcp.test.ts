@@ -26,7 +26,9 @@ describe("MCP Routes", () => {
     it("should create MCP if workspace admin", async () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]); // requireOrgAccess
-      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]); // requireWorkspaceAccess
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-1", organizationId: "org-1" },
+      ]); // requireWorkspaceAccess
 
       const mockMcp = { id: "mcp-1", name: "New MCP", url: "http://mcp.com" };
       mockDb.returning.mockResolvedValueOnce([mockMcp]);
@@ -58,7 +60,9 @@ describe("MCP Routes", () => {
     it("returns 403 for a non-admin owner when self-management is disabled", async () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
-      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]); // requireWorkspaceAccess
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-1", organizationId: "org-1" },
+      ]); // requireWorkspaceAccess
       mockDb.limit.mockResolvedValueOnce([{ flag: false }]); // delegation flag
 
       const res = await app.request(baseUrl, {
@@ -72,7 +76,9 @@ describe("MCP Routes", () => {
     it("allows a non-admin owner when self-management is enabled", async () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
-      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]);
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-1", organizationId: "org-1" },
+      ]);
       mockDb.limit.mockResolvedValueOnce([{ flag: true }]); // delegation flag set
       mockDb.returning.mockResolvedValueOnce([
         { id: "mcp-1", name: "New MCP" },
@@ -91,7 +97,9 @@ describe("MCP Routes", () => {
     it("should list workspace-scoped MCPs and only attached org-scoped MCPs", async () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
-      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]); // requireWorkspaceAccess
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-1", organizationId: "org-1" },
+      ]); // requireWorkspaceAccess
 
       const workspaceMcps = [
         { id: "mcp-ws", name: "Workspace MCP", authType: "None" },
@@ -121,7 +129,9 @@ describe("MCP Routes", () => {
     it("should test MCP connection", async () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]); // requireOrgAccess
-      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]); // requireWorkspaceAccess
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-1", organizationId: "org-1" },
+      ]); // requireWorkspaceAccess
 
       const res = await app.request(`${baseUrl}/test`, {
         method: "POST",
@@ -157,7 +167,9 @@ describe("MCP Routes", () => {
     it("force=true: clears the four oauth token columns in DB and returns authorizationUrl", async () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]); // requireOrgAccess
-      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]); // requireWorkspaceAccess
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-1", organizationId: "org-1" },
+      ]); // requireWorkspaceAccess
       mockDb.limit.mockResolvedValueOnce([{ ...mcpRecord }]); // MCP lookup
 
       (mcpAuth as any).mockImplementationOnce(async (provider: any) => {
@@ -196,7 +208,9 @@ describe("MCP Routes", () => {
     it("no force flag: leaves token columns untouched when SDK silently refreshes", async () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]); // requireOrgAccess
-      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]); // requireWorkspaceAccess
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-1", organizationId: "org-1" },
+      ]); // requireWorkspaceAccess
       mockDb.limit.mockResolvedValueOnce([{ ...mcpRecord }]); // MCP lookup
 
       (mcpAuth as any).mockResolvedValueOnce("AUTHORIZED");

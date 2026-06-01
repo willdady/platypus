@@ -53,7 +53,9 @@ const eventTrigger = {
 const stubAuthLookups = () => {
   mockSession();
   mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
-  mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]);
+  mockDb.limit.mockResolvedValueOnce([
+    { ownerId: "user-1", organizationId: "org-1" },
+  ]);
 };
 
 describe("Trigger Routes", () => {

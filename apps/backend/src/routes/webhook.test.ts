@@ -29,7 +29,9 @@ describe("Webhook Routes", () => {
     it("should return list of webhooks", async () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
-      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]); // requireWorkspaceAccess
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-1", organizationId: "org-1" },
+      ]); // requireWorkspaceAccess
 
       const mockWebhooks = [
         {
@@ -71,7 +73,9 @@ describe("Webhook Routes", () => {
     it("should return empty results when no webhooks exist", async () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
-      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]); // requireWorkspaceAccess
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-1", organizationId: "org-1" },
+      ]); // requireWorkspaceAccess
 
       mockDb.where
         .mockReturnValueOnce(mockDb) // requireOrgAccess
@@ -89,7 +93,9 @@ describe("Webhook Routes", () => {
     it("should create webhook and return 201", async () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
-      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]); // requireWorkspaceAccess
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-1", organizationId: "org-1" },
+      ]); // requireWorkspaceAccess
 
       const mockWebhook = {
         id: "wh-1",
@@ -132,7 +138,7 @@ describe("Webhook Routes", () => {
       mockSession();
       mockDb.limit
         .mockResolvedValueOnce([{ role: "member" }]) // requireOrgAccess
-        .mockResolvedValueOnce([{ ownerId: "user-1" }]) // requireWorkspaceAccess
+        .mockResolvedValueOnce([{ ownerId: "user-1", organizationId: "org-1" }]) // requireWorkspaceAccess
         .mockResolvedValueOnce([
           {
             id: "wh-1",
@@ -157,7 +163,7 @@ describe("Webhook Routes", () => {
       mockSession();
       mockDb.limit
         .mockResolvedValueOnce([{ role: "member" }]) // requireOrgAccess
-        .mockResolvedValueOnce([{ ownerId: "user-1" }]) // requireWorkspaceAccess
+        .mockResolvedValueOnce([{ ownerId: "user-1", organizationId: "org-1" }]) // requireWorkspaceAccess
         .mockResolvedValueOnce([]); // no webhook
 
       const res = await app.request(`${baseUrl}/nonexistent`);
@@ -169,7 +175,9 @@ describe("Webhook Routes", () => {
     it("should update webhook", async () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
-      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]); // requireWorkspaceAccess
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-1", organizationId: "org-1" },
+      ]); // requireWorkspaceAccess
 
       mockDb.returning.mockResolvedValueOnce([
         {
@@ -203,7 +211,9 @@ describe("Webhook Routes", () => {
     it("should return 404 for non-existent webhook", async () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
-      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]); // requireWorkspaceAccess
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-1", organizationId: "org-1" },
+      ]); // requireWorkspaceAccess
 
       mockDb.returning.mockResolvedValueOnce([]);
 
@@ -223,7 +233,9 @@ describe("Webhook Routes", () => {
     it("should delete webhook", async () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
-      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]); // requireWorkspaceAccess
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-1", organizationId: "org-1" },
+      ]); // requireWorkspaceAccess
 
       mockDb.returning.mockResolvedValueOnce([{ id: "wh-1" }]);
 
@@ -238,7 +250,9 @@ describe("Webhook Routes", () => {
     it("should return 404 for non-existent webhook", async () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
-      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]); // requireWorkspaceAccess
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-1", organizationId: "org-1" },
+      ]); // requireWorkspaceAccess
 
       mockDb.returning.mockResolvedValueOnce([]);
 
@@ -254,7 +268,9 @@ describe("Webhook Routes", () => {
     it("should regenerate signing secret and return full record", async () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
-      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]); // requireWorkspaceAccess
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-1", organizationId: "org-1" },
+      ]); // requireWorkspaceAccess
 
       const newWebhook = {
         id: "wh-1",
@@ -288,7 +304,9 @@ describe("Webhook Routes", () => {
     it("should return 404 for non-existent webhook", async () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
-      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]); // requireWorkspaceAccess
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-1", organizationId: "org-1" },
+      ]); // requireWorkspaceAccess
 
       mockDb.returning.mockResolvedValueOnce([]);
 

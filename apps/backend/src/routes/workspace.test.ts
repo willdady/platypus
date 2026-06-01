@@ -41,7 +41,10 @@ describe("Workspace Routes", () => {
       expect(await res.json()).toEqual(mockWorkspace);
       // Owner defaults to the calling admin when no ownerId is supplied.
       const insertedValues = mockDb.values.mock.calls.at(-1)?.[0];
-      expect(insertedValues).toMatchObject({ ownerId: "user-1" });
+      expect(insertedValues).toMatchObject({
+        ownerId: "user-1",
+        organizationId: "org-1",
+      });
     });
 
     // ADR-0008: a regular member can no longer self-create Workspaces.
@@ -85,7 +88,10 @@ describe("Workspace Routes", () => {
 
       expect(res.status).toBe(201);
       const insertedValues = mockDb.values.mock.calls.at(-1)?.[0];
-      expect(insertedValues).toMatchObject({ ownerId: "member-2" });
+      expect(insertedValues).toMatchObject({
+        ownerId: "member-2",
+        organizationId: "org-1",
+      });
     });
 
     // Governance: an admin cannot hand a workspace to a non-member.
@@ -157,7 +163,9 @@ describe("Workspace Routes", () => {
       // Mock requireOrgAccess: return member role
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
       // Mock requireWorkspaceAccess: workspace owned by user
-      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]);
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-1", organizationId: "org-1" },
+      ]);
       // Mock get workspace
       mockDb.limit.mockResolvedValueOnce([mockWorkspace]);
 
@@ -187,7 +195,9 @@ describe("Workspace Routes", () => {
       // Mock requireOrgAccess: return member role
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
       // Mock requireWorkspaceAccess: workspace owned by user
-      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]);
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-1", organizationId: "org-1" },
+      ]);
 
       // Mock update
       mockDb.returning.mockResolvedValueOnce([mockWorkspace]);
@@ -207,7 +217,9 @@ describe("Workspace Routes", () => {
     it("strips delegation flags from a non-admin owner's update", async () => {
       mockSession({ id: "user-1", role: "user" });
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
-      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]); // requireWorkspaceAccess
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-1", organizationId: "org-1" },
+      ]); // requireWorkspaceAccess
       mockDb.returning.mockResolvedValueOnce([
         { id: "ws-1", name: "My Workspace" },
       ]);
@@ -231,7 +243,9 @@ describe("Workspace Routes", () => {
     it("lets an org admin set delegation flags", async () => {
       mockSession({ id: "user-1", role: "user" });
       mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]); // requireOrgAccess
-      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-2" }]); // requireWorkspaceAccess (admin, not owner)
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-2", organizationId: "org-1" },
+      ]); // requireWorkspaceAccess (admin, not owner)
       mockDb.returning.mockResolvedValueOnce([
         { id: "ws-1", name: "My Workspace" },
       ]);
@@ -255,7 +269,9 @@ describe("Workspace Routes", () => {
       // Mock requireOrgAccess: return member role
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
       // Mock requireWorkspaceAccess: workspace owned by user
-      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]);
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-1", organizationId: "org-1" },
+      ]);
 
       // Mock delete — order: orgAccess where (chained) → workspaceAccess where
       // (chained) → destroyWorkspaceSandboxes select-where (resolves []) →
