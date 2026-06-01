@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.89.1](https://github.com/willdady/platypus/compare/v1.89.0...v1.89.1) (2026-06-01)
+
+
+### Bug Fixes
+
+* **backend:** verify workspace belongs to path orgId in requireWorkspaceAccess ([#175](https://github.com/willdady/platypus/issues/175)) ([71b8cae](https://github.com/willdady/platypus/commit/71b8cae69c7ba98ad4566e73c097bd2b808f0a2d))
+* **frontend:** unbreak ESLint 10 lint + clear mechanical lint errors ([#173](https://github.com/willdady/platypus/issues/173)) ([9c3132b](https://github.com/willdady/platypus/commit/9c3132b0153461ee28a1facc21960fb677892d2d))
+
 ## [1.89.0](https://github.com/willdady/platypus/compare/v1.88.0...v1.89.0) (2026-05-31)
 
 
