@@ -11,6 +11,7 @@
     "drizzle-kit-generate": "turbo run drizzle-kit-generate -F @platypus/backend",
     "drizzle-kit-migrate": "turbo run drizzle-kit-migrate -F @platypus/backend",
     "format": "prettier --write \"**/*.{ts,tsx,md}\"",
+    "lint": "turbo run lint",
     "test": "turbo run test"
   },
   "devDependencies": {
