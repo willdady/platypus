@@ -174,7 +174,7 @@ export const WorkspaceContextForm = ({ contextId }: { contextId?: string }) => {
           toast.error("Failed to create context");
         }
       }
-    } catch (error) {
+    } catch {
       toast.error("Error saving context");
     } finally {
       setIsSubmitting(false);
@@ -200,7 +200,7 @@ export const WorkspaceContextForm = ({ contextId }: { contextId?: string }) => {
       } else {
         toast.error("Failed to delete context");
       }
-    } catch (error) {
+    } catch {
       toast.error("Error deleting context");
     } finally {
       setIsDeleting(false);
@@ -216,13 +216,15 @@ export const WorkspaceContextForm = ({ contextId }: { contextId?: string }) => {
               <Field>
                 <FieldLabel>Organization</FieldLabel>
                 <div className="text-sm text-muted-foreground">
-                  {(contextData as any)?.organizationName || "\u00A0"}
+                  {(contextData as { organizationName?: string })
+                    ?.organizationName || "\u00A0"}
                 </div>
               </Field>
               <Field>
                 <FieldLabel>Workspace</FieldLabel>
                 <div className="text-sm text-muted-foreground">
-                  {(contextData as any)?.workspaceName || "\u00A0"}
+                  {(contextData as { workspaceName?: string })?.workspaceName ||
+                    "\u00A0"}
                 </div>
               </Field>
             </>

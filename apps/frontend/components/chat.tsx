@@ -244,7 +244,9 @@ export const Chat = ({
   } = chatUI;
 
   // Use ref to store getRequestBody so the transport callback can access current values
-  const getRequestBodyRef = useRef<(() => any) | undefined>(undefined);
+  const getRequestBodyRef = useRef<(() => Record<string, unknown>) | undefined>(
+    undefined,
+  );
 
   // Create getRequestBody function that depends on extracted values
   const getRequestBody = useCallback(() => {
@@ -496,7 +498,7 @@ export const Chat = ({
           <div className="w-full xl:w-4/5 max-w-4xl">
             {isWorkspaceOwner ? (
               <PromptInput
-                onSubmit={(message, event) => {
+                onSubmit={(message) => {
                   handleSubmit(message);
                   setInputValue("");
                 }}

@@ -248,7 +248,7 @@ const WorkspaceForm = ({
         setIsDeleting(false);
         setIsDeleteDialogOpen(false);
       }
-    } catch (error) {
+    } catch {
       toast.error("Error deleting workspace");
       setIsDeleting(false);
       setIsDeleteDialogOpen(false);
@@ -427,7 +427,10 @@ const WorkspaceForm = ({
                 <SelectContent>
                   <SelectItem value="none">Disabled</SelectItem>
                   {providers
-                    .filter((p) => (p as any).embeddingModelId)
+                    .filter(
+                      (p) =>
+                        (p as { embeddingModelId?: string }).embeddingModelId,
+                    )
                     .map((provider) => (
                       <SelectItem key={provider.id} value={provider.id}>
                         {provider.name}

@@ -248,13 +248,6 @@ export function KanbanBoard({
     [columnIds],
   );
 
-  const findColumnByCardId = useCallback(
-    (cardId: string): ColumnWithCards | undefined => {
-      return columns.find((col) => col.cards.some((c) => c.id === cardId));
-    },
-    [columns],
-  );
-
   const handleDragStart = useCallback(
     (event: DragStartEvent) => {
       const { active } = event;

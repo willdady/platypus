@@ -568,7 +568,7 @@ const TriggerForm = ({
         setValidationErrors(parseValidationErrors(errorData));
         toast.error("Failed to save trigger");
       }
-    } catch (error) {
+    } catch {
       toast.error("Error saving trigger");
     } finally {
       setIsSubmitting(false);
@@ -598,7 +598,7 @@ const TriggerForm = ({
         setIsDeleting(false);
         setIsDeleteDialogOpen(false);
       }
-    } catch (error) {
+    } catch {
       toast.error("Error deleting trigger");
       setIsDeleting(false);
       setIsDeleteDialogOpen(false);
@@ -929,7 +929,7 @@ const TriggerForm = ({
                   />
                   <FieldDescription>
                     Format: minute hour day-of-month month day-of-week. Example:
-                    "0 9 * * *" runs daily at 9:00 AM.
+                    &quot;0 9 * * *&quot; runs daily at 9:00 AM.
                   </FieldDescription>
                   {validationErrors.cronExpression && (
                     <FieldError>{validationErrors.cronExpression}</FieldError>

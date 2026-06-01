@@ -45,7 +45,7 @@ const UserInvitationsPage = () => {
         const errorData = await response.json();
         toast.error(errorData.message || "Failed to accept invitation");
       }
-    } catch (error) {
+    } catch {
       toast.error("Error accepting invitation");
     }
   };
@@ -69,7 +69,7 @@ const UserInvitationsPage = () => {
       } else {
         toast.error("Failed to decline invitation");
       }
-    } catch (error) {
+    } catch {
       toast.error("Error declining invitation");
     } finally {
       setIsDeclining(false);

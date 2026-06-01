@@ -64,7 +64,7 @@ export function MemberEditDialog({
           data.error || data.message || "Failed to update member role",
         );
       }
-    } catch (error) {
+    } catch {
       toast.error("Error updating member role");
     } finally {
       setIsSubmitting(false);

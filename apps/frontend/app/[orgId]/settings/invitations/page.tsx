@@ -69,7 +69,7 @@ const OrgInvitationsPage = () => {
       } else {
         toast.error("Failed to delete invitation");
       }
-    } catch (error) {
+    } catch {
       toast.error("Error deleting invitation");
     } finally {
       setIsDeleting(false);
@@ -161,7 +161,7 @@ const OrgInvitationsPage = () => {
                       <TableCell>{invite.email}</TableCell>
                       <TableCell className="text-muted-foreground">
                         {invite.workspaceName || (
-                          <span className="italic">Member's name</span>
+                          <span className="italic">Member&apos;s name</span>
                         )}
                       </TableCell>
                       <TableCell>{getStatusBadge(invite.status)}</TableCell>

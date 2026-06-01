@@ -271,7 +271,7 @@ const AgentForm = ({
   const handleModelChange = (value: string) => {
     if (value.startsWith("provider:")) {
       // Provider/model selected
-      const [_, newProviderId, ...modelIdParts] = value.split(":");
+      const [, newProviderId, ...modelIdParts] = value.split(":");
       const newModelId = modelIdParts.join(":");
       setFormData((prevData) => ({
         ...prevData,
