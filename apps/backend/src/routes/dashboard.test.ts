@@ -36,7 +36,9 @@ describe("Dashboard Routes", () => {
     it("lists all dashboards in workspace", async () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
-      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]); // requireWorkspaceAccess
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-1", organizationId: "org-1" },
+      ]); // requireWorkspaceAccess
       const mockDashboards = [{ id: dashboardId, name: "Dash 1", workspaceId }];
       mockDb.orderBy.mockResolvedValueOnce(mockDashboards);
 
@@ -60,7 +62,9 @@ describe("Dashboard Routes", () => {
     it("creates a dashboard", async () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
-      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]);
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-1", organizationId: "org-1" },
+      ]);
       const mockDash = {
         id: "test-id-123",
         name: "New Dashboard",
@@ -82,7 +86,9 @@ describe("Dashboard Routes", () => {
     it("returns 400 if name is missing", async () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
-      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]);
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-1", organizationId: "org-1" },
+      ]);
 
       const res = await app.request(baseUrl, {
         method: "POST",
@@ -103,7 +109,9 @@ describe("Dashboard Routes", () => {
     it("returns 404 if dashboard not found", async () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
-      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]);
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-1", organizationId: "org-1" },
+      ]);
       mockDb.limit.mockResolvedValueOnce([]);
 
       const res = await app.request(`${baseUrl}/${dashboardId}`);
@@ -113,7 +121,9 @@ describe("Dashboard Routes", () => {
     it("returns dashboard", async () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
-      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]);
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-1", organizationId: "org-1" },
+      ]);
       const mockDash = { id: dashboardId, workspaceId, name: "Dash 1" };
       mockDb.limit.mockResolvedValueOnce([mockDash]);
 
@@ -127,7 +137,9 @@ describe("Dashboard Routes", () => {
     it("returns 404 if dashboard not found", async () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
-      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]);
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-1", organizationId: "org-1" },
+      ]);
       mockDb.limit.mockResolvedValueOnce([]);
 
       const res = await app.request(`${baseUrl}/${dashboardId}`, {
@@ -141,7 +153,9 @@ describe("Dashboard Routes", () => {
     it("updates dashboard", async () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
-      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]);
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-1", organizationId: "org-1" },
+      ]);
       mockDb.limit.mockResolvedValueOnce([{ id: dashboardId, workspaceId }]);
       const updated = { id: dashboardId, name: "Updated", workspaceId };
       mockDb.returning.mockResolvedValueOnce([updated]);
@@ -160,7 +174,9 @@ describe("Dashboard Routes", () => {
     it("returns 404 if dashboard not found", async () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
-      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]);
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-1", organizationId: "org-1" },
+      ]);
       mockDb.limit.mockResolvedValueOnce([]);
 
       const res = await app.request(`${baseUrl}/${dashboardId}`, {
@@ -172,7 +188,9 @@ describe("Dashboard Routes", () => {
     it("deletes dashboard and returns 204", async () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
-      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]);
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-1", organizationId: "org-1" },
+      ]);
       mockDb.limit.mockResolvedValueOnce([{ id: dashboardId, workspaceId }]);
 
       const res = await app.request(`${baseUrl}/${dashboardId}`, {
@@ -194,7 +212,9 @@ describe("Dashboard Routes", () => {
     it("returns 404 if dashboard not found", async () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
-      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]);
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-1", organizationId: "org-1" },
+      ]);
       mockDb.limit.mockResolvedValueOnce([]);
 
       const res = await app.request(`${baseUrl}/${dashboardId}/widgets`);
@@ -204,7 +224,9 @@ describe("Dashboard Routes", () => {
     it("lists widgets on a dashboard", async () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
-      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]);
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-1", organizationId: "org-1" },
+      ]);
       mockDb.limit.mockResolvedValueOnce([{ id: dashboardId, workspaceId }]);
       const mockWidgets = [{ id: widgetId, dashboardId, type: "metric" }];
       mockDb.orderBy.mockResolvedValueOnce(mockWidgets);
@@ -219,7 +241,9 @@ describe("Dashboard Routes", () => {
     it("returns 404 if dashboard not found", async () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
-      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]);
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-1", organizationId: "org-1" },
+      ]);
       mockDb.limit.mockResolvedValueOnce([]);
 
       const res = await app.request(`${baseUrl}/${dashboardId}/widgets`, {
@@ -233,7 +257,9 @@ describe("Dashboard Routes", () => {
     it("creates a widget", async () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
-      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]);
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-1", organizationId: "org-1" },
+      ]);
       mockDb.limit.mockResolvedValueOnce([{ id: dashboardId, workspaceId }]);
       const mockWidget = {
         id: "test-id-123",
@@ -256,7 +282,9 @@ describe("Dashboard Routes", () => {
     it("returns 400 for invalid widget type", async () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
-      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]);
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-1", organizationId: "org-1" },
+      ]);
 
       const res = await app.request(`${baseUrl}/${dashboardId}/widgets`, {
         method: "POST",
@@ -271,7 +299,9 @@ describe("Dashboard Routes", () => {
     it("returns 404 if widget not found", async () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
-      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]);
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-1", organizationId: "org-1" },
+      ]);
       mockDb.limit.mockResolvedValueOnce([{ id: dashboardId, workspaceId }]);
       mockDb.limit.mockResolvedValueOnce([]);
 
@@ -292,7 +322,9 @@ describe("Dashboard Routes", () => {
     it("returns 400 on widget type mismatch", async () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
-      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]);
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-1", organizationId: "org-1" },
+      ]);
       mockDb.limit.mockResolvedValueOnce([{ id: dashboardId, workspaceId }]);
       mockDb.limit.mockResolvedValueOnce([
         { id: widgetId, dashboardId, type: "text" },
@@ -315,7 +347,9 @@ describe("Dashboard Routes", () => {
     it("updates widget data", async () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
-      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]);
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-1", organizationId: "org-1" },
+      ]);
       mockDb.limit.mockResolvedValueOnce([{ id: dashboardId, workspaceId }]);
       mockDb.limit.mockResolvedValueOnce([
         { id: widgetId, dashboardId, type: "metric" },
@@ -348,7 +382,9 @@ describe("Dashboard Routes", () => {
     it("returns 404 if widget not found", async () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
-      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]);
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-1", organizationId: "org-1" },
+      ]);
       mockDb.limit.mockResolvedValueOnce([{ id: dashboardId, workspaceId }]);
       mockDb.limit.mockResolvedValueOnce([]);
 
@@ -362,7 +398,9 @@ describe("Dashboard Routes", () => {
     it("deletes widget and returns 204", async () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
-      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]);
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-1", organizationId: "org-1" },
+      ]);
       mockDb.limit.mockResolvedValueOnce([{ id: dashboardId, workspaceId }]);
       mockDb.limit.mockResolvedValueOnce([{ id: widgetId, dashboardId }]);
 

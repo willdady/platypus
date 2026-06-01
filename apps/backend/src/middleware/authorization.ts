@@ -160,34 +160,13 @@ export const requireWorkspaceAccess = createMiddleware(async (c, next) => {
   const orgMembership = c.get("orgMembership");
 
   const workspaceId = c.req.param("workspaceId");
+  const orgId = c.req.param("orgId");
 
   if (!workspaceId) {
     return c.json({ error: "Workspace ID required" }, 400);
   }
 
-  // Super admins bypass all checks but still check ownership
-  if (isSuperAdmin(user)) {
-    const [ws] = await db
-      .select()
-      .from(workspaceTable)
-      .where(eq(workspaceTable.id, workspaceId))
-      .limit(1);
-
-    if (!ws) {
-      return c.json({ error: "Workspace not found" }, 404);
-    }
-
-    const isOwner = ws.ownerId === user.id;
-    c.set("isWorkspaceOwner", isOwner);
-    const parent = c.get("orgScope");
-    if (parent) {
-      c.set("workspaceScope", workspaceScope(parent, workspaceId, isOwner));
-    }
-    await next();
-    return;
-  }
-
-  // Fetch workspace to check ownership
+  // Fetch the workspace once for every role branch below.
   const [ws] = await db
     .select()
     .from(workspaceTable)
@@ -198,9 +177,29 @@ export const requireWorkspaceAccess = createMiddleware(async (c, next) => {
     return c.json({ error: "Workspace not found" }, 404);
   }
 
+  // Cross-org guard: the workspace must belong to the organization named in
+  // the path. Without this, an admin (or super admin) of org A who knows a
+  // workspace id in org B could operate on it via /organizations/A/workspaces/B.
+  // Reply 404 (not 403) so we don't leak the existence of other orgs' workspaces.
+  // Applies uniformly to the member, org-admin, and super-admin branches below.
+  if (orgId && ws.organizationId !== orgId) {
+    return c.json({ error: "Workspace not found" }, 404);
+  }
+
   const isOwner = ws.ownerId === user.id;
 
-  // Org admins have access to all workspaces
+  // Super admins bypass ownership checks but still record ownership.
+  if (isSuperAdmin(user)) {
+    c.set("isWorkspaceOwner", isOwner);
+    const parent = c.get("orgScope");
+    if (parent) {
+      c.set("workspaceScope", workspaceScope(parent, workspaceId, isOwner));
+    }
+    await next();
+    return;
+  }
+
+  // Org admins have access to all workspaces in their organization.
   if (orgMembership.role === "admin") {
     c.set("isWorkspaceOwner", isOwner);
     const parent = c.get("orgScope");

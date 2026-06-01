@@ -17,7 +17,9 @@ describe("Provider Routes", () => {
     it("should create provider if workspace admin", async () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]); // requireOrgAccess
-      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]); // requireWorkspaceAccess
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-1", organizationId: "org-1" },
+      ]); // requireWorkspaceAccess
 
       const mockProvider = { id: "p1", name: "OpenAI", providerType: "OpenAI" };
       mockDb.returning.mockResolvedValueOnce([mockProvider]);
@@ -43,7 +45,9 @@ describe("Provider Routes", () => {
     it("should return 409 if provider name already exists in workspace", async () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]); // requireOrgAccess
-      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]); // requireWorkspaceAccess
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-1", organizationId: "org-1" },
+      ]); // requireWorkspaceAccess
 
       const drizzleError = new Error("DrizzleQueryError: Failed query");
       (drizzleError as any).cause = {
@@ -89,7 +93,9 @@ describe("Provider Routes", () => {
     it("returns 403 for a non-admin owner when self-management is disabled", async () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
-      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]); // requireWorkspaceAccess
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-1", organizationId: "org-1" },
+      ]); // requireWorkspaceAccess
       mockDb.limit.mockResolvedValueOnce([{ flag: false }]); // delegation flag
 
       const res = await app.request(baseUrl, {
@@ -103,7 +109,9 @@ describe("Provider Routes", () => {
     it("allows a non-admin owner when self-management is enabled", async () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
-      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]);
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-1", organizationId: "org-1" },
+      ]);
       mockDb.limit.mockResolvedValueOnce([{ flag: true }]); // delegation flag set
       mockDb.returning.mockResolvedValueOnce([{ id: "p1", name: "OpenAI" }]);
 
@@ -120,7 +128,9 @@ describe("Provider Routes", () => {
     it("should list workspace providers and only attached org providers", async () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
-      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]); // requireWorkspaceAccess
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-1", organizationId: "org-1" },
+      ]); // requireWorkspaceAccess
 
       const workspaceProviders = [{ id: "p1", name: "WS OpenAI" }];
       // Org-scoped query is an inner join on attachment → rows nest under `provider`.
@@ -151,7 +161,9 @@ describe("Provider Routes", () => {
     it("should return provider with scope", async () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
-      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]); // requireWorkspaceAccess
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-1", organizationId: "org-1" },
+      ]); // requireWorkspaceAccess
 
       const mockProvider = { id: "p1", name: "OpenAI", workspaceId };
       mockDb.limit.mockResolvedValueOnce([mockProvider]);

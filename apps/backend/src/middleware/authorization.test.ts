@@ -79,10 +79,19 @@ describe("Authorization Middleware", () => {
   });
 
   describe("requireWorkspaceAccess", () => {
-    it("should allow super admin to bypass workspace checks", async () => {
-      // Mock workspace lookup for super admin
-      mockDb.limit.mockResolvedValueOnce([{ ownerId: "other-user" }]);
-
+    // Routes are mounted under :orgId so the cross-org guard can compare the
+    // resolved workspace's organizationId against the path orgId.
+    const buildApp = (
+      user: any,
+      orgMembership: any,
+    ): Hono<{
+      Variables: {
+        user: any;
+        orgMembership: any;
+        isWorkspaceOwner: any;
+        db: any;
+      };
+    }> => {
       const app = new Hono<{
         Variables: {
           user: any;
@@ -92,99 +101,80 @@ describe("Authorization Middleware", () => {
         };
       }>();
       app.use("*", async (c, next) => {
-        c.set("user", { id: "admin-1", role: "admin" });
-        c.set("orgMembership", { role: "admin", isSuperAdmin: true });
+        c.set("user", user);
+        c.set("orgMembership", orgMembership);
         c.set("db", mockDb);
         await next();
       });
-      app.use("/workspaces/:workspaceId/*", requireWorkspaceAccess);
-      app.get("/workspaces/:workspaceId/test", (c) =>
+      app.use(
+        "/organizations/:orgId/workspaces/:workspaceId/*",
+        requireWorkspaceAccess,
+      );
+      app.get("/organizations/:orgId/workspaces/:workspaceId/test", (c) =>
         c.json({ isWorkspaceOwner: c.get("isWorkspaceOwner") }),
       );
+      return app;
+    };
 
-      const res = await app.request("/workspaces/ws-1/test");
+    it("should allow super admin to bypass workspace checks", async () => {
+      // Mock workspace lookup for super admin
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "other-user", organizationId: "org-1" },
+      ]);
+
+      const app = buildApp(
+        { id: "admin-1", role: "admin" },
+        { role: "admin", isSuperAdmin: true },
+      );
+
+      const res = await app.request(
+        "/organizations/org-1/workspaces/ws-1/test",
+      );
       expect(res.status).toBe(200);
       expect(await res.json()).toEqual({ isWorkspaceOwner: false });
     });
 
     it("should allow org admin to bypass workspace checks", async () => {
       // Workspace lookup
-      mockDb.limit.mockResolvedValueOnce([{ ownerId: "other-user" }]);
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "other-user", organizationId: "org-1" },
+      ]);
 
-      const app = new Hono<{
-        Variables: {
-          user: any;
-          orgMembership: any;
-          isWorkspaceOwner: any;
-          db: any;
-        };
-      }>();
-      app.use("*", async (c, next) => {
-        c.set("user", { id: "u1", role: "user" });
-        c.set("orgMembership", { role: "admin" });
-        c.set("db", mockDb);
-        await next();
-      });
-      app.use("/workspaces/:workspaceId/*", requireWorkspaceAccess);
-      app.get("/workspaces/:workspaceId/test", (c) =>
-        c.json({ isWorkspaceOwner: c.get("isWorkspaceOwner") }),
+      const app = buildApp({ id: "u1", role: "user" }, { role: "admin" });
+
+      const res = await app.request(
+        "/organizations/org-1/workspaces/ws-1/test",
       );
-
-      const res = await app.request("/workspaces/ws-1/test");
       expect(res.status).toBe(200);
       expect(await res.json()).toEqual({ isWorkspaceOwner: false });
     });
 
     it("should allow workspace owner access", async () => {
       // Workspace lookup - user is owner
-      mockDb.limit.mockResolvedValueOnce([{ ownerId: "u1" }]);
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "u1", organizationId: "org-1" },
+      ]);
 
-      const app = new Hono<{
-        Variables: {
-          user: any;
-          orgMembership: any;
-          isWorkspaceOwner: any;
-          db: any;
-        };
-      }>();
-      app.use("*", async (c, next) => {
-        c.set("user", { id: "u1", role: "user" });
-        c.set("orgMembership", { role: "member" });
-        c.set("db", mockDb);
-        await next();
-      });
-      app.use("/workspaces/:workspaceId/*", requireWorkspaceAccess);
-      app.get("/workspaces/:workspaceId/test", (c) =>
-        c.json({ isWorkspaceOwner: c.get("isWorkspaceOwner") }),
+      const app = buildApp({ id: "u1", role: "user" }, { role: "member" });
+
+      const res = await app.request(
+        "/organizations/org-1/workspaces/ws-1/test",
       );
-
-      const res = await app.request("/workspaces/ws-1/test");
       expect(res.status).toBe(200);
       expect(await res.json()).toEqual({ isWorkspaceOwner: true });
     });
 
     it("should return 403 if user is not workspace owner", async () => {
       // Workspace lookup - user is not owner
-      mockDb.limit.mockResolvedValueOnce([{ ownerId: "other-user" }]);
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "other-user", organizationId: "org-1" },
+      ]);
 
-      const app = new Hono<{
-        Variables: {
-          user: any;
-          orgMembership: any;
-          isWorkspaceOwner: any;
-          db: any;
-        };
-      }>();
-      app.use("*", async (c, next) => {
-        c.set("user", { id: "u1", role: "user" });
-        c.set("orgMembership", { role: "member" });
-        c.set("db", mockDb);
-        await next();
-      });
-      app.use("/workspaces/:workspaceId/*", requireWorkspaceAccess);
-      app.get("/workspaces/:workspaceId/test", (c) => c.text("ok"));
+      const app = buildApp({ id: "u1", role: "user" }, { role: "member" });
 
-      const res = await app.request("/workspaces/ws-1/test");
+      const res = await app.request(
+        "/organizations/org-1/workspaces/ws-1/test",
+      );
       expect(res.status).toBe(403);
     });
 
@@ -192,25 +182,58 @@ describe("Authorization Middleware", () => {
       // Workspace lookup - not found
       mockDb.limit.mockResolvedValueOnce([]);
 
-      const app = new Hono<{
-        Variables: {
-          user: any;
-          orgMembership: any;
-          isWorkspaceOwner: any;
-          db: any;
-        };
-      }>();
-      app.use("*", async (c, next) => {
-        c.set("user", { id: "u1", role: "user" });
-        c.set("orgMembership", { role: "member" });
-        c.set("db", mockDb);
-        await next();
-      });
-      app.use("/workspaces/:workspaceId/*", requireWorkspaceAccess);
-      app.get("/workspaces/:workspaceId/test", (c) => c.text("ok"));
+      const app = buildApp({ id: "u1", role: "user" }, { role: "member" });
 
-      const res = await app.request("/workspaces/ws-1/test");
+      const res = await app.request(
+        "/organizations/org-1/workspaces/ws-1/test",
+      );
       expect(res.status).toBe(404);
+    });
+
+    it("should return 404 when workspace belongs to a different org (member)", async () => {
+      // Workspace exists but lives in org-2 while the path names org-1.
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "u1", organizationId: "org-2" },
+      ]);
+
+      const app = buildApp({ id: "u1", role: "user" }, { role: "member" });
+
+      const res = await app.request(
+        "/organizations/org-1/workspaces/ws-1/test",
+      );
+      expect(res.status).toBe(404);
+      expect(await res.json()).toEqual({ error: "Workspace not found" });
+    });
+
+    it("should return 404 when workspace belongs to a different org (org admin)", async () => {
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "other-user", organizationId: "org-2" },
+      ]);
+
+      const app = buildApp({ id: "u1", role: "user" }, { role: "admin" });
+
+      const res = await app.request(
+        "/organizations/org-1/workspaces/ws-1/test",
+      );
+      expect(res.status).toBe(404);
+      expect(await res.json()).toEqual({ error: "Workspace not found" });
+    });
+
+    it("should return 404 when workspace belongs to a different org (super admin)", async () => {
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "other-user", organizationId: "org-2" },
+      ]);
+
+      const app = buildApp(
+        { id: "admin-1", role: "admin" },
+        { role: "admin", isSuperAdmin: true },
+      );
+
+      const res = await app.request(
+        "/organizations/org-1/workspaces/ws-1/test",
+      );
+      expect(res.status).toBe(404);
+      expect(await res.json()).toEqual({ error: "Workspace not found" });
     });
   });
 
