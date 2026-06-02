@@ -15,18 +15,20 @@ import {
 import { Item, ItemActions, ItemContent, ItemTitle } from "./ui/item";
 import { useState } from "react";
 
-type ResourceType = "mcp" | "provider" | "skill";
+type ResourceType = "mcp" | "provider" | "skill" | "agent";
 
 const COLLECTION: Record<ResourceType, string> = {
   mcp: "mcps",
   provider: "providers",
   skill: "skills",
+  agent: "agents",
 };
 
 const LABEL: Record<ResourceType, string> = {
   mcp: "MCP server",
   provider: "provider",
   skill: "skill",
+  agent: "agent",
 };
 
 /**

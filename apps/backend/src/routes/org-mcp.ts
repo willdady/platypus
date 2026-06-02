@@ -18,6 +18,7 @@ import {
 import { eq, and } from "drizzle-orm";
 import { requireAuth } from "../middleware/authentication.ts";
 import { requireOrgAccess } from "../middleware/authorization.ts";
+import { scrubDeletedAgentReference } from "../services/agent-references.ts";
 import type { Variables } from "../server.ts";
 import { logger } from "../logger.ts";
 import {
@@ -177,10 +178,18 @@ orgMcp.delete(
       );
     }
 
-    const result = await db
-      .delete(mcpTable)
-      .where(and(eq(mcpTable.id, mcpId), eq(mcpTable.organizationId, orgId)))
-      .returning();
+    // Delete the MCP and scrub its (now-dead) id from any Agent's toolSetIds in
+    // the same transaction, so deletion never leaves dangling references.
+    const result = await db.transaction(async (tx) => {
+      const rows = await tx
+        .delete(mcpTable)
+        .where(and(eq(mcpTable.id, mcpId), eq(mcpTable.organizationId, orgId)))
+        .returning();
+      if (rows.length > 0) {
+        await scrubDeletedAgentReference(tx, "toolSetIds", mcpId);
+      }
+      return rows;
+    });
     if (result.length === 0) {
       return c.json({ error: "MCP not found" }, 404);
     }

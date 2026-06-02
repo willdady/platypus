@@ -74,12 +74,23 @@ describe("Attachment Schema", () => {
     expect(result.success).toBe(true);
   });
 
-  it("rejects an unknown resource type", () => {
+  it("validates an agent attachment", () => {
     const result = attachmentSchema.safeParse({
       id: "att-1",
       workspaceId: "ws-1",
       resourceType: "agent",
       resourceId: "agent-1",
+      createdAt: new Date(),
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("rejects an unknown resource type", () => {
+    const result = attachmentSchema.safeParse({
+      id: "att-1",
+      workspaceId: "ws-1",
+      resourceType: "blueprint",
+      resourceId: "bp-1",
       createdAt: new Date(),
     });
     expect(result.success).toBe(false);

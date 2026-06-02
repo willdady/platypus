@@ -39,6 +39,7 @@ import {
   Link2,
   Pencil,
   Plus,
+  Share2,
   Trash2,
   TriangleAlert,
   Unlink,
@@ -50,6 +51,10 @@ import Link from "next/link";
 import { useBackendUrl } from "@/app/client-context";
 import { useAuth } from "@/components/auth-provider";
 import { AttachSharedResourceDialog } from "@/components/attach-shared-resource-dialog";
+import {
+  ManageAttachmentsDialog,
+  SharedWithBadge,
+} from "@/components/manage-sharing";
 
 // The list serves two surfaces: a Workspace (workspaceId provided) where it
 // shows workspace-scoped Skills plus attached org-scoped Shared Skills as
@@ -81,6 +86,13 @@ export const SkillsList = ({
   );
   const [promoting, setPromoting] = useState(false);
   const [promoteError, setPromoteError] = useState<string | null>(null);
+  const [skillToManage, setSkillToManage] = useState<SkillWithScope | null>(
+    null,
+  );
+  const [deleteBlocked, setDeleteBlocked] = useState<{
+    skill: SkillWithScope;
+    count: number;
+  } | null>(null);
 
   const listUrl = workspaceId
     ? `/organizations/${orgId}/workspaces/${workspaceId}/skills`
@@ -129,9 +141,31 @@ export const SkillsList = ({
   const getAgentsForSkill = (skillId: string) =>
     agents.filter((agent) => agent.skillIds?.includes(skillId));
 
-  const handleDeleteClick = (skill: SkillWithScope) => {
-    setSkillToDelete(skill);
+  const handleDeleteClick = async (skill: SkillWithScope) => {
     setDeleteError(null);
+    // On the Organization surface a Shared Skill can't be deleted while attached
+    // (ADR-0007) — check the live count first and explain the blocker up front
+    // instead of offering a Delete button that is guaranteed to fail.
+    if (!workspaceId && backendUrl) {
+      try {
+        const res = await fetch(
+          joinUrl(
+            backendUrl,
+            `/organizations/${orgId}/attachments?resourceType=skill&resourceId=${skill.id}`,
+          ),
+          { credentials: "include" },
+        );
+        const info = await res.json().catch(() => ({ results: [] }));
+        const count = (info.results ?? []).length;
+        if (count > 0) {
+          setDeleteBlocked({ skill, count });
+          return;
+        }
+      } catch {
+        // If the check fails, fall through — the backend still guards with 409.
+      }
+    }
+    setSkillToDelete(skill);
     setDeleteDialogOpen(true);
   };
 
@@ -292,6 +326,15 @@ export const SkillsList = ({
                         )}
                       </div>
                     )}
+                    {!workspaceId && isOrgAdmin && (
+                      <div className="mt-1">
+                        <SharedWithBadge
+                          orgId={orgId}
+                          resourceType="skill"
+                          resourceId={skill.id}
+                        />
+                      </div>
+                    )}
                   </ItemContent>
                   <ItemActions>
                     <DropdownMenu>
@@ -325,6 +368,14 @@ export const SkillsList = ({
                             <ArrowUpFromLine /> Promote to organization
                           </DropdownMenuItem>
                         )}
+                        {!workspaceId && isOrgAdmin && (
+                          <DropdownMenuItem
+                            className="cursor-pointer"
+                            onSelect={() => setSkillToManage(skill)}
+                          >
+                            <Share2 /> Manage attachments
+                          </DropdownMenuItem>
+                        )}
                         <DropdownMenuSeparator />
                         <DropdownMenuItem
                           className="cursor-pointer text-destructive focus:text-destructive"
@@ -354,6 +405,17 @@ export const SkillsList = ({
           </Button>
         )}
       </div>
+
+      {skillToManage && (
+        <ManageAttachmentsDialog
+          orgId={orgId}
+          resourceType="skill"
+          resourceId={skillToManage.id}
+          resourceName={skillToManage.name}
+          open={!!skillToManage}
+          onOpenChange={(open) => !open && setSkillToManage(null)}
+        />
+      )}
 
       {canAttach && workspaceId && (
         <AttachSharedResourceDialog
@@ -441,6 +503,26 @@ export const SkillsList = ({
         onConfirm={handleDeleteConfirm}
         loading={deleting}
         error={deleteError}
+      />
+
+      <ConfirmDialog
+        open={!!deleteBlocked}
+        onOpenChange={(open) => !open && setDeleteBlocked(null)}
+        title="Can't delete shared skill"
+        description={
+          deleteBlocked
+            ? `“${deleteBlocked.skill.name}” is shared with ${deleteBlocked.count} workspace${
+                deleteBlocked.count !== 1 ? "s" : ""
+              }. Detach it from every workspace before deleting.`
+            : ""
+        }
+        confirmLabel="Manage attachments"
+        cancelLabel="Close"
+        onConfirm={() => {
+          const skill = deleteBlocked?.skill ?? null;
+          setDeleteBlocked(null);
+          setSkillToManage(skill);
+        }}
       />
     </>
   );

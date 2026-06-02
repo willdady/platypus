@@ -53,14 +53,23 @@ never cascading.
   `Provider`) before a Shared Agent can reference one; Chat-turn MCP resolution, today
   workspace-scoped, must also resolve Organization-scoped MCPs. A down Shared MCP has
   org-wide blast radius, so its resolution should fail soft rather than throw.
-- **Role-based editing.** Org Admins edit a Shared resource where it is attached and via
-  the Organization management surface; Workspace Owners see it locked. Because only Org
-  Admins can Promote, the author is always an Org Admin and keeps their edit/test loop in
-  place. A non-admin who authored a resource is locked out of editing it once it is
+- **Role-based editing (Edit 1).** A Shared resource is edited **only on the
+  Organization management surface**; it is locked in every Workspace — to Workspace
+  Owners _and_ Org Admins alike (the Workspace renders it as a locked card that links out
+  to the Organization editor). Because only Org Admins can Promote, the author is always
+  an Org Admin; a non-admin who authored a resource is locked out of editing it once it is
   Shared — intentional, consistent with ADR-0006 (high-blast-radius config is
-  admin-managed).
+  admin-managed). _Originally specified as also editable in place in the Workspace where
+  attached; narrowed to org-surface-only so there is a single edit locus and no
+  "which-Workspace-do-I-open?" ambiguity, matching how Skills already behaved._
 - **Visibility.** A Shared resource appears in a Workspace only where attached; Promotion
   auto-attaches the origin Workspace. Org Admins see and manage every Shared resource,
   attached or not, only on the Organization management surface — not implicitly inside
   every Workspace.
 - **Deletion.** Deleting a Shared resource is blocked while any Attachment exists.
+  **(Edit 1)** On delete, the resource's id is scrubbed from every Agent that referenced
+  it (`skillIds`, `subAgentIds`, and MCP-backed `toolSetIds`), in the same transaction, so
+  deletion never leaves dangling references; `providerId` needs no scrub as it is a
+  foreign key with `onDelete: restrict`. **Detach** is deliberately _not_ scrubbed — it is
+  reversible, so an Agent's reference is preserved and resolves again if the resource is
+  re-attached.

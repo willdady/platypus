@@ -4,6 +4,7 @@ import { nanoid } from "nanoid";
 import { db } from "../index.ts";
 import {
   attachment as attachmentTable,
+  agent as agentTable,
   mcp as mcpTable,
   provider as providerTable,
   skill as skillTable,
@@ -65,7 +66,9 @@ attachment.post(
         ? mcpTable
         : resourceType === "skill"
           ? skillTable
-          : providerTable;
+          : resourceType === "agent"
+            ? agentTable
+            : providerTable;
     const resource = await db
       .select({ id: table.id })
       .from(table)
@@ -114,7 +117,7 @@ attachment.delete(
           eq(attachmentTable.workspaceId, workspaceId),
           eq(
             attachmentTable.resourceType,
-            resourceType as "mcp" | "provider" | "skill",
+            resourceType as "mcp" | "provider" | "skill" | "agent",
           ),
           eq(attachmentTable.resourceId, resourceId),
         ),

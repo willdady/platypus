@@ -228,6 +228,71 @@ describe("chat-execution", () => {
       expect(detachedTurn.stream.tools).not.toHaveProperty("loadSkill");
     });
 
+    it("runs a Shared (org-scoped) Agent invoked from a borrowing Workspace where attached", async () => {
+      const borrowingWorkspace = { ...baseWorkspace, id: "ws-2" };
+      const orgProvider = {
+        ...baseProvider,
+        id: "p-org",
+        organizationId: "org-1",
+        workspaceId: null,
+      };
+      const sharedAgent = {
+        ...baseAgent,
+        id: "shared-agent",
+        organizationId: "org-1",
+        workspaceId: null,
+        providerId: "p-org",
+      };
+
+      // Attached to the borrowing Workspace → the Shared Agent (and its
+      // org-scoped Provider) resolve against that Workspace (ADR-0007).
+      const attached = createInMemoryChatTurnQueries({
+        workspaces: [borrowingWorkspace],
+        agents: [sharedAgent as any],
+        providers: [orgProvider as any],
+        attachments: [
+          {
+            workspaceId: "ws-2",
+            resourceType: "agent",
+            resourceId: "shared-agent",
+          },
+          {
+            workspaceId: "ws-2",
+            resourceType: "provider",
+            resourceId: "p-org",
+          },
+        ],
+      });
+
+      const turn = await prepareChatTurn(
+        {
+          ...baseInput,
+          workspaceId: "ws-2",
+          request: { id: "chat-shared", agentId: "shared-agent" },
+        },
+        attached,
+      );
+      expect(turn.resolved.agentId).toBe("shared-agent");
+      expect(turn.resolved.providerId).toBe("p-org");
+
+      // Not attached → the Shared Agent is invisible to this Workspace.
+      const detached = createInMemoryChatTurnQueries({
+        workspaces: [borrowingWorkspace],
+        agents: [sharedAgent as any],
+        providers: [orgProvider as any],
+      });
+      await expect(
+        prepareChatTurn(
+          {
+            ...baseInput,
+            workspaceId: "ws-2",
+            request: { id: "chat-shared2", agentId: "shared-agent" },
+          },
+          detached,
+        ),
+      ).rejects.toBeInstanceOf(NotFoundError);
+    });
+
     it("Direct Provider+Model selection populates resolved.systemPrompt and merges request overrides", async () => {
       const queries = createInMemoryChatTurnQueries({
         workspaces: [baseWorkspace],

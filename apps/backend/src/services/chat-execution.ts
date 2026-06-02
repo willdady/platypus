@@ -178,7 +178,11 @@ export type ToolActivityEvent = {
  */
 export type ChatTurnQueries = {
   getWorkspace(id: string): Promise<WorkspaceRow | null>;
-  getAgent(id: string, workspaceId: string): Promise<AgentRow | null>;
+  getAgent(
+    id: string,
+    orgId: string,
+    workspaceId: string,
+  ): Promise<AgentRow | null>;
   getProvider(
     id: string,
     orgId: string,
@@ -215,7 +219,7 @@ export type ChatTurnQueries = {
  * (ADR-0007). Org-scoped resources resolve at Chat-turn time only where attached.
  */
 const isAttached = async (
-  resourceType: "mcp" | "provider" | "skill",
+  resourceType: "mcp" | "provider" | "skill" | "agent",
   resourceId: string,
   workspaceId: string,
 ): Promise<boolean> => {
@@ -243,15 +247,34 @@ export const drizzleChatTurnQueries: ChatTurnQueries = {
     return rows[0] ?? null;
   },
 
-  async getAgent(id, workspaceId) {
+  async getAgent(id, orgId, workspaceId) {
+    // Resolve an Agent at either scope: the invoking workspace, or the
+    // organization (a Shared Agent — ADR-0007).
     const rows = await db
       .select()
       .from(agentTable)
       .where(
-        and(eq(agentTable.id, id), eq(agentTable.workspaceId, workspaceId)),
+        and(
+          eq(agentTable.id, id),
+          or(
+            eq(agentTable.workspaceId, workspaceId),
+            eq(agentTable.organizationId, orgId),
+          ),
+        ),
       )
       .limit(1);
-    return rows[0] ?? null;
+    const row = rows[0];
+    if (!row) return null;
+    // A Shared Agent runs only in a Workspace it is attached to (ADR-0007); its
+    // Sandbox/MCP tools still rebind to that invoking Workspace via loadTools.
+    if (
+      row.organizationId &&
+      !row.workspaceId &&
+      !(await isAttached("agent", id, workspaceId))
+    ) {
+      return null;
+    }
+    return row;
   },
 
   async getProvider(id, orgId, workspaceId) {
@@ -704,7 +727,7 @@ const resolveChatContext = async (
 
   if (agentId) {
     resolvedAgentId = agentId;
-    const found = await queries.getAgent(agentId, workspaceId);
+    const found = await queries.getAgent(agentId, orgId, workspaceId);
     if (!found) throw new NotFoundError(`Agent '${agentId}' not found`);
     agent = found;
     resolvedProviderId = agent.providerId;
