@@ -33,7 +33,8 @@ vi.mock("../logger.ts", () => ({
   },
 }));
 
-import { AgentRunner } from "./agent-runner.ts";
+import { AgentRunner, withToolTimestamps } from "./agent-runner.ts";
+import type { UIMessageChunk } from "ai";
 import { runRegistry, TimeoutError } from "./run-registry.ts";
 import type { ResolvedRunPlan, RunInput, RunSink } from "./types.ts";
 import type { WorkspaceScope } from "../scope.ts";
@@ -332,5 +333,86 @@ describe("AgentRunner timeout types", () => {
     const e = new TimeoutError("x", "run");
     expect(e).toBeInstanceOf(Error);
     expect(e.kind).toBe("run");
+  });
+});
+
+describe("withToolTimestamps", () => {
+  const FIXED_NOW = "2026-05-30T12:00:00.000Z";
+
+  const collect = async <T>(stream: ReadableStream<T>): Promise<T[]> => {
+    const out: T[] = [];
+    const reader = stream.getReader();
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      out.push(value);
+    }
+    return out;
+  };
+
+  const sourceOf = (chunks: UIMessageChunk[]): ReadableStream<UIMessageChunk> =>
+    new ReadableStream<UIMessageChunk>({
+      start(controller) {
+        for (const chunk of chunks) controller.enqueue(chunk);
+        controller.close();
+      },
+    });
+
+  const toolInputAvailable = (
+    overrides: Partial<
+      Extract<UIMessageChunk, { type: "tool-input-available" }>
+    > = {},
+  ): UIMessageChunk =>
+    ({
+      type: "tool-input-available",
+      toolCallId: "t1",
+      toolName: "foo",
+      input: { x: 1 },
+      ...overrides,
+    }) as UIMessageChunk;
+
+  it("injects startedAt on tool-input-available chunks", async () => {
+    const result = await collect(
+      withToolTimestamps(sourceOf([toolInputAvailable()]), () => FIXED_NOW),
+    );
+
+    expect(result).toHaveLength(1);
+    expect(
+      (result[0] as { toolMetadata?: Record<string, unknown> }).toolMetadata,
+    ).toEqual({ startedAt: FIXED_NOW });
+  });
+
+  it("preserves existing toolMetadata fields", async () => {
+    const result = await collect(
+      withToolTimestamps(
+        sourceOf([toolInputAvailable({ toolMetadata: { custom: "value" } })]),
+        () => FIXED_NOW,
+      ),
+    );
+
+    expect(
+      (result[0] as { toolMetadata?: Record<string, unknown> }).toolMetadata,
+    ).toEqual({
+      custom: "value",
+      startedAt: FIXED_NOW,
+    });
+  });
+
+  it("passes non-tool-input-available chunks through unchanged", async () => {
+    const chunks: UIMessageChunk[] = [
+      { type: "text-delta", id: "a", delta: "hello" } as UIMessageChunk,
+      {
+        type: "tool-output-available",
+        toolCallId: "t1",
+        output: { ok: true },
+      } as UIMessageChunk,
+      { type: "finish", finishReason: "stop" } as UIMessageChunk,
+    ];
+
+    const result = await collect(
+      withToolTimestamps(sourceOf(chunks), () => "irrelevant"),
+    );
+
+    expect(result).toEqual(chunks);
   });
 });

@@ -172,7 +172,19 @@ export type ToolHeaderProps = {
   label?: string;
   type: ToolUIPart["type"];
   state: ToolUIPart["state"];
+  /** ISO timestamp of when this tool call began, if known. */
+  startedAt?: string;
   className?: string;
+};
+
+const formatToolTime = (iso: string): string | undefined => {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return undefined;
+  return d.toLocaleTimeString([], {
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  });
 };
 
 const getStatusBadge = (status: ToolUIPart["state"]) => {
@@ -210,9 +222,11 @@ export const ToolHeader = ({
   label,
   type,
   state,
+  startedAt,
   ...props
 }: ToolHeaderProps) => {
   const Icon = getToolIcon(type);
+  const time = startedAt ? formatToolTime(startedAt) : undefined;
   return (
     <CollapsibleTrigger
       className={cn(
@@ -233,6 +247,9 @@ export const ToolHeader = ({
           )}
         </span>
         {getStatusBadge(state)}
+        {time && (
+          <span className="text-xs text-muted-foreground shrink-0">{time}</span>
+        )}
       </div>
       <ChevronDownIcon className="size-4 shrink-0 text-muted-foreground transition-transform group-data-[state=open]:rotate-180" />
     </CollapsibleTrigger>

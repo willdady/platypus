@@ -9,6 +9,7 @@ import {
   stepCountIs,
   streamText,
   type LanguageModel,
+  type UIMessageChunk,
 } from "ai";
 import {
   prepareChatTurn,
@@ -32,6 +33,60 @@ import type {
   RunStats,
   RunStatus,
 } from "./types.ts";
+
+/**
+ * Returns a new RunInput with `createdAt` stamped on the last user message
+ * if it doesn't already have one. Non-mutating — caller's input is preserved.
+ *
+ * Client-side stamping (see chat.tsx) covers normal flow; this is a fallback
+ * for older clients or other callers that don't set `metadata.createdAt`.
+ */
+function stampLastUserMessageCreatedAt(input: RunInput): RunInput {
+  const lastIdx = input.messages.length - 1;
+  if (lastIdx < 0) return input;
+  const last = input.messages[lastIdx];
+  const existing = last.metadata as Record<string, unknown> | undefined;
+  if (last.role !== "user" || existing?.createdAt) return input;
+  const stamped = {
+    ...last,
+    metadata: { ...existing, createdAt: new Date().toISOString() },
+  };
+  return {
+    ...input,
+    messages: [...input.messages.slice(0, lastIdx), stamped],
+  };
+}
+
+/**
+ * Injects startedAt into tool-input-available chunks via toolMetadata.
+ * Must be on tool-input-available (not -output-available) because the AI SDK's
+ * tool-output-available handler ignores chunk.toolMetadata and reuses the
+ * invocation's existing toolMetadata from the input-available phase.
+ *
+ * Exported for unit testing.
+ */
+export function withToolTimestamps<TChunk extends UIMessageChunk>(
+  stream: ReadableStream<TChunk>,
+  now: () => string = () => new Date().toISOString(),
+): ReadableStream<TChunk> {
+  return stream.pipeThrough(
+    new TransformStream<TChunk, TChunk>({
+      transform(chunk, controller) {
+        if (chunk.type === "tool-input-available") {
+          controller.enqueue({
+            ...chunk,
+            toolMetadata: {
+              ...chunk.toolMetadata,
+              startedAt: now(),
+            },
+          });
+        } else {
+          controller.enqueue(chunk);
+        }
+      },
+    }),
+  );
+}
 
 export type StreamOptions = {
   origin: string;
@@ -195,7 +250,9 @@ export class AgentRunner {
     sink: RunSink;
     options: StreamOptions;
   }): Promise<Response> {
-    const { scope, input, sink, options } = params;
+    const { scope, sink, options } = params;
+    const input = stampLastUserMessageCreatedAt(params.input);
+
     await sink.onStart({ runId: input.runId, messages: input.messages });
 
     let turn: ChatTurn | undefined;
@@ -315,36 +372,31 @@ export class AgentRunner {
     // the source. The source keeps pulling as long as the snapshot
     // branch is being read, so `onFinish` only fires on natural
     // completion — not when the consumer cancels with partial state.
+    // Capture createdAt ONCE (not inside messageMetadata callback). The AI SDK
+    // invokes the callback for both `start` and `finish` chunks; calling
+    // `new Date()` each time would store the finish time and mislabel it as
+    // createdAt — which can be minutes off for long agent runs.
+    const assistantCreatedAt = new Date().toISOString();
     const uiStream = result.toUIMessageStream<PlatypusUIMessage>({
       originalMessages: input.messages,
       generateMessageId: createIdGenerator({ prefix: "msg", size: 16 }),
-      messageMetadata: () =>
-        turn.resolved.agentId ? { agentId: turn.resolved.agentId } : undefined,
+      messageMetadata: () => ({
+        ...(turn.resolved.agentId ? { agentId: turn.resolved.agentId } : {}),
+        createdAt: assistantCreatedAt,
+      }),
       onError: (error) => formatStreamError(error),
-      onFinish: async ({ messages: finalMessages }) => {
-        lastMessages = finalMessages;
-        let status: RunStatus = "succeeded";
-        let err: Error | undefined;
-        if (handle.signal.aborted) {
-          const reason = handle.signal.reason;
-          if (reason instanceof TimeoutError) {
-            status = "failed";
-            err = reason;
-          } else {
-            status = "cancelled";
-          }
-        }
-        await finalize(status, err);
-      },
     });
 
-    const [forResponse, forSnapshot] = uiStream.tee();
+    const [forResponse, forSnapshot] = withToolTimestamps(uiStream).tee();
 
     // Read the snapshot branch as message snapshots and keep `lastMessages`
     // up to date. ChatSink's FlushScheduler then writes the in-progress
     // assistant message to the DB on each onProgress bump, so a user who
     // reconnects mid-run sees the partial answer (not just their own
     // input message).
+    //
+    // finalize is called here (not in toUIMessageStream's onFinish) so that
+    // lastMessages contains toolMetadata timestamps injected by withToolTimestamps.
     void (async () => {
       try {
         for await (const message of readUIMessageStream<PlatypusUIMessage>({
@@ -362,6 +414,19 @@ export class AgentRunner {
           { err, runId: input.runId },
           "Server-side UI stream consumer error",
         );
+      } finally {
+        let status: RunStatus = "succeeded";
+        let err: Error | undefined;
+        if (handle.signal.aborted) {
+          const reason = handle.signal.reason;
+          if (reason instanceof TimeoutError) {
+            status = "failed";
+            err = reason;
+          } else {
+            status = "cancelled";
+          }
+        }
+        await finalize(status, err);
       }
     })();
 

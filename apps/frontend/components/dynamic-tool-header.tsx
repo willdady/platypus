@@ -17,7 +17,19 @@ import type { ReactNode } from "react";
 export type DynamicToolHeaderProps = {
   title: string;
   state: DynamicToolUIPart["state"];
+  /** ISO timestamp of when this tool call began, if known. */
+  startedAt?: string;
   className?: string;
+};
+
+const formatToolTime = (iso: string): string | undefined => {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return undefined;
+  return d.toLocaleTimeString([], {
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  });
 };
 
 const getStatusBadge = (status: DynamicToolUIPart["state"]) => {
@@ -53,20 +65,27 @@ export const DynamicToolHeader = ({
   className,
   title,
   state,
+  startedAt,
   ...props
-}: DynamicToolHeaderProps) => (
-  <CollapsibleTrigger
-    className={cn(
-      "flex w-full items-center justify-between gap-4 p-3",
-      className,
-    )}
-    {...props}
-  >
-    <div className="flex items-center gap-2">
-      <WrenchIcon className="size-4 text-muted-foreground" />
-      <span className="font-medium text-sm">{title}</span>
-      {getStatusBadge(state)}
-    </div>
-    <ChevronDownIcon className="size-4 text-muted-foreground transition-transform group-data-[state=open]:rotate-180" />
-  </CollapsibleTrigger>
-);
+}: DynamicToolHeaderProps) => {
+  const time = startedAt ? formatToolTime(startedAt) : undefined;
+  return (
+    <CollapsibleTrigger
+      className={cn(
+        "flex w-full items-center justify-between gap-4 p-3",
+        className,
+      )}
+      {...props}
+    >
+      <div className="flex items-center gap-2">
+        <WrenchIcon className="size-4 text-muted-foreground" />
+        <span className="font-medium text-sm">{title}</span>
+        {getStatusBadge(state)}
+        {time && (
+          <span className="text-xs text-muted-foreground shrink-0">{time}</span>
+        )}
+      </div>
+      <ChevronDownIcon className="size-4 text-muted-foreground transition-transform group-data-[state=open]:rotate-180" />
+    </CollapsibleTrigger>
+  );
+};
