@@ -182,12 +182,18 @@ export const agent = pgTable(
   "agent",
   (t) => ({
     id: t.text("id").primaryKey(),
-    workspaceId: t
-      .text("workspace_id")
-      .notNull()
-      .references(() => workspace.id, {
+    // An Agent is scoped to either an Organization or a Workspace (mutually
+    // exclusive), mirroring the dual-scope shape of `provider`/`mcp`/`skill`.
+    // Org-scoped Agents are Shared resources managed by Org Admins (ADR-0007);
+    // the XOR is enforced in the Zod schema and by the routes/Promote action.
+    organizationId: t
+      .text("organization_id")
+      .references(() => organization.id, {
         onDelete: "cascade",
       }),
+    workspaceId: t.text("workspace_id").references(() => workspace.id, {
+      onDelete: "cascade",
+    }),
     providerId: t
       .text("provider_id")
       .notNull()
@@ -215,7 +221,11 @@ export const agent = pgTable(
   }),
   (t) => [
     index("idx_agent_workspace_id").on(t.workspaceId),
+    index("idx_agent_organization_id").on(t.organizationId),
     index("idx_agent_provider_id").on(t.providerId),
+    // Shared Agents must have unique names within an Organization so Promote
+    // surfaces a clean conflict. Workspace Agent names stay unconstrained.
+    unique("unique_agent_name_org").on(t.organizationId, t.name),
   ],
 );
 
@@ -293,7 +303,7 @@ export const attachment = pgTable(
       .references(() => workspace.id, { onDelete: "cascade" }),
     resourceType: t
       .text("resource_type")
-      .$type<"mcp" | "provider" | "skill">()
+      .$type<"mcp" | "provider" | "skill" | "agent">()
       .notNull(),
     resourceId: t.text("resource_id").notNull(),
     createdAt: t.timestamp("created_at").notNull().defaultNow(),

@@ -27,7 +27,7 @@ export type ChatTurnQueriesFixtures = {
   // org-scoped Provider/MCP/Skill resolves at Chat-turn time only where attached.
   attachments?: Array<{
     workspaceId: string;
-    resourceType: "mcp" | "provider" | "skill";
+    resourceType: "mcp" | "provider" | "skill" | "agent";
     resourceId: string;
   }>;
   userContexts?: Array<{
@@ -47,7 +47,7 @@ export const createInMemoryChatTurnQueries = (
   fx: ChatTurnQueriesFixtures = {},
 ): ChatTurnQueries => {
   const isAttached = (
-    resourceType: "mcp" | "provider" | "skill",
+    resourceType: "mcp" | "provider" | "skill" | "agent",
     resourceId: string,
     workspaceId: string,
   ) =>
@@ -63,11 +63,20 @@ export const createInMemoryChatTurnQueries = (
       return fx.workspaces?.find((w) => w.id === id) ?? null;
     },
 
-    async getAgent(id, workspaceId) {
-      return (
-        fx.agents?.find((a) => a.id === id && a.workspaceId === workspaceId) ??
-        null
-      );
+    async getAgent(id, orgId, workspaceId) {
+      const a = fx.agents?.find((a) => a.id === id) ?? null;
+      if (!a) return null;
+      // Workspace-scoped Agent in this workspace.
+      if (a.workspaceId === workspaceId) return a;
+      // Org-scoped (Shared) Agent resolves only where attached (ADR-0007).
+      if (
+        a.organizationId === orgId &&
+        !a.workspaceId &&
+        isAttached("agent", id, workspaceId)
+      ) {
+        return a;
+      }
+      return null;
     },
 
     async getProvider(id, orgId, workspaceId) {

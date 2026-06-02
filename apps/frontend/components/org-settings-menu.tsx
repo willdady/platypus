@@ -8,7 +8,15 @@ import {
   SidebarMenuItem,
   SidebarMenu,
 } from "@/components/ui/sidebar";
-import { Mail, Plug, Settings, Sparkles, Unplug, Users } from "lucide-react";
+import {
+  Bot,
+  Mail,
+  Plug,
+  Settings,
+  Sparkles,
+  Unplug,
+  Users,
+} from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
@@ -24,6 +32,7 @@ export function OrgSettingsMenu({ orgId }: OrgSettingsMenuProps) {
   const providersHref = `/${orgId}/settings/providers`;
   const mcpHref = `/${orgId}/settings/mcp`;
   const skillsHref = `/${orgId}/settings/skills`;
+  const agentsHref = `/${orgId}/settings/agents`;
 
   return (
     <SidebarContent>
@@ -84,6 +93,16 @@ export function OrgSettingsMenu({ orgId }: OrgSettingsMenuProps) {
               >
                 <Link href={skillsHref}>
                   <Sparkles /> Skills
+                </Link>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+            <SidebarMenuItem>
+              <SidebarMenuButton
+                asChild
+                isActive={pathname.startsWith(agentsHref)}
+              >
+                <Link href={agentsHref}>
+                  <Bot /> Agents
                 </Link>
               </SidebarMenuButton>
             </SidebarMenuItem>

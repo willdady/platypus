@@ -10,6 +10,7 @@ import { skillCreateSchema, skillUpdateSchema } from "@platypus/schemas";
 import { eq, and } from "drizzle-orm";
 import { requireAuth } from "../middleware/authentication.ts";
 import { requireOrgAccess } from "../middleware/authorization.ts";
+import { scrubDeletedAgentReference } from "../services/agent-references.ts";
 import type { Variables } from "../server.ts";
 
 // Org-scoped Skills are Shared resources (ADR-0007): a single source of truth
@@ -157,12 +158,20 @@ orgSkill.delete(
       );
     }
 
-    const result = await db
-      .delete(skillTable)
-      .where(
-        and(eq(skillTable.id, skillId), eq(skillTable.organizationId, orgId)),
-      )
-      .returning();
+    // Delete the Skill and scrub its (now-dead) id from any Agent's skillIds in
+    // the same transaction, so deletion never leaves dangling references.
+    const result = await db.transaction(async (tx) => {
+      const rows = await tx
+        .delete(skillTable)
+        .where(
+          and(eq(skillTable.id, skillId), eq(skillTable.organizationId, orgId)),
+        )
+        .returning();
+      if (rows.length > 0) {
+        await scrubDeletedAgentReference(tx, "skillIds", skillId);
+      }
+      return rows;
+    });
     if (result.length === 0) {
       return c.json({ error: "Skill not found" }, 404);
     }

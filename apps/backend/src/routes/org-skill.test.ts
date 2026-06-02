@@ -166,6 +166,8 @@ describe("Organization Skill Routes", () => {
       const res = await app.request(`${baseUrl}/skill-1`, { method: "DELETE" });
       expect(res.status).toBe(200);
       expect(await res.json()).toEqual({ message: "Skill deleted" });
+      // The dead skill id is scrubbed from referencing agents in the same tx.
+      expect(mockDb.update).toHaveBeenCalled();
     });
 
     it("returns 409 when the skill is attached to a workspace", async () => {
