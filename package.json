@@ -1,6 +1,6 @@
 {
   "name": "platypus",
-  "version": "1.89.1",
+  "version": "1.90.0",
   "private": true,
   "scripts": {
     "build": "turbo run build",

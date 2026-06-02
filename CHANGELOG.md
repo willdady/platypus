@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.90.0](https://github.com/willdady/platypus/compare/v1.89.1...v1.90.0) (2026-06-02)
+
+
+### Features
+
+* org-scoped agents + promote, shared-resource editing & central attachments ([#177](https://github.com/willdady/platypus/issues/177)) ([a8af7eb](https://github.com/willdady/platypus/commit/a8af7ebd8a9ab65a43f711c87bed8382b33ed5b9))
+
 ## [1.89.1](https://github.com/willdady/platypus/compare/v1.89.0...v1.89.1) (2026-06-01)
 
 
