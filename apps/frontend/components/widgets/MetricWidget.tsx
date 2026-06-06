@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import type { Widget } from "@platypus/schemas";
+import { useResetOnChange } from "@/hooks/use-reset-on-change";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -50,16 +51,13 @@ export function MetricWidget({
     return () => ro.disconnect();
   }, [data?.value, data?.unit, editing]);
 
-  useEffect(() => {
-    setTitle(widget.title);
-  }, [widget.title]);
-
-  useEffect(() => {
+  useResetOnChange(widget.title, () => setTitle(widget.title));
+  useResetOnChange(String(widget.updatedAt), () => {
     setValue(String(data?.value ?? ""));
     setLabel(data?.label ?? "");
     setUnit(data?.unit ?? "");
     setChange(data?.change ?? "");
-  }, [data?.value, data?.label, data?.unit, data?.change]);
+  });
 
   if (editing) {
     return (

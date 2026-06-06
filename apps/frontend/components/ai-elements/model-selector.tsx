@@ -175,6 +175,9 @@ export const ModelSelectorLogo = ({
   className,
   ...props
 }: ModelSelectorLogoProps) => (
+  // External SVG logo from models.dev; serving via the Next image optimizer
+  // would require whitelisting the host and dangerouslyAllowSVG.
+  // eslint-disable-next-line @next/next/no-img-element
   <img
     {...props}
     alt={`${provider} logo`}

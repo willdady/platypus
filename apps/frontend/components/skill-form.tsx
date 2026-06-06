@@ -14,7 +14,8 @@ import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { ConfirmDialog } from "@/components/confirm-dialog";
-import { useState, useEffect } from "react";
+import { useState } from "react";
+import { useResetOnChange } from "@/hooks/use-reset-on-change";
 import { useRouter } from "next/navigation";
 import { Trash2 } from "lucide-react";
 import { type Skill, type Agent } from "@platypus/schemas";
@@ -87,7 +88,7 @@ const SkillForm = ({
   const router = useRouter();
 
   // Initialize form with existing skill data when editing
-  useEffect(() => {
+  useResetOnChange(skill, () => {
     if (skill) {
       setFormData({
         name: skill.name,
@@ -95,14 +96,14 @@ const SkillForm = ({
         body: skill.body,
       });
     }
-  }, [skill]);
+  });
 
   // Initialize agent selections from the skill's agentIds
-  useEffect(() => {
+  useResetOnChange(skill, () => {
     if (skill?.agentIds) {
       setSelectedAgentIds(skill.agentIds);
     }
-  }, [skill]);
+  });
 
   if (skillLoading) {
     return <div className={classNames}>Loading...</div>;

@@ -29,13 +29,17 @@ export const OAuthCallbackHandler = ({
   state?: string;
 }) => {
   const backendUrl = useBackendUrl();
-  const [error, setError] = useState<string | null>(null);
-  const [isProcessing, setIsProcessing] = useState(true);
+  // code/state come from the URL and are fixed for the lifetime of this view,
+  // so the missing-parameter state is derived at init rather than set in an
+  // effect.
+  const missingParams = !code || !state;
+  const [error, setError] = useState<string | null>(
+    missingParams ? "Missing authorization code or state parameter." : null,
+  );
+  const [isProcessing, setIsProcessing] = useState(!missingParams);
 
   useEffect(() => {
     if (!code || !state) {
-      setError("Missing authorization code or state parameter.");
-      setIsProcessing(false);
       return;
     }
 

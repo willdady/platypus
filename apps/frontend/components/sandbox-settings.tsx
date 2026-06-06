@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useMemo, useState } from "react";
+import { useResetOnChange } from "@/hooks/use-reset-on-change";
 import useSWR from "swr";
 import { toast } from "sonner";
 import { Box, Plus, Trash2, X } from "lucide-react";
@@ -229,7 +230,7 @@ const SandboxSettings = ({
   const { data: backendsData, isLoading: backendsLoading } = useSWR<{
     results: SandboxBackend[];
   }>(backendUrl && user ? `${sandboxUrl}/backends` : null, fetcher);
-  const backends = backendsData?.results ?? [];
+  const backends = useMemo(() => backendsData?.results ?? [], [backendsData]);
 
   // Operator network allowlist — admin-only endpoint (ADR-0005).
   const { data: networksData } = useSWR<{ results: string[] }>(
@@ -255,7 +256,7 @@ const SandboxSettings = ({
   }>({ open: false, kind: null, message: "" });
   const [isForcing, setIsForcing] = useState(false);
 
-  useEffect(() => {
+  useResetOnChange(data, () => {
     if (data) {
       const config = (data.config ?? {}) as {
         networks?: string[];
@@ -269,12 +270,18 @@ const SandboxSettings = ({
         networks: config.networks ?? [],
         extraHosts: extraHostsToRows(config.extraHosts),
       });
-    } else if (backends.length > 0) {
+    }
+  });
+
+  // When creating (no existing record), default the backend to the first
+  // available one until the user picks another.
+  useResetOnChange(backends, () => {
+    if (!data && backends.length > 0) {
       setFormData((prev) =>
         prev.backend ? prev : { ...prev, backend: backends[0].backend },
       );
     }
-  }, [data, backends]);
+  });
 
   const clearError = (field: string) => {
     if (validationErrors[field]) {

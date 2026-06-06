@@ -107,6 +107,9 @@ export const ChatMessage = memo(function ChatMessage({
   const assistantAvatar =
     message.role === "assistant" &&
     (messageAgent?.avatarUrl ? (
+      // Agent avatar URL is user-supplied (arbitrary host); not routable
+      // through the Next image optimizer.
+      // eslint-disable-next-line @next/next/no-img-element
       <img
         src={messageAgent.avatarUrl}
         alt={messageAgent.name}
@@ -270,6 +273,9 @@ export const ChatMessage = memo(function ChatMessage({
               avatar={assistantAvatar}
             >
               <MessageContent className="max-w-full">
+                {/* Generated/uploaded image served from a backend or data: URL;
+                not routable through the Next image optimizer. */}
+                {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   src={filePart.url}
                   alt={filePart.filename || "Generated image"}

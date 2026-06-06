@@ -19,7 +19,7 @@ import {
   EmptyTitle,
 } from "@/components/ui/empty";
 import { useAuth } from "@/components/auth-provider";
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 
 export default function Home() {
@@ -32,7 +32,7 @@ export default function Home() {
     fetcher,
   );
 
-  const organizations = data?.results || [];
+  const organizations = useMemo(() => data?.results || [], [data]);
 
   // Redirect to first organization if available
   useEffect(() => {

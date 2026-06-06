@@ -36,6 +36,7 @@ import {
 import { type PlatypusUIMessage } from "@platypus/backend/src/types";
 import useSWR from "swr";
 import { fetcher, joinUrl } from "@/lib/utils";
+import { useResetOnChange } from "@/hooks/use-reset-on-change";
 import { useChatSettings } from "@/hooks/use-chat-settings";
 import { useModelSelection } from "@/hooks/use-model-selection";
 import { useMessageEditing } from "@/hooks/use-message-editing";
@@ -174,7 +175,10 @@ export const Chat = ({
     // Transport: `body` is a function so it's re-evaluated on every request.
     // This ensures dynamic values like agentId and model config are always current.
     // We use `getRequestBodyRef` (a ref) to avoid stale closures since this
-    // transport instance is created once and captured by useChat.
+    // transport instance is created once and captured by useChat. The `body`
+    // callback reads the ref at request time (not during render), which the
+    // static analysis can't prove from the construction site.
+    // eslint-disable-next-line react-hooks/refs
     transport: new DefaultChatTransport({
       api: joinUrl(
         backendUrl || "",
@@ -280,8 +284,11 @@ export const Chat = ({
     search,
   ]);
 
-  // Update ref whenever getRequestBody changes
-  getRequestBodyRef.current = getRequestBody;
+  // Update ref whenever getRequestBody changes. Written in an effect (not
+  // during render) so the transport body callback reads the latest value.
+  useEffect(() => {
+    getRequestBodyRef.current = getRequestBody;
+  }, [getRequestBody]);
 
   // Message editing hook (needs getRequestBody to be defined)
   const messageEditing = useMessageEditing(
@@ -305,7 +312,11 @@ export const Chat = ({
   // the streaming status transitions. Without this, ending a stream would
   // trigger the effect and overwrite the fresh messages with stale SWR data.
   const statusRef = useRef(status);
-  statusRef.current = status;
+  // Written in an effect (not during render) so the hydrate effect below reads
+  // the status committed by the previous render.
+  useEffect(() => {
+    statusRef.current = status;
+  }, [status]);
 
   useEffect(() => {
     if (
@@ -339,9 +350,7 @@ export const Chat = ({
   }, [initialAgentId, agentId, chatData, modelSetters]);
 
   // Reset search when model or provider changes
-  useEffect(() => {
-    setSearch(false);
-  }, [modelId, providerId]);
+  useResetOnChange(`${modelId}:${providerId}`, () => setSearch(false));
 
   const handleCopyMessage = useCallback(
     async (content: string, messageId: string) => {

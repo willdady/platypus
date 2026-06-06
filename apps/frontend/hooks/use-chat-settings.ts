@@ -1,5 +1,6 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Chat } from "@platypus/schemas";
+import { useResetOnChange } from "@/hooks/use-reset-on-change";
 
 export interface ChatSettings {
   systemPrompt: string;
@@ -25,8 +26,10 @@ export const useChatSettings = (
     number | undefined
   >();
 
-  // Initialize chat settings from existing chat data
-  useEffect(() => {
+  // Initialize chat settings from existing chat data (only when no agent is
+  // selected — an agent supplies its own settings). Re-syncs when either the
+  // chat data or the selected agent changes.
+  const initializeFromChat = () => {
     if (chatData && !agentId) {
       setSystemPrompt(chatData.systemPrompt || "");
       setTemperature(chatData.temperature ?? undefined);
@@ -36,7 +39,9 @@ export const useChatSettings = (
       setPresencePenalty(chatData.presencePenalty ?? undefined);
       setFrequencyPenalty(chatData.frequencyPenalty ?? undefined);
     }
-  }, [chatData, agentId]);
+  };
+  useResetOnChange(chatData, initializeFromChat);
+  useResetOnChange(agentId, initializeFromChat);
 
   const settings: ChatSettings = {
     systemPrompt,

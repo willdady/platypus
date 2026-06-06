@@ -33,7 +33,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import type { ComponentProps, ReactNode } from "react";
-import { isValidElement } from "react";
+import { createElement, isValidElement } from "react";
 import { CodeBlock } from "./code-block";
 
 /**
@@ -212,7 +212,9 @@ export const ToolHeader = ({
   state,
   ...props
 }: ToolHeaderProps) => {
-  const Icon = getToolIcon(type);
+  // getToolIcon returns a stable module-level Lucide icon; render via
+  // createElement so the dynamic selection isn't flagged as a component
+  // created during render.
   return (
     <CollapsibleTrigger
       className={cn(
@@ -222,7 +224,9 @@ export const ToolHeader = ({
       {...props}
     >
       <div className="flex items-center gap-2 min-w-0">
-        <Icon className="size-4 shrink-0 text-muted-foreground" />
+        {createElement(getToolIcon(type), {
+          className: "size-4 shrink-0 text-muted-foreground",
+        })}
         <span className="font-medium text-sm truncate select-text">
           {title ?? humanizeToolType(type)}
           {label && (

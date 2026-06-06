@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useResetOnChange } from "@/hooks/use-reset-on-change";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -102,14 +103,14 @@ export const WorkspaceContextForm = ({ contextId }: { contextId?: string }) => {
   }, [orgs, backendUrl]);
 
   // Set form data when editing
-  useEffect(() => {
+  useResetOnChange(contextData, () => {
     if (contextData) {
       setFormData({
         content: contextData.content,
         workspaceId: contextData.workspaceId || "",
       });
     }
-  }, [contextData]);
+  });
 
   // Filter out workspaces that already have contexts (unless we're editing that context)
   const existingWorkspaceIds = new Set(

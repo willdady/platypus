@@ -27,7 +27,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { useState, useEffect } from "react";
+import { useState } from "react";
+import { useResetOnChange } from "@/hooks/use-reset-on-change";
 import { useRouter } from "next/navigation";
 import { type Workspace, type Provider } from "@platypus/schemas";
 import { fetcher, parseValidationErrors, joinUrl } from "@/lib/utils";
@@ -106,15 +107,15 @@ const WorkspaceForm = ({
 
   // When creating, default the owner to the current admin until they pick
   // another member.
-  useEffect(() => {
+  useResetOnChange(`${workspaceId ?? ""}:${user?.id ?? ""}`, () => {
     if (!workspaceId && user) {
       setFormData((prev) =>
         prev.ownerId ? prev : { ...prev, ownerId: user.id },
       );
     }
-  }, [workspaceId, user]);
+  });
 
-  useEffect(() => {
+  useResetOnChange(workspace, () => {
     if (workspace) {
       setFormData({
         name: workspace.name,
@@ -129,7 +130,7 @@ const WorkspaceForm = ({
         mcpSelfManagement: workspace.mcpSelfManagement ?? false,
       });
     }
-  }, [workspace]);
+  });
 
   const handleChange = (
     e:
