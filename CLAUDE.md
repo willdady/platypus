@@ -13,6 +13,7 @@ pnpm dev               # frontend + backend + local Postgres
 pnpm drizzle-kit-push  # apply schema changes (requires `pnpm dev` running)
 pnpm build
 pnpm format
+pnpm lint
 pnpm test              # all tests (Vitest, orchestrated by Turborepo)
 ```
 
