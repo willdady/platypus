@@ -1,0 +1,1 @@
+ALTER TABLE "provider" ADD COLUMN "native_search_enabled" boolean DEFAULT true NOT NULL;
