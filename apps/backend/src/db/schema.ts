@@ -320,6 +320,65 @@ export const attachment = pgTable(
   ],
 );
 
+// Blueprint — a named, Organization-scoped macro that, applied to a Workspace,
+// creates the Attachments for a chosen set of Shared resources in one step
+// (ADR-0008). It is a snapshot, not a living binding: applying stamps
+// Attachments at that moment; later edits never disturb already-provisioned
+// Workspaces. Blueprints are always org-scoped (no dual scope) and managed only
+// by Org Admins.
+export const blueprint = pgTable(
+  "blueprint",
+  (t) => ({
+    id: t.text("id").primaryKey(),
+    organizationId: t
+      .text("organization_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    name: t.text("name").notNull(),
+    description: t.text("description"),
+    createdAt: t.timestamp("created_at").notNull().defaultNow(),
+    updatedAt: t.timestamp("updated_at").notNull().defaultNow(),
+  }),
+  (t) => [
+    index("idx_blueprint_organization_id").on(t.organizationId),
+    unique("unique_blueprint_name_org").on(t.organizationId, t.name),
+  ],
+);
+
+// The Shared resources a Blueprint provisions. Mirrors `attachment`: polymorphic
+// `resourceType` + `resourceId` pointing at an org-scoped resource, no FK on
+// `resourceId` (the relationship is enforced in application code, and deletion
+// of a Shared resource is blocked while any Blueprint lists it rather than
+// cascaded). The `blueprint_id` FK cascades so deleting a Blueprint drops its
+// items.
+export const blueprintItem = pgTable(
+  "blueprint_item",
+  (t) => ({
+    id: t.text("id").primaryKey(),
+    blueprintId: t
+      .text("blueprint_id")
+      .notNull()
+      .references(() => blueprint.id, { onDelete: "cascade" }),
+    resourceType: t
+      .text("resource_type")
+      .$type<"mcp" | "provider" | "skill" | "agent">()
+      .notNull(),
+    resourceId: t.text("resource_id").notNull(),
+    createdAt: t.timestamp("created_at").notNull().defaultNow(),
+  }),
+  (t) => [
+    index("idx_blueprint_item_blueprint").on(t.blueprintId),
+    // Drives the extended deletion guard ("is this resource listed in any
+    // Blueprint?")
+    index("idx_blueprint_item_resource").on(t.resourceType, t.resourceId),
+    unique("unique_blueprint_item").on(
+      t.blueprintId,
+      t.resourceType,
+      t.resourceId,
+    ),
+  ],
+);
+
 export const sandbox = pgTable(
   "sandbox",
   (t) => ({

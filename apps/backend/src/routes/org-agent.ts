@@ -14,6 +14,7 @@ import { requireAuth } from "../middleware/authentication.ts";
 import { requireOrgAccess } from "../middleware/authorization.ts";
 import { findNonSharedReferences } from "../services/agent-scope-validation.ts";
 import { scrubDeletedAgentReference } from "../services/agent-references.ts";
+import { isResourceListedInBlueprint } from "../services/blueprint-guard.ts";
 import { getStorage } from "../storage/index.ts";
 import { avatarKeyToUrl } from "../utils/avatar-url.ts";
 import { getOrigin } from "../utils/get-origin.ts";
@@ -297,6 +298,18 @@ orgAgent.delete(
         {
           error:
             "Cannot delete: this agent is attached to one or more workspaces. Detach it first.",
+        },
+        409,
+      );
+    }
+
+    // Nor while it is listed in a Blueprint (ADR-0008) — remove it from every
+    // Blueprint first, so nothing still points at it.
+    if (await isResourceListedInBlueprint("agent", agentId)) {
+      return c.json(
+        {
+          error:
+            "Cannot delete: this agent is listed in one or more blueprints. Remove it from them first.",
         },
         409,
       );

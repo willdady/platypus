@@ -479,6 +479,54 @@ export const attachmentCreateSchema = attachmentBaseSchema.pick({
 });
 export type AttachmentCreateData = z.infer<typeof attachmentCreateSchema>;
 
+// Blueprint — a named, Organization-scoped macro that, applied to a Workspace,
+// creates the Attachments for a chosen set of Shared resources in one step
+// (ADR-0008). It is a snapshot, not a living binding: applying stamps
+// Attachments at that moment; later edits never disturb already-provisioned
+// Workspaces. A Blueprint may only list org-scoped (Shared) resources, so its
+// items reuse the Attachment resource-type set.
+
+const blueprintItemSchema = z.object({
+  resourceType: attachmentResourceTypeSchema,
+  resourceId: z.string(),
+});
+export type BlueprintItem = z.infer<typeof blueprintItemSchema>;
+
+const blueprintBaseSchema = z.object({
+  id: z.string(),
+  organizationId: z.string(),
+  name: z.string().min(3).max(100),
+  description: z.string().max(500).nullable().optional(),
+  // The Shared resources this Blueprint provisions. Deduped/validated by the
+  // route; each must be an org-scoped resource in the same organization.
+  items: z.array(blueprintItemSchema),
+  createdAt: z.date(),
+  updatedAt: z.date(),
+});
+
+export const blueprintSchema = blueprintBaseSchema;
+export type Blueprint = z.infer<typeof blueprintSchema>;
+
+export const blueprintCreateSchema = blueprintBaseSchema.pick({
+  name: true,
+  description: true,
+  items: true,
+});
+export type BlueprintCreateData = z.infer<typeof blueprintCreateSchema>;
+
+export const blueprintUpdateSchema = blueprintBaseSchema.pick({
+  name: true,
+  description: true,
+  items: true,
+});
+export type BlueprintUpdateData = z.infer<typeof blueprintUpdateSchema>;
+
+// Apply a Blueprint to an existing Workspace (admin only, ad-hoc re-apply).
+export const blueprintApplySchema = z.object({
+  workspaceId: z.string(),
+});
+export type BlueprintApplyData = z.infer<typeof blueprintApplySchema>;
+
 // Provider
 
 export const providerApiModeSchema = z.enum(["chat", "responses"]);

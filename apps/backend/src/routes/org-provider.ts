@@ -12,6 +12,7 @@ import { handleEmbeddingConfigChange } from "../services/embedding-invalidation.
 import { dedupeArray } from "../utils.ts";
 import { requireAuth } from "../middleware/authentication.ts";
 import { requireOrgAccess } from "../middleware/authorization.ts";
+import { isResourceListedInBlueprint } from "../services/blueprint-guard.ts";
 import type { Variables } from "../server.ts";
 
 const orgProvider = new Hono<{ Variables: Variables }>();
@@ -182,6 +183,18 @@ orgProvider.delete(
         {
           error:
             "Cannot delete: this provider is attached to one or more workspaces. Detach it first.",
+        },
+        409,
+      );
+    }
+
+    // Nor while it is listed in a Blueprint (ADR-0008) — remove it from every
+    // Blueprint first, so nothing still points at it.
+    if (await isResourceListedInBlueprint("provider", providerId)) {
+      return c.json(
+        {
+          error:
+            "Cannot delete: this provider is listed in one or more blueprints. Remove it from them first.",
         },
         409,
       );

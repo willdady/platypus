@@ -160,7 +160,8 @@ describe("Organization Skill Routes", () => {
       mockSession();
       mockDb.limit
         .mockResolvedValueOnce([{ role: "admin" }]) // requireOrgAccess
-        .mockResolvedValueOnce([]); // attachment guard: none
+        .mockResolvedValueOnce([]) // attachment guard: none
+        .mockResolvedValueOnce([]); // blueprint guard: none
       mockDb.returning.mockResolvedValueOnce([{ id: "skill-1" }]);
 
       const res = await app.request(`${baseUrl}/skill-1`, { method: "DELETE" });
@@ -175,6 +176,17 @@ describe("Organization Skill Routes", () => {
       mockDb.limit
         .mockResolvedValueOnce([{ role: "admin" }]) // requireOrgAccess
         .mockResolvedValueOnce([{ id: "att-1" }]); // attachment guard: attached
+
+      const res = await app.request(`${baseUrl}/skill-1`, { method: "DELETE" });
+      expect(res.status).toBe(409);
+    });
+
+    it("returns 409 when the skill is listed in a blueprint", async () => {
+      mockSession();
+      mockDb.limit
+        .mockResolvedValueOnce([{ role: "admin" }]) // requireOrgAccess
+        .mockResolvedValueOnce([]) // attachment guard: none
+        .mockResolvedValueOnce([{ id: "bpi-1" }]); // blueprint guard: listed
 
       const res = await app.request(`${baseUrl}/skill-1`, { method: "DELETE" });
       expect(res.status).toBe(409);

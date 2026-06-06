@@ -10,6 +10,7 @@ import {
 } from "@/components/ui/sidebar";
 import {
   Bot,
+  Layers,
   Mail,
   Plug,
   Settings,
@@ -33,6 +34,7 @@ export function OrgSettingsMenu({ orgId }: OrgSettingsMenuProps) {
   const mcpHref = `/${orgId}/settings/mcp`;
   const skillsHref = `/${orgId}/settings/skills`;
   const agentsHref = `/${orgId}/settings/agents`;
+  const blueprintsHref = `/${orgId}/settings/blueprints`;
 
   return (
     <SidebarContent>
@@ -103,6 +105,16 @@ export function OrgSettingsMenu({ orgId }: OrgSettingsMenuProps) {
               >
                 <Link href={agentsHref}>
                   <Bot /> Agents
+                </Link>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+            <SidebarMenuItem>
+              <SidebarMenuButton
+                asChild
+                isActive={pathname.startsWith(blueprintsHref)}
+              >
+                <Link href={blueprintsHref}>
+                  <Layers /> Blueprints
                 </Link>
               </SidebarMenuButton>
             </SidebarMenuItem>

@@ -11,6 +11,7 @@ import { eq, and } from "drizzle-orm";
 import { requireAuth } from "../middleware/authentication.ts";
 import { requireOrgAccess } from "../middleware/authorization.ts";
 import { scrubDeletedAgentReference } from "../services/agent-references.ts";
+import { isResourceListedInBlueprint } from "../services/blueprint-guard.ts";
 import type { Variables } from "../server.ts";
 
 // Org-scoped Skills are Shared resources (ADR-0007): a single source of truth
@@ -153,6 +154,18 @@ orgSkill.delete(
         {
           error:
             "Cannot delete: this skill is attached to one or more workspaces. Detach it first.",
+        },
+        409,
+      );
+    }
+
+    // Nor while it is listed in a Blueprint (ADR-0008) — remove it from every
+    // Blueprint first, so nothing still points at it.
+    if (await isResourceListedInBlueprint("skill", skillId)) {
+      return c.json(
+        {
+          error:
+            "Cannot delete: this skill is listed in one or more blueprints. Remove it from them first.",
         },
         409,
       );
