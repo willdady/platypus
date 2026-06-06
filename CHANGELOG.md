@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.92.0](https://github.com/willdady/platypus/compare/v1.91.0...v1.92.0) (2026-06-06)
+
+
+### Features
+
+* Blueprint CRUD + apply macro (Tier 1) ([#184](https://github.com/willdady/platypus/issues/184)) ([66b9499](https://github.com/willdady/platypus/commit/66b9499e274c49df148b3b91f72d9fc6194a9e48))
+
 ## [1.91.0](https://github.com/willdady/platypus/compare/v1.90.0...v1.91.0) (2026-06-06)
 
 
