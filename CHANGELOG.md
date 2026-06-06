@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.91.0](https://github.com/willdady/platypus/compare/v1.90.0...v1.91.0) (2026-06-06)
+
+
+### Features
+
+* **provider:** add per-provider toggle to disable native web search ([#183](https://github.com/willdady/platypus/issues/183)) ([ddeb861](https://github.com/willdady/platypus/commit/ddeb8614cc167b0d109dffb51343feac9d294696))
+
+
+### Bug Fixes
+
+* **frontend:** resolve deferred react-hooks & no-img-element lint errors ([#181](https://github.com/willdady/platypus/issues/181)) ([a938aef](https://github.com/willdady/platypus/commit/a938aefc6b423901a35b27492204d544d06d05ed))
+
 ## [1.90.0](https://github.com/willdady/platypus/compare/v1.89.1...v1.90.0) (2026-06-02)
 
 
