@@ -296,6 +296,9 @@ export function PromptInputAttachment({
           <div className="relative size-5 shrink-0">
             <div className="absolute inset-0 flex size-5 items-center justify-center overflow-hidden rounded bg-background transition-opacity group-hover:opacity-0">
               {isImage ? (
+                // Attachment served from a blob:/data:/backend URL; not
+                // routable through the Next image optimizer.
+                // eslint-disable-next-line @next/next/no-img-element
                 <img
                   alt={filename || "attachment"}
                   className="size-5 object-cover"
@@ -331,6 +334,9 @@ export function PromptInputAttachment({
         <div className="w-auto space-y-3">
           {isImage && (
             <div className="flex max-h-96 w-96 items-center justify-center overflow-hidden rounded-md border">
+              {/* Attachment served from a blob:/data:/backend URL; not
+              routable through the Next image optimizer. */}
+              {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 alt={filename || "attachment preview"}
                 className="max-h-full max-w-full object-contain"
@@ -544,36 +550,51 @@ export const PromptInput = ({
     [matchesAccept, maxFiles, maxFileSize, onError],
   );
 
-  const add = usingProvider
-    ? (files: File[] | FileList) => controller.attachments.add(files)
-    : addLocal;
+  const add = useCallback(
+    (files: File[] | FileList) =>
+      usingProvider ? controller.attachments.add(files) : addLocal(files),
+    [usingProvider, controller, addLocal],
+  );
 
-  const remove = usingProvider
-    ? (id: string) => controller.attachments.remove(id)
-    : (id: string) =>
-        setItems((prev) => {
-          const found = prev.find((file) => file.id === id);
-          if (found?.url) {
-            URL.revokeObjectURL(found.url);
-          }
-          return prev.filter((file) => file.id !== id);
-        });
+  const remove = useCallback(
+    (id: string) => {
+      if (usingProvider) {
+        controller.attachments.remove(id);
+        return;
+      }
+      setItems((prev) => {
+        const found = prev.find((file) => file.id === id);
+        if (found?.url) {
+          URL.revokeObjectURL(found.url);
+        }
+        return prev.filter((file) => file.id !== id);
+      });
+    },
+    [usingProvider, controller],
+  );
 
-  const clear = usingProvider
-    ? () => controller.attachments.clear()
-    : () =>
-        setItems((prev) => {
-          for (const file of prev) {
-            if (file.url) {
-              URL.revokeObjectURL(file.url);
-            }
-          }
-          return [];
-        });
+  const clear = useCallback(() => {
+    if (usingProvider) {
+      controller.attachments.clear();
+      return;
+    }
+    setItems((prev) => {
+      for (const file of prev) {
+        if (file.url) {
+          URL.revokeObjectURL(file.url);
+        }
+      }
+      return [];
+    });
+  }, [usingProvider, controller]);
 
-  const openFileDialog = usingProvider
-    ? () => controller.attachments.openFileDialog()
-    : openFileDialogLocal;
+  const openFileDialog = useCallback(
+    () =>
+      usingProvider
+        ? controller.attachments.openFileDialog()
+        : openFileDialogLocal(),
+    [usingProvider, controller, openFileDialogLocal],
+  );
 
   // Let provider know about our hidden file input so external menus can call openFileDialog()
   useEffect(() => {
@@ -1154,6 +1175,10 @@ export const PromptInputSpeechButton = ({
       };
 
       recognitionRef.current = speechRecognition;
+      // Expose the constructed SpeechRecognition (an external browser API,
+      // only available after mount) to render so the mic button can enable;
+      // the setState here is part of initialising that external system.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setRecognition(speechRecognition);
     }
 

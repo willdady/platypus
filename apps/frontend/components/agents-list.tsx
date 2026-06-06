@@ -438,6 +438,9 @@ export const AgentsList = ({
               <Item variant="outline" className="h-full items-stretch">
                 {agent.avatarUrl ? (
                   <ItemMedia variant="image" className="size-12 rounded-lg">
+                    {/* Agent avatar URL is user-supplied (arbitrary host); not
+                    routable through the Next image optimizer. */}
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
                       src={agent.avatarUrl}
                       alt={agent.name}

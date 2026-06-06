@@ -14,7 +14,8 @@ import { AgentAvatar } from "@/components/agent-avatar";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { ConfirmDialog } from "@/components/confirm-dialog";
-import { useState, useEffect, useMemo } from "react";
+import { useState, useMemo } from "react";
+import { useResetOnChange } from "@/hooks/use-reset-on-change";
 import { useRouter } from "next/navigation";
 import { Trash2 } from "lucide-react";
 import {
@@ -298,7 +299,7 @@ const TriggerForm = ({
       : null,
     fetcher,
   );
-  const agents = agentsData?.results || [];
+  const agents = useMemo(() => agentsData?.results || [], [agentsData]);
 
   const { data: boardsData } = useSWR<{
     results: KanbanBoard[];
@@ -376,7 +377,7 @@ const TriggerForm = ({
 
   const router = useRouter();
 
-  useEffect(() => {
+  useResetOnChange(trigger, () => {
     if (trigger) {
       setTriggerType(trigger.type);
       setFormData({
@@ -416,13 +417,19 @@ const TriggerForm = ({
         setFilterBoardId(eventConfig.filters?.boardId || "");
         setFilterColumnId(eventConfig.filters?.columnId || "");
       }
-    } else if (agents.length > 0) {
+    }
+  });
+
+  // When creating (no existing trigger), default the agent to the first
+  // available one until the user picks another.
+  useResetOnChange(agents, () => {
+    if (!trigger && agents.length > 0) {
       setFormData((prev) => ({
         ...prev,
         agentId: agents[0].id,
       }));
     }
-  }, [trigger, agents]);
+  });
 
   const effectiveCronExpression = useMemo(() => {
     if (scheduleMode === "simple") {

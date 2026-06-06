@@ -1,4 +1,5 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
+import { useResetOnChange } from "@/hooks/use-reset-on-change";
 
 export const useChatUI = (error: Error | undefined) => {
   const [isModelSelectorOpen, setIsModelSelectorOpen] = useState(false);
@@ -9,12 +10,13 @@ export const useChatUI = (error: Error | undefined) => {
   const [showErrorDialog, setShowErrorDialog] = useState(false);
   const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
 
-  // Show error dialog if there's an error from useChat
-  useEffect(() => {
+  // Show error dialog when a new error arrives from useChat. Keyed on the error
+  // so the user can still dismiss the dialog while the error persists.
+  useResetOnChange(error, () => {
     if (error) {
       setShowErrorDialog(true);
     }
-  }, [error]);
+  });
 
   return {
     isModelSelectorOpen,

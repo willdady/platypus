@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/select";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { useState, useEffect } from "react";
+import { useResetOnChange } from "@/hooks/use-reset-on-change";
 import { useRouter } from "next/navigation";
 import { type MCP } from "@platypus/schemas";
 import useSWR from "swr";
@@ -116,7 +117,7 @@ const McpForm = ({
     fetcher,
   );
 
-  useEffect(() => {
+  useResetOnChange(mcp, () => {
     if (mcp) {
       const existingHeaders = (mcp as { headers?: Record<string, string> })
         .headers;
@@ -137,7 +138,7 @@ const McpForm = ({
         headerRows,
       });
     }
-  }, [mcp]);
+  });
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { id, value } = e.target;

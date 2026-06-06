@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
+import { useResetOnChange } from "@/hooks/use-reset-on-change";
 import { useAuth } from "@/components/auth-provider";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,11 +15,11 @@ const UserSettingsPage = () => {
   const [isEditing, setIsEditing] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
 
-  useEffect(() => {
+  useResetOnChange(user?.name, () => {
     if (user?.name) {
       setName(user.name);
     }
-  }, [user?.name]);
+  });
 
   if (!user) return null;
 

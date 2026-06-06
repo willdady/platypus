@@ -26,8 +26,12 @@ export function CollapsibleSection({
   const [open, setOpen] = useState(false);
 
   useEffect(() => {
+    // Reads localStorage (client-only) to restore the persisted open state
+    // after mount. Doing this during render would break SSR/hydration, so the
+    // setState here is intentional.
     const stored = localStorage.getItem(storageKey);
     if (stored !== null) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setOpen(stored !== "false");
     }
   }, [storageKey]);

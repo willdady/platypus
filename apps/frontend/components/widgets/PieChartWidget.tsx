@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
+import { useResetOnChange } from "@/hooks/use-reset-on-change";
 import { Pie, PieChart, Cell, Label as RechartsLabel } from "recharts";
 import type { Widget, PieChartWidgetData } from "@platypus/schemas";
 import {
@@ -52,17 +53,13 @@ export function PieChartWidget({
     toSegmentEntries(data?.segments),
   );
 
-  useEffect(() => {
-    setTitle(widget.title);
-  }, [widget.title]);
-
-  useEffect(() => {
+  useResetOnChange(widget.title, () => setTitle(widget.title));
+  // updatedAt tracks server-side changes; array refs are not stable across renders
+  useResetOnChange(String(widget.updatedAt), () => {
     setCenterLabel(data?.centerLabel ?? "");
     setCenterSubLabel(data?.centerSubLabel ?? "");
     setSegments(toSegmentEntries(data?.segments));
-    // updatedAt tracks server-side changes; array refs are not stable across renders
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [String(widget.updatedAt)]);
+  });
 
   if (editing) {
     const handleAddSegment = () =>

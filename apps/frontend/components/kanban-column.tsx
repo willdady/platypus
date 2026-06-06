@@ -179,12 +179,13 @@ function ColumnContent({
   );
 }
 
-const KanbanColumnComponentInner = function KanbanColumnComponent({
+// Sortable variant: owns the dnd-kit hooks. Kept separate from the overlay
+// path so the hooks below are never called conditionally (rules-of-hooks).
+function SortableKanbanColumn({
   column,
   labels,
   draggable = true,
   isDraggingColumn = false,
-  overlay = false,
   isFirst = false,
   isLast = false,
   onCardClick,
@@ -193,27 +194,6 @@ const KanbanColumnComponentInner = function KanbanColumnComponent({
   onDeleteColumn,
   onMoveColumn,
 }: KanbanColumnProps) {
-  // Overlay instances render as plain static elements — no dnd hooks
-  if (overlay) {
-    return (
-      <div className="flex flex-col w-80 min-w-80 shrink-0 bg-muted/50 rounded-lg">
-        <ColumnContent
-          column={column}
-          labels={labels}
-          draggable={false}
-          isFirst={isFirst}
-          isLast={isLast}
-          onCardClick={onCardClick}
-          onAddCard={onAddCard}
-          onEditColumn={onEditColumn}
-          onDeleteColumn={onDeleteColumn}
-          onMoveColumn={onMoveColumn}
-          overlay
-        />
-      </div>
-    );
-  }
-
   const {
     attributes,
     listeners,
@@ -277,6 +257,32 @@ const KanbanColumnComponentInner = function KanbanColumnComponent({
       />
     </div>
   );
-};
+}
+
+function KanbanColumnComponentInner(props: KanbanColumnProps) {
+  // Overlay instances render as plain static elements — no dnd hooks. Delegate
+  // the interactive case to SortableKanbanColumn so its hooks always run.
+  if (props.overlay) {
+    return (
+      <div className="flex flex-col w-80 min-w-80 shrink-0 bg-muted/50 rounded-lg">
+        <ColumnContent
+          column={props.column}
+          labels={props.labels}
+          draggable={false}
+          isFirst={props.isFirst}
+          isLast={props.isLast}
+          onCardClick={props.onCardClick}
+          onAddCard={props.onAddCard}
+          onEditColumn={props.onEditColumn}
+          onDeleteColumn={props.onDeleteColumn}
+          onMoveColumn={props.onMoveColumn}
+          overlay
+        />
+      </div>
+    );
+  }
+
+  return <SortableKanbanColumn {...props} />;
+}
 
 export const KanbanColumnComponent = memo(KanbanColumnComponentInner);

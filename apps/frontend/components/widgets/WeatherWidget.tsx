@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import Image from "next/image";
+import { useResetOnChange } from "@/hooks/use-reset-on-change";
 import type {
   Widget,
   WeatherWidgetData,
@@ -93,11 +94,8 @@ export function WeatherWidget({
   const [lowC, setLowC] = useState(String(data?.lowC ?? ""));
   const [unit, setUnit] = useState<"C" | "F">(data?.unit ?? "C");
 
-  useEffect(() => {
-    setTitle(widget.title);
-  }, [widget.title]);
-
-  useEffect(() => {
+  useResetOnChange(widget.title, () => setTitle(widget.title));
+  useResetOnChange(String(widget.updatedAt), () => {
     setLocation(data?.location ?? "");
     setDate(data?.date ?? new Date().toISOString().split("T")[0]);
     setCondition(data?.condition ?? "clear-day");
@@ -106,16 +104,7 @@ export function WeatherWidget({
     setHighC(String(data?.highC ?? ""));
     setLowC(String(data?.lowC ?? ""));
     setUnit(data?.unit ?? "C");
-  }, [
-    data?.location,
-    data?.date,
-    data?.condition,
-    data?.description,
-    data?.temperatureC,
-    data?.highC,
-    data?.lowC,
-    data?.unit,
-  ]);
+  });
 
   if (editing) {
     return (

@@ -65,10 +65,13 @@ export const Reasoning = memo(
     const [hasAutoClosed, setHasAutoClosed] = useState(false);
     const [startTime, setStartTime] = useState<number | null>(null);
 
-    // Track duration when streaming starts and ends
+    // Track duration when streaming starts and ends. This measures wall-clock
+    // time at the streaming transition (Date.now()), which can't be derived
+    // during render, so recording it via setState in this effect is intended.
     useEffect(() => {
       if (isStreaming) {
         if (startTime === null) {
+          // eslint-disable-next-line react-hooks/set-state-in-effect
           setStartTime(Date.now());
         }
       } else if (startTime !== null) {

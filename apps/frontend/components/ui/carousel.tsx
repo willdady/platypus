@@ -95,6 +95,10 @@ function Carousel({
 
   React.useEffect(() => {
     if (!api) return;
+    // Subscribe to the embla carousel (an external system) and take an initial
+    // snapshot of its state; the synchronous sync here is the documented
+    // subscribe-and-sync pattern.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     onSelect(api);
     api.on("reInit", onSelect);
     api.on("select", onSelect);

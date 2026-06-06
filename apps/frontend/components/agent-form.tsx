@@ -20,8 +20,9 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import { ConfirmDialog } from "@/components/confirm-dialog";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { useRouter } from "next/navigation";
+import { useResetOnChange } from "@/hooks/use-reset-on-change";
 import Link from "next/link";
 import {
   ChevronsUpDown,
@@ -101,7 +102,10 @@ const AgentForm = ({
   const { data: providersData, isLoading: providersLoading } = useSWR<{
     results: Provider[];
   }>(backendUrl && user ? joinUrl(backendUrl, providersBase) : null, fetcher);
-  const providers = providersData?.results || [];
+  const providers = useMemo(
+    () => providersData?.results || [],
+    [providersData],
+  );
 
   // Fetch skills
   const { data: skillsData } = useSWR<{ results: Skill[] }>(
@@ -161,23 +165,26 @@ const AgentForm = ({
   const router = useRouter();
 
   // Initialize with first provider's first model once providers are loaded
-  useEffect(() => {
-    if (
-      providers.length > 0 &&
-      !formData.modelId &&
-      !formData.providerId &&
-      !agentId
-    ) {
-      setFormData((prevData) => ({
-        ...prevData,
-        modelId: providers[0].modelIds[0],
-        providerId: providers[0].id,
-      }));
-    }
-  }, [providers, formData.modelId, formData.providerId, agentId]);
+  useResetOnChange(
+    `${providers.length}:${formData.modelId ?? ""}:${formData.providerId ?? ""}:${agentId ?? ""}`,
+    () => {
+      if (
+        providers.length > 0 &&
+        !formData.modelId &&
+        !formData.providerId &&
+        !agentId
+      ) {
+        setFormData((prevData) => ({
+          ...prevData,
+          modelId: providers[0].modelIds[0],
+          providerId: providers[0].id,
+        }));
+      }
+    },
+  );
 
   // Initialize form with existing agent data when editing
-  useEffect(() => {
+  useResetOnChange(agent, () => {
     if (agent) {
       setFormData({
         name: agent.name,
@@ -202,7 +209,7 @@ const AgentForm = ({
         setAvatarDeleted(false);
       }
     }
-  }, [agent]);
+  });
 
   const handleChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>,
@@ -238,20 +245,23 @@ const AgentForm = ({
     }));
   };
 
+  const setAvatarFromFile = useCallback(
+    (file: File) => {
+      if (avatarPreviewUrl) {
+        URL.revokeObjectURL(avatarPreviewUrl);
+      }
+      setAvatarFile(file);
+      setAvatarPreviewUrl(URL.createObjectURL(file));
+      setAvatarDeleted(false);
+    },
+    [avatarPreviewUrl],
+  );
+
   const handleAvatarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
       setAvatarFromFile(file);
     }
-  };
-
-  const setAvatarFromFile = (file: File) => {
-    if (avatarPreviewUrl) {
-      URL.revokeObjectURL(avatarPreviewUrl);
-    }
-    setAvatarFile(file);
-    setAvatarPreviewUrl(URL.createObjectURL(file));
-    setAvatarDeleted(false);
   };
 
   const handleAvatarDelete = () => {
@@ -279,7 +289,7 @@ const AgentForm = ({
     };
     document.addEventListener("paste", handlePaste);
     return () => document.removeEventListener("paste", handlePaste);
-  }, [avatarPreviewUrl]);
+  }, [setAvatarFromFile]);
 
   const handleModelChange = (value: string) => {
     if (value.startsWith("provider:")) {
@@ -474,6 +484,9 @@ const AgentForm = ({
             >
               <div className="w-20 h-20 rounded-2xl bg-muted flex items-center justify-center overflow-hidden border-2 border-dashed border-muted-foreground/20 hover:border-muted-foreground/40 transition-colors">
                 {avatarPreviewUrl ? (
+                  // Local blob:/object-URL preview of the chosen file; the Next
+                  // image optimizer cannot process object URLs.
+                  // eslint-disable-next-line @next/next/no-img-element
                   <img
                     src={avatarPreviewUrl}
                     alt="Avatar"
