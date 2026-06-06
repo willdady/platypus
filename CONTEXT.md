@@ -56,6 +56,10 @@ _Avoid_: organization owner.
 The single User who owns a Workspace. Always manages composition (Agents, Skills, Chats); manages credential- and reach-bearing resources only where an Org Admin has delegated it.
 _Avoid_: workspace user, member.
 
+**Scoped resource**:
+An Agent, Skill, MCP, or Provider whose row lives at exactly one scope — a Workspace _or_ the Organization, mutually exclusive (the dual-scope shape). Resolved relative to a Workspace it yields a `(row, scope)` pair: Workspace-scoped rows are visible directly; Organization-scoped rows are visible only where an **Attachment** exists, and are locked against Workspace-surface mutation. The **Shared resource** is the Organization-scoped case of a Scoped resource.
+_Avoid_: dual-scope entity, polymorphic resource.
+
 **Shared resource**:
 An Agent, Skill, MCP, or Provider defined once at Organization scope and _referenced_ (not copied) by Workspaces. A single source of truth: edited only by Org Admins, surfaced as locked to Workspace Owners. A Shared resource may only reference other Shared resources — sharing is always explicit and per-resource, never implicit or cascading.
 _Avoid_: org agent, global agent.
@@ -78,7 +82,7 @@ _Avoid_: template, policy, group.
 - A **Chat turn** uses either an **Agent** or a direct **Provider** + model selection.
 - An **Agent** references one **Provider**, zero-or-more **Tool sets** (static or **MCP**-backed), zero-or-more **Skills**, and zero-or-more **Sub-Agents**.
 - A **Provider** belongs to either an **Organization** (shared) or a **Workspace** (private).
-- An **Agent**, **Skill**, **MCP**, or **Provider** may be a **Shared resource** at **Organization** scope, referenced by **Workspaces** through an **Attachment**; a Sandbox-backed **Tool set** instead rebinds to the invoking **Workspace**'s **Sandbox** at Chat-turn time.
+- An **Agent**, **Skill**, **MCP**, or **Provider** is a **Scoped resource**: its row carries either an `organizationId` or a `workspaceId`, never both. Resolved relative to a **Workspace**, an Organization-scoped one is a **Shared resource**, visible only through an **Attachment**; a Sandbox-backed **Tool set** instead rebinds to the invoking **Workspace**'s **Sandbox** at Chat-turn time.
 - A **Blueprint** names a set of **Shared resources** and, applied to a **Workspace**, creates their **Attachments** in one step.
 - **Workspaces** are created only by **Org Admins** — directly, or auto-provisioned for a member when they accept an invitation. An invitation carries an ordered set of zero-or-more **Blueprints**; on accept they are applied to the new Workspace in order (Attachments union; later Blueprints win on any single-valued pointer-setting). Members do not create their own Workspaces.
 - Authority over configuration runs **Operator** → **Org Admin** → **Workspace Owner**; each tier is bounded by the tier above it.
