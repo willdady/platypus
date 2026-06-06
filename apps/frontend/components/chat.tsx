@@ -393,10 +393,20 @@ export const Chat = ({
   }
 
   const selectedAgent = agentId ? agents.find((a) => a.id === agentId) : null;
-  const currentProvider = providerId
-    ? providers.find((p) => p.id === providerId)
+  // Resolve the provider backing the current selection, whether that's a raw
+  // model (providerId) or an agent (which carries its own providerId). Used to
+  // decide whether the chat search toggle is shown.
+  const resolvedProviderId = agentId ? selectedAgent?.providerId : providerId;
+  const resolvedProvider = resolvedProviderId
+    ? providers.find((p) => p.id === resolvedProviderId)
     : null;
-  const currentProviderType = currentProvider?.providerType;
+  // Show the search toggle only when the resolved provider supports native
+  // search (not Bedrock) and hasn't disabled it. Hidden when nothing is
+  // resolved yet — we can't search without a model. (#167)
+  const canSearch =
+    !!resolvedProvider &&
+    resolvedProvider.providerType !== "Bedrock" &&
+    resolvedProvider.nativeSearchEnabled !== false;
 
   // Treat a server-side run-in-progress as if we were locally streaming,
   // so a tab that reconnects mid-run (or an unrelated tab opened on the
@@ -552,8 +562,7 @@ export const Chat = ({
                       </TooltipTrigger>
                       <TooltipContent>Microphone</TooltipContent>
                     </Tooltip>
-                    {(!currentProviderType ||
-                      currentProviderType !== "Bedrock") && (
+                    {canSearch && (
                       <Tooltip delayDuration={1000}>
                         <TooltipTrigger asChild>
                           <PromptInputButton

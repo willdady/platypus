@@ -61,6 +61,7 @@ import {
   NotFoundError,
   ValidationError,
   createToolHeartbeat,
+  shouldInjectNativeSearch,
 } from "./chat-execution.ts";
 import { createInMemoryChatTurnQueries } from "./chat-execution.test-fixtures.ts";
 
@@ -612,6 +613,37 @@ describe("chat-execution", () => {
 
       vi.advanceTimersByTime(5000);
       expect(bump).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("shouldInjectNativeSearch", () => {
+    it("injects when search is requested and native search is enabled", () => {
+      expect(
+        shouldInjectNativeSearch(true, { nativeSearchEnabled: true }),
+      ).toBe(true);
+    });
+
+    it("does not inject when search is requested but native search is disabled", () => {
+      expect(
+        shouldInjectNativeSearch(true, { nativeSearchEnabled: false }),
+      ).toBe(false);
+    });
+
+    it("does not inject when search is not requested, regardless of provider", () => {
+      expect(
+        shouldInjectNativeSearch(false, { nativeSearchEnabled: true }),
+      ).toBe(false);
+      expect(
+        shouldInjectNativeSearch(undefined, { nativeSearchEnabled: true }),
+      ).toBe(false);
+    });
+
+    it("treats a legacy provider (nativeSearchEnabled undefined) as enabled", () => {
+      expect(
+        shouldInjectNativeSearch(true, {
+          nativeSearchEnabled: undefined as unknown as boolean,
+        }),
+      ).toBe(true);
     });
   });
 });

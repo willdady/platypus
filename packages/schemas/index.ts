@@ -508,6 +508,11 @@ const providerBaseSchema = z.object({
   organization: z.string().optional(),
   project: z.string().optional(),
   apiMode: providerApiModeSchema.default("responses"),
+  // When false, the provider's native web_search tool is never injected and the
+  // chat search toggle is hidden. Defaults to true so existing providers keep
+  // their built-in search. See issue #167 — provides a path to disable native
+  // search for OpenAI-compatible endpoints (e.g. vLLM) that can't honor it.
+  nativeSearchEnabled: z.boolean().default(true),
   modelIds: z.array(z.string()).min(1),
   taskModelId: z.string(),
   memoryExtractionModelId: z.string(),
@@ -564,6 +569,7 @@ export const providerCreateSchema = providerBaseSchema.pick({
   organization: true,
   project: true,
   apiMode: true,
+  nativeSearchEnabled: true,
   modelIds: true,
   taskModelId: true,
   memoryExtractionModelId: true,
@@ -693,6 +699,7 @@ export const providerUpdateSchema = providerBaseSchema.pick({
   organization: true,
   project: true,
   apiMode: true,
+  nativeSearchEnabled: true,
   modelIds: true,
   taskModelId: true,
   memoryExtractionModelId: true,
