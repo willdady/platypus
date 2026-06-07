@@ -96,7 +96,7 @@ export function ChangePasswordForm() {
         </FieldGroup>
       </FieldSet>
       <Button type="submit" disabled={isSubmitting}>
-        {isSubmitting ? "Changing..." : "Change Password"}
+        {isSubmitting ? "Changing..." : "Change password"}
       </Button>
     </form>
   );

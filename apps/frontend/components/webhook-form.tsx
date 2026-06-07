@@ -457,7 +457,7 @@ const WebhookForm = ({ orgId, workspaceId, webhookId }: WebhookFormProps) => {
                 onClick={addHeader}
                 disabled={isSubmitting}
               >
-                <Plus className="h-4 w-4" /> Add Header
+                <Plus className="h-4 w-4" /> Add header
               </Button>
             </div>
           </Field>

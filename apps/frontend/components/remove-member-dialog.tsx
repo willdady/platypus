@@ -93,7 +93,7 @@ export function RemoveMemberDialog({
             onClick={handleSubmit}
             disabled={isSubmitting}
           >
-            {isSubmitting ? "Removing..." : "Remove Member"}
+            {isSubmitting ? "Removing..." : "Remove member"}
           </Button>
         </DialogFooter>
       </DialogContent>

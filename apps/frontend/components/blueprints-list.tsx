@@ -162,7 +162,7 @@ export const BlueprintsList = ({ orgId }: { orgId: string }) => {
       <div className="mt-4 flex gap-2">
         <Button variant="outline" asChild>
           <Link href={`${editBasePath}/create`}>
-            <Plus /> Create Blueprint
+            <Plus /> Create blueprint
           </Link>
         </Button>
       </div>

@@ -146,7 +146,7 @@ export function UsersList() {
                             className="cursor-pointer"
                           >
                             <KeyRound className="h-4 w-4" />
-                            Change Password
+                            Change password
                           </Button>
                           <Button
                             variant="destructive"

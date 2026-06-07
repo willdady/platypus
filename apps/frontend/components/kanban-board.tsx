@@ -898,7 +898,7 @@ export function KanbanBoard({
               className="flex flex-col items-center justify-center w-40 min-w-40 shrink-0 bg-muted/30 rounded-lg border border-dashed border-muted-foreground/30 text-muted-foreground hover:bg-muted/50 transition-colors cursor-pointer"
             >
               <Plus className="h-8 w-8" />
-              <span className="text-sm">Add Column</span>
+              <span className="text-sm">Add column</span>
             </button>
           </div>
         </div>
@@ -960,7 +960,7 @@ export function KanbanBoard({
             >
               Cancel
             </Button>
-            <Button onClick={confirmAddColumn}>Add Column</Button>
+            <Button onClick={confirmAddColumn}>Add column</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -1021,7 +1021,7 @@ export function KanbanBoard({
             >
               Cancel
             </Button>
-            <Button onClick={confirmAddCard}>Add Card</Button>
+            <Button onClick={confirmAddCard}>Add card</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

@@ -93,7 +93,7 @@ const CreateDashboardPage = ({
           </div>
           {error && <p className="text-sm text-destructive">{error}</p>}
           <Button type="submit" disabled={loading || !name.trim()}>
-            {loading ? "Creating..." : "Create Dashboard"}
+            {loading ? "Creating..." : "Create dashboard"}
           </Button>
         </form>
       </div>

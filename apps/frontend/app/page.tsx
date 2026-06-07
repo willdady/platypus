@@ -96,7 +96,7 @@ export default function Home() {
               <EmptyContent>
                 <Button asChild className="w-full">
                   <Link href="/create">
-                    <Plus className="h-4 w-4" /> Create Organization
+                    <Plus className="h-4 w-4" /> Create organization
                   </Link>
                 </Button>
               </EmptyContent>

@@ -144,7 +144,7 @@ export function ChangePasswordDialog({
             disabled={isSubmitting || !newPassword}
             className={isSubmitting ? "opacity-50" : ""}
           >
-            {isSubmitting ? "Updating..." : "Update Password"}
+            {isSubmitting ? "Updating..." : "Update password"}
           </Button>
         </DialogFooter>
       </DialogContent>

@@ -361,12 +361,12 @@ export function AppSidebar() {
                         className="cursor-pointer"
                         href={`/${orgId}/create`}
                       >
-                        <Plus /> Add Workspace
+                        <Plus /> Add workspace
                       </Link>
                     </DropdownMenuItem>
                     <DropdownMenuItem asChild>
                       <Link className="cursor-pointer" href={`/${orgId}`}>
-                        <ArrowLeftRight /> Switch Org
+                        <ArrowLeftRight /> Switch org
                       </Link>
                     </DropdownMenuItem>
                   </DropdownMenuGroup>
@@ -376,7 +376,7 @@ export function AppSidebar() {
             <SidebarMenuItem>
               <Button asChild className="w-full">
                 <Link href={`/${orgId}/workspace/${workspaceId}/chat`}>
-                  <BotMessageSquare /> New Chat
+                  <BotMessageSquare /> New chat
                 </Link>
               </Button>
             </SidebarMenuItem>
@@ -590,7 +590,7 @@ export function AppSidebar() {
               disabled={isRenaming || !renameTitle.trim()}
               className="cursor-pointer"
             >
-              Save Changes
+              Save changes
             </Button>
           </DialogFooter>
         </DialogContent>

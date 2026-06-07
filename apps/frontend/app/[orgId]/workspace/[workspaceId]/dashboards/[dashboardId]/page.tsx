@@ -521,7 +521,7 @@ const DashboardPage = ({
                 size="sm"
                 onClick={() => setAddWidgetOpen(true)}
               >
-                <Plus className="h-4 w-4" /> Add Widget
+                <Plus className="h-4 w-4" /> Add widget
               </Button>
               <Button variant="outline" size="sm" onClick={cancelEdit}>
                 Cancel

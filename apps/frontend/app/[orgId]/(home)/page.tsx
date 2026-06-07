@@ -63,7 +63,7 @@ export default function OrgPage({
             )}
             <Button variant="outline" asChild>
               <Link href={`/${orgId}/settings`}>
-                <Settings className="size-4" /> Organization Settings
+                <Settings className="size-4" /> Organization settings
               </Link>
             </Button>
           </div>
@@ -87,13 +87,13 @@ export default function OrgPage({
               {isOrgAdmin && (
                 <Button asChild className="flex-1">
                   <Link href={`/${orgId}/create`}>
-                    <Plus className="h-4 w-4" /> Create Workspace
+                    <Plus className="h-4 w-4" /> Create workspace
                   </Link>
                 </Button>
               )}
               <Button variant="outline" asChild>
                 <Link href={`/${orgId}/settings`}>
-                  <Settings className="size-4" /> Organization Settings
+                  <Settings className="size-4" /> Organization settings
                 </Link>
               </Button>
             </div>

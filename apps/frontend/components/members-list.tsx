@@ -109,7 +109,7 @@ export function MembersList({ orgId, members, onUpdate }: MembersListProps) {
                             onClick={() => setEditingMember(member)}
                             className="cursor-pointer"
                           >
-                            <Edit className="h-4 w-4" /> Edit Org Role
+                            <Edit className="h-4 w-4" /> Edit org role
                           </DropdownMenuItem>
                           <DropdownMenuSeparator />
                           <DropdownMenuItem

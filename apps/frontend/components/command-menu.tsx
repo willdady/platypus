@@ -123,7 +123,7 @@ export function CommandMenu({ orgId, workspaceId }: CommandMenuProps) {
             }}
           >
             <ArrowLeftRight />
-            <span>Switch Org</span>
+            <span>Switch org</span>
           </CommandItem>
           <CommandItem
             className="cursor-pointer"
@@ -134,7 +134,7 @@ export function CommandMenu({ orgId, workspaceId }: CommandMenuProps) {
             }}
           >
             <BotMessageSquare />
-            <span>New Chat</span>
+            <span>New chat</span>
           </CommandItem>
           <CommandItem
             className="cursor-pointer"
@@ -145,7 +145,7 @@ export function CommandMenu({ orgId, workspaceId }: CommandMenuProps) {
             }}
           >
             <Bot />
-            <span>New Agent</span>
+            <span>New agent</span>
           </CommandItem>
           <CommandItem
             className="cursor-pointer"
@@ -156,7 +156,7 @@ export function CommandMenu({ orgId, workspaceId }: CommandMenuProps) {
             }}
           >
             <Sparkles />
-            <span>New Skill</span>
+            <span>New skill</span>
           </CommandItem>
           <CommandItem
             className="cursor-pointer"
@@ -167,7 +167,7 @@ export function CommandMenu({ orgId, workspaceId }: CommandMenuProps) {
             }}
           >
             <KanbanSquare />
-            <span>New Board</span>
+            <span>New board</span>
           </CommandItem>
           <CommandItem
             className="cursor-pointer"
@@ -180,7 +180,7 @@ export function CommandMenu({ orgId, workspaceId }: CommandMenuProps) {
             }}
           >
             <LayoutDashboard />
-            <span>New Dashboard</span>
+            <span>New dashboard</span>
           </CommandItem>
           <CommandItem
             className="cursor-pointer"
@@ -193,7 +193,7 @@ export function CommandMenu({ orgId, workspaceId }: CommandMenuProps) {
             }}
           >
             <Zap />
-            <span>New Trigger</span>
+            <span>New trigger</span>
           </CommandItem>
           <CommandItem
             className="cursor-pointer"
@@ -206,7 +206,7 @@ export function CommandMenu({ orgId, workspaceId }: CommandMenuProps) {
             }}
           >
             <Radio />
-            <span>Add Webhook</span>
+            <span>Add webhook</span>
           </CommandItem>
           <CommandItem
             className="cursor-pointer"
@@ -215,7 +215,7 @@ export function CommandMenu({ orgId, workspaceId }: CommandMenuProps) {
             }}
           >
             <Settings />
-            <span>Profile Settings</span>
+            <span>Profile settings</span>
           </CommandItem>
           <CommandItem
             className="cursor-pointer"
@@ -226,7 +226,7 @@ export function CommandMenu({ orgId, workspaceId }: CommandMenuProps) {
             }}
           >
             <Settings />
-            <span>Workspace Settings</span>
+            <span>Workspace settings</span>
           </CommandItem>
           <CommandItem
             className="cursor-pointer"

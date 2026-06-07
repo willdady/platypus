@@ -36,7 +36,7 @@ const ContextsList = ({ className }: { className?: string }) => {
         <Button asChild>
           <Link href="/settings/contexts/create">
             <Plus className="w-4 h-4" />
-            Add Workspace Context
+            Add workspace context
           </Link>
         </Button>
       </div>
@@ -71,7 +71,7 @@ const ContextsList = ({ className }: { className?: string }) => {
       <Button asChild>
         <Link href="/settings/contexts/create">
           <Plus className="w-4 h-4" />
-          Add Workspace Context
+          Add workspace context
         </Link>
       </Button>
     </>

@@ -737,7 +737,7 @@ const McpForm = ({
               disabled={isSubmitting}
             >
               <Plus className="h-4 w-4" />
-              Add Header
+              Add header
             </Button>
           </div>
 
@@ -811,7 +811,7 @@ const McpForm = ({
             }
           >
             <Plug />
-            {isTesting ? "Testing..." : "Test Connection"}
+            {isTesting ? "Testing..." : "Test connection"}
           </Button>
 
           {/* Display test results */}

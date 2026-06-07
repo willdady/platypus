@@ -426,7 +426,7 @@ const Workspace = () => {
               <Link
                 href={`/${orgId}/workspace/${workspaceId}/dashboards/create`}
               >
-                <Plus /> Create Dashboard
+                <Plus /> Create dashboard
               </Link>
             </Button>
           </CollapsibleSection>
@@ -446,7 +446,7 @@ const Workspace = () => {
             <BoardsList orgId={orgId} workspaceId={workspaceId} />
             <Button variant="outline" asChild>
               <Link href={`/${orgId}/workspace/${workspaceId}/boards/create`}>
-                <Plus /> Create Board
+                <Plus /> Create board
               </Link>
             </Button>
           </CollapsibleSection>
@@ -466,7 +466,7 @@ const Workspace = () => {
             <TriggerList orgId={orgId} workspaceId={workspaceId} />
             <Button variant="outline" asChild>
               <Link href={`/${orgId}/workspace/${workspaceId}/triggers/create`}>
-                <Plus /> Create Trigger
+                <Plus /> Create trigger
               </Link>
             </Button>
           </CollapsibleSection>

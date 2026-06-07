@@ -300,7 +300,7 @@ export function InvitationForm({ orgId, onSuccess }: InvitationFormProps) {
         disabled={isSubmitting}
         className={`w-full md:w-auto mt-2 ${!isSubmitting ? "cursor-pointer" : ""}`}
       >
-        {isSubmitting ? "Sending..." : "Send Invitation"}
+        {isSubmitting ? "Sending..." : "Send invitation"}
       </Button>
     </form>
   );

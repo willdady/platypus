@@ -264,7 +264,7 @@ export const TriggerList = ({
                           className="cursor-pointer"
                           href={`/${orgId}/workspace/${workspaceId}/triggers/${trigger.id}/runs`}
                         >
-                          <List /> View Runs
+                          <List /> View runs
                         </Link>
                       </DropdownMenuItem>
                       <DropdownMenuItem

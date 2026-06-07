@@ -396,7 +396,7 @@ export const SkillsList = ({
       <div className="mt-4 flex gap-2">
         <Button variant="outline" asChild>
           <Link href={`${editBasePath}/create`}>
-            <Plus /> Create Skill
+            <Plus /> Create skill
           </Link>
         </Button>
         {canAttach && (
