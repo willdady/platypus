@@ -8,12 +8,18 @@ import {
   attachment as attachmentTable,
 } from "../db/schema.ts";
 import { skillCreateSchema, skillUpdateSchema } from "@platypus/schemas";
-import { eq, and, or, sql, inArray, notInArray } from "drizzle-orm";
+import { eq, and, sql, inArray, notInArray } from "drizzle-orm";
 import { requireAuth } from "../middleware/authentication.ts";
 import {
   requireOrgAccess,
   requireWorkspaceAccess,
 } from "../middleware/authorization.ts";
+import {
+  listScoped,
+  requireScoped,
+  requireWorkspaceMutable,
+} from "../services/scoped-resource.ts";
+import { NotFoundError } from "../errors.ts";
 import type { Variables } from "../server.ts";
 
 const skill = new Hono<{ Variables: Variables }>();
@@ -28,33 +34,10 @@ skill.get(
     const orgId = c.req.param("orgId")!;
     const workspaceId = c.req.param("workspaceId")!;
 
-    // Workspace-scoped Skills
-    const workspaceSkills = await db
-      .select()
-      .from(skillTable)
-      .where(eq(skillTable.workspaceId, workspaceId));
-
-    // Org-scoped (Shared) Skills appear in a Workspace only where attached
-    // (ADR-0007 / #154) — gate by an inner join on the Attachment table.
-    const attachedOrgRows = await db
-      .select()
-      .from(skillTable)
-      .innerJoin(
-        attachmentTable,
-        and(
-          eq(attachmentTable.resourceId, skillTable.id),
-          eq(attachmentTable.resourceType, "skill"),
-          eq(attachmentTable.workspaceId, workspaceId),
-        ),
-      )
-      .where(eq(skillTable.organizationId, orgId));
-    const orgSkills = attachedOrgRows.map((r) => r.skill);
-
-    // Tag each Skill with its scope for the frontend (locked cards for org).
-    const results = [
-      ...orgSkills.map((s) => ({ ...s, scope: "organization" as const })),
-      ...workspaceSkills.map((s) => ({ ...s, scope: "workspace" as const })),
-    ];
+    // Workspace-scoped Skills plus the attached org-scoped (Shared) ones, each
+    // tagged with its scope for the frontend (locked cards for org).
+    const scoped = await listScoped(db, "skill", { orgId, wsId: workspaceId });
+    const results = scoped.map(({ row, scope }) => ({ ...row, scope }));
 
     return c.json({ results });
   },
@@ -71,44 +54,12 @@ skill.get(
     const workspaceId = c.req.param("workspaceId")!;
     const skillId = c.req.param("skillId");
 
-    // Resolve a Skill at either scope: the invoking workspace, or the
-    // organization (a Shared Skill — ADR-0007).
-    const record = await db
-      .select()
-      .from(skillTable)
-      .where(
-        and(
-          eq(skillTable.id, skillId),
-          or(
-            eq(skillTable.workspaceId, workspaceId),
-            eq(skillTable.organizationId, orgId),
-          ),
-        ),
-      )
-      .limit(1);
-
-    if (record.length === 0) {
-      return c.json({ error: "Skill not found" }, 404);
-    }
-
-    // An org-scoped (Shared) Skill is only visible here where attached.
-    const isOrgScoped = !!record[0].organizationId && !record[0].workspaceId;
-    if (isOrgScoped) {
-      const [attached] = await db
-        .select({ id: attachmentTable.id })
-        .from(attachmentTable)
-        .where(
-          and(
-            eq(attachmentTable.workspaceId, workspaceId),
-            eq(attachmentTable.resourceType, "skill"),
-            eq(attachmentTable.resourceId, skillId),
-          ),
-        )
-        .limit(1);
-      if (!attached) {
-        return c.json({ error: "Skill not found" }, 404);
-      }
-    }
+    // Resolve the Skill visible here — Workspace-scoped, or an attached
+    // org-scoped (Shared) one (ADR-0007); not visible → 404 via onError.
+    const found = await requireScoped(db, "skill", skillId, {
+      orgId,
+      wsId: workspaceId,
+    });
 
     // Find workspace agents that have this skill assigned
     const agentsWithSkill = await db
@@ -122,8 +73,8 @@ skill.get(
       );
 
     return c.json({
-      ...record[0],
-      scope: isOrgScoped ? "organization" : "workspace",
+      ...found.row,
+      scope: found.scope,
       agentIds: agentsWithSkill.map((a) => a.id),
     });
   },
@@ -139,59 +90,43 @@ skill.post(
   async (c) => {
     const workspaceId = c.req.param("workspaceId")!;
     const { agentIds, ...data } = c.req.valid("json");
-    try {
-      const newId = nanoid();
-      // The workspace route only ever creates workspace-scoped Skills; the
-      // scope is taken from the route, never the body (org-scoped Skills are
-      // created via the Organization surface or by Promote).
-      const record = await db
-        .insert(skillTable)
-        .values({
-          id: newId,
-          name: data.name,
-          description: data.description,
-          body: data.body,
-          workspaceId,
-          organizationId: null,
+
+    const newId = nanoid();
+    // The workspace route only ever creates workspace-scoped Skills; the scope
+    // is taken from the route, never the body (org-scoped Skills are created via
+    // the Organization surface or by Promote). A duplicate name surfaces as a
+    // Postgres unique violation, mapped to 409 by the central onError (ADR-0009).
+    const record = await db
+      .insert(skillTable)
+      .values({
+        id: newId,
+        name: data.name,
+        description: data.description,
+        body: data.body,
+        workspaceId,
+        organizationId: null,
+      })
+      .returning();
+
+    // Add skill to specified agents
+    if (agentIds && agentIds.length > 0) {
+      const newIdJson = JSON.stringify([newId]);
+      await db
+        .update(agentTable)
+        .set({
+          skillIds: sql`${agentTable.skillIds} || ${newIdJson}::jsonb`,
+          updatedAt: new Date(),
         })
-        .returning();
-
-      // Add skill to specified agents
-      if (agentIds && agentIds.length > 0) {
-        const newIdJson = JSON.stringify([newId]);
-        await db
-          .update(agentTable)
-          .set({
-            skillIds: sql`${agentTable.skillIds} || ${newIdJson}::jsonb`,
-            updatedAt: new Date(),
-          })
-          .where(
-            and(
-              eq(agentTable.workspaceId, workspaceId),
-              inArray(agentTable.id, agentIds),
-              sql`NOT ${agentTable.skillIds} @> ${newIdJson}::jsonb`,
-            ),
-          );
-      }
-
-      return c.json(record[0], 201);
-    } catch (error: any) {
-      const isUniqueViolation =
-        error.code === "23505" ||
-        error.cause?.code === "23505" ||
-        error.message?.includes("unique constraint") ||
-        error.cause?.message?.includes("unique constraint");
-
-      if (isUniqueViolation) {
-        return c.json(
-          {
-            error: "A skill with this name already exists in this workspace",
-          },
-          409,
+        .where(
+          and(
+            eq(agentTable.workspaceId, workspaceId),
+            inArray(agentTable.id, agentIds),
+            sql`NOT ${agentTable.skillIds} @> ${newIdJson}::jsonb`,
+          ),
         );
-      }
-      throw error;
     }
+
+    return c.json(record[0], 201);
   },
 );
 
@@ -203,86 +138,75 @@ skill.put(
   requireWorkspaceAccess,
   sValidator("json", skillUpdateSchema),
   async (c) => {
+    const orgId = c.req.param("orgId")!;
     const workspaceId = c.req.param("workspaceId")!;
     const skillId = c.req.param("skillId");
     const { agentIds, ...data } = c.req.valid("json");
 
-    try {
-      const record = await db
-        .update(skillTable)
-        .set({
-          ...data,
-          updatedAt: new Date(),
-        })
-        .where(
-          and(
-            eq(skillTable.id, skillId),
-            eq(skillTable.workspaceId, workspaceId),
-          ),
-        )
-        .returning();
+    // A Shared Skill is a single source of truth edited only on the Organization
+    // surface (ADR-0007); requireWorkspaceMutable throws NotFound (→404) when the
+    // Skill is not visible here, then Locked (→403) when it is org-scoped.
+    await requireWorkspaceMutable(db, "skill", skillId, {
+      orgId,
+      wsId: workspaceId,
+    });
 
-      if (record.length === 0) {
-        return c.json({ error: "Skill not found" }, 404);
+    // A duplicate name surfaces as a Postgres unique violation, mapped to 409
+    // by the central onError (ADR-0009).
+    const record = await db
+      .update(skillTable)
+      .set({
+        ...data,
+        updatedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(skillTable.id, skillId),
+          eq(skillTable.workspaceId, workspaceId),
+        ),
+      )
+      .returning();
+
+    // Update agent associations if agentIds was provided
+    if (agentIds !== undefined) {
+      const now = new Date();
+      const skillIdJson = JSON.stringify([skillId]);
+
+      // Remove skill from agents not in the new list
+      const removeWhere = [
+        eq(agentTable.workspaceId, workspaceId),
+        sql`${agentTable.skillIds} @> ${skillIdJson}::jsonb`,
+      ];
+      if (agentIds.length > 0) {
+        removeWhere.push(notInArray(agentTable.id, agentIds));
       }
+      await db
+        .update(agentTable)
+        .set({
+          skillIds: sql`(${agentTable.skillIds})::jsonb - ${skillId}::text`,
+          updatedAt: now,
+        })
+        .where(and(...removeWhere));
 
-      // Update agent associations if agentIds was provided
-      if (agentIds !== undefined) {
-        const now = new Date();
-        const skillIdJson = JSON.stringify([skillId]);
-
-        // Remove skill from agents not in the new list
-        const removeWhere = [
-          eq(agentTable.workspaceId, workspaceId),
-          sql`${agentTable.skillIds} @> ${skillIdJson}::jsonb`,
-        ];
-        if (agentIds.length > 0) {
-          removeWhere.push(notInArray(agentTable.id, agentIds));
-        }
+      // Add skill to agents in the new list that don't already have it
+      if (agentIds.length > 0) {
         await db
           .update(agentTable)
           .set({
-            skillIds: sql`(${agentTable.skillIds})::jsonb - ${skillId}::text`,
+            skillIds: sql`${agentTable.skillIds} || ${skillIdJson}::jsonb`,
             updatedAt: now,
           })
-          .where(and(...removeWhere));
-
-        // Add skill to agents in the new list that don't already have it
-        if (agentIds.length > 0) {
-          await db
-            .update(agentTable)
-            .set({
-              skillIds: sql`${agentTable.skillIds} || ${skillIdJson}::jsonb`,
-              updatedAt: now,
-            })
-            .where(
-              and(
-                eq(agentTable.workspaceId, workspaceId),
-                inArray(agentTable.id, agentIds),
-                sql`NOT ${agentTable.skillIds} @> ${skillIdJson}::jsonb`,
-              ),
-            );
-        }
+          .where(
+            and(
+              eq(agentTable.workspaceId, workspaceId),
+              inArray(agentTable.id, agentIds),
+              sql`NOT ${agentTable.skillIds} @> ${skillIdJson}::jsonb`,
+            ),
+          );
       }
-
-      return c.json(record[0], 200);
-    } catch (error: any) {
-      const isUniqueViolation =
-        error.code === "23505" ||
-        error.cause?.code === "23505" ||
-        error.message?.includes("unique constraint") ||
-        error.cause?.message?.includes("unique constraint");
-
-      if (isUniqueViolation) {
-        return c.json(
-          {
-            error: "A skill with this name already exists in this workspace",
-          },
-          409,
-        );
-      }
-      throw error;
     }
+
+    return c.json(record[0], 200);
   },
 );
 
@@ -293,8 +217,17 @@ skill.delete(
   requireOrgAccess(),
   requireWorkspaceAccess,
   async (c) => {
+    const orgId = c.req.param("orgId")!;
     const workspaceId = c.req.param("workspaceId")!;
     const skillId = c.req.param("skillId");
+
+    // A Shared Skill is deleted only from the Organization surface (ADR-0007):
+    // requireWorkspaceMutable throws NotFound (→404) when the Skill is not
+    // visible here, then Locked (→403) when it is org-scoped.
+    await requireWorkspaceMutable(db, "skill", skillId, {
+      orgId,
+      wsId: workspaceId,
+    });
 
     // Check if skill is referenced by any agent
     const referencingAgents = await db
@@ -318,19 +251,14 @@ skill.delete(
       );
     }
 
-    const result = await db
+    await db
       .delete(skillTable)
       .where(
         and(
           eq(skillTable.id, skillId),
           eq(skillTable.workspaceId, workspaceId),
         ),
-      )
-      .returning();
-
-    if (result.length === 0) {
-      return c.json({ error: "Skill not found" }, 404);
-    }
+      );
 
     return c.json({ message: "Skill deleted" });
   },
@@ -369,7 +297,7 @@ skill.post(
       )
       .limit(1);
     if (!existing) {
-      return c.json({ error: "Skill not found" }, 404);
+      throw new NotFoundError("Skill not found");
     }
 
     // Sentinel for a lost TOCTOU race: the Skill was re-scoped or deleted
@@ -415,22 +343,10 @@ skill.post(
       return c.json({ ...promoted, scope: "organization" }, 200);
     } catch (error: any) {
       if (error?.message === PROMOTE_RACE) {
-        return c.json({ error: "Skill not found" }, 404);
+        throw new NotFoundError("Skill not found");
       }
-      const isUniqueViolation =
-        error.code === "23505" ||
-        error.cause?.code === "23505" ||
-        error.message?.includes("unique constraint") ||
-        error.cause?.message?.includes("unique constraint");
-
-      if (isUniqueViolation) {
-        return c.json(
-          {
-            error: "A skill with this name already exists in this organization",
-          },
-          409,
-        );
-      }
+      // A duplicate Shared-Skill name surfaces as a Postgres unique violation,
+      // mapped to 409 by the central onError (ADR-0009).
       throw error;
     }
   },

@@ -12,6 +12,7 @@ import { requireAuth } from "../middleware/authentication.ts";
 import { requireOrgAccess } from "../middleware/authorization.ts";
 import { scrubDeletedAgentReference } from "../services/agent-references.ts";
 import { isResourceListedInBlueprint } from "../services/blueprint-guard.ts";
+import { NotFoundError } from "../errors.ts";
 import type { Variables } from "../server.ts";
 
 // Org-scoped Skills are Shared resources (ADR-0007): a single source of truth
@@ -19,17 +20,6 @@ import type { Variables } from "../server.ts";
 // Attachment. They are managed only by Org Admins on the Organization surface,
 // so all mutations are org-admin-only; any member may read them.
 const orgSkill = new Hono<{ Variables: Variables }>();
-
-/** Detects a Postgres unique-constraint violation across driver shapes. */
-const isUniqueViolation = (error: any): boolean =>
-  error.code === "23505" ||
-  error.cause?.code === "23505" ||
-  error.message?.includes("unique constraint") ||
-  error.cause?.message?.includes("unique constraint");
-
-const NAME_CONFLICT = {
-  error: "A skill with this name already exists in this organization",
-} as const;
 
 /** Create an org-scoped Skill (admin only) */
 orgSkill.post(
@@ -42,25 +32,20 @@ orgSkill.post(
     // Agent associations are a workspace concern; org-scoped Skills carry none.
     const { agentIds: _agentIds, ...data } = c.req.valid("json");
 
-    try {
-      const record = await db
-        .insert(skillTable)
-        .values({
-          id: nanoid(),
-          name: data.name,
-          description: data.description,
-          body: data.body,
-          organizationId: orgId,
-          workspaceId: null,
-        })
-        .returning();
-      return c.json(record[0], 201);
-    } catch (error: any) {
-      if (isUniqueViolation(error)) {
-        return c.json(NAME_CONFLICT, 409);
-      }
-      throw error;
-    }
+    // A duplicate name surfaces as a Postgres unique violation, mapped to 409
+    // by the central onError (ADR-0009).
+    const record = await db
+      .insert(skillTable)
+      .values({
+        id: nanoid(),
+        name: data.name,
+        description: data.description,
+        body: data.body,
+        organizationId: orgId,
+        workspaceId: null,
+      })
+      .returning();
+    return c.json(record[0], 201);
   },
 );
 
@@ -86,7 +71,7 @@ orgSkill.get("/:skillId", requireAuth, requireOrgAccess(), async (c) => {
     )
     .limit(1);
   if (record.length === 0) {
-    return c.json({ error: "Skill not found" }, 404);
+    throw new NotFoundError("Skill not found");
   }
   return c.json(record[0]);
 });
@@ -102,29 +87,24 @@ orgSkill.put(
     const skillId = c.req.param("skillId");
     const { agentIds: _agentIds, ...data } = c.req.valid("json");
 
-    try {
-      const record = await db
-        .update(skillTable)
-        .set({
-          name: data.name,
-          description: data.description,
-          body: data.body,
-          updatedAt: new Date(),
-        })
-        .where(
-          and(eq(skillTable.id, skillId), eq(skillTable.organizationId, orgId)),
-        )
-        .returning();
-      if (record.length === 0) {
-        return c.json({ error: "Skill not found" }, 404);
-      }
-      return c.json(record[0], 200);
-    } catch (error: any) {
-      if (isUniqueViolation(error)) {
-        return c.json(NAME_CONFLICT, 409);
-      }
-      throw error;
+    // A duplicate name surfaces as a Postgres unique violation, mapped to 409
+    // by the central onError (ADR-0009).
+    const record = await db
+      .update(skillTable)
+      .set({
+        name: data.name,
+        description: data.description,
+        body: data.body,
+        updatedAt: new Date(),
+      })
+      .where(
+        and(eq(skillTable.id, skillId), eq(skillTable.organizationId, orgId)),
+      )
+      .returning();
+    if (record.length === 0) {
+      throw new NotFoundError("Skill not found");
     }
+    return c.json(record[0], 200);
   },
 );
 
@@ -186,7 +166,7 @@ orgSkill.delete(
       return rows;
     });
     if (result.length === 0) {
-      return c.json({ error: "Skill not found" }, 404);
+      throw new NotFoundError("Skill not found");
     }
     return c.json({ message: "Skill deleted" });
   },
