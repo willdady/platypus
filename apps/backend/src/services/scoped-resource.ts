@@ -38,22 +38,30 @@ export type RowOf = {
   provider: typeof providerTable.$inferSelect;
 };
 
+/**
+ * The four dual-scope tables, each at its real type. They share the `id` /
+ * `organizationId` / `workspaceId` columns this module relies on; the
+ * per-resource row type is recovered via the `RowOf` cast at each return.
+ */
+type ScopedTable =
+  | typeof agentTable
+  | typeof skillTable
+  | typeof mcpTable
+  | typeof providerTable;
+
 type RegistryEntry = {
   /** The Drizzle table backing this resource type. */
-  table: typeof agentTable;
+  table: ScopedTable;
   /** Human label used in the `NotFoundError` message ("Agent not found"). */
   label: string;
 };
 
-// Typed registry keyed by the `attachment.resourceType` enum. The tables share
-// the `id` / `organizationId` / `workspaceId` columns this module relies on, so
-// they are addressed through a single common shape (`typeof agentTable`); the
-// per-resource row type is recovered via the `RowOf` cast at each return.
+// Typed registry keyed by the `attachment.resourceType` enum.
 const REGISTRY: Record<ScopedResourceType, RegistryEntry> = {
   agent: { table: agentTable, label: "Agent" },
-  skill: { table: skillTable as typeof agentTable, label: "Skill" },
-  mcp: { table: mcpTable as typeof agentTable, label: "MCP" },
-  provider: { table: providerTable as typeof agentTable, label: "Provider" },
+  skill: { table: skillTable, label: "Skill" },
+  mcp: { table: mcpTable, label: "MCP" },
+  provider: { table: providerTable, label: "Provider" },
 };
 
 /** The Workspace a Scoped resource is resolved relative to. */
@@ -146,8 +154,9 @@ export const listScoped = async <T extends ScopedResourceType>(
 
   // The inner-join rows are keyed by the table's name, which matches the
   // resource type for every dual-scope table (`agent`, `skill`, `mcp`,
-  // `provider`).
-  const orgRows = (attachedRows as Record<string, RowOf[T]>[]).map(
+  // `provider`). The key is dynamic over the union table, so bridge through
+  // `unknown` to recover the per-resource row shape.
+  const orgRows = (attachedRows as unknown as Record<string, RowOf[T]>[]).map(
     (r) => r[type],
   );
 
