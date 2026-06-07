@@ -13,6 +13,13 @@ import { ExpandableTextarea } from "@/components/expandable-textarea";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { useState } from "react";
 import { useResetOnChange } from "@/hooks/use-reset-on-change";
@@ -22,6 +29,7 @@ import type {
   Blueprint,
   BlueprintItem,
   AttachmentResourceType,
+  Provider,
 } from "@platypus/schemas";
 import useSWR from "swr";
 import { fetcher, parseValidationErrors, joinUrl } from "@/lib/utils";
@@ -156,7 +164,25 @@ const BlueprintForm = ({
     fetcher,
   );
 
-  const [formData, setFormData] = useState({ name: "", description: "" });
+  // Org-scoped providers — the eligible set for Tier 2 pointer-settings, which
+  // may only reference Shared resources (ADR-0008).
+  const { data: providersData } = useSWR<{ results: Provider[] }>(
+    backendUrl && user
+      ? joinUrl(backendUrl, `/organizations/${orgId}/providers`)
+      : null,
+    fetcher,
+  );
+  const providers = providersData?.results || [];
+
+  const [formData, setFormData] = useState({
+    name: "",
+    description: "",
+    // Tier 2 pointer-settings stamped onto the workspace on apply (ADR-0008).
+    context: "",
+    taskModelProviderId: null as string | null,
+    memoryExtractionProviderId: null as string | null,
+    memoryEmbeddingProviderId: null as string | null,
+  });
   // Selected items as a Set of `${type}:${id}` keys for cheap toggling.
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -172,6 +198,11 @@ const BlueprintForm = ({
       setFormData({
         name: blueprint.name,
         description: blueprint.description ?? "",
+        context: blueprint.context ?? "",
+        taskModelProviderId: blueprint.taskModelProviderId ?? null,
+        memoryExtractionProviderId:
+          blueprint.memoryExtractionProviderId ?? null,
+        memoryEmbeddingProviderId: blueprint.memoryEmbeddingProviderId ?? null,
       });
       setSelected(
         new Set(
@@ -211,7 +242,39 @@ const BlueprintForm = ({
       else next.delete(key);
       return next;
     });
+    // A Tier 2 pointer-setting can only target a provider this blueprint also
+    // attaches. Removing a provider from the composer clears any Tier 2 slot
+    // pointing at it, so we never stamp a workspace with an unattached provider.
+    if (type === "provider" && !on) {
+      setFormData((prev) => ({
+        ...prev,
+        taskModelProviderId:
+          prev.taskModelProviderId === id ? null : prev.taskModelProviderId,
+        memoryExtractionProviderId:
+          prev.memoryExtractionProviderId === id
+            ? null
+            : prev.memoryExtractionProviderId,
+        memoryEmbeddingProviderId:
+          prev.memoryEmbeddingProviderId === id
+            ? null
+            : prev.memoryEmbeddingProviderId,
+      }));
+    }
   };
+
+  // Tier 2 settings may only reference a provider the blueprint attaches (a
+  // selected "provider:<id>" item). The memory slots additionally require the
+  // provider to expose the relevant model. Each select is disabled when it has
+  // no eligible provider, so an empty "Leave unset"-only dropdown never shows.
+  const attachedProviders = providers.filter((p) =>
+    selected.has(itemKey("provider", p.id)),
+  );
+  const memoryExtractionProviders = attachedProviders.filter(
+    (p) => p.memoryExtractionModelId,
+  );
+  const memoryEmbeddingProviders = attachedProviders.filter(
+    (p) => (p as { embeddingModelId?: string }).embeddingModelId,
+  );
 
   const handleSubmit = async () => {
     setIsSubmitting(true);
@@ -229,6 +292,12 @@ const BlueprintForm = ({
         name: formData.name,
         description: formData.description || undefined,
         items,
+        // Tier 2 pointer-settings (ADR-0008). Null clears the slot; on apply a
+        // null slot leaves the workspace's existing value untouched.
+        context: formData.context || null,
+        taskModelProviderId: formData.taskModelProviderId,
+        memoryExtractionProviderId: formData.memoryExtractionProviderId,
+        memoryEmbeddingProviderId: formData.memoryEmbeddingProviderId,
       };
 
       const url = blueprintId
@@ -352,6 +421,144 @@ const BlueprintForm = ({
           disabled={isSubmitting}
         />
       ))}
+
+      <h2 className="text-lg font-semibold mb-1">Workspace settings</h2>
+      <p className="text-sm text-muted-foreground mb-4">
+        Optional settings applied to the workspace when this blueprint is
+        applied. Leave a setting unset to keep the workspace&apos;s existing
+        value.
+      </p>
+
+      <FieldSet className="mb-6">
+        <FieldGroup className="gap-4">
+          <Field data-invalid={!!validationErrors.context}>
+            <ExpandableTextarea
+              id="context"
+              label="Default context"
+              placeholder="Optional context for the workspace"
+              value={formData.context}
+              onChange={handleChange}
+              disabled={isSubmitting}
+              className="!font-mono"
+              maxLength={1000}
+              aria-invalid={!!validationErrors.context}
+              error={validationErrors.context}
+            />
+            <FieldDescription>
+              Additional context included in all chats in the workspace.
+            </FieldDescription>
+          </Field>
+
+          <Field data-invalid={!!validationErrors.taskModelProviderId}>
+            <FieldLabel htmlFor="taskModelProviderId">
+              Task model provider
+            </FieldLabel>
+            <Select
+              value={formData.taskModelProviderId || "none"}
+              onValueChange={(value) =>
+                setFormData((prev) => ({
+                  ...prev,
+                  taskModelProviderId: value === "none" ? null : value,
+                }))
+              }
+              disabled={isSubmitting || attachedProviders.length === 0}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Select a provider" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">Leave unset</SelectItem>
+                {attachedProviders.map((provider) => (
+                  <SelectItem key={provider.id} value={provider.id}>
+                    {provider.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <FieldDescription>
+              Provider used for generating chat titles and tags. Attach a
+              provider under Shared resources to enable this.
+            </FieldDescription>
+            {validationErrors.taskModelProviderId && (
+              <FieldError>{validationErrors.taskModelProviderId}</FieldError>
+            )}
+          </Field>
+
+          <Field data-invalid={!!validationErrors.memoryExtractionProviderId}>
+            <FieldLabel htmlFor="memoryExtractionProviderId">
+              Memory extraction provider
+            </FieldLabel>
+            <Select
+              value={formData.memoryExtractionProviderId || "none"}
+              onValueChange={(value) =>
+                setFormData((prev) => ({
+                  ...prev,
+                  memoryExtractionProviderId: value === "none" ? null : value,
+                }))
+              }
+              disabled={isSubmitting || memoryExtractionProviders.length === 0}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Select a provider" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">Leave unset</SelectItem>
+                {memoryExtractionProviders.map((provider) => (
+                  <SelectItem key={provider.id} value={provider.id}>
+                    {provider.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <FieldDescription>
+              Provider used to extract memories from conversations. Must be
+              attached by this blueprint and expose a memory-extraction model.
+            </FieldDescription>
+            {validationErrors.memoryExtractionProviderId && (
+              <FieldError>
+                {validationErrors.memoryExtractionProviderId}
+              </FieldError>
+            )}
+          </Field>
+
+          <Field data-invalid={!!validationErrors.memoryEmbeddingProviderId}>
+            <FieldLabel htmlFor="memoryEmbeddingProviderId">
+              Memory embedding provider
+            </FieldLabel>
+            <Select
+              value={formData.memoryEmbeddingProviderId || "none"}
+              onValueChange={(value) =>
+                setFormData((prev) => ({
+                  ...prev,
+                  memoryEmbeddingProviderId: value === "none" ? null : value,
+                }))
+              }
+              disabled={isSubmitting || memoryEmbeddingProviders.length === 0}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Select a provider" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">Leave unset</SelectItem>
+                {memoryEmbeddingProviders.map((provider) => (
+                  <SelectItem key={provider.id} value={provider.id}>
+                    {provider.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <FieldDescription>
+              Provider used for memory embeddings. Must be attached by this
+              blueprint and expose an embedding model.
+            </FieldDescription>
+            {validationErrors.memoryEmbeddingProviderId && (
+              <FieldError>
+                {validationErrors.memoryEmbeddingProviderId}
+              </FieldError>
+            )}
+          </Field>
+        </FieldGroup>
+      </FieldSet>
 
       {formError && <FieldError className="mb-4">{formError}</FieldError>}
 

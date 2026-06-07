@@ -5,7 +5,6 @@ import { db } from "../index.ts";
 import {
   blueprint as blueprintTable,
   blueprintItem as blueprintItemTable,
-  attachment as attachmentTable,
   agent as agentTable,
   mcp as mcpTable,
   provider as providerTable,
@@ -22,6 +21,8 @@ import { and, eq, inArray } from "drizzle-orm";
 import { requireAuth } from "../middleware/authentication.ts";
 import { requireOrgAccess } from "../middleware/authorization.ts";
 import type { Variables } from "../server.ts";
+import { applyBlueprintsToWorkspace } from "../services/blueprint-apply.ts";
+import { isBlueprintReferencedByLiveInvitation } from "../services/blueprint-guard.ts";
 
 // Blueprint — a named, Organization-scoped macro that, applied to a Workspace,
 // creates the Attachments for a chosen set of Shared resources in one step
@@ -96,6 +97,111 @@ const findNonSharedItems = async (
   return invalid;
 };
 
+/** The non-null Tier 2 provider references carried by a create/update body. */
+const tier2ProviderIds = (data: {
+  taskModelProviderId?: string | null;
+  memoryExtractionProviderId?: string | null;
+  memoryEmbeddingProviderId?: string | null;
+}): string[] =>
+  [
+    data.taskModelProviderId,
+    data.memoryExtractionProviderId,
+    data.memoryEmbeddingProviderId,
+  ].filter((id): id is string => Boolean(id));
+
+/**
+ * Returns the Tier 2 provider references that the Blueprint does NOT also
+ * attach. A Tier 2 pointer-setting only makes sense for a provider the
+ * Blueprint provisions — applying it both attaches the provider and points the
+ * Workspace at it, so a pointer to an unattached provider would leave the
+ * Workspace referencing something it can't see. Because Tier 1 items are
+ * already validated org-scoped, "is an attached provider item" also implies
+ * org-scoped (ADR-0008).
+ */
+const tier2ProvidersNotAttached = (
+  data: {
+    taskModelProviderId?: string | null;
+    memoryExtractionProviderId?: string | null;
+    memoryEmbeddingProviderId?: string | null;
+  },
+  items: BlueprintItem[],
+): string[] => {
+  const attached = new Set(
+    items.filter((i) => i.resourceType === "provider").map((i) => i.resourceId),
+  );
+  return tier2ProviderIds(data).filter((id) => !attached.has(id));
+};
+
+/**
+ * Tier 2 memory settings whose chosen Provider lacks the model that slot needs
+ * — parity with the Workspace route, which rejects a memory-embedding Provider
+ * with no embedding model (and a memory-extraction Provider with no extraction
+ * model). Stamping such a Provider on apply would produce an unusable Workspace
+ * memory config, so it is blocked when the Blueprint is authored.
+ */
+const findInvalidMemoryProviders = async (
+  data: {
+    memoryExtractionProviderId?: string | null;
+    memoryEmbeddingProviderId?: string | null;
+  },
+  orgId: string,
+): Promise<{ field: string; providerId: string; reason: string }[]> => {
+  const checks: {
+    field: string;
+    providerId: string;
+    column: "memoryExtractionModelId" | "embeddingModelId";
+    reason: string;
+  }[] = [];
+  if (data.memoryExtractionProviderId) {
+    checks.push({
+      field: "memoryExtractionProviderId",
+      providerId: data.memoryExtractionProviderId,
+      column: "memoryExtractionModelId",
+      reason: "does not have a memory extraction model configured",
+    });
+  }
+  if (data.memoryEmbeddingProviderId) {
+    checks.push({
+      field: "memoryEmbeddingProviderId",
+      providerId: data.memoryEmbeddingProviderId,
+      column: "embeddingModelId",
+      reason: "does not have an embedding model configured",
+    });
+  }
+  if (checks.length === 0) return [];
+
+  const rows = await db
+    .select({
+      id: providerTable.id,
+      memoryExtractionModelId: providerTable.memoryExtractionModelId,
+      embeddingModelId: providerTable.embeddingModelId,
+    })
+    .from(providerTable)
+    .where(
+      and(
+        eq(providerTable.organizationId, orgId),
+        inArray(
+          providerTable.id,
+          checks.map((c) => c.providerId),
+        ),
+      ),
+    );
+  const byId = new Map(rows.map((r) => [r.id, r]));
+
+  const invalid: { field: string; providerId: string; reason: string }[] = [];
+  for (const c of checks) {
+    const provider = byId.get(c.providerId);
+    if (!provider || !provider[c.column]) {
+      invalid.push({
+        field: c.field,
+        providerId: c.providerId,
+        reason: c.reason,
+      });
+    }
+  }
+  return invalid;
+};
+
 /** Load the items of one or more blueprints, grouped by blueprint id. */
 const loadItemsByBlueprint = async (
   blueprintIds: string[],
@@ -126,7 +232,15 @@ orgBlueprint.post(
   sValidator("json", blueprintCreateSchema),
   async (c) => {
     const orgId = c.req.param("orgId")!;
-    const { name, description, items } = c.req.valid("json");
+    const {
+      name,
+      description,
+      items,
+      taskModelProviderId,
+      memoryExtractionProviderId,
+      memoryEmbeddingProviderId,
+      context,
+    } = c.req.valid("json");
     const deduped = dedupeItems(items);
 
     const invalid = await findNonSharedItems(deduped, orgId);
@@ -141,6 +255,38 @@ orgBlueprint.post(
       );
     }
 
+    // Tier 2 provider settings may only reference providers the blueprint also
+    // attaches (ADR-0008) — so applying it never points a workspace at an
+    // unattached provider.
+    const unattached = tier2ProvidersNotAttached(c.req.valid("json"), deduped);
+    if (unattached.length > 0) {
+      return c.json(
+        {
+          error:
+            "A blueprint's provider settings must reference providers the blueprint also attaches",
+          invalidProviderIds: unattached,
+        },
+        422,
+      );
+    }
+
+    // A memory provider must expose the model its slot needs (parity with the
+    // workspace route), so apply never stamps an unusable memory config.
+    const invalidMemory = await findInvalidMemoryProviders(
+      c.req.valid("json"),
+      orgId,
+    );
+    if (invalidMemory.length > 0) {
+      return c.json(
+        {
+          error:
+            "A blueprint's memory provider setting references a provider without the required model",
+          invalidMemoryProviders: invalidMemory,
+        },
+        422,
+      );
+    }
+
     const id = nanoid();
     try {
       await db.transaction(async (tx) => {
@@ -149,6 +295,10 @@ orgBlueprint.post(
           organizationId: orgId,
           name,
           description: description ?? null,
+          taskModelProviderId: taskModelProviderId ?? null,
+          memoryExtractionProviderId: memoryExtractionProviderId ?? null,
+          memoryEmbeddingProviderId: memoryEmbeddingProviderId ?? null,
+          context: context ?? null,
         });
         if (deduped.length > 0) {
           await tx.insert(blueprintItemTable).values(
@@ -233,7 +383,15 @@ orgBlueprint.put(
   async (c) => {
     const orgId = c.req.param("orgId")!;
     const blueprintId = c.req.param("blueprintId");
-    const { name, description, items } = c.req.valid("json");
+    const {
+      name,
+      description,
+      items,
+      taskModelProviderId,
+      memoryExtractionProviderId,
+      memoryEmbeddingProviderId,
+      context,
+    } = c.req.valid("json");
     const deduped = dedupeItems(items);
 
     // The blueprint must exist in this org before we touch its items.
@@ -263,6 +421,33 @@ orgBlueprint.put(
       );
     }
 
+    const unattached = tier2ProvidersNotAttached(c.req.valid("json"), deduped);
+    if (unattached.length > 0) {
+      return c.json(
+        {
+          error:
+            "A blueprint's provider settings must reference providers the blueprint also attaches",
+          invalidProviderIds: unattached,
+        },
+        422,
+      );
+    }
+
+    const invalidMemory = await findInvalidMemoryProviders(
+      c.req.valid("json"),
+      orgId,
+    );
+    if (invalidMemory.length > 0) {
+      return c.json(
+        {
+          error:
+            "A blueprint's memory provider setting references a provider without the required model",
+          invalidMemoryProviders: invalidMemory,
+        },
+        422,
+      );
+    }
+
     try {
       await db.transaction(async (tx) => {
         await tx
@@ -270,6 +455,10 @@ orgBlueprint.put(
           .set({
             name,
             description: description ?? null,
+            taskModelProviderId: taskModelProviderId ?? null,
+            memoryExtractionProviderId: memoryExtractionProviderId ?? null,
+            memoryEmbeddingProviderId: memoryEmbeddingProviderId ?? null,
+            context: context ?? null,
             updatedAt: new Date(),
           })
           .where(eq(blueprintTable.id, blueprintId));
@@ -313,6 +502,20 @@ orgBlueprint.delete(
   async (c) => {
     const orgId = c.req.param("orgId")!;
     const blueprintId = c.req.param("blueprintId");
+
+    // A Blueprint cannot be deleted while a live pending invitation references
+    // it (ADR-0009) — accept-time provisioning would otherwise dereference a
+    // missing Blueprint. A lazily-expired invite does not block.
+    if (await isBlueprintReferencedByLiveInvitation(blueprintId)) {
+      return c.json(
+        {
+          error:
+            "Cannot delete: this blueprint is referenced by one or more pending invitations. Delete those invitations first.",
+        },
+        409,
+      );
+    }
+
     const result = await db
       .delete(blueprintTable)
       .where(
@@ -331,8 +534,11 @@ orgBlueprint.delete(
 
 /**
  * Apply a Blueprint to an existing Workspace (admin only). The macro creates the
- * Attachments for the Blueprint's current items. It is additive and idempotent:
- * re-applying, or applying a resource already attached, is a no-op (ADR-0008).
+ * Tier 1 Attachments for the Blueprint's current items and stamps its Tier 2
+ * pointer-settings onto the Workspace. It is additive and idempotent on Tier 1
+ * (re-applying, or applying a resource already attached, is a no-op) and
+ * last-write-wins on Tier 2 (ADR-0008). Ad-hoc apply stays single-Blueprint;
+ * the ordered set lives only on invitations (ADR-0009).
  */
 orgBlueprint.post(
   "/:blueprintId/apply",
@@ -373,39 +579,12 @@ orgBlueprint.post(
       return c.json({ error: "Workspace not found in this organization" }, 404);
     }
 
-    const itemsByBlueprint = await loadItemsByBlueprint([blueprintId]);
-    const items = itemsByBlueprint.get(blueprintId) ?? [];
-
-    if (items.length === 0) {
-      return c.json({ workspaceId, attached: 0, skipped: 0, total: 0 }, 200);
-    }
-
-    // Additive + idempotent: onConflictDoNothing against the unique
-    // (workspace, type, id) attachment constraint, so re-runs only add what is
-    // missing. `returning()` yields just the rows actually inserted.
-    const inserted = await db
-      .insert(attachmentTable)
-      .values(
-        items.map((item) => ({
-          id: nanoid(),
-          workspaceId,
-          resourceType: item.resourceType,
-          resourceId: item.resourceId,
-        })),
-      )
-      .onConflictDoNothing()
-      .returning();
-
-    const attached = inserted.length;
-    return c.json(
-      {
-        workspaceId,
-        attached,
-        skipped: items.length - attached,
-        total: items.length,
-      },
-      200,
+    // Tier 1 Attachments + Tier 2 settings commit together.
+    const result = await db.transaction((tx) =>
+      applyBlueprintsToWorkspace(tx, workspaceId, [blueprintId]),
     );
+
+    return c.json({ workspaceId, ...result }, 200);
   },
 );
 

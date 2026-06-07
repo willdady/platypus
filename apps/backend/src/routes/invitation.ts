@@ -2,9 +2,13 @@ import { Hono } from "hono";
 import { sValidator } from "@hono/standard-validator";
 import { nanoid } from "nanoid";
 import { db } from "../index.ts";
-import { invitation as invitationTable } from "../db/schema.ts";
+import {
+  invitation as invitationTable,
+  invitationBlueprint as invitationBlueprintTable,
+  blueprint as blueprintTable,
+} from "../db/schema.ts";
 import { invitationCreateSchema } from "@platypus/schemas";
-import { eq, and } from "drizzle-orm";
+import { eq, and, inArray, asc } from "drizzle-orm";
 import { requireAuth } from "../middleware/authentication.ts";
 import { requireOrgAccess } from "../middleware/authorization.ts";
 import type { Variables } from "../server.ts";
@@ -31,24 +35,66 @@ invitation.post(
       return c.json({ error: "You cannot invite yourself" }, 400);
     }
 
+    // The invitation carries an ordered set of Blueprints (ADR-0009). Dedupe
+    // while preserving order — it is a *set*, and `position` makes the order
+    // first-class. Each must be a Blueprint in this organization.
+    const blueprintIds = [...new Set(data.blueprintIds ?? [])];
+    if (blueprintIds.length > 0) {
+      const found = await db
+        .select({ id: blueprintTable.id })
+        .from(blueprintTable)
+        .where(
+          and(
+            eq(blueprintTable.organizationId, orgId),
+            inArray(blueprintTable.id, blueprintIds),
+          ),
+        );
+      const foundSet = new Set(found.map((b) => b.id));
+      const missing = blueprintIds.filter((id) => !foundSet.has(id));
+      if (missing.length > 0) {
+        return c.json(
+          {
+            error: "One or more blueprints were not found in this organization",
+            missingBlueprintIds: missing,
+          },
+          422,
+        );
+      }
+    }
+
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + INVITATION_EXPIRY_DAYS);
 
+    const invitationId = nanoid();
     try {
-      const record = await db
-        .insert(invitationTable)
-        .values({
-          id: nanoid(),
-          email: data.email,
-          organizationId: orgId,
-          invitedBy: user.id,
-          status: "pending",
-          workspaceName: data.workspaceName ?? null,
-          expiresAt,
-        })
-        .returning();
+      const record = await db.transaction(async (tx) => {
+        const [row] = await tx
+          .insert(invitationTable)
+          .values({
+            id: invitationId,
+            email: data.email,
+            organizationId: orgId,
+            invitedBy: user.id,
+            status: "pending",
+            workspaceName: data.workspaceName ?? null,
+            expiresAt,
+          })
+          .returning();
 
-      return c.json(record[0], 201);
+        if (blueprintIds.length > 0) {
+          await tx.insert(invitationBlueprintTable).values(
+            blueprintIds.map((blueprintId, position) => ({
+              id: nanoid(),
+              invitationId,
+              blueprintId,
+              position,
+            })),
+          );
+        }
+        return row;
+      });
+
+      return c.json({ ...record, blueprintIds }, 201);
     } catch (error: any) {
       const isDuplicate =
         error.code === "23505" ||
@@ -81,7 +127,32 @@ invitation.get("/", requireAuth, requireOrgAccess(["admin"]), async (c) => {
     .from(invitationTable)
     .where(eq(invitationTable.organizationId, orgId));
 
-  return c.json({ results });
+  // Attach each invitation's ordered set of Blueprints (ADR-0009), in
+  // `position` order, so the admin can see what a pending invite will provision.
+  const byInvitation = new Map<string, string[]>();
+  const invitationIds = results.map((r) => r.id);
+  if (invitationIds.length > 0) {
+    const rows = await db
+      .select({
+        invitationId: invitationBlueprintTable.invitationId,
+        blueprintId: invitationBlueprintTable.blueprintId,
+      })
+      .from(invitationBlueprintTable)
+      .where(inArray(invitationBlueprintTable.invitationId, invitationIds))
+      .orderBy(asc(invitationBlueprintTable.position));
+    for (const row of rows) {
+      const ids = byInvitation.get(row.invitationId) ?? [];
+      ids.push(row.blueprintId);
+      byInvitation.set(row.invitationId, ids);
+    }
+  }
+
+  return c.json({
+    results: results.map((r) => ({
+      ...r,
+      blueprintIds: byInvitation.get(r.id) ?? [],
+    })),
+  });
 });
 
 /** Delete an invitation (org admin only) */

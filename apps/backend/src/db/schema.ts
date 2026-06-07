@@ -336,6 +336,24 @@ export const blueprint = pgTable(
       .references(() => organization.id, { onDelete: "cascade" }),
     name: t.text("name").notNull(),
     description: t.text("description"),
+
+    // Tier 2 pointer-settings (ADR-0008): the Workspace settings a Blueprint
+    // stamps on apply, mirroring the Workspace's own columns. All three provider
+    // references must be org-scoped (Shared) — enforced in the route. `context`
+    // is the default Workspace context text. Deleting a referenced provider sets
+    // these null (SET NULL), matching the Workspace's pointer-setting behavior;
+    // the blueprint_item deletion guard does not cover Tier 2 references.
+    taskModelProviderId: t
+      .text("task_model_provider_id")
+      .references(() => provider.id, { onDelete: "set null" }),
+    memoryExtractionProviderId: t
+      .text("memory_extraction_provider_id")
+      .references(() => provider.id, { onDelete: "set null" }),
+    memoryEmbeddingProviderId: t
+      .text("memory_embedding_provider_id")
+      .references(() => provider.id, { onDelete: "set null" }),
+    context: t.text("context"),
+
     createdAt: t.timestamp("created_at").notNull().defaultNow(),
     updatedAt: t.timestamp("updated_at").notNull().defaultNow(),
   }),
@@ -485,6 +503,36 @@ export const invitation = pgTable(
     index("idx_invitation_email").on(t.email),
     index("idx_invitation_org_id").on(t.organizationId),
     unique("unique_invitation_org_email").on(t.organizationId, t.email),
+  ],
+);
+
+// The ordered set of Blueprints an invitation carries (ADR-0009). On accept,
+// each Blueprint's macro runs in `position` order against the freshly
+// provisioned Workspace. Mirrors `blueprint_item`: `position` makes order
+// first-class, and the real `blueprint_id` FK powers the deletion guard
+// (a Blueprint cannot be deleted while a live pending invitation references it).
+// Both FKs cascade — deleting an invitation or a (legitimately deletable)
+// Blueprint cleans up the junction rows.
+export const invitationBlueprint = pgTable(
+  "invitation_blueprint",
+  (t) => ({
+    id: t.text("id").primaryKey(),
+    invitationId: t
+      .text("invitation_id")
+      .notNull()
+      .references(() => invitation.id, { onDelete: "cascade" }),
+    blueprintId: t
+      .text("blueprint_id")
+      .notNull()
+      .references(() => blueprint.id, { onDelete: "cascade" }),
+    position: t.integer("position").notNull(),
+    createdAt: t.timestamp("created_at").notNull().defaultNow(),
+  }),
+  (t) => [
+    index("idx_invitation_blueprint_invitation").on(t.invitationId),
+    // Drives the deletion guard ("is this Blueprint referenced by an invite?")
+    index("idx_invitation_blueprint_blueprint").on(t.blueprintId),
+    unique("unique_invitation_blueprint").on(t.invitationId, t.blueprintId),
   ],
 );
 

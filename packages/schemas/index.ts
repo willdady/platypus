@@ -500,6 +500,14 @@ const blueprintBaseSchema = z.object({
   // The Shared resources this Blueprint provisions. Deduped/validated by the
   // route; each must be an org-scoped resource in the same organization.
   items: z.array(blueprintItemSchema),
+  // Tier 2 pointer-settings (ADR-0008) stamped onto the Workspace on apply.
+  // The three provider references must be org-scoped (Shared) — validated by
+  // the route. `context` is the default Workspace context text. All optional;
+  // a null/omitted slot leaves the Workspace's existing value untouched.
+  taskModelProviderId: z.string().nullable().optional(),
+  memoryExtractionProviderId: z.string().nullable().optional(),
+  memoryEmbeddingProviderId: z.string().nullable().optional(),
+  context: z.string().max(1000).nullable().optional(),
   createdAt: z.date(),
   updatedAt: z.date(),
 });
@@ -511,6 +519,10 @@ export const blueprintCreateSchema = blueprintBaseSchema.pick({
   name: true,
   description: true,
   items: true,
+  taskModelProviderId: true,
+  memoryExtractionProviderId: true,
+  memoryEmbeddingProviderId: true,
+  context: true,
 });
 export type BlueprintCreateData = z.infer<typeof blueprintCreateSchema>;
 
@@ -518,6 +530,10 @@ export const blueprintUpdateSchema = blueprintBaseSchema.pick({
   name: true,
   description: true,
   items: true,
+  taskModelProviderId: true,
+  memoryExtractionProviderId: true,
+  memoryEmbeddingProviderId: true,
+  context: true,
 });
 export type BlueprintUpdateData = z.infer<typeof blueprintUpdateSchema>;
 
@@ -718,6 +734,10 @@ export const invitationSchema = z.object({
     .max(WORKSPACE_NAME_MAX_LENGTH)
     .nullable()
     .optional(),
+  // The ordered set of Blueprints applied to the provisioned Workspace on
+  // accept (ADR-0009). Stored in the invitation_blueprint junction; surfaced
+  // here in `position` order on reads.
+  blueprintIds: z.array(z.string()).optional(),
   expiresAt: z.date(),
   createdAt: z.date(),
 });
@@ -727,6 +747,7 @@ export type Invitation = z.infer<typeof invitationSchema>;
 export const invitationCreateSchema = invitationSchema.pick({
   email: true,
   workspaceName: true,
+  blueprintIds: true,
 });
 
 export const invitationListItemSchema = invitationSchema.extend({

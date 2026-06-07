@@ -71,7 +71,7 @@ The explicit reference that makes a Shared resource appear inside a Workspace. A
 The Org-Admin action that re-scopes a Workspace-private resource to Organization scope, turning it into a Shared resource and auto-attaching its origin Workspace. The resource becomes Org-Admin-governed.
 
 **Blueprint**:
-A named, Organization-scoped macro that, applied to a Workspace, creates the Attachments for a chosen set of Shared resources in one step — run once at provisioning (or re-run on demand), never a live link. Editing a Blueprint affects only later applications; already-provisioned Workspaces are unchanged. The primary tool for provisioning a ready-to-use Workspace during onboarding.
+A named, Organization-scoped macro that, applied to a Workspace, both creates the Attachments for a chosen set of Shared resources (Tier 1) and sets the Workspace's pointer-settings — task/memory Providers and a default Context (Tier 2) — in one step. Run once at provisioning (or re-run on demand), never a live link. A Tier 2 Provider must also be one the Blueprint attaches. Editing a Blueprint affects only later applications; already-provisioned Workspaces are unchanged. The primary tool for provisioning a ready-to-use Workspace during onboarding.
 _Avoid_: template, policy, group.
 
 ## Relationships

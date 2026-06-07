@@ -96,6 +96,129 @@ describe("Organization Blueprint Routes", () => {
       });
       expect(res.status).toBe(403);
     });
+
+    // ADR-0008 Tier 2: a Blueprint can carry Workspace pointer-settings, but a
+    // Tier 2 provider must be one the blueprint also attaches.
+    it("persists Tier 2 settings when the provider is also an attached item", async () => {
+      mockSession();
+      const record = {
+        id: "bp-1",
+        organizationId: orgId,
+        name: "Starter kit",
+        taskModelProviderId: "prov-1",
+        context: "Default context",
+      };
+      mockDb.limit
+        .mockResolvedValueOnce([{ role: "admin" }]) // requireOrgAccess
+        .mockResolvedValueOnce([record]); // final read-back
+      mockDb.where
+        .mockReturnValueOnce(mockDb) // requireOrgAccess
+        .mockResolvedValueOnce([{ id: "prov-1" }]); // findNonSharedItems (provider)
+
+      const res = await app.request(baseUrl, {
+        method: "POST",
+        body: JSON.stringify({
+          name: "Starter kit",
+          // The Tier 2 provider is attached as a Tier 1 item.
+          items: [{ resourceType: "provider", resourceId: "prov-1" }],
+          taskModelProviderId: "prov-1",
+          context: "Default context",
+        }),
+        headers: { "Content-Type": "application/json" },
+      });
+      expect(res.status).toBe(201);
+      const json = await res.json();
+      expect(json.taskModelProviderId).toBe("prov-1");
+      expect(json.context).toBe("Default context");
+    });
+
+    it("422s when a Tier 2 provider is not attached by the blueprint", async () => {
+      mockSession();
+      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]); // requireOrgAccess
+      // Empty items → no item query; the Tier 2 provider is not attached.
+
+      const res = await app.request(baseUrl, {
+        method: "POST",
+        body: JSON.stringify({
+          name: "Starter kit",
+          items: [],
+          memoryEmbeddingProviderId: "prov-x",
+        }),
+        headers: { "Content-Type": "application/json" },
+      });
+      expect(res.status).toBe(422);
+      expect((await res.json()).invalidProviderIds).toEqual(["prov-x"]);
+    });
+
+    // Parity with the workspace route: a memory provider must expose the model
+    // its slot needs, so apply never stamps an unusable memory config.
+    it("422s when the memory embedding provider has no embedding model", async () => {
+      mockSession();
+      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]); // requireOrgAccess
+      mockDb.where
+        .mockReturnValueOnce(mockDb) // requireOrgAccess
+        .mockResolvedValueOnce([{ id: "prov-1" }]) // findNonSharedItems (provider attached)
+        .mockResolvedValueOnce([
+          {
+            id: "prov-1",
+            memoryExtractionModelId: "m",
+            embeddingModelId: null,
+          },
+        ]); // findInvalidMemoryProviders
+
+      const res = await app.request(baseUrl, {
+        method: "POST",
+        body: JSON.stringify({
+          name: "Starter kit",
+          items: [{ resourceType: "provider", resourceId: "prov-1" }],
+          memoryEmbeddingProviderId: "prov-1",
+        }),
+        headers: { "Content-Type": "application/json" },
+      });
+      expect(res.status).toBe(422);
+      const json = await res.json();
+      expect(json.invalidMemoryProviders).toEqual([
+        expect.objectContaining({
+          field: "memoryEmbeddingProviderId",
+          providerId: "prov-1",
+        }),
+      ]);
+    });
+
+    it("creates when the memory embedding provider has an embedding model", async () => {
+      mockSession();
+      const record = {
+        id: "bp-1",
+        organizationId: orgId,
+        name: "Starter kit",
+        memoryEmbeddingProviderId: "prov-1",
+      };
+      mockDb.limit
+        .mockResolvedValueOnce([{ role: "admin" }]) // requireOrgAccess
+        .mockResolvedValueOnce([record]); // read-back
+      mockDb.where
+        .mockReturnValueOnce(mockDb) // requireOrgAccess
+        .mockResolvedValueOnce([{ id: "prov-1" }]) // findNonSharedItems
+        .mockResolvedValueOnce([
+          {
+            id: "prov-1",
+            memoryExtractionModelId: "m",
+            embeddingModelId: "emb-model",
+          },
+        ]); // findInvalidMemoryProviders: valid
+
+      const res = await app.request(baseUrl, {
+        method: "POST",
+        body: JSON.stringify({
+          name: "Starter kit",
+          items: [{ resourceType: "provider", resourceId: "prov-1" }],
+          memoryEmbeddingProviderId: "prov-1",
+        }),
+        headers: { "Content-Type": "application/json" },
+      });
+      expect(res.status).toBe(201);
+      expect((await res.json()).memoryEmbeddingProviderId).toBe("prov-1");
+    });
   });
 
   describe("GET /", () => {
@@ -233,9 +356,11 @@ describe("Organization Blueprint Routes", () => {
   });
 
   describe("DELETE /:blueprintId", () => {
-    it("deletes a blueprint (admin)", async () => {
+    it("deletes a blueprint (admin) when no live invitation references it", async () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]); // requireOrgAccess
+      // Deletion guard: no pending invitations reference this blueprint.
+      mockDb.where.mockReturnValueOnce(mockDb).mockResolvedValueOnce([]);
       mockDb.returning.mockResolvedValueOnce([{ id: "bp-1" }]);
 
       const res = await app.request(`${baseUrl}/bp-1`, { method: "DELETE" });
@@ -246,10 +371,46 @@ describe("Organization Blueprint Routes", () => {
     it("404s when the blueprint does not exist", async () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]); // requireOrgAccess
+      mockDb.where.mockReturnValueOnce(mockDb).mockResolvedValueOnce([]); // guard: clear
       mockDb.returning.mockResolvedValueOnce([]);
 
       const res = await app.request(`${baseUrl}/missing`, { method: "DELETE" });
       expect(res.status).toBe(404);
+    });
+
+    // ADR-0009: a Blueprint cannot be deleted while a live pending invitation
+    // references it (status = 'pending' AND expiresAt > now()).
+    it("409s when a live pending invitation references the blueprint", async () => {
+      mockSession();
+      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]); // requireOrgAccess
+      const future = new Date();
+      future.setDate(future.getDate() + 7);
+      // Guard query returns a still-live pending invitation.
+      mockDb.where
+        .mockReturnValueOnce(mockDb)
+        .mockResolvedValueOnce([{ expiresAt: future.toISOString() }]);
+
+      const res = await app.request(`${baseUrl}/bp-1`, { method: "DELETE" });
+      expect(res.status).toBe(409);
+      // The delete must not run while the guard blocks.
+      expect(mockDb.delete).not.toHaveBeenCalled();
+    });
+
+    // Expiry is lazy with write-back: a row past expiresAt may still read
+    // 'pending'. The guard excludes it in app code, so deletion proceeds.
+    it("allows deletion when the only referencing invitation is lazily-expired", async () => {
+      mockSession();
+      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]); // requireOrgAccess
+      const past = new Date();
+      past.setDate(past.getDate() - 1);
+      mockDb.where
+        .mockReturnValueOnce(mockDb)
+        .mockResolvedValueOnce([{ expiresAt: past.toISOString() }]);
+      mockDb.returning.mockResolvedValueOnce([{ id: "bp-1" }]);
+
+      const res = await app.request(`${baseUrl}/bp-1`, { method: "DELETE" });
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({ message: "Blueprint deleted" });
     });
 
     it("403s for a non-admin", async () => {
@@ -265,11 +426,24 @@ describe("Organization Blueprint Routes", () => {
     const applyUrl = `${baseUrl}/bp-1/apply`;
     const body = { workspaceId: "ws-1" };
     const itemRows = [
-      { blueprintId: "bp-1", resourceType: "agent", resourceId: "agent-1" },
-      { blueprintId: "bp-1", resourceType: "skill", resourceId: "skill-1" },
+      { resourceType: "agent", resourceId: "agent-1" },
+      { resourceType: "skill", resourceId: "skill-1" },
+    ];
+    // Tier 2 source row for bp-1 (the apply service reads these settings).
+    const tier2Rows = [
+      {
+        id: "bp-1",
+        taskModelProviderId: "prov-1",
+        memoryExtractionProviderId: null,
+        memoryEmbeddingProviderId: null,
+        context: "Default context",
+      },
     ];
 
-    it("creates the attachments and reports what was attached", async () => {
+    // The apply service (inside the route's transaction) runs two selects —
+    // Tier 2 settings then items — so the where mocks resolve in that order
+    // after the route's blueprint/workspace org checks.
+    it("creates the attachments and stamps Tier 2 settings", async () => {
       mockSession();
       mockDb.limit
         .mockResolvedValueOnce([{ role: "admin" }]) // requireOrgAccess
@@ -279,7 +453,8 @@ describe("Organization Blueprint Routes", () => {
         .mockReturnValueOnce(mockDb) // requireOrgAccess
         .mockReturnValueOnce(mockDb) // blueprint check
         .mockReturnValueOnce(mockDb) // workspace check
-        .mockResolvedValueOnce(itemRows); // loadItemsByBlueprint
+        .mockResolvedValueOnce(tier2Rows) // service: Tier 2 select
+        .mockResolvedValueOnce(itemRows); // service: items select
       // Both items newly inserted.
       mockDb.returning.mockResolvedValueOnce([
         { id: "att-1" },
@@ -298,6 +473,14 @@ describe("Organization Blueprint Routes", () => {
         skipped: 0,
         total: 2,
       });
+      // Tier 2: the workspace is updated with the blueprint's non-null slots.
+      const tier2Set = mockDb.set.mock.calls
+        .map((c) => c[0])
+        .find((v) => v?.taskModelProviderId !== undefined);
+      expect(tier2Set).toMatchObject({
+        taskModelProviderId: "prov-1",
+        context: "Default context",
+      });
     });
 
     it("is idempotent: a re-apply where everything is attached is a no-op", async () => {
@@ -310,7 +493,8 @@ describe("Organization Blueprint Routes", () => {
         .mockReturnValueOnce(mockDb)
         .mockReturnValueOnce(mockDb)
         .mockReturnValueOnce(mockDb)
-        .mockResolvedValueOnce(itemRows);
+        .mockResolvedValueOnce(tier2Rows) // Tier 2 select
+        .mockResolvedValueOnce(itemRows); // items select
       // onConflictDoNothing inserts nothing — all rows already present.
       mockDb.returning.mockResolvedValueOnce([]);
 
@@ -328,7 +512,7 @@ describe("Organization Blueprint Routes", () => {
       });
     });
 
-    it("handles an empty blueprint without inserting", async () => {
+    it("handles an empty blueprint without inserting attachments", async () => {
       mockSession();
       mockDb.limit
         .mockResolvedValueOnce([{ role: "admin" }])
@@ -338,7 +522,16 @@ describe("Organization Blueprint Routes", () => {
         .mockReturnValueOnce(mockDb)
         .mockReturnValueOnce(mockDb)
         .mockReturnValueOnce(mockDb)
-        .mockResolvedValueOnce([]); // no items
+        .mockResolvedValueOnce([
+          {
+            id: "bp-1",
+            taskModelProviderId: null,
+            memoryExtractionProviderId: null,
+            memoryEmbeddingProviderId: null,
+            context: null,
+          },
+        ]) // Tier 2 select: nothing set
+        .mockResolvedValueOnce([]); // items select: no items
 
       const res = await app.request(applyUrl, {
         method: "POST",
