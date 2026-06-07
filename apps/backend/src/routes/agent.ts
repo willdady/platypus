@@ -7,7 +7,7 @@ import {
   attachment as attachmentTable,
 } from "../db/schema.ts";
 import { agentCreateSchema, agentUpdateSchema } from "@platypus/schemas";
-import { eq, and, or, inArray } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 import { dedupeArray } from "../utils.ts";
 import { requireAuth } from "../middleware/authentication.ts";
 import {
@@ -17,6 +17,12 @@ import {
 import type { Variables } from "../server.ts";
 import { validateSubAgentAssignment } from "../services/sub-agent-validation.ts";
 import { findNonSharedReferences } from "../services/agent-scope-validation.ts";
+import {
+  listScoped,
+  requireScoped,
+  requireWorkspaceMutable,
+} from "../services/scoped-resource.ts";
+import { NotFoundError } from "../errors.ts";
 import { getStorage } from "../storage/index.ts";
 import sharp from "sharp";
 import { avatarKeyToUrl } from "../utils/avatar-url.ts";
@@ -32,9 +38,6 @@ const MAX_AVATAR_SIZE = 5 * 1024 * 1024;
 const MIN_AVATAR_DIMENSION = 64;
 const AVATAR_SIZE = 512;
 
-type AgentRow = typeof agentTable.$inferSelect;
-type AgentScope = "organization" | "workspace";
-
 function agentWithAvatarUrl(
   agent: Record<string, unknown>,
   baseUrl: string,
@@ -43,60 +46,6 @@ function agentWithAvatarUrl(
   const { avatarKey: _avatarKey, ...rest } = agent;
   return { ...rest, avatarUrl: avatarKeyToUrl(key, baseUrl) ?? undefined };
 }
-
-/** Detects a Postgres unique-constraint violation across driver shapes. */
-const isUniqueViolation = (error: any): boolean =>
-  error.code === "23505" ||
-  error.cause?.code === "23505" ||
-  error.message?.includes("unique constraint") ||
-  error.cause?.message?.includes("unique constraint");
-
-/**
- * Resolves an Agent visible inside this Workspace: a Workspace-scoped Agent in
- * the Workspace, or an Organization-scoped (Shared) Agent attached to it
- * (ADR-0007). Returns the row plus its scope, or null when not visible here.
- */
-const findVisibleAgent = async (
-  agentId: string,
-  orgId: string,
-  workspaceId: string,
-): Promise<{ row: AgentRow; scope: AgentScope } | null> => {
-  const rows = await db
-    .select()
-    .from(agentTable)
-    .where(
-      and(
-        eq(agentTable.id, agentId),
-        or(
-          eq(agentTable.workspaceId, workspaceId),
-          eq(agentTable.organizationId, orgId),
-        ),
-      ),
-    )
-    .limit(1);
-  const row = rows[0];
-  if (!row) return null;
-
-  const isOrgScoped = !!row.organizationId && !row.workspaceId;
-  if (!isOrgScoped) {
-    return { row, scope: "workspace" };
-  }
-
-  // An org-scoped (Shared) Agent is only visible here where attached.
-  const [attached] = await db
-    .select({ id: attachmentTable.id })
-    .from(attachmentTable)
-    .where(
-      and(
-        eq(attachmentTable.workspaceId, workspaceId),
-        eq(attachmentTable.resourceType, "agent"),
-        eq(attachmentTable.resourceId, agentId),
-      ),
-    )
-    .limit(1);
-  if (!attached) return null;
-  return { row, scope: "organization" };
-};
 
 const agent = new Hono<{ Variables: Variables }>();
 
@@ -162,37 +111,11 @@ agent.get(
     const workspaceId = c.req.param("workspaceId")!;
     const baseUrl = getOrigin(c);
 
-    const workspaceAgents = await db
-      .select()
-      .from(agentTable)
-      .where(eq(agentTable.workspaceId, workspaceId));
-
-    // Org-scoped (Shared) Agents appear in a Workspace only where attached
-    // (ADR-0007) — gate by an inner join on the Attachment table.
-    const attachedOrgRows = await db
-      .select()
-      .from(agentTable)
-      .innerJoin(
-        attachmentTable,
-        and(
-          eq(attachmentTable.resourceId, agentTable.id),
-          eq(attachmentTable.resourceType, "agent"),
-          eq(attachmentTable.workspaceId, workspaceId),
-        ),
-      )
-      .where(eq(agentTable.organizationId, orgId));
-    const orgAgents = attachedOrgRows.map((r) => r.agent);
-
-    const results = [
-      ...orgAgents.map((a) => ({
-        ...agentWithAvatarUrl(a, baseUrl),
-        scope: "organization" as const,
-      })),
-      ...workspaceAgents.map((a) => ({
-        ...agentWithAvatarUrl(a, baseUrl),
-        scope: "workspace" as const,
-      })),
-    ];
+    const scoped = await listScoped(db, "agent", { orgId, wsId: workspaceId });
+    const results = scoped.map(({ row, scope }) => ({
+      ...agentWithAvatarUrl(row, baseUrl),
+      scope,
+    }));
     return c.json({ results });
   },
 );
@@ -209,10 +132,10 @@ agent.get(
     const workspaceId = c.req.param("workspaceId")!;
     const baseUrl = getOrigin(c);
 
-    const found = await findVisibleAgent(agentId, orgId, workspaceId);
-    if (!found) {
-      return c.json({ error: "Agent not found" }, 404);
-    }
+    const found = await requireScoped(db, "agent", agentId, {
+      orgId,
+      wsId: workspaceId,
+    });
     return c.json({
       ...agentWithAvatarUrl(found.row, baseUrl),
       scope: found.scope,
@@ -244,21 +167,15 @@ agent.put(
       data.subAgentIds = dedupeArray(data.subAgentIds);
     }
 
-    const found = await findVisibleAgent(agentId, orgId, workspaceId);
-    if (!found) {
-      return c.json({ error: "Agent not found" }, 404);
-    }
+    // A Shared Agent is a single source of truth edited only on the Organization
+    // surface (ADR-0007); requireWorkspaceMutable throws NotFound (→404) when the
+    // Agent is not visible here, then Locked (→403) when it is org-scoped.
+    await requireWorkspaceMutable(db, "agent", agentId, {
+      orgId,
+      wsId: workspaceId,
+    });
 
     const baseUrl = getOrigin(c);
-
-    // A Shared Agent is a single source of truth edited only on the Organization
-    // surface (ADR-0007); it is locked in every Workspace, even to Org Admins.
-    if (found.scope === "organization") {
-      return c.json(
-        { error: "This agent is managed at the organization level" },
-        403,
-      );
-    }
 
     // Workspace-scoped update.
     if (data.subAgentIds) {
@@ -301,17 +218,11 @@ agent.post(
     const orgId = c.req.param("orgId")!;
     const baseUrl = getOrigin(c);
 
-    const found = await findVisibleAgent(agentId, orgId, workspaceId);
-    if (!found) {
-      return c.json({ error: "Agent not found" }, 404);
-    }
     // Shared agents are managed only on the Organization surface (ADR-0007).
-    if (found.scope === "organization") {
-      return c.json(
-        { error: "This agent is managed at the organization level" },
-        403,
-      );
-    }
+    const found = await requireWorkspaceMutable(db, "agent", agentId, {
+      orgId,
+      wsId: workspaceId,
+    });
 
     const body = await c.req.parseBody();
     const file = body["file"];
@@ -400,17 +311,11 @@ agent.delete(
     const workspaceId = c.req.param("workspaceId")!;
     const baseUrl = getOrigin(c);
 
-    const found = await findVisibleAgent(agentId, orgId, workspaceId);
-    if (!found) {
-      return c.json({ error: "Agent not found" }, 404);
-    }
     // Shared agents are managed only on the Organization surface (ADR-0007).
-    if (found.scope === "organization") {
-      return c.json(
-        { error: "This agent is managed at the organization level" },
-        403,
-      );
-    }
+    const found = await requireWorkspaceMutable(db, "agent", agentId, {
+      orgId,
+      wsId: workspaceId,
+    });
 
     if (found.row.avatarKey) {
       try {
@@ -444,31 +349,21 @@ agent.delete(
   requireWorkspaceAccess,
   async (c) => {
     const agentId = c.req.param("agentId");
+    const orgId = c.req.param("orgId")!;
     const workspaceId = c.req.param("workspaceId")!;
 
-    const existing = await db
-      .select({
-        avatarKey: agentTable.avatarKey,
-      })
-      .from(agentTable)
-      .where(
-        and(
-          eq(agentTable.id, agentId),
-          eq(agentTable.workspaceId, workspaceId),
-        ),
-      )
-      .limit(1);
+    // A Shared Agent is deleted only from the Organization surface (ADR-0007):
+    // requireWorkspaceMutable throws NotFound (→404) when the Agent is not
+    // visible here, then Locked (→403) when it is org-scoped.
+    const found = await requireWorkspaceMutable(db, "agent", agentId, {
+      orgId,
+      wsId: workspaceId,
+    });
 
-    // A Shared Agent attached here has no workspace row to match; it must be
-    // detached or deleted from the Organization surface (ADR-0007).
-    if (existing.length === 0) {
-      return c.json({ error: "Agent not found" }, 404);
-    }
-
-    if (existing[0]?.avatarKey) {
+    if (found.row.avatarKey) {
       try {
         const storage = getStorage();
-        await storage.delete(existing[0].avatarKey);
+        await storage.delete(found.row.avatarKey);
       } catch {
         // Ignore deletion errors
       }
@@ -520,7 +415,7 @@ agent.post(
       )
       .limit(1);
     if (!existing) {
-      return c.json({ error: "Agent not found" }, 404);
+      throw new NotFoundError("Agent not found");
     }
 
     // No-cascade guard (ADR-0007): every travels-with reference must already be
@@ -588,17 +483,10 @@ agent.post(
       );
     } catch (error: any) {
       if (error?.message === PROMOTE_RACE) {
-        return c.json({ error: "Agent not found" }, 404);
+        throw new NotFoundError("Agent not found");
       }
-      if (isUniqueViolation(error)) {
-        return c.json(
-          {
-            error:
-              "An agent with this name already exists in this organization",
-          },
-          409,
-        );
-      }
+      // A duplicate Shared-Agent name surfaces as a Postgres unique violation,
+      // mapped to 409 by the central onError (ADR-0009).
       throw error;
     }
   },
