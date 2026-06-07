@@ -18,6 +18,7 @@ import { isResourceListedInBlueprint } from "../services/blueprint-guard.ts";
 import { getStorage } from "../storage/index.ts";
 import { avatarKeyToUrl } from "../utils/avatar-url.ts";
 import { getOrigin } from "../utils/get-origin.ts";
+import { NotFoundError } from "../errors.ts";
 import type { Variables } from "../server.ts";
 
 const ALLOWED_AVATAR_TYPES = [
@@ -45,17 +46,6 @@ function agentWithAvatarUrl(
   return { ...rest, avatarUrl: avatarKeyToUrl(key, baseUrl) ?? undefined };
 }
 
-/** Detects a Postgres unique-constraint violation across driver shapes. */
-const isUniqueViolation = (error: any): boolean =>
-  error.code === "23505" ||
-  error.cause?.code === "23505" ||
-  error.message?.includes("unique constraint") ||
-  error.cause?.message?.includes("unique constraint");
-
-const NAME_CONFLICT = {
-  error: "An agent with this name already exists in this organization",
-} as const;
-
 /** List org-scoped Agents */
 orgAgent.get("/", requireAuth, requireOrgAccess(), async (c) => {
   const orgId = c.req.param("orgId")!;
@@ -82,7 +72,7 @@ orgAgent.get("/:agentId", requireAuth, requireOrgAccess(), async (c) => {
     )
     .limit(1);
   if (record.length === 0) {
-    return c.json({ error: "Agent not found" }, 404);
+    throw new NotFoundError("Agent not found");
   }
   return c.json(agentWithAvatarUrl(record[0], baseUrl));
 });
@@ -128,24 +118,19 @@ orgAgent.put(
       );
     }
 
-    try {
-      const record = await db
-        .update(agentTable)
-        .set({ ...data, updatedAt: new Date() })
-        .where(
-          and(eq(agentTable.id, agentId), eq(agentTable.organizationId, orgId)),
-        )
-        .returning();
-      if (record.length === 0) {
-        return c.json({ error: "Agent not found" }, 404);
-      }
-      return c.json(agentWithAvatarUrl(record[0], baseUrl), 200);
-    } catch (error: any) {
-      if (isUniqueViolation(error)) {
-        return c.json(NAME_CONFLICT, 409);
-      }
-      throw error;
+    // A duplicate name surfaces as a Postgres unique violation, mapped to 409
+    // by the central onError (ADR-0009).
+    const record = await db
+      .update(agentTable)
+      .set({ ...data, updatedAt: new Date() })
+      .where(
+        and(eq(agentTable.id, agentId), eq(agentTable.organizationId, orgId)),
+      )
+      .returning();
+    if (record.length === 0) {
+      throw new NotFoundError("Agent not found");
     }
+    return c.json(agentWithAvatarUrl(record[0], baseUrl), 200);
   },
 );
 
@@ -167,7 +152,7 @@ orgAgent.post(
       )
       .limit(1);
     if (!existing) {
-      return c.json({ error: "Agent not found" }, 404);
+      throw new NotFoundError("Agent not found");
     }
 
     const body = await c.req.parseBody();
@@ -250,7 +235,7 @@ orgAgent.delete(
       )
       .limit(1);
     if (!existing) {
-      return c.json({ error: "Agent not found" }, 404);
+      throw new NotFoundError("Agent not found");
     }
 
     if (existing.avatarKey) {
@@ -330,7 +315,7 @@ orgAgent.delete(
       return rows;
     });
     if (result.length === 0) {
-      return c.json({ error: "Agent not found" }, 404);
+      throw new NotFoundError("Agent not found");
     }
     return c.json({ message: "Agent deleted" });
   },

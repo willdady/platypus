@@ -135,10 +135,12 @@ describe("Agent Routes", () => {
 
       const res = await app.request(baseUrl);
       expect(res.status).toBe(200);
+      // listScoped returns Workspace rows first, then attached org rows; the
+      // frontend regroups by scope, so order is not observable behaviour.
       expect(await res.json()).toEqual({
         results: [
-          { id: "org-agent-1", name: "Shared Agent", scope: "organization" },
           { id: "agent-1", name: "Agent 1", scope: "workspace" },
+          { id: "org-agent-1", name: "Shared Agent", scope: "organization" },
         ],
       });
     });
@@ -323,19 +325,40 @@ describe("Agent Routes", () => {
       expect(await res.json()).toEqual({ message: "Agent deleted" });
     });
 
-    it("should 404 when deleting a shared agent from the workspace", async () => {
+    it("should 404 when deleting a shared agent not attached here", async () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]);
       mockDb.limit.mockResolvedValueOnce([
         { ownerId: "user-1", organizationId: "org-1" },
       ]);
-      // No workspace row matches (agent is org-scoped) → 404
+      // resolveScoped lookup → none visible here → 404
       mockDb.limit.mockResolvedValueOnce([]);
 
       const res = await app.request(`${baseUrl}/org-agent-1`, {
         method: "DELETE",
       });
       expect(res.status).toBe(404);
+      expect(mockDb.delete).not.toHaveBeenCalled();
+    });
+
+    it("should 403 (locked) when deleting an attached shared agent", async () => {
+      mockSession();
+      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]);
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-1", organizationId: "org-1" },
+      ]);
+      // resolveScoped lookup → org-scoped agent
+      mockDb.limit.mockResolvedValueOnce([
+        { id: "org-agent-1", name: "Shared", organizationId: orgId },
+      ]);
+      // attachment check → attached here, so it is visible but locked
+      mockDb.limit.mockResolvedValueOnce([{ id: "att-1" }]);
+
+      const res = await app.request(`${baseUrl}/org-agent-1`, {
+        method: "DELETE",
+      });
+      // Shared agents are deleted only on the Organization surface (ADR-0007).
+      expect(res.status).toBe(403);
       expect(mockDb.delete).not.toHaveBeenCalled();
     });
   });
