@@ -82,9 +82,10 @@ describe("Organization MCP Routes", () => {
         headers: { "Content-Type": "application/json" },
       });
 
+      // The conflict now flows through the central onError (ADR-0009).
       expect(res.status).toBe(409);
       expect(await res.json()).toEqual({
-        error: "An MCP with this name already exists in this organization",
+        error: "A resource with that name already exists",
       });
     });
   });

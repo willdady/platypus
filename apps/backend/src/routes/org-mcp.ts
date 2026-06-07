@@ -29,22 +29,12 @@ import {
   buildMcpTransportConfig,
 } from "../services/mcp-oauth-provider.ts";
 import { OAUTH_TOKEN_CLEAR_FIELDS, sanitizeMcpResponse } from "./mcp.ts";
+import { NotFoundError } from "../errors.ts";
 
 // Org-scoped MCPs are Shared resources (ADR-0007). They introduce credentials
 // and external reach, so all mutations are org-admin-only (ADR-0006) — there is
 // no per-workspace delegation at org scope.
 const orgMcp = new Hono<{ Variables: Variables }>();
-
-/** Detects a Postgres unique-constraint violation across driver shapes. */
-const isUniqueViolation = (error: any): boolean =>
-  error.code === "23505" ||
-  error.cause?.code === "23505" ||
-  error.message?.includes("unique constraint") ||
-  error.cause?.message?.includes("unique constraint");
-
-const NAME_CONFLICT = {
-  error: "An MCP with this name already exists in this organization",
-} as const;
 
 /** Create an org-scoped MCP (admin only) */
 orgMcp.post(
@@ -56,23 +46,18 @@ orgMcp.post(
     const orgId = c.req.param("orgId")!;
     const data = c.req.valid("json");
 
-    try {
-      const record = await db
-        .insert(mcpTable)
-        .values({
-          id: nanoid(),
-          ...data,
-          organizationId: orgId,
-          workspaceId: null,
-        })
-        .returning();
-      return c.json(sanitizeMcpResponse(record[0]), 201);
-    } catch (error: any) {
-      if (isUniqueViolation(error)) {
-        return c.json(NAME_CONFLICT, 409);
-      }
-      throw error;
-    }
+    // A duplicate name surfaces as a Postgres unique violation, mapped to 409
+    // by the central onError (ADR-0009).
+    const record = await db
+      .insert(mcpTable)
+      .values({
+        id: nanoid(),
+        ...data,
+        organizationId: orgId,
+        workspaceId: null,
+      })
+      .returning();
+    return c.json(sanitizeMcpResponse(record[0]), 201);
   },
 );
 
@@ -96,7 +81,7 @@ orgMcp.get("/:mcpId", requireAuth, requireOrgAccess(), async (c) => {
     .where(and(eq(mcpTable.id, mcpId), eq(mcpTable.organizationId, orgId)))
     .limit(1);
   if (record.length === 0) {
-    return c.json({ error: "MCP not found" }, 404);
+    throw new NotFoundError("MCP not found");
   }
   return c.json(sanitizeMcpResponse(record[0]));
 });
@@ -121,30 +106,25 @@ orgMcp.put(
 
     const urlChanged = existing.length > 0 && existing[0].url !== data.url;
 
-    try {
-      const record = await db
-        .update(mcpTable)
-        .set({
-          ...data,
-          ...(urlChanged && {
-            ...OAUTH_TOKEN_CLEAR_FIELDS,
-            oauthClientId: null,
-            oauthClientSecret: null,
-          }),
-          updatedAt: new Date(),
-        })
-        .where(and(eq(mcpTable.id, mcpId), eq(mcpTable.organizationId, orgId)))
-        .returning();
-      if (record.length === 0) {
-        return c.json({ error: "MCP not found" }, 404);
-      }
-      return c.json(sanitizeMcpResponse(record[0]), 200);
-    } catch (error: any) {
-      if (isUniqueViolation(error)) {
-        return c.json(NAME_CONFLICT, 409);
-      }
-      throw error;
+    // A duplicate name surfaces as a Postgres unique violation, mapped to 409
+    // by the central onError (ADR-0009).
+    const record = await db
+      .update(mcpTable)
+      .set({
+        ...data,
+        ...(urlChanged && {
+          ...OAUTH_TOKEN_CLEAR_FIELDS,
+          oauthClientId: null,
+          oauthClientSecret: null,
+        }),
+        updatedAt: new Date(),
+      })
+      .where(and(eq(mcpTable.id, mcpId), eq(mcpTable.organizationId, orgId)))
+      .returning();
+    if (record.length === 0) {
+      throw new NotFoundError("MCP not found");
     }
+    return c.json(sanitizeMcpResponse(record[0]), 200);
   },
 );
 
@@ -204,7 +184,7 @@ orgMcp.delete(
       return rows;
     });
     if (result.length === 0) {
-      return c.json({ error: "MCP not found" }, 404);
+      throw new NotFoundError("MCP not found");
     }
     return c.json({ message: "MCP deleted" });
   },
