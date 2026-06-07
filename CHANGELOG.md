@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.93.0](https://github.com/willdady/platypus/compare/v1.92.0...v1.93.0) (2026-06-07)
+
+
+### Features
+
+* blueprints on invitations + Tier 2 workspace settings ([#192](https://github.com/willdady/platypus/issues/192)) ([9007394](https://github.com/willdady/platypus/commit/900739416aa0fa079893a60e7f1dc5e4e7b3102e))
+
 ## [1.92.0](https://github.com/willdady/platypus/compare/v1.91.0...v1.92.0) (2026-06-06)
 
 
