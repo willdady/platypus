@@ -202,6 +202,30 @@ describe("Provider Routes", () => {
       memoryExtractionModelId: "gpt-4",
     };
 
+    it("updates a workspace-scoped provider and returns the row", async () => {
+      mockSession();
+      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]); // requireOrgAccess
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-1", organizationId: "org-1" },
+      ]); // requireWorkspaceAccess
+      // requireWorkspaceMutable → resolveScoped → workspace-scoped row (no
+      // attachment check needed)
+      mockDb.limit.mockResolvedValueOnce([{ id: "p1", workspaceId }]);
+
+      const updated = { id: "p1", name: "Renamed", workspaceId };
+      mockDb.returning.mockResolvedValueOnce([updated]);
+
+      const res = await app.request(`${baseUrl}/p1`, {
+        method: "PUT",
+        body: JSON.stringify(updateBody),
+        headers: { "Content-Type": "application/json" },
+      });
+
+      expect(res.status).toBe(200);
+      // The single row, not the raw `.returning()` array.
+      expect(await res.json()).toEqual(updated);
+    });
+
     it("should 403 when updating an attached org-scoped provider", async () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]); // requireOrgAccess

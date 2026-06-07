@@ -135,7 +135,7 @@ provider.put(
       )
       .returning();
 
-    return c.json(record, 200);
+    return c.json(record[0], 200);
   },
 );
 
