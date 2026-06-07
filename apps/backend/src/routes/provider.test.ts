@@ -72,9 +72,10 @@ describe("Provider Routes", () => {
         headers: { "Content-Type": "application/json" },
       });
 
+      // The unique violation flows through the central onError (ADR-0009).
       expect(res.status).toBe(409);
       expect(await res.json()).toEqual({
-        error: "A provider with this name already exists in this workspace",
+        error: "A resource with that name already exists",
       });
     });
 
@@ -171,6 +172,134 @@ describe("Provider Routes", () => {
       const res = await app.request(`${baseUrl}/p1`);
       expect(res.status).toBe(200);
       expect(await res.json()).toEqual({ ...mockProvider, scope: "workspace" });
+    });
+
+    it("should 404 for an org-scoped provider not attached here", async () => {
+      mockSession();
+      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-1", organizationId: "org-1" },
+      ]); // requireWorkspaceAccess
+      // resolveScoped row lookup → org-scoped provider...
+      mockDb.limit.mockResolvedValueOnce([
+        { id: "p2", name: "Org OpenAI", organizationId: orgId },
+      ]);
+      // ...attachment check → not attached here → not visible → 404
+      mockDb.limit.mockResolvedValueOnce([]);
+
+      const res = await app.request(`${baseUrl}/p2`);
+      expect(res.status).toBe(404);
+    });
+  });
+
+  describe("PUT /:providerId", () => {
+    const updateBody = {
+      name: "Renamed",
+      providerType: "OpenAI",
+      apiKey: "sk-123",
+      modelIds: ["gpt-4"],
+      taskModelId: "gpt-4",
+      memoryExtractionModelId: "gpt-4",
+    };
+
+    it("updates a workspace-scoped provider and returns the row", async () => {
+      mockSession();
+      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]); // requireOrgAccess
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-1", organizationId: "org-1" },
+      ]); // requireWorkspaceAccess
+      // requireWorkspaceMutable → resolveScoped → workspace-scoped row (no
+      // attachment check needed)
+      mockDb.limit.mockResolvedValueOnce([{ id: "p1", workspaceId }]);
+
+      const updated = { id: "p1", name: "Renamed", workspaceId };
+      mockDb.returning.mockResolvedValueOnce([updated]);
+
+      const res = await app.request(`${baseUrl}/p1`, {
+        method: "PUT",
+        body: JSON.stringify(updateBody),
+        headers: { "Content-Type": "application/json" },
+      });
+
+      expect(res.status).toBe(200);
+      // The single row, not the raw `.returning()` array.
+      expect(await res.json()).toEqual(updated);
+    });
+
+    it("should 403 when updating an attached org-scoped provider", async () => {
+      mockSession();
+      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]); // requireOrgAccess
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-1", organizationId: "org-1" },
+      ]); // requireWorkspaceAccess
+      // requireWorkspaceMutable → resolveScoped row lookup → org-scoped provider...
+      mockDb.limit.mockResolvedValueOnce([
+        { id: "p2", name: "Org OpenAI", organizationId: orgId },
+      ]);
+      // ...attachment check → attached, so it is visible but locked
+      mockDb.limit.mockResolvedValueOnce([{ id: "att-1" }]);
+
+      const res = await app.request(`${baseUrl}/p2`, {
+        method: "PUT",
+        body: JSON.stringify(updateBody),
+        headers: { "Content-Type": "application/json" },
+      });
+      // Shared providers are edited only on the Organization surface (ADR-0007).
+      expect(res.status).toBe(403);
+      expect(mockDb.update).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("DELETE /:providerId", () => {
+    it("deletes a workspace-scoped provider", async () => {
+      mockSession();
+      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]); // requireOrgAccess
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-1", organizationId: "org-1" },
+      ]); // requireWorkspaceAccess
+      // requireWorkspaceMutable → resolveScoped → workspace-scoped row (no
+      // attachment check needed)
+      mockDb.limit.mockResolvedValueOnce([{ id: "p1", workspaceId }]);
+
+      const res = await app.request(`${baseUrl}/p1`, { method: "DELETE" });
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({ message: "Provider deleted" });
+    });
+
+    it("should 404 when deleting an org-scoped provider not attached here", async () => {
+      mockSession();
+      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]); // requireOrgAccess
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-1", organizationId: "org-1" },
+      ]); // requireWorkspaceAccess
+      // resolveScoped row lookup → org-scoped provider...
+      mockDb.limit.mockResolvedValueOnce([
+        { id: "p2", name: "Org OpenAI", organizationId: orgId },
+      ]);
+      // ...attachment check → not attached here → 404
+      mockDb.limit.mockResolvedValueOnce([]);
+
+      const res = await app.request(`${baseUrl}/p2`, { method: "DELETE" });
+      expect(res.status).toBe(404);
+      expect(mockDb.delete).not.toHaveBeenCalled();
+    });
+
+    it("should 403 when deleting an attached org-scoped provider", async () => {
+      mockSession();
+      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]); // requireOrgAccess
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-1", organizationId: "org-1" },
+      ]); // requireWorkspaceAccess
+      // resolveScoped row lookup → org-scoped provider...
+      mockDb.limit.mockResolvedValueOnce([
+        { id: "p2", name: "Org OpenAI", organizationId: orgId },
+      ]);
+      // ...attachment check → attached, so it is visible but locked
+      mockDb.limit.mockResolvedValueOnce([{ id: "att-1" }]);
+
+      const res = await app.request(`${baseUrl}/p2`, { method: "DELETE" });
+      expect(res.status).toBe(403);
+      expect(mockDb.delete).not.toHaveBeenCalled();
     });
   });
 });
