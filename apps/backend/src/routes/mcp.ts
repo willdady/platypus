@@ -6,22 +6,24 @@ import {
   auth as mcpAuth,
 } from "@ai-sdk/mcp";
 import { db } from "../index.ts";
-import {
-  mcp as mcpTable,
-  attachment as attachmentTable,
-} from "../db/schema.ts";
+import { mcp as mcpTable } from "../db/schema.ts";
 import {
   mcpCreateSchema,
   mcpUpdateSchema,
   mcpTestSchema,
 } from "@platypus/schemas";
-import { eq, and, or } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 import { requireAuth } from "../middleware/authentication.ts";
 import {
   requireOrgAccess,
   requireWorkspaceAccess,
   requireWorkspaceConfigAccess,
 } from "../middleware/authorization.ts";
+import {
+  listScoped,
+  requireScoped,
+  requireWorkspaceMutable,
+} from "../services/scoped-resource.ts";
 import type { Variables } from "../server.ts";
 import { logger } from "../logger.ts";
 
@@ -96,39 +98,13 @@ mcp.get(
     const orgId = c.req.param("orgId")!;
     const workspaceId = c.req.param("workspaceId")!;
 
-    // Workspace-scoped MCPs
-    const workspaceMcps = await db
-      .select()
-      .from(mcpTable)
-      .where(eq(mcpTable.workspaceId, workspaceId));
-
-    // Org-scoped (Shared) MCPs appear in a Workspace only where attached
-    // (ADR-0007 / #154) — gate by an inner join on the Attachment table.
-    const attachedOrgRows = await db
-      .select()
-      .from(mcpTable)
-      .innerJoin(
-        attachmentTable,
-        and(
-          eq(attachmentTable.resourceId, mcpTable.id),
-          eq(attachmentTable.resourceType, "mcp"),
-          eq(attachmentTable.workspaceId, workspaceId),
-        ),
-      )
-      .where(eq(mcpTable.organizationId, orgId));
-    const orgMcps = attachedOrgRows.map((r) => r.mcp);
-
-    // Tag each MCP with its scope for the frontend
-    const results = [
-      ...orgMcps.map((m) => ({
-        ...sanitizeMcpResponse(m),
-        scope: "organization" as const,
-      })),
-      ...workspaceMcps.map((m) => ({
-        ...sanitizeMcpResponse(m),
-        scope: "workspace" as const,
-      })),
-    ];
+    // Workspace-scoped MCPs plus the Shared (org-scoped) MCPs attached here
+    // (ADR-0007), each tagged with its scope for the frontend.
+    const scoped = await listScoped(db, "mcp", { orgId, wsId: workspaceId });
+    const results = scoped.map(({ row, scope }) => ({
+      ...sanitizeMcpResponse(row),
+      scope,
+    }));
 
     return c.json({ results });
   },
@@ -144,24 +120,11 @@ mcp.get(
     const mcpId = c.req.param("mcpId");
     const orgId = c.req.param("orgId")!;
     const workspaceId = c.req.param("workspaceId")!;
-    const record = await db
-      .select()
-      .from(mcpTable)
-      .where(
-        and(
-          eq(mcpTable.id, mcpId),
-          or(
-            eq(mcpTable.workspaceId, workspaceId),
-            eq(mcpTable.organizationId, orgId),
-          ),
-        ),
-      )
-      .limit(1);
-    if (record.length === 0) {
-      return c.json({ error: "MCP not found" }, 404);
-    }
-    const scope = record[0].organizationId ? "organization" : "workspace";
-    return c.json({ ...sanitizeMcpResponse(record[0]), scope });
+    const { row, scope } = await requireScoped(db, "mcp", mcpId, {
+      orgId,
+      wsId: workspaceId,
+    });
+    return c.json({ ...sanitizeMcpResponse(row), scope });
   },
 );
 
@@ -175,17 +138,21 @@ mcp.put(
   sValidator("json", mcpUpdateSchema),
   async (c) => {
     const mcpId = c.req.param("mcpId");
+    const orgId = c.req.param("orgId")!;
     const workspaceId = c.req.param("workspaceId")!;
     const data = c.req.valid("json");
 
-    // If URL is changing, clear stored OAuth tokens (they're server-specific)
-    const existing = await db
-      .select()
-      .from(mcpTable)
-      .where(and(eq(mcpTable.id, mcpId), eq(mcpTable.workspaceId, workspaceId)))
-      .limit(1);
+    // A Shared MCP is a single source of truth edited only on the Organization
+    // surface (ADR-0007); requireWorkspaceMutable throws NotFound (→404) when the
+    // MCP is not visible here, then Locked (→403) when it is org-scoped. On
+    // success the row is guaranteed Workspace-scoped.
+    const { row } = await requireWorkspaceMutable(db, "mcp", mcpId, {
+      orgId,
+      wsId: workspaceId,
+    });
 
-    const urlChanged = existing.length > 0 && existing[0].url !== data.url;
+    // If the URL is changing, clear stored OAuth tokens (they're server-specific)
+    const urlChanged = row.url !== data.url;
 
     const record = await db
       .update(mcpTable)
@@ -200,9 +167,6 @@ mcp.put(
       })
       .where(and(eq(mcpTable.id, mcpId), eq(mcpTable.workspaceId, workspaceId)))
       .returning();
-    if (record.length === 0) {
-      return c.json({ error: "MCP not found" }, 404);
-    }
     return c.json(sanitizeMcpResponse(record[0]), 200);
   },
 );
@@ -216,14 +180,21 @@ mcp.delete(
   requireMcpConfigAccess,
   async (c) => {
     const mcpId = c.req.param("mcpId");
+    const orgId = c.req.param("orgId")!;
     const workspaceId = c.req.param("workspaceId")!;
-    const result = await db
+
+    // A Shared MCP is deleted only from the Organization surface (ADR-0007):
+    // requireWorkspaceMutable throws NotFound (→404) when the MCP is not visible
+    // here, then Locked (→403) when it is org-scoped.
+    await requireWorkspaceMutable(db, "mcp", mcpId, {
+      orgId,
+      wsId: workspaceId,
+    });
+
+    await db
       .delete(mcpTable)
       .where(and(eq(mcpTable.id, mcpId), eq(mcpTable.workspaceId, workspaceId)))
       .returning();
-    if (result.length === 0) {
-      return c.json({ error: "MCP not found" }, 404);
-    }
     return c.json({ message: "MCP deleted" });
   },
 );
