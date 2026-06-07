@@ -1,5 +1,23 @@
 # Changelog
 
+## [1.94.0](https://github.com/willdady/platypus/compare/v1.93.0...v1.94.0) (2026-06-07)
+
+
+### Features
+
+* **backend:** migrate MCP routes onto ScopedResource ([#189](https://github.com/willdady/platypus/issues/189)) ([#196](https://github.com/willdady/platypus/issues/196)) ([c23a420](https://github.com/willdady/platypus/commit/c23a420fbccaa14c3f94cec81dd5c49c587003ae))
+* **backend:** migrate Provider routes onto ScopedResource ([#190](https://github.com/willdady/platypus/issues/190)) ([#197](https://github.com/willdady/platypus/issues/197)) ([0f999ab](https://github.com/willdady/platypus/commit/0f999ab99d8d7ee34a73b15f974726cfe6296e5b))
+* **backend:** migrate Skill routes onto ScopedResource ([#188](https://github.com/willdady/platypus/issues/188)) ([#198](https://github.com/willdady/platypus/issues/198)) ([814ffa5](https://github.com/willdady/platypus/commit/814ffa5f19bf78c3da4d2b1e815d169ed83d1e97))
+* **backend:** ScopedResource read module + typed-error seam (proven on Agent) ([#195](https://github.com/willdady/platypus/issues/195)) ([aadd822](https://github.com/willdady/platypus/commit/aadd822244be0265371e65e9d8f122c1f984a9b6))
+
+
+### Bug Fixes
+
+* **backend:** type ScopedResource registry as the real table union ([#199](https://github.com/willdady/platypus/issues/199)) ([c036a18](https://github.com/willdady/platypus/commit/c036a189acb3294a9b74b94687ebdbfc3ccf20d3))
+* **frontend:** default workspace owner to current user on create ([4ce66e1](https://github.com/willdady/platypus/commit/4ce66e18a4f7cb2330247a005da0bfb7f7a80dfd))
+* **frontend:** defer org toolbar until membership loads ([35e209b](https://github.com/willdady/platypus/commit/35e209bc93611a137cb77445df3d6504a789ce0c))
+* **frontend:** show current user as owner option on workspace create ([a41e3b9](https://github.com/willdady/platypus/commit/a41e3b95a8e6c482085285674d4921d01037ef84))
+
 ## [1.93.0](https://github.com/willdady/platypus/compare/v1.92.0...v1.93.0) (2026-06-07)
 
 
