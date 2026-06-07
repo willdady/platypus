@@ -2,12 +2,9 @@ import { Hono } from "hono";
 import { sValidator } from "@hono/standard-validator";
 import { nanoid } from "nanoid";
 import { db } from "../index.ts";
-import {
-  provider as providerTable,
-  attachment as attachmentTable,
-} from "../db/schema.ts";
+import { provider as providerTable } from "../db/schema.ts";
 import { providerCreateSchema, providerUpdateSchema } from "@platypus/schemas";
-import { eq, and, or } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 import { handleEmbeddingConfigChange } from "../services/embedding-invalidation.ts";
 import { dedupeArray } from "../utils.ts";
 import { requireAuth } from "../middleware/authentication.ts";
@@ -16,6 +13,11 @@ import {
   requireWorkspaceAccess,
   requireWorkspaceConfigAccess,
 } from "../middleware/authorization.ts";
+import {
+  listScoped,
+  requireScoped,
+  requireWorkspaceMutable,
+} from "../services/scoped-resource.ts";
 import type { Variables } from "../server.ts";
 
 const provider = new Hono<{ Variables: Variables }>();
@@ -37,36 +39,20 @@ provider.post(
     if (data.modelIds) {
       data.modelIds = dedupeArray(data.modelIds).sort();
     }
-    try {
-      const record = await db
-        .insert(providerTable)
-        .values({
-          id: nanoid(),
-          ...data,
-        })
-        .returning();
-      return c.json(record[0], 201);
-    } catch (error: any) {
-      const isUniqueViolation =
-        error.code === "23505" ||
-        error.cause?.code === "23505" ||
-        error.message?.includes("unique constraint") ||
-        error.cause?.message?.includes("unique constraint");
-
-      if (isUniqueViolation) {
-        return c.json(
-          {
-            error: "A provider with this name already exists in this workspace",
-          },
-          409,
-        );
-      }
-      throw error;
-    }
+    // A duplicate name surfaces as a Postgres unique violation, mapped to 409
+    // by the central onError (ADR-0009).
+    const record = await db
+      .insert(providerTable)
+      .values({
+        id: nanoid(),
+        ...data,
+      })
+      .returning();
+    return c.json(record[0], 201);
   },
 );
 
-/** List all providers (workspace + org-scoped) */
+/** List providers visible in this workspace (workspace-scoped + attached org-scoped) */
 provider.get(
   "/",
   requireAuth,
@@ -76,39 +62,16 @@ provider.get(
     const orgId = c.req.param("orgId")!;
     const workspaceId = c.req.param("workspaceId")!;
 
-    // Get workspace-scoped providers
-    const workspaceProviders = await db
-      .select()
-      .from(providerTable)
-      .where(eq(providerTable.workspaceId, workspaceId));
-
-    // Org-scoped providers appear in a Workspace only where attached
-    // (ADR-0007 / #154) — gate by an inner join on the Attachment table.
-    const attachedOrgRows = await db
-      .select()
-      .from(providerTable)
-      .innerJoin(
-        attachmentTable,
-        and(
-          eq(attachmentTable.resourceId, providerTable.id),
-          eq(attachmentTable.resourceType, "provider"),
-          eq(attachmentTable.workspaceId, workspaceId),
-        ),
-      )
-      .where(eq(providerTable.organizationId, orgId));
-    const orgProviders = attachedOrgRows.map((r) => r.provider);
-
-    // Tag providers with their scope for frontend
-    const results = [
-      ...orgProviders.map((p) => ({ ...p, scope: "organization" as const })),
-      ...workspaceProviders.map((p) => ({ ...p, scope: "workspace" as const })),
-    ];
-
+    const scoped = await listScoped(db, "provider", {
+      orgId,
+      wsId: workspaceId,
+    });
+    const results = scoped.map(({ row, scope }) => ({ ...row, scope }));
     return c.json({ results });
   },
 );
 
-/** Get a provider by ID */
+/** Get a provider by ID (workspace-scoped, or attached org-scoped) */
 provider.get(
   "/:providerId",
   requireAuth,
@@ -119,28 +82,11 @@ provider.get(
     const workspaceId = c.req.param("workspaceId")!;
     const providerId = c.req.param("providerId");
 
-    const record = await db
-      .select()
-      .from(providerTable)
-      .where(
-        and(
-          eq(providerTable.id, providerId),
-          or(
-            eq(providerTable.workspaceId, workspaceId),
-            eq(providerTable.organizationId, orgId),
-          ),
-        ),
-      )
-      .limit(1);
-
-    if (record.length === 0) {
-      return c.json({ error: "Provider not found" }, 404);
-    }
-
-    const p = record[0];
-    const scope = p.organizationId ? "organization" : "workspace";
-
-    return c.json({ ...p, scope });
+    const found = await requireScoped(db, "provider", providerId, {
+      orgId,
+      wsId: workspaceId,
+    });
+    return c.json({ ...found.row, scope: found.scope });
   },
 );
 
@@ -153,6 +99,7 @@ provider.put(
   requireWorkspaceConfigAccess("providerSelfManagement"),
   sValidator("json", providerUpdateSchema),
   async (c) => {
+    const orgId = c.req.param("orgId")!;
     const workspaceId = c.req.param("workspaceId")!;
     const providerId = c.req.param("providerId");
     const data = c.req.valid("json");
@@ -160,42 +107,35 @@ provider.put(
       data.modelIds = dedupeArray(data.modelIds).sort();
     }
 
+    // A Shared Provider is a single source of truth edited only on the
+    // Organization surface (ADR-0007); requireWorkspaceMutable throws NotFound
+    // (→404) when the Provider is not visible here, then Locked (→403) when it
+    // is org-scoped.
+    await requireWorkspaceMutable(db, "provider", providerId, {
+      orgId,
+      wsId: workspaceId,
+    });
+
     // Detect and handle embedding config changes before the update
     await handleEmbeddingConfigChange(providerId, data);
 
-    try {
-      const record = await db
-        .update(providerTable)
-        .set({
-          ...data,
-          updatedAt: new Date(),
-        })
-        .where(
-          and(
-            eq(providerTable.id, providerId),
-            eq(providerTable.workspaceId, workspaceId),
-          ),
-        )
-        .returning();
+    // A duplicate name surfaces as a Postgres unique violation, mapped to 409
+    // by the central onError (ADR-0009).
+    const record = await db
+      .update(providerTable)
+      .set({
+        ...data,
+        updatedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(providerTable.id, providerId),
+          eq(providerTable.workspaceId, workspaceId),
+        ),
+      )
+      .returning();
 
-      return c.json(record, 200);
-    } catch (error: any) {
-      const isUniqueViolation =
-        error.code === "23505" ||
-        error.cause?.code === "23505" ||
-        error.message?.includes("unique constraint") ||
-        error.cause?.message?.includes("unique constraint");
-
-      if (isUniqueViolation) {
-        return c.json(
-          {
-            error: "A provider with this name already exists in this workspace",
-          },
-          409,
-        );
-      }
-      throw error;
-    }
+    return c.json(record, 200);
   },
 );
 
@@ -207,8 +147,18 @@ provider.delete(
   requireWorkspaceAccess,
   requireWorkspaceConfigAccess("providerSelfManagement"),
   async (c) => {
+    const orgId = c.req.param("orgId")!;
     const workspaceId = c.req.param("workspaceId")!;
     const providerId = c.req.param("providerId");
+
+    // A Shared Provider is deleted only from the Organization surface
+    // (ADR-0007): requireWorkspaceMutable throws NotFound (→404) when the
+    // Provider is not visible here, then Locked (→403) when it is org-scoped.
+    await requireWorkspaceMutable(db, "provider", providerId, {
+      orgId,
+      wsId: workspaceId,
+    });
+
     await db
       .delete(providerTable)
       .where(

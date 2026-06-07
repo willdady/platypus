@@ -91,9 +91,10 @@ describe("Organization Provider Routes", () => {
         headers: { "Content-Type": "application/json" },
       });
 
+      // The unique violation flows through the central onError (ADR-0009).
       expect(res.status).toBe(409);
       expect(await res.json()).toEqual({
-        error: "A provider with this name already exists in this organization",
+        error: "A resource with that name already exists",
       });
     });
   });
