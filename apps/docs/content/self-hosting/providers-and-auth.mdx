@@ -1,0 +1,114 @@
+---
+title: Providers & authentication
+description: Connect AI vendors and understand the Platypus role ladder.
+---
+
+import { Callout } from "nextra/components";
+
+# Providers & authentication
+
+A fresh installation can sign in but can't yet run an agent — it has no
+**Provider**. This page covers the two setup tasks an **Org Admin** performs to
+make a deployment usable: connecting an AI vendor, and understanding the
+authentication model and roles that govern who may do so.
+
+## Providers
+
+A **Provider** is a configured connection to an AI vendor. It carries the
+credentials and settings Platypus needs to call that vendor's models, and it is
+referenced by an [Agent](/concepts) (or selected directly on a chat turn).
+
+### Supported vendors
+
+Platypus speaks to OpenAI, OpenRouter, Amazon Bedrock, Google, and Anthropic.
+OpenAI-compatible endpoints (e.g. vLLM) are reachable through the OpenAI
+provider type by overriding the base URL.
+
+### What a Provider holds
+
+| Field           | Meaning                                                                                   |
+| --------------- | ----------------------------------------------------------------------------------------- |
+| `name`          | A human label for the connection.                                                         |
+| `providerType`  | The vendor (`OpenAI`, `OpenRouter`, `Bedrock`, `Google`, `Anthropic`).                    |
+| `apiKey`        | The vendor credential.                                                                    |
+| `baseUrl`       | Optional override for OpenAI-compatible / self-hosted endpoints.                          |
+| `region`        | Required for Bedrock (AWS region).                                                         |
+| `modelIds`      | The set of models this Provider exposes for selection (at least one).                     |
+| `taskModelId`   | The model used for one-shot internal tasks (e.g. generating a chat title), not chat turns.|
+
+A Provider also carries the models used for **Memory** (extraction and
+embeddings), so background memory features have a model to call.
+
+<Callout type="info">
+  The distinction between a **chat turn** (running the selected Agent/model to
+  reply to a user) and a **one-shot Provider execution** (like title generation,
+  which uses `taskModelId`) is part of the domain vocabulary — see
+  [Concepts](/concepts).
+</Callout>
+
+### Scope: Organization vs Workspace
+
+A Provider is a **Scoped resource**: its row lives at exactly one scope.
+
+- An **Organization-scoped** Provider is a **Shared resource** — defined once by
+  an Org Admin and referenced (not copied) by any Workspace it's attached to. A
+  single source of truth for a vendor connection across the Organization.
+- A **Workspace-scoped** Provider is private to one Workspace.
+
+Because Providers are credential-bearing, **creating and editing them is an Org
+Admin task by default**. An Org Admin may delegate self-management of
+*workspace-scoped* Providers to a Workspace Owner per-Workspace (for legitimate
+personal-credential cases), but the default is admin-managed. See
+[Concepts](/concepts) for the Scoped/Shared resource model.
+
+## Authentication
+
+Authentication runs on [better-auth](https://www.better-auth.com/), mounted at
+`/auth/*` on the backend. Out of the box Platypus uses email-and-password sign
+in. Sessions are cookie-based and signed with `BETTER_AUTH_SECRET`; the auth
+server's canonical URL is `BETTER_AUTH_URL`, and browser origins must appear in
+`ALLOWED_ORIGINS` (see [Configuration & environment](/self-hosting/configuration)).
+
+<Callout type="warning">
+  Email verification is disabled by default — appropriate for a single-operator
+  deployment, but consider enabling it before exposing sign-up more broadly.
+</Callout>
+
+## The role ladder
+
+Authority over configuration runs top-down, each tier bounded by the one above
+it:
+
+**Operator → Org Admin → Workspace Owner**
+
+- **Operator** — controls the deployment itself: process environment, compose
+  files, infrastructure. Equivalent to the platform super-admin (the
+  `admin`-role user), who bypasses all in-app authorization. The Operator
+  declares deployment-time allowlists (such as the eligible sandbox networks)
+  that *bound* what an Org Admin may configure in-app.
+- **Org Admin** — a User with the `admin` role in an Organization. Configures
+  the credential- and reach-bearing resources — **Providers, Sandboxes, MCPs** —
+  and may delegate self-management of some of them to a Workspace Owner.
+- **Workspace Owner** — the single User who owns a Workspace. Always manages
+  *composition* (Agents, Skills, Chats); manages credential- and reach-bearing
+  resources only where an Org Admin has delegated it.
+
+The split is deliberate: resources that introduce credentials, external reach,
+or code execution default to admin-managed, while resources that merely compose
+already-sanctioned capabilities stay owner-managed.
+
+## The default admin
+
+On first boot against an empty database, the backend seeds a Default
+Organization, a Default Workspace, and an admin user from `ADMIN_EMAIL` /
+`ADMIN_PASSWORD`. That user is the platform `admin` — your **Operator** and first
+**Org Admin**. The seed runs exactly once, so set those values before the first
+start and change the password from account settings after you sign in. Full
+mechanics are in [Deploy with Docker Compose](/self-hosting/docker-compose).
+
+## Next steps
+
+- [Sandbox infrastructure](/self-hosting/sandbox) — the other credential- and
+  reach-bearing resource an Org Admin curates.
+- [Concepts](/concepts) — the domain model: Organizations, Workspaces, Agents,
+  Providers, and Scoped/Shared resources.

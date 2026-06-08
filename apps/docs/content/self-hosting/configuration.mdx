@@ -1,0 +1,107 @@
+---
+title: Configuration & environment
+description: How the meaningful configuration areas of a Platypus deployment fit together.
+---
+
+import { Callout } from "nextra/components";
+
+# Configuration & environment
+
+This page is the **narrative** guide to configuring a deployment — the
+configuration areas that matter and how they relate to one another. It is not an
+exhaustive variable list; for every supported variable and its default, see the
+[Reference](/reference) (split into backend and frontend tables). Where this page
+names a variable, treat it as an illustration of the _area_, not the complete
+set.
+
+<Callout type="info">
+  Both services read the same root `.env` (via compose `env_file`). Keep the
+  narrative here in sync with how your deployment is actually wired, and rely on
+  the [Reference](/reference) for the precise names and defaults so the two
+  don't drift.
+</Callout>
+
+## Service URLs
+
+The most common source of first-deploy confusion is URL wiring, because the
+frontend reaches the backend by two different paths:
+
+- **`BACKEND_URL`** — the **browser-facing** backend URL. The browser uses this
+  to call the API and the `/auth/*` endpoints, so it must be reachable from the
+  user's machine (e.g. `http://localhost:4000` locally, or
+  `https://api.your-host` in production).
+- **`INTERNAL_BACKEND_URL`** — the **server-to-server** URL the frontend uses
+  during server-side rendering. In compose this is `http://backend:4000` (the
+  service name on the private network); it never leaves the cluster.
+- **`BETTER_AUTH_URL`** — the canonical base URL of the auth server. In compose
+  it is derived from `BACKEND_URL`; auth cookies and redirects are issued
+  against it, so it must match the URL the browser actually uses.
+- **`FRONTEND_URL`** — used by the backend to build links back into the web app
+  (e.g. resource links in tool output and MCP OAuth redirects).
+
+These have to agree. If the browser loads the app from one origin but
+`BETTER_AUTH_URL` points somewhere else, sign-in cookies won't stick.
+
+### CORS / trusted origins
+
+`ALLOWED_ORIGINS` is a comma-separated list of origins permitted to call the
+backend. It feeds both the API's CORS policy and better-auth's trusted-origins
+list. Include every origin the browser loads the frontend from; a missing entry
+shows up as blocked cross-origin requests or failed sign-in.
+
+## Database
+
+`DATABASE_URL` is the PostgreSQL connection string. In compose it points at the
+bundled `database` service. The database must be PostgreSQL 17 with the
+`pgvector` extension available (the backend enables the extension on startup);
+embeddings for [Memory](/concepts) are stored as vectors, so `pgvector` is not
+optional. PostgreSQL 18 is not supported.
+
+## Authentication
+
+Authentication is handled by [better-auth](https://www.better-auth.com/), mounted
+at `/auth/*` on the backend. The essentials:
+
+- **`BETTER_AUTH_SECRET`** — the signing secret for sessions and tokens. Set a
+  strong, unique value; rotating it invalidates existing sessions.
+- **`ADMIN_EMAIL` / `ADMIN_PASSWORD`** — used only to seed the first admin user
+  on an empty database (see [Deploy with Docker Compose](/self-hosting/docker-compose)).
+
+The deeper model — Providers, the role ladder, and the default admin — lives in
+[Providers & authentication](/self-hosting/providers-and-auth).
+
+## Sandbox
+
+The [Sandbox](/concepts) (agent shell/filesystem access) is **off by default**.
+Enabling the Docker reference backend and curating what it can reach is an
+Operator concern with its own page:
+
+- **`PLATYPUS_SANDBOX_DOCKER_ENABLED`** — registers the Docker backend; without
+  it, sandbox configuration is inert.
+- **`PLATYPUS_SANDBOX_DOCKER_ALLOWED_NETWORKS`** — the Operator's allowlist that
+  bounds which Docker networks an Org Admin may attach a sandbox to
+  (default-deny).
+
+See [Sandbox infrastructure](/self-hosting/sandbox) for the security model and
+the opt-in `compose.sandbox.yaml` overlay.
+
+## Other operational areas
+
+These rarely need changing but exist when you need them — see the
+[Reference](/reference) for names and defaults:
+
+- **Storage** — uploaded files go to local disk by default; an S3-compatible
+  backend can be selected instead.
+- **Logging** — log verbosity is configurable.
+- **Time** — a deployment-wide IANA timezone for time-aware tools and schedules.
+- **Schedulers & runs** — concurrency caps and per-run / per-step timeouts for
+  scheduled and triggered agent executions.
+
+## Where the exhaustive lists live
+
+| You want…                                   | Go to                                         |
+| ------------------------------------------- | --------------------------------------------- |
+| Why a setting exists and how it relates     | **This page**                                 |
+| Every backend variable + default            | [Reference](/reference) — backend config      |
+| Every frontend variable + default           | [Reference](/reference) — frontend config     |
+| The sandbox security model                  | [Sandbox infrastructure](/self-hosting/sandbox) |
