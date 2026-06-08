@@ -411,7 +411,7 @@ agent.post(
         throw new NotFoundError("Agent not found");
       }
       // A duplicate Shared-Agent name surfaces as a Postgres unique violation,
-      // mapped to 409 by the central onError (ADR-0009).
+      // mapped to 409 by the central onError (ADR-0010).
       throw error;
     }
   },

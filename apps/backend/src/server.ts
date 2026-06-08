@@ -179,7 +179,7 @@ app.route("/users/me/invitations", userInvitation);
 app.route("/users/me/contexts", context);
 app.route("/oauth/mcp/callback", mcpOauthCallback);
 
-// Central error seam (ADR-0009): typed domain errors and Postgres unique
+// Central error seam (ADR-0010): typed domain errors and Postgres unique
 // violations map to their HTTP status here, so routes throw instead of
 // hand-rolling `c.json({ error }, status)` for these cross-cutting modes.
 // Anything unmapped is an unexpected fault → 500.

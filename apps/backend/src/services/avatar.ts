@@ -25,7 +25,7 @@ const AVATAR_SIZE = 512;
 /**
  * Outcome of {@link storeAvatar}. A rejected upload carries a human-readable
  * message the route returns as a 400 — validation 4xx stay inline at the route
- * rather than going through the central `onError` (ADR-0009).
+ * rather than going through the central `onError` (ADR-0010).
  */
 export type StoreAvatarResult =
   | { ok: true; key: string }

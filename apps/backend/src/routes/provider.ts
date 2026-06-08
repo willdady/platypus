@@ -40,7 +40,7 @@ provider.post(
       data.modelIds = dedupeArray(data.modelIds).sort();
     }
     // A duplicate name surfaces as a Postgres unique violation, mapped to 409
-    // by the central onError (ADR-0009).
+    // by the central onError (ADR-0010).
     const record = await db
       .insert(providerTable)
       .values({
@@ -120,7 +120,7 @@ provider.put(
     await handleEmbeddingConfigChange(providerId, data);
 
     // A duplicate name surfaces as a Postgres unique violation, mapped to 409
-    // by the central onError (ADR-0009).
+    // by the central onError (ADR-0010).
     const record = await db
       .update(providerTable)
       .set({
