@@ -1,0 +1,157 @@
+---
+title: Deploy with Docker Compose
+description: Stand up Platypus from the published images using compose.yaml.
+---
+
+import { Callout, Steps } from "nextra/components";
+
+# Deploy with Docker Compose
+
+The fastest way to run Platypus is the `compose.yaml` that ships in the
+repository. It pulls the published images, wires the services together on a
+private network, and seeds an initial organization, workspace, and admin user on
+first boot.
+
+## The stack
+
+`compose.yaml` defines three services on a private bridge network
+(`platypus-network`):
+
+| Service    | Image                              | Port (host:container) | Purpose                                          |
+| ---------- | ---------------------------------- | --------------------- | ------------------------------------------------ |
+| `database` | `pgvector/pgvector:pg17`           | _internal only_       | PostgreSQL 17 with the `pgvector` extension      |
+| `backend`  | `willdady/platypus-backend:latest` | `4000:4000`           | Hono REST API, auth, run lifecycle, schedulers   |
+| `frontend` | `willdady/platypus-frontend:latest`| `3000:3000`           | Next.js web app                                  |
+
+The services start in dependency order: the backend waits for the database to
+become healthy, and the frontend waits for the backend. Both the backend and the
+database publish Docker health checks so `docker compose` can gate startup and
+report status.
+
+<Callout type="info">
+  Postgres 18 is **not supported** (a Drizzle ORM incompatibility). Stay on the
+  `pg17` image tag.
+</Callout>
+
+### Image tags
+
+The compose file pins `:latest` for both application images. The docs track the
+latest release only — if you are running an older release, check out the
+matching git tag and use the `compose.yaml` from that checkout, which references
+the images for that version.
+
+### Ports
+
+- **Frontend** — `http://localhost:3000` (the URL you sign in at).
+- **Backend** — `http://localhost:4000` (the REST API and `/auth/*` endpoints).
+
+The frontend reaches the backend over the private network at
+`http://backend:4000` (set via `INTERNAL_BACKEND_URL`) for server-side rendering,
+while the browser talks to the backend at its public URL. See
+[Configuration & environment](/self-hosting/configuration) for how these URLs fit
+together.
+
+### Volumes
+
+- `postgres_data` — a named volume holding the database. Your data lives here;
+  don't delete it unless you mean to start over.
+- `./data` — a bind mount into the backend at `/data`, used by the default
+  disk storage backend for uploaded files.
+
+## First boot
+
+<Steps>
+
+### Clone and configure
+
+```bash
+git clone https://github.com/willdady/platypus.git
+cd platypus
+cp .env.example .env
+```
+
+Edit `.env`. At minimum set:
+
+- `BETTER_AUTH_SECRET` — a secure random string (32+ characters).
+- `ADMIN_EMAIL` / `ADMIN_PASSWORD` — credentials for the initial admin user.
+- `BACKEND_URL` — the URL the browser uses to reach the backend (e.g.
+  `http://localhost:4000`).
+
+Both services read the same root `.env` via `env_file`. The full set of
+variables is documented in [Configuration & environment](/self-hosting/configuration)
+and the [Reference](/reference).
+
+### Start the stack
+
+```bash
+docker compose up -d
+```
+
+Compose pulls the images, starts PostgreSQL, runs the backend (which seeds the
+database on first boot), then starts the frontend.
+
+### Sign in
+
+Open `http://localhost:3000` and sign in with the `ADMIN_EMAIL` /
+`ADMIN_PASSWORD` you configured.
+
+</Steps>
+
+### What first boot creates
+
+When the backend starts against an empty database it bootstraps:
+
+- a **Default Organization**,
+- an **admin user** from `ADMIN_EMAIL` / `ADMIN_PASSWORD` (granted the platform
+  `admin` role — the **Operator**), and
+- a **Default Workspace** owned by that user.
+
+<Callout type="warning">
+  The backend **refuses to seed** if `ADMIN_EMAIL` and `ADMIN_PASSWORD` are
+  unset — it logs an error and exits rather than creating a credential-less
+  admin. Set both before the first `docker compose up`.
+</Callout>
+
+### The default admin
+
+The shipped `.env.example` defaults to `admin@example.com` / `admin123`.
+**Override these** by editing `.env` before first boot — seeding happens exactly
+once against an empty database, so the values you set then are the ones that
+stick. Change the password from the in-app account settings after you first sign
+in.
+
+To change the admin _after_ the database is already seeded, use the in-app user
+management — editing `ADMIN_EMAIL` / `ADMIN_PASSWORD` later has no effect because
+the seed only runs when no organization exists.
+
+## Health checks
+
+The backend exposes `GET /health`; its compose health check polls that endpoint,
+and the database health check runs `pg_isready`. Inspect status with:
+
+```bash
+docker compose ps
+docker compose logs -f backend
+```
+
+A backend stuck in `starting`/`unhealthy` is almost always a database connection
+or a missing required env var — check `docker compose logs backend`.
+
+## Upgrading
+
+```bash
+docker compose pull      # fetch the latest images
+docker compose up -d     # recreate containers with the new images
+```
+
+The backend applies any pending schema changes on startup. Your data persists in
+the `postgres_data` volume across upgrades. To roll back, check out the previous
+git tag and `docker compose up -d` from there.
+
+## Next steps
+
+- [Configuration & environment](/self-hosting/configuration) — the meaningful
+  config areas and how they relate.
+- [Providers & authentication](/self-hosting/providers-and-auth) — connect an AI
+  vendor and understand the role ladder.
+- [Reference](/reference) — the exhaustive backend and frontend variable tables.

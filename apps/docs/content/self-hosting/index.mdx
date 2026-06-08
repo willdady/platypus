@@ -1,7 +1,40 @@
 ---
 title: Self-Hosting
+description: Stand up and operate your own Platypus deployment.
 ---
+
+import { Cards } from "nextra/components";
 
 # Self-Hosting
 
-_Content coming soon._
+This section is for the **Operator** — the person who controls a Platypus
+deployment: its process environment, compose files, and infrastructure. It also
+covers the **Org Admin** tasks that bootstrap a usable installation, such as
+connecting AI providers and curating sandbox infrastructure.
+
+Platypus runs as two services (a backend API and a frontend web app) backed by a
+PostgreSQL database with the `pgvector` extension. The published Docker images
+let you stand the whole stack up with a single `docker compose up`.
+
+<Cards>
+  <Cards.Card
+    title="Deploy with Docker Compose"
+    href="/self-hosting/docker-compose"
+  />
+  <Cards.Card
+    title="Configuration & environment"
+    href="/self-hosting/configuration"
+  />
+  <Cards.Card
+    title="Providers & authentication"
+    href="/self-hosting/providers-and-auth"
+  />
+  <Cards.Card
+    title="Sandbox infrastructure"
+    href="/self-hosting/sandbox"
+  />
+</Cards>
+
+Once you can sign in and reach a workspace, head to
+[Building with Platypus](/building-with-platypus) to start creating agents, or
+the [Reference](/reference) for the exhaustive list of configuration variables.

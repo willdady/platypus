@@ -1,0 +1,160 @@
+---
+title: Sandbox infrastructure
+description: Curate the Sandbox execution environment — Docker reference adapter, env vars, and network allowlists.
+---
+
+import { Callout } from "nextra/components";
+
+# Sandbox infrastructure
+
+A **Sandbox** is a configured, isolated execution environment registered on a
+[Workspace](/concepts), giving agents shell and filesystem tools that run inside
+it. The Sandbox interface is pluggable so different backends — local container,
+remote VM, hosted sandbox-as-a-service — can be contributed. Platypus ships one
+reference backend: **Docker**.
+
+This page is for the **Operator** and **Org Admin** who stand up and curate that
+infrastructure. The architectural rationale lives in the Sandbox ADRs, linked
+throughout rather than restated here.
+
+## Sandbox backends
+
+The Sandbox is modelled as a sibling of Provider: one Sandbox row per Workspace,
+with a `backend` discriminator and a JSON config, resolved by an in-tree adapter
+registry at chat-turn time. Filesystem and environment state persist across chat
+turns — that's what makes longer-lived, build-something workflows possible.
+
+Adding a new backend (Modal, E2B, Daytona, a custom VM) means implementing the
+fixed `SandboxBackend` interface; see the [Extending](/extending) section for
+custom backends.
+
+<Callout type="info">
+  Background and trade-offs:
+  [ADR-0001 — Sandbox as a workspace-keyed execution environment](https://github.com/willdady/platypus/blob/main/docs/adr/0001-sandbox-as-workspace-keyed-execution-environment.md)
+  and
+  [ADR-0002 — the fixed five-tool core](https://github.com/willdady/platypus/blob/main/docs/adr/0002-sandbox-fixed-five-tool-core.md).
+</Callout>
+
+## The Docker reference adapter
+
+The Docker adapter (`backend: "docker"`) spawns one container per Workspace via
+the host's Docker daemon, accessed by **bind-mounting `/var/run/docker.sock`**
+into the backend container.
+
+<Callout type="error">
+  Mounting the Docker socket grants the backend container **effective root on the
+  host**. Use the Docker adapter only on single-node, single-operator
+  deployments (your laptop, a personal VPS). Do **not** enable it on a host you
+  share with anyone you don't trust, and never in a multi-tenant or
+  hostile-tenant environment.
+</Callout>
+
+Because of that, the adapter is **off by default** and gated two ways:
+
+1. An env flag, `PLATYPUS_SANDBOX_DOCKER_ENABLED`. If it's unset or false, the
+   `"docker"` backend type isn't registered at all (so you can't create
+   un-runnable Sandbox rows).
+2. An opt-in compose overlay, `compose.sandbox.yaml`, which adds the socket mount
+   and sets the flag.
+
+Enable it by composing the overlay alongside the default stack:
+
+```bash
+docker compose -f compose.yaml -f compose.sandbox.yaml up
+```
+
+Horizontally-scaled deployments **cannot** use this adapter: sandbox state lives
+on a single host's Docker daemon, so each backend replica would have its own.
+Pick a remote backend instead.
+
+<Callout type="info">
+  Details, including the hardcoded container resource/security limits
+  (`PidsLimit`, memory caps, `no-new-privileges`) and why DinD was rejected:
+  [ADR-0003 — Docker reference adapter mounts the host socket](https://github.com/willdady/platypus/blob/main/docs/adr/0003-docker-reference-sandbox-adapter-socket-mount.md).
+</Callout>
+
+## Workspace-default environment variables
+
+A Sandbox carries workspace-default environment variables that are merged into
+every shell execution **on the server, without transiting the model**. The
+motivating case is API keys (`OPENAI_API_KEY`, `GITHUB_TOKEN`, …): agent-written
+code can call third-party services without the secret values ever appearing in
+the prompt, tool-call transcripts, or logs. The model is shown the key *names*
+only.
+
+The env is split into two tiers to match the authorization model:
+
+- **`adminEnv`** — Org-Admin-managed. Secrets the Workspace Owner can read the
+  names of but cannot change or override.
+- **`userEnv`** — Workspace-Owner-managed. The Owner's own secrets, set without
+  an admin round-trip.
+
+At execution time, precedence is `adminEnv` ▸ `userEnv` ▸ the model's per-call
+`env` (highest wins) — so an Owner can never override an admin-pinned key, and
+the model's values stay lowest. Changing env takes effect on the next shell
+execution; the container is not recreated.
+
+<Callout type="info">
+  The merge semantics and validation rules:
+  [ADR-0004 — workspace-default env vars](https://github.com/willdady/platypus/blob/main/docs/adr/0004-sandbox-workspace-default-env-vars.md).
+</Callout>
+
+## Host reachability: default-deny + admin-curated allowlists
+
+A new Sandbox can reach **no host service** until reachability is explicitly
+granted — the safe, default-deny posture. Reachability is expressed as two
+per-Sandbox fields on the Docker adapter, both defaulting to empty:
+
+- **`networks`** — Docker networks the sandbox container attaches to (reaches
+  other *containers*).
+- **`extraHosts`** — host-gateway aliases (reaches non-containerized *host*
+  processes, e.g. a bare-metal Ollama or internal proxy).
+
+The authority chain is honest and runs top-down:
+
+- The **Operator** declares the eligible set at deployment time via
+  `PLATYPUS_SANDBOX_DOCKER_ALLOWED_NETWORKS` — a deployment env var, *not* an
+  in-app screen.
+- An **Org Admin** selects a per-Sandbox subset of that allowlist. Submissions
+  are validated server-side against the allowlist; out-of-allowlist entries are
+  rejected.
+- A **Workspace Owner** cannot change reachability at all (a non-admin Owner gets
+  a 403).
+
+Reach changes are pending until the container is recreated — consistent with the
+frozen-container rule — surfaced in-app as a "Pending — applies on recreate"
+badge with a "Recreate now" action.
+
+<Callout type="warning">
+  The "Platypus database stays unreachable from sandboxes" property holds only as
+  long as the database's network is **not** in the allowlist. It's an outcome of
+  your allowlist configuration, not a structural guarantee — don't add the
+  database network.
+</Callout>
+
+<Callout type="info">
+  The reachability design:
+  [ADR-0005 — host reachability is admin-curated, default-deny](https://github.com/willdady/platypus/blob/main/docs/adr/0005-sandbox-host-reachability-is-admin-curated-default-deny.md).
+</Callout>
+
+## Who can configure what
+
+Sandboxes are credential- and reach-bearing, so configuration is **Org
+Admin-managed and never delegatable** to a Workspace Owner. Within a Sandbox the
+gate is field-level: `backend`, `credentials`, `networks`, `extraHosts`,
+`adminEnv`, and creation are admin-only, while `name` and `userEnv` stay
+Owner-editable.
+
+<Callout type="info">
+  The field-level authorization model:
+  [ADR-0006 — credential- and reach-bearing config is admin-managed](https://github.com/willdady/platypus/blob/main/docs/adr/0006-credential-and-reach-bearing-config-is-admin-managed.md).
+</Callout>
+
+## Next steps
+
+- [Extending](/extending) — implement a custom Sandbox backend against the
+  `SandboxBackend` interface.
+- [Configuration & environment](/self-hosting/configuration) — where the sandbox
+  env vars sit among the rest of the deployment config.
+- [Providers & authentication](/self-hosting/providers-and-auth) — the role
+  ladder these admin-only gates rest on.
