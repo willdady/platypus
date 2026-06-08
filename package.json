@@ -6,7 +6,9 @@
     "build": "turbo run build",
     "build-docker": "turbo run build-docker",
     "cleanup-docker": "docker rmi -f $(docker images willdady/platypus-frontend --format \"{{.Repository}}:{{.Tag}}\" | grep -v \"latest\" | xargs) && docker rmi -f $(docker images willdady/platypus-backend --format \"{{.Repository}}:{{.Tag}}\" | grep -v \"latest\" | xargs)",
-    "dev": "turbo run dev",
+    "dev": "turbo run dev --filter=!@platypus/docs",
+    "docs-build": "turbo run build -F @platypus/docs",
+    "docs-dev": "pnpm --filter @platypus/docs dev",
     "drizzle-kit-push": "turbo run drizzle-kit-push -F @platypus/backend",
     "drizzle-kit-generate": "turbo run drizzle-kit-generate -F @platypus/backend",
     "drizzle-kit-migrate": "turbo run drizzle-kit-migrate -F @platypus/backend",
@@ -22,5 +24,11 @@
   "packageManager": "pnpm@10.26.1+sha512.664074abc367d2c9324fdc18037097ce0a8f126034160f709928e9e9f95d98714347044e5c3164d65bd5da6c59c6be362b107546292a8eecb7999196e5ce58fa",
   "engines": {
     "node": ">=18"
+  },
+  "pnpm": {
+    "overrides": {
+      "nextra>zod": "4.3.6",
+      "nextra-theme-docs>zod": "4.3.6"
+    }
   }
 }

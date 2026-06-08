@@ -1,0 +1,23 @@
+@import "nextra-theme-docs/style.css";
+@import "tailwindcss";
+
+@variant dark (&:where(.dark *));
+
+/*
+ * Brand cohesion with apps/frontend (ADR-0011): rather than fork the design
+ * system, we re-use the Platypus brand tokens and drive Nextra's accent colour
+ * from the frontend's teal `--primary` (oklch hue ~180). Nextra derives links,
+ * active nav items, and focus rings from `--nextra-primary-*`.
+ */
+:root {
+  --primary: oklch(0.488 0.243 180);
+  --primary-foreground: oklch(0.97 0.014 180);
+
+  --nextra-primary-hue: 183deg;
+  --nextra-primary-saturation: 70%;
+  --nextra-primary-lightness: 40%;
+}
+
+.dark {
+  --nextra-primary-lightness: 55%;
+}
