@@ -1,0 +1,32 @@
+---
+title: Skills
+description: A Skill is packaged know-how an agent can pull in on demand, keeping its instructions lean until the skill is actually needed.
+---
+
+# Skills
+
+## Skill
+
+A **Skill** is a named capability you attach to an **Agent** — a description plus
+a set of instructions for doing something well. Rather than stuffing every
+possible instruction into the Agent's system prompt, you give the Agent Skills it
+can reach for when the moment calls for it.
+
+Here's the clever part: the Agent only sees each Skill's _name and description_
+up front. When it decides a Skill is relevant, it requests that Skill's full
+instructions on demand. This keeps the Agent's everyday prompt short and focused,
+while still giving it deep know-how the instant it's needed.
+
+**Why you'd use one:** to teach an Agent how to handle specific situations
+without bloating its prompt. A "Write a release note" Skill, a "Triage a bug
+report" Skill, a "Format data as a table" Skill — each stays tucked away until the
+Agent recognises it should use it.
+
+## Where Skills live
+
+A Skill lives at **Workspace scope** (private to one Workspace) or can be shared
+at **Organization scope** as a [Shared resource](/concepts/sharing), so the same
+know-how is reused across many Workspaces.
+
+See [Building with Platypus → Skills](/building-with-platypus) for how to author
+one.

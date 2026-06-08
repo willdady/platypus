@@ -1,7 +1,89 @@
 ---
-title: Concepts
+title: The big picture
+description: How Platypus is organised — Organizations, Workspaces, Chats, and Agents — and the core ideas you'll meet along the way.
 ---
+
+import { Callout } from "nextra/components";
 
 # Concepts
 
-_Content coming soon._
+Platypus is a place to build AI agents and chat with them. Before you start
+clicking around, it helps to know how the pieces fit together. This section
+explains the main ideas in plain language — what each one is, and why you'd
+reach for it.
+
+If you just want to get a chat running, head to
+[Getting Started](/getting-started). Come back here when you want to understand
+_why_ things are arranged the way they are.
+
+## The hierarchy
+
+Everything in Platypus lives inside a nesting of three things:
+
+**Organization → Workspace → Chat / Agent**
+
+### Organization
+
+An **Organization** is the top level — your company, your team, or just you.
+It's the boundary that everything else lives inside. An Organization owns its
+**Workspaces**, holds shared settings like AI **Providers**, and is where member
+roles are managed.
+
+You'll typically belong to one Organization. People who administer it (adding
+members, configuring credentials) are **Org Admins**.
+
+### Workspace
+
+A **Workspace** is your own scoped environment inside an Organization. It holds
+your **Chats**, the **Agents** you've built, and the other resources they use.
+Each Workspace is owned by exactly one person — the **Workspace Owner** — and is
+not shared with other people. Think of it as your personal project space: what
+you build in one Workspace doesn't leak into anyone else's.
+
+<Callout type="info">
+  You don't create your own Workspaces — an Org Admin sets them up, often
+  pre-loaded with everything you need via a [Blueprint](/concepts/sharing). When
+  you accept an invitation, a ready-to-use Workspace can be provisioned for you
+  automatically.
+</Callout>
+
+### Chat
+
+A **Chat** is a saved conversation. It's a sequence of messages plus the
+configuration used to produce the assistant's replies. Every back-and-forth you
+have lives in a Chat, and Chats persist so you can return to them later.
+
+Each round of the conversation — you send a message, the assistant streams a
+reply — is a **Chat turn**. A turn runs against either an **Agent** or a direct
+**Provider** + model choice.
+
+### Agent
+
+An **Agent** is a reusable preset for how the assistant should behave. Instead of
+picking a model and writing a system prompt every time, you configure an Agent
+once — its **Provider** and model, its system prompt, its tools, its **Skills**,
+and any **Sub-Agents** — and then select it on a Chat. Selecting an Agent
+replaces choosing a Provider and model by hand.
+
+Agents are the heart of building with Platypus. The
+[Agents & sub-agents](/concepts/agents) page goes deeper.
+
+## The core nouns
+
+Beyond the hierarchy, you'll meet a handful of building blocks. Each has its own
+page in this section:
+
+- **[Agents & sub-agents](/concepts/agents)** — the configurable presets that
+  drive a conversation, and how one Agent can delegate to another.
+- **[Providers & models](/concepts/providers)** — your connections to AI vendors
+  like OpenAI, Anthropic, or Google.
+- **[Tools, tool sets & MCP](/concepts/tools)** — how an Agent gets the ability
+  to _do_ things, not just talk.
+- **[Sandboxes](/concepts/sandboxes)** — isolated environments where an Agent can
+  run shell commands and work with files.
+- **[Skills](/concepts/skills)** — packaged know-how an Agent can pull in on
+  demand.
+- **[Memory & context](/concepts/memory-and-context)** — how an Agent remembers
+  past activity and the notes you give it.
+- **[Sharing across workspaces](/concepts/sharing)** — how an Organization
+  reuses one resource across many Workspaces.
