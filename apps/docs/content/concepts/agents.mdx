@@ -1,0 +1,41 @@
+---
+title: Agents & sub-agents
+description: Agents are reusable presets that pin a model, prompt, tools, and skills. Sub-agents let one agent delegate to another.
+---
+
+# Agents & sub-agents
+
+## Agent
+
+An **Agent** is a saved configuration for how the assistant should behave. Rather
+than choosing a model and writing a system prompt every time you start a
+conversation, you set it all up once on an Agent and then just pick that Agent on
+a Chat.
+
+An Agent pins together:
+
+- a **Provider** and a specific **model** to run on,
+- a **system prompt** that shapes its personality and instructions,
+- **generation parameters** (such as temperature),
+- the **tools** it's allowed to use (see [Tools, tool sets & MCP](/concepts/tools)),
+- any **[Skills](/concepts/skills)** it can draw on,
+- and any **sub-agents** it can delegate to.
+
+When you select an Agent on a Chat turn, that selection takes the place of
+choosing a Provider and model by hand — the Agent already carries those choices.
+
+**Why you'd use one:** consistency and reuse. A "Research assistant" Agent, a
+"Code reviewer" Agent, and a "Friendly support bot" Agent can each have their own
+prompt, model, and tools. Build them once, use them across many Chats, and tweak
+them in one place.
+
+## Sub-agent
+
+A **Sub-Agent** is simply an Agent that another Agent can call on. When you add an
+Agent as a sub-agent of a parent Agent, the parent gains the ability to hand off
+work to it — the sub-agent shows up to the parent as a tool it can invoke.
+
+**Why you'd use one:** to break a big job into specialists. A top-level Agent can
+stay focused on coordinating, then delegate research to one sub-agent, drafting to
+another, and fact-checking to a third. Each sub-agent is a full Agent in its own
+right, with its own model, prompt, and tools.
