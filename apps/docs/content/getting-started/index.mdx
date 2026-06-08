@@ -2,6 +2,155 @@
 title: Getting Started
 ---
 
+import { Callout, Steps } from "nextra/components";
+
 # Getting Started
 
-_Content coming soon._
+Platypus is a multi-tenant platform for building and managing AI agents — agents
+that reason, use tools, and connect to your data through the Model Context
+Protocol. This guide takes you from nothing to your first streamed reply.
+
+The fastest path is the Docker quick start below, then a five-step loop:
+**create a Workspace → configure a Provider → create an Agent → start a Chat →
+send a message**.
+
+## Quick start (Docker)
+
+The quickest way to a running instance is Docker Compose.
+
+<Steps>
+
+### Clone and configure
+
+```bash
+git clone https://github.com/willdady/platypus.git
+cd platypus
+cp .env.example .env
+```
+
+Open `.env` and set, at minimum:
+
+- **`BETTER_AUTH_SECRET`** — a secure random string (32+ characters). The app
+  signs session tokens with this; treat it like a password.
+- **`ADMIN_EMAIL`** / **`ADMIN_PASSWORD`** — the first admin account, created on
+  first startup (see [First run](#first-run--the-default-admin) below).
+
+The remaining options have sensible defaults — see the comments in
+`.env.example`, and the [Reference](/reference) section for the full list.
+
+### Start the application
+
+```bash
+docker compose up -d
+```
+
+This brings up the backend, frontend, and a Postgres 17 database with pgvector.
+
+### Sign in
+
+Open [http://localhost:3000](http://localhost:3000) and sign in with the
+`ADMIN_EMAIL` / `ADMIN_PASSWORD` you set in `.env`.
+
+</Steps>
+
+<Callout type="warning">
+  If you didn't change them, the defaults are `admin@example.com` / `admin123`.
+  **Change the password immediately after your first login**, especially on any
+  network-reachable deployment.
+</Callout>
+
+For a production-grade deployment — TLS, persistent storage, S3-backed file
+storage, and configuration hardening — see [Self-Hosting](/self-hosting).
+
+## First run & the default admin
+
+On first startup Platypus seeds a single platform admin from the environment:
+
+| Variable         | Default               | Purpose                         |
+| ---------------- | --------------------- | ------------------------------- |
+| `ADMIN_EMAIL`    | `admin@example.com`   | Login for the first admin user  |
+| `ADMIN_PASSWORD` | `admin123`            | Password for that user          |
+
+This account is the **Operator** — the platform super-admin who bypasses
+in-app authorization. Use it to create your first Organization and Workspace,
+then create regular users for day-to-day work.
+
+<Callout type="info">
+  The seed runs only when no matching admin exists. Changing `ADMIN_PASSWORD`
+  in `.env` later does **not** reset an already-created account — change the
+  password from within the app instead.
+</Callout>
+
+## Your first reply
+
+Once you're signed in, here's the end-to-end loop to a working agent reply.
+
+<Steps>
+
+### Create a Workspace
+
+After signing in you land on your Organization. A fresh install has an empty
+Organization and no Workspaces.
+
+Click **Add workspace**, give it a **Name**, leave yourself as the **Owner**,
+and click **Save**. You'll land on the Workspace dashboard.
+
+> A **Workspace** is your scoped environment — it holds your Chats, Agents,
+> Skills, MCP servers, and Providers. See [Concepts](/concepts) for how
+> Organizations, Workspaces, and Agents fit together.
+
+### Configure a Provider
+
+A Workspace can't run an agent until it can reach a model. The dashboard shows
+a **No providers configured** prompt — click **Add provider** (or go to
+**Settings → Providers → Add provider**).
+
+Fill in the form:
+
+- **Provider Type** — your AI vendor: OpenAI, OpenRouter, Anthropic, Google, or
+  Bedrock.
+- **Name** — a label for this connection.
+- **API Key** — your credential from that vendor.
+- **Model IDs** — the models you want to allow, one per line (e.g.
+  `gpt-4o`, `claude-sonnet-4-6`).
+
+Click **Save**.
+
+<Callout type="info">
+  Don't have a key yet? [OpenRouter](https://openrouter.ai) gives you a single
+  key that reaches many vendors and is a quick way to try Platypus.
+</Callout>
+
+### Create an Agent
+
+From the dashboard's **Agents** section, click **Create agent**.
+
+- **Name** — what to call the agent.
+- **Model** — pick one of the models you enabled on your Provider (the dropdown
+  groups models under each Provider).
+- **System prompt** _(optional)_ — instructions that shape its behaviour, e.g.
+  _"You are a concise, helpful assistant."_
+
+Click **Save**. An **Agent** pins a Provider, model, and prompt (and, later,
+Tools, Skills, and Sub-Agents) into a reusable preset.
+
+### Start a Chat and send a message
+
+Open a new Chat from the Workspace, then click the model selector and choose
+your Agent under **Agents** (or pick a Provider + model directly).
+
+Type a message in the input box and press **Enter**. The assistant's reply
+streams back token by token — that's a **Chat turn** running end to end:
+resolving your Agent's Provider and model, rendering its system prompt, and
+streaming the model's response.
+
+</Steps>
+
+That's the full loop. 🎉
+
+## Where to next
+
+- **[Concepts](/concepts)** — the domain model: Organizations, Workspaces,
+  Agents, Skills, MCP, Sandbox, and Memory.
+- **[Self-Hosting](/self-hosting)** — deploy Platypus properly: configuration,
+  providers, storage, and the sandbox infrastructure.
