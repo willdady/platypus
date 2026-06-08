@@ -57,6 +57,16 @@ sandbox-as-a-service (Daytona, Modal), remote VMs, and so on.
 > for a first contribution — open a discussion describing the target backend before
 > starting.
 
+### Documentation
+
+Filling the gaps in user- and contributor-facing docs so that self-hosting, configuring,
+and extending Platypus doesn't require reading the source. This covers setup and
+deployment guides, the domain model, and the extension points contributors are most
+likely to reach for.
+
+> **Contributions welcome.** Docs are one of the easiest ways to make a first contribution
+> — fixing a confusing setup step or documenting an undocumented feature is always useful.
+
 ## Next
 
 ### Extension / plugin system
