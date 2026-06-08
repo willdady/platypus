@@ -1,12 +1,57 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 
-const { mockPrepareChatTurn, mockGenerateText, mockStreamText } = vi.hoisted(
-  () => ({
-    mockPrepareChatTurn: vi.fn(),
-    mockGenerateText: vi.fn(),
-    mockStreamText: vi.fn(),
-  }),
-);
+const { mockPrepareChatTurn, mockGenerateText, mockStreamText, streamHarness } =
+  vi.hoisted(() => {
+    // A minimal, manually-driven async iterable standing in for the server-side
+    // snapshot branch of the UI message stream. The test pushes partial
+    // messages and ends it explicitly so timing is deterministic.
+    class AsyncQueue {
+      items: unknown[] = [];
+      resolvers: ((r: { value: unknown; done: boolean }) => void)[] = [];
+      ended = false;
+      push(item: unknown) {
+        const r = this.resolvers.shift();
+        if (r) r({ value: item, done: false });
+        else this.items.push(item);
+      }
+      end() {
+        this.ended = true;
+        let r;
+        while ((r = this.resolvers.shift()))
+          r({ value: undefined, done: true });
+      }
+      [Symbol.asyncIterator]() {
+        return {
+          next: () => {
+            if (this.items.length)
+              return Promise.resolve({
+                value: this.items.shift(),
+                done: false,
+              });
+            if (this.ended)
+              return Promise.resolve({ value: undefined, done: true });
+            return new Promise((res) => this.resolvers.push(res));
+          },
+        };
+      }
+    }
+    return {
+      mockPrepareChatTurn: vi.fn(),
+      mockGenerateText: vi.fn(),
+      mockStreamText: vi.fn(),
+      streamHarness: {
+        AsyncQueue,
+        queue: null as InstanceType<typeof AsyncQueue> | null,
+        // The AI SDK callbacks the runner registers; captured so the test can
+        // drive step-completion and stream-completion by hand.
+        onStepFinish: undefined as ((step: unknown) => void) | undefined,
+        onFinish: undefined as
+          | ((ctx: { messages: unknown[] }) => Promise<void> | void)
+          | undefined,
+        responseSentinel: { __isResponse: true },
+      },
+    };
+  });
 
 vi.mock("../services/chat-execution.ts", () => ({
   prepareChatTurn: mockPrepareChatTurn,
@@ -21,6 +66,8 @@ vi.mock("ai", async () => {
     convertToModelMessages: vi.fn().mockReturnValue([]),
     createIdGenerator: vi.fn().mockReturnValue(() => "msg-1"),
     stepCountIs: vi.fn(),
+    readUIMessageStream: () => streamHarness.queue,
+    createUIMessageStreamResponse: () => streamHarness.responseSentinel,
   };
 });
 
@@ -42,7 +89,13 @@ type LifecycleEvent =
   | { name: "onStart"; runId: string }
   | { name: "onResolved"; runId: string; plan: ResolvedRunPlan }
   | { name: "onProgress"; runId: string }
-  | { name: "onFinish"; runId: string; status: string; error?: string };
+  | {
+      name: "onFinish";
+      runId: string;
+      status: string;
+      error?: string;
+      messages?: unknown[];
+    };
 
 class RecordingSink implements RunSink {
   events: LifecycleEvent[] = [];
@@ -63,12 +116,14 @@ class RecordingSink implements RunSink {
     runId: string;
     status: string;
     error?: Error;
+    messages?: unknown[];
   }): Promise<void> {
     this.events.push({
       name: "onFinish",
       runId: ctx.runId,
       status: ctx.status,
       error: ctx.error?.message,
+      messages: ctx.messages,
     });
   }
 
@@ -321,6 +376,158 @@ describe("AgentRunner.cancel", () => {
 
     expect(runner.cancel("ok-1")).toBe(false);
     expect(runRegistry.has("ok-1")).toBe(false);
+  });
+});
+
+describe("AgentRunner.stream — success & interruption", () => {
+  let runner: AgentRunner;
+  beforeEach(() => {
+    runner = new AgentRunner();
+    vi.clearAllMocks();
+    streamHarness.queue = null;
+    streamHarness.onStepFinish = undefined;
+    streamHarness.onFinish = undefined;
+  });
+
+  const tick = () => new Promise((r) => setTimeout(r, 0));
+
+  // Make streamText return a fake result whose UI-stream callbacks the test
+  // can drive by hand: `onStepFinish` (per step) and `onFinish` (completion).
+  const primeStreamText = () => {
+    mockStreamText.mockImplementation((opts: any) => {
+      streamHarness.onStepFinish = opts.onStepFinish;
+      return {
+        toUIMessageStream: (uiOpts: any) => {
+          streamHarness.onFinish = uiOpts.onFinish;
+          return { tee: () => [{}, {}] };
+        },
+      };
+    });
+  };
+
+  it("runs the full lifecycle on success and persists the final messages", async () => {
+    const dispose = vi.fn().mockResolvedValue(undefined);
+    mockPrepareChatTurn.mockResolvedValueOnce(fakeTurn({ dispose }));
+    const queue = new streamHarness.AsyncQueue();
+    streamHarness.queue = queue;
+    primeStreamText();
+
+    const sink = new RecordingSink();
+    const res = await runner.stream({
+      scope,
+      input: { ...baseInput, runId: "s-ok" },
+      sink,
+      options: { origin: "http://test" },
+    });
+    expect(res).toBe(streamHarness.responseSentinel);
+
+    // A step completes -> onProgress.
+    streamHarness.onStepFinish!({
+      usage: { inputTokens: 3, outputTokens: 4 },
+      toolCalls: [],
+    });
+    // A partial snapshot streams in over the server-side branch.
+    queue.push({ id: "m1", role: "assistant", parts: [] });
+    await tick();
+    // Natural completion delivers the final assistant message.
+    const finalMessages = [
+      { id: "m1", role: "assistant", parts: [{ type: "text", text: "hi" }] },
+    ];
+    await streamHarness.onFinish!({ messages: finalMessages });
+    queue.end();
+    await tick();
+
+    expect(sink.names()).toEqual([
+      "onStart",
+      "onResolved",
+      "onProgress",
+      "onFinish",
+    ]);
+    const finish = sink.events.at(-1) as Extract<
+      LifecycleEvent,
+      { name: "onFinish" }
+    >;
+    expect(finish.status).toBe("succeeded");
+    expect(finish.error).toBeUndefined();
+    expect(finish.messages).toEqual(finalMessages);
+    expect(dispose).toHaveBeenCalledTimes(1);
+    expect(runRegistry.has("s-ok")).toBe(false);
+  });
+
+  it("finalises as cancelled with the partial messages when cancelled mid-stream", async () => {
+    mockPrepareChatTurn.mockResolvedValueOnce(fakeTurn());
+    const queue = new streamHarness.AsyncQueue();
+    streamHarness.queue = queue;
+    primeStreamText();
+
+    const sink = new RecordingSink();
+    await runner.stream({
+      scope,
+      input: { ...baseInput, runId: "s-cancel" },
+      sink,
+      options: { origin: "http://test" },
+    });
+
+    const partial = {
+      id: "m1",
+      role: "assistant",
+      parts: [{ type: "text", text: "par" }],
+    };
+    queue.push(partial);
+    await tick();
+
+    expect(runner.cancel("s-cancel")).toBe(true);
+    // The SDK observes the abort and finishes the UI stream.
+    await streamHarness.onFinish!({ messages: [partial] });
+    queue.end();
+    await tick();
+
+    const finish = sink.events.at(-1) as Extract<
+      LifecycleEvent,
+      { name: "onFinish" }
+    >;
+    expect(finish.status).toBe("cancelled");
+    expect(finish.messages).toEqual([partial]);
+  });
+
+  it("finalises as failed with a TimeoutError and the partial messages on per-run timeout", async () => {
+    mockPrepareChatTurn.mockResolvedValueOnce(fakeTurn());
+    const queue = new streamHarness.AsyncQueue();
+    streamHarness.queue = queue;
+    primeStreamText();
+
+    const sink = new RecordingSink();
+    await runner.stream({
+      scope,
+      input: { ...baseInput, runId: "s-timeout" },
+      sink,
+      options: {
+        origin: "http://test",
+        timeouts: { perRunTimeoutMs: 5, perStepTimeoutMs: 1_000_000 },
+      },
+    });
+
+    const partial = {
+      id: "m1",
+      role: "assistant",
+      parts: [{ type: "text", text: "par" }],
+    };
+    queue.push(partial);
+    await tick();
+    // Let the per-run timer fire -> registry aborts -> onTimeout -> finalize.
+    await new Promise((r) => setTimeout(r, 30));
+    queue.end();
+    await tick();
+
+    const finish = sink.events.at(-1) as Extract<
+      LifecycleEvent,
+      { name: "onFinish" }
+    >;
+    expect(finish.status).toBe("failed");
+    expect(finish.error).toMatch(/per-run timeout/);
+    // The snapshot accumulated before the timeout is what gets persisted.
+    expect(finish.messages).toEqual([partial]);
+    expect(runRegistry.has("s-timeout")).toBe(false);
   });
 });
 
