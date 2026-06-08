@@ -2,6 +2,296 @@
 title: Extending
 ---
 
+import { Callout } from "nextra/components";
+
 # Extending
 
-_Content coming soon._
+This section is for **contributors** working in the Platypus codebase. It maps
+the in-tree extension points — places designed to be added to without forking
+the core — and points at the [Architecture Decision
+Records](https://github.com/willdady/platypus/tree/main/docs/adr) that explain
+_why_ each one is shaped the way it is.
+
+Platypus has two first-class extension points today, plus a deliberate
+non-extension point:
+
+- **[Sandbox backends](#sandbox-backends)** — implement the `SandboxBackend`
+  interface to run shell and filesystem tools on a new execution environment
+  (Modal, Daytona, E2B, a remote host…).
+- **[Tool sets](#tool-sets)** — register a named group of tools that Agents can
+  be granted.
+- **[MCP servers](#mcp-vs-static-tool-sets)** are _not_ a code extension point —
+  they're the runtime, open-ended way to add tools without touching the
+  codebase. Reach for them first; see the comparison below.
+
+<Callout type="info">
+  Both extension points are **static, in-tree registries** wired up at process
+  start — there is no plugin loader or dynamic discovery yet. Adding an
+  extension means adding code to `apps/backend` and rebuilding. The
+  [plugins](#the-plugin-direction-future) direction below is the future shape,
+  not today's.
+</Callout>
+
+## Sandbox backends
+
+A **Sandbox** is a persistent, Workspace-keyed execution environment that
+exposes a fixed set of shell and filesystem tools to Agents. The contract every
+backend implements is small and fixed on purpose: an Agent's prompt should not
+care _which_ backend it's running on, so you can swap the reference Docker
+adapter for Modal or Daytona without re-prompting.
+
+> See [ADR-0001](https://github.com/willdady/platypus/blob/main/docs/adr/0001-sandbox-as-workspace-keyed-execution-environment.md)
+> for why a Sandbox is a Workspace-keyed sibling of Provider (not a Provider
+> variant, an MCP server, or a generic plugin), and
+> [ADR-0002](https://github.com/willdady/platypus/blob/main/docs/adr/0002-sandbox-fixed-five-tool-core.md)
+> for why the interface is a fixed five-tool core.
+
+### The interface
+
+A backend is anything that implements `SandboxBackend`
+(`apps/backend/src/sandbox/types.ts`). It is exactly five tools plus an
+idempotent teardown — adapters **cannot** add, rename, or re-sign tools:
+
+```ts
+export interface SandboxBackend {
+  shellExec(
+    ctx: SandboxContext,
+    input: ShellExecInput,
+  ): Promise<ShellExecOutput>;
+  fsRead(ctx: SandboxContext, input: FsReadInput): Promise<FsReadOutput>;
+  fsWrite(ctx: SandboxContext, input: FsWriteInput): Promise<FsWriteOutput>;
+  fsEdit(ctx: SandboxContext, input: FsEditInput): Promise<FsEditOutput>;
+  fsList(ctx: SandboxContext, input: FsListInput): Promise<FsListOutput>;
+  destroy(ctx: SandboxContext): Promise<void>;
+}
+```
+
+Every method receives a `SandboxContext` — the stable identity key your adapter
+uses to find or provision the environment:
+
+```ts
+export type SandboxContext = {
+  orgId: string;
+  workspaceId: string;
+  userId: string;
+};
+```
+
+State (filesystem, environment) is expected to **persist across Chat turns**,
+keyed on `(orgId, workspaceId)`. That persistence is the whole point —
+Hermes / Claude-Code-style workflows depend on it.
+
+Contract rules your adapter must honour (all from
+[ADR-0002](https://github.com/willdady/platypus/blob/main/docs/adr/0002-sandbox-fixed-five-tool-core.md)):
+
+- **Paths are workspace-root-relative.** The root is conventionally
+  `/workspace`; reject absolute paths.
+- **`shellExec` is stateless** — a fresh shell per call with an explicit `cwd`,
+  no session state between calls. Default 60s timeout, hard cap 600s.
+- **`fsWrite` requires explicit `mode: "create" | "overwrite"`** — no silent
+  create-or-overwrite.
+- **`fsEdit` uses `oldString` / `newString` semantics** (Claude Code style), not
+  patch/diff format.
+- **Every response carries a `truncated` flag** with the Platypus-defined byte /
+  entry caps. If your backend can't honour the cap natively, truncate yourself.
+- **`destroy` must be idempotent** — it fires on row delete, on a `backend`
+  change, and best-effort on Workspace cascade.
+
+### Registering a backend
+
+Backends are registered into an in-tree registry
+(`apps/backend/src/sandbox/index.ts`) via `registerSandboxBackend`. A
+registration declares a `backend` discriminator, a display `name`, Zod schemas
+for the per-Sandbox `config` and `credentials`, and a `create` factory:
+
+```ts
+export interface SandboxBackendRegistration<
+  TConfig = unknown,
+  TCredentials = unknown,
+> {
+  backend: string;
+  name: string;
+  configSchema: z.ZodType<TConfig>;
+  credentialsSchema: z.ZodType<TCredentials>;
+  create(config: TConfig, credentials: TCredentials): SandboxBackend;
+}
+```
+
+The reference **Docker** adapter
+(`apps/backend/src/sandbox/backends/docker.ts`) shows the pattern. Its
+registration is **env-gated** so an un-runnable backend is never offered
+(`apps/backend/src/sandbox/backends/index.ts`):
+
+```ts
+if (process.env.PLATYPUS_SANDBOX_DOCKER_ENABLED === "true") {
+  registerSandboxBackend({
+    backend: "docker",
+    name: "Local Docker",
+    configSchema: dockerSandboxConfigSchema,
+    credentialsSchema: dockerSandboxCredentialsSchema,
+    create: (config, credentials) =>
+      new DockerSandboxBackend(config, credentials),
+  });
+}
+```
+
+The whole `backends/` module is imported for its side effects at boot
+(`import "./sandbox/backends/index.ts"` in `apps/backend/src/server.ts`), which
+is what populates the registry.
+
+**To add a backend:**
+
+1. Implement `SandboxBackend` in a new file under
+   `apps/backend/src/sandbox/backends/`.
+2. Define `configSchema` and `credentialsSchema` (Zod). `config` is non-secret
+   shape (e.g. region, image); `credentials` is secret material (e.g. API
+   tokens).
+3. Call `registerSandboxBackend({...})` from
+   `apps/backend/src/sandbox/backends/index.ts`, gated behind an env flag if the
+   backend needs external prerequisites.
+
+<Callout type="warning">
+  The Docker reference adapter mounts the host Docker socket and is scoped to
+  **development and single-node self-hosting only** — explicitly not for
+  multi-tenant or hostile-tenant environments. Reach / network exposure is
+  default-deny and admin-curated. See
+  [ADR-0003](https://github.com/willdady/platypus/blob/main/docs/adr/0003-docker-reference-sandbox-adapter-socket-mount.md)
+  and
+  [ADR-0005](https://github.com/willdady/platypus/blob/main/docs/adr/0005-sandbox-host-reachability-is-admin-curated-default-deny.md)
+  before shipping a backend with host reach.
+</Callout>
+
+## Tool sets
+
+A **tool set** is a named, categorised group of tools that an Agent can be
+granted. Built-in tool sets are registered statically into an in-tree registry
+(`apps/backend/src/tools/index.ts`) via `registerToolSet`:
+
+```ts
+type ToolSet = {
+  id: string;
+  name: string;
+  category: string;
+  description?: string;
+  tools:
+    | { [toolId: string]: Tool<any, any> }
+    | ((
+        context: ToolSetContext,
+      ) => Record<string, Tool> | Promise<Record<string, Tool>>);
+};
+```
+
+`tools` is either a **static map** of tools, or a **factory** that receives a
+`ToolSetContext` at Chat-turn time — use the factory form when tools need
+runtime scope:
+
+```ts
+export type ToolSetContext = {
+  workspaceId: string;
+  agentId: string;
+  orgId: string;
+  frontendUrl: string | undefined;
+  userId: string;
+};
+```
+
+Individual tools are Vercel AI SDK tools (`tool()` from the `ai` package) with a
+Zod `inputSchema` and an `execute` function. The simplest registration uses a
+static map:
+
+```ts
+registerToolSet("math-conversions", {
+  name: "Math Conversions",
+  category: "Math",
+  description: "Temperature and unit conversions",
+  tools: { convertTemperature, convertDistance, convertWeight, convertVolume },
+});
+```
+
+When tools need the Workspace / Agent context, pass a factory instead:
+
+```ts
+registerToolSet("kanban", {
+  name: "Kanban",
+  category: "Productivity",
+  description: "Manage kanban boards in this workspace",
+  tools: ({ workspaceId, agentId, orgId, frontendUrl }) =>
+    createKanbanTools(workspaceId, agentId, orgId, frontendUrl),
+});
+```
+
+**To add a tool set:**
+
+1. Define your tools with `tool({ description, inputSchema, execute })`. Put
+   them in a new file under `apps/backend/src/tools/` (see `math.ts` for a
+   stateless example, `kanban.ts` for a context-factory example).
+2. Call `registerToolSet("my-tool-set", {...})` in
+   `apps/backend/src/tools/index.ts`. Use a static `tools` map, or a factory if
+   your tools need `ToolSetContext`.
+3. Optionally export a `MY_TOOLSET_ID` constant for code that references the id.
+
+A tool set is granted to Agents like any other; if its dependencies aren't
+present at turn time it degrades gracefully (the `sandbox` tool set, for
+example, is registered unconditionally but resolves to no tools when a Workspace
+has no Sandbox configured).
+
+<Callout type="info">
+  Frontend tool / tool-set presentation (icons, custom UI) lives separately. If
+  you're wiring a new tool set end to end, see the `tools` skill in the repo for
+  the frontend icon mapping and custom-UI conventions.
+</Callout>
+
+### MCP vs static tool sets
+
+Static tool sets and MCP servers are deliberately different surfaces — pick the
+right one:
+
+- **MCP server** — the open-ended, runtime way to expose arbitrary tools
+  _without changing Platypus_. Configured per Workspace (or shared at the Org
+  level). This is the default answer to "I want my Agent to call X."
+- **Static tool set** — for tools that ship _with_ Platypus and are part of the
+  product surface (Kanban, math, sandbox…). Adding one means adding code and
+  rebuilding.
+
+If you're integrating an external service for your own use, you almost always
+want an MCP server, not a code change.
+
+## Shared resources
+
+Agents, Skills, and MCPs can be **Promoted** to Organization scope and become
+**Shared resources** that many Workspaces reference (never copy). The defining
+rule is **no implicit sharing** — a Shared resource may reference only other
+Shared resources. If you're touching the resource model (adding a new shareable
+resource type, or a reference between resources), read
+[ADR-0007](https://github.com/willdady/platypus/blob/main/docs/adr/0007-organization-scoped-shared-resources.md)
+first; the promotion-prerequisite rule has wide-reaching consequences.
+
+## The plugin direction (future)
+
+There is **no plugin system today** — both extension points above are static,
+in-tree registries compiled into the backend. That's a deliberate v1 choice, not
+an oversight:
+
+- The Sandbox interface was explicitly modelled as a fixed contract rather than
+  "a generic plugin system"
+  ([ADR-0001](https://github.com/willdady/platypus/blob/main/docs/adr/0001-sandbox-as-workspace-keyed-execution-environment.md)).
+- A "fixed core plus adapter extensions" hybrid for Sandbox was considered and
+  deferred — it can be added later **without breaking the v1 contract**
+  ([ADR-0002](https://github.com/willdady/platypus/blob/main/docs/adr/0002-sandbox-fixed-five-tool-core.md)).
+
+The registry shape is the seam a future plugin loader would plug into: dynamic
+discovery would call the same `registerSandboxBackend` / `registerToolSet`
+functions rather than replace them. Until then, contribute backends and tool
+sets in-tree and reach for MCP for everything open-ended.
+
+## Reference ADRs
+
+| ADR                                                                                                                             | Topic                                              |
+| ------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------- |
+| [0001](https://github.com/willdady/platypus/blob/main/docs/adr/0001-sandbox-as-workspace-keyed-execution-environment.md)        | Sandbox is a Workspace-keyed execution environment |
+| [0002](https://github.com/willdady/platypus/blob/main/docs/adr/0002-sandbox-fixed-five-tool-core.md)                            | Fixed five-tool Sandbox interface                  |
+| [0003](https://github.com/willdady/platypus/blob/main/docs/adr/0003-docker-reference-sandbox-adapter-socket-mount.md)           | Docker reference adapter (socket mount)            |
+| [0004](https://github.com/willdady/platypus/blob/main/docs/adr/0004-sandbox-workspace-default-env-vars.md)                      | Sandbox default environment variables              |
+| [0005](https://github.com/willdady/platypus/blob/main/docs/adr/0005-sandbox-host-reachability-is-admin-curated-default-deny.md) | Host reachability is admin-curated, default-deny   |
+| [0006](https://github.com/willdady/platypus/blob/main/docs/adr/0006-credential-and-reach-bearing-config-is-admin-managed.md)    | Credential/reach config is admin-managed           |
+| [0007](https://github.com/willdady/platypus/blob/main/docs/adr/0007-organization-scoped-shared-resources.md)                    | Organization-scoped Shared resources               |

@@ -1,0 +1,30 @@
+---
+title: Frontend configuration
+---
+
+import { Callout } from "nextra/components";
+
+# Frontend configuration
+
+The exhaustive list of frontend environment variables. Source of truth:
+[`apps/frontend/.env.example`](https://github.com/willdady/platypus/blob/main/apps/frontend/.env.example).
+For a guided walkthrough of configuring a deployment, see
+[Self-Hosting](/self-hosting); this page is the flat enumeration.
+
+The frontend is a Next.js 16 App Router app. It needs to know how to reach the
+backend — once from the browser, and (in containerised deployments) once from
+the server-side renderer.
+
+| Variable               | Purpose                                                                                                                                                                                                      | Default                   | Required               |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------- | ---------------------- |
+| `BACKEND_URL`          | Backend base URL for **client-side** requests (browser → backend).                                                                                                                                           | `http://localhost:4001`   | **Yes**                |
+| `INTERNAL_BACKEND_URL` | Backend base URL for **server-side** requests (SSR → backend) over the internal Docker network. Only needed when running in Docker; leave unset for local development, where `BACKEND_URL` is used for both. | _(unset)_                 | When running in Docker |
+| `BASE_PATH`            | Optional base path for deploying the app under a subpath (e.g. `/platypus-app`).                                                                                                                             | _(unset, served at root)_ | No                     |
+
+<Callout type="info">
+  In Docker Compose, the browser and the SSR process reach the backend by
+  different routes: the browser uses the host-published URL (`BACKEND_URL`),
+  while the SSR process talks to the backend container directly over the Docker
+  network (`INTERNAL_BACKEND_URL`, e.g. `http://backend:4000`). Outside Docker,
+  set only `BACKEND_URL`.
+</Callout>

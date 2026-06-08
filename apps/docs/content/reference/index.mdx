@@ -2,6 +2,31 @@
 title: Reference
 ---
 
+import { Cards } from "nextra/components";
+
 # Reference
 
-_Content coming soon._
+Exhaustive, lookup-oriented reference material. These pages enumerate every
+configuration option as flat tables — they are the source-of-truth lists, not a
+guided walkthrough.
+
+For the narrative "how do I configure this for my deployment" story — TLS,
+storage, providers, the sandbox overlay — see
+[Self-Hosting](/self-hosting). This section is what you reach for when you
+already know roughly what you want and need the exact variable name, default, or
+whether it's required.
+
+<Cards>
+  <Cards.Card
+    title="Backend configuration"
+    href="/reference/backend-configuration"
+  />
+  <Cards.Card
+    title="Frontend configuration"
+    href="/reference/frontend-configuration"
+  />
+</Cards>
+
+Both pages are derived from the `.env.example` files in the repository
+(`apps/backend/.env.example`, `apps/frontend/.env.example`) — treat those files
+as the ultimate source of truth if anything here drifts.

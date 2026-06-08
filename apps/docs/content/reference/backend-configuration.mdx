@@ -1,0 +1,97 @@
+---
+title: Backend configuration
+---
+
+import { Callout } from "nextra/components";
+
+# Backend configuration
+
+The exhaustive list of backend environment variables. Source of truth:
+[`apps/backend/.env.example`](https://github.com/willdady/platypus/blob/main/apps/backend/.env.example).
+For a guided walkthrough of configuring a deployment, see
+[Self-Hosting](/self-hosting); this page is the flat enumeration.
+
+<Callout type="info">
+  **"Required"** means the backend won't start correctly without an explicit
+  value. Everything else has a working default suitable for local development.
+  In Docker Compose deployments the top-level `.env` feeds these through to the
+  backend container.
+</Callout>
+
+## Core
+
+| Variable          | Purpose                                                                               | Default                                                  | Required |
+| ----------------- | ------------------------------------------------------------------------------------- | -------------------------------------------------------- | -------- |
+| `PORT`            | Port the backend HTTP server listens on.                                              | `4001`                                                   | No       |
+| `ALLOWED_ORIGINS` | Comma-separated origins allowed by CORS. Set to your frontend's URL(s).               | `http://localhost:3001`                                  | No       |
+| `DATABASE_URL`    | Postgres 17 connection string (with pgvector).                                        | `postgres://postgres:mypassword@localhost:5432/postgres` | **Yes**  |
+| `LOG_LEVEL`       | Logging verbosity (`trace`, `debug`, `info`, `warn`, `error`, `fatal`).               | `info`                                                   | No       |
+| `TIMEZONE`        | IANA timezone (e.g. `America/New_York`, `Europe/London`). Falls back to UTC if unset. | `UTC`                                                    | No       |
+| `NODE_OPTIONS`    | Node runtime flags. Ships set to silence the experimental-feature warning.            | `--disable-warning=ExperimentalWarning`                  | No       |
+
+## Authentication
+
+| Variable                 | Purpose                                                                                                                  | Default                                                    | Required |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------- | -------- |
+| `BETTER_AUTH_SECRET`     | Secret used to sign session tokens (better-auth). Must be a secure random string, 32+ characters. Treat like a password. | `your-secret-key-min-32-chars` _(placeholder — change it)_ | **Yes**  |
+| `BETTER_AUTH_URL`        | Public base URL of the backend, used by better-auth.                                                                     | `http://localhost:4001`                                    | **Yes**  |
+| `INVITATION_EXPIRY_DAYS` | Days a Workspace/Org invitation remains valid.                                                                           | `7`                                                        | No       |
+
+## Default admin
+
+Seeded only on first startup, when no matching admin exists. Changing these
+later does **not** reset an already-created account — change the password from
+within the app. See [Getting Started](/getting-started) for the first-run flow.
+
+| Variable         | Purpose                                   | Default             | Required |
+| ---------------- | ----------------------------------------- | ------------------- | -------- |
+| `ADMIN_EMAIL`    | Email of the first admin (Operator) user. | `admin@example.com` | No       |
+| `ADMIN_PASSWORD` | Password for that user.                   | `admin123`          | No       |
+
+<Callout type="warning">
+  Change `ADMIN_PASSWORD` (or set a non-default one before first startup) on any
+  network-reachable deployment.
+</Callout>
+
+## Background workers
+
+| Variable                         | Purpose                                                               | Default              | Required |
+| -------------------------------- | --------------------------------------------------------------------- | -------------------- | -------- |
+| `MEMORY_EXTRACTION_INTERVAL_MS`  | How often the memory-extraction worker runs, in milliseconds.         | `300000` (5 minutes) | No       |
+| `SCHEDULE_SCHEDULER_INTERVAL_MS` | How often the schedule scheduler polls for due runs, in milliseconds. | `60000` (1 minute)   | No       |
+| `SCHEDULE_MAX_CONCURRENT`        | Maximum parallel schedule executions.                                 | `5`                  | No       |
+
+## Tools
+
+| Variable                       | Purpose                                                                    | Default                 | Required |
+| ------------------------------ | -------------------------------------------------------------------------- | ----------------------- | -------- |
+| `FETCH_TOOL_IGNORE_ROBOTS_TXT` | Set `true` to skip `robots.txt` checks when the fetch tool retrieves URLs. | `false`                 | No       |
+| `FRONTEND_URL`                 | Frontend URL used to build resource links inside tool responses.           | `http://localhost:3001` | No       |
+
+## Storage
+
+The file-storage backend. Disk is the default; S3 (or an S3-compatible service)
+is the production option.
+
+| Variable                       | Purpose                                                                                                       | Default        | Required                  |
+| ------------------------------ | ------------------------------------------------------------------------------------------------------------- | -------------- | ------------------------- |
+| `STORAGE_BACKEND`              | Storage backend: `disk` or `s3`.                                                                              | `disk`         | No                        |
+| `STORAGE_DISK_PATH`            | Filesystem path for stored files (when `STORAGE_BACKEND=disk`).                                               | `./data/files` | No                        |
+| `STORAGE_PUBLIC_URL`           | Optional public URL for direct file access, bypassing the `/files` proxy endpoint (e.g. a CDN or bucket URL). | _(unset)_      | No                        |
+| `STORAGE_S3_BUCKET`            | S3 bucket name.                                                                                               | _(unset)_      | When `STORAGE_BACKEND=s3` |
+| `STORAGE_S3_REGION`            | S3 region.                                                                                                    | _(unset)_      | When `STORAGE_BACKEND=s3` |
+| `STORAGE_S3_ENDPOINT`          | S3 endpoint URL (for S3-compatible services).                                                                 | _(unset)_      | When `STORAGE_BACKEND=s3` |
+| `STORAGE_S3_ACCESS_KEY_ID`     | S3 access key ID.                                                                                             | _(unset)_      | When `STORAGE_BACKEND=s3` |
+| `STORAGE_S3_SECRET_ACCESS_KEY` | S3 secret access key.                                                                                         | _(unset)_      | When `STORAGE_BACKEND=s3` |
+
+## Sandbox
+
+The Docker reference Sandbox adapter. Disabled by default and scoped to
+development / single-node self-hosting only. See
+[ADR-0003](https://github.com/willdady/platypus/blob/main/docs/adr/0003-docker-reference-sandbox-adapter-socket-mount.md)
+and the [Extending](/extending#sandbox-backends) section.
+
+| Variable                                   | Purpose                                                                                                                                            | Default   | Required |
+| ------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------- | --------- | -------- |
+| `PLATYPUS_SANDBOX_DOCKER_ENABLED`          | Set `true` to register the Docker reference adapter. Requires a reachable Docker daemon and the `compose.sandbox.yaml` overlay.                    | `false`   | No       |
+| `PLATYPUS_SANDBOX_DOCKER_ALLOWED_NETWORKS` | Comma-separated Docker networks a Sandbox may attach to. Admins select a per-Sandbox subset; unset/empty means none are attachable (default-deny). | _(unset)_ | No       |
