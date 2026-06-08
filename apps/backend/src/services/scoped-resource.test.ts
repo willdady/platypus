@@ -5,8 +5,9 @@ import {
   listScoped,
   requireScoped,
   requireWorkspaceMutable,
+  requireSharedDeletable,
 } from "./scoped-resource.ts";
-import { NotFoundError, LockedError } from "../errors.ts";
+import { NotFoundError, LockedError, ConflictError } from "../errors.ts";
 
 const ctx = { orgId: "org-1", wsId: "ws-1" };
 
@@ -122,6 +123,40 @@ describe("ScopedResource read module", () => {
       await expect(
         requireWorkspaceMutable(mockDb, "agent", "a1", ctx),
       ).rejects.toBeInstanceOf(NotFoundError);
+    });
+  });
+
+  describe("requireSharedDeletable", () => {
+    it("throws ConflictError while an Attachment references it", async () => {
+      mockDb.limit.mockResolvedValueOnce([{ id: "att-1" }]); // attachment lookup
+      await expect(
+        requireSharedDeletable(mockDb, "agent", "a1"),
+      ).rejects.toBeInstanceOf(ConflictError);
+    });
+
+    it("throws ConflictError while a Blueprint lists it", async () => {
+      mockDb.limit
+        .mockResolvedValueOnce([]) // attachment lookup → none
+        .mockResolvedValueOnce([{ id: "item-1" }]); // blueprint lookup → listed
+      await expect(
+        requireSharedDeletable(mockDb, "agent", "a1"),
+      ).rejects.toBeInstanceOf(ConflictError);
+    });
+
+    it("resolves when nothing points at it", async () => {
+      mockDb.limit
+        .mockResolvedValueOnce([]) // attachment lookup → none
+        .mockResolvedValueOnce([]); // blueprint lookup → none
+      await expect(
+        requireSharedDeletable(mockDb, "agent", "a1"),
+      ).resolves.toBeUndefined();
+    });
+
+    it("uses the uppercase MCP acronym in the conflict message", async () => {
+      mockDb.limit.mockResolvedValueOnce([{ id: "att-1" }]);
+      await expect(requireSharedDeletable(mockDb, "mcp", "m1")).rejects.toThrow(
+        /this MCP is attached/,
+      );
     });
   });
 });

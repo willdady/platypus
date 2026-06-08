@@ -2,16 +2,13 @@ import { Hono } from "hono";
 import { sValidator } from "@hono/standard-validator";
 import { nanoid } from "nanoid";
 import { db } from "../index.ts";
-import {
-  skill as skillTable,
-  attachment as attachmentTable,
-} from "../db/schema.ts";
+import { skill as skillTable } from "../db/schema.ts";
 import { skillCreateSchema, skillUpdateSchema } from "@platypus/schemas";
 import { eq, and } from "drizzle-orm";
 import { requireAuth } from "../middleware/authentication.ts";
 import { requireOrgAccess } from "../middleware/authorization.ts";
 import { scrubDeletedAgentReference } from "../services/agent-references.ts";
-import { isResourceListedInBlueprint } from "../services/blueprint-guard.ts";
+import { requireSharedDeletable } from "../services/scoped-resource.ts";
 import { NotFoundError } from "../errors.ts";
 import type { Variables } from "../server.ts";
 
@@ -117,39 +114,10 @@ orgSkill.delete(
     const orgId = c.req.param("orgId")!;
     const skillId = c.req.param("skillId");
 
-    // A Shared resource cannot be deleted while any Attachment references it
-    // (ADR-0007) — detach it from every Workspace first.
-    const [attached] = await db
-      .select()
-      .from(attachmentTable)
-      .where(
-        and(
-          eq(attachmentTable.resourceType, "skill"),
-          eq(attachmentTable.resourceId, skillId),
-        ),
-      )
-      .limit(1);
-    if (attached) {
-      return c.json(
-        {
-          error:
-            "Cannot delete: this skill is attached to one or more workspaces. Detach it first.",
-        },
-        409,
-      );
-    }
-
-    // Nor while it is listed in a Blueprint (ADR-0008) — remove it from every
-    // Blueprint first, so nothing still points at it.
-    if (await isResourceListedInBlueprint("skill", skillId)) {
-      return c.json(
-        {
-          error:
-            "Cannot delete: this skill is listed in one or more blueprints. Remove it from them first.",
-        },
-        409,
-      );
-    }
+    // A Shared resource cannot be deleted while anything still points at it —
+    // an Attachment (ADR-0007) or a Blueprint (ADR-0008). Throws ConflictError
+    // → 409 via the central onError (ADR-0009).
+    await requireSharedDeletable(db, "skill", skillId);
 
     // Delete the Skill and scrub its (now-dead) id from any Agent's skillIds in
     // the same transaction, so deletion never leaves dangling references.

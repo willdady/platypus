@@ -16,6 +16,7 @@ import {
   requireOrgAccess,
   requireWorkspaceAccess,
 } from "../middleware/authorization.ts";
+import { isUniqueViolation } from "../errors.ts";
 import type { Variables } from "../server.ts";
 
 // Attachment is the explicit reference that surfaces an org-scoped Shared
@@ -23,13 +24,6 @@ import type { Variables } from "../server.ts";
 // action — `requireOrgAccess(["admin"])` rejects non-admins with 403 — scoped
 // to a specific Workspace via `requireWorkspaceAccess`.
 const attachment = new Hono<{ Variables: Variables }>();
-
-/** Detects a Postgres unique-constraint violation across driver shapes. */
-const isUniqueViolation = (error: any): boolean =>
-  error.code === "23505" ||
-  error.cause?.code === "23505" ||
-  error.message?.includes("unique constraint") ||
-  error.cause?.message?.includes("unique constraint");
 
 /** List attachments for this workspace (admin only) */
 attachment.get(

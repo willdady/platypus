@@ -6,10 +6,7 @@ import {
   auth as mcpAuth,
 } from "@ai-sdk/mcp";
 import { db } from "../index.ts";
-import {
-  mcp as mcpTable,
-  attachment as attachmentTable,
-} from "../db/schema.ts";
+import { mcp as mcpTable } from "../db/schema.ts";
 import {
   mcpCreateSchema,
   mcpUpdateSchema,
@@ -19,7 +16,7 @@ import { eq, and } from "drizzle-orm";
 import { requireAuth } from "../middleware/authentication.ts";
 import { requireOrgAccess } from "../middleware/authorization.ts";
 import { scrubDeletedAgentReference } from "../services/agent-references.ts";
-import { isResourceListedInBlueprint } from "../services/blueprint-guard.ts";
+import { requireSharedDeletable } from "../services/scoped-resource.ts";
 import type { Variables } from "../server.ts";
 import { logger } from "../logger.ts";
 import {
@@ -137,39 +134,10 @@ orgMcp.delete(
     const orgId = c.req.param("orgId")!;
     const mcpId = c.req.param("mcpId");
 
-    // A Shared resource cannot be deleted while any Attachment references it
-    // (ADR-0007) — detach it from every Workspace first.
-    const [attached] = await db
-      .select()
-      .from(attachmentTable)
-      .where(
-        and(
-          eq(attachmentTable.resourceType, "mcp"),
-          eq(attachmentTable.resourceId, mcpId),
-        ),
-      )
-      .limit(1);
-    if (attached) {
-      return c.json(
-        {
-          error:
-            "Cannot delete: this MCP is attached to one or more workspaces. Detach it first.",
-        },
-        409,
-      );
-    }
-
-    // Nor while it is listed in a Blueprint (ADR-0008) — remove it from every
-    // Blueprint first, so nothing still points at it.
-    if (await isResourceListedInBlueprint("mcp", mcpId)) {
-      return c.json(
-        {
-          error:
-            "Cannot delete: this MCP is listed in one or more blueprints. Remove it from them first.",
-        },
-        409,
-      );
-    }
+    // A Shared resource cannot be deleted while anything still points at it —
+    // an Attachment (ADR-0007) or a Blueprint (ADR-0008). Throws ConflictError
+    // → 409 via the central onError (ADR-0009).
+    await requireSharedDeletable(db, "mcp", mcpId);
 
     // Delete the MCP and scrub its (now-dead) id from any Agent's toolSetIds in
     // the same transaction, so deletion never leaves dangling references.

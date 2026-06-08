@@ -1,10 +1,7 @@
 import { Hono } from "hono";
 import { sValidator } from "@hono/standard-validator";
 import { db } from "../index.ts";
-import {
-  agent as agentTable,
-  attachment as attachmentTable,
-} from "../db/schema.ts";
+import { agent as agentTable } from "../db/schema.ts";
 import { agentUpdateSchema } from "@platypus/schemas";
 import { eq, and } from "drizzle-orm";
 import { dedupeArray } from "../utils.ts";
@@ -12,7 +9,7 @@ import { requireAuth } from "../middleware/authentication.ts";
 import { requireOrgAccess } from "../middleware/authorization.ts";
 import { findNonSharedReferences } from "../services/agent-scope-validation.ts";
 import { scrubDeletedAgentReference } from "../services/agent-references.ts";
-import { isResourceListedInBlueprint } from "../services/blueprint-guard.ts";
+import { requireSharedDeletable } from "../services/scoped-resource.ts";
 import { storeAvatar, deleteAvatar } from "../services/avatar.ts";
 import { avatarKeyToUrl } from "../utils/avatar-url.ts";
 import { getOrigin } from "../utils/get-origin.ts";
@@ -203,39 +200,10 @@ orgAgent.delete(
     const orgId = c.req.param("orgId")!;
     const agentId = c.req.param("agentId");
 
-    // A Shared resource cannot be deleted while any Attachment references it
-    // (ADR-0007) — detach it from every Workspace first.
-    const [attached] = await db
-      .select()
-      .from(attachmentTable)
-      .where(
-        and(
-          eq(attachmentTable.resourceType, "agent"),
-          eq(attachmentTable.resourceId, agentId),
-        ),
-      )
-      .limit(1);
-    if (attached) {
-      return c.json(
-        {
-          error:
-            "Cannot delete: this agent is attached to one or more workspaces. Detach it first.",
-        },
-        409,
-      );
-    }
-
-    // Nor while it is listed in a Blueprint (ADR-0008) — remove it from every
-    // Blueprint first, so nothing still points at it.
-    if (await isResourceListedInBlueprint("agent", agentId)) {
-      return c.json(
-        {
-          error:
-            "Cannot delete: this agent is listed in one or more blueprints. Remove it from them first.",
-        },
-        409,
-      );
-    }
+    // A Shared resource cannot be deleted while anything still points at it —
+    // an Attachment (ADR-0007) or a Blueprint (ADR-0008). Throws ConflictError
+    // → 409 via the central onError (ADR-0009).
+    await requireSharedDeletable(db, "agent", agentId);
 
     // Delete the Agent and scrub its (now-dead) id from any Agent's subAgentIds
     // in the same transaction, so deletion never leaves dangling references.

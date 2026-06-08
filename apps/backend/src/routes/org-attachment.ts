@@ -12,6 +12,7 @@ import {
 import { and, eq } from "drizzle-orm";
 import { requireAuth } from "../middleware/authentication.ts";
 import { requireOrgAccess } from "../middleware/authorization.ts";
+import { isUniqueViolation } from "../errors.ts";
 import type { Variables } from "../server.ts";
 
 // Org-surface management of where a Shared resource is attached (ADR-0007).
@@ -32,13 +33,6 @@ type ResourceType = keyof typeof RESOURCE_TABLES;
 
 const isResourceType = (v: string | undefined): v is ResourceType =>
   v === "mcp" || v === "provider" || v === "skill" || v === "agent";
-
-/** Detects a Postgres unique-constraint violation across driver shapes. */
-const isUniqueViolation = (error: any): boolean =>
-  error.code === "23505" ||
-  error.cause?.code === "23505" ||
-  error.message?.includes("unique constraint") ||
-  error.cause?.message?.includes("unique constraint");
 
 /**
  * Confirms a resource is org-scoped and belongs to this organization — you can

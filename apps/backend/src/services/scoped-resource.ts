@@ -7,7 +7,8 @@ import {
   attachment as attachmentTable,
 } from "../db/schema.ts";
 import { db } from "../index.ts";
-import { LockedError, NotFoundError } from "../errors.ts";
+import { ConflictError, LockedError, NotFoundError } from "../errors.ts";
+import { isResourceListedInBlueprint } from "./blueprint-guard.ts";
 
 /**
  * The read side of the **Scoped resource** (CONTEXT.md): an Agent, Skill, MCP,
@@ -20,8 +21,9 @@ import { LockedError, NotFoundError } from "../errors.ts";
  * Collapses the "resolve → null-check → org-scope-403" branch that the
  * dual-scope resource routes each re-implemented. `resolveScoped`/`listScoped`
  * are exception-free for callers that tolerate absence (e.g. the Chat-turn
- * attachment check); `requireScoped`/`requireWorkspaceMutable` throw the typed
- * errors mapped centrally by `app.onError` (ADR-0009).
+ * attachment check); `requireScoped`/`requireWorkspaceMutable`/
+ * `requireSharedDeletable` throw the typed errors mapped centrally by
+ * `app.onError` (ADR-0009).
  */
 
 /** `"workspace"` for a directly-owned row, `"organization"` for a Shared one. */
@@ -54,14 +56,20 @@ type RegistryEntry = {
   table: ScopedTable;
   /** Human label used in the `NotFoundError` message ("Agent not found"). */
   label: string;
+  /**
+   * The resource as it reads mid-sentence in a conflict message ("this agent
+   * is attached…"). Distinct from `label` because `mcp` stays the uppercase
+   * acronym "MCP" rather than lowercasing to "mcp".
+   */
+  noun: string;
 };
 
 // Typed registry keyed by the `attachment.resourceType` enum.
 const REGISTRY: Record<ScopedResourceType, RegistryEntry> = {
-  agent: { table: agentTable, label: "Agent" },
-  skill: { table: skillTable, label: "Skill" },
-  mcp: { table: mcpTable, label: "MCP" },
-  provider: { table: providerTable, label: "Provider" },
+  agent: { table: agentTable, label: "Agent", noun: "agent" },
+  skill: { table: skillTable, label: "Skill", noun: "skill" },
+  mcp: { table: mcpTable, label: "MCP", noun: "MCP" },
+  provider: { table: providerTable, label: "Provider", noun: "provider" },
 };
 
 /** The Workspace a Scoped resource is resolved relative to. */
@@ -206,4 +214,40 @@ export const requireWorkspaceMutable = async <T extends ScopedResourceType>(
     );
   }
   return { row: found.row, scope: "workspace" };
+};
+
+/**
+ * Guards deletion of an Organization-scoped (Shared) resource: throws
+ * `ConflictError` while anything still points at it — an Attachment in any
+ * Workspace (ADR-0007) or a Blueprint that would re-provision it (ADR-0008).
+ * The single home for the "can this Shared resource be deleted?" rule the four
+ * org-resource delete routes each re-implemented inline; the `ConflictError` is
+ * mapped to 409 at `app.onError` (ADR-0009). Returns when deletion may proceed.
+ */
+export const requireSharedDeletable = async (
+  database: Database,
+  type: ScopedResourceType,
+  id: string,
+): Promise<void> => {
+  const [attached] = await database
+    .select({ id: attachmentTable.id })
+    .from(attachmentTable)
+    .where(
+      and(
+        eq(attachmentTable.resourceType, type),
+        eq(attachmentTable.resourceId, id),
+      ),
+    )
+    .limit(1);
+  if (attached) {
+    throw new ConflictError(
+      `Cannot delete: this ${REGISTRY[type].noun} is attached to one or more workspaces. Detach it first.`,
+    );
+  }
+
+  if (await isResourceListedInBlueprint(type, id)) {
+    throw new ConflictError(
+      `Cannot delete: this ${REGISTRY[type].noun} is listed in one or more blueprints. Remove it from them first.`,
+    );
+  }
 };
