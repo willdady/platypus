@@ -1,0 +1,92 @@
+---
+title: Skills
+description: Author a Skill — a named capability with a description and instructions — attach it to an Agent, and let the model load its full instructions on demand via the loadSkill tool.
+---
+
+import { Callout, Steps } from "nextra/components";
+
+# Skills
+
+A **Skill** is packaged know-how you attach to an Agent: a name, a description,
+and a body of instructions for doing one thing well. The Agent sees only the
+name and description up front and pulls in the full body _on demand_ — keeping
+its everyday prompt short. For the concept, see [Skills](/concepts/skills); this
+page is how to author one.
+
+## Author a Skill
+
+<Steps>
+
+### Open the Skill form
+
+From your Workspace, go to the **Skills** section and click **Create skill**.
+
+### Fill in the fields
+
+- **Name** — a kebab-case identifier, e.g. `write-release-note` (lowercase
+  letters, numbers, and hyphens; 5–64 characters). This is the name the model
+  uses to request the Skill.
+- **Description** — a brief summary of what the Skill does and when to reach for
+  it (24–1024 characters). The model reads this to decide _whether_ a request is
+  relevant, so make it specific.
+- **Body** — the full instructions, up to 50,000 characters. This is what the
+  model receives only after it loads the Skill, so be as detailed as you like:
+  step-by-step procedures, examples, formatting rules, edge cases.
+
+</Steps>
+
+<Callout type="info">
+  Write the **description** for triage and the **body** for execution. The
+  description is always in context (so keep it tight); the body is fetched only
+  when needed (so it can be long).
+</Callout>
+
+## Attach a Skill to an Agent
+
+A Skill does nothing until an Agent can use it. There are two equivalent ways to
+wire them up:
+
+- **From the Skill form** — the **Agents** section lists the Agents in your
+  Workspace. Flip a switch to enable this Skill for that Agent.
+- **From the [Agent form](/building-with-platypus/agents)** — the **Skills** card
+  lists available Skills. Flip a switch to attach one to that Agent.
+
+## How `loadSkill` surfaces a Skill
+
+When an Agent has Skills attached, Platypus injects just their names and
+descriptions into the Agent's instructions, like:
+
+```xml
+<skills>
+  <skill name="write-release-note">Draft a release note from a list of merged PRs…</skill>
+</skills>
+```
+
+along with guidance to **use the `loadSkill` tool** when a request matches one.
+The model then calls `loadSkill` with the Skill's name, and the tool returns that
+Skill's full **body** — which the model reads before responding. Nothing in the
+body costs context until the moment it's actually needed.
+
+## Workspace vs Shared scope
+
+A Skill lives at exactly one scope:
+
+- **Workspace scope** — private to your Workspace. This is what you get when you
+  create one from the Skills section above.
+- **Organization scope** — a [Shared resource](/concepts/sharing) defined once by
+  an Org Admin and attached to many Workspaces. Shared Skills appear **locked** in
+  your Workspace: you can attach them to your Agents and the Agent can `loadSkill`
+  them, but only an Org Admin can edit the Skill itself.
+
+<Callout type="info">
+  `loadSkill` resolves a Skill in your Workspace first, then falls back to a
+  Shared (Organization-scoped) Skill — but only if that Shared Skill has been
+  **attached** to your Workspace.
+</Callout>
+
+## Where to next
+
+- **[Agents & sub-agents](/building-with-platypus/agents)** — the Agent that uses
+  the Skills you author here.
+- **[Sharing across workspaces](/concepts/sharing)** — how a Skill becomes a
+  Shared resource.

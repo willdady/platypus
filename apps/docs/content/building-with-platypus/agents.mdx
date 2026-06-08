@@ -1,0 +1,124 @@
+---
+title: Agents & sub-agents
+description: Create and configure an Agent — pin a Provider and model, write a system prompt, tune generation parameters, grant tools and Skills, and compose sub-agents.
+---
+
+import { Callout, Steps } from "nextra/components";
+
+# Agents & sub-agents
+
+An **Agent** is a reusable preset for how the assistant behaves: a Provider and
+model, a system prompt, generation settings, and the tools, Skills, and
+sub-agents it's allowed to use. Build it once, then select it on any Chat. For
+the concept, see [Agents & sub-agents](/concepts/agents); this page is the
+build.
+
+## Create an Agent
+
+<Steps>
+
+### Open the Agent form
+
+From your Workspace, go to the **Agents** section and click **Create agent**.
+
+### Name and describe it
+
+- **Name** — what to call the Agent (3–30 characters).
+- **Description** — a short summary (1–128 characters). This is also what a
+  parent Agent sees when it considers delegating to this one as a sub-agent.
+- **Input Placeholder** _(optional)_ — custom placeholder text shown in the chat
+  input when this Agent is selected.
+- **Avatar** _(optional)_ — click to upload or paste an image.
+
+### Write the system prompt
+
+The **System prompt** field shapes the Agent's personality and instructions. It's
+optional, but it's the single biggest lever on behaviour — e.g. _"You are a
+concise research assistant. Cite sources and prefer primary documents."_
+
+### Pin a Provider and model
+
+Open the **Model** dropdown and pick a model. Models are grouped under each
+**Provider** available in your Workspace. If a model you expect is missing, no
+available Provider has it enabled — that's an Org Admin setting (see
+[Providers & models](/concepts/providers)).
+
+</Steps>
+
+<Callout type="info">
+  Selecting an Agent on a Chat replaces choosing a Provider and model by hand —
+  the Agent already carries those choices.
+</Callout>
+
+## Tune generation
+
+Two levels of control over how the model generates:
+
+- **Max steps** — how many steps a tool-calling loop may run before it stops.
+  This lives in the main form (default `30`). Raise it for Agents that chain many
+  tool calls; lower it to cap runaway loops.
+- **Advanced settings** — expand this section for the optional sampling
+  parameters. Leave any blank to use the Provider's default.
+
+| Parameter             | Range    | What it does                                  |
+| --------------------- | -------- | --------------------------------------------- |
+| **Temperature**       | from `0` | Randomness — higher is more varied            |
+| **Top-p**             | `0`–`1`  | Nucleus sampling cutoff                       |
+| **Top-k**             | from `1` | Limits sampling to the _k_ most likely tokens |
+| **Seed**              | integer  | Fixes sampling for reproducible output        |
+| **Presence penalty**  | `-2`–`2` | Discourages repeating topics already present  |
+| **Frequency penalty** | `-2`–`2` | Discourages repeating the same tokens         |
+
+<Callout type="info">
+  Not every Provider or model honours every parameter — unsupported values are
+  ignored by the vendor.
+</Callout>
+
+## Grant tools and Skills
+
+An Agent that can only talk is limited. Give it the ability to _act_:
+
+- **Tools** — a card listing the **tool sets** available in your Workspace,
+  grouped by category. Flip a switch to grant a tool set. Both built-in tool sets
+  (Web Fetch, Time, Kanban, Dashboards, and more) and any
+  [MCP servers](/building-with-platypus/mcp) you've registered appear here — an
+  MCP shows up under the **MCP** category. See
+  [Tools, tool sets & MCP](/concepts/tools) for the model behind this.
+- **Skills** — a card listing the [Skills](/building-with-platypus/skills) in
+  your Workspace. Flip a switch to attach one; the Agent loads its full
+  instructions on demand at run time.
+
+<Callout type="info">
+  The **Tools** and **Skills** cards only appear when your Workspace actually
+  has tool sets or Skills to grant. A brand-new Workspace with neither won't
+  show them.
+</Callout>
+
+## Compose sub-agents
+
+A **sub-agent** is just another Agent that this one can hand work to. In the
+**Sub-Agents** card, flip a switch for each Agent you want this Agent to be able
+to delegate to.
+
+At run time each selected sub-agent is exposed to the parent as a **delegate
+tool** named `delegateTo<AgentName>` — calling it runs the sub-agent (with its
+own model, prompt, and tools) and returns the result. This lets a coordinator
+Agent stay focused while specialists do the detailed work.
+
+<Callout type="warning">
+  Delegation is **one level deep**. An Agent running _as_ a sub-agent cannot
+  delegate further — its own sub-agents are not wired up in that context. Design
+  for a coordinator plus a flat set of specialists, not deep chains.
+</Callout>
+
+Click **Save** to create the Agent. You can edit every field later from the same
+form.
+
+## Where to next
+
+- **[Skills](/building-with-platypus/skills)** — author the on-demand know-how
+  you attach above.
+- **[MCP servers](/building-with-platypus/mcp)** — add outside tools to the
+  **Tools** card.
+- **[Triggers](/building-with-platypus/triggers)** — run this Agent
+  automatically.

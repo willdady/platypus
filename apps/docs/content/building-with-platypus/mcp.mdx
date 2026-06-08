@@ -1,0 +1,102 @@
+---
+title: MCP servers
+description: Register an MCP server in your Workspace (or attach a Shared one), authenticate it, and grant its tool set to an Agent. How an MCP resolves to a tool set at Chat-turn time.
+---
+
+import { Callout, Steps } from "nextra/components";
+
+# MCP servers
+
+**MCP** (the Model Context Protocol) is how you connect Platypus to tools that
+don't ship with it — your own services, third-party integrations, or community
+servers. You register an MCP server once; at run time it resolves to a **tool
+set** you can grant to any Agent. For the concept, see
+[Tools, tool sets & MCP](/concepts/tools); this page is how to set one up.
+
+<Callout type="info">
+  Platypus connects to MCP servers over **HTTP**. You point it at the server's
+  URL — there's no local command/stdio option.
+</Callout>
+
+## Register an MCP server
+
+<Steps>
+
+### Open the MCP form
+
+In your Workspace, go to **Settings → MCP** and click **Create** (the form lives
+at **Settings → MCP → Create**).
+
+### Enter the connection
+
+- **Name** — a label for this server (3–30 characters).
+- **URL** — the server's HTTP endpoint, e.g. `https://example.com/mcp`.
+
+### Choose how it authenticates
+
+The **Auth** dropdown controls the credential fields:
+
+- **None** — no authentication.
+- **Bearer** — reveals a **Bearer Token** field; sent as an `Authorization`
+  header on every request.
+- **OAuth** — reveals OAuth fields: **Client ID**, **Client Secret** (leave blank
+  if the server supports dynamic client registration), and **OAuth Scopes** (a
+  space-separated list — required by some providers, e.g. Google).
+
+### Add custom headers (optional)
+
+Under **Custom Headers**, add any extra HTTP headers to send with every request
+— use **Add header** for each name/value pair.
+
+</Steps>
+
+### Authorize and test
+
+- For **OAuth** servers, an authorization panel shows the status (**Not
+  Authorized** / **Authorized**). Click **Authorize** to complete the OAuth flow;
+  use **Re-authorize** or **Revoke** later as needed.
+- Click **Test Connection** to verify the server responds — on success it lists
+  the tools the server exposes. Then **Save**.
+
+## How an MCP resolves to a tool set
+
+An Agent's granted tools are stored as a list of **tool set IDs**. When you grant
+an MCP, its ID goes into that same list. At **Chat-turn time**, Platypus walks the
+list: anything that isn't a built-in tool set is looked up as an MCP, and — using
+the auth and headers you configured — Platypus connects to the server and fetches
+its tools live. Those tools are merged into what the model can call for that turn.
+
+<Callout type="info">
+  Resolution is **fail-soft**: if an MCP server is unreachable when a turn runs,
+  it simply contributes no tools and the turn continues, rather than failing the
+  whole Chat.
+</Callout>
+
+## Grant an MCP to an Agent
+
+Open the [Agent form](/building-with-platypus/agents) and find the **Tools** card.
+Registered MCP servers appear there grouped under the **MCP** category, alongside
+built-in tool sets. Flip a switch to grant the server's tool set to that Agent.
+
+## Workspace vs Shared scope
+
+An MCP lives at exactly one scope:
+
+- **Workspace scope** — private to your Workspace, registered as above.
+- **Organization scope** — a [Shared resource](/concepts/sharing) registered by an
+  Org Admin and attached to many Workspaces. A Shared MCP appears in your
+  Workspace with an **Organization** badge and is **read-only** here — you can
+  grant it to your Agents, but only an Org Admin can edit the server itself.
+
+<Callout type="warning">
+  Because MCP servers can carry credentials, registering them is often
+  restricted to Org Admins. A Workspace Owner can manage Workspace MCPs only
+  where that's been delegated; otherwise ask an Org Admin to register or attach
+  one.
+</Callout>
+
+## Where to next
+
+- **[Agents & sub-agents](/building-with-platypus/agents)** — grant the tool set
+  to an Agent.
+- **[Tools, tool sets & MCP](/concepts/tools)** — the underlying model.

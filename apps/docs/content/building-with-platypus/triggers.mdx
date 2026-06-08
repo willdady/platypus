@@ -1,0 +1,110 @@
+---
+title: Triggers
+description: Run an Agent automatically with Triggers — scheduled (cron) runs on a cadence, or event-driven runs. How to create one, the cadence model, and what a run executes.
+---
+
+import { Callout, Steps } from "nextra/components";
+
+# Triggers
+
+A **Trigger** runs an Agent automatically, without anyone sitting in a Chat. Each
+Trigger sends a fixed instruction to a chosen Agent and records the result. There
+are two types:
+
+- **Cron** — runs on a **schedule** (a cadence you define).
+- **Event** — runs in response to something happening in the Workspace, such as a
+  card being created on a [Board](/building-with-platypus/boards).
+
+You'll find Triggers in the **Triggers** section of your Workspace —
+_"Automated agent runs configured for this workspace."_
+
+## Create a Trigger
+
+<Steps>
+
+### Open the Trigger form
+
+In your Workspace, go to the **Triggers** section and click **Create**.
+
+### Pick the type and Agent
+
+- **Trigger Type** — **Cron** or **Event**. This is fixed once the Trigger is
+  created.
+- **Name** and **Description** — label the Trigger (description optional).
+- **Agent** — which Agent to run.
+- **Instruction** — the message sent to the Agent every time the Trigger fires
+  (up to 10,000 characters). For Event triggers, the event's data is appended
+  automatically.
+
+### Set the cadence (Cron)
+
+Choose a **Schedule Mode**:
+
+- **Simple** — pick a **Frequency** (every 5 / 10 / 15 / 30 minutes, hourly,
+  daily, weekly, or monthly). Depending on the frequency you'll also set the
+  **Hour**, **Minute**, **Day of Week**, or **Day of Month**.
+- **Advanced** — enter a raw **Cron Expression** (`minute hour day-of-month month
+day-of-week`), e.g. `0 9 * * *` for "every day at 9:00 AM".
+
+Set the **Timezone** (defaults to your browser's) — the schedule is evaluated in
+that zone. A **Next Run Preview** shows when it will fire next. Toggle **One-off
+Trigger** to run once and then disable itself.
+
+### Or choose events (Event)
+
+For an Event trigger, select one or more **Events** (e.g. `card.created`,
+`card.updated`, `notification.created`). Optionally narrow with **Filter by
+Board** and **Filter by Column** so the Trigger only fires for activity on a
+specific board.
+
+### Finish
+
+Set **Max Runs to Keep** (how many run records to retain), optionally enable
+**Web Search** (native model web search, if the Provider supports it), and leave
+**Enabled** on. Click save.
+
+</Steps>
+
+<Callout type="info">
+  Simple and Advanced are two views of the same thing — your Simple choices
+  compile to a standard 5-field cron expression. Switch to Advanced to see or
+  fine-tune it.
+</Callout>
+
+## What a run does
+
+When a Trigger fires, Platypus runs its Agent against the **instruction** as a
+background job — there's no live Chat window. The run is captured as a
+**trigger run** record: it starts as _running_, accrues stats (steps, tool calls,
+token counts), and ends _success_ or _failed_.
+
+A few details worth knowing:
+
+- **Scheduled (cron) runs** are checked about once a minute; a due Trigger is
+  claimed and executed, then its next run time is recomputed from the cadence
+  (one-off Triggers disable themselves instead).
+- **Event runs** fire when a matching event occurs, with a short debounce so a
+  burst of rapid events coalesces into one run.
+- Older run records beyond **Max Runs to Keep** are pruned automatically.
+
+## Review run history
+
+Open a Trigger and go to its **Runs** view to see the history: each run's status
+(Success / Failed / Running / Pending), when it ran and how long it took, the
+event type for Event triggers, per-run stats, and any error message. It's the
+place to confirm a schedule is actually firing and to debug a Trigger that's
+failing.
+
+<Callout type="info">
+  Anything an Agent does in a run uses that Agent's own tools — so a Trigger
+  can, for example, update a [Board](/building-with-platypus/boards) or a
+  [Dashboard](/building-with-platypus/dashboards) on a schedule, as long as the
+  Agent has those tool sets granted.
+</Callout>
+
+## Where to next
+
+- **[Agents & sub-agents](/building-with-platypus/agents)** — the Agent a Trigger
+  runs.
+- **[Boards](/building-with-platypus/boards)** — a common source of Trigger
+  events and a common target for scheduled runs.

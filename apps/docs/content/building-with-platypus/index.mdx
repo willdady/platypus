@@ -1,7 +1,35 @@
 ---
 title: Building with Platypus
+description: The Workspace Owner's guide to building agents — configuring an Agent, giving it Skills and MCP tools, and putting it to work with Triggers, Boards, and Dashboards.
 ---
 
 # Building with Platypus
 
-_Content coming soon._
+This section is for the **Workspace Owner** — the person building inside a
+Workspace. It's task-oriented: each page walks through the screens you actually
+click. If you want the _what_ and _why_ behind the nouns first, read
+[Concepts](/concepts); this section is the _how_.
+
+Everything you build lives inside your **Workspace** (your scoped environment —
+see [The big picture](/concepts)). A typical build goes in this order:
+
+1. **[Agents & sub-agents](/building-with-platypus/agents)** — create an Agent:
+   pin a Provider and model, write its system prompt, tune generation, and grant
+   it tools. Compose specialists as sub-agents.
+2. **[Skills](/building-with-platypus/skills)** — author named, on-demand
+   know-how and attach it to an Agent.
+3. **[MCP servers](/building-with-platypus/mcp)** — connect outside tools by
+   registering an MCP server and granting it to an Agent.
+4. **[Triggers](/building-with-platypus/triggers)** — run an Agent automatically
+   on a schedule (cron) or in response to an event.
+5. **[Boards](/building-with-platypus/boards)** — Kanban boards that you and
+   your Agents share as a working surface.
+6. **[Dashboards](/building-with-platypus/dashboards)** — display structured data
+   in widgets that Agents can keep up to date.
+
+<br />
+
+> Throughout this section, screens live under your Workspace at
+> `/{org}/workspace/{workspace}/…`. Resources you create are **Workspace-scoped**
+> (private to one Workspace) unless an Org Admin has shared them at Organization
+> scope — see [Sharing across workspaces](/concepts/sharing).
