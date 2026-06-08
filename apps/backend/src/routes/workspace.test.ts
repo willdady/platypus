@@ -1,10 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import {
-  mockDb,
-  mockSession,
-  mockNoSession,
-  resetMockDb,
-} from "../test-utils.ts";
+import { mockDb, mockSession, resetMockDb } from "../test-utils.ts";
 import app from "../server.ts";
 
 describe("Workspace Routes", () => {

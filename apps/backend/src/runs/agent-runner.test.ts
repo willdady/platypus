@@ -187,9 +187,7 @@ describe("AgentRunner.generate", () => {
     const sink = new RecordingSink();
     await runner.generate({ scope, input: baseInput, sink });
 
-    const resolved = sink.events.find((e) => e.name === "onResolved") as
-      | Extract<LifecycleEvent, { name: "onResolved" }>
-      | undefined;
+    const resolved = sink.events.find((e) => e.name === "onResolved");
     expect(resolved?.plan.resolved.agentId).toBe("agent-1");
     expect(resolved?.plan.resolved.providerId).toBe("p1");
   });

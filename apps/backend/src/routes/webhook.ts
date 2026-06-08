@@ -91,7 +91,7 @@ webhook.get(
   requireWorkspaceAccess,
   async (c) => {
     const workspaceId = c.req.param("workspaceId")!;
-    const webhookId = c.req.param("webhookId")!;
+    const webhookId = c.req.param("webhookId");
 
     const results = await db
       .select()
@@ -121,7 +121,7 @@ webhook.put(
   sValidator("json", webhookUpdateSchema),
   async (c) => {
     const workspaceId = c.req.param("workspaceId")!;
-    const webhookId = c.req.param("webhookId")!;
+    const webhookId = c.req.param("webhookId");
     const body = c.req.valid("json" as never) as {
       name?: string;
       url?: string;
@@ -166,7 +166,7 @@ webhook.delete(
   requireWorkspaceAccess,
   async (c) => {
     const workspaceId = c.req.param("workspaceId")!;
-    const webhookId = c.req.param("webhookId")!;
+    const webhookId = c.req.param("webhookId");
 
     const result = await db
       .delete(webhookTable)
@@ -194,7 +194,7 @@ webhook.post(
   requireWorkspaceAccess,
   async (c) => {
     const workspaceId = c.req.param("workspaceId")!;
-    const webhookId = c.req.param("webhookId")!;
+    const webhookId = c.req.param("webhookId");
 
     const result = await db
       .update(webhookTable)

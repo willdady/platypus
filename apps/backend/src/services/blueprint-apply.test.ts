@@ -21,7 +21,7 @@ describe("applyBlueprintsToWorkspace", () => {
   });
 
   it("runs no queries and returns zero counts for an empty set", async () => {
-    const result = await applyBlueprintsToWorkspace(mockDb as any, "ws-1", []);
+    const result = await applyBlueprintsToWorkspace(mockDb, "ws-1", []);
     expect(result).toEqual({ attached: 0, skipped: 0, total: 0 });
     expect(mockDb.select).not.toHaveBeenCalled();
     expect(mockDb.insert).not.toHaveBeenCalled();
@@ -44,7 +44,7 @@ describe("applyBlueprintsToWorkspace", () => {
     // Both deduped rows are newly inserted.
     mockDb.returning.mockResolvedValueOnce([{ id: "att-1" }, { id: "att-2" }]);
 
-    const result = await applyBlueprintsToWorkspace(mockDb as any, "ws-1", [
+    const result = await applyBlueprintsToWorkspace(mockDb, "ws-1", [
       "bp-1",
       "bp-2",
     ]);
@@ -73,7 +73,7 @@ describe("applyBlueprintsToWorkspace", () => {
     // onConflictDoNothing inserts only one — the other was already attached.
     mockDb.returning.mockResolvedValueOnce([{ id: "att-1" }]);
 
-    const result = await applyBlueprintsToWorkspace(mockDb as any, "ws-1", [
+    const result = await applyBlueprintsToWorkspace(mockDb, "ws-1", [
       "bp-1",
     ]);
 
@@ -94,7 +94,7 @@ describe("applyBlueprintsToWorkspace", () => {
       ])
       .mockResolvedValueOnce([]); // no items
 
-    const result = await applyBlueprintsToWorkspace(mockDb as any, "ws-1", [
+    const result = await applyBlueprintsToWorkspace(mockDb, "ws-1", [
       "bp-1",
       "bp-2",
     ]);
@@ -120,7 +120,7 @@ describe("applyBlueprintsToWorkspace", () => {
       ])
       .mockResolvedValueOnce([]);
 
-    const result = await applyBlueprintsToWorkspace(mockDb as any, "ws-1", [
+    const result = await applyBlueprintsToWorkspace(mockDb, "ws-1", [
       "bp-1",
       "missing",
     ]);

@@ -84,7 +84,7 @@ describe("trigger-execution", () => {
       mockDb.limit.mockResolvedValueOnce([mockWorkspace]);
       mockGenerate.mockResolvedValueOnce({ text: "ok", stats: {} });
 
-      const runId = await executeTrigger(baseTrigger as any);
+      const runId = await executeTrigger(baseTrigger);
 
       expect(runId).toBe("test-id");
       expect(mockGenerate).toHaveBeenCalledTimes(1);
@@ -104,7 +104,7 @@ describe("trigger-execution", () => {
       mockDb.limit.mockResolvedValueOnce([mockWorkspace]);
       mockGenerate.mockResolvedValueOnce({ text: "ok", stats: {} });
 
-      await executeTrigger(baseTrigger as any, {
+      await executeTrigger(baseTrigger, {
         eventType: "card.created",
         eventData: { cardId: "c1" },
       });
@@ -120,7 +120,7 @@ describe("trigger-execution", () => {
       mockDb.limit.mockResolvedValueOnce([mockWorkspace]);
       mockGenerate.mockResolvedValueOnce({ text: "ok", stats: {} });
 
-      await executeTrigger(baseTrigger as any, {
+      await executeTrigger(baseTrigger, {
         eventType: "card.created",
         eventData: { cardId: "c1" },
       });
@@ -137,7 +137,7 @@ describe("trigger-execution", () => {
       mockGenerate.mockResolvedValueOnce({ text: "ok", stats: {} });
 
       const trigger = { ...baseTrigger, search: true };
-      await executeTrigger(trigger as any);
+      await executeTrigger(trigger);
 
       const args = mockGenerate.mock.calls[0][0];
       expect(args.input.request.search).toBe(true);
@@ -168,7 +168,7 @@ describe("trigger-execution", () => {
       mockValidateCronExpression.mockReturnValue(nextRun);
       mockDb.limit.mockResolvedValue([]);
 
-      await updateTriggerAfterRun("trigger-1", baseTrigger as any);
+      await updateTriggerAfterRun("trigger-1", baseTrigger);
 
       expect(mockDb.update).toHaveBeenCalled();
       expect(mockDb.set).toHaveBeenCalledWith(
@@ -225,7 +225,7 @@ describe("trigger-execution", () => {
       );
       mockDb.returning.mockResolvedValue([]);
 
-      await updateTriggerAfterRun("trigger-1", baseTrigger as any);
+      await updateTriggerAfterRun("trigger-1", baseTrigger);
 
       expect(mockDb.select).toHaveBeenCalled();
     });

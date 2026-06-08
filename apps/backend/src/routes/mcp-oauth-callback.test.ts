@@ -190,7 +190,7 @@ describe("MCP OAuth Callback Route", () => {
       ])
       .mockResolvedValueOnce([{ id: "ws-1", organizationId: "org-1" }]);
 
-    vi.mocked(mcpAuth).mockResolvedValueOnce("REDIRECT" as any);
+    vi.mocked(mcpAuth).mockResolvedValueOnce("REDIRECT");
 
     const res = await app.request(baseUrl, {
       method: "POST",

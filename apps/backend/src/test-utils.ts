@@ -98,7 +98,7 @@ vi.mock("./index.ts", () => ({
 vi.mock("drizzle-orm", async () => {
   const actual = await vi.importActual("drizzle-orm");
   const sqlMock = Object.assign(
-    vi.fn((strings: TemplateStringsArray, ...values: any[]) => ({
+    vi.fn((strings: TemplateStringsArray, ..._values: any[]) => ({
       getSQL: () => ({ query: strings.join("?") }),
       mapWith: vi.fn(),
     })),
@@ -124,8 +124,6 @@ vi.mock("drizzle-orm", async () => {
 vi.mock("./auth.ts", () => ({
   auth: mockAuth,
 }));
-
-import { auth } from "./auth.ts";
 
 /**
  * Helper to mock a successful session

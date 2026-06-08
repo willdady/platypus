@@ -38,7 +38,7 @@ async function withConcurrencyLimit<T>(
   const executing: Promise<void>[] = [];
   for (const item of items) {
     const promise = fn(item).finally(() => {
-      executing.splice(executing.indexOf(promise), 1);
+      void executing.splice(executing.indexOf(promise), 1);
     });
     executing.push(promise);
     if (executing.length >= limit) {
@@ -95,13 +95,15 @@ function scheduleAligned(intervalMs: number, fn: () => Promise<void>): void {
     const nextTick = Math.ceil(now / intervalMs) * intervalMs;
     const delay = nextTick - now;
 
-    setTimeout(async () => {
-      try {
-        await fn();
-      } catch (error) {
-        logger.error({ error }, "Scheduled job failed");
-      }
-      scheduleNext();
+    setTimeout(() => {
+      void (async () => {
+        try {
+          await fn();
+        } catch (error) {
+          logger.error({ error }, "Scheduled job failed");
+        }
+        scheduleNext();
+      })();
     }, delay);
   }
 

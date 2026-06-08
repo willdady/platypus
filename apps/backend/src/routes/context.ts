@@ -8,7 +8,7 @@ import {
   organization as organizationTable,
 } from "../db/schema.ts";
 import { contextCreateSchema, contextUpdateSchema } from "@platypus/schemas";
-import { eq, and, isNull, sql } from "drizzle-orm";
+import { eq, and, sql } from "drizzle-orm";
 import { requireAuth } from "../middleware/authentication.ts";
 import type { Variables } from "../server.ts";
 import { logger } from "../logger.ts";

@@ -57,7 +57,7 @@ let mockState: MockState;
 function makeFakeContainer(): FakeContainer {
   const demuxStream = (stream: any, stdoutPass: any, stderrPass: any) => {
     // Read the most recently configured exec output (set on exec.start()).
-    const cfg = (stream as any).__execCfg as ExecConfig | undefined;
+    const cfg = (stream).__execCfg as ExecConfig | undefined;
     process.nextTick(() => {
       if (cfg?.stdout) {
         stdoutPass.write(

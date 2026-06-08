@@ -70,7 +70,7 @@ export function dispatchEvent(
         }
 
         // Debounce per trigger+entity to coalesce rapid events
-        const entityId = (data as Record<string, unknown>)?.id ?? "unknown";
+        const entityId = (data as { id?: string | number })?.id ?? "unknown";
         const debounceKey = `${trigger.id}:${entityId}`;
 
         debounceTriggerExecution(

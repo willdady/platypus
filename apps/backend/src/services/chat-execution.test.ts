@@ -455,7 +455,7 @@ describe("chat-execution", () => {
         workspaces: [baseWorkspace],
         agents: [agentWithMcp as any],
         providers: [baseProvider as any],
-        mcps: [orgMcp as any],
+        mcps: [orgMcp],
         attachments: [
           {
             workspaceId: baseWorkspace.id,
@@ -486,7 +486,7 @@ describe("chat-execution", () => {
         workspaces: [baseWorkspace],
         agents: [agentWithMcp as any],
         providers: [baseProvider as any],
-        mcps: [orgMcp as any],
+        mcps: [orgMcp],
         // no attachments
       });
 
@@ -509,7 +509,7 @@ describe("chat-execution", () => {
         workspaces: [baseWorkspace],
         agents: [agentWithMcp as any],
         providers: [baseProvider as any],
-        mcps: [orgMcp as any],
+        mcps: [orgMcp],
         attachments: [
           {
             workspaceId: baseWorkspace.id,

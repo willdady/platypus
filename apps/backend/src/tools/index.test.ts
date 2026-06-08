@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 
 // Mock the db used by transitive imports (kanban, trigger, etc.)
 vi.mock("../index.ts", () => ({

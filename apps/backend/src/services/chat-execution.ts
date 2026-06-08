@@ -465,7 +465,7 @@ export const prepareChatTurn = async (
 
   const context = await resolveChatContext(
     queries,
-    request as ChatSubmitData,
+    request,
     orgId,
     workspaceId,
   );
@@ -516,7 +516,7 @@ export const prepareChatTurn = async (
   };
 
   const generation = resolveGenerationConfig(
-    request as ChatSubmitData,
+    request,
     agent,
     promptCtx,
   );
@@ -721,7 +721,7 @@ const wrapToolsWithBump = (
         finish();
         return result;
       },
-    } as Tool;
+    };
   }
   return wrapped;
 };

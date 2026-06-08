@@ -55,7 +55,6 @@ interface SubAgentToolOptions {
  */
 export const createSubAgentTool = (options: SubAgentToolOptions) => {
   const {
-    id,
     name,
     description,
     systemPrompt,
@@ -152,7 +151,7 @@ export const createSubAgentTool = (options: SubAgentToolOptions) => {
       },
       toModelOutput: ({ output }) => ({
         type: "text" as const,
-        value: (output as SubAgentActivity)?.text ?? "Task completed.",
+        value: output?.text ?? "Task completed.",
       }),
     }),
   };

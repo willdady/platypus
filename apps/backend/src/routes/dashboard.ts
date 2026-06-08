@@ -91,7 +91,7 @@ dashboard.get(
   requireOrgAccess(),
   requireWorkspaceAccess,
   async (c) => {
-    const dashboardId = c.req.param("dashboardId")!;
+    const dashboardId = c.req.param("dashboardId");
     const workspaceId = c.req.param("workspaceId")!;
     const record = await db
       .select()
@@ -113,7 +113,7 @@ dashboard.put(
   sValidator("json", dashboardUpdateSchema),
   async (c) => {
     const data = c.req.valid("json");
-    const dashboardId = c.req.param("dashboardId")!;
+    const dashboardId = c.req.param("dashboardId");
     const workspaceId = c.req.param("workspaceId")!;
     const existing = await db
       .select({
@@ -163,7 +163,7 @@ dashboard.delete(
   requireOrgAccess(),
   requireWorkspaceAccess,
   async (c) => {
-    const dashboardId = c.req.param("dashboardId")!;
+    const dashboardId = c.req.param("dashboardId");
     const workspaceId = c.req.param("workspaceId")!;
     const existing = await db
       .select({
@@ -189,7 +189,7 @@ dashboard.get(
   requireOrgAccess(),
   requireWorkspaceAccess,
   async (c) => {
-    const dashboardId = c.req.param("dashboardId")!;
+    const dashboardId = c.req.param("dashboardId");
     const workspaceId = c.req.param("workspaceId")!;
     const dash = await db
       .select({
@@ -219,7 +219,7 @@ dashboard.post(
   sValidator("json", widgetCreateSchema),
   async (c) => {
     const data = c.req.valid("json");
-    const dashboardId = c.req.param("dashboardId")!;
+    const dashboardId = c.req.param("dashboardId");
     const workspaceId = c.req.param("workspaceId")!;
     const dash = await db
       .select({
@@ -273,8 +273,8 @@ dashboard.put(
   sValidator("json", widgetUpdateDataSchema),
   async (c) => {
     const body = c.req.valid("json");
-    const dashboardId = c.req.param("dashboardId")!;
-    const widgetId = c.req.param("widgetId")!;
+    const dashboardId = c.req.param("dashboardId");
+    const widgetId = c.req.param("widgetId");
     const workspaceId = c.req.param("workspaceId")!;
     const dash = await db
       .select({
@@ -342,8 +342,8 @@ dashboard.delete(
   requireOrgAccess(),
   requireWorkspaceAccess,
   async (c) => {
-    const dashboardId = c.req.param("dashboardId")!;
-    const widgetId = c.req.param("widgetId")!;
+    const dashboardId = c.req.param("dashboardId");
+    const widgetId = c.req.param("widgetId");
     const workspaceId = c.req.param("workspaceId")!;
     const dash = await db
       .select({

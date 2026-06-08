@@ -86,7 +86,7 @@ export const openProvider = (provider: Provider): OpenedProvider => {
     }
     default:
       throw new Error(
-        `Unrecognized provider type '${(provider as Provider).providerType}'`,
+        `Unrecognized provider type '${(provider as { providerType: string }).providerType}'`,
       );
   }
 };

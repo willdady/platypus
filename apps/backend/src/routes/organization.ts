@@ -10,7 +10,7 @@ import {
   organizationCreateSchema,
   organizationUpdateSchema,
 } from "@platypus/schemas";
-import { eq, and, inArray } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import { requireAuth } from "../middleware/authentication.ts";
 import {
   requireOrgAccess,

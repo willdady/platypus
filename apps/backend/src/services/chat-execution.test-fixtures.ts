@@ -4,7 +4,7 @@ import type {
   mcp as mcpTable,
   workspace as workspaceTable,
 } from "../db/schema.ts";
-import type { Provider, Skill } from "@platypus/schemas";
+import type { Provider } from "@platypus/schemas";
 import type { MemorySummary } from "./memory-retrieval.ts";
 
 type AgentRow = typeof agentTable.$inferSelect;

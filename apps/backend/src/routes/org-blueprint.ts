@@ -77,9 +77,9 @@ const findNonSharedItems = async (
 ): Promise<BlueprintItem[]> => {
   const byType = new Map<ResourceType, string[]>();
   for (const item of items) {
-    const ids = byType.get(item.resourceType as ResourceType) ?? [];
+    const ids = byType.get(item.resourceType) ?? [];
     ids.push(item.resourceId);
-    byType.set(item.resourceType as ResourceType, ids);
+    byType.set(item.resourceType, ids);
   }
 
   const invalid: BlueprintItem[] = [];

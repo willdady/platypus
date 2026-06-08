@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from "vitest";
+import { describe, it, expect, beforeEach } from "vitest";
 import { mockDb, resetMockDb } from "../test-utils.ts";
 
 import {
@@ -7,18 +7,19 @@ import {
   type MemorySummary,
 } from "./memory-retrieval.ts";
 
-const makeSummary = (overrides: Partial<MemorySummary> = {}): MemorySummary =>
-  ({
-    id: "s1",
-    userId: "u1",
-    workspaceId: "ws-1",
-    summaryDate: "2026-04-29",
-    summary: "User likes coffee.",
-    embedding: null,
-    createdAt: new Date(),
-    updatedAt: new Date(),
-    ...overrides,
-  }) as MemorySummary;
+const makeSummary = (
+  overrides: Partial<MemorySummary> = {},
+): MemorySummary => ({
+  id: "s1",
+  userId: "u1",
+  workspaceId: "ws-1",
+  summaryDate: "2026-04-29",
+  summary: "User likes coffee.",
+  embedding: null,
+  createdAt: new Date(),
+  updatedAt: new Date(),
+  ...overrides,
+});
 
 describe("retrieveRecentSummaries", () => {
   beforeEach(() => {

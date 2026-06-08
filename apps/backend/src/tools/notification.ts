@@ -2,10 +2,7 @@ import { tool, type Tool } from "ai";
 import { z } from "zod";
 import { and, desc, eq } from "drizzle-orm";
 import { db } from "../index.ts";
-import {
-  notification as notificationTable,
-  agent as agentTable,
-} from "../db/schema.ts";
+import { notification as notificationTable } from "../db/schema.ts";
 import { dispatchEvent } from "../services/event-dispatch.ts";
 
 export function createNotificationTools(

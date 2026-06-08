@@ -398,7 +398,7 @@ describe("MCP Routes", () => {
       );
 
       // DCR/static client credentials are deliberately preserved
-      const setPayload = (mockDb.set as any).mock.calls[0][0];
+      const setPayload = (mockDb.set).mock.calls[0][0];
       expect(setPayload).not.toHaveProperty("oauthClientId");
       expect(setPayload).not.toHaveProperty("oauthClientSecret");
     });

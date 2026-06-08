@@ -250,7 +250,11 @@ async function runExec(
 
   // dockerode-attached demuxer
   (
-    container as unknown as { modem: { demuxStream: Function } }
+    container as unknown as {
+      modem: {
+        demuxStream: (s: unknown, out: unknown, err: unknown) => void;
+      };
+    }
   ).modem.demuxStream(stream, stdoutPass, stderrPass);
 
   let timedOut = false;
@@ -282,7 +286,7 @@ async function runExec(
   stdoutPass.end();
   stderrPass.end();
 
-  let exitCode = 0;
+  let exitCode: number;
   if (timedOut) {
     exitCode = 124;
   } else {
@@ -411,7 +415,7 @@ export class DockerSandboxBackend implements SandboxBackend {
       if (!is404(err)) throw err;
     }
     logger.info({ image: IMAGE }, "Pulling sandbox image");
-    const stream = (await this.docker.pull(IMAGE)) as NodeJS.ReadableStream;
+    const stream = await this.docker.pull(IMAGE);
     await new Promise<void>((resolve, reject) => {
       this.docker.modem.followProgress(stream, (err: Error | null) =>
         err ? reject(err) : resolve(),
