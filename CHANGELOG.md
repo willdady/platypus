@@ -1,5 +1,22 @@
 # Changelog
 
+## [1.95.0](https://github.com/willdady/platypus/compare/v1.94.0...v1.95.0) (2026-06-08)
+
+
+### Features
+
+* **docs:** add Self-Hosting section pages ([#228](https://github.com/willdady/platypus/issues/228)) ([b3d444f](https://github.com/willdady/platypus/commit/b3d444fbd9459c0dd67104dc60e97f90cf07f9d4))
+* **docs:** Extending section & Reference config pages ([#230](https://github.com/willdady/platypus/issues/230)) ([c068907](https://github.com/willdady/platypus/commit/c068907d9f3ec527dba86c02a498992341b6e6ca))
+* **docs:** Getting Started — quick start & first run ([#213](https://github.com/willdady/platypus/issues/213)) ([#227](https://github.com/willdady/platypus/issues/227)) ([76687b3](https://github.com/willdady/platypus/commit/76687b34f69ad8c6f80388413f6d9c4c77615ff0))
+* **docs:** scaffold Nextra 4 documentation site ([#206](https://github.com/willdady/platypus/issues/206)) ([#210](https://github.com/willdady/platypus/issues/210)) ([9428886](https://github.com/willdady/platypus/commit/94288869eb938aef21d6771f6627bafbce5eee06))
+* **docs:** write the Building with Platypus section ([#231](https://github.com/willdady/platypus/issues/231)) ([ee29d60](https://github.com/willdady/platypus/commit/ee29d601a68605d37bf17dee44e01c33ae0f29d3))
+* **docs:** write the Concepts section ([#212](https://github.com/willdady/platypus/issues/212)) ([#229](https://github.com/willdady/platypus/issues/229)) ([e4ebece](https://github.com/willdady/platypus/commit/e4ebece6bd65952ef93504fa14b96456d0cbe3b7))
+
+
+### Bug Fixes
+
+* **docs:** use green brand accent instead of Nextra default blue ([ce9ef19](https://github.com/willdady/platypus/commit/ce9ef19802d9df08bb2d1f376ed1e4f02a25cd70))
+
 ## [1.94.0](https://github.com/willdady/platypus/compare/v1.93.0...v1.94.0) (2026-06-07)
 
 
