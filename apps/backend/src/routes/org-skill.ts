@@ -30,7 +30,7 @@ orgSkill.post(
     const { agentIds: _agentIds, ...data } = c.req.valid("json");
 
     // A duplicate name surfaces as a Postgres unique violation, mapped to 409
-    // by the central onError (ADR-0009).
+    // by the central onError (ADR-0010).
     const record = await db
       .insert(skillTable)
       .values({
@@ -85,7 +85,7 @@ orgSkill.put(
     const { agentIds: _agentIds, ...data } = c.req.valid("json");
 
     // A duplicate name surfaces as a Postgres unique violation, mapped to 409
-    // by the central onError (ADR-0009).
+    // by the central onError (ADR-0010).
     const record = await db
       .update(skillTable)
       .set({
@@ -116,7 +116,7 @@ orgSkill.delete(
 
     // A Shared resource cannot be deleted while anything still points at it —
     // an Attachment (ADR-0007) or a Blueprint (ADR-0008). Throws ConflictError
-    // → 409 via the central onError (ADR-0009).
+    // → 409 via the central onError (ADR-0010).
     await requireSharedDeletable(db, "skill", skillId);
 
     // Delete the Skill and scrub its (now-dead) id from any Agent's skillIds in

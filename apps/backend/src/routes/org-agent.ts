@@ -104,7 +104,7 @@ orgAgent.put(
     }
 
     // A duplicate name surfaces as a Postgres unique violation, mapped to 409
-    // by the central onError (ADR-0009).
+    // by the central onError (ADR-0010).
     const record = await db
       .update(agentTable)
       .set({ ...data, updatedAt: new Date() })
@@ -202,7 +202,7 @@ orgAgent.delete(
 
     // A Shared resource cannot be deleted while anything still points at it —
     // an Attachment (ADR-0007) or a Blueprint (ADR-0008). Throws ConflictError
-    // → 409 via the central onError (ADR-0009).
+    // → 409 via the central onError (ADR-0010).
     await requireSharedDeletable(db, "agent", agentId);
 
     // Delete the Agent and scrub its (now-dead) id from any Agent's subAgentIds

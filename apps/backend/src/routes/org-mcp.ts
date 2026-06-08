@@ -44,7 +44,7 @@ orgMcp.post(
     const data = c.req.valid("json");
 
     // A duplicate name surfaces as a Postgres unique violation, mapped to 409
-    // by the central onError (ADR-0009).
+    // by the central onError (ADR-0010).
     const record = await db
       .insert(mcpTable)
       .values({
@@ -104,7 +104,7 @@ orgMcp.put(
     const urlChanged = existing.length > 0 && existing[0].url !== data.url;
 
     // A duplicate name surfaces as a Postgres unique violation, mapped to 409
-    // by the central onError (ADR-0009).
+    // by the central onError (ADR-0010).
     const record = await db
       .update(mcpTable)
       .set({
@@ -136,7 +136,7 @@ orgMcp.delete(
 
     // A Shared resource cannot be deleted while anything still points at it —
     // an Attachment (ADR-0007) or a Blueprint (ADR-0008). Throws ConflictError
-    // → 409 via the central onError (ADR-0009).
+    // → 409 via the central onError (ADR-0010).
     await requireSharedDeletable(db, "mcp", mcpId);
 
     // Delete the MCP and scrub its (now-dead) id from any Agent's toolSetIds in

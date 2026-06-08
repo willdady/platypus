@@ -23,7 +23,7 @@ import { isResourceListedInBlueprint } from "./blueprint-guard.ts";
  * are exception-free for callers that tolerate absence (e.g. the Chat-turn
  * attachment check); `requireScoped`/`requireWorkspaceMutable`/
  * `requireSharedDeletable` throw the typed errors mapped centrally by
- * `app.onError` (ADR-0009).
+ * `app.onError` (ADR-0010).
  */
 
 /** `"workspace"` for a directly-owned row, `"organization"` for a Shared one. */
@@ -222,7 +222,7 @@ export const requireWorkspaceMutable = async <T extends ScopedResourceType>(
  * Workspace (ADR-0007) or a Blueprint that would re-provision it (ADR-0008).
  * The single home for the "can this Shared resource be deleted?" rule the four
  * org-resource delete routes each re-implemented inline; the `ConflictError` is
- * mapped to 409 at `app.onError` (ADR-0009). Returns when deletion may proceed.
+ * mapped to 409 at `app.onError` (ADR-0010). Returns when deletion may proceed.
  */
 export const requireSharedDeletable = async (
   database: Database,

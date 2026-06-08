@@ -3,7 +3,7 @@ import type { ContentfulStatusCode } from "hono/utils/http-status";
 /**
  * Typed domain errors raised by services and route handlers for the three
  * cross-cutting failure modes, mapped to HTTP status in a single Hono
- * `app.onError` (ADR-0009): a resource that does not exist, an
+ * `app.onError` (ADR-0010): a resource that does not exist, an
  * Organization-scoped (Shared) resource locked against Workspace-surface
  * mutation, and a unique-constraint violation. Route-specific 4xx responses
  * (validation, sub-agent rules, `findNonSharedReferences`) stay inline.

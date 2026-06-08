@@ -95,7 +95,7 @@ skill.post(
     // The workspace route only ever creates workspace-scoped Skills; the scope
     // is taken from the route, never the body (org-scoped Skills are created via
     // the Organization surface or by Promote). A duplicate name surfaces as a
-    // Postgres unique violation, mapped to 409 by the central onError (ADR-0009).
+    // Postgres unique violation, mapped to 409 by the central onError (ADR-0010).
     const record = await db
       .insert(skillTable)
       .values({
@@ -152,7 +152,7 @@ skill.put(
     });
 
     // A duplicate name surfaces as a Postgres unique violation, mapped to 409
-    // by the central onError (ADR-0009).
+    // by the central onError (ADR-0010).
     const record = await db
       .update(skillTable)
       .set({
@@ -346,7 +346,7 @@ skill.post(
         throw new NotFoundError("Skill not found");
       }
       // A duplicate Shared-Skill name surfaces as a Postgres unique violation,
-      // mapped to 409 by the central onError (ADR-0009).
+      // mapped to 409 by the central onError (ADR-0010).
       throw error;
     }
   },
