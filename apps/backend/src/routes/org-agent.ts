@@ -1,7 +1,5 @@
 import { Hono } from "hono";
 import { sValidator } from "@hono/standard-validator";
-import { nanoid } from "nanoid";
-import sharp from "sharp";
 import { db } from "../index.ts";
 import {
   agent as agentTable,
@@ -15,21 +13,11 @@ import { requireOrgAccess } from "../middleware/authorization.ts";
 import { findNonSharedReferences } from "../services/agent-scope-validation.ts";
 import { scrubDeletedAgentReference } from "../services/agent-references.ts";
 import { isResourceListedInBlueprint } from "../services/blueprint-guard.ts";
-import { getStorage } from "../storage/index.ts";
+import { storeAvatar, deleteAvatar } from "../services/avatar.ts";
 import { avatarKeyToUrl } from "../utils/avatar-url.ts";
 import { getOrigin } from "../utils/get-origin.ts";
 import { NotFoundError } from "../errors.ts";
 import type { Variables } from "../server.ts";
-
-const ALLOWED_AVATAR_TYPES = [
-  "image/jpeg",
-  "image/png",
-  "image/webp",
-  "image/gif",
-];
-const MAX_AVATAR_SIZE = 5 * 1024 * 1024;
-const MIN_AVATAR_DIMENSION = 64;
-const AVATAR_SIZE = 512;
 
 // Org-scoped Agents are Shared resources (ADR-0007): a single source of truth
 // defined once at Organization scope (via Promote) and referenced by Workspaces
@@ -156,59 +144,14 @@ orgAgent.post(
     }
 
     const body = await c.req.parseBody();
-    const file = body["file"];
-    if (!file || !(file instanceof File)) {
-      return c.json({ error: "No file provided" }, 400);
+    const result = await storeAvatar(body["file"], agentId, existing.avatarKey);
+    if (!result.ok) {
+      return c.json({ error: result.error }, 400);
     }
-    if (!ALLOWED_AVATAR_TYPES.includes(file.type)) {
-      return c.json({ error: "Invalid file type" }, 400);
-    }
-    if (file.size > MAX_AVATAR_SIZE) {
-      return c.json({ error: "File too large (max 5MB)" }, 400);
-    }
-
-    const buffer = Buffer.from(await file.arrayBuffer());
-    let metadata: sharp.Metadata;
-    try {
-      metadata = await sharp(buffer).metadata();
-    } catch {
-      return c.json({ error: "Invalid image" }, 400);
-    }
-    if (
-      metadata.width &&
-      metadata.height &&
-      (metadata.width < MIN_AVATAR_DIMENSION ||
-        metadata.height < MIN_AVATAR_DIMENSION)
-    ) {
-      return c.json(
-        {
-          error: `Image must be at least ${MIN_AVATAR_DIMENSION}x${MIN_AVATAR_DIMENSION} pixels`,
-        },
-        400,
-      );
-    }
-
-    const processedBuffer = await sharp(buffer)
-      .resize(AVATAR_SIZE, AVATAR_SIZE, { fit: "cover" })
-      .webp()
-      .toBuffer();
-
-    // Avatars are keyed by the Agent's globally-unique id, independent of scope.
-    const key = `agents/${agentId}/avatar-${nanoid()}.webp`;
-
-    if (existing.avatarKey) {
-      try {
-        await getStorage().delete(existing.avatarKey);
-      } catch {
-        // Ignore deletion errors
-      }
-    }
-
-    await getStorage().put(key, processedBuffer, "image/webp");
 
     const record = await db
       .update(agentTable)
-      .set({ avatarKey: key, updatedAt: new Date() })
+      .set({ avatarKey: result.key, updatedAt: new Date() })
       .where(
         and(eq(agentTable.id, agentId), eq(agentTable.organizationId, orgId)),
       )
@@ -238,13 +181,7 @@ orgAgent.delete(
       throw new NotFoundError("Agent not found");
     }
 
-    if (existing.avatarKey) {
-      try {
-        await getStorage().delete(existing.avatarKey);
-      } catch {
-        // Ignore deletion errors
-      }
-    }
+    await deleteAvatar(existing.avatarKey);
 
     const record = await db
       .update(agentTable)
@@ -317,6 +254,13 @@ orgAgent.delete(
     if (result.length === 0) {
       throw new NotFoundError("Agent not found");
     }
+
+    // Clean up the (now-orphaned) avatar, matching the Workspace surface — the
+    // avatar is keyed by the Agent id alone, so nothing else can reference it
+    // once the row is gone. Best-effort: a storage miss must not fail the
+    // delete that already committed.
+    await deleteAvatar(result[0].avatarKey);
+
     return c.json({ message: "Agent deleted" });
   },
 );

@@ -1,6 +1,12 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { mockDb, mockSession, resetMockDb } from "../test-utils.ts";
 import app from "../server.ts";
+import { deleteAvatar } from "../services/avatar.ts";
+
+vi.mock("../services/avatar.ts", () => ({
+  storeAvatar: vi.fn(),
+  deleteAvatar: vi.fn(),
+}));
 
 describe("Organization Agent Routes", () => {
   beforeEach(() => {
@@ -144,6 +150,21 @@ describe("Organization Agent Routes", () => {
       const res = await app.request(`${baseUrl}/agent-1`, { method: "DELETE" });
       expect(res.status).toBe(200);
       expect(await res.json()).toEqual({ message: "Agent deleted" });
+    });
+
+    it("removes the deleted agent's avatar from storage", async () => {
+      mockSession();
+      mockDb.limit
+        .mockResolvedValueOnce([{ role: "admin" }]) // requireOrgAccess
+        .mockResolvedValueOnce([]) // attachment guard: none
+        .mockResolvedValueOnce([]); // blueprint guard: none
+      mockDb.returning.mockResolvedValueOnce([
+        { id: "agent-1", avatarKey: "agents/agent-1/avatar-x.webp" },
+      ]);
+
+      const res = await app.request(`${baseUrl}/agent-1`, { method: "DELETE" });
+      expect(res.status).toBe(200);
+      expect(deleteAvatar).toHaveBeenCalledWith("agents/agent-1/avatar-x.webp");
     });
 
     it("returns 409 when the agent is attached to a workspace", async () => {

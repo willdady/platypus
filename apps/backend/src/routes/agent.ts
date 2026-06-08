@@ -23,20 +23,9 @@ import {
   requireWorkspaceMutable,
 } from "../services/scoped-resource.ts";
 import { NotFoundError } from "../errors.ts";
-import { getStorage } from "../storage/index.ts";
-import sharp from "sharp";
+import { storeAvatar, deleteAvatar } from "../services/avatar.ts";
 import { avatarKeyToUrl } from "../utils/avatar-url.ts";
 import { getOrigin } from "../utils/get-origin.ts";
-
-const ALLOWED_AVATAR_TYPES = [
-  "image/jpeg",
-  "image/png",
-  "image/webp",
-  "image/gif",
-];
-const MAX_AVATAR_SIZE = 5 * 1024 * 1024;
-const MIN_AVATAR_DIMENSION = 64;
-const AVATAR_SIZE = 512;
 
 function agentWithAvatarUrl(
   agent: Record<string, unknown>,
@@ -225,68 +214,18 @@ agent.post(
     });
 
     const body = await c.req.parseBody();
-    const file = body["file"];
-    if (!file || !(file instanceof File)) {
-      return c.json({ error: "No file provided" }, 400);
+    const result = await storeAvatar(
+      body["file"],
+      agentId,
+      found.row.avatarKey,
+    );
+    if (!result.ok) {
+      return c.json({ error: result.error }, 400);
     }
-
-    if (!ALLOWED_AVATAR_TYPES.includes(file.type)) {
-      return c.json({ error: "Invalid file type" }, 400);
-    }
-
-    if (file.size > MAX_AVATAR_SIZE) {
-      return c.json({ error: "File too large (max 5MB)" }, 400);
-    }
-
-    const buffer = Buffer.from(await file.arrayBuffer());
-
-    let metadata: sharp.Metadata;
-    try {
-      metadata = await sharp(buffer).metadata();
-    } catch {
-      return c.json({ error: "Invalid image" }, 400);
-    }
-
-    if (metadata.width && metadata.height) {
-      if (
-        metadata.width < MIN_AVATAR_DIMENSION ||
-        metadata.height < MIN_AVATAR_DIMENSION
-      ) {
-        return c.json(
-          {
-            error: `Image must be at least ${MIN_AVATAR_DIMENSION}x${MIN_AVATAR_DIMENSION} pixels`,
-          },
-          400,
-        );
-      }
-    }
-
-    const processedBuffer = await sharp(buffer)
-      .resize(AVATAR_SIZE, AVATAR_SIZE, { fit: "cover" })
-      .webp()
-      .toBuffer();
-
-    // Avatars are keyed by the Agent's (globally unique) id, independent of
-    // scope — so the path never goes stale when a workspace Agent is Promoted
-    // to the Organization (ADR-0007). The exact key is stored on the row, so
-    // deletion never needs to reconstruct it.
-    const key = `agents/${agentId}/avatar-${nanoid()}.webp`;
-
-    if (found.row.avatarKey) {
-      try {
-        const storage = getStorage();
-        await storage.delete(found.row.avatarKey);
-      } catch {
-        // Ignore deletion errors
-      }
-    }
-
-    const storage = getStorage();
-    await storage.put(key, processedBuffer, "image/webp");
 
     const record = await db
       .update(agentTable)
-      .set({ avatarKey: key, updatedAt: new Date() })
+      .set({ avatarKey: result.key, updatedAt: new Date() })
       .where(
         and(
           eq(agentTable.id, agentId),
@@ -317,14 +256,7 @@ agent.delete(
       wsId: workspaceId,
     });
 
-    if (found.row.avatarKey) {
-      try {
-        const storage = getStorage();
-        await storage.delete(found.row.avatarKey);
-      } catch {
-        // Ignore deletion errors
-      }
-    }
+    await deleteAvatar(found.row.avatarKey);
 
     const record = await db
       .update(agentTable)
@@ -360,14 +292,7 @@ agent.delete(
       wsId: workspaceId,
     });
 
-    if (found.row.avatarKey) {
-      try {
-        const storage = getStorage();
-        await storage.delete(found.row.avatarKey);
-      } catch {
-        // Ignore deletion errors
-      }
-    }
+    await deleteAvatar(found.row.avatarKey);
 
     await db
       .delete(agentTable)
