@@ -81,7 +81,13 @@ type GenerationConfig = {
   skills?: Array<Pick<Skill, "name" | "description">>;
 };
 
-export type ChatSubmitData = {
+/**
+ * The slim request shape `prepareChatTurn` actually consumes: agent/provider
+ * selection plus generation overrides. Distinct from `@platypus/schemas`'
+ * `ChatSubmitData` (the HTTP payload, which also carries id/workspaceId/
+ * messages) — those arrive as separate `PrepareChatTurnInput` fields.
+ */
+export type ChatTurnRequest = {
   agentId?: string;
   providerId?: string;
   modelId?: string;
@@ -128,7 +134,7 @@ export type PrepareChatTurnInput = {
   orgId: string;
   workspaceId: string;
   user: { id: string; name: string };
-  request: ChatSubmitData;
+  request: ChatTurnRequest;
   messages: PlatypusUIMessage[];
   /**
    * Used to rewrite `storage://` URLs in messages to absolute HTTP URLs so
@@ -720,7 +726,7 @@ const wrapToolsWithBump = (
 
 const resolveChatContext = async (
   queries: ChatTurnQueries,
-  data: ChatSubmitData,
+  data: ChatTurnRequest,
   orgId: string,
   workspaceId: string,
 ): Promise<ChatContext> => {
@@ -841,7 +847,7 @@ const loadTools = async (
 };
 
 const resolveGenerationConfig = (
-  data: ChatSubmitData,
+  data: ChatTurnRequest,
   agent: AgentRow | undefined,
   promptCtx: SystemPromptContext,
 ): GenerationConfig => {
