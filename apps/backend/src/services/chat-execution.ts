@@ -23,11 +23,7 @@ import {
   retrieveRecentSummaries,
   type MemorySummary,
 } from "./memory-retrieval.ts";
-import type {
-  ChatSubmitData as ChatSubmitDataSchema,
-  Provider,
-  Skill,
-} from "@platypus/schemas";
+import type { Provider, Skill } from "@platypus/schemas";
 import type { Tool } from "ai";
 import { logger } from "../logger.ts";
 import { buildMcpTransportConfig } from "./mcp-oauth-provider.ts";
@@ -85,7 +81,7 @@ type GenerationConfig = {
   skills?: Array<Pick<Skill, "name" | "description">>;
 };
 
-type ChatSubmitData = {
+export type ChatSubmitData = {
   agentId?: string;
   providerId?: string;
   modelId?: string;
@@ -132,7 +128,7 @@ export type PrepareChatTurnInput = {
   orgId: string;
   workspaceId: string;
   user: { id: string; name: string };
-  request: ChatSubmitDataSchema;
+  request: ChatSubmitData;
   messages: PlatypusUIMessage[];
   /**
    * Used to rewrite `storage://` URLs in messages to absolute HTTP URLs so
@@ -515,11 +511,7 @@ export const prepareChatTurn = async (
     runMode,
   };
 
-  const generation = resolveGenerationConfig(
-    request,
-    agent,
-    promptCtx,
-  );
+  const generation = resolveGenerationConfig(request, agent, promptCtx);
 
   if (skills.length > 0) {
     tools.loadSkill = createLoadSkillTool(orgId, workspaceId);

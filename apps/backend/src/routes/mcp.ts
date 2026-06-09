@@ -336,6 +336,9 @@ mcp.post(
     if (!mcpRecord[0].url) {
       return c.json({ error: "MCP URL is not configured" }, 400);
     }
+    // Capture the narrowed URL before the `force` block reassigns
+    // `mcpRecord[0]`, which widens the property back to `string | null`.
+    const serverUrl = mcpRecord[0].url;
 
     // `force=true` clears stored tokens before running the OAuth flow so
     // mcpAuth always returns REDIRECT. Lets the UI offer a single-click
@@ -373,7 +376,7 @@ mcp.post(
       );
 
       const result = await mcpAuth(provider, {
-        serverUrl: mcpRecord[0].url,
+        serverUrl,
         fetchFn: oauthFetchFn,
       });
 
