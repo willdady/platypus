@@ -14,8 +14,7 @@ remote VM, hosted sandbox-as-a-service — can be contributed. Platypus ships on
 reference backend: **Docker**.
 
 This page is for the **Operator** and **Org Admin** who stand up and curate that
-infrastructure. The architectural rationale lives in the Sandbox ADRs, linked
-throughout rather than restated here.
+infrastructure.
 
 ## Sandbox backends
 
@@ -27,13 +26,6 @@ turns — that's what makes longer-lived, build-something workflows possible.
 Adding a new backend (Modal, E2B, Daytona, a custom VM) means implementing the
 fixed `SandboxBackend` interface; see the [Extending](/extending) section for
 custom backends.
-
-<Callout type="info">
-  Background and trade-offs:
-  [ADR-0001 — Sandbox as a workspace-keyed execution environment](https://github.com/willdady/platypus/blob/main/docs/adr/0001-sandbox-as-workspace-keyed-execution-environment.md)
-  and
-  [ADR-0002 — the fixed five-tool core](https://github.com/willdady/platypus/blob/main/docs/adr/0002-sandbox-fixed-five-tool-core.md).
-</Callout>
 
 ## The Docker reference adapter
 
@@ -63,43 +55,16 @@ Enable it by composing the overlay alongside the default stack:
 docker compose -f compose.yaml -f compose.sandbox.yaml up
 ```
 
+Each container is spawned with fixed resource and security limits — a process
+cap (`PidsLimit`), a memory ceiling, and `no-new-privileges` — to contain
+runaway or hostile workloads. These are hardcoded in the adapter, not
+configurable per Sandbox.
+
 Horizontally-scaled deployments **cannot** use this adapter: sandbox state lives
 on a single host's Docker daemon, so each backend replica would have its own.
 Pick a remote backend instead.
 
-<Callout type="info">
-  Details, including the hardcoded container resource/security limits
-  (`PidsLimit`, memory caps, `no-new-privileges`) and why DinD was rejected:
-  [ADR-0003 — Docker reference adapter mounts the host socket](https://github.com/willdady/platypus/blob/main/docs/adr/0003-docker-reference-sandbox-adapter-socket-mount.md).
-</Callout>
-
-## Workspace-default environment variables
-
-A Sandbox carries workspace-default environment variables that are merged into
-every shell execution **on the server, without transiting the model**. The
-motivating case is API keys (`OPENAI_API_KEY`, `GITHUB_TOKEN`, …): agent-written
-code can call third-party services without the secret values ever appearing in
-the prompt, tool-call transcripts, or logs. The model is shown the key *names*
-only.
-
-The env is split into two tiers to match the authorization model:
-
-- **`adminEnv`** — Org-Admin-managed. Secrets the Workspace Owner can read the
-  names of but cannot change or override.
-- **`userEnv`** — Workspace-Owner-managed. The Owner's own secrets, set without
-  an admin round-trip.
-
-At execution time, precedence is `adminEnv` ▸ `userEnv` ▸ the model's per-call
-`env` (highest wins) — so an Owner can never override an admin-pinned key, and
-the model's values stay lowest. Changing env takes effect on the next shell
-execution; the container is not recreated.
-
-<Callout type="info">
-  The merge semantics and validation rules:
-  [ADR-0004 — workspace-default env vars](https://github.com/willdady/platypus/blob/main/docs/adr/0004-sandbox-workspace-default-env-vars.md).
-</Callout>
-
-## Host reachability: default-deny + admin-curated allowlists
+### Host reachability: default-deny + admin-curated allowlists
 
 A new Sandbox can reach **no host service** until reachability is explicitly
 granted — the safe, default-deny posture. Reachability is expressed as two
@@ -132,10 +97,26 @@ badge with a "Recreate now" action.
   database network.
 </Callout>
 
-<Callout type="info">
-  The reachability design:
-  [ADR-0005 — host reachability is admin-curated, default-deny](https://github.com/willdady/platypus/blob/main/docs/adr/0005-sandbox-host-reachability-is-admin-curated-default-deny.md).
-</Callout>
+## Workspace-default environment variables
+
+A Sandbox carries workspace-default environment variables that are merged into
+every shell execution **on the server, without transiting the model**. The
+motivating case is API keys (`OPENAI_API_KEY`, `GITHUB_TOKEN`, …): agent-written
+code can call third-party services without the secret values ever appearing in
+the prompt, tool-call transcripts, or logs. The model is shown the key *names*
+only.
+
+The env is split into two tiers to match the authorization model:
+
+- **`adminEnv`** — Org-Admin-managed. Secrets the Workspace Owner can read the
+  names of but cannot change or override.
+- **`userEnv`** — Workspace-Owner-managed. The Owner's own secrets, set without
+  an admin round-trip.
+
+At execution time, precedence is `adminEnv` ▸ `userEnv` ▸ the model's per-call
+`env` (highest wins) — so an Owner can never override an admin-pinned key, and
+the model's values stay lowest. Changing env takes effect on the next shell
+execution; the container is not recreated.
 
 ## Who can configure what
 
@@ -144,11 +125,6 @@ Admin-managed and never delegatable** to a Workspace Owner. Within a Sandbox the
 gate is field-level: `backend`, `credentials`, `networks`, `extraHosts`,
 `adminEnv`, and creation are admin-only, while `name` and `userEnv` stay
 Owner-editable.
-
-<Callout type="info">
-  The field-level authorization model:
-  [ADR-0006 — credential- and reach-bearing config is admin-managed](https://github.com/willdady/platypus/blob/main/docs/adr/0006-credential-and-reach-bearing-config-is-admin-managed.md).
-</Callout>
 
 ## Next steps
 

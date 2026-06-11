@@ -34,6 +34,8 @@ Open `.env` and set, at minimum:
   signs session tokens with this; treat it like a password.
 - **`ADMIN_EMAIL`** / **`ADMIN_PASSWORD`** — the first admin account, created on
   first startup (see [First run](#first-run--the-default-admin) below).
+- **`TIMEZONE`** — an IANA timezone name (e.g. `America/New_York`,
+  `Europe/London`) used for scheduling and timestamps. Defaults to `UTC`.
 
 The remaining options have sensible defaults — see the comments in
 `.env.example`, and the [Reference](/reference) section for the full list.
@@ -81,7 +83,7 @@ then create regular users for day-to-day work.
   password from within the app instead.
 </Callout>
 
-## Your first reply
+## Your first agent
 
 Once you're signed in, here's the end-to-end loop to a working agent reply.
 

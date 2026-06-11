@@ -1,14 +1,49 @@
 ---
 title: Introduction
+description: Platypus is a full-stack platform for building and managing AI agents with tool support and multi-provider capabilities.
 ---
+
+import { Cards } from "nextra/components";
 
 # Platypus
 
-Platypus is a full-stack app for building and managing AI agents with tool
-support and multi-provider capabilities.
+Platypus is a full-stack platform for building and managing AI agents — agents
+that reason, use tools, and connect to your data through the Model Context
+Protocol. It's multi-tenant, multi-provider, and self-hosted: you bring the
+models, Platypus gives you everything around them.
 
-These docs are the source of truth for narrative content — setup, concepts,
-guides, and extension points. Use the navigation to get started.
+These docs are the source of truth for narrative content — setup, the domain
+model, build guides, and extension points. Pick a starting point below, or use
+the navigation to find your way around.
 
-> This site was just scaffolded. The sections below are placeholders; content
-> lands in follow-up issues.
+## Where to start
+
+<Cards>
+  <Cards.Card title="Getting Started" href="/getting-started" />
+  <Cards.Card title="Concepts" href="/concepts" />
+  <Cards.Card title="Building with Platypus" href="/building-with-platypus" />
+  <Cards.Card title="Self-Hosting" href="/self-hosting" />
+  <Cards.Card title="Extending" href="/extending" />
+  <Cards.Card title="Reference" href="/reference" />
+</Cards>
+
+## Find your path
+
+The docs are organised around what you're trying to do:
+
+- **Just want to see it run?** [Getting Started](/getting-started) takes you from
+  nothing to your first streamed reply with Docker Compose and a five-step loop.
+- **Want to understand the model?** [Concepts](/concepts) explains the domain in
+  plain language — Organizations, Workspaces, Chats, Agents, Skills, MCP,
+  Sandboxes, and Memory — and why things are arranged the way they are.
+- **Building agents?** [Building with Platypus](/building-with-platypus) is the
+  task-oriented guide for Workspace Owners: configure an Agent, give it Skills
+  and MCP tools, and put it to work with Triggers, Boards, and Dashboards.
+- **Running the platform?** [Self-Hosting](/self-hosting) is for Operators —
+  deployment, configuration, providers and authentication, and the sandbox
+  infrastructure.
+- **Working in the codebase?** [Extending](/extending) maps the in-tree
+  extension points (sandbox backends and tool sets) and the decisions behind
+  them.
+- **Need an exact value?** [Reference](/reference) enumerates every
+  configuration option as flat, lookup-oriented tables.
