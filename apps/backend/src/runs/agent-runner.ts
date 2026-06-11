@@ -527,10 +527,40 @@ export class AgentRunner {
 
     const startedAt = new Date().toISOString();
     let firstTokenAt: string | undefined;
+    // Set when the §H/§I stats are first emitted (messageMetadata `finish`), so
+    // the post-stream persist stamp reuses the same value rather than a slightly
+    // later one — streamed and reloaded stats then match.
+    let finishedAt: string | undefined;
+
+    // Single source of truth for the per-message stats, so the live-streamed
+    // copy (messageMetadata, below) and the persisted copy (applyMessageStats in
+    // the finally) are identical. Reads the mutable state at call time.
+    const buildMessageStats = (
+      finishedAtValue: string,
+    ): MessageStats | undefined => {
+      if (!state.turn) return undefined;
+      return {
+        inputTokens: state.stats.inputTokens ?? 0,
+        outputTokens: state.stats.outputTokens ?? 0,
+        contextTokens: state.lastStepInputTokens,
+        startedAt,
+        firstTokenAt,
+        finishedAt: finishedAtValue,
+        contextWindow: state.turn.resolved.contextWindow,
+        contextWindowIsDefault: state.turn.resolved.contextWindowIsDefault,
+      };
+    };
 
     const result = streamText({
       ...modelArgs,
       onStepFinish: (step) => onStep(step),
+      // TTFT: stamp the first text token here (fires before the `finish` event),
+      // so the stats are complete by the time messageMetadata emits them.
+      onChunk: ({ chunk }) => {
+        if (!firstTokenAt && chunk.type === "text-delta") {
+          firstTokenAt = new Date().toISOString();
+        }
+      },
     });
 
     // Build the UI message stream and tee it. The response body consumes
@@ -541,10 +571,22 @@ export class AgentRunner {
     const uiStream = result.toUIMessageStream<PlatypusUIMessage>({
       originalMessages: input.messages,
       generateMessageId: createIdGenerator({ prefix: "msg", size: 16 }),
-      messageMetadata: () =>
-        state.turn?.resolved.agentId
+      // Emit the §H/§I stats with the `finish` event so the client gets them on
+      // the final stream chunk — the (i) stats action then appears the instant
+      // the answer completes, not a DB-refetch round-trip later. `start` carries
+      // only agentId (timing/usage don't exist yet). The post-stream stamp in
+      // the finally still writes them to the persisted message for reload.
+      messageMetadata: ({ part }) => {
+        const agentId = state.turn?.resolved.agentId
           ? { agentId: state.turn.resolved.agentId }
-          : undefined,
+          : undefined;
+        if (part.type === "finish") {
+          finishedAt = new Date().toISOString();
+          const stats = buildMessageStats(finishedAt);
+          return stats ? { ...agentId, stats } : agentId;
+        }
+        return agentId;
+      },
       onError: (error) => formatStreamError(error),
     });
 
@@ -579,9 +621,6 @@ export class AgentRunner {
             );
           },
         })) {
-          if (!firstTokenAt && message.parts?.some((p) => p.type === "text")) {
-            firstTokenAt = new Date().toISOString();
-          }
           state.messages = [...input.messages, message];
         }
       } catch (err) {
@@ -591,20 +630,12 @@ export class AgentRunner {
           "Server-side UI stream consumer error",
         );
       } finally {
-        const finishedAt = new Date().toISOString();
+        // Reuse the finish-event timestamp when present so the persisted stats
+        // match what was streamed; fall back if the stream ended without one.
+        const finishedAtFinal = finishedAt ?? new Date().toISOString();
         applyToolCompletions(state.messages, completions);
-        if (state.turn) {
-          applyMessageStats(state.messages, {
-            inputTokens: state.stats.inputTokens ?? 0,
-            outputTokens: state.stats.outputTokens ?? 0,
-            contextTokens: state.lastStepInputTokens,
-            startedAt,
-            firstTokenAt,
-            finishedAt,
-            contextWindow: state.turn.resolved.contextWindow,
-            contextWindowIsDefault: state.turn.resolved.contextWindowIsDefault,
-          });
-        }
+        const stats = buildMessageStats(finishedAtFinal);
+        if (stats) applyMessageStats(state.messages, stats);
         let status: RunStatus = "succeeded";
         let err: Error | undefined;
         if (handle.signal.aborted) {
