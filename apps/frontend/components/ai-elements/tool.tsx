@@ -7,6 +7,7 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import { cn } from "@/lib/utils";
+import { useToolDuration } from "@/hooks/use-tool-completed-at";
 import type { ToolUIPart } from "ai";
 import {
   ArrowRightLeftIcon,
@@ -172,6 +173,10 @@ export type ToolHeaderProps = {
   label?: string;
   type: ToolUIPart["type"];
   state: ToolUIPart["state"];
+  /** ISO timestamp of when this tool call began, if known. */
+  startedAt?: string;
+  /** ISO timestamp of when this tool call completed, if known. */
+  completedAt?: string;
   className?: string;
 };
 
@@ -210,8 +215,11 @@ export const ToolHeader = ({
   label,
   type,
   state,
+  startedAt,
+  completedAt,
   ...props
 }: ToolHeaderProps) => {
+  const duration = useToolDuration(state, startedAt, completedAt);
   // getToolIcon returns a stable module-level Lucide icon; render via
   // createElement so the dynamic selection isn't flagged as a component
   // created during render.
@@ -237,6 +245,11 @@ export const ToolHeader = ({
           )}
         </span>
         {getStatusBadge(state)}
+        {duration && (
+          <span className="text-xs text-muted-foreground shrink-0">
+            {duration}
+          </span>
+        )}
       </div>
       <ChevronDownIcon className="size-4 shrink-0 text-muted-foreground transition-transform group-data-[state=open]:rotate-180" />
     </CollapsibleTrigger>

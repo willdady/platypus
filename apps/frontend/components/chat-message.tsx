@@ -35,7 +35,7 @@ import {
   TextUIPart,
   type ChatStatus,
 } from "ai";
-import { Agent } from "@platypus/schemas";
+import { Agent, type MessageStats } from "@platypus/schemas";
 import {
   BotIcon,
   CheckIcon,
@@ -44,10 +44,76 @@ import {
   TrashIcon,
   RefreshCwIcon,
   XIcon,
+  InfoIcon,
 } from "lucide-react";
 import { Textarea } from "./ui/textarea";
 import { LoadSkillTool } from "./load-skill-tool";
 import { SubAgentTool } from "./sub-agent-tool";
+import { Button } from "./ui/button";
+import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
+import { formatDurationMs } from "@/lib/utils";
+
+const getToolStartedAt = (part: unknown): string | undefined => {
+  const raw = (part as { toolMetadata?: { startedAt?: unknown } })?.toolMetadata
+    ?.startedAt;
+  return typeof raw === "string" ? raw : undefined;
+};
+
+const getToolCompletedAt = (part: unknown): string | undefined => {
+  const raw = (part as { toolMetadata?: { completedAt?: unknown } })
+    ?.toolMetadata?.completedAt;
+  return typeof raw === "string" ? raw : undefined;
+};
+
+function MessageStatsPopover({ stats }: { stats: MessageStats }) {
+  const ttft = stats.firstTokenAt
+    ? formatDurationMs(
+        new Date(stats.firstTokenAt).getTime() -
+          new Date(stats.startedAt).getTime(),
+      )
+    : undefined;
+  const total = formatDurationMs(
+    new Date(stats.finishedAt).getTime() - new Date(stats.startedAt).getTime(),
+  );
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <Button
+          size="icon"
+          variant="ghost"
+          type="button"
+          className="cursor-pointer text-muted-foreground"
+        >
+          <InfoIcon className="size-4" />
+          <span className="sr-only">Response stats</span>
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-auto min-w-44 p-3" align="start">
+        <div className="flex flex-col gap-1 text-sm">
+          <p className="text-xs font-medium text-muted-foreground mb-1">
+            Response stats
+          </p>
+          <p>
+            <span className="text-muted-foreground">In:</span>{" "}
+            {stats.inputTokens.toLocaleString()}{" "}
+            <span className="text-muted-foreground">Out:</span>{" "}
+            {stats.outputTokens.toLocaleString()}
+          </p>
+          {ttft && (
+            <p>
+              <span className="text-muted-foreground">TTFT:</span> {ttft}
+            </p>
+          )}
+          {total && (
+            <p>
+              <span className="text-muted-foreground">Total:</span> {total}
+            </p>
+          )}
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+}
 
 interface ChatMessageProps {
   /** The message object to render */
@@ -120,6 +186,7 @@ export const ChatMessage = memo(function ChatMessage({
         <BotIcon className="size-3.5 text-muted-foreground" />
       </div>
     ));
+
   const fileParts = message.parts?.filter(
     (part): part is FileUIPart =>
       part.type === "file" && !part.mediaType?.startsWith("image/"),
@@ -133,6 +200,11 @@ export const ChatMessage = memo(function ChatMessage({
       ?.filter((part): part is TextUIPart => part.type === "text")
       .map((part) => part.text)
       .join("") || "";
+
+  const assistantStats =
+    message.role === "assistant"
+      ? (message.metadata as { stats?: MessageStats } | undefined)?.stats
+      : undefined;
 
   return (
     <Fragment key={message.id}>
@@ -154,7 +226,17 @@ export const ChatMessage = memo(function ChatMessage({
         </Sources>
       )}
       {message.parts?.map((part, i) => {
-        if (part.type === "text") {
+        if (part.type === "step-start") {
+          // The SDK emits step-start at every round boundary. We don't render
+          // it — tool-call timestamps appear inside the tool header below.
+          return null;
+        } else if (part.type === "text") {
+          const partText = (part as TextUIPart).text;
+
+          // Skip empty text parts on assistant messages — the SDK emits them
+          // between steps; rendering would leave a bare avatar bubble.
+          if (message.role === "assistant" && !partText.trim()) return null;
+
           if (isEditing) {
             const isFirstTextPart =
               i === message.parts.findIndex((p) => p.type === "text");
@@ -186,7 +268,7 @@ export const ChatMessage = memo(function ChatMessage({
               avatar={assistantAvatar}
             >
               <MessageContent className="max-w-full">
-                <MessageResponse>{(part as TextUIPart).text}</MessageResponse>
+                <MessageResponse>{partText}</MessageResponse>
               </MessageContent>
             </Message>
           );
@@ -212,6 +294,8 @@ export const ChatMessage = memo(function ChatMessage({
               <DynamicToolHeader
                 state={toolPart.state}
                 title={toolPart.toolName}
+                startedAt={getToolStartedAt(toolPart)}
+                completedAt={getToolCompletedAt(toolPart)}
               />
               <ToolContent>
                 <ToolInput input={toolPart.input} />
@@ -251,6 +335,8 @@ export const ChatMessage = memo(function ChatMessage({
                 state={toolPart.state}
                 type={toolPart.type}
                 label={toolLabel}
+                startedAt={getToolStartedAt(toolPart)}
+                completedAt={getToolCompletedAt(toolPart)}
               />
               <ToolContent>
                 <ToolInput input={toolPart.input} />
@@ -354,6 +440,7 @@ export const ChatMessage = memo(function ChatMessage({
                 <RefreshCwIcon className="size-4" />
               </MessageAction>
             )}
+            {assistantStats && <MessageStatsPopover stats={assistantStats} />}
           </MessageActions>
         ))}
     </Fragment>
