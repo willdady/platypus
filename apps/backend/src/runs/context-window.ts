@@ -243,7 +243,11 @@ async function detectOpenAiCompatible(
   httpGetJson: HttpGetJson,
 ): Promise<Partial<ResolvedWindow> | undefined> {
   if (!provider.baseUrl) return undefined; // official OpenAI omits the field
-  const base = trimSlash(provider.baseUrl);
+  // baseUrl conventionally ends in "/v1" (the OpenAI SDK needs it that way for
+  // chat calls), but the models endpoint is "{root}/v1/models" — strip a
+  // trailing "/v1" first so we don't request "/v1/v1/models" (404 → the window
+  // silently falls to the default and the usage ring renders "unknown").
+  const base = trimSlash(provider.baseUrl).replace(/\/v1$/, "");
   const headers = provider.apiKey
     ? { authorization: `Bearer ${provider.apiKey}` }
     : undefined;

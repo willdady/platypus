@@ -216,6 +216,28 @@ describe("API auto-detect parsers", () => {
     expect(out.source).toBe("api");
   });
 
+  it("vLLM: a baseUrl already ending in /v1 probes /v1/models, not /v1/v1/models", async () => {
+    const httpGetJson = vi.fn().mockResolvedValue({
+      data: [{ id: "qwen36", max_model_len: 262144 }],
+    });
+    const r = new ContextWindowResolver({ loadRegistry, httpGetJson });
+    const out = await r.resolve(
+      {
+        id: "v",
+        providerType: "OpenAI",
+        baseUrl: "http://localhost:8000/v1",
+        apiKey: "x",
+      },
+      "qwen36",
+    );
+    expect(out.contextWindow).toBe(262144);
+    expect(out.source).toBe("api");
+    expect(httpGetJson).toHaveBeenCalledWith(
+      "http://localhost:8000/v1/models",
+      expect.anything(),
+    );
+  });
+
   it("official OpenAI (no baseUrl) skips the probe and falls to registry", async () => {
     const httpGetJson = vi.fn();
     const r = new ContextWindowResolver({ loadRegistry, httpGetJson });
