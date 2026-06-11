@@ -1,4 +1,10 @@
-import { stepCountIs, tool, ToolLoopAgent, type Tool } from "ai";
+import {
+  stepCountIs,
+  tool,
+  ToolLoopAgent,
+  type PrepareStepFunction,
+  type Tool,
+} from "ai";
 import { z } from "zod";
 import { logger } from "../logger.ts";
 
@@ -43,6 +49,8 @@ interface SubAgentToolOptions {
   maxSteps?: number;
   /** Called on each activity update from the sub-agent. Used to reset the parent run's per-step timeout. */
   onProgress?: () => void;
+  /** Tier 2 in-turn compaction callback (§D, drift M3). Null when compaction disabled. */
+  prepareStep?: PrepareStepFunction;
 }
 
 /**
@@ -62,6 +70,7 @@ export const createSubAgentTool = (options: SubAgentToolOptions) => {
     tools,
     maxSteps = 50,
     onProgress,
+    prepareStep,
   } = options;
 
   const toolName = subAgentToolName({ name });
@@ -73,6 +82,7 @@ export const createSubAgentTool = (options: SubAgentToolOptions) => {
       `You are a specialized sub-agent named "${name}". Complete the task you are given thoroughly and accurately.`,
     tools,
     stopWhen: [stepCountIs(maxSteps)],
+    prepareStep,
   });
 
   return {
@@ -183,6 +193,7 @@ export const createSubAgentTools = async (
     toolSetIds: string[],
   ) => Promise<Record<string, Tool>>,
   onProgress?: () => void,
+  prepareStepFn?: (id: string) => PrepareStepFunction | undefined,
 ): Promise<Record<string, Tool>> => {
   const tools: Record<string, Tool> = {};
 
@@ -207,6 +218,7 @@ export const createSubAgentTools = async (
         tools: subAgentTools,
         maxSteps: subAgent.maxSteps || 50,
         onProgress,
+        prepareStep: prepareStepFn?.(subAgent.id),
       });
 
       tools[toolName] = tool;

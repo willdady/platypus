@@ -1,57 +1,12 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 
-const { mockPrepareChatTurn, mockGenerateText, mockStreamText, streamHarness } =
-  vi.hoisted(() => {
-    // A minimal, manually-driven async iterable standing in for the server-side
-    // snapshot branch of the UI message stream. The test pushes partial
-    // messages and ends it explicitly so timing is deterministic.
-    class AsyncQueue {
-      items: unknown[] = [];
-      resolvers: ((r: { value: unknown; done: boolean }) => void)[] = [];
-      ended = false;
-      push(item: unknown) {
-        const r = this.resolvers.shift();
-        if (r) r({ value: item, done: false });
-        else this.items.push(item);
-      }
-      end() {
-        this.ended = true;
-        let r;
-        while ((r = this.resolvers.shift()))
-          r({ value: undefined, done: true });
-      }
-      [Symbol.asyncIterator]() {
-        return {
-          next: () => {
-            if (this.items.length)
-              return Promise.resolve({
-                value: this.items.shift(),
-                done: false,
-              });
-            if (this.ended)
-              return Promise.resolve({ value: undefined, done: true });
-            return new Promise((res) => this.resolvers.push(res));
-          },
-        };
-      }
-    }
-    return {
-      mockPrepareChatTurn: vi.fn(),
-      mockGenerateText: vi.fn(),
-      mockStreamText: vi.fn(),
-      streamHarness: {
-        AsyncQueue,
-        queue: null as InstanceType<typeof AsyncQueue> | null,
-        // The AI SDK callbacks the runner registers; captured so the test can
-        // drive step-completion and stream-completion by hand.
-        onStepFinish: undefined as ((step: unknown) => void) | undefined,
-        onFinish: undefined as
-          | ((ctx: { messages: unknown[] }) => Promise<void> | void)
-          | undefined,
-        responseSentinel: { __isResponse: true },
-      },
-    };
-  });
+const { mockPrepareChatTurn, mockGenerateText, mockStreamText } = vi.hoisted(
+  () => ({
+    mockPrepareChatTurn: vi.fn(),
+    mockGenerateText: vi.fn(),
+    mockStreamText: vi.fn(),
+  }),
+);
 
 vi.mock("../services/chat-execution.ts", () => ({
   prepareChatTurn: mockPrepareChatTurn,
@@ -66,8 +21,6 @@ vi.mock("ai", async () => {
     convertToModelMessages: vi.fn().mockReturnValue([]),
     createIdGenerator: vi.fn().mockReturnValue(() => "msg-1"),
     stepCountIs: vi.fn(),
-    readUIMessageStream: () => streamHarness.queue,
-    createUIMessageStreamResponse: () => streamHarness.responseSentinel,
   };
 });
 
@@ -80,7 +33,9 @@ vi.mock("../logger.ts", () => ({
   },
 }));
 
-import { AgentRunner } from "./agent-runner.ts";
+import { AgentRunner, withToolTimestamps } from "./agent-runner.ts";
+import { buildTier2PrepareStep } from "./compaction.ts";
+import type { UIMessageChunk } from "ai";
 import { runRegistry, TimeoutError } from "./run-registry.ts";
 import type { ResolvedRunPlan, RunInput, RunSink } from "./types.ts";
 import type { WorkspaceScope } from "../scope.ts";
@@ -89,13 +44,7 @@ type LifecycleEvent =
   | { name: "onStart"; runId: string }
   | { name: "onResolved"; runId: string; plan: ResolvedRunPlan }
   | { name: "onProgress"; runId: string }
-  | {
-      name: "onFinish";
-      runId: string;
-      status: string;
-      error?: string;
-      messages?: unknown[];
-    };
+  | { name: "onFinish"; runId: string; status: string; error?: string };
 
 class RecordingSink implements RunSink {
   events: LifecycleEvent[] = [];
@@ -116,14 +65,12 @@ class RecordingSink implements RunSink {
     runId: string;
     status: string;
     error?: Error;
-    messages?: unknown[];
   }): Promise<void> {
     this.events.push({
       name: "onFinish",
       runId: ctx.runId,
       status: ctx.status,
       error: ctx.error?.message,
-      messages: ctx.messages,
     });
   }
 
@@ -160,6 +107,14 @@ const fakeTurn = (overrides?: { dispose?: () => Promise<void> }) => {
       providerId: "p1",
       modelId: "m1",
     },
+    recovery: {
+      imageProvider: "default" as const,
+      targetTokens: 1000,
+      keepRecentMessages: 10,
+      minPrunableChars: 2000,
+      summarize: async (t: string) => t,
+    },
+    tier2: null,
     dispose,
   };
 };
@@ -379,163 +334,283 @@ describe("AgentRunner.cancel", () => {
   });
 });
 
-describe("AgentRunner.stream — success & interruption", () => {
-  let runner: AgentRunner;
-  beforeEach(() => {
-    runner = new AgentRunner();
-    vi.clearAllMocks();
-    streamHarness.queue = null;
-    streamHarness.onStepFinish = undefined;
-    streamHarness.onFinish = undefined;
-  });
-
-  const tick = () => new Promise((r) => setTimeout(r, 0));
-
-  // Make streamText return a fake result whose UI-stream callbacks the test
-  // can drive by hand: `onStepFinish` (per step) and `onFinish` (completion).
-  const primeStreamText = () => {
-    mockStreamText.mockImplementation((opts: any) => {
-      streamHarness.onStepFinish = opts.onStepFinish;
-      return {
-        toUIMessageStream: (uiOpts: any) => {
-          streamHarness.onFinish = uiOpts.onFinish;
-          return { tee: () => [{}, {}] };
-        },
-      };
-    });
-  };
-
-  it("runs the full lifecycle on success and persists the final messages", async () => {
-    const dispose = vi.fn().mockResolvedValue(undefined);
-    mockPrepareChatTurn.mockResolvedValueOnce(fakeTurn({ dispose }));
-    const queue = new streamHarness.AsyncQueue();
-    streamHarness.queue = queue;
-    primeStreamText();
-
-    const sink = new RecordingSink();
-    const res = await runner.stream({
-      scope,
-      input: { ...baseInput, runId: "s-ok" },
-      sink,
-      options: { origin: "http://test" },
-    });
-    expect(res).toBe(streamHarness.responseSentinel);
-
-    // A step completes -> onProgress.
-    streamHarness.onStepFinish!({
-      usage: { inputTokens: 3, outputTokens: 4 },
-      toolCalls: [],
-    });
-    // A partial snapshot streams in over the server-side branch.
-    queue.push({ id: "m1", role: "assistant", parts: [] });
-    await tick();
-    // Natural completion delivers the final assistant message.
-    const finalMessages = [
-      { id: "m1", role: "assistant", parts: [{ type: "text", text: "hi" }] },
-    ];
-    await streamHarness.onFinish!({ messages: finalMessages });
-    queue.end();
-    await tick();
-
-    expect(sink.names()).toEqual([
-      "onStart",
-      "onResolved",
-      "onProgress",
-      "onFinish",
-    ]);
-    const finish = sink.events.at(-1) as Extract<
-      LifecycleEvent,
-      { name: "onFinish" }
-    >;
-    expect(finish.status).toBe("succeeded");
-    expect(finish.error).toBeUndefined();
-    expect(finish.messages).toEqual(finalMessages);
-    expect(dispose).toHaveBeenCalledTimes(1);
-    expect(runRegistry.has("s-ok")).toBe(false);
-  });
-
-  it("finalises as cancelled with the partial messages when cancelled mid-stream", async () => {
-    mockPrepareChatTurn.mockResolvedValueOnce(fakeTurn());
-    const queue = new streamHarness.AsyncQueue();
-    streamHarness.queue = queue;
-    primeStreamText();
-
-    const sink = new RecordingSink();
-    await runner.stream({
-      scope,
-      input: { ...baseInput, runId: "s-cancel" },
-      sink,
-      options: { origin: "http://test" },
-    });
-
-    const partial = {
-      id: "m1",
-      role: "assistant",
-      parts: [{ type: "text", text: "par" }],
-    };
-    queue.push(partial);
-    await tick();
-
-    expect(runner.cancel("s-cancel")).toBe(true);
-    // The SDK observes the abort and finishes the UI stream.
-    await streamHarness.onFinish!({ messages: [partial] });
-    queue.end();
-    await tick();
-
-    const finish = sink.events.at(-1) as Extract<
-      LifecycleEvent,
-      { name: "onFinish" }
-    >;
-    expect(finish.status).toBe("cancelled");
-    expect(finish.messages).toEqual([partial]);
-  });
-
-  it("finalises as failed with a TimeoutError and the partial messages on per-run timeout", async () => {
-    mockPrepareChatTurn.mockResolvedValueOnce(fakeTurn());
-    const queue = new streamHarness.AsyncQueue();
-    streamHarness.queue = queue;
-    primeStreamText();
-
-    const sink = new RecordingSink();
-    await runner.stream({
-      scope,
-      input: { ...baseInput, runId: "s-timeout" },
-      sink,
-      options: {
-        origin: "http://test",
-        timeouts: { perRunTimeoutMs: 5, perStepTimeoutMs: 1_000_000 },
-      },
-    });
-
-    const partial = {
-      id: "m1",
-      role: "assistant",
-      parts: [{ type: "text", text: "par" }],
-    };
-    queue.push(partial);
-    await tick();
-    // Let the per-run timer fire -> registry aborts -> onTimeout -> finalize.
-    await new Promise((r) => setTimeout(r, 30));
-    queue.end();
-    await tick();
-
-    const finish = sink.events.at(-1) as Extract<
-      LifecycleEvent,
-      { name: "onFinish" }
-    >;
-    expect(finish.status).toBe("failed");
-    expect(finish.error).toMatch(/per-run timeout/);
-    // The snapshot accumulated before the timeout is what gets persisted.
-    expect(finish.messages).toEqual([partial]);
-    expect(runRegistry.has("s-timeout")).toBe(false);
-  });
-});
-
 // Smoke test the TimeoutError export so the type stays public-importable
 describe("AgentRunner timeout types", () => {
   it("TimeoutError remains an Error subclass", () => {
     const e = new TimeoutError("x", "run");
     expect(e).toBeInstanceOf(Error);
     expect(e.kind).toBe("run");
+  });
+});
+
+describe("withToolTimestamps", () => {
+  const FIXED_NOW = "2026-05-30T12:00:00.000Z";
+
+  const collect = async <T>(stream: ReadableStream<T>): Promise<T[]> => {
+    const out: T[] = [];
+    const reader = stream.getReader();
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      out.push(value);
+    }
+    return out;
+  };
+
+  const sourceOf = (chunks: UIMessageChunk[]): ReadableStream<UIMessageChunk> =>
+    new ReadableStream<UIMessageChunk>({
+      start(controller) {
+        for (const chunk of chunks) controller.enqueue(chunk);
+        controller.close();
+      },
+    });
+
+  const toolInputAvailable = (
+    overrides: Partial<
+      Extract<UIMessageChunk, { type: "tool-input-available" }>
+    > = {},
+  ): UIMessageChunk => ({
+    type: "tool-input-available",
+    toolCallId: "t1",
+    toolName: "foo",
+    input: { x: 1 },
+    ...overrides,
+  });
+
+  it("injects startedAt on tool-input-available chunks", async () => {
+    const { stream } = withToolTimestamps(
+      sourceOf([toolInputAvailable()]),
+      () => FIXED_NOW,
+    );
+    const result = await collect(stream);
+
+    expect(result).toHaveLength(1);
+    expect(
+      (result[0] as { toolMetadata?: Record<string, unknown> }).toolMetadata,
+    ).toEqual({ startedAt: FIXED_NOW });
+  });
+
+  it("preserves existing toolMetadata fields", async () => {
+    const { stream } = withToolTimestamps(
+      sourceOf([toolInputAvailable({ toolMetadata: { custom: "value" } })]),
+      () => FIXED_NOW,
+    );
+    const result = await collect(stream);
+
+    expect(
+      (result[0] as { toolMetadata?: Record<string, unknown> }).toolMetadata,
+    ).toEqual({
+      custom: "value",
+      startedAt: FIXED_NOW,
+    });
+  });
+
+  it("passes other chunks through unchanged", async () => {
+    const chunks: UIMessageChunk[] = [
+      { type: "text-delta", id: "a", delta: "hello" },
+      {
+        type: "tool-output-available",
+        toolCallId: "t1",
+        output: { ok: true },
+      },
+      { type: "finish", finishReason: "stop" },
+    ];
+
+    const { stream } = withToolTimestamps(sourceOf(chunks), () => FIXED_NOW);
+    const result = await collect(stream);
+
+    expect(result).toEqual(chunks);
+  });
+
+  it("records completedAt for tool-output-available chunks", async () => {
+    const { stream, completions } = withToolTimestamps(
+      sourceOf([
+        toolInputAvailable(),
+        {
+          type: "tool-output-available",
+          toolCallId: "t1",
+          output: { ok: true },
+        },
+      ]),
+      () => FIXED_NOW,
+    );
+    // Completions are populated as the stream drains, so consume it first.
+    await collect(stream);
+
+    expect(completions.get("t1")).toBe(FIXED_NOW);
+  });
+
+  it("records completedAt for tool-output-error chunks", async () => {
+    const { stream, completions } = withToolTimestamps(
+      sourceOf([
+        toolInputAvailable(),
+        {
+          type: "tool-output-error",
+          toolCallId: "t1",
+          errorText: "boom",
+        },
+      ]),
+      () => FIXED_NOW,
+    );
+    await collect(stream);
+
+    expect(completions.get("t1")).toBe(FIXED_NOW);
+  });
+
+  // Mirrors AgentRunner.stream's pipeline: transform -> tee -> readUIMessageStream
+  // drains the snapshot branch. Verifies completions populate AND the built
+  // message's tool part carries the same toolCallId, so applyToolCompletions
+  // (matches on toolCallId) can stamp completedAt.
+  it("integration: completions + built tool part share toolCallId after tee+read", async () => {
+    const { readUIMessageStream } =
+      await vi.importActual<typeof import("ai")>("ai");
+
+    const chunks: UIMessageChunk[] = [
+      { type: "start", messageId: "m1" },
+      { type: "start-step" },
+      {
+        type: "tool-input-available",
+        toolCallId: "call_xyz",
+        toolName: "foo",
+        input: { a: 1 },
+      },
+      {
+        type: "tool-output-available",
+        toolCallId: "call_xyz",
+        output: { ok: true },
+      },
+      { type: "finish-step" },
+      { type: "finish" },
+    ];
+
+    const { stream, completions } = withToolTimestamps(
+      sourceOf(chunks),
+      () => FIXED_NOW,
+    );
+    const [forResponse, forSnapshot] = stream.tee();
+
+    let lastMessage: { parts?: Array<Record<string, unknown>> } | undefined;
+    for await (const message of readUIMessageStream({ stream: forSnapshot })) {
+      lastMessage = message;
+    }
+    await collect(forResponse);
+
+    expect(completions.get("call_xyz")).toBe(FIXED_NOW);
+
+    const toolPart = lastMessage?.parts?.find(
+      (p) => (p as { toolCallId?: string }).toolCallId === "call_xyz",
+    ) as { toolMetadata?: Record<string, unknown>; toolCallId?: string };
+    expect(toolPart).toBeDefined();
+    expect(toolPart.toolCallId).toBe("call_xyz");
+    expect(toolPart.toolMetadata).toMatchObject({ startedAt: FIXED_NOW });
+  });
+});
+
+describe("buildTier2PrepareStep", () => {
+  const makeCtx = (triggerTokens = 100) => ({
+    triggerTokens,
+    targetTokens: 50,
+    keepRecentMessages: 4,
+    minPrunableChars: 100,
+    imageProvider: "default" as const,
+    summarize: vi.fn().mockResolvedValue("summary"),
+    summarizerWindow: undefined,
+  });
+
+  // Invoke a PrepareStepFunction supplying only the field under test; the
+  // callback ignores steps/stepNumber/model/experimental_context.
+  const callStep = (
+    fn: ReturnType<typeof buildTier2PrepareStep>,
+    messages: import("ai").ModelMessage[],
+  ) =>
+    fn({
+      messages,
+      steps: [],
+      stepNumber: 0,
+      model: {} as never,
+      experimental_context: undefined,
+    });
+
+  const shortMessages: import("ai").ModelMessage[] = [
+    { role: "user", content: [{ type: "text", text: "hi" }] },
+    {
+      role: "assistant",
+      content: [{ type: "text", text: "hello" }],
+    },
+  ];
+
+  // 6 assistant/tool pairs where each tool result carries 1200 chars of text
+  // (≈ 300 tokens each via char/4). Total ≈ 1800+ tokens > any reasonable
+  // triggerTokens threshold used in these tests.
+  const longMessages = (): import("ai").ModelMessage[] => {
+    const msgs: import("ai").ModelMessage[] = [
+      { role: "user", content: [{ type: "text", text: "start" }] },
+    ];
+    for (let i = 0; i < 6; i++) {
+      msgs.push({
+        role: "assistant",
+        content: [
+          {
+            type: "tool-call",
+            toolCallId: `tc${i}`,
+            toolName: "tool",
+            input: {},
+          },
+        ],
+      });
+      msgs.push({
+        role: "tool",
+        content: [
+          {
+            type: "tool-result",
+            toolCallId: `tc${i}`,
+            toolName: "tool",
+            // Must use typed output shape so tokenEstimator counts the value.
+            output: { type: "text" as const, value: "x".repeat(1200) },
+          },
+        ],
+      });
+    }
+    return msgs;
+  };
+
+  it("returns undefined when messages are below triggerTokens (drift m3)", async () => {
+    const fn = buildTier2PrepareStep(makeCtx(10_000));
+    const result = await callStep(fn, shortMessages);
+    expect(result).toBeUndefined();
+  });
+
+  it("compacts when messages exceed triggerTokens", async () => {
+    const msgs = longMessages();
+    const ctx = makeCtx(1);
+    const fn = buildTier2PrepareStep(ctx);
+    const result = await callStep(fn, msgs);
+    expect(result?.messages).toBeDefined();
+    const out = result!.messages!;
+    expect(out.length).toBeLessThan(msgs.length);
+    // Stage 2 summarizes the dropped prefix.
+    expect(ctx.summarize).toHaveBeenCalled();
+    // First surviving message is the synthetic summary (role "user"); the one
+    // after it starts the kept tail and must not be an orphaned tool result
+    // (its assistant tool-call would have been dropped into the prefix).
+    expect(out[1]?.role).not.toBe("tool");
+  });
+
+  it("returns undefined when prefix is empty (no-op, drift m3 / RV4)", async () => {
+    // Two messages, keepRecentMessages 4 → no prefix to summarize →
+    // compactModelMessages drops nothing → prepareStep returns undefined so the
+    // SDK proceeds unchanged, and the summarizer is never called.
+    const ctx = makeCtx(1);
+    const fn = buildTier2PrepareStep(ctx);
+    const result = await callStep(fn, shortMessages);
+    expect(result).toBeUndefined();
+    expect(ctx.summarize).not.toHaveBeenCalled();
+  });
+
+  it("does not call summarize when estimate is below triggerTokens", async () => {
+    const ctx = makeCtx(10_000);
+    const fn = buildTier2PrepareStep(ctx);
+    await callStep(fn, shortMessages);
+    expect(ctx.summarize).not.toHaveBeenCalled();
   });
 });

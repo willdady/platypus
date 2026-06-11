@@ -67,6 +67,13 @@ export const provider = pgTable(
     memoryExtractionModelId: t.text("memory_extraction_model_id").notNull(),
     embeddingModelId: t.text("embedding_model_id"),
     embeddingDimensions: t.integer("embedding_dimensions"),
+    // Per-model context-window / output overrides (context-compaction-plan §A).
+    // Keyed by model id; resolveContextWindow consults this before API/registry.
+    modelMeta: t
+      .jsonb("model_meta")
+      .$type<
+        Record<string, { contextWindow?: number; maxOutputTokens?: number }>
+      >(),
     createdAt: t.timestamp("created_at").notNull().defaultNow(),
     updatedAt: t.timestamp("updated_at").notNull().defaultNow(),
   }),
@@ -162,6 +169,16 @@ export const chat = pgTable(
     presencePenalty: t.real("presence_penalty"),
     frequencyPenalty: t.real("frequency_penalty"),
 
+    // Context-compaction state (docs/adr/0009). All additive nullable/defaulted.
+    // P1 view-not-delete: these change what is sent to the model, never the
+    // stored `messages`. `summaryWatermark` = message id of the last summarized
+    // message. All mutations go through the single versioned CAS writer (P3/R1);
+    // `version` is its compare-and-swap token.
+    contextSummary: t.text("context_summary"),
+    summaryWatermark: t.text("summary_watermark"),
+    compactionDirty: t.boolean("compaction_dirty").notNull().default(false),
+    version: t.integer("version").notNull().default(0),
+
     // Memory processing tracking
     lastMemoryProcessedAt: t.timestamp("last_memory_processed_at"),
     memoryExtractionStatus: t
@@ -215,6 +232,15 @@ export const agent = pgTable(
     seed: t.real("seed"),
     presencePenalty: t.real("presence_penalty"),
     frequencyPenalty: t.real("frequency_penalty"),
+    // Per-agent context-compaction config (context-compaction-plan §G). All
+    // nullable; the runtime applies defaults when unset (true / 0.8 / 0.5 /
+    // 0.05 / 10 / 2000). Editable surface wired in a later slice.
+    compactionEnabled: t.boolean("compaction_enabled"),
+    triggerRatio: t.real("trigger_ratio"),
+    targetRatio: t.real("target_ratio"),
+    reserveRatio: t.real("reserve_ratio"),
+    keepRecentMessages: t.integer("keep_recent_messages"),
+    minPrunableChars: t.integer("min_prunable_chars"),
     toolSetIds: t.jsonb("tool_set_ids").$type<string[]>().default([]), // Array of tool set ids
     skillIds: t.jsonb("skill_ids").$type<string[]>().default([]), // Array of skill ids
     subAgentIds: t.jsonb("sub_agent_ids").$type<string[]>().default([]), // Array of sub-agent ids

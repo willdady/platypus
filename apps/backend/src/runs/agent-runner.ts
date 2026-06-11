@@ -8,9 +8,17 @@ import {
   readUIMessageStream,
   stepCountIs,
   streamText,
+  wrapLanguageModel,
   type LanguageModel,
+  type UIMessageChunk,
 } from "ai";
 import {
+  contextOverflowRecoveryMiddleware,
+  isContextOverflowError,
+} from "./recovery.ts";
+import { buildTier2PrepareStep } from "./compaction.ts";
+import {
+  loadChatMessages,
   prepareChatTurn,
   type ChatTurn,
   type ToolActivityEvent,
@@ -32,6 +40,129 @@ import type {
   RunStats,
   RunStatus,
 } from "./types.ts";
+
+/**
+ * Result of {@link withToolTimestamps}: the transformed stream plus a map of
+ * `toolCallId` → completion ISO timestamp, populated as tool-output chunks
+ * pass through.
+ */
+export type ToolTimestampStream<TChunk extends UIMessageChunk> = {
+  stream: ReadableStream<TChunk>;
+  /** toolCallId → completedAt ISO timestamp, filled in as the stream drains. */
+  completions: Map<string, string>;
+};
+
+/**
+ * Stamps tool-call timing onto the stream so the UI can show each tool's run
+ * duration:
+ *
+ * - `startedAt` is injected into `tool-input-available` chunks via
+ *   `toolMetadata`. It must go here (not on the output chunk) because the AI
+ *   SDK's tool-output handlers ignore `chunk.toolMetadata` and reuse the
+ *   invocation's existing `toolMetadata` from the input-available phase.
+ * - `completedAt` cannot ride the output chunk for the same reason, so it is
+ *   recorded in the returned `completions` map keyed by `toolCallId`. The run
+ *   loop applies it to the built message via {@link applyToolCompletions}
+ *   before the sink persists it.
+ *
+ * Exported for unit testing.
+ */
+export function withToolTimestamps<TChunk extends UIMessageChunk>(
+  stream: ReadableStream<TChunk>,
+  now: () => string = () => new Date().toISOString(),
+): ToolTimestampStream<TChunk> {
+  const completions = new Map<string, string>();
+  const out = stream.pipeThrough(
+    new TransformStream<TChunk, TChunk>({
+      transform(chunk, controller) {
+        if (chunk.type === "tool-input-available") {
+          controller.enqueue({
+            ...chunk,
+            toolMetadata: {
+              ...chunk.toolMetadata,
+              startedAt: now(),
+            },
+          });
+          return;
+        }
+        if (
+          chunk.type === "tool-output-available" ||
+          chunk.type === "tool-output-error"
+        ) {
+          completions.set(chunk.toolCallId, now());
+        }
+        controller.enqueue(chunk);
+      },
+    }),
+  );
+  return { stream: out, completions };
+}
+
+/** Stats stamped on the last assistant message's metadata after each stream (§H/§I). */
+export type MessageStats = {
+  /** Run-wide totals across every step (sum) — §I cost popover. */
+  inputTokens: number;
+  outputTokens: number;
+  /**
+   * Input tokens of the LAST model call = peak context fullness — §H ring.
+   * NOT the run-wide sum (which over-counts on multi-step tool loops).
+   */
+  contextTokens: number;
+  startedAt: string;
+  firstTokenAt?: string;
+  finishedAt: string;
+  contextWindow: number;
+  contextWindowIsDefault: boolean;
+};
+
+/**
+ * Stamps per-run stats (token counts, timing, resolved context window) onto
+ * the last assistant message's `metadata.stats` in place. Applied at the same
+ * point as {@link applyToolCompletions} so both mutations happen before the
+ * sink persists the final state (§H/§I).
+ */
+function applyMessageStats(
+  messages: PlatypusUIMessage[],
+  stats: MessageStats,
+): void {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    if (messages[i].role === "assistant") {
+      const msg = messages[i] as PlatypusUIMessage & {
+        metadata?: Record<string, unknown>;
+      };
+      msg.metadata = { ...msg.metadata, stats };
+      return;
+    }
+  }
+}
+
+/**
+ * Stamps `completedAt` onto assistant tool parts in place, reading from the
+ * `completions` map produced by {@link withToolTimestamps}. Applied to the
+ * built message just before it is persisted, since the AI SDK strips
+ * `toolMetadata` from tool-output chunks and the end time can't be injected
+ * inline. Paired with the injected `startedAt`, this lets the UI compute each
+ * tool's run duration.
+ */
+function applyToolCompletions(
+  messages: PlatypusUIMessage[],
+  completions: Map<string, string>,
+): void {
+  if (completions.size === 0) return;
+  for (const message of messages) {
+    for (const part of message.parts ?? []) {
+      const anyPart = part as {
+        toolCallId?: string;
+        toolMetadata?: Record<string, unknown>;
+      };
+      const completedAt = anyPart.toolCallId
+        ? completions.get(anyPart.toolCallId)
+        : undefined;
+      if (!completedAt) continue;
+      anyPart.toolMetadata = { ...anyPart.toolMetadata, completedAt };
+    }
+  }
+}
 
 export type StreamOptions = {
   origin: string;
@@ -154,6 +285,12 @@ type RunState = {
   stats: RunStats;
   messages: PlatypusUIMessage[];
   terminated: boolean;
+  /**
+   * Input tokens reported by the most recent model step = peak context
+   * fullness for the §H ring. Tracked separately from `stats.inputTokens`,
+   * which is the run-wide SUM and over-counts multi-step tool loops.
+   */
+  lastStepInputTokens: number;
 };
 
 /**
@@ -178,6 +315,7 @@ export class AgentRunner {
     origin: string | undefined,
     frontendUrl?: string,
     onActivity?: (event?: ToolActivityEvent) => void,
+    priorMessages?: PlatypusUIMessage[],
   ): Promise<ChatTurn> {
     return prepareChatTurn({
       orgId: scope.orgId,
@@ -189,6 +327,7 @@ export class AgentRunner {
       frontendUrl,
       runMode: scope.principal.kind === "user" ? "interactive" : "headless",
       onActivity,
+      priorMessages,
     });
   }
 
@@ -219,12 +358,29 @@ export class AgentRunner {
     timeouts?: Pick<RegisterOptions, "perStepTimeoutMs" | "perRunTimeoutMs">;
   }) {
     const { scope, input, sink } = params;
+
+    // RV1: snapshot the DB state BEFORE onStart overwrites it so
+    // applyTier1IfNeeded has the correct C4 baseline. Only interactive chats
+    // carry a `request.id`; headless runs (triggers, sub-agents) have none.
+    const priorMessages = input.request.id
+      ? await loadChatMessages(input.request.id).catch((err) => {
+          // Falls back to the post-overwrite DB read inside applyTier1IfNeeded,
+          // which cannot detect edits below the watermark — log the degradation.
+          logger.warn(
+            { err, chatId: input.request.id },
+            "RV1: failed to snapshot prior messages; C4 edit-detection degraded this turn",
+          );
+          return undefined;
+        })
+      : undefined;
+
     await sink.onStart({ runId: input.runId, messages: input.messages });
 
     const state: RunState = {
       stats: {},
       messages: input.messages,
       terminated: false,
+      lastStepInputTokens: 0,
     };
 
     const finalize = async (
@@ -277,6 +433,7 @@ export class AgentRunner {
         params.origin,
         params.frontendUrl,
         onActivity,
+        priorMessages,
       );
     } catch (error) {
       const err = error instanceof Error ? error : new Error(String(error));
@@ -297,6 +454,8 @@ export class AgentRunner {
     }): void => {
       handle.bumpStep();
       accumulateStepStats(state.stats, step);
+      state.lastStepInputTokens =
+        step.usage?.inputTokens ?? state.lastStepInputTokens;
       logger.info(
         {
           runId: input.runId,
@@ -323,12 +482,20 @@ export class AgentRunner {
     // an `undefined` value identically, and the streaming path has always
     // passed them this way in production.
     const modelArgs = {
-      model: state.turn.stream.model as LanguageModel,
+      // Recovery middleware (§E, P4): every model call — first call and every
+      // tool-loop step, stream and generate alike — gets one trim-and-retry on
+      // a provider "context too long" rejection. Always on; not gated by §G.
+      model: withOverflowRecovery(state.turn),
       messages: await convertToModelMessages(state.turn.stream.messages),
       system: state.turn.stream.system,
       tools: state.turn.stream.tools,
       stopWhen: [stepCountIs(state.turn.stream.maxSteps)],
       abortSignal: handle.signal,
+      // Tier 2 (§D): in-turn compaction before each step when the live window
+      // nears the limit. Undefined when the turn has no Tier 2 runtime.
+      prepareStep: state.turn.tier2
+        ? buildTier2PrepareStep(state.turn.tier2)
+        : undefined,
       temperature: state.turn.stream.temperature,
       topP: state.turn.stream.topP,
       topK: state.turn.stream.topK,
@@ -358,6 +525,9 @@ export class AgentRunner {
 
     logger.debug({ systemPrompt: modelArgs.system }, "System prompt for chat");
 
+    const startedAt = new Date().toISOString();
+    let firstTokenAt: string | undefined;
+
     const result = streamText({
       ...modelArgs,
       onStepFinish: (step) => onStep(step),
@@ -367,8 +537,7 @@ export class AgentRunner {
     // one branch; we drain the other server-side so a disconnected
     // client (cancelling the response branch) doesn't propagate back to
     // the source. The source keeps pulling as long as the snapshot
-    // branch is being read, so `onFinish` only fires on natural
-    // completion — not when the consumer cancels with partial state.
+    // branch is being read.
     const uiStream = result.toUIMessageStream<PlatypusUIMessage>({
       originalMessages: input.messages,
       generateMessageId: createIdGenerator({ prefix: "msg", size: 16 }),
@@ -377,8 +546,65 @@ export class AgentRunner {
           ? { agentId: state.turn.resolved.agentId }
           : undefined,
       onError: (error) => formatStreamError(error),
-      onFinish: async ({ messages: finalMessages }) => {
-        state.messages = finalMessages;
+    });
+
+    const { stream: timedStream, completions } = withToolTimestamps(uiStream);
+    const [forResponse, forSnapshot] = timedStream.tee();
+
+    // Read the snapshot branch as message snapshots and keep `state.messages`
+    // up to date. ChatSink's FlushScheduler then writes the in-progress
+    // assistant message to the DB on each onProgress bump, so a user who
+    // reconnects mid-run sees the partial answer (not just their own
+    // input message).
+    //
+    // finalize is called here (not in toUIMessageStream's onFinish) so that
+    // state.messages reflects the fully-drained stream — including the tool
+    // `completedAt` timestamps and §H/§I stats applied below — before the sink
+    // persists it.
+    // RV8: an error chunk (model/tool failure surfaced via formatStreamError) or
+    // an internal stream fault ends the for-await without throwing, because
+    // readUIMessageStream defaults terminateOnError=false. Capture it so the
+    // finally finalizes "failed" instead of silently persisting a partial
+    // message as "succeeded".
+    let streamError: unknown;
+    void (async () => {
+      try {
+        for await (const message of readUIMessageStream<PlatypusUIMessage>({
+          stream: forSnapshot,
+          onError: (err) => {
+            streamError = err;
+            logger.error(
+              { err, runId: input.runId },
+              "Snapshot stream parse error",
+            );
+          },
+        })) {
+          if (!firstTokenAt && message.parts?.some((p) => p.type === "text")) {
+            firstTokenAt = new Date().toISOString();
+          }
+          state.messages = [...input.messages, message];
+        }
+      } catch (err) {
+        streamError = err;
+        logger.error(
+          { err, runId: input.runId },
+          "Server-side UI stream consumer error",
+        );
+      } finally {
+        const finishedAt = new Date().toISOString();
+        applyToolCompletions(state.messages, completions);
+        if (state.turn) {
+          applyMessageStats(state.messages, {
+            inputTokens: state.stats.inputTokens ?? 0,
+            outputTokens: state.stats.outputTokens ?? 0,
+            contextTokens: state.lastStepInputTokens,
+            startedAt,
+            firstTokenAt,
+            finishedAt,
+            contextWindow: state.turn.resolved.contextWindow,
+            contextWindowIsDefault: state.turn.resolved.contextWindowIsDefault,
+          });
+        }
         let status: RunStatus = "succeeded";
         let err: Error | undefined;
         if (handle.signal.aborted) {
@@ -389,35 +615,20 @@ export class AgentRunner {
           } else {
             status = "cancelled";
           }
+        } else if (streamError !== undefined) {
+          // The stream errored (model/tool rejection or internal fault) but did
+          // not abort — record the run as failed rather than succeeded (RV8).
+          status = "failed";
+          err =
+            streamError instanceof Error
+              ? streamError
+              : new Error(
+                  typeof streamError === "string"
+                    ? streamError
+                    : "Server-side UI stream error",
+                );
         }
         await finalize(status, err);
-      },
-    });
-
-    const [forResponse, forSnapshot] = uiStream.tee();
-
-    // Read the snapshot branch as message snapshots and keep `state.messages`
-    // up to date. ChatSink's FlushScheduler then writes the in-progress
-    // assistant message to the DB on each onProgress bump, so a user who
-    // reconnects mid-run sees the partial answer (not just their own
-    // input message).
-    void (async () => {
-      try {
-        for await (const message of readUIMessageStream<PlatypusUIMessage>({
-          stream: forSnapshot,
-          onError: (err) =>
-            logger.error(
-              { err, runId: input.runId },
-              "Snapshot stream parse error",
-            ),
-        })) {
-          state.messages = [...input.messages, message];
-        }
-      } catch (err) {
-        logger.error(
-          { err, runId: input.runId },
-          "Server-side UI stream consumer error",
-        );
       }
     })();
 
@@ -490,6 +701,18 @@ export class AgentRunner {
 }
 
 /**
+ * Wraps the turn's model with the context-overflow recovery middleware (§E,
+ * P4): every model call — first call and every tool-loop step, stream and
+ * generate alike — gets one trim-and-retry on a provider "context too long"
+ * rejection. Always on; the §G kill switch does not gate it.
+ */
+const withOverflowRecovery = (turn: ChatTurn): LanguageModel =>
+  wrapLanguageModel({
+    model: turn.stream.model,
+    middleware: contextOverflowRecoveryMiddleware(turn.recovery),
+  });
+
+/**
  * Converts AI SDK errors into user-facing strings for the UI message stream.
  * Behaviour-preserving copy of the previous inline `onError` handler.
  */
@@ -497,6 +720,11 @@ const formatStreamError = (error: unknown): string => {
   logger.error({ error }, "Chat stream error");
   if (LoadAPIKeyError.isInstance(error)) {
     return "AI provider API key is missing or not configured.";
+  }
+  // Reaching here means recovery (§E) already trimmed and retried once and the
+  // provider still rejected the prompt — surface the actionable dead end.
+  if (isContextOverflowError(error)) {
+    return "Conversation too large for the model's context window even after trimming — start a new chat or reduce attachments.";
   }
   if (APICallError.isInstance(error)) {
     if (error.statusCode === 401 || error.statusCode === 403) {

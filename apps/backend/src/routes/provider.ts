@@ -7,6 +7,7 @@ import { providerCreateSchema, providerUpdateSchema } from "@platypus/schemas";
 import { eq, and } from "drizzle-orm";
 import { handleEmbeddingConfigChange } from "../services/embedding-invalidation.ts";
 import { dedupeArray } from "../utils.ts";
+import { contextWindowResolver } from "../runs/context-window.ts";
 import { requireAuth } from "../middleware/authentication.ts";
 import {
   requireOrgAccess,
@@ -135,6 +136,10 @@ provider.put(
       )
       .returning();
 
+    // RV7c: bust the cached context window so a modelMeta override takes effect
+    // immediately rather than waiting out the 1-hour TTL (drift T5).
+    contextWindowResolver.evict(providerId);
+
     return c.json(record[0], 200);
   },
 );
@@ -168,6 +173,46 @@ provider.delete(
         ),
       );
     return c.json({ message: "Provider deleted" });
+  },
+);
+
+/**
+ * Returns the resolved context window for a specific model on this provider
+ * (§H ring, drift U1). Uses the cached resolver — fast for repeated calls.
+ * Returns `{ contextWindow: null }` when the window fell to the conservative
+ * default so the frontend can render the ring neutral (drift T6).
+ */
+provider.get(
+  "/:providerId/context-window",
+  requireAuth,
+  requireOrgAccess(),
+  requireWorkspaceAccess,
+  async (c) => {
+    const orgId = c.req.param("orgId")!;
+    const workspaceId = c.req.param("workspaceId")!;
+    const providerId = c.req.param("providerId");
+    const modelId = c.req.query("modelId");
+
+    if (!modelId) {
+      return c.json({ error: "modelId query parameter required" }, 400);
+    }
+
+    const found = await requireScoped(db, "provider", providerId, {
+      orgId,
+      wsId: workspaceId,
+    });
+
+    const resolved = await contextWindowResolver
+      .resolve(found.row, modelId)
+      .catch(() => null);
+
+    return c.json({
+      contextWindow:
+        resolved && resolved.source !== "default"
+          ? resolved.contextWindow
+          : null,
+      source: resolved?.source ?? "default",
+    });
   },
 );
 

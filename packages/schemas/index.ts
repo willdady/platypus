@@ -101,6 +101,13 @@ export const chatSchema = z.object({
   seed: z.number().optional(),
   presencePenalty: z.number().optional(),
   frequencyPenalty: z.number().optional(),
+  // Context-compaction state (docs/adr/0009). Server-managed; intentionally NOT
+  // part of chatSubmit/chatUpdate. summaryWatermark is the message id of the
+  // last summarized message (P1: a view over history, never a delete).
+  contextSummary: z.string().nullable().optional(),
+  summaryWatermark: z.string().nullable().optional(),
+  compactionDirty: z.boolean().optional(),
+  version: z.number().int().optional(),
   createdAt: z.date(),
   updatedAt: z.date(),
 });
@@ -198,6 +205,15 @@ const agentBaseSchema = z.object({
   seed: z.number().optional(),
   presencePenalty: z.number().optional(),
   frequencyPenalty: z.number().optional(),
+  // Per-agent context-compaction config (context-compaction-plan §G). All
+  // optional; the runtime applies defaults when unset. Editable surface (adding
+  // these to agentCreate/Update picks + the form) lands in a later slice.
+  compactionEnabled: z.boolean().optional(),
+  triggerRatio: z.number().min(0).max(1).optional(),
+  targetRatio: z.number().min(0).max(1).optional(),
+  reserveRatio: z.number().min(0).max(1).optional(),
+  keepRecentMessages: z.number().int().min(1).optional(),
+  minPrunableChars: z.number().int().nonnegative().optional(),
   toolSetIds: z.array(z.string()).optional(),
   skillIds: z.array(z.string()).optional(),
   subAgentIds: z.array(z.string()).optional(),
@@ -222,44 +238,78 @@ export const agentSchema = agentBaseSchema.refine(
 
 export type Agent = z.infer<typeof agentSchema>;
 
-export const agentCreateSchema = agentBaseSchema.pick({
-  workspaceId: true,
-  providerId: true,
-  name: true,
-  description: true,
-  systemPrompt: true,
-  modelId: true,
-  maxSteps: true,
-  temperature: true,
-  topP: true,
-  topK: true,
-  seed: true,
-  presencePenalty: true,
-  frequencyPenalty: true,
-  toolSetIds: true,
-  skillIds: true,
-  subAgentIds: true,
-  inputPlaceholder: true,
-});
+// Hysteresis guard (context-compaction-plan §C2 / drift C2): the post-compaction
+// target must sit BELOW the trigger, otherwise compaction re-fires every turn
+// (the Cline #5616 thrash). Per-field bounds are 0..1; this enforces the
+// relationship. Only checked when BOTH are supplied (either may be omitted to
+// fall back to the runtime default).
+const compactionRatioOrder = (data: {
+  triggerRatio?: number;
+  targetRatio?: number;
+}) =>
+  data.triggerRatio == null ||
+  data.targetRatio == null ||
+  data.targetRatio < data.triggerRatio;
 
-export const agentUpdateSchema = agentBaseSchema.pick({
-  providerId: true,
-  name: true,
-  description: true,
-  systemPrompt: true,
-  modelId: true,
-  maxSteps: true,
-  temperature: true,
-  topP: true,
-  topK: true,
-  seed: true,
-  presencePenalty: true,
-  frequencyPenalty: true,
-  toolSetIds: true,
-  skillIds: true,
-  subAgentIds: true,
-  inputPlaceholder: true,
-});
+const compactionRatioOrderIssue = {
+  message: "targetRatio must be less than triggerRatio",
+  path: ["targetRatio"],
+};
+
+export const agentCreateSchema = agentBaseSchema
+  .pick({
+    workspaceId: true,
+    providerId: true,
+    name: true,
+    description: true,
+    systemPrompt: true,
+    modelId: true,
+    maxSteps: true,
+    temperature: true,
+    topP: true,
+    topK: true,
+    seed: true,
+    presencePenalty: true,
+    frequencyPenalty: true,
+    toolSetIds: true,
+    skillIds: true,
+    subAgentIds: true,
+    inputPlaceholder: true,
+    compactionEnabled: true,
+    triggerRatio: true,
+    targetRatio: true,
+    reserveRatio: true,
+    keepRecentMessages: true,
+    minPrunableChars: true,
+  })
+  .refine(compactionRatioOrder, compactionRatioOrderIssue);
+
+export const agentUpdateSchema = agentBaseSchema
+  .pick({
+    providerId: true,
+    name: true,
+    description: true,
+    systemPrompt: true,
+    modelId: true,
+    maxSteps: true,
+    temperature: true,
+    topP: true,
+    topK: true,
+    seed: true,
+    presencePenalty: true,
+    frequencyPenalty: true,
+    toolSetIds: true,
+    skillIds: true,
+    subAgentIds: true,
+    inputPlaceholder: true,
+    compactionEnabled: true,
+    triggerRatio: true,
+    targetRatio: true,
+    reserveRatio: true,
+    keepRecentMessages: true,
+    minPrunableChars: true,
+  })
+  .refine(compactionRatioOrder, compactionRatioOrderIssue);
 
 // Skill
 
@@ -549,6 +599,19 @@ export const providerApiModeSchema = z.enum(["chat", "responses"]);
 
 export type ProviderApiMode = z.infer<typeof providerApiModeSchema>;
 
+// Per-model context-window / output overrides (context-compaction-plan §A).
+// Keyed by model id; both fields optional so an override can set just one.
+export const modelMetaEntrySchema = z.object({
+  contextWindow: z.number().int().positive().optional(),
+  maxOutputTokens: z.number().int().positive().optional(),
+});
+
+export type ModelMetaEntry = z.infer<typeof modelMetaEntrySchema>;
+
+export const modelMetaSchema = z.record(z.string(), modelMetaEntrySchema);
+
+export type ModelMeta = z.infer<typeof modelMetaSchema>;
+
 const providerBaseSchema = z.object({
   id: z.string(),
   organizationId: z.string().optional(),
@@ -588,6 +651,7 @@ const providerBaseSchema = z.object({
     .max(4096)
     .nullable()
     .optional(),
+  modelMeta: modelMetaSchema.optional(),
   createdAt: z.date(),
   updatedAt: z.date(),
 });
@@ -639,6 +703,7 @@ export const providerCreateSchema = providerBaseSchema.pick({
   memoryExtractionModelId: true,
   embeddingModelId: true,
   embeddingDimensions: true,
+  modelMeta: true,
 });
 
 // Sandbox
@@ -774,6 +839,7 @@ export const providerUpdateSchema = providerBaseSchema.pick({
   memoryExtractionModelId: true,
   embeddingModelId: true,
   embeddingDimensions: true,
+  modelMeta: true,
 });
 
 export type ProviderUpdateData = z.infer<typeof providerUpdateSchema>;
@@ -1523,3 +1589,23 @@ export const dashboardUpdateSchema = z.object({
   desktopLayout: z.array(rglLayoutItemSchema).optional(),
   mobileLayout: z.array(rglLayoutItemSchema).optional(),
 });
+
+// Message stats (context-compaction-plan §H/§I)
+// Stamped on the last assistant message's metadata.stats after each stream run.
+// Used by the frontend context-usage ring (§H) and per-message stats popover (§I).
+
+export const messageStatsSchema = z.object({
+  // Run-wide totals across every step (sum) — for the §I cost popover.
+  inputTokens: z.number().nonnegative(),
+  outputTokens: z.number().nonnegative(),
+  // Input tokens of the LAST model call = peak context fullness — for the §H
+  // ring. NOT the run-wide sum (which over-counts on multi-step tool loops).
+  contextTokens: z.number().nonnegative(),
+  startedAt: z.string(),
+  firstTokenAt: z.string().optional(),
+  finishedAt: z.string(),
+  contextWindow: z.number().positive(),
+  contextWindowIsDefault: z.boolean(),
+});
+
+export type MessageStats = z.infer<typeof messageStatsSchema>;

@@ -9,7 +9,11 @@ import {
   provider as providerTable,
   workspace as workspaceTable,
 } from "../db/schema.ts";
-import { NotFoundError, ValidationError } from "../services/chat-execution.ts";
+import {
+  forceCompactChat,
+  NotFoundError,
+  ValidationError,
+} from "../services/chat-execution.ts";
 import { openProvider } from "../services/provider.ts";
 import {
   chatGenerateMetadataSchema,
@@ -29,6 +33,7 @@ import { type PlatypusUIMessage } from "../types.ts";
 import { rewriteStorageUrls, deleteFiles } from "../storage/utils.ts";
 import { getOrigin } from "../utils/get-origin.ts";
 import { agentRunner } from "../runs/agent-runner.ts";
+import { runRegistry } from "../runs/run-registry.ts";
 import { ChatSink } from "../runs/sinks/chat-sink.ts";
 import type { RunInput } from "../runs/types.ts";
 
@@ -142,6 +147,23 @@ chat.post(
   async (c) => {
     const scope = c.get("workspaceScope")!;
     const data = c.req.valid("json");
+
+    // RV2: verify the submitted chat id (if any) belongs to this workspace.
+    // Without this check a workspace-A user could supply a workspace-B chat id
+    // and corrupt B's compaction state via the unscoped store writes.
+    if (data.id) {
+      const existing = await db
+        .select({ workspaceId: chatTable.workspaceId })
+        .from(chatTable)
+        .where(eq(chatTable.id, data.id))
+        .limit(1);
+      if (
+        existing.length > 0 &&
+        existing[0].workspaceId !== scope.workspaceId
+      ) {
+        return c.json({ message: "Chat not found" }, 404);
+      }
+    }
 
     const input: RunInput = {
       runId: data.id,
@@ -414,6 +436,46 @@ chat.post(
       .returning();
 
     return c.json(updateResult[0]);
+  },
+);
+
+chat.post(
+  "/:chatId/compact",
+  requireAuth,
+  requireOrgAccess(),
+  requireWorkspaceAccess,
+  requireWorkspaceOwner,
+  async (c) => {
+    const orgId = c.req.param("orgId")!;
+    const chatId = c.req.param("chatId");
+    const workspaceId = c.req.param("workspaceId")!;
+
+    // Reject if a run is currently in flight — the frontend defers the click
+    // until streaming finishes (drift U4), but guard here as a belt-and-suspenders
+    // check to avoid CAS races with an in-progress writer.
+    if (runRegistry.has(chatId)) {
+      return c.json(
+        { error: "Run in progress; retry after the response finishes" },
+        409,
+      );
+    }
+
+    try {
+      const result = await forceCompactChat(chatId, workspaceId, orgId);
+      return c.json({
+        inputTokens: result.estimatedTokens,
+        contextWindow: result.contextWindow,
+        contextWindowIsDefault: result.contextWindowIsDefault,
+      });
+    } catch (error) {
+      if (error instanceof NotFoundError) {
+        return c.json({ error: error.message }, 404);
+      }
+      if (error instanceof ValidationError) {
+        return c.json({ error: error.message }, 400);
+      }
+      throw error;
+    }
   },
 );
 
