@@ -534,10 +534,9 @@ async function buildCompactionRuntime(args: {
   chatId?: string;
   provider: Provider;
   resolvedModelId: string;
-  agent: AgentRow | null;
   opened: ReturnType<typeof openProvider>;
 }): Promise<CompactionRuntime> {
-  const { chatId, provider, resolvedModelId, agent, opened } = args;
+  const { chatId, provider, resolvedModelId, opened } = args;
 
   const config = { ...DEFAULT_COMPACTION_CONFIG };
   // Global kill switch (§G) gates proactive compaction; recovery is unaffected.
@@ -845,7 +844,6 @@ export const prepareChatTurn = async (
     chatId: request.id,
     provider,
     resolvedModelId,
-    agent: agent ?? null,
     opened,
   });
 
@@ -1318,7 +1316,6 @@ const loadSubAgents = async (
           chatId: sa.id,
           provider: resolved.provider,
           resolvedModelId: sa.modelId,
-          agent: sa,
           opened: resolved.opened,
         });
         if (!runtime.config.compactionEnabled) return;
@@ -1446,7 +1443,6 @@ export async function forceCompactChat(
     chatId,
     provider,
     resolvedModelId,
-    agent,
     opened,
   });
 
