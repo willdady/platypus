@@ -51,6 +51,7 @@ import { LoadSkillTool } from "./load-skill-tool";
 import { SubAgentTool } from "./sub-agent-tool";
 import { Button } from "./ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
+import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip";
 import { formatDurationMs } from "@/lib/utils";
 
 const getToolStartedAt = (part: unknown): string | undefined => {
@@ -76,42 +77,52 @@ function MessageStatsPopover({ stats }: { stats: MessageStats }) {
     new Date(stats.finishedAt).getTime() - new Date(stats.startedAt).getTime(),
   );
   return (
-    <Popover>
-      <PopoverTrigger asChild>
-        <Button
-          size="icon"
-          variant="ghost"
-          type="button"
-          className="cursor-pointer text-muted-foreground"
-        >
-          <InfoIcon className="size-4" />
-          <span className="sr-only">Response stats</span>
-        </Button>
-      </PopoverTrigger>
-      <PopoverContent className="w-auto min-w-44 p-3" align="start">
-        <div className="flex flex-col gap-1 text-sm">
-          <p className="text-xs font-medium text-muted-foreground mb-1">
-            Response stats
-          </p>
-          <p>
-            <span className="text-muted-foreground">In:</span>{" "}
-            {stats.inputTokens.toLocaleString()}{" "}
-            <span className="text-muted-foreground">Out:</span>{" "}
-            {stats.outputTokens.toLocaleString()}
-          </p>
-          {ttft && (
-            <p>
-              <span className="text-muted-foreground">TTFT:</span> {ttft}
+    <Tooltip delayDuration={500}>
+      <Popover>
+        <TooltipTrigger asChild>
+          <PopoverTrigger asChild>
+            <Button
+              size="icon"
+              variant="ghost"
+              type="button"
+              className="cursor-pointer text-muted-foreground"
+            >
+              <InfoIcon className="size-4" />
+              <span className="sr-only">Response stats</span>
+            </Button>
+          </PopoverTrigger>
+        </TooltipTrigger>
+        <PopoverContent className="w-auto min-w-44 p-3" align="start">
+          <div className="flex flex-col gap-1 text-sm">
+            <p className="text-xs font-medium text-muted-foreground mb-1">
+              Response stats
             </p>
-          )}
-          {total && (
             <p>
-              <span className="text-muted-foreground">Total:</span> {total}
+              <span className="text-muted-foreground">In:</span>{" "}
+              {stats.inputTokens.toLocaleString()}{" "}
+              <span className="text-muted-foreground">Out:</span>{" "}
+              {stats.outputTokens.toLocaleString()}
             </p>
-          )}
-        </div>
-      </PopoverContent>
-    </Popover>
+            {ttft && (
+              <p>
+                <span className="text-muted-foreground">TTFT:</span> {ttft}
+              </p>
+            )}
+            {total && (
+              <p>
+                <span className="text-muted-foreground">Total:</span> {total}
+              </p>
+            )}
+          </div>
+        </PopoverContent>
+      </Popover>
+      <TooltipContent side="top">
+        In: {stats.inputTokens.toLocaleString()} · Out:{" "}
+        {stats.outputTokens.toLocaleString()}
+        {ttft ? ` · TTFT: ${ttft}` : ""}
+        {total ? ` · Total: ${total}` : ""}
+      </TooltipContent>
+    </Tooltip>
   );
 }
 
