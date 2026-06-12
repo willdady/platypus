@@ -899,6 +899,25 @@ export async function applyTier1Compaction(
     forceCompact ||
     (config.compactionEnabled && projected >= budget.triggerTokens);
 
+  logger.info(
+    {
+      metric: "compaction.check",
+      chatId: input.chatId,
+      compactionEnabled: config.compactionEnabled,
+      projected,
+      triggerTokens: budget.triggerTokens,
+      targetTokens: budget.targetTokens,
+      inputBudget: budget.inputBudget,
+      triggered,
+      forceCompact,
+      messageTokens,
+      priorSummaryTokens,
+      overheadTokens: input.overheadTokens ?? 0,
+      lastInputTokens: input.lastInputTokens,
+    },
+    "compaction.check",
+  );
+
   if (!triggered) {
     return { messages: baseView, compacted: false };
   }
