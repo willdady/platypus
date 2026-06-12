@@ -543,6 +543,27 @@ async function buildCompactionRuntime(args: {
   if (process.env.COMPACTION_ENABLED === "false") {
     config.compactionEnabled = false;
   }
+  // Optional env overrides for the global ceiling (§G). Unset/blank/invalid →
+  // the DEFAULT_COMPACTION_CONFIG value stands, so production behavior is
+  // unchanged. Intended for tuning the trigger on test deployments without a
+  // code change. Keep targetRatio < triggerRatio or compaction re-fires every
+  // turn (the thrash trap).
+  const numEnv = (raw: string | undefined): number | undefined => {
+    if (raw == null || raw === "") return undefined;
+    const n = Number(raw);
+    return Number.isFinite(n) ? n : undefined;
+  };
+  config.triggerRatio =
+    numEnv(process.env.COMPACTION_TRIGGER_RATIO) ?? config.triggerRatio;
+  config.targetRatio =
+    numEnv(process.env.COMPACTION_TARGET_RATIO) ?? config.targetRatio;
+  config.reserveRatio =
+    numEnv(process.env.COMPACTION_RESERVE_RATIO) ?? config.reserveRatio;
+  config.keepRecentMessages =
+    numEnv(process.env.COMPACTION_KEEP_RECENT) ?? config.keepRecentMessages;
+  config.minPrunableChars =
+    numEnv(process.env.COMPACTION_MIN_PRUNABLE_CHARS) ??
+    config.minPrunableChars;
 
   // RV7d: resolve both windows concurrently (they are independent).
   const taskModelId = provider.taskModelId || resolvedModelId;
