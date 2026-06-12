@@ -152,12 +152,6 @@ const AgentForm = ({
     seed: undefined as number | undefined,
     presencePenalty: undefined as number | undefined,
     frequencyPenalty: undefined as number | undefined,
-    compactionEnabled: undefined as boolean | undefined,
-    triggerRatio: undefined as number | undefined,
-    targetRatio: undefined as number | undefined,
-    reserveRatio: undefined as number | undefined,
-    keepRecentMessages: undefined as number | undefined,
-    minPrunableChars: undefined as number | undefined,
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [validationErrors, setValidationErrors] = useState<
@@ -209,12 +203,6 @@ const AgentForm = ({
         toolSetIds: agent.toolSetIds || [],
         skillIds: agent.skillIds || [],
         subAgentIds: agent.subAgentIds || [],
-        compactionEnabled: agent.compactionEnabled ?? undefined,
-        triggerRatio: agent.triggerRatio ?? undefined,
-        targetRatio: agent.targetRatio ?? undefined,
-        reserveRatio: agent.reserveRatio ?? undefined,
-        keepRecentMessages: agent.keepRecentMessages ?? undefined,
-        minPrunableChars: agent.minPrunableChars ?? undefined,
       });
       if (agent.avatarUrl) {
         setAvatarPreviewUrl(agent.avatarUrl);
@@ -339,12 +327,6 @@ const AgentForm = ({
         toolSetIds: formData.toolSetIds,
         skillIds: formData.skillIds,
         subAgentIds: formData.subAgentIds,
-        compactionEnabled: formData.compactionEnabled,
-        triggerRatio: formData.triggerRatio,
-        targetRatio: formData.targetRatio,
-        reserveRatio: formData.reserveRatio,
-        keepRecentMessages: formData.keepRecentMessages,
-        minPrunableChars: formData.minPrunableChars,
       };
 
       const url = agentId
@@ -914,122 +896,6 @@ const AgentForm = ({
                 />
               </Field>
             </FieldGroup>
-
-            <div className="mt-4 space-y-3">
-              <p className="text-sm font-medium">Context compaction</p>
-              <FieldDescription>
-                Override per-agent compaction behaviour. Leave blank to use
-                defaults (trigger 80%, target 50%, reserve 5%, keep last 10
-                messages, prune outputs &gt;2000 chars). Target ratio must stay
-                below trigger ratio. Has no effect when compaction is disabled
-                globally (COMPACTION_ENABLED).
-              </FieldDescription>
-              <Field orientation="horizontal">
-                <Switch
-                  id="compactionEnabled"
-                  className="cursor-pointer"
-                  checked={formData.compactionEnabled ?? true}
-                  onCheckedChange={(checked) =>
-                    setFormData((prev) => ({
-                      ...prev,
-                      compactionEnabled: checked,
-                    }))
-                  }
-                  disabled={isSubmitting || readOnly}
-                />
-                <FieldLabel htmlFor="compactionEnabled">
-                  Enable compaction
-                </FieldLabel>
-              </Field>
-              <FieldGroup className="grid grid-cols-2">
-                <Field>
-                  <FieldLabel htmlFor="triggerRatio">
-                    Trigger ratio (0–1)
-                  </FieldLabel>
-                  <Input
-                    id="triggerRatio"
-                    type="number"
-                    min="0"
-                    max="1"
-                    step="0.05"
-                    placeholder="0.8"
-                    value={formData.triggerRatio ?? ""}
-                    onChange={(e) =>
-                      handleFloatChange("triggerRatio", e.target.value)
-                    }
-                    disabled={isSubmitting || readOnly}
-                  />
-                </Field>
-                <Field>
-                  <FieldLabel htmlFor="targetRatio">
-                    Target ratio (0–1)
-                  </FieldLabel>
-                  <Input
-                    id="targetRatio"
-                    type="number"
-                    min="0"
-                    max="1"
-                    step="0.05"
-                    placeholder="0.5"
-                    value={formData.targetRatio ?? ""}
-                    onChange={(e) =>
-                      handleFloatChange("targetRatio", e.target.value)
-                    }
-                    disabled={isSubmitting || readOnly}
-                  />
-                </Field>
-                <Field>
-                  <FieldLabel htmlFor="reserveRatio">
-                    Reserve ratio (0–1)
-                  </FieldLabel>
-                  <Input
-                    id="reserveRatio"
-                    type="number"
-                    min="0"
-                    max="1"
-                    step="0.01"
-                    placeholder="0.05"
-                    value={formData.reserveRatio ?? ""}
-                    onChange={(e) =>
-                      handleFloatChange("reserveRatio", e.target.value)
-                    }
-                    disabled={isSubmitting || readOnly}
-                  />
-                </Field>
-                <Field>
-                  <FieldLabel htmlFor="keepRecentMessages">
-                    Keep recent messages
-                  </FieldLabel>
-                  <Input
-                    id="keepRecentMessages"
-                    type="number"
-                    min="1"
-                    placeholder="10"
-                    value={formData.keepRecentMessages ?? ""}
-                    onChange={(e) =>
-                      handleNumberChange("keepRecentMessages", e.target.value)
-                    }
-                    disabled={isSubmitting || readOnly}
-                  />
-                </Field>
-                <Field className="col-span-2">
-                  <FieldLabel htmlFor="minPrunableChars">
-                    Min prunable chars
-                  </FieldLabel>
-                  <Input
-                    id="minPrunableChars"
-                    type="number"
-                    min="0"
-                    placeholder="2000"
-                    value={formData.minPrunableChars ?? ""}
-                    onChange={(e) =>
-                      handleNumberChange("minPrunableChars", e.target.value)
-                    }
-                    disabled={isSubmitting || readOnly}
-                  />
-                </Field>
-              </FieldGroup>
-            </div>
           </CollapsibleContent>
         </Collapsible>
       </FieldSet>

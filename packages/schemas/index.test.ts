@@ -389,46 +389,6 @@ describe("Chat compaction state (context-compaction §C)", () => {
   });
 });
 
-describe("Agent compaction config (context-compaction §G)", () => {
-  const base = {
-    id: "789",
-    workspaceId: "456",
-    providerId: "provider-123",
-    name: "Test Agent",
-    description: "A test agent",
-    modelId: "gpt-4",
-    createdAt: new Date(),
-    updatedAt: new Date(),
-  };
-
-  it("is valid with no compaction config (defaults applied in code)", () => {
-    expect(agentSchema.safeParse(base).success).toBe(true);
-  });
-
-  it("accepts a full compaction config", () => {
-    const result = agentSchema.safeParse({
-      ...base,
-      compactionEnabled: true,
-      triggerRatio: 0.8,
-      targetRatio: 0.5,
-      reserveRatio: 0.05,
-      keepRecentMessages: 10,
-      minPrunableChars: 2000,
-    });
-    expect(result.success).toBe(true);
-  });
-
-  it("rejects a ratio above 1", () => {
-    const result = agentSchema.safeParse({ ...base, triggerRatio: 1.2 });
-    expect(result.success).toBe(false);
-  });
-
-  it("rejects a negative keepRecentMessages", () => {
-    const result = agentSchema.safeParse({ ...base, keepRecentMessages: -1 });
-    expect(result.success).toBe(false);
-  });
-});
-
 describe("Provider Create Schema", () => {
   const baseProvider = {
     organizationId: "org-123",

@@ -415,7 +415,6 @@ import {
   applyTier1Compaction,
   buildCompactionTraceMessage,
   computeBudget,
-  resolveCompactionConfig,
   invalidateCompaction,
   affectedBelowWatermark,
   summaryUIMessage,
@@ -463,21 +462,6 @@ const cfg = (over: Partial<CompactionConfig> = {}): CompactionConfig => ({
   ...DEFAULT_COMPACTION_CONFIG,
   keepRecentMessages: 2,
   ...over,
-});
-
-describe("resolveCompactionConfig (§G defaults)", () => {
-  it("returns defaults when overrides are null/undefined", () => {
-    expect(resolveCompactionConfig(null)).toEqual(DEFAULT_COMPACTION_CONFIG);
-  });
-  it("applies partial overrides, keeping defaults for the rest", () => {
-    const c = resolveCompactionConfig({
-      triggerRatio: 0.9,
-      compactionEnabled: false,
-    });
-    expect(c.triggerRatio).toBe(0.9);
-    expect(c.compactionEnabled).toBe(false);
-    expect(c.targetRatio).toBe(DEFAULT_COMPACTION_CONFIG.targetRatio);
-  });
 });
 
 describe("computeBudget (drift C3 — subtract both reserves)", () => {

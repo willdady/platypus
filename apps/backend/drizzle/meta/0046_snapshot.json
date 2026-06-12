@@ -98,42 +98,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "compaction_enabled": {
-          "name": "compaction_enabled",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "trigger_ratio": {
-          "name": "trigger_ratio",
-          "type": "real",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "target_ratio": {
-          "name": "target_ratio",
-          "type": "real",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "reserve_ratio": {
-          "name": "reserve_ratio",
-          "type": "real",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "keep_recent_messages": {
-          "name": "keep_recent_messages",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "min_prunable_chars": {
-          "name": "min_prunable_chars",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false
-        },
         "tool_set_ids": {
           "name": "tool_set_ids",
           "type": "jsonb",

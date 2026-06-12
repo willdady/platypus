@@ -49,7 +49,7 @@ import {
   computeBudget,
   drizzleCompactionStore,
   invalidateCompaction,
-  resolveCompactionConfig,
+  DEFAULT_COMPACTION_CONFIG,
   setCompactionDirty,
   type Budget,
   type CompactionConfig,
@@ -539,7 +539,7 @@ async function buildCompactionRuntime(args: {
 }): Promise<CompactionRuntime> {
   const { chatId, provider, resolvedModelId, agent, opened } = args;
 
-  const config = resolveCompactionConfig(agent);
+  const config = { ...DEFAULT_COMPACTION_CONFIG };
   // Global kill switch (§G) gates proactive compaction; recovery is unaffected.
   if (process.env.COMPACTION_ENABLED === "false") {
     config.compactionEnabled = false;

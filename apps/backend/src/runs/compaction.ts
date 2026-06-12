@@ -678,53 +678,6 @@ export const DEFAULT_COMPACTION_CONFIG: CompactionConfig = {
   minPrunableChars: 2000,
 };
 
-/** Agent row fields that override the compaction defaults (all optional). */
-export type CompactionConfigOverrides = {
-  compactionEnabled?: boolean | null;
-  triggerRatio?: number | null;
-  targetRatio?: number | null;
-  reserveRatio?: number | null;
-  keepRecentMessages?: number | null;
-  minPrunableChars?: number | null;
-};
-
-export function resolveCompactionConfig(
-  overrides: CompactionConfigOverrides | null | undefined,
-): CompactionConfig {
-  const o = overrides ?? {};
-  const pick = <T>(v: T | null | undefined, d: T): T => (v == null ? d : v);
-  const triggerRatio = pick(
-    o.triggerRatio,
-    DEFAULT_COMPACTION_CONFIG.triggerRatio,
-  );
-  let targetRatio = pick(o.targetRatio, DEFAULT_COMPACTION_CONFIG.targetRatio);
-  // Hysteresis backstop (drift C2): the post-compaction target must stay below
-  // the trigger or compaction re-fires every turn. The agent create/update zod
-  // schema already rejects an inverted pair, but a pre-existing/legacy row (or a
-  // direct DB write) could still carry one — clamp it here so the runtime can
-  // never thrash.
-  if (targetRatio >= triggerRatio) {
-    targetRatio = triggerRatio * 0.9;
-  }
-  return {
-    compactionEnabled: pick(
-      o.compactionEnabled,
-      DEFAULT_COMPACTION_CONFIG.compactionEnabled,
-    ),
-    triggerRatio,
-    targetRatio,
-    reserveRatio: pick(o.reserveRatio, DEFAULT_COMPACTION_CONFIG.reserveRatio),
-    keepRecentMessages: pick(
-      o.keepRecentMessages,
-      DEFAULT_COMPACTION_CONFIG.keepRecentMessages,
-    ),
-    minPrunableChars: pick(
-      o.minPrunableChars,
-      DEFAULT_COMPACTION_CONFIG.minPrunableChars,
-    ),
-  };
-}
-
 export type Budget = {
   inputBudget: number;
   triggerTokens: number;

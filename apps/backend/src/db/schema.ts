@@ -232,15 +232,6 @@ export const agent = pgTable(
     seed: t.real("seed"),
     presencePenalty: t.real("presence_penalty"),
     frequencyPenalty: t.real("frequency_penalty"),
-    // Per-agent context-compaction config (context-compaction-plan §G). All
-    // nullable; the runtime applies defaults when unset (true / 0.8 / 0.5 /
-    // 0.05 / 10 / 2000). Editable surface wired in a later slice.
-    compactionEnabled: t.boolean("compaction_enabled"),
-    triggerRatio: t.real("trigger_ratio"),
-    targetRatio: t.real("target_ratio"),
-    reserveRatio: t.real("reserve_ratio"),
-    keepRecentMessages: t.integer("keep_recent_messages"),
-    minPrunableChars: t.integer("min_prunable_chars"),
     toolSetIds: t.jsonb("tool_set_ids").$type<string[]>().default([]), // Array of tool set ids
     skillIds: t.jsonb("skill_ids").$type<string[]>().default([]), // Array of skill ids
     subAgentIds: t.jsonb("sub_agent_ids").$type<string[]>().default([]), // Array of sub-agent ids
