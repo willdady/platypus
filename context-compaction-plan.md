@@ -703,18 +703,25 @@ tool loop bloats. Recovery (§E) covers them too since `agent-runner` is shared.
 
 ### G. Config surface + kill switch
 
-Per-agent (and/or per-workspace) optional fields, with sane defaults:
+**SUPERSEDED 2026-06-12 — going global+per-model (see Chunk 12).** The per-agent
+fields below shipped in chunk 10 but are being removed: no surveyed tool
+(Hermes/Codex/Claude/Cline) exposes per-agent compaction tuning, and the ratios
+self-normalize to the model window so per-agent variance buys nothing measurable.
 
-- `compactionEnabled` (default true)
-- `triggerRatio` (default 0.8), `targetRatio` (default 0.5),
+~~Per-agent optional fields, with sane defaults:~~
+
+- ~~`compactionEnabled` (default true)~~
+- ~~`triggerRatio` (default 0.8), `targetRatio` (default 0.5),
   `reserveRatio` (default 0.05), `keepRecentMessages` (default 10),
-  `minPrunableChars` (default ~2000)
+  `minPrunableChars` (default ~2000)~~
 
-Add to agent schema (`packages/schemas`, agent table) — optional, defaulted.
+The runtime now uses `DEFAULT_COMPACTION_CONFIG` for all agents; window/output
+size stays per-model via the §A resolver (`provider.modelMeta` override).
 
 **Global kill switch:** env `COMPACTION_ENABLED` (default true) disables all
 proactive compaction (Tier 1 + Tier 2) in prod without a deploy. **Recovery (§E)
-ignores this flag** — it is the safety net (P4).
+ignores this flag** — it is the safety net (P4). After Chunk 12 this env flag is
+the ONLY compaction toggle (the per-agent `compactionEnabled` is gone).
 
 ### H. Frontend context-usage indicator (the ring)
 
@@ -1211,6 +1218,196 @@ Review of the first 11c cut surfaced one correctness defect + three gaps; all fi
   `stripCompactionTraceParts`, `buildCompactionTraceMessage`, and trace-gating
   tests (backend suite 1096 pass). `humanizeToolType` maps `compact_context` →
   "Context compaction".
+
+---
+
+## Chunk 12 — remove per-agent compaction config, go global+per-model (planned, decided 2026-06-12)
+
+**Decision.** Drop ALL per-agent compaction tuning shipped in chunk 10. Compaction
+behavior becomes global (`DEFAULT_COMPACTION_CONFIG` + the `COMPACTION_ENABLED`
+env kill switch); only window/output **size** stays per-model via the §A resolver.
+
+**Why.** The 2026-06-12 field re-survey: no surveyed agent (Hermes, Codex CLI,
+Claude Code, Cline) exposes per-agent compaction knobs — all use global config +
+per-model window. Trigger/target are fractions of an already model-normalized
+`inputBudget`, so per-agent variance is speculative generality. The agent-edit
+form clutter is real cost for a feature ~100% of agents leave at default (every
+agent on the test server has all six columns NULL).
+
+**Trade-off (accepted).** Removing per-agent `compactionEnabled` loses the ability
+to disable compaction for a single agent (e.g. an exact-recall code/legal agent
+where lossy summarization corrupts output). Mitigation: the global
+`COMPACTION_ENABLED` env still exists, and recovery (§E, P4) keeps such an agent
+from hard-failing on overflow regardless. If a real need for single-agent opt-out
+appears, revisit as a **per-model or per-workspace** flag — NOT per-agent.
+
+**Change list.**
+
+- `packages/schemas/index.ts` — remove `compactionEnabled`, `triggerRatio`,
+  `targetRatio`, `reserveRatio`, `keepRecentMessages`, `minPrunableChars` from
+  `agentSchema` + the `agentCreate`/`agentUpdate` picks; delete the
+  `compactionRatioOrder` refinement (+ its `index.test.ts` cases).
+- `apps/backend/src/db/schema.ts` — drop the six `agent` columns.
+- New migration — `ALTER TABLE "agent" DROP COLUMN IF EXISTS ...` ×6. `IF EXISTS`
+  because divergent-lineage server DBs (see deploy notes) may not have all six;
+  destructive but safe — the columns hold only tuning overrides, NULL in practice.
+- `apps/backend/src/runs/compaction.ts` — `resolveCompactionConfig` returns
+  `DEFAULT_COMPACTION_CONFIG` unconditionally; delete `CompactionConfigOverrides`
+  and the per-agent merge. Keep `DEFAULT_COMPACTION_CONFIG` + `computeBudget`.
+- `apps/backend/src/services/chat-execution.ts` — drop the `agent` argument to
+  `resolveCompactionConfig`; keep the `COMPACTION_ENABLED` env override.
+- `apps/frontend` — remove the six compaction fields from the agent-edit form.
+
+**Verify.** Agent create/update no longer accepts the six fields; chat still
+compacts using defaults; `COMPACTION_ENABLED=false` still disables proactively;
+recovery still fires when proactive is off; migrate is idempotent on a DB missing
+some columns.
+
+---
+
+## Chunk 13 — compaction reliability + prompt overhaul (planned, 2026-06-12)
+
+Chunk 12 shipped (`625ff96` + dead-`agent`-binding cleanup + env-override knobs
+`da2c159`). Live test-server run on a single-vLLM provider (`qwen36`, lowered
+ceiling via `.env`: trigger 0.2 / target 0.1 / keepRecent 4 / minPrunable 500)
+surfaced a turn-killing bug + several prompt/UX gaps. All findings + fixes below.
+
+### Observed bug — per-step timeout kills pre-stream compaction
+
+Live log evidence (chat `hur61ZR79koiHQysBDS2o`):
+
+- Trigger fired (`projected` 63,511 > `triggerTokens` 48,988).
+- `summarize` ran **149,955 ms** on `qwen36`, **input 6,178 → output 8,631 tokens**
+  (the summary was LONGER than its input — degenerate expansion, not compression).
+- The run's **per-step stall timeout (120,000 ms) fired at ~120 s** → `level:50
+"Run timed out" kind:"step"` → run aborted ~30 s **before** summarize returned.
+- `summarize` ignored the abort, finished at 150 s, committed the watermark →
+  `context-compacted` logged (dropped 9, 63,511 → 14,785). But the turn was already
+  dead → **no model answer streamed, and the turn's assistant message was lost.**
+
+Root cause: Tier-1 `summarize()` is a long blocking call that runs **inside
+`prepareChatTurn`, before the response stream opens**, and does **not bump the
+per-step stall timer**. The 120 s watchdog treats it as a stalled step and kills
+the run.
+
+Why the turn vanished from the chat: two separate writes. The durable
+summary/watermark is a CAS write on the **chat row** (survived — later turns have
+the summary, persisted value is a clean **770-char / ~193-token** structured
+summary). The turn's **assistant message** (answer + the synthetic `compact_context`
+trace part) only persists via the **response stream**, which never opened. So the
+chat-row state advanced but the visible turn was lost.
+
+Note: the 8,631-token runaway was the timed-out turn and was **discarded** — the
+persisted summary is the good 193-token one. So `qwen36` _can_ summarize tightly;
+the 8,631 was a pathological one-off. Confirms a `maxOutputTokens` ceiling loses
+no context in normal operation (healthy output is ~10× below a 2k ceiling).
+
+### Fixes (in priority order)
+
+1. **Heartbeat during summarize (CRITICAL).** Compaction is legitimate long work,
+   not a stall. Ping `onActivity` / bump the per-step timer on an interval while
+   `summarize` runs so the 120 s watchdog keeps resetting. Directly stops the
+   spurious kill. (`buildCompactionRuntime` already has `onActivity` in scope via
+   the turn; thread it into the summarize wrapper, tick ~every 10 s.)
+
+2. **`maxOutputTokens` ceiling (~2,000) + "be concise" prompt instruction.** Pure
+   safety backstop against the runaway — NOT a blind truncation. The prompt asks
+   the model to compress _to fit_ (length target); the ceiling only catches a
+   degenerate run. Proven safe: real summaries are ~193 tokens. Also log
+   `finishReason === "length"` so we know if the cap ever bit.
+
+3. **Open the response stream BEFORE compaction (bigger refactor).** Today the
+   synthetic `compact_context` chunks are injected post-hoc by `prependCompactionChunks`
+   as a paired `tool-input-available` + `tool-output-available` — i.e. already
+   "Completed", emitted only after the (already-open-too-late) model stream's
+   `start`. To show live **Pending → Running → Completed** AND keep the HTTP /
+   playit-tunnel connection alive during the wait (a second timeout vector):
+   - Split the cheap trigger decision (`projectTier1Tokens` vs `triggerTokens`, no
+     LLM) from the expensive `summarize`, so we know to emit the pending chunk
+     before paying for summarize.
+   - Build a prelude stream: `start` + `tool-input-available(compact_context)` →
+     await summarize → `tool-output-available` → concat the model stream (suppress/
+     merge the model's own `start` so the synthetic part + answer share one message
+     id). Replaces the post-hoc `prependCompactionChunks` injection.
+   - Move the compacted-messages await out of `prepareChatTurn` into the stream step.
+   - Frontend is **already done** — `tool.tsx` renders `input-available` = "Running"
+     (pulsing clock), `output-available` = "Completed". Zero frontend change.
+   - Error path: if `summarize` throws after the pending chunk shows, resolve the
+     tool part to `output-error` — do not leave it stuck "Running". Tier-1 stays
+     best-effort (fail → proceed uncompacted) but must close the tool part.
+   - Preserve invariants: `stripCompactionTraceParts` + snapshot persistence expect
+     a well-formed input+output pair; tee/snapshot drain must see prelude chunks.
+
+4. **Pass `abortSignal` into `summarize` (minor correctness).** Today summarize
+   burned 30 s + a full LLM call _after_ the turn was dead. Make it cancellable so
+   a real abort stops it. Fold into #3.
+
+### Prompt overhaul
+
+Current prompt (`chat-execution.ts` ~L578) is an unstructured one-liner with **no
+length instruction** (the runaway's root). Prior-art survey of real summarization
+prompts (2026-06-12):
+
+- **Claude Code** — heaviest: chronological analysis + **9 sections** (Primary
+  Request & Intent, Key Technical Concepts, Files & Code, Errors & fixes, Problem
+  Solving, All user messages, Pending Tasks, Current Work, Optional Next Step);
+  security-relevant instructions preserved **verbatim**.
+- **Codex CLI** — handoff-oriented: _"You are performing a CONTEXT CHECKPOINT
+  COMPACTION. Create a handoff summary for another LLM that will resume the task."_
+  - 4 sections (progress & decisions · context/constraints/prefs · what remains ·
+    critical data/refs). Prepends a **resume prefix** next turn (_"Another language
+    model started to solve this problem and produced a summary…"_) so the resumer
+    builds on prior work instead of restarting. Issue #14347: sections **reduce loss
+    over repeated compactions**.
+- **OpenCode** — 6 sections (done · WIP · files · next steps · user requests/
+  constraints · decisions & rationale).
+- **Hermes Agent** — weakest: just _"Summarize these conversation turns concisely"_
+  → `[CONTEXT SUMMARY]: <raw>`, positional keep (first 3 + last 4 turns), Gemini
+  Flash aux model. Open issue #499 proposes **copying Codex's structured handoff**
+  — Hermes is behind us, not ahead.
+
+Gaps vs prior art: (a) no length instruction → the runaway; (b) no section
+structure → erodes across repeated re-compactions (we feed the prior summary back
+in via `priorSummaryTokens`); (c) no "build on prior work" framing (our
+`summaryUIMessage` prefix `[Summary of earlier conversation]` is just a label).
+
+**Proposed replacement system prompt** (handoff + sections + concise + integrate-
+prior; pairs with the #2 ceiling):
+
+```
+You are performing a context checkpoint compaction. Another instance of this
+assistant will resume using ONLY your summary plus the most recent messages —
+earlier history will be gone. Write a dense markdown handoff under these
+headings (omit one only if truly empty):
+
+- **Intent & open requests** — what the user wants, the latest explicit request, pending tasks.
+- **Decisions & facts** — conclusions, confirmed values/IDs/paths, constraints and user
+  preferences (preserve any security-relevant instruction verbatim).
+- **Files & tools touched** — what was read/changed and why.
+- **Current state & next step** — where things stand and the immediate next action.
+
+If a prior summary appears in the history, integrate it — don't drop facts it
+captured. Be concise: aim under ~1500 tokens. Output only the summary.
+```
+
+### Deferred / decided-against here
+
+- **Selectable compaction model in provider UI** — DECIDED NO. The compaction
+  model already = `provider.taskModelId` (same-provider only: summarize runs through
+  the chat provider's own client `opened.languageModel(taskModelId)`). On a single
+  vLLM (`modelIds` has one entry) there is no other model to pick, so a dropdown is
+  a no-op. `workspace.taskModelProviderId` routes _other_ task work (tag/title) to a
+  different provider but compaction does NOT use it. A separate fast compaction
+  endpoint would need new wiring (route summarize through a task provider's client) +
+  multi-model infra (2nd provider or a LiteLLM gateway) — not worth it now.
+
+### Verify (Chunk 13)
+
+Compaction no longer trips the per-step timeout (heartbeat); a slow summarize
+streams a Running tool part instead of a blank turn; summary output is bounded
+(`finishReason` logged if capped); the compacted turn's assistant message + trace
+persist even when summarize is slow; the new prompt yields structured, concise,
+multi-compaction-stable summaries.
 
 ---
 
