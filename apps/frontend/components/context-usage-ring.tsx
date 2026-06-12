@@ -65,7 +65,11 @@ export function ContextUsageRing({
   } else if (isCompacting) {
     tooltipLabel = "Compacting…";
   } else if (isNeutral) {
-    tooltipLabel = `Context usage unknown${clickHint}`;
+    if (!contextWindow) {
+      tooltipLabel = `Context window unknown · model not found in provider registry${clickHint}`;
+    } else {
+      tooltipLabel = `No messages yet · ${contextWindow.toLocaleString()} token window${clickHint}`;
+    }
   } else {
     tooltipLabel = `Last response: ${usedTokens!.toLocaleString()} / ${contextWindow!.toLocaleString()} (${Math.round(fill * 100)}%) · current input not yet counted${clickHint}`;
   }

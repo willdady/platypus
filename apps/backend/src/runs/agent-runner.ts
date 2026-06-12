@@ -16,7 +16,11 @@ import {
   contextOverflowRecoveryMiddleware,
   isContextOverflowError,
 } from "./recovery.ts";
-import { buildTier2PrepareStep } from "./compaction.ts";
+import {
+  buildTier2PrepareStep,
+  COMPACT_CONTEXT_TOOL_NAME,
+  type CompactionTrace,
+} from "./compaction.ts";
 import {
   loadChatMessages,
   prepareChatTurn,
@@ -96,6 +100,89 @@ export function withToolTimestamps<TChunk extends UIMessageChunk>(
     }),
   );
   return { stream: out, completions };
+}
+
+/**
+ * Injects synthetic `compact_context` tool-call + tool-result chunks into a
+ * UIMessage stream immediately after the `start` event (§K / 11c). Makes Tier
+ * 1 compaction visible in the chat timeline without a custom renderer — the
+ * existing tool-call expander handles it automatically.
+ *
+ * Exported for unit testing.
+ */
+export function prependCompactionChunks(
+  stream: ReadableStream<UIMessageChunk>,
+  trace: CompactionTrace,
+  generateId: () => string = createIdGenerator({ prefix: "cc", size: 12 }),
+): ReadableStream<UIMessageChunk> {
+  const toolCallId = generateId();
+  const syntheticChunks: UIMessageChunk[] = [
+    {
+      type: "tool-input-available",
+      toolCallId,
+      toolName: COMPACT_CONTEXT_TOOL_NAME,
+      title: "Context compaction",
+      input: { messagesDropped: trace.messagesDropped },
+    },
+    {
+      type: "tool-output-available",
+      toolCallId,
+      output: {
+        messagesDropped: trace.messagesDropped,
+        ...(trace.summaryExcerpt
+          ? { summaryExcerpt: trace.summaryExcerpt }
+          : {}),
+      },
+    },
+  ];
+  let injected = false;
+  return stream.pipeThrough(
+    new TransformStream<UIMessageChunk, UIMessageChunk>({
+      transform(chunk, controller) {
+        controller.enqueue(chunk);
+        if (!injected && chunk.type === "start") {
+          injected = true;
+          for (const c of syntheticChunks) controller.enqueue(c);
+        }
+      },
+    }),
+  );
+}
+
+const COMPACT_CONTEXT_PART_TYPE = `tool-${COMPACT_CONTEXT_TOOL_NAME}`;
+
+/**
+ * Removes the synthetic `compact_context` trace parts (§K/11c) from a message
+ * list before it is converted to ModelMessages. The trace is a UI-only marker
+ * persisted in the assistant message for the chat timeline; it must NEVER be
+ * replayed to the provider, which would otherwise see a phantom tool call for a
+ * tool it was never given (provider rejection / model confusion). An assistant
+ * message left with no parts after stripping (the §J standalone trace message)
+ * is dropped entirely rather than sent empty.
+ *
+ * Exported for unit testing.
+ */
+export function stripCompactionTraceParts(
+  messages: PlatypusUIMessage[],
+): PlatypusUIMessage[] {
+  let changed = false;
+  const out: PlatypusUIMessage[] = [];
+  for (const message of messages) {
+    if (
+      message.role !== "assistant" ||
+      !message.parts.some((p) => p.type === COMPACT_CONTEXT_PART_TYPE)
+    ) {
+      out.push(message);
+      continue;
+    }
+    changed = true;
+    const parts = message.parts.filter(
+      (p) => p.type !== COMPACT_CONTEXT_PART_TYPE,
+    );
+    if (parts.length > 0) out.push({ ...message, parts });
+    // else: trace-only message (§J) — drop it from the model payload.
+  }
+  return changed ? out : messages;
 }
 
 /** Stats stamped on the last assistant message's metadata after each stream (§H/§I). */
@@ -486,7 +573,13 @@ export class AgentRunner {
       // tool-loop step, stream and generate alike — gets one trim-and-retry on
       // a provider "context too long" rejection. Always on; not gated by §G.
       model: withOverflowRecovery(state.turn),
-      messages: await convertToModelMessages(state.turn.stream.messages),
+      // Strip the UI-only synthetic compact_context trace parts (§K/11c) before
+      // sending history to the provider — replaying them surfaces a phantom tool
+      // call for a tool the model was never given. Applied here so both the
+      // streaming and generate paths (which share modelArgs) are covered.
+      messages: await convertToModelMessages(
+        stripCompactionTraceParts(state.turn.stream.messages),
+      ),
       system: state.turn.stream.system,
       tools: state.turn.stream.tools,
       stopWhen: [stepCountIs(state.turn.stream.maxSteps)],
@@ -590,7 +683,20 @@ export class AgentRunner {
       onError: (error) => formatStreamError(error),
     });
 
-    const { stream: timedStream, completions } = withToolTimestamps(uiStream);
+    // §K / 11c: if Tier 1 compaction fired this turn, prepend synthetic
+    // compact_context tool-call + tool-result chunks so the compaction is
+    // visible in the chat timeline. Injected after the 'start' event so the
+    // AI SDK builds them into the same assistant message as the response.
+    const tracedStream: ReadableStream<UIMessageChunk> = state.turn
+      ?.compactionTrace
+      ? prependCompactionChunks(
+          uiStream as ReadableStream<UIMessageChunk>,
+          state.turn.compactionTrace,
+        )
+      : (uiStream as ReadableStream<UIMessageChunk>);
+
+    const { stream: timedStream, completions } =
+      withToolTimestamps(tracedStream);
     const [forResponse, forSnapshot] = timedStream.tee();
 
     // Read the snapshot branch as message snapshots and keep `state.messages`

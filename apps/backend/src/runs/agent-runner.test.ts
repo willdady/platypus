@@ -33,11 +33,17 @@ vi.mock("../logger.ts", () => ({
   },
 }));
 
-import { AgentRunner, withToolTimestamps } from "./agent-runner.ts";
+import {
+  AgentRunner,
+  prependCompactionChunks,
+  stripCompactionTraceParts,
+  withToolTimestamps,
+} from "./agent-runner.ts";
 import { buildTier2PrepareStep } from "./compaction.ts";
 import type { UIMessageChunk } from "ai";
 import { runRegistry, TimeoutError } from "./run-registry.ts";
 import type { ResolvedRunPlan, RunInput, RunSink } from "./types.ts";
+import type { PlatypusUIMessage } from "../types.ts";
 import type { WorkspaceScope } from "../scope.ts";
 
 type LifecycleEvent =
@@ -503,6 +509,151 @@ describe("withToolTimestamps", () => {
     expect(toolPart).toBeDefined();
     expect(toolPart.toolCallId).toBe("call_xyz");
     expect(toolPart.toolMetadata).toMatchObject({ startedAt: FIXED_NOW });
+  });
+});
+
+describe("prependCompactionChunks", () => {
+  const collect = async (
+    stream: ReadableStream<UIMessageChunk>,
+  ): Promise<UIMessageChunk[]> => {
+    const out: UIMessageChunk[] = [];
+    const reader = stream.getReader();
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      out.push(value);
+    }
+    return out;
+  };
+
+  const sourceOf = (chunks: UIMessageChunk[]): ReadableStream<UIMessageChunk> =>
+    new ReadableStream<UIMessageChunk>({
+      start(controller) {
+        for (const chunk of chunks) controller.enqueue(chunk);
+        controller.close();
+      },
+    });
+
+  it("injects a compact_context tool-call/result pair right after start, before any text", async () => {
+    const out = await collect(
+      prependCompactionChunks(
+        sourceOf([
+          { type: "start" },
+          { type: "text-start", id: "t" },
+          { type: "text-delta", id: "t", delta: "hi" },
+        ]),
+        { messagesDropped: 12, summaryExcerpt: "the user did X" },
+        () => "cc1",
+      ),
+    );
+
+    expect(out.map((c) => c.type)).toEqual([
+      "start",
+      "tool-input-available",
+      "tool-output-available",
+      "text-start",
+      "text-delta",
+    ]);
+    const input = out[1] as Extract<
+      UIMessageChunk,
+      { type: "tool-input-available" }
+    >;
+    expect(input.toolName).toBe("compact_context");
+    expect(input.toolCallId).toBe("cc1");
+    const output = out[2] as Extract<
+      UIMessageChunk,
+      { type: "tool-output-available" }
+    >;
+    expect(output.toolCallId).toBe("cc1");
+    expect(output.output).toEqual({
+      messagesDropped: 12,
+      summaryExcerpt: "the user did X",
+    });
+  });
+
+  it("omits summaryExcerpt when absent", async () => {
+    const out = await collect(
+      prependCompactionChunks(
+        sourceOf([{ type: "start" }]),
+        { messagesDropped: 3 },
+        () => "cc2",
+      ),
+    );
+    const output = out[2] as Extract<
+      UIMessageChunk,
+      { type: "tool-output-available" }
+    >;
+    expect(output.output).toEqual({ messagesDropped: 3 });
+  });
+
+  it("injects only once even if multiple start events appear", async () => {
+    const out = await collect(
+      prependCompactionChunks(
+        sourceOf([{ type: "start" }, { type: "start" }]),
+        { messagesDropped: 1 },
+        () => "cc3",
+      ),
+    );
+    expect(out.filter((c) => c.type === "tool-input-available")).toHaveLength(
+      1,
+    );
+  });
+});
+
+describe("stripCompactionTraceParts", () => {
+  const traceMessage = (id: string): PlatypusUIMessage =>
+    ({
+      id,
+      role: "assistant",
+      parts: [
+        {
+          type: "tool-compact_context",
+          toolCallId: `${id}-call`,
+          state: "output-available",
+          input: { messagesDropped: 2 },
+          output: { messagesDropped: 2 },
+        },
+      ],
+    }) as unknown as PlatypusUIMessage;
+
+  it("drops a trace-only assistant message entirely (never replayed to the model)", () => {
+    const messages = [
+      { id: "u1", role: "user", parts: [{ type: "text", text: "hi" }] },
+      traceMessage("t1"),
+    ] as unknown as PlatypusUIMessage[];
+
+    const out = stripCompactionTraceParts(messages);
+    expect(out.map((m) => m.id)).toEqual(["u1"]);
+  });
+
+  it("strips only the trace part from an assistant message with real content", () => {
+    const messages = [
+      {
+        id: "a1",
+        role: "assistant",
+        parts: [
+          {
+            type: "tool-compact_context",
+            toolCallId: "a1-call",
+            state: "output-available",
+            input: {},
+            output: {},
+          },
+          { type: "text", text: "answer" },
+        ],
+      },
+    ] as unknown as PlatypusUIMessage[];
+
+    const out = stripCompactionTraceParts(messages);
+    expect(out).toHaveLength(1);
+    expect(out[0].parts.map((p) => p.type)).toEqual(["text"]);
+  });
+
+  it("returns the same array reference when nothing to strip", () => {
+    const messages = [
+      { id: "u1", role: "user", parts: [{ type: "text", text: "hi" }] },
+    ] as unknown as PlatypusUIMessage[];
+    expect(stripCompactionTraceParts(messages)).toBe(messages);
   });
 });
 

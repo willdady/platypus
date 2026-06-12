@@ -24,7 +24,7 @@ import {
   type MemorySummary,
 } from "./memory-retrieval.ts";
 import type { Provider, Skill } from "@platypus/schemas";
-import { generateText, type Tool } from "ai";
+import { createIdGenerator, generateText, type Tool } from "ai";
 import { logger } from "../logger.ts";
 import { buildMcpTransportConfig } from "./mcp-oauth-provider.ts";
 import { inlineFileUrls } from "../storage/utils.ts";
@@ -44,6 +44,7 @@ import {
 import {
   applyTier1Compaction,
   affectedBelowWatermark,
+  buildCompactionTraceMessage,
   buildTier2PrepareStep,
   computeBudget,
   drizzleCompactionStore,
@@ -53,6 +54,7 @@ import {
   type Budget,
   type CompactionConfig,
   type CompactionState,
+  type CompactionTrace,
   type Summarize,
   type Tier2Context,
 } from "../runs/compaction.ts";
@@ -150,6 +152,12 @@ export type ChatTurn = {
     presencePenalty?: number;
     seed?: number;
   };
+  /**
+   * Set when Tier 1 compaction fired this turn (§K / 11c). agent-runner emits
+   * a synthetic compact_context tool-call + tool-result pair into the stream so
+   * the compaction is visible in the chat timeline.
+   */
+  compactionTrace?: CompactionTrace;
   resolved: {
     agentId?: string;
     providerId: string;
@@ -619,14 +627,20 @@ type ApplyTier1Args = {
   lastInputTokens?: number;
 };
 
+type Tier1IfNeededResult = {
+  messages: PlatypusUIMessage[];
+  compactionTrace?: CompactionTrace;
+};
+
 /**
  * Reconstructs/advances the compacted view and persists any new summary — all
  * best-effort. Any throw degrades to the uncompacted messages (recovery §E
- * remains the safety net). Returns the message array to send to the model.
+ * remains the safety net). Returns the messages to send to the model plus an
+ * optional compactionTrace for the stream trace (§K / 11c).
  */
 async function applyTier1IfNeeded(
   args: ApplyTier1Args,
-): Promise<PlatypusUIMessage[]> {
+): Promise<Tier1IfNeededResult> {
   const { chatId, runtime, messages, rawMessages } = args;
   try {
     const store = drizzleCompactionStore;
@@ -672,13 +686,16 @@ async function applyTier1IfNeeded(
         logger.info({ chatId, ...event }, "context-compacted"),
     });
 
-    return result.messages;
+    return {
+      messages: result.messages,
+      compactionTrace: result.compactionTrace,
+    };
   } catch (error) {
     logger.error(
       { error, chatId },
       "Tier 1 compaction failed; sending uncompacted history",
     );
-    return messages;
+    return { messages };
   }
 }
 
@@ -842,7 +859,7 @@ export const prepareChatTurn = async (
   // runs (triggers, sub-agents) carry no chat id and have no durable history to
   // compact (plan M3 — they are Tier 2 only), so send messages uncompacted.
   const chatId = request.id;
-  const compactedMessages = chatId
+  const tier1Result = chatId
     ? await applyTier1IfNeeded({
         chatId,
         runtime: compactionRuntime,
@@ -863,7 +880,8 @@ export const prepareChatTurn = async (
             | undefined
         )?.stats?.contextTokens,
       })
-    : inlinedMessages;
+    : { messages: inlinedMessages };
+  const compactedMessages = tier1Result.messages;
 
   // Recovery (§E, P4): always wired, even when proactive compaction is off.
   // Headless runs get trim+retry but no dirty flag (no durable chat row).
@@ -916,6 +934,7 @@ export const prepareChatTurn = async (
       contextWindow: compactionRuntime.contextWindow,
       contextWindowIsDefault: compactionRuntime.contextWindowIsDefault,
     },
+    compactionTrace: tier1Result.compactionTrace,
     recovery,
     tier2: compactionRuntime.config.compactionEnabled
       ? {
@@ -1369,6 +1388,8 @@ export async function forceCompactChat(
   estimatedTokens: number;
   contextWindow: number;
   contextWindowIsDefault: boolean;
+  /** §J/11c — the persisted synthetic trace message, when a summary was produced. */
+  traceMessage?: PlatypusUIMessage;
 }> {
   // Load the chat record (workspace-scoped).
   const chatRows = await db
@@ -1457,9 +1478,31 @@ export async function forceCompactChat(
     uiMessagesToCountUnits(result.messages, runtime.imageProvider),
   );
 
+  // §J/11c: a forced compaction has no live stream to inject the trace into, so
+  // persist it as a standalone synthetic assistant message. Appended after the
+  // last real message — above the watermark (which already advanced inside
+  // applyTier1Compaction), so it is never itself summarized. The strip filter
+  // keeps it out of the model payload on subsequent turns. Only written when a
+  // model summary was actually produced (result.compactionTrace is undefined
+  // otherwise — see Tier1Output).
+  let traceMessage: PlatypusUIMessage | undefined;
+  if (result.compactionTrace) {
+    traceMessage = buildCompactionTraceMessage(
+      result.compactionTrace,
+      createIdGenerator({ prefix: "msg", size: 16 })(),
+    );
+    await db
+      .update(chatTable)
+      .set({ messages: [...messages, traceMessage] })
+      .where(
+        and(eq(chatTable.id, chatId), eq(chatTable.workspaceId, workspaceId)),
+      );
+  }
+
   return {
     estimatedTokens,
     contextWindow: runtime.contextWindow,
     contextWindowIsDefault: runtime.contextWindowIsDefault,
+    traceMessage,
   };
 }

@@ -835,12 +835,63 @@ export type Tier1Input = {
   onEvent?: (event: CompactionEvent) => void;
 };
 
+export type CompactionTrace = {
+  /** Number of messages that were folded into the summary. */
+  messagesDropped: number;
+  /** First ~120 chars of the LLM-generated summary. */
+  summaryExcerpt?: string;
+};
+
+/** Tool name for the synthetic compaction-trace tool-call/result pair (§K/11c).
+ * Shared by the stream-trace producer (agent-runner), the strip filter that
+ * keeps it out of the model payload, the §J persisted-message builder, and the
+ * frontend display-name mapping. */
+export const COMPACT_CONTEXT_TOOL_NAME = "compact_context";
+
+/** Builds a standalone synthetic assistant message carrying the compaction
+ * trace as a `compact_context` tool-call/result pair (§J — forced compaction
+ * has no live stream to inject into, so the trace is persisted as its own
+ * message instead). The message is always appended ABOVE the watermark, so it
+ * is never itself summarized; the strip filter keeps it out of the model
+ * payload on subsequent turns. */
+export function buildCompactionTraceMessage(
+  trace: CompactionTrace,
+  id: string,
+): PlatypusUIMessage {
+  return {
+    id,
+    role: "assistant",
+    parts: [
+      {
+        type: `tool-${COMPACT_CONTEXT_TOOL_NAME}`,
+        toolCallId: `${id}-call`,
+        state: "output-available",
+        input: { messagesDropped: trace.messagesDropped },
+        output: {
+          messagesDropped: trace.messagesDropped,
+          ...(trace.summaryExcerpt
+            ? { summaryExcerpt: trace.summaryExcerpt }
+            : {}),
+        },
+      },
+    ],
+  } as unknown as PlatypusUIMessage;
+}
+
 export type Tier1Output = {
   /** The compacted view to send to the model (summary message + recent). */
   messages: PlatypusUIMessage[];
   /** True when a new summary was produced and persisted this turn. */
   compacted: boolean;
   commit?: CommitResult;
+  /**
+   * Present ONLY when a model summary was produced this turn — the user-visible
+   * "compaction happened" signal (§K/11c). Deliberately undefined for
+   * prune-only and force-dirty-within-target no-op turns: those drop 0 messages
+   * and have no excerpt, so a trace would render an empty/confusing timeline
+   * entry.
+   */
+  compactionTrace?: CompactionTrace;
 };
 
 /** Splits history at the watermark message id. Returns the messages after it and
@@ -970,7 +1021,23 @@ export async function applyTier1Compaction(
     commit = await pinnedWrite({ dirty: false });
   }
 
-  return { messages: view, compacted: result.usedModelCall, commit };
+  // Only surface a trace when an actual model summary was produced. Prune-only
+  // and force-dirty-within-target runs drop 0 messages with no excerpt — a
+  // trace there would be an empty, confusing timeline entry (§K/11c).
+  const compactionTrace: CompactionTrace | undefined =
+    result.usedModelCall && result.summaryText
+      ? {
+          messagesDropped: result.messagesDropped,
+          summaryExcerpt: result.summaryText.slice(0, 120),
+        }
+      : undefined;
+
+  return {
+    messages: view,
+    compacted: result.usedModelCall,
+    commit,
+    compactionTrace,
+  };
 }
 
 /**

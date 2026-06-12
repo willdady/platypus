@@ -466,6 +466,9 @@ chat.post(
         inputTokens: result.estimatedTokens,
         contextWindow: result.contextWindow,
         contextWindowIsDefault: result.contextWindowIsDefault,
+        // §J/11c: the persisted synthetic trace message (when a summary ran), so
+        // the frontend can append it to the timeline without a full refetch.
+        traceMessage: result.traceMessage,
       });
     } catch (error) {
       if (error instanceof NotFoundError) {

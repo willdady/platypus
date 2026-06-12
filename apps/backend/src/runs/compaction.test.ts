@@ -413,6 +413,7 @@ describe("compactModelMessages (Tier 2 / recovery)", () => {
 
 import {
   applyTier1Compaction,
+  buildCompactionTraceMessage,
   computeBudget,
   resolveCompactionConfig,
   invalidateCompaction,
@@ -422,6 +423,37 @@ import {
   type Budget,
   type CompactionConfig,
 } from "./compaction.ts";
+
+describe("buildCompactionTraceMessage (§J/11c)", () => {
+  it("builds an assistant message with a completed compact_context tool part", () => {
+    const msg = buildCompactionTraceMessage(
+      { messagesDropped: 7, summaryExcerpt: "did things" },
+      "msg-abc",
+    );
+    expect(msg.id).toBe("msg-abc");
+    expect(msg.role).toBe("assistant");
+    expect(msg.parts).toHaveLength(1);
+    const part = msg.parts[0] as {
+      type: string;
+      state: string;
+      toolCallId: string;
+      output: unknown;
+    };
+    expect(part.type).toBe("tool-compact_context");
+    expect(part.state).toBe("output-available");
+    expect(part.toolCallId).toBe("msg-abc-call");
+    expect(part.output).toEqual({
+      messagesDropped: 7,
+      summaryExcerpt: "did things",
+    });
+  });
+
+  it("omits summaryExcerpt from the output when absent", () => {
+    const msg = buildCompactionTraceMessage({ messagesDropped: 1 }, "msg-x");
+    const part = msg.parts[0] as { output: unknown };
+    expect(part.output).toEqual({ messagesDropped: 1 });
+  });
+});
 
 function storeFromState(state: Partial<CompactionState>): FakeStore {
   return new FakeStore(state);
@@ -545,6 +577,12 @@ describe("applyTier1Compaction", () => {
     expect(store.state.version).toBe(1);
     expect(out.messages[0].id).toBe("context-summary");
     expect(onEvent).toHaveBeenCalledOnce();
+    // §K/11c: a summary ran → a trace is surfaced with the dropped count and a
+    // summary excerpt.
+    expect(out.compactionTrace).toEqual({
+      messagesDropped: 2,
+      summaryExcerpt: "SUMMARY",
+    });
   });
 
   it("disabled + not dirty: no compaction even when over the trigger", async () => {
@@ -629,6 +667,34 @@ describe("applyTier1Compaction", () => {
     expect(store.state.compactionDirty).toBe(false); // flag cleared
     expect(store.state.contextSummary).toBeNull(); // no summary written
     expect(store.state.version).toBe(1);
+    // §K/11c: no model summary ran → no trace (would be an empty timeline entry).
+    expect(out.compactionTrace).toBeUndefined();
+  });
+
+  it("under trigger: no trace surfaced", async () => {
+    const store = storeFromState({ version: 0 });
+    const messages = [uiText("r1", "user", "a")];
+    const out = await applyTier1Compaction({
+      chatId: "c",
+      messages,
+      state: {
+        version: 0,
+        summaryWatermark: null,
+        contextSummary: null,
+        compactionDirty: false,
+      },
+      budget: {
+        inputBudget: 100000,
+        triggerTokens: 100000,
+        targetTokens: 50000,
+      },
+      config: cfg(),
+      imageProvider: "default",
+      summarize: noopSummarize,
+      store,
+    });
+    expect(out.compacted).toBe(false);
+    expect(out.compactionTrace).toBeUndefined();
   });
 });
 

@@ -449,11 +449,22 @@ export const Chat = ({
   // refreshes the ring immediately (before the next completed message).
   const [compactPending, setCompactPending] = useState(false);
   const [isCompacting, setIsCompacting] = useState(false);
-  // Post-compact estimate, tagged with the message count at compaction time so
-  // it auto-expires once a new message arrives (the next provider count is
-  // authoritative). Tagging avoids a set-state-in-effect reset.
+  // Stable count of assistant messages — unaffected by optimistic user-message
+  // pushes (11a / U5). Used to tag post-compact estimates so the ring doesn't
+  // snap back to the old value when the user hits Send.
+  const assistantMessageCount = useMemo(
+    () => messages.filter((m) => m.role === "assistant").length,
+    [messages],
+  );
+
+  // Post-compact estimate, tagged with the assistant message count at
+  // compaction time so it auto-expires once a new assistant message arrives
+  // (the next provider count is authoritative). Using assistantMessageCount
+  // instead of messages.length fixes the U5 ring jump: an optimistic user
+  // message increments messages.length but not assistantMessageCount, so the
+  // compacted estimate stays valid until the real response lands.
   const [compacted, setCompacted] = useState<{
-    atMessageCount: number;
+    atAssistantMessageCount: number;
     tokens: number;
   } | null>(null);
 
@@ -479,12 +490,24 @@ export const Chat = ({
       // the provider's authoritative count.
       const body = (await res.json().catch(() => ({}))) as {
         inputTokens?: number;
+        traceMessage?: PlatypusUIMessage;
       };
       if (typeof body.inputTokens === "number") {
         setCompacted({
-          atMessageCount: messages.length,
+          atAssistantMessageCount: assistantMessageCount,
           tokens: body.inputTokens,
         });
+      }
+      // §J/11c: append the persisted compaction-trace message so it shows in the
+      // timeline immediately. It carries the id the backend persisted, so a
+      // later SWR revalidation reconciles rather than duplicating it.
+      if (body.traceMessage) {
+        const traceMessage = body.traceMessage;
+        setMessages((prev) =>
+          prev.some((m) => m.id === traceMessage.id)
+            ? prev
+            : [...prev, traceMessage],
+        );
       }
       toast.success("Context compacted");
     } catch {
@@ -492,7 +515,14 @@ export const Chat = ({
     } finally {
       setIsCompacting(false);
     }
-  }, [backendUrl, orgId, workspaceId, chatId, messages.length]);
+  }, [
+    backendUrl,
+    orgId,
+    workspaceId,
+    chatId,
+    assistantMessageCount,
+    setMessages,
+  ]);
 
   const handleCompact = useCallback(() => {
     // Confirm at click time (not after the deferred run fires) so the prompt
@@ -705,7 +735,8 @@ export const Chat = ({
                     )}
                     <ContextUsageRing
                       usedTokens={
-                        compacted?.atMessageCount === messages.length
+                        compacted?.atAssistantMessageCount ===
+                        assistantMessageCount
                           ? compacted.tokens
                           : lastAssistantStats?.contextTokens
                       }
@@ -737,11 +768,18 @@ export const Chat = ({
                         open={isAgentInfoDialogOpen}
                         onOpenChange={setIsAgentInfoDialogOpen}
                       >
-                        <DialogTrigger asChild>
-                          <PromptInputButton>
-                            <Info />
-                          </PromptInputButton>
-                        </DialogTrigger>
+                        <Tooltip delayDuration={500}>
+                          <TooltipTrigger asChild>
+                            <DialogTrigger asChild>
+                              <PromptInputButton aria-label="Agent info">
+                                <Info />
+                              </PromptInputButton>
+                            </DialogTrigger>
+                          </TooltipTrigger>
+                          <TooltipContent side="top">
+                            {selectedAgent.description?.trim() || "Agent info"}
+                          </TooltipContent>
+                        </Tooltip>
                         <AgentInfoDialog
                           agent={selectedAgent}
                           agents={agents}
