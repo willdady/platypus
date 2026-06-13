@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.95.1](https://github.com/willdady/platypus/compare/v1.95.0...v1.95.1) (2026-06-13)
+
+
+### Bug Fixes
+
+* **backend:** resolve source-level tsc errors in apps/backend ([#232](https://github.com/willdady/platypus/issues/232)) ([75c1439](https://github.com/willdady/platypus/commit/75c14394c0b2032fed06e86b9a1f1cd3111924cc))
+
 ## [1.95.0](https://github.com/willdady/platypus/compare/v1.94.0...v1.95.0) (2026-06-08)
 
 
