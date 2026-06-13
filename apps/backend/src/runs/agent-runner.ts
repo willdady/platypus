@@ -403,6 +403,7 @@ export class AgentRunner {
     frontendUrl?: string,
     onActivity?: (event?: ToolActivityEvent) => void,
     priorMessages?: PlatypusUIMessage[],
+    signal?: AbortSignal,
   ): Promise<ChatTurn> {
     return prepareChatTurn({
       orgId: scope.orgId,
@@ -415,6 +416,7 @@ export class AgentRunner {
       runMode: scope.principal.kind === "user" ? "interactive" : "headless",
       onActivity,
       priorMessages,
+      signal,
     });
   }
 
@@ -521,6 +523,7 @@ export class AgentRunner {
         params.frontendUrl,
         onActivity,
         priorMessages,
+        handle.signal,
       );
     } catch (error) {
       const err = error instanceof Error ? error : new Error(String(error));

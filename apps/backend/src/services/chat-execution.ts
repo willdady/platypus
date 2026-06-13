@@ -224,6 +224,13 @@ export type PrepareChatTurnInput = {
    * check falls back to a DB read that now returns the post-overwrite state.
    */
   priorMessages?: PlatypusUIMessage[];
+  /**
+   * Run abort signal from the run registry. Threaded into the compaction
+   * summarizer so a cancelled or timed-out run aborts the in-flight
+   * `generateText` (review Fix B). Optional: callers without a registry-backed
+   * run (tests, ad-hoc) omit it and the summarize call simply runs uncancelled.
+   */
+  signal?: AbortSignal;
 };
 
 /**
@@ -531,8 +538,8 @@ type CompactionRuntime = {
  * has a working configuration.
  */
 /** Safety ceiling on summarizer output (Chunk 13, Fix 2). Prevents a runaway
- * model from producing a summary longer than its input. Healthy summaries on
- * a 6k-token prefix are ~150-200 tokens; 2000 is a generous ceiling. */
+ * model from producing a summary longer than its input. The system prompt
+ * targets ~1500 tokens; this 2000 backstop only trips on a degenerate run. */
 const SUMMARIZE_MAX_OUTPUT_TOKENS = 2000;
 
 /** Heartbeat interval while the summarizer runs (Chunk 13, Fix 1). Resets the
@@ -540,7 +547,7 @@ const SUMMARIZE_MAX_OUTPUT_TOKENS = 2000;
  * frozen run and killed before it returns. */
 const SUMMARIZE_HEARTBEAT_INTERVAL_MS = 10_000;
 
-async function buildCompactionRuntime(args: {
+export async function buildCompactionRuntime(args: {
   chatId?: string;
   provider: Provider;
   resolvedModelId: string;
@@ -548,8 +555,13 @@ async function buildCompactionRuntime(args: {
   /** When present, called every ~10 s during `summarize` to keep the per-step
    *  stall watchdog alive (Chunk 13, Fix 1). */
   onActivity?: () => void;
+  /** Run abort signal, threaded into the summarizer `generateText` so a
+   *  cancelled / per-run-timed-out run aborts the call instead of leaking it
+   *  past the heartbeat-suppressed per-step watchdog (review Fix B). */
+  signal?: AbortSignal;
 }): Promise<CompactionRuntime> {
-  const { chatId, provider, resolvedModelId, opened, onActivity } = args;
+  const { chatId, provider, resolvedModelId, opened, onActivity, signal } =
+    args;
 
   const config = { ...DEFAULT_COMPACTION_CONFIG };
   // Global kill switch (§G) gates proactive compaction; recovery is unaffected.
@@ -619,19 +631,28 @@ async function buildCompactionRuntime(args: {
         // Fix 2 (Chunk 13): structured handoff prompt — sections reduce loss
         // across repeated re-compactions (Codex CLI pattern); explicit concise
         // instruction + "aim under ~1500 tokens" pairs with the output ceiling.
-        system: `You are performing a context checkpoint compaction. Another instance of this assistant will resume using ONLY your summary plus the most recent messages — earlier history will be gone. Write a dense markdown handoff under these headings (omit one only if truly empty):
+        // Sections are ordered most-critical-first: if the output is truncated
+        // at the ceiling (finishReason === "length"), the tail that drops is
+        // the least resume-critical (file/tool detail), not intent or next step.
+        system: `You are performing a context checkpoint compaction. Another instance of this assistant will resume using ONLY your summary plus the most recent messages — earlier history will be gone. Write a dense markdown handoff under these headings, in this order (omit one only if truly empty). Front-load the most important facts within each section — if you run long, later detail may be cut:
 
 - **Intent & open requests** — what the user wants, the latest explicit request, pending tasks.
+- **Current state & next step** — where things stand and the immediate next action.
 - **Decisions & facts** — conclusions, confirmed values/IDs/paths, constraints and user preferences (preserve any security-relevant instruction verbatim).
 - **Files & tools touched** — what was read/changed and why.
-- **Current state & next step** — where things stand and the immediate next action.
 
 If a prior summary appears in the history, integrate it — don't drop facts it captured. Be concise: aim under ~1500 tokens. Output only the summary.`,
         prompt: text,
         // Fix 2 (Chunk 13): hard ceiling prevents a degenerate run from
-        // producing a summary longer than its input. Healthy summaries on a
-        // 6k-token prefix are ~150-200 tokens; 2000 is a generous backstop.
+        // producing a summary longer than its input. Healthy summaries run a
+        // few hundred tokens; the ~1500-token prompt target leaves headroom
+        // under this 2000 backstop, which only trips on a degenerate run.
         maxOutputTokens: SUMMARIZE_MAX_OUTPUT_TOKENS,
+        // Fix B (review): thread the run's abort signal so a cancelled or
+        // per-run-timed-out run actually aborts this call. The heartbeat above
+        // keeps the per-step watchdog from firing, so without this a hung
+        // summarize would otherwise run until the 10 min per-run timeout.
+        abortSignal: signal,
       });
       const { text: summary, usage, finishReason } = result;
       logger.info(
@@ -807,6 +828,7 @@ export const prepareChatTurn = async (
     frontendUrl,
     runMode = "interactive",
     onActivity,
+    signal,
   } = input;
 
   const workspace = await queries.getWorkspace(workspaceId);
@@ -912,8 +934,13 @@ export const prepareChatTurn = async (
     resolvedModelId,
     opened,
     // Thread the activity callback so the summarizer heartbeat can bump the
-    // per-step stall watchdog (Chunk 13, Fix 1).
-    onActivity: onActivity ? () => onActivity() : undefined,
+    // per-step stall watchdog (Chunk 13, Fix 1). `onActivity` accepts an
+    // optional event, so it satisfies the `() => void` heartbeat signature
+    // directly — the interval invokes it with no event (timer-only bump).
+    onActivity,
+    // Thread the abort signal so a cancelled/timed-out run aborts summarize
+    // instead of leaking past the heartbeat-suppressed watchdog (review Fix B).
+    signal,
   });
 
   // Per-turn overhead: system prompt + tool schemas, sent on every turn but

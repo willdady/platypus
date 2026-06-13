@@ -56,14 +56,27 @@ vi.mock("@ai-sdk/mcp", () => ({
   auth: vi.fn(),
 }));
 
+// Partial mock of "ai": only `generateText` is replaced (used by the compaction
+// summarizer). `createIdGenerator` and the rest stay real via importActual.
+const { mockGenerateText } = vi.hoisted(() => ({
+  mockGenerateText: vi.fn(),
+}));
+vi.mock("ai", async (importActual) => {
+  const actual = await importActual<typeof import("ai")>();
+  return { ...actual, generateText: mockGenerateText };
+});
+
 import {
   prepareChatTurn,
+  buildCompactionRuntime,
   NotFoundError,
   ValidationError,
   createToolHeartbeat,
   shouldInjectNativeSearch,
 } from "./chat-execution.ts";
 import { createInMemoryChatTurnQueries } from "./chat-execution.test-fixtures.ts";
+import { logger } from "../logger.ts";
+import { contextWindowResolver } from "../runs/context-window.ts";
 
 const baseProvider = {
   id: "p1",
@@ -644,6 +657,107 @@ describe("chat-execution", () => {
           nativeSearchEnabled: undefined as unknown as boolean,
         }),
       ).toBe(true);
+    });
+  });
+
+  describe("buildCompactionRuntime summarize (Chunk 13 / review Fix B)", () => {
+    const buildRuntime = (signal?: AbortSignal, onActivity?: () => void) =>
+      buildCompactionRuntime({
+        chatId: "chat-1",
+        provider: baseProvider as never,
+        resolvedModelId: "gpt-4",
+        opened: {
+          languageModel: vi.fn(() => ({ modelId: "task-model" })),
+        } as never,
+        onActivity,
+        signal,
+      });
+
+    beforeEach(() => {
+      mockGenerateText.mockReset();
+      vi.spyOn(contextWindowResolver, "resolve").mockResolvedValue({
+        contextWindow: 128_000,
+        maxOutputTokens: 4096,
+        source: "registry",
+      } as never);
+    });
+
+    afterEach(() => {
+      vi.restoreAllMocks();
+      vi.useRealTimers();
+    });
+
+    it("threads the abort signal, output ceiling, and ordered prompt into generateText", async () => {
+      mockGenerateText.mockResolvedValue({
+        text: "SUMMARY",
+        usage: {},
+        finishReason: "stop",
+      });
+      const controller = new AbortController();
+      const runtime = await buildRuntime(controller.signal);
+
+      const out = await runtime.summarize("history text");
+
+      expect(out).toBe("SUMMARY");
+      expect(mockGenerateText).toHaveBeenCalledTimes(1);
+      const arg = mockGenerateText.mock.calls[0][0];
+      expect(arg.maxOutputTokens).toBe(2000);
+      expect(arg.abortSignal).toBe(controller.signal);
+      expect(arg.prompt).toBe("history text");
+      expect(arg.system).toContain("context checkpoint compaction");
+      // Sections ordered most-critical-first so truncation drops the tail
+      // (file/tool detail), not intent or next step.
+      const intentIdx = arg.system.indexOf("Intent & open requests");
+      const nextStepIdx = arg.system.indexOf("Current state & next step");
+      const filesIdx = arg.system.indexOf("Files & tools touched");
+      expect(intentIdx).toBeGreaterThanOrEqual(0);
+      expect(nextStepIdx).toBeGreaterThan(intentIdx);
+      expect(filesIdx).toBeGreaterThan(nextStepIdx);
+    });
+
+    it("warns but still returns the summary when the output ceiling is hit", async () => {
+      mockGenerateText.mockResolvedValue({
+        text: "TRUNCATED",
+        usage: {},
+        finishReason: "length",
+      });
+      const warn = vi.spyOn(logger, "warn").mockImplementation(() => {});
+      const runtime = await buildRuntime();
+
+      const out = await runtime.summarize("x");
+
+      expect(out).toBe("TRUNCATED");
+      expect(warn).toHaveBeenCalledWith(
+        expect.objectContaining({ maxTokens: 2000 }),
+        expect.stringContaining("maxOutputTokens ceiling"),
+      );
+    });
+
+    it("bumps onActivity on each heartbeat tick while summarize runs, then stops", async () => {
+      let resolveGen: (v: unknown) => void = () => {};
+      mockGenerateText.mockImplementation(
+        () =>
+          new Promise((resolve) => {
+            resolveGen = resolve;
+          }),
+      );
+      const onActivity = vi.fn();
+      const runtime = await buildRuntime(undefined, onActivity);
+
+      vi.useFakeTimers();
+      const pending = runtime.summarize("x");
+
+      // Two heartbeat intervals (10 s each) elapse mid-call.
+      await vi.advanceTimersByTimeAsync(25_000);
+      expect(onActivity).toHaveBeenCalledTimes(2);
+
+      resolveGen({ text: "S", usage: {}, finishReason: "stop" });
+      await pending;
+
+      // Interval cleared in the finally block — no further bumps.
+      onActivity.mockClear();
+      await vi.advanceTimersByTimeAsync(30_000);
+      expect(onActivity).not.toHaveBeenCalled();
     });
   });
 });
