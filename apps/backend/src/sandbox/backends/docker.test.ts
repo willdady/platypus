@@ -14,7 +14,13 @@ type FakeContainer = {
   remove: ReturnType<typeof vi.fn>;
   exec: ReturnType<typeof vi.fn>;
   putArchive: ReturnType<typeof vi.fn>;
-  modem: { demuxStream: (...args: any[]) => void };
+  modem: {
+    demuxStream: (
+      stream: PassThrough,
+      stdout: PassThrough,
+      stderr: PassThrough,
+    ) => void;
+  };
 };
 
 type ExecConfig = {
@@ -25,27 +31,52 @@ type ExecConfig = {
   closeDelayMs?: number;
 };
 
+/** A PassThrough stream extended with optional exec configuration attached by the mock. */
+type ExecStream = PassThrough & { __execCfg?: ExecConfig };
+
+type ContainerCreateOpts = {
+  name?: string;
+  Image?: string;
+  Cmd?: string[];
+  WorkingDir?: string;
+  Labels?: Record<string, string>;
+  HostConfig?: {
+    Binds?: string[];
+    PidsLimit?: number;
+    Memory?: number;
+    MemorySwap?: number;
+    NanoCpus?: number;
+    SecurityOpt?: string[];
+    ExtraHosts?: string[];
+    NetworkMode?: string;
+  };
+};
+
+type PutArchiveCall = { buffer: Buffer; opts: { path: string } };
+
+type NetworkConnectCall = { network: string; opts: { Container?: string } };
+
 type MockState = {
   // Sequence of behaviours for container.inspect() — popped left-to-right.
-  containerInspects: Array<() => Promise<any>>;
+  containerInspects: Array<() => Promise<{ State: { Running: boolean } }>>;
   // Sequence for image.inspect().
-  imageInspects: Array<() => Promise<any>>;
+  imageInspects: Array<() => Promise<{ Id: string }>>;
   // Sequence for volume.inspect().
-  volumeInspects: Array<() => Promise<any>>;
+  volumeInspects: Array<() => Promise<{ Name: string }>>;
   // Sequence of exec behaviours, popped on each exec.
   execQueue: ExecConfig[];
   // Recorded calls.
-  createContainerCalls: any[];
-  createVolumeCalls: any[];
-  putArchiveCalls: Array<{ buffer: Buffer; opts: any }>;
-  execCalls: any[];
-  pullCalls: any[];
+  createContainerCalls: ContainerCreateOpts[];
+  createVolumeCalls: Record<string, unknown>[];
+  putArchiveCalls: PutArchiveCall[];
+  execCalls: Record<string, unknown>[];
+  pullCalls: string[];
   // Recorded network.connect() calls (additional networks beyond the primary).
-  networkConnectCalls: Array<{ network: string; opts: any }>;
+  networkConnectCalls: NetworkConnectCall[];
   // Per-container stop/remove handlers (keyed by container name).
-  containerStop: () => Promise<any>;
-  containerRemove: () => Promise<any>;
-  volumeRemove: () => Promise<any>;
+  containerStop: () => Promise<void>;
+  containerRemove: () => Promise<void>;
+  volumeRemove: () => Promise<void>;
   // Track last container so tests can assert .start() was called.
   lastContainer: FakeContainer | null;
   // Track the *existing* container (returned by getContainer before create).
@@ -55,9 +86,13 @@ type MockState = {
 let mockState: MockState;
 
 function makeFakeContainer(): FakeContainer {
-  const demuxStream = (stream: any, stdoutPass: any, stderrPass: any) => {
+  const demuxStream = (
+    stream: PassThrough,
+    stdoutPass: PassThrough,
+    stderrPass: PassThrough,
+  ) => {
     // Read the most recently configured exec output (set on exec.start()).
-    const cfg = (stream).__execCfg as ExecConfig | undefined;
+    const cfg = (stream as ExecStream).__execCfg;
     process.nextTick(() => {
       if (cfg?.stdout) {
         stdoutPass.write(
@@ -77,22 +112,22 @@ function makeFakeContainer(): FakeContainer {
   };
 
   const container: FakeContainer = {
-    inspect: vi.fn(async () => {
+    inspect: vi.fn(() => {
       const next = mockState.containerInspects.shift();
       if (!next) {
         // Default: container running.
-        return { State: { Running: true } };
+        return Promise.resolve({ State: { Running: true } });
       }
       return next();
     }),
-    start: vi.fn(async () => undefined),
-    stop: vi.fn(async () => mockState.containerStop()),
-    remove: vi.fn(async () => mockState.containerRemove()),
-    exec: vi.fn(async (opts: any) => {
+    start: vi.fn(() => Promise.resolve(undefined)),
+    stop: vi.fn(() => mockState.containerStop()),
+    remove: vi.fn(() => mockState.containerRemove()),
+    exec: vi.fn((opts: Record<string, unknown>) => {
       mockState.execCalls.push(opts);
       const cfg: ExecConfig = mockState.execQueue.shift() ?? {};
-      const stream = new PassThrough();
-      (stream as any).__execCfg = cfg;
+      const stream: ExecStream = new PassThrough();
+      stream.__execCfg = cfg;
       // Production code awaits stream.on("end" | "close" | "error"). Since
       // nothing actually consumes `stream` itself (demuxStream is mocked to
       // write to the pass-throughs directly), we manually emit "close" to
@@ -107,13 +142,14 @@ function makeFakeContainer(): FakeContainer {
       } else {
         process.nextTick(closeStream);
       }
-      return {
-        start: vi.fn(async () => stream),
-        inspect: vi.fn(async () => ({ ExitCode: cfg.exitCode ?? 0 })),
-      };
+      return Promise.resolve({
+        start: vi.fn(() => Promise.resolve(stream)),
+        inspect: vi.fn(() => Promise.resolve({ ExitCode: cfg.exitCode ?? 0 })),
+      });
     }),
-    putArchive: vi.fn(async (buffer: Buffer, opts: any) => {
+    putArchive: vi.fn((buffer: Buffer, opts: { path: string }) => {
       mockState.putArchiveCalls.push({ buffer, opts });
+      return Promise.resolve(undefined);
     }),
     modem: { demuxStream },
   };
@@ -122,11 +158,20 @@ function makeFakeContainer(): FakeContainer {
 
 vi.mock("dockerode", () => {
   class Docker {
-    modem: { followProgress: (...args: any[]) => void; demuxStream: any };
+    modem: {
+      followProgress: (
+        stream: PassThrough,
+        cb: (err: Error | null) => void,
+      ) => void;
+      demuxStream: () => void;
+    };
 
     constructor() {
       this.modem = {
-        followProgress: (_stream: any, cb: (err: Error | null) => void) => {
+        followProgress: (
+          _stream: PassThrough,
+          cb: (err: Error | null) => void,
+        ) => {
           cb(null);
         },
         demuxStream: () => {
@@ -147,9 +192,9 @@ vi.mock("dockerode", () => {
 
     getImage(_image: string) {
       return {
-        inspect: vi.fn(async () => {
+        inspect: vi.fn(() => {
           const next = mockState.imageInspects.shift();
-          if (!next) return { Id: "sha256:abc" };
+          if (!next) return Promise.resolve({ Id: "sha256:abc" });
           return next();
         }),
       };
@@ -157,16 +202,16 @@ vi.mock("dockerode", () => {
 
     getVolume(_name: string) {
       return {
-        inspect: vi.fn(async () => {
+        inspect: vi.fn(() => {
           const next = mockState.volumeInspects.shift();
-          if (!next) return { Name: _name };
+          if (!next) return Promise.resolve({ Name: _name });
           return next();
         }),
-        remove: vi.fn(async () => mockState.volumeRemove()),
+        remove: vi.fn(() => mockState.volumeRemove()),
       };
     }
 
-    createContainer(opts: any) {
+    createContainer(opts: ContainerCreateOpts) {
       mockState.createContainerCalls.push(opts);
       const c = makeFakeContainer();
       mockState.lastContainer = c;
@@ -174,15 +219,16 @@ vi.mock("dockerode", () => {
       return c;
     }
 
-    createVolume(opts: any) {
+    createVolume(opts: Record<string, unknown>) {
       mockState.createVolumeCalls.push(opts);
       return {};
     }
 
     getNetwork(name: string) {
       return {
-        connect: vi.fn(async (opts: any) => {
+        connect: vi.fn((opts: { Container?: string }) => {
           mockState.networkConnectCalls.push({ network: name, opts });
+          return Promise.resolve(undefined);
         }),
       };
     }
@@ -236,9 +282,9 @@ function resetMockState() {
     execCalls: [],
     pullCalls: [],
     networkConnectCalls: [],
-    containerStop: async () => undefined,
-    containerRemove: async () => undefined,
-    volumeRemove: async () => undefined,
+    containerStop: () => Promise.resolve(undefined),
+    containerRemove: () => Promise.resolve(undefined),
+    volumeRemove: () => Promise.resolve(undefined),
     lastContainer: null,
     existingContainer: null,
   };
@@ -249,29 +295,34 @@ function queueExec(cfg: ExecConfig = {}) {
   mockState.execQueue.push(cfg);
 }
 
+/** A Docker-style error with an HTTP status code. */
+interface StatusError extends Error {
+  statusCode: number;
+}
+
+function makeStatusError(message: string, statusCode: number): StatusError {
+  const err = new Error(message) as StatusError;
+  err.statusCode = statusCode;
+  return err;
+}
+
 /** Configure container.inspect() to reject 404 (no such container). */
 function setContainerMissing() {
-  mockState.containerInspects.push(async () => {
-    const err: any = new Error("no such container");
-    err.statusCode = 404;
-    throw err;
-  });
+  mockState.containerInspects.push(() =>
+    Promise.reject(makeStatusError("no such container", 404)),
+  );
 }
 
 function setImageMissing() {
-  mockState.imageInspects.push(async () => {
-    const err: any = new Error("no such image");
-    err.statusCode = 404;
-    throw err;
-  });
+  mockState.imageInspects.push(() =>
+    Promise.reject(makeStatusError("no such image", 404)),
+  );
 }
 
 function setVolumeMissing() {
-  mockState.volumeInspects.push(async () => {
-    const err: any = new Error("no such volume");
-    err.statusCode = 404;
-    throw err;
-  });
+  mockState.volumeInspects.push(() =>
+    Promise.reject(makeStatusError("no such volume", 404)),
+  );
 }
 
 /** Configure a fresh provisioning path: every check returns 404 until create. */
@@ -320,28 +371,28 @@ describe("DockerSandboxBackend — provisioning", () => {
     expect(opts.Image).toBe("debian:stable-slim");
     expect(opts.Cmd).toEqual(["sleep", "infinity"]);
     expect(opts.WorkingDir).toBe("/workspace");
-    expect(opts.Labels["platypus.sandbox"]).toBe("true");
-    expect(opts.Labels["platypus.sandbox.workspaceId"]).toBe("ws-abc");
-    expect(opts.HostConfig.Binds).toEqual([
+    expect(opts.Labels?.["platypus.sandbox"]).toBe("true");
+    expect(opts.Labels?.["platypus.sandbox.workspaceId"]).toBe("ws-abc");
+    expect(opts.HostConfig?.Binds).toEqual([
       "platypus-sandbox-vol-ws-abc:/workspace",
     ]);
-    expect(opts.HostConfig.PidsLimit).toBe(256);
-    expect(opts.HostConfig.Memory).toBe(2 * 1024 * 1024 * 1024);
-    expect(opts.HostConfig.MemorySwap).toBe(opts.HostConfig.Memory);
-    expect(opts.HostConfig.NanoCpus).toBe(2_000_000_000);
-    expect(opts.HostConfig.SecurityOpt).toEqual(["no-new-privileges:true"]);
+    expect(opts.HostConfig?.PidsLimit).toBe(256);
+    expect(opts.HostConfig?.Memory).toBe(2 * 1024 * 1024 * 1024);
+    expect(opts.HostConfig?.MemorySwap).toBe(opts.HostConfig?.Memory);
+    expect(opts.HostConfig?.NanoCpus).toBe(2_000_000_000);
+    expect(opts.HostConfig?.SecurityOpt).toEqual(["no-new-privileges:true"]);
     // Default-deny host reachability (ADR-0005): empty config → no reachability.
-    expect(opts.HostConfig.ExtraHosts).toEqual([]);
-    expect(opts.HostConfig.NetworkMode).toBeUndefined();
+    expect(opts.HostConfig?.ExtraHosts).toEqual([]);
+    expect(opts.HostConfig?.NetworkMode).toBeUndefined();
   });
 
   it("reuses an existing running container without re-creating", async () => {
     // existingContainer present; its inspect() will resolve Running=true.
     mockState.existingContainer = makeFakeContainer();
     // First inspect returns running.
-    mockState.containerInspects.push(async () => ({
-      State: { Running: true },
-    }));
+    mockState.containerInspects.push(() =>
+      Promise.resolve({ State: { Running: true } }),
+    );
     queueExec({ stdout: "ok", exitCode: 0 });
 
     const backend = new DockerSandboxBackend({}, {});
@@ -355,9 +406,9 @@ describe("DockerSandboxBackend — provisioning", () => {
 
   it("starts an existing stopped container", async () => {
     mockState.existingContainer = makeFakeContainer();
-    mockState.containerInspects.push(async () => ({
-      State: { Running: false },
-    }));
+    mockState.containerInspects.push(() =>
+      Promise.resolve({ State: { Running: false } }),
+    );
     queueExec({ exitCode: 0 });
 
     const backend = new DockerSandboxBackend({}, {});
@@ -393,7 +444,7 @@ describe("DockerSandboxBackend — argv safety", () => {
     await backend.fsRead(ctx, { path: malicious });
 
     // Find the fsRead exec call — last call (after provisioning mkdir).
-    const last = mockState.execCalls.at(-1);
+    const last = mockState.execCalls.at(-1) as { Cmd: string[] };
     expect(last.Cmd).toEqual(["cat", "--", `/workspace/${malicious}`]);
   });
 
@@ -404,7 +455,7 @@ describe("DockerSandboxBackend — argv safety", () => {
     const backend = new DockerSandboxBackend({}, {});
     await backend.fsList(ctx, { glob: "*.ts" });
 
-    const last = mockState.execCalls.at(-1);
+    const last = mockState.execCalls.at(-1) as { Cmd: string[] };
     const idx = last.Cmd.indexOf("-name");
     expect(idx).toBeGreaterThan(-1);
     expect(last.Cmd[idx + 1]).toBe("*.ts");
@@ -417,7 +468,7 @@ describe("DockerSandboxBackend — argv safety", () => {
     const backend = new DockerSandboxBackend({}, {});
     await backend.fsList(ctx, { glob: "src/*.ts" });
 
-    const last = mockState.execCalls.at(-1);
+    const last = mockState.execCalls.at(-1) as { Cmd: string[] };
     const idx = last.Cmd.indexOf("-path");
     expect(idx).toBeGreaterThan(-1);
     expect(last.Cmd[idx + 1]).toBe("*/src/*.ts");
@@ -430,7 +481,7 @@ describe("DockerSandboxBackend — argv safety", () => {
     const backend = new DockerSandboxBackend({}, {});
     await backend.fsList(ctx, { glob: "**/*.ts" });
 
-    const last = mockState.execCalls.at(-1);
+    const last = mockState.execCalls.at(-1) as { Cmd: string[] };
     const idx = last.Cmd.indexOf("-path");
     expect(idx).toBeGreaterThan(-1);
     expect(last.Cmd[idx + 1]).toBe("*/*/*.ts");
@@ -450,7 +501,7 @@ describe("DockerSandboxBackend — argv safety", () => {
       }),
     ).rejects.toThrow(/already exists/);
 
-    const probeCall = mockState.execCalls.at(-1);
+    const probeCall = mockState.execCalls.at(-1) as { Cmd: string[] };
     expect(probeCall.Cmd).toEqual(["test", "-e", "/workspace/foo"]);
   });
 
@@ -458,9 +509,9 @@ describe("DockerSandboxBackend — argv safety", () => {
     // Pre-warm with an existing running container so we can isolate exec calls
     // from the fsWrite itself.
     mockState.existingContainer = makeFakeContainer();
-    mockState.containerInspects.push(async () => ({
-      State: { Running: true },
-    }));
+    mockState.containerInspects.push(() =>
+      Promise.resolve({ State: { Running: true } }),
+    );
 
     const backend = new DockerSandboxBackend({}, {});
     await backend.fsWrite(ctx, {
@@ -508,11 +559,8 @@ describe("DockerSandboxBackend — tar builder", () => {
 describe("DockerSandboxBackend — destroy() idempotence", () => {
   it("swallows 404 on stop and proceeds to remove + volume remove", async () => {
     mockState.existingContainer = makeFakeContainer();
-    mockState.containerStop = async () => {
-      const err: any = new Error("no such container");
-      err.statusCode = 404;
-      throw err;
-    };
+    mockState.containerStop = () =>
+      Promise.reject(makeStatusError("no such container", 404));
 
     const backend = new DockerSandboxBackend({}, {});
     await expect(backend.destroy(ctx)).resolves.toBeUndefined();
@@ -521,11 +569,8 @@ describe("DockerSandboxBackend — destroy() idempotence", () => {
 
   it("swallows 304 (already stopped) on stop", async () => {
     mockState.existingContainer = makeFakeContainer();
-    mockState.containerStop = async () => {
-      const err: any = new Error("already stopped");
-      err.statusCode = 304;
-      throw err;
-    };
+    mockState.containerStop = () =>
+      Promise.reject(makeStatusError("already stopped", 304));
 
     const backend = new DockerSandboxBackend({}, {});
     await expect(backend.destroy(ctx)).resolves.toBeUndefined();
@@ -534,13 +579,10 @@ describe("DockerSandboxBackend — destroy() idempotence", () => {
 
   it("swallows 404 on container remove and on volume remove", async () => {
     mockState.existingContainer = makeFakeContainer();
-    const mkErr = () => {
-      const err: any = new Error("not found");
-      err.statusCode = 404;
-      throw err;
-    };
-    mockState.containerRemove = async () => mkErr();
-    mockState.volumeRemove = async () => mkErr();
+    mockState.containerRemove = () =>
+      Promise.reject(makeStatusError("not found", 404));
+    mockState.volumeRemove = () =>
+      Promise.reject(makeStatusError("not found", 404));
 
     const backend = new DockerSandboxBackend({}, {});
     await expect(backend.destroy(ctx)).resolves.toBeUndefined();
@@ -549,18 +591,17 @@ describe("DockerSandboxBackend — destroy() idempotence", () => {
 
   it("logs but proceeds when stop returns 500", async () => {
     mockState.existingContainer = makeFakeContainer();
-    mockState.containerStop = async () => {
-      const err: any = new Error("internal");
-      err.statusCode = 500;
-      throw err;
-    };
+    mockState.containerStop = () =>
+      Promise.reject(makeStatusError("internal", 500));
     let removeCalled = false;
-    mockState.containerRemove = async () => {
+    mockState.containerRemove = () => {
       removeCalled = true;
+      return Promise.resolve(undefined);
     };
     let volRemoveCalled = false;
-    mockState.volumeRemove = async () => {
+    mockState.volumeRemove = () => {
       volRemoveCalled = true;
+      return Promise.resolve(undefined);
     };
 
     const backend = new DockerSandboxBackend({}, {});
@@ -641,7 +682,7 @@ describe("DockerSandboxBackend — host reachability (ADR-0005)", () => {
     );
     await backend.shellExec(ctx, { command: "true" });
 
-    expect(mockState.createContainerCalls[0].HostConfig.ExtraHosts).toEqual([
+    expect(mockState.createContainerCalls[0].HostConfig?.ExtraHosts).toEqual([
       "host.docker.internal:host-gateway",
     ]);
   });
@@ -656,7 +697,7 @@ describe("DockerSandboxBackend — host reachability (ADR-0005)", () => {
     );
     await backend.shellExec(ctx, { command: "true" });
 
-    expect(mockState.createContainerCalls[0].HostConfig.NetworkMode).toBe(
+    expect(mockState.createContainerCalls[0].HostConfig?.NetworkMode).toBe(
       "primary",
     );
     expect(mockState.networkConnectCalls.map((c) => c.network)).toEqual([
@@ -676,7 +717,7 @@ describe("DockerSandboxBackend — host reachability (ADR-0005)", () => {
     const backend = new DockerSandboxBackend({ networks: ["only"] }, {});
     await backend.shellExec(ctx, { command: "true" });
 
-    expect(mockState.createContainerCalls[0].HostConfig.NetworkMode).toBe(
+    expect(mockState.createContainerCalls[0].HostConfig?.NetworkMode).toBe(
       "only",
     );
     expect(mockState.networkConnectCalls).toHaveLength(0);
