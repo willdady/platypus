@@ -795,12 +795,10 @@ export function createKanbanTools(
         const { position: calcPos, needsRebalance, afterIndex } = result;
 
         if (needsRebalance) {
-          // Rebalance existing cards and place new card at the right spot
-          const reorderedCards = [...cardsInColumn];
-          reorderedCards.splice(afterIndex + 1, 0, {
-            id: "__placeholder__",
-            position: 0,
-          } as any);
+          // Rebalance existing cards and place new card at the right spot.
+          // Only `.id` is read below, so a minimal {id} shape is enough.
+          const reorderedCards: Array<{ id: string }> = [...cardsInColumn];
+          reorderedCards.splice(afterIndex + 1, 0, { id: "__placeholder__" });
           for (let i = 0; i < reorderedCards.length; i++) {
             if (reorderedCards[i].id !== "__placeholder__") {
               await db

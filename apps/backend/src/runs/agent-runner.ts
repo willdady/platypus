@@ -8,7 +8,6 @@ import {
   readUIMessageStream,
   stepCountIs,
   streamText,
-  type LanguageModel,
 } from "ai";
 import {
   prepareChatTurn,
@@ -323,7 +322,7 @@ export class AgentRunner {
     // an `undefined` value identically, and the streaming path has always
     // passed them this way in production.
     const modelArgs = {
-      model: state.turn.stream.model as LanguageModel,
+      model: state.turn.stream.model,
       messages: await convertToModelMessages(state.turn.stream.messages),
       system: state.turn.stream.system,
       tools: state.turn.stream.tools,
@@ -382,7 +381,7 @@ export class AgentRunner {
         let status: RunStatus = "succeeded";
         let err: Error | undefined;
         if (handle.signal.aborted) {
-          const reason = handle.signal.reason;
+          const reason: unknown = handle.signal.reason;
           if (reason instanceof TimeoutError) {
             status = "failed";
             err = reason;

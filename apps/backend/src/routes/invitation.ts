@@ -95,13 +95,20 @@ invitation.post(
       });
 
       return c.json({ ...record, blueprintIds }, 201);
-    } catch (error: any) {
+    } catch (error) {
+      const e = error as {
+        code?: string;
+        constraint?: string;
+        message?: string;
+        detail?: string;
+        cause?: { code?: string };
+      };
       const isDuplicate =
-        error.code === "23505" ||
-        error.cause?.code === "23505" ||
-        error.constraint === "unique_invitation_org_email" ||
-        error.message?.includes("unique_invitation_org_email") ||
-        error.detail?.includes("already exists");
+        e.code === "23505" ||
+        e.cause?.code === "23505" ||
+        e.constraint === "unique_invitation_org_email" ||
+        !!e.message?.includes("unique_invitation_org_email") ||
+        !!e.detail?.includes("already exists");
 
       if (isDuplicate) {
         return c.json(

@@ -23,6 +23,7 @@ import { requireOrgAccess } from "../middleware/authorization.ts";
 import type { Variables } from "../server.ts";
 import { applyBlueprintsToWorkspace } from "../services/blueprint-apply.ts";
 import { isBlueprintReferencedByLiveInvitation } from "../services/blueprint-guard.ts";
+import { isUniqueViolation } from "../errors.ts";
 
 // Blueprint — a named, Organization-scoped macro that, applied to a Workspace,
 // creates the Attachments for a chosen set of Shared resources in one step
@@ -40,13 +41,6 @@ const RESOURCE_TABLES = {
 } as const;
 
 type ResourceType = keyof typeof RESOURCE_TABLES;
-
-/** Detects a Postgres unique-constraint violation across driver shapes. */
-const isUniqueViolation = (error: any): boolean =>
-  error.code === "23505" ||
-  error.cause?.code === "23505" ||
-  error.message?.includes("unique constraint") ||
-  error.cause?.message?.includes("unique constraint");
 
 const NAME_CONFLICT = {
   error: "A blueprint with this name already exists in this organization",
@@ -311,7 +305,7 @@ orgBlueprint.post(
           );
         }
       });
-    } catch (error: any) {
+    } catch (error) {
       if (isUniqueViolation(error)) {
         return c.json(NAME_CONFLICT, 409);
       }
@@ -478,7 +472,7 @@ orgBlueprint.put(
           );
         }
       });
-    } catch (error: any) {
+    } catch (error) {
       if (isUniqueViolation(error)) {
         return c.json(NAME_CONFLICT, 409);
       }

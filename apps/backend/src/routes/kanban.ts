@@ -1133,8 +1133,7 @@ kanban.put(
 
     // Check ownership: super admins, org admins can moderate; others must own the comment
     const canModerate =
-      isSuperAdmin(currentUser as { role: string }) ||
-      orgMembership?.role === "admin";
+      isSuperAdmin(currentUser) || orgMembership?.role === "admin";
     if (!canModerate && existingComment.createdByUserId !== currentUser.id) {
       return c.json({ error: "You can only edit your own comments" }, 403);
     }
@@ -1185,8 +1184,7 @@ kanban.delete(
 
     // Check ownership: super admins, org admins can moderate; others must own the comment
     const canModerate =
-      isSuperAdmin(currentUser as { role: string }) ||
-      orgMembership?.role === "admin";
+      isSuperAdmin(currentUser) || orgMembership?.role === "admin";
     if (!canModerate && existingComment.createdByUserId !== currentUser.id) {
       return c.json({ error: "You can only delete your own comments" }, 403);
     }

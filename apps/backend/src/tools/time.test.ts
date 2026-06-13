@@ -48,8 +48,8 @@ describe("convertTimezone", () => {
     );
   });
 
-  it("throws for invalid date string", async () => {
-    await expect(
+  it("throws for invalid date string", () => {
+    expect(() =>
       convertTimezone.execute(
         {
           dateTime: "not-a-date",
@@ -58,6 +58,6 @@ describe("convertTimezone", () => {
         },
         ctx,
       ),
-    ).rejects.toThrow("Invalid date format");
+    ).toThrow("Invalid date format");
   });
 });

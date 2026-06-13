@@ -30,4 +30,4 @@ export type PlatypusTools = MathTools &
   SkillTools &
   TriggerTools;
 
-export type PlatypusUIMessage = UIMessage<any, UIDataTypes, PlatypusTools>;
+export type PlatypusUIMessage = UIMessage<unknown, UIDataTypes, PlatypusTools>;
