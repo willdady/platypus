@@ -17,10 +17,17 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # Skip on release-please's release PR: it only bumps the version and
+  # changelog (no source changes), so lint/test would re-run on code that
+  # already passed. A job skipped via `if:` is reported as skipped, which
+  # branch protection counts as a passing required check — so the release PR
+  # stays mergeable without doing redundant work.
   lint:
+    if: ${{ !startsWith(github.head_ref, 'release-please--') }}
     uses: ./.github/workflows/lint.yml
 
   test:
+    if: ${{ !startsWith(github.head_ref, 'release-please--') }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
