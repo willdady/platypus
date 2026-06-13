@@ -105,7 +105,10 @@ describe("Agent Routes", () => {
       });
 
       expect(res.status).toBe(400);
-      const body = await res.json();
+      const body = (await res.json()) as {
+        success: boolean;
+        error: { code: string; path: string[] }[];
+      };
       expect(body.success).toBe(false);
       expect(Array.isArray(body.error)).toBe(true);
       expect(body.error[0].code).toBe("too_big");
@@ -418,7 +421,7 @@ describe("Agent Routes", () => {
 
       const res = await app.request(promoteUrl, { method: "POST" });
       expect(res.status).toBe(422);
-      const body = await res.json();
+      const body = (await res.json()) as { blockers: unknown[] };
       expect(body.blockers).toEqual([
         { type: "skill", id: "s1", name: "ws-skill" },
       ]);

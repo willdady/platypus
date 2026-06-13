@@ -260,7 +260,10 @@ describe("Kanban Routes", () => {
 
       const res = await app.request(`${baseUrl}/${boardId}/state`);
       expect(res.status).toBe(200);
-      const body = await res.json();
+      const body = (await res.json()) as {
+        board: unknown;
+        columns: { cards: { createdByName: string | null }[] }[];
+      };
       expect(body.board).toEqual(mockBoard);
       expect(Array.isArray(body.columns)).toBe(true);
       expect(body.columns).toHaveLength(1);
@@ -335,7 +338,7 @@ describe("Kanban Routes", () => {
       });
 
       expect(res.status).toBe(409);
-      const body = await res.json();
+      const body = (await res.json()) as Record<string, unknown>;
       expect(body.error).toBe(
         "A column with this name already exists on the board",
       );
@@ -398,7 +401,7 @@ describe("Kanban Routes", () => {
       });
 
       expect(res.status).toBe(409);
-      const body = await res.json();
+      const body = (await res.json()) as Record<string, unknown>;
       expect(body.error).toBe(
         "A column with this name already exists on the board",
       );
@@ -616,7 +619,7 @@ describe("Kanban Routes", () => {
         });
 
         expect(res.status).toBe(400);
-        const body = await res.json();
+        const body = (await res.json()) as Record<string, unknown>;
         expect(body.error).toBe("Invalid user assignee");
       });
 
@@ -653,7 +656,7 @@ describe("Kanban Routes", () => {
         });
 
         expect(res.status).toBe(200);
-        const body = await res.json();
+        const body = (await res.json()) as Record<string, unknown>;
         expect(body.assignees).toEqual([{ type: "user", id: "admin-user" }]);
       });
 
@@ -687,7 +690,7 @@ describe("Kanban Routes", () => {
         });
 
         expect(res.status).toBe(200);
-        const body = await res.json();
+        const body = (await res.json()) as Record<string, unknown>;
         expect(body.assignees).toEqual([{ type: "user", id: "user-1" }]);
       });
     });
@@ -793,7 +796,7 @@ describe("Kanban Routes", () => {
       });
 
       expect(res.status).toBe(400);
-      const body = await res.json();
+      const body = (await res.json()) as Record<string, unknown>;
       expect(body.error).toBe("afterCardId not found in column");
     });
   });
@@ -896,7 +899,9 @@ describe("Kanban Routes", () => {
 
       const res = await app.request(commentsUrl);
       expect(res.status).toBe(200);
-      const body = await res.json();
+      const body = (await res.json()) as {
+        results: { body: string; createdByName: string | null }[];
+      };
       expect(body.results).toHaveLength(1);
       expect(body.results[0].body).toBe("Test comment");
       expect(body.results[0].createdByName).toBeNull();
@@ -913,7 +918,9 @@ describe("Kanban Routes", () => {
 
       const res = await app.request(commentsUrl);
       expect(res.status).toBe(200);
-      expect((await res.json()).results).toHaveLength(0);
+      expect(
+        ((await res.json()) as { results: unknown[] }).results,
+      ).toHaveLength(0);
     });
   });
 
@@ -959,7 +966,7 @@ describe("Kanban Routes", () => {
         headers: { "Content-Type": "application/json" },
       });
       expect(res.status).toBe(201);
-      const body = await res.json();
+      const body = (await res.json()) as Record<string, unknown>;
       expect(body.body).toBe("Test comment");
       expect(body.id).toBe(commentId);
     });
@@ -1025,7 +1032,7 @@ describe("Kanban Routes", () => {
         headers: { "Content-Type": "application/json" },
       });
       expect(res.status).toBe(200);
-      expect((await res.json()).body).toBe("Updated");
+      expect(((await res.json()) as { body: string }).body).toBe("Updated");
     });
 
     it("should return 404 if comment not found", async () => {
@@ -1064,7 +1071,7 @@ describe("Kanban Routes", () => {
         headers: { "Content-Type": "application/json" },
       });
       expect(res.status).toBe(403);
-      expect((await res.json()).error).toBe(
+      expect(((await res.json()) as { error: string }).error).toBe(
         "You can only edit your own comments",
       );
     });
@@ -1153,7 +1160,7 @@ describe("Kanban Routes", () => {
         method: "DELETE",
       });
       expect(res.status).toBe(403);
-      expect((await res.json()).error).toBe(
+      expect(((await res.json()) as { error: string }).error).toBe(
         "You can only delete your own comments",
       );
     });

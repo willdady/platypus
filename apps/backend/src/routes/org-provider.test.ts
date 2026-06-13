@@ -68,12 +68,16 @@ describe("Organization Provider Routes", () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]); // requireOrgAccess
 
-      const drizzleError = new Error("DrizzleQueryError: Failed query");
-      (drizzleError as any).cause = {
-        code: "23505",
-        message:
-          'duplicate key value violates unique constraint "unique_provider_name_org"',
-      };
+      const drizzleError = Object.assign(
+        new Error("DrizzleQueryError: Failed query"),
+        {
+          cause: {
+            code: "23505",
+            message:
+              'duplicate key value violates unique constraint "unique_provider_name_org"',
+          },
+        },
+      );
 
       mockDb.returning.mockRejectedValueOnce(drizzleError);
 

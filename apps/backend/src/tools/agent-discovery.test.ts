@@ -1,40 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-
-const { mockDb, dbMethods } = vi.hoisted(() => {
-  const mock: any = {};
-  const methods = [
-    "select",
-    "from",
-    "where",
-    "limit",
-    "orderBy",
-    "insert",
-    "values",
-    "update",
-    "set",
-    "delete",
-    "returning",
-    "onConflictDoUpdate",
-  ];
-  methods.forEach((method) => {
-    mock[method] = vi.fn().mockReturnValue(mock);
-  });
-  return { mockDb: mock, dbMethods: methods };
-});
-
-vi.mock("../index.ts", () => ({
-  db: mockDb,
-}));
-
-vi.mock("drizzle-orm", async () => {
-  const actual = await vi.importActual("drizzle-orm");
-  return {
-    ...actual,
-    eq: vi.fn(),
-    or: vi.fn((...args) => args.filter(Boolean)),
-    and: vi.fn((...args) => args.filter(Boolean)),
-  };
-});
+import { mockDb, resetMockDb } from "../test-utils.ts";
 
 import { createAgentDiscoveryTools } from "./agent-discovery.ts";
 
@@ -43,18 +8,12 @@ const workspaceId = "ws-1";
 const orgId = "org-1";
 const frontendUrl = "http://localhost:3000";
 
-function resetDb() {
-  dbMethods.forEach((method) => {
-    mockDb[method] = vi.fn().mockReturnValue(mockDb);
-  });
-}
-
 describe("createAgentDiscoveryTools", () => {
   let tools: ReturnType<typeof createAgentDiscoveryTools>;
 
   beforeEach(() => {
     vi.clearAllMocks();
-    resetDb();
+    resetMockDb();
     tools = createAgentDiscoveryTools(workspaceId, orgId, frontendUrl);
   });
 
@@ -75,8 +34,9 @@ describe("createAgentDiscoveryTools", () => {
       ];
       mockDb.where.mockResolvedValue(providers);
 
-      const result = await tools.listModelProviders.execute({}, ctx);
-      expect(result).toEqual(providers);
+      expect(await tools.listModelProviders.execute!({}, ctx)).toEqual(
+        providers,
+      );
     });
   });
 
@@ -85,8 +45,7 @@ describe("createAgentDiscoveryTools", () => {
       const agents = [{ id: "a1", name: "Agent 1" }];
       mockDb.where.mockResolvedValue(agents);
 
-      const result = await tools.listAgents.execute({}, ctx);
-      expect(result).toEqual(agents);
+      expect(await tools.listAgents.execute!({}, ctx)).toEqual(agents);
     });
   });
 
@@ -94,11 +53,12 @@ describe("createAgentDiscoveryTools", () => {
     it("returns error when agent not found", async () => {
       mockDb.limit.mockResolvedValue([]);
 
-      const result = await tools.getAgent.execute(
-        { agentId: "bad-id", label: "test" },
-        ctx,
-      );
-      expect(result).toEqual({ error: "Agent not found" });
+      expect(
+        await tools.getAgent.execute!(
+          { agentId: "bad-id", label: "test" },
+          ctx,
+        ),
+      ).toEqual({ error: "Agent not found" });
     });
 
     it("returns agent details when found", async () => {
@@ -111,10 +71,11 @@ describe("createAgentDiscoveryTools", () => {
       };
       mockDb.limit.mockResolvedValue([agent]);
 
-      const result = await tools.getAgent.execute(
+      const result = (await tools.getAgent.execute!(
         { agentId: "a1", label: "Agent 1" },
         ctx,
-      );
+      )) as { id: string; name: string; url?: string };
+
       expect(result).toMatchObject({ id: "a1", name: "Agent 1" });
       expect(result.url).toContain("agents/a1");
     });

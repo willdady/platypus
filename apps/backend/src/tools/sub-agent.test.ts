@@ -1,5 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import type { ToolExecutionOptions } from "ai";
 import { createSubAgentTool, createSubAgentTools } from "./sub-agent.ts";
+import type { SubAgentActivity } from "./sub-agent.ts";
 
 // Helper to consume an async generator and collect all yielded values.
 // Deep-copies each yield since the generator reuses mutable objects.
@@ -13,15 +15,30 @@ async function consumeGenerator<T>(
   return { yielded };
 }
 
-// Mock stream events helper
+// Mock stream events helper — returns a sync iterable; AsyncGenerator consumers
+// accept any iterable, so no async generator is needed here.
 function createMockFullStream(
-  events: Array<{ type: string; [key: string]: any }>,
+  events: Array<{ type: string } & Record<string, unknown>>,
 ) {
   return {
-    async *[Symbol.asyncIterator]() {
-      for (const event of events) {
-        yield event;
-      }
+    [Symbol.asyncIterator](): AsyncIterator<
+      { type: string } & Record<string, unknown>
+    > {
+      let i = 0;
+      return {
+        next() {
+          if (i < events.length) {
+            return Promise.resolve({ value: events[i++], done: false });
+          }
+          return Promise.resolve({
+            value: undefined as unknown as { type: string } & Record<
+              string,
+              unknown
+            >,
+            done: true,
+          });
+        },
+      };
     },
   };
 }
@@ -126,10 +143,10 @@ describe("createSubAgentTool", () => {
       });
 
       const { tool } = createSubAgentTool(baseOptions);
-      const gen = tool.execute(
+      const gen = tool.execute!(
         { task: "Do something" },
-        {} as any,
-      ) as AsyncGenerator<any, any>;
+        {} as ToolExecutionOptions,
+      ) as AsyncGenerator<SubAgentActivity>;
 
       const { yielded } = await consumeGenerator(gen);
 
@@ -187,10 +204,10 @@ describe("createSubAgentTool", () => {
       });
 
       const { tool } = createSubAgentTool(baseOptions);
-      const gen = tool.execute(
+      const gen = tool.execute!(
         { task: "Do something" },
-        {} as any,
-      ) as AsyncGenerator<any, any>;
+        {} as ToolExecutionOptions,
+      ) as AsyncGenerator<SubAgentActivity>;
 
       const { yielded } = await consumeGenerator(gen);
 
@@ -211,9 +228,9 @@ describe("createSubAgentTool", () => {
 
       const { tool } = createSubAgentTool(baseOptions);
       const abortController = new AbortController();
-      const gen = tool.execute({ task: "Do something" }, {
+      const gen = tool.execute!({ task: "Do something" }, {
         abortSignal: abortController.signal,
-      } as any) as AsyncGenerator<any, any>;
+      } as ToolExecutionOptions) as AsyncGenerator<SubAgentActivity>;
 
       await consumeGenerator(gen);
 
@@ -235,10 +252,10 @@ describe("createSubAgentTool", () => {
       });
 
       const { tool } = createSubAgentTool(baseOptions);
-      const gen = tool.execute(
+      const gen = tool.execute!(
         { task: "Do something" },
-        {} as any,
-      ) as AsyncGenerator<any, any>;
+        {} as ToolExecutionOptions,
+      ) as AsyncGenerator<SubAgentActivity>;
 
       const { yielded } = await consumeGenerator(gen);
 
@@ -251,7 +268,7 @@ describe("createSubAgentTool", () => {
   describe("toModelOutput", () => {
     it("extracts text from activity output", () => {
       const { tool } = createSubAgentTool(baseOptions);
-      const result = (tool as any).toModelOutput({
+      const result = tool.toModelOutput!({
         toolCallId: "tc1",
         input: { task: "test" },
         output: { entries: [], text: "Final answer" },
@@ -261,7 +278,7 @@ describe("createSubAgentTool", () => {
 
     it("returns fallback when output has no text", () => {
       const { tool } = createSubAgentTool(baseOptions);
-      const result = (tool as any).toModelOutput({
+      const result = tool.toModelOutput!({
         toolCallId: "tc1",
         input: { task: "test" },
         output: { entries: [] },
@@ -271,10 +288,10 @@ describe("createSubAgentTool", () => {
 
     it("returns fallback when output is null", () => {
       const { tool } = createSubAgentTool(baseOptions);
-      const result = (tool as any).toModelOutput({
+      const result = tool.toModelOutput!({
         toolCallId: "tc1",
         input: { task: "test" },
-        output: null,
+        output: null as unknown as SubAgentActivity,
       });
       expect(result).toEqual({ type: "text", value: "Task completed." });
     });

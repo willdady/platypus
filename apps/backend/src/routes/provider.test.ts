@@ -49,12 +49,16 @@ describe("Provider Routes", () => {
         { ownerId: "user-1", organizationId: "org-1" },
       ]); // requireWorkspaceAccess
 
-      const drizzleError = new Error("DrizzleQueryError: Failed query");
-      (drizzleError as any).cause = {
-        code: "23505",
-        message:
-          'duplicate key value violates unique constraint "unique_provider_name_workspace"',
-      };
+      const drizzleError = Object.assign(
+        new Error("DrizzleQueryError: Failed query"),
+        {
+          cause: {
+            code: "23505",
+            message:
+              'duplicate key value violates unique constraint "unique_provider_name_workspace"',
+          },
+        },
+      );
 
       mockDb.returning.mockRejectedValueOnce(drizzleError);
 
@@ -147,7 +151,7 @@ describe("Provider Routes", () => {
 
       const res = await app.request(baseUrl);
       expect(res.status).toBe(200);
-      const data = await res.json();
+      const data = (await res.json()) as Record<string, unknown>;
       expect(data.results).toHaveLength(2);
       expect(data.results).toEqual(
         expect.arrayContaining([

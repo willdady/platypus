@@ -4,11 +4,14 @@ import app from "../server.ts";
 
 // Mock crypto.randomBytes for predictable signing secrets
 vi.mock("node:crypto", async () => {
-  const actual = await vi.importActual("node:crypto");
+  const actual =
+    await vi.importActual<typeof import("node:crypto")>("node:crypto");
+  const actualDefault: typeof import("node:crypto") =
+    actual.default as typeof import("node:crypto");
   return {
     ...actual,
     default: {
-      ...(actual as any).default,
+      ...actualDefault,
       randomBytes: vi.fn().mockReturnValue(Buffer.from("a".repeat(32))),
     },
   };
@@ -64,7 +67,7 @@ describe("Webhook Routes", () => {
 
       const res = await app.request(baseUrl);
       expect(res.status).toBe(200);
-      const data = await res.json();
+      const data = (await res.json()) as { results: { name: string }[] };
       expect(data.results).toHaveLength(2);
       expect(data.results[0].name).toBe("My Webhook");
       expect(data.results[1].name).toBe("Second Webhook");
@@ -84,7 +87,7 @@ describe("Webhook Routes", () => {
 
       const res = await app.request(baseUrl);
       expect(res.status).toBe(200);
-      const data = await res.json();
+      const data = (await res.json()) as { results: unknown[] };
       expect(data.results).toHaveLength(0);
     });
   });
@@ -127,7 +130,7 @@ describe("Webhook Routes", () => {
       });
 
       expect(res.status).toBe(201);
-      const data = await res.json();
+      const data = (await res.json()) as { url: string; name: string };
       expect(data.url).toBe("https://example.com/webhook");
       expect(data.name).toBe("My Webhook");
     });
@@ -154,7 +157,10 @@ describe("Webhook Routes", () => {
 
       const res = await app.request(`${baseUrl}/wh-1`);
       expect(res.status).toBe(200);
-      const data = await res.json();
+      const data = (await res.json()) as {
+        name: string;
+        headers: Record<string, string>;
+      };
       expect(data.name).toBe("My Webhook");
       expect(data.headers).toEqual({ Authorization: "Bearer real-token" });
     });
@@ -203,7 +209,7 @@ describe("Webhook Routes", () => {
       });
 
       expect(res.status).toBe(200);
-      const data = await res.json();
+      const data = (await res.json()) as { name: string; url: string };
       expect(data.name).toBe("Updated Webhook");
       expect(data.url).toBe("https://new-url.com/webhook");
     });
@@ -297,7 +303,7 @@ describe("Webhook Routes", () => {
       });
 
       expect(res.status).toBe(200);
-      const data = await res.json();
+      const data = (await res.json()) as { signingSecret: string };
       expect(data.signingSecret).toBe("new-secret");
     });
 

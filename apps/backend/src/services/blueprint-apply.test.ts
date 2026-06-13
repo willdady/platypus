@@ -51,14 +51,16 @@ describe("applyBlueprintsToWorkspace", () => {
 
     expect(result).toEqual({ attached: 2, skipped: 0, total: 2 });
     // The insert received the deduped union, each pinned to the workspace.
-    const inserted = mockDb.values.mock.calls.at(-1)?.[0];
+    const inserted = mockDb.values.mock.calls.at(-1)?.[0] as Array<{
+      resourceId: string;
+      workspaceId: string;
+    }>;
     expect(inserted).toHaveLength(2);
-    expect(
-      inserted.map((a: { resourceId: string }) => a.resourceId).sort(),
-    ).toEqual(["agent-1", "skill-1"]);
-    expect(
-      inserted.every((a: { workspaceId: string }) => a.workspaceId === "ws-1"),
-    ).toBe(true);
+    expect(inserted.map((a) => a.resourceId).sort()).toEqual([
+      "agent-1",
+      "skill-1",
+    ]);
+    expect(inserted.every((a) => a.workspaceId === "ws-1")).toBe(true);
     // No Tier 2 slot set → the workspace is not updated.
     expect(mockDb.update).not.toHaveBeenCalled();
   });
@@ -73,9 +75,7 @@ describe("applyBlueprintsToWorkspace", () => {
     // onConflictDoNothing inserts only one — the other was already attached.
     mockDb.returning.mockResolvedValueOnce([{ id: "att-1" }]);
 
-    const result = await applyBlueprintsToWorkspace(mockDb, "ws-1", [
-      "bp-1",
-    ]);
+    const result = await applyBlueprintsToWorkspace(mockDb, "ws-1", ["bp-1"]);
 
     expect(result).toEqual({ attached: 1, skipped: 1, total: 2 });
   });

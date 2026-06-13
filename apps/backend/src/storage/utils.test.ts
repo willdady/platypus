@@ -8,6 +8,7 @@ import {
   STORAGE_URL_PREFIX,
 } from "./utils.ts";
 import type { PlatypusUIMessage } from "../types.ts";
+import type { FileUIPart } from "ai";
 import { resetStorage } from "./index.ts";
 import { promises as fs } from "node:fs";
 import * as path from "node:path";
@@ -78,10 +79,10 @@ describe("Storage Utils", () => {
 
       const filePart = result[0].parts[1];
       expect(filePart.type).toBe("file");
-      expect((filePart as any).url).toMatch(/^storage:\/\//);
+      expect((filePart as FileUIPart).url).toMatch(/^storage:\/\//);
 
       // Verify the key format
-      const key = (filePart as any).url.slice(STORAGE_URL_PREFIX.length);
+      const key = (filePart as FileUIPart).url.slice(STORAGE_URL_PREFIX.length);
       expect(key).toMatch(/^org-1\/ws-1\/chat-1\/msg-1\/1-[a-f0-9]{8}\.png$/);
     });
 
@@ -100,7 +101,7 @@ describe("Storage Utils", () => {
       const result = await extractFiles(messages, context);
 
       const filePart = result[0].parts[1];
-      expect((filePart as any).url).toBe(httpUrl);
+      expect((filePart as FileUIPart).url).toBe(httpUrl);
     });
 
     it("should handle messages without parts", async () => {
@@ -160,7 +161,7 @@ describe("Storage Utils", () => {
       const result = rewriteStorageUrls(messages, "http://localhost:4000");
 
       const filePart = result[0].parts[0];
-      expect((filePart as any).url).toBe(
+      expect((filePart as FileUIPart).url).toBe(
         "http://localhost:4000/files/org-1/ws-1/chat-1/msg-1/1-abc12345.png",
       );
     });
@@ -180,7 +181,7 @@ describe("Storage Utils", () => {
       const result = rewriteStorageUrls(messages, "http://localhost:4000");
 
       const filePart = result[0].parts[0];
-      expect((filePart as any).url).toBe(
+      expect((filePart as FileUIPart).url).toBe(
         "https://my-bucket.s3.amazonaws.com/org-1/ws-1/chat-1/msg-1/1-abc12345.png",
       );
 
@@ -200,7 +201,7 @@ describe("Storage Utils", () => {
       const result = rewriteStorageUrls(messages, "http://localhost:4000");
 
       const filePart = result[0].parts[0];
-      expect((filePart as any).url).toBe(httpUrl);
+      expect((filePart as FileUIPart).url).toBe(httpUrl);
     });
   });
 
@@ -332,7 +333,7 @@ describe("Storage Utils", () => {
       const inlined = await inlineFileUrls(storedMessages, backendOrigin);
 
       const filePart = inlined[0].parts[1];
-      expect((filePart as any).url).toMatch(/^data:image\/png;base64,/);
+      expect((filePart as FileUIPart).url).toMatch(/^data:image\/png;base64,/);
     });
 
     it("should inline /files/ HTTP URLs as data URLs", async () => {
@@ -357,7 +358,7 @@ describe("Storage Utils", () => {
       const inlined = await inlineFileUrls(httpMessages, backendOrigin);
 
       const filePart = inlined[0].parts[1];
-      expect((filePart as any).url).toMatch(/^data:image\/png;base64,/);
+      expect((filePart as FileUIPart).url).toMatch(/^data:image\/png;base64,/);
     });
 
     it("should leave existing data URLs unchanged", async () => {
@@ -369,7 +370,7 @@ describe("Storage Utils", () => {
       const inlined = await inlineFileUrls(messages, backendOrigin);
 
       const filePart = inlined[0].parts[1];
-      expect((filePart as any).url).toBe(dataUrl);
+      expect((filePart as FileUIPart).url).toBe(dataUrl);
     });
 
     it("should leave unrecognized URLs unchanged", async () => {
@@ -381,7 +382,7 @@ describe("Storage Utils", () => {
       const inlined = await inlineFileUrls(messages, backendOrigin);
 
       const filePart = inlined[0].parts[1];
-      expect((filePart as any).url).toBe(externalUrl);
+      expect((filePart as FileUIPart).url).toBe(externalUrl);
     });
 
     it("should handle messages without parts", async () => {
@@ -407,7 +408,7 @@ describe("Storage Utils", () => {
       const inlined = await inlineFileUrls(messages, backendOrigin);
 
       const filePart = inlined[0].parts[0];
-      expect((filePart as any).url).toBe(storageUrl);
+      expect((filePart as FileUIPart).url).toBe(storageUrl);
     });
   });
 });

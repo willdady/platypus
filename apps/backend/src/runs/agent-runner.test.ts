@@ -100,19 +100,19 @@ type LifecycleEvent =
 class RecordingSink implements RunSink {
   events: LifecycleEvent[] = [];
 
-  async onStart(ctx: { runId: string }): Promise<void> {
+  onStart(ctx: { runId: string }): Promise<void> {
     this.events.push({ name: "onStart", runId: ctx.runId });
+    return Promise.resolve();
   }
-  async onResolved(ctx: {
-    runId: string;
-    plan: ResolvedRunPlan;
-  }): Promise<void> {
+  onResolved(ctx: { runId: string; plan: ResolvedRunPlan }): Promise<void> {
     this.events.push({ name: "onResolved", runId: ctx.runId, plan: ctx.plan });
+    return Promise.resolve();
   }
-  async onProgress(ctx: { runId: string }): Promise<void> {
+  onProgress(ctx: { runId: string }): Promise<void> {
     this.events.push({ name: "onProgress", runId: ctx.runId });
+    return Promise.resolve();
   }
-  async onFinish(ctx: {
+  onFinish(ctx: {
     runId: string;
     status: string;
     error?: Error;
@@ -125,6 +125,7 @@ class RecordingSink implements RunSink {
       error: ctx.error?.message,
       messages: ctx.messages,
     });
+    return Promise.resolve();
   }
 
   names(): string[] {
@@ -290,18 +291,20 @@ describe("AgentRunner.cancel", () => {
   it("cancels an in-flight generate run with status=cancelled", async () => {
     mockPrepareChatTurn.mockResolvedValueOnce(fakeTurn());
     // Make generateText hang until aborted
-    mockGenerateText.mockImplementation(async ({ abortSignal }: any) => {
-      await new Promise<never>((_, reject) => {
-        if (abortSignal.aborted) {
-          reject(new Error("aborted"));
-          return;
-        }
-        abortSignal.addEventListener("abort", () =>
-          reject(new Error("aborted")),
-        );
-      });
-      throw new Error("unreachable");
-    });
+    mockGenerateText.mockImplementation(
+      async ({ abortSignal }: { abortSignal: AbortSignal }) => {
+        await new Promise<never>((_, reject) => {
+          if (abortSignal.aborted) {
+            reject(new Error("aborted"));
+            return;
+          }
+          abortSignal.addEventListener("abort", () =>
+            reject(new Error("aborted")),
+          );
+        });
+        throw new Error("unreachable");
+      },
+    );
 
     const sink = new RecordingSink();
     const inFlight = runner.generate({
@@ -331,14 +334,16 @@ describe("AgentRunner.cancel", () => {
 
   it("per-run timeout produces onFinish with status=failed and TimeoutError", async () => {
     mockPrepareChatTurn.mockResolvedValueOnce(fakeTurn());
-    mockGenerateText.mockImplementation(async ({ abortSignal }: any) => {
-      await new Promise<never>((_, reject) => {
-        abortSignal.addEventListener("abort", () =>
-          reject(abortSignal.reason ?? new Error("aborted")),
-        );
-      });
-      throw new Error("unreachable");
-    });
+    mockGenerateText.mockImplementation(
+      async ({ abortSignal }: { abortSignal: AbortSignal }) => {
+        await new Promise<never>((_, reject) => {
+          abortSignal.addEventListener("abort", () =>
+            reject(abortSignal.reason ?? new Error("aborted")),
+          );
+        });
+        throw new Error("unreachable");
+      },
+    );
 
     const sink = new RecordingSink();
     const inFlight = runner.generate({
@@ -359,8 +364,7 @@ describe("AgentRunner.cancel", () => {
     expect(finish.status).toBe("failed");
     expect(finish.error).toMatch(/per-run timeout/);
     // Confirm it was specifically a TimeoutError (kind="run")
-    const finishEv = sink.events.at(-1)!;
-    expect((finishEv as any).error).toContain("run");
+    expect(finish.error).toContain("run");
   });
 
   it("unregisters the run after generate succeeds", async () => {
@@ -394,15 +398,19 @@ describe("AgentRunner.stream — success & interruption", () => {
   // Make streamText return a fake result whose UI-stream callbacks the test
   // can drive by hand: `onStepFinish` (per step) and `onFinish` (completion).
   const primeStreamText = () => {
-    mockStreamText.mockImplementation((opts: any) => {
-      streamHarness.onStepFinish = opts.onStepFinish;
-      return {
-        toUIMessageStream: (uiOpts: any) => {
-          streamHarness.onFinish = uiOpts.onFinish;
-          return { tee: () => [{}, {}] };
-        },
-      };
-    });
+    mockStreamText.mockImplementation(
+      (opts: { onStepFinish: (step: unknown) => void }) => {
+        streamHarness.onStepFinish = opts.onStepFinish;
+        return {
+          toUIMessageStream: (uiOpts: {
+            onFinish: (ctx: { messages: unknown[] }) => Promise<void> | void;
+          }) => {
+            streamHarness.onFinish = uiOpts.onFinish;
+            return { tee: () => [{}, {}] };
+          },
+        };
+      },
+    );
   };
 
   it("runs the full lifecycle on success and persists the final messages", async () => {

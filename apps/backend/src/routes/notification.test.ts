@@ -55,7 +55,13 @@ describe("Notification Routes", () => {
 
       const res = await app.request(baseUrl);
       expect(res.status).toBe(200);
-      const body = await res.json();
+      const body = (await res.json()) as {
+        results: {
+          agentName: string;
+          isRead: boolean;
+          agentAvatarUrl?: string;
+        }[];
+      };
       expect(body.results).toHaveLength(1);
       expect(body.results[0].agentName).toBe("My Agent");
       expect(body.results[0].isRead).toBe(false);
@@ -72,7 +78,7 @@ describe("Notification Routes", () => {
 
       const res = await app.request(baseUrl);
       expect(res.status).toBe(200);
-      const body = await res.json();
+      const body = (await res.json()) as Record<string, unknown>;
       expect(body.results).toHaveLength(0);
     });
   });
@@ -98,7 +104,7 @@ describe("Notification Routes", () => {
 
       const res = await app.request(`${baseUrl}/unread-count`);
       expect(res.status).toBe(200);
-      const body = await res.json();
+      const body = (await res.json()) as Record<string, unknown>;
       expect(body.count).toBe(3);
     });
 
@@ -115,7 +121,7 @@ describe("Notification Routes", () => {
 
       const res = await app.request(`${baseUrl}/unread-count`);
       expect(res.status).toBe(200);
-      const body = await res.json();
+      const body = (await res.json()) as Record<string, unknown>;
       expect(body.count).toBe(0);
     });
   });
@@ -145,7 +151,7 @@ describe("Notification Routes", () => {
         method: "POST",
       });
       expect(res.status).toBe(200);
-      const body = await res.json();
+      const body = (await res.json()) as Record<string, unknown>;
       expect(body.success).toBe(true);
     });
 
@@ -193,7 +199,7 @@ describe("Notification Routes", () => {
         method: "POST",
       });
       expect(res.status).toBe(200);
-      const body = await res.json();
+      const body = (await res.json()) as Record<string, unknown>;
       expect(body.success).toBe(true);
     });
   });
@@ -219,7 +225,7 @@ describe("Notification Routes", () => {
         method: "DELETE",
       });
       expect(res.status).toBe(200);
-      const body = await res.json();
+      const body = (await res.json()) as Record<string, unknown>;
       expect(body.message).toBe("Notification deleted");
     });
 

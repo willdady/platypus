@@ -1,47 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-
-const { mockDb, dbMethods } = vi.hoisted(() => {
-  const mock: any = {};
-  const methods = [
-    "select",
-    "from",
-    "where",
-    "limit",
-    "orderBy",
-    "innerJoin",
-    "insert",
-    "values",
-    "update",
-    "set",
-    "delete",
-    "returning",
-  ];
-  methods.forEach((method) => {
-    mock[method] = vi.fn().mockReturnValue(mock);
-  });
-  mock.transaction = vi.fn((cb: any) => cb(mock));
-  return { mockDb: mock, dbMethods: methods };
-});
-
-vi.mock("../index.ts", () => ({
-  db: mockDb,
-}));
+import { z } from "zod";
+import { mockDb, resetMockDb } from "../test-utils.ts";
 
 vi.mock("../services/event-dispatch.ts", () => ({
   dispatchEvent: vi.fn(),
 }));
-
-vi.mock("drizzle-orm", async () => {
-  const actual = await vi.importActual("drizzle-orm");
-  return {
-    ...actual,
-    eq: vi.fn(),
-    and: vi.fn((...args) => args.filter(Boolean)),
-    inArray: vi.fn(),
-    asc: vi.fn(),
-    max: vi.fn(),
-  };
-});
 
 import { createKanbanTools } from "./kanban.ts";
 
@@ -51,19 +14,12 @@ const agentId = "agent-1";
 const orgId = "org-1";
 const frontendUrl = "http://localhost:3000";
 
-function resetDb() {
-  dbMethods.forEach((method) => {
-    mockDb[method] = vi.fn().mockReturnValue(mockDb);
-  });
-  mockDb.transaction = vi.fn((cb: any) => cb(mockDb));
-}
-
 describe("createKanbanTools", () => {
   let tools: ReturnType<typeof createKanbanTools>;
 
   beforeEach(() => {
     vi.clearAllMocks();
-    resetDb();
+    resetMockDb();
     tools = createKanbanTools(workspaceId, agentId, orgId, frontendUrl);
   });
 
@@ -89,8 +45,7 @@ describe("createKanbanTools", () => {
       const boards = [{ id: "b1", name: "Board 1" }];
       mockDb.where.mockResolvedValue(boards);
 
-      const result = await tools.listBoards.execute({}, ctx);
-      expect(result).toEqual(boards);
+      expect(await tools.listBoards.execute!({}, ctx)).toEqual(boards);
     });
   });
 
@@ -98,11 +53,12 @@ describe("createKanbanTools", () => {
     it("returns error when board not found", async () => {
       mockDb.limit.mockResolvedValue([]);
 
-      const result = await tools.getBoardState.execute(
-        { boardId: "bad-id", label: "test" },
-        ctx,
-      );
-      expect(result).toEqual({ error: "Board not found" });
+      expect(
+        await tools.getBoardState.execute!(
+          { boardId: "bad-id", label: "test" },
+          ctx,
+        ),
+      ).toEqual({ error: "Board not found" });
     });
   });
 
@@ -110,18 +66,15 @@ describe("createKanbanTools", () => {
     it("returns error when card not found (verifyCard fails)", async () => {
       mockDb.limit.mockResolvedValue([]);
 
-      const result = await tools.getCard.execute(
-        { cardId: "bad-id", label: "test" },
-        ctx,
-      );
-      expect(result).toEqual({ error: "Card not found" });
+      expect(
+        await tools.getCard.execute!({ cardId: "bad-id", label: "test" }, ctx),
+      ).toEqual({ error: "Card not found" });
     });
   });
 
   describe("upsertCard (create)", () => {
     it("returns error when columnId and title missing", async () => {
-      const result = await tools.upsertCard.execute({ label: "test" }, ctx);
-      expect(result).toEqual({
+      expect(await tools.upsertCard.execute!({ label: "test" }, ctx)).toEqual({
         error: "columnId and title are required when creating a new card",
       });
     });
@@ -129,11 +82,12 @@ describe("createKanbanTools", () => {
     it("returns error when column not found", async () => {
       mockDb.limit.mockResolvedValue([]);
 
-      const result = await tools.upsertCard.execute(
-        { columnId: "bad-col", title: "Card", label: "test" },
-        ctx,
-      );
-      expect(result).toEqual({ error: "Column not found" });
+      expect(
+        await tools.upsertCard.execute!(
+          { columnId: "bad-col", title: "Card", label: "test" },
+          ctx,
+        ),
+      ).toEqual({ error: "Column not found" });
     });
   });
 
@@ -141,11 +95,12 @@ describe("createKanbanTools", () => {
     it("returns error when card not found during update", async () => {
       mockDb.limit.mockResolvedValue([]);
 
-      const result = await tools.upsertCard.execute(
-        { cardId: "bad-id", title: "Updated", label: "test" },
-        ctx,
-      );
-      expect(result).toEqual({ error: "Card not found" });
+      expect(
+        await tools.upsertCard.execute!(
+          { cardId: "bad-id", title: "Updated", label: "test" },
+          ctx,
+        ),
+      ).toEqual({ error: "Card not found" });
     });
   });
 
@@ -163,7 +118,7 @@ describe("createKanbanTools", () => {
     it("applies search-replace to existing body", async () => {
       setupCardUpdate("Hello world", { id: "card-1", body: "Hello there" });
 
-      const result = await tools.upsertCard.execute(
+      await tools.upsertCard.execute!(
         {
           cardId: "card-1",
           label: "test",
@@ -172,9 +127,8 @@ describe("createKanbanTools", () => {
         ctx,
       );
 
-      const setCall = mockDb.set.mock.calls[0][0];
+      const setCall = mockDb.set.mock.calls[0][0] as { body: string };
       expect(setCall.body).toBe("Hello there");
-      expect(result).not.toHaveProperty("error");
     });
 
     it("returns error when search string not found", async () => {
@@ -182,16 +136,16 @@ describe("createKanbanTools", () => {
         .mockResolvedValueOnce([{ id: "card-1" }]) // verifyCard
         .mockResolvedValueOnce([{ body: "Hello world" }]); // SELECT body
 
-      const result = await tools.upsertCard.execute(
-        {
-          cardId: "card-1",
-          label: "test",
-          bodyDiff: [{ search: "missing text", replace: "replacement" }],
-        },
-        ctx,
-      );
-
-      expect(result).toEqual({
+      expect(
+        await tools.upsertCard.execute!(
+          {
+            cardId: "card-1",
+            label: "test",
+            bodyDiff: [{ search: "missing text", replace: "replacement" }],
+          },
+          ctx,
+        ),
+      ).toEqual({
         error: 'bodyDiff search string not found: "missing text"',
       });
     });
@@ -199,7 +153,7 @@ describe("createKanbanTools", () => {
     it("applies multiple search-replace operations sequentially", async () => {
       setupCardUpdate("foo bar baz", { id: "card-1", body: "qux quux baz" });
 
-      await tools.upsertCard.execute(
+      await tools.upsertCard.execute!(
         {
           cardId: "card-1",
           label: "test",
@@ -211,7 +165,7 @@ describe("createKanbanTools", () => {
         ctx,
       );
 
-      const setCall = mockDb.set.mock.calls[0][0];
+      const setCall = mockDb.set.mock.calls[0][0] as { body: string };
       expect(setCall.body).toBe("qux quux baz");
     });
 
@@ -221,7 +175,7 @@ describe("createKanbanTools", () => {
         body: "existing content\nnew line",
       });
 
-      await tools.upsertCard.execute(
+      await tools.upsertCard.execute!(
         {
           cardId: "card-1",
           label: "test",
@@ -230,7 +184,7 @@ describe("createKanbanTools", () => {
         ctx,
       );
 
-      const setCall = mockDb.set.mock.calls[0][0];
+      const setCall = mockDb.set.mock.calls[0][0] as { body: string };
       expect(setCall.body).toBe("existing content\nnew line");
     });
 
@@ -240,7 +194,7 @@ describe("createKanbanTools", () => {
         body: "new line\nexisting content",
       });
 
-      await tools.upsertCard.execute(
+      await tools.upsertCard.execute!(
         {
           cardId: "card-1",
           label: "test",
@@ -249,12 +203,13 @@ describe("createKanbanTools", () => {
         ctx,
       );
 
-      const setCall = mockDb.set.mock.calls[0][0];
+      const setCall = mockDb.set.mock.calls[0][0] as { body: string };
       expect(setCall.body).toBe("new line\nexisting content");
     });
 
     it("rejects when both body and bodyDiff are provided", () => {
-      const result = tools.upsertCard.inputSchema.safeParse({
+      const schema = tools.upsertCard.inputSchema as z.ZodType;
+      const result = schema.safeParse({
         cardId: "card-1",
         label: "test",
         body: "full body",
@@ -272,16 +227,17 @@ describe("createKanbanTools", () => {
     it("returns error when card not found", async () => {
       mockDb.limit.mockResolvedValue([]);
 
-      const result = await tools.moveCard.execute(
-        {
-          cardId: "bad-id",
-          columnId: "col-1",
-          afterCardId: null,
-          label: "test",
-        },
-        ctx,
-      );
-      expect(result).toEqual({ error: "Card not found" });
+      expect(
+        await tools.moveCard.execute!(
+          {
+            cardId: "bad-id",
+            columnId: "col-1",
+            afterCardId: null,
+            label: "test",
+          },
+          ctx,
+        ),
+      ).toEqual({ error: "Card not found" });
     });
   });
 
@@ -311,10 +267,10 @@ describe("createKanbanTools", () => {
       mockDb.where.mockResolvedValueOnce([{ maxPos: 3 }]);
       mockDb.returning.mockResolvedValueOnce([newCard]);
 
-      const result = await tools.copyCard.execute(
+      const result = (await tools.copyCard.execute!(
         { cardId: "card-1", columnId: "col-2", label: "Source Card" },
         ctx,
-      );
+      )) as { error?: string; url?: string };
 
       expect(result).not.toHaveProperty("error");
       expect(result).toHaveProperty("url");
@@ -350,7 +306,7 @@ describe("createKanbanTools", () => {
       // comments query (orderBy resolves)
       mockDb.orderBy.mockResolvedValueOnce(comments);
 
-      const result = await tools.copyCard.execute(
+      const result = (await tools.copyCard.execute!(
         {
           cardId: "card-1",
           columnId: "col-1",
@@ -358,7 +314,7 @@ describe("createKanbanTools", () => {
           label: "Source Card",
         },
         ctx,
-      );
+      )) as { error?: string };
 
       expect(result).not.toHaveProperty("error");
       // insert called for the new card + once per comment
@@ -368,11 +324,12 @@ describe("createKanbanTools", () => {
     it("returns error when source card not found", async () => {
       mockDb.limit.mockResolvedValue([]);
 
-      const result = await tools.copyCard.execute(
-        { cardId: "bad-id", columnId: "col-1", label: "test" },
-        ctx,
-      );
-      expect(result).toEqual({ error: "Card not found" });
+      expect(
+        await tools.copyCard.execute!(
+          { cardId: "bad-id", columnId: "col-1", label: "test" },
+          ctx,
+        ),
+      ).toEqual({ error: "Card not found" });
     });
 
     it("returns error when target column not found", async () => {
@@ -380,11 +337,12 @@ describe("createKanbanTools", () => {
         .mockResolvedValueOnce([{ id: "card-1" }]) // verifyCard passes
         .mockResolvedValueOnce([]); // verifyColumn fails
 
-      const result = await tools.copyCard.execute(
-        { cardId: "card-1", columnId: "bad-col", label: "test" },
-        ctx,
-      );
-      expect(result).toEqual({ error: "Column not found" });
+      expect(
+        await tools.copyCard.execute!(
+          { cardId: "card-1", columnId: "bad-col", label: "test" },
+          ctx,
+        ),
+      ).toEqual({ error: "Column not found" });
     });
 
     it("returns error when cross-board copy is attempted", async () => {
@@ -394,11 +352,12 @@ describe("createKanbanTools", () => {
         .mockResolvedValueOnce([{ boardId: "board-1" }]) // getBoardIdForCard (source)
         .mockResolvedValueOnce([{ boardId: "board-2" }]); // target column boardId
 
-      const result = await tools.copyCard.execute(
-        { cardId: "card-1", columnId: "col-2", label: "test" },
-        ctx,
-      );
-      expect(result).toEqual({ error: "Cross-board copy is not allowed" });
+      expect(
+        await tools.copyCard.execute!(
+          { cardId: "card-1", columnId: "col-2", label: "test" },
+          ctx,
+        ),
+      ).toEqual({ error: "Cross-board copy is not allowed" });
     });
   });
 
@@ -406,21 +365,23 @@ describe("createKanbanTools", () => {
     it("returns error when card not found", async () => {
       mockDb.limit.mockResolvedValue([]);
 
-      const result = await tools.deleteCard.execute(
-        { cardIds: ["bad-id"], label: "test" },
-        ctx,
-      );
-      expect(result).toEqual({ error: "Card not found: bad-id" });
+      expect(
+        await tools.deleteCard.execute!(
+          { cardIds: ["bad-id"], label: "test" },
+          ctx,
+        ),
+      ).toEqual({ error: "Card not found: bad-id" });
     });
   });
 
   describe("upsertComment (create)", () => {
     it("returns error when cardId missing", async () => {
-      const result = await tools.upsertComment.execute(
-        { body: "Comment text", label: "test" },
-        ctx,
-      );
-      expect(result).toEqual({
+      expect(
+        await tools.upsertComment.execute!(
+          { body: "Comment text", label: "test" },
+          ctx,
+        ),
+      ).toEqual({
         error: "cardId is required when creating a new comment",
       });
     });
@@ -430,11 +391,12 @@ describe("createKanbanTools", () => {
     it("returns error when comment not found", async () => {
       mockDb.limit.mockResolvedValue([]);
 
-      const result = await tools.upsertComment.execute(
-        { commentId: "bad-id", body: "Updated", label: "test" },
-        ctx,
-      );
-      expect(result).toEqual({ error: "Comment not found" });
+      expect(
+        await tools.upsertComment.execute!(
+          { commentId: "bad-id", body: "Updated", label: "test" },
+          ctx,
+        ),
+      ).toEqual({ error: "Comment not found" });
     });
   });
 
@@ -442,11 +404,12 @@ describe("createKanbanTools", () => {
     it("returns error when comment not found", async () => {
       mockDb.limit.mockResolvedValue([]);
 
-      const result = await tools.deleteComment.execute(
-        { commentId: "bad-id", label: "test" },
-        ctx,
-      );
-      expect(result).toEqual({ error: "Comment not found" });
+      expect(
+        await tools.deleteComment.execute!(
+          { commentId: "bad-id", label: "test" },
+          ctx,
+        ),
+      ).toEqual({ error: "Comment not found" });
     });
   });
 });

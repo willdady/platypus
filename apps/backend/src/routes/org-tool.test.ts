@@ -24,7 +24,9 @@ describe("Organization Tool Routes", () => {
 
     const res = await app.request(baseUrl);
     expect(res.status).toBe(200);
-    const body = await res.json();
+    const body = (await res.json()) as {
+      results: { id: string; name: string; category: string }[];
+    };
     // The org MCP is surfaced as an "MCP" tool set...
     expect(body.results).toContainEqual({
       id: "mcp-1",
@@ -32,9 +34,7 @@ describe("Organization Tool Routes", () => {
       category: "MCP",
     });
     // ...alongside statically registered tool sets.
-    expect(
-      body.results.some((t: { category: string }) => t.category !== "MCP"),
-    ).toBe(true);
+    expect(body.results.some((t) => t.category !== "MCP")).toBe(true);
   });
 
   it("returns 403 when not a member of the organization", async () => {

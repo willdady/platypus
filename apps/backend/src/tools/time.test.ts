@@ -5,22 +5,22 @@ const ctx = { toolCallId: "test", messages: [] };
 
 describe("getCurrentTime", () => {
   it("returns timezone, timestamp, and formatted fields", async () => {
-    const result = await getCurrentTime.execute({}, ctx);
+    const result = await getCurrentTime.execute!({}, ctx);
     expect(result).toHaveProperty("timezone");
     expect(result).toHaveProperty("timestamp");
     expect(result).toHaveProperty("formatted");
   });
 
   it("returns a valid ISO timestamp", async () => {
-    const result = await getCurrentTime.execute({}, ctx);
-    const date = new Date(result.timestamp);
+    const result = await getCurrentTime.execute!({}, ctx);
+    const date = new Date(result.timestamp as string);
     expect(isNaN(date.getTime())).toBe(false);
   });
 });
 
 describe("convertTimezone", () => {
   it("converts UTC datetime to target timezone", async () => {
-    const result = await convertTimezone.execute(
+    const result = await convertTimezone.execute!(
       {
         dateTime: "2025-01-07T14:30:00Z",
         fromTimezone: "UTC",
@@ -34,7 +34,7 @@ describe("convertTimezone", () => {
   });
 
   it("returns correct ISO format with offset", async () => {
-    const result = await convertTimezone.execute(
+    const result = await convertTimezone.execute!(
       {
         dateTime: "2025-01-07T14:30:00Z",
         fromTimezone: "UTC",
@@ -50,7 +50,7 @@ describe("convertTimezone", () => {
 
   it("throws for invalid date string", () => {
     expect(() =>
-      convertTimezone.execute(
+      convertTimezone.execute!(
         {
           dateTime: "not-a-date",
           fromTimezone: "UTC",

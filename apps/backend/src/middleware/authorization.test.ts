@@ -17,7 +17,7 @@ describe("Authorization Middleware", () => {
   describe("requireOrgAccess", () => {
     it("should allow super admin to bypass checks", async () => {
       const app = new Hono<{
-        Variables: { user: any; orgMembership: any; db: any };
+        Variables: { user: unknown; orgMembership: unknown; db: unknown };
       }>();
       app.use("*", async (c, next) => {
         c.set("user", { id: "admin-1", role: "admin" });
@@ -35,7 +35,7 @@ describe("Authorization Middleware", () => {
     it("should return 403 if user is not a member of the organization", async () => {
       mockDb.limit.mockResolvedValueOnce([]); // No membership found
 
-      const app = new Hono<{ Variables: { user: any; db: any } }>();
+      const app = new Hono<{ Variables: { user: unknown; db: unknown } }>();
       app.use("*", async (c, next) => {
         c.set("user", { id: "u1", role: "user" });
         c.set("db", mockDb);
@@ -60,7 +60,7 @@ describe("Authorization Middleware", () => {
       mockDb.limit.mockResolvedValueOnce([mockMembership]);
 
       const app = new Hono<{
-        Variables: { user: any; orgMembership: any; db: any };
+        Variables: { user: unknown; orgMembership: unknown; db: unknown };
       }>();
       app.use("*", async (c, next) => {
         c.set("user", { id: "u1", role: "user" });
@@ -82,22 +82,22 @@ describe("Authorization Middleware", () => {
     // Routes are mounted under :orgId so the cross-org guard can compare the
     // resolved workspace's organizationId against the path orgId.
     const buildApp = (
-      user: any,
-      orgMembership: any,
+      user: unknown,
+      orgMembership: unknown,
     ): Hono<{
       Variables: {
-        user: any;
-        orgMembership: any;
-        isWorkspaceOwner: any;
-        db: any;
+        user: unknown;
+        orgMembership: unknown;
+        isWorkspaceOwner: unknown;
+        db: unknown;
       };
     }> => {
       const app = new Hono<{
         Variables: {
-          user: any;
-          orgMembership: any;
-          isWorkspaceOwner: any;
-          db: any;
+          user: unknown;
+          orgMembership: unknown;
+          isWorkspaceOwner: unknown;
+          db: unknown;
         };
       }>();
       app.use("*", async (c, next) => {
@@ -239,7 +239,7 @@ describe("Authorization Middleware", () => {
 
   describe("requireSuperAdmin", () => {
     it("should return 403 if user is not super admin", async () => {
-      const app = new Hono<{ Variables: { user: any } }>();
+      const app = new Hono<{ Variables: { user: unknown } }>();
       app.use("*", async (c, next) => {
         c.set("user", { id: "u1", role: "user" });
         await next();
@@ -252,7 +252,7 @@ describe("Authorization Middleware", () => {
     });
 
     it("should allow super admin", async () => {
-      const app = new Hono<{ Variables: { user: any } }>();
+      const app = new Hono<{ Variables: { user: unknown } }>();
       app.use("*", async (c, next) => {
         c.set("user", { id: "admin-1", role: "admin" });
         await next();

@@ -73,7 +73,7 @@ describe("Sandbox Routes", () => {
       });
 
       expect(res.status).toBe(201);
-      const body = await res.json();
+      const body = (await res.json()) as Record<string, unknown>;
       expect(body).not.toHaveProperty("credentials");
       expect(body.id).toBe("sbx-1");
       expect(body.backend).toBe("docker");
@@ -117,7 +117,7 @@ describe("Sandbox Routes", () => {
 
       const res = await app.request(baseUrl);
       expect(res.status).toBe(200);
-      const body = await res.json();
+      const body = (await res.json()) as Record<string, unknown>;
       expect(body).not.toHaveProperty("credentials");
       expect(body.id).toBe("sbx-1");
     });
@@ -176,7 +176,7 @@ describe("Sandbox Routes", () => {
       });
 
       expect(res.status).toBe(200);
-      const body = await res.json();
+      const body = (await res.json()) as Record<string, unknown>;
       expect(body).not.toHaveProperty("credentials");
       expect(body.name).toBe("Renamed");
     });
@@ -210,7 +210,7 @@ describe("Sandbox Routes", () => {
       });
 
       expect(res.status).toBe(500);
-      const body = await res.json();
+      const body = (await res.json()) as Record<string, unknown>;
       expect(body.error).toMatch(/force=true/);
     });
 
@@ -324,7 +324,7 @@ describe("Sandbox Routes", () => {
 
       const res = await app.request(baseUrl, { method: "DELETE" });
       expect(res.status).toBe(500);
-      const body = await res.json();
+      const body = (await res.json()) as Record<string, unknown>;
       expect(body.error).toMatch(/no-such-backend/);
       expect(body.error).toMatch(/force=true/);
     });
@@ -399,7 +399,7 @@ describe("Sandbox Routes", () => {
         headers: { "Content-Type": "application/json" },
       });
       expect(res.status).toBe(400);
-      const body = await res.json();
+      const body = (await res.json()) as Record<string, unknown>;
       expect(body.error).toMatch(/SHARED/);
     });
 
@@ -478,7 +478,7 @@ describe("Sandbox Routes", () => {
         headers: { "Content-Type": "application/json" },
       });
       expect(res.status).toBe(400);
-      const body = await res.json();
+      const body = (await res.json()) as Record<string, unknown>;
       expect(body.error).toMatch(/ADMIN_KEY/);
     });
   });
