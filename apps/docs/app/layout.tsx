@@ -5,14 +5,37 @@ import { getPageMap } from "nextra/page-map";
 import type { FC, ReactNode } from "react";
 import "./globals.css";
 
+const title = "Platypus Docs";
+const description =
+  "Documentation for Platypus — build and manage AI agents with tool support and multi-provider capabilities.";
+
 export const metadata: Metadata = {
+  metadataBase: new URL("https://docs.platypus.chat"),
   title: {
-    default: "Platypus Docs",
-    template: "%s | Platypus Docs",
+    default: title,
+    template: `%s | ${title}`,
   },
-  description:
-    "Documentation for Platypus — build and manage AI agents with tool support and multi-provider capabilities.",
-  applicationName: "Platypus Docs",
+  description,
+  applicationName: title,
+  openGraph: {
+    type: "website",
+    siteName: title,
+    title: {
+      default: title,
+      template: `%s | ${title}`,
+    },
+    description,
+    url: "/",
+    locale: "en_US",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: {
+      default: title,
+      template: `%s | ${title}`,
+    },
+    description,
+  },
 };
 
 const version = process.env.NEXT_PUBLIC_APP_VERSION ?? "unknown";

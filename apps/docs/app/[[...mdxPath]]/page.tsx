@@ -13,6 +13,14 @@ type PageProps = Readonly<{
 export async function generateMetadata(props: PageProps) {
   const params = await props.params;
   const { metadata } = await importPage(params.mdxPath);
+  // Nextra only sets the plain `title` from frontmatter. Mirror it into
+  // openGraph/twitter so link previews show the page title (the parent
+  // layout's `%s | Platypus Docs` template then applies to og:title too).
+  const pageTitle = metadata.title;
+  if (typeof pageTitle === "string") {
+    metadata.openGraph = { ...metadata.openGraph, title: pageTitle };
+    metadata.twitter = { ...metadata.twitter, title: pageTitle };
+  }
   return metadata;
 }
 
