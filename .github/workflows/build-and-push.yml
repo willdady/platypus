@@ -8,29 +8,9 @@ permissions:
   contents: read
 
 jobs:
-  # Gate: lint must pass before any image is built or pushed. Runs the full
-  # monorepo lint (`turbo run lint`) since this workflow deploys both the
-  # frontend and backend images.
+  # Gate: lint must pass before any image is built or pushed.
   lint:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Install pnpm
-        uses: pnpm/action-setup@v4
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: pnpm
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Lint
-        run: pnpm lint
+    uses: ./.github/workflows/lint.yml
 
   build-and-push:
     needs: lint

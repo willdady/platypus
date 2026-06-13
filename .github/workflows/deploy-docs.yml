@@ -15,7 +15,12 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # Gate: lint must pass before the docs are built and deployed.
+  lint:
+    uses: ./.github/workflows/lint.yml
+
   deploy-docs:
+    needs: lint
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
