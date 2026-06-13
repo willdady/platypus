@@ -530,13 +530,26 @@ type CompactionRuntime = {
  * resolution falls back to the conservative default so recovery (P4) always
  * has a working configuration.
  */
+/** Safety ceiling on summarizer output (Chunk 13, Fix 2). Prevents a runaway
+ * model from producing a summary longer than its input. Healthy summaries on
+ * a 6k-token prefix are ~150-200 tokens; 2000 is a generous ceiling. */
+const SUMMARIZE_MAX_OUTPUT_TOKENS = 2000;
+
+/** Heartbeat interval while the summarizer runs (Chunk 13, Fix 1). Resets the
+ * per-step stall watchdog so a slow summarize call is not misidentified as a
+ * frozen run and killed before it returns. */
+const SUMMARIZE_HEARTBEAT_INTERVAL_MS = 10_000;
+
 async function buildCompactionRuntime(args: {
   chatId?: string;
   provider: Provider;
   resolvedModelId: string;
   opened: ReturnType<typeof openProvider>;
+  /** When present, called every ~10 s during `summarize` to keep the per-step
+   *  stall watchdog alive (Chunk 13, Fix 1). */
+  onActivity?: () => void;
 }): Promise<CompactionRuntime> {
-  const { chatId, provider, resolvedModelId, opened } = args;
+  const { chatId, provider, resolvedModelId, opened, onActivity } = args;
 
   const config = { ...DEFAULT_COMPACTION_CONFIG };
   // Global kill switch (§G) gates proactive compaction; recovery is unaffected.
@@ -594,23 +607,55 @@ async function buildCompactionRuntime(args: {
   // when unset (drift T7). generateText is one-shot, no tools.
   const summarize = async (text: string): Promise<string> => {
     const startedAt = Date.now();
-    const { text: summary, usage } = await generateText({
-      model: opened.languageModel(taskModelId),
-      system:
-        "You compress conversation history for context reuse. Produce a dense summary capturing decisions made, facts established, files/tools touched, open questions, and the user's intent. Drop pleasantries and redundancy. Output only the summary.",
-      prompt: text,
-    });
-    logger.info(
-      {
-        metric: "summarize.latency_ms",
-        latencyMs: Date.now() - startedAt,
-        chatId,
-        taskModelId,
-        usage,
-      },
-      "context compaction summarize",
-    );
-    return summary;
+    // Fix 1 (Chunk 13): keep the per-step stall watchdog alive while the
+    // summarizer runs. Tier-1 compaction is legitimate long work, not a stall;
+    // without this ping the 120 s watchdog fires and kills the run.
+    const heartbeat = onActivity
+      ? setInterval(onActivity, SUMMARIZE_HEARTBEAT_INTERVAL_MS)
+      : null;
+    try {
+      const result = await generateText({
+        model: opened.languageModel(taskModelId),
+        // Fix 2 (Chunk 13): structured handoff prompt — sections reduce loss
+        // across repeated re-compactions (Codex CLI pattern); explicit concise
+        // instruction + "aim under ~1500 tokens" pairs with the output ceiling.
+        system: `You are performing a context checkpoint compaction. Another instance of this assistant will resume using ONLY your summary plus the most recent messages — earlier history will be gone. Write a dense markdown handoff under these headings (omit one only if truly empty):
+
+- **Intent & open requests** — what the user wants, the latest explicit request, pending tasks.
+- **Decisions & facts** — conclusions, confirmed values/IDs/paths, constraints and user preferences (preserve any security-relevant instruction verbatim).
+- **Files & tools touched** — what was read/changed and why.
+- **Current state & next step** — where things stand and the immediate next action.
+
+If a prior summary appears in the history, integrate it — don't drop facts it captured. Be concise: aim under ~1500 tokens. Output only the summary.`,
+        prompt: text,
+        // Fix 2 (Chunk 13): hard ceiling prevents a degenerate run from
+        // producing a summary longer than its input. Healthy summaries on a
+        // 6k-token prefix are ~150-200 tokens; 2000 is a generous backstop.
+        maxOutputTokens: SUMMARIZE_MAX_OUTPUT_TOKENS,
+      });
+      const { text: summary, usage, finishReason } = result;
+      logger.info(
+        {
+          metric: "summarize.latency_ms",
+          latencyMs: Date.now() - startedAt,
+          chatId,
+          taskModelId,
+          usage,
+          finishReason,
+          hitOutputCeiling: finishReason === "length",
+        },
+        "context compaction summarize",
+      );
+      if (finishReason === "length") {
+        logger.warn(
+          { chatId, taskModelId, maxTokens: SUMMARIZE_MAX_OUTPUT_TOKENS },
+          "summarize hit maxOutputTokens ceiling — summary may be truncated",
+        );
+      }
+      return summary;
+    } finally {
+      if (heartbeat !== null) clearInterval(heartbeat);
+    }
   };
 
   return {
@@ -866,6 +911,9 @@ export const prepareChatTurn = async (
     provider,
     resolvedModelId,
     opened,
+    // Thread the activity callback so the summarizer heartbeat can bump the
+    // per-step stall watchdog (Chunk 13, Fix 1).
+    onActivity: onActivity ? () => onActivity() : undefined,
   });
 
   // Per-turn overhead: system prompt + tool schemas, sent on every turn but
