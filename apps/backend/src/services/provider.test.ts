@@ -1,4 +1,14 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
+import type { Mock } from "vitest";
+import type { Provider } from "@platypus/schemas";
+
+type ProviderInstance = Mock<
+  (modelId: string) => { modelId: string; _sentinel: boolean }
+> & {
+  chat: Mock<
+    (modelId: string) => { modelId: string; _sentinel: boolean; _mode: string }
+  >;
+};
 
 const {
   mockCreateOpenAI,
@@ -8,10 +18,10 @@ const {
   mockCreateAnthropic,
 } = vi.hoisted(() => {
   const makeMock = () => {
-    const instance: any = vi.fn((modelId: string) => ({
+    const instance = vi.fn((modelId: string) => ({
       modelId,
       _sentinel: true,
-    }));
+    })) as ProviderInstance;
     instance.chat = vi.fn((modelId: string) => ({
       modelId,
       _sentinel: true,
@@ -45,15 +55,15 @@ vi.mock("@ai-sdk/anthropic", () => ({
 
 import { openProvider } from "./provider.ts";
 
-const baseProvider = {
+const baseProvider: Provider = {
   id: "p1",
   name: "Test",
   organizationId: "org-1",
   workspaceId: "ws-1",
-  providerType: "OpenAI" as const,
+  providerType: "OpenAI",
   modelIds: ["gpt-4"],
   apiKey: "sk-test",
-  apiMode: "chat" as const,
+  apiMode: "chat",
   baseUrl: null,
   headers: null,
   organization: null,
@@ -114,7 +124,10 @@ describe("openProvider", () => {
 
   it("throws for unknown provider type", () => {
     expect(() =>
-      openProvider({ ...baseProvider, providerType: "Unknown" as any }),
+      openProvider({
+        ...baseProvider,
+        providerType: "Unknown" as Provider["providerType"],
+      }),
     ).toThrow("Unrecognized provider type 'Unknown'");
   });
 
@@ -123,7 +136,7 @@ describe("openProvider", () => {
       ...baseProvider,
       providerType: "Anthropic" as const,
     });
-    expect(opened.embeddingModel).toBeUndefined();
+    expect(Object.hasOwn(opened, "embeddingModel")).toBe(false);
   });
 
   it("omits searchTools for Bedrock (no vendor-native search)", () => {
@@ -131,7 +144,7 @@ describe("openProvider", () => {
       ...baseProvider,
       providerType: "Bedrock" as const,
     });
-    expect(opened.searchTools).toBeUndefined();
+    expect(Object.hasOwn(opened, "searchTools")).toBe(false);
   });
 
   it("exposes embeddingModel and searchTools for OpenAI", () => {

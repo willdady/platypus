@@ -59,85 +59,89 @@ export const createInMemoryChatTurnQueries = (
     );
 
   return {
-    async getWorkspace(id) {
-      return fx.workspaces?.find((w) => w.id === id) ?? null;
+    getWorkspace(id) {
+      return Promise.resolve(fx.workspaces?.find((w) => w.id === id) ?? null);
     },
 
-    async getAgent(id, orgId, workspaceId) {
+    getAgent(id, orgId, workspaceId) {
       const a = fx.agents?.find((a) => a.id === id) ?? null;
-      if (!a) return null;
+      if (!a) return Promise.resolve(null);
       // Workspace-scoped Agent in this workspace.
-      if (a.workspaceId === workspaceId) return a;
+      if (a.workspaceId === workspaceId) return Promise.resolve(a);
       // Org-scoped (Shared) Agent resolves only where attached (ADR-0007).
       if (
         a.organizationId === orgId &&
         !a.workspaceId &&
         isAttached("agent", id, workspaceId)
       ) {
-        return a;
+        return Promise.resolve(a);
       }
-      return null;
+      return Promise.resolve(null);
     },
 
-    async getProvider(id, orgId, workspaceId) {
+    getProvider(id, orgId, workspaceId) {
       const p =
         fx.providers?.find(
           (p) =>
             p.id === id &&
             (p.workspaceId === workspaceId || p.organizationId === orgId),
         ) ?? null;
-      if (!p) return null;
+      if (!p) return Promise.resolve(null);
       // Org-scoped (no workspace) → resolves only where attached (ADR-0007).
       if (
         p.organizationId &&
         !p.workspaceId &&
         !isAttached("provider", id, workspaceId)
       )
-        return null;
-      return p;
+        return Promise.resolve(null);
+      return Promise.resolve(p);
     },
 
-    async getSkillsByIds(ids, orgId, workspaceId) {
-      if (ids.length === 0) return [];
-      return (fx.skills ?? [])
-        .filter((s) => {
-          if (!ids.includes(s.id)) return false;
-          // Workspace-scoped Skill in this workspace.
-          if (s.workspaceId === workspaceId) return true;
-          // Org-scoped (Shared) Skill resolves only where attached (ADR-0007).
-          return (
-            s.organizationId === orgId &&
-            !s.workspaceId &&
-            isAttached("skill", s.id, workspaceId)
-          );
-        })
-        .map((s) => ({ name: s.name, description: s.description }));
+    getSkillsByIds(ids, orgId, workspaceId) {
+      if (ids.length === 0) return Promise.resolve([]);
+      return Promise.resolve(
+        (fx.skills ?? [])
+          .filter((s) => {
+            if (!ids.includes(s.id)) return false;
+            // Workspace-scoped Skill in this workspace.
+            if (s.workspaceId === workspaceId) return true;
+            // Org-scoped (Shared) Skill resolves only where attached (ADR-0007).
+            return (
+              s.organizationId === orgId &&
+              !s.workspaceId &&
+              isAttached("skill", s.id, workspaceId)
+            );
+          })
+          .map((s) => ({ name: s.name, description: s.description })),
+      );
     },
 
-    async getMcp(id, orgId, workspaceId) {
+    getMcp(id, orgId, workspaceId) {
       const m =
         fx.mcps?.find(
           (m) =>
             m.id === id &&
             (m.workspaceId === workspaceId || m.organizationId === orgId),
         ) ?? null;
-      if (!m) return null;
+      if (!m) return Promise.resolve(null);
       // Org-scoped (no workspace) → resolves only where attached (ADR-0007).
       if (
         m.organizationId &&
         !m.workspaceId &&
         !isAttached("mcp", id, workspaceId)
       )
-        return null;
-      return m;
+        return Promise.resolve(null);
+      return Promise.resolve(m);
     },
 
-    async getSubAgentsByIds(ids) {
-      if (ids.length === 0) return [];
-      return (fx.agents ?? []).filter((a) => ids.includes(a.id));
+    getSubAgentsByIds(ids) {
+      if (ids.length === 0) return Promise.resolve([]);
+      return Promise.resolve(
+        (fx.agents ?? []).filter((a) => ids.includes(a.id)),
+      );
     },
 
-    async getUserContexts(userId, workspaceId) {
+    getUserContexts(userId, workspaceId) {
       let global: string | undefined;
       let workspace: string | undefined;
       for (const ctx of fx.userContexts ?? []) {
@@ -145,19 +149,21 @@ export const createInMemoryChatTurnQueries = (
         if (ctx.workspaceId === null) global = ctx.content;
         else if (ctx.workspaceId === workspaceId) workspace = ctx.content;
       }
-      return { global, workspace };
+      return Promise.resolve({ global, workspace });
     },
 
-    async getRecentMemories(userId, workspaceId) {
-      return (fx.memories ?? [])
-        .filter((m) => m.userId === userId && m.workspaceId === workspaceId)
-        .map(
-          ({ userId: _u, workspaceId: _w, ...rest }) => rest as MemorySummary,
-        );
+    getRecentMemories(userId, workspaceId) {
+      return Promise.resolve(
+        (fx.memories ?? [])
+          .filter((m) => m.userId === userId && m.workspaceId === workspaceId)
+          .map(
+            ({ userId: _u, workspaceId: _w, ...rest }) => rest as MemorySummary,
+          ),
+      );
     },
 
-    async getSandboxEnvKeys(workspaceId) {
-      return fx.sandboxEnvKeys?.[workspaceId] ?? [];
+    getSandboxEnvKeys(workspaceId) {
+      return Promise.resolve(fx.sandboxEnvKeys?.[workspaceId] ?? []);
     },
   };
 };

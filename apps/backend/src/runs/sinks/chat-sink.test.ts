@@ -4,11 +4,12 @@ import { mockDb, resetMockDb } from "../../test-utils.ts";
 // extractFiles is exercised by storage/utils tests — pass through here so
 // we can assert the messages handed to the db layer without file I/O.
 vi.mock("../../storage/utils.ts", () => ({
-  extractFiles: vi.fn((messages: any) => Promise.resolve(messages)),
+  extractFiles: vi.fn((messages: unknown) => Promise.resolve(messages)),
 }));
 
 import { ChatSink } from "./chat-sink.ts";
 import type { ResolvedRunPlan } from "../types.ts";
+import type { PlatypusUIMessage } from "../../types.ts";
 
 const planWithAgent: ResolvedRunPlan = {
   resolved: {
@@ -97,7 +98,9 @@ describe("ChatSink", () => {
       await sink.onStart({ runId: "chat-3", messages: [] });
       await sink.onResolved({ runId: "chat-3", plan: planWithAgent });
 
-      const messages = [{ role: "assistant", parts: [] } as any];
+      const messages: PlatypusUIMessage[] = [
+        { role: "assistant", parts: [] } as PlatypusUIMessage,
+      ];
       await sink.onProgress({ runId: "chat-3", messages, stats: {} });
       await sink.onProgress({ runId: "chat-3", messages, stats: {} });
       await sink.onProgress({ runId: "chat-3", messages, stats: {} });
@@ -153,7 +156,7 @@ describe("ChatSink", () => {
       await sink.onFinish({
         runId: "chat-1",
         status: "succeeded",
-        messages: [{ role: "user", parts: [] } as any],
+        messages: [{ role: "user", parts: [] } as PlatypusUIMessage],
         stats: {},
       });
 

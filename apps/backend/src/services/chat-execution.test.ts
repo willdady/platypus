@@ -1,4 +1,13 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import type { Mock } from "vitest";
+
+type ProviderInstance = Mock<
+  (modelId: string) => { modelId: string; _sentinel: boolean }
+> & {
+  chat: Mock<
+    (modelId: string) => { modelId: string; _sentinel: boolean; _mode: string }
+  >;
+};
 
 const {
   mockCreateOpenAI,
@@ -8,10 +17,10 @@ const {
   mockCreateAnthropic,
 } = vi.hoisted(() => {
   const makeMock = () => {
-    const instance: any = vi.fn((modelId: string) => ({
+    const instance = vi.fn((modelId: string) => ({
       modelId,
       _sentinel: true,
-    }));
+    })) as ProviderInstance;
     instance.chat = vi.fn((modelId: string) => ({
       modelId,
       _sentinel: true,
@@ -64,6 +73,11 @@ import {
   shouldInjectNativeSearch,
 } from "./chat-execution.ts";
 import { createInMemoryChatTurnQueries } from "./chat-execution.test-fixtures.ts";
+import type { agent as agentTable } from "../db/schema.ts";
+import type { Provider } from "@platypus/schemas";
+import type { ChatTurnRequest } from "./chat-execution.ts";
+
+type AgentRow = typeof agentTable.$inferSelect;
 
 const baseProvider = {
   id: "p1",
@@ -138,8 +152,8 @@ describe("chat-execution", () => {
       const agentWithSkill = { ...baseAgent, skillIds: ["skill-1"] };
       const queries = createInMemoryChatTurnQueries({
         workspaces: [baseWorkspace],
-        agents: [agentWithSkill as any],
-        providers: [baseProvider as any],
+        agents: [agentWithSkill as AgentRow],
+        providers: [baseProvider as Provider],
         skills: [
           {
             id: "skill-1",
@@ -188,8 +202,8 @@ describe("chat-execution", () => {
       // Attached → the Skill surfaces in the system prompt.
       const attached = createInMemoryChatTurnQueries({
         workspaces: [baseWorkspace],
-        agents: [agentWithSkill as any],
-        providers: [baseProvider as any],
+        agents: [agentWithSkill as AgentRow],
+        providers: [baseProvider as Provider],
         skills: [orgSkill],
         attachments: [
           {
@@ -213,8 +227,8 @@ describe("chat-execution", () => {
       // Not attached → the Skill is invisible to this workspace.
       const detached = createInMemoryChatTurnQueries({
         workspaces: [baseWorkspace],
-        agents: [agentWithSkill as any],
-        providers: [baseProvider as any],
+        agents: [agentWithSkill as AgentRow],
+        providers: [baseProvider as Provider],
         skills: [orgSkill],
       });
 
@@ -249,8 +263,8 @@ describe("chat-execution", () => {
       // org-scoped Provider) resolve against that Workspace (ADR-0007).
       const attached = createInMemoryChatTurnQueries({
         workspaces: [borrowingWorkspace],
-        agents: [sharedAgent as any],
-        providers: [orgProvider as any],
+        agents: [sharedAgent as AgentRow],
+        providers: [orgProvider as Provider],
         attachments: [
           {
             workspaceId: "ws-2",
@@ -279,8 +293,8 @@ describe("chat-execution", () => {
       // Not attached → the Shared Agent is invisible to this Workspace.
       const detached = createInMemoryChatTurnQueries({
         workspaces: [borrowingWorkspace],
-        agents: [sharedAgent as any],
-        providers: [orgProvider as any],
+        agents: [sharedAgent as AgentRow],
+        providers: [orgProvider as Provider],
       });
       await expect(
         prepareChatTurn(
@@ -297,7 +311,7 @@ describe("chat-execution", () => {
     it("Direct Provider+Model selection populates resolved.systemPrompt and merges request overrides", async () => {
       const queries = createInMemoryChatTurnQueries({
         workspaces: [baseWorkspace],
-        providers: [baseProvider as any],
+        providers: [baseProvider as Provider],
       });
 
       const turn = await prepareChatTurn(
@@ -336,7 +350,7 @@ describe("chat-execution", () => {
 
       await expect(
         prepareChatTurn(
-          { ...baseInput, request: { id: "chat-3" } as any },
+          { ...baseInput, request: { id: "chat-3" } as ChatTurnRequest },
           queries,
         ),
       ).rejects.toBeInstanceOf(ValidationError);
@@ -381,7 +395,7 @@ describe("chat-execution", () => {
     it("throws ValidationError when the model id is not enabled on the Provider", async () => {
       const queries = createInMemoryChatTurnQueries({
         workspaces: [baseWorkspace],
-        providers: [{ ...baseProvider, modelIds: ["gpt-3.5"] } as any],
+        providers: [{ ...baseProvider, modelIds: ["gpt-3.5"] } as Provider],
       });
 
       await expect(
@@ -453,8 +467,8 @@ describe("chat-execution", () => {
       const orgMcp = { ...baseMcp, organizationId: "org-1" };
       const queries = createInMemoryChatTurnQueries({
         workspaces: [baseWorkspace],
-        agents: [agentWithMcp as any],
-        providers: [baseProvider as any],
+        agents: [agentWithMcp as AgentRow],
+        providers: [baseProvider as Provider],
         mcps: [orgMcp],
         attachments: [
           {
@@ -484,8 +498,8 @@ describe("chat-execution", () => {
       const orgMcp = { ...baseMcp, organizationId: "org-1" };
       const queries = createInMemoryChatTurnQueries({
         workspaces: [baseWorkspace],
-        agents: [agentWithMcp as any],
-        providers: [baseProvider as any],
+        agents: [agentWithMcp as AgentRow],
+        providers: [baseProvider as Provider],
         mcps: [orgMcp],
         // no attachments
       });
@@ -507,8 +521,8 @@ describe("chat-execution", () => {
       const orgMcp = { ...baseMcp, organizationId: "org-1" };
       const queries = createInMemoryChatTurnQueries({
         workspaces: [baseWorkspace],
-        agents: [agentWithMcp as any],
-        providers: [baseProvider as any],
+        agents: [agentWithMcp as AgentRow],
+        providers: [baseProvider as Provider],
         mcps: [orgMcp],
         attachments: [
           {

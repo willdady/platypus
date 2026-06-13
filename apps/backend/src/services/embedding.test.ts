@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
+import type { Provider } from "@platypus/schemas";
 
 const { mockEmbed, mockOpenProvider } = vi.hoisted(() => ({
   mockEmbed: vi.fn(),
@@ -10,12 +11,12 @@ vi.mock("./provider.ts", () => ({ openProvider: mockOpenProvider }));
 
 import { generateEmbedding } from "./embedding.ts";
 
-const baseProvider = {
+const baseProvider: Provider = {
   id: "p1",
   name: "Test",
   organizationId: "org-1",
   workspaceId: "ws-1",
-  providerType: "OpenAI" as const,
+  providerType: "OpenAI",
   modelIds: ["text-embedding-3-small"],
   apiKey: "sk-test",
   baseUrl: null,
@@ -26,7 +27,7 @@ const baseProvider = {
   extraBody: null,
   createdAt: new Date(),
   updatedAt: new Date(),
-} as any;
+};
 
 describe("generateEmbedding", () => {
   beforeEach(() => {
