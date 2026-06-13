@@ -1411,6 +1411,123 @@ multi-compaction-stable summaries.
 
 ---
 
+## Chunk 14 — kept-message tool-result handling (planned, 2026-06-14)
+
+Origin: live event on the test server — compaction fired but missed target badly
+(`tokensAfter=75226` vs `targetTokens≈24000`). Cause: 4 recent messages were
+massive mempalace (MCP) tool-result JSON dumps. Step 1 (drop prefix) already
+collapses prefix tool results via `softTrim(out, 200)` in `renderUIMessages`, so
+the summarizer only saw ~2.5k input tokens — but `keptMessages: recent` was
+returned **verbatim**, so the bulky kept results dominated `tokensAfter`.
+
+### The two-tier reality (established this session)
+
+- **Tier 2 (`compactModelMessages`, `prepareStep`)** runs _between tool steps in
+  one stream_. It prunes **prefix only**; `recent` is passed **verbatim**
+  ([compaction.ts](apps/backend/src/runs/compaction.ts) `[summaryModelMessage(...), ...recent]`).
+  So current-stream tool results are never trimmed mid-stream. **Caveat:** the
+  keep-window is the last `keepRecentMessages` _messages_ counted flat, and in
+  ModelMessage form a tool call + its result are two messages — so in a >5-tool
+  stream the _early_ results of the same stream scroll into the prefix and DO get
+  summarized mid-stream. Tier 2 protects the tail, not the whole stream.
+- **Tier 1 (`compactUIMessages`)** runs _between turns_. The just-finished
+  stream's tool results are the newest messages → land in `recent`. This is the
+  only place a result the user is actively asking about can be trimmed.
+
+### Mapping to Anthropic's shipped mechanisms (claude-api skill, 2026-06-14)
+
+The Anthropic API converged on **three** complementary layers; Platypus today has
+only the summarize leg:
+
+1. **Compaction** — summarize earlier context near the window limit (beta
+   `compact-2026-01-12`). ≈ Platypus Tier 1/Tier 2.
+2. **Context editing (`clear_tool_uses`)** — _prune_ stale tool results + thinking
+   blocks at configurable thresholds, keeping conversation structure; "keeps the
+   transcript lean **without summarizing**." Platypus does NOT have this. → Task 2.
+3. **Ingestion offload** — Managed Agents auto-offloads any MCP tool result
+   > 100K tokens to a sandbox file, returning a truncated preview + path. An
+   > ingestion cap, not compaction — the only real fix for "one result too big to
+   > fit the window at all." → Task 3.
+
+### Task 1 — make Tier 1 recent-trim safe (READY; partially shipped)
+
+**Shipped 2026-06-14 (`64232d8`, on `test/compaction-clean-deploy`, deployed):**
+recent tool results pruned via `pruneUIMessage(m, minRecentPrunableChars)` (default
+`minPrunableChars * 5` = 10000 chars) across every over-target return path
+including the empty-prefix / null-watermark bail; warns when post-compaction
+estimate > `targetTokens * 2`; env override `COMPACTION_MIN_RECENT_PRUNABLE_CHARS`;
+summarizer output ceiling 2000 → 4000.
+
+**Still to do — adopt "option D" (overflow-gate + exempt newest)** so we stop
+gutting active data for a _soft_-target miss:
+
+- Missing `targetTokens` (0.5) is cheap — it's a hysteresis goal; the call still
+  succeeds as long as `recent < inputBudget`. The hard wall is `inputBudget`
+  (window − output reserve − safety, from `computeBudget`).
+- Gate recent-trim on `estimate(recent)+summary > inputBudget` (call would
+  actually overflow), NOT on the soft target. Below the wall, leave `recent`
+  intact — full fidelity, just a missed hysteresis target that re-compacts next
+  turn (cheap; empty-prefix path makes no summarizer call).
+- Always exempt the single newest message regardless.
+- Requires threading `inputBudget` into `UICompactOptions`.
+- This is strictly better than the alternatives we weighed (B: exempt newest N —
+  still over-trims under the test box's 0.1 target; A: raise threshold to 100k —
+  reduces frequency only; C: revert — loses the pathological-dump guard). The test
+  server's `COMPACTION_TARGET_RATIO=0.1` manufactures the worst case; prod 0.5
+  rarely trips it.
+
+### Task 2 — context-editing-style prune of kept tool results (NEEDS REVIEW + bigger plan)
+
+The user's ideal model (decided 2026-06-14): in-stream, only compact near the
+ceiling so the stream doesn't stop (Tier 2 already does this); **at stream end,
+strip bulky tool results so the next turn doesn't start at 40k** (NEW); then
+threshold-compact as chat continues (Tier 1 already does this). This is exactly
+Anthropic's **context editing (`clear_tool_uses`)** — prune, don't summarize.
+
+Design notes captured this session (to expand before implementing):
+
+- The current "keep last N _messages_ verbatim" heuristic is backwards: in a
+  > 10-tool stream the keep-window fills with raw tool results while the small,
+  > high-value conversational text (question + answer) gets summarized into the
+  > prefix. A type-aware policy is better: **keep conversational text + the newest
+  > turn's results verbatim; compress older bulky results to placeholders.**
+- Implement as a **model-view transform**, not destruction — full result stays in
+  the DB/UI (display/audit); only the lean version is _sent_ to the model each
+  subsequent turn. Platypus already separates stored messages from the model view
+  (watermark + summary reconstruction), so this fits.
+- Keep tool call↔result structural validity: replace the result _content_ with a
+  short placeholder marker (`[mempalace result, 40k chars — elided after turn N]`),
+  don't drop the message (providers reject an orphaned call). Size-gate it — tiny
+  results (`"OK"`) gain nothing from a placeholder.
+- The unavoidable tradeoff: eager stripping loses the immediate "based on those
+  results, do X" follow-up. Options: (a) strip immediately + agent re-calls if
+  needed; (b) placeholder-with-summary so the model can re-fetch intelligently
+  (recommended); (c) one-turn grace (keep the just-finished turn's results one
+  more turn). User's "next turn must not carry 40k" leans toward (b).
+- Anthropic's `clear_tool_uses` is **threshold-triggered** with configurable
+  thresholds, not strictly "every stream end" — decide whether to mirror that or
+  go eager at each turn boundary.
+
+This is a redesign of the compaction unit (messages → type-aware policies keyed
+off turn boundaries), bigger than Task 1, and overlaps Task 3. Review before
+building.
+
+### Task 3 — ingestion cap for oversized MCP / sub-agent results (UPSTREAM ISSUE — file so we don't forget)
+
+No tier can fix a _single_ result larger than the window by trimming other
+messages. Today: sandbox tools self-cap (ADR-0002, `truncated` flag), but **MCP
+tools (mempalace) and sub-agent returns have no cap** — one oversized result
+overflows all tiers (Tier 2/recovery never prune `recent`) → provider reject →
+error. The fix is an **ingestion cap at tool-result storage time** (mirror the
+sandbox/ADR-0002 pattern and Anthropic's 100K MCP offload): truncate/offload the
+oversized result, set a `truncated`-style marker, tell the model to narrow /
+re-fetch. Lives in tool wrapping + agent-runner, not compaction.
+
+**Action: file as an upstream issue on `willdady/platypus`** (per the issue-tracker
+skill). Marked here so it isn't lost; not yet filed.
+
+---
+
 ## Open / deferred decisions
 
 - **OpenAI-compatible as a separate provider type** — not required (auto-detect
