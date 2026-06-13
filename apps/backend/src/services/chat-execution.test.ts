@@ -701,7 +701,7 @@ describe("chat-execution", () => {
       expect(out).toBe("SUMMARY");
       expect(mockGenerateText).toHaveBeenCalledTimes(1);
       const arg = mockGenerateText.mock.calls[0][0];
-      expect(arg.maxOutputTokens).toBe(2000);
+      expect(arg.maxOutputTokens).toBe(4000);
       expect(arg.abortSignal).toBe(controller.signal);
       expect(arg.prompt).toBe("history text");
       expect(arg.system).toContain("context checkpoint compaction");
@@ -728,7 +728,7 @@ describe("chat-execution", () => {
 
       expect(out).toBe("TRUNCATED");
       expect(warn).toHaveBeenCalledWith(
-        expect.objectContaining({ maxTokens: 2000 }),
+        expect.objectContaining({ maxTokens: 4000 }),
         expect.stringContaining("maxOutputTokens ceiling"),
       );
     });

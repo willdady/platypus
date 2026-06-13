@@ -539,8 +539,9 @@ type CompactionRuntime = {
  */
 /** Safety ceiling on summarizer output (Chunk 13, Fix 2). Prevents a runaway
  * model from producing a summary longer than its input. The system prompt
- * targets ~1500 tokens; this 2000 backstop only trips on a degenerate run. */
-const SUMMARIZE_MAX_OUTPUT_TOKENS = 2000;
+ * hard-limits to 1500 tokens; this 4000 backstop catches models that ignore
+ * the instruction (e.g. qwen36 on large tool-heavy inputs). */
+const SUMMARIZE_MAX_OUTPUT_TOKENS = 4000;
 
 /** Heartbeat interval while the summarizer runs (Chunk 13, Fix 1). Resets the
  * per-step stall watchdog so a slow summarize call is not misidentified as a
@@ -589,6 +590,9 @@ export async function buildCompactionRuntime(args: {
   config.minPrunableChars =
     numEnv(process.env.COMPACTION_MIN_PRUNABLE_CHARS) ??
     config.minPrunableChars;
+  config.minRecentPrunableChars =
+    numEnv(process.env.COMPACTION_MIN_RECENT_PRUNABLE_CHARS) ??
+    config.minRecentPrunableChars;
 
   // RV7d: resolve both windows concurrently (they are independent).
   const taskModelId = provider.taskModelId || resolvedModelId;
@@ -641,12 +645,11 @@ export async function buildCompactionRuntime(args: {
 - **Decisions & facts** — conclusions, confirmed values/IDs/paths, constraints and user preferences (preserve any security-relevant instruction verbatim).
 - **Files & tools touched** — what was read/changed and why.
 
-If a prior summary appears in the history, integrate it — don't drop facts it captured. Be concise: aim under ~1500 tokens. Output only the summary.`,
+If a prior summary appears in the history, integrate it — don't drop facts it captured. Be concise: hard limit 1500 tokens maximum. Output only the summary.`,
         prompt: text,
-        // Fix 2 (Chunk 13): hard ceiling prevents a degenerate run from
-        // producing a summary longer than its input. Healthy summaries run a
-        // few hundred tokens; the ~1500-token prompt target leaves headroom
-        // under this 2000 backstop, which only trips on a degenerate run.
+        // Fix 2 (Chunk 13): hard ceiling prevents a runaway model from
+        // producing a summary longer than its input. Prompt hard-limits to
+        // 1500 tokens; 4000 backstop catches models that ignore the instruction.
         maxOutputTokens: SUMMARIZE_MAX_OUTPUT_TOKENS,
         // Fix B (review): thread the run's abort signal so a cancelled or
         // per-run-timed-out run actually aborts this call. The heartbeat above

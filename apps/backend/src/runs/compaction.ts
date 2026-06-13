@@ -272,6 +272,9 @@ export type UICompactOptions = {
   targetTokens: number;
   keepRecentMessages: number;
   minPrunableChars: number;
+  /** Threshold for pruning tool results in kept (recent) messages after Stage 2.
+   * Defaults to minPrunableChars * 5 when omitted. */
+  minRecentPrunableChars?: number;
   imageProvider?: ImageProvider;
   /** Existing durable summary to fold the new prefix into (incremental). */
   priorSummary?: string | null;
@@ -395,6 +398,31 @@ export async function compactUIMessages(
     };
   }
 
+  // Past this point we are over target. Prune large tool results in the kept
+  // (recent) messages — these stay in the model view, so extreme outliers (e.g.
+  // large MCP tool dumps) bloat tokensAfter and prevent reaching targetTokens.
+  // Computed once and reused by every over-target return below (the empty-prefix
+  // / null-watermark bail and the Stage 2 summarize path) so a history that fits
+  // entirely within keepRecentMessages still gets its outliers trimmed.
+  const recentThreshold =
+    opts.minRecentPrunableChars ?? opts.minPrunableChars * 5;
+  const prunedRecent = recent.map(
+    (m) => pruneUIMessage(m, recentThreshold).message,
+  );
+
+  const warnIfOverTarget = (afterEstimate: number) => {
+    if (afterEstimate > opts.targetTokens * 2) {
+      logger.warn(
+        {
+          afterEstimate,
+          targetTokens: opts.targetTokens,
+          keepRecentMessages: opts.keepRecentMessages,
+        },
+        "compaction fired but recent messages exceed target — keepRecentMessages may be locking in large tool results",
+      );
+    }
+  };
+
   // RV4: nothing to summarize when the prefix is empty (history fits within
   // keepRecentMessages). Also bail when the boundary message has no id — we
   // cannot anchor a watermark there, and committing a watermark:null +
@@ -404,13 +432,16 @@ export async function compactUIMessages(
   const watermarkId =
     prefix.length > 0 ? (prefix[prefix.length - 1].id ?? null) : null;
   if (prefix.length === 0 || watermarkId === null) {
+    const kept = [...prunedPrefix, ...prunedRecent];
+    const afterEstimate = estimate(kept) + priorTokens;
+    warnIfOverTarget(afterEstimate);
     return {
-      keptMessages: prunedAll,
+      keptMessages: kept,
       summaryText: opts.priorSummary ?? null,
       watermarkId: null,
       messagesDropped: 0,
       usedModelCall: false,
-      estimatedTokens: estimate(prunedAll) + priorTokens,
+      estimatedTokens: afterEstimate,
     };
   }
 
@@ -422,13 +453,16 @@ export async function compactUIMessages(
     opts.summarizerWindow,
   );
 
+  const afterEstimate = estimate(prunedRecent) + textTokens(summaryText);
+  warnIfOverTarget(afterEstimate);
+
   return {
-    keptMessages: recent,
+    keptMessages: prunedRecent,
     summaryText,
     watermarkId,
     messagesDropped: prefix.length,
     usedModelCall: true,
-    estimatedTokens: estimate(recent) + textTokens(summaryText),
+    estimatedTokens: afterEstimate,
   };
 }
 
@@ -667,6 +701,10 @@ export type CompactionConfig = {
   reserveRatio: number;
   keepRecentMessages: number;
   minPrunableChars: number;
+  /** Threshold for pruning tool results in the kept (recent) messages after
+   * Stage 2 summarization. Higher than minPrunableChars — we trim extreme
+   * outliers (e.g. huge MCP tool dumps) without destroying useful context. */
+  minRecentPrunableChars: number;
 };
 
 export const DEFAULT_COMPACTION_CONFIG: CompactionConfig = {
@@ -676,6 +714,7 @@ export const DEFAULT_COMPACTION_CONFIG: CompactionConfig = {
   reserveRatio: 0.05,
   keepRecentMessages: 10,
   minPrunableChars: 2000,
+  minRecentPrunableChars: 10000,
 };
 
 export type Budget = {
@@ -939,6 +978,7 @@ export async function applyTier1Compaction(
     targetTokens: effectiveTarget,
     keepRecentMessages: config.keepRecentMessages,
     minPrunableChars: config.minPrunableChars,
+    minRecentPrunableChars: config.minRecentPrunableChars,
     imageProvider,
     priorSummary,
     summarize: input.summarize,

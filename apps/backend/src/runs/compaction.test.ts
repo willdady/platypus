@@ -15,6 +15,7 @@ import {
   type CompactionState,
   type WatermarkPatch,
 } from "./compaction.ts";
+import { logger } from "../logger.ts";
 import type { ModelMessage } from "ai";
 import type { PlatypusUIMessage } from "../types.ts";
 
@@ -308,6 +309,93 @@ describe("compactUIMessages (Tier 1)", () => {
       summarizerWindow: 100, // 400-char chunks → several chunk calls + 1 reduce
     });
     expect(summarize.mock.calls.length).toBeGreaterThan(1);
+  });
+
+  it("Stage 2 prunes large tool results in kept (recent) messages", async () => {
+    const msgs = [
+      uiText("p1", "user", "P".repeat(4000)),
+      uiText("p2", "assistant", "Q".repeat(4000)),
+      uiTool("r1", "X".repeat(12000)), // big tool result in recent
+      uiText("r2", "user", "done"),
+    ];
+    const res = await compactUIMessages(msgs, {
+      ...baseOpts,
+      summarize: noopSummarize,
+      targetTokens: 300,
+      minRecentPrunableChars: 5000, // 12000-char output exceeds threshold
+    });
+    expect(res.usedModelCall).toBe(true);
+    expect(res.keptMessages).toHaveLength(2); // r1 + r2
+    // Tool result in r1 should be trimmed (soft-trim produces head+tail, not full string)
+    const toolPart = res.keptMessages[0].parts?.find((p) =>
+      (p as { type: string }).type.startsWith("tool-"),
+    ) as { output?: string } | undefined;
+    expect(typeof toolPart?.output).toBe("string");
+    expect((toolPart?.output as string).length).toBeLessThan(12000);
+  });
+
+  it("Stage 2 does not prune recent tool results below minRecentPrunableChars", async () => {
+    const msgs = [
+      uiText("p1", "user", "P".repeat(4000)),
+      uiText("p2", "assistant", "Q".repeat(4000)),
+      uiTool("r1", "X".repeat(3000)), // below threshold of 20000
+      uiText("r2", "user", "done"),
+    ];
+    const res = await compactUIMessages(msgs, {
+      ...baseOpts,
+      summarize: noopSummarize,
+      targetTokens: 300,
+      minRecentPrunableChars: 20000, // threshold above 3000 → no pruning
+    });
+    expect(res.usedModelCall).toBe(true);
+    const toolPart = res.keptMessages[0].parts?.find((p) =>
+      (p as { type: string }).type.startsWith("tool-"),
+    ) as { output?: string } | undefined;
+    // Output unchanged — 3000 chars below threshold
+    expect(toolPart?.output).toBe("X".repeat(3000));
+  });
+
+  it("prunes large recent tool results when the prefix is empty (no summary)", async () => {
+    // Whole history fits within keepRecentMessages (2) but a huge tool result
+    // pushes it over target. boundary=0 → empty prefix → no model call, but the
+    // outlier in recent must still be trimmed (Finding 1 gap).
+    const msgs = [
+      uiTool("r1", "X".repeat(12000)), // big tool result, no prefix to summarize
+      uiText("r2", "user", "done"),
+    ];
+    const res = await compactUIMessages(msgs, {
+      ...baseOpts,
+      summarize: noopSummarize,
+      targetTokens: 300,
+      minRecentPrunableChars: 5000,
+    });
+    expect(res.usedModelCall).toBe(false); // empty prefix → no summarize
+    const toolPart = res.keptMessages[0].parts?.find((p) =>
+      (p as { type: string }).type.startsWith("tool-"),
+    ) as { output?: string } | undefined;
+    expect(typeof toolPart?.output).toBe("string");
+    expect((toolPart?.output as string).length).toBeLessThan(12000);
+  });
+
+  it("warns when Stage 2 result still exceeds 2× targetTokens after pruning", async () => {
+    const warn = vi.spyOn(logger, "warn").mockReturnValue(undefined);
+    const msgs = [
+      uiText("p1", "user", "P".repeat(4000)),
+      uiText("p2", "assistant", "Q".repeat(4000)),
+      // recent messages are huge text (not tool), cannot be pruned
+      uiText("r1", "user", "R".repeat(8000)),
+      uiText("r2", "assistant", "S".repeat(8000)),
+    ];
+    await compactUIMessages(msgs, {
+      ...baseOpts,
+      summarize: noopSummarize,
+      targetTokens: 50, // recent alone is ~4000 tokens → well over 2×50
+    });
+    expect(warn).toHaveBeenCalledWith(
+      expect.objectContaining({ targetTokens: 50 }),
+      expect.stringContaining("recent messages exceed target"),
+    );
+    warn.mockRestore();
   });
 });
 
