@@ -67,12 +67,18 @@ describe("Invitation Routes", () => {
       });
 
       expect(res.status).toBe(201);
-      expect((await res.json()).blueprintIds).toEqual(["bp-1", "bp-2"]);
+      expect(
+        ((await res.json()) as { blueprintIds: string[] }).blueprintIds,
+      ).toEqual(["bp-1", "bp-2"]);
 
       // The junction insert carries the ordered, deduped set with positions.
       const junctionInsert = mockDb.values.mock.calls
         .map((c) => c[0])
-        .find((v) => Array.isArray(v) && v[0]?.blueprintId);
+        .find(
+          (v): v is { blueprintId: string; position: number }[] =>
+            Array.isArray(v) &&
+            (v as { blueprintId?: unknown }[])[0]?.blueprintId !== undefined,
+        );
       expect(junctionInsert).toEqual([
         expect.objectContaining({ blueprintId: "bp-1", position: 0 }),
         expect.objectContaining({ blueprintId: "bp-2", position: 1 }),
@@ -97,7 +103,10 @@ describe("Invitation Routes", () => {
       });
 
       expect(res.status).toBe(422);
-      expect((await res.json()).missingBlueprintIds).toEqual(["bp-2"]);
+      expect(
+        ((await res.json()) as { missingBlueprintIds: string[] })
+          .missingBlueprintIds,
+      ).toEqual(["bp-2"]);
     });
 
     // ADR-0008: the invitation carries an optional Workspace name used to
@@ -167,7 +176,9 @@ describe("Invitation Routes", () => {
 
       const res = await app.request(baseUrl);
       expect(res.status).toBe(200);
-      const json = await res.json();
+      const json = (await res.json()) as {
+        results: { blueprintIds: string[] }[];
+      };
       expect(json.results[0].blueprintIds).toEqual(["bp-1", "bp-2"]);
       // An invite with no blueprints reports an empty set, not undefined.
       expect(json.results[1].blueprintIds).toEqual([]);

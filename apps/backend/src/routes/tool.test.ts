@@ -42,7 +42,7 @@ describe("Tool Routes", () => {
 
       const res = await app.request(baseUrl);
       expect(res.status).toBe(200);
-      const json = await res.json();
+      const json = (await res.json()) as Record<string, unknown>;
 
       // Static tools
       expect(json.results).toContainEqual(

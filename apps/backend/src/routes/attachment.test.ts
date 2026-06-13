@@ -99,12 +99,13 @@ describe("Attachment Routes", () => {
       mockAdminAccess();
       mockDb.limit.mockResolvedValueOnce([{ id: "mcp-1" }]); // org-scope lookup
 
-      const err = new Error("DrizzleQueryError");
-      (err as any).cause = {
-        code: "23505",
-        message:
-          'duplicate key value violates unique constraint "unique_attachment"',
-      };
+      const err = Object.assign(new Error("DrizzleQueryError"), {
+        cause: {
+          code: "23505",
+          message:
+            'duplicate key value violates unique constraint "unique_attachment"',
+        },
+      });
       mockDb.returning.mockRejectedValueOnce(err);
 
       const res = await app.request(baseUrl, {
@@ -164,7 +165,9 @@ describe("Attachment Routes", () => {
 
       const res = await app.request(baseUrl);
       expect(res.status).toBe(200);
-      expect((await res.json()).results).toEqual(rows);
+      expect(((await res.json()) as { results: unknown[] }).results).toEqual(
+        rows,
+      );
     });
   });
 });

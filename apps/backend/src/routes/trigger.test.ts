@@ -93,7 +93,7 @@ describe("Trigger Routes", () => {
 
       const res = await app.request(`${baseUrl}/trig-1`);
       expect(res.status).toBe(200);
-      const body = await res.json();
+      const body = (await res.json()) as Record<string, unknown>;
       expect(body).toMatchObject({ id: "trig-1", agentId: "agent-1" });
     });
 

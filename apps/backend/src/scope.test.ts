@@ -10,7 +10,9 @@ import {
   type Principal,
 } from "./scope.ts";
 
-const fakeUser = { id: "user-1", name: "Alice" } as any;
+const fakeUser = { id: "user-1", name: "Alice" } as unknown as Parameters<
+  typeof userScope
+>[0];
 
 describe("scope hierarchy", () => {
   it("builds nested scopes additively", () => {

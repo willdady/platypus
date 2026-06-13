@@ -1,26 +1,47 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
+interface S3ClientConfig {
+  region?: string;
+  endpoint?: string;
+  credentials?: { accessKeyId: string; secretAccessKey: string };
+  forcePathStyle?: boolean;
+}
+
+interface MockCommand {
+  _type: string;
+  input: Record<string, unknown>;
+}
+
 const sendMock = vi.fn();
-let capturedConfigs: any[] = [];
+let capturedConfigs: S3ClientConfig[] = [];
 
 vi.mock("@aws-sdk/client-s3", () => {
   class MockS3Client {
     send = sendMock;
-    constructor(config: any) {
+    constructor(config: S3ClientConfig) {
       capturedConfigs.push(config);
     }
   }
-  class MockPutObjectCommand {
+  class MockPutObjectCommand implements MockCommand {
     _type = "PutObjectCommand";
-    constructor(public input: any) {}
+    input: Record<string, unknown>;
+    constructor(input: Record<string, unknown>) {
+      this.input = input;
+    }
   }
-  class MockGetObjectCommand {
+  class MockGetObjectCommand implements MockCommand {
     _type = "GetObjectCommand";
-    constructor(public input: any) {}
+    input: Record<string, unknown>;
+    constructor(input: Record<string, unknown>) {
+      this.input = input;
+    }
   }
-  class MockDeleteObjectCommand {
+  class MockDeleteObjectCommand implements MockCommand {
     _type = "DeleteObjectCommand";
-    constructor(public input: any) {}
+    input: Record<string, unknown>;
+    constructor(input: Record<string, unknown>) {
+      this.input = input;
+    }
   }
   return {
     S3Client: MockS3Client,
@@ -100,7 +121,7 @@ describe("S3Storage", () => {
       await storage.put("org/ws/chat/msg/0-abc.png", data, "image/png");
 
       expect(sendMock).toHaveBeenCalledTimes(1);
-      const cmd = sendMock.mock.calls[0][0];
+      const cmd = sendMock.mock.calls[0][0] as MockCommand;
       expect(cmd._type).toBe("PutObjectCommand");
       expect(cmd.input).toEqual({
         Bucket: "test-bucket",
@@ -116,7 +137,7 @@ describe("S3Storage", () => {
     it("should return file data and content type", async () => {
       const bodyData = Buffer.from("file content");
       sendMock.mockResolvedValueOnce({
-        Body: (async function* () {
+        Body: (function* () {
           yield bodyData;
         })(),
         ContentType: "image/png",
@@ -126,7 +147,7 @@ describe("S3Storage", () => {
       const result = await storage.get("org/ws/chat/msg/0-abc.png");
 
       expect(sendMock).toHaveBeenCalledTimes(1);
-      const cmd = sendMock.mock.calls[0][0];
+      const cmd = sendMock.mock.calls[0][0] as MockCommand;
       expect(cmd._type).toBe("GetObjectCommand");
       expect(cmd.input).toEqual({
         Bucket: "test-bucket",
@@ -148,7 +169,7 @@ describe("S3Storage", () => {
 
     it("should return null for NoSuchKey error", async () => {
       const error = new Error("NoSuchKey");
-      (error as any).name = "NoSuchKey";
+      error.name = "NoSuchKey";
       sendMock.mockRejectedValueOnce(error);
 
       const storage = new S3Storage();
@@ -158,8 +179,9 @@ describe("S3Storage", () => {
     });
 
     it("should return null for NoSuchKey error via Code property", async () => {
-      const error = new Error("Not found");
-      (error as any).Code = "NoSuchKey";
+      const error = Object.assign(new Error("Not found"), {
+        Code: "NoSuchKey",
+      });
       sendMock.mockRejectedValueOnce(error);
 
       const storage = new S3Storage();
@@ -178,7 +200,7 @@ describe("S3Storage", () => {
     it("should fallback to metadata content-type when ContentType is absent", async () => {
       const bodyData = Buffer.from("data");
       sendMock.mockResolvedValueOnce({
-        Body: (async function* () {
+        Body: (function* () {
           yield bodyData;
         })(),
         ContentType: undefined,
@@ -194,7 +216,7 @@ describe("S3Storage", () => {
     it("should fallback to application/octet-stream when no content type available", async () => {
       const bodyData = Buffer.from("data");
       sendMock.mockResolvedValueOnce({
-        Body: (async function* () {
+        Body: (function* () {
           yield bodyData;
         })(),
         ContentType: undefined,
@@ -216,7 +238,7 @@ describe("S3Storage", () => {
       await storage.delete("org/ws/chat/msg/0-abc.png");
 
       expect(sendMock).toHaveBeenCalledTimes(1);
-      const cmd = sendMock.mock.calls[0][0];
+      const cmd = sendMock.mock.calls[0][0] as MockCommand;
       expect(cmd._type).toBe("DeleteObjectCommand");
       expect(cmd.input).toEqual({
         Bucket: "test-bucket",

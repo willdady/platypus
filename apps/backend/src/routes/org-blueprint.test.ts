@@ -44,7 +44,7 @@ describe("Organization Blueprint Routes", () => {
         headers: { "Content-Type": "application/json" },
       });
       expect(res.status).toBe(201);
-      const json = await res.json();
+      const json = (await res.json()) as Record<string, unknown>;
       expect(json.id).toBe("bp-1");
       expect(json.items).toEqual([
         { resourceType: "agent", resourceId: "agent-1" },
@@ -63,7 +63,7 @@ describe("Organization Blueprint Routes", () => {
         headers: { "Content-Type": "application/json" },
       });
       expect(res.status).toBe(422);
-      const json = await res.json();
+      const json = (await res.json()) as Record<string, unknown>;
       expect(json.invalidItems).toEqual([
         { resourceType: "agent", resourceId: "agent-1" },
       ]);
@@ -127,7 +127,7 @@ describe("Organization Blueprint Routes", () => {
         headers: { "Content-Type": "application/json" },
       });
       expect(res.status).toBe(201);
-      const json = await res.json();
+      const json = (await res.json()) as Record<string, unknown>;
       expect(json.taskModelProviderId).toBe("prov-1");
       expect(json.context).toBe("Default context");
     });
@@ -147,7 +147,10 @@ describe("Organization Blueprint Routes", () => {
         headers: { "Content-Type": "application/json" },
       });
       expect(res.status).toBe(422);
-      expect((await res.json()).invalidProviderIds).toEqual(["prov-x"]);
+      expect(
+        ((await res.json()) as { invalidProviderIds: string[] })
+          .invalidProviderIds,
+      ).toEqual(["prov-x"]);
     });
 
     // Parity with the workspace route: a memory provider must expose the model
@@ -176,7 +179,7 @@ describe("Organization Blueprint Routes", () => {
         headers: { "Content-Type": "application/json" },
       });
       expect(res.status).toBe(422);
-      const json = await res.json();
+      const json = (await res.json()) as Record<string, unknown>;
       expect(json.invalidMemoryProviders).toEqual([
         expect.objectContaining({
           field: "memoryEmbeddingProviderId",
@@ -217,7 +220,10 @@ describe("Organization Blueprint Routes", () => {
         headers: { "Content-Type": "application/json" },
       });
       expect(res.status).toBe(201);
-      expect((await res.json()).memoryEmbeddingProviderId).toBe("prov-1");
+      expect(
+        ((await res.json()) as { memoryEmbeddingProviderId: string })
+          .memoryEmbeddingProviderId,
+      ).toBe("prov-1");
     });
   });
 
@@ -239,7 +245,9 @@ describe("Organization Blueprint Routes", () => {
 
       const res = await app.request(baseUrl);
       expect(res.status).toBe(200);
-      const json = await res.json();
+      const json = (await res.json()) as {
+        results: { items: unknown[] }[];
+      };
       expect(json.results).toHaveLength(1);
       expect(json.results[0].items).toHaveLength(2);
     });
@@ -269,7 +277,7 @@ describe("Organization Blueprint Routes", () => {
 
       const res = await app.request(`${baseUrl}/bp-1`);
       expect(res.status).toBe(200);
-      const json = await res.json();
+      const json = (await res.json()) as Record<string, unknown>;
       expect(json.id).toBe("bp-1");
       expect(json.items).toHaveLength(1);
     });
@@ -313,7 +321,7 @@ describe("Organization Blueprint Routes", () => {
         headers: { "Content-Type": "application/json" },
       });
       expect(res.status).toBe(200);
-      const json = await res.json();
+      const json = (await res.json()) as Record<string, unknown>;
       expect(json.items).toEqual([
         { resourceType: "skill", resourceId: "skill-1" },
       ]);

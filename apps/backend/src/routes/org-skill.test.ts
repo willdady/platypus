@@ -59,12 +59,13 @@ describe("Organization Skill Routes", () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]); // requireOrgAccess
 
-      const err = new Error("DrizzleQueryError");
-      (err as any).cause = {
-        code: "23505",
-        message:
-          'duplicate key value violates unique constraint "unique_skill_name_org"',
-      };
+      const err = Object.assign(new Error("DrizzleQueryError"), {
+        cause: {
+          code: "23505",
+          message:
+            'duplicate key value violates unique constraint "unique_skill_name_org"',
+        },
+      });
       mockDb.returning.mockRejectedValueOnce(err);
 
       const res = await app.request(baseUrl, {

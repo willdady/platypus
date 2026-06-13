@@ -191,9 +191,12 @@ describe("User Invitation Routes", () => {
 
       expect(res.status).toBe(200);
       const insertedValues = mockDb.values.mock.calls.map((c) => c[0]);
-      const provisioned = insertedValues.find((v) => v?.name);
-      expect(provisioned.name.length).toBeLessThanOrEqual(30);
-      expect(provisioned.name.endsWith(" Workspace")).toBe(true);
+      const provisioned = insertedValues.find(
+        (v): v is { name: string } =>
+          typeof v === "object" && v !== null && "name" in v,
+      );
+      expect(provisioned?.name.length).toBeLessThanOrEqual(30);
+      expect(provisioned?.name.endsWith(" Workspace")).toBe(true);
     });
 
     // ADR-0009: accepting a Blueprint-bearing invite provisions the Workspace
@@ -268,9 +271,13 @@ describe("User Invitation Routes", () => {
       // Tier 1: the attachment insert receives the deduped union (2 distinct).
       const attachInsert = mockDb.values.mock.calls
         .map((c) => c[0])
-        .find((v) => Array.isArray(v) && v[0]?.resourceType);
+        .find(
+          (v): v is { resourceType: string; resourceId: string }[] =>
+            Array.isArray(v) &&
+            (v as { resourceType?: unknown }[])[0]?.resourceType !== undefined,
+        );
       expect(attachInsert).toHaveLength(2);
-      expect(attachInsert.map((a: any) => a.resourceId).sort()).toEqual([
+      expect(attachInsert?.map((a) => a.resourceId).sort()).toEqual([
         "agent-1",
         "skill-1",
       ]);
@@ -320,7 +327,11 @@ describe("User Invitation Routes", () => {
       // No attachment insert ran — the service early-returns on an empty set.
       const attachInsert = mockDb.values.mock.calls
         .map((c) => c[0])
-        .find((v) => Array.isArray(v) && v[0]?.resourceType);
+        .find(
+          (v): v is { resourceType: string }[] =>
+            Array.isArray(v) &&
+            (v as { resourceType?: unknown }[])[0]?.resourceType !== undefined,
+        );
       expect(attachInsert).toBeUndefined();
     });
 
