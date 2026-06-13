@@ -6,8 +6,11 @@
   "scripts": {
     "dev": "next dev -p 3002",
     "prebuild": "echo NEXT_PUBLIC_APP_VERSION=$(node -p \"require('../../package.json').version\") > .env.local",
-    "build": "next build",
-    "postbuild": "pagefind --site out --output-path out/_pagefind",
+    "build": "next build && pagefind --site .next/server/app --output-path public/_pagefind",
+    "preview": "opennextjs-cloudflare build && opennextjs-cloudflare preview",
+    "deploy": "opennextjs-cloudflare build && opennextjs-cloudflare deploy",
+    "upload": "opennextjs-cloudflare build && opennextjs-cloudflare upload",
+    "cf-typegen": "wrangler types --env-interface CloudflareEnv cloudflare-env.d.ts",
     "lint": "eslint"
   },
   "dependencies": {
@@ -18,6 +21,7 @@
     "react-dom": "19.2.7"
   },
   "devDependencies": {
+    "@opennextjs/cloudflare": "^1.19.11",
     "@tailwindcss/postcss": "^4.3.1",
     "@types/node": "^25.9.3",
     "@types/react": "^19.2.17",
@@ -26,6 +30,7 @@
     "eslint-config-next": "16.2.9",
     "pagefind": "^1.5.2",
     "tailwindcss": "^4.3.1",
-    "typescript": "^6.0.3"
+    "typescript": "^6.0.3",
+    "wrangler": "^4.100.0"
   }
 }

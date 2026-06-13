@@ -1,0 +1,40 @@
+name: Deploy Docs
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+# Docs are a static satellite deployed to Cloudflare Workers via OpenNext
+# (ADR-0011); they track the latest release only, so deploy on release publish.
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-docs
+  cancel-in-progress: true
+
+jobs:
+  deploy-docs:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build and deploy to Cloudflare
+        run: pnpm docs-deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}

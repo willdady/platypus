@@ -47,7 +47,21 @@ const RootLayout: FC<{ children: ReactNode }> = async ({ children }) => {
           saturation: 100,
           lightness: { light: 30, dark: 45 },
         }}
-      />
+      >
+        {/*
+         * Anti-FOUC: Nextra renders its next-themes script inside <body>, so the
+         * page can paint one light frame before the theme class lands on <html>.
+         * Mirror next-themes here in <head> (same `theme` storage key, same
+         * `system` default) to set the class before first paint. Idempotent with
+         * Nextra's later script.
+         */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html:
+              "try{var t=localStorage.getItem('theme'),d=t==='dark'||((!t||t==='system')&&matchMedia('(prefers-color-scheme: dark)').matches),e=document.documentElement;e.classList.toggle('dark',d);e.style.colorScheme=d?'dark':'light'}catch(e){}",
+          }}
+        />
+      </Head>
       <body>
         <Layout
           navbar={navbar}
