@@ -138,7 +138,7 @@ orgAttachment.post("/", requireAuth, requireOrgAccess(["admin"]), async (c) => {
       .values({ id: nanoid(), workspaceId, resourceType, resourceId })
       .returning();
     return c.json(record[0], 201);
-  } catch (error: any) {
+  } catch (error) {
     if (isUniqueViolation(error)) {
       return c.json(
         { error: "This resource is already attached to that workspace" },

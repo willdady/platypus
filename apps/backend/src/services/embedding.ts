@@ -11,14 +11,14 @@ export const generateEmbedding = async (
   embeddingModelId: string,
   text: string,
 ): Promise<number[]> => {
-  const embeddingModel = openProvider(provider).embeddingModel;
-  if (!embeddingModel) {
+  const opened = openProvider(provider);
+  if (!opened.embeddingModel) {
     throw new Error(
       `Provider type '${provider.providerType}' does not support text embeddings.`,
     );
   }
   const { embedding } = await embed({
-    model: embeddingModel(embeddingModelId),
+    model: opened.embeddingModel(embeddingModelId),
     value: text,
   });
   return embedding;

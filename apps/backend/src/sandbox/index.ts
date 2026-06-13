@@ -17,10 +17,9 @@ export const MAX_SHELL_TIMEOUT_MS = 600_000;
 // is the user-visible root.
 export const SANDBOX_WORKSPACE_ROOT = "/workspace";
 
-const SANDBOX_BACKEND_REGISTRY: Record<
-  string,
-  SandboxBackendRegistration<any, any>
-> = {};
+// Stored at the erased (default `unknown`) parameterisation: the registry is
+// heterogeneous and lookups hand back this same erased shape.
+const SANDBOX_BACKEND_REGISTRY: Record<string, SandboxBackendRegistration> = {};
 
 export const registerSandboxBackend = <TConfig, TCredentials>(
   registration: SandboxBackendRegistration<TConfig, TCredentials>,

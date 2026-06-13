@@ -1,4 +1,7 @@
-import { experimental_createMCPClient as createMCPClient } from "@ai-sdk/mcp";
+import {
+  experimental_createMCPClient as createMCPClient,
+  type MCPClient,
+} from "@ai-sdk/mcp";
 import { openProvider } from "./provider.ts";
 import { and, eq, or, inArray } from "drizzle-orm";
 import { db } from "../index.ts";
@@ -24,7 +27,7 @@ import {
   type MemorySummary,
 } from "./memory-retrieval.ts";
 import type { Provider, Skill } from "@platypus/schemas";
-import type { Tool } from "ai";
+import type { LanguageModel, Tool } from "ai";
 import { logger } from "../logger.ts";
 import { buildMcpTransportConfig } from "./mcp-oauth-provider.ts";
 import { inlineFileUrls } from "../storage/utils.ts";
@@ -103,7 +106,7 @@ export type ChatTurnRequest = {
 
 export type ChatTurn = {
   stream: {
-    model: any;
+    model: LanguageModel;
     tools: Record<string, Tool>;
     system: string;
     messages: PlatypusUIMessage[];
@@ -670,14 +673,15 @@ const wrapToolsWithBump = (
 ): Record<string, Tool> => {
   const wrapped: Record<string, Tool> = {};
   for (const [name, t] of Object.entries(tools)) {
-    const execute = (t as any).execute;
+    const execute = (t as { execute?: unknown }).execute;
     if (typeof execute !== "function") {
       wrapped[name] = t;
       continue;
     }
+    const runExecute = execute as (args: unknown, options: unknown) => unknown;
     wrapped[name] = {
       ...t,
-      execute: function (args: any, options: any) {
+      execute: (args: unknown, options: unknown) => {
         const startedAt = Date.now();
         onToolStart();
         onActivity({ phase: "start", toolName: name });
@@ -691,19 +695,23 @@ const wrapToolsWithBump = (
         };
         let result: unknown;
         try {
-          result = execute.call(t, args, options);
+          result = runExecute.call(t, args, options);
         } catch (err) {
           finish();
           throw err;
         }
-        if (result && typeof (result as any).then === "function") {
-          return (result as Promise<any>).finally(finish);
+        if (
+          result != null &&
+          typeof (result as { then?: unknown }).then === "function"
+        ) {
+          return (result as Promise<unknown>).finally(finish);
         }
         // Async iterable / generator path (sub-agent tools). Wrap it so the
         // counter decrements once the consumer drains the iterator.
         if (
-          result &&
-          typeof (result as any)[Symbol.asyncIterator] === "function"
+          result != null &&
+          typeof (result as Record<symbol, unknown>)[Symbol.asyncIterator] ===
+            "function"
         ) {
           const inner = result as AsyncIterable<unknown>;
           return (async function* () {
@@ -785,14 +793,14 @@ const resolveChatContext = async (
 
 const loadTools = async (
   queries: ChatTurnQueries,
-  agent: AgentRow | undefined,
+  agent: Pick<AgentRow, "id" | "toolSetIds"> | undefined,
   workspaceId: string,
   orgId: string,
   frontendUrl: string | undefined,
   userId?: string,
-): Promise<{ tools: Record<string, Tool>; mcpClients: any[] }> => {
+): Promise<{ tools: Record<string, Tool>; mcpClients: MCPClient[] }> => {
   const tools: Record<string, Tool> = {};
-  const mcpClients: any[] = [];
+  const mcpClients: MCPClient[] = [];
 
   if (!agent || !agent.toolSetIds || agent.toolSetIds.length === 0) {
     return { tools, mcpClients };
@@ -891,7 +899,7 @@ const loadSubAgents = async (
 ): Promise<{
   subAgents: Array<{ id: string; name: string; description?: string | null }>;
   subAgentTools: Record<string, Tool>;
-  subAgentMcpClients: any[];
+  subAgentMcpClients: MCPClient[];
 }> => {
   if (!agent?.subAgentIds || agent.subAgentIds.length === 0) {
     return { subAgents: [], subAgentTools: {}, subAgentMcpClients: [] };
@@ -905,7 +913,7 @@ const loadSubAgents = async (
     description: sa.description,
   }));
 
-  const subAgentMcpClients: any[] = [];
+  const subAgentMcpClients: MCPClient[] = [];
 
   const subAgentTools = await createSubAgentTools(
     subAgentRecords,
@@ -924,7 +932,7 @@ const loadSubAgents = async (
       const subAgentRecord = subAgentRecords.find((sa) => sa.id === subAgentId);
       const { tools: subTools, mcpClients } = await loadTools(
         queries,
-        subAgentRecord ?? ({ id: subAgentId, toolSetIds } as any),
+        subAgentRecord ?? { id: subAgentId, toolSetIds },
         workspaceId,
         orgId,
         frontendUrl,

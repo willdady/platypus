@@ -76,7 +76,7 @@ sandbox.get(
   requireAuth,
   requireOrgAccess(),
   requireWorkspaceAccess,
-  async (c) => {
+  (c) => {
     const results = getSandboxBackends().map((r) => ({
       backend: r.backend,
       name: r.name,
@@ -94,7 +94,7 @@ sandbox.get(
   requireOrgAccess(),
   requireWorkspaceAccess,
   requireSandboxAdmin,
-  async (c) => {
+  (c) => {
     return c.json({ results: readAllowedDockerNetworks() });
   },
 );

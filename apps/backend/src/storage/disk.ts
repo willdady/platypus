@@ -73,7 +73,7 @@ export class DiskStorage implements StorageBackend {
         fs.readFile(metaPath, "utf-8"),
       ]);
 
-      const meta = JSON.parse(metaContent);
+      const meta = JSON.parse(metaContent) as { contentType: string };
       return { data, contentType: meta.contentType };
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === "ENOENT") {

@@ -406,8 +406,8 @@ agent.post(
         { ...agentWithAvatarUrl(promoted, baseUrl), scope: "organization" },
         200,
       );
-    } catch (error: any) {
-      if (error?.message === PROMOTE_RACE) {
+    } catch (error) {
+      if (error instanceof Error && error.message === PROMOTE_RACE) {
         throw new NotFoundError("Agent not found");
       }
       // A duplicate Shared-Agent name surfaces as a Postgres unique violation,
