@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import type { fetchUrl as FetchUrlType } from "./fetch.ts";
 
 const ctx = { toolCallId: "test", messages: [] };
 
@@ -6,7 +7,7 @@ const ctx = { toolCallId: "test", messages: [] };
 const originalEnv = process.env.FETCH_TOOL_IGNORE_ROBOTS_TXT;
 
 describe("fetchUrl", () => {
-  let fetchUrl: any;
+  let fetchUrl: typeof FetchUrlType;
   const mockFetch = vi.fn();
 
   beforeEach(async () => {
@@ -33,7 +34,7 @@ describe("fetchUrl", () => {
       text: vi.fn().mockResolvedValue("Hello, world!"),
     });
 
-    const result = await fetchUrl.execute(
+    const result = await fetchUrl.execute!(
       {
         url: "https://example.com/data.txt",
         max_length: 5000,
@@ -56,7 +57,7 @@ describe("fetchUrl", () => {
       text: vi.fn().mockResolvedValue(mdContent),
     });
 
-    const result = await fetchUrl.execute(
+    const result = await fetchUrl.execute!(
       {
         url: "https://example.com/page.md",
         max_length: 5000,
@@ -77,7 +78,7 @@ describe("fetchUrl", () => {
       text: vi.fn().mockResolvedValue(longContent),
     });
 
-    const result = await fetchUrl.execute(
+    const result = await fetchUrl.execute!(
       {
         url: "https://example.com/long.txt",
         max_length: 50,
@@ -100,7 +101,7 @@ describe("fetchUrl", () => {
       text: vi.fn().mockResolvedValue(content),
     });
 
-    const result = await fetchUrl.execute(
+    const result = await fetchUrl.execute!(
       {
         url: "https://example.com/page.txt",
         max_length: 5000,
@@ -126,7 +127,7 @@ describe("fetchUrl", () => {
       text: vi.fn().mockResolvedValue(html),
     });
 
-    const result = await fetchUrl.execute(
+    const result = await fetchUrl.execute!(
       {
         url: "https://example.com/page.html",
         max_length: 5000,
@@ -149,7 +150,7 @@ describe("fetchUrl", () => {
       text: vi.fn().mockResolvedValue(html),
     });
 
-    const result = await fetchUrl.execute(
+    const result = await fetchUrl.execute!(
       {
         url: "https://example.com/page.html",
         max_length: 5000,
@@ -169,7 +170,7 @@ describe("fetchUrl", () => {
       text: vi.fn().mockResolvedValue("redirected"),
     });
 
-    const result = await fetchUrl.execute(
+    const result = await fetchUrl.execute!(
       {
         url: "https://example.com/redirect",
         max_length: 5000,
@@ -186,7 +187,7 @@ describe("fetchUrl", () => {
 describe("robots.txt checking", () => {
   const mockFetch = vi.fn();
 
-  beforeEach(async () => {
+  beforeEach(() => {
     vi.resetModules();
     global.fetch = mockFetch;
     mockFetch.mockReset();
@@ -211,7 +212,7 @@ describe("robots.txt checking", () => {
       text: vi.fn().mockResolvedValue("User-agent: *\nDisallow: /"),
     });
 
-    const result = await mod.fetchUrl.execute(
+    const result = await mod.fetchUrl.execute!(
       {
         url: "https://blocked.com/page",
         max_length: 5000,
@@ -239,7 +240,7 @@ describe("robots.txt checking", () => {
       text: vi.fn().mockResolvedValue("content"),
     });
 
-    const result = await mod.fetchUrl.execute(
+    const result = await mod.fetchUrl.execute!(
       {
         url: "https://example.com/page",
         max_length: 5000,
