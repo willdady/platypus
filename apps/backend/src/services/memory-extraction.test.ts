@@ -61,14 +61,11 @@ const makeProvider = (overrides: Record<string, unknown> = {}) => ({
  * 4+. status update / summary update where calls (terminal, result discarded)
  */
 function setupWhere(workspaces: unknown[], providers: unknown[]) {
-  let call = 0;
-  mockDb.where.mockImplementation(() => {
-    call++;
-    if (call === 1) return Promise.resolve(workspaces);
-    if (call === 2) return mockDb; // chats query intermediate
-    if (call === 3) return Promise.resolve(providers);
-    return mockDb; // subsequent terminal awaits — discarded
-  });
+  mockDb.where
+    .mockResolvedValueOnce(workspaces) // 1. workspaces query (terminal)
+    .mockReturnValueOnce(mockDb) // 2. chats query (intermediate)
+    .mockResolvedValueOnce(providers) // 3. providers query (terminal)
+    .mockReturnValue(mockDb); // 4+. subsequent terminal awaits — discarded
 }
 
 describe("processMemoryExtractionBatch", () => {
