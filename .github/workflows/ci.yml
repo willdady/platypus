@@ -1,12 +1,11 @@
 name: CI
 
-# Pre-merge gate: lint and tests must pass on every PR into main (and on main
-# itself). This catches problems at the merge boundary, before release-please
-# and the release/deploy workflows ever see the code.
+# Pre-merge gate: lint and tests must pass on every PR into main. This catches
+# problems at the merge boundary, before release-please and the release/deploy
+# workflows ever see the code. Enforced as required status checks on main, so
+# nothing merges without it.
 on:
   pull_request:
-    branches: [main]
-  push:
     branches: [main]
 
 permissions:
