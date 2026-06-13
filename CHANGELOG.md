@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.96.0](https://github.com/willdady/platypus/compare/v1.95.1...v1.96.0) (2026-06-13)
+
+
+### Features
+
+* **docs:** deploy to Cloudflare Workers via OpenNext + slim README ([#235](https://github.com/willdady/platypus/issues/235)) ([f736ef9](https://github.com/willdady/platypus/commit/f736ef9b2635d9e0a84f7fa633c1f08d2f89a9f3))
+
 ## [1.95.1](https://github.com/willdady/platypus/compare/v1.95.0...v1.95.1) (2026-06-13)
 
 
