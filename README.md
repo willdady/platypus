@@ -13,6 +13,8 @@
 
 Platypus is an open-source, full-stack application designed to help you build AI agents. Built with a focus on extensibility and modern web standards, Platypus allows you to create agents that can reason, use tools, and interact with the world.
 
+📚 **Full documentation lives at [docs.platypus.chat](https://docs.platypus.chat).**
+
 ![](assets/00_screenshot.png)
 
 ## ✨ Key Features
@@ -36,166 +38,41 @@ Platypus is an open-source, full-stack application designed to help you build AI
 
 ![](assets/01_screenshot.png)
 
+## 🚀 Quick Start (Docker)
+
+```bash
+git clone https://github.com/willdady/platypus.git
+cd platypus
+cp .env.example .env   # set BETTER_AUTH_SECRET and your admin credentials
+docker compose up -d   # then open http://localhost:3000
+```
+
+> [!CAUTION]
+> Change the default password after your first login!
+
+For configuration, providers, sandbox infrastructure, and production deployment, see the [Self-Hosting guide](https://docs.platypus.chat/self-hosting).
+
+## 📚 Documentation
+
+The docs site is the single source of truth for setup, concepts, and reference material:
+
+- **[Getting Started](https://docs.platypus.chat/getting-started)** — quick start, first run, and the default admin account.
+- **[Self-Hosting](https://docs.platypus.chat/self-hosting)** — Docker Compose, configuration & environment, providers & auth, and sandbox infrastructure.
+- **[Concepts](https://docs.platypus.chat/concepts)** — the domain model: Organizations, Workspaces, Agents, Skills, MCP, Sandbox, and Memory.
+- **[Building with Platypus](https://docs.platypus.chat/building-with-platypus)** — agents & sub-agents, skills, MCP servers, schedules, boards, and dashboards.
+- **[Reference](https://docs.platypus.chat/reference)** — backend and frontend configuration reference.
+
+Docs track the latest release; older versions are available by checking out the matching git tag.
+
 ## 🏗️ Architecture
 
-Platypus is a monorepo managed by [Turborepo](https://turbo.build/), ensuring a fast and efficient development workflow.
+Platypus is a monorepo managed by [Turborepo](https://turbo.build/):
 
 - **`apps/frontend`**: A responsive web interface built with Next.js, ShadCN, and Tailwind. It uses the AI SDK for real-time streaming responses.
 - **`apps/backend`**: A high-performance REST API built with Hono.js running on Node.js. It handles agent logic, tool execution, and database interactions.
 - **`packages/schemas`**: Shared Zod schemas used by both frontend and backend for end-to-end type safety.
 
-## 🚀 Quick Start (Docker)
-
-The fastest way to get Platypus running is using Docker Compose.
-
-1.  **Clone and configure:**
-
-    ```bash
-    git clone https://github.com/willdady/platypus.git
-    cd platypus
-    cp .env.example .env
-    ```
-
-    Edit `.env` and set `BETTER_AUTH_SECRET` to a secure random string and update the admin credentials. See the comments in `.env.example` for all available options.
-
-2.  **Start the application:**
-
-    ```bash
-    docker compose up -d
-    ```
-
-3.  **Sign in:**
-
-    Navigate to `http://localhost:3000` and sign in with the credentials you configured in `.env`.
-
-> [!CAUTION]
-> Change the default password after your first login!
-
-## 🛠️ Local Development
-
-### Prerequisites
-
-- **Docker** (for the local Postgres database with [pgvector](https://github.com/pgvector/pgvector))
-- **Node.js v24+**
-- **pnpm**
-- An AI Provider API Key (e.g., OpenRouter, OpenAI)
-
-### Setup
-
-1.  **Install dependencies:**
-
-    ```bash
-    pnpm install
-    ```
-
-2.  **Configure Environment:**
-    Create `.env` files for both apps:
-
-    ```bash
-    cp apps/frontend/.env.example apps/frontend/.env
-    cp apps/backend/.env.example apps/backend/.env
-    ```
-
-    Edit `apps/backend/.env` and set the following environment variables:
-    - `BETTER_AUTH_SECRET`: A secure random string (minimum 32 characters).
-    - `ADMIN_EMAIL`: The email address for the initial admin user.
-    - `ADMIN_PASSWORD`: A secure password for the initial admin user.
-    - `TIMEZONE` (optional): IANA timezone name for e.g., "America/New_York", "Europe/London". Defaults to UTC.
-    - `FRONTEND_URL` (optional): The URL of the frontend application, used for generating resource links in tool responses. Defaults to `http://localhost:3001`.
-
-    ```env
-    BETTER_AUTH_SECRET: "your-secure-random-string-here"
-    ADMIN_EMAIL: "admin@example.com"
-    ADMIN_PASSWORD: "your-secure-password-here"
-    TIMEZONE: "UTC"
-    FRONTEND_URL: "http://localhost:3001"
-    ```
-
-3.  **Start Development Server:**
-    This command starts the frontend, backend, and a local Postgres container.
-
-    ```bash
-    pnpm dev
-    ```
-
-4.  **Initialize Database:**
-    Apply the schema to your local database (ensure `pnpm dev` is running first).
-
-    ```bash
-    pnpm drizzle-kit-push
-    ```
-
-5.  **Sign in:**
-    Navigate to `http://localhost:3001` and sign in with the default credentials configured in your `.env` file (`ADMIN_EMAIL` and `ADMIN_PASSWORD`).
-
-## 📱 Accessing from Mobile or Other Devices on Your Network
-
-By default the dev setup is configured for `localhost`-only access. To access Platypus from a phone or another device on your local network, a few extra steps are needed due to how browser cookies work — session cookies set on one host (e.g. `192.168.1.10`) are not sent for a different host (e.g. `localhost`), so you must use the same host for both the frontend and backend consistently.
-
-1. **Find your machine's local IP address** (e.g. `192.168.1.10`).
-
-2. **Update `apps/frontend/.env`:**
-
-   ```env
-   # URL used by the browser to reach the backend — must be your LAN IP
-   BACKEND_URL=http://192.168.1.10:4001
-
-   # URL used by the Next.js server to reach the backend internally (optional but recommended)
-   INTERNAL_BACKEND_URL=http://localhost:4001
-
-   # Allow the Next.js dev server to accept requests from your LAN IP
-   ALLOWED_DEV_ORIGINS=192.168.1.10
-   ```
-
-3. **Update `apps/backend/.env`** to allow requests from both origins:
-
-   ```env
-   ALLOWED_ORIGINS=http://localhost:3001,http://192.168.1.10:3001
-   ```
-
-4. **Access the app via your LAN IP on all devices** — including your desktop browser. Because session cookies are scoped to the host they were set on, you must use `http://192.168.1.10:3001` consistently. Mixing `localhost` and the IP address on the same browser will cause sign-in to silently fail.
-
-## 📦 Storage
-
-Platypus stores file attachments (images, documents, etc.) separately from chat messages to keep the database efficient. When users attach files to messages, the binary data is extracted and stored in a pluggable storage backend, with only a reference stored in the database.
-
-The following variables are configured in your `.env` file (see `.env.example` for defaults).
-
-### Disk Storage (Default)
-
-By default, files are stored on the local filesystem at `./data/files`. This works well for single-server deployments and local development.
-
-```env
-STORAGE_BACKEND=disk
-STORAGE_DISK_PATH=/data/files
-```
-
-### S3-Compatible Storage
-
-For production deployments, you can use any S3-compatible service (AWS S3, MinIO, Cloudflare R2, DigitalOcean Spaces, etc.):
-
-```env
-STORAGE_BACKEND=s3
-STORAGE_S3_BUCKET=my-bucket
-STORAGE_S3_REGION=us-east-1
-STORAGE_S3_ENDPOINT=https://s3.amazonaws.com
-STORAGE_S3_ACCESS_KEY_ID=your-access-key
-STORAGE_S3_SECRET_ACCESS_KEY=your-secret-key
-```
-
-### Direct File Access
-
-For better performance with cloud storage, you can configure a public URL to serve files directly from your storage provider instead of proxying through the backend:
-
-```env
-STORAGE_PUBLIC_URL=https://my-bucket.s3.amazonaws.com
-```
-
-This allows browsers to fetch files directly from S3 (or via CDN) instead of going through the backend `/files` endpoint.
-
-## ⚠️ Known Issues
-
-- When chatting with Google's image generation models (Nano Banana) you MAY get more than one image returned. See https://blog.laozhang.ai/en/posts/temporary-images-nano-banana-bug
+The [Extending guide](https://docs.platypus.chat/extending) covers contribution-facing extension points (sandbox backends, tool sets).
 
 ## 🗺️ Roadmap
 
@@ -206,7 +83,7 @@ lands well.
 
 ## 🤝 Contributing
 
-Contributions are welcome! Please read our [Contributing Guide](CONTRIBUTING.md) for details on branch naming, commit conventions, and how to submit a pull request.
+Contributions are welcome! Please read our [Contributing Guide](CONTRIBUTING.md) for details on local development, branch naming, commit conventions, and how to submit a pull request.
 
 ---
 

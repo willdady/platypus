@@ -9,8 +9,76 @@ Please be respectful and constructive in all interactions. We are committed to p
 ## Getting Started
 
 1. **Fork the repository** and clone your fork locally.
-2. **Set up your development environment** by following the [Local Development](README.md#️-local-development) section in the README.
+2. **Set up your development environment** by following [Local Development](#local-development) below.
 3. **Create a branch** from `main` for your changes (see [Branch Naming](#branch-naming) below).
+
+> Running a Platypus instance (rather than developing it)? See the [Self-Hosting docs](https://docs.platypus.chat/self-hosting) instead.
+
+## Local Development
+
+This is the from-source workflow for contributors. (To simply run Platypus, use the [Docker quick start](README.md#-quick-start-docker).)
+
+### Prerequisites
+
+- **Docker** (for the local Postgres database with [pgvector](https://github.com/pgvector/pgvector))
+- **Node.js v24+**
+- **pnpm**
+- An AI Provider API Key (e.g., OpenRouter, OpenAI)
+
+### Setup
+
+1. **Install dependencies:**
+
+   ```bash
+   pnpm install
+   ```
+
+2. **Configure environment** — create `.env` files for both apps:
+
+   ```bash
+   cp apps/frontend/.env.example apps/frontend/.env
+   cp apps/backend/.env.example apps/backend/.env
+   ```
+
+   In `apps/backend/.env`, set at least:
+   - `BETTER_AUTH_SECRET` — a secure random string (minimum 32 characters).
+   - `ADMIN_EMAIL` / `ADMIN_PASSWORD` — credentials for the initial admin user.
+
+   See the comments in each `.env.example` and the [configuration reference](https://docs.platypus.chat/reference) for all options.
+
+3. **Start the development server** (frontend, backend, and a local Postgres container):
+
+   ```bash
+   pnpm dev
+   ```
+
+4. **Initialize the database** (with `pnpm dev` running):
+
+   ```bash
+   pnpm drizzle-kit-push
+   ```
+
+5. **Sign in** at `http://localhost:3001` using the admin credentials from your `.env`.
+
+### Accessing from other devices on your network
+
+The dev setup is `localhost`-only by default. Session cookies are scoped to the host they were set on, so to reach Platypus from a phone or another machine you must use the **same** host (your LAN IP) consistently for both apps — mixing `localhost` and the IP in one browser silently breaks sign-in.
+
+In `apps/frontend/.env` (replace `192.168.1.10` with your machine's LAN IP):
+
+```env
+BACKEND_URL=http://192.168.1.10:4001
+INTERNAL_BACKEND_URL=http://localhost:4001
+ALLOWED_DEV_ORIGINS=192.168.1.10
+```
+
+In `apps/backend/.env`:
+
+```env
+ALLOWED_ORIGINS=http://localhost:3001,http://192.168.1.10:3001
+```
+
+Then access the app via `http://192.168.1.10:3001` on every device, including your desktop.
 
 ## Branch Naming
 
