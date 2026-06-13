@@ -47,3 +47,24 @@ jobs:
 
       - name: Test
         run: pnpm test
+
+  # Single required status check. Runs always (even when lint/test are skipped
+  # on release PRs), so the required context is always reported. Passes when
+  # both jobs succeeded or were skipped; fails otherwise. Branch protection
+  # requires only this `gate` context — keying it to the reusable `lint` job's
+  # nested name (`lint / lint`) breaks when that job is skipped, since the
+  # context collapses to `lint` and the required check never reports.
+  gate:
+    needs: [lint, test]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify lint & test passed (or were skipped)
+        run: |
+          echo "lint=${{ needs.lint.result }} test=${{ needs.test.result }}"
+          if [[ "${{ needs.lint.result }}" == "failure" || "${{ needs.lint.result }}" == "cancelled" || \
+                "${{ needs.test.result }}" == "failure" || "${{ needs.test.result }}" == "cancelled" ]]; then
+            echo "CI gate failed"
+            exit 1
+          fi
+          echo "CI gate passed"
