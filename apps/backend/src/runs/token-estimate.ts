@@ -48,6 +48,21 @@ export const DEFAULT_NONTEXT_TOKENS = 1200;
 const OPENAI_LOW_DETAIL_TOKENS = 85;
 
 /**
+ * No-dimension fallbacks for providers with a real per-image cost (A2). When the
+ * bytes are absent (hosted http(s) URL — and note `inlineFileUrls` turns every
+ * stored attachment into one) or the header can't be parsed, we have no pixels
+ * to plug into the formula. The flat {@link DEFAULT_NONTEXT_TOKENS} (1200)
+ * under-counts a large image on these providers, defeating "over-count beats
+ * overflow" exactly where it matters. Use a pessimistic value near each
+ * provider's effective per-image ceiling after its own resize:
+ *  - Anthropic resizes to ≤1.15 MP ⇒ ~1600 tokens max.
+ *  - OpenAI high-detail tiling tops out a few thousand; 2000 is a safe ceiling
+ *    for the common ≤2048² case.
+ */
+const ANTHROPIC_NO_DIMS_TOKENS = 1600;
+const OPENAI_HIGH_NO_DIMS_TOKENS = 2000;
+
+/**
  * The provider families with a known image-cost formula. Everything else maps
  * to `"default"` and pays the conservative flat cost.
  */
@@ -96,9 +111,12 @@ function nonTextTokens(part: NonTextPart): number {
 
   if (width == null || height == null) {
     // Dimensions unknown. OpenAI low-detail has a flat cost even without dims;
+    // providers with a real per-image cost get a pessimistic ceiling (A2);
     // everything else falls to the conservative default.
     if (provider === "openai" && detail === "low")
       return OPENAI_LOW_DETAIL_TOKENS;
+    if (provider === "anthropic") return ANTHROPIC_NO_DIMS_TOKENS;
+    if (provider === "openai") return OPENAI_HIGH_NO_DIMS_TOKENS;
     return DEFAULT_NONTEXT_TOKENS;
   }
 

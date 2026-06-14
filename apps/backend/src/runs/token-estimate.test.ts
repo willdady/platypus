@@ -105,11 +105,25 @@ describe("modality table (drift T2 — never char/4 an image)", () => {
     expect(estimateTokens(noDims)).toBe(85);
   });
 
-  it("missing dimensions fall to the conservative default", () => {
-    const units: CountUnit[] = [
+  it("missing dimensions use a pessimistic per-provider ceiling (A2)", () => {
+    // Providers with a real per-image cost would be UNDER-counted by the flat
+    // 1200 default when bytes/dims are unavailable (hosted URL), so they fall to
+    // a pessimistic ceiling near each provider's post-resize max instead.
+    const anthropic: CountUnit[] = [
       { role: "user", text: "", nonText: [{ provider: "anthropic" }] },
     ];
-    expect(estimateTokens(units)).toBe(DEFAULT_NONTEXT_TOKENS);
+    expect(estimateTokens(anthropic)).toBe(1600);
+
+    const openaiHigh: CountUnit[] = [
+      { role: "user", text: "", nonText: [{ provider: "openai" }] },
+    ];
+    expect(estimateTokens(openaiHigh)).toBe(2000);
+
+    // The unknown ("default") provider keeps the conservative flat default.
+    const unknown: CountUnit[] = [
+      { role: "user", text: "", nonText: [{ provider: "default" }] },
+    ];
+    expect(estimateTokens(unknown)).toBe(DEFAULT_NONTEXT_TOKENS);
   });
 
   it("unknown provider falls to the conservative default", () => {

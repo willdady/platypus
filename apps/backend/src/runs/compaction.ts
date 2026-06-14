@@ -932,8 +932,17 @@ export function computeBudget(
   maxOutputTokens: number | undefined,
   config: CompactionConfig,
 ): Budget {
-  const maxOutputReserve =
+  const rawOutputReserve =
     maxOutputTokens ?? Math.min(4096, Math.floor(contextWindow * 0.25));
+  // Cap the output reservation at half the window (A6). litellm's
+  // `max_input_tokens` (which feeds `contextWindow`) is already input-scoped for
+  // some providers, so subtracting a large `max_output_tokens` again can collapse
+  // `inputBudget` toward 1 — making trigger/target ≈ 0 and thrashing. Capping
+  // keeps the (otherwise-safe) over-reservation from degenerating.
+  const maxOutputReserve = Math.min(
+    rawOutputReserve,
+    Math.floor(contextWindow * 0.5),
+  );
   const safetyReserve = Math.floor(config.reserveRatio * contextWindow);
   const inputBudget = Math.max(
     1,
@@ -972,7 +981,13 @@ export function projectTier1Tokens(args: {
 }): number {
   const charBased =
     args.messageTokens + args.priorSummaryTokens + (args.overheadTokens ?? 0);
-  if (args.lastInputTokens == null) {
+  // Treat a non-positive count as "no baseline" (A1): some OpenAI-compatible /
+  // vLLM gateways omit `usage.inputTokens`, which we persist as
+  // `contextTokens = 0`. A bare `== null` check would let that 0 slip through —
+  // skipping the cold-start margin AND no-op-ing the `max()` below — leaving the
+  // raw char/4 projection with no safety buffer on EVERY turn for those
+  // providers. Falling back to the margin keeps the conservative over-count.
+  if (args.lastInputTokens == null || args.lastInputTokens <= 0) {
     return Math.ceil(charBased * COLD_START_MARGIN);
   }
   // Two independent estimates of this turn's payload: `charBased` is a fresh
@@ -1232,6 +1247,13 @@ export async function applyTier1Compaction(
   // recompute (R4 — the wasted summarize is bounded, never corrupting). The
   // version-pinning gate is shared so both write paths decide identically.
   const capturedVersion = state.version;
+  // On a version mismatch we skip as "covered" WITHOUT clearing dirty. Plan T10
+  // says "winner advanced → SKIP + clear-dirty", but that is only safe when the
+  // winner actually compacted. A concurrent invalidateCompaction also advances
+  // the version yet leaves dirty set on purpose (it resets the summary, it does
+  // not shrink history) — clearing dirty here would then drop the forced
+  // compaction the overflow demanded. Leaving dirty set is strictly safe: worst
+  // case is one extra compaction next turn. (Intentional deviation from T10.)
   const pinnedWrite = (patch: WatermarkPatch) =>
     commitWatermark(input.store, input.chatId, (latest) =>
       latest.version === capturedVersion
@@ -1241,6 +1263,15 @@ export async function applyTier1Compaction(
   let commit: CommitResult | undefined;
 
   if (result.usedModelCall) {
+    // Same-basis before/after for the user-visible reduction (B-F7): both are
+    // char/4 message estimates plus the per-turn overhead. The trigger
+    // `projected` mixes in the provider's `lastInputTokens` floor and is NOT
+    // comparable to the message-only post estimate, so reporting it as "before"
+    // overstated the drop. Computed only on the model-call path (the only place
+    // these are reported).
+    const tokensBefore = messageTokens + priorSummaryTokens + overheadTokens;
+    const tokensAfter = result.estimatedTokens + overheadTokens;
+
     commit = await pinnedWrite({
       summary: result.summaryText,
       watermark: result.watermarkId,
@@ -1251,8 +1282,10 @@ export async function applyTier1Compaction(
         metric: "compaction.fired",
         tier: 1,
         chatId: input.chatId,
-        tokensBefore: projected,
-        tokensAfter: result.estimatedTokens,
+        tokensBefore,
+        tokensAfter,
+        // Keep the raw trigger projection for correlation with compaction.check.
+        projected,
         messagesDropped: result.messagesDropped,
       },
       "compaction.fired",
@@ -1260,8 +1293,8 @@ export async function applyTier1Compaction(
     input.onEvent?.({
       type: "context-compacted",
       messagesDropped: result.messagesDropped,
-      tokensBefore: projected,
-      tokensAfter: result.estimatedTokens,
+      tokensBefore,
+      tokensAfter,
     });
   } else if (state.compactionDirty) {
     // Forced by recovery but pruning/within-target sufficed: just clear the flag.

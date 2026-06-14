@@ -3,7 +3,7 @@ import {
   type MCPClient,
 } from "@ai-sdk/mcp";
 import { openProvider } from "./provider.ts";
-import { and, eq, or, inArray } from "drizzle-orm";
+import { and, eq, or, inArray, sql } from "drizzle-orm";
 import { db } from "../index.ts";
 import {
   agent as agentTable,
@@ -523,6 +523,28 @@ export async function loadChatMessages(
 }
 
 /**
+ * Newest-first scan for the last assistant message carrying a POSITIVE
+ * provider-reported `contextTokens` (the §H stat). Skips two messages that would
+ * otherwise shadow the real baseline:
+ *  - the §J standalone trace message (assistant role, no `metadata.stats`) — C2;
+ *  - a turn from a usage-less provider stamped `contextTokens = 0` — A1.
+ * Either would make the Tier 1 projection drop the corrective baseline (and, for
+ * the 0 case, the cold-start margin too).
+ */
+function findLastInputTokens(
+  messages: PlatypusUIMessage[],
+): number | undefined {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    if (messages[i].role !== "assistant") continue;
+    const ct = (
+      messages[i].metadata as { stats?: { contextTokens?: number } } | undefined
+    )?.stats?.contextTokens;
+    if (typeof ct === "number" && ct > 0) return ct;
+  }
+  return undefined;
+}
+
+/**
  * Everything the compaction machinery needs that is resolved once per turn:
  * the budget (from the resolved context window), the effective config, the
  * summarizer, and the summarizer's own window (drift M1). Shared by Tier 1
@@ -582,36 +604,103 @@ export async function buildCompactionRuntime(args: {
   // unchanged. Intended for tuning the trigger on test deployments without a
   // code change. Keep targetRatio < triggerRatio or compaction re-fires every
   // turn (the thrash trap).
-  const numEnv = (raw: string | undefined): number | undefined => {
+  // Reads + RANGE-VALIDATES a numeric env override (A3/B-F1). An out-of-range or
+  // non-finite value is rejected (warn + fall back to the default) rather than
+  // silently applied: the old `Number.isFinite`-only check let `0` and negatives
+  // through, so `COMPACTION_KEEP_RECENT=0` summarized the current message away
+  // and `COMPACTION_TRIGGER_RATIO=0` fired on empty chats.
+  const numEnv = (
+    name: string,
+    raw: string | undefined,
+    opts: { min?: number; max?: number; integer?: boolean } = {},
+  ): number | undefined => {
     if (raw == null || raw === "") return undefined;
-    const n = Number(raw);
-    return Number.isFinite(n) ? n : undefined;
+    let n = Number(raw);
+    let invalid = !Number.isFinite(n);
+    if (!invalid && opts.integer) n = Math.floor(n);
+    if (!invalid && opts.min !== undefined && n < opts.min) invalid = true;
+    if (!invalid && opts.max !== undefined && n > opts.max) invalid = true;
+    if (invalid) {
+      logger.warn(
+        { env: name, raw, ...opts },
+        "ignoring out-of-range compaction env override; using default",
+      );
+      return undefined;
+    }
+    return n;
   };
+  const RATIO = { min: 0.01, max: 1 };
   config.triggerRatio =
-    numEnv(process.env.COMPACTION_TRIGGER_RATIO) ?? config.triggerRatio;
+    numEnv(
+      "COMPACTION_TRIGGER_RATIO",
+      process.env.COMPACTION_TRIGGER_RATIO,
+      RATIO,
+    ) ?? config.triggerRatio;
   config.targetRatio =
-    numEnv(process.env.COMPACTION_TARGET_RATIO) ?? config.targetRatio;
+    numEnv(
+      "COMPACTION_TARGET_RATIO",
+      process.env.COMPACTION_TARGET_RATIO,
+      RATIO,
+    ) ?? config.targetRatio;
   config.reserveRatio =
-    numEnv(process.env.COMPACTION_RESERVE_RATIO) ?? config.reserveRatio;
+    numEnv("COMPACTION_RESERVE_RATIO", process.env.COMPACTION_RESERVE_RATIO, {
+      min: 0,
+      max: 0.9,
+    }) ?? config.reserveRatio;
   config.keepRecentMessages =
-    numEnv(process.env.COMPACTION_KEEP_RECENT) ?? config.keepRecentMessages;
+    numEnv("COMPACTION_KEEP_RECENT", process.env.COMPACTION_KEEP_RECENT, {
+      min: 1,
+      integer: true,
+    }) ?? config.keepRecentMessages;
   config.minPrunableChars =
-    numEnv(process.env.COMPACTION_MIN_PRUNABLE_CHARS) ??
-    config.minPrunableChars;
+    numEnv(
+      "COMPACTION_MIN_PRUNABLE_CHARS",
+      process.env.COMPACTION_MIN_PRUNABLE_CHARS,
+      {
+        min: 1,
+        integer: true,
+      },
+    ) ?? config.minPrunableChars;
   config.minRecentPrunableChars =
-    numEnv(process.env.COMPACTION_MIN_RECENT_PRUNABLE_CHARS) ??
-    config.minRecentPrunableChars;
+    numEnv(
+      "COMPACTION_MIN_RECENT_PRUNABLE_CHARS",
+      process.env.COMPACTION_MIN_RECENT_PRUNABLE_CHARS,
+      { min: 1, integer: true },
+    ) ?? config.minRecentPrunableChars;
   // Stage 0 context editing (Chunk 14 Task 2). Disabled via
   // COMPACTION_CONTEXT_EDITING_ENABLED=false; recency/size gates tunable.
   if (process.env.COMPACTION_CONTEXT_EDITING_ENABLED === "false") {
     config.contextEditingEnabled = false;
   }
   config.keepRecentToolResults =
-    numEnv(process.env.COMPACTION_KEEP_RECENT_TOOL_RESULTS) ??
-    config.keepRecentToolResults;
+    numEnv(
+      "COMPACTION_KEEP_RECENT_TOOL_RESULTS",
+      process.env.COMPACTION_KEEP_RECENT_TOOL_RESULTS,
+      { min: 0, integer: true },
+    ) ?? config.keepRecentToolResults;
   config.minEditableToolChars =
-    numEnv(process.env.COMPACTION_MIN_EDITABLE_TOOL_CHARS) ??
-    config.minEditableToolChars;
+    numEnv(
+      "COMPACTION_MIN_EDITABLE_TOOL_CHARS",
+      process.env.COMPACTION_MIN_EDITABLE_TOOL_CHARS,
+      { min: 1, integer: true },
+    ) ?? config.minEditableToolChars;
+
+  // Hysteresis backstop (C2 / B-F1): target must stay below trigger or
+  // compaction re-fires every turn. The chunk-9 runtime clamp was lost when
+  // chunk-12 deleted resolveCompactionConfig; restore it here so an operator who
+  // sets COMPACTION_TARGET_RATIO >= COMPACTION_TRIGGER_RATIO still runs safely.
+  if (config.targetRatio >= config.triggerRatio) {
+    const clamped = config.triggerRatio * 0.9;
+    logger.warn(
+      {
+        targetRatio: config.targetRatio,
+        triggerRatio: config.triggerRatio,
+        clamped,
+      },
+      "COMPACTION_TARGET_RATIO >= COMPACTION_TRIGGER_RATIO; clamping target to triggerRatio*0.9 (C2 hysteresis)",
+    );
+    config.targetRatio = clamped;
+  }
 
   // RV7d: resolve both windows concurrently (they are independent).
   const taskModelId = provider.taskModelId || resolvedModelId;
@@ -986,15 +1075,10 @@ export const prepareChatTurn = async (
         // Pre-overwrite baseline threaded from agent-runner (RV1).
         priorMessages: input.priorMessages,
         overheadTokens,
-        // Prior turn's provider-reported input token count (C1 / §H): the last
-        // assistant message carries metadata.stats.contextTokens (stamped by
-        // applyMessageStats) — the corrective baseline for the Tier 1 trigger
-        // projection on turns ≥ 2. Absent on turn 1 → cold-start margin applies.
-        lastInputTokens: (
-          messages.findLast((m) => m.role === "assistant")?.metadata as
-            | { stats?: { contextTokens?: number } }
-            | undefined
-        )?.stats?.contextTokens,
+        // Prior turn's provider-reported input token count (C1 / §H): the
+        // corrective baseline for the Tier 1 trigger projection on turns ≥ 2.
+        // Absent on turn 1 → cold-start margin applies.
+        lastInputTokens: findLastInputTokens(messages),
       })
     : { messages: inlinedMessages };
   const compactedMessages = tier1Result.messages;
@@ -1429,6 +1513,10 @@ const loadSubAgents = async (
     string,
     import("ai").PrepareStepFunction
   >();
+  // Per-sub-agent overflow recovery (C1/B-F3). Built ALWAYS — recovery (P4) is
+  // the net even when the §G kill switch disables proactive compaction, exactly
+  // as on the main path. Tier 2 (below) is the only part gated by the switch.
+  const subAgentRecoveries = new Map<string, RecoveryContext>();
   await Promise.all(
     subAgentRecords.map(async (sa) => {
       try {
@@ -1440,6 +1528,17 @@ const loadSubAgents = async (
           provider: resolved.provider,
           resolvedModelId: sa.modelId,
           opened: resolved.opened,
+        });
+        // Recovery net first (not gated by compactionEnabled). No markDirty —
+        // sub-agents have no durable chat row to flag.
+        subAgentRecoveries.set(sa.id, {
+          chatId: sa.id,
+          imageProvider: runtime.imageProvider,
+          targetTokens: Math.max(0, runtime.budget.targetTokens),
+          keepRecentMessages: runtime.config.keepRecentMessages,
+          minPrunableChars: runtime.config.minPrunableChars,
+          summarize: runtime.summarize,
+          summarizerWindow: runtime.summarizerWindow,
         });
         if (!runtime.config.compactionEnabled) return;
         const tier2: Tier2Context = {
@@ -1486,6 +1585,7 @@ const loadSubAgents = async (
     },
     onProgress,
     (id) => subAgentPrepareSteps.get(id),
+    (id) => subAgentRecoveries.get(id),
   );
 
   return { subAgents, subAgentTools, subAgentMcpClients };
@@ -1610,9 +1710,17 @@ export async function forceCompactChat(
       result.compactionTrace,
       createIdGenerator({ prefix: "msg", size: 16 })(),
     );
+    // Atomic jsonb append (A4/B-F8): concatenate at the DB rather than overwrite
+    // the whole column from the in-memory `messages` snapshot loaded earlier.
+    // The route guards with runRegistry.has(chatId), but a run that registers in
+    // the has()→write window — or a second concurrent POST /compact — would
+    // otherwise be clobbered by this stale array. `||` appends to whatever is
+    // stored now, so no concurrently-written messages are lost.
     await db
       .update(chatTable)
-      .set({ messages: [...messages, traceMessage] })
+      .set({
+        messages: sql`coalesce(${chatTable.messages}, '[]'::jsonb) || ${JSON.stringify([traceMessage])}::jsonb`,
+      })
       .where(
         and(eq(chatTable.id, chatId), eq(chatTable.workspaceId, workspaceId)),
       );

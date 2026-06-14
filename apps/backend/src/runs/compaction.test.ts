@@ -659,6 +659,14 @@ describe("computeBudget (drift C3 — subtract both reserves)", () => {
     const b = computeBudget(10000, undefined, cfg({ reserveRatio: 0.05 }));
     expect(b.inputBudget).toBe(7000); // 10000 - min(4096, 2500) - 500
   });
+
+  it("caps the output reserve at half the window so inputBudget can't collapse (A6)", () => {
+    // A bogus registry entry where max_output >= the input-scoped window would
+    // otherwise drive inputBudget toward 1 and thrash. The cap keeps it sane.
+    const b = computeBudget(10000, 20000, cfg({ reserveRatio: 0.05 }));
+    // reserve capped at 5000 (half), safety 500 → 10000 - 5000 - 500 = 4500.
+    expect(b.inputBudget).toBe(4500);
+  });
 });
 
 const bigText = (id: string, role: "user" | "assistant") =>
@@ -1000,6 +1008,18 @@ describe("projectTier1Tokens (drift C1/M2)", () => {
         lastInputTokens: 50,
       }),
     ).toBe(100);
+  });
+
+  it("treats a 0 provider count as no baseline and keeps the margin (A1)", () => {
+    // Usage-less providers persist contextTokens=0; a bare `== null` check would
+    // skip the margin AND no-op the max(), leaving the raw char/4 with no buffer.
+    expect(
+      projectTier1Tokens({
+        messageTokens: 100,
+        priorSummaryTokens: 0,
+        lastInputTokens: 0,
+      }),
+    ).toBe(Math.ceil(100 * COLD_START_MARGIN));
   });
 });
 
