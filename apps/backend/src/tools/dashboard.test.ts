@@ -5,9 +5,6 @@ import { createDashboardTools } from "./dashboard.ts";
 
 const ctx = { toolCallId: "test", messages: [] };
 const workspaceId = "ws-1";
-const agentId = "agent-1";
-const orgId = "org-1";
-const frontendUrl = "http://localhost:3000";
 const dashboardId = "dash-1";
 const widgetId = "widget-1";
 
@@ -17,7 +14,7 @@ describe("createDashboardTools", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     resetMockDb();
-    tools = createDashboardTools(workspaceId, agentId, orgId, frontendUrl);
+    tools = createDashboardTools(workspaceId);
   });
 
   it("returns the expected tool names", () => {

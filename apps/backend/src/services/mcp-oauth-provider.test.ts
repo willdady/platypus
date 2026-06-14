@@ -45,7 +45,7 @@ describe("mcp-oauth-provider", () => {
         id: "mcp-1",
         url: "http://mcp.example.com",
         authType: "None",
-      } as McpRecord;
+      } as unknown as McpRecord;
 
       const config = buildMcpTransportConfig(mcp);
       expect(config).toEqual({
@@ -62,7 +62,7 @@ describe("mcp-oauth-provider", () => {
         url: "http://mcp.example.com",
         authType: "Bearer",
         bearerToken: "my-secret-token",
-      } as McpRecord;
+      } as unknown as McpRecord;
 
       const config = buildMcpTransportConfig(mcp);
       expect(config).toEqual({
@@ -80,7 +80,7 @@ describe("mcp-oauth-provider", () => {
         url: "http://mcp.example.com",
         authType: "OAuth",
         oauthAccessToken: "access-token-123",
-      } as McpRecord;
+      } as unknown as McpRecord;
 
       const config = buildMcpTransportConfig(mcp);
       expect(config.type).toBe("http");
@@ -96,7 +96,7 @@ describe("mcp-oauth-provider", () => {
         url: "http://mcp.example.com",
         authType: "None",
         headers: { "X-Custom": "value", "X-Another": "test" },
-      } as McpRecord;
+      } as unknown as McpRecord;
 
       const config = buildMcpTransportConfig(mcp);
       expect(config).toEqual({
@@ -118,7 +118,7 @@ describe("mcp-oauth-provider", () => {
           "X-Custom": "value",
           Authorization: "should-be-overridden",
         },
-      } as McpRecord;
+      } as unknown as McpRecord;
 
       const config = buildMcpTransportConfig(mcp);
       expect(config).toEqual({
@@ -139,7 +139,7 @@ describe("mcp-oauth-provider", () => {
         url: "http://mcp.example.com",
         authType: "None",
         headers: undefined,
-      } as McpRecord;
+      } as unknown as McpRecord;
 
       const config = buildMcpTransportConfig(mcp);
       expect(config).toEqual({
@@ -157,7 +157,7 @@ describe("mcp-oauth-provider", () => {
         url: "http://mcp.example.com",
         authType: "None",
         headers: {},
-      } as McpRecord;
+      } as unknown as McpRecord;
 
       const config = buildMcpTransportConfig(mcp);
       expect(config).toEqual({
@@ -175,7 +175,7 @@ describe("mcp-oauth-provider", () => {
         url: "http://mcp.example.com",
         authType: "OAuth",
         oauthAccessToken: null,
-      } as McpRecord;
+      } as unknown as McpRecord;
 
       const config = buildMcpTransportConfig(mcp);
       expect(config.authProvider).toBeUndefined();

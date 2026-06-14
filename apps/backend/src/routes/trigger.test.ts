@@ -266,7 +266,7 @@ describe("Trigger Routes", () => {
         headers: { "Content-Type": "application/json" },
       });
       expect(res.status).toBe(200);
-      const setArg = mockDb.set.mock.calls[0][0];
+      const setArg = mockDb.set.mock.calls[0][0] as Record<string, unknown>;
       expect(setArg.nextRunAt).toBeNull();
     });
   });

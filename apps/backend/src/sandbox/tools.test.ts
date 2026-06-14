@@ -14,7 +14,7 @@ function callExecute(
 ): Promise<unknown> {
   const fn = tools[name]?.execute as TypedExecute | undefined;
   if (!fn) throw new Error(`tool "${name}" has no execute function`);
-  return Promise.resolve(fn(input, {}));
+  return Promise.resolve(fn(input, { toolCallId: "test", messages: [] }));
 }
 
 const ctx: SandboxContext = {

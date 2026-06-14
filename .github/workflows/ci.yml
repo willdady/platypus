@@ -47,22 +47,49 @@ jobs:
       - name: Test
         run: pnpm test
 
-  # Single required status check. Runs always (even when lint/test are skipped
-  # on release PRs), so the required context is always reported. Passes when
-  # both jobs succeeded or were skipped; fails otherwise. Branch protection
+  # Source-level type gate (`tsc --noEmit`). ESLint does not surface type errors,
+  # so without this a strict-tsconfig violation can land on main unnoticed
+  # (see #233). Currently covers @platypus/backend; other packages join by
+  # adding their own `typecheck` script.
+  typecheck:
+    if: ${{ !startsWith(github.head_ref, 'release-please--') }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+  # Single required status check. Runs always (even when the upstream jobs are
+  # skipped on release PRs), so the required context is always reported. Passes
+  # when every job succeeded or was skipped; fails otherwise. Branch protection
   # requires only this `gate` context — keying it to the reusable `lint` job's
   # nested name (`lint / lint`) breaks when that job is skipped, since the
   # context collapses to `lint` and the required check never reports.
   gate:
-    needs: [lint, test]
+    needs: [lint, test, typecheck]
     if: always()
     runs-on: ubuntu-latest
     steps:
-      - name: Verify lint & test passed (or were skipped)
+      - name: Verify lint, typecheck & test passed (or were skipped)
         run: |
-          echo "lint=${{ needs.lint.result }} test=${{ needs.test.result }}"
+          echo "lint=${{ needs.lint.result }} test=${{ needs.test.result }} typecheck=${{ needs.typecheck.result }}"
           if [[ "${{ needs.lint.result }}" == "failure" || "${{ needs.lint.result }}" == "cancelled" || \
-                "${{ needs.test.result }}" == "failure" || "${{ needs.test.result }}" == "cancelled" ]]; then
+                "${{ needs.test.result }}" == "failure" || "${{ needs.test.result }}" == "cancelled" || \
+                "${{ needs.typecheck.result }}" == "failure" || "${{ needs.typecheck.result }}" == "cancelled" ]]; then
             echo "CI gate failed"
             exit 1
           fi
