@@ -1,0 +1,48 @@
+name: Deploy Website
+
+on:
+  # The marketing site changes rarely and is decoupled from releases, so deploy
+  # on pushes to main that touch apps/website only (recursive `**` — `*` would
+  # miss nested files). `workflow_dispatch` allows manual re-deploys.
+  push:
+    branches: [main]
+    paths:
+      - "apps/website/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-website
+  cancel-in-progress: true
+
+jobs:
+  # Gate: lint must pass before the website is built and deployed.
+  lint:
+    uses: ./.github/workflows/lint.yml
+
+  deploy-website:
+    needs: lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build and deploy to Cloudflare
+        run: pnpm website-deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}

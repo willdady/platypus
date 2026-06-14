@@ -330,7 +330,7 @@ describe("Chat Routes", () => {
         method: "POST",
       });
       expect(res.status).toBe(200);
-      const body = await res.json();
+      const body = (await res.json()) as Record<string, unknown>;
       expect(body.message).toMatch(/cancel/i);
     });
 

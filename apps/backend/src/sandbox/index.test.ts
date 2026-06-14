@@ -8,18 +8,20 @@ import {
 import type { SandboxBackend, SandboxBackendRegistration } from "./types.ts";
 
 const stubBackend: SandboxBackend = {
-  shellExec: async () => ({
-    stdout: "",
-    stderr: "",
-    exitCode: 0,
-    truncated: false,
-    durationMs: 0,
-  }),
-  fsRead: async () => ({ content: "", lineCount: 0, truncated: false }),
-  fsWrite: async () => ({ bytesWritten: 0 }),
-  fsEdit: async () => ({ replacements: 1 }),
-  fsList: async () => ({ entries: [], truncated: false }),
-  destroy: async () => {},
+  shellExec: () =>
+    Promise.resolve({
+      stdout: "",
+      stderr: "",
+      exitCode: 0,
+      truncated: false,
+      durationMs: 0,
+    }),
+  fsRead: () =>
+    Promise.resolve({ content: "", lineCount: 0, truncated: false }),
+  fsWrite: () => Promise.resolve({ bytesWritten: 0 }),
+  fsEdit: () => Promise.resolve({ replacements: 1 }),
+  fsList: () => Promise.resolve({ entries: [], truncated: false }),
+  destroy: () => Promise.resolve(),
 };
 
 const makeRegistration = (

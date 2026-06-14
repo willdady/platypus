@@ -748,7 +748,7 @@ export class AgentRunner {
         let status: RunStatus = "succeeded";
         let err: Error | undefined;
         if (handle.signal.aborted) {
-          const reason = handle.signal.reason;
+          const reason: unknown = handle.signal.reason;
           if (reason instanceof TimeoutError) {
             status = "failed";
             err = reason;
@@ -848,7 +848,12 @@ export class AgentRunner {
  */
 const withOverflowRecovery = (turn: ChatTurn): LanguageModel =>
   wrapLanguageModel({
-    model: turn.stream.model,
+    // turn.stream.model is typed `LanguageModel` (string | model spec); at this
+    // point it is always a resolved model object, never a string id — narrow to
+    // the spec form wrapLanguageModel requires.
+    model: turn.stream.model as Parameters<
+      typeof wrapLanguageModel
+    >[0]["model"],
     middleware: contextOverflowRecoveryMiddleware(turn.recovery),
   });
 

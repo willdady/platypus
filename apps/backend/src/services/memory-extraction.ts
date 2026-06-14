@@ -148,14 +148,15 @@ const processChat = async (
       prompt: summaryPrompt,
       temperature: 0.3,
     });
-  } catch (error: any) {
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
     logger.error(
       {
         err: error,
         chatId: chat.id,
         modelId: extractionProvider.memoryExtractionModelId,
       },
-      `Memory summary extraction LLM call failed: ${error.message ?? error}`,
+      `Memory summary extraction LLM call failed: ${message}`,
     );
     await updateChatExtractionStatus(chat.id, "failed");
     return;
@@ -178,10 +179,11 @@ const processChat = async (
         embeddingProvider.embeddingModelId,
         updatedSummary,
       );
-    } catch (error: any) {
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
       logger.error(
         { err: error, chatId: chat.id },
-        `Failed to generate embedding for daily summary: ${error.message ?? error}`,
+        `Failed to generate embedding for daily summary: ${message}`,
       );
     }
   }

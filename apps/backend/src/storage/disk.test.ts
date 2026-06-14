@@ -33,7 +33,7 @@ describe("DiskStorage", () => {
       expect(fileContent.toString()).toBe("test file content");
 
       const metaContent = await fs.readFile(metaPath, "utf-8");
-      const meta = JSON.parse(metaContent);
+      const meta = JSON.parse(metaContent) as { contentType: string };
       expect(meta.contentType).toBe("image/png");
     });
 

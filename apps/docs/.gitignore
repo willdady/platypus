@@ -3,10 +3,15 @@
 
 # next.js
 /.next/
-/out/
 
-# pagefind search index (generated into the static export)
-/out/_pagefind/
+# pagefind search index (generated into public/ at build time)
+/public/_pagefind/
+
+# opennext / cloudflare workers
+/.open-next/
+/.wrangler/
+.dev.vars
+cloudflare-env.d.ts
 
 # production
 /build

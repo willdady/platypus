@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from "vitest";
 import { mockDb, resetMockDb } from "../test-utils.ts";
+import type { McpRecord } from "./mcp-oauth-provider.ts";
 
 describe("mcp-oauth-provider", () => {
   beforeEach(() => {
@@ -44,7 +45,7 @@ describe("mcp-oauth-provider", () => {
         id: "mcp-1",
         url: "http://mcp.example.com",
         authType: "None",
-      } as any;
+      } as unknown as McpRecord;
 
       const config = buildMcpTransportConfig(mcp);
       expect(config).toEqual({
@@ -61,7 +62,7 @@ describe("mcp-oauth-provider", () => {
         url: "http://mcp.example.com",
         authType: "Bearer",
         bearerToken: "my-secret-token",
-      } as any;
+      } as unknown as McpRecord;
 
       const config = buildMcpTransportConfig(mcp);
       expect(config).toEqual({
@@ -79,7 +80,7 @@ describe("mcp-oauth-provider", () => {
         url: "http://mcp.example.com",
         authType: "OAuth",
         oauthAccessToken: "access-token-123",
-      } as any;
+      } as unknown as McpRecord;
 
       const config = buildMcpTransportConfig(mcp);
       expect(config.type).toBe("http");
@@ -95,7 +96,7 @@ describe("mcp-oauth-provider", () => {
         url: "http://mcp.example.com",
         authType: "None",
         headers: { "X-Custom": "value", "X-Another": "test" },
-      } as any;
+      } as unknown as McpRecord;
 
       const config = buildMcpTransportConfig(mcp);
       expect(config).toEqual({
@@ -117,7 +118,7 @@ describe("mcp-oauth-provider", () => {
           "X-Custom": "value",
           Authorization: "should-be-overridden",
         },
-      } as any;
+      } as unknown as McpRecord;
 
       const config = buildMcpTransportConfig(mcp);
       expect(config).toEqual({
@@ -138,7 +139,7 @@ describe("mcp-oauth-provider", () => {
         url: "http://mcp.example.com",
         authType: "None",
         headers: undefined,
-      } as any;
+      } as unknown as McpRecord;
 
       const config = buildMcpTransportConfig(mcp);
       expect(config).toEqual({
@@ -156,7 +157,7 @@ describe("mcp-oauth-provider", () => {
         url: "http://mcp.example.com",
         authType: "None",
         headers: {},
-      } as any;
+      } as unknown as McpRecord;
 
       const config = buildMcpTransportConfig(mcp);
       expect(config).toEqual({
@@ -174,7 +175,7 @@ describe("mcp-oauth-provider", () => {
         url: "http://mcp.example.com",
         authType: "OAuth",
         oauthAccessToken: null,
-      } as any;
+      } as unknown as McpRecord;
 
       const config = buildMcpTransportConfig(mcp);
       expect(config.authProvider).toBeUndefined();
@@ -219,7 +220,7 @@ describe("mcp-oauth-provider", () => {
       const { DatabaseOAuthClientProvider } =
         await import("./mcp-oauth-provider.ts");
       const provider = new DatabaseOAuthClientProvider(
-        { id: "mcp-1" } as any,
+        { id: "mcp-1" } as McpRecord,
         "http://localhost:3001/oauth/mcp/callback",
       );
       expect(provider.redirectUrl).toBe(
@@ -232,7 +233,7 @@ describe("mcp-oauth-provider", () => {
         await import("./mcp-oauth-provider.ts");
       const callbackUrl = "http://localhost:3001/oauth/mcp/callback";
       const provider = new DatabaseOAuthClientProvider(
-        { id: "mcp-1" } as any,
+        { id: "mcp-1" } as McpRecord,
         callbackUrl,
       );
       expect(provider.clientMetadata).toEqual({
@@ -250,7 +251,7 @@ describe("mcp-oauth-provider", () => {
         {
           id: "mcp-1",
           oauthRequestedScope: "https://www.googleapis.com/auth/calendar",
-        } as any,
+        } as McpRecord,
         callbackUrl,
       );
       expect(provider.clientMetadata).toEqual({
@@ -265,7 +266,7 @@ describe("mcp-oauth-provider", () => {
       const { DatabaseOAuthClientProvider } =
         await import("./mcp-oauth-provider.ts");
       const provider = new DatabaseOAuthClientProvider(
-        { id: "mcp-1" } as any,
+        { id: "mcp-1" } as McpRecord,
         "http://localhost:3001/oauth/mcp/callback",
       );
 
@@ -278,7 +279,7 @@ describe("mcp-oauth-provider", () => {
       const { DatabaseOAuthClientProvider } =
         await import("./mcp-oauth-provider.ts");
       const provider = new DatabaseOAuthClientProvider(
-        { id: "mcp-1" } as any,
+        { id: "mcp-1" } as McpRecord,
         "http://localhost:3001/oauth/mcp/callback",
       );
 
@@ -306,7 +307,7 @@ describe("mcp-oauth-provider", () => {
       const { DatabaseOAuthClientProvider } =
         await import("./mcp-oauth-provider.ts");
       const provider = new DatabaseOAuthClientProvider(
-        { id: "mcp-1" } as any,
+        { id: "mcp-1" } as McpRecord,
         "http://localhost:3001/oauth/mcp/callback",
       );
 
@@ -334,7 +335,7 @@ describe("mcp-oauth-provider", () => {
       const { DatabaseOAuthClientProvider } =
         await import("./mcp-oauth-provider.ts");
       const provider = new DatabaseOAuthClientProvider(
-        { id: "mcp-1" } as any,
+        { id: "mcp-1" } as McpRecord,
         "http://localhost:3001/oauth/mcp/callback",
       );
 
@@ -356,7 +357,7 @@ describe("mcp-oauth-provider", () => {
       const { DatabaseOAuthClientProvider } =
         await import("./mcp-oauth-provider.ts");
       const provider = new DatabaseOAuthClientProvider(
-        { id: "mcp-1" } as any,
+        { id: "mcp-1" } as McpRecord,
         "http://localhost:3001/oauth/mcp/callback",
       );
 
@@ -369,7 +370,7 @@ describe("mcp-oauth-provider", () => {
       const { DatabaseOAuthClientProvider } =
         await import("./mcp-oauth-provider.ts");
       const provider = new DatabaseOAuthClientProvider(
-        { id: "mcp-1" } as any,
+        { id: "mcp-1" } as McpRecord,
         "http://localhost:3001/oauth/mcp/callback",
       );
 
@@ -393,12 +394,12 @@ describe("mcp-oauth-provider", () => {
       const { DatabaseOAuthClientProvider } =
         await import("./mcp-oauth-provider.ts");
       const provider = new DatabaseOAuthClientProvider(
-        { id: "mcp-1" } as any,
+        { id: "mcp-1" } as McpRecord,
         "http://localhost:3001/oauth/mcp/callback",
       );
 
       const authUrl = new URL("https://auth.example.com/authorize?foo=bar");
-      await provider.redirectToAuthorization(authUrl);
+      provider.redirectToAuthorization(authUrl);
       expect(provider.getPendingAuthUrl()).toEqual(authUrl);
     });
 
@@ -406,7 +407,7 @@ describe("mcp-oauth-provider", () => {
       const { DatabaseOAuthClientProvider } =
         await import("./mcp-oauth-provider.ts");
       const provider = new DatabaseOAuthClientProvider(
-        { id: "mcp-1" } as any,
+        { id: "mcp-1" } as McpRecord,
         "http://localhost:3001/oauth/mcp/callback",
       );
       expect(provider.getPendingAuthUrl()).toBeUndefined();
@@ -416,14 +417,14 @@ describe("mcp-oauth-provider", () => {
       const { DatabaseOAuthClientProvider } =
         await import("./mcp-oauth-provider.ts");
       const provider = new DatabaseOAuthClientProvider(
-        { id: "mcp-1" } as any,
+        { id: "mcp-1" } as McpRecord,
         "http://localhost:3001/oauth/mcp/callback",
       );
 
-      const state = await provider.state();
+      const state = provider.state();
       expect(state).toBeTruthy();
       // Should return the same state on subsequent calls
-      const state2 = await provider.state();
+      const state2 = provider.state();
       expect(state2).toBe(state);
     });
 
@@ -431,7 +432,7 @@ describe("mcp-oauth-provider", () => {
       const { DatabaseOAuthClientProvider } =
         await import("./mcp-oauth-provider.ts");
       const provider = new DatabaseOAuthClientProvider(
-        { id: "mcp-1" } as any,
+        { id: "mcp-1" } as McpRecord,
         "http://localhost:3001/oauth/mcp/callback",
       );
 
@@ -452,7 +453,7 @@ describe("mcp-oauth-provider", () => {
       const { DatabaseOAuthClientProvider } =
         await import("./mcp-oauth-provider.ts");
       const provider = new DatabaseOAuthClientProvider(
-        { id: "mcp-1" } as any,
+        { id: "mcp-1" } as McpRecord,
         "http://localhost:3001/oauth/mcp/callback",
       );
 
@@ -469,7 +470,7 @@ describe("mcp-oauth-provider", () => {
       const { DatabaseOAuthClientProvider } =
         await import("./mcp-oauth-provider.ts");
       const provider = new DatabaseOAuthClientProvider(
-        { id: "mcp-1" } as any,
+        { id: "mcp-1" } as McpRecord,
         "http://localhost:3001/oauth/mcp/callback",
       );
 
@@ -482,13 +483,13 @@ describe("mcp-oauth-provider", () => {
       const { DatabaseOAuthClientProvider } =
         await import("./mcp-oauth-provider.ts");
       const provider = new DatabaseOAuthClientProvider(
-        { id: "mcp-1" } as any,
+        { id: "mcp-1" } as McpRecord,
         "http://localhost:3001/oauth/mcp/callback",
       );
 
-      expect(await provider.storedState()).toBeUndefined();
+      expect(provider.storedState()).toBeUndefined();
       provider.setStateForLookup("state-456");
-      expect(await provider.storedState()).toBe("state-456");
+      expect(provider.storedState()).toBe("state-456");
     });
   });
 });

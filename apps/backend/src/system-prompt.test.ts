@@ -3,6 +3,10 @@ import {
   renderSystemPrompt,
   type SystemPromptContext,
 } from "./system-prompt.ts";
+import type { agent as agentTable } from "./db/schema.ts";
+import type { MemorySummary } from "./services/memory-retrieval.ts";
+
+type AgentRecord = typeof agentTable.$inferSelect;
 
 const baseCtx = (): SystemPromptContext => ({
   workspace: { id: "ws-1" },
@@ -19,43 +23,45 @@ const agentRecord = (
     systemPrompt: string | null;
     toolSetIds: string[] | null;
   }> = {},
-) =>
-  ({
-    id: "agent-1",
-    workspaceId: "ws-1",
-    providerId: "p-1",
-    name: "Helper",
-    description: "test",
-    systemPrompt: null,
-    modelId: "gpt-4",
-    maxSteps: null,
-    temperature: null,
-    topP: null,
-    topK: null,
-    seed: null,
-    presencePenalty: null,
-    frequencyPenalty: null,
-    toolSetIds: null,
-    skillIds: null,
-    subAgentIds: null,
-    inputPlaceholder: null,
-    avatarUrl: null,
-    createdAt: new Date(),
-    updatedAt: new Date(),
-    ...overrides,
-  }) as any;
+): AgentRecord => ({
+  id: "agent-1",
+  organizationId: null,
+  workspaceId: "ws-1",
+  providerId: "p-1",
+  name: "Helper",
+  description: "test",
+  systemPrompt: null,
+  modelId: "gpt-4",
+  maxSteps: null,
+  temperature: null,
+  topP: null,
+  topK: null,
+  seed: null,
+  presencePenalty: null,
+  frequencyPenalty: null,
+  toolSetIds: null,
+  skillIds: null,
+  subAgentIds: null,
+  inputPlaceholder: null,
+  avatarKey: null,
+  createdAt: new Date(),
+  updatedAt: new Date(),
+  ...overrides,
+});
 
-const memorySummary = (summary: string, summaryDate = "2026-04-01") =>
-  ({
-    id: "mem-1",
-    userId: "user-1",
-    workspaceId: "ws-1",
-    summaryDate,
-    summary,
-    embedding: null,
-    createdAt: new Date(),
-    updatedAt: new Date(),
-  }) as any;
+const memorySummary = (
+  summary: string,
+  summaryDate = "2026-04-01",
+): MemorySummary => ({
+  id: "mem-1",
+  userId: "user-1",
+  workspaceId: "ws-1",
+  summaryDate,
+  summary,
+  embedding: null,
+  createdAt: new Date(),
+  updatedAt: new Date(),
+});
 
 describe("renderSystemPrompt — agent prompt", () => {
   it("uses the agent's system prompt when agent is set", () => {

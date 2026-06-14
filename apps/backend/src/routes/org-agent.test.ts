@@ -112,7 +112,7 @@ describe("Organization Agent Routes", () => {
       });
 
       expect(res.status).toBe(422);
-      const body = await res.json();
+      const body = (await res.json()) as Record<string, unknown>;
       expect(body.blockers).toEqual([
         { type: "provider", id: "p1", name: "WS Provider" },
       ]);

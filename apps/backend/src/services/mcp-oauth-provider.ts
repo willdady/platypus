@@ -195,11 +195,14 @@ export class DatabaseOAuthClientProvider implements OAuthClientProvider {
       .where(eq(mcpTable.id, this.mcpRecord.id));
   }
 
-  async redirectToAuthorization(authorizationUrl: URL) {
+  redirectToAuthorization(authorizationUrl: URL) {
     // Google requires access_type=offline to return a refresh token.
     // prompt=consent forces re-consent even if the user previously authorized,
     // which is required when requesting offline access for the first time.
-    if (authorizationUrl.hostname.endsWith(".google.com") || authorizationUrl.hostname === "google.com") {
+    if (
+      authorizationUrl.hostname.endsWith(".google.com") ||
+      authorizationUrl.hostname === "google.com"
+    ) {
       authorizationUrl.searchParams.set("access_type", "offline");
       authorizationUrl.searchParams.set("prompt", "consent");
     }
@@ -237,7 +240,7 @@ export class DatabaseOAuthClientProvider implements OAuthClientProvider {
     throw new Error("No code verifier found");
   }
 
-  async state(): Promise<string> {
+  state(): string {
     if (!this._generatedState) this._generatedState = nanoid();
     return this._generatedState;
   }
@@ -255,7 +258,7 @@ export class DatabaseOAuthClientProvider implements OAuthClientProvider {
     });
   }
 
-  async storedState(): Promise<string | undefined> {
+  storedState(): string | undefined {
     return this._stateForLookup;
   }
 

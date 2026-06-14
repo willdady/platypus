@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import { mockDb, resetMockDb } from "../test-utils.ts";
+import { mockDb, resetMockDb, asDb } from "../test-utils.ts";
 import {
   resolveScoped,
   listScoped,
@@ -28,7 +28,7 @@ describe("ScopedResource read module", () => {
       };
       mockDb.limit.mockResolvedValueOnce([row]);
 
-      const found = await resolveScoped(mockDb, "agent", "a1", ctx);
+      const found = await resolveScoped(asDb(mockDb), "agent", "a1", ctx);
       expect(found).toEqual({ row, scope: "workspace" });
     });
 
@@ -43,7 +43,7 @@ describe("ScopedResource read module", () => {
         .mockResolvedValueOnce([row]) // resource lookup → org-scoped
         .mockResolvedValueOnce([{ id: "att-1" }]); // attachment check → attached
 
-      const found = await resolveScoped(mockDb, "agent", "a1", ctx);
+      const found = await resolveScoped(asDb(mockDb), "agent", "a1", ctx);
       expect(found).toEqual({ row, scope: "organization" });
     });
 
@@ -54,14 +54,14 @@ describe("ScopedResource read module", () => {
         ])
         .mockResolvedValueOnce([]); // attachment check → not attached
 
-      const found = await resolveScoped(mockDb, "agent", "a1", ctx);
+      const found = await resolveScoped(asDb(mockDb), "agent", "a1", ctx);
       expect(found).toBeNull();
     });
 
     it("returns null when the resource is missing", async () => {
       mockDb.limit.mockResolvedValueOnce([]);
 
-      const found = await resolveScoped(mockDb, "agent", "a1", ctx);
+      const found = await resolveScoped(asDb(mockDb), "agent", "a1", ctx);
       expect(found).toBeNull();
     });
   });
@@ -75,7 +75,7 @@ describe("ScopedResource read module", () => {
         // attached org rows arrive from an inner join, keyed by table name.
         .mockResolvedValueOnce([{ agent: orgRow }]);
 
-      const results = await listScoped(mockDb, "agent", ctx);
+      const results = await listScoped(asDb(mockDb), "agent", ctx);
       expect(results).toEqual([
         { row: wsRow, scope: "workspace" },
         { row: orgRow, scope: "organization" },
@@ -87,14 +87,14 @@ describe("ScopedResource read module", () => {
     it("throws NotFoundError when not visible here", async () => {
       mockDb.limit.mockResolvedValueOnce([]);
       await expect(
-        requireScoped(mockDb, "agent", "a1", ctx),
+        requireScoped(asDb(mockDb), "agent", "a1", ctx),
       ).rejects.toBeInstanceOf(NotFoundError);
     });
 
     it("returns the resolved row when visible", async () => {
       const row = { id: "a1", workspaceId: "ws-1", organizationId: null };
       mockDb.limit.mockResolvedValueOnce([row]);
-      const found = await requireScoped(mockDb, "agent", "a1", ctx);
+      const found = await requireScoped(asDb(mockDb), "agent", "a1", ctx);
       expect(found).toEqual({ row, scope: "workspace" });
     });
   });
@@ -103,7 +103,12 @@ describe("ScopedResource read module", () => {
     it("returns a workspace row unchanged", async () => {
       const row = { id: "a1", workspaceId: "ws-1", organizationId: null };
       mockDb.limit.mockResolvedValueOnce([row]);
-      const found = await requireWorkspaceMutable(mockDb, "agent", "a1", ctx);
+      const found = await requireWorkspaceMutable(
+        asDb(mockDb),
+        "agent",
+        "a1",
+        ctx,
+      );
       expect(found).toEqual({ row, scope: "workspace" });
     });
 
@@ -114,14 +119,14 @@ describe("ScopedResource read module", () => {
         ])
         .mockResolvedValueOnce([{ id: "att-1" }]); // attached → visible but locked
       await expect(
-        requireWorkspaceMutable(mockDb, "agent", "a1", ctx),
+        requireWorkspaceMutable(asDb(mockDb), "agent", "a1", ctx),
       ).rejects.toBeInstanceOf(LockedError);
     });
 
     it("throws NotFoundError (not Locked) when missing", async () => {
       mockDb.limit.mockResolvedValueOnce([]);
       await expect(
-        requireWorkspaceMutable(mockDb, "agent", "a1", ctx),
+        requireWorkspaceMutable(asDb(mockDb), "agent", "a1", ctx),
       ).rejects.toBeInstanceOf(NotFoundError);
     });
   });
@@ -130,7 +135,7 @@ describe("ScopedResource read module", () => {
     it("throws ConflictError while an Attachment references it", async () => {
       mockDb.limit.mockResolvedValueOnce([{ id: "att-1" }]); // attachment lookup
       await expect(
-        requireSharedDeletable(mockDb, "agent", "a1"),
+        requireSharedDeletable(asDb(mockDb), "agent", "a1"),
       ).rejects.toBeInstanceOf(ConflictError);
     });
 
@@ -139,7 +144,7 @@ describe("ScopedResource read module", () => {
         .mockResolvedValueOnce([]) // attachment lookup → none
         .mockResolvedValueOnce([{ id: "item-1" }]); // blueprint lookup → listed
       await expect(
-        requireSharedDeletable(mockDb, "agent", "a1"),
+        requireSharedDeletable(asDb(mockDb), "agent", "a1"),
       ).rejects.toBeInstanceOf(ConflictError);
     });
 
@@ -148,15 +153,15 @@ describe("ScopedResource read module", () => {
         .mockResolvedValueOnce([]) // attachment lookup → none
         .mockResolvedValueOnce([]); // blueprint lookup → none
       await expect(
-        requireSharedDeletable(mockDb, "agent", "a1"),
+        requireSharedDeletable(asDb(mockDb), "agent", "a1"),
       ).resolves.toBeUndefined();
     });
 
     it("uses the uppercase MCP acronym in the conflict message", async () => {
       mockDb.limit.mockResolvedValueOnce([{ id: "att-1" }]);
-      await expect(requireSharedDeletable(mockDb, "mcp", "m1")).rejects.toThrow(
-        /this MCP is attached/,
-      );
+      await expect(
+        requireSharedDeletable(asDb(mockDb), "mcp", "m1"),
+      ).rejects.toThrow(/this MCP is attached/);
     });
   });
 });

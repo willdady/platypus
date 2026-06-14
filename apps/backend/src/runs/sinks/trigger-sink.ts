@@ -91,13 +91,15 @@ export class TriggerSink implements RunSink {
     // triggerRun schema persists today.
   }
 
-  async onProgress(ctx: {
+  // Synchronous work; returns a resolved promise to satisfy the async RunSink contract.
+  onProgress(ctx: {
     runId: RunId;
     messages: PlatypusUIMessage[];
     stats: RunStats;
   }): Promise<void> {
     this.latestStats = ctx.stats;
     this.flusher?.bump();
+    return Promise.resolve();
   }
 
   async onFinish(ctx: {

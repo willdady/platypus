@@ -1,5 +1,13 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { mockDb, resetMockDb } from "../test-utils.ts";
+import type { trigger as triggerTable } from "../db/schema.ts";
+import type { WorkspaceScope } from "../scope.ts";
+import type { RunInput } from "../runs/types.ts";
+
+type TriggerRow = typeof triggerTable.$inferSelect;
+
+/** Shape of the argument object passed to agentRunner.generate in these tests. */
+type GenerateArgs = { scope: WorkspaceScope; input: RunInput; sink: unknown };
 
 const { mockGenerate, mockValidateCronExpression } = vi.hoisted(() => ({
   mockGenerate: vi.fn(),
@@ -88,16 +96,22 @@ describe("trigger-execution", () => {
 
       expect(runId).toBe("test-id");
       expect(mockGenerate).toHaveBeenCalledTimes(1);
-      const args = mockGenerate.mock.calls[0][0];
+      const args = mockGenerate.mock.calls[0][0] as GenerateArgs;
       expect(args.scope.orgId).toBe("org-1");
       expect(args.scope.workspaceId).toBe("ws-1");
-      expect(args.scope.principal.kind).toBe("trigger");
-      expect(args.scope.principal.triggerId).toBe("trigger-1");
-      expect(args.scope.principal.onBehalfOfUserId).toBe("user-1");
+      const { principal } = args.scope;
+      expect(principal.kind).toBe("trigger");
+      if (principal.kind !== "trigger")
+        throw new Error("expected a trigger principal");
+      expect(principal.triggerId).toBe("trigger-1");
+      expect(principal.onBehalfOfUserId).toBe("user-1");
       expect(args.input.runId).toBe("test-id");
       expect(args.input.request.agentId).toBe("agent-1");
       expect(args.input.messages).toHaveLength(1);
-      expect(args.input.messages[0].parts[0].text).toBe("Do something");
+      const part = args.input.messages[0].parts[0];
+      expect(part.type).toBe("text");
+      if (part.type !== "text") throw new Error("expected a text part");
+      expect(part.text).toBe("Do something");
     });
 
     it("prepends event context to the instruction for event triggers", async () => {
@@ -109,8 +123,8 @@ describe("trigger-execution", () => {
         eventData: { cardId: "c1" },
       });
 
-      const args = mockGenerate.mock.calls[0][0];
-      const text = args.input.messages[0].parts[0].text;
+      const args = mockGenerate.mock.calls[0][0] as GenerateArgs;
+      const text = (args.input.messages[0].parts[0] as { text: string }).text;
       expect(text).toContain("Event: card.created");
       expect(text).toContain('"cardId": "c1"');
       expect(text).toContain("Do something");
@@ -139,14 +153,14 @@ describe("trigger-execution", () => {
       const trigger = { ...baseTrigger, search: true };
       await executeTrigger(trigger);
 
-      const args = mockGenerate.mock.calls[0][0];
+      const args = mockGenerate.mock.calls[0][0] as GenerateArgs;
       expect(args.input.request.search).toBe(true);
     });
 
     it("throws when the workspace is not found, before invoking the runner", async () => {
       mockDb.limit.mockResolvedValueOnce([]);
 
-      await expect(executeTrigger(baseTrigger as any)).rejects.toThrow(
+      await expect(executeTrigger(baseTrigger as TriggerRow)).rejects.toThrow(
         "Workspace 'ws-1' not found",
       );
       expect(mockGenerate).not.toHaveBeenCalled();
@@ -156,7 +170,7 @@ describe("trigger-execution", () => {
       mockDb.limit.mockResolvedValueOnce([mockWorkspace]);
       mockGenerate.mockRejectedValueOnce(new Error("Model error"));
 
-      await expect(executeTrigger(baseTrigger as any)).rejects.toThrow(
+      await expect(executeTrigger(baseTrigger as TriggerRow)).rejects.toThrow(
         "Model error",
       );
     });
@@ -188,7 +202,7 @@ describe("trigger-execution", () => {
           timezone: "UTC",
           isOneOff: true,
         },
-      } as any;
+      } as TriggerRow;
 
       await updateTriggerAfterRun("trigger-1", trigger);
 
@@ -206,7 +220,7 @@ describe("trigger-execution", () => {
         ...baseTrigger,
         type: "event",
         config: { events: ["card.created"] },
-      } as any;
+      } as TriggerRow;
 
       await updateTriggerAfterRun("trigger-1", trigger);
 
@@ -232,7 +246,7 @@ describe("trigger-execution", () => {
 
     it("should skip retention cleanup when maxRunsToKeep is 0", async () => {
       mockValidateCronExpression.mockReturnValue(new Date());
-      const trigger = { ...baseTrigger, maxRunsToKeep: 0 } as any;
+      const trigger = { ...baseTrigger, maxRunsToKeep: 0 } as TriggerRow;
 
       resetMockDb();
       await updateTriggerAfterRun("trigger-1", trigger);

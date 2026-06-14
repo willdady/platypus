@@ -1,0 +1,4 @@
+/_next/static/*
+  Cache-Control: public,max-age=31536000,immutable
+/_pagefind/*
+  Cache-Control: public,max-age=86400

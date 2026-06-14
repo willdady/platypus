@@ -116,7 +116,7 @@ describe("MCP Routes", () => {
 
       const res = await app.request(baseUrl);
       expect(res.status).toBe(200);
-      const body = await res.json();
+      const body = (await res.json()) as { results: unknown[] };
       // listScoped returns Workspace rows first, then attached org rows; the
       // frontend regroups by scope, so order is not observable behaviour.
       expect(body.results).toEqual([
@@ -370,12 +370,14 @@ describe("MCP Routes", () => {
       ]); // requireWorkspaceAccess
       mockDb.limit.mockResolvedValueOnce([{ ...mcpRecord }]); // MCP lookup
 
-      (mcpAuth as any).mockImplementationOnce(async (provider: any) => {
-        await provider.redirectToAuthorization(
-          new URL("https://provider.example.com/authorize?x=1"),
-        );
-        return "REDIRECT";
-      });
+      vi.mocked(mcpAuth).mockImplementationOnce(
+        (provider: { redirectToAuthorization: (url: URL) => void }) => {
+          provider.redirectToAuthorization(
+            new URL("https://provider.example.com/authorize?x=1"),
+          );
+          return Promise.resolve("REDIRECT");
+        },
+      );
 
       const res = await app.request(`${authorizeUrl}?force=true`, {
         method: "POST",
@@ -398,7 +400,7 @@ describe("MCP Routes", () => {
       );
 
       // DCR/static client credentials are deliberately preserved
-      const setPayload = (mockDb.set).mock.calls[0][0];
+      const setPayload = mockDb.set.mock.calls[0][0];
       expect(setPayload).not.toHaveProperty("oauthClientId");
       expect(setPayload).not.toHaveProperty("oauthClientSecret");
     });
@@ -411,7 +413,7 @@ describe("MCP Routes", () => {
       ]); // requireWorkspaceAccess
       mockDb.limit.mockResolvedValueOnce([{ ...mcpRecord }]); // MCP lookup
 
-      (mcpAuth as any).mockResolvedValueOnce("AUTHORIZED");
+      vi.mocked(mcpAuth).mockResolvedValueOnce("AUTHORIZED");
 
       const res = await app.request(authorizeUrl, { method: "POST" });
 

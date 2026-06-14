@@ -59,7 +59,7 @@ files.get("/*", requireAuth, async (c) => {
 
   // Authorization check
   // Super admins bypass all checks
-  if (user.role && isSuperAdmin(user as { role: string })) {
+  if (user.role && isSuperAdmin(user)) {
     // Continue to serve file
   } else {
     // Check org membership

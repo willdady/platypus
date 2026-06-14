@@ -1,0 +1,96 @@
+@import "tailwindcss";
+
+/*
+ * Brand cohesion with apps/frontend (ADR-0011): the marketing site re-uses the
+ * Platypus brand tokens rather than forking the design system. The site is
+ * dark-only (no toggle), so the frontend's `.dark` palette is lifted verbatim
+ * into `:root` — there is no `.dark` class and no theme-switching script.
+ */
+:root {
+  --radius: 0.5rem;
+  --background: oklch(0.2 0.004 220);
+  --foreground: oklch(0.985 0 0);
+  --card: oklch(0.25 0.004 220);
+  --card-foreground: oklch(0.985 0 0);
+  --popover: oklch(0.25 0.004 220);
+  --popover-foreground: oklch(0.985 0 0);
+  --primary: oklch(0.488 0.243 180);
+  --primary-foreground: oklch(0.97 0.014 180);
+  /*
+   * The brand green (`--primary`) is rich on solid buttons but reads muddy as
+   * coloured text on the dark background. `--primary-bright` is a lighter, less
+   * saturated variant used only for text/icons; buttons keep `--primary`.
+   */
+  --primary-bright: oklch(0.72 0.18 180);
+  --secondary: oklch(0.3 0.004 220);
+  --secondary-foreground: oklch(0.985 0 0);
+  --muted: oklch(0.26 0.004 220);
+  --muted-foreground: oklch(0.705 0.015 220);
+  --accent: oklch(0.3 0.004 220);
+  --accent-foreground: oklch(0.985 0 0);
+  --destructive: oklch(0.704 0.191 22.216);
+  --border: oklch(1 0 0 / 10%);
+  --input: oklch(1 0 0 / 15%);
+  --ring: oklch(0.556 0 0);
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary-bright: var(--primary-bright);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono:
+    var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, Monaco,
+    Consolas, monospace;
+
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  html {
+    /* Smooth-scroll for in-page anchor nav; offset for the sticky header. */
+    scroll-behavior: smooth;
+    color-scheme: dark;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+  /* Sections are scroll targets — keep their headings clear of the sticky nav. */
+  section[id] {
+    scroll-margin-top: 5rem;
+  }
+  a,
+  button:not([disabled]),
+  [role="button"]:not([disabled]) {
+    cursor: pointer;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+}

@@ -2,6 +2,7 @@ import {
   stepCountIs,
   tool,
   ToolLoopAgent,
+  type LanguageModel,
   type PrepareStepFunction,
   type Tool,
 } from "ai";
@@ -14,7 +15,7 @@ import { logger } from "../logger.ts";
  */
 export const subAgentToolName = (subAgent: { name: string }): string =>
   `delegateTo${subAgent.name
-    .replace(/[^a-zA-Z0-9]+(.)/g, (_, c) => c.toUpperCase())
+    .replace(/[^a-zA-Z0-9]+(.)/g, (_, c: string) => c.toUpperCase())
     .replace(/[^a-zA-Z0-9]/g, "")
     .replace(/^./, (c) => c.toUpperCase())}`;
 
@@ -44,7 +45,7 @@ interface SubAgentToolOptions {
   name: string;
   description?: string;
   systemPrompt?: string;
-  model: any; // LanguageModel from AI SDK
+  model: LanguageModel;
   tools: Record<string, Tool>;
   maxSteps?: number;
   /** Called on each activity update from the sub-agent. Used to reset the parent run's per-step timeout. */
@@ -187,7 +188,10 @@ export const createSubAgentTools = async (
     toolSetIds?: string[] | null;
     maxSteps?: number | null;
   }>,
-  createModelFn: (providerId: string, modelId: string) => Promise<any>,
+  createModelFn: (
+    providerId: string,
+    modelId: string,
+  ) => Promise<LanguageModel>,
   loadToolsFn: (
     subAgentId: string,
     toolSetIds: string[],

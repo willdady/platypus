@@ -36,7 +36,7 @@ type ToolSet = {
   category: string;
   description?: string;
   tools:
-    | { [toolId: string]: Tool<any, any> }
+    | { [toolId: string]: Tool }
     | ((
         context: ToolSetContext,
       ) => Record<string, Tool> | Promise<Record<string, Tool>>);

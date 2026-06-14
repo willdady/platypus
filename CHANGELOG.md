@@ -1,5 +1,33 @@
 # Changelog
 
+## [1.97.0](https://github.com/willdady/platypus/compare/v1.96.0...v1.97.0) (2026-06-13)
+
+
+### Features
+
+* **docs:** add Open Graph and Twitter Card metadata ([#244](https://github.com/willdady/platypus/issues/244)) ([d79cf2b](https://github.com/willdady/platypus/commit/d79cf2b9ad15f656edfc7f11ad4aebc02d80d48a))
+
+
+### Bug Fixes
+
+* **backend:** adopt typed DB mocks across the test suite ([#239](https://github.com/willdady/platypus/issues/239)–[#242](https://github.com/willdady/platypus/issues/242)) ([#248](https://github.com/willdady/platypus/issues/248)) ([1cee254](https://github.com/willdady/platypus/commit/1cee254f0113097c9d80cf85604052cd1c77afad))
+* **backend:** eliminate any/unsafe lint warnings in source code ([#247](https://github.com/willdady/platypus/issues/247)) ([2a88db3](https://github.com/willdady/platypus/commit/2a88db36c80fe24865b2997d5afc91fdf4d1a0ea))
+* **backend:** type the shared test DB/auth mock harness ([#246](https://github.com/willdady/platypus/issues/246)) ([842f628](https://github.com/willdady/platypus/commit/842f628034b366246ba9299e88c316d0ea945282))
+
+## [1.96.0](https://github.com/willdady/platypus/compare/v1.95.1...v1.96.0) (2026-06-13)
+
+
+### Features
+
+* **docs:** deploy to Cloudflare Workers via OpenNext + slim README ([#235](https://github.com/willdady/platypus/issues/235)) ([f736ef9](https://github.com/willdady/platypus/commit/f736ef9b2635d9e0a84f7fa633c1f08d2f89a9f3))
+
+## [1.95.1](https://github.com/willdady/platypus/compare/v1.95.0...v1.95.1) (2026-06-13)
+
+
+### Bug Fixes
+
+* **backend:** resolve source-level tsc errors in apps/backend ([#232](https://github.com/willdady/platypus/issues/232)) ([75c1439](https://github.com/willdady/platypus/commit/75c14394c0b2032fed06e86b9a1f1cd3111924cc))
+
 ## [1.95.0](https://github.com/willdady/platypus/compare/v1.94.0...v1.95.0) (2026-06-08)
 
 

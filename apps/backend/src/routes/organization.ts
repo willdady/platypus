@@ -45,7 +45,7 @@ organization.get("/", requireAuth, async (c) => {
   const user = c.get("user")!;
 
   // Super admins see all organizations
-  if (isSuperAdmin(user as { role: string })) {
+  if (isSuperAdmin(user)) {
     const results = await db.select().from(organizationTable);
     return c.json({ results });
   }
@@ -118,13 +118,8 @@ organization.delete(
 );
 
 /** Get user's membership for an organization */
-organization.get(
-  "/:orgId/membership",
-  requireAuth,
-  requireOrgAccess(),
-  async (c) => {
-    return c.json(c.get("orgMembership"));
-  },
-);
+organization.get("/:orgId/membership", requireAuth, requireOrgAccess(), (c) => {
+  return c.json(c.get("orgMembership"));
+});
 
 export { organization };

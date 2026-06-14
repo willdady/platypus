@@ -5,14 +5,37 @@ import { getPageMap } from "nextra/page-map";
 import type { FC, ReactNode } from "react";
 import "./globals.css";
 
+const title = "Platypus Docs";
+const description =
+  "Documentation for Platypus — build and manage AI agents with tool support and multi-provider capabilities.";
+
 export const metadata: Metadata = {
+  metadataBase: new URL("https://docs.platypus.chat"),
   title: {
-    default: "Platypus Docs",
-    template: "%s | Platypus Docs",
+    default: title,
+    template: `%s | ${title}`,
   },
-  description:
-    "Documentation for Platypus — build and manage AI agents with tool support and multi-provider capabilities.",
-  applicationName: "Platypus Docs",
+  description,
+  applicationName: title,
+  openGraph: {
+    type: "website",
+    siteName: title,
+    title: {
+      default: title,
+      template: `%s | ${title}`,
+    },
+    description,
+    url: "/",
+    locale: "en_US",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: {
+      default: title,
+      template: `%s | ${title}`,
+    },
+    description,
+  },
 };
 
 const version = process.env.NEXT_PUBLIC_APP_VERSION ?? "unknown";
@@ -47,7 +70,21 @@ const RootLayout: FC<{ children: ReactNode }> = async ({ children }) => {
           saturation: 100,
           lightness: { light: 30, dark: 45 },
         }}
-      />
+      >
+        {/*
+         * Anti-FOUC: Nextra renders its next-themes script inside <body>, so the
+         * page can paint one light frame before the theme class lands on <html>.
+         * Mirror next-themes here in <head> (same `theme` storage key, same
+         * `system` default) to set the class before first paint. Idempotent with
+         * Nextra's later script.
+         */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html:
+              "try{var t=localStorage.getItem('theme'),d=t==='dark'||((!t||t==='system')&&matchMedia('(prefers-color-scheme: dark)').matches),e=document.documentElement;e.classList.toggle('dark',d);e.style.colorScheme=d?'dark':'light'}catch(e){}",
+          }}
+        />
+      </Head>
       <body>
         <Layout
           navbar={navbar}

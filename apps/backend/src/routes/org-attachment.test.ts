@@ -26,7 +26,9 @@ describe("Organization Attachment (central sharing) Routes", () => {
         `${baseUrl}?resourceType=agent&resourceId=agent-1`,
       );
       expect(res.status).toBe(200);
-      const body = await res.json();
+      const body = (await res.json()) as {
+        results: { workspaceName: string }[];
+      };
       expect(body.results).toHaveLength(2);
       expect(body.results[0].workspaceName).toBe("Alpha");
     });

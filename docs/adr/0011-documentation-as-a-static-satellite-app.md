@@ -10,9 +10,11 @@ rather than adopting a separately-styled framework like Docusaurus. The site is 
 **single source of truth for narrative content** (setup, concepts, guides, extension
 points); `README.md` keeps a short quick-start and links in, while the internal
 `CONTEXT.md` glossary and `docs/adr/` are **not published** — the public "Concepts" pages
-are written independently for end users. It is **excluded from the app runtime**: no
-Docker image, absent from `compose.yaml` and `build-and-push.yml`, and built to a static
-export so it can be served cheaply from a CDN. Docs **track the latest release only**;
+are written independently for end users. It is **excluded from the self-hosted app
+runtime**: no Docker image, absent from `compose.yaml` and `build-and-push.yml`. It
+deploys independently as its own Cloudflare Worker via OpenNext
+(`@opennextjs/cloudflare`) — see the Amendment below; pages remain statically generated.
+Docs **track the latest release only**;
 older versions are reached by checking out the corresponding git tag (a self-hoster
 already has the matching docs in their checkout), avoiding a per-release
 snapshot/version-switcher.
@@ -40,6 +42,27 @@ snapshot/version-switcher.
 - The public site and `CONTEXT.md` cover overlapping subjects for different readers; they
   must be maintained independently and may legitimately diverge in voice and depth.
 - Top-level information architecture follows audience/journey (Getting Started,
-  Self-Hosting, Concepts, Building with Platypus, Extending, Reference); the host for
-  `docs.platypus.chat` is deliberately deferred, since the static output is portable
-  between GitHub Pages / Cloudflare Pages / Vercel.
+  Self-Hosting, Concepts, Building with Platypus, Extending, Reference).
+
+## Amendment (2026-06-13): deploy via OpenNext to Cloudflare Workers
+
+The original decision built `apps/docs` to a static export (`output: 'export'` → `out/`)
+for serving from a CDN, leaving the host deliberately deferred. We now deploy the site to
+**Cloudflare Workers via OpenNext** (`@opennextjs/cloudflare` + `wrangler`):
+
+- `next.config.mjs` drops `output: 'export'` (and the `images.unoptimized` it required) and
+  calls `initOpenNextCloudflareForDev()`. The build runs in Next.js standalone mode and the
+  OpenNext adapter wraps it into a Worker (`.open-next/worker.js`), configured by
+  `wrangler.jsonc` and `open-next.config.ts`.
+- Pages are still **statically generated** — this is not a move to per-request SSR. The
+  Worker serves prerendered HTML plus static assets (`.open-next/assets`, populated from
+  `public/`). No incremental cache / R2 is configured.
+- **Pagefind search** moves from indexing the static `out/` to indexing the standalone
+  build output: `pagefind --site .next/server/app --output-path public/_pagefind`, folded
+  into the `build` script so the index is copied into the Worker's assets.
+- Deploy/preview is `pnpm --filter docs deploy` / `preview` (OpenNext + Wrangler). The site
+  stays out of the self-hosted `compose.yaml` / `build-and-push.yml` — this changes only
+  _where the public docs site is hosted_, not the self-hosted-from-git-tag model.
+
+This supersedes "built to a static export … served from a CDN" and the deferred-host note;
+the rest of the ADR (Nextra choice, latest-only, IA, independence from `CONTEXT.md`) stands.

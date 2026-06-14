@@ -32,7 +32,9 @@ describe("Member Routes", () => {
 
       const res = await app.request(baseUrl);
       expect(res.status).toBe(200);
-      const json = await res.json();
+      const json = (await res.json()) as {
+        results: { id: string; isSuperAdmin: boolean }[];
+      };
       expect(json.results[0].id).toBe("m1");
       expect(json.results[0].isSuperAdmin).toBe(false);
     });

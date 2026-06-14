@@ -40,29 +40,31 @@ const eslintConfig = defineConfig([
         },
       ],
 
-      // `any` and its downstream effects are surfaced as warnings to burn down
-      // over time, not hard errors — the existing codebase leans on `any` in
-      // places (AI-SDK payloads, dynamic tool args) where typing is genuinely
-      // hard. Promise-safety rules from recommendedTypeChecked (no-floating-
-      // promises, no-misused-promises, await-thenable) stay as errors.
-      "@typescript-eslint/no-explicit-any": "warn",
-      "@typescript-eslint/no-unsafe-assignment": "warn",
-      "@typescript-eslint/no-unsafe-member-access": "warn",
-      "@typescript-eslint/no-unsafe-call": "warn",
-      "@typescript-eslint/no-unsafe-argument": "warn",
-      "@typescript-eslint/no-unsafe-return": "warn",
+      // `any` and its downstream effects were warnings while the codebase was
+      // burned down from ~4.2k violations to zero (incl. the typed test-mock
+      // harness). Now enforced as errors — uniformly, tests included — so the
+      // `any` that dominated the old test mocks can't creep back. Promise-
+      // safety rules from recommendedTypeChecked (no-floating-promises,
+      // no-misused-promises, await-thenable) are likewise errors.
+      "@typescript-eslint/no-explicit-any": "error",
+      "@typescript-eslint/no-unsafe-assignment": "error",
+      "@typescript-eslint/no-unsafe-member-access": "error",
+      "@typescript-eslint/no-unsafe-call": "error",
+      "@typescript-eslint/no-unsafe-argument": "error",
+      "@typescript-eslint/no-unsafe-return": "error",
 
       // An `async` function with no `await` is valid (it just returns a
-      // resolved promise); flagging it isn't dead-code or a safety issue, and
-      // "fixing" it by removing `async` would change the return type and break
-      // call sites. Keep as a warning, not a blocking error.
-      "@typescript-eslint/require-await": "warn",
+      // resolved promise), but the codebase is now clean of unnecessary ones —
+      // enforce as an error so new ones get an explicit decision (drop `async`
+      // or add a scoped disable with a reason) rather than silently landing.
+      "@typescript-eslint/require-await": "error",
 
-      // High false-positive rate in this codebase: fires on AI-SDK model
-      // properties (typed as methods) and on test spy assertions
-      // (`expect(obj.method)`) that never actually detach `this`. Warn so
-      // genuine `this`-binding mistakes still surface without blocking lint.
-      "@typescript-eslint/unbound-method": "warn",
+      // Previously a warning for its false-positive rate on AI-SDK model
+      // properties (typed as methods) and test spy assertions
+      // (`expect(obj.method)`). The remaining genuine cases were resolved, so
+      // enforce as an error; suppress with a scoped disable where a known
+      // false positive recurs.
+      "@typescript-eslint/unbound-method": "error",
     },
   },
 

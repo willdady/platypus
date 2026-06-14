@@ -23,7 +23,7 @@ const unboundVector = customType<{
   },
   fromDriver(value: unknown): number[] {
     if (typeof value === "string") {
-      return JSON.parse(value);
+      return JSON.parse(value) as number[];
     }
     return value as number[];
   },

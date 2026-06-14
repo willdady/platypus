@@ -4,8 +4,16 @@ import {
   organizationMember,
   workspace as workspaceTable,
 } from "../db/schema.ts";
-import type { SuperAdminOrgMembership, OrgRole } from "../server.ts";
+import type {
+  SuperAdminOrgMembership,
+  OrgRole,
+  OrganizationMembership,
+  Variables,
+} from "../server.ts";
 import { orgScope, userScope, workspaceScope } from "../scope.ts";
+
+/** Hono environment for these middleware: carries the request-scoped Variables. */
+type Env = { Variables: Variables };
 
 /**
  * Checks if a user is a super admin based on their role field.
@@ -21,8 +29,8 @@ import { orgScope, userScope, workspaceScope } from "../scope.ts";
  * }
  * ```
  */
-const isSuperAdmin = (user: { role: string }): boolean => {
-  return user.role === "admin";
+const isSuperAdmin = (user: { role?: string | null } | undefined): boolean => {
+  return user?.role === "admin";
 };
 
 /**
@@ -45,9 +53,13 @@ const isSuperAdmin = (user: { role: string }): boolean => {
  * ```
  */
 const isSuperAdminMembership = (
-  membership: any,
+  membership: OrganizationMembership | SuperAdminOrgMembership | undefined,
 ): membership is SuperAdminOrgMembership => {
-  return membership?.isSuperAdmin === true;
+  return (
+    membership != null &&
+    "isSuperAdmin" in membership &&
+    membership.isSuperAdmin === true
+  );
 };
 
 /**
@@ -79,8 +91,9 @@ const isSuperAdminMembership = (
  * ```
  */
 export const requireOrgAccess = (requiredRoles?: OrgRole[]) =>
-  createMiddleware(async (c, next) => {
-    const user = c.get("user");
+  createMiddleware<Env>(async (c, next) => {
+    // requireAuth runs first, so user is always set here.
+    const user = c.get("user")!;
     const db = c.get("db");
 
     const parentScope = c.get("userScope") ?? userScope(user);
@@ -154,10 +167,11 @@ export const requireOrgAccess = (requiredRoles?: OrgRole[]) =>
  * app.get("/chats", requireAuth, requireOrgAccess(), requireWorkspaceAccess, handler);
  * ```
  */
-export const requireWorkspaceAccess = createMiddleware(async (c, next) => {
-  const user = c.get("user");
+export const requireWorkspaceAccess = createMiddleware<Env>(async (c, next) => {
+  // requireAuth and requireOrgAccess run first, so user and orgMembership are set.
+  const user = c.get("user")!;
   const db = c.get("db");
-  const orgMembership = c.get("orgMembership");
+  const orgMembership = c.get("orgMembership")!;
 
   const workspaceId = c.req.param("workspaceId");
   const orgId = c.req.param("orgId");
@@ -252,7 +266,7 @@ export const requireWorkspaceAccess = createMiddleware(async (c, next) => {
 export const requireWorkspaceConfigAccess = (
   delegationFlag?: "providerSelfManagement" | "mcpSelfManagement",
 ) =>
-  createMiddleware(async (c, next) => {
+  createMiddleware<Env>(async (c, next) => {
     const user = c.get("user");
     const orgMembership = c.get("orgMembership");
 
@@ -321,7 +335,7 @@ export const requireWorkspaceConfigAccess = (
  * app.put("/system/settings", requireAuth, requireSuperAdmin, handler);
  * ```
  */
-export const requireSuperAdmin = createMiddleware(async (c, next) => {
+export const requireSuperAdmin = createMiddleware<Env>(async (c, next) => {
   const user = c.get("user");
 
   if (!isSuperAdmin(user)) {
@@ -360,7 +374,7 @@ export const requireSuperAdmin = createMiddleware(async (c, next) => {
  * app.post("/chats/:id/messages", requireAuth, requireOrgAccess(), requireWorkspaceAccess, requireWorkspaceOwner, handler);
  * ```
  */
-export const requireWorkspaceOwner = createMiddleware(async (c, next) => {
+export const requireWorkspaceOwner = createMiddleware<Env>(async (c, next) => {
   const isWorkspaceOwner = c.get("isWorkspaceOwner");
 
   if (!isWorkspaceOwner) {

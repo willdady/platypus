@@ -4,11 +4,12 @@ import { mockDb, resetMockDb } from "../../test-utils.ts";
 // extractFiles is exercised by storage/utils tests — pass through here so
 // we can assert the messages handed to the db layer without file I/O.
 vi.mock("../../storage/utils.ts", () => ({
-  extractFiles: vi.fn((messages: any) => Promise.resolve(messages)),
+  extractFiles: vi.fn((messages: unknown) => Promise.resolve(messages)),
 }));
 
 import { ChatSink } from "./chat-sink.ts";
 import type { ResolvedRunPlan } from "../types.ts";
+import type { PlatypusUIMessage } from "../../types.ts";
 
 const planWithAgent: ResolvedRunPlan = {
   resolved: {
@@ -23,6 +24,8 @@ const planWithAgent: ResolvedRunPlan = {
     seed: undefined,
     presencePenalty: undefined,
     frequencyPenalty: undefined,
+    contextWindow: 128000,
+    contextWindowIsDefault: false,
   },
 };
 
@@ -38,6 +41,8 @@ const planAdhoc: ResolvedRunPlan = {
     seed: 42,
     presencePenalty: 0.1,
     frequencyPenalty: 0.2,
+    contextWindow: 128000,
+    contextWindowIsDefault: false,
   },
 };
 
@@ -54,7 +59,7 @@ describe("ChatSink", () => {
       await sink.onStart({ runId: "chat-1", messages: [] });
 
       expect(mockDb.update).toHaveBeenCalledTimes(1);
-      const setArg = mockDb.set.mock.calls[0][0];
+      const setArg = mockDb.set.mock.calls[0][0] as Record<string, unknown>;
       expect(setArg.status).toBe("running");
       expect(mockDb.insert).not.toHaveBeenCalled();
     });
@@ -67,7 +72,10 @@ describe("ChatSink", () => {
 
       expect(mockDb.update).toHaveBeenCalledTimes(1);
       expect(mockDb.insert).toHaveBeenCalledTimes(1);
-      const inserted = mockDb.values.mock.calls[0][0];
+      const inserted = mockDb.values.mock.calls[0][0] as Record<
+        string,
+        unknown
+      >;
       expect(inserted.id).toBe("chat-2");
       expect(inserted.status).toBe("running");
       expect(inserted.title).toBe("Untitled");
@@ -97,7 +105,9 @@ describe("ChatSink", () => {
       await sink.onStart({ runId: "chat-3", messages: [] });
       await sink.onResolved({ runId: "chat-3", plan: planWithAgent });
 
-      const messages = [{ role: "assistant", parts: [] } as any];
+      const messages: PlatypusUIMessage[] = [
+        { id: "m-1", role: "assistant", parts: [] },
+      ];
       await sink.onProgress({ runId: "chat-3", messages, stats: {} });
       await sink.onProgress({ runId: "chat-3", messages, stats: {} });
       await sink.onProgress({ runId: "chat-3", messages, stats: {} });
@@ -109,7 +119,7 @@ describe("ChatSink", () => {
 
       // FlushScheduler triggered one update with status=running + messages
       expect(mockDb.update).toHaveBeenCalledTimes(2);
-      const flushSet = mockDb.set.mock.calls[1][0];
+      const flushSet = mockDb.set.mock.calls[1][0] as Record<string, unknown>;
       expect(flushSet.status).toBe("running");
       expect(flushSet.messages).toEqual(messages);
       expect(flushSet.agentId).toBe("a1");
@@ -153,13 +163,13 @@ describe("ChatSink", () => {
       await sink.onFinish({
         runId: "chat-1",
         status: "succeeded",
-        messages: [{ role: "user", parts: [] } as any],
+        messages: [{ id: "m-1", role: "user", parts: [] }],
         stats: {},
       });
 
       // 2 updates: onStart status flip + onFinish full write
       expect(mockDb.update).toHaveBeenCalledTimes(2);
-      const finishSet = mockDb.set.mock.calls[1][0];
+      const finishSet = mockDb.set.mock.calls[1][0] as Record<string, unknown>;
       expect(finishSet.status).toBe("succeeded");
       expect(finishSet.agentId).toBe("a1");
       expect(finishSet.providerId).toBeNull();
@@ -187,7 +197,10 @@ describe("ChatSink", () => {
       });
 
       expect(mockDb.insert).toHaveBeenCalledTimes(1);
-      const insertedValues = mockDb.values.mock.calls.at(-1)![0];
+      const insertedValues = mockDb.values.mock.calls.at(-1)![0] as Record<
+        string,
+        unknown
+      >;
       expect(insertedValues.id).toBe("chat-2");
       expect(insertedValues.workspaceId).toBe("ws-1");
       expect(insertedValues.title).toBe("Untitled");
@@ -209,7 +222,7 @@ describe("ChatSink", () => {
         stats: {},
       });
 
-      const finishSet = mockDb.set.mock.calls[1][0];
+      const finishSet = mockDb.set.mock.calls[1][0] as Record<string, unknown>;
       expect(finishSet.status).toBe("cancelled");
     });
   });
@@ -229,7 +242,7 @@ describe("ChatSink", () => {
         stats: {},
       });
 
-      const finishSet = mockDb.set.mock.calls[1][0];
+      const finishSet = mockDb.set.mock.calls[1][0] as Record<string, unknown>;
       expect(finishSet.agentId).toBeNull();
       expect(finishSet.providerId).toBe("p1");
       expect(finishSet.modelId).toBe("m1");
@@ -259,7 +272,7 @@ describe("ChatSink", () => {
 
       // 2 updates: onStart upsert + onFinish status-only update
       expect(mockDb.update).toHaveBeenCalledTimes(2);
-      const finishSet = mockDb.set.mock.calls[1][0];
+      const finishSet = mockDb.set.mock.calls[1][0] as Record<string, unknown>;
       expect(finishSet.status).toBe("failed");
       expect(finishSet.messages).toBeUndefined();
       expect(mockDb.insert).not.toHaveBeenCalled();

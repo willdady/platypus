@@ -8,6 +8,8 @@ const plan: ResolvedRunPlan = {
     agentId: "a1",
     providerId: "p1",
     modelId: "m1",
+    contextWindow: 128000,
+    contextWindowIsDefault: false,
   },
 };
 
@@ -27,7 +29,10 @@ describe("TriggerSink", () => {
       await sink.onStart({ runId: "run-1", messages: [] });
 
       expect(mockDb.insert).toHaveBeenCalledTimes(1);
-      const inserted = mockDb.values.mock.calls[0][0];
+      const inserted = mockDb.values.mock.calls[0][0] as Record<
+        string,
+        unknown
+      >;
       expect(inserted.id).toBe("run-1");
       expect(inserted.triggerId).toBe("trigger-1");
       expect(inserted.status).toBe("running");
@@ -42,7 +47,10 @@ describe("TriggerSink", () => {
 
       await sink.onStart({ runId: "run-1", messages: [] });
 
-      const inserted = mockDb.values.mock.calls[0][0];
+      const inserted = mockDb.values.mock.calls[0][0] as Record<
+        string,
+        unknown
+      >;
       expect(inserted.eventType).toBeNull();
       expect(inserted.eventData).toBeNull();
     });
@@ -102,7 +110,7 @@ describe("TriggerSink", () => {
       await vi.advanceTimersByTimeAsync(100);
 
       expect(mockDb.update).toHaveBeenCalledTimes(1);
-      const setArg = mockDb.set.mock.calls[0][0];
+      const setArg = mockDb.set.mock.calls[0][0] as Record<string, unknown>;
       expect(setArg.stats).toEqual({
         steps: 2,
         toolCalls: [{ name: "t1", count: 2 }],
@@ -144,7 +152,7 @@ describe("TriggerSink", () => {
       });
 
       expect(mockDb.update).toHaveBeenCalledTimes(1);
-      const setArg = mockDb.set.mock.calls[0][0];
+      const setArg = mockDb.set.mock.calls[0][0] as Record<string, unknown>;
       expect(setArg.status).toBe("success");
       expect(setArg.errorMessage).toBeNull();
       expect(setArg.stats).toEqual({
@@ -167,7 +175,7 @@ describe("TriggerSink", () => {
         error: new Error("Model exploded"),
       });
 
-      const setArg = mockDb.set.mock.calls[0][0];
+      const setArg = mockDb.set.mock.calls[0][0] as Record<string, unknown>;
       expect(setArg.status).toBe("failed");
       expect(setArg.errorMessage).toBe("Model exploded");
       expect(setArg.stats).toBeNull();
@@ -186,7 +194,7 @@ describe("TriggerSink", () => {
         stats: {},
       });
 
-      const setArg = mockDb.set.mock.calls[0][0];
+      const setArg = mockDb.set.mock.calls[0][0] as Record<string, unknown>;
       expect(setArg.status).toBe("failed");
     });
 
@@ -200,7 +208,7 @@ describe("TriggerSink", () => {
         stats: {},
       });
 
-      const setArg = mockDb.set.mock.calls[0][0];
+      const setArg = mockDb.set.mock.calls[0][0] as Record<string, unknown>;
       expect(setArg.stats).toBeNull();
     });
   });
