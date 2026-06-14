@@ -24,7 +24,7 @@ function createMessageWithFile(
     role: "user",
     parts: [
       { type: "text", text: "Here's an image:" },
-      { type: "file", url: dataUrl, mimeType: "image/png" },
+      { type: "file", url: dataUrl, mediaType: "image/png" },
     ],
   };
 }
@@ -154,7 +154,7 @@ describe("Storage Utils", () => {
         {
           id: "msg-1",
           role: "assistant",
-          parts: [{ type: "file", url: storageUrl, mimeType: "image/png" }],
+          parts: [{ type: "file", url: storageUrl, mediaType: "image/png" }],
         },
       ];
 
@@ -174,7 +174,7 @@ describe("Storage Utils", () => {
         {
           id: "msg-1",
           role: "assistant",
-          parts: [{ type: "file", url: storageUrl, mimeType: "image/png" }],
+          parts: [{ type: "file", url: storageUrl, mediaType: "image/png" }],
         },
       ];
 
@@ -194,7 +194,7 @@ describe("Storage Utils", () => {
         {
           id: "msg-1",
           role: "assistant",
-          parts: [{ type: "file", url: httpUrl, mimeType: "image/png" }],
+          parts: [{ type: "file", url: httpUrl, mediaType: "image/png" }],
         },
       ];
 
@@ -215,7 +215,7 @@ describe("Storage Utils", () => {
             {
               type: "file",
               url: "storage://org-1/ws-1/chat-1/msg-1/1-abc12345.png",
-              mimeType: "image/png",
+              mediaType: "image/png",
             },
           ],
         },
@@ -226,7 +226,7 @@ describe("Storage Utils", () => {
             {
               type: "file",
               url: "storage://org-1/ws-1/chat-1/msg-2/0-def67890.jpg",
-              mimeType: "image/jpeg",
+              mediaType: "image/jpeg",
             },
           ],
         },
@@ -401,7 +401,7 @@ describe("Storage Utils", () => {
         {
           id: "msg-1",
           role: "user",
-          parts: [{ type: "file", url: storageUrl, mimeType: "image/png" }],
+          parts: [{ type: "file", url: storageUrl, mediaType: "image/png" }],
         },
       ];
 

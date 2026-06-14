@@ -73,11 +73,6 @@ import {
   shouldInjectNativeSearch,
 } from "./chat-execution.ts";
 import { createInMemoryChatTurnQueries } from "./chat-execution.test-fixtures.ts";
-import type { agent as agentTable } from "../db/schema.ts";
-import type { Provider } from "@platypus/schemas";
-import type { ChatTurnRequest } from "./chat-execution.ts";
-
-type AgentRow = typeof agentTable.$inferSelect;
 
 const baseProvider = {
   id: "p1",
@@ -88,12 +83,9 @@ const baseProvider = {
   modelIds: ["gpt-4"],
   apiKey: "sk-test",
   apiMode: "chat" as const,
-  baseUrl: null,
-  headers: null,
-  organization: null,
-  project: null,
-  region: null,
-  extraBody: null,
+  nativeSearchEnabled: true,
+  taskModelId: "gpt-4",
+  memoryExtractionModelId: "gpt-4",
   createdAt: new Date(),
   updatedAt: new Date(),
 };
@@ -101,6 +93,7 @@ const baseProvider = {
 const baseAgent = {
   id: "agent-1",
   name: "Test Agent",
+  organizationId: null,
   workspaceId: "ws-1",
   providerId: "p1",
   modelId: "gpt-4",
@@ -115,7 +108,9 @@ const baseAgent = {
   toolSetIds: [],
   skillIds: [],
   subAgentIds: [],
-  description: null,
+  description: "Test agent",
+  inputPlaceholder: null,
+  avatarKey: null,
   createdAt: new Date(),
   updatedAt: new Date(),
 };
@@ -130,6 +125,8 @@ const baseWorkspace = {
   memoryExtractionProviderId: null,
   memoryEmbeddingProviderId: null,
   maxDailySummaries: 30,
+  providerSelfManagement: false,
+  mcpSelfManagement: false,
   createdAt: new Date(),
   updatedAt: new Date(),
 };
@@ -152,8 +149,8 @@ describe("chat-execution", () => {
       const agentWithSkill = { ...baseAgent, skillIds: ["skill-1"] };
       const queries = createInMemoryChatTurnQueries({
         workspaces: [baseWorkspace],
-        agents: [agentWithSkill as AgentRow],
-        providers: [baseProvider as Provider],
+        agents: [agentWithSkill],
+        providers: [baseProvider],
         skills: [
           {
             id: "skill-1",
@@ -165,7 +162,7 @@ describe("chat-execution", () => {
       });
 
       const turn = await prepareChatTurn(
-        { ...baseInput, request: { id: "chat-1", agentId: agentWithSkill.id } },
+        { ...baseInput, request: { agentId: agentWithSkill.id } },
         queries,
       );
 
@@ -202,8 +199,8 @@ describe("chat-execution", () => {
       // Attached → the Skill surfaces in the system prompt.
       const attached = createInMemoryChatTurnQueries({
         workspaces: [baseWorkspace],
-        agents: [agentWithSkill as AgentRow],
-        providers: [baseProvider as Provider],
+        agents: [agentWithSkill],
+        providers: [baseProvider],
         skills: [orgSkill],
         attachments: [
           {
@@ -217,7 +214,7 @@ describe("chat-execution", () => {
       const attachedTurn = await prepareChatTurn(
         {
           ...baseInput,
-          request: { id: "chat-os", agentId: agentWithSkill.id },
+          request: { agentId: agentWithSkill.id },
         },
         attached,
       );
@@ -227,15 +224,15 @@ describe("chat-execution", () => {
       // Not attached → the Skill is invisible to this workspace.
       const detached = createInMemoryChatTurnQueries({
         workspaces: [baseWorkspace],
-        agents: [agentWithSkill as AgentRow],
-        providers: [baseProvider as Provider],
+        agents: [agentWithSkill],
+        providers: [baseProvider],
         skills: [orgSkill],
       });
 
       const detachedTurn = await prepareChatTurn(
         {
           ...baseInput,
-          request: { id: "chat-os2", agentId: agentWithSkill.id },
+          request: { agentId: agentWithSkill.id },
         },
         detached,
       );
@@ -249,7 +246,7 @@ describe("chat-execution", () => {
         ...baseProvider,
         id: "p-org",
         organizationId: "org-1",
-        workspaceId: null,
+        workspaceId: undefined,
       };
       const sharedAgent = {
         ...baseAgent,
@@ -263,8 +260,8 @@ describe("chat-execution", () => {
       // org-scoped Provider) resolve against that Workspace (ADR-0007).
       const attached = createInMemoryChatTurnQueries({
         workspaces: [borrowingWorkspace],
-        agents: [sharedAgent as AgentRow],
-        providers: [orgProvider as Provider],
+        agents: [sharedAgent],
+        providers: [orgProvider],
         attachments: [
           {
             workspaceId: "ws-2",
@@ -283,7 +280,7 @@ describe("chat-execution", () => {
         {
           ...baseInput,
           workspaceId: "ws-2",
-          request: { id: "chat-shared", agentId: "shared-agent" },
+          request: { agentId: "shared-agent" },
         },
         attached,
       );
@@ -293,15 +290,15 @@ describe("chat-execution", () => {
       // Not attached → the Shared Agent is invisible to this Workspace.
       const detached = createInMemoryChatTurnQueries({
         workspaces: [borrowingWorkspace],
-        agents: [sharedAgent as AgentRow],
-        providers: [orgProvider as Provider],
+        agents: [sharedAgent],
+        providers: [orgProvider],
       });
       await expect(
         prepareChatTurn(
           {
             ...baseInput,
             workspaceId: "ws-2",
-            request: { id: "chat-shared2", agentId: "shared-agent" },
+            request: { agentId: "shared-agent" },
           },
           detached,
         ),
@@ -311,14 +308,13 @@ describe("chat-execution", () => {
     it("Direct Provider+Model selection populates resolved.systemPrompt and merges request overrides", async () => {
       const queries = createInMemoryChatTurnQueries({
         workspaces: [baseWorkspace],
-        providers: [baseProvider as Provider],
+        providers: [baseProvider],
       });
 
       const turn = await prepareChatTurn(
         {
           ...baseInput,
           request: {
-            id: "chat-2",
             providerId: baseProvider.id,
             modelId: "gpt-4",
             systemPrompt: "Be terse.",
@@ -349,10 +345,7 @@ describe("chat-execution", () => {
       });
 
       await expect(
-        prepareChatTurn(
-          { ...baseInput, request: { id: "chat-3" } as ChatTurnRequest },
-          queries,
-        ),
+        prepareChatTurn({ ...baseInput, request: {} }, queries),
       ).rejects.toBeInstanceOf(ValidationError);
     });
 
@@ -365,7 +358,7 @@ describe("chat-execution", () => {
         prepareChatTurn(
           {
             ...baseInput,
-            request: { id: "chat-4", agentId: "agent-missing" },
+            request: { agentId: "agent-missing" },
           },
           queries,
         ),
@@ -382,7 +375,6 @@ describe("chat-execution", () => {
           {
             ...baseInput,
             request: {
-              id: "chat-5",
               providerId: "p-missing",
               modelId: "gpt-4",
             },
@@ -395,7 +387,7 @@ describe("chat-execution", () => {
     it("throws ValidationError when the model id is not enabled on the Provider", async () => {
       const queries = createInMemoryChatTurnQueries({
         workspaces: [baseWorkspace],
-        providers: [{ ...baseProvider, modelIds: ["gpt-3.5"] } as Provider],
+        providers: [{ ...baseProvider, modelIds: ["gpt-3.5"] }],
       });
 
       await expect(
@@ -403,7 +395,6 @@ describe("chat-execution", () => {
           {
             ...baseInput,
             request: {
-              id: "chat-6",
               providerId: baseProvider.id,
               modelId: "gpt-4",
             },
@@ -421,7 +412,6 @@ describe("chat-execution", () => {
           {
             ...baseInput,
             request: {
-              id: "chat-7",
               providerId: baseProvider.id,
               modelId: "gpt-4",
             },
@@ -467,8 +457,8 @@ describe("chat-execution", () => {
       const orgMcp = { ...baseMcp, organizationId: "org-1" };
       const queries = createInMemoryChatTurnQueries({
         workspaces: [baseWorkspace],
-        agents: [agentWithMcp as AgentRow],
-        providers: [baseProvider as Provider],
+        agents: [agentWithMcp],
+        providers: [baseProvider],
         mcps: [orgMcp],
         attachments: [
           {
@@ -480,7 +470,7 @@ describe("chat-execution", () => {
       });
 
       const turn = await prepareChatTurn(
-        { ...baseInput, request: { id: "chat-mcp", agentId: agentWithMcp.id } },
+        { ...baseInput, request: { agentId: agentWithMcp.id } },
         queries,
       );
 
@@ -498,14 +488,14 @@ describe("chat-execution", () => {
       const orgMcp = { ...baseMcp, organizationId: "org-1" };
       const queries = createInMemoryChatTurnQueries({
         workspaces: [baseWorkspace],
-        agents: [agentWithMcp as AgentRow],
-        providers: [baseProvider as Provider],
+        agents: [agentWithMcp],
+        providers: [baseProvider],
         mcps: [orgMcp],
         // no attachments
       });
 
       const turn = await prepareChatTurn(
-        { ...baseInput, request: { id: "chat-mcp", agentId: agentWithMcp.id } },
+        { ...baseInput, request: { agentId: agentWithMcp.id } },
         queries,
       );
 
@@ -521,8 +511,8 @@ describe("chat-execution", () => {
       const orgMcp = { ...baseMcp, organizationId: "org-1" };
       const queries = createInMemoryChatTurnQueries({
         workspaces: [baseWorkspace],
-        agents: [agentWithMcp as AgentRow],
-        providers: [baseProvider as Provider],
+        agents: [agentWithMcp],
+        providers: [baseProvider],
         mcps: [orgMcp],
         attachments: [
           {
@@ -535,7 +525,7 @@ describe("chat-execution", () => {
 
       // The unreachable MCP must not kill the Chat turn.
       const turn = await prepareChatTurn(
-        { ...baseInput, request: { id: "chat-mcp", agentId: agentWithMcp.id } },
+        { ...baseInput, request: { agentId: agentWithMcp.id } },
         queries,
       );
 

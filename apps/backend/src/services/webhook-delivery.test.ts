@@ -10,7 +10,7 @@ interface WebhookFetchOptions {
 
 /** Pull typed call args from mockFetch.mock.calls[n]. */
 const getFetchCall = (
-  calls: Parameters<typeof fetch>[][],
+  calls: Parameters<typeof fetch>[],
   index: number,
 ): [string, WebhookFetchOptions] => {
   const [url, opts] = calls[index];
@@ -88,7 +88,7 @@ describe("Webhook Delivery Service", () => {
 
   it("should deliver webhook with correct headers and body", async () => {
     mockWebhookSelect.mockResolvedValueOnce([sampleWebhook]);
-    mockFetch.mockResolvedValueOnce({ ok: true });
+    mockFetch.mockResolvedValueOnce({ ok: true } as Response);
 
     dispatchEvent("ws-1", "notification.created", { id: "n-1" });
 
@@ -115,7 +115,7 @@ describe("Webhook Delivery Service", () => {
 
   it("should compute correct HMAC-SHA256 signature", async () => {
     mockWebhookSelect.mockResolvedValueOnce([sampleWebhook]);
-    mockFetch.mockResolvedValueOnce({ ok: true });
+    mockFetch.mockResolvedValueOnce({ ok: true } as Response);
 
     dispatchEvent("ws-1", "notification.created", { id: "n-1" });
 
@@ -137,7 +137,7 @@ describe("Webhook Delivery Service", () => {
       headers: { Authorization: "Bearer token123", "X-Custom": "value" },
     };
     mockWebhookSelect.mockResolvedValueOnce([webhookWithHeaders]);
-    mockFetch.mockResolvedValueOnce({ ok: true });
+    mockFetch.mockResolvedValueOnce({ ok: true } as Response);
 
     dispatchEvent("ws-1", "notification.created", {});
 
@@ -152,7 +152,7 @@ describe("Webhook Delivery Service", () => {
     mockWebhookSelect.mockResolvedValueOnce([sampleWebhook]);
     mockFetch
       .mockRejectedValueOnce(new Error("Network error"))
-      .mockResolvedValueOnce({ ok: true });
+      .mockResolvedValueOnce({ ok: true } as Response);
 
     dispatchEvent("ws-1", "notification.created", {});
 
@@ -230,7 +230,7 @@ describe("Webhook Delivery Service", () => {
       signingSecret: "other-secret",
     };
     mockWebhookSelect.mockResolvedValueOnce([sampleWebhook, webhook2]);
-    mockFetch.mockResolvedValue({ ok: true });
+    mockFetch.mockResolvedValue({ ok: true } as Response);
 
     dispatchEvent("ws-1", "notification.created", { id: "n-1" });
 
@@ -258,7 +258,7 @@ describe("Webhook Delivery Service", () => {
       events: ["notification.created"],
     };
     mockWebhookSelect.mockResolvedValueOnce([sampleWebhook, webhook2]);
-    mockFetch.mockResolvedValue({ ok: true });
+    mockFetch.mockResolvedValue({ ok: true } as Response);
 
     dispatchEvent("ws-1", "notification.dismissed", { id: "n-1" });
 
@@ -282,7 +282,7 @@ describe("Webhook Delivery Service", () => {
     // First webhook fails, second succeeds
     mockFetch
       .mockRejectedValueOnce(new Error("Network error"))
-      .mockResolvedValueOnce({ ok: true });
+      .mockResolvedValueOnce({ ok: true } as Response);
 
     dispatchEvent("ws-1", "notification.created", { id: "n-1" });
 

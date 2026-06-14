@@ -76,7 +76,9 @@ describe("User Invitation Routes", () => {
 
       // ADR-0008: accepting always provisions a workspace owned by the
       // acceptor, using the invitation's workspace name.
-      const insertedValues = mockDb.values.mock.calls.map((c) => c[0]);
+      const insertedValues = mockDb.values.mock.calls.map(
+        (c) => c[0] as Record<string, unknown>,
+      );
       const provisioned = insertedValues.find((v) => v?.name);
       expect(provisioned).toMatchObject({
         organizationId: "org-1",
@@ -116,7 +118,9 @@ describe("User Invitation Routes", () => {
       });
 
       expect(res.status).toBe(200);
-      const insertedValues = mockDb.values.mock.calls.map((c) => c[0]);
+      const insertedValues = mockDb.values.mock.calls.map(
+        (c) => c[0] as Record<string, unknown>,
+      );
       const provisioned = insertedValues.find((v) => v?.name);
       expect(provisioned).toMatchObject({
         ownerId: "u1",
@@ -154,7 +158,9 @@ describe("User Invitation Routes", () => {
       });
 
       expect(res.status).toBe(200);
-      const insertedValues = mockDb.values.mock.calls.map((c) => c[0]);
+      const insertedValues = mockDb.values.mock.calls.map(
+        (c) => c[0] as Record<string, unknown>,
+      );
       const provisioned = insertedValues.find((v) => v?.name);
       expect(provisioned).toMatchObject({ name: "James' Workspace" });
     });
@@ -190,7 +196,9 @@ describe("User Invitation Routes", () => {
       });
 
       expect(res.status).toBe(200);
-      const insertedValues = mockDb.values.mock.calls.map((c) => c[0]);
+      const insertedValues = mockDb.values.mock.calls.map(
+        (c) => c[0] as Record<string, unknown>,
+      );
       const provisioned = insertedValues.find(
         (v): v is { name: string } =>
           typeof v === "object" && v !== null && "name" in v,
@@ -285,7 +293,7 @@ describe("User Invitation Routes", () => {
       // Tier 2: the later blueprint (bp-2) wins on taskModelProviderId; the
       // null slot it leaves does not clobber bp-1's earlier context.
       const tier2Set = mockDb.set.mock.calls
-        .map((c) => c[0])
+        .map((c) => c[0] as Record<string, unknown>)
         .find((v) => v?.taskModelProviderId !== undefined);
       expect(tier2Set).toMatchObject({
         taskModelProviderId: "prov-B",

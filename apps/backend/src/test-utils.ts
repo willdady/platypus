@@ -1,4 +1,62 @@
 import { vi, type Mock } from "vitest";
+import type {
+  InferToolInput,
+  InferToolOutput,
+  Tool,
+  ToolCallOptions,
+} from "ai";
+
+/** Default tool-call context for tests; tools rarely read these fields. */
+const TEST_TOOL_OPTIONS: ToolCallOptions = { toolCallId: "test", messages: [] };
+
+/**
+ * Invokes a tool's `execute` in tests. The AI SDK types `execute` as optional
+ * and lets it return an `AsyncIterable` (streaming) alongside the plain result,
+ * so calling it directly trips `tsc --noEmit`. Our non-streaming tools always
+ * resolve to a value, so this asserts `execute` exists and narrows away the
+ * streaming branch, returning the awaited result.
+ */
+export async function callTool<TOOL extends Tool>(
+  tool: TOOL,
+  input: InferToolInput<TOOL>,
+  options: ToolCallOptions = TEST_TOOL_OPTIONS,
+): Promise<Exclude<InferToolOutput<TOOL>, AsyncIterable<unknown>>> {
+  if (typeof tool.execute !== "function") {
+    throw new Error("Tool has no execute function");
+  }
+  const result: unknown = await tool.execute(input, options);
+  return result as Exclude<InferToolOutput<TOOL>, AsyncIterable<unknown>>;
+}
+
+/**
+ * Narrows a tool result to its success branch, throwing if the tool returned an
+ * `{ error }` payload. Tools that can fail return `Success | { error: string }`;
+ * tests that expect success use this to drop the error branch.
+ */
+export function expectOk<T>(result: T): Exclude<T, { error: string }> {
+  if (result && typeof result === "object" && "error" in result) {
+    throw new Error(
+      `Expected a success result but got an error: ${String(
+        (result as { error: unknown }).error,
+      )}`,
+    );
+  }
+  return result as Exclude<T, { error: string }>;
+}
+
+/** Convenience: invoke a tool and narrow the result to its success branch. */
+export async function callOkTool<TOOL extends Tool>(
+  tool: TOOL,
+  input: InferToolInput<TOOL>,
+  options: ToolCallOptions = TEST_TOOL_OPTIONS,
+): Promise<
+  Exclude<InferToolOutput<TOOL>, AsyncIterable<unknown> | { error: string }>
+> {
+  return expectOk(await callTool(tool, input, options)) as Exclude<
+    InferToolOutput<TOOL>,
+    AsyncIterable<unknown> | { error: string }
+  >;
+}
 
 // Set environment variables for tests
 process.env.ALLOWED_ORIGINS = "http://localhost:3000";
@@ -85,6 +143,16 @@ function installBuilderMethods(target: MockDb): void {
     target[method] = vi.fn((..._args: unknown[]) => target);
   }
   target.transaction = vi.fn((cb: (tx: MockDb) => unknown) => cb(target));
+}
+
+/**
+ * Casts the chainable mock to whatever concrete Drizzle `db`/transaction type a
+ * function under test expects. The mock is structurally a query builder but not
+ * a `NodePgDatabase`/`PgTransaction`, so call sites pass `asDb(mockDb)` and let
+ * the target parameter's type drive inference of `T`.
+ */
+export function asDb<T>(db: MockDb): T {
+  return db as unknown as T;
 }
 
 /**

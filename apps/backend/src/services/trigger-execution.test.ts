@@ -99,13 +99,19 @@ describe("trigger-execution", () => {
       const args = mockGenerate.mock.calls[0][0] as GenerateArgs;
       expect(args.scope.orgId).toBe("org-1");
       expect(args.scope.workspaceId).toBe("ws-1");
-      expect(args.scope.principal.kind).toBe("trigger");
-      expect(args.scope.principal.triggerId).toBe("trigger-1");
-      expect(args.scope.principal.onBehalfOfUserId).toBe("user-1");
+      const { principal } = args.scope;
+      expect(principal.kind).toBe("trigger");
+      if (principal.kind !== "trigger")
+        throw new Error("expected a trigger principal");
+      expect(principal.triggerId).toBe("trigger-1");
+      expect(principal.onBehalfOfUserId).toBe("user-1");
       expect(args.input.runId).toBe("test-id");
       expect(args.input.request.agentId).toBe("agent-1");
       expect(args.input.messages).toHaveLength(1);
-      expect(args.input.messages[0].parts[0].text).toBe("Do something");
+      const part = args.input.messages[0].parts[0];
+      expect(part.type).toBe("text");
+      if (part.type !== "text") throw new Error("expected a text part");
+      expect(part.text).toBe("Do something");
     });
 
     it("prepends event context to the instruction for event triggers", async () => {

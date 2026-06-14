@@ -6,8 +6,9 @@ import app from "../server.ts";
 vi.mock("node:crypto", async () => {
   const actual =
     await vi.importActual<typeof import("node:crypto")>("node:crypto");
-  const actualDefault: typeof import("node:crypto") =
-    actual.default as typeof import("node:crypto");
+  const actualDefault: typeof import("node:crypto") = (
+    actual as unknown as { default: typeof import("node:crypto") }
+  ).default;
   return {
     ...actual,
     default: {

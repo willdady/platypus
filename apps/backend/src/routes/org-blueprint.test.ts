@@ -483,7 +483,7 @@ describe("Organization Blueprint Routes", () => {
       });
       // Tier 2: the workspace is updated with the blueprint's non-null slots.
       const tier2Set = mockDb.set.mock.calls
-        .map((c) => c[0])
+        .map((c) => c[0] as Record<string, unknown>)
         .find((v) => v?.taskModelProviderId !== undefined);
       expect(tier2Set).toMatchObject({
         taskModelProviderId: "prov-1",
