@@ -68,7 +68,9 @@ describe("createSubAgentTool", () => {
   const baseOptions = {
     id: "agent-1",
     name: "Research Agent",
-    model: {},
+    // ToolLoopAgent is mocked, so the model value is never used; a string
+    // satisfies the `LanguageModel` type without constructing a real provider.
+    model: "mock-model",
     tools: {},
   };
 
