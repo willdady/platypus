@@ -275,6 +275,18 @@ export type UICompactOptions = {
   /** Threshold for pruning tool results in kept (recent) messages after Stage 2.
    * Defaults to minPrunableChars * 5 when omitted. */
   minRecentPrunableChars?: number;
+  /**
+   * The HARD window wall (Chunk 14 Task 1, option D): the kept view's tokens
+   * above which the call would actually overflow (already net of per-turn
+   * overhead by the caller). Recent (kept) tool results are trimmed ONLY when
+   * the kept view breaches this wall — a mere `targetTokens` (hysteresis) miss
+   * is cheap (it re-compacts next turn) and is not worth gutting active data the
+   * user is asking about. The single newest message is always exempt regardless.
+   * When omitted, recent results are always trimmed once over target (the
+   * pre-option-D behaviour) — safer than never trimming for callers that cannot
+   * supply the wall.
+   */
+  inputBudget?: number;
   imageProvider?: ImageProvider;
   /** Existing durable summary to fold the new prefix into (incremental). */
   priorSummary?: string | null;
@@ -398,27 +410,69 @@ export async function compactUIMessages(
     };
   }
 
-  // Past this point we are over target. Prune large tool results in the kept
-  // (recent) messages — these stay in the model view, so extreme outliers (e.g.
-  // large MCP tool dumps) bloat tokensAfter and prevent reaching targetTokens.
-  // Computed once and reused by every over-target return below (the empty-prefix
-  // / null-watermark bail and the Stage 2 summarize path) so a history that fits
-  // entirely within keepRecentMessages still gets its outliers trimmed.
+  // Past this point we are over target. Recent (kept) messages stay in the model
+  // view, so extreme outliers (e.g. large MCP tool dumps) bloat tokensAfter.
+  // Option D (Chunk 14 Task 1): trim them ONLY when the kept view would breach
+  // the hard window wall (`inputBudget`); a soft `targetTokens` miss is left at
+  // full fidelity and just re-compacts next turn (cheap). The newest message is
+  // always exempt — it is the data the current turn is actively about.
   const recentThreshold =
     opts.minRecentPrunableChars ?? opts.minPrunableChars * 5;
-  const prunedRecent = recent.map(
-    (m) => pruneUIMessage(m, recentThreshold).message,
-  );
+  const pruneRecentExemptNewest = (
+    msgs: PlatypusUIMessage[],
+  ): { messages: PlatypusUIMessage[]; changed: boolean } => {
+    let changed = false;
+    const messages = msgs.map((m, i) => {
+      if (i === msgs.length - 1) return m; // newest always exempt
+      const pruned = pruneUIMessage(m, recentThreshold);
+      if (pruned.changed) changed = true;
+      return pruned.message;
+    });
+    return { messages, changed };
+  };
+  // Decides whether to keep `recent` verbatim or trim it (option D). Returns the
+  // kept messages and their token estimate (reused for `afterEstimate` so the
+  // recent set is never re-estimated). `fixedTokens` is the kept view's NON-recent
+  // part (pruned prefix and/or folded summary). When `inputBudget` is omitted the
+  // wall is unknown → always trim once over target (pre-option-D guard).
+  const keepRecentWithinWall = (
+    fixedTokens: number,
+    recentMsgs: PlatypusUIMessage[],
+  ): { messages: PlatypusUIMessage[]; recentTokens: number } => {
+    const recentTokens = estimate(recentMsgs);
+    if (
+      opts.inputBudget !== undefined &&
+      fixedTokens + recentTokens <= opts.inputBudget
+    ) {
+      return { messages: recentMsgs, recentTokens }; // within wall — full fidelity
+    }
+    const trimmed = pruneRecentExemptNewest(recentMsgs);
+    // Nothing prunable (no tool outputs over threshold) → reuse the estimate.
+    return {
+      messages: trimmed.messages,
+      recentTokens: trimmed.changed ? estimate(trimmed.messages) : recentTokens,
+    };
+  };
 
-  const warnIfOverTarget = (afterEstimate: number) => {
-    if (afterEstimate > opts.targetTokens * 2) {
+  // Warn only when the kept view still breaches the HARD wall after trimming —
+  // i.e. recent genuinely couldn't be brought under the window (one oversized
+  // result; Task 3 ingestion-cap territory). Post-option-D a soft `targetTokens`
+  // miss is by design (recent kept verbatim below the wall), so it is NOT a
+  // warning. Falls back to the old `target * 2` heuristic when no wall is supplied.
+  const warnIfOverWall = (afterEstimate: number) => {
+    const over =
+      opts.inputBudget !== undefined
+        ? afterEstimate > opts.inputBudget
+        : afterEstimate > opts.targetTokens * 2;
+    if (over) {
       logger.warn(
         {
           afterEstimate,
           targetTokens: opts.targetTokens,
+          inputBudget: opts.inputBudget,
           keepRecentMessages: opts.keepRecentMessages,
         },
-        "compaction fired but recent messages exceed target — keepRecentMessages may be locking in large tool results",
+        "compaction fired but recent messages exceed the window — a single oversized tool result may be uncompactable (see ingestion cap)",
       );
     }
   };
@@ -432,9 +486,11 @@ export async function compactUIMessages(
   const watermarkId =
     prefix.length > 0 ? (prefix[prefix.length - 1].id ?? null) : null;
   if (prefix.length === 0 || watermarkId === null) {
-    const kept = [...prunedPrefix, ...prunedRecent];
-    const afterEstimate = estimate(kept) + priorTokens;
-    warnIfOverTarget(afterEstimate);
+    const prunedPrefixTokens = estimate(prunedPrefix) + priorTokens;
+    const keptRecent = keepRecentWithinWall(prunedPrefixTokens, recent);
+    const kept = [...prunedPrefix, ...keptRecent.messages];
+    const afterEstimate = prunedPrefixTokens + keptRecent.recentTokens;
+    warnIfOverWall(afterEstimate);
     return {
       keptMessages: kept,
       summaryText: opts.priorSummary ?? null,
@@ -453,11 +509,13 @@ export async function compactUIMessages(
     opts.summarizerWindow,
   );
 
-  const afterEstimate = estimate(prunedRecent) + textTokens(summaryText);
-  warnIfOverTarget(afterEstimate);
+  const summaryTokens = textTokens(summaryText);
+  const keptRecent = keepRecentWithinWall(summaryTokens, recent);
+  const afterEstimate = keptRecent.recentTokens + summaryTokens;
+  warnIfOverWall(afterEstimate);
 
   return {
-    keptMessages: prunedRecent,
+    keptMessages: keptRecent.messages,
     summaryText,
     watermarkId,
     messagesDropped: prefix.length,
@@ -974,8 +1032,14 @@ export async function applyTier1Compaction(
     );
   }
 
+  // The hard wall the kept view must fit under (option D), net of the per-turn
+  // overhead compaction cannot shrink — mirrors how effectiveTarget adjusts the
+  // soft target. Recent tool results are trimmed only when this is breached.
+  const effectiveInputBudget = Math.max(0, budget.inputBudget - overheadTokens);
+
   const result = await compactUIMessages(afterWatermark, {
     targetTokens: effectiveTarget,
+    inputBudget: effectiveInputBudget,
     keepRecentMessages: config.keepRecentMessages,
     minPrunableChars: config.minPrunableChars,
     minRecentPrunableChars: config.minRecentPrunableChars,

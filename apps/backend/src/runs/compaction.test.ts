@@ -377,7 +377,28 @@ describe("compactUIMessages (Tier 1)", () => {
     expect((toolPart?.output as string).length).toBeLessThan(12000);
   });
 
-  it("warns when Stage 2 result still exceeds 2× targetTokens after pruning", async () => {
+  it("option D: keeps recent VERBATIM in the empty-prefix path when within inputBudget", async () => {
+    // Whole history fits within keepRecentMessages (2) → empty prefix, no model
+    // call. Over the soft target but under the wall → outlier must stay untouched.
+    const msgs = [
+      uiTool("r1", "X".repeat(12000)),
+      uiText("r2", "user", "done"),
+    ];
+    const res = await compactUIMessages(msgs, {
+      ...baseOpts,
+      summarize: noopSummarize,
+      targetTokens: 300,
+      minRecentPrunableChars: 5000,
+      inputBudget: 100000, // wall far above → no recent trim
+    });
+    expect(res.usedModelCall).toBe(false);
+    const toolPart = res.keptMessages[0].parts?.find((p) =>
+      (p as { type: string }).type.startsWith("tool-"),
+    ) as { output?: string } | undefined;
+    expect(toolPart?.output).toBe("X".repeat(12000)); // untouched
+  });
+
+  it("warns (no wall) when Stage 2 result still exceeds 2× targetTokens after pruning", async () => {
     const warn = vi.spyOn(logger, "warn").mockReturnValue(undefined);
     const msgs = [
       uiText("p1", "user", "P".repeat(4000)),
@@ -390,12 +411,81 @@ describe("compactUIMessages (Tier 1)", () => {
       ...baseOpts,
       summarize: noopSummarize,
       targetTokens: 50, // recent alone is ~4000 tokens → well over 2×50
+      // no inputBudget → warn falls back to the target*2 heuristic
     });
     expect(warn).toHaveBeenCalledWith(
       expect.objectContaining({ targetTokens: 50 }),
-      expect.stringContaining("recent messages exceed target"),
+      expect.stringContaining("recent messages exceed the window"),
     );
     warn.mockRestore();
+  });
+
+  it("option D: does NOT warn on a soft-target miss when recent is under the wall", async () => {
+    const warn = vi.spyOn(logger, "warn").mockReturnValue(undefined);
+    const msgs = [
+      uiText("p1", "user", "P".repeat(4000)),
+      uiText("p2", "assistant", "Q".repeat(4000)),
+      uiText("r1", "user", "R".repeat(8000)),
+      uiText("r2", "assistant", "S".repeat(8000)),
+    ];
+    await compactUIMessages(msgs, {
+      ...baseOpts,
+      summarize: noopSummarize,
+      targetTokens: 50, // way over target...
+      inputBudget: 100000, // ...but well under the hard wall → no warn
+    });
+    expect(warn).not.toHaveBeenCalled();
+    warn.mockRestore();
+  });
+
+  it("option D: keeps recent tool results VERBATIM when within inputBudget", async () => {
+    // Over the soft target (300) so Stage 2 fires, but the kept view (summary +
+    // recent) stays under the hard wall → recent must NOT be trimmed.
+    const msgs = [
+      uiText("p1", "user", "P".repeat(4000)),
+      uiText("p2", "assistant", "Q".repeat(4000)),
+      uiTool("r1", "X".repeat(12000)), // ~3000 tokens in recent
+      uiText("r2", "user", "done"),
+    ];
+    const res = await compactUIMessages(msgs, {
+      ...baseOpts,
+      summarize: noopSummarize,
+      targetTokens: 300,
+      minRecentPrunableChars: 5000,
+      inputBudget: 100000, // wall far above the kept view → no recent trim
+    });
+    expect(res.usedModelCall).toBe(true);
+    const toolPart = res.keptMessages[0].parts?.find((p) =>
+      (p as { type: string }).type.startsWith("tool-"),
+    ) as { output?: string } | undefined;
+    expect(toolPart?.output).toBe("X".repeat(12000)); // untouched
+  });
+
+  it("option D: trims recent (except newest) when the kept view breaches inputBudget", async () => {
+    // Two big tool results in recent; the kept view breaches the wall → trim the
+    // older one, exempt the single newest message even though it is bulky.
+    const msgs = [
+      uiText("p1", "user", "P".repeat(4000)),
+      uiText("p2", "assistant", "Q".repeat(4000)),
+      uiTool("r1", "X".repeat(12000)), // older recent → trimmed
+      uiTool("r2", "Y".repeat(12000)), // newest → exempt
+    ];
+    const res = await compactUIMessages(msgs, {
+      ...baseOpts,
+      summarize: noopSummarize,
+      targetTokens: 300,
+      minRecentPrunableChars: 5000,
+      inputBudget: 100, // wall well below the kept view → trim
+    });
+    expect(res.usedModelCall).toBe(true);
+    const out = (i: number) =>
+      (
+        res.keptMessages[i].parts?.find((p) =>
+          (p as { type: string }).type.startsWith("tool-"),
+        ) as { output?: string } | undefined
+      )?.output;
+    expect((out(0) as string).length).toBeLessThan(12000); // r1 trimmed
+    expect(out(1)).toBe("Y".repeat(12000)); // r2 (newest) exempt
   });
 });
 

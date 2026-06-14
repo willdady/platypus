@@ -1458,18 +1458,43 @@ including the empty-prefix / null-watermark bail; warns when post-compaction
 estimate > `targetTokens * 2`; env override `COMPACTION_MIN_RECENT_PRUNABLE_CHARS`;
 summarizer output ceiling 2000 → 4000.
 
-**Still to do — adopt "option D" (overflow-gate + exempt newest)** so we stop
+**DONE 2026-06-14 — "option D" (overflow-gate + exempt newest) shipped** so we stop
 gutting active data for a _soft_-target miss:
 
 - Missing `targetTokens` (0.5) is cheap — it's a hysteresis goal; the call still
   succeeds as long as `recent < inputBudget`. The hard wall is `inputBudget`
   (window − output reserve − safety, from `computeBudget`).
-- Gate recent-trim on `estimate(recent)+summary > inputBudget` (call would
-  actually overflow), NOT on the soft target. Below the wall, leave `recent`
+- Recent-trim is now gated on `estimate(recent)+summary > inputBudget` (call would
+  actually overflow), NOT on the soft target. Below the wall, `recent` is left
   intact — full fidelity, just a missed hysteresis target that re-compacts next
   turn (cheap; empty-prefix path makes no summarizer call).
-- Always exempt the single newest message regardless.
-- Requires threading `inputBudget` into `UICompactOptions`.
+- The single newest message is always exempt regardless (`pruneRecentExemptNewest`).
+- Implementation: `UICompactOptions.inputBudget` added; `keepRecentWithinWall`
+  helper in `compactUIMessages` applied on both over-target return paths (Stage 2
+  - empty-prefix bail); `applyTier1Compaction` threads
+    `effectiveInputBudget = max(0, budget.inputBudget − overheadTokens)` (mirrors
+    `effectiveTarget`). When `inputBudget` is omitted (recovery/tests) it falls
+    back to always-trim (pre-option-D guard).
+- **Caveat (not a full close): newest-exempt narrows the prior code's accidental
+  coverage of the single-oversized-result case.** Old code trimmed ALL recent incl.
+  the newest; option D keeps the newest verbatim. So if the NEWEST single message
+  alone exceeds the wall (e.g. a 40k mempalace dump as the last message), no tier
+  trims it — recovery also prunes prefix-only — and the turn hard-errors ("start a
+  new chat"). That is the Task 3 ingestion-cap gap, unsolved by any tier today;
+  option D does not introduce it but no longer accidentally masks it. The origin
+  event (4 big results) is fixed: option D trims 3, the newest stays, and the
+  result fits **as long as the newest < wall**.
+- **Review fixes (2026-06-14, post-implementation review):**
+  - The over-target warning was re-gated from `afterEstimate > targetTokens * 2`
+    to `afterEstimate > inputBudget` (`warnIfOverWall`). Post-option-D a soft
+    target miss is by design (recent kept verbatim below the wall), so the old
+    `target*2` warn fired on every healthy compaction under a low target ratio
+    (test box `0.1`). It now fires only when recent genuinely can't fit the window
+    (the Task 3 case). Falls back to `target*2` when no wall is supplied.
+  - `keepRecentWithinWall` now returns the recent token estimate so `afterEstimate`
+    never re-estimates the recent set (avoids the double char/4 pass).
+  - Tests: 57 pass (option-D Stage-2 verbatim + trim-except-newest; empty-prefix
+    verbatim; soft-miss-no-warn; the no-wall warn case renamed).
 - This is strictly better than the alternatives we weighed (B: exempt newest N —
   still over-trims under the test box's 0.1 target; A: raise threshold to 100k —
   reduces frequency only; C: revert — loses the pathological-dump guard). The test
