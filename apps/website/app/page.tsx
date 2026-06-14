@@ -114,8 +114,8 @@ const FeatureSection: FC<{
   image,
   reverse,
 }) => (
-  <Section id={id} className="py-20 sm:py-28">
-    <div className="grid items-center gap-10 lg:grid-cols-5 lg:gap-16">
+  <Section id={id} className="py-12 sm:py-28">
+    <div className="grid grid-cols-1 items-center gap-10 lg:grid-cols-5 lg:gap-16">
       <div className={`lg:col-span-2 ${reverse ? "lg:order-2" : ""}`}>
         <div className="inline-flex items-center gap-2 text-sm font-semibold text-primary-bright">
           <Icon className="size-5" />
@@ -169,7 +169,7 @@ export default function HomePage() {
             multi-tenant — you bring the models, Platypus gives you everything
             around them.
           </p>
-          <div className="mt-10 flex flex-col items-center gap-3 sm:flex-row">
+          <div className="mt-10 flex flex-row items-center justify-center gap-3">
             <a
               href={GITHUB_URL}
               target="_blank"
@@ -195,7 +195,7 @@ export default function HomePage() {
         </Section>
 
         {/* Features */}
-        <Section id="features" className="py-20 sm:py-28">
+        <Section id="features" className="py-12 sm:py-28">
           <div className="mx-auto max-w-2xl text-center">
             <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">
               Everything you need to harness AI
@@ -257,7 +257,7 @@ export default function HomePage() {
         />
 
         {/* How it works */}
-        <Section id="how-it-works" className="py-20 sm:py-28">
+        <Section id="how-it-works" className="py-12 sm:py-28">
           <div className="mx-auto max-w-2xl text-center">
             <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">
               Structure that scales with you
@@ -305,9 +305,9 @@ export default function HomePage() {
         </Section>
 
         {/* Get started */}
-        <Section id="get-started" className="py-20 sm:py-28">
+        <Section id="get-started" className="py-12 sm:py-28">
           <div className="rounded-2xl border border-border bg-card p-8 sm:p-12">
-            <div className="grid items-center gap-10 lg:grid-cols-2">
+            <div className="grid grid-cols-1 items-center gap-10 lg:grid-cols-2">
               <div>
                 <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">
                   Up and running in minutes
@@ -335,7 +335,7 @@ export default function HomePage() {
                   </a>
                 </div>
               </div>
-              <div className="rounded-xl border border-border bg-background p-5 font-mono text-sm">
+              <div className="min-w-0 rounded-xl border border-border bg-background p-5 font-mono text-sm">
                 <pre className="overflow-x-auto whitespace-pre text-muted-foreground">
                   <code>
                     <span className="text-muted-foreground/60">

@@ -13,6 +13,8 @@
 
 Platypus is an open-source, full-stack application designed to help you build AI agents. Built with a focus on extensibility and modern web standards, Platypus allows you to create agents that can reason, use tools, and interact with the world.
 
+🌐 **Visit the website at [platypus.chat](https://platypus.chat).**
+
 📚 **Full documentation lives at [docs.platypus.chat](https://docs.platypus.chat).**
 
 ![](assets/00_screenshot.png)

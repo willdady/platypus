@@ -26,6 +26,12 @@ export function HeroImage() {
     let raf = 0;
     const apply = () => {
       raf = 0;
+      // No tilt on mobile (<md). The CSS class below also flattens it pre-hydration
+      // to avoid a flash; here we just clear any inline transform and bail.
+      if (window.innerWidth < 768) {
+        frame.style.transform = "";
+        return;
+      }
       const rect = wrapper.getBoundingClientRect();
       const vh = window.innerHeight;
       // progress: 0 when the wrapper's top sits at the viewport bottom, 1 once
@@ -56,7 +62,7 @@ export function HeroImage() {
     <div ref={wrapperRef} style={{ perspective: "1600px" }}>
       <div
         ref={frameRef}
-        className="overflow-hidden rounded-xl border border-border shadow-2xl shadow-black/40"
+        className="overflow-hidden rounded-xl border border-border shadow-2xl shadow-black/40 max-md:[transform:none!important]"
         // Initial inline transform so the first paint is already tilted (close
         // to the on-load computed value), avoiding a flash before the effect runs.
         style={{
@@ -66,17 +72,17 @@ export function HeroImage() {
         }}
       >
         {/* Pseudo-browser app bar: traffic-light window controls. */}
-        <div className="flex items-center gap-2 border-b border-border bg-[oklch(0.15_0.004_220)] px-4 py-3">
+        <div className="flex items-center gap-1.5 border-b border-border bg-[oklch(0.15_0.004_220)] px-3 py-2 sm:gap-2 sm:px-4 sm:py-3">
           <span
-            className="size-3 rounded-full bg-[#ff5f57]"
+            className="size-1.5 rounded-full sm:size-3 bg-[#ff5f57]"
             aria-hidden="true"
           />
           <span
-            className="size-3 rounded-full bg-[#febc2e]"
+            className="size-1.5 rounded-full sm:size-3 bg-[#febc2e]"
             aria-hidden="true"
           />
           <span
-            className="size-3 rounded-full bg-[#28c840]"
+            className="size-1.5 rounded-full sm:size-3 bg-[#28c840]"
             aria-hidden="true"
           />
         </div>
