@@ -241,6 +241,133 @@ function pruneUIMessage(
     : { message, changed };
 }
 
+/**
+ * Placeholder body for an elided tool result (Chunk 14 Task 2 — context editing).
+ * LLM-AGNOSTIC: Platypus may run small/weak background models, so the string is
+ * EXPLICIT and self-describing. A terse marker ("[Old tool result content
+ * cleared]") assumes the model infers it can re-call the tool; a small model may
+ * not. Names the tool + elided size so the model can decide to re-run it, and is
+ * short enough that Stage 1 / option-D never re-trim it.
+ */
+const ELIDED_PLACEHOLDER_PREFIX = '[Tool result for "';
+
+export function elidedToolPlaceholder(toolName: string, chars: number): string {
+  return `${ELIDED_PLACEHOLDER_PREFIX}${toolName}" omitted to save context (${chars} chars). The full result is still available — call the tool again with the same input if you need it.]`;
+}
+
+export type EditToolResultsOptions = {
+  /** Exempt the last N tool results (most recent) from elision. */
+  keepRecentToolResults: number;
+  /** Only elide a tool result whose serialized output exceeds this many chars. */
+  minEditableToolChars: number;
+};
+
+export type EditToolResultsResult = {
+  messages: PlatypusUIMessage[];
+  resultsElided: number;
+  /** Net chars removed (original output length − placeholder length), for metrics. */
+  charsReclaimed: number;
+};
+
+/**
+ * Stage 0 (Chunk 14 Task 2 — context editing; Anthropic `clear_tool_uses`
+ * equivalent): replaces the `output` of OLD bulky tool-result parts with a short
+ * placeholder, keeping the tool part itself (pairing) and ALL text parts intact.
+ * Pure + deterministic — no model call, recomputed from raw messages each turn by
+ * recency, so it needs no durable state (P1: raw `chat.messages` is untouched, the
+ * full result stays for UI/audit).
+ *
+ * Recency is by COUNT of tool results (we have no clean turn id): the last
+ * `keepRecentToolResults` results are exempt, and the newest message is exempt
+ * regardless (same invariant as option D, Task 1). A result is elided only when
+ * its serialized `output` exceeds `minEditableToolChars` — the size gate ≈
+ * Anthropic's `clear_at_least`, so trivial results never churn the prompt cache.
+ *
+ * Monotonic + deterministic ⇒ cache-friendly: a result is elided the turn it ages
+ * past the keep-window and stays elided. Returns the SAME array reference when
+ * nothing qualified, so callers can skip a re-estimate.
+ */
+export function editToolResults(
+  messages: PlatypusUIMessage[],
+  opts: EditToolResultsOptions,
+): EditToolResultsResult {
+  // Enumerate every tool-result-bearing part in order so "keep the last N" is a
+  // simple tail slice. A single message can carry several tool parts.
+  const toolResultLocs: Array<{ mi: number; pi: number }> = [];
+  messages.forEach((m, mi) => {
+    (m.parts ?? []).forEach((part, pi) => {
+      const ap = part as { type: string; output?: unknown };
+      const isTool = ap.type === "dynamic-tool" || ap.type.startsWith("tool-");
+      if (isTool && ap.output !== undefined) toolResultLocs.push({ mi, pi });
+    });
+  });
+
+  // Candidates for elision = all but the last `keepRecentToolResults`; the newest
+  // MESSAGE is exempt regardless (decision 5 / option-D invariant). Decide the
+  // FULL elision policy here (recency + size gate + idempotency + grow-guard) and
+  // record the precomputed placeholder, so the rewrite map below fires only when
+  // there is real work — and never allocates a copy for a pure no-op.
+  const keepFrom = Math.max(
+    0,
+    toolResultLocs.length - opts.keepRecentToolResults,
+  );
+  const newestMessageIndex = messages.length - 1;
+  const elideAt = new Map<string, string>(); // "mi:pi" -> placeholder
+  let charsReclaimed = 0;
+  for (let k = 0; k < keepFrom; k++) {
+    const loc = toolResultLocs[k];
+    if (loc.mi === newestMessageIndex) continue; // newest message exempt
+    const ap = (messages[loc.mi].parts ?? [])[loc.pi] as {
+      type: string;
+      output?: unknown;
+      toolName?: string;
+    };
+    const serialized =
+      typeof ap.output === "string" ? ap.output : JSON.stringify(ap.output);
+    // Size gate (≈ clear_at_least): leave trivial results untouched — no churn.
+    if (serialized.length <= opts.minEditableToolChars) continue;
+    // Idempotency guard: never re-elide our own placeholder. At the default gate
+    // (50k) the ~150-char placeholder is far below it, but a misconfigured tiny
+    // gate would otherwise re-elide it every turn. Keeps this monotonic.
+    if (
+      typeof ap.output === "string" &&
+      ap.output.startsWith(ELIDED_PLACEHOLDER_PREFIX)
+    ) {
+      continue;
+    }
+    const toolName =
+      ap.type === "dynamic-tool"
+        ? (ap.toolName ?? "unknown")
+        : ap.type.slice("tool-".length);
+    const placeholder = elidedToolPlaceholder(toolName, serialized.length);
+    // Grow-guard: a tiny gate could pick a result shorter than the placeholder;
+    // eliding would INFLATE the prompt (negative reclaim). Skip — never grow.
+    if (placeholder.length >= serialized.length) continue;
+    elideAt.set(`${loc.mi}:${loc.pi}`, placeholder);
+    charsReclaimed += serialized.length - placeholder.length;
+  }
+
+  // Nothing truly qualified ⇒ return the original reference so callers skip the
+  // re-estimate (cache-friendly no-op) and we allocate no copy.
+  if (elideAt.size === 0) {
+    return { messages, resultsElided: 0, charsReclaimed: 0 };
+  }
+
+  const out = messages.map((m, mi) => {
+    const parts = m.parts ?? [];
+    if (!parts.some((_, pi) => elideAt.has(`${mi}:${pi}`))) return m;
+    const newParts = parts.map((part, pi) => {
+      const placeholder = elideAt.get(`${mi}:${pi}`);
+      if (placeholder === undefined) return part;
+      const ap = part as { output?: unknown };
+      return { ...ap, output: placeholder };
+    });
+    return { ...m, parts: newParts } as PlatypusUIMessage;
+  });
+
+  return { messages: out, resultsElided: elideAt.size, charsReclaimed };
+}
+
 /** Builds a readable transcript of UIMessages for the summarizer. */
 function renderUIMessages(messages: PlatypusUIMessage[]): string {
   return messages
@@ -763,6 +890,14 @@ export type CompactionConfig = {
    * Stage 2 summarization. Higher than minPrunableChars — we trim extreme
    * outliers (e.g. huge MCP tool dumps) without destroying useful context. */
   minRecentPrunableChars: number;
+  /** Stage 0 context editing (Chunk 14 Task 2): elide OLD bulky tool results to a
+   * placeholder before the trigger check, so a leaned view can avoid summarizing
+   * entirely. Gated alongside the COMPACTION_ENABLED kill switch. */
+  contextEditingEnabled: boolean;
+  /** Stage 0: exempt the last N tool results from elision (recency, by count). */
+  keepRecentToolResults: number;
+  /** Stage 0: only elide a tool result whose serialized output exceeds this. */
+  minEditableToolChars: number;
 };
 
 export const DEFAULT_COMPACTION_CONFIG: CompactionConfig = {
@@ -773,6 +908,12 @@ export const DEFAULT_COMPACTION_CONFIG: CompactionConfig = {
   keepRecentMessages: 10,
   minPrunableChars: 2000,
   minRecentPrunableChars: 10000,
+  contextEditingEnabled: true,
+  keepRecentToolResults: 4,
+  // 50k chars ≈ 12.5k tokens — matches LibreChat's minPrunableToolChars, the only
+  // direct per-result char-gate analog. High enough to spare medium results (less
+  // cache churn) while still catching the ~160k-char mempalace dump.
+  minEditableToolChars: 50000,
 };
 
 export type Budget = {
@@ -975,15 +1116,45 @@ export async function applyTier1Compaction(
   const { afterWatermark, priorSummary } = viewAfterWatermark(messages, state);
   const priorSummaryTokens = priorSummary ? textTokens(priorSummary) : 0;
 
+  // Stage 0 — context editing (Chunk 14 Task 2): elide OLD bulky tool results to
+  // placeholders BEFORE the trigger projection, so a leaned view can drop under
+  // the trigger and skip summarization entirely. Pure/deterministic, no durable
+  // state (P1). Gated by the COMPACTION_ENABLED kill switch (recovery stays the
+  // net, P4) AND the per-feature `contextEditingEnabled`. Returns the same array
+  // reference when nothing qualified, so the no-op case re-estimates nothing.
+  // NB (plan decision 7): the elided placeholders also flow into the prefix that
+  // Stage 2 would summarize, so a summarized result keeps only its placeholder —
+  // an accepted fidelity trade-off (a 40k dump's head+tail is poor summary fodder
+  // and the raw stays in the DB).
+  const contextEditing =
+    config.compactionEnabled && config.contextEditingEnabled
+      ? editToolResults(afterWatermark, {
+          keepRecentToolResults: config.keepRecentToolResults,
+          minEditableToolChars: config.minEditableToolChars,
+        })
+      : { messages: afterWatermark, resultsElided: 0, charsReclaimed: 0 };
+  const editedView = contextEditing.messages;
+  if (contextEditing.resultsElided > 0) {
+    logger.info(
+      {
+        metric: "context_edited",
+        chatId: input.chatId,
+        resultsElided: contextEditing.resultsElided,
+        charsReclaimed: contextEditing.charsReclaimed,
+      },
+      "context_edited",
+    );
+  }
+
   const inject = (summary: string | null, msgs: PlatypusUIMessage[]) =>
     summary ? [summaryUIMessage(summary), ...msgs] : msgs;
 
   // The view that would be sent if we did nothing more this turn.
-  const baseView = inject(priorSummary, afterWatermark);
+  const baseView = inject(priorSummary, editedView);
   const overheadTokens = input.overheadTokens ?? 0;
   // RV9: compute the char/4 pass over the unsummarized view once and reuse it
   // for both the trigger projection and compactUIMessages' no-op gate.
-  const messageTokens = estimate(afterWatermark);
+  const messageTokens = estimate(editedView);
   const projected = projectTier1Tokens({
     messageTokens,
     priorSummaryTokens,
@@ -1037,7 +1208,7 @@ export async function applyTier1Compaction(
   // soft target. Recent tool results are trimmed only when this is breached.
   const effectiveInputBudget = Math.max(0, budget.inputBudget - overheadTokens);
 
-  const result = await compactUIMessages(afterWatermark, {
+  const result = await compactUIMessages(editedView, {
     targetTokens: effectiveTarget,
     inputBudget: effectiveInputBudget,
     keepRecentMessages: config.keepRecentMessages,

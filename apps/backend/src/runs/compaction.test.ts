@@ -9,6 +9,8 @@ import {
   commitWatermark,
   compactUIMessages,
   compactModelMessages,
+  editToolResults,
+  elidedToolPlaceholder,
   pickKeepBoundary,
   softTrim,
   type CompactionStore,
@@ -1083,5 +1085,231 @@ describe("setCompactionDirty (§E recovery producer, drift T3)", () => {
     await setCompactionDirty(store, "c");
     expect(store.state.contextSummary).toBe("KEEP");
     expect(store.state.summaryWatermark).toBe("m7");
+  });
+});
+
+// --- Chunk 14 Task 2: Stage 0 context editing ---------------------------
+
+/** Tool message with a named tool and arbitrary output. */
+const toolMsg = (
+  id: string,
+  name: string,
+  output: unknown,
+): PlatypusUIMessage =>
+  ({
+    id,
+    role: "assistant",
+    parts: [
+      {
+        type: `tool-${name}`,
+        toolCallId: `${id}-call`,
+        state: "output-available",
+        input: { q: "x" },
+        output,
+      },
+    ],
+  }) as unknown as PlatypusUIMessage;
+
+const bigOut = (n = 200) => "D".repeat(n);
+const outputOf = (m: PlatypusUIMessage) =>
+  (m.parts[0] as { output?: unknown }).output;
+
+describe("editToolResults (Stage 0 — context editing)", () => {
+  const opts = { keepRecentToolResults: 1, minEditableToolChars: 100 };
+
+  it("elides OLD bulky results past the keep-window; keeps recent + all text", () => {
+    const messages = [
+      toolMsg("t1", "search", bigOut()),
+      uiText("u1", "user", "carry on"),
+      toolMsg("t2", "search", bigOut()),
+      toolMsg("t3", "search", bigOut()),
+    ];
+    const res = editToolResults(messages, opts);
+    // 3 results, keep last 1 (t3) → t1, t2 are candidates and both bulky.
+    expect(res.resultsElided).toBe(2);
+    expect(outputOf(res.messages[0])).toBe(
+      elidedToolPlaceholder("search", 200),
+    );
+    expect(outputOf(res.messages[2])).toBe(
+      elidedToolPlaceholder("search", 200),
+    );
+    expect(outputOf(res.messages[3])).toBe(bigOut()); // t3 within keep-window
+    expect(res.messages[1]).toBe(messages[1]); // text untouched (same ref)
+  });
+
+  it("keeps results within keepRecentToolResults verbatim", () => {
+    const messages = [
+      toolMsg("t1", "f", bigOut()),
+      toolMsg("t2", "f", bigOut()),
+      toolMsg("t3", "f", bigOut()),
+    ];
+    const res = editToolResults(messages, {
+      keepRecentToolResults: 2,
+      minEditableToolChars: 100,
+    });
+    expect(res.resultsElided).toBe(1); // only t1
+    expect(outputOf(res.messages[0])).toBe(elidedToolPlaceholder("f", 200));
+    expect(outputOf(res.messages[1])).toBe(bigOut());
+    expect(outputOf(res.messages[2])).toBe(bigOut());
+  });
+
+  it("exempts the newest message even with keepRecentToolResults=0", () => {
+    const messages = [
+      toolMsg("t1", "f", bigOut()),
+      toolMsg("t2", "f", bigOut()),
+    ];
+    const res = editToolResults(messages, {
+      keepRecentToolResults: 0,
+      minEditableToolChars: 100,
+    });
+    expect(res.resultsElided).toBe(1); // t1 only; t2 is the newest message
+    expect(outputOf(res.messages[0])).toBe(elidedToolPlaceholder("f", 200));
+    expect(outputOf(res.messages[1])).toBe(bigOut());
+  });
+
+  it("size gate: leaves results at/under minEditableToolChars untouched", () => {
+    const messages = [
+      toolMsg("small", "f", bigOut(50)), // ≤ gate
+      toolMsg("big", "f", bigOut(200)), // > gate
+      uiText("u1", "user", "tail"), // newest, so both tools are candidates
+    ];
+    const res = editToolResults(messages, {
+      keepRecentToolResults: 0,
+      minEditableToolChars: 100,
+    });
+    expect(res.resultsElided).toBe(1);
+    expect(outputOf(res.messages[0])).toBe(bigOut(50)); // small kept
+    expect(outputOf(res.messages[1])).toBe(elidedToolPlaceholder("f", 200));
+  });
+
+  it("pairing: keeps the tool-call part, swaps only the output body", () => {
+    const messages = [
+      toolMsg("t1", "search", bigOut()),
+      uiText("u1", "user", "x"),
+    ];
+    const res = editToolResults(messages, {
+      keepRecentToolResults: 0,
+      minEditableToolChars: 100,
+    });
+    const part = res.messages[0].parts[0] as Record<string, unknown>;
+    expect(part.type).toBe("tool-search");
+    expect(part.toolCallId).toBe("t1-call");
+    expect(part.input).toEqual({ q: "x" });
+    expect(part.state).toBe("output-available");
+    expect(part.output).toBe(elidedToolPlaceholder("search", 200));
+  });
+
+  it("is deterministic/monotonic: feeding the edited view back elides nothing new", () => {
+    const messages = [
+      toolMsg("t1", "f", bigOut()),
+      toolMsg("t2", "f", bigOut()),
+      uiText("u1", "user", "tail"),
+    ];
+    const first = editToolResults(messages, opts);
+    expect(first.resultsElided).toBeGreaterThan(0);
+    const second = editToolResults(first.messages, opts);
+    expect(second.resultsElided).toBe(0);
+    expect(second.messages).toBe(first.messages); // stable ⇒ cache-friendly
+  });
+
+  it("grow-guard: never elides when the placeholder would be longer than the output", () => {
+    // Tiny gate picks a result just over it, but shorter than the ~140-char
+    // placeholder ⇒ eliding would inflate the prompt. Must skip (no negative
+    // reclaim, no churn, no-op identity).
+    const shortOut = "D".repeat(30); // > gate 10, < placeholder length
+    const messages = [
+      toolMsg("t1", "f", shortOut),
+      uiText("u1", "user", "tail"),
+    ];
+    const res = editToolResults(messages, {
+      keepRecentToolResults: 0,
+      minEditableToolChars: 10,
+    });
+    expect(res.resultsElided).toBe(0);
+    expect(res.charsReclaimed).toBe(0);
+    expect(res.messages).toBe(messages);
+  });
+
+  it("no-op identity: returns the same array reference when nothing qualifies", () => {
+    const messages = [
+      toolMsg("t1", "f", bigOut(50)), // under gate
+      uiText("u1", "user", "hi"),
+    ];
+    const res = editToolResults(messages, opts);
+    expect(res.resultsElided).toBe(0);
+    expect(res.charsReclaimed).toBe(0);
+    expect(res.messages).toBe(messages);
+  });
+});
+
+describe("applyTier1Compaction — Stage 0 avoids summarization (Task 2)", () => {
+  const hugeTool = (id: string) => toolMsg(id, "dump", "Z".repeat(8000));
+  // High minPrunableChars so Stage 1 prefix-pruning does NOT rescue the no-edit
+  // case — it must reach Stage 2 (the model call) to make Stage 0's avoidance of
+  // it the real discriminator.
+  const editCfg = cfg({
+    keepRecentToolResults: 1,
+    minEditableToolChars: 100,
+    keepRecentMessages: 2,
+    minPrunableChars: 100000,
+  });
+  // Trigger sits between the post-edit size (~one big tool left) and the
+  // pre-edit size (~two big tools).
+  const budget: Budget = {
+    inputBudget: 100000,
+    triggerTokens: 3000,
+    targetTokens: 1500,
+  };
+  const state: CompactionState = {
+    version: 0,
+    summaryWatermark: null,
+    contextSummary: null,
+    compactionDirty: false,
+  };
+  const messages = () => [
+    hugeTool("bt1"),
+    hugeTool("bt2"),
+    uiText("r1", "user", "ok"),
+    uiText("r2", "assistant", "done"),
+  ];
+
+  it("elides the old dump, drops under trigger, skips the model call", async () => {
+    const summarize = vi.fn(async () => "SUMMARY");
+    const out = await applyTier1Compaction({
+      chatId: "c",
+      messages: messages(),
+      state,
+      budget,
+      config: editCfg,
+      imageProvider: "default",
+      summarize,
+      store: storeFromState({ version: 0 }),
+    });
+    expect(summarize).not.toHaveBeenCalled();
+    expect(out.compacted).toBe(false);
+    // Stage 0 still leaned the view: the old dump (bt1) is a placeholder, the
+    // recent dump (bt2, within keep) stays verbatim.
+    expect(outputOf(out.messages[0])).toBe(elidedToolPlaceholder("dump", 8000));
+    expect(outputOf(out.messages[1])).toBe("Z".repeat(8000));
+  });
+
+  it("without context editing the same chat triggers summarization", async () => {
+    const summarize = vi.fn(async () => "SUMMARY");
+    const out = await applyTier1Compaction({
+      chatId: "c",
+      messages: messages(),
+      state,
+      budget,
+      config: cfg({
+        contextEditingEnabled: false,
+        keepRecentMessages: 2,
+        minPrunableChars: 100000,
+      }),
+      imageProvider: "default",
+      summarize,
+      store: storeFromState({ version: 0 }),
+    });
+    expect(summarize).toHaveBeenCalledOnce();
+    expect(out.compacted).toBe(true);
   });
 });

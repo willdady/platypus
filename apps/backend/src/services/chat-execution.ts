@@ -593,6 +593,17 @@ export async function buildCompactionRuntime(args: {
   config.minRecentPrunableChars =
     numEnv(process.env.COMPACTION_MIN_RECENT_PRUNABLE_CHARS) ??
     config.minRecentPrunableChars;
+  // Stage 0 context editing (Chunk 14 Task 2). Disabled via
+  // COMPACTION_CONTEXT_EDITING_ENABLED=false; recency/size gates tunable.
+  if (process.env.COMPACTION_CONTEXT_EDITING_ENABLED === "false") {
+    config.contextEditingEnabled = false;
+  }
+  config.keepRecentToolResults =
+    numEnv(process.env.COMPACTION_KEEP_RECENT_TOOL_RESULTS) ??
+    config.keepRecentToolResults;
+  config.minEditableToolChars =
+    numEnv(process.env.COMPACTION_MIN_EDITABLE_TOOL_CHARS) ??
+    config.minEditableToolChars;
 
   // RV7d: resolve both windows concurrently (they are independent).
   const taskModelId = provider.taskModelId || resolvedModelId;

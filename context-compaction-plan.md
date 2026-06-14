@@ -1501,41 +1501,225 @@ gutting active data for a _soft_-target miss:
   server's `COMPACTION_TARGET_RATIO=0.1` manufactures the worst case; prod 0.5
   rarely trips it.
 
-### Task 2 — context-editing-style prune of kept tool results (NEEDS REVIEW + bigger plan)
+### Task 2 — context editing: recency-based tool-result pruning, no summary (DONE 2026-06-14)
 
-The user's ideal model (decided 2026-06-14): in-stream, only compact near the
-ceiling so the stream doesn't stop (Tier 2 already does this); **at stream end,
-strip bulky tool results so the next turn doesn't start at 40k** (NEW); then
-threshold-compact as chat continues (Tier 1 already does this). This is exactly
-Anthropic's **context editing (`clear_tool_uses`)** — prune, don't summarize.
+**Shipped.** `editToolResults` + `elidedToolPlaceholder` in `compaction.ts`, wired
+as Stage 0 in `applyTier1Compaction` (after `viewAfterWatermark`, before the
+trigger projection); 3 new `CompactionConfig` fields + defaults
+(`contextEditingEnabled=true`, `keepRecentToolResults=4`,
+`minEditableToolChars=50000`); 3 env overrides in `buildCompactionRuntime`
+(`COMPACTION_CONTEXT_EDITING_ENABLED`, `COMPACTION_KEEP_RECENT_TOOL_RESULTS`,
+`COMPACTION_MIN_EDITABLE_TOOL_CHARS`). No schema / agent-runner / frontend change.
+Gated by the `COMPACTION_ENABLED` kill switch AND `contextEditingEnabled`; metric
+`context_edited` logged when `resultsElided > 0`. Implementation notes:
 
-Design notes captured this session (to expand before implementing):
+- **`minEditableToolChars` defaulted to 50000, not the initial 10000** — 10k (≈2.5k
+  tokens) was well below every shipped tool; 50k matches LibreChat and still
+  catches the ~160k-char mempalace dump while sparing medium results (less churn).
+- **Idempotency guard added** — `editToolResults` skips a result whose output
+  already starts with the placeholder prefix, so a misconfigured tiny gate cannot
+  re-elide its own placeholder (monotonic for any gate, not just the 50k default).
+- **Grow-guard added (post-review 2026-06-14)** — skip when `placeholder.length
+  > = serialized.length`: a tiny gate could pick a result shorter than the
+~140-char placeholder, where eliding would INFLATE the prompt (negative
+`charsReclaimed`). Restructured so the full elision policy (recency + size +
+idempotency + grow) is decided up front into a `Map<"mi:pi", placeholder>`; the
+  > rewrite map runs only when real work exists and never allocates a copy on a pure
+  > no-op. New test: grow-guard (placeholder longer than output ⇒ no-op identity).
+- **Placeholder is explicit/self-describing** (LLM-agnostic — small background
+  models): `[Tool result for "<name>" omitted to save context (<N> chars). The
+full result is still available — call the tool again with the same input if you
+need it.]`. Not a terse copied marker.
+- **Plan decision 7 (accepted fidelity loss)**: elided placeholders also flow into
+  any prefix Stage 2 later summarizes — accepted (a huge dump's head+tail is poor
+  summary fodder; raw stays in DB).
+- Tests: +10 Task-2 cases (elide-old / keep-within-window / newest-exempt /
+  size-gate / pairing-survives / determinism+monotonic / grow-guard /
+  no-op-identity / Stage-0-avoids-summarization / off-control); compaction suite
+  67 pass. tsc: 0 new errors (260 pre-existing in unrelated test mocks); lint: 0
+  new errors.
 
-- The current "keep last N _messages_ verbatim" heuristic is backwards: in a
-  > 10-tool stream the keep-window fills with raw tool results while the small,
-  > high-value conversational text (question + answer) gets summarized into the
-  > prefix. A type-aware policy is better: **keep conversational text + the newest
-  > turn's results verbatim; compress older bulky results to placeholders.**
-- Implement as a **model-view transform**, not destruction — full result stays in
-  the DB/UI (display/audit); only the lean version is _sent_ to the model each
-  subsequent turn. Platypus already separates stored messages from the model view
-  (watermark + summary reconstruction), so this fits.
-- Keep tool call↔result structural validity: replace the result _content_ with a
-  short placeholder marker (`[mempalace result, 40k chars — elided after turn N]`),
-  don't drop the message (providers reject an orphaned call). Size-gate it — tiny
-  results (`"OK"`) gain nothing from a placeholder.
-- The unavoidable tradeoff: eager stripping loses the immediate "based on those
-  results, do X" follow-up. Options: (a) strip immediately + agent re-calls if
-  needed; (b) placeholder-with-summary so the model can re-fetch intelligently
-  (recommended); (c) one-turn grace (keep the just-finished turn's results one
-  more turn). User's "next turn must not carry 40k" leans toward (b).
-- Anthropic's `clear_tool_uses` is **threshold-triggered** with configurable
-  thresholds, not strictly "every stream end" — decide whether to mirror that or
-  go eager at each turn boundary.
+#### Original spec (for reference)
 
-This is a redesign of the compaction unit (messages → type-aware policies keyed
-off turn boundaries), bigger than Task 1, and overlaps Task 3. Review before
-building.
+The user's ideal model (2026-06-14): in-stream, compact only near the ceiling so
+the stream doesn't stop (Tier 2 ✅); at stream end strip bulky tool results so the
+next turn doesn't start at 40k (NEW — this task); then threshold-compact as the
+chat continues (Tier 1 ✅). This is Anthropic's **context editing
+(`clear_tool_uses`)** — prune tool-result bodies, do NOT summarize.
+
+#### Field research that fixed the design (2026-06-14, cited)
+
+Every shipped "prune-not-summarize" implementation converged on the **same
+mechanics** — adopt them, don't reinvent:
+
+| Product                                  | Trigger                                       | What it prunes                                                | Keep / protect                                                                              | Placeholder                                                       | Pairing                                   |
+| ---------------------------------------- | --------------------------------------------- | ------------------------------------------------------------- | ------------------------------------------------------------------------------------------- | ----------------------------------------------------------------- | ----------------------------------------- |
+| **Anthropic `clear_tool_uses_20250919`** | `trigger`, default **100k input tokens**      | tool **results** only (calls kept unless `clear_tool_inputs`) | `keep` = **3** most-recent tool uses; `exclude_tools`; `clear_at_least` (cache-break guard) | inserts a placeholder (exact string undocumented)                 | yes — keeps `tool_use`, swaps result body |
+| **Hermes**                               | **0.50** agent + **0.85**/400-msg hygiene     | tool results only; dedups, strips images                      | `protect_last_n=20`, `protect_first_n=3`; never-prune list                                  | `"[Old tool output cleared to save context space]"`               | yes                                       |
+| **Codex (remote)**                       | model window, oldest-first, stop when it fits | `FunctionCallOutput` / tool outputs — rewrites body           | stops as soon as history fits                                                               | `"Output exceeded the available model context and was truncated"` | yes — keeps `call_id`                     |
+| **Claude Code microcompact**             | "when context grows long"                     | old tool results (prune) before auto-compact (summarize)      | recent context + current file/task state                                                    | `[Old tool result content cleared]` (community-reported)          | yes                                       |
+| **LibreChat `contextPruning`**           | gated, off by default                         | tool-result content; soft (head+tail) → hard (clear)          | `keepLastAssistants=3`; `minPrunableToolChars` **50000**                                    | hard: `"[Old tool result content cleared]"`                       | content-only                              |
+
+Takeaways baked into the spec below: **prune-then-summarize staging** (we already
+have it); **never delete the tool-call block — swap only the result body** (keeps
+`call_id`/pairing valid, no orphan rejection); **keep a recent tail by COUNT of
+tool results** (not by turn — we have no turn id); **size-gate** the edit (cache
+guard ≈ `clear_at_least`); **visible placeholder** so the model knows to re-call.
+NB: Anthropic's literal default placeholder string is **not documented** — do not
+copy `"[cleared to save context]"` from the cookbook (it is demo code).
+
+#### Architectural decisions (converged)
+
+1. **A pure view transform, no new durable state.** Unlike summary/watermark
+   (which need CAS + a DB column because they are LLM-derived and must persist),
+   context editing is **deterministic and recomputed from raw messages each turn**
+   by recency. **No schema change, no CAS, no `version` bump.** Sibling in spirit
+   to `stripCompactionTraceParts` ([agent-runner.ts:165](apps/backend/src/runs/agent-runner.ts#L165)),
+   the existing "stored-but-altered-for-the-wire" transform. P1 holds trivially:
+   raw `chat.messages` is untouched; the full result stays for UI/audit.
+2. **Runs as Stage 0 inside `applyTier1Compaction`, before the summarize trigger
+   decision** — NOT in agent-runner. Rationale: it is chat-only (durable history,
+   recency across the whole chat), and running it _before_ the trigger lets a lean
+   view AVOID summarization entirely (cheaper, the whole point). agent-runner's
+   strip stays for the synthetic trace (a different concern, all paths).
+3. **Recency by COUNT of tool results, not turn-grouping.** Matches Anthropic
+   `keep` / Hermes `protect_last_n`. We have no clean turn id; do not invent one.
+4. **Monotonic + deterministic ⇒ cache-friendly.** A result is elided the turn it
+   ages past the keep-window and stays elided. One cache break per result as it
+   scrolls out — far cheaper than re-summarizing. The size gate is our
+   `clear_at_least`: trivial results are never touched, so no churn.
+5. **Newest message always exempt** — same invariant as option D (Task 1).
+6. **Scope line vs Task 3 (explicit).** Task 2 handles **accumulation of older
+   bulky results**. A single result too large to afford _even as the newest_ is
+   **Task 3** (ingestion cap at storage time). They overlap by design: Task 2's
+   keep-window is the one-turn grace for "based on those results, do X"; Task 3
+   caps the pathological single dump. Task 2 does **not** fully deliver "next turn
+   carries no 40k" for a 40k _newest_ result — that is Task 3.
+7. **Accepted fidelity loss on the summarize path (2026-06-14).** Stage 0 runs on
+   `afterWatermark` _before_ the trigger; when the trigger still fires anyway,
+   `compactUIMessages` summarizes the **prefix** — which Stage 0 has already
+   reduced to `[… result omitted …]` placeholders for old bulky results. So the
+   summarizer never sees that result's content (vs Stage 1's head+tail soft-trim,
+   which leaves ~1000 chars of gist). **This is strictly more lossy than today on
+   the summarize path, and accepted:** a 40k MCP/JSON dump's head+tail is not
+   useful summary fodder either, the raw stays in the DB (P1) for UI/audit, and the
+   common case is Stage 0 dropping the view under the trigger so no summary fires
+   at all. If this ever bites a real case, the mitigation is to run Stage 0 only on
+   the kept/recent region and let the about-to-be-summarized prefix keep its
+   soft-trim — not done now.
+
+#### Implementation spec
+
+**New in `compaction.ts`:**
+
+```ts
+// Placeholder body for an elided tool result. Names the tool + elided size so the
+// model can decide to re-run it. Short enough that Stage 1 / option-D never re-trim it.
+// LLM-AGNOSTIC: Platypus may run small/weak background models, so the string must be
+// EXPLICIT and self-describing — do NOT copy a terse marker (LibreChat's
+// "[Old tool result content cleared]") that assumes the model infers it can re-call.
+// Canonical form:
+//   `[Tool result for "<toolName>" omitted to save context (<N> chars). The full
+//    result is still available — call the tool again with the same input if you
+//    need it.]`
+function elidedToolPlaceholder(toolName: string, chars: number): string;
+
+// Stage 0: replace the `output` of OLD bulky tool-result parts with a placeholder.
+// Pure, deterministic, no model call. Keeps the tool part (pairing); text parts
+// untouched. Returns { messages, resultsElided, charsReclaimed } (unchanged array
+// identity when nothing qualified, so callers can skip a re-estimate).
+export function editToolResults(
+  messages: PlatypusUIMessage[],
+  opts: {
+    keepRecentToolResults: number; // exempt the last N tool results (default 4)
+    minEditableToolChars: number; // only elide results larger than this (default 50000)
+  },
+): {
+  messages: PlatypusUIMessage[];
+  resultsElided: number;
+  charsReclaimed: number;
+};
+```
+
+Policy inside `editToolResults`:
+
+- Walk messages; collect indices of tool-result-bearing parts (`dynamic-tool` /
+  `tool-*` with `output !== undefined`), in order.
+- The last `keepRecentToolResults` of them are exempt (verbatim). The message at
+  the end of the array (newest) is exempt regardless (decision 5).
+- For each remaining tool result whose serialized `output` length
+  `> minEditableToolChars`, replace `output` with `elidedToolPlaceholder(name, len)`.
+  Tool calls/inputs and all text parts are left intact.
+- Operate on shallow copies (P1). Reuse the `pruneUIMessage` shape-walking style.
+
+**Wiring in `applyTier1Compaction`** (after `viewAfterWatermark`, before the
+trigger projection):
+
+- `const edited = config.contextEditingEnabled ? editToolResults(afterWatermark, …) : { messages: afterWatermark, … }`
+- Use `edited.messages` everywhere `afterWatermark` is used downstream (projection,
+  `compactUIMessages`, the injected view).
+- Log `metric: "context_edited"` with `{ resultsElided, charsReclaimed }` when
+  `resultsElided > 0` (no per-turn noise when it's a no-op).
+- This shrinks `messageTokens` before the trigger check ⇒ summarize fires less.
+  No behavior change when nothing qualifies (array identity preserved).
+- Gated by the existing `COMPACTION_ENABLED` kill switch (P4: recovery still the
+  net) AND a per-feature `contextEditingEnabled`.
+
+**Config (`CompactionConfig` + `DEFAULT_COMPACTION_CONFIG` + env in
+`buildCompactionRuntime`):**
+
+- `contextEditingEnabled: boolean` (default `true`) — env
+  `COMPACTION_CONTEXT_EDITING_ENABLED=false` to disable.
+- `keepRecentToolResults: number` (default `4`) — env
+  `COMPACTION_KEEP_RECENT_TOOL_RESULTS`.
+- `minEditableToolChars: number` (default `50000`) — env
+  `COMPACTION_MIN_EDITABLE_TOOL_CHARS`. Matches LibreChat's `minPrunableToolChars`
+  (50k chars ≈ 12.5k tokens), the only direct per-result char-gate analog in the
+  field survey. Deliberately higher than option-D's `minRecentPrunableChars`
+  (10k) — Stage 0 only elides genuinely huge dumps (the 40k-token ≈ 160k-char
+  mempalace case), sparing medium results to minimize cache churn. 10k was too
+  aggressive vs every shipped tool.
+
+**Touches to current implementation (yes — confirmed):**
+
+- `compaction.ts`: new `editToolResults` + placeholder helper; Stage 0 call in
+  `applyTier1Compaction`; 3 new `CompactionConfig` fields + defaults.
+- `chat-execution.ts` `buildCompactionRuntime`: 3 env overrides (mirror the
+  existing `numEnv` / kill-switch pattern at the COMPACTION\_\* block).
+- No schema change. No agent-runner change (the leaned view flows through the
+  existing reconstruction → `stripCompactionTraceParts` → `convertToModelMessages`
+  path unchanged). No frontend change (full result still stored/displayed).
+
+**Out of scope (deferred, noted so we don't drift):**
+
+- Tier 2 / sub-agent context editing — Tier 2 already prunes its prefix
+  intra-turn; could adopt the same recency placeholder in `compactModelMessages`
+  later. Not now.
+- Placeholder-WITH-summary (re-fetch hint that includes an LLM mini-summary of the
+  elided result) — needs a model call, belongs with Stage 2; the name+size
+  placeholder is enough for the model to re-call. Defer.
+- A UI "tool result elided" timeline marker — log/metric only for now (a per-turn
+  UI entry would be noisy).
+
+**Tests (`compaction.test.ts`):**
+
+- elides an OLD bulky result beyond the keep-window; keeps recent + all text.
+- result within `keepRecentToolResults` kept verbatim.
+- newest message exempt even when bulky.
+- result ≤ `minEditableToolChars` untouched (size gate).
+- pairing: the tool-call part survives; only `output` changes.
+- determinism/monotonicity: feeding the edited view back elides nothing new
+  (stable prefix ⇒ cache-friendly).
+- integration: a chat that was over the summarize trigger drops under it after
+  Stage 0 ⇒ `usedModelCall === false` (summarization avoided).
+- no-op identity: nothing qualifies ⇒ returns the same array reference.
+
+#### Open question for the user before coding
+
+- **RESOLVED 2026-06-14.** `keepRecentToolResults` = **4**, `minEditableToolChars`
+  = **50000** (raised from the initial 10k proposal — see config note above; 10k
+  was well below every shipped tool, 50k matches LibreChat and still catches the
+  mempalace dump). Both env-overridable so prod can tune without a deploy.
 
 ### Task 3 — ingestion cap for oversized MCP / sub-agent results (UPSTREAM ISSUE — file so we don't forget)
 
