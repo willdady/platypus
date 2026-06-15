@@ -25,7 +25,7 @@ const REGISTRY: Registry = {
   "legacy-model": { max_tokens: 4096 },
 };
 
-const loadRegistry = async () => REGISTRY;
+const loadRegistry = () => Promise.resolve(REGISTRY);
 
 function resolver() {
   return new ContextWindowResolver({ loadRegistry });
@@ -260,9 +260,7 @@ describe("API auto-detect parsers", () => {
 describe("registry load failure (ADR-0012 §Window resolution)", () => {
   it("a throwing loader degrades to empty registry → default, no reject", async () => {
     const r = new ContextWindowResolver({
-      loadRegistry: async () => {
-        throw new Error("bad vendored json");
-      },
+      loadRegistry: () => Promise.reject(new Error("bad vendored json")),
     });
     const out = await r.resolve({ ...openai }, "gpt-4o");
     expect(out.source).toBe("default");

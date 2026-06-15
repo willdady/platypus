@@ -339,8 +339,8 @@ const REGISTRY: Registry = {
   "Qwen/Qwen3-32B": { max_input_tokens: 131072, max_output_tokens: 8192 },
 };
 
-/** Returns the built-in minimal registry. Async so the signature matches the
- *  injected `loadRegistry` slot and allows a future async fetch path. */
-export async function loadBuiltinRegistry(): Promise<Registry> {
-  return REGISTRY;
+/** Returns the built-in minimal registry. Returns a Promise so the signature
+ *  matches the injected `loadRegistry` slot and allows a future async fetch path. */
+export function loadBuiltinRegistry(): Promise<Registry> {
+  return Promise.resolve(REGISTRY);
 }

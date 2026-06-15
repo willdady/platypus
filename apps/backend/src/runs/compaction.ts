@@ -1055,7 +1055,7 @@ export function summaryUIMessage(text: string): PlatypusUIMessage {
     parts: [
       { type: "text", text: `[Summary of earlier conversation]\n${text}` },
     ],
-  } as PlatypusUIMessage;
+  };
 }
 
 /** Fail-loud event so the transcript shows compaction happened (ADR-0012 §Tier 1). */

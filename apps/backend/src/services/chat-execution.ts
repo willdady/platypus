@@ -1667,7 +1667,6 @@ export async function forceCompactChat(
   // Shared resources and the ADR-0007 attachment gate).
   let provider: Provider;
   let resolvedModelId: string;
-  let agent: AgentRow | null = null;
 
   if (chatRow.agentId) {
     const agentRow = await drizzleChatTurnQueries.getAgent(
@@ -1676,10 +1675,9 @@ export async function forceCompactChat(
       workspaceId,
     );
     if (!agentRow) throw new NotFoundError("Agent not found");
-    agent = agentRow;
-    resolvedModelId = agent.modelId;
+    resolvedModelId = agentRow.modelId;
     const providerRow = await drizzleChatTurnQueries.getProvider(
-      agent.providerId,
+      agentRow.providerId,
       orgId,
       workspaceId,
     );

@@ -136,7 +136,7 @@ const ctx = (over: Partial<RecoveryContext> = {}): RecoveryContext => ({
   targetTokens: 100,
   keepRecentMessages: 4, // recovery halves this → keep 2
   minPrunableChars: 2000,
-  summarize: async () => "RSUM",
+  summarize: () => Promise.resolve("RSUM"),
   ...over,
 });
 
@@ -149,10 +149,10 @@ const overflow = () =>
 /** Fake V3 model capturing retry params. */
 const fakeModel = (result: unknown = "RETRIED", fail?: unknown) => {
   const calls: Array<{ prompt: PromptMsg[] }> = [];
-  const impl = async (params: { prompt: PromptMsg[] }) => {
+  const impl = (params: { prompt: PromptMsg[] }) => {
     calls.push(params);
-    if (fail) throw fail;
-    return result;
+    if (fail) return Promise.reject(fail);
+    return Promise.resolve(result);
   };
   return { calls, model: { doGenerate: impl, doStream: impl } };
 };
@@ -166,20 +166,16 @@ const runWrapGenerate = (
   },
 ) =>
   (mw.wrapGenerate as (o: unknown) => Promise<unknown>)({
-    doStream: async () => {
-      throw new Error("unused");
-    },
+    doStream: () => Promise.reject(new Error("unused")),
     ...args,
   });
 
 describe("contextOverflowRecoveryMiddleware (ADR-0012 §Recovery)", () => {
   it("trims via the shared compactor and retries exactly once on overflow", async () => {
-    const markDirty = vi.fn(async () => undefined);
+    const markDirty = vi.fn(() => Promise.resolve(undefined));
     const mw = contextOverflowRecoveryMiddleware(ctx({ markDirty }));
     const { calls, model } = fakeModel();
-    const doGenerate = vi.fn(async () => {
-      throw overflow();
-    });
+    const doGenerate = vi.fn(() => Promise.reject(overflow()));
 
     const result = await runWrapGenerate(mw, {
       doGenerate,
@@ -208,16 +204,14 @@ describe("contextOverflowRecoveryMiddleware (ADR-0012 §Recovery)", () => {
   });
 
   it("propagates the second overflow — no infinite retry", async () => {
-    const markDirty = vi.fn(async () => undefined);
+    const markDirty = vi.fn(() => Promise.resolve(undefined));
     const mw = contextOverflowRecoveryMiddleware(ctx({ markDirty }));
     const second = overflow();
     const { model } = fakeModel(undefined, second);
 
     await expect(
       runWrapGenerate(mw, {
-        doGenerate: async () => {
-          throw overflow();
-        },
+        doGenerate: () => Promise.reject(overflow()),
         params: { prompt: overflowPrompt() },
         model,
       }),
@@ -227,16 +221,14 @@ describe("contextOverflowRecoveryMiddleware (ADR-0012 §Recovery)", () => {
   });
 
   it("rethrows non-overflow errors without retrying or flagging", async () => {
-    const markDirty = vi.fn(async () => undefined);
+    const markDirty = vi.fn(() => Promise.resolve(undefined));
     const mw = contextOverflowRecoveryMiddleware(ctx({ markDirty }));
     const { calls, model } = fakeModel();
     const authError = apiError({ statusCode: 401, message: "bad key" });
 
     await expect(
       runWrapGenerate(mw, {
-        doGenerate: async () => {
-          throw authError;
-        },
+        doGenerate: () => Promise.reject(authError),
         params: { prompt: overflowPrompt() },
         model,
       }),
@@ -246,16 +238,12 @@ describe("contextOverflowRecoveryMiddleware (ADR-0012 §Recovery)", () => {
   });
 
   it("still retries when persisting the dirty flag fails (best-effort)", async () => {
-    const markDirty = vi.fn(async () => {
-      throw new Error("db down");
-    });
+    const markDirty = vi.fn(() => Promise.reject(new Error("db down")));
     const mw = contextOverflowRecoveryMiddleware(ctx({ markDirty }));
     const { calls, model } = fakeModel();
 
     const result = await runWrapGenerate(mw, {
-      doGenerate: async () => {
-        throw overflow();
-      },
+      doGenerate: () => Promise.reject(overflow()),
       params: { prompt: overflowPrompt() },
       model,
     });
@@ -267,18 +255,14 @@ describe("contextOverflowRecoveryMiddleware (ADR-0012 §Recovery)", () => {
     const first = overflow();
     const mw = contextOverflowRecoveryMiddleware(
       ctx({
-        summarize: async () => {
-          throw new Error("summarizer down");
-        },
+        summarize: () => Promise.reject(new Error("summarizer down")),
       }),
     );
     const { calls, model } = fakeModel();
 
     await expect(
       runWrapGenerate(mw, {
-        doGenerate: async () => {
-          throw first;
-        },
+        doGenerate: () => Promise.reject(first),
         params: { prompt: overflowPrompt() },
         model,
       }),
@@ -291,12 +275,8 @@ describe("contextOverflowRecoveryMiddleware (ADR-0012 §Recovery)", () => {
     const { calls, model } = fakeModel("STREAMED");
 
     const result = await (mw.wrapStream as (o: unknown) => Promise<unknown>)({
-      doGenerate: async () => {
-        throw new Error("unused");
-      },
-      doStream: async () => {
-        throw overflow();
-      },
+      doGenerate: () => Promise.reject(new Error("unused")),
+      doStream: () => Promise.reject(overflow()),
       params: { prompt: overflowPrompt() },
       model,
     });

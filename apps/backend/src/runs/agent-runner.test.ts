@@ -174,7 +174,7 @@ const fakeTurn = (overrides?: { dispose?: () => Promise<void> }) => {
       targetTokens: 1000,
       keepRecentMessages: 10,
       minPrunableChars: 2000,
-      summarize: async (t: string) => t,
+      summarize: (t: string) => Promise.resolve(t),
     },
     tier2: null,
     dispose,

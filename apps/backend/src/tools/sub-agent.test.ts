@@ -45,9 +45,9 @@ function createMockFullStream(
 
 const { mockStream, MockToolLoopAgent, capturedSettings } = vi.hoisted(() => {
   const mockStream = vi.fn();
-  const capturedSettings: any[] = [];
+  const capturedSettings: Record<string, unknown>[] = [];
   class MockToolLoopAgent {
-    constructor(settings: any) {
+    constructor(settings: Record<string, unknown>) {
       capturedSettings.push(settings);
     }
     stream = mockStream;

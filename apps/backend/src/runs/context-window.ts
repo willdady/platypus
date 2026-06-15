@@ -325,7 +325,8 @@ export class ContextWindowResolver {
   #now: () => number;
 
   constructor(deps: ResolverDeps = {}) {
-    this.#loadRegistry = deps.loadRegistry ?? (async () => ({}));
+    this.#loadRegistry =
+      deps.loadRegistry ?? ((): Promise<Registry> => Promise.resolve({}));
     this.#aliasMap = deps.aliasMap ?? {};
     this.#httpGetJson = deps.httpGetJson ?? defaultHttpGetJson;
     this.#ttlMs = deps.ttlMs ?? DEFAULT_CACHE_TTL_MS;

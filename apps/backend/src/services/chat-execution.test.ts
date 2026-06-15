@@ -668,7 +668,7 @@ describe("chat-execution", () => {
     const buildRuntime = (signal?: AbortSignal, onActivity?: () => void) =>
       buildCompactionRuntime({
         chatId: "chat-1",
-        provider: baseProvider as never,
+        provider: baseProvider,
         resolvedModelId: "gpt-4",
         opened: {
           languageModel: vi.fn(() => ({ modelId: "task-model" })),
@@ -704,7 +704,12 @@ describe("chat-execution", () => {
 
       expect(out).toBe("SUMMARY");
       expect(mockGenerateText).toHaveBeenCalledTimes(1);
-      const arg = mockGenerateText.mock.calls[0][0];
+      const arg = mockGenerateText.mock.calls[0][0] as {
+        maxOutputTokens?: number;
+        abortSignal?: AbortSignal;
+        prompt?: string;
+        system: string;
+      };
       expect(arg.maxOutputTokens).toBe(4000);
       expect(arg.abortSignal).toBe(controller.signal);
       expect(arg.prompt).toBe("history text");

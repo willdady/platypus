@@ -41,23 +41,23 @@ class FakeStore implements CompactionStore {
     };
   }
 
-  async readState() {
-    return { ...this.state };
+  readState() {
+    return Promise.resolve({ ...this.state });
   }
 
-  async casWrite(
+  casWrite(
     _chatId: string,
     expectVersion: number,
     patch: WatermarkPatch,
-  ) {
+  ): Promise<boolean> {
     this.casCalls++;
-    if (this.state.version !== expectVersion) return false;
+    if (this.state.version !== expectVersion) return Promise.resolve(false);
     if ("watermark" in patch)
       this.state.summaryWatermark = patch.watermark ?? null;
     if ("summary" in patch) this.state.contextSummary = patch.summary ?? null;
     if ("dirty" in patch) this.state.compactionDirty = patch.dirty ?? false;
     this.state.version = expectVersion + 1;
-    return true;
+    return Promise.resolve(true);
   }
 }
 
@@ -171,7 +171,7 @@ function uiText(
   role: "user" | "assistant",
   text: string,
 ): PlatypusUIMessage {
-  return { id, role, parts: [{ type: "text", text }] } as PlatypusUIMessage;
+  return { id, role, parts: [{ type: "text", text }] };
 }
 
 function uiTool(id: string, output: unknown): PlatypusUIMessage {
@@ -190,7 +190,7 @@ function uiTool(id: string, output: unknown): PlatypusUIMessage {
   } as unknown as PlatypusUIMessage;
 }
 
-const noopSummarize = async () => "SUMMARY";
+const noopSummarize = () => Promise.resolve("SUMMARY");
 
 describe("softTrim", () => {
   it("keeps short text untouched", () => {
@@ -1294,7 +1294,7 @@ describe("applyTier1Compaction — Stage 0 avoids summarization (ADR-0012 §Stag
   ];
 
   it("elides the old dump, drops under trigger, skips the model call", async () => {
-    const summarize = vi.fn(async () => "SUMMARY");
+    const summarize = vi.fn(() => Promise.resolve("SUMMARY"));
     const out = await applyTier1Compaction({
       chatId: "c",
       messages: messages(),
@@ -1314,7 +1314,7 @@ describe("applyTier1Compaction — Stage 0 avoids summarization (ADR-0012 §Stag
   });
 
   it("without context editing the same chat triggers summarization", async () => {
-    const summarize = vi.fn(async () => "SUMMARY");
+    const summarize = vi.fn(() => Promise.resolve("SUMMARY"));
     const out = await applyTier1Compaction({
       chatId: "c",
       messages: messages(),

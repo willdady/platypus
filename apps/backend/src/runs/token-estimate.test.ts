@@ -144,7 +144,7 @@ describe("modality table (ADR-0012 §Token estimation — never char/4 an image)
         id: "m1",
         role: "user",
         parts: [{ type: "file", mediaType: "image/png", url: dataUrl(png) }],
-      } as PlatypusUIMessage,
+      },
     ];
     const tokens = estimateTokens(uiMessagesToCountUnits(ui, "anthropic"));
     // char/4 of the base64 data URL would be far larger than the table cost.
@@ -279,7 +279,7 @@ describe("adapter equality (ADR-0012 §One estimator — one estimate across bot
     const model = await convertToModelMessages(ui);
 
     const uiTokens = estimateTokens(
-      uiMessagesToCountUnits(ui as PlatypusUIMessage[], "openai"),
+      uiMessagesToCountUnits(ui, "openai"),
     );
     const modelTokens = estimateTokens(
       modelMessagesToCountUnits(model, "openai"),
