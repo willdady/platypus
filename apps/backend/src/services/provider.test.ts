@@ -115,6 +115,7 @@ describe("openProvider", () => {
       baseURL: "http://localhost:8000/v1",
       apiKey: "sk-test",
       headers: undefined,
+      includeUsage: true,
     });
     expect(mockCreateOpenAICompatible.chatModel).toHaveBeenCalledWith("qwen3");
     // OpenAI SDK is still instantiated for embeddings + native search tools.

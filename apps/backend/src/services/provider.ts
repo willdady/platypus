@@ -41,6 +41,11 @@ export const openProvider = (provider: Provider): OpenedProvider => {
             baseURL: provider.baseUrl ?? "",
             apiKey: provider.apiKey ?? undefined,
             headers: provider.headers ?? undefined,
+            // Request `stream_options.include_usage` so streamed responses carry
+            // token usage. Without it the compatible provider omits stream_options
+            // and servers (vLLM/SGLang/…) return no usage on the streaming path,
+            // surfacing as In:0 / Out:0 in the UI. Non-streaming already reports it.
+            includeUsage: true,
           })
         : undefined;
       return {
