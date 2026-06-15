@@ -1,4 +1,5 @@
 import { createOpenAI } from "@ai-sdk/openai";
+import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 import { createAmazonBedrock } from "@ai-sdk/amazon-bedrock";
 import { createAnthropic } from "@ai-sdk/anthropic";
@@ -23,8 +24,27 @@ export const openProvider = (provider: Provider): OpenedProvider => {
         project: provider.project ?? undefined,
       });
       const useChatCompletions = provider.apiMode === "chat";
+      // Chat-completions mode is, in practice, only used against self-hosted /
+      // company OpenAI-compatible servers (vLLM, SGLang, llama.cpp, TGI, …) —
+      // real OpenAI is driven via the Responses API. Those servers expose the
+      // model's thinking in a `reasoning_content` field that `@ai-sdk/openai`'s
+      // chat model silently drops. `@ai-sdk/openai-compatible` reads it natively
+      // and emits reasoning stream parts the UI renders as a collapsible block.
+      // Embeddings + native search tools stay on the OpenAI SDK (unaffected).
+      // NOTE: leaving `supportsStructuredOutputs` at its default (false) means a
+      // requested JSON schema is downgraded to plain `json_object` mode; the AI
+      // SDK still validates client-side. Enabling it would send strict
+      // `json_schema` (vLLM guided decoding) but breaks servers lacking support.
+      const compat = useChatCompletions
+        ? createOpenAICompatible({
+            name: provider.name,
+            baseURL: provider.baseUrl ?? "",
+            apiKey: provider.apiKey ?? undefined,
+            headers: provider.headers ?? undefined,
+          })
+        : undefined;
       return {
-        languageModel: (id) => (useChatCompletions ? sdk.chat(id) : sdk(id)),
+        languageModel: (id) => (compat ? compat.chatModel(id) : sdk(id)),
         embeddingModel: (id) => sdk.embeddingModel(id),
         searchTools: () => ({
           web_search: sdk.tools.webSearch({

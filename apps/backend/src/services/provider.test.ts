@@ -12,6 +12,7 @@ type ProviderInstance = Mock<
 
 const {
   mockCreateOpenAI,
+  mockCreateOpenAICompatible,
   mockCreateOpenRouter,
   mockCreateAmazonBedrock,
   mockCreateGoogleGenerativeAI,
@@ -30,8 +31,18 @@ const {
     const creator = vi.fn(() => instance);
     return { creator, instance };
   };
+  // openai-compatible exposes `chatModel(id)`, not a callable instance.
+  const compatChatModel = vi.fn((modelId: string) => ({
+    modelId,
+    _compat: true,
+  }));
+  const mockCreateOpenAICompatible = {
+    creator: vi.fn(() => ({ chatModel: compatChatModel })),
+    chatModel: compatChatModel,
+  };
   return {
     mockCreateOpenAI: makeMock(),
+    mockCreateOpenAICompatible,
     mockCreateOpenRouter: makeMock(),
     mockCreateAmazonBedrock: makeMock(),
     mockCreateGoogleGenerativeAI: makeMock(),
@@ -40,6 +51,9 @@ const {
 });
 
 vi.mock("@ai-sdk/openai", () => ({ createOpenAI: mockCreateOpenAI.creator }));
+vi.mock("@ai-sdk/openai-compatible", () => ({
+  createOpenAICompatible: mockCreateOpenAICompatible.creator,
+}));
 vi.mock("@openrouter/ai-sdk-provider", () => ({
   createOpenRouter: mockCreateOpenRouter.creator,
 }));
@@ -85,6 +99,35 @@ describe("openProvider", () => {
       organization: undefined,
       project: undefined,
     });
+  });
+
+  it("routes chat-completions language model through openai-compatible", () => {
+    // apiMode "chat" (self-hosted vLLM/SGLang/etc.) must use the compatible
+    // provider so `reasoning_content` is surfaced as reasoning parts.
+    openProvider({
+      ...baseProvider,
+      apiMode: "chat",
+      name: "vLLM Local",
+      baseUrl: "http://localhost:8000/v1",
+    }).languageModel("qwen3");
+    expect(mockCreateOpenAICompatible.creator).toHaveBeenCalledWith({
+      name: "vLLM Local",
+      baseURL: "http://localhost:8000/v1",
+      apiKey: "sk-test",
+      headers: undefined,
+    });
+    expect(mockCreateOpenAICompatible.chatModel).toHaveBeenCalledWith("qwen3");
+    // OpenAI SDK is still instantiated for embeddings + native search tools.
+    expect(mockCreateOpenAI.creator).toHaveBeenCalled();
+  });
+
+  it("uses the OpenAI Responses model when apiMode is responses", () => {
+    openProvider({
+      ...baseProvider,
+      apiMode: "responses",
+    }).languageModel("gpt-4");
+    expect(mockCreateOpenAICompatible.creator).not.toHaveBeenCalled();
+    expect(mockCreateOpenAI.instance).toHaveBeenCalledWith("gpt-4");
   });
 
   it("dispatches OpenRouter to the OpenRouter SDK", () => {

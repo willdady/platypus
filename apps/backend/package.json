@@ -26,6 +26,7 @@
     "@ai-sdk/google": "^3.0.82",
     "@ai-sdk/mcp": "^1.0.50",
     "@ai-sdk/openai": "^3.0.71",
+    "@ai-sdk/openai-compatible": "^2.0.50",
     "@aws-sdk/client-s3": "^3.1068.0",
     "@hono/node-server": "^2.0.4",
     "@hono/standard-validator": "^0.2.2",
