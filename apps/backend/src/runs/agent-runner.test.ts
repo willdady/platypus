@@ -950,7 +950,7 @@ describe("buildTier2PrepareStep", () => {
     return msgs;
   };
 
-  it("returns undefined when messages are below triggerTokens (drift m3)", async () => {
+  it("returns undefined when messages are below triggerTokens (ADR-0012 §Sub-agents)", async () => {
     const fn = buildTier2PrepareStep(makeCtx(10_000));
     const result = await callStep(fn, shortMessages);
     expect(result).toBeUndefined();
@@ -972,7 +972,7 @@ describe("buildTier2PrepareStep", () => {
     expect(out[1]?.role).not.toBe("tool");
   });
 
-  it("returns undefined when prefix is empty (no-op, drift m3 / RV4)", async () => {
+  it("returns undefined when prefix is empty (no-op, ADR-0012 §Sub-agents)", async () => {
     // Two messages, keepRecentMessages 4 → no prefix to summarize →
     // compactModelMessages drops nothing → prepareStep returns undefined so the
     // SDK proceeds unchanged, and the summarizer is never called.

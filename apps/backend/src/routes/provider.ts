@@ -8,6 +8,7 @@ import { eq, and } from "drizzle-orm";
 import { handleEmbeddingConfigChange } from "../services/embedding-invalidation.ts";
 import { dedupeArray } from "../utils.ts";
 import { contextWindowResolver } from "../runs/context-window.ts";
+import { resolveCompactionConfig } from "../services/chat-execution.ts";
 import { requireAuth } from "../middleware/authentication.ts";
 import {
   requireOrgAccess,
@@ -136,8 +137,8 @@ provider.put(
       )
       .returning();
 
-    // RV7c: bust the cached context window so a modelMeta override takes effect
-    // immediately rather than waiting out the 1-hour TTL (drift T5).
+    // ADR-0012 §Window resolution (caching & eviction): bust the cached context window so a modelMeta override takes effect
+    // immediately rather than waiting out the 1-hour TTL (ADR-0012 §Window resolution (caching & eviction)).
     contextWindowResolver.evict(providerId);
 
     return c.json(record[0], 200);
@@ -178,9 +179,9 @@ provider.delete(
 
 /**
  * Returns the resolved context window for a specific model on this provider
- * (§H ring, drift U1). Uses the cached resolver — fast for repeated calls.
+ * (ADR-0012 §Context-usage ring). Uses the cached resolver — fast for repeated calls.
  * Returns `{ contextWindow: null }` when the window fell to the conservative
- * default so the frontend can render the ring neutral (drift T6).
+ * default so the frontend can render the ring neutral (ADR-0012 §Context-usage ring).
  */
 provider.get(
   "/:providerId/context-window",
@@ -212,6 +213,11 @@ provider.get(
           ? resolved.contextWindow
           : null,
       source: resolved?.source ?? "default",
+      // ADR-0012 §Force-compact on demand: the client gates the confirm dialog on
+      // the drop being significant. messagesDropped ≈ total − keepRecent, so
+      // "messagesDropped > keepRecent" ⟺ "total > 2 × keepRecent" — a pre-run
+      // proxy computable client-side from the message count.
+      keepRecentMessages: resolveCompactionConfig().keepRecentMessages,
     });
   },
 );

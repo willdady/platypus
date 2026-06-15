@@ -104,7 +104,7 @@ export function withToolTimestamps<TChunk extends UIMessageChunk>(
 
 /**
  * Injects synthetic `compact_context` tool-call + tool-result chunks into a
- * UIMessage stream immediately after the `start` event (§K / 11c). Makes Tier
+ * UIMessage stream immediately after the `start` event (ADR-0012 §Compaction trace in the timeline). Makes Tier
  * 1 compaction visible in the chat timeline without a custom renderer — the
  * existing tool-call expander handles it automatically.
  *
@@ -152,12 +152,12 @@ export function prependCompactionChunks(
 const COMPACT_CONTEXT_PART_TYPE = `tool-${COMPACT_CONTEXT_TOOL_NAME}`;
 
 /**
- * Removes the synthetic `compact_context` trace parts (§K/11c) from a message
+ * Removes the synthetic `compact_context` trace parts (ADR-0012 §Compaction trace in the timeline) from a message
  * list before it is converted to ModelMessages. The trace is a UI-only marker
  * persisted in the assistant message for the chat timeline; it must NEVER be
  * replayed to the provider, which would otherwise see a phantom tool call for a
  * tool it was never given (provider rejection / model confusion). An assistant
- * message left with no parts after stripping (the §J standalone trace message)
+ * message left with no parts after stripping (the ADR-0012 §Force-compact on demand standalone trace message)
  * is dropped entirely rather than sent empty.
  *
  * Exported for unit testing.
@@ -180,18 +180,18 @@ export function stripCompactionTraceParts(
       (p) => p.type !== COMPACT_CONTEXT_PART_TYPE,
     );
     if (parts.length > 0) out.push({ ...message, parts });
-    // else: trace-only message (§J) — drop it from the model payload.
+    // else: trace-only message (ADR-0012 §Force-compact on demand) — drop it from the model payload.
   }
   return changed ? out : messages;
 }
 
-/** Stats stamped on the last assistant message's metadata after each stream (§H/§I). */
+/** Stats stamped on the last assistant message's metadata after each stream (ADR-0012 §Context-usage ring / §Per-message stats). */
 export type MessageStats = {
-  /** Run-wide totals across every step (sum) — §I cost popover. */
+  /** Run-wide totals across every step (sum) — ADR-0012 §Per-message stats cost popover. */
   inputTokens: number;
   outputTokens: number;
   /**
-   * Input tokens of the LAST model call = peak context fullness — §H ring.
+   * Input tokens of the LAST model call = peak context fullness — ADR-0012 §Context-usage ring.
    * NOT the run-wide sum (which over-counts on multi-step tool loops).
    */
   contextTokens: number;
@@ -206,7 +206,7 @@ export type MessageStats = {
  * Stamps per-run stats (token counts, timing, resolved context window) onto
  * the last assistant message's `metadata.stats` in place. Applied at the same
  * point as {@link applyToolCompletions} so both mutations happen before the
- * sink persists the final state (§H/§I).
+ * sink persists the final state (ADR-0012 §Context-usage ring / §Per-message stats).
  */
 function applyMessageStats(
   messages: PlatypusUIMessage[],
@@ -374,7 +374,7 @@ type RunState = {
   terminated: boolean;
   /**
    * Input tokens reported by the most recent model step = peak context
-   * fullness for the §H ring. Tracked separately from `stats.inputTokens`,
+   * fullness for the ADR-0012 §Context-usage ring. Tracked separately from `stats.inputTokens`,
    * which is the run-wide SUM and over-counts multi-step tool loops.
    */
   lastStepInputTokens: number;
@@ -448,8 +448,8 @@ export class AgentRunner {
   }) {
     const { scope, input, sink } = params;
 
-    // RV1: snapshot the DB state BEFORE onStart overwrites it so
-    // applyTier1IfNeeded has the correct C4 baseline. Only interactive chats
+    // ADR-0012 §Summary invalidation: snapshot the DB state BEFORE onStart overwrites it so
+    // applyTier1IfNeeded has the correct ADR-0012 §Summary invalidation baseline. Only interactive chats
     // carry a `request.id`; headless runs (triggers, sub-agents) have none.
     const priorMessages = input.request.id
       ? await loadChatMessages(input.request.id).catch((err) => {
@@ -457,7 +457,7 @@ export class AgentRunner {
           // which cannot detect edits below the watermark — log the degradation.
           logger.warn(
             { err, chatId: input.request.id },
-            "RV1: failed to snapshot prior messages; C4 edit-detection degraded this turn",
+            "ADR-0012 §Summary invalidation: failed to snapshot prior messages; ADR-0012 §Summary invalidation edit-detection degraded this turn",
           );
           return undefined;
         })
@@ -572,11 +572,11 @@ export class AgentRunner {
     // an `undefined` value identically, and the streaming path has always
     // passed them this way in production.
     const modelArgs = {
-      // Recovery middleware (§E, P4): every model call — first call and every
+      // Recovery middleware (ADR-0012 §Recovery): every model call — first call and every
       // tool-loop step, stream and generate alike — gets one trim-and-retry on
-      // a provider "context too long" rejection. Always on; not gated by §G.
+      // a provider "context too long" rejection. Always on; not gated by ADR-0012 §Config & kill switch.
       model: withOverflowRecovery(state.turn),
-      // Strip the UI-only synthetic compact_context trace parts (§K/11c) before
+      // Strip the UI-only synthetic compact_context trace parts (ADR-0012 §Compaction trace in the timeline) before
       // sending history to the provider — replaying them surfaces a phantom tool
       // call for a tool the model was never given. Applied here so both the
       // streaming and generate paths (which share modelArgs) are covered.
@@ -587,7 +587,7 @@ export class AgentRunner {
       tools: state.turn.stream.tools,
       stopWhen: [stepCountIs(state.turn.stream.maxSteps)],
       abortSignal: handle.signal,
-      // Tier 2 (§D): in-turn compaction before each step when the live window
+      // Tier 2 (ADR-0012 §Tier 2): in-turn compaction before each step when the live window
       // nears the limit. Undefined when the turn has no Tier 2 runtime.
       prepareStep: state.turn.tier2
         ? buildTier2PrepareStep(state.turn.tier2)
@@ -623,7 +623,7 @@ export class AgentRunner {
 
     const startedAt = new Date().toISOString();
     let firstTokenAt: string | undefined;
-    // Set when the §H/§I stats are first emitted (messageMetadata `finish`), so
+    // Set when the ADR-0012 §Context-usage ring / §Per-message stats are first emitted (messageMetadata `finish`), so
     // the post-stream persist stamp reuses the same value rather than a slightly
     // later one — streamed and reloaded stats then match.
     let finishedAt: string | undefined;
@@ -667,7 +667,7 @@ export class AgentRunner {
     const uiStream = result.toUIMessageStream<PlatypusUIMessage>({
       originalMessages: input.messages,
       generateMessageId: createIdGenerator({ prefix: "msg", size: 16 }),
-      // Emit the §H/§I stats with the `finish` event so the client gets them on
+      // Emit the ADR-0012 §Context-usage ring / §Per-message stats with the `finish` event so the client gets them on
       // the final stream chunk — the (i) stats action then appears the instant
       // the answer completes, not a DB-refetch round-trip later. `start` carries
       // only agentId (timing/usage don't exist yet). The post-stream stamp in
@@ -686,7 +686,7 @@ export class AgentRunner {
       onError: (error) => formatStreamError(error),
     });
 
-    // §K / 11c: if Tier 1 compaction fired this turn, prepend synthetic
+    // ADR-0012 §Compaction trace in the timeline: if Tier 1 compaction fired this turn, prepend synthetic
     // compact_context tool-call + tool-result chunks so the compaction is
     // visible in the chat timeline. Injected after the 'start' event so the
     // AI SDK builds them into the same assistant message as the response.
@@ -710,9 +710,9 @@ export class AgentRunner {
     //
     // finalize is called here (not in toUIMessageStream's onFinish) so that
     // state.messages reflects the fully-drained stream — including the tool
-    // `completedAt` timestamps and §H/§I stats applied below — before the sink
+    // `completedAt` timestamps and ADR-0012 §Context-usage ring / §Per-message stats applied below — before the sink
     // persists it.
-    // RV8: an error chunk (model/tool failure surfaced via formatStreamError) or
+    // An error chunk (model/tool failure surfaced via formatStreamError) or
     // an internal stream fault ends the for-await without throwing, because
     // readUIMessageStream defaults terminateOnError=false. Capture it so the
     // finally finalizes "failed" instead of silently persisting a partial
@@ -757,7 +757,7 @@ export class AgentRunner {
           }
         } else if (streamError !== undefined) {
           // The stream errored (model/tool rejection or internal fault) but did
-          // not abort — record the run as failed rather than succeeded (RV8).
+          // not abort — record the run as failed rather than succeeded.
           status = "failed";
           err =
             streamError instanceof Error
@@ -841,10 +841,9 @@ export class AgentRunner {
 }
 
 /**
- * Wraps the turn's model with the context-overflow recovery middleware (§E,
- * P4): every model call — first call and every tool-loop step, stream and
+ * Wraps the turn's model with the context-overflow recovery middleware (ADR-0012 §Recovery): every model call — first call and every tool-loop step, stream and
  * generate alike — gets one trim-and-retry on a provider "context too long"
- * rejection. Always on; the §G kill switch does not gate it.
+ * rejection. Always on; the ADR-0012 §Config & kill switch does not gate it.
  */
 const withOverflowRecovery = (turn: ChatTurn): LanguageModel =>
   wrapLanguageModel({
@@ -866,7 +865,7 @@ const formatStreamError = (error: unknown): string => {
   if (LoadAPIKeyError.isInstance(error)) {
     return "AI provider API key is missing or not configured.";
   }
-  // Reaching here means recovery (§E) already trimmed and retried once and the
+  // Reaching here means recovery (ADR-0012 §Recovery) already trimmed and retried once and the
   // provider still rejected the prompt — surface the actionable dead end.
   if (isContextOverflowError(error)) {
     return "Conversation too large for the model's context window even after trimming — start a new chat or reduce attachments.";

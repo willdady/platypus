@@ -38,7 +38,7 @@ const openai: ProviderWindowInput = {
   apiKey: "sk-x",
 };
 
-describe("lookupRegistry — key normalization (drift T4)", () => {
+describe("lookupRegistry — key normalization (ADR-0012 §Window resolution (key normalization))", () => {
   it("exact match", () => {
     expect(lookupRegistry(REGISTRY, "gpt-4o")?.max_input_tokens).toBe(128000);
   });
@@ -110,7 +110,7 @@ describe("resolveContextWindow — resolution order", () => {
     });
   });
 
-  it("ignores litellm max_tokens (output cap, not window) → default (drift F1)", async () => {
+  it("ignores litellm max_tokens (output cap, not window) → default (ADR-0012 §Window resolution)", async () => {
     // "legacy-model" has only max_tokens; that is the OUTPUT cap, so it must NOT
     // be read as the context window. Falls through to the conservative default.
     const r = resolver();
@@ -119,7 +119,7 @@ describe("resolveContextWindow — resolution order", () => {
     expect(out.source).toBe("default");
   });
 
-  it("merges a maxOutputTokens-only override onto a registry window (drift F5)", async () => {
+  it("merges a maxOutputTokens-only override onto a registry window (ADR-0012 §Window resolution)", async () => {
     const r = resolver();
     const out = await r.resolve(
       { ...openai, modelMeta: { "gpt-4o": { maxOutputTokens: 999 } } },
@@ -133,7 +133,7 @@ describe("resolveContextWindow — resolution order", () => {
     });
   });
 
-  it("4. conservative default + source=default on a MISS (drift T6)", async () => {
+  it("4. conservative default + source=default on a MISS (ADR-0012 §Context-usage ring)", async () => {
     const r = resolver();
     const out = await r.resolve({ ...openai }, "unknown-model-zzz");
     expect(out).toEqual({
@@ -257,7 +257,7 @@ describe("API auto-detect parsers", () => {
   });
 });
 
-describe("registry load failure (drift F3)", () => {
+describe("registry load failure (ADR-0012 §Window resolution)", () => {
   it("a throwing loader degrades to empty registry → default, no reject", async () => {
     const r = new ContextWindowResolver({
       loadRegistry: async () => {
@@ -270,7 +270,7 @@ describe("registry load failure (drift F3)", () => {
   });
 });
 
-describe("cache + evict (drift T5)", () => {
+describe("cache + evict (ADR-0012 §Window resolution (caching & eviction))", () => {
   it("caches within the TTL (one probe), evict forces a re-probe", async () => {
     const httpGetJson = vi
       .fn()
@@ -320,7 +320,7 @@ describe("cache + evict (drift T5)", () => {
     expect(httpGetJson).toHaveBeenCalledTimes(2);
   });
 
-  it("RV7d: a default-source result is cached briefly, not for the full TTL", async () => {
+  it("a default-source result is cached briefly, not for the full TTL", async () => {
     let now = 0;
     // API probe never yields a window and the model is not in the registry →
     // every resolve falls to source:"default".

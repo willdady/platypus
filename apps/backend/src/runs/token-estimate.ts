@@ -1,19 +1,20 @@
 /**
- * The single token estimator (context-compaction-plan §B, principle P2).
+ * The single token estimator (ADR-0012 §One estimator).
  *
  * Token counting lives in **exactly one** function — {@link estimateTokens} —
  * over **one** neutral structure ({@link CountUnit}). Tier 1 operates on
  * UIMessages and Tier 2 on ModelMessages; both normalize into `CountUnit[]` via
- * the adapters here, so the two tiers can never diverge on a count (drift T1).
+ * the adapters here, so the two tiers can never diverge on a count
+ * (ADR-0012 §One estimator).
  *
  * Hard rules baked in:
  *  - **char/4 applies to text only.** Tool-call inputs and tool-result outputs
  *    are text-like to the model, so they fold into a unit's `text`. Image /
  *    binary bytes are NEVER char/4'd — they go through the modality table
- *    ({@link nonTextTokens}, drift T2).
+ *    ({@link nonTextTokens}, ADR-0012 §Token estimation).
  *  - **UI-only parts are excluded on both sides.** `reasoning`, `source-url`,
  *    `source-document`, `step-start`, and `data-*` never reach the model, so
- *    they are dropped by both adapters (drift T1).
+ *    they are dropped by both adapters (ADR-0012 §One estimator).
  *  - The estimate is content-only — **no per-message role framing overhead** —
  *    so the total is invariant to how messages are grouped. That is what lets
  *    the UIMessage and ModelMessage adapters agree exactly even though
@@ -21,8 +22,9 @@
  *
  * The char/4 estimate runs every turn. The provider-reported
  * `usage.inputTokens` from the prior turn acts as a corrective baseline when
- * available (`Tier1Input.lastInputTokens` — threaded by the §H usage-metadata
- * chunk); until then the cold-start margin (M2) compensates for under-counts.
+ * available (`Tier1Input.lastInputTokens` — threaded by the ADR-0012
+ * §Context-usage ring); until then the cold-start margin
+ * (ADR-0012 §Token estimation (cold-start margin)) compensates for under-counts.
  */
 
 import {
@@ -40,7 +42,7 @@ export const CHARS_PER_TOKEN = 4;
 /**
  * Conservative flat cost for a non-text part whose true cost we cannot compute
  * (unknown provider, missing image dimensions, non-image binary file). Over-
- * counting beats overflow (drift T2).
+ * counting beats overflow (ADR-0012 §Token estimation).
  */
 export const DEFAULT_NONTEXT_TOKENS = 1200;
 
@@ -48,7 +50,7 @@ export const DEFAULT_NONTEXT_TOKENS = 1200;
 const OPENAI_LOW_DETAIL_TOKENS = 85;
 
 /**
- * No-dimension fallbacks for providers with a real per-image cost (A2). When the
+ * No-dimension fallbacks for providers with a real per-image cost (ADR-0012 §Token estimation). When the
  * bytes are absent (hosted http(s) URL — and note `inlineFileUrls` turns every
  * stored attachment into one) or the header can't be parsed, we have no pixels
  * to plug into the formula. The flat {@link DEFAULT_NONTEXT_TOKENS} (1200)
@@ -97,13 +99,14 @@ export type CountUnit = {
 
 /**
  * UIMessage part `type`s that reach the model and are therefore counted. Kept
- * as data so the test can assert the UI-only parts are excluded (drift T1).
+ * as data so the test can assert the UI-only parts are excluded
+ * (ADR-0012 §One estimator).
  * Tool parts are matched separately by the `tool-`/`dynamic-tool` prefix.
  */
 export const MODEL_BOUND_UI_PART_TYPES = ["text", "file"] as const;
 
 // ---------------------------------------------------------------------------
-// The estimator (the one function — P2)
+// The estimator (the one function — ADR-0012 §One estimator)
 // ---------------------------------------------------------------------------
 
 function nonTextTokens(part: NonTextPart): number {
@@ -111,7 +114,7 @@ function nonTextTokens(part: NonTextPart): number {
 
   if (width == null || height == null) {
     // Dimensions unknown. OpenAI low-detail has a flat cost even without dims;
-    // providers with a real per-image cost get a pessimistic ceiling (A2);
+    // providers with a real per-image cost get a pessimistic ceiling (ADR-0012 §Token estimation);
     // everything else falls to the conservative default.
     if (provider === "openai" && detail === "low")
       return OPENAI_LOW_DETAIL_TOKENS;
@@ -176,7 +179,8 @@ export const estimateTokens = (units: CountUnit[]): number => {
 /**
  * Deterministic JSON with sorted keys, so the same value serializes to the same
  * string from either adapter (the UIMessage and ModelMessage shapes must agree
- * exactly — drift T1). Cheaper than guarding key order at every call site.
+ * exactly — ADR-0012 §One estimator). Cheaper than guarding key order at every
+ * call site.
  */
 export function stableStringify(value: unknown): string {
   if (value === null || typeof value !== "object")
@@ -195,7 +199,8 @@ function isImageMediaType(mediaType: string | undefined): boolean {
 
 /**
  * Builds a {@link NonTextPart} for an image, parsing pixel dimensions from the
- * bytes when available (drift T2: a cheap header read, no full decode).
+ * bytes when available (ADR-0012 §Token estimation: a cheap header read, no full
+ * decode).
  */
 function imagePart(
   provider: ImageProvider,
@@ -218,7 +223,7 @@ function binaryPart(): NonTextPart {
 /**
  * Reads pixel dimensions from PNG / JPEG headers without decoding the image.
  * Returns undefined for unrecognized formats or truncated data — the caller
- * then falls to the conservative constant (drift T2).
+ * then falls to the conservative constant (ADR-0012 §Token estimation).
  */
 export function parseImageDimensions(
   bytes: Uint8Array,
@@ -245,7 +250,7 @@ export function parseImageDimensions(
       }
       const marker = bytes[offset + 1];
       // 0xFF fill bytes pad before a real marker; consume one and re-read so a
-      // run of fill bytes doesn't get mistaken for a segment (RV10).
+      // run of fill bytes doesn't get mistaken for a segment.
       if (marker === 0xff) {
         offset++;
         continue;
@@ -273,7 +278,7 @@ export function parseImageDimensions(
         return { width, height };
       }
       // Standalone markers with no length payload: SOI(D8), EOI(D9),
-      // RSTn(D0-D7), TEM(01) (RV10). Skip the 2-byte marker.
+      // RSTn(D0-D7), TEM(01). Skip the 2-byte marker.
       if (
         marker === 0xd8 ||
         marker === 0xd9 ||
@@ -293,7 +298,7 @@ export function parseImageDimensions(
 }
 
 /**
- * Upper bound on bytes decoded from a data URL for header parsing (RV9). PNG
+ * Upper bound on bytes decoded from a data URL for header parsing. PNG
  * dimensions live in the first 24 bytes; a JPEG SOF marker is almost always
  * within the first few KB. Decoding only a 64 KB prefix avoids materializing a
  * multi-MB image on every estimation pass — we never need the pixel data, only
@@ -306,7 +311,7 @@ const HEADER_DECODE_MAX_B64_CHARS = Math.ceil(HEADER_DECODE_MAX_BYTES / 3) * 4;
  * Decodes the bytes behind a UIMessage file URL when it is a base64 data URL.
  * Hosted (http/https) URLs return undefined — we have no bytes in hand, so the
  * caller falls to the conservative constant. Only a bounded prefix is decoded
- * (RV9) since the caller only reads image headers.
+ * since the caller only reads image headers.
  */
 function bytesFromUrl(url: string): Uint8Array | undefined {
   const match = /^data:[^;,]*;base64,(.*)$/s.exec(url);
@@ -364,14 +369,28 @@ function uiMessageToCountUnit(
     // Tool invocations (`tool-<name>` and `dynamic-tool`) are model-bound and
     // text-like: fold their input + output into the char/4 blob.
     if (type === "dynamic-tool" || type.startsWith("tool-")) {
-      const tool = part as { input?: unknown; output?: unknown };
+      const tool = part as {
+        input?: unknown;
+        output?: unknown;
+        errorText?: string;
+      };
       if (tool.input !== undefined) text += stableStringify(tool.input);
-      if (tool.output !== undefined) text += stableStringify(tool.output);
+      // Count the output OR the error text — `convertToModelMessages` maps an
+      // `output-error` UI part to a `tool-result` with `output: {type:"error-text",
+      // value: errorText}`, which the model adapter counts via `toolResultOutputText`.
+      // Skipping errorText here would make the UI side count 0 for a failed tool call
+      // while the model side counts the error string — breaking the §One estimator
+      // equality (a tier could fire on a number the other never sees).
+      if (tool.output !== undefined) {
+        text += stableStringify(tool.output);
+      } else if (tool.errorText !== undefined) {
+        text += stableStringify(tool.errorText);
+      }
       continue;
     }
 
     // Everything else (reasoning, source-url, source-document, step-start,
-    // data-*) is UI-only and excluded on both sides (drift T1).
+    // data-*) is UI-only and excluded on both sides (ADR-0012 §One estimator).
   }
 
   return { role: message.role, text, nonText };
@@ -394,7 +413,7 @@ export function uiMessagesToCountUnits(
  * behaviours exist: `execution-denied` carries a `reason`; every other variant
  * (`text` / `error-text` / `json` / `error-json` / `content`) carries a `value`
  * that is char/4'd via `stableStringify` — mirroring the UI adapter, which folds
- * the raw output the same way (RV10: the old per-label switch collapsed to these
+ * the raw output the same way (the old per-label switch collapsed to these
  * two and carried an unreachable `default`).
  */
 function toolResultOutputText(output: ToolResultPart["output"]): string {
@@ -459,7 +478,8 @@ export function modelMessagesToCountUnits(
 }
 
 // ---------------------------------------------------------------------------
-// Per-turn overhead — system prompt + tool schemas (drift C1)
+// Per-turn overhead — system prompt + tool schemas
+// (ADR-0012 §Tier 1 (trigger projection))
 // ---------------------------------------------------------------------------
 
 /**
@@ -470,7 +490,7 @@ export function modelMessagesToCountUnits(
 export const TOOL_SCHEMA_FALLBACK_TOKENS = 200;
 
 /**
- * Serialized-schema char length cached per input-schema object (RV9). The
+ * Serialized-schema char length cached per input-schema object. The
  * `asSchema(...) → stableStringify` conversion is the expensive part of overhead
  * estimation and a tool's schema object is stable across turns, so memoize it.
  * A WeakMap keyed by the schema object never pins a tool that goes out of scope.
@@ -481,7 +501,8 @@ const schemaLenCache = new WeakMap<object, number>();
  * Estimates the tokens of the per-turn payload that is NOT in the message
  * history: the rendered system prompt plus every tool's name, description, and
  * JSON input schema — all sent to the model on every turn, and the dominant
- * cause of the C1 trigger under-count on tool-bearing agents (observed 8888
+ * cause of the trigger under-count on tool-bearing agents
+ * (ADR-0012 §Tier 1 (trigger projection)) (observed 8888
  * provider-reported vs ~986 message-only). Same char/4 rule as the single
  * estimator; the result feeds `Tier1Input.overheadTokens`.
  */

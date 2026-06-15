@@ -67,7 +67,7 @@ export const provider = pgTable(
     memoryExtractionModelId: t.text("memory_extraction_model_id").notNull(),
     embeddingModelId: t.text("embedding_model_id"),
     embeddingDimensions: t.integer("embedding_dimensions"),
-    // Per-model context-window / output overrides (context-compaction-plan §A).
+    // Per-model context-window / output overrides (ADR-0012 §Window resolution).
     // Keyed by model id; resolveContextWindow consults this before API/registry.
     modelMeta: t
       .jsonb("model_meta")
@@ -169,10 +169,10 @@ export const chat = pgTable(
     presencePenalty: t.real("presence_penalty"),
     frequencyPenalty: t.real("frequency_penalty"),
 
-    // Context-compaction state (docs/adr/0009). All additive nullable/defaulted.
-    // P1 view-not-delete: these change what is sent to the model, never the
+    // Context-compaction state (docs/adr/0012). All additive nullable/defaulted.
+    // View-not-delete (ADR-0012 §View, not delete): these change what is sent to the model, never the
     // stored `messages`. `summaryWatermark` = message id of the last summarized
-    // message. All mutations go through the single versioned CAS writer (P3/R1);
+    // message. All mutations go through the single versioned CAS writer (ADR-0012 §One durable writer);
     // `version` is its compare-and-swap token.
     contextSummary: t.text("context_summary"),
     summaryWatermark: t.text("summary_watermark"),

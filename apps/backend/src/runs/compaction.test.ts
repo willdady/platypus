@@ -61,7 +61,7 @@ class FakeStore implements CompactionStore {
   }
 }
 
-describe("casWrite — version-gated CAS (P3/R1)", () => {
+describe("casWrite — version-gated CAS (ADR-0012 §One durable writer)", () => {
   it("applies and bumps version when the expected version matches", async () => {
     const store = new FakeStore({ version: 3 });
     const won = await store.casWrite("c", 3, { summary: "s", watermark: "m1" });
@@ -92,7 +92,7 @@ describe("casWrite — version-gated CAS (P3/R1)", () => {
   });
 });
 
-describe("commitWatermark — loser logic (drift T10/R1)", () => {
+describe("commitWatermark — loser logic (ADR-0012 §One durable writer)", () => {
   it("applies a write on an uncontended commit", async () => {
     const store = new FakeStore({ version: 2 });
     const res = await commitWatermark(store, "c", () => ({
@@ -274,7 +274,7 @@ describe("compactUIMessages (Tier 1)", () => {
     expect(res.estimatedTokens).toBeLessThanOrEqual(300);
   });
 
-  it("does NOT re-fire next turn: feeding the result back is a no-op (C2)", async () => {
+  it("does NOT re-fire next turn: feeding the result back is a no-op (ADR-0012 §Tier 1 (hysteresis))", async () => {
     const msgs = [
       uiText("p1", "user", "P".repeat(4000)),
       uiText("p2", "assistant", "Q".repeat(4000)),
@@ -297,7 +297,7 @@ describe("compactUIMessages (Tier 1)", () => {
     expect(second.messagesDropped).toBe(0);
   });
 
-  it("map-reduces an oversized prefix (drift M1)", async () => {
+  it("map-reduces an oversized prefix (ADR-0012 §Tier 1 (summarizer model & map-reduce))", async () => {
     const summarize = vi.fn(noopSummarize);
     const msgs = [
       uiText("p1", "user", "Z".repeat(4000)), // ~1000 tokens of transcript
@@ -379,7 +379,7 @@ describe("compactUIMessages (Tier 1)", () => {
     expect((toolPart?.output as string).length).toBeLessThan(12000);
   });
 
-  it("option D: keeps recent VERBATIM in the empty-prefix path when within inputBudget", async () => {
+  it("ADR-0012 §Hard window wall: keeps recent VERBATIM in the empty-prefix path when within inputBudget", async () => {
     // Whole history fits within keepRecentMessages (2) → empty prefix, no model
     // call. Over the soft target but under the wall → outlier must stay untouched.
     const msgs = [
@@ -422,7 +422,7 @@ describe("compactUIMessages (Tier 1)", () => {
     warn.mockRestore();
   });
 
-  it("option D: does NOT warn on a soft-target miss when recent is under the wall", async () => {
+  it("ADR-0012 §Hard window wall: does NOT warn on a soft-target miss when recent is under the wall", async () => {
     const warn = vi.spyOn(logger, "warn").mockReturnValue(undefined);
     const msgs = [
       uiText("p1", "user", "P".repeat(4000)),
@@ -440,7 +440,7 @@ describe("compactUIMessages (Tier 1)", () => {
     warn.mockRestore();
   });
 
-  it("option D: keeps recent tool results VERBATIM when within inputBudget", async () => {
+  it("ADR-0012 §Hard window wall: keeps recent tool results VERBATIM when within inputBudget", async () => {
     // Over the soft target (300) so Stage 2 fires, but the kept view (summary +
     // recent) stays under the hard wall → recent must NOT be trimmed.
     const msgs = [
@@ -463,7 +463,7 @@ describe("compactUIMessages (Tier 1)", () => {
     expect(toolPart?.output).toBe("X".repeat(12000)); // untouched
   });
 
-  it("option D: trims recent (except newest) when the kept view breaches inputBudget", async () => {
+  it("ADR-0012 §Hard window wall: trims recent (except newest) when the kept view breaches inputBudget", async () => {
     // Two big tool results in recent; the kept view breaches the wall → trim the
     // older one, exempt the single newest message even though it is bulky.
     const msgs = [
@@ -549,7 +549,7 @@ describe("compactModelMessages (Tier 2 / recovery)", () => {
     expect(roles[toolIdx - 1]).toBe("assistant");
   });
 
-  it("force bypasses BOTH no-op gates so recovery never retries byte-identically (RV3)", async () => {
+  it("force bypasses BOTH no-op gates so recovery never retries byte-identically (ADR-0012 §Recovery)", async () => {
     // Estimator says we are within target AND nothing is prunable (small,
     // non-bulky messages). Without force both the whole-message gate and the
     // post-prune gate would no-op → recovery would retry the exact same prompt
@@ -570,7 +570,7 @@ describe("compactModelMessages (Tier 2 / recovery)", () => {
     expect(res.messages).not.toBe(msgs);
   });
 
-  it("force with an empty prefix is a no-op, not a prompt-growing summary (RV4 model-side)", async () => {
+  it("force with an empty prefix is a no-op, not a prompt-growing summary (ADR-0012 §Tier 1, model-side)", async () => {
     // recent alone exceeds keepRecentMessages → prefix is empty. Summarizing
     // nothing would ADD a synthetic message and grow the prompt, never
     // converging. Surface the overflow instead.
@@ -603,7 +603,7 @@ import {
   type CompactionConfig,
 } from "./compaction.ts";
 
-describe("buildCompactionTraceMessage (§J/11c)", () => {
+describe("buildCompactionTraceMessage (ADR-0012 §Force-compact on demand)", () => {
   it("builds an assistant message with a completed compact_context tool part", () => {
     const msg = buildCompactionTraceMessage(
       { messagesDropped: 7, summaryExcerpt: "did things" },
@@ -644,7 +644,7 @@ const cfg = (over: Partial<CompactionConfig> = {}): CompactionConfig => ({
   ...over,
 });
 
-describe("computeBudget (drift C3 — subtract both reserves)", () => {
+describe("computeBudget (ADR-0012 §Tier 1 (budget math) — subtract both reserves)", () => {
   it("subtracts output + safety reserve before applying ratios", () => {
     const b = computeBudget(
       10000,
@@ -660,7 +660,7 @@ describe("computeBudget (drift C3 — subtract both reserves)", () => {
     expect(b.inputBudget).toBe(7000); // 10000 - min(4096, 2500) - 500
   });
 
-  it("caps the output reserve at half the window so inputBudget can't collapse (A6)", () => {
+  it("caps the output reserve at half the window so inputBudget can't collapse (ADR-0012 §Tier 1 (budget math))", () => {
     // A bogus registry entry where max_output >= the input-scoped window would
     // otherwise drive inputBudget toward 1 and thrash. The cap keeps it sane.
     const b = computeBudget(10000, 20000, cfg({ reserveRatio: 0.05 }));
@@ -749,7 +749,7 @@ describe("applyTier1Compaction", () => {
     expect(store.state.version).toBe(1);
     expect(out.messages[0].id).toBe("context-summary");
     expect(onEvent).toHaveBeenCalledOnce();
-    // §K/11c: a summary ran → a trace is surfaced with the dropped count and a
+    // ADR-0012 §Compaction trace in the timeline: a summary ran → a trace is surfaced with the dropped count and a
     // summary excerpt.
     expect(out.compactionTrace).toEqual({
       messagesDropped: 2,
@@ -783,7 +783,7 @@ describe("applyTier1Compaction", () => {
     expect(store.casCalls).toBe(0);
   });
 
-  it("dirty forces compaction even when proactive is disabled (P4 recovery hand-off)", async () => {
+  it("dirty forces compaction even when proactive is disabled (ADR-0012 §Recovery is the net recovery hand-off)", async () => {
     const store = storeFromState({ version: 0, compactionDirty: true });
     const messages = [
       bigText("p1", "user"),
@@ -839,7 +839,7 @@ describe("applyTier1Compaction", () => {
     expect(store.state.compactionDirty).toBe(false); // flag cleared
     expect(store.state.contextSummary).toBeNull(); // no summary written
     expect(store.state.version).toBe(1);
-    // §K/11c: no model summary ran → no trace (would be an empty timeline entry).
+    // ADR-0012 §Compaction trace in the timeline: no model summary ran → no trace (would be an empty timeline entry).
     expect(out.compactionTrace).toBeUndefined();
   });
 
@@ -870,7 +870,7 @@ describe("applyTier1Compaction", () => {
   });
 });
 
-describe("invalidateCompaction (drift C4)", () => {
+describe("invalidateCompaction (ADR-0012 §Summary invalidation)", () => {
   const ordered = ["m1", "m2", "m3", "m4"];
 
   it("resets summary + watermark when a message at/below the watermark changes", async () => {
@@ -883,7 +883,7 @@ describe("invalidateCompaction (drift C4)", () => {
     expect(res.status).toBe("applied");
     expect(store.state.summaryWatermark).toBeNull();
     expect(store.state.contextSummary).toBeNull();
-    expect(store.state.version).toBe(6); // bumped so a racing compaction loses (R1)
+    expect(store.state.version).toBe(6); // bumped so a racing compaction loses (ADR-0012 §One durable writer)
   });
 
   it("is a no-op when the edit is entirely above the watermark", async () => {
@@ -915,7 +915,7 @@ describe("invalidateCompaction (drift C4)", () => {
   });
 });
 
-describe("affectedBelowWatermark (C4 divergence detection)", () => {
+describe("affectedBelowWatermark (ADR-0012 §Summary invalidation divergence detection)", () => {
   const persisted = [
     uiText("m1", "user", "one"),
     uiText("m2", "assistant", "two"),
@@ -964,7 +964,7 @@ describe("affectedBelowWatermark (C4 divergence detection)", () => {
   });
 });
 
-// --- Chunk 3: C1/M2 trigger projection + recovery dirty-flag producer -----
+// --- ADR-0012 §Tier 1 (trigger projection) / §Token estimation (cold-start margin): trigger projection + recovery dirty-flag producer -----
 
 import {
   projectTier1Tokens,
@@ -972,14 +972,14 @@ import {
   COLD_START_MARGIN,
 } from "./compaction.ts";
 
-describe("projectTier1Tokens (drift C1/M2)", () => {
-  it("applies the cold-start margin when no provider baseline exists (M2)", () => {
+describe("projectTier1Tokens (ADR-0012 §Tier 1 (trigger projection) / §Token estimation (cold-start margin))", () => {
+  it("applies the cold-start margin when no provider baseline exists (ADR-0012 §Token estimation (cold-start margin))", () => {
     expect(
       projectTier1Tokens({ messageTokens: 100, priorSummaryTokens: 0 }),
     ).toBe(Math.ceil(100 * COLD_START_MARGIN));
   });
 
-  it("counts the per-turn overhead toward the trigger (C1)", () => {
+  it("counts the per-turn overhead toward the trigger (ADR-0012 §Tier 1 (trigger projection))", () => {
     expect(
       projectTier1Tokens({
         messageTokens: 100,
@@ -1010,7 +1010,7 @@ describe("projectTier1Tokens (drift C1/M2)", () => {
     ).toBe(100);
   });
 
-  it("treats a 0 provider count as no baseline and keeps the margin (A1)", () => {
+  it("treats a 0 provider count as no baseline and keeps the margin (ADR-0012 §Tier 1 (trigger projection))", () => {
     // Usage-less providers persist contextTokens=0; a bare `== null` check would
     // skip the margin AND no-op the max(), leaving the raw char/4 with no buffer.
     expect(
@@ -1023,7 +1023,7 @@ describe("projectTier1Tokens (drift C1/M2)", () => {
   });
 });
 
-describe("applyTier1Compaction — overhead in the trigger (C1)", () => {
+describe("applyTier1Compaction — overhead in the trigger (ADR-0012 §Tier 1 (trigger projection))", () => {
   it("fires on system/tool overhead even when messages alone are under trigger", async () => {
     const store = storeFromState({ version: 0 });
     // ~4 tokens of messages — far under the 50-token trigger on their own.
@@ -1080,7 +1080,7 @@ describe("applyTier1Compaction — overhead in the trigger (C1)", () => {
   });
 });
 
-describe("setCompactionDirty (§E recovery producer, drift T3)", () => {
+describe("setCompactionDirty (ADR-0012 §Recovery producer)", () => {
   it("sets the flag through the CAS writer", async () => {
     const store = storeFromState({ version: 3 });
     const res = await setCompactionDirty(store, "c");
@@ -1108,7 +1108,7 @@ describe("setCompactionDirty (§E recovery producer, drift T3)", () => {
   });
 });
 
-// --- Chunk 14 Task 2: Stage 0 context editing ---------------------------
+// --- ADR-0012 §Stage 0 — context editing ---------------------------
 
 /** Tool message with a named tool and arbitrary output. */
 const toolMsg = (
@@ -1262,7 +1262,7 @@ describe("editToolResults (Stage 0 — context editing)", () => {
   });
 });
 
-describe("applyTier1Compaction — Stage 0 avoids summarization (Task 2)", () => {
+describe("applyTier1Compaction — Stage 0 avoids summarization (ADR-0012 §Stage 0 — context editing)", () => {
   const hugeTool = (id: string) => toolMsg(id, "dump", "Z".repeat(8000));
   // High minPrunableChars so Stage 1 prefix-pruning does NOT rescue the no-edit
   // case — it must reach Stage 2 (the model call) to make Stage 0's avoidance of

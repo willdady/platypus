@@ -148,7 +148,7 @@ chat.post(
     const scope = c.get("workspaceScope")!;
     const data = c.req.valid("json");
 
-    // RV2: verify the submitted chat id (if any) belongs to this workspace.
+    // ADR-0012 §Consequences (cross-tenant safety): verify the submitted chat id (if any) belongs to this workspace.
     // Without this check a workspace-A user could supply a workspace-B chat id
     // and corrupt B's compaction state via the unscoped store writes.
     if (data.id) {
@@ -451,7 +451,7 @@ chat.post(
     const workspaceId = c.req.param("workspaceId")!;
 
     // Reject if a run is currently in flight — the frontend defers the click
-    // until streaming finishes (drift U4), but guard here as a belt-and-suspenders
+    // until streaming finishes (ADR-0012 §Force-compact on demand), but guard here as a belt-and-suspenders
     // check to avoid CAS races with an in-progress writer.
     if (runRegistry.has(chatId)) {
       return c.json(
@@ -464,9 +464,14 @@ chat.post(
       const result = await forceCompactChat(chatId, workspaceId, orgId);
       return c.json({
         inputTokens: result.estimatedTokens,
+        // ADR-0012 §Force-compact on demand: the client confirms only when the drop
+        // is significant (messagesDropped > keepRecentMessages OR reduction > 30%).
+        tokensBefore: result.tokensBefore,
+        messagesDropped: result.messagesDropped,
+        keepRecentMessages: result.keepRecentMessages,
         contextWindow: result.contextWindow,
         contextWindowIsDefault: result.contextWindowIsDefault,
-        // §J/11c: the persisted synthetic trace message (when a summary ran), so
+        // ADR-0012 §Compaction trace in the timeline: the persisted synthetic trace message (when a summary ran), so
         // the frontend can append it to the timeline without a full refetch.
         traceMessage: result.traceMessage,
       });

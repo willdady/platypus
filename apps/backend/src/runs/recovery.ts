@@ -1,20 +1,20 @@
 /**
- * Context-overflow recovery (context-compaction-plan §E, principle P4).
+ * Context-overflow recovery (ADR-0012 §Recovery).
  *
  * Recovery is the NET, proactive compaction is the plan: even when Tier 1/2 are
- * disabled (kill switch §G) or their estimates were wrong, a provider 400/413
+ * disabled (kill switch — ADR-0012 §Config & kill switch) or their estimates were wrong, a provider 400/413
  * "context too long" must not hard-fail the turn. The middleware here wraps the
  * language model so EVERY individual model call — the first call of a turn and
  * every later step of a tool loop, in both the stream and generate paths — gets
  * one trim-and-retry:
  *
  *   1. Detect the overflow ({@link isContextOverflowError}, per-provider body
- *      matrix — drift T9).
+ *      matrix — ADR-0012 §Recovery).
  *   2. Persist `compactionDirty = true` through the single CAS writer so the
- *      NEXT `prepareChatTurn` forces a durable Tier 1 compaction (drift T3 —
- *      recovery never writes summary/watermark itself; it only flags).
+ *      NEXT `prepareChatTurn` forces a durable Tier 1 compaction (ADR-0012
+ *      §Recovery — recovery never writes summary/watermark itself; it only flags).
  *   3. Trim in-memory via {@link compactModelMessages} — the shared Tier 2
- *      adapter, NOT a bespoke trim (drift T3) — and retry the call once.
+ *      adapter, NOT a bespoke trim (ADR-0012 §Recovery) — and retry the call once.
  *   4. A second failure propagates; {@link formatStreamError} in agent-runner
  *      surfaces the "conversation too large" message. No infinite retry.
  *
@@ -22,9 +22,10 @@
  * a structural subset of `ModelMessage` for everything compaction touches
  * (roles, text / tool-call / tool-result / file parts, output wrappers), so the
  * prompt is passed to `compactModelMessages` directly rather than through a
- * lossy converter — one estimator, one trimmer (P2/T3). The leading system
- * message(s) are split off first and re-attached verbatim (§C: pin the system
- * prompt; the summary must never swallow it).
+ * lossy converter — one estimator, one trimmer (ADR-0012 §One estimator /
+ * §Recovery). The leading system message(s) are split off first and re-attached
+ * verbatim (ADR-0012 §Tier 1: pin the system prompt; the summary must never
+ * swallow it).
  */
 
 import {
@@ -47,7 +48,7 @@ export type RecoveryContext = {
   imageProvider: ImageProvider;
   /** Trim down to this many tokens (the Tier 1 hysteresis target). */
   targetTokens: number;
-  /** The configured keep-recent; recovery halves it (aggressive trim, §E). */
+  /** The configured keep-recent; recovery halves it (aggressive trim, ADR-0012 §Recovery). */
   keepRecentMessages: number;
   minPrunableChars: number;
   summarize: Summarize;
@@ -62,7 +63,7 @@ export type RecoveryContext = {
 };
 
 /**
- * Per-provider context-overflow phrasings (drift T9). Matched against the
+ * Per-provider context-overflow phrasings (ADR-0012 §Recovery). Matched against the
  * error message AND raw response body, case-insensitive:
  *  - OpenAI / vLLM / OpenAI-compatible: "This model's maximum context length is
  *    N tokens…" + code "context_length_exceeded"
@@ -110,7 +111,7 @@ export async function trimOverflowingPrompt<T extends PromptMessage>(
   const rest = prompt.slice(systemEnd) as unknown as ModelMessage[];
 
   const result = await compactModelMessages(rest, {
-    // Aggressive: halve the configured keep-recent (§E), floor of 2 so a
+    // Aggressive: halve the configured keep-recent (ADR-0012 §Recovery), floor of 2 so a
     // user/assistant pair survives.
     keepRecentMessages: Math.max(2, Math.ceil(ctx.keepRecentMessages / 2)),
     targetTokens: ctx.targetTokens,
@@ -119,7 +120,7 @@ export async function trimOverflowingPrompt<T extends PromptMessage>(
     summarize: ctx.summarize,
     summarizerWindow: ctx.summarizerWindow,
     // The provider already rejected this prompt, so the estimator is wrong;
-    // bypass the no-op gate or the retry will be byte-identical (RV3).
+    // bypass the no-op gate or the retry will be byte-identical (ADR-0012 §Recovery).
     force: true,
   });
 
@@ -155,7 +156,7 @@ export function contextOverflowRecoveryMiddleware(
       "context overflow detected; trimming and retrying once",
     );
 
-    // Flag durable compaction for the NEXT turn first (drift T3) — even if the
+    // Flag durable compaction for the NEXT turn first (ADR-0012 §Recovery) — even if the
     // retry below fails, the next prepareChatTurn must force Tier 1.
     if (ctx.markDirty) {
       try {

@@ -337,7 +337,6 @@ const REGISTRY: Registry = {
   "Qwen/Qwen3-8B": { max_input_tokens: 131072, max_output_tokens: 8192 },
   "Qwen/Qwen3-14B": { max_input_tokens: 131072, max_output_tokens: 8192 },
   "Qwen/Qwen3-32B": { max_input_tokens: 131072, max_output_tokens: 8192 },
-  "Qwen/Qwen3-72B": { max_input_tokens: 131072, max_output_tokens: 8192 },
 };
 
 /** Returns the built-in minimal registry. Async so the signature matches the

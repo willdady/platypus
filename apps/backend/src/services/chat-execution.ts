@@ -130,7 +130,7 @@ export type ChatTurnRequest = {
    * Chat id. Present for interactive chat turns (the chatSubmit payload);
    * absent for headless callers (triggers, sub-agents) whose `request` carries
    * no chat. Tier 1 compaction keys on it — see the skip guard in
-   * `prepareChatTurn` (plan M3: headless runs are Tier 2 only).
+   * `prepareChatTurn` (ADR-0012 §Sub-agents: headless runs are Tier 2 only).
    */
   id?: string;
   agentId?: string;
@@ -161,7 +161,7 @@ export type ChatTurn = {
     seed?: number;
   };
   /**
-   * Set when Tier 1 compaction fired this turn (§K / 11c). agent-runner emits
+   * Set when Tier 1 compaction fired this turn (ADR-0012 §Compaction trace in the timeline). agent-runner emits
    * a synthetic compact_context tool-call + tool-result pair into the stream so
    * the compaction is visible in the chat timeline.
    */
@@ -177,20 +177,20 @@ export type ChatTurn = {
     frequencyPenalty?: number;
     presencePenalty?: number;
     seed?: number;
-    /** Resolved context window for the main model (§H ring, §I stats). */
+    /** Resolved context window for the main model (ADR-0012 §Context-usage ring, ADR-0012 §Per-message stats). */
     contextWindow: number;
-    /** True when contextWindow fell to the conservative default (T6: ring → neutral). */
+    /** True when contextWindow fell to the conservative default (ADR-0012 §Context-usage ring: ring → neutral). */
     contextWindowIsDefault: boolean;
   };
   /**
-   * Context-overflow recovery wiring (§E, P4). Always present — recovery is
+   * Context-overflow recovery wiring (ADR-0012 §Recovery, ADR-0012 §Recovery is the net). Always present — recovery is
    * the safety net and stays on even when proactive compaction is disabled.
    * agent-runner wraps the model with the recovery middleware using this.
    */
   recovery: RecoveryContext;
   /**
-   * Tier 2 in-turn compaction config (§D). Null when proactive compaction is
-   * disabled (§G kill switch or agent override). agent-runner builds the
+   * Tier 2 in-turn compaction config (ADR-0012 §Tier 2). Null when proactive compaction is
+   * disabled (ADR-0012 §Config & kill switch or agent override). agent-runner builds the
    * prepareStep callback from this and wires it into streamText/generateText.
    */
   tier2: Tier2Context | null;
@@ -227,8 +227,8 @@ export type PrepareChatTurnInput = {
   onActivity?: (event?: ToolActivityEvent) => void;
   /**
    * Messages as they were in the DB BEFORE this submission's `ChatSink.onStart`
-   * overwrote them — the C4 baseline for detecting edits below the watermark
-   * (RV1). Loaded by agent-runner before calling onStart. When absent the C4
+   * overwrote them — the ADR-0012 §Summary invalidation baseline for detecting edits below the watermark
+   * (ADR-0012 §Summary invalidation). Loaded by agent-runner before calling onStart. When absent the ADR-0012 §Summary invalidation
    * check falls back to a DB read that now returns the post-overwrite state.
    */
   priorMessages?: PlatypusUIMessage[];
@@ -496,7 +496,7 @@ export const drizzleChatTurnQueries: ChatTurnQueries = {
   },
 };
 
-// --- Tier 1 context compaction (ADR-0009) ---
+// --- Tier 1 context compaction (ADR-0012) ---
 
 const EMPTY_COMPACTION_STATE: CompactionState = {
   version: 0,
@@ -506,105 +506,24 @@ const EMPTY_COMPACTION_STATE: CompactionState = {
 };
 
 /**
- * Loads the canonical (raw) persisted history for a chat. Exported so
- * agent-runner can snapshot it BEFORE `ChatSink.onStart` overwrites the row —
- * that snapshot is the C4 baseline (RV1: onStart runs before prepareChatTurn,
- * so a read inside applyTier1IfNeeded would see the just-submitted messages).
+ * Resolves the effective global compaction config from DEFAULT_COMPACTION_CONFIG
+ * + env overrides (ADR-0012 §Config & kill switch). Extracted so both
+ * buildCompactionRuntime and the context-window endpoint (which surfaces
+ * keepRecentMessages to the force-compact confirm gate) share one source of
+ * truth. Pure — depends only on process.env.
  */
-export async function loadChatMessages(
-  chatId: string,
-): Promise<PlatypusUIMessage[]> {
-  const rows = await db
-    .select({ messages: chatTable.messages })
-    .from(chatTable)
-    .where(eq(chatTable.id, chatId))
-    .limit(1);
-  return (rows[0]?.messages as PlatypusUIMessage[] | null) ?? [];
-}
-
-/**
- * Newest-first scan for the last assistant message carrying a POSITIVE
- * provider-reported `contextTokens` (the §H stat). Skips two messages that would
- * otherwise shadow the real baseline:
- *  - the §J standalone trace message (assistant role, no `metadata.stats`) — C2;
- *  - a turn from a usage-less provider stamped `contextTokens = 0` — A1.
- * Either would make the Tier 1 projection drop the corrective baseline (and, for
- * the 0 case, the cold-start margin too).
- */
-function findLastInputTokens(
-  messages: PlatypusUIMessage[],
-): number | undefined {
-  for (let i = messages.length - 1; i >= 0; i--) {
-    if (messages[i].role !== "assistant") continue;
-    const ct = (
-      messages[i].metadata as { stats?: { contextTokens?: number } } | undefined
-    )?.stats?.contextTokens;
-    if (typeof ct === "number" && ct > 0) return ct;
-  }
-  return undefined;
-}
-
-/**
- * Everything the compaction machinery needs that is resolved once per turn:
- * the budget (from the resolved context window), the effective config, the
- * summarizer, and the summarizer's own window (drift M1). Shared by Tier 1
- * and the recovery middleware (§E) so the two never disagree.
- */
-type CompactionRuntime = {
-  budget: Budget;
-  config: CompactionConfig;
-  imageProvider: ImageProvider;
-  summarize: Summarize;
-  summarizerWindow?: number;
-  /** Resolved context window for the main model (§H ring). */
-  contextWindow: number;
-  /** True when the window fell to the conservative default (T6: ring → neutral). */
-  contextWindowIsDefault: boolean;
-};
-
-/**
- * Builds the per-turn compaction runtime. Never throws: a failed window
- * resolution falls back to the conservative default so recovery (P4) always
- * has a working configuration.
- */
-/** Safety ceiling on summarizer output (Chunk 13, Fix 2). Prevents a runaway
- * model from producing a summary longer than its input. The system prompt
- * hard-limits to 1500 tokens; this 4000 backstop catches models that ignore
- * the instruction (e.g. qwen36 on large tool-heavy inputs). */
-const SUMMARIZE_MAX_OUTPUT_TOKENS = 4000;
-
-/** Heartbeat interval while the summarizer runs (Chunk 13, Fix 1). Resets the
- * per-step stall watchdog so a slow summarize call is not misidentified as a
- * frozen run and killed before it returns. */
-const SUMMARIZE_HEARTBEAT_INTERVAL_MS = 10_000;
-
-export async function buildCompactionRuntime(args: {
-  chatId?: string;
-  provider: Provider;
-  resolvedModelId: string;
-  opened: ReturnType<typeof openProvider>;
-  /** When present, called every ~10 s during `summarize` to keep the per-step
-   *  stall watchdog alive (Chunk 13, Fix 1). */
-  onActivity?: () => void;
-  /** Run abort signal, threaded into the summarizer `generateText` so a
-   *  cancelled / per-run-timed-out run aborts the call instead of leaking it
-   *  past the heartbeat-suppressed per-step watchdog (review Fix B). */
-  signal?: AbortSignal;
-}): Promise<CompactionRuntime> {
-  const { chatId, provider, resolvedModelId, opened, onActivity, signal } =
-    args;
-
+export function resolveCompactionConfig(): CompactionConfig {
   const config = { ...DEFAULT_COMPACTION_CONFIG };
-  // Global kill switch (§G) gates proactive compaction; recovery is unaffected.
+  // Global kill switch (ADR-0012 §Config & kill switch) gates proactive compaction; recovery is unaffected.
   if (process.env.COMPACTION_ENABLED === "false") {
     config.compactionEnabled = false;
   }
-  // Optional env overrides for the global ceiling (§G). Unset/blank/invalid →
+  // Optional env overrides for the global ceiling (ADR-0012 §Config & kill switch). Unset/blank/invalid →
   // the DEFAULT_COMPACTION_CONFIG value stands, so production behavior is
   // unchanged. Intended for tuning the trigger on test deployments without a
   // code change. Keep targetRatio < triggerRatio or compaction re-fires every
   // turn (the thrash trap).
-  // Reads + RANGE-VALIDATES a numeric env override (A3/B-F1). An out-of-range or
+  // Reads + RANGE-VALIDATES a numeric env override (ADR-0012 §Config & kill switch). An out-of-range or
   // non-finite value is rejected (warn + fall back to the default) rather than
   // silently applied: the old `Number.isFinite`-only check let `0` and negatives
   // through, so `COMPACTION_KEEP_RECENT=0` summarized the current message away
@@ -667,7 +586,7 @@ export async function buildCompactionRuntime(args: {
       process.env.COMPACTION_MIN_RECENT_PRUNABLE_CHARS,
       { min: 1, integer: true },
     ) ?? config.minRecentPrunableChars;
-  // Stage 0 context editing (Chunk 14 Task 2). Disabled via
+  // ADR-0012 §Stage 0 — context editing. Disabled via
   // COMPACTION_CONTEXT_EDITING_ENABLED=false; recency/size gates tunable.
   if (process.env.COMPACTION_CONTEXT_EDITING_ENABLED === "false") {
     config.contextEditingEnabled = false;
@@ -685,9 +604,9 @@ export async function buildCompactionRuntime(args: {
       { min: 1, integer: true },
     ) ?? config.minEditableToolChars;
 
-  // Hysteresis backstop (C2 / B-F1): target must stay below trigger or
-  // compaction re-fires every turn. The chunk-9 runtime clamp was lost when
-  // chunk-12 deleted resolveCompactionConfig; restore it here so an operator who
+  // Hysteresis backstop (ADR-0012 §Tier 1 (hysteresis)): target must stay below trigger or
+  // compaction re-fires every turn (ADR-0012 §Tier 1 hysteresis). The earlier runtime clamp was
+  // dropped when per-agent config was removed (ADR-0012 §Config & kill switch); restore it here so an operator who
   // sets COMPACTION_TARGET_RATIO >= COMPACTION_TRIGGER_RATIO still runs safely.
   if (config.targetRatio >= config.triggerRatio) {
     const clamped = config.triggerRatio * 0.9;
@@ -697,12 +616,105 @@ export async function buildCompactionRuntime(args: {
         triggerRatio: config.triggerRatio,
         clamped,
       },
-      "COMPACTION_TARGET_RATIO >= COMPACTION_TRIGGER_RATIO; clamping target to triggerRatio*0.9 (C2 hysteresis)",
+      "COMPACTION_TARGET_RATIO >= COMPACTION_TRIGGER_RATIO; clamping target to triggerRatio*0.9 (hysteresis)",
     );
     config.targetRatio = clamped;
   }
+  return config;
+}
 
-  // RV7d: resolve both windows concurrently (they are independent).
+/**
+ * Loads the canonical (raw) persisted history for a chat. Exported so
+ * agent-runner can snapshot it BEFORE `ChatSink.onStart` overwrites the row —
+ * that snapshot is the ADR-0012 §Summary invalidation baseline (ADR-0012 §Summary invalidation: onStart runs before prepareChatTurn,
+ * so a read inside applyTier1IfNeeded would see the just-submitted messages).
+ */
+export async function loadChatMessages(
+  chatId: string,
+): Promise<PlatypusUIMessage[]> {
+  const rows = await db
+    .select({ messages: chatTable.messages })
+    .from(chatTable)
+    .where(eq(chatTable.id, chatId))
+    .limit(1);
+  return (rows[0]?.messages as PlatypusUIMessage[] | null) ?? [];
+}
+
+/**
+ * Newest-first scan for the last assistant message carrying a POSITIVE
+ * provider-reported `contextTokens` (the ADR-0012 §Context-usage ring stat). Skips two messages that would
+ * otherwise shadow the real baseline:
+ *  - the ADR-0012 §Force-compact on demand standalone trace message (assistant role, no `metadata.stats`) — ADR-0012 §Tier 1 (hysteresis);
+ *  - a turn from a usage-less provider stamped `contextTokens = 0` — ADR-0012 §Tier 1 (trigger projection).
+ * Either would make the Tier 1 projection drop the corrective baseline (and, for
+ * the 0 case, the cold-start margin too).
+ */
+function findLastInputTokens(
+  messages: PlatypusUIMessage[],
+): number | undefined {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    if (messages[i].role !== "assistant") continue;
+    const ct = (
+      messages[i].metadata as { stats?: { contextTokens?: number } } | undefined
+    )?.stats?.contextTokens;
+    if (typeof ct === "number" && ct > 0) return ct;
+  }
+  return undefined;
+}
+
+/**
+ * Everything the compaction machinery needs that is resolved once per turn:
+ * the budget (from the resolved context window), the effective config, the
+ * summarizer, and the summarizer's own window (ADR-0012 §Tier 1 (summarizer model & map-reduce)). Shared by Tier 1
+ * and the recovery middleware (ADR-0012 §Recovery) so the two never disagree.
+ */
+type CompactionRuntime = {
+  budget: Budget;
+  config: CompactionConfig;
+  imageProvider: ImageProvider;
+  summarize: Summarize;
+  summarizerWindow?: number;
+  /** Resolved context window for the main model (ADR-0012 §Context-usage ring). */
+  contextWindow: number;
+  /** True when the window fell to the conservative default (ADR-0012 §Context-usage ring: ring → neutral). */
+  contextWindowIsDefault: boolean;
+};
+
+/**
+ * Builds the per-turn compaction runtime. Never throws: a failed window
+ * resolution falls back to the conservative default so recovery (ADR-0012 §Recovery is the net) always
+ * has a working configuration.
+ */
+/** Safety ceiling on summarizer output (ADR-0012 §Summarizer hardening). Prevents a runaway
+ * model from producing a summary longer than its input. The system prompt
+ * hard-limits to 1500 tokens; this 4000 backstop catches models that ignore
+ * the instruction (e.g. qwen36 on large tool-heavy inputs). */
+const SUMMARIZE_MAX_OUTPUT_TOKENS = 4000;
+
+/** Heartbeat interval while the summarizer runs (ADR-0012 §Summarizer hardening). Resets the
+ * per-step stall watchdog so a slow summarize call is not misidentified as a
+ * frozen run and killed before it returns. */
+const SUMMARIZE_HEARTBEAT_INTERVAL_MS = 10_000;
+
+export async function buildCompactionRuntime(args: {
+  chatId?: string;
+  provider: Provider;
+  resolvedModelId: string;
+  opened: ReturnType<typeof openProvider>;
+  /** When present, called every ~10 s during `summarize` to keep the per-step
+   *  stall watchdog alive (ADR-0012 §Summarizer hardening). */
+  onActivity?: () => void;
+  /** Run abort signal, threaded into the summarizer `generateText` so a
+   *  cancelled / per-run-timed-out run aborts the call instead of leaking it
+   *  past the heartbeat-suppressed per-step watchdog (review Fix B). */
+  signal?: AbortSignal;
+}): Promise<CompactionRuntime> {
+  const { chatId, provider, resolvedModelId, opened, onActivity, signal } =
+    args;
+
+  const config = resolveCompactionConfig();
+
+  // ADR-0012 §Window resolution: resolve both windows concurrently (they are independent).
   const taskModelId = provider.taskModelId || resolvedModelId;
   const [mainWindow, summarizerWindowResult] = await Promise.all([
     contextWindowResolver.resolve(provider, resolvedModelId).catch((error) => {
@@ -728,10 +740,10 @@ export async function buildCompactionRuntime(args: {
     : undefined;
 
   // Summarizer uses the provider's task model, falling back to the main model
-  // when unset (drift T7). generateText is one-shot, no tools.
+  // when unset (ADR-0012 §Tier 1 (summarizer model)). generateText is one-shot, no tools.
   const summarize = async (text: string): Promise<string> => {
     const startedAt = Date.now();
-    // Fix 1 (Chunk 13): keep the per-step stall watchdog alive while the
+    // ADR-0012 §Summarizer hardening: keep the per-step stall watchdog alive while the
     // summarizer runs. Tier-1 compaction is legitimate long work, not a stall;
     // without this ping the 120 s watchdog fires and kills the run.
     const heartbeat = onActivity
@@ -740,7 +752,7 @@ export async function buildCompactionRuntime(args: {
     try {
       const result = await generateText({
         model: opened.languageModel(taskModelId),
-        // Fix 2 (Chunk 13): structured handoff prompt — sections reduce loss
+        // ADR-0012 §Summarizer hardening: structured handoff prompt — sections reduce loss
         // across repeated re-compactions (Codex CLI pattern); explicit concise
         // instruction + "aim under ~1500 tokens" pairs with the output ceiling.
         // Sections are ordered most-critical-first: if the output is truncated
@@ -755,7 +767,7 @@ export async function buildCompactionRuntime(args: {
 
 If a prior summary appears in the history, integrate it — don't drop facts it captured. Be concise: hard limit 1500 tokens maximum. Output only the summary.`,
         prompt: text,
-        // Fix 2 (Chunk 13): hard ceiling prevents a runaway model from
+        // ADR-0012 §Summarizer hardening: hard ceiling prevents a runaway model from
         // producing a summary longer than its input. Prompt hard-limits to
         // 1500 tokens; 4000 backstop catches models that ignore the instruction.
         maxOutputTokens: SUMMARIZE_MAX_OUTPUT_TOKENS,
@@ -804,23 +816,23 @@ If a prior summary appears in the history, integrate it — don't drop facts it 
 type ApplyTier1Args = {
   chatId: string;
   runtime: CompactionRuntime;
-  /** Post-inlineFileUrls messages — used for the compaction itself (T2). */
+  /** Post-inlineFileUrls messages — used for the compaction itself (ADR-0012 §Token estimation). */
   messages: PlatypusUIMessage[];
   /**
    * Pre-inlineFileUrls messages from this submission — used as the incoming
-   * side of the C4 divergence check (RV1). Must NOT be inlined: the persisted
+   * side of the ADR-0012 §Summary invalidation divergence check (ADR-0012 §Summary invalidation). Must NOT be inlined: the persisted
    * side also uses storage:// / http:// URLs, so both sides are comparable.
    */
   rawMessages: PlatypusUIMessage[];
   /**
    * Messages as they were in the DB BEFORE this submission's onStart overwrote
-   * them (RV1). When absent, the C4 check falls back to a fresh DB read, which
+   * them (ADR-0012 §Summary invalidation). When absent, the ADR-0012 §Summary invalidation check falls back to a fresh DB read, which
    * returns the post-overwrite state and therefore never detects edits.
    */
   priorMessages?: PlatypusUIMessage[];
-  /** Estimated system-prompt + tool-schema payload for this turn (drift C1). */
+  /** Estimated system-prompt + tool-schema payload for this turn (ADR-0012 §Tier 1 (trigger projection)). */
   overheadTokens: number;
-  /** Provider-reported `usage.inputTokens` from the prior turn (C1, §H). */
+  /** Provider-reported `usage.inputTokens` from the prior turn (ADR-0012 §Tier 1 (trigger projection), ADR-0012 §Context-usage ring). */
   lastInputTokens?: number;
 };
 
@@ -831,9 +843,9 @@ type Tier1IfNeededResult = {
 
 /**
  * Reconstructs/advances the compacted view and persists any new summary — all
- * best-effort. Any throw degrades to the uncompacted messages (recovery §E
+ * best-effort. Any throw degrades to the uncompacted messages (recovery ADR-0012 §Recovery
  * remains the safety net). Returns the messages to send to the model plus an
- * optional compactionTrace for the stream trace (§K / 11c).
+ * optional compactionTrace for the stream trace (ADR-0012 §Compaction trace in the timeline).
  */
 async function applyTier1IfNeeded(
   args: ApplyTier1Args,
@@ -843,11 +855,11 @@ async function applyTier1IfNeeded(
     const store = drizzleCompactionStore;
     let state = (await store.readState(chatId)) ?? EMPTY_COMPACTION_STATE;
 
-    // C4 invalidation: if the submitted history changed at/below the watermark
+    // ADR-0012 §Summary invalidation: if the submitted history changed at/below the watermark
     // (edit/delete/regenerate), reset the stale summary before compacting. The
     // single submit endpoint is the only "edit handler" in this architecture.
     //
-    // RV1 fix: the baseline must be the DB state BEFORE this submission's
+    // ADR-0012 §Summary invalidation fix: the baseline must be the DB state BEFORE this submission's
     // onStart overwrote the row. agent-runner reads it before calling onStart
     // and threads it here as `priorMessages`. We also compare the pre-inline
     // (`rawMessages`) side so file-URL inlining doesn't trigger false positives.
@@ -1036,7 +1048,7 @@ export const prepareChatTurn = async (
 
   const systemPrompt = generation.systemPrompt!;
 
-  // --- Context compaction & recovery (ADR-0009) ---
+  // --- Context compaction & recovery (ADR-0012) ---
   // The runtime (window budget, config, summarizer) is resolved once and shared
   // by Tier 1 and the recovery middleware so they never disagree. Never throws.
   const compactionRuntime = await buildCompactionRuntime({
@@ -1045,7 +1057,7 @@ export const prepareChatTurn = async (
     resolvedModelId,
     opened,
     // Thread the activity callback so the summarizer heartbeat can bump the
-    // per-step stall watchdog (Chunk 13, Fix 1). `onActivity` accepts an
+    // per-step stall watchdog (ADR-0012 §Summarizer hardening). `onActivity` accepts an
     // optional event, so it satisfies the `() => void` heartbeat signature
     // directly — the interval invokes it with no event (timer-only bump).
     onActivity,
@@ -1055,27 +1067,27 @@ export const prepareChatTurn = async (
   });
 
   // Per-turn overhead: system prompt + tool schemas, sent on every turn but
-  // invisible to a message-only estimate (drift C1).
+  // invisible to a message-only estimate (ADR-0012 §Tier 1 (trigger projection)).
   const overheadTokens = estimateOverheadTokens(systemPrompt, wrappedTools);
 
   // Tier 1 is best-effort: a failure here must never break the turn — recovery
-  // (§E) is the net. Runs AFTER inlineFileUrls so the estimate sees the real
-  // payload (T2). Cross-turn durable compaction is keyed by chat id; headless
+  // (ADR-0012 §Recovery) is the net. Runs AFTER inlineFileUrls so the estimate sees the real
+  // payload (ADR-0012 §Token estimation). Cross-turn durable compaction is keyed by chat id; headless
   // runs (triggers, sub-agents) carry no chat id and have no durable history to
-  // compact (plan M3 — they are Tier 2 only), so send messages uncompacted.
+  // compact (ADR-0012 §Sub-agents — they are Tier 2 only), so send messages uncompacted.
   const chatId = request.id;
   const tier1Result = chatId
     ? await applyTier1IfNeeded({
         chatId,
         runtime: compactionRuntime,
         messages: inlinedMessages,
-        // Pre-inline messages for C4 comparison (RV1): both sides must use the
+        // Pre-inline messages for ADR-0012 §Summary invalidation comparison (ADR-0012 §Summary invalidation): both sides must use the
         // same URL format (storage:// / http://) to avoid false positives.
         rawMessages: messages,
-        // Pre-overwrite baseline threaded from agent-runner (RV1).
+        // Pre-overwrite baseline threaded from agent-runner (ADR-0012 §Summary invalidation).
         priorMessages: input.priorMessages,
         overheadTokens,
-        // Prior turn's provider-reported input token count (C1 / §H): the
+        // Prior turn's provider-reported input token count (ADR-0012 §Tier 1 (trigger projection) / ADR-0012 §Context-usage ring): the
         // corrective baseline for the Tier 1 trigger projection on turns ≥ 2.
         // Absent on turn 1 → cold-start margin applies.
         lastInputTokens: findLastInputTokens(messages),
@@ -1083,12 +1095,12 @@ export const prepareChatTurn = async (
     : { messages: inlinedMessages };
   const compactedMessages = tier1Result.messages;
 
-  // Recovery (§E, P4): always wired, even when proactive compaction is off.
+  // Recovery (ADR-0012 §Recovery, ADR-0012 §Recovery is the net): always wired, even when proactive compaction is off.
   // Headless runs get trim+retry but no dirty flag (no durable chat row).
   const recovery: RecoveryContext = {
     chatId,
     imageProvider: compactionRuntime.imageProvider,
-    // RV6: subtract the per-turn overhead so recovery uses the same effective
+    // ADR-0012 §Tier 1 (budget math): subtract the per-turn overhead so recovery uses the same effective
     // target as Tier 1. Without this, a large overhead (e.g. 65%+ of the window)
     // means the recovery retry still overflows even after trimming.
     targetTokens: Math.max(
@@ -1138,7 +1150,7 @@ export const prepareChatTurn = async (
     recovery,
     tier2: compactionRuntime.config.compactionEnabled
       ? {
-          // RV6 (Tier 2): the prepareStep estimate counts ModelMessages only —
+          // ADR-0012 §Tier 1 (budget math) (Tier 2): the prepareStep estimate counts ModelMessages only —
           // system prompt + tool schemas go as separate streamText params and
           // are invisible to it, yet they consume the same window. Subtract the
           // per-turn overhead so the trigger/target reflect the real wire
@@ -1506,15 +1518,15 @@ const loadSubAgents = async (
     return providerCache.get(providerId) ?? null;
   };
 
-  // Tier 2 only for sub-agents (drift M3: no durable history for Tier 1).
+  // Tier 2 only for sub-agents (ADR-0012 §Sub-agents: no durable history for Tier 1).
   // Resolve per-sub-agent compaction runtime so each sub-agent's tool loop
   // gets a prepareStep calibrated to its own model's context window.
   const subAgentPrepareSteps = new Map<
     string,
     import("ai").PrepareStepFunction
   >();
-  // Per-sub-agent overflow recovery (C1/B-F3). Built ALWAYS — recovery (P4) is
-  // the net even when the §G kill switch disables proactive compaction, exactly
+  // Per-sub-agent overflow recovery (ADR-0012 §Sub-agents). Built ALWAYS — recovery (ADR-0012 §Recovery is the net) is
+  // the net even when the ADR-0012 §Config & kill switch disables proactive compaction, exactly
   // as on the main path. Tier 2 (below) is the only part gated by the switch.
   const subAgentRecoveries = new Map<string, RecoveryContext>();
   await Promise.all(
@@ -1529,12 +1541,25 @@ const loadSubAgents = async (
           resolvedModelId: sa.modelId,
           opened: resolved.opened,
         });
+        // ADR-0012 §Tier 1 (budget math): subtract the sub-agent's per-turn
+        // overhead so its recovery/Tier 2 targets match the main path. The
+        // sub-agent's tool schemas resolve lazily at invocation and aren't
+        // available here, so the system prompt — the dominant, predictable
+        // component — is the floor; under-counting overhead only trims slightly
+        // less aggressively, and recovery's force-halving still backstops it.
+        const subOverheadTokens = estimateOverheadTokens(
+          sa.systemPrompt ?? undefined,
+          undefined,
+        );
         // Recovery net first (not gated by compactionEnabled). No markDirty —
         // sub-agents have no durable chat row to flag.
         subAgentRecoveries.set(sa.id, {
           chatId: sa.id,
           imageProvider: runtime.imageProvider,
-          targetTokens: Math.max(0, runtime.budget.targetTokens),
+          targetTokens: Math.max(
+            0,
+            runtime.budget.targetTokens - subOverheadTokens,
+          ),
           keepRecentMessages: runtime.config.keepRecentMessages,
           minPrunableChars: runtime.config.minPrunableChars,
           summarize: runtime.summarize,
@@ -1542,8 +1567,14 @@ const loadSubAgents = async (
         });
         if (!runtime.config.compactionEnabled) return;
         const tier2: Tier2Context = {
-          triggerTokens: Math.max(0, runtime.budget.triggerTokens),
-          targetTokens: Math.max(0, runtime.budget.targetTokens),
+          triggerTokens: Math.max(
+            0,
+            runtime.budget.triggerTokens - subOverheadTokens,
+          ),
+          targetTokens: Math.max(
+            0,
+            runtime.budget.targetTokens - subOverheadTokens,
+          ),
           keepRecentMessages: runtime.config.keepRecentMessages,
           minPrunableChars: runtime.config.minPrunableChars,
           imageProvider: runtime.imageProvider,
@@ -1591,12 +1622,12 @@ const loadSubAgents = async (
   return { subAgents, subAgentTools, subAgentMcpClients };
 };
 
-// --- Force-compact endpoint (§J) ---
+// --- Force-compact endpoint (ADR-0012 §Force-compact on demand) ---
 
 /**
- * Runs Tier 1 compaction unconditionally for a chat (§J: clickable ring).
+ * Runs Tier 1 compaction unconditionally for a chat (ADR-0012 §Force-compact on demand: clickable ring).
  * Forces the compaction regardless of the token threshold by injecting
- * compactionDirty=true so the RV3 force path bypasses the estimate gate.
+ * compactionDirty=true so the ADR-0012 §Recovery force path bypasses the estimate gate.
  * Called from `POST /chats/:id/compact`; the route guards against concurrent
  * runs before calling here.
  */
@@ -1606,9 +1637,15 @@ export async function forceCompactChat(
   orgId: string,
 ): Promise<{
   estimatedTokens: number;
+  /** Message-only estimate of the history BEFORE compaction (same basis as estimatedTokens). */
+  tokensBefore: number;
+  /** Number of prefix messages folded into the summary this run (0 if no summary). */
+  messagesDropped: number;
+  /** The config keep-recent count — the client compares messagesDropped against it. */
+  keepRecentMessages: number;
   contextWindow: number;
   contextWindowIsDefault: boolean;
-  /** §J/11c — the persisted synthetic trace message, when a summary was produced. */
+  /** ADR-0012 §Compaction trace in the timeline — the persisted synthetic trace message, when a summary was produced. */
   traceMessage?: PlatypusUIMessage;
 }> {
   // Load the chat record (workspace-scoped).
@@ -1673,7 +1710,7 @@ export async function forceCompactChat(
   const rawState =
     (await drizzleCompactionStore.readState(chatId)) ?? EMPTY_COMPACTION_STATE;
 
-  // Force-trigger by marking dirty in the in-memory copy (RV3: bypass the
+  // Force-trigger by marking dirty in the in-memory copy (ADR-0012 §Recovery: bypass the
   // estimate gate so the compaction actually shrinks the history).
   const forcedState: CompactionState = { ...rawState, compactionDirty: true };
 
@@ -1696,8 +1733,13 @@ export async function forceCompactChat(
   const estimatedTokens = estimateTokens(
     uiMessagesToCountUnits(result.messages, runtime.imageProvider),
   );
+  // Pre-compaction estimate (same basis) so the client can decide whether the
+  // drop is significant enough to confirm — ADR-0012 §Force-compact on demand.
+  const tokensBefore = estimateTokens(
+    uiMessagesToCountUnits(messages, runtime.imageProvider),
+  );
 
-  // §J/11c: a forced compaction has no live stream to inject the trace into, so
+  // ADR-0012 §Compaction trace in the timeline: a forced compaction has no live stream to inject the trace into, so
   // persist it as a standalone synthetic assistant message. Appended after the
   // last real message — above the watermark (which already advanced inside
   // applyTier1Compaction), so it is never itself summarized. The strip filter
@@ -1710,7 +1752,7 @@ export async function forceCompactChat(
       result.compactionTrace,
       createIdGenerator({ prefix: "msg", size: 16 })(),
     );
-    // Atomic jsonb append (A4/B-F8): concatenate at the DB rather than overwrite
+    // Atomic jsonb append: concatenate at the DB rather than overwrite
     // the whole column from the in-memory `messages` snapshot loaded earlier.
     // The route guards with runRegistry.has(chatId), but a run that registers in
     // the has()→write window — or a second concurrent POST /compact — would
@@ -1728,6 +1770,9 @@ export async function forceCompactChat(
 
   return {
     estimatedTokens,
+    tokensBefore,
+    messagesDropped: result.compactionTrace?.messagesDropped ?? 0,
+    keepRecentMessages: runtime.config.keepRecentMessages,
     contextWindow: runtime.contextWindow,
     contextWindowIsDefault: runtime.contextWindowIsDefault,
     traceMessage,

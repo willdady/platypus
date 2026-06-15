@@ -81,7 +81,7 @@ describe("createSubAgentTool", () => {
     capturedSettings.length = 0;
   });
 
-  describe("Tier 2 prepareStep (drift M3)", () => {
+  describe("Tier 2 prepareStep (ADR-0012 §Sub-agents)", () => {
     it("passes prepareStep to ToolLoopAgent when provided", () => {
       const mockPrepareStep = vi.fn();
       createSubAgentTool({ ...baseOptions, prepareStep: mockPrepareStep });
@@ -421,7 +421,7 @@ describe("createSubAgentTools", () => {
     expect(Object.keys(result)).toHaveLength(1);
   });
 
-  it("threads prepareStepFn to ToolLoopAgent for each sub-agent (drift M3)", async () => {
+  it("threads prepareStepFn to ToolLoopAgent for each sub-agent (ADR-0012 §Sub-agents)", async () => {
     capturedSettings.length = 0;
     const subAgents = [
       { id: "sa-1", name: "Alpha", providerId: "p1", modelId: "m1" },

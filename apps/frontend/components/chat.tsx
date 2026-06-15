@@ -380,7 +380,7 @@ export const Chat = ({
     [messages, setMessages],
   );
 
-  // Resolve the effective provider+model for the ring (drift U1: use selected
+  // Resolve the effective provider+model for the ring (ADR-0012 §Context-usage ring: use selected
   // model's window, not last message's window). When an agent is selected we
   // look up its provider/model; otherwise use the directly selected values.
   const effectiveRingProviderId = agentId
@@ -392,10 +392,11 @@ export const Chat = ({
 
   // Fetch resolved context window for the currently-selected model (cached on
   // the backend). Returns null contextWindow when source = "default" so the ring
-  // renders neutral (drift T6). Re-fetches automatically on model/agent change.
+  // renders neutral (ADR-0012 §Context-usage ring). Re-fetches automatically on model/agent change.
   const { data: contextWindowData } = useSWR<{
     contextWindow: number | null;
     source: string;
+    keepRecentMessages?: number;
   }>(
     backendUrl && user && effectiveRingProviderId && effectiveRingModelId
       ? joinUrl(
@@ -406,8 +407,8 @@ export const Chat = ({
     fetcher,
   );
 
-  // Stats from the last completed assistant message for the ring (§H) and
-  // per-message stats popover (§I).
+  // Stats from the last completed assistant message for the ring (ADR-0012 §Context-usage ring) and
+  // per-message stats popover (ADR-0012 §Per-message stats).
   const lastAssistantStats = useMemo<MessageStats | null>(() => {
     for (let i = messages.length - 1; i >= 0; i--) {
       const msg = messages[i];
@@ -444,13 +445,13 @@ export const Chat = ({
     chatData?.status === "running" && status === "ready";
   const effectiveStatus = isReconnectedToRunningRun ? "streaming" : status;
 
-  // §J: compact on demand — state for pending (deferred while streaming),
+  // ADR-0012 §Force-compact on demand — state for pending (deferred while streaming),
   // in-flight compaction spinner, and the post-compact token estimate that
   // refreshes the ring immediately (before the next completed message).
   const [compactPending, setCompactPending] = useState(false);
   const [isCompacting, setIsCompacting] = useState(false);
   // Stable count of assistant messages — unaffected by optimistic user-message
-  // pushes (11a / U5). Used to tag post-compact estimates so the ring doesn't
+  // pushes (ADR-0012 §Context-usage ring). Used to tag post-compact estimates so the ring doesn't
   // snap back to the old value when the user hits Send.
   const assistantMessageCount = useMemo(
     () => messages.filter((m) => m.role === "assistant").length,
@@ -460,7 +461,7 @@ export const Chat = ({
   // Post-compact estimate, tagged with the assistant message count at
   // compaction time so it auto-expires once a new assistant message arrives
   // (the next provider count is authoritative). Using assistantMessageCount
-  // instead of messages.length fixes the U5 ring jump: an optimistic user
+  // instead of messages.length fixes the ring-jump bug (ADR-0012 §Context-usage ring): an optimistic user
   // message increments messages.length but not assistantMessageCount, so the
   // compacted estimate stays valid until the real response lands.
   const [compacted, setCompacted] = useState<{
@@ -484,7 +485,7 @@ export const Chat = ({
         toast.error((body as { error?: string }).error ?? "Compact failed");
         return;
       }
-      // Refresh the ring immediately from the post-compact estimate (§J). This
+      // Refresh the ring immediately from the post-compact estimate (ADR-0012 §Force-compact on demand). This
       // is a message-only char/4 estimate (no per-turn system/tool overhead),
       // so it reads slightly low until the next real response replaces it with
       // the provider's authoritative count.
@@ -498,7 +499,7 @@ export const Chat = ({
           tokens: body.inputTokens,
         });
       }
-      // §J/11c: append the persisted compaction-trace message so it shows in the
+      // ADR-0012 §Compaction trace in the timeline: append the persisted compaction-trace message so it shows in the
       // timeline immediately. It carries the id the backend persisted, so a
       // later SWR revalidation reconciles rather than duplicating it.
       if (body.traceMessage) {
@@ -525,23 +526,33 @@ export const Chat = ({
   ]);
 
   const handleCompact = useCallback(() => {
-    // Confirm at click time (not after the deferred run fires) so the prompt
-    // never surprises the user mid-stream. Per P1 this is a view change, not
-    // data loss — the full history is preserved.
+    // ADR-0012 §Force-compact on demand: confirm ONLY when the drop is significant;
+    // below that, run immediately. The summarized prefix is everything before the
+    // keep-recent boundary, so messagesDropped ≈ messages.length − keepRecent, and
+    // the ADR's "messagesDropped > keepRecentMessages" criterion reduces to the
+    // pre-run-computable "messages.length > 2 × keepRecent". (The >30%-reduction
+    // criterion needs the post-run summary size; we don't gate on it here — the op
+    // is non-destructive either way per ADR-0012 §View, not delete.)
+    // Confirm at click time (not after the deferred run fires) so the prompt never
+    // surprises the user mid-stream.
+    const keepRecent = contextWindowData?.keepRecentMessages ?? 10;
+    const significant = messages.length > keepRecent * 2;
     if (
+      significant &&
       !window.confirm(
         "This will summarize older messages to reduce context usage. The full conversation history is preserved. Continue?",
       )
-    )
+    ) {
       return;
+    }
     if (effectiveStatus === "streaming" || effectiveStatus === "submitted") {
       setCompactPending(true);
     } else {
       void runCompact();
     }
-  }, [effectiveStatus, runCompact]);
+  }, [contextWindowData, messages.length, effectiveStatus, runCompact]);
 
-  // Fire deferred compact once streaming finishes (drift U4). Already confirmed
+  // Fire deferred compact once streaming finishes (ADR-0012 §Force-compact on demand). Already confirmed
   // at click time, so this just runs.
   useEffect(() => {
     if (
@@ -558,7 +569,7 @@ export const Chat = ({
   }, [compactPending, effectiveStatus, runCompact]);
 
   // Early returns live below ALL hooks so hook order stays unconditional
-  // (react-hooks/rules-of-hooks). The §H/§J ring hooks above must always run.
+  // (react-hooks/rules-of-hooks). The ADR-0012 §Context-usage ring / §Force-compact ring hooks above must always run.
   // TODO: Ideally show a loading indicator here
   if (isLoading || !providersData) return null;
 

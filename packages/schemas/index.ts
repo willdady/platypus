@@ -101,7 +101,7 @@ export const chatSchema = z.object({
   seed: z.number().optional(),
   presencePenalty: z.number().optional(),
   frequencyPenalty: z.number().optional(),
-  // Context-compaction state (docs/adr/0009). Server-managed; intentionally NOT
+  // Context-compaction state (docs/adr/0012). Server-managed; intentionally NOT
   // part of chatSubmit/chatUpdate. summaryWatermark is the message id of the
   // last summarized message (P1: a view over history, never a delete).
   contextSummary: z.string().nullable().optional(),
@@ -556,7 +556,7 @@ export const providerApiModeSchema = z.enum(["chat", "responses"]);
 
 export type ProviderApiMode = z.infer<typeof providerApiModeSchema>;
 
-// Per-model context-window / output overrides (context-compaction-plan §A).
+// Per-model context-window / output overrides (ADR-0012 §Window resolution).
 // Keyed by model id; both fields optional so an override can set just one.
 export const modelMetaEntrySchema = z.object({
   contextWindow: z.number().int().positive().optional(),
@@ -1547,16 +1547,16 @@ export const dashboardUpdateSchema = z.object({
   mobileLayout: z.array(rglLayoutItemSchema).optional(),
 });
 
-// Message stats (context-compaction-plan §H/§I)
+// Message stats (ADR-0012 §Context-usage ring / §Per-message stats)
 // Stamped on the last assistant message's metadata.stats after each stream run.
-// Used by the frontend context-usage ring (§H) and per-message stats popover (§I).
+// Used by the frontend context-usage ring and per-message stats popover.
 
 export const messageStatsSchema = z.object({
-  // Run-wide totals across every step (sum) — for the §I cost popover.
+  // Run-wide totals across every step (sum) — for the cost popover (§Per-message stats).
   inputTokens: z.number().nonnegative(),
   outputTokens: z.number().nonnegative(),
-  // Input tokens of the LAST model call = peak context fullness — for the §H
-  // ring. NOT the run-wide sum (which over-counts on multi-step tool loops).
+  // Input tokens of the LAST model call = peak context fullness — for the
+  // §Context-usage ring. NOT the run-wide sum (which over-counts on multi-step tool loops).
   contextTokens: z.number().nonnegative(),
   startedAt: z.string(),
   firstTokenAt: z.string().optional(),

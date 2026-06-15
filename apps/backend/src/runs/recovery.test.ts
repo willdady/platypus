@@ -26,9 +26,9 @@ const apiError = (args: {
     responseBody: args.responseBody,
   });
 
-// --- isContextOverflowError — per-provider body matrix (drift T9) ---------
+// --- isContextOverflowError — per-provider body matrix (ADR-0012 §Recovery) ---------
 
-describe("isContextOverflowError (drift T9)", () => {
+describe("isContextOverflowError (ADR-0012 §Recovery)", () => {
   it("matches the OpenAI phrasing + code", () => {
     const err = apiError({
       statusCode: 400,
@@ -111,7 +111,7 @@ describe("isContextOverflowError (drift T9)", () => {
   });
 });
 
-// --- middleware: trim + retry-once (§E, drift T3) --------------------------
+// --- middleware: trim + retry-once (ADR-0012 §Recovery) --------------------------
 
 type PromptMsg = { role: string; content: unknown };
 
@@ -121,7 +121,7 @@ const text = (role: "user" | "assistant", t: string): PromptMsg => ({
 });
 
 /** system + 2 big + 2 small messages: prune can't help (no tool results), so
- * the trim must go through the shared summarize stage (drift T3). */
+ * the trim must go through the shared summarize stage (ADR-0012 §Recovery). */
 const overflowPrompt = (): PromptMsg[] => [
   { role: "system", content: "SYS" },
   text("user", "X".repeat(4000)),
@@ -172,7 +172,7 @@ const runWrapGenerate = (
     ...args,
   });
 
-describe("contextOverflowRecoveryMiddleware (§E)", () => {
+describe("contextOverflowRecoveryMiddleware (ADR-0012 §Recovery)", () => {
   it("trims via the shared compactor and retries exactly once on overflow", async () => {
     const markDirty = vi.fn(async () => undefined);
     const mw = contextOverflowRecoveryMiddleware(ctx({ markDirty }));
@@ -192,10 +192,10 @@ describe("contextOverflowRecoveryMiddleware (§E)", () => {
     expect(calls).toHaveLength(1);
 
     const retried = calls[0].prompt;
-    // System head pinned verbatim at the front (§C).
+    // System head pinned verbatim at the front (ADR-0012 §Tier 1).
     expect(retried[0]).toEqual({ role: "system", content: "SYS" });
-    // The big prefix was replaced by the shared summary message (drift T3 —
-    // compactModelMessages' shape, not a bespoke trim).
+    // The big prefix was replaced by the shared summary message (ADR-0012
+    // §Recovery — compactModelMessages' shape, not a bespoke trim).
     const summary = retried[1] as { content: Array<{ text: string }> };
     expect(summary.content[0].text).toContain(
       "[Summary of earlier conversation]",
@@ -222,7 +222,7 @@ describe("contextOverflowRecoveryMiddleware (§E)", () => {
         model,
       }),
     ).rejects.toBe(second);
-    // Flag persisted anyway: the NEXT turn must compact durably (drift T3).
+    // Flag persisted anyway: the NEXT turn must compact durably (ADR-0012 §Recovery).
     expect(markDirty).toHaveBeenCalledTimes(1);
   });
 

@@ -8,16 +8,16 @@ import {
 import { Loader2 } from "lucide-react";
 
 /**
- * Context-usage ring (context-compaction-plan §H + §J).
+ * Context-usage ring (ADR-0012 §Context-usage ring + §Force-compact on demand).
  *
  * Renders a small SVG donut ring showing `usedTokens / contextWindow` fill.
  * Colours: green < 0.7, amber >= 0.7, red >= 0.9.
  * Shows neutral grey with no percentage when contextWindow is unknown/default
- * (drift T6) or when no run has completed yet.
+ * (ADR-0012 §Context-usage ring) or when no run has completed yet.
  *
- * When `onClick` is provided the ring is clickable (§J: compact on demand).
+ * When `onClick` is provided the ring is clickable (ADR-0012 §Force-compact on demand).
  * - While `isPending` (click queued, waiting for streaming to finish): shows
- *   a pending badge and is disabled (drift U4).
+ *   a pending badge and is disabled (ADR-0012 §Force-compact on demand).
  * - While `isCompacting`: shows a spinner.
  * - `isStreaming` disables clicks entirely (frontend defers via pending flag).
  */
@@ -38,6 +38,9 @@ export function ContextUsageRing({
 }) {
   const r = 7;
   const circumference = 2 * Math.PI * r;
+  // Amber has no semantic token (unlike primary/destructive); use Tailwind v4's
+  // default-palette CSS var so the threshold colour isn't a bare hex literal.
+  const amber = "var(--color-amber-500, #f59e0b)";
 
   const isNeutral = !contextWindow || usedTokens === undefined;
   const fill = isNeutral
@@ -49,7 +52,7 @@ export function ContextUsageRing({
     : fill >= 0.9
       ? "var(--color-destructive)"
       : fill >= 0.7
-        ? "#f59e0b"
+        ? amber
         : "var(--color-primary)";
 
   const isDisabled = isPending || isCompacting || isStreaming || !onClick;
@@ -123,7 +126,7 @@ export function ContextUsageRing({
                 style={{ transition: "stroke-dashoffset 0.3s ease" }}
               />
               {/* Pending dot */}
-              {isPending && <circle cx="10" cy="3.5" r="2" fill="#f59e0b" />}
+              {isPending && <circle cx="10" cy="3.5" r="2" fill={amber} />}
             </svg>
           )}
         </div>

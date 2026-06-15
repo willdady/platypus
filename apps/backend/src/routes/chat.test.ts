@@ -27,7 +27,7 @@ vi.mock("../services/chat-execution.ts", () => {
   return {
     prepareChatTurn: mockPrepareChatTurn,
     forceCompactChat: mockForceCompactChat,
-    // loadChatMessages is called by agent-runner before onStart (RV1 baseline).
+    // loadChatMessages is called by agent-runner before onStart (ADR-0012 §Summary invalidation baseline).
     loadChatMessages: vi.fn().mockResolvedValue([]),
     ValidationError,
     NotFoundError,
@@ -252,7 +252,7 @@ describe("Chat Routes", () => {
       mockDb.limit.mockResolvedValueOnce([
         { ownerId: "user-1", organizationId: "org-1" },
       ]); // requireWorkspaceAccess
-      mockDb.limit.mockResolvedValueOnce([{ workspaceId: "ws-1" }]); // RV2 chat workspace check
+      mockDb.limit.mockResolvedValueOnce([{ workspaceId: "ws-1" }]); // ADR-0012 §Consequences (cross-tenant safety) chat workspace check
 
       // ChatSink.onStart upserts the chat row with status=running before
       // prepareChatTurn runs. Returning a non-empty array skips the insert
@@ -292,6 +292,36 @@ describe("Chat Routes", () => {
 
       expect(res.status).toBe(200);
       expect(await res.text()).toBe("stream");
+    });
+
+    it("returns 404 when the submitted chat id belongs to another workspace (ADR-0012 §Consequences cross-tenant safety)", async () => {
+      mockSession({
+        id: "user-1",
+        name: "Test User",
+        email: "test@example.com",
+      });
+      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-1", organizationId: "org-1" },
+      ]); // requireWorkspaceAccess
+      // Cross-tenant check: the chat exists but in a DIFFERENT workspace.
+      mockDb.limit.mockResolvedValueOnce([{ workspaceId: "ws-other" }]);
+
+      const res = await app.request(baseUrl, {
+        method: "POST",
+        body: JSON.stringify({
+          id: "chat-1",
+          workspaceId,
+          providerId: "p1",
+          modelId: "m1",
+          messages: [{ role: "user", content: "hello" }],
+        }),
+        headers: { "Content-Type": "application/json" },
+      });
+
+      expect(res.status).toBe(404);
+      // The run must never start — no compaction-store mutation on another tenant's chat.
+      expect(mockPrepareChatTurn).not.toHaveBeenCalled();
     });
   });
 

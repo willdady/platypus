@@ -39,7 +39,7 @@ function dataUrl(bytes: Uint8Array, mediaType = "image/png"): string {
   return `data:${mediaType};base64,${Buffer.from(bytes).toString("base64")}`;
 }
 
-describe("estimateTokens (the single estimator, P2)", () => {
+describe("estimateTokens (the single estimator, ADR-0012 §One estimator)", () => {
   it("applies char/4 to text only, rounding up", () => {
     const units: CountUnit[] = [
       { role: "user", text: "abcdefgh", nonText: [] },
@@ -60,7 +60,7 @@ describe("estimateTokens (the single estimator, P2)", () => {
   });
 });
 
-describe("modality table (drift T2 — never char/4 an image)", () => {
+describe("modality table (ADR-0012 §Token estimation — never char/4 an image)", () => {
   it("anthropic: ceil(w*h/750)", () => {
     const units: CountUnit[] = [
       {
@@ -105,7 +105,7 @@ describe("modality table (drift T2 — never char/4 an image)", () => {
     expect(estimateTokens(noDims)).toBe(85);
   });
 
-  it("missing dimensions use a pessimistic per-provider ceiling (A2)", () => {
+  it("missing dimensions use a pessimistic per-provider ceiling (ADR-0012 §Token estimation)", () => {
     // Providers with a real per-image cost would be UNDER-counted by the flat
     // 1200 default when bytes/dims are unavailable (hosted URL), so they fall to
     // a pessimistic ceiling near each provider's post-resize max instead.
@@ -174,7 +174,7 @@ describe("parseImageDimensions (cheap header parse)", () => {
   });
 });
 
-describe("MODEL_BOUND filter (drift T1 — UI-only parts excluded)", () => {
+describe("MODEL_BOUND filter (ADR-0012 §One estimator — UI-only parts excluded)", () => {
   it("counts text but ignores reasoning / source / step-start / data parts", () => {
     const ui: PlatypusUIMessage[] = [
       {
@@ -195,7 +195,7 @@ describe("MODEL_BOUND filter (drift T1 — UI-only parts excluded)", () => {
     expect(units[0].nonText).toHaveLength(0);
   });
 
-  it("only text/file UI part types are model-bound (RV10 — the documented set)", () => {
+  it("only text/file UI part types are model-bound (the documented set)", () => {
     expect([...MODEL_BOUND_UI_PART_TYPES]).toEqual(["text", "file"]);
     // The UI-only types the adapter must drop are NOT in the model-bound set.
     for (const uiOnly of [
@@ -210,7 +210,7 @@ describe("MODEL_BOUND filter (drift T1 — UI-only parts excluded)", () => {
   });
 });
 
-describe("tool-result output variants (RV10 — model adapter)", () => {
+describe("tool-result output variants (model adapter)", () => {
   const unit = (output: unknown): CountUnit => {
     const msg = {
       role: "tool",
@@ -238,7 +238,7 @@ describe("tool-result output variants (RV10 — model adapter)", () => {
   });
 });
 
-describe("adapter equality (drift T1 — one estimate across both shapes)", () => {
+describe("adapter equality (ADR-0012 §One estimator — one estimate across both shapes)", () => {
   it("estimate(UI) === estimate(convertToModelMessages(UI)) exactly", async () => {
     const png = fakePng(128, 128);
     const ui: UIMessage[] = [
@@ -300,13 +300,13 @@ describe("imageProviderFor", () => {
   });
 });
 
-// --- estimateOverheadTokens (drift C1) -------------------------------------
+// --- estimateOverheadTokens (ADR-0012 §Tier 1 (trigger projection)) --------
 
 import { z } from "zod";
 import { tool } from "ai";
 import { estimateOverheadTokens } from "./token-estimate.ts";
 
-describe("estimateOverheadTokens (drift C1)", () => {
+describe("estimateOverheadTokens (ADR-0012 §Tier 1 (trigger projection))", () => {
   it("counts the system prompt at char/4", () => {
     const sys = "S".repeat(400);
     expect(estimateOverheadTokens(sys, {})).toBe(100);
@@ -365,11 +365,12 @@ describe("estimateOverheadTokens (drift C1)", () => {
         }),
       ]),
     );
-    // The point of C1: this payload is large even with a short history.
+    // The point of ADR-0012 §Tier 1 (trigger projection): this payload is large
+    // even with a short history.
     expect(estimateOverheadTokens(sys, tools)).toBeGreaterThan(500);
   });
 
-  it("is stable across repeated calls (RV9 schema-cache must not change counts)", () => {
+  it("is stable across repeated calls (schema-cache must not change counts)", () => {
     const sys = "system prompt";
     const tools = {
       lookup: tool({

@@ -55,15 +55,15 @@ interface SubAgentToolOptions {
   maxSteps?: number;
   /** Called on each activity update from the sub-agent. Used to reset the parent run's per-step timeout. */
   onProgress?: () => void;
-  /** Tier 2 in-turn compaction callback (§D, drift M3). Null when compaction disabled. */
+  /** Tier 2 in-turn compaction callback (ADR-0012 §Tier 2 / §Sub-agents). Null when compaction disabled. */
   prepareStep?: PrepareStepFunction;
   /**
-   * Context-overflow recovery (§E, P4) for the sub-agent's own model calls.
+   * Context-overflow recovery (ADR-0012 §Recovery) for the sub-agent's own model calls.
    * Sub-agents run a ToolLoopAgent OUTSIDE the parent run's recovery-wrapped
    * model, so without this their only overflow protection is Tier 2 — which
    * fires late (its trigger omits the sub-agent's tool/prompt overhead) and has
    * no net behind it. Wrapping here gives every sub-agent step one trim+retry,
-   * matching the main path (C1/B-F3). `markDirty` is omitted (no chat row).
+   * matching the main path (ADR-0012 §Sub-agents). `markDirty` is omitted (no chat row).
    */
   recovery?: RecoveryContext;
 }
@@ -91,7 +91,7 @@ export const createSubAgentTool = (options: SubAgentToolOptions) => {
 
   const toolName = subAgentToolName({ name });
 
-  // Wrap the sub-agent model with the overflow-recovery middleware (C1/B-F3) so
+  // Wrap the sub-agent model with the overflow-recovery middleware (ADR-0012 §Sub-agents) so
   // a step that overflows gets one trim+retry instead of hard-failing the task.
   // Guard on `typeof model !== "string"`: `wrapLanguageModel` needs a model
   // INSTANCE, and `LanguageModel` permits a bare string id. The factory returns

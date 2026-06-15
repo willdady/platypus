@@ -1,13 +1,13 @@
 /**
- * Context compaction (context-compaction-plan §C/§D, ADR-0009).
+ * Context compaction (ADR-0012 §Tier 1 / §Tier 2).
  *
  * This module owns durable compaction state and the message-shaping primitives.
- * Slice 2a (this section) is the **single durable writer** (principle P3): every
+ * Slice 2a (this section) is the **single durable writer** (principle ADR-0012 §One durable writer): every
  * mutation of `summaryWatermark` / `contextSummary` / `compactionDirty` flows
  * through {@link CompactionStore.casWrite}, a version-gated compare-and-swap.
  *
- * Why versioned CAS and not "compare the watermark value" (drift R1): history
- * edits (§C invalidation) move the watermark **backward**. A loser that compared
+ * Why versioned CAS and not "compare the watermark value" (ADR-0012 §One durable writer): history
+ * edits (ADR-0012 §Tier 1 invalidation) move the watermark **backward**. A loser that compared
  * watermark values could mistake a reset for "not yet advanced" and write a stale
  * summary over mutated history. Deciding by `version` removes the monotonicity
  * assumption entirely — any concurrent mutation bumps the version, so a racing
@@ -58,7 +58,7 @@ export type CompactionStore = {
    * Version-gated compare-and-swap. Applies `patch` and sets
    * `version = expectVersion + 1` **only if** the row's current version still
    * equals `expectVersion`. Returns true iff exactly one row was updated
-   * (i.e. this writer won). The single durable writer (P3).
+   * (i.e. this writer won). The single durable writer (ADR-0012 §One durable writer).
    */
   casWrite(
     chatId: string,
@@ -118,7 +118,7 @@ export type WatermarkDecision =
   | { kind: "skip"; reason: "no-op" | "covered" };
 
 /**
- * The single entry point for mutating compaction state (P3, drift T10).
+ * The single entry point for mutating compaction state (ADR-0012 §One durable writer).
  *
  * Reads the current state, asks `decide` what to do, and CAS-writes it. On a
  * CAS conflict it re-reads and retries the decision **once**; a second conflict
@@ -150,8 +150,8 @@ export async function commitWatermark(
     if (won) return { status: "applied", version: state.version + 1 };
     // Lost the CAS — a concurrent writer moved the version. Loop to re-read and
     // re-decide. The decision compares VERSION (via the re-read), not watermark
-    // values, so a backward watermark reset cannot be misread (R1). The metric
-    // gates whether the R4 read→summarize→write contention note ever needs a fix.
+    // values, so a backward watermark reset cannot be misread (ADR-0012 §One durable writer). The metric
+    // gates whether the read→summarize→write contention note ever needs a fix.
     logger.info(
       { metric: "cas.conflict", chatId, attempt, version: state.version },
       "cas.conflict",
@@ -173,7 +173,7 @@ export async function commitWatermark(
 //   Stage 2 — summarize the older prefix into one synthetic summary (model call).
 // `compactUIMessages` (Tier 1, durable) and `compactModelMessages` (Tier 2 +
 // recovery, throwaway) differ only in message shape and the tool-pairing rule.
-// Token counting is the ONE estimator from token-estimate.ts (P2).
+// Token counting is the ONE estimator from token-estimate.ts (ADR-0012 §One estimator).
 // ===========================================================================
 
 /** Summarizes a transcript into a compact paragraph. Injected (the task model). */
@@ -199,7 +199,7 @@ export function softTrim(text: string, keepEachSide = 500): string {
 /**
  * Picks the index splitting `prefix = [0, boundary)` from `recent = [boundary,
  * total)`. Starts at `total - keepRecent`, then walks backward while the
- * boundary is unsafe so a tool-call/result pair is never split (drift in §C).
+ * boundary is unsafe so a tool-call/result pair is never split (ADR-0012 §Tier 1).
  */
 export function pickKeepBoundary(
   total: number,
@@ -216,7 +216,7 @@ export function pickKeepBoundary(
 /**
  * Prunes bulky tool-result outputs in a UIMessage in place on a shallow copy.
  * The tool part is kept (never dropped — the assistant tool message is atomic,
- * §C); only its `output` is soft-trimmed. Returns the (possibly) pruned message.
+ * ADR-0012 §Tier 1); only its `output` is soft-trimmed. Returns the (possibly) pruned message.
  */
 function pruneUIMessage(
   message: PlatypusUIMessage,
@@ -242,12 +242,12 @@ function pruneUIMessage(
 }
 
 /**
- * Placeholder body for an elided tool result (Chunk 14 Task 2 — context editing).
+ * Placeholder body for an elided tool result (ADR-0012 §Stage 0 — context editing).
  * LLM-AGNOSTIC: Platypus may run small/weak background models, so the string is
  * EXPLICIT and self-describing. A terse marker ("[Old tool result content
  * cleared]") assumes the model infers it can re-call the tool; a small model may
  * not. Names the tool + elided size so the model can decide to re-run it, and is
- * short enough that Stage 1 / option-D never re-trim it.
+ * short enough that Stage 1 / the hard window wall never re-trim it.
  */
 const ELIDED_PLACEHOLDER_PREFIX = '[Tool result for "';
 
@@ -270,16 +270,16 @@ export type EditToolResultsResult = {
 };
 
 /**
- * Stage 0 (Chunk 14 Task 2 — context editing; Anthropic `clear_tool_uses`
+ * Stage 0 (ADR-0012 §Stage 0 — context editing; Anthropic `clear_tool_uses`
  * equivalent): replaces the `output` of OLD bulky tool-result parts with a short
  * placeholder, keeping the tool part itself (pairing) and ALL text parts intact.
  * Pure + deterministic — no model call, recomputed from raw messages each turn by
- * recency, so it needs no durable state (P1: raw `chat.messages` is untouched, the
+ * recency, so it needs no durable state (ADR-0012 §View, not delete: raw `chat.messages` is untouched, the
  * full result stays for UI/audit).
  *
  * Recency is by COUNT of tool results (we have no clean turn id): the last
  * `keepRecentToolResults` results are exempt, and the newest message is exempt
- * regardless (same invariant as option D, Task 1). A result is elided only when
+ * regardless (same invariant as ADR-0012 §Hard window wall). A result is elided only when
  * its serialized `output` exceeds `minEditableToolChars` — the size gate ≈
  * Anthropic's `clear_at_least`, so trivial results never churn the prompt cache.
  *
@@ -303,7 +303,7 @@ export function editToolResults(
   });
 
   // Candidates for elision = all but the last `keepRecentToolResults`; the newest
-  // MESSAGE is exempt regardless (decision 5 / option-D invariant). Decide the
+  // MESSAGE is exempt regardless (ADR-0012 §Hard window wall invariant). Decide the
   // FULL elision policy here (recency + size gate + idempotency + grow-guard) and
   // record the precomputed placeholder, so the rewrite map below fires only when
   // there is real work — and never allocates a copy for a pure no-op.
@@ -369,29 +369,30 @@ export function editToolResults(
 }
 
 /** Builds a readable transcript of UIMessages for the summarizer. */
-function renderUIMessages(messages: PlatypusUIMessage[]): string {
-  return messages
-    .map((m) => {
-      const text = (m.parts ?? [])
-        .map((p) => {
-          const ap = p as { type: string; text?: string; output?: unknown };
-          if (ap.type === "text") return ap.text ?? "";
-          if (ap.type === "dynamic-tool" || ap.type.startsWith("tool-")) {
-            const out =
-              typeof ap.output === "string"
-                ? ap.output
-                : ap.output !== undefined
-                  ? JSON.stringify(ap.output)
-                  : "";
-            return `[tool ${ap.type}] ${softTrim(out, 200)}`;
-          }
-          return "";
-        })
-        .filter(Boolean)
-        .join("\n");
-      return `${m.role}: ${text}`;
-    })
-    .join("\n\n");
+/** Renders each message to its own transcript string (one entry per message), so
+ * the map-reduce summarizer can chunk on message boundaries and never split a
+ * single message mid-content (ADR-0012 §Tier 1 map-reduce). */
+function renderUIMessageList(messages: PlatypusUIMessage[]): string[] {
+  return messages.map((m) => {
+    const text = (m.parts ?? [])
+      .map((p) => {
+        const ap = p as { type: string; text?: string; output?: unknown };
+        if (ap.type === "text") return ap.text ?? "";
+        if (ap.type === "dynamic-tool" || ap.type.startsWith("tool-")) {
+          const out =
+            typeof ap.output === "string"
+              ? ap.output
+              : ap.output !== undefined
+                ? JSON.stringify(ap.output)
+                : "";
+          return `[tool ${ap.type}] ${softTrim(out, 200)}`;
+        }
+        return "";
+      })
+      .filter(Boolean)
+      .join("\n");
+    return `${m.role}: ${text}`;
+  });
 }
 
 export type UICompactOptions = {
@@ -403,14 +404,14 @@ export type UICompactOptions = {
    * Defaults to minPrunableChars * 5 when omitted. */
   minRecentPrunableChars?: number;
   /**
-   * The HARD window wall (Chunk 14 Task 1, option D): the kept view's tokens
+   * The HARD window wall (ADR-0012 §Hard window wall): the kept view's tokens
    * above which the call would actually overflow (already net of per-turn
    * overhead by the caller). Recent (kept) tool results are trimmed ONLY when
    * the kept view breaches this wall — a mere `targetTokens` (hysteresis) miss
    * is cheap (it re-compacts next turn) and is not worth gutting active data the
    * user is asking about. The single newest message is always exempt regardless.
    * When omitted, recent results are always trimmed once over target (the
-   * pre-option-D behaviour) — safer than never trimming for callers that cannot
+   * behaviour predating ADR-0012 §Hard window wall) — safer than never trimming for callers that cannot
    * supply the wall.
    */
   inputBudget?: number;
@@ -418,17 +419,17 @@ export type UICompactOptions = {
   /** Existing durable summary to fold the new prefix into (incremental). */
   priorSummary?: string | null;
   summarize: Summarize;
-  /** Token budget of one summarize call; larger prefixes are map-reduced (M1). */
+  /** Token budget of one summarize call; larger prefixes are map-reduced (ADR-0012 §Tier 1 (summarizer model & map-reduce)). */
   summarizerWindow?: number;
   /**
    * Bypass the no-op estimate gate and force compaction even when char/4 says
-   * we are within budget. Used for dirty-forced Tier 1 (§E/RV3): recovery sets
+   * we are within budget. Used for dirty-forced Tier 1 (ADR-0012 §Recovery): recovery sets
    * the dirty flag AFTER a provider rejection, so the estimator already failed;
    * re-using it as the no-op gate causes an infinite overflow→dirty→no-op loop.
    */
   force?: boolean;
   /**
-   * Pre-computed estimate of `messages` (RV9). The caller's trigger projection
+   * Pre-computed estimate of `messages`. The caller's trigger projection
    * already ran the char/4 pass over this exact set, so reuse it instead of
    * re-estimating the full history a second time on the hot path.
    */
@@ -444,16 +445,52 @@ export type UICompactionResult = {
   watermarkId: string | null;
   messagesDropped: number;
   usedModelCall: boolean;
-  /** Post-compaction estimate incl. the summary — should be ≤ targetTokens (C2). */
+  /** Post-compaction estimate incl. the summary — should be ≤ targetTokens (ADR-0012 §Tier 1 (hysteresis)). */
   estimatedTokens: number;
 };
 
 /**
  * Summarizes a prefix transcript, map-reducing when it exceeds the summarizer's
- * own window (drift M1 — a huge cold-start history can't be sent whole).
+ * own window (ADR-0012 §Tier 1 (summarizer model & map-reduce) — a huge cold-start history can't be sent whole).
  */
+/**
+ * Packs per-message transcript segments into chunks that each fit `windowTokens`,
+ * splitting only on MESSAGE boundaries — never mid-message. A lone segment larger
+ * than the window (a single oversized message) is char-sliced as a last resort,
+ * which is unavoidable for one message that cannot fit whole.
+ */
+function packSegments(segments: string[], windowTokens: number): string[] {
+  const chunks: string[] = [];
+  let cur = "";
+  const flush = () => {
+    if (cur) {
+      chunks.push(cur);
+      cur = "";
+    }
+  };
+  for (const seg of segments) {
+    if (textTokens(seg) > windowTokens) {
+      flush();
+      const charBudget = windowTokens * CHARS_PER_TOKEN;
+      for (let i = 0; i < seg.length; i += charBudget) {
+        chunks.push(seg.slice(i, i + charBudget));
+      }
+      continue;
+    }
+    const next = cur ? `${cur}\n\n${seg}` : seg;
+    if (textTokens(next) > windowTokens) {
+      flush();
+      cur = seg;
+    } else {
+      cur = next;
+    }
+  }
+  flush();
+  return chunks;
+}
+
 async function summarizePrefix(
-  prefixText: string,
+  segments: string[],
   priorSummary: string | null | undefined,
   summarize: Summarize,
   summarizerWindow: number | undefined,
@@ -461,27 +498,39 @@ async function summarizePrefix(
   const fold = (prior: string | null | undefined, body: string) =>
     prior ? `Previous summary:\n${prior}\n\nNewer messages:\n${body}` : body;
 
-  if (!summarizerWindow || textTokens(prefixText) <= summarizerWindow) {
-    return summarize(fold(priorSummary, prefixText));
+  // Single pass when everything — prior summary AND fold framing included —
+  // fits the window. Checking the *folded* size (not the bare body) closes the
+  // gap where a large prior summary overflowed an otherwise-fitting prefix.
+  const joined = segments.join("\n\n");
+  if (
+    !summarizerWindow ||
+    textTokens(fold(priorSummary, joined)) <= summarizerWindow
+  ) {
+    return summarize(fold(priorSummary, joined));
   }
 
-  // Map-reduce: chunk the prefix by character budget, summarize each, then
-  // summarize the concatenated chunk summaries folded with the prior summary.
-  const charBudget = summarizerWindow * CHARS_PER_TOKEN;
-  const chunks: string[] = [];
-  for (let i = 0; i < prefixText.length; i += charBudget) {
-    chunks.push(prefixText.slice(i, i + charBudget));
-  }
+  // Map: summarize each window-sized chunk (message-boundary aligned).
+  const chunks = packSegments(segments, summarizerWindow);
   const chunkSummaries: string[] = [];
   for (const chunk of chunks) chunkSummaries.push(await summarize(chunk));
-  return summarize(fold(priorSummary, chunkSummaries.join("\n")));
+
+  // Reduce: the joined chunk summaries (+ prior) can THEMSELVES exceed the window
+  // when there are many chunks, so recurse rather than summarizing them whole —
+  // the reduce step must never re-overflow (ADR-0012 §Tier 1 map-reduce). Each
+  // pass shrinks the segment count, so this converges.
+  return summarizePrefix(
+    chunkSummaries,
+    priorSummary,
+    summarize,
+    summarizerWindow,
+  );
 }
 
 /**
  * Tier 1 (durable) compaction over UIMessages. Stage 1 prunes; if that reaches
  * the target, no model call is made and the prefix stays (lighter). Otherwise
  * Stage 2 summarizes the prefix into one synthetic summary and drops it from the
- * model view. Raw messages are never mutated by the caller (P1 — this returns a
+ * model view. Raw messages are never mutated by the caller (ADR-0012 §View, not delete — this returns a
  * view).
  */
 export async function compactUIMessages(
@@ -493,15 +542,15 @@ export async function compactUIMessages(
   const estimate = (msgs: PlatypusUIMessage[]) =>
     estimateTokens(uiMessagesToCountUnits(msgs, provider));
 
-  // RV9: reuse the caller's already-computed estimate of `messages` rather than
+  // Reuse the caller's already-computed estimate of `messages` rather than
   // re-running the full char/4 pass on the hot path.
   const initialEstimate = opts.knownEstimate ?? estimate(messages);
 
   // No-op when already within target (incl. the existing summary). This is what
-  // makes a follow-up turn after compaction NOT re-fire (hysteresis, C2).
+  // makes a follow-up turn after compaction NOT re-fire (hysteresis, ADR-0012 §Tier 1 (hysteresis)).
   // Bypassed when `force` is set — recovery sets the dirty flag AFTER a provider
   // rejection, so the estimator already proved wrong; using it as a no-op gate
-  // causes an infinite overflow→dirty→no-op loop (RV3).
+  // causes an infinite overflow→dirty→no-op loop (ADR-0012 §Recovery).
   if (!opts.force && initialEstimate + priorTokens <= opts.targetTokens) {
     return {
       keptMessages: messages,
@@ -539,7 +588,7 @@ export async function compactUIMessages(
 
   // Past this point we are over target. Recent (kept) messages stay in the model
   // view, so extreme outliers (e.g. large MCP tool dumps) bloat tokensAfter.
-  // Option D (Chunk 14 Task 1): trim them ONLY when the kept view would breach
+  // The hard window wall (ADR-0012 §Hard window wall): trim them ONLY when the kept view would breach
   // the hard window wall (`inputBudget`); a soft `targetTokens` miss is left at
   // full fidelity and just re-compacts next turn (cheap). The newest message is
   // always exempt — it is the data the current turn is actively about.
@@ -557,11 +606,11 @@ export async function compactUIMessages(
     });
     return { messages, changed };
   };
-  // Decides whether to keep `recent` verbatim or trim it (option D). Returns the
+  // Decides whether to keep `recent` verbatim or trim it (ADR-0012 §Hard window wall). Returns the
   // kept messages and their token estimate (reused for `afterEstimate` so the
   // recent set is never re-estimated). `fixedTokens` is the kept view's NON-recent
   // part (pruned prefix and/or folded summary). When `inputBudget` is omitted the
-  // wall is unknown → always trim once over target (pre-option-D guard).
+  // wall is unknown → always trim once over target (guard predating ADR-0012 §Hard window wall).
   const keepRecentWithinWall = (
     fixedTokens: number,
     recentMsgs: PlatypusUIMessage[],
@@ -583,7 +632,7 @@ export async function compactUIMessages(
 
   // Warn only when the kept view still breaches the HARD wall after trimming —
   // i.e. recent genuinely couldn't be brought under the window (one oversized
-  // result; Task 3 ingestion-cap territory). Post-option-D a soft `targetTokens`
+  // result; ingestion-cap territory). Under ADR-0012 §Hard window wall a soft `targetTokens`
   // miss is by design (recent kept verbatim below the wall), so it is NOT a
   // warning. Falls back to the old `target * 2` heuristic when no wall is supplied.
   const warnIfOverWall = (afterEstimate: number) => {
@@ -604,7 +653,7 @@ export async function compactUIMessages(
     }
   };
 
-  // RV4: nothing to summarize when the prefix is empty (history fits within
+  // ADR-0012 §Tier 1: nothing to summarize when the prefix is empty (history fits within
   // keepRecentMessages). Also bail when the boundary message has no id — we
   // cannot anchor a watermark there, and committing a watermark:null +
   // non-null summary would orphan the summary (viewAfterWatermark ignores
@@ -630,7 +679,7 @@ export async function compactUIMessages(
 
   // Stage 2 — summarize the pruned prefix into one synthetic summary.
   const summaryText = await summarizePrefix(
-    renderUIMessages(prunedPrefix),
+    renderUIMessageList(prunedPrefix),
     opts.priorSummary,
     opts.summarize,
     opts.summarizerWindow,
@@ -682,7 +731,7 @@ function pruneModelMessage(
         };
       }
     }
-    // RV5: @ai-sdk/mcp emits {type:"content"} for essentially every MCP tool
+    // ADR-0012 §Tier 1 (Stage 1 prune): @ai-sdk/mcp emits {type:"content"} for essentially every MCP tool
     // result. Without this branch Stage 1 reclaims zero tokens from the bulkiest
     // payloads and their text is invisible to the summarizer.
     if (output.type === "content" && Array.isArray(output.value)) {
@@ -713,40 +762,39 @@ function pruneModelMessage(
   return { ...message, content };
 }
 
-function renderModelMessages(messages: ModelMessage[]): string {
-  return messages
-    .map((m) => {
-      if (typeof m.content === "string") return `${m.role}: ${m.content}`;
-      const text = m.content
-        .map((p) => {
-          if (p.type === "text") return p.text;
-          if (p.type === "tool-call") return `[tool-call ${p.toolName}]`;
-          if (p.type === "tool-result") {
-            const o = p.output;
-            let v: string;
-            if (o.type === "text" || o.type === "error-text") {
-              v = o.value;
-            } else if (o.type === "json" || o.type === "error-json") {
-              v = JSON.stringify(o.value);
-            } else if (o.type === "content") {
-              // RV5: extract text items from content-type MCP output (RV5).
-              type ContentItem = { type: string; text?: string };
-              v = (o.value as ContentItem[])
-                .filter((i) => i.type === "text")
-                .map((i) => i.text ?? "")
-                .join("\n");
-            } else {
-              v = "";
-            }
-            return `[tool-result] ${softTrim(v, 200)}`;
+/** Per-message transcript strings (one entry per message). See renderUIMessageList. */
+function renderModelMessageList(messages: ModelMessage[]): string[] {
+  return messages.map((m) => {
+    if (typeof m.content === "string") return `${m.role}: ${m.content}`;
+    const text = m.content
+      .map((p) => {
+        if (p.type === "text") return p.text;
+        if (p.type === "tool-call") return `[tool-call ${p.toolName}]`;
+        if (p.type === "tool-result") {
+          const o = p.output;
+          let v: string;
+          if (o.type === "text" || o.type === "error-text") {
+            v = o.value;
+          } else if (o.type === "json" || o.type === "error-json") {
+            v = JSON.stringify(o.value);
+          } else if (o.type === "content") {
+            // ADR-0012 §Tier 1 (Stage 1 prune): extract text items from content-type MCP output.
+            type ContentItem = { type: string; text?: string };
+            v = (o.value as ContentItem[])
+              .filter((i) => i.type === "text")
+              .map((i) => i.text ?? "")
+              .join("\n");
+          } else {
+            v = "";
           }
-          return "";
-        })
-        .filter(Boolean)
-        .join("\n");
-      return `${m.role}: ${text}`;
-    })
-    .join("\n\n");
+          return `[tool-result] ${softTrim(v, 200)}`;
+        }
+        return "";
+      })
+      .filter(Boolean)
+      .join("\n");
+    return `${m.role}: ${text}`;
+  });
 }
 
 /** A synthetic summary as a model message. User-role + clear framing is the most
@@ -823,7 +871,7 @@ export async function compactModelMessages(
     pruneModelMessage(m, opts.minPrunableChars),
   );
   const prunedAll = [...prunedPrefix, ...recent];
-  // Force-guarded like gate 1 (RV3): when recovery forces a trim the provider
+  // Force-guarded like gate 1 (ADR-0012 §Recovery): when recovery forces a trim the provider
   // already rejected this prompt, so the estimator proved wrong — re-trusting
   // it here would return a byte-identical prompt and burn the single retry.
   if (!opts.force && estimate(prunedAll) <= opts.targetTokens) {
@@ -835,7 +883,7 @@ export async function compactModelMessages(
     };
   }
 
-  // RV4 (model-side): nothing to summarize when the prefix is empty (recent
+  // ADR-0012 §Tier 1 (model-side): nothing to summarize when the prefix is empty (recent
   // alone exceeds keepRecentMessages). Summarizing an empty prefix would add a
   // synthetic message and GROW the prompt — never converges. Surface the
   // overflow instead (recovery retries once, then propagates).
@@ -850,7 +898,7 @@ export async function compactModelMessages(
 
   // Stage 2 — summarize the pruned prefix into one synthetic message.
   const summaryText = await summarizePrefix(
-    renderModelMessages(prunedPrefix),
+    renderModelMessageList(prunedPrefix),
     null,
     opts.summarize,
     opts.summarizerWindow,
@@ -870,15 +918,15 @@ export async function compactModelMessages(
 // `applyTier1Compaction` is the durable, cross-turn entry point invoked from
 // `prepareChatTurn`. It is dependency-injected (store + summarizer) so it is
 // unit-testable without standing up the full turn machinery. It:
-//   1. Reconstructs the compacted VIEW from persisted state every turn (P1) —
+//   1. Reconstructs the compacted VIEW from persisted state every turn (ADR-0012 §View, not delete) —
 //      drop messages up to the watermark, re-inject the stored summary.
 //   2. Triggers a fresh compaction when the projected size crosses the trigger
-//      ratio, OR when `compactionDirty` forces it (recovery hand-off, §E).
+//      ratio, OR when `compactionDirty` forces it (recovery hand-off, ADR-0012 §Recovery).
 //   3. Persists any new summary/watermark + clears dirty via the single CAS
-//      writer (P3), the loser skipping safely on contention (R4).
+//      writer (ADR-0012 §One durable writer), the loser skipping safely on contention.
 // ===========================================================================
 
-/** Resolved per-turn compaction config (§G), defaults applied. */
+/** Resolved per-turn compaction config (ADR-0012 §Config & kill switch), defaults applied. */
 export type CompactionConfig = {
   compactionEnabled: boolean;
   triggerRatio: number;
@@ -890,7 +938,7 @@ export type CompactionConfig = {
    * Stage 2 summarization. Higher than minPrunableChars — we trim extreme
    * outliers (e.g. huge MCP tool dumps) without destroying useful context. */
   minRecentPrunableChars: number;
-  /** Stage 0 context editing (Chunk 14 Task 2): elide OLD bulky tool results to a
+  /** Stage 0 context editing (ADR-0012 §Stage 0 — context editing): elide OLD bulky tool results to a
    * placeholder before the trigger check, so a leaned view can avoid summarizing
    * entirely. Gated alongside the COMPACTION_ENABLED kill switch. */
   contextEditingEnabled: boolean;
@@ -923,7 +971,7 @@ export type Budget = {
 };
 
 /**
- * Budget math (drift C3): the trigger/target are fractions of the INPUT budget —
+ * Budget math (ADR-0012 §Tier 1 (budget math)): the trigger/target are fractions of the INPUT budget —
  * the window minus the output reservation and a safety headroom — not of the raw
  * window. When the resolved max output is unknown, reserve a conservative slice.
  */
@@ -934,7 +982,7 @@ export function computeBudget(
 ): Budget {
   const rawOutputReserve =
     maxOutputTokens ?? Math.min(4096, Math.floor(contextWindow * 0.25));
-  // Cap the output reservation at half the window (A6). litellm's
+  // Cap the output reservation at half the window (ADR-0012 §Tier 1 (budget math)). litellm's
   // `max_input_tokens` (which feeds `contextWindow`) is already input-scoped for
   // some providers, so subtracting a large `max_output_tokens` again can collapse
   // `inputBudget` toward 1 — making trigger/target ≈ 0 and thrashing. Capping
@@ -956,22 +1004,22 @@ export function computeBudget(
 }
 
 /**
- * First-turn safety margin on the char/4 projection (drift M2): char/4
+ * First-turn safety margin on the char/4 projection (ADR-0012 §Token estimation (cold-start margin)): char/4
  * under-counts CJK, dense JSON, and tool chatter, and on a cold start there is
  * no provider-reported `usage.inputTokens` to correct it.
  */
 export const COLD_START_MARGIN = 1.15;
 
 /**
- * The Tier 1 trigger projection (drift C1): what THIS turn is about to put on
+ * The Tier 1 trigger projection (ADR-0012 §Tier 1 (trigger projection)): what THIS turn is about to put on
  * the wire, not just the stored messages. `overheadTokens` carries the
  * estimated system prompt + tool schemas + skill payload — invisible to a
  * message-only estimate but sent to the model on every turn (the observed
  * live-test gap: provider reported 8888 input tokens vs ~986 message-only).
  * `lastInputTokens` is the provider-reported count from the prior turn — the
- * corrective baseline for turns ≥ 2 (threaded in the §H usage-metadata chunk).
+ * corrective baseline for turns ≥ 2 (threaded in the ADR-0012 §Context-usage ring usage-metadata chunk).
  * When it is absent the whole char/4 projection is inflated by
- * {@link COLD_START_MARGIN} (M2).
+ * {@link COLD_START_MARGIN} (ADR-0012 §Token estimation (cold-start margin)).
  */
 export function projectTier1Tokens(args: {
   messageTokens: number;
@@ -981,7 +1029,7 @@ export function projectTier1Tokens(args: {
 }): number {
   const charBased =
     args.messageTokens + args.priorSummaryTokens + (args.overheadTokens ?? 0);
-  // Treat a non-positive count as "no baseline" (A1): some OpenAI-compatible /
+  // Treat a non-positive count as "no baseline" (ADR-0012 §Tier 1 (trigger projection)): some OpenAI-compatible /
   // vLLM gateways omit `usage.inputTokens`, which we persist as
   // `contextTokens = 0`. A bare `== null` check would let that 0 slip through —
   // skipping the cold-start margin AND no-op-ing the `max()` below — leaving the
@@ -1010,7 +1058,7 @@ export function summaryUIMessage(text: string): PlatypusUIMessage {
   } as PlatypusUIMessage;
 }
 
-/** Fail-loud event so the transcript shows compaction happened (§C). */
+/** Fail-loud event so the transcript shows compaction happened (ADR-0012 §Tier 1). */
 export type CompactionEvent = {
   type: "context-compacted";
   messagesDropped: number;
@@ -1020,7 +1068,7 @@ export type CompactionEvent = {
 
 export type Tier1Input = {
   chatId: string;
-  /** Full durable history (post-`inlineFileUrls`, drift T2). */
+  /** Full durable history (post-`inlineFileUrls`, ADR-0012 §Token estimation). */
   messages: PlatypusUIMessage[];
   state: CompactionState;
   budget: Budget;
@@ -1031,12 +1079,12 @@ export type Tier1Input = {
   summarizerWindow?: number;
   /**
    * Estimated tokens of the per-turn payload that is NOT in `messages` —
-   * system prompt, tool schemas, skill list (drift C1). Counted toward the
+   * system prompt, tool schemas, skill list (ADR-0012 §Tier 1 (trigger projection)). Counted toward the
    * trigger and subtracted from the compaction target (compaction cannot
-   * shrink it, so hysteresis must leave room for it — C2).
+   * shrink it, so hysteresis must leave room for it — ADR-0012 §Tier 1 (hysteresis)).
    */
   overheadTokens?: number;
-  /** Provider-reported `usage.inputTokens` from the prior turn (C1, via §H). */
+  /** Provider-reported `usage.inputTokens` from the prior turn (ADR-0012 §Tier 1 (trigger projection), via ADR-0012 §Context-usage ring). */
   lastInputTokens?: number;
   onEvent?: (event: CompactionEvent) => void;
 };
@@ -1048,14 +1096,14 @@ export type CompactionTrace = {
   summaryExcerpt?: string;
 };
 
-/** Tool name for the synthetic compaction-trace tool-call/result pair (§K/11c).
+/** Tool name for the synthetic compaction-trace tool-call/result pair (ADR-0012 §Compaction trace in the timeline).
  * Shared by the stream-trace producer (agent-runner), the strip filter that
- * keeps it out of the model payload, the §J persisted-message builder, and the
+ * keeps it out of the model payload, the ADR-0012 §Force-compact on demand persisted-message builder, and the
  * frontend display-name mapping. */
 export const COMPACT_CONTEXT_TOOL_NAME = "compact_context";
 
 /** Builds a standalone synthetic assistant message carrying the compaction
- * trace as a `compact_context` tool-call/result pair (§J — forced compaction
+ * trace as a `compact_context` tool-call/result pair (ADR-0012 §Force-compact on demand — forced compaction
  * has no live stream to inject into, so the trace is persisted as its own
  * message instead). The message is always appended ABOVE the watermark, so it
  * is never itself summarized; the strip filter keeps it out of the model
@@ -1092,7 +1140,7 @@ export type Tier1Output = {
   commit?: CommitResult;
   /**
    * Present ONLY when a model summary was produced this turn — the user-visible
-   * "compaction happened" signal (§K/11c). Deliberately undefined for
+   * "compaction happened" signal (ADR-0012 §Compaction trace in the timeline). Deliberately undefined for
    * prune-only and force-dirty-within-target no-op turns: those drop 0 messages
    * and have no excerpt, so a trace would render an empty/confusing timeline
    * entry.
@@ -1112,7 +1160,7 @@ function viewAfterWatermark(
   const idx = messages.findIndex((m) => m.id === state.summaryWatermark);
   if (idx === -1) {
     // Watermark message is gone (edited/deleted before invalidation landed):
-    // distrust the summary and fall back to the full history (defensive C4).
+    // distrust the summary and fall back to the full history (defensive ADR-0012 §Summary invalidation).
     return { afterWatermark: messages, priorSummary: null };
   }
   return {
@@ -1131,13 +1179,13 @@ export async function applyTier1Compaction(
   const { afterWatermark, priorSummary } = viewAfterWatermark(messages, state);
   const priorSummaryTokens = priorSummary ? textTokens(priorSummary) : 0;
 
-  // Stage 0 — context editing (Chunk 14 Task 2): elide OLD bulky tool results to
+  // Stage 0 — context editing (ADR-0012 §Stage 0 — context editing): elide OLD bulky tool results to
   // placeholders BEFORE the trigger projection, so a leaned view can drop under
   // the trigger and skip summarization entirely. Pure/deterministic, no durable
-  // state (P1). Gated by the COMPACTION_ENABLED kill switch (recovery stays the
-  // net, P4) AND the per-feature `contextEditingEnabled`. Returns the same array
+  // state (ADR-0012 §View, not delete). Gated by the COMPACTION_ENABLED kill switch (recovery stays the
+  // net, ADR-0012 §Recovery is the net) AND the per-feature `contextEditingEnabled`. Returns the same array
   // reference when nothing qualified, so the no-op case re-estimates nothing.
-  // NB (plan decision 7): the elided placeholders also flow into the prefix that
+  // NB (ADR-0012 §Stage 0 — context editing): the elided placeholders also flow into the prefix that
   // Stage 2 would summarize, so a summarized result keeps only its placeholder —
   // an accepted fidelity trade-off (a 40k dump's head+tail is poor summary fodder
   // and the raw stays in the DB).
@@ -1167,7 +1215,7 @@ export async function applyTier1Compaction(
   // The view that would be sent if we did nothing more this turn.
   const baseView = inject(priorSummary, editedView);
   const overheadTokens = input.overheadTokens ?? 0;
-  // RV9: compute the char/4 pass over the unsummarized view once and reuse it
+  // Compute the char/4 pass over the unsummarized view once and reuse it
   // for both the trigger projection and compactUIMessages' no-op gate.
   const messageTokens = estimate(editedView);
   const projected = projectTier1Tokens({
@@ -1206,7 +1254,7 @@ export async function applyTier1Compaction(
   }
 
   // Compaction can only shrink the messages, never the per-turn overhead, so
-  // the target the messages must fit in is reduced by it (C1/C2). When the
+  // the target the messages must fit in is reduced by it (ADR-0012 §Tier 1 (hysteresis)). When the
   // overhead alone exhausts the target, hysteresis is impossible — warn loudly
   // (compaction will re-fire every turn) but still compact: recovery is the
   // only other net.
@@ -1218,7 +1266,7 @@ export async function applyTier1Compaction(
     );
   }
 
-  // The hard wall the kept view must fit under (option D), net of the per-turn
+  // The hard wall the kept view must fit under (ADR-0012 §Hard window wall), net of the per-turn
   // overhead compaction cannot shrink — mirrors how effectiveTarget adjusts the
   // soft target. Recent tool results are trimmed only when this is breached.
   const effectiveInputBudget = Math.max(0, budget.inputBudget - overheadTokens);
@@ -1233,27 +1281,27 @@ export async function applyTier1Compaction(
     priorSummary,
     summarize: input.summarize,
     summarizerWindow: input.summarizerWindow,
-    // When dirty-forced the estimator already proved wrong (RV3): bypass the
+    // When dirty-forced the estimator already proved wrong (ADR-0012 §Recovery): bypass the
     // no-op gate so recovery's dirty flag actually shrinks the history.
     force: forceCompact,
-    // RV9: the no-op gate estimates this exact set; reuse the value above.
+    // The no-op gate estimates this exact set; reuse the value above.
     knownEstimate: messageTokens,
   });
 
   const view = inject(result.summaryText ?? priorSummary, result.keptMessages);
 
-  // Persist through the single CAS writer (P3). The decision is gated on the
+  // Persist through the single CAS writer (ADR-0012 §One durable writer). The decision is gated on the
   // version we read; if a concurrent writer advanced it, we skip rather than
-  // recompute (R4 — the wasted summarize is bounded, never corrupting). The
+  // recompute (the wasted summarize is bounded, never corrupting). The
   // version-pinning gate is shared so both write paths decide identically.
   const capturedVersion = state.version;
-  // On a version mismatch we skip as "covered" WITHOUT clearing dirty. Plan T10
-  // says "winner advanced → SKIP + clear-dirty", but that is only safe when the
-  // winner actually compacted. A concurrent invalidateCompaction also advances
-  // the version yet leaves dirty set on purpose (it resets the summary, it does
-  // not shrink history) — clearing dirty here would then drop the forced
-  // compaction the overflow demanded. Leaving dirty set is strictly safe: worst
-  // case is one extra compaction next turn. (Intentional deviation from T10.)
+  // On a version mismatch we skip as "covered" WITHOUT clearing dirty (ADR-0012
+  // §One durable writer). Clearing on skip is only safe when the winner actually
+  // compacted; a concurrent invalidateCompaction also advances the version yet
+  // leaves dirty set on purpose (it resets the summary, it does not shrink
+  // history) — clearing dirty here would then drop the forced compaction the
+  // overflow demanded. Leaving dirty set is strictly safe: worst case is one
+  // extra compaction next turn.
   const pinnedWrite = (patch: WatermarkPatch) =>
     commitWatermark(input.store, input.chatId, (latest) =>
       latest.version === capturedVersion
@@ -1263,7 +1311,7 @@ export async function applyTier1Compaction(
   let commit: CommitResult | undefined;
 
   if (result.usedModelCall) {
-    // Same-basis before/after for the user-visible reduction (B-F7): both are
+    // Same-basis before/after for the user-visible reduction: both are
     // char/4 message estimates plus the per-turn overhead. The trigger
     // `projected` mixes in the provider's `lastInputTokens` floor and is NOT
     // comparable to the message-only post estimate, so reporting it as "before"
@@ -1303,7 +1351,7 @@ export async function applyTier1Compaction(
 
   // Only surface a trace when an actual model summary was produced. Prune-only
   // and force-dirty-within-target runs drop 0 messages with no excerpt — a
-  // trace there would be an empty, confusing timeline entry (§K/11c).
+  // trace there would be an empty, confusing timeline entry (ADR-0012 §Compaction trace in the timeline).
   const compactionTrace: CompactionTrace | undefined =
     result.usedModelCall && result.summaryText
       ? {
@@ -1322,7 +1370,7 @@ export async function applyTier1Compaction(
 
 /**
  * Detects which summarized messages (at/below the watermark) the freshly
- * submitted history changed or dropped — the C4 trigger. Because the client
+ * submitted history changed or dropped — the ADR-0012 §Summary invalidation trigger. Because the client
  * resubmits the full message array each turn (there is no separate edit/delete
  * endpoint), divergence is found by comparing the persisted canonical history
  * against the incoming one up to the watermark. Returns the ids that an
@@ -1350,10 +1398,10 @@ export function affectedBelowWatermark(
 }
 
 /**
- * Persists `compactionDirty = true` after a context-overflow recovery (§E,
- * drift T3). Recovery never writes summary/watermark — it only flags; the next
+ * Persists `compactionDirty = true` after a context-overflow recovery (ADR-0012 §Recovery).
+ * Recovery never writes summary/watermark — it only flags; the next
  * `prepareChatTurn` sees the flag, forces Tier 1, and clears it inside the same
- * CAS write that advances the watermark. Goes through the single writer (P3);
+ * CAS write that advances the watermark. Goes through the single writer (ADR-0012 §One durable writer);
  * already-dirty is a no-op.
  */
 export async function setCompactionDirty(
@@ -1390,12 +1438,12 @@ export async function invalidateCompaction(
   });
 }
 
-// --- Tier 2 in-turn compaction (§D, ADR-0009) ---
+// --- Tier 2 in-turn compaction (ADR-0012 §Tier 2) ---
 
 /**
- * Per-turn Tier 2 compaction context (§D). Null when the §G kill switch or
+ * Per-turn Tier 2 compaction context (ADR-0012 §Tier 2). Null when the ADR-0012 §Config & kill switch or
  * agent config disables proactive compaction. Sub-agents also receive Tier 2
- * (drift M3 — they have no durable history for Tier 1, but their tool loop
+ * (ADR-0012 §Sub-agents / §Tier 2 — they have no durable history for Tier 1, but their tool loop
  * can bloat intra-turn).
  */
 export type Tier2Context = {
@@ -1409,11 +1457,11 @@ export type Tier2Context = {
 };
 
 /**
- * Builds the Tier 2 in-turn compaction `prepareStep` callback (§D). Fires
+ * Builds the Tier 2 in-turn compaction `prepareStep` callback (ADR-0012 §Tier 2). Fires
  * before each step of a tool loop when the accumulated model messages exceed
  * `triggerTokens` — compacts via `compactModelMessages` and returns the
  * trimmed messages. Returns `undefined` when below the threshold so the SDK
- * proceeds unchanged (drift m3: no per-step overhead when the loop is small).
+ * proceeds unchanged (ADR-0012 §Sub-agents / §Tier 2: no per-step overhead when the loop is small).
  */
 export function buildTier2PrepareStep(ctx: Tier2Context): PrepareStepFunction {
   return async ({ messages }) => {
@@ -1429,7 +1477,7 @@ export function buildTier2PrepareStep(ctx: Tier2Context): PrepareStepFunction {
       imageProvider: ctx.imageProvider,
       summarize: ctx.summarize,
       summarizerWindow: ctx.summarizerWindow,
-      // Reuse the trigger-check estimate; skips a redundant full pass (RV9).
+      // Reuse the trigger-check estimate; skips a redundant full pass.
       knownEstimate: estimate,
     });
 

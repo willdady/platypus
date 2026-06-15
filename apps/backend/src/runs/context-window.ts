@@ -1,5 +1,5 @@
 /**
- * Context-window resolution (context-compaction-plan §A).
+ * Context-window resolution (ADR-0012 §Window resolution).
  *
  * Resolves the usable context window (and max output tokens) for a
  * provider+model, in this order:
@@ -11,14 +11,17 @@
  *   4. Conservative default — {@link DEFAULT_CONTEXT_WINDOW} (8192).
  *
  * A fall-through to the default, and every registry key MISS, is `log.warn`'d:
- * the window is then unknown and the ring must render neutral (drift T6).
+ * the window is then unknown and the ring must render neutral
+ * (ADR-0012 §Context-usage ring).
  *
  * Results are cached per `providerId:modelId` with a TTL. Editing a `modelMeta`
  * override must call {@link ContextWindowResolver.evict} immediately so the
- * override takes effect without waiting for the TTL (drift T5).
+ * override takes effect without waiting for the TTL
+ * (ADR-0012 §Window resolution (caching & eviction)).
  *
  * The registry lookup and HTTP probe are injected so this module is unit
- * testable without network or a vendored multi-MB JSON file (drift T4 cases are
+ * testable without network or a vendored multi-MB JSON file
+ * (ADR-0012 §Window resolution (key normalization) cases are
  * exercised against small fixture registries).
  */
 
@@ -31,14 +34,14 @@ export const DEFAULT_CONTEXT_WINDOW = 8192;
 export const DEFAULT_CACHE_TTL_MS = 60 * 60 * 1000; // 1 hour
 
 /**
- * Short TTL for `source: "default"` resolutions (defect 6 / RV7d). A registry
+ * Short TTL for `source: "default"` resolutions (ADR-0012 §Window resolution (caching & eviction)). A registry
  * MISS or a transient API failure falls to 8192; caching that for the full hour
  * pins a wrong window long after the blip clears. A 60 s TTL lets the next turn
  * re-probe while still collapsing a burst of same-turn lookups.
  */
 export const DEFAULT_SOURCE_CACHE_TTL_MS = 60 * 1000; // 1 minute
 
-/** Where a resolved window came from — drives ring neutrality (T6). */
+/** Where a resolved window came from — drives ring neutrality (ADR-0012 §Context-usage ring). */
 export type WindowSource = "override" | "api" | "registry" | "default";
 
 export type ResolvedWindow = {
@@ -85,7 +88,7 @@ export type ResolverDeps = {
 };
 
 // ---------------------------------------------------------------------------
-// litellm registry key normalization (drift T4)
+// litellm registry key normalization (ADR-0012 §Window resolution (key normalization))
 // ---------------------------------------------------------------------------
 
 /** Strips a Bedrock ARN down to its `vendor.model` id, if it is one. */
@@ -138,7 +141,7 @@ export function lookupRegistry(
 
   // 6. family heuristic — longest registry key that is a proper prefix of the
   // id, separated by "-", ".", ":", or "/" so "gpt-4" does NOT match "gpt-4.5"
-  // (RV7b: raw startsWith caused gpt-4.5-preview to silently resolve via a
+  // (ADR-0012 §Window resolution (key normalization): raw startsWith caused gpt-4.5-preview to silently resolve via a
   // stale gpt-4 entry with a wrong 8192 window).
   // Case-insensitive so mixed-case registry keys ("Qwen/…", "meta-llama/…")
   // still match lowercase ids from providers that normalize model names.
@@ -168,7 +171,7 @@ function windowFromRegistryEntry(entry: RegistryEntry): {
 } {
   // Only trust the explicit input limit. litellm's `max_tokens` is the OUTPUT
   // cap (not the context window); using it would silently under-size the window
-  // and cause constant over-compaction (drift F1). When `max_input_tokens` is
+  // and cause constant over-compaction (ADR-0012 §Window resolution). When `max_input_tokens` is
   // absent we return no window so the caller falls to the conservative default,
   // which at least surfaces a warn + neutral ring rather than a wrong number.
   return {
@@ -296,7 +299,7 @@ async function detectViaApi(
 // Resolver (cache + evict)
 // ---------------------------------------------------------------------------
 
-/** RV7d: 5 s hard cap so a hung provider endpoint never blocks turns for ~300 s. */
+/** ADR-0012 §Window resolution (caching & eviction): 5 s hard cap so a hung provider endpoint never blocks turns for ~300 s. */
 const API_DETECT_TIMEOUT_MS = 5000;
 
 const defaultHttpGetJson: HttpGetJson = async (url, headers) => {
@@ -312,7 +315,7 @@ type CacheEntry = { value: ResolvedWindow; expiresAt: number };
 
 export class ContextWindowResolver {
   #cache = new Map<string, CacheEntry>();
-  /** RV7d: single-flight — concurrent callers for the same key share one fetch. */
+  /** ADR-0012 §Window resolution (caching & eviction): single-flight — concurrent callers for the same key share one fetch. */
   #inflight = new Map<string, Promise<ResolvedWindow>>();
   #loadRegistry: () => Promise<Registry>;
   #registry: Registry | undefined;
@@ -329,7 +332,7 @@ export class ContextWindowResolver {
     this.#now = deps.now ?? (() => Date.now());
   }
 
-  /** Drops all cached windows for a provider — call on `modelMeta` edit (T5). */
+  /** Drops all cached windows for a provider — call on `modelMeta` edit (ADR-0012 §Window resolution (caching & eviction)). */
   evict(providerId: string): void {
     for (const key of this.#cache.keys()) {
       if (key.startsWith(`${providerId}:`)) this.#cache.delete(key);
@@ -344,7 +347,7 @@ export class ContextWindowResolver {
   async #registryEntry(modelId: string): Promise<RegistryEntry | undefined> {
     if (this.#registry === undefined) {
       // A failing loader (bad vendored JSON, fs error) must not reject the whole
-      // resolution — degrade to an empty registry + warn (drift F3).
+      // resolution — degrade to an empty registry + warn (ADR-0012 §Window resolution).
       try {
         this.#registry = await this.#loadRegistry();
       } catch (error) {
@@ -366,7 +369,7 @@ export class ContextWindowResolver {
     const cached = this.#cache.get(cacheKey);
     if (cached && cached.expiresAt > this.#now()) return cached.value;
 
-    // RV7d: single-flight — reuse an in-flight promise rather than spawning a
+    // ADR-0012 §Window resolution (caching & eviction): single-flight — reuse an in-flight promise rather than spawning a
     // second fetch for the same key (cold-cache stampede protection).
     const existing = this.#inflight.get(cacheKey);
     if (existing) return existing;
@@ -375,9 +378,9 @@ export class ContextWindowResolver {
       // Only write the cache if this promise is still the live in-flight one.
       // An evict() during the fetch deletes the inflight entry; without this
       // guard the resolving promise would repopulate the cache with the stale
-      // pre-update value and defeat the eviction for a full TTL (RV7c race).
+      // pre-update value and defeat the eviction for a full TTL (ADR-0012 §Window resolution (caching & eviction) race).
       if (this.#inflight.get(cacheKey) === promise) {
-        // RV7d / defect 6: a default-source result (MISS or transient API
+        // ADR-0012 §Window resolution (caching & eviction): a default-source result (MISS or transient API
         // failure) gets a short TTL so a blip doesn't pin 8192 for an hour.
         const ttl =
           value.source === "default"
