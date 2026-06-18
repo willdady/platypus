@@ -192,12 +192,16 @@ const agentBaseSchema = z.object({
   systemPrompt: z.string().optional(),
   modelId: z.string(),
   maxSteps: z.number().optional(),
-  temperature: z.number().optional(),
-  topP: z.number().optional(),
-  topK: z.number().optional(),
-  seed: z.number().optional(),
-  presencePenalty: z.number().optional(),
-  frequencyPenalty: z.number().optional(),
+  // Sampling params are nullable so the UI can clear them back to "unset"
+  // (null) — without null, JSON.stringify drops the cleared `undefined` key
+  // and the column keeps its previous value (#263). null is treated as "unset"
+  // at run time, falling back to the provider/model default.
+  temperature: z.number().nullable().optional(),
+  topP: z.number().nullable().optional(),
+  topK: z.number().nullable().optional(),
+  seed: z.number().nullable().optional(),
+  presencePenalty: z.number().nullable().optional(),
+  frequencyPenalty: z.number().nullable().optional(),
   toolSetIds: z.array(z.string()).optional(),
   skillIds: z.array(z.string()).optional(),
   subAgentIds: z.array(z.string()).optional(),
