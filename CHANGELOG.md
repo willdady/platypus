@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.99.0](https://github.com/willdady/platypus/compare/v1.98.0...v1.99.0) (2026-06-20)
+
+
+### Features
+
+* **backend:** surface self-hosted reasoning via @ai-sdk/openai-compatible ([#262](https://github.com/willdady/platypus/issues/262)) ([1088b63](https://github.com/willdady/platypus/commit/1088b639ec381c78aa43b5c8474d30c6f7ee52a1))
+
+
+### Bug Fixes
+
+* **backend:** default chat-mode baseUrl to OpenAI's endpoint ([#266](https://github.com/willdady/platypus/issues/266)) ([2490a8d](https://github.com/willdady/platypus/commit/2490a8d9e35172dd1dc95fa56b68ac1c850c4feb))
+
 ## [1.98.0](https://github.com/willdady/platypus/compare/v1.97.0...v1.98.0) (2026-06-18)
 
 
