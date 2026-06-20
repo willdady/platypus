@@ -318,12 +318,15 @@ const AgentForm = ({
         systemPrompt: formData.systemPrompt,
         modelId: formData.modelId,
         maxSteps: formData.maxSteps,
-        temperature: formData.temperature,
-        topP: formData.topP,
-        topK: formData.topK,
-        seed: formData.seed,
-        presencePenalty: formData.presencePenalty,
-        frequencyPenalty: formData.frequencyPenalty,
+        // Send null (not undefined) for cleared sampling params so the key
+        // survives JSON.stringify and the backend persists the cleared value
+        // instead of silently keeping the previous one (#263).
+        temperature: formData.temperature ?? null,
+        topP: formData.topP ?? null,
+        topK: formData.topK ?? null,
+        seed: formData.seed ?? null,
+        presencePenalty: formData.presencePenalty ?? null,
+        frequencyPenalty: formData.frequencyPenalty ?? null,
         toolSetIds: formData.toolSetIds,
         skillIds: formData.skillIds,
         subAgentIds: formData.subAgentIds,
