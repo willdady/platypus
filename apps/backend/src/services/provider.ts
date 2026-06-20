@@ -38,7 +38,12 @@ export const openProvider = (provider: Provider): OpenedProvider => {
       const compat = useChatCompletions
         ? createOpenAICompatible({
             name: provider.name,
-            baseURL: provider.baseUrl ?? "",
+            // Fall back to OpenAI's endpoint when no baseUrl is configured.
+            // `baseUrl` is optional in the schema, so a real-OpenAI provider set
+            // to chat mode arrives here with it empty/undefined — `||` (not `??`)
+            // also catches the empty-string case the form can produce. Without
+            // this the compatible client would target an empty URL and fail.
+            baseURL: provider.baseUrl || "https://api.openai.com/v1",
             apiKey: provider.apiKey ?? undefined,
             headers: provider.headers ?? undefined,
             // Request `stream_options.include_usage` so streamed responses carry

@@ -122,6 +122,20 @@ describe("openProvider", () => {
     expect(mockCreateOpenAI.creator).toHaveBeenCalled();
   });
 
+  it("falls back to OpenAI's endpoint for chat mode without a baseUrl", () => {
+    // baseUrl is optional, so a real-OpenAI provider in chat mode arrives with
+    // it empty. The compatible client must still target OpenAI rather than an
+    // empty URL.
+    openProvider({
+      ...baseProvider,
+      apiMode: "chat",
+      baseUrl: undefined,
+    }).languageModel("gpt-4");
+    expect(mockCreateOpenAICompatible.creator).toHaveBeenCalledWith(
+      expect.objectContaining({ baseURL: "https://api.openai.com/v1" }),
+    );
+  });
+
   it("uses the OpenAI Responses model when apiMode is responses", () => {
     openProvider({
       ...baseProvider,
