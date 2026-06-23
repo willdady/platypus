@@ -61,6 +61,20 @@ within the app. See [Getting Started](/getting-started) for the first-run flow.
 | `SCHEDULE_SCHEDULER_INTERVAL_MS` | How often the schedule scheduler polls for due runs, in milliseconds. | `60000` (1 minute)   | No       |
 | `SCHEDULE_MAX_CONCURRENT`        | Maximum parallel schedule executions.                                 | `5`                  | No       |
 
+## Triggers
+
+Timeouts that bound an unattended (Trigger / scheduled) Agent run. They're the
+wall-clock backstop alongside the Agent's **Max steps** ceiling and the
+no-progress guard (which stops a run that keeps repeating the same tool call for
+the same result). Headless runs aren't user-facing, so the defaults are generous
+— raise them for long multi-step research or MCP work, lower them to fail a stuck
+run sooner.
+
+| Variable                      | Purpose                                                                              | Default              | Required |
+| ----------------------------- | ------------------------------------------------------------------------------------ | -------------------- | -------- |
+| `TRIGGER_PER_STEP_TIMEOUT_MS` | Idle timeout between steps of a Trigger run; a step that makes no progress aborts it. | `600000` (10 minutes) | No       |
+| `TRIGGER_PER_RUN_TIMEOUT_MS`  | Wall-clock timeout for an entire Trigger run.                                         | `3600000` (60 minutes) | No       |
+
 ## Tools
 
 | Variable                       | Purpose                                                                    | Default                 | Required |
