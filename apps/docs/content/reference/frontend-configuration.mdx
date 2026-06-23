@@ -28,3 +28,10 @@ the server-side renderer.
   network (`INTERNAL_BACKEND_URL`, e.g. `http://backend:4000`). Outside Docker,
   set only `BACKEND_URL`.
 </Callout>
+
+## Other
+
+| Variable                  | Purpose                                                                                                                                                            | Default               | Required |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------- | -------- |
+| `ALLOWED_DEV_ORIGINS`     | Comma-separated origins added to Next.js [`allowedDevOrigins`](https://nextjs.org/docs/app/api-reference/config/next-config-js/allowedDevOrigins). Dev server only. | _(unset, none added)_ | No       |
+| `NEXT_PUBLIC_APP_VERSION` | Version string shown on the in-app **About** page. Normally injected at build time rather than set per-deployment; falls back to `unknown`.                         | `unknown`             | No       |
