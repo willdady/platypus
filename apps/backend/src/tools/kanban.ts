@@ -371,10 +371,12 @@ export function createKanbanTools(
         }
 
         const boardId = await getBoardIdForCard(cardId);
-        dispatchEvent(workspaceId, "card.updated", {
-          ...record[0],
-          boardId,
-        });
+        dispatchEvent(
+          workspaceId,
+          "card.updated",
+          { ...record[0], boardId },
+          { actorAgentId: agentId },
+        );
         const url = boardId
           ? buildResourceUrl(
               frontendUrl,
@@ -428,7 +430,12 @@ export function createKanbanTools(
         .returning();
 
       const boardId = await getBoardIdForCard(id);
-      dispatchEvent(workspaceId, "card.created", { ...record[0], boardId });
+      dispatchEvent(
+        workspaceId,
+        "card.created",
+        { ...record[0], boardId },
+        { actorAgentId: agentId },
+      );
       const url = boardId
         ? buildResourceUrl(
             frontendUrl,
@@ -524,7 +531,12 @@ export function createKanbanTools(
         .limit(1);
 
       const boardId = await getBoardIdForCard(cardId);
-      dispatchEvent(workspaceId, "card.updated", { ...updated[0], boardId });
+      dispatchEvent(
+        workspaceId,
+        "card.updated",
+        { ...updated[0], boardId },
+        { actorAgentId: agentId },
+      );
       const url = boardId
         ? buildResourceUrl(
             frontendUrl,
@@ -563,11 +575,12 @@ export function createKanbanTools(
           .limit(1);
         const columnId = cardRecord[0]?.columnId;
         await db.delete(kanbanCardTable).where(eq(kanbanCardTable.id, cardId));
-        dispatchEvent(workspaceId, "card.deleted", {
-          cardId,
-          boardId,
-          columnId,
-        });
+        dispatchEvent(
+          workspaceId,
+          "card.deleted",
+          { cardId, boardId, columnId },
+          { actorAgentId: agentId },
+        );
       }
 
       return { success: true };
@@ -857,10 +870,12 @@ export function createKanbanTools(
       }
 
       // 8. Dispatch event
-      dispatchEvent(workspaceId, "card.created", {
-        ...record[0],
-        boardId: sourceBoardId,
-      });
+      dispatchEvent(
+        workspaceId,
+        "card.created",
+        { ...record[0], boardId: sourceBoardId },
+        { actorAgentId: agentId },
+      );
 
       const url = sourceBoardId
         ? buildResourceUrl(
@@ -1054,10 +1069,12 @@ export function createKanbanTools(
           .from(kanbanCardTable)
           .where(eq(kanbanCardTable.id, cardId))
           .limit(1);
-        dispatchEvent(workspaceId, "card.updated", {
-          ...updated[0],
-          boardId,
-        });
+        dispatchEvent(
+          workspaceId,
+          "card.updated",
+          { ...updated[0], boardId },
+          { actorAgentId: agentId },
+        );
       }
 
       const succeededResults = validCardIds.map((cardId) => ({

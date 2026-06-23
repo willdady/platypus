@@ -248,6 +248,66 @@ describe("event-dispatch", () => {
       await flushMicrotasks();
     });
 
+    it("should skip a trigger when its own agent caused the event", async () => {
+      const trigger = makeEventTrigger({ agentId: "agent-1" });
+      mockDb.where.mockResolvedValueOnce([]).mockResolvedValueOnce([trigger]);
+
+      dispatchEvent(
+        "ws-1",
+        "card.updated",
+        { id: "c1" },
+        { actorAgentId: "agent-1" },
+      );
+      await flushMicrotasks();
+
+      expect(mockExecuteTrigger).not.toHaveBeenCalled();
+    });
+
+    it("should fire on a human event even when the trigger's agent previously touched the card", async () => {
+      const trigger = makeEventTrigger({ agentId: "agent-1" });
+      mockDb.where.mockResolvedValueOnce([]).mockResolvedValueOnce([trigger]);
+
+      // Human write path supplies no actor, even though the card row still
+      // carries a stale lastEditedByAgentId from a prior agent edit.
+      dispatchEvent("ws-1", "card.updated", {
+        id: "c1",
+        lastEditedByAgentId: "agent-1",
+      });
+      await flushMicrotasks();
+
+      expect(mockExecuteTrigger).toHaveBeenCalled();
+    });
+
+    it("should fire when a different agent caused the event", async () => {
+      const trigger = makeEventTrigger({ agentId: "agent-1" });
+      mockDb.where.mockResolvedValueOnce([]).mockResolvedValueOnce([trigger]);
+
+      dispatchEvent(
+        "ws-1",
+        "card.updated",
+        { id: "c1" },
+        { actorAgentId: "agent-2" },
+      );
+      await flushMicrotasks();
+
+      expect(mockExecuteTrigger).toHaveBeenCalled();
+    });
+
+    it("should not apply the self-actor guard to triggers without an agentId", async () => {
+      const trigger = makeEventTrigger({ agentId: null });
+      mockDb.where.mockResolvedValueOnce([]).mockResolvedValueOnce([trigger]);
+
+      dispatchEvent(
+        "ws-1",
+        "card.updated",
+        { id: "c1" },
+        { actorAgentId: "agent-1" },
+      );
+      await flushMicrotasks();
+
+      expect(mockExecuteTrigger).toHaveBeenCalled();
+    });
+
     it("should dispatch to both webhooks and triggers for the same event", async () => {
       const webhook = makeWebhook();
       const trigger = makeEventTrigger();
