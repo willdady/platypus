@@ -1,5 +1,29 @@
 # Changelog
 
+## [1.99.0](https://github.com/willdady/platypus/compare/v1.98.0...v1.99.0) (2026-06-20)
+
+
+### Features
+
+* **backend:** surface self-hosted reasoning via @ai-sdk/openai-compatible ([#262](https://github.com/willdady/platypus/issues/262)) ([1088b63](https://github.com/willdady/platypus/commit/1088b639ec381c78aa43b5c8474d30c6f7ee52a1))
+
+
+### Bug Fixes
+
+* **backend:** default chat-mode baseUrl to OpenAI's endpoint ([#266](https://github.com/willdady/platypus/issues/266)) ([2490a8d](https://github.com/willdady/platypus/commit/2490a8d9e35172dd1dc95fa56b68ac1c850c4feb))
+
+## [1.98.0](https://github.com/willdady/platypus/compare/v1.97.0...v1.98.0) (2026-06-18)
+
+
+### Features
+
+* **website:** add platypus.chat marketing site ([#258](https://github.com/willdady/platypus/issues/258)) ([202ec9e](https://github.com/willdady/platypus/commit/202ec9e2276a6838118829d0a4fa5fb14a541751))
+
+
+### Bug Fixes
+
+* **frontend:** persist cleared sampling params as null ([#263](https://github.com/willdady/platypus/issues/263)) ([#264](https://github.com/willdady/platypus/issues/264)) ([38b17b1](https://github.com/willdady/platypus/commit/38b17b1259f57d573d3a429950877aae801d7e09))
+
 ## [1.97.0](https://github.com/willdady/platypus/compare/v1.96.0...v1.97.0) (2026-06-13)
 
 
