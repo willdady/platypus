@@ -339,6 +339,22 @@ describe("chat-execution", () => {
       expect(turn.stream.maxSteps).toBe(1);
     });
 
+    it("Agent without an explicit maxSteps falls back to the default (15), not 1", async () => {
+      const agentNoMaxSteps = { ...baseAgent, maxSteps: null };
+      const queries = createInMemoryChatTurnQueries({
+        workspaces: [baseWorkspace],
+        agents: [agentNoMaxSteps],
+        providers: [baseProvider],
+      });
+
+      const turn = await prepareChatTurn(
+        { ...baseInput, request: { agentId: agentNoMaxSteps.id } },
+        queries,
+      );
+
+      expect(turn.stream.maxSteps).toBe(15);
+    });
+
     it("throws ValidationError when neither agentId nor providerId+modelId is supplied", async () => {
       const queries = createInMemoryChatTurnQueries({
         workspaces: [baseWorkspace],

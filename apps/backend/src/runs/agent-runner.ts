@@ -23,6 +23,11 @@ import {
   type RegisterOptions,
   type RunHandle,
 } from "./run-registry.ts";
+import {
+  createNoProgressDetector,
+  NoProgressError,
+  type NoProgressDetector,
+} from "./no-progress.ts";
 import type {
   ResolvedRunPlan,
   RunId,
@@ -216,6 +221,13 @@ export class AgentRunner {
     origin?: string;
     frontendUrl?: string;
     timeouts?: Pick<RegisterOptions, "perStepTimeoutMs" | "perRunTimeoutMs">;
+    /**
+     * Unattended (trigger/scheduled) runs enable no-progress detection: a
+     * stuck model that re-issues the same call for the same result is aborted
+     * before it burns compute up to the step ceiling. Interactive runs leave
+     * it off — a human can stop those themselves.
+     */
+    unattended?: boolean;
   }) {
     const { scope, input, sink } = params;
     await sink.onStart({ runId: input.runId, messages: input.messages });
@@ -317,6 +329,14 @@ export class AgentRunner {
         );
     };
 
+    // Unattended runs gain a second stop condition alongside the step
+    // ceiling: when the model makes no progress (same call → same result,
+    // K times) the loop halts before issuing yet another wasteful step.
+    // `tripped()` is read after generation to record the run as failed.
+    const noProgress: NoProgressDetector | null = params.unattended
+      ? createNoProgressDetector()
+      : null;
+
     // Built once and shared by both invocations. Generation params pass
     // through as-is (including `undefined`): the SDK treats an absent key and
     // an `undefined` value identically, and the streaming path has always
@@ -326,7 +346,9 @@ export class AgentRunner {
       messages: await convertToModelMessages(state.turn.stream.messages),
       system: state.turn.stream.system,
       tools: state.turn.stream.tools,
-      stopWhen: [stepCountIs(state.turn.stream.maxSteps)],
+      stopWhen: noProgress
+        ? [stepCountIs(state.turn.stream.maxSteps), noProgress.stopCondition]
+        : [stepCountIs(state.turn.stream.maxSteps)],
       abortSignal: handle.signal,
       temperature: state.turn.stream.temperature,
       topP: state.turn.stream.topP,
@@ -336,7 +358,7 @@ export class AgentRunner {
       seed: state.turn.stream.seed,
     };
 
-    return { state, handle, finalize, onStep, modelArgs };
+    return { state, handle, finalize, onStep, modelArgs, noProgress };
   }
 
   async stream(params: {
@@ -436,13 +458,16 @@ export class AgentRunner {
     const { input } = params;
     const options = params.options ?? {};
     // No `origin`: headless callers don't have file URLs to inline.
-    const { state, handle, finalize, onStep, modelArgs } = await this.setup({
-      scope: params.scope,
-      input,
-      sink: params.sink,
-      frontendUrl: options.frontendUrl,
-      timeouts: options.timeouts,
-    });
+    // Headless runs are unattended → enable no-progress detection.
+    const { state, handle, finalize, onStep, modelArgs, noProgress } =
+      await this.setup({
+        scope: params.scope,
+        input,
+        sink: params.sink,
+        frontendUrl: options.frontendUrl,
+        timeouts: options.timeouts,
+        unattended: true,
+      });
 
     const startTime = Date.now();
     try {
@@ -453,6 +478,27 @@ export class AgentRunner {
 
       const stats = computeStats(result as Parameters<typeof computeStats>[0]);
       state.stats = stats;
+
+      // The no-progress stop condition halts the loop cleanly (the SDK
+      // resolves normally), so the abort is surfaced here rather than via the
+      // catch path. Record the run as failed with a machine-readable reason.
+      const trip = noProgress?.tripped() ?? null;
+      if (trip) {
+        const err = new NoProgressError(trip.toolName, trip.count);
+        logger.warn(
+          {
+            runId: input.runId,
+            toolName: trip.toolName,
+            count: trip.count,
+            duration: Date.now() - startTime,
+            stats,
+          },
+          "Run aborted: no progress",
+        );
+        await finalize("failed", err);
+        return { text: result.text, stats };
+      }
+
       logger.info(
         {
           runId: input.runId,
