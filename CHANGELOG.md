@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.100.0](https://github.com/willdady/platypus/compare/v1.99.1...v1.100.0) (2026-06-26)
+
+
+### Features
+
+* **backend:** add orgId to webhook event envelope and document webhooks ([#273](https://github.com/willdady/platypus/issues/273)) ([2e0635b](https://github.com/willdady/platypus/commit/2e0635bc80d917663b570b08ae28789d28baf901))
+
 ## [1.99.1](https://github.com/willdady/platypus/compare/v1.99.0...v1.99.1) (2026-06-23)
 
 
