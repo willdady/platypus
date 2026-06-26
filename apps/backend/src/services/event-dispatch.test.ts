@@ -99,7 +99,7 @@ describe("event-dispatch", () => {
         .mockResolvedValueOnce([webhook]) // webhooks query
         .mockResolvedValueOnce([]); // event triggers query
 
-      dispatchEvent("ws-1", "card.created", { cardId: "c1" });
+      dispatchEvent("org-1", "ws-1", "card.created", { cardId: "c1" });
       await flushMicrotasks();
 
       expect(mockDeliverWebhook).toHaveBeenCalledWith(
@@ -109,13 +109,22 @@ describe("event-dispatch", () => {
         expect.any(String),
         null,
       );
+
+      // The delivered envelope carries both org and workspace coordinates.
+      const body = JSON.parse(mockDeliverWebhook.mock.calls[0][1]);
+      expect(body).toMatchObject({
+        event: "card.created",
+        orgId: "org-1",
+        workspaceId: "ws-1",
+        data: { cardId: "c1" },
+      });
     });
 
     it("should skip disabled webhooks", async () => {
       const webhook = makeWebhook({ enabled: false });
       mockDb.where.mockResolvedValueOnce([webhook]).mockResolvedValueOnce([]);
 
-      dispatchEvent("ws-1", "card.created", { cardId: "c1" });
+      dispatchEvent("org-1", "ws-1", "card.created", { cardId: "c1" });
       await flushMicrotasks();
 
       expect(mockDeliverWebhook).not.toHaveBeenCalled();
@@ -125,7 +134,7 @@ describe("event-dispatch", () => {
       const webhook = makeWebhook({ events: ["card.deleted"] });
       mockDb.where.mockResolvedValueOnce([webhook]).mockResolvedValueOnce([]);
 
-      dispatchEvent("ws-1", "card.created", { cardId: "c1" });
+      dispatchEvent("org-1", "ws-1", "card.created", { cardId: "c1" });
       await flushMicrotasks();
 
       expect(mockDeliverWebhook).not.toHaveBeenCalled();
@@ -137,7 +146,7 @@ describe("event-dispatch", () => {
         .mockResolvedValueOnce([]) // no webhooks
         .mockResolvedValueOnce([trigger]); // event triggers
 
-      dispatchEvent("ws-1", "card.created", { cardId: "c1" });
+      dispatchEvent("org-1", "ws-1", "card.created", { cardId: "c1" });
       await flushMicrotasks();
 
       expect(mockExecuteTrigger).toHaveBeenCalledWith(trigger, {
@@ -156,7 +165,7 @@ describe("event-dispatch", () => {
       });
       mockDb.where.mockResolvedValueOnce([]).mockResolvedValueOnce([trigger]);
 
-      dispatchEvent("ws-1", "card.created", { cardId: "c1" });
+      dispatchEvent("org-1", "ws-1", "card.created", { cardId: "c1" });
       await flushMicrotasks();
 
       expect(mockExecuteTrigger).not.toHaveBeenCalled();
@@ -172,7 +181,7 @@ describe("event-dispatch", () => {
       mockDb.where.mockResolvedValueOnce([]).mockResolvedValueOnce([trigger]);
 
       // Event data has a different boardId
-      dispatchEvent("ws-1", "card.created", {
+      dispatchEvent("org-1", "ws-1", "card.created", {
         cardId: "c1",
         boardId: "board-2",
       });
@@ -190,7 +199,7 @@ describe("event-dispatch", () => {
       });
       mockDb.where.mockResolvedValueOnce([]).mockResolvedValueOnce([trigger]);
 
-      dispatchEvent("ws-1", "card.created", {
+      dispatchEvent("org-1", "ws-1", "card.created", {
         cardId: "c1",
         boardId: "board-1",
       });
@@ -208,7 +217,7 @@ describe("event-dispatch", () => {
       });
       mockDb.where.mockResolvedValueOnce([]).mockResolvedValueOnce([trigger]);
 
-      dispatchEvent("ws-1", "card.created", {
+      dispatchEvent("org-1", "ws-1", "card.created", {
         cardId: "c1",
         columnId: "col-2",
       });
@@ -230,7 +239,7 @@ describe("event-dispatch", () => {
         .mockResolvedValueOnce([webhook1, webhook2])
         .mockResolvedValueOnce([trigger1, trigger2]);
 
-      dispatchEvent("ws-1", "card.created", { cardId: "c1" });
+      dispatchEvent("org-1", "ws-1", "card.created", { cardId: "c1" });
       await flushMicrotasks();
 
       expect(mockDeliverWebhook).toHaveBeenCalledTimes(2);
@@ -244,7 +253,7 @@ describe("event-dispatch", () => {
       mockExecuteTrigger.mockRejectedValue(new Error("Execution failed"));
 
       // Should not throw — errors are caught internally
-      dispatchEvent("ws-1", "card.created", { cardId: "c1" });
+      dispatchEvent("org-1", "ws-1", "card.created", { cardId: "c1" });
       await flushMicrotasks();
     });
 
@@ -253,6 +262,7 @@ describe("event-dispatch", () => {
       mockDb.where.mockResolvedValueOnce([]).mockResolvedValueOnce([trigger]);
 
       dispatchEvent(
+        "org-1",
         "ws-1",
         "card.updated",
         { id: "c1" },
@@ -269,7 +279,7 @@ describe("event-dispatch", () => {
 
       // Human write path supplies no actor, even though the card row still
       // carries a stale lastEditedByAgentId from a prior agent edit.
-      dispatchEvent("ws-1", "card.updated", {
+      dispatchEvent("org-1", "ws-1", "card.updated", {
         id: "c1",
         lastEditedByAgentId: "agent-1",
       });
@@ -283,6 +293,7 @@ describe("event-dispatch", () => {
       mockDb.where.mockResolvedValueOnce([]).mockResolvedValueOnce([trigger]);
 
       dispatchEvent(
+        "org-1",
         "ws-1",
         "card.updated",
         { id: "c1" },
@@ -298,6 +309,7 @@ describe("event-dispatch", () => {
       mockDb.where.mockResolvedValueOnce([]).mockResolvedValueOnce([trigger]);
 
       dispatchEvent(
+        "org-1",
         "ws-1",
         "card.updated",
         { id: "c1" },
@@ -315,7 +327,7 @@ describe("event-dispatch", () => {
         .mockResolvedValueOnce([webhook])
         .mockResolvedValueOnce([trigger]);
 
-      dispatchEvent("ws-1", "card.created", { cardId: "c1" });
+      dispatchEvent("org-1", "ws-1", "card.created", { cardId: "c1" });
       await flushMicrotasks();
 
       expect(mockDeliverWebhook).toHaveBeenCalledTimes(1);

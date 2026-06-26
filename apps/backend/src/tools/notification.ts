@@ -8,6 +8,7 @@ import { dispatchEvent } from "../services/event-dispatch.ts";
 export function createNotificationTools(
   workspaceId: string,
   agentId: string,
+  orgId: string,
 ): Record<string, Tool> {
   async function verifyNotification(notificationId: string): Promise<boolean> {
     const result = await db
@@ -58,7 +59,7 @@ export function createNotificationTools(
         })
         .returning();
 
-      dispatchEvent(workspaceId, "notification.created", record[0]);
+      dispatchEvent(orgId, workspaceId, "notification.created", record[0]);
 
       return record[0];
     },
@@ -131,7 +132,7 @@ export function createNotificationTools(
         return { error: "Notification not found" };
       }
 
-      dispatchEvent(workspaceId, "notification.updated", record[0]);
+      dispatchEvent(orgId, workspaceId, "notification.updated", record[0]);
 
       return record[0];
     },
@@ -153,7 +154,7 @@ export function createNotificationTools(
         .delete(notificationTable)
         .where(eq(notificationTable.id, notificationId));
 
-      dispatchEvent(workspaceId, "notification.dismissed", {
+      dispatchEvent(orgId, workspaceId, "notification.dismissed", {
         notificationId,
       });
 

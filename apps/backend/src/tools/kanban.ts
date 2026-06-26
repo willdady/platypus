@@ -372,6 +372,7 @@ export function createKanbanTools(
 
         const boardId = await getBoardIdForCard(cardId);
         dispatchEvent(
+          orgId,
           workspaceId,
           "card.updated",
           { ...record[0], boardId },
@@ -431,6 +432,7 @@ export function createKanbanTools(
 
       const boardId = await getBoardIdForCard(id);
       dispatchEvent(
+        orgId,
         workspaceId,
         "card.created",
         { ...record[0], boardId },
@@ -532,6 +534,7 @@ export function createKanbanTools(
 
       const boardId = await getBoardIdForCard(cardId);
       dispatchEvent(
+        orgId,
         workspaceId,
         "card.updated",
         { ...updated[0], boardId },
@@ -576,6 +579,7 @@ export function createKanbanTools(
         const columnId = cardRecord[0]?.columnId;
         await db.delete(kanbanCardTable).where(eq(kanbanCardTable.id, cardId));
         dispatchEvent(
+          orgId,
           workspaceId,
           "card.deleted",
           { cardId, boardId, columnId },
@@ -871,6 +875,7 @@ export function createKanbanTools(
 
       // 8. Dispatch event
       dispatchEvent(
+        orgId,
         workspaceId,
         "card.created",
         { ...record[0], boardId: sourceBoardId },
@@ -1070,6 +1075,7 @@ export function createKanbanTools(
           .where(eq(kanbanCardTable.id, cardId))
           .limit(1);
         dispatchEvent(
+          orgId,
           workspaceId,
           "card.updated",
           { ...updated[0], boardId },

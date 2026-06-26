@@ -29,6 +29,7 @@ export interface DispatchEventOptions {
 }
 
 export function dispatchEvent(
+  orgId: string,
   workspaceId: string,
   event: WebhookEvent,
   data: unknown,
@@ -45,7 +46,13 @@ export function dispatchEvent(
 
       if (webhooks.length > 0) {
         const timestamp = new Date().toISOString();
-        const body = JSON.stringify({ event, timestamp, workspaceId, data });
+        const body = JSON.stringify({
+          event,
+          timestamp,
+          orgId,
+          workspaceId,
+          data,
+        });
 
         for (const webhook of webhooks) {
           if (!webhook.enabled) continue;

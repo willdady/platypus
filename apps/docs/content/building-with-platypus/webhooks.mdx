@@ -1,0 +1,225 @@
+---
+title: Webhooks
+description: Receive Workspace events in an external system with Webhooks — the events you can subscribe to, the JSON payload Platypus sends, how to verify the signature, and the delivery and retry behaviour.
+---
+
+import { Callout, Steps } from "nextra/components";
+
+# Webhooks
+
+A **Webhook** delivers Workspace events to a URL you control. Whenever something
+happens in the Workspace — a card is created, a notification is dismissed —
+Platypus sends an HTTP `POST` with a JSON body describing the event, so an
+external system can react to it.
+
+Where a [Trigger](/building-with-platypus/triggers) runs an Agent _inside_
+Platypus in response to an event, a Webhook sends that same event _out_ to your
+own service. Both subscribe to the same set of events.
+
+You'll find Webhooks under **Settings → Webhooks** in your Workspace.
+
+## Subscribable events
+
+A Webhook subscribes to one or more events. The available events are:
+
+| Event                    | Fires when                                                    |
+| ------------------------ | ------------------------------------------------------------- |
+| `card.created`           | A card is added to a [Board](/building-with-platypus/boards). |
+| `card.updated`           | A card's fields, column, or position change.                  |
+| `card.deleted`           | A card is removed.                                            |
+| `notification.created`   | An Agent posts a notification.                                |
+| `notification.updated`   | A notification is edited.                                     |
+| `notification.read`      | A notification is marked read.                                |
+| `notification.dismissed` | A notification is dismissed.                                  |
+
+If you don't pick any events when creating a Webhook, it subscribes to all of
+them.
+
+## Create a Webhook
+
+<Steps>
+
+### Open the Webhook form
+
+In your Workspace, go to **Settings → Webhooks** and click **Create**.
+
+### Configure the endpoint
+
+- **Name** — a label for the Webhook.
+- **URL** — where the `POST` is sent. **Must be HTTPS.**
+- **Events** — which events to subscribe to (defaults to all).
+- **Headers** — optional custom headers sent with every delivery (e.g. an
+  `Authorization` header your endpoint expects).
+- **Enabled** — leave on to start delivering immediately.
+
+### Save and note the signing secret
+
+On save, Platypus generates a **signing secret** for the Webhook. Every delivery
+is signed with it so you can verify the request really came from Platypus — see
+[Verifying the signature](#verifying-the-signature). You can rotate it later with
+**Regenerate secret**.
+
+</Steps>
+
+## The payload
+
+Platypus sends a `POST` request with `Content-Type: application/json`. The body
+is the same envelope for every event:
+
+```json
+{
+  "event": "card.created",
+  "timestamp": "2026-06-26T09:30:00.000Z",
+  "orgId": "g7Qw3pLm9xRt2nK5vB8dY",
+  "workspaceId": "k4Tn2pXqRf7Lm9sWvB3dY",
+  "data": {
+    "id": "V1StGXR8_Z5jdHi6B-myT",
+    "boardId": "lbfQ0p7xKmR2nT4vZ8wYs",
+    "columnId": "9zHcN3eW1qoP5rUaB7dKt",
+    "title": "Review onboarding flow",
+    "body": "Check the new sign-up steps.",
+    "labelIds": [],
+    "assignees": [],
+    "dueDate": null,
+    "priority": "none",
+    "position": 1024,
+    "createdByUserId": "x6Ym2Qp9LrT4nW8sVdB1k",
+    "createdByAgentId": null,
+    "createdAt": "2026-06-26T09:30:00.000Z",
+    "updatedAt": "2026-06-26T09:30:00.000Z"
+  }
+}
+```
+
+The envelope fields are always present:
+
+| Field         | Description                                                                       |
+| ------------- | --------------------------------------------------------------------------------- |
+| `event`       | The event name, e.g. `card.created`.                                              |
+| `timestamp`   | ISO 8601 time the event was dispatched. Matches the `X-Webhook-Timestamp` header. |
+| `orgId`       | The Organization the event belongs to.                                            |
+| `workspaceId` | The Workspace the event belongs to.                                               |
+| `data`        | The event's payload. Its shape depends on the event (see below).                  |
+
+### `data` by event
+
+The shape of `data` varies by event. For example, `notification.created` carries
+the full notification record:
+
+```json
+{
+  "event": "notification.created",
+  "timestamp": "2026-06-26T09:31:00.000Z",
+  "orgId": "g7Qw3pLm9xRt2nK5vB8dY",
+  "workspaceId": "k4Tn2pXqRf7Lm9sWvB3dY",
+  "data": {
+    "id": "Hs8dK2pQ9mRnL7wT4vYx1",
+    "workspaceId": "k4Tn2pXqRf7Lm9sWvB3dY",
+    "agentId": "Jf3kP9xR2mLqN7wT4vYsZ",
+    "title": "Daily summary ready",
+    "body": "Your daily summary has been generated.",
+    "createdAt": "2026-06-26T09:31:00.000Z",
+    "updatedAt": "2026-06-26T09:31:00.000Z"
+  }
+}
+```
+
+while lighter-weight events carry only the affected IDs. For example,
+`card.deleted`:
+
+```json
+{
+  "event": "card.deleted",
+  "timestamp": "2026-06-26T09:32:00.000Z",
+  "orgId": "g7Qw3pLm9xRt2nK5vB8dY",
+  "workspaceId": "k4Tn2pXqRf7Lm9sWvB3dY",
+  "data": {
+    "cardId": "V1StGXR8_Z5jdHi6B-myT",
+    "boardId": "lbfQ0p7xKmR2nT4vZ8wYs",
+    "columnId": "9zHcN3eW1qoP5rUaB7dKt"
+  }
+}
+```
+
+and `notification.read` / `notification.dismissed` carry the notification ID and
+the user who acted:
+
+```json
+{
+  "data": {
+    "notificationId": "Hs8dK2pQ9mRnL7wT4vYx1",
+    "userId": "x6Ym2Qp9LrT4nW8sVdB1k"
+  }
+}
+```
+
+<Callout type="info">
+  Treat `data` defensively — read the fields your integration needs rather than
+  assuming a fixed set, since the underlying records can gain fields over time.
+</Callout>
+
+## Headers
+
+Every delivery includes:
+
+| Header                | Value                                                    |
+| --------------------- | -------------------------------------------------------- |
+| `Content-Type`        | `application/json`                                       |
+| `X-Webhook-Signature` | HMAC-SHA256 of the raw request body, hex-encoded.        |
+| `X-Webhook-Timestamp` | ISO 8601 timestamp, identical to the body's `timestamp`. |
+
+Any custom **Headers** you configured on the Webhook are sent alongside these.
+
+## Verifying the signature
+
+The signature is an HMAC-SHA256 of the **exact raw request body**, keyed with the
+Webhook's signing secret and hex-encoded. Recompute it on your end and compare —
+if it doesn't match, reject the request.
+
+```js
+import crypto from "node:crypto";
+
+function verify(rawBody, signatureHeader, signingSecret) {
+  const expected = crypto
+    .createHmac("sha256", signingSecret)
+    .update(rawBody)
+    .digest("hex");
+
+  // Constant-time comparison
+  return (
+    expected.length === signatureHeader.length &&
+    crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(signatureHeader))
+  );
+}
+
+// In your handler, compute over the raw body BEFORE JSON parsing:
+const ok = verify(rawBody, req.headers["x-webhook-signature"], signingSecret);
+```
+
+<Callout type="warning">
+  Compute the signature over the raw, unparsed body bytes. Re-serializing the
+  parsed JSON can change whitespace or key order and produce a different
+  signature.
+</Callout>
+
+## Delivery and retries
+
+- Deliveries are **fire-and-forget** — a slow or failing endpoint never blocks
+  the action that produced the event.
+- A delivery counts as successful on any **2xx** response. Each attempt times out
+  after **10 seconds**.
+- On failure (non-2xx, timeout, or connection error) Platypus retries up to
+  **3 times** with a backoff of **1s, 2s, then 4s**. After that the delivery is
+  given up.
+- Disabled Webhooks, and Webhooks not subscribed to the event, are skipped.
+
+<Callout type="info">
+  Your endpoint should be idempotent — a retried delivery sends the same body,
+  so process the same `data.id` / event more than once safely.
+</Callout>
+
+## Where to next
+
+- **[Triggers](/building-with-platypus/triggers)** — react to the same events by
+  running an Agent inside Platypus.
+- **[Boards](/building-with-platypus/boards)** — the source of `card.*` events.

@@ -90,7 +90,7 @@ describe("Webhook Delivery Service", () => {
     mockWebhookSelect.mockResolvedValueOnce([sampleWebhook]);
     mockFetch.mockResolvedValueOnce({ ok: true } as Response);
 
-    dispatchEvent("ws-1", "notification.created", { id: "n-1" });
+    dispatchEvent("org-1", "ws-1", "notification.created", { id: "n-1" });
 
     // Allow the async fire-and-forget to complete
     await vi.advanceTimersByTimeAsync(100);
@@ -105,10 +105,12 @@ describe("Webhook Delivery Service", () => {
 
     const body = JSON.parse(options.body) as {
       event: string;
+      orgId: string;
       workspaceId: string;
       data: unknown;
     };
     expect(body.event).toBe("notification.created");
+    expect(body.orgId).toBe("org-1");
     expect(body.workspaceId).toBe("ws-1");
     expect(body.data).toEqual({ id: "n-1" });
   });
@@ -117,7 +119,7 @@ describe("Webhook Delivery Service", () => {
     mockWebhookSelect.mockResolvedValueOnce([sampleWebhook]);
     mockFetch.mockResolvedValueOnce({ ok: true } as Response);
 
-    dispatchEvent("ws-1", "notification.created", { id: "n-1" });
+    dispatchEvent("org-1", "ws-1", "notification.created", { id: "n-1" });
 
     await vi.advanceTimersByTimeAsync(100);
 
@@ -139,7 +141,7 @@ describe("Webhook Delivery Service", () => {
     mockWebhookSelect.mockResolvedValueOnce([webhookWithHeaders]);
     mockFetch.mockResolvedValueOnce({ ok: true } as Response);
 
-    dispatchEvent("ws-1", "notification.created", {});
+    dispatchEvent("org-1", "ws-1", "notification.created", {});
 
     await vi.advanceTimersByTimeAsync(100);
 
@@ -154,7 +156,7 @@ describe("Webhook Delivery Service", () => {
       .mockRejectedValueOnce(new Error("Network error"))
       .mockResolvedValueOnce({ ok: true } as Response);
 
-    dispatchEvent("ws-1", "notification.created", {});
+    dispatchEvent("org-1", "ws-1", "notification.created", {});
 
     // First attempt fails immediately
     await vi.advanceTimersByTimeAsync(100);
@@ -172,7 +174,7 @@ describe("Webhook Delivery Service", () => {
     mockWebhookSelect.mockResolvedValueOnce([sampleWebhook]);
     mockFetch.mockRejectedValue(new Error("Network error"));
 
-    dispatchEvent("ws-1", "notification.created", {});
+    dispatchEvent("org-1", "ws-1", "notification.created", {});
 
     // Advance through all retries: initial + 1s + 2s + 4s
     await vi.advanceTimersByTimeAsync(100);
@@ -192,7 +194,7 @@ describe("Webhook Delivery Service", () => {
       { ...sampleWebhook, enabled: false },
     ]);
 
-    dispatchEvent("ws-1", "notification.created", {});
+    dispatchEvent("org-1", "ws-1", "notification.created", {});
 
     await vi.advanceTimersByTimeAsync(100);
 
@@ -202,7 +204,7 @@ describe("Webhook Delivery Service", () => {
   it("should skip when no webhook configured", async () => {
     mockWebhookSelect.mockResolvedValueOnce([]);
 
-    dispatchEvent("ws-1", "notification.created", {});
+    dispatchEvent("org-1", "ws-1", "notification.created", {});
 
     await vi.advanceTimersByTimeAsync(100);
 
@@ -214,7 +216,7 @@ describe("Webhook Delivery Service", () => {
       { ...sampleWebhook, events: ["notification.created"] },
     ]);
 
-    dispatchEvent("ws-1", "notification.dismissed", { id: "n-1" });
+    dispatchEvent("org-1", "ws-1", "notification.dismissed", { id: "n-1" });
 
     await vi.advanceTimersByTimeAsync(100);
 
@@ -232,7 +234,7 @@ describe("Webhook Delivery Service", () => {
     mockWebhookSelect.mockResolvedValueOnce([sampleWebhook, webhook2]);
     mockFetch.mockResolvedValue({ ok: true } as Response);
 
-    dispatchEvent("ws-1", "notification.created", { id: "n-1" });
+    dispatchEvent("org-1", "ws-1", "notification.created", { id: "n-1" });
 
     await vi.advanceTimersByTimeAsync(100);
 
@@ -260,7 +262,7 @@ describe("Webhook Delivery Service", () => {
     mockWebhookSelect.mockResolvedValueOnce([sampleWebhook, webhook2]);
     mockFetch.mockResolvedValue({ ok: true } as Response);
 
-    dispatchEvent("ws-1", "notification.dismissed", { id: "n-1" });
+    dispatchEvent("org-1", "ws-1", "notification.dismissed", { id: "n-1" });
 
     await vi.advanceTimersByTimeAsync(100);
 
@@ -284,7 +286,7 @@ describe("Webhook Delivery Service", () => {
       .mockRejectedValueOnce(new Error("Network error"))
       .mockResolvedValueOnce({ ok: true } as Response);
 
-    dispatchEvent("ws-1", "notification.created", { id: "n-1" });
+    dispatchEvent("org-1", "ws-1", "notification.created", { id: "n-1" });
 
     await vi.advanceTimersByTimeAsync(100);
 

@@ -11,6 +11,7 @@ import { dispatchEvent } from "../services/event-dispatch.ts";
 const ctx = { toolCallId: "test", messages: [] };
 const workspaceId = "ws-1";
 const agentId = "agent-1";
+const orgId = "org-1";
 
 describe("createNotificationTools", () => {
   let tools: ReturnType<typeof createNotificationTools>;
@@ -18,7 +19,7 @@ describe("createNotificationTools", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     resetMockDb();
-    tools = createNotificationTools(workspaceId, agentId);
+    tools = createNotificationTools(workspaceId, agentId, orgId);
   });
 
   it("returns the expected tool names", () => {
@@ -48,6 +49,7 @@ describe("createNotificationTools", () => {
         ),
       ).toEqual(record);
       expect(dispatchEvent).toHaveBeenCalledWith(
+        orgId,
         workspaceId,
         "notification.created",
         record,
@@ -93,6 +95,7 @@ describe("createNotificationTools", () => {
         ),
       ).toEqual(updated);
       expect(dispatchEvent).toHaveBeenCalledWith(
+        orgId,
         workspaceId,
         "notification.updated",
         updated,
@@ -119,6 +122,7 @@ describe("createNotificationTools", () => {
         await tools.deleteNotification.execute!({ notificationId: "n1" }, ctx),
       ).toEqual({ success: true });
       expect(dispatchEvent).toHaveBeenCalledWith(
+        orgId,
         workspaceId,
         "notification.dismissed",
         { notificationId: "n1" },

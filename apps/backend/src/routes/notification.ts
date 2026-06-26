@@ -148,7 +148,7 @@ notification.post(
       })
       .onConflictDoNothing();
 
-    dispatchEvent(workspaceId, "notification.read", {
+    dispatchEvent(c.req.param("orgId")!, workspaceId, "notification.read", {
       notificationId,
       userId: user.id,
     });
@@ -194,7 +194,7 @@ notification.post(
         })),
       );
 
-      dispatchEvent(workspaceId, "notification.read", {
+      dispatchEvent(c.req.param("orgId")!, workspaceId, "notification.read", {
         notificationIds: unread.map((n) => n.id),
         userId: user.id,
         bulk: true,
@@ -229,9 +229,14 @@ notification.delete(
       return c.json({ error: "Notification not found" }, 404);
     }
 
-    dispatchEvent(workspaceId, "notification.dismissed", {
-      notificationId,
-    });
+    dispatchEvent(
+      c.req.param("orgId")!,
+      workspaceId,
+      "notification.dismissed",
+      {
+        notificationId,
+      },
+    );
 
     return c.json({ message: "Notification deleted" });
   },

@@ -158,8 +158,8 @@ registerToolSet("notifications", {
   name: "Notifications",
   category: "Communication",
   description: "Post notifications visible to users in this workspace",
-  tools: ({ workspaceId, agentId }) =>
-    createNotificationTools(workspaceId, agentId),
+  tools: ({ workspaceId, agentId, orgId }) =>
+    createNotificationTools(workspaceId, agentId, orgId),
 });
 
 registerToolSet("memory", {
