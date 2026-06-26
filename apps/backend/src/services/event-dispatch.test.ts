@@ -111,7 +111,9 @@ describe("event-dispatch", () => {
       );
 
       // The delivered envelope carries both org and workspace coordinates.
-      const body = JSON.parse(mockDeliverWebhook.mock.calls[0][1]);
+      const body = JSON.parse(
+        mockDeliverWebhook.mock.calls[0][1] as string,
+      ) as Record<string, unknown>;
       expect(body).toMatchObject({
         event: "card.created",
         orgId: "org-1",
