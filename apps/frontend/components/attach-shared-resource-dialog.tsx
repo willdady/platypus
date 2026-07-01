@@ -102,7 +102,7 @@ const AttachSharedResourceDialog = ({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
-        <DialogHeader>
+        <DialogHeader className="text-left">
           <DialogTitle>Attach a shared {label}</DialogTitle>
           <DialogDescription>
             Organization {label}s appear in this workspace only where attached.
