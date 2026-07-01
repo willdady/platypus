@@ -1,5 +1,6 @@
 import { generateStaticParamsFor, importPage } from "nextra/pages";
 import type { FC } from "react";
+import { openGraph, twitter } from "../layout";
 import { useMDXComponents as getMDXComponents } from "../../mdx-components";
 
 export const generateStaticParams = generateStaticParamsFor("mdxPath");
@@ -16,10 +17,17 @@ export async function generateMetadata(props: PageProps) {
   // Nextra only sets the plain `title` from frontmatter. Mirror it into
   // openGraph/twitter so link previews show the page title (the parent
   // layout's `%s | Platypus Docs` template then applies to og:title too).
+  // Spread the layout's shared bases first: Next.js OVERWRITES (does not
+  // deep-merge) openGraph/twitter across segments, so without these the
+  // og:image and Twitter card from the layout would be dropped.
   const pageTitle = metadata.title;
   if (typeof pageTitle === "string") {
-    metadata.openGraph = { ...metadata.openGraph, title: pageTitle };
-    metadata.twitter = { ...metadata.twitter, title: pageTitle };
+    metadata.openGraph = {
+      ...openGraph,
+      ...metadata.openGraph,
+      title: pageTitle,
+    };
+    metadata.twitter = { ...twitter, ...metadata.twitter, title: pageTitle };
   }
   return metadata;
 }
