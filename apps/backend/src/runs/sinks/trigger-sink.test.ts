@@ -8,6 +8,8 @@ const plan: ResolvedRunPlan = {
     agentId: "a1",
     providerId: "p1",
     modelId: "m1",
+    contextWindow: 128000,
+    contextWindowIsDefault: false,
   },
 };
 

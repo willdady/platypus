@@ -3,6 +3,7 @@
 import { Badge } from "@/components/ui/badge";
 import { CollapsibleTrigger } from "@/components/ui/collapsible";
 import { cn } from "@/lib/utils";
+import { useToolDuration } from "@/hooks/use-tool-completed-at";
 import type { DynamicToolUIPart } from "ai";
 import {
   CheckCircleIcon,
@@ -17,6 +18,10 @@ import type { ReactNode } from "react";
 export type DynamicToolHeaderProps = {
   title: string;
   state: DynamicToolUIPart["state"];
+  /** ISO timestamp of when this tool call began, if known. */
+  startedAt?: string;
+  /** ISO timestamp of when this tool call completed, if known. */
+  completedAt?: string;
   className?: string;
 };
 
@@ -53,20 +58,30 @@ export const DynamicToolHeader = ({
   className,
   title,
   state,
+  startedAt,
+  completedAt,
   ...props
-}: DynamicToolHeaderProps) => (
-  <CollapsibleTrigger
-    className={cn(
-      "flex w-full items-center justify-between gap-4 p-3",
-      className,
-    )}
-    {...props}
-  >
-    <div className="flex items-center gap-2">
-      <WrenchIcon className="size-4 text-muted-foreground" />
-      <span className="font-medium text-sm">{title}</span>
-      {getStatusBadge(state)}
-    </div>
-    <ChevronDownIcon className="size-4 text-muted-foreground transition-transform group-data-[state=open]:rotate-180" />
-  </CollapsibleTrigger>
-);
+}: DynamicToolHeaderProps) => {
+  const duration = useToolDuration(state, startedAt, completedAt);
+  return (
+    <CollapsibleTrigger
+      className={cn(
+        "flex w-full items-center justify-between gap-4 p-3",
+        className,
+      )}
+      {...props}
+    >
+      <div className="flex items-center gap-2">
+        <WrenchIcon className="size-4 text-muted-foreground" />
+        <span className="font-medium text-sm">{title}</span>
+        {getStatusBadge(state)}
+        {duration && (
+          <span className="text-xs text-muted-foreground shrink-0">
+            {duration}
+          </span>
+        )}
+      </div>
+      <ChevronDownIcon className="size-4 text-muted-foreground transition-transform group-data-[state=open]:rotate-180" />
+    </CollapsibleTrigger>
+  );
+};

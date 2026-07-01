@@ -13,7 +13,10 @@ import {
   sandboxEnvSchema,
   SANDBOX_ENV_MAX_ENTRIES,
   SANDBOX_ENV_MAX_VALUE_BYTES,
+  providerSchema,
+  providerUpdateSchema,
   providerCreateSchema,
+  chatSchema,
 } from "./index";
 
 describe("Organization Schema", () => {
@@ -283,6 +286,106 @@ describe("Agent Schema", () => {
     };
     const result = agentSchema.safeParse(agentWithOptionals);
     expect(result.success).toBe(true);
+  });
+});
+
+describe("Provider modelMeta (context-compaction §A)", () => {
+  const base = {
+    id: "prov-1",
+    workspaceId: "ws-1",
+    name: "My Provider",
+    providerType: "OpenAI" as const,
+    apiKey: "sk-x",
+    modelIds: ["gpt-4o"],
+    taskModelId: "gpt-4o",
+    memoryExtractionModelId: "gpt-4o",
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  };
+
+  it("is valid with modelMeta omitted (additive, optional)", () => {
+    expect(providerSchema.safeParse(base).success).toBe(true);
+  });
+
+  it("accepts per-model contextWindow / maxOutputTokens overrides", () => {
+    const result = providerSchema.safeParse({
+      ...base,
+      modelMeta: {
+        "gpt-4o": { contextWindow: 128000, maxOutputTokens: 16384 },
+        "o1-mini": { contextWindow: 200000 },
+      },
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("rejects a non-positive contextWindow", () => {
+    const result = providerSchema.safeParse({
+      ...base,
+      modelMeta: { "gpt-4o": { contextWindow: 0 } },
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("rejects a non-integer window", () => {
+    const result = providerSchema.safeParse({
+      ...base,
+      modelMeta: { "gpt-4o": { contextWindow: 1.5 } },
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("carries modelMeta through the update schema", () => {
+    const result = providerUpdateSchema.safeParse({
+      name: "My Provider",
+      providerType: "OpenAI",
+      apiKey: "sk-x",
+      modelIds: ["gpt-4o"],
+      taskModelId: "gpt-4o",
+      memoryExtractionModelId: "gpt-4o",
+      modelMeta: { "gpt-4o": { contextWindow: 128000 } },
+    });
+    expect(result.success).toBe(true);
+  });
+});
+
+describe("Chat compaction state (context-compaction §C)", () => {
+  const base = {
+    id: "chat-1",
+    workspaceId: "ws-1",
+    title: "My Chat Title",
+    status: "succeeded" as const,
+    isPinned: false,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  };
+
+  it("is valid with compaction fields omitted (existing rows)", () => {
+    expect(chatSchema.safeParse(base).success).toBe(true);
+  });
+
+  it("accepts a populated summary + watermark + version", () => {
+    const result = chatSchema.safeParse({
+      ...base,
+      contextSummary: "Summary of earlier turns.",
+      summaryWatermark: "msg-42",
+      compactionDirty: true,
+      version: 3,
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("accepts an explicitly null summary / watermark", () => {
+    const result = chatSchema.safeParse({
+      ...base,
+      contextSummary: null,
+      summaryWatermark: null,
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("rejects a non-integer version", () => {
+    const result = chatSchema.safeParse({ ...base, version: 1.5 });
+    expect(result.success).toBe(false);
   });
 });
 

@@ -101,6 +101,13 @@ export const chatSchema = z.object({
   seed: z.number().optional(),
   presencePenalty: z.number().optional(),
   frequencyPenalty: z.number().optional(),
+  // Context-compaction state (docs/adr/0012). Server-managed; intentionally NOT
+  // part of chatSubmit/chatUpdate. summaryWatermark is the message id of the
+  // last summarized message (P1: a view over history, never a delete).
+  contextSummary: z.string().nullable().optional(),
+  summaryWatermark: z.string().nullable().optional(),
+  compactionDirty: z.boolean().optional(),
+  version: z.number().int().optional(),
   createdAt: z.date(),
   updatedAt: z.date(),
 });
@@ -553,6 +560,19 @@ export const providerApiModeSchema = z.enum(["chat", "responses"]);
 
 export type ProviderApiMode = z.infer<typeof providerApiModeSchema>;
 
+// Per-model context-window / output overrides (ADR-0012 §Window resolution).
+// Keyed by model id; both fields optional so an override can set just one.
+export const modelMetaEntrySchema = z.object({
+  contextWindow: z.number().int().positive().optional(),
+  maxOutputTokens: z.number().int().positive().optional(),
+});
+
+export type ModelMetaEntry = z.infer<typeof modelMetaEntrySchema>;
+
+export const modelMetaSchema = z.record(z.string(), modelMetaEntrySchema);
+
+export type ModelMeta = z.infer<typeof modelMetaSchema>;
+
 const providerBaseSchema = z.object({
   id: z.string(),
   organizationId: z.string().optional(),
@@ -592,6 +612,7 @@ const providerBaseSchema = z.object({
     .max(4096)
     .nullable()
     .optional(),
+  modelMeta: modelMetaSchema.optional(),
   createdAt: z.date(),
   updatedAt: z.date(),
 });
@@ -643,6 +664,7 @@ export const providerCreateSchema = providerBaseSchema.pick({
   memoryExtractionModelId: true,
   embeddingModelId: true,
   embeddingDimensions: true,
+  modelMeta: true,
 });
 
 // Sandbox
@@ -778,6 +800,7 @@ export const providerUpdateSchema = providerBaseSchema.pick({
   memoryExtractionModelId: true,
   embeddingModelId: true,
   embeddingDimensions: true,
+  modelMeta: true,
 });
 
 export type ProviderUpdateData = z.infer<typeof providerUpdateSchema>;
@@ -1527,3 +1550,23 @@ export const dashboardUpdateSchema = z.object({
   desktopLayout: z.array(rglLayoutItemSchema).optional(),
   mobileLayout: z.array(rglLayoutItemSchema).optional(),
 });
+
+// Message stats (ADR-0012 §Context-usage ring / §Per-message stats)
+// Stamped on the last assistant message's metadata.stats after each stream run.
+// Used by the frontend context-usage ring and per-message stats popover.
+
+export const messageStatsSchema = z.object({
+  // Run-wide totals across every step (sum) — for the cost popover (§Per-message stats).
+  inputTokens: z.number().nonnegative(),
+  outputTokens: z.number().nonnegative(),
+  // Input tokens of the LAST model call = peak context fullness — for the
+  // §Context-usage ring. NOT the run-wide sum (which over-counts on multi-step tool loops).
+  contextTokens: z.number().nonnegative(),
+  startedAt: z.string(),
+  firstTokenAt: z.string().optional(),
+  finishedAt: z.string(),
+  contextWindow: z.number().positive(),
+  contextWindowIsDefault: z.boolean(),
+});
+
+export type MessageStats = z.infer<typeof messageStatsSchema>;
