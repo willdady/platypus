@@ -53,8 +53,34 @@ export const metadata: Metadata = {
   },
   description,
   applicationName: title,
+  // Site-wide icons: page-level generateMetadata doesn't set `icons`, so these
+  // are inherited by every doc page. app/favicon.ico is auto-linked by Next.
+  icons: {
+    icon: [
+      { url: "/favicon-32x32.png", type: "image/png", sizes: "32x32" },
+      { url: "/favicon-16x16.png", type: "image/png", sizes: "16x16" },
+    ],
+    apple: [
+      { url: "/apple-touch-icon.png", type: "image/png", sizes: "180x180" },
+    ],
+  },
   openGraph,
   twitter,
+};
+
+// JSON-LD structured data for the docs site, injected once in the root layout.
+const jsonLd = {
+  "@context": "https://schema.org",
+  "@type": "WebSite",
+  "@id": "https://docs.platypus.chat/#website",
+  url: "https://docs.platypus.chat",
+  name: title,
+  description,
+  publisher: {
+    "@type": "Organization",
+    name: "Platypus",
+    url: "https://platypus.chat",
+  },
 };
 
 const version = process.env.NEXT_PUBLIC_APP_VERSION ?? "unknown";
@@ -119,6 +145,10 @@ const RootLayout: FC<{ children: ReactNode }> = async ({ children }) => {
         />
       </Head>
       <body>
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+        />
         <Layout
           navbar={navbar}
           pageMap={await getPageMap()}
