@@ -1,5 +1,5 @@
 import { nanoid } from "nanoid";
-import sharp from "sharp";
+import sharp, { type Metadata } from "sharp";
 import { getStorage } from "../storage/index.ts";
 
 /**
@@ -28,8 +28,7 @@ const AVATAR_SIZE = 512;
  * rather than going through the central `onError` (ADR-0010).
  */
 export type StoreAvatarResult =
-  | { ok: true; key: string }
-  | { ok: false; error: string };
+  { ok: true; key: string } | { ok: false; error: string };
 
 /**
  * Validate, resize, and store an uploaded avatar for an Agent, deleting the
@@ -61,7 +60,7 @@ export async function storeAvatar(
 
   const buffer = Buffer.from(await file.arrayBuffer());
 
-  let metadata: sharp.Metadata;
+  let metadata: Metadata;
   try {
     metadata = await sharp(buffer).metadata();
   } catch {
