@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.101.0](https://github.com/willdady/platypus/compare/v1.100.0...v1.101.0) (2026-07-01)
+
+
+### Features
+
+* **docs:** add Platypus logo lockup to top bar ([#278](https://github.com/willdady/platypus/issues/278)) ([52d6d90](https://github.com/willdady/platypus/commit/52d6d90f3d6bd800c3350b945503e1b30c121018))
+* generate Open Graph image for website and docs via Playwright ([8e0ba1f](https://github.com/willdady/platypus/commit/8e0ba1f10bfa07647b5dd11a53aafbad1a555382))
+
+
+### Bug Fixes
+
+* **frontend:** left-align attach dialog text on mobile ([#279](https://github.com/willdady/platypus/issues/279)) ([0c02ae4](https://github.com/willdady/platypus/commit/0c02ae4f9ce723fb5495ce631e1668e3dfb56e63))
+* **website:** correct board copy, icon, step count, and workspace description ([a0abf0d](https://github.com/willdady/platypus/commit/a0abf0d8c3efd420ec8781b6ebbcdd5241885494))
+
 ## [1.100.0](https://github.com/willdady/platypus/compare/v1.99.1...v1.100.0) (2026-06-26)
 
 
