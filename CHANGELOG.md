@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.101.1](https://github.com/willdady/platypus/compare/v1.101.0...v1.101.1) (2026-07-01)
+
+
+### Bug Fixes
+
+* **docs:** restore og:image on doc pages ([#280](https://github.com/willdady/platypus/issues/280)) ([62fd5fd](https://github.com/willdady/platypus/commit/62fd5fdd7131f4e9e7667ffe23e3d9f7d58fe2dc))
+* improve SEO and meta tags for website and docs ([#282](https://github.com/willdady/platypus/issues/282)) ([3add55a](https://github.com/willdady/platypus/commit/3add55a85ce4b5d1df6abdf46faaa918ccef2160))
+
 ## [1.101.0](https://github.com/willdady/platypus/compare/v1.100.0...v1.101.0) (2026-07-01)
 
 
