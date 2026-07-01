@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Image from "next/image";
 import { Footer, Layout, Navbar } from "nextra-theme-docs";
 import { Head } from "nextra/components";
 import { getPageMap } from "nextra/page-map";
@@ -51,7 +52,21 @@ const version = process.env.NEXT_PUBLIC_APP_VERSION ?? "unknown";
 
 const navbar = (
   <Navbar
-    logo={<b>Platypus</b>}
+    // Mirror the website's top-bar lockup (apps/website site-nav.tsx): the
+    // platypus mark left of a bold wordmark, gap-2.
+    logo={
+      <span className="flex items-center gap-2 font-bold tracking-tight">
+        <Image
+          src="/platypus.png"
+          alt="Platypus logo"
+          width={40}
+          height={40}
+          priority
+          className="size-10"
+        />
+        <span className="text-lg">Platypus</span>
+      </span>
+    }
     projectLink="https://github.com/willdady/platypus"
   />
 );
