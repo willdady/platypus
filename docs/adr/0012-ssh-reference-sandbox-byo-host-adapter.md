@@ -1,6 +1,10 @@
+---
+Status: proposed
+---
+
 # SSH reference Sandbox adapter attaches to a pre-existing, operator-owned host
 
-Platypus ships a second reference Sandbox adapter (`backend: "ssh"`) that connects to an already-running SSH server the operator supplies — bring-your-own-host — rather than provisioning any compute. One `sandbox` row maps to exactly one connection target: `config` carries `{ host, port, user, rootDir?, hostKey? }` and `credentials` carries `{ privateKey, passphrase? }` (public-key auth only). The adapter never creates or destroys the machine; it connects, ensures the workspace root exists, and runs the fixed five-tool core over the connection. Registration is env-gated behind `PLATYPUS_SANDBOX_SSH_ENABLED`, mirroring the Docker adapter. It is the recommended backend for horizontally-scaled deployments, where the Docker adapter cannot run (ADR-0003).
+Platypus ships a second reference Sandbox adapter (`backend: "ssh"`) that connects to an already-running SSH server the operator supplies — bring-your-own-host — rather than provisioning any compute. One `sandbox` row maps to exactly one connection target: `config` carries `{ host, port, user, rootDir?, hostKey? }` and `credentials` carries `{ privateKey, passphrase? }` (public-key auth only). The adapter never creates or destroys the machine; it connects, ensures the workspace root exists, and runs the fixed five-tool core over the connection. It ships as the core plugin `@platypus/ssh`, contributing a Sandbox backend via the plugin model in [ADR-0013](0013-plugin-system-manifest-driven-in-process-extension-points.md); it is enabled by listing `@platypus/ssh` in `PLATYPUS_PLUGINS`, not by a dedicated env gate. **This ADR therefore depends on and is sequenced after ADR-0013** — only the registration/enablement mechanism changed; every backend decision below is unaffected. It is the recommended backend for horizontally-scaled deployments, where the Docker adapter cannot run (ADR-0003).
 
 ## Considered Options
 
@@ -14,7 +18,7 @@ Platypus ships a second reference Sandbox adapter (`backend: "ssh"`) that connec
 
 ## Consequences
 
-- New backend discriminator `"ssh"`, registered for side-effects in `apps/backend/src/sandbox/backends/index.ts` only when `PLATYPUS_SANDBOX_SSH_ENABLED === "true"` — same "not registered ⇒ tools absent that turn" degradation as Docker.
+- New backend discriminator `"ssh"` (a core, unprefixed Contribution id per ADR-0013), contributed by the `@platypus/ssh` core plugin through `contributes.sandboxBackends` — _not_ a side-effect registration and _not_ gated by `PLATYPUS_SANDBOX_SSH_ENABLED`. Available only when `@platypus/ssh` is listed in `PLATYPUS_PLUGINS`; not listed ⇒ tools absent that turn, the same degradation as any absent backend. The per-Workspace `config`/`credentials` above stay per-Workspace Sandbox settings (ADR-0001/0006) — ADR-0013's deploy-time _plugin_ config does not apply to them.
 - `config = { host, port, user, rootDir?, hostKey? }`, `credentials = { privateKey, passphrase? }`. `rootDir` is optional and defaults to `$HOME/platypus-workspace`, created with `mkdir -p` on connect; the adapter resolves `$HOME` once per connection so SFTP (which does not expand `~`) has an absolute root. As with every adapter the model only ever sees workspace-root-relative paths, so the physical root is free.
 - The backend image gains the `ssh2` (npm) dependency for the connection, `exec`, and SFTP subsystem access.
 - **Connection lifecycle is self-managed.** A backend instance is minted per Chat turn; it lazy-connects on the first tool call, reuses the single connection across all tool calls in the turn (inflight-promise pattern, as Docker shares one `ensureContainer` promise), and an `unref()`'d idle timer closes it after inactivity. No cross-turn pooling; no changes to the tool-set contract.
