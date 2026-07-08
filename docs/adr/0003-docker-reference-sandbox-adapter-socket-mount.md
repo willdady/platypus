@@ -1,5 +1,12 @@
 # Docker reference Sandbox adapter mounts the host Docker socket
 
+> **Update — superseded in part by [ADR-0013](0013-plugin-system-manifest-driven-in-process-extension-points.md):**
+> the `PLATYPUS_SANDBOX_DOCKER_ENABLED` env gate described below has been retired.
+> The Docker adapter now ships as the core plugin `@platypus/docker`; enable it by
+> listing `@platypus/docker` in `PLATYPUS_PLUGINS` — list membership _is_ the enable
+> switch. The opt-in `compose.sandbox.yaml` overlay and the socket-mount security
+> posture are unchanged. The rest of this ADR stands as originally decided.
+
 Platypus ships a reference Sandbox adapter (`backend: "docker"`) that spawns one container per Workspace via the host's Docker daemon, accessed by bind-mounting `/var/run/docker.sock` into the backend container. The mount is gated behind an opt-in `compose.sandbox.yaml` overlay and an env flag (`PLATYPUS_SANDBOX_DOCKER_ENABLED`); the default compose stack does not include it. The adapter is scoped to development and single-node self-hosted deployments only — explicitly _not_ for multi-tenant or hostile-tenant environments. Sandbox containers are siblings of the backend container on Docker's default bridge, not on `platypus-network`, so they cannot reach the Platypus database directly.
 
 ## Considered Options

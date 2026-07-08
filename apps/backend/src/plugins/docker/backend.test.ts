@@ -259,10 +259,13 @@ import {
   DockerSandboxBackend,
   buildSingleFileTar,
   dockerSandboxConfigSchema,
-} from "./docker.ts";
+} from "./backend.ts";
 import { logger } from "../../logger.ts";
-import { MAX_SHELL_OUTPUT_BYTES, SANDBOX_WORKSPACE_ROOT } from "../index.ts";
-import type { SandboxContext } from "../types.ts";
+import {
+  MAX_SHELL_OUTPUT_BYTES,
+  SANDBOX_WORKSPACE_ROOT,
+} from "../../sandbox/index.ts";
+import type { SandboxContext } from "../../sandbox/types.ts";
 
 const ctx: SandboxContext = {
   orgId: "org-1",

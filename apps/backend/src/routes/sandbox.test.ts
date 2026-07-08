@@ -34,9 +34,9 @@ describe("Sandbox Routes", () => {
       const body = (await res.json()) as {
         results: Array<{ backend: string; name: string }>;
       };
-      // The registry is process-wide; tests don't register the Docker adapter
-      // (no PLATYPUS_SANDBOX_DOCKER_ENABLED), so the list shape is what we
-      // assert — not specific entries.
+      // The registry is process-wide; tests don't run the plugin loader, so
+      // the Docker adapter (contributed by @platypus/docker) is not registered
+      // here. We assert the list shape, not specific entries.
       expect(Array.isArray(body.results)).toBe(true);
       for (const r of body.results) {
         expect(typeof r.backend).toBe("string");
