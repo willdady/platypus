@@ -240,11 +240,9 @@ export const ChatMessage = memo(function ChatMessage({
         } else if (part.type.startsWith("tool-")) {
           const toolPart = part as ToolUIPart;
           const toolInput = toolPart.input as
-            | Record<string, unknown>
-            | undefined;
+            Record<string, unknown> | undefined;
           const toolLabel = (toolInput?.label ?? toolInput?.name) as
-            | string
-            | undefined;
+            string | undefined;
           return (
             <Tool key={`${message.id}-${i}`}>
               <ToolHeader
