@@ -118,8 +118,8 @@ orgProvider.put(
       throw new NotFoundError("Provider not found");
     }
 
-    // RV7c: bust the cached context window so a modelMeta override takes effect
-    // immediately rather than waiting out the 1-hour TTL (drift T5).
+    // Bust the cached context window so a modelMeta override takes effect
+    // immediately rather than waiting out the 1-hour TTL.
     contextWindowResolver.evict(providerId);
 
     return c.json(record[0], 200);

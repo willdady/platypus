@@ -545,6 +545,7 @@ describe("Chat Routes", () => {
         "chat-1",
         workspaceId,
         orgId,
+        expect.any(AbortSignal),
       );
     });
 

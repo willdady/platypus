@@ -514,6 +514,16 @@ async function summarizePrefix(
   const chunkSummaries: string[] = [];
   for (const chunk of chunks) chunkSummaries.push(await summarize(chunk));
 
+  // Termination guard (m8): the recursion shrinks `segments`, but if the prior
+  // summary ALONE exceeds the window, the folded single-pass check above can
+  // never pass — chunkSummaries collapses to one segment and stays there,
+  // recursing forever (unbounded paid model calls). When we can no longer make
+  // progress (nothing left to reduce), fold the prior in and do one final
+  // summarize; the summarizer truncates rather than us looping.
+  if (chunkSummaries.length <= 1) {
+    return summarize(fold(priorSummary, chunkSummaries.join("\n\n")));
+  }
+
   // Reduce: the joined chunk summaries (+ prior) can THEMSELVES exceed the window
   // when there are many chunks, so recurse rather than summarizing them whole —
   // the reduce step must never re-overflow (ADR-0012 §Tier 1 map-reduce). Each
@@ -1230,6 +1240,18 @@ export async function applyTier1Compaction(
     forceCompact ||
     (config.compactionEnabled && projected >= budget.triggerTokens);
 
+  // `projected` mixes in the provider's `lastInputTokens` floor (and the
+  // cold-start margin), but `compactUIMessages`' no-op gate re-checks char/4
+  // alone. When the trigger fired only because that floor exceeded the char
+  // basis, the char-only gate would wrongly no-op — trigger true, 0 dropped,
+  // every turn — until real overflow hits recovery (M1). Force past the gate so
+  // the ADR promise "compact when projected >= trigger" is actually met. Char/4
+  // chronically under-counts here, so we cannot trust a prune-only early return
+  // either; forcing summarize is the honest response to the provider floor.
+  const charOnlyBasis = messageTokens + priorSummaryTokens + overheadTokens;
+  const projectionFloorTriggered =
+    triggered && !forceCompact && projected > charOnlyBasis;
+
   logger.info(
     {
       metric: "compaction.check",
@@ -1282,8 +1304,10 @@ export async function applyTier1Compaction(
     summarize: input.summarize,
     summarizerWindow: input.summarizerWindow,
     // When dirty-forced the estimator already proved wrong (ADR-0012 §Recovery): bypass the
-    // no-op gate so recovery's dirty flag actually shrinks the history.
-    force: forceCompact,
+    // no-op gate so recovery's dirty flag actually shrinks the history. Also
+    // bypass when the trigger fired via the provider-token floor (M1) — the
+    // char-only gate would otherwise no-op despite the projection being over.
+    force: forceCompact || projectionFloorTriggered,
     // The no-op gate estimates this exact set; reuse the value above.
     knownEstimate: messageTokens,
   });
@@ -1349,11 +1373,15 @@ export async function applyTier1Compaction(
     commit = await pinnedWrite({ dirty: false });
   }
 
-  // Only surface a trace when an actual model summary was produced. Prune-only
-  // and force-dirty-within-target runs drop 0 messages with no excerpt — a
-  // trace there would be an empty, confusing timeline entry (ADR-0012 §Compaction trace in the timeline).
+  // Only surface a trace when an actual model summary was produced AND it
+  // durably landed. Prune-only and force-dirty-within-target runs drop 0
+  // messages with no excerpt — a trace there would be an empty, confusing
+  // timeline entry (ADR-0012 §Compaction trace in the timeline). Gating on the
+  // committed write also prevents a phantom trace when a concurrent writer
+  // advanced the version and the summary was skipped (m5): the summary was NOT
+  // persisted, so a "compacted" timeline entry would be a lie.
   const compactionTrace: CompactionTrace | undefined =
-    result.usedModelCall && result.summaryText
+    result.usedModelCall && result.summaryText && commit?.status === "applied"
       ? {
           messagesDropped: result.messagesDropped,
           summaryExcerpt: result.summaryText.slice(0, 120),
@@ -1470,16 +1498,29 @@ export function buildTier2PrepareStep(ctx: Tier2Context): PrepareStepFunction {
     );
     if (estimate < ctx.triggerTokens) return undefined;
 
-    const result = await compactModelMessages(messages, {
-      targetTokens: ctx.targetTokens,
-      keepRecentMessages: ctx.keepRecentMessages,
-      minPrunableChars: ctx.minPrunableChars,
-      imageProvider: ctx.imageProvider,
-      summarize: ctx.summarize,
-      summarizerWindow: ctx.summarizerWindow,
-      // Reuse the trigger-check estimate; skips a redundant full pass.
-      knownEstimate: estimate,
-    });
+    // Stage 2 summarize is a real network call and can throw (429/timeout) while
+    // still below true overflow. A throw here would reject the SDK step and kill
+    // an otherwise-successful turn. Degrade gracefully: log, proceed uncompacted;
+    // the recovery middleware remains the backstop for real overflow (M3).
+    let result;
+    try {
+      result = await compactModelMessages(messages, {
+        targetTokens: ctx.targetTokens,
+        keepRecentMessages: ctx.keepRecentMessages,
+        minPrunableChars: ctx.minPrunableChars,
+        imageProvider: ctx.imageProvider,
+        summarize: ctx.summarize,
+        summarizerWindow: ctx.summarizerWindow,
+        // Reuse the trigger-check estimate; skips a redundant full pass.
+        knownEstimate: estimate,
+      });
+    } catch (err) {
+      logger.warn(
+        { err, estimatedTokens: estimate },
+        "Tier 2 in-turn compaction failed; proceeding uncompacted",
+      );
+      return undefined;
+    }
 
     if (result.messagesDropped === 0) return undefined;
 

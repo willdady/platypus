@@ -43,6 +43,13 @@ export const CHARS_PER_TOKEN = 4;
  * Conservative flat cost for a non-text part whose true cost we cannot compute
  * (unknown provider, missing image dimensions, non-image binary file). Over-
  * counting beats overflow (ADR-0012 §Token estimation).
+ *
+ * KNOWN LIMITATION (m7): for a large non-image binary (e.g. a 100-page PDF ≈
+ * ~100k real tokens) this flat 1200 is a gross UNDER-count, so "over-count beats
+ * overflow" does not hold there — recovery (ADR-0012 §Recovery) is the backstop
+ * if such a payload overflows. NonTextPart carries no byte size today; scaling by
+ * data-URL length would require threading bytes through both count adapters
+ * without breaking the single-estimator grouping invariant.
  */
 export const DEFAULT_NONTEXT_TOKENS = 1200;
 

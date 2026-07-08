@@ -18,33 +18,19 @@ export function joinUrl(base: string, path: string): string {
   return `${normalizedBase}${normalizedPath}`;
 }
 
-/**
- * Formats a tool call's run duration from its start/end ISO timestamps.
- * Returns undefined when either timestamp is missing or invalid (e.g. an
- * in-progress tool, or a historical message persisted before durations were
- * tracked) so the UI can simply render nothing.
- *
- * Output scales with magnitude: `950ms`, `1.2s`, `1m 3s`.
- */
-export function formatToolDuration(
-  startedAt?: string,
-  completedAt?: string,
-): string | undefined {
-  if (!startedAt || !completedAt) return undefined;
-  const start = new Date(startedAt).getTime();
-  const end = new Date(completedAt).getTime();
-  if (Number.isNaN(start) || Number.isNaN(end) || end < start) return undefined;
-  return formatDurationMs(end - start);
-}
-
-/** Formats an elapsed millisecond span: `950ms`, `1.2s`, `1m 3s`. */
+/** Formats an elapsed millisecond span: `950ms`, `1.2s`, `1m 3s`. Used by the
+ *  per-message stats popover (TTFT / total generation time). */
 export function formatDurationMs(ms: number): string | undefined {
   if (!Number.isFinite(ms) || ms < 0) return undefined;
   if (ms < 1000) return `${Math.round(ms)}ms`;
   const seconds = ms / 1000;
-  if (seconds < 60) return `${seconds.toFixed(1)}s`;
-  const minutes = Math.floor(seconds / 60);
-  const remSeconds = Math.round(seconds % 60);
+  // Round to the display precision FIRST, then split — otherwise a value that
+  // rounds up at the boundary renders "60.0s" or "1m 60s" (m10). e.g. 59.96s →
+  // "1m 0s", 119.6s → "2m 0s".
+  if (seconds < 59.95) return `${seconds.toFixed(1)}s`;
+  const totalSeconds = Math.round(seconds);
+  const minutes = Math.floor(totalSeconds / 60);
+  const remSeconds = totalSeconds % 60;
   return `${minutes}m ${remSeconds}s`;
 }
 

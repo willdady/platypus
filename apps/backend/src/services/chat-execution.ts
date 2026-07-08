@@ -988,7 +988,15 @@ export const prepareChatTurn = async (
   ] = await Promise.all([
     loadTools(queries, agent, workspaceId, orgId, frontendUrl, user.id),
     loadSkills(queries, agent, orgId, workspaceId),
-    loadSubAgents(queries, agent, orgId, workspaceId, frontendUrl, onActivity),
+    loadSubAgents(
+      queries,
+      agent,
+      orgId,
+      workspaceId,
+      frontendUrl,
+      onActivity,
+      signal,
+    ),
     queries.getUserContexts(user.id, workspaceId),
     queries.getRecentMemories(user.id, workspaceId),
     queries.getSandboxEnvKeys(workspaceId),
@@ -1491,6 +1499,7 @@ const loadSubAgents = async (
   workspaceId: string,
   frontendUrl: string | undefined,
   onProgress?: () => void,
+  signal?: AbortSignal,
 ): Promise<{
   subAgents: Array<{ id: string; name: string; description?: string | null }>;
   subAgentTools: Record<string, Tool>;
@@ -1548,6 +1557,10 @@ const loadSubAgents = async (
           provider: resolved.provider,
           resolvedModelId: sa.modelId,
           opened: resolved.opened,
+          // Thread heartbeat + abort so a sub-agent summarizer isn't killed by
+          // the stall watchdog and aborts on run cancel/timeout (m3).
+          onActivity: onProgress,
+          signal,
         });
         // ADR-0012 §Tier 1 (budget math): subtract the sub-agent's per-turn
         // overhead so its recovery/Tier 2 targets match the main path. The
@@ -1643,6 +1656,10 @@ export async function forceCompactChat(
   chatId: string,
   workspaceId: string,
   orgId: string,
+  /** Request abort signal — threaded into the summarizer so a client disconnect
+   *  or hung summarize aborts the call instead of leaking and hanging the route
+   *  (m3). */
+  signal?: AbortSignal,
 ): Promise<{
   estimatedTokens: number;
   /** Message-only estimate of the history BEFORE compaction (same basis as estimatedTokens). */
@@ -1710,6 +1727,7 @@ export async function forceCompactChat(
     provider,
     resolvedModelId,
     opened,
+    signal,
   });
 
   const messages = await loadChatMessages(chatId);

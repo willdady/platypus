@@ -594,6 +594,7 @@ describe("compactModelMessages (Tier 2 / recovery)", () => {
 import {
   applyTier1Compaction,
   buildCompactionTraceMessage,
+  buildTier2PrepareStep,
   computeBudget,
   invalidateCompaction,
   affectedBelowWatermark,
@@ -601,6 +602,7 @@ import {
   DEFAULT_COMPACTION_CONFIG,
   type Budget,
   type CompactionConfig,
+  type Tier2Context,
 } from "./compaction.ts";
 
 describe("buildCompactionTraceMessage (ADR-0012 §Force-compact on demand)", () => {
@@ -1077,6 +1079,108 @@ describe("applyTier1Compaction — overhead in the trigger (ADR-0012 §Tier 1 (t
     });
     expect(out.compacted).toBe(false);
     expect(store.casCalls).toBe(0);
+  });
+});
+
+describe("applyTier1Compaction — provider-token floor forces past the char-only gate (M1)", () => {
+  it("compacts when lastInputTokens is over the trigger even though char/4 is under target", async () => {
+    const store = storeFromState({ version: 0 });
+    // Char/4 of these messages is a handful of tokens — well under target(25),
+    // so the char-only no-op gate would return early. But the provider reported
+    // 8888 tokens last turn (dense CJK/JSON that char/4 grossly under-counts),
+    // which is over the trigger. Before the fix this no-op'd every turn until
+    // real overflow; now the floor forces a real compaction.
+    const messages = [
+      uiText("p1", "user", "aaaa"),
+      uiText("p2", "assistant", "bbbb"),
+      uiText("r1", "user", "cccc"),
+      uiText("r2", "assistant", "dddd"),
+    ];
+    const out = await applyTier1Compaction({
+      chatId: "c",
+      messages,
+      state: {
+        version: 0,
+        summaryWatermark: null,
+        contextSummary: null,
+        compactionDirty: false,
+      },
+      budget: { inputBudget: 100, triggerTokens: 50, targetTokens: 25 },
+      config: cfg(),
+      imageProvider: "default",
+      summarize: noopSummarize,
+      store,
+      lastInputTokens: 8888,
+    });
+    expect(out.compacted).toBe(true);
+    expect(out.compactionTrace?.messagesDropped).toBeGreaterThan(0);
+    expect(store.state.summaryWatermark).toBe("p2");
+  });
+
+  it("still no-ops when both char/4 and the provider floor are under the trigger", async () => {
+    const store = storeFromState({ version: 0 });
+    const messages = [
+      uiText("r1", "user", "cccc"),
+      uiText("r2", "assistant", "dddd"),
+    ];
+    const out = await applyTier1Compaction({
+      chatId: "c",
+      messages,
+      state: {
+        version: 0,
+        summaryWatermark: null,
+        contextSummary: null,
+        compactionDirty: false,
+      },
+      budget: { inputBudget: 100, triggerTokens: 50, targetTokens: 25 },
+      config: cfg(),
+      imageProvider: "default",
+      summarize: noopSummarize,
+      store,
+      lastInputTokens: 10,
+    });
+    expect(out.compacted).toBe(false);
+    expect(store.casCalls).toBe(0);
+  });
+});
+
+describe("buildTier2PrepareStep — Stage 2 failure never kills the turn (M3)", () => {
+  const ctx = (summarize: Tier2Context["summarize"]): Tier2Context => ({
+    triggerTokens: 10,
+    targetTokens: 5,
+    keepRecentMessages: 2,
+    minPrunableChars: 2000,
+    imageProvider: "default",
+    summarize,
+  });
+
+  const overflowingMessages: ModelMessage[] = [
+    { role: "user", content: "P".repeat(4000) },
+    { role: "assistant", content: "Q".repeat(4000) },
+    { role: "user", content: "recent-1" },
+    { role: "assistant", content: "recent-2" },
+  ];
+
+  it("returns undefined (proceeds uncompacted) when the summarizer throws", async () => {
+    const throwing = () => Promise.reject(new Error("429 rate limited"));
+    const prepareStep = buildTier2PrepareStep(ctx(throwing));
+    const result = await prepareStep({
+      messages: overflowingMessages,
+      steps: [],
+      stepNumber: 0,
+    } as unknown as Parameters<typeof prepareStep>[0]);
+    expect(result).toBeUndefined();
+  });
+
+  it("still compacts normally when the summarizer succeeds", async () => {
+    const prepareStep = buildTier2PrepareStep(ctx(noopSummarize));
+    const result = await prepareStep({
+      messages: overflowingMessages,
+      steps: [],
+      stepNumber: 0,
+    } as unknown as Parameters<typeof prepareStep>[0]);
+    expect(result).toBeDefined();
+    expect(result?.messages?.length).toBeGreaterThan(0);
   });
 });
 

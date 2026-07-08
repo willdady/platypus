@@ -51,63 +51,6 @@ import type {
 } from "./types.ts";
 
 /**
- * Result of {@link withToolTimestamps}: the transformed stream plus a map of
- * `toolCallId` → completion ISO timestamp, populated as tool-output chunks
- * pass through.
- */
-export type ToolTimestampStream<TChunk extends UIMessageChunk> = {
-  stream: ReadableStream<TChunk>;
-  /** toolCallId → completedAt ISO timestamp, filled in as the stream drains. */
-  completions: Map<string, string>;
-};
-
-/**
- * Stamps tool-call timing onto the stream so the UI can show each tool's run
- * duration:
- *
- * - `startedAt` is injected into `tool-input-available` chunks via
- *   `toolMetadata`. It must go here (not on the output chunk) because the AI
- *   SDK's tool-output handlers ignore `chunk.toolMetadata` and reuse the
- *   invocation's existing `toolMetadata` from the input-available phase.
- * - `completedAt` cannot ride the output chunk for the same reason, so it is
- *   recorded in the returned `completions` map keyed by `toolCallId`. The run
- *   loop applies it to the built message via {@link applyToolCompletions}
- *   before the sink persists it.
- *
- * Exported for unit testing.
- */
-export function withToolTimestamps<TChunk extends UIMessageChunk>(
-  stream: ReadableStream<TChunk>,
-  now: () => string = () => new Date().toISOString(),
-): ToolTimestampStream<TChunk> {
-  const completions = new Map<string, string>();
-  const out = stream.pipeThrough(
-    new TransformStream<TChunk, TChunk>({
-      transform(chunk, controller) {
-        if (chunk.type === "tool-input-available") {
-          controller.enqueue({
-            ...chunk,
-            toolMetadata: {
-              ...chunk.toolMetadata,
-              startedAt: now(),
-            },
-          });
-          return;
-        }
-        if (
-          chunk.type === "tool-output-available" ||
-          chunk.type === "tool-output-error"
-        ) {
-          completions.set(chunk.toolCallId, now());
-        }
-        controller.enqueue(chunk);
-      },
-    }),
-  );
-  return { stream: out, completions };
-}
-
-/**
  * Injects synthetic `compact_context` tool-call + tool-result chunks into a
  * UIMessage stream immediately after the `start` event (ADR-0012 §Compaction trace in the timeline). Makes Tier
  * 1 compaction visible in the chat timeline without a custom renderer — the
@@ -224,34 +167,6 @@ function applyMessageStats(
       };
       msg.metadata = { ...msg.metadata, stats };
       return;
-    }
-  }
-}
-
-/**
- * Stamps `completedAt` onto assistant tool parts in place, reading from the
- * `completions` map produced by {@link withToolTimestamps}. Applied to the
- * built message just before it is persisted, since the AI SDK strips
- * `toolMetadata` from tool-output chunks and the end time can't be injected
- * inline. Paired with the injected `startedAt`, this lets the UI compute each
- * tool's run duration.
- */
-function applyToolCompletions(
-  messages: PlatypusUIMessage[],
-  completions: Map<string, string>,
-): void {
-  if (completions.size === 0) return;
-  for (const message of messages) {
-    for (const part of message.parts ?? []) {
-      const anyPart = part as {
-        toolCallId?: string;
-        toolMetadata?: Record<string, unknown>;
-      };
-      const completedAt = anyPart.toolCallId
-        ? completions.get(anyPart.toolCallId)
-        : undefined;
-      if (!completedAt) continue;
-      anyPart.toolMetadata = { ...anyPart.toolMetadata, completedAt };
     }
   }
 }
@@ -720,9 +635,7 @@ export class AgentRunner {
         )
       : (uiStream as ReadableStream<UIMessageChunk>);
 
-    const { stream: timedStream, completions } =
-      withToolTimestamps(tracedStream);
-    const [forResponse, forSnapshot] = timedStream.tee();
+    const [forResponse, forSnapshot] = tracedStream.tee();
 
     // Read the snapshot branch as message snapshots and keep `state.messages`
     // up to date. ChatSink's FlushScheduler then writes the in-progress
@@ -731,9 +644,9 @@ export class AgentRunner {
     // input message).
     //
     // finalize is called here (not in toUIMessageStream's onFinish) so that
-    // state.messages reflects the fully-drained stream — including the tool
-    // `completedAt` timestamps and ADR-0012 §Context-usage ring / §Per-message stats applied below — before the sink
-    // persists it.
+    // state.messages reflects the fully-drained stream — including the
+    // ADR-0012 §Context-usage ring / §Per-message stats applied below — before
+    // the sink persists it.
     // An error chunk (model/tool failure surfaced via formatStreamError) or
     // an internal stream fault ends the for-await without throwing, because
     // readUIMessageStream defaults terminateOnError=false. Capture it so the
@@ -764,7 +677,6 @@ export class AgentRunner {
         // Reuse the finish-event timestamp when present so the persisted stats
         // match what was streamed; fall back if the stream ended without one.
         const finishedAtFinal = finishedAt ?? new Date().toISOString();
-        applyToolCompletions(state.messages, completions);
         const stats = buildMessageStats(finishedAtFinal);
         if (stats) applyMessageStats(state.messages, stats);
         let status: RunStatus = "succeeded";
@@ -911,10 +823,12 @@ const formatStreamError = (error: unknown): string => {
   if (LoadAPIKeyError.isInstance(error)) {
     return "AI provider API key is missing or not configured.";
   }
-  // Reaching here means recovery (ADR-0012 §Recovery) already trimmed and retried once and the
-  // provider still rejected the prompt — surface the actionable dead end.
+  // Reaching here means recovery (ADR-0012 §Recovery) could not salvage the turn:
+  // either the trimmed retry was still rejected, or there was nothing left to
+  // trim (m1) / the trim itself failed — so we do NOT claim a trim definitely ran
+  // (n6). Surface the actionable dead end.
   if (isContextOverflowError(error)) {
-    return "Conversation too large for the model's context window even after trimming — start a new chat or reduce attachments.";
+    return "Conversation too large for the model's context window — start a new chat or reduce attachments.";
   }
   if (APICallError.isInstance(error)) {
     if (error.statusCode === 401 || error.statusCode === 403) {

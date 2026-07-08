@@ -473,15 +473,27 @@ export const Chat = ({
     if (!backendUrl) return;
     setIsCompacting(true);
     try {
-      const res = await fetch(
-        joinUrl(
-          backendUrl,
-          `/organizations/${orgId}/workspaces/${workspaceId}/chat/${chatId}/compact`,
-        ),
-        { method: "POST", credentials: "include" },
+      // A deferred compact fires the instant local streaming flips to idle, but
+      // the backend unregisters the run only after it disposes/persists — so the
+      // first POST can race and 409 ("run in progress"). Retry a few times with
+      // backoff before surfacing an error, so the queued action isn't lost (m12).
+      const compactUrl = joinUrl(
+        backendUrl,
+        `/organizations/${orgId}/workspaces/${workspaceId}/chat/${chatId}/compact`,
       );
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
+      const maxAttempts = 4;
+      let res: Response | undefined;
+      for (let attempt = 0; attempt < maxAttempts; attempt++) {
+        res = await fetch(compactUrl, {
+          method: "POST",
+          credentials: "include",
+        });
+        if (res.status !== 409 || attempt === maxAttempts - 1) break;
+        // 300ms, 600ms, 1200ms — bounded, generous enough for run teardown.
+        await new Promise((r) => setTimeout(r, 300 * 2 ** attempt));
+      }
+      if (!res || !res.ok) {
+        const body = res ? await res.json().catch(() => ({})) : {};
         toast.error((body as { error?: string }).error ?? "Compact failed");
         return;
       }
@@ -493,9 +505,19 @@ export const Chat = ({
         inputTokens?: number;
         traceMessage?: PlatypusUIMessage;
       };
+      // The trace message is `role: "assistant"` and is appended below, which
+      // bumps assistantMessageCount by 1 on the next render. Tag the estimate
+      // with that post-append count so the ring guard still matches and the ring
+      // refreshes — otherwise it self-defeats and snaps back to the pre-compact
+      // value exactly on the model-summary path that did the most work (M4).
+      const willAppendTrace =
+        !!body.traceMessage &&
+        body.traceMessage.role === "assistant" &&
+        !messages.some((m) => m.id === body.traceMessage!.id);
       if (typeof body.inputTokens === "number") {
         setCompacted({
-          atAssistantMessageCount: assistantMessageCount,
+          atAssistantMessageCount:
+            assistantMessageCount + (willAppendTrace ? 1 : 0),
           tokens: body.inputTokens,
         });
       }
@@ -522,6 +544,7 @@ export const Chat = ({
     workspaceId,
     chatId,
     assistantMessageCount,
+    messages,
     setMessages,
   ]);
 

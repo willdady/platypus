@@ -140,9 +140,13 @@ export function lookupRegistry(
   }
 
   // 6. family heuristic — longest registry key that is a proper prefix of the
-  // id, separated by "-", ".", ":", or "/" so "gpt-4" does NOT match "gpt-4.5"
+  // id, separated only by "-" or "/" so "gpt-4" does NOT match "gpt-4.5"
   // (ADR-0012 §Window resolution (key normalization): raw startsWith caused gpt-4.5-preview to silently resolve via a
   // stale gpt-4 entry with a wrong 8192 window).
+  // "." and ":" are deliberately excluded: a dot-version bump ("gpt-4.6") or a
+  // Bedrock ":N" suffix ("…-v2:1") must NOT collapse onto a shorter family key,
+  // or an unknown version silently resolves to a stale window (M2). Exact/versioned
+  // keys (e.g. registry "gpt-4.1") are already caught by the exact hits above.
   // Case-insensitive so mixed-case registry keys ("Qwen/…", "meta-llama/…")
   // still match lowercase ids from providers that normalize model names.
   const strippedLower = stripped.toLowerCase();
@@ -152,8 +156,6 @@ export function lookupRegistry(
     const isMatch =
       strippedLower === keyLower ||
       strippedLower.startsWith(keyLower + "-") ||
-      strippedLower.startsWith(keyLower + ".") ||
-      strippedLower.startsWith(keyLower + ":") ||
       strippedLower.startsWith(keyLower + "/");
     if (isMatch && (!best || key.length > best.key.length)) {
       best = { key, entry: registry[key] };
@@ -200,7 +202,7 @@ async function detectGoogle(
     ? { "x-goog-api-key": provider.apiKey }
     : undefined;
   const body = (await httpGetJson(
-    `${base}/v1beta/models/${modelId}`,
+    `${base}/v1beta/models/${encodeURIComponent(modelId)}`,
     headers,
   )) as {
     inputTokenLimit?: number;
@@ -222,7 +224,12 @@ async function detectOpenRouter(
   httpGetJson: HttpGetJson,
 ): Promise<Partial<ResolvedWindow> | undefined> {
   const base = trimSlash(provider.baseUrl || "https://openrouter.ai");
-  const body = (await httpGetJson(`${base}/api/v1/models`)) as {
+  // Send auth so private/self-hosted gateways don't 401 into a silent
+  // fall-through to the conservative default (n3).
+  const headers = provider.apiKey
+    ? { Authorization: `Bearer ${provider.apiKey}` }
+    : undefined;
+  const body = (await httpGetJson(`${base}/api/v1/models`, headers)) as {
     data?: Array<{
       id?: string;
       context_length?: number;
@@ -333,6 +340,15 @@ export class ContextWindowResolver {
     this.#now = deps.now ?? (() => Date.now());
   }
 
+  /** Removes every entry whose TTL has lapsed (m9). O(n) but n is bounded by the
+   *  number of distinct provider:model keys seen within one TTL window. */
+  #sweepExpired(): void {
+    const now = this.#now();
+    for (const [key, entry] of this.#cache) {
+      if (entry.expiresAt <= now) this.#cache.delete(key);
+    }
+  }
+
   /** Drops all cached windows for a provider — call on `modelMeta` edit (ADR-0012 §Window resolution (caching & eviction)). */
   evict(providerId: string): void {
     for (const key of this.#cache.keys()) {
@@ -387,6 +403,9 @@ export class ContextWindowResolver {
           value.source === "default"
             ? Math.min(DEFAULT_SOURCE_CACHE_TTL_MS, this.#ttlMs)
             : this.#ttlMs;
+        // Drop expired entries before inserting so the Map can't grow unbounded
+        // over a stream of distinct modelIds — nothing else prunes it (m9).
+        this.#sweepExpired();
         this.#cache.set(cacheKey, { value, expiresAt: this.#now() + ttl });
         this.#inflight.delete(cacheKey);
       }

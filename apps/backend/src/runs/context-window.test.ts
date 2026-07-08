@@ -77,6 +77,20 @@ describe("lookupRegistry — key normalization (ADR-0012 §Window resolution (ke
   it("returns undefined on a true MISS", () => {
     expect(lookupRegistry(REGISTRY, "totally-unknown-xyz")).toBeUndefined();
   });
+
+  it("family heuristic: a dot-version does NOT collapse onto a shorter key (M2)", () => {
+    // A bare "gpt-4" family key must NOT swallow an unknown dot-version like
+    // "gpt-4.6" — that silently resolved to a stale 8192 window (M2). "." (and
+    // ":") are excluded as prefix separators; only "-" and "/" match.
+    const reg: Registry = {
+      "gpt-4": { max_input_tokens: 8192, max_output_tokens: 4096 },
+    };
+    expect(lookupRegistry(reg, "gpt-4.6")).toBeUndefined();
+    // A Bedrock ":N" suffix must not collapse onto a shorter key either.
+    expect(lookupRegistry(reg, "gpt-4:1")).toBeUndefined();
+    // But a real "-" family suffix still matches.
+    expect(lookupRegistry(reg, "gpt-4-turbo")?.max_input_tokens).toBe(8192);
+  });
 });
 
 describe("resolveContextWindow — resolution order", () => {

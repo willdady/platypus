@@ -46,8 +46,7 @@ const { mockPrepareChatTurn, mockGenerateText, mockStreamText, streamHarness } =
         // drive step-completion and stream-completion by hand.
         onStepFinish: undefined as ((step: unknown) => void) | undefined,
         onFinish: undefined as
-          | ((ctx: { messages: unknown[] }) => Promise<void> | void)
-          | undefined,
+          ((ctx: { messages: unknown[] }) => Promise<void> | void) | undefined,
         responseSentinel: { __isResponse: true },
       },
     };
@@ -84,7 +83,6 @@ import {
   AgentRunner,
   prependCompactionChunks,
   stripCompactionTraceParts,
-  withToolTimestamps,
 } from "./agent-runner.ts";
 import { buildTier2PrepareStep } from "./compaction.ts";
 import type { UIMessageChunk } from "ai";
@@ -506,10 +504,9 @@ describe("AgentRunner.stream — success & interruption", () => {
             onFinish: (ctx: { messages: unknown[] }) => Promise<void> | void;
           }) => {
             streamHarness.onFinish = uiOpts.onFinish;
-            // The runner pipes this through withToolTimestamps (pipeThrough) and
-            // tees it, so it must be a real ReadableStream. Its contents are
-            // irrelevant — the snapshot branch is driven via the mocked
-            // readUIMessageStream (streamHarness.queue), not this stream.
+            // The runner tees this stream, so it must be a real ReadableStream.
+            // Its contents are irrelevant — the snapshot branch is driven via the
+            // mocked readUIMessageStream (streamHarness.queue), not this stream.
             return new ReadableStream<UIMessageChunk>({
               start(controller) {
                 controller.close();
@@ -590,8 +587,7 @@ describe("AgentRunner.stream — success & interruption", () => {
             onFinish: (ctx: { messages: unknown[] }) => Promise<void> | void;
           }) => {
             streamHarness.onFinish = uiOpts.onFinish;
-            // Must be a real ReadableStream — the runner pipes it through
-            // withToolTimestamps (pipeThrough) before tee-ing it.
+            // Must be a real ReadableStream — the runner tees it.
             return new ReadableStream<UIMessageChunk>({
               start(controller) {
                 controller.close();
@@ -701,169 +697,6 @@ describe("AgentRunner timeout types", () => {
     const e = new TimeoutError("x", "run");
     expect(e).toBeInstanceOf(Error);
     expect(e.kind).toBe("run");
-  });
-});
-
-describe("withToolTimestamps", () => {
-  const FIXED_NOW = "2026-05-30T12:00:00.000Z";
-
-  const collect = async <T>(stream: ReadableStream<T>): Promise<T[]> => {
-    const out: T[] = [];
-    const reader = stream.getReader();
-    for (;;) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      out.push(value);
-    }
-    return out;
-  };
-
-  const sourceOf = (chunks: UIMessageChunk[]): ReadableStream<UIMessageChunk> =>
-    new ReadableStream<UIMessageChunk>({
-      start(controller) {
-        for (const chunk of chunks) controller.enqueue(chunk);
-        controller.close();
-      },
-    });
-
-  const toolInputAvailable = (
-    overrides: Partial<
-      Extract<UIMessageChunk, { type: "tool-input-available" }>
-    > = {},
-  ): UIMessageChunk => ({
-    type: "tool-input-available",
-    toolCallId: "t1",
-    toolName: "foo",
-    input: { x: 1 },
-    ...overrides,
-  });
-
-  it("injects startedAt on tool-input-available chunks", async () => {
-    const { stream } = withToolTimestamps(
-      sourceOf([toolInputAvailable()]),
-      () => FIXED_NOW,
-    );
-    const result = await collect(stream);
-
-    expect(result).toHaveLength(1);
-    expect(
-      (result[0] as { toolMetadata?: Record<string, unknown> }).toolMetadata,
-    ).toEqual({ startedAt: FIXED_NOW });
-  });
-
-  it("preserves existing toolMetadata fields", async () => {
-    const { stream } = withToolTimestamps(
-      sourceOf([toolInputAvailable({ toolMetadata: { custom: "value" } })]),
-      () => FIXED_NOW,
-    );
-    const result = await collect(stream);
-
-    expect(
-      (result[0] as { toolMetadata?: Record<string, unknown> }).toolMetadata,
-    ).toEqual({
-      custom: "value",
-      startedAt: FIXED_NOW,
-    });
-  });
-
-  it("passes other chunks through unchanged", async () => {
-    const chunks: UIMessageChunk[] = [
-      { type: "text-delta", id: "a", delta: "hello" },
-      {
-        type: "tool-output-available",
-        toolCallId: "t1",
-        output: { ok: true },
-      },
-      { type: "finish", finishReason: "stop" },
-    ];
-
-    const { stream } = withToolTimestamps(sourceOf(chunks), () => FIXED_NOW);
-    const result = await collect(stream);
-
-    expect(result).toEqual(chunks);
-  });
-
-  it("records completedAt for tool-output-available chunks", async () => {
-    const { stream, completions } = withToolTimestamps(
-      sourceOf([
-        toolInputAvailable(),
-        {
-          type: "tool-output-available",
-          toolCallId: "t1",
-          output: { ok: true },
-        },
-      ]),
-      () => FIXED_NOW,
-    );
-    // Completions are populated as the stream drains, so consume it first.
-    await collect(stream);
-
-    expect(completions.get("t1")).toBe(FIXED_NOW);
-  });
-
-  it("records completedAt for tool-output-error chunks", async () => {
-    const { stream, completions } = withToolTimestamps(
-      sourceOf([
-        toolInputAvailable(),
-        {
-          type: "tool-output-error",
-          toolCallId: "t1",
-          errorText: "boom",
-        },
-      ]),
-      () => FIXED_NOW,
-    );
-    await collect(stream);
-
-    expect(completions.get("t1")).toBe(FIXED_NOW);
-  });
-
-  // Mirrors AgentRunner.stream's pipeline: transform -> tee -> readUIMessageStream
-  // drains the snapshot branch. Verifies completions populate AND the built
-  // message's tool part carries the same toolCallId, so applyToolCompletions
-  // (matches on toolCallId) can stamp completedAt.
-  it("integration: completions + built tool part share toolCallId after tee+read", async () => {
-    const { readUIMessageStream } =
-      await vi.importActual<typeof import("ai")>("ai");
-
-    const chunks: UIMessageChunk[] = [
-      { type: "start", messageId: "m1" },
-      { type: "start-step" },
-      {
-        type: "tool-input-available",
-        toolCallId: "call_xyz",
-        toolName: "foo",
-        input: { a: 1 },
-      },
-      {
-        type: "tool-output-available",
-        toolCallId: "call_xyz",
-        output: { ok: true },
-      },
-      { type: "finish-step" },
-      { type: "finish" },
-    ];
-
-    const { stream, completions } = withToolTimestamps(
-      sourceOf(chunks),
-      () => FIXED_NOW,
-    );
-    const [forResponse, forSnapshot] = stream.tee();
-
-    let lastMessage: { parts?: Array<Record<string, unknown>> } | undefined;
-    for await (const message of readUIMessageStream({ stream: forSnapshot })) {
-      lastMessage = message;
-    }
-    await collect(forResponse);
-
-    expect(completions.get("call_xyz")).toBe(FIXED_NOW);
-
-    const toolPart = lastMessage?.parts?.find(
-      (p) => (p as { toolCallId?: string }).toolCallId === "call_xyz",
-    ) as { toolMetadata?: Record<string, unknown>; toolCallId?: string };
-    expect(toolPart).toBeDefined();
-    expect(toolPart.toolCallId).toBe("call_xyz");
-    expect(toolPart.toolMetadata).toMatchObject({ startedAt: FIXED_NOW });
   });
 });
 

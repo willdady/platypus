@@ -74,7 +74,7 @@ export type RecoveryContext = {
  *  - Generic gateways: "too many tokens", "exceed context limit"
  */
 const CONTEXT_OVERFLOW_PATTERN =
-  /context[ _]length|context_length_exceeded|prompt is too long|too many tokens|maximum context|exceeds the (?:maximum|max)(?: number of)? (?:input )?tokens|input is too long|exceeds? (?:the )?context limit/i;
+  /context[ _]length|context_length_exceeded|context window|prompt is too long|(?:maximum|max)(?:imum)? prompt length|too many tokens|maximum context|request_too_large|exceeds the (?:maximum|max)(?: number of)? (?:input )?tokens|input is too long|exceeds? (?:the )?context limit/i;
 
 /**
  * True when `error` is a provider context-overflow rejection: an `APICallError`
@@ -174,6 +174,16 @@ export function contextOverflowRecoveryMiddleware(
         params.prompt,
         ctx,
       );
+      // Nothing could be trimmed (e.g. ≤2 non-system messages) — the retry would
+      // be byte-identical and re-fail. Surface the original overflow instead of
+      // burning a guaranteed-failing call (m1).
+      if (messagesDropped === 0) {
+        logger.warn(
+          { metric: "recovery.no_progress", chatId: ctx.chatId },
+          "overflow recovery trimmed nothing; surfacing original overflow",
+        );
+        throw error;
+      }
       logger.info(
         { metric: "recovery.retry", chatId: ctx.chatId, messagesDropped },
         "overflow recovery trim complete; retrying model call",

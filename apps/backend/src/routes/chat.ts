@@ -161,7 +161,7 @@ chat.post(
         existing.length > 0 &&
         existing[0].workspaceId !== scope.workspaceId
       ) {
-        return c.json({ message: "Chat not found" }, 404);
+        return c.json({ error: "Chat not found" }, 404);
       }
     }
 
@@ -450,6 +450,20 @@ chat.post(
     const chatId = c.req.param("chatId");
     const workspaceId = c.req.param("workspaceId")!;
 
+    // Verify the chat belongs to this workspace BEFORE the runRegistry probe.
+    // Otherwise the 409-vs-404 outcome below leaks whether a run is in flight for
+    // an arbitrary (cross-workspace) chat id to any authenticated user (m4).
+    const owned = await db
+      .select({ id: chatTable.id })
+      .from(chatTable)
+      .where(
+        and(eq(chatTable.id, chatId), eq(chatTable.workspaceId, workspaceId)),
+      )
+      .limit(1);
+    if (owned.length === 0) {
+      return c.json({ error: "Chat not found" }, 404);
+    }
+
     // Reject if a run is currently in flight — the frontend defers the click
     // until streaming finishes (ADR-0012 §Force-compact on demand), but guard here as a belt-and-suspenders
     // check to avoid CAS races with an in-progress writer.
@@ -461,7 +475,12 @@ chat.post(
     }
 
     try {
-      const result = await forceCompactChat(chatId, workspaceId, orgId);
+      const result = await forceCompactChat(
+        chatId,
+        workspaceId,
+        orgId,
+        c.req.raw.signal,
+      );
       return c.json({
         inputTokens: result.estimatedTokens,
         // ADR-0012 §Force-compact on demand: the client confirms only when the drop

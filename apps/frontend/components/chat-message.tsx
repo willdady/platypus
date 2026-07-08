@@ -54,18 +54,6 @@ import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
 import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip";
 import { formatDurationMs } from "@/lib/utils";
 
-const getToolStartedAt = (part: unknown): string | undefined => {
-  const raw = (part as { toolMetadata?: { startedAt?: unknown } })?.toolMetadata
-    ?.startedAt;
-  return typeof raw === "string" ? raw : undefined;
-};
-
-const getToolCompletedAt = (part: unknown): string | undefined => {
-  const raw = (part as { toolMetadata?: { completedAt?: unknown } })
-    ?.toolMetadata?.completedAt;
-  return typeof raw === "string" ? raw : undefined;
-};
-
 function MessageStatsPopover({ stats }: { stats: MessageStats }) {
   const ttft = stats.firstTokenAt
     ? formatDurationMs(
@@ -305,8 +293,6 @@ export const ChatMessage = memo(function ChatMessage({
               <DynamicToolHeader
                 state={toolPart.state}
                 title={toolPart.toolName}
-                startedAt={getToolStartedAt(toolPart)}
-                completedAt={getToolCompletedAt(toolPart)}
               />
               <ToolContent>
                 <ToolInput input={toolPart.input} />
@@ -344,8 +330,6 @@ export const ChatMessage = memo(function ChatMessage({
                 state={toolPart.state}
                 type={toolPart.type}
                 label={toolLabel}
-                startedAt={getToolStartedAt(toolPart)}
-                completedAt={getToolCompletedAt(toolPart)}
               />
               <ToolContent>
                 <ToolInput input={toolPart.input} />
