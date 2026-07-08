@@ -14,10 +14,14 @@ explains how tools are bundled and where they come from.
 A **Tool set** is a named bundle of tools you can grant to an **Agent**. Instead
 of wiring up individual tools one by one, you give an Agent a whole tool set.
 
-Tool sets come from two places:
+Tool sets come from two kinds of source:
 
-- **built in** — registered in Platypus's code and available out of the box, or
-- **backed by an MCP server** — contributed from outside Platypus (see below).
+- **contributed by a plugin** — a plugin declares tool sets in its manifest and
+  core loads them at boot. This covers both the **core built-ins** that ship
+  with Platypus (math, Kanban, sandbox…) and **third-party plugins** installed
+  as npm packages. See [Extending → Tool sets](/extending#tool-sets).
+- **backed by an MCP server** — contributed at runtime from outside Platypus,
+  without a code change or a plugin install (see below).
 
 When an Agent runs, each tool set it's been granted is resolved into the actual
 tools the model can call.
@@ -42,8 +46,9 @@ one up.
 ## How it fits together
 
 > An **Agent** is granted zero or more **tool sets**. Each tool set is either
-> built in or backed by an **MCP** server, and resolves to a concrete set of
-> tools the model can call during a **Chat turn**.
+> contributed by a **plugin** (a core built-in or a third-party plugin) or
+> backed by an **MCP** server, and resolves to a concrete set of tools the model
+> can call during a **Chat turn**.
 
 A **[Sandbox](/concepts/sandboxes)** also resolves to a tool set — its shell and
 filesystem tools — which is why sandboxes get their own page.

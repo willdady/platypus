@@ -30,12 +30,13 @@ a fixed set of core-owned **Extension points**:
 <Callout type="info">
   The plugin loader is being rolled out incrementally (see
   [ADR-0013](https://github.com/willdady/platypus/blob/main/docs/adr/0013-plugin-system-manifest-driven-in-process-extension-points.md)).
-  The first core plugin — `@platypus/tools-basic` (math, time) — ships through
-  it today; the remaining built-in Tool sets and the Docker Sandbox backend are
-  still registered in-tree pending migration. Either way the underlying
-  `registerToolSet` / `registerSandboxBackend` functions are the same — they are
-  now **core-internal**, driven by the loader rather than called by plugin
-  authors.
+  The core plugins `@platypus/tools-basic` (math, time) and `@platypus/docker`
+  (the Sandbox backend) ship through it today, and **third-party plugins** load
+  from installed npm packages with their contribution ids namespaced by plugin
+  name; the remaining built-in Tool sets are still registered in-tree pending
+  migration. Either way the underlying `registerToolSet` /
+  `registerSandboxBackend` functions are the same — they are now
+  **core-internal**, driven by the loader rather than called by plugin authors.
 </Callout>
 
 ## The plugin model
@@ -319,15 +320,80 @@ field instead:
    `apps/backend/src/plugins/builtin.ts` (the built-in map / core allowlist).
 3. Add the plugin name to the deployment's `PLATYPUS_PLUGINS` list so it loads.
 
-**To ship a third-party tool set:** publish a package that depends on
-`@platypuschat/plugin-sdk` and exports a `plugin` manifest; the Operator adds
-its package name to `PLATYPUS_PLUGINS`.
-
 Core Contribution ids stay unprefixed (`math-conversions`, `time`) so persisted
 `agent.toolSetIds` references keep working. A tool set is granted to Agents like
 any other; if its dependencies aren't present at turn time it degrades
 gracefully (the `sandbox` tool set, for example, resolves to no tools when a
 Workspace has no Sandbox configured).
+
+### Third-party plugins
+
+A **third-party plugin** is any plugin that isn't one of the core built-ins — it
+lives out of tree, ships as its own npm package, and is enabled by adding its
+package name to `PLATYPUS_PLUGINS`. You don't fork Platypus to ship one.
+
+1. Create a package that depends on
+   [`@platypuschat/plugin-sdk`](https://www.npmjs.com/package/@platypuschat/plugin-sdk)
+   and exports a `plugin` manifest from its entry point. Author your
+   contributions exactly as a core plugin does — the SDK types are identical.
+2. Install it into the deployment (`pnpm add my-platypus-plugin`) so it resolves
+   from `node_modules`; core loads third-party plugins by dynamic
+   `import(packageName)`.
+3. Add the **package name** to `PLATYPUS_PLUGINS`.
+
+```ts
+import type { PlatypusPlugin } from "@platypuschat/plugin-sdk";
+import { PLUGIN_API_VERSION } from "@platypuschat/plugin-sdk";
+import { tool } from "ai";
+import { z } from "zod";
+
+export const plugin: PlatypusPlugin = {
+  name: "example", // ← the namespace prefix (see below)
+  version: "0.1.0",
+  apiVersion: PLUGIN_API_VERSION,
+  contributes: {
+    toolSets: [
+      {
+        id: "greeting", // ← bare id; core prefixes it to `example.greeting`
+        name: "Greeting",
+        category: "Examples",
+        tools: {
+          greet: tool({
+            description: "Return a friendly greeting.",
+            inputSchema: z.object({ name: z.string() }),
+            execute: ({ name }) => `Hello, ${name}!`,
+          }),
+        },
+      },
+    ],
+  },
+};
+```
+
+The repo ships this exact plugin as a runnable reference under
+[`packages/example-plugin`](https://github.com/willdady/platypus/tree/main/packages/example-plugin)
+(the `@platypus-examples/tool-set` package).
+
+#### Contribution-id namespacing
+
+Third-party Contribution ids are **auto-prefixed with the plugin's manifest
+`name`** at load — `example.greeting`, and so on. You write **bare** ids in your
+manifest; core prefixes them. Core built-in ids stay flat and un-prefixed
+(`math-conversions`, `time`, `docker`). This split (ADR-0013) means a
+third-party id can never collide with a current — or _future_ — core built-in
+and silently break a deployment on upgrade.
+
+Two consequences worth internalising:
+
+- **Grant and reference the namespaced id.** An Agent that uses the tool set
+  above stores `example.greeting` in its `toolSetIds`, and that's the id a Chat
+  turn resolves.
+- **The core allowlist is the sole authority for "core".** Membership in the
+  built-in map (`apps/backend/src/plugins/builtin.ts`) — _not_ the package scope
+  — decides origin. A package that installs itself under an `@platypus/*` name
+  it doesn't own is still absent from the allowlist, so it's treated as
+  third-party and prefixed. Scope impersonation can't smuggle a package in as
+  core.
 
 <Callout type="info">
   Frontend tool / tool-set presentation (icons, custom UI) lives separately. If
@@ -368,16 +434,18 @@ What's live and what's still in-tree today:
 
 - **Live:** the `@platypuschat/plugin-sdk` surface (Tool sets _and_
   Sandbox-backend contributions), the boot-time loader, the built-in map / core
-  allowlist, the first core plugin `@platypus/tools-basic` (math, time), and the
-  Docker Sandbox backend as the core plugin `@platypus/docker` — each flowing
-  manifest → loader → registry in a Chat turn.
+  allowlist, the first core plugin `@platypus/tools-basic` (math, time), the
+  Docker Sandbox backend as the core plugin `@platypus/docker`, and
+  **third-party plugin loading with contribution-id namespacing** (dynamic
+  `import()` of an installed package, ids prefixed by the manifest `name`; see
+  the `@platypus-examples/tool-set` reference plugin) — each flowing manifest →
+  loader → registry in a Chat turn.
 - **Still in-tree, pending migration:** the remaining built-in Tool sets
   (`kanban`, `triggers`, `sandbox`, …) still call `registerToolSet` directly at
   boot. They keep working unchanged; the same registration functions are what the
   loader drives.
-- **Follow-up slices:** third-party id namespacing, deploy-time plugin
-  config/credentials, `apiVersion` compatibility windowing, and a read-only
-  `GET /plugins` catalog.
+- **Follow-up slices:** deploy-time plugin config/credentials, `apiVersion`
+  compatibility windowing, and a read-only `GET /plugins` catalog.
 
 ## Reference ADRs
 
