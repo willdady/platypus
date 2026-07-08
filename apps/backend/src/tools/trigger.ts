@@ -254,8 +254,7 @@ export function createTriggerTools(
         // Validate config based on type
         if (effectiveType === "cron") {
           const cronExpression = effectiveConfig.cronExpression as
-            | string
-            | undefined;
+            string | undefined;
           if (!cronExpression) {
             return {
               success: false,

@@ -830,9 +830,7 @@ const DashboardPage = ({
                 );
                 if (!expandedWidget) return null;
                 const expandedData = expandedWidget.data as
-                  | { content: string }
-                  | null
-                  | undefined;
+                  { content: string } | null | undefined;
                 return (
                   <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-8">
                     <motion.div

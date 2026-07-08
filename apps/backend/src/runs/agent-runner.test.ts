@@ -46,8 +46,7 @@ const { mockPrepareChatTurn, mockGenerateText, mockStreamText, streamHarness } =
         // drive step-completion and stream-completion by hand.
         onStepFinish: undefined as ((step: unknown) => void) | undefined,
         onFinish: undefined as
-          | ((ctx: { messages: unknown[] }) => Promise<void> | void)
-          | undefined,
+          ((ctx: { messages: unknown[] }) => Promise<void> | void) | undefined,
         responseSentinel: { __isResponse: true },
       },
     };
