@@ -46,7 +46,8 @@ const { mockPrepareChatTurn, mockGenerateText, mockStreamText, streamHarness } =
         // drive step-completion and stream-completion by hand.
         onStepFinish: undefined as ((step: unknown) => void) | undefined,
         onFinish: undefined as
-          ((ctx: { messages: unknown[] }) => Promise<void> | void) | undefined,
+          | ((ctx: { messages: unknown[] }) => Promise<void> | void)
+          | undefined,
         responseSentinel: { __isResponse: true },
       },
     };
@@ -589,7 +590,13 @@ describe("AgentRunner.stream — success & interruption", () => {
             onFinish: (ctx: { messages: unknown[] }) => Promise<void> | void;
           }) => {
             streamHarness.onFinish = uiOpts.onFinish;
-            return { tee: () => [{}, {}] };
+            // Must be a real ReadableStream — the runner pipes it through
+            // withToolTimestamps (pipeThrough) before tee-ing it.
+            return new ReadableStream<UIMessageChunk>({
+              start(controller) {
+                controller.close();
+              },
+            });
           },
         };
       },
@@ -606,7 +613,8 @@ describe("AgentRunner.stream — success & interruption", () => {
     // Only the step ceiling — no no-progress condition for interactive runs.
     expect(capturedStopWhen).toHaveLength(1);
 
-    await streamHarness.onFinish!({ messages: [] });
+    // Ending the snapshot queue drains the consumer and finalises the run
+    // (the runner does not use toUIMessageStream's onFinish).
     queue.end();
     await tick();
   });
