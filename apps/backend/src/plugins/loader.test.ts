@@ -86,9 +86,11 @@ describe("loadPlugins", () => {
 
   it("resolves a third-party plugin via dynamic import", async () => {
     const { register, calls } = makeRegister();
-    const importPlugin = vi.fn(async (_name: string) => ({
-      plugin: manifest("@third/party", [toolSet("custom")]),
-    }));
+    const importPlugin = vi.fn((_name: string) =>
+      Promise.resolve({
+        plugin: manifest("@third/party", [toolSet("custom")]),
+      }),
+    );
 
     const loaded = await loadPlugins({
       pluginNames: ["@third/party"],
@@ -110,9 +112,11 @@ describe("loadPlugins", () => {
           plugin: manifest("@platypus/tools-basic", [toolSet("time")]),
         }),
     };
-    const importPlugin = vi.fn(async (_name: string) => ({
-      plugin: manifest("@third/party", [toolSet("custom")]),
-    }));
+    const importPlugin = vi.fn((_name: string) =>
+      Promise.resolve({
+        plugin: manifest("@third/party", [toolSet("custom")]),
+      }),
+    );
 
     const loaded = await loadPlugins({
       pluginNames: ["@platypus/tools-basic", "@third/party"],
@@ -129,7 +133,7 @@ describe("loadPlugins", () => {
 
   it("aborts (fail-loud) when a plugin cannot be resolved", async () => {
     const { register } = makeRegister();
-    const importPlugin = vi.fn(async () => {
+    const importPlugin = vi.fn(() => {
       throw new Error("Cannot find module");
     });
 
@@ -149,9 +153,10 @@ describe("loadPlugins", () => {
       loadPlugins({
         pluginNames: ["@bad/plugin"],
         builtinPlugins: {},
-        importPlugin: async () => ({
-          plugin: { name: "@bad/plugin", version: "0.1.0", apiVersion: 1 },
-        }),
+        importPlugin: () =>
+          Promise.resolve({
+            plugin: { name: "@bad/plugin", version: "0.1.0", apiVersion: 1 },
+          }),
         register,
       }),
     ).rejects.toThrow(/@bad\/plugin.*contributes/s);
@@ -163,14 +168,15 @@ describe("loadPlugins", () => {
       loadPlugins({
         pluginNames: ["@bad/plugin"],
         builtinPlugins: {},
-        importPlugin: async () => ({
-          plugin: {
-            name: "@bad/plugin",
-            version: "0.1.0",
-            apiVersion: "1",
-            contributes: {},
-          },
-        }),
+        importPlugin: () =>
+          Promise.resolve({
+            plugin: {
+              name: "@bad/plugin",
+              version: "0.1.0",
+              apiVersion: "1",
+              contributes: {},
+            },
+          }),
         register,
       }),
     ).rejects.toThrow(/@bad\/plugin.*apiVersion/s);
@@ -182,7 +188,7 @@ describe("loadPlugins", () => {
       loadPlugins({
         pluginNames: ["@empty/plugin"],
         builtinPlugins: {},
-        importPlugin: async () => ({}),
+        importPlugin: () => Promise.resolve({}),
         register,
       }),
     ).rejects.toThrow(/@empty\/plugin.*manifest/s);
@@ -190,9 +196,11 @@ describe("loadPlugins", () => {
 
   it("aborts (fail-loud) on a duplicate id, naming both owning plugins", async () => {
     const { register } = makeRegister();
-    const importPlugin = vi.fn(async (name: string) => ({
-      plugin: manifest(name, [toolSet("time")]),
-    }));
+    const importPlugin = vi.fn((name: string) =>
+      Promise.resolve({
+        plugin: manifest(name, [toolSet("time")]),
+      }),
+    );
 
     await expect(
       loadPlugins({
@@ -214,9 +222,10 @@ describe("loadPlugins", () => {
       loadPlugins({
         pluginNames: ["@collides/plugin"],
         builtinPlugins: {},
-        importPlugin: async () => ({
-          plugin: manifest("@collides/plugin", [toolSet("kanban")]),
-        }),
+        importPlugin: () =>
+          Promise.resolve({
+            plugin: manifest("@collides/plugin", [toolSet("kanban")]),
+          }),
         register,
       }),
     ).rejects.toThrow(/@collides\/plugin.*"kanban".*already been registered/s);

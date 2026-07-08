@@ -116,7 +116,7 @@ export async function loadPlugins(
         `Plugin "${name}": failed to resolve (${
           cause instanceof Error ? cause.message : String(cause)
         }).`,
-        { cause: cause instanceof Error ? cause : undefined },
+        { cause },
       );
     }
 
@@ -142,7 +142,7 @@ export async function loadPlugins(
           `Plugin "${manifest.name}": failed to register tool set "${id}" (${
             cause instanceof Error ? cause.message : String(cause)
           }).`,
-          { cause: cause instanceof Error ? cause : undefined },
+          { cause },
         );
       }
 
