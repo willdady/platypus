@@ -1,10 +1,12 @@
 import { describe, it, expect, vi } from "vitest";
 import { z } from "zod";
-import type {
-  PlatypusPlugin,
-  SandboxBackend,
-  SandboxBackendContribution,
-  ToolSetContribution,
+import {
+  OLDEST_SUPPORTED_API_VERSION,
+  PLUGIN_API_VERSION,
+  type PlatypusPlugin,
+  type SandboxBackend,
+  type SandboxBackendContribution,
+  type ToolSetContribution,
 } from "@platypuschat/plugin-sdk";
 import { loadPlugins, parsePluginList } from "./loader.ts";
 
@@ -29,10 +31,11 @@ const makeSandboxRegister = () => {
 const manifest = (
   name: string,
   toolSets: ToolSetContribution[],
+  apiVersion: number = PLUGIN_API_VERSION,
 ): PlatypusPlugin => ({
   name,
   version: "0.1.0",
-  apiVersion: 1,
+  apiVersion,
   contributes: { toolSets },
 });
 
@@ -71,6 +74,94 @@ describe("parsePluginList", () => {
     expect(parsePluginList(undefined)).toEqual([]);
     expect(parsePluginList("")).toEqual([]);
     expect(parsePluginList("  ")).toEqual([]);
+  });
+});
+
+describe("loadPlugins — apiVersion compatibility window (N and N−1)", () => {
+  it("accepts a plugin declaring exactly core's apiVersion", async () => {
+    const { register, calls } = makeRegister();
+    const loaded = await loadPlugins({
+      pluginNames: ["@exact/plugin"],
+      builtinPlugins: {},
+      importPlugin: () =>
+        Promise.resolve({
+          plugin: manifest(
+            "@exact/plugin",
+            [toolSet("exact")],
+            PLUGIN_API_VERSION,
+          ),
+        }),
+      register,
+    });
+    expect(calls.map((c) => c.id)).toEqual(["exact"]);
+    expect(loaded[0].name).toBe("@exact/plugin");
+  });
+
+  it("accepts a plugin on the previous major (N−1)", async () => {
+    const { register, calls } = makeRegister();
+    const loaded = await loadPlugins({
+      pluginNames: ["@nminus1/plugin"],
+      builtinPlugins: {},
+      importPlugin: () =>
+        Promise.resolve({
+          plugin: manifest(
+            "@nminus1/plugin",
+            [toolSet("older")],
+            OLDEST_SUPPORTED_API_VERSION,
+          ),
+        }),
+      register,
+    });
+    expect(calls.map((c) => c.id)).toEqual(["older"]);
+    expect(loaded[0].name).toBe("@nminus1/plugin");
+  });
+
+  it("rejects (fail-loud) a plugin needing a newer API than core provides", async () => {
+    const { register } = makeRegister();
+    await expect(
+      loadPlugins({
+        pluginNames: ["@future/plugin"],
+        builtinPlugins: {},
+        importPlugin: () =>
+          Promise.resolve({
+            plugin: manifest(
+              "@future/plugin",
+              [toolSet("future")],
+              PLUGIN_API_VERSION + 1,
+            ),
+          }),
+        register,
+      }),
+    ).rejects.toThrow(
+      new RegExp(
+        `@future/plugin.*needs API v${PLUGIN_API_VERSION + 1}.*core supports up to v${PLUGIN_API_VERSION}`,
+        "s",
+      ),
+    );
+  });
+
+  it("rejects (fail-loud) a plugin targeting a dropped, older major", async () => {
+    const { register } = makeRegister();
+    await expect(
+      loadPlugins({
+        pluginNames: ["@ancient/plugin"],
+        builtinPlugins: {},
+        importPlugin: () =>
+          Promise.resolve({
+            plugin: manifest(
+              "@ancient/plugin",
+              [toolSet("ancient")],
+              OLDEST_SUPPORTED_API_VERSION - 1,
+            ),
+          }),
+        register,
+      }),
+    ).rejects.toThrow(
+      new RegExp(
+        `@ancient/plugin.*targets API v${OLDEST_SUPPORTED_API_VERSION - 1}.*below the oldest`,
+        "s",
+      ),
+    );
   });
 });
 

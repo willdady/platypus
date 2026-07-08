@@ -65,6 +65,34 @@ The compile-time contract — the manifest type, the Contribution types, and
 package. Third-party authors depend on it from npm; core plugins consume the
 same types via a workspace link.
 
+### API versioning & compatibility
+
+Set `apiVersion` from the SDK's `PLUGIN_API_VERSION` constant. It declares the
+**minimum** core API major your plugin needs — not an exact match. The policy is
+**forward-compatible with minimum-version semantics**: a core upgrade must never
+break a plugin already in the wild.
+
+Core supports the **current major and one previous — N and N−1** — at the same
+time. At boot, core rejects a listed plugin only when its `apiVersion` is:
+
+- **newer than core** (needs a capability this core doesn't provide yet) — the
+  Operator fixes it by upgrading core, which they control; or
+- **below core's oldest supported major** (targets a dropped, long-deprecated
+  major).
+
+Anything inside the `[N−1, N]` window loads. Rejection is
+[fail-loud](#the-plugin-model): the boot error names the plugin and both
+versions (`plugin X needs API vY, core supports vZ`).
+
+**Contracts evolve append-only.** Within a major, every extension-point contract
+grows only by **optional** members — a new capability is an optional method or
+field, never a new required one. That is what lets a plugin built against an
+older minor keep working after a core bump: it simply doesn't use members it
+never knew about. Adding a whole extension point (a new `contributes` key) is
+likewise additive. A genuinely breaking change — removing or re-signing a
+required member — is a **windowed major bump**: the major increments and core
+runs both N and N−1 for a release so authors can migrate.
+
 **Loading.** Before the HTTP server starts, core reads the Operator-supplied
 [`PLATYPUS_PLUGINS`](/self-hosting/configuration#plugins) list, resolves each
 plugin, reads its manifest, and drives registration by calling the internal
@@ -367,17 +395,18 @@ The plugin loader is landing incrementally
 What's live and what's still in-tree today:
 
 - **Live:** the `@platypuschat/plugin-sdk` surface (Tool sets _and_
-  Sandbox-backend contributions), the boot-time loader, the built-in map / core
-  allowlist, the first core plugin `@platypus/tools-basic` (math, time), and the
-  Docker Sandbox backend as the core plugin `@platypus/docker` — each flowing
-  manifest → loader → registry in a Chat turn.
+  Sandbox-backend contributions), the boot-time loader with the
+  [`apiVersion` compatibility window](#api-versioning--compatibility) (N and
+  N−1), the built-in map / core allowlist, the first core plugin
+  `@platypus/tools-basic` (math, time), and the Docker Sandbox backend as the
+  core plugin `@platypus/docker` — each flowing manifest → loader → registry in a
+  Chat turn.
 - **Still in-tree, pending migration:** the remaining built-in Tool sets
   (`kanban`, `triggers`, `sandbox`, …) still call `registerToolSet` directly at
   boot. They keep working unchanged; the same registration functions are what the
   loader drives.
 - **Follow-up slices:** third-party id namespacing, deploy-time plugin
-  config/credentials, `apiVersion` compatibility windowing, and a read-only
-  `GET /plugins` catalog.
+  config/credentials, and a read-only `GET /plugins` catalog.
 
 ## Reference ADRs
 
