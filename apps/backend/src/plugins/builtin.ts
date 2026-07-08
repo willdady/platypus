@@ -13,5 +13,7 @@ export const BUILTIN_PLUGINS: Record<
   () => Promise<{ plugin: PlatypusPlugin }>
 > = {
   "@platypus/tools-basic": () => import("./tools-basic/index.ts"),
+  "@platypus/web-fetch": () => import("./web-fetch/index.ts"),
+  "@platypus/tools-platform": () => import("./tools-platform/index.ts"),
   "@platypus/docker": () => import("./docker/index.ts"),
 };
