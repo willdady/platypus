@@ -490,7 +490,7 @@ describe("loadPlugins — deploy-time plugin config injection", () => {
     });
 
     // Sandbox create(): invoked as core would, with the per-Workspace values.
-    sandboxCalls[0].create({}, {}, undefined as unknown as PluginConfigContext);
+    sandboxCalls[0].create({}, {});
 
     expect(seen.toolSet).toEqual({
       config: { region: "eu" },
@@ -535,7 +535,7 @@ describe("loadPlugins — deploy-time plugin config injection", () => {
       frontendUrl: undefined,
       userId: "u",
     });
-    sandboxCalls[0].create({}, {}, undefined as unknown as PluginConfigContext);
+    sandboxCalls[0].create({}, {});
 
     // The two contributions must be handed the *same* resolved block — one
     // credential block per plugin, shared deployment-wide (ADR-0013).
@@ -659,11 +659,10 @@ describe("loadPlugins — example third-party plugin", () => {
 
     // Sandbox backend: create() with per-Workspace values; the adapter reads
     // the deploy-time token/region injected as the third argument.
-    const backend = sandboxCalls[0].create(
-      {},
-      {},
-      undefined as unknown as PluginConfigContext,
-    ) as unknown as { apiToken: string; region: string };
+    const backend = sandboxCalls[0].create({}, {}) as unknown as {
+      apiToken: string;
+      region: string;
+    };
     expect(backend.apiToken).toBe("dtn_shared_token");
     expect(backend.region).toBe("ap");
 

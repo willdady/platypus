@@ -55,28 +55,30 @@ class ExampleSandboxBackend implements SandboxBackend {
     this.region = plugin.config.region;
   }
 
-  async shellExec() {
-    return {
+  shellExec() {
+    return Promise.resolve({
       stdout: "",
       stderr: "",
       exitCode: 0,
       truncated: false,
       durationMs: 0,
-    };
+    });
   }
-  async fsRead() {
-    return { content: "", lineCount: 0, truncated: false };
+  fsRead() {
+    return Promise.resolve({ content: "", lineCount: 0, truncated: false });
   }
-  async fsWrite() {
-    return { bytesWritten: 0 };
+  fsWrite() {
+    return Promise.resolve({ bytesWritten: 0 });
   }
-  async fsEdit() {
-    return { replacements: 1 as const };
+  fsEdit() {
+    return Promise.resolve({ replacements: 1 as const });
   }
-  async fsList() {
-    return { entries: [], truncated: false };
+  fsList() {
+    return Promise.resolve({ entries: [], truncated: false });
   }
-  async destroy() {}
+  destroy() {
+    return Promise.resolve();
+  }
 }
 
 // Contribution 1 — a Sandbox backend. Its create() ignores the per-Workspace
@@ -105,8 +107,10 @@ const exampleManagementToolSet: ToolSetContribution = {
         description: "List sandboxes in the configured region",
         inputSchema: z.object({}),
         // A real tool would call the vendor API with `credentials.apiToken`.
-        execute: async () =>
-          `Listing sandboxes in ${config.region} (token ${credentials.apiToken.slice(0, 3)}…)`,
+        execute: () =>
+          Promise.resolve(
+            `Listing sandboxes in ${config.region} (token ${credentials.apiToken.slice(0, 3)}…)`,
+          ),
       }),
     };
   },
