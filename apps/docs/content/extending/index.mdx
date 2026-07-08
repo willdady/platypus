@@ -151,15 +151,19 @@ Contract rules your adapter must honour (all from
 - **`destroy` must be idempotent** — it fires on row delete, on a `backend`
   change, and best-effort on Workspace cascade.
 
-### Registering a backend
+### Contributing a backend
 
-Backends are registered into an in-tree registry
-(`apps/backend/src/sandbox/index.ts`) via `registerSandboxBackend`. A
-registration declares a `backend` discriminator, a display `name`, Zod schemas
-for the per-Sandbox `config` and `credentials`, and a `create` factory:
+Backends are contributed through the `contributes.sandboxBackends` array in a
+plugin manifest; each entry is a `SandboxBackendContribution` from the SDK. Core
+reads the manifest and drives the internal `registerSandboxBackend` itself — you
+never call it directly. A contribution declares a `backend` discriminator, a
+display `name`, Zod schemas for the per-Sandbox `config` and `credentials`, and
+a `create` factory:
 
 ```ts
-export interface SandboxBackendRegistration<
+import type { SandboxBackendContribution } from "@platypuschat/plugin-sdk";
+
+export interface SandboxBackendContribution<
   TConfig = unknown,
   TCredentials = unknown,
 > {
@@ -171,38 +175,45 @@ export interface SandboxBackendRegistration<
 }
 ```
 
-The reference **Docker** adapter
-(`apps/backend/src/sandbox/backends/docker.ts`) shows the pattern. Its
-registration is **env-gated** so an un-runnable backend is never offered
-(`apps/backend/src/sandbox/backends/index.ts`):
+The reference **Docker** adapter ships as the core plugin `@platypus/docker`
+(`apps/backend/src/plugins/docker/`) and shows the pattern — its manifest
+contributes the backend:
 
 ```ts
-if (process.env.PLATYPUS_SANDBOX_DOCKER_ENABLED === "true") {
-  registerSandboxBackend({
-    backend: "docker",
-    name: "Local Docker",
-    configSchema: dockerSandboxConfigSchema,
-    credentialsSchema: dockerSandboxCredentialsSchema,
-    create: (config, credentials) =>
-      new DockerSandboxBackend(config, credentials),
-  });
-}
+export const plugin: PlatypusPlugin = {
+  name: "@platypus/docker",
+  version: "0.1.0",
+  apiVersion: PLUGIN_API_VERSION,
+  contributes: {
+    sandboxBackends: [
+      {
+        backend: "docker",
+        name: "Local Docker",
+        configSchema: dockerSandboxConfigSchema,
+        credentialsSchema: dockerSandboxCredentialsSchema,
+        create: (config, credentials) =>
+          new DockerSandboxBackend(config, credentials),
+      },
+    ],
+  },
+};
 ```
 
-The whole `backends/` module is imported for its side effects at boot
-(`import "./sandbox/backends/index.ts"` in `apps/backend/src/server.ts`), which
-is what populates the registry.
+The plugin is **off unless listed**: enable Docker by adding `@platypus/docker`
+to `PLATYPUS_PLUGINS`. Omit it and the `"docker"` backend type is never
+registered, so an un-runnable Sandbox row can't be created. Plugin-list
+membership _is_ the enable switch — there is no separate per-backend env gate
+(see [the plugin model](#the-plugin-model)).
 
 **To add a backend:**
 
-1. Implement `SandboxBackend` in a new file under
-   `apps/backend/src/sandbox/backends/`.
+1. Implement `SandboxBackend` in a new plugin under
+   `apps/backend/src/plugins/<name>/` (or an external package).
 2. Define `configSchema` and `credentialsSchema` (Zod). `config` is non-secret
    shape (e.g. region, image); `credentials` is secret material (e.g. API
    tokens).
-3. Call `registerSandboxBackend({...})` from
-   `apps/backend/src/sandbox/backends/index.ts`, gated behind an env flag if the
-   backend needs external prerequisites.
+3. Contribute it via `contributes.sandboxBackends` in the plugin manifest, then
+   enable the plugin by listing it in `PLATYPUS_PLUGINS`.
 
 <Callout type="warning">
   The Docker reference adapter mounts the host Docker socket and is scoped to
@@ -355,17 +366,18 @@ The plugin loader is landing incrementally
 ([ADR-0013](https://github.com/willdady/platypus/blob/main/docs/adr/0013-plugin-system-manifest-driven-in-process-extension-points.md)).
 What's live and what's still in-tree today:
 
-- **Live:** the `@platypuschat/plugin-sdk` surface, the boot-time loader, the
-  built-in map / core allowlist, and the first core plugin
-  `@platypus/tools-basic` (math, time), which flows manifest → loader →
-  registry → tools in a Chat turn.
+- **Live:** the `@platypuschat/plugin-sdk` surface (Tool sets _and_
+  Sandbox-backend contributions), the boot-time loader, the built-in map / core
+  allowlist, the first core plugin `@platypus/tools-basic` (math, time), and the
+  Docker Sandbox backend as the core plugin `@platypus/docker` — each flowing
+  manifest → loader → registry in a Chat turn.
 - **Still in-tree, pending migration:** the remaining built-in Tool sets
-  (`kanban`, `triggers`, `sandbox`, …) and the Docker Sandbox backend still call
-  `registerToolSet` / `registerSandboxBackend` directly at boot. They keep
-  working unchanged; the same registration functions are what the loader drives.
-- **Follow-up slices:** Sandbox-backend contributions, third-party id
-  namespacing, deploy-time plugin config/credentials, `apiVersion` compatibility
-  windowing, and a read-only `GET /plugins` catalog.
+  (`kanban`, `triggers`, `sandbox`, …) still call `registerToolSet` directly at
+  boot. They keep working unchanged; the same registration functions are what the
+  loader drives.
+- **Follow-up slices:** third-party id namespacing, deploy-time plugin
+  config/credentials, `apiVersion` compatibility windowing, and a read-only
+  `GET /plugins` catalog.
 
 ## Reference ADRs
 

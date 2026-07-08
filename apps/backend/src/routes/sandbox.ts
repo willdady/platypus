@@ -14,7 +14,7 @@ import {
 import type { Variables } from "../server.ts";
 import { destroySandboxRow } from "../sandbox/teardown.ts";
 import { getSandboxBackend, getSandboxBackends } from "../sandbox/index.ts";
-import { readAllowedDockerNetworks } from "../sandbox/backends/docker.ts";
+import { readAllowedDockerNetworks } from "../plugins/docker/backend.ts";
 import { logger } from "../logger.ts";
 
 type SandboxRecord = typeof sandboxTable.$inferSelect;

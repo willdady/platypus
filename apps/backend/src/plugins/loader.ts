@@ -1,9 +1,11 @@
 import type {
   PlatypusPlugin,
+  SandboxBackendContribution,
   ToolSetContribution,
 } from "@platypuschat/plugin-sdk";
 import { BUILTIN_PLUGINS } from "./builtin.ts";
 import { registerToolSet } from "../tools/index.ts";
+import { registerSandboxBackend } from "../sandbox/index.ts";
 
 // Summary of one loaded plugin, for the boot log line and observability.
 export interface LoadedPlugin {
@@ -11,6 +13,7 @@ export interface LoadedPlugin {
   version: string;
   origin: "core" | "third-party";
   toolSetIds: string[];
+  sandboxBackendIds: string[];
 }
 
 // A module that exports a plugin manifest. Values are `unknown` until validated.
@@ -25,6 +28,8 @@ export interface LoadPluginsOptions {
   importPlugin?: (name: string) => Promise<PluginModule>;
   /** Registers one Tool set contribution. Defaults to the core `registerToolSet`. */
   register?: (id: string, def: Omit<ToolSetContribution, "id">) => void;
+  /** Registers one Sandbox-backend contribution. Defaults to core `registerSandboxBackend`. */
+  registerSandbox?: (contribution: SandboxBackendContribution) => void;
 }
 
 /**
@@ -73,6 +78,14 @@ const validateManifest = (name: string, mod: PluginModule): PlatypusPlugin => {
       `Plugin "${name}": "contributes.toolSets" must be an array.`,
     );
   }
+  if (
+    contributes.sandboxBackends !== undefined &&
+    !Array.isArray(contributes.sandboxBackends)
+  ) {
+    throw new Error(
+      `Plugin "${name}": "contributes.sandboxBackends" must be an array.`,
+    );
+  }
   return p as PlatypusPlugin;
 };
 
@@ -99,9 +112,13 @@ export async function loadPlugins(
     opts.importPlugin ??
     ((name: string) => import(name) as Promise<PluginModule>);
   const register = opts.register ?? registerToolSet;
+  const registerSandbox = opts.registerSandbox ?? registerSandboxBackend;
 
   // Tracks contribution id -> owning plugin name for owner-attributed collisions.
+  // Tool sets and Sandbox backends live in separate registries, so each keeps
+  // its own owner map (a Tool set and a backend may share a bare id).
   const owners = new Map<string, string>();
+  const sandboxOwners = new Map<string, string>();
   const loaded: LoadedPlugin[] = [];
 
   for (const name of names) {
@@ -150,11 +167,41 @@ export async function loadPlugins(
       toolSetIds.push(id);
     }
 
+    const sandboxBackendIds: string[] = [];
+
+    for (const contribution of manifest.contributes.sandboxBackends ?? []) {
+      const { backend } = contribution;
+
+      const existingOwner = sandboxOwners.get(backend);
+      if (existingOwner) {
+        throw new Error(
+          `Sandbox backend id "${backend}" is contributed by both "${existingOwner}" and "${manifest.name}".`,
+        );
+      }
+
+      try {
+        registerSandbox(contribution);
+      } catch (cause) {
+        // A collision with a backend registered outside the loader surfaces
+        // here — re-throw with plugin attribution.
+        throw new Error(
+          `Plugin "${manifest.name}": failed to register sandbox backend "${backend}" (${
+            cause instanceof Error ? cause.message : String(cause)
+          }).`,
+          { cause },
+        );
+      }
+
+      sandboxOwners.set(backend, manifest.name);
+      sandboxBackendIds.push(backend);
+    }
+
     loaded.push({
       name: manifest.name,
       version: manifest.version,
       origin,
       toolSetIds,
+      sandboxBackendIds,
     });
   }
 

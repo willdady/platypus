@@ -43,11 +43,12 @@ into the backend container.
 
 Because of that, the adapter is **off by default** and gated two ways:
 
-1. An env flag, `PLATYPUS_SANDBOX_DOCKER_ENABLED`. If it's unset or false, the
+1. Plugin enablement. The adapter ships as the core plugin `@platypus/docker`;
+   enable it by listing `@platypus/docker` in `PLATYPUS_PLUGINS`. Omit it and the
    `"docker"` backend type isn't registered at all (so you can't create
    un-runnable Sandbox rows).
 2. An opt-in compose overlay, `compose.sandbox.yaml`, which adds the socket mount
-   and sets the flag.
+   and lists the plugin.
 
 Enable it by composing the overlay alongside the default stack:
 

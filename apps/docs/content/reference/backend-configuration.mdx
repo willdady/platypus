@@ -110,11 +110,13 @@ is the production option.
 ## Sandbox
 
 The Docker reference Sandbox adapter. Disabled by default and scoped to
-development / single-node self-hosting only. See
+development / single-node self-hosting only. Enable it by listing
+`@platypus/docker` in `PLATYPUS_PLUGINS` (it ships as a core plugin — see
+[Plugins](#plugins) above); this requires a reachable Docker daemon and the
+`compose.sandbox.yaml` overlay. See
 [ADR-0003](https://github.com/willdady/platypus/blob/main/docs/adr/0003-docker-reference-sandbox-adapter-socket-mount.md)
 and the [Extending](/extending#sandbox-backends) section.
 
 | Variable                                   | Purpose                                                                                                                                            | Default   | Required |
 | ------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------- | --------- | -------- |
-| `PLATYPUS_SANDBOX_DOCKER_ENABLED`          | Set `true` to register the Docker reference adapter. Requires a reachable Docker daemon and the `compose.sandbox.yaml` overlay.                    | `false`   | No       |
 | `PLATYPUS_SANDBOX_DOCKER_ALLOWED_NETWORKS` | Comma-separated Docker networks a Sandbox may attach to. Admins select a per-Sandbox subset; unset/empty means none are attachable (default-deny). | _(unset)_ | No       |

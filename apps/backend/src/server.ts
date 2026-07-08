@@ -11,7 +11,6 @@ import { skill } from "./routes/skill.ts";
 import { tool } from "./routes/tool.ts";
 import { mcp } from "./routes/mcp.ts";
 import { sandbox } from "./routes/sandbox.ts";
-import "./sandbox/backends/index.ts";
 import { provider } from "./routes/provider.ts";
 import { orgProvider } from "./routes/org-provider.ts";
 import { orgMcp } from "./routes/org-mcp.ts";

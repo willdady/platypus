@@ -98,8 +98,9 @@ The [Sandbox](/concepts) (agent shell/filesystem access) is **off by default**.
 Enabling the Docker reference backend and curating what it can reach is an
 Operator concern with its own page:
 
-- **`PLATYPUS_SANDBOX_DOCKER_ENABLED`** — registers the Docker backend; without
-  it, sandbox configuration is inert.
+- **Enable Docker by listing `@platypus/docker` in `PLATYPUS_PLUGINS`** — the
+  Docker backend ships as a core plugin; without it in the list, sandbox
+  configuration is inert.
 - **`PLATYPUS_SANDBOX_DOCKER_ALLOWED_NETWORKS`** — the Operator's allowlist that
   bounds which Docker networks an Org Admin may attach a sandbox to
   (default-deny).

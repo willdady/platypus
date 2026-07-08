@@ -1,6 +1,9 @@
 import { describe, it, expect, vi } from "vitest";
+import { z } from "zod";
 import type {
   PlatypusPlugin,
+  SandboxBackend,
+  SandboxBackendContribution,
   ToolSetContribution,
 } from "@platypuschat/plugin-sdk";
 import { loadPlugins, parsePluginList } from "./loader.ts";
@@ -14,6 +17,15 @@ const makeRegister = () => {
   return { register, calls };
 };
 
+// A capturing `registerSandbox` for the Sandbox-backend extension point.
+const makeSandboxRegister = () => {
+  const calls: SandboxBackendContribution[] = [];
+  const registerSandbox = (contribution: SandboxBackendContribution) => {
+    calls.push(contribution);
+  };
+  return { registerSandbox, calls };
+};
+
 const manifest = (
   name: string,
   toolSets: ToolSetContribution[],
@@ -24,11 +36,30 @@ const manifest = (
   contributes: { toolSets },
 });
 
+const sandboxManifest = (
+  name: string,
+  sandboxBackends: SandboxBackendContribution[],
+): PlatypusPlugin => ({
+  name,
+  version: "0.1.0",
+  apiVersion: 1,
+  contributes: { sandboxBackends },
+});
+
 const toolSet = (id: string): ToolSetContribution => ({
   id,
   name: id,
   category: "Test",
   tools: {},
+});
+
+const sandboxBackend = (backend: string): SandboxBackendContribution => ({
+  backend,
+  name: backend,
+  configSchema: z.object({}),
+  credentialsSchema: z.object({}),
+  // The loader never invokes create(); a stub suffices.
+  create: () => ({}) as unknown as SandboxBackend,
 });
 
 describe("parsePluginList", () => {
@@ -69,6 +100,7 @@ describe("loadPlugins", () => {
         version: "0.1.0",
         origin: "core",
         toolSetIds: ["math-conversions", "time"],
+        sandboxBackendIds: [],
       },
     ]);
   });
@@ -229,5 +261,98 @@ describe("loadPlugins", () => {
         register,
       }),
     ).rejects.toThrow(/@collides\/plugin.*"kanban".*already been registered/s);
+  });
+});
+
+describe("loadPlugins — sandbox backends", () => {
+  it("registers a sandbox-backend contribution and reports its id", async () => {
+    const { register } = makeRegister();
+    const { registerSandbox, calls } = makeSandboxRegister();
+    const loaded = await loadPlugins({
+      pluginNames: ["@platypus/docker"],
+      builtinPlugins: {
+        "@platypus/docker": () =>
+          Promise.resolve({
+            plugin: sandboxManifest("@platypus/docker", [
+              sandboxBackend("docker"),
+            ]),
+          }),
+      },
+      register,
+      registerSandbox,
+    });
+
+    expect(calls.map((c) => c.backend)).toEqual(["docker"]);
+    expect(loaded).toEqual([
+      {
+        name: "@platypus/docker",
+        version: "0.1.0",
+        origin: "core",
+        toolSetIds: [],
+        sandboxBackendIds: ["docker"],
+      },
+    ]);
+  });
+
+  it("aborts (fail-loud) on a duplicate sandbox backend id, naming both plugins", async () => {
+    const { register } = makeRegister();
+    const { registerSandbox } = makeSandboxRegister();
+    const importPlugin = vi.fn((name: string) =>
+      Promise.resolve({
+        plugin: sandboxManifest(name, [sandboxBackend("docker")]),
+      }),
+    );
+
+    await expect(
+      loadPlugins({
+        pluginNames: ["@a/plugin", "@b/plugin"],
+        builtinPlugins: {},
+        importPlugin,
+        register,
+        registerSandbox,
+      }),
+    ).rejects.toThrow(/"docker".*"@a\/plugin".*"@b\/plugin"/s);
+  });
+
+  it("re-throws a registry collision with plugin attribution", async () => {
+    const { register } = makeRegister();
+    const registerSandbox = () => {
+      throw new Error("Sandbox backend 'docker' has already been registered.");
+    };
+    await expect(
+      loadPlugins({
+        pluginNames: ["@collides/plugin"],
+        builtinPlugins: {},
+        importPlugin: () =>
+          Promise.resolve({
+            plugin: sandboxManifest("@collides/plugin", [
+              sandboxBackend("docker"),
+            ]),
+          }),
+        register,
+        registerSandbox,
+      }),
+    ).rejects.toThrow(/@collides\/plugin.*"docker".*already been registered/s);
+  });
+
+  it("aborts (fail-loud) when sandboxBackends is not an array", async () => {
+    const { register } = makeRegister();
+    await expect(
+      loadPlugins({
+        pluginNames: ["@bad/plugin"],
+        builtinPlugins: {},
+        importPlugin: () =>
+          Promise.resolve({
+            plugin: {
+              name: "@bad/plugin",
+              version: "0.1.0",
+              apiVersion: 1,
+              contributes: { sandboxBackends: {} },
+            },
+          }),
+        register,
+        registerSandbox: () => {},
+      }),
+    ).rejects.toThrow(/@bad\/plugin.*sandboxBackends.*array/s);
   });
 });

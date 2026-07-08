@@ -10,7 +10,7 @@ import {
   MAX_SHELL_OUTPUT_BYTES,
   MAX_SHELL_TIMEOUT_MS,
   SANDBOX_WORKSPACE_ROOT,
-} from "../index.ts";
+} from "../../sandbox/index.ts";
 import type {
   FsEditInput,
   FsEditOutput,
@@ -25,7 +25,7 @@ import type {
   SandboxContext,
   ShellExecInput,
   ShellExecOutput,
-} from "../types.ts";
+} from "../../sandbox/types.ts";
 
 const IMAGE = "debian:stable-slim";
 const LABEL_SANDBOX = "platypus.sandbox";

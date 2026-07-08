@@ -49,13 +49,121 @@ export interface ToolSetContribution {
 }
 
 /**
+ * Context handed to every Sandbox adapter call. The (orgId, workspaceId) tuple
+ * is the stable identity key for the Sandbox; adapters use it to find or
+ * provision their external resource. userId is the Workspace owner, included
+ * for audit/identification, not isolation (Workspaces are single-user).
+ */
+export interface SandboxContext {
+  orgId: string;
+  workspaceId: string;
+  userId: string;
+}
+
+/** shell.exec input. All paths are relative to the sandbox workspace root. */
+export interface ShellExecInput {
+  command: string;
+  cwd?: string;
+  timeoutMs?: number;
+  env?: Record<string, string>;
+}
+export interface ShellExecOutput {
+  stdout: string;
+  stderr: string;
+  exitCode: number;
+  truncated: boolean;
+  durationMs: number;
+}
+
+export interface FsReadInput {
+  path: string;
+  lineRange?: [number, number];
+}
+export interface FsReadOutput {
+  content: string;
+  lineCount: number;
+  truncated: boolean;
+}
+
+export interface FsWriteInput {
+  path: string;
+  content: string;
+  mode: "create" | "overwrite";
+}
+export interface FsWriteOutput {
+  bytesWritten: number;
+}
+
+export interface FsEditInput {
+  path: string;
+  oldString: string;
+  newString: string;
+}
+export interface FsEditOutput {
+  replacements: 1;
+}
+
+export interface FsListInput {
+  path?: string;
+  recursive?: boolean;
+  glob?: string;
+}
+export interface FsListEntry {
+  path: string;
+  type: "file" | "dir";
+  size?: number;
+}
+export interface FsListOutput {
+  entries: FsListEntry[];
+  truncated: boolean;
+}
+
+/**
+ * Implemented by every Sandbox adapter. Methods take a {@link SandboxContext}
+ * plus their typed input and MUST honour the Platypus-defined output bounds,
+ * setting the `truncated` flag when they apply them. `destroy()` MUST be
+ * idempotent: safe to call on a resource that's already gone.
+ *
+ * This is append-only within a major API version: new capability arrives as an
+ * optional member, never a new required method.
+ */
+export interface SandboxBackend {
+  shellExec(
+    ctx: SandboxContext,
+    input: ShellExecInput,
+  ): Promise<ShellExecOutput>;
+  fsRead(ctx: SandboxContext, input: FsReadInput): Promise<FsReadOutput>;
+  fsWrite(ctx: SandboxContext, input: FsWriteInput): Promise<FsWriteOutput>;
+  fsEdit(ctx: SandboxContext, input: FsEditInput): Promise<FsEditOutput>;
+  fsList(ctx: SandboxContext, input: FsListInput): Promise<FsListOutput>;
+  destroy(ctx: SandboxContext): Promise<void>;
+}
+
+/**
+ * A single Sandbox-backend contribution — the payload core's internal
+ * `registerSandboxBackend` accepts. `backend` is the discriminator stored in the
+ * `sandbox.backend` column; `configSchema` / `credentialsSchema` validate the
+ * per-Workspace jsonb columns before `create()` instantiates an adapter.
+ */
+export interface SandboxBackendContribution<
+  TConfig = unknown,
+  TCredentials = unknown,
+> {
+  backend: string;
+  name: string;
+  configSchema: z.ZodType<TConfig>;
+  credentialsSchema: z.ZodType<TCredentials>;
+  create(config: TConfig, credentials: TCredentials): SandboxBackend;
+}
+
+/**
  * The `contributes` block: keyed by Extension-point type (core-owned, fixed).
- * Adding an Extension point (e.g. Sandbox backends, a messaging gateway) is a
- * purely additive, minor API bump — a new optional key here.
+ * Adding an Extension point (e.g. a messaging gateway) is a purely additive,
+ * minor API bump — a new optional key here.
  */
 export interface PluginContributions {
   toolSets?: ToolSetContribution[];
-  // sandboxBackends?: SandboxBackendContribution[]; // follow-up slice
+  sandboxBackends?: SandboxBackendContribution[];
 }
 
 /**
