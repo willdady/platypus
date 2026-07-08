@@ -76,13 +76,32 @@ Platypus loads its extensions — starting with Tool sets — as **plugins**, an
 comma-separated list of plugin names; core built-ins are listed too (e.g.
 `@platypus/tools-basic`).
 
+**The default list shipped in `.env.example`** is the standard core tool set:
+
+```
+PLATYPUS_PLUGINS=@platypus/tools-basic,@platypus/web-fetch,@platypus/tools-platform
+```
+
+- `@platypus/tools-basic` — pure utilities (math conversions, time).
+- `@platypus/web-fetch` — the web-fetch Tool set. It ships as its own plugin so
+  its **network egress** can be denied in isolation: drop it from the list and
+  the rest of the standard tools stay.
+- `@platypus/tools-platform` — the Platypus-domain sets (kanban, dashboards,
+  triggers, memory, notifications, agent discovery/management, skill management).
+- `@platypus/docker` — the Docker Sandbox backend — is **intentionally not** in
+  the default. It's opt-in infra; add it only when you want a Sandbox (see
+  [Sandbox](#sandbox)).
+
+Since `compose.yaml` reads the backend's `env_file: .env`, a deployment seeded
+from `.env.example` gets this list; pin your own by editing the value.
+
 - **List membership both loads and enables a plugin.** There is no separate
   enable switch — adding a name turns a plugin on, removing it turns it off.
   Both take effect on the next backend restart (this is a deploy-time trust
   boundary — there is no in-app install button).
-- **An empty list yields a deployment with no plugin-provided tools** (the
-  `@platypus/tools-basic` math/time tools disappear, for example). That's
-  accepted and self-documenting.
+- **An empty list yields a deployment with no plugin-provided tools** (all the
+  Tool sets above disappear — an Agent granted `kanban` resolves to no tools).
+  That's accepted and self-documenting.
 - **Boot is fail-loud.** A listed plugin that can't be resolved or exports an
   invalid manifest, or two plugins whose tool-set ids collide, aborts startup
   with a plugin-named error — a misconfigured plugin never silently drops tools.
