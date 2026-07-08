@@ -29,6 +29,15 @@ For a guided walkthrough of configuring a deployment, see
 | `TIMEZONE`        | IANA timezone (e.g. `America/New_York`, `Europe/London`). Falls back to UTC if unset. | `UTC`                                                    | No       |
 | `NODE_OPTIONS`    | Node runtime flags. Ships set to silence the experimental-feature warning.            | `--disable-warning=ExperimentalWarning`                  | No       |
 
+## Plugins
+
+| Variable           | Purpose                                                                                                                                                                                       | Default                 | Required |
+| ------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------- | -------- |
+| `PLATYPUS_PLUGINS` | Comma-separated list of plugins to load and enable at boot (core built-ins included). List membership both loads _and_ enables a plugin. Empty ⇒ no plugin-provided tools. Fail-loud at boot. | `@platypus/tools-basic` | No       |
+
+See [Extending → the plugin model](/extending#the-plugin-model) and
+[Configuration → Plugins](/self-hosting/configuration#plugins).
+
 ## Authentication
 
 | Variable                 | Purpose                                                                                                                  | Default                                                    | Required |
@@ -70,9 +79,9 @@ the same result). Headless runs aren't user-facing, so the defaults are generous
 — raise them for long multi-step research or MCP work, lower them to fail a stuck
 run sooner.
 
-| Variable                      | Purpose                                                                              | Default              | Required |
-| ----------------------------- | ------------------------------------------------------------------------------------ | -------------------- | -------- |
-| `TRIGGER_PER_STEP_TIMEOUT_MS` | Idle timeout between steps of a Trigger run; a step that makes no progress aborts it. | `600000` (10 minutes) | No       |
+| Variable                      | Purpose                                                                               | Default                | Required |
+| ----------------------------- | ------------------------------------------------------------------------------------- | ---------------------- | -------- |
+| `TRIGGER_PER_STEP_TIMEOUT_MS` | Idle timeout between steps of a Trigger run; a step that makes no progress aborts it. | `600000` (10 minutes)  | No       |
 | `TRIGGER_PER_RUN_TIMEOUT_MS`  | Wall-clock timeout for an entire Trigger run.                                         | `3600000` (60 minutes) | No       |
 
 ## Tools

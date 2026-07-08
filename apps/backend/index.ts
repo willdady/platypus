@@ -13,6 +13,7 @@ import { auth } from "./src/auth.ts";
 import { logger } from "./src/logger.ts";
 import { startMemoryScheduler } from "./src/jobs/memory-scheduler.ts";
 import { startTriggerScheduler } from "./src/jobs/trigger-scheduler.ts";
+import { loadPlugins } from "./src/plugins/loader.ts";
 
 const PORT = process.env.PORT || "4001";
 
@@ -100,6 +101,15 @@ const main = async () => {
       }
     }
   });
+
+  // Load plugins before the HTTP server accepts traffic so their Tool set
+  // contributions are registered by the time Chat turns resolve tools. Fail-loud
+  // and all-or-nothing: a bad plugin aborts startup (ADR-0013).
+  const loadedPlugins = await loadPlugins();
+  logger.info(
+    { plugins: loadedPlugins },
+    `Loaded ${loadedPlugins.length} plugin(s)`,
+  );
 
   serve({
     fetch: app.fetch,

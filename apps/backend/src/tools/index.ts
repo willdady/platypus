@@ -1,12 +1,5 @@
 import { type Tool } from "ai";
 import { eq } from "drizzle-orm";
-import {
-  convertTemperature,
-  convertDistance,
-  convertWeight,
-  convertVolume,
-} from "./math.ts";
-import { getCurrentTime, convertTimezone } from "./time.ts";
 import { fetchUrl } from "./fetch.ts";
 import { createKanbanTools } from "./kanban.ts";
 import { createDashboardTools } from "./dashboard.ts";
@@ -22,13 +15,10 @@ import { getSandboxBackend } from "../sandbox/index.ts";
 import { createSandboxTools } from "../sandbox/tools.ts";
 import { logger } from "../logger.ts";
 
-export type ToolSetContext = {
-  workspaceId: string;
-  agentId: string;
-  orgId: string;
-  frontendUrl: string | undefined;
-  userId: string;
-};
+// The Extension-point surface lives in the published SDK; re-export the context
+// type so core's internal callers keep importing it from here.
+export type { ToolSetContext } from "@platypuschat/plugin-sdk";
+import type { ToolSetContext } from "@platypuschat/plugin-sdk";
 
 type ToolSet = {
   id: string;
@@ -72,29 +62,10 @@ export const getToolSets = (): typeof TOOL_SETS_REGISTRY => TOOL_SETS_REGISTRY;
 export const MEMORY_TOOLSET_ID = "memory";
 
 // REGISTER TOOL SETS HERE!
-registerToolSet("math-conversions", {
-  name: "Math Conversions",
-  category: "Math",
-  description: "Temperature and unit conversions",
-  tools: {
-    convertTemperature,
-    convertDistance,
-    convertWeight,
-    convertVolume,
-  },
-});
-
-registerToolSet("time", {
-  name: "Time",
-  category: "Utilities",
-  description:
-    "Tools for getting current time and converting between timezones",
-  tools: {
-    getCurrentTime,
-    convertTimezone,
-  },
-});
-
+// Note: the `math-conversions` and `time` tool sets now ship as the
+// `@platypus/tools-basic` plugin (apps/backend/src/plugins/tools-basic), loaded
+// via the plugin loader from `PLATYPUS_PLUGINS`. See ADR-0013. The tool sets
+// below remain statically registered pending migration in later slices.
 registerToolSet("web-fetch", {
   name: "Web Fetch",
   category: "Web",

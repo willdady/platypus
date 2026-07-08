@@ -1,0 +1,35 @@
+{
+  "name": "@platypuschat/plugin-sdk",
+  "version": "0.1.0",
+  "description": "Plugin SDK for Platypus — the manifest type and extension-point surface third-party plugins depend on.",
+  "license": "MIT",
+  "author": "Will Dady",
+  "type": "module",
+  "main": "index.ts",
+  "types": "index.ts",
+  "files": ["index.ts", "dist"],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.build.json --noEmit",
+    "test": "vitest run"
+  },
+  "publishConfig": {
+    "main": "dist/index.js",
+    "types": "dist/index.d.ts",
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "import": "./dist/index.js"
+      }
+    }
+  },
+  "dependencies": {
+    "ai": "^6.0.217",
+    "zod": "^4.4.3"
+  },
+  "packageManager": "pnpm@10.26.1+sha512.664074abc367d2c9324fdc18037097ce0a8f126034160f709928e9e9f95d98714347044e5c3164d65bd5da6c59c6be362b107546292a8eecb7999196e5ce58fa",
+  "devDependencies": {
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.9"
+  }
+}

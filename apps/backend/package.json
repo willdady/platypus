@@ -33,6 +33,7 @@
     "@mozilla/readability": "^0.6.0",
     "@openrouter/ai-sdk-provider": "^2.10.0",
     "@platypus/schemas": "workspace:*",
+    "@platypuschat/plugin-sdk": "workspace:*",
     "ai": "^6.0.217",
     "better-auth": "^1.6.23",
     "croner": "^10.0.1",

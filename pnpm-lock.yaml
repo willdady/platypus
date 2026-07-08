@@ -63,6 +63,9 @@ importers:
       '@platypus/schemas':
         specifier: workspace:*
         version: link:../../packages/schemas
+      '@platypuschat/plugin-sdk':
+        specifier: workspace:*
+        version: link:../../packages/plugin-sdk
       ai:
         specifier: ^6.0.217
         version: 6.0.217(zod@4.4.3)
@@ -475,6 +478,22 @@ importers:
       wrangler:
         specifier: ^4.106.0
         version: 4.106.0
+
+  packages/plugin-sdk:
+    dependencies:
+      ai:
+        specifier: ^6.0.217
+        version: 6.0.217(zod@4.4.3)
+      zod:
+        specifier: ^4.4.3
+        version: 4.4.3
+    devDependencies:
+      typescript:
+        specifier: ^6.0.3
+        version: 6.0.3
+      vitest:
+        specifier: ^4.1.9
+        version: 4.1.9(@opentelemetry/api@1.9.1)(@types/node@26.1.0)(@vitest/coverage-v8@4.1.9)(jsdom@29.1.1(@noble/hashes@2.2.0))(vite@7.3.1(@types/node@26.1.0)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.16.9)(tsx@4.22.4)(yaml@2.9.0))
 
   packages/schemas:
     dependencies:
