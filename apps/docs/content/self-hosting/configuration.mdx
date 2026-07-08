@@ -92,6 +92,45 @@ comma-separated list of plugin names; core built-ins are listed too (e.g.
 See [Extending → the plugin model](/extending#the-plugin-model) for how a
 manifest's `contributes` block fills extension points.
 
+### Plugin config & credentials
+
+Some plugins need deploy-time settings — a region, an API token — that are the
+**Operator's** to set, not an end user's. `PLATYPUS_PLUGIN_CONFIG` carries them:
+a single JSON object keyed by plugin name, each value an optional `config`
+(non-secret) and `credentials` (secret) block.
+
+```jsonc
+// PLATYPUS_PLUGIN_CONFIG (as a single-line env value)
+{
+  "@acme/cloud-sandbox": {
+    "config": { "region": "eu" },
+    "credentials": { "apiToken": "dtn_live_…" }
+  }
+}
+```
+
+- **One namespace, one block per plugin.** A plugin's config/credentials are
+  keyed by its plugin name and validated **at boot** against the schemas its
+  manifest declares. A malformed or missing required value is **fail-loud** —
+  startup aborts with a plugin-named error, the same posture as the plugin list.
+- **The credential block is shared, deployment-wide.** The one block is injected
+  into _every_ one of that plugin's contributions and serves _all_ tenants — a
+  plugin's Sandbox backend and its management Tool set read the same token. This
+  is not a per-user or per-Workspace secret.
+- **Distinct from per-Workspace Sandbox config.** The genuinely tenant-specific
+  settings — which Docker networks _this_ Workspace's sandbox may attach to, its
+  environment variables — still live on the per-Workspace Sandbox row (see
+  [Sandbox](#sandbox) below) and are unchanged. Plugin config is a _deployment_
+  layer **above** per-Workspace _resource_ config; the two layer, they do not
+  merge.
+- **Only plugins that declare schemas consume it.** A plugin with no
+  plugin-level `configSchema` / `credentialsSchema` (e.g. `@platypus/tools-basic`)
+  ignores any entry. `@platypus/docker` keeps taking its per-Workspace config as
+  before and needs no entry here.
+
+Treat `PLATYPUS_PLUGIN_CONFIG` like any secret-bearing env var: inject it from
+your secret manager, never commit it.
+
 ## Sandbox
 
 The [Sandbox](/concepts) (agent shell/filesystem access) is **off by default**.
