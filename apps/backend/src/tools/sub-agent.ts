@@ -7,6 +7,7 @@ import {
 } from "ai";
 import { z } from "zod";
 import { logger } from "../logger.ts";
+import { renderSecurityGuardrails } from "../security-prompt.ts";
 
 /**
  * Single source of truth for the sub-agent delegation tool name.
@@ -47,6 +48,13 @@ interface SubAgentToolOptions {
   model: LanguageModel;
   tools: Record<string, Tool>;
   maxSteps?: number;
+  /**
+   * Free-text security directives from THIS sub-agent's resolved provider,
+   * appended (non-suppressibly) to its instructions. Null/empty → nothing
+   * appended. Sub-agents never call renderSystemPrompt, so this is the only
+   * path guardrails reach them.
+   */
+  securityGuardrails?: string | null;
   /** Called on each activity update from the sub-agent. Used to reset the parent run's per-step timeout. */
   onProgress?: () => void;
 }
@@ -67,16 +75,27 @@ export const createSubAgentTool = (options: SubAgentToolOptions) => {
     model,
     tools,
     maxSteps = 50,
+    securityGuardrails,
     onProgress,
   } = options;
 
   const toolName = subAgentToolName({ name });
 
+  // Append the provider's security directives to the base instructions —
+  // whether those come from the sub-agent's own systemPrompt OR the canned
+  // fallback. Appending only to systemPrompt would silently drop guardrails for
+  // prompt-less sub-agents, breaking the non-suppressible guarantee.
+  const baseInstructions =
+    systemPrompt ||
+    `You are a specialized sub-agent named "${name}". Complete the task you are given thoroughly and accurately.`;
+  const securityBlock = renderSecurityGuardrails(securityGuardrails);
+  const instructions = securityBlock
+    ? `${baseInstructions}\n\n${securityBlock}`
+    : baseInstructions;
+
   const agent = new ToolLoopAgent({
     model,
-    instructions:
-      systemPrompt ||
-      `You are a specialized sub-agent named "${name}". Complete the task you are given thoroughly and accurately.`,
+    instructions,
     tools,
     stopWhen: [stepCountIs(maxSteps)],
   });
@@ -186,7 +205,7 @@ export const createSubAgentTools = async (
   createModelFn: (
     providerId: string,
     modelId: string,
-  ) => Promise<LanguageModel>,
+  ) => Promise<{ model: LanguageModel; securityGuardrails: string | null }>,
   loadToolsFn: (
     subAgentId: string,
     toolSetIds: string[],
@@ -197,8 +216,11 @@ export const createSubAgentTools = async (
 
   for (const subAgent of subAgents) {
     try {
-      // Get the sub-agent's model
-      const model = await createModelFn(subAgent.providerId, subAgent.modelId);
+      // Get the sub-agent's model and its provider's security directives.
+      const { model, securityGuardrails } = await createModelFn(
+        subAgent.providerId,
+        subAgent.modelId,
+      );
 
       // Load the sub-agent's tools
       const subAgentTools = await loadToolsFn(
@@ -215,6 +237,7 @@ export const createSubAgentTools = async (
         model,
         tools: subAgentTools,
         maxSteps: subAgent.maxSteps || 50,
+        securityGuardrails,
         onProgress,
       });
 

@@ -26,15 +26,16 @@ provider type by overriding the base URL.
 
 ### What a Provider holds
 
-| Field           | Meaning                                                                                   |
-| --------------- | ----------------------------------------------------------------------------------------- |
-| `name`          | A human label for the connection.                                                         |
-| `providerType`  | The vendor (`OpenAI`, `OpenRouter`, `Bedrock`, `Google`, `Anthropic`).                    |
-| `apiKey`        | The vendor credential.                                                                    |
-| `baseUrl`       | Optional override for OpenAI-compatible / self-hosted endpoints.                          |
-| `region`        | Required for Bedrock (AWS region).                                                         |
-| `modelIds`      | The set of models this Provider exposes for selection (at least one).                     |
-| `taskModelId`   | The model used for one-shot internal tasks (e.g. generating a chat title), not chat turns.|
+| Field                | Meaning                                                                                                   |
+| -------------------- | --------------------------------------------------------------------------------------------------------- |
+| `name`               | A human label for the connection.                                                                         |
+| `providerType`       | The vendor (`OpenAI`, `OpenRouter`, `Bedrock`, `Google`, `Anthropic`).                                    |
+| `apiKey`             | The vendor credential.                                                                                    |
+| `baseUrl`            | Optional override for OpenAI-compatible / self-hosted endpoints.                                          |
+| `region`             | Required for Bedrock (AWS region).                                                                        |
+| `modelIds`           | The set of models this Provider exposes for selection (at least one).                                     |
+| `taskModelId`        | The model used for one-shot internal tasks (e.g. generating a chat title), not chat turns.                |
+| `securityGuardrails` | Optional free-text security directives appended last in the system prompt for every run on this Provider. |
 
 A Provider also carries the models used for **Memory** (extraction and
 embeddings), so background memory features have a model to call.
@@ -57,9 +58,55 @@ A Provider is a **Scoped resource**: its row lives at exactly one scope.
 
 Because Providers are credential-bearing, **creating and editing them is an Org
 Admin task by default**. An Org Admin may delegate self-management of
-*workspace-scoped* Providers to a Workspace Owner per-Workspace (for legitimate
+_workspace-scoped_ Providers to a Workspace Owner per-Workspace (for legitimate
 personal-credential cases), but the default is admin-managed. See
 [Concepts](/concepts) for the Scoped/Shared resource model.
+
+## Guardrails: the three-layer model
+
+A Provider's `securityGuardrails` field is one layer of defense against prompt
+injection and misuse — not the whole story. Think of guarding as three layers,
+strongest last:
+
+1. **Steer (in-prompt)** — the `securityGuardrails` text. Cheap, immediate, and
+   built in. It nudges the model to treat tool output as untrusted, refuse
+   authority-spoofing, confirm destructive actions, and so on. But it lives
+   _inside_ the same prompt an attacker is trying to subvert, so it is a
+   **floor, not a guarantee** — a determined multi-turn injection can still slip
+   through, especially on smaller self-hosted models.
+2. **Detect (out-of-band)** — a classifier or moderation pass that inspects
+   inputs/outputs and flags or blocks suspicious traffic. Runs outside the
+   model's own reasoning, so it can't be talked out of its job.
+3. **Enforce (deterministic)** — hard rules that don't depend on the model
+   cooperating at all: allowlisted tools, egress filtering, per-key rate and
+   spend caps, blocked destinations.
+
+Platypus ships layer 1 (the in-prompt field). Layers 2 and 3 are not rebuilt
+inside Platypus — that's a proxy's job.
+
+### Fronting a Provider with a proxy
+
+Because a Provider exposes a `baseUrl`, you can point it at a gateway (e.g.
+[LiteLLM](https://github.com/BerriAI/litellm), or your own reverse proxy)
+instead of the vendor directly:
+
+```
+Platypus ──▶ proxy (baseUrl) ──▶ vendor API
+             │
+             ├─ layer 2: input/output moderation, injection classifier
+             └─ layer 3: key vaulting, allowlists, rate/spend caps, egress rules
+```
+
+The proxy holds the real vendor credential, applies detection and enforcement
+that the model cannot argue with, and forwards clean traffic upstream. Platypus
+only ever sees the proxy URL. Use this whenever "the model should follow the
+rule" isn't a strong enough guarantee for the risk.
+
+<Callout type="warning">
+  Do not rely on the in-prompt layer alone for anything you must *guarantee*
+  (blocking exfiltration, enforcing spend limits, preventing a tool from
+  firing). Prompt-level steering reduces risk; only layers 2 and 3 enforce it.
+</Callout>
 
 ## Authentication
 
@@ -80,12 +127,12 @@ it:
   files, infrastructure. Equivalent to the platform super-admin (the
   `admin`-role user), who bypasses all in-app authorization. The Operator
   declares deployment-time allowlists (such as the eligible sandbox networks)
-  that *bound* what an Org Admin may configure in-app.
+  that _bound_ what an Org Admin may configure in-app.
 - **Org Admin** — a User with the `admin` role in an Organization. Configures
   the credential- and reach-bearing resources — **Providers, Sandboxes, MCPs** —
   and may delegate self-management of some of them to a Workspace Owner.
 - **Workspace Owner** — the single User who owns a Workspace. Always manages
-  *composition* (Agents, Skills, Chats); manages credential- and reach-bearing
+  _composition_ (Agents, Skills, Chats); manages credential- and reach-bearing
   resources only where an Org Admin has delegated it.
 
 The split is deliberate: resources that introduce credentials, external reach,

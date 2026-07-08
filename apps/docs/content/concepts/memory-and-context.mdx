@@ -36,3 +36,20 @@ answers formatted, what a project is about.
 **Memory vs. Context:** Memory is built up automatically from your activity;
 Context is written deliberately by you. They work together — Memory remembers,
 Context instructs.
+
+## Organization identity
+
+An **Organization** carries an optional free-text **identity / context** field,
+set by an Org Admin. Whatever you write there is folded into the Agent's
+instructions **early** — as framing, alongside the Workspace context — for every
+chat across the Organization.
+
+Use it for standing facts about the organization itself: who you are, what you
+do, house tone, standard terminology. It's the org-wide counterpart to the
+per-Workspace Context above.
+
+**This is framing, not a security control.** It shapes _who the assistant is_,
+not _what it must refuse_. Because it's rendered early (where the model reads it
+as setup, not as final orders), it is deliberately **not** the place for
+injection defenses. Those belong in a Provider's **security guardrails**, which
+render last — see [Providers & models](/concepts/providers#security-guardrails).
