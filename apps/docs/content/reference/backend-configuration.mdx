@@ -31,12 +31,14 @@ For a guided walkthrough of configuring a deployment, see
 
 ## Plugins
 
-| Variable           | Purpose                                                                                                                                                                                       | Default                 | Required |
-| ------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------- | -------- |
-| `PLATYPUS_PLUGINS` | Comma-separated list of plugins to load and enable at boot (core built-ins included). List membership both loads _and_ enables a plugin. Empty ⇒ no plugin-provided tools. Fail-loud at boot. | `@platypus/tools-basic` | No       |
+| Variable                 | Purpose                                                                                                                                                                                                                                                                                                                                          | Default                 | Required |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------- | -------- |
+| `PLATYPUS_PLUGINS`       | Comma-separated list of plugins to load and enable at boot (core built-ins included). List membership both loads _and_ enables a plugin. Empty ⇒ no plugin-provided tools. Fail-loud at boot.                                                                                                                                                     | `@platypus/tools-basic` | No       |
+| `PLATYPUS_PLUGIN_CONFIG` | Deploy-time, Operator-owned plugin config/credentials as a JSON object keyed by plugin name, each `{ "config": {…}, "credentials": {…} }`. Validated at boot against the plugin's manifest schemas (fail-loud). One block is shared deployment-wide across all of a plugin's contributions and tenants. Distinct from per-Workspace Sandbox config. | _(unset)_               | No       |
 
 See [Extending → the plugin model](/extending#the-plugin-model) and
-[Configuration → Plugins](/self-hosting/configuration#plugins).
+[Configuration → Plugins](/self-hosting/configuration#plugins) (incl.
+[plugin config & credentials](/self-hosting/configuration#plugin-config--credentials)).
 
 ## Authentication
 

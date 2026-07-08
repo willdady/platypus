@@ -2,14 +2,21 @@ import { describe, it, expect } from "vitest";
 import { z } from "zod";
 import { tool } from "ai";
 import {
+  OLDEST_SUPPORTED_API_VERSION,
   PLUGIN_API_VERSION,
   type PlatypusPlugin,
+  type PluginConfigContext,
+  type SandboxBackendContribution,
   type ToolSetContribution,
 } from "./index.ts";
 
 describe("@platypuschat/plugin-sdk", () => {
   it("pins the plugin API version", () => {
     expect(PLUGIN_API_VERSION).toBe(1);
+  });
+
+  it("supports exactly one previous major (N and N−1)", () => {
+    expect(OLDEST_SUPPORTED_API_VERSION).toBe(PLUGIN_API_VERSION - 1);
   });
 
   it("accepts a well-formed manifest with a static-map tool set", () => {
@@ -63,5 +70,50 @@ describe("@platypuschat/plugin-sdk", () => {
 
     expect(typeof plugin.contributes.toolSets?.[0].tools).toBe("function");
     expect(plugin.configSchema).toBeDefined();
+  });
+
+  it("injects a shared PluginConfigContext into factories (optional to consume)", () => {
+    const shared: PluginConfigContext<
+      { region: string },
+      { apiToken: string }
+    > = {
+      config: { region: "eu" },
+      credentials: { apiToken: "tok" },
+    };
+
+    // A tool-set factory may accept the appended `plugin` argument…
+    const toolSet: ToolSetContribution = {
+      id: "scoped",
+      name: "Scoped",
+      category: "Productivity",
+      tools: (_ctx, plugin) => {
+        expect(plugin?.credentials).toEqual({ apiToken: "tok" });
+        return {};
+      },
+    };
+    (toolSet.tools as (ctx: unknown, plugin: PluginConfigContext) => unknown)(
+      {
+        workspaceId: "w",
+        agentId: "a",
+        orgId: "o",
+        frontendUrl: undefined,
+        userId: "u",
+      },
+      shared,
+    );
+
+    // …and a Sandbox-backend factory takes it as a third argument, sharing the
+    // same block. A two-argument factory (ignoring `plugin`) still type-checks.
+    const backend: SandboxBackendContribution = {
+      backend: "cloud",
+      name: "Cloud",
+      configSchema: z.object({}),
+      credentialsSchema: z.object({}),
+      create: (_config, _credentials, plugin) => {
+        expect(plugin).toBe(shared);
+        return {} as never;
+      },
+    };
+    backend.create({}, {}, shared);
   });
 });

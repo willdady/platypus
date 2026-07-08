@@ -2,15 +2,46 @@ import type { Tool } from "ai";
 import type { z } from "zod";
 
 /**
- * Minimum core API a plugin declares it needs, via its manifest `apiVersion`.
+ * The current major of the plugin API surface. A plugin's manifest `apiVersion`
+ * states the **minimum** core API it needs, not an exact match.
  *
- * Compatibility is forward-compatible and append-only: contracts grow only by
- * optional members, and core supports the current major and one previous (N and
- * N−1). This slice publishes the surface and the constant; the boot-time
- * compatibility window (rejecting plugins that need a newer or dropped major) is
- * enforced in a follow-up. See ADR-0013.
+ * ## Compatibility policy (enforced at boot; see ADR-0013)
+ *
+ * Compatibility is **forward-compatible with minimum-version semantics** — a
+ * core upgrade must never break an in-the-wild plugin. Core supports the current
+ * major **and one previous (N and N−1)** simultaneously, so the accepted window
+ * is `[OLDEST_SUPPORTED_API_VERSION, PLUGIN_API_VERSION]`. At boot core rejects a
+ * plugin only when its `apiVersion` is:
+ *
+ * - **newer than core** (`apiVersion > PLUGIN_API_VERSION`) — the plugin needs a
+ *   capability this core does not yet provide; the Operator fixes it by
+ *   upgrading core, which they control; or
+ * - **below core's oldest supported major** (`apiVersion <
+ *   OLDEST_SUPPORTED_API_VERSION`) — the plugin targets a dropped, long-
+ *   deprecated major.
+ *
+ * ## The append-only contract policy
+ *
+ * Within a major, every Extension-point contract in this SDK evolves
+ * **append-only**: a new capability arrives as an **optional** member (an
+ * optional method or field), never as a new required member. That is what lets a
+ * plugin built against an older minor keep working after a core bump — the older
+ * plugin simply doesn't use the members it never knew about. Adding a whole
+ * Extension point (e.g. a messaging gateway) is likewise additive: a new optional
+ * key on {@link PluginContributions}.
+ *
+ * A genuinely **breaking** change — removing or re-signing a required member — is
+ * a **windowed major bump**: the major increments, and during the window core
+ * runs both N and N−1 so authors have a release to migrate.
  */
 export const PLUGIN_API_VERSION = 1 as const;
+
+/**
+ * The oldest plugin API major core still accepts — one below the current major
+ * (the "N−1" of the N-and-N−1 window). A plugin whose `apiVersion` is below this
+ * targets a dropped major and is rejected at boot. See {@link PLUGIN_API_VERSION}.
+ */
+export const OLDEST_SUPPORTED_API_VERSION = PLUGIN_API_VERSION - 1;
 
 /**
  * Runtime scope handed to a Tool set factory at Chat-turn time. This SDK is the
@@ -25,14 +56,43 @@ export interface ToolSetContext {
 }
 
 /**
+ * Deploy-time, Operator-owned config for one plugin, resolved at boot and
+ * injected into **every** one of that plugin's contribution factories (ADR-0013).
+ * Keyed by plugin name — the "one config namespace" — and validated at boot
+ * against the manifest's plugin-level `configSchema` / `credentialsSchema`.
+ *
+ * One block is shared across all of a plugin's contributions and all tenants
+ * (deployment-wide): a plugin's Sandbox backend and its management Tool set read
+ * the same `credentials` here. This is a layer *above* per-Workspace Sandbox
+ * config/credentials (ADR-0001/0006); the two layer, they do not merge.
+ *
+ * `config` / `credentials` are `undefined` when the manifest declares no
+ * corresponding schema (nothing to validate against).
+ */
+export interface PluginConfigContext<
+  TConfig = unknown,
+  TCredentials = unknown,
+> {
+  config: TConfig;
+  credentials: TCredentials;
+}
+
+/**
  * The tools a Tool set contributes: either a static map keyed by tool id, or a
  * factory resolved with the {@link ToolSetContext} at Chat-turn time (use the
  * factory when tools need Workspace/Agent scope). Tools are Vercel AI SDK tools.
+ *
+ * The factory's second argument is the deploy-time {@link PluginConfigContext}
+ * — the plugin's shared config/credentials block, the same object handed to
+ * every one of the plugin's contribution factories. It is appended and optional
+ * so existing single-argument factories keep working unchanged (append-only
+ * compatibility, ADR-0013). Core always supplies it at Chat-turn time.
  */
 export type ToolSetTools =
   | Record<string, Tool>
   | ((
       ctx: ToolSetContext,
+      plugin?: PluginConfigContext,
     ) => Record<string, Tool> | Promise<Record<string, Tool>>);
 
 /**
@@ -153,7 +213,19 @@ export interface SandboxBackendContribution<
   name: string;
   configSchema: z.ZodType<TConfig>;
   credentialsSchema: z.ZodType<TCredentials>;
-  create(config: TConfig, credentials: TCredentials): SandboxBackend;
+  /**
+   * Instantiate the adapter. `config` / `credentials` are the per-Workspace
+   * values validated against the schemas above; `plugin` is the deploy-time
+   * {@link PluginConfigContext} shared across every one of the plugin's
+   * contributions (ADR-0013). `plugin` is appended and optional so existing
+   * two-argument factories keep working unchanged (append-only compatibility).
+   * Core always supplies it when instantiating the adapter.
+   */
+  create(
+    config: TConfig,
+    credentials: TCredentials,
+    plugin?: PluginConfigContext,
+  ): SandboxBackend;
 }
 
 /**
@@ -173,13 +245,18 @@ export interface PluginContributions {
  * registration itself; plugin authors never call the internal `register*()`.
  *
  * `configSchema` / `credentialsSchema` describe deploy-time, Operator-owned
- * config keyed by plugin name; they are part of the locked manifest shape but
- * are not consumed until the plugin-config follow-up slice.
+ * config keyed by plugin name. Core validates the Operator-supplied values
+ * against them at boot (fail-loud on mismatch) and injects the resolved
+ * {@link PluginConfigContext} into every contribution factory.
  */
 export interface PlatypusPlugin {
   name: string;
   version: string;
-  /** Minimum core API this plugin needs. */
+  /**
+   * The **minimum** core API major this plugin needs. Core accepts it when it
+   * falls in the N-and-N−1 window `[OLDEST_SUPPORTED_API_VERSION,
+   * PLUGIN_API_VERSION]`; see {@link PLUGIN_API_VERSION} for the policy.
+   */
   apiVersion: number;
   configSchema?: z.ZodType;
   credentialsSchema?: z.ZodType;
