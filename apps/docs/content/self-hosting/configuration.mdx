@@ -111,6 +111,21 @@ from `.env.example` gets this list; pin your own by editing the value.
 See [Extending → the plugin model](/extending#the-plugin-model) for how a
 manifest's `contributes` block fills extension points.
 
+### Inspecting installed plugins
+
+An **Org Admin** can confirm what's actually loaded from the app:
+**Organization settings → Plugins** lists every plugin loaded at boot, its
+version, its origin (**Core** or **Third-party**), and the contributions it
+registered — the Tool sets and Sandbox backends it provides. That last part ties
+a Tool set or Sandbox backend back to the plugin it came from.
+
+The view is **strictly read-only**: there is no enable / disable / install
+control, because enablement is the deploy-time `PLATYPUS_PLUGINS` list above — a
+trust boundary owned by the operator, not an in-app action. It simply reflects
+the current `GET /plugins` response, so it changes only when you edit the list
+and restart the backend. To add or remove a plugin, edit `PLATYPUS_PLUGINS` and
+restart.
+
 ### Plugin config & credentials
 
 Some plugins need deploy-time settings — a region, an API token — that are the

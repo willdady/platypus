@@ -559,12 +559,17 @@ What's live and what's still in-tree today:
   [third-party plugin loading with contribution-id namespacing](#third-party-plugins)
   (dynamic `import()` of an installed package, ids prefixed by the manifest
   `name`; see the `@platypus-examples/tool-set` reference plugin) — each flowing
-  manifest → loader → registry in a Chat turn.
+  manifest → loader → registry in a Chat turn. Observability is live too: a boot
+  log enumerating loaded plugins, a read-only `GET /plugins` catalog, and
+  originating-plugin annotations on the `GET /backends` and Tools listings. That
+  catalog backs the read-only
+  [**Installed plugins** Org-Admin view](/self-hosting/configuration#inspecting-installed-plugins)
+  — versions and contributions per plugin, no enable/disable (enablement is the
+  deploy-time `PLATYPUS_PLUGINS` list).
 - **Still in-tree, pending migration:** the remaining built-in Tool sets
   (`kanban`, `triggers`, `sandbox`, …) still call `registerToolSet` directly at
   boot. They keep working unchanged; the same registration functions are what the
   loader drives.
-- **Follow-up slices:** a read-only `GET /plugins` catalog.
 
 ## Reference ADRs
 
