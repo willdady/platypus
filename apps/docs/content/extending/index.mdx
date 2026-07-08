@@ -81,10 +81,71 @@ plugin, reads its manifest, and drives registration by calling the internal
 module resolution.
 
 **Boot is fail-loud and all-or-nothing.** A listed plugin that can't resolve,
-exports an invalid manifest, or whose Contribution ids collide with another
-plugin's aborts startup with a plugin-named error. Runtime Chat-turn resolution
-stays graceful (a Workspace pointing at a since-removed Tool set degrades to no
-tools, as before) — strict at boot, forgiving at runtime.
+exports an invalid manifest, whose deploy-time config/credentials fail schema
+validation, or whose Contribution ids collide with another plugin's aborts
+startup with a plugin-named error. Runtime Chat-turn resolution stays graceful (a
+Workspace pointing at a since-removed Tool set degrades to no tools, as before) —
+strict at boot, forgiving at runtime.
+
+### Deploy-time plugin config & credentials
+
+A plugin can declare **plugin-level** `configSchema` / `credentialsSchema` on its
+manifest — separate from the per-contribution schemas a Sandbox backend declares
+for its per-Workspace `config` / `credentials`. These describe deploy-time,
+**Operator-owned** settings: a region, an API token. The Operator supplies them
+through [`PLATYPUS_PLUGIN_CONFIG`](/self-hosting/configuration#plugin-config--credentials)
+— a JSON object keyed by plugin name.
+
+Core validates the supplied values at boot (fail-loud) and injects the resolved
+block into **every** one of that plugin's contribution factories:
+
+- A **Tool set** factory receives it as an appended second argument,
+  `(ctx, plugin) => …`.
+- A **Sandbox backend** `create(config, credentials, plugin)` receives it as a
+  third argument, alongside the per-Workspace `config` / `credentials`.
+
+Both arguments are optional to consume, so existing factories keep working
+unchanged. The key property: **one block is shared** across all of a plugin's
+contributions and all tenants (it is a _deployment_ layer, not per-Workspace).
+That is how a plugin's Sandbox backend and its management Tool set authenticate
+with the **same** credential — e.g. one Daytona token driving both:
+
+```ts
+export const plugin: PlatypusPlugin = {
+  name: "@example/cloud-sandbox",
+  version: "0.1.0",
+  apiVersion: PLUGIN_API_VERSION,
+  // Plugin-level, deploy-time schemas — validated at boot.
+  configSchema: z.object({ region: z.string().default("us") }),
+  credentialsSchema: z.object({ apiToken: z.string() }),
+  contributes: {
+    sandboxBackends: [
+      {
+        backend: "sandbox",
+        name: "Example Cloud Sandbox",
+        configSchema: z.object({}), // per-Workspace (none here)
+        credentialsSchema: z.object({}),
+        // The shared deploy-time token arrives as the third argument.
+        create: (_cfg, _creds, plugin) => new ExampleBackend(plugin),
+      },
+    ],
+    toolSets: [
+      {
+        id: "management",
+        name: "Example Management",
+        category: "Sandbox",
+        // …and the SAME block arrives here as the second argument.
+        tools: (_ctx, plugin) => createManagementTools(plugin.credentials),
+      },
+    ],
+  },
+};
+```
+
+The in-repo reference is `apps/backend/src/plugins/example/` — a two-contribution
+plugin that proves the single credential block reaches both. This is distinct
+from, and layers above, the per-Workspace Sandbox `config` / `credentials`
+(unchanged); the two do not merge.
 
 ## Sandbox backends
 
@@ -368,16 +429,17 @@ What's live and what's still in-tree today:
 
 - **Live:** the `@platypuschat/plugin-sdk` surface (Tool sets _and_
   Sandbox-backend contributions), the boot-time loader, the built-in map / core
-  allowlist, the first core plugin `@platypus/tools-basic` (math, time), and the
-  Docker Sandbox backend as the core plugin `@platypus/docker` — each flowing
-  manifest → loader → registry in a Chat turn.
+  allowlist, the first core plugin `@platypus/tools-basic` (math, time), the
+  Docker Sandbox backend as the core plugin `@platypus/docker`, and
+  [deploy-time plugin config/credentials](#deploy-time-plugin-config--credentials)
+  (the shared credential block) — each flowing manifest → loader → registry in a
+  Chat turn.
 - **Still in-tree, pending migration:** the remaining built-in Tool sets
   (`kanban`, `triggers`, `sandbox`, …) still call `registerToolSet` directly at
   boot. They keep working unchanged; the same registration functions are what the
   loader drives.
-- **Follow-up slices:** third-party id namespacing, deploy-time plugin
-  config/credentials, `apiVersion` compatibility windowing, and a read-only
-  `GET /plugins` catalog.
+- **Follow-up slices:** third-party id namespacing, `apiVersion` compatibility
+  windowing, and a read-only `GET /plugins` catalog.
 
 ## Reference ADRs
 

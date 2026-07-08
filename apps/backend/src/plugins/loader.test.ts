@@ -2,11 +2,13 @@ import { describe, it, expect, vi } from "vitest";
 import { z } from "zod";
 import type {
   PlatypusPlugin,
+  PluginConfigContext,
   SandboxBackend,
   SandboxBackendContribution,
   ToolSetContribution,
 } from "@platypuschat/plugin-sdk";
-import { loadPlugins, parsePluginList } from "./loader.ts";
+import { loadPlugins, parsePluginConfig, parsePluginList } from "./loader.ts";
+import { plugin as examplePlugin } from "./example/index.ts";
 
 // A capturing `register` and the builtin/import module shapes the loader expects.
 const makeRegister = () => {
@@ -354,5 +356,347 @@ describe("loadPlugins — sandbox backends", () => {
         registerSandbox: () => {},
       }),
     ).rejects.toThrow(/@bad\/plugin.*sandboxBackends.*array/s);
+  });
+});
+
+describe("parsePluginConfig", () => {
+  it("returns an empty map for unset or empty input", () => {
+    expect(parsePluginConfig(undefined)).toEqual({});
+    expect(parsePluginConfig("")).toEqual({});
+    expect(parsePluginConfig("   ")).toEqual({});
+  });
+
+  it("parses a JSON object keyed by plugin name", () => {
+    const raw = JSON.stringify({
+      "@acme/daytona": {
+        config: { region: "eu" },
+        credentials: { apiToken: "secret" },
+      },
+    });
+    expect(parsePluginConfig(raw)).toEqual({
+      "@acme/daytona": {
+        config: { region: "eu" },
+        credentials: { apiToken: "secret" },
+      },
+    });
+  });
+
+  it("tolerates entries that omit config or credentials", () => {
+    const raw = JSON.stringify({ "@acme/one": { config: { a: 1 } } });
+    expect(parsePluginConfig(raw)).toEqual({
+      "@acme/one": { config: { a: 1 }, credentials: undefined },
+    });
+  });
+
+  it("throws (fail-loud) on malformed JSON", () => {
+    expect(() => parsePluginConfig("{not json")).toThrow(
+      /PLATYPUS_PLUGIN_CONFIG is not valid JSON/,
+    );
+  });
+
+  it("throws (fail-loud) when the root is not an object", () => {
+    expect(() => parsePluginConfig("[]")).toThrow(
+      /must be a JSON object keyed by plugin name/,
+    );
+    expect(() => parsePluginConfig('"x"')).toThrow(
+      /must be a JSON object keyed by plugin name/,
+    );
+  });
+
+  it("throws (fail-loud) when an entry is not an object", () => {
+    expect(() =>
+      parsePluginConfig(JSON.stringify({ "@acme/bad": "token" })),
+    ).toThrow(/@acme\/bad.*must be an object/s);
+  });
+});
+
+describe("loadPlugins — deploy-time plugin config injection", () => {
+  // A plugin declaring plugin-level schemas plus one factory tool set and one
+  // sandbox backend, both of which record the injected PluginConfigContext.
+  const configuredManifest = (
+    name: string,
+    seen: { toolSet?: PluginConfigContext; sandbox?: PluginConfigContext },
+  ): PlatypusPlugin => ({
+    name,
+    version: "0.1.0",
+    apiVersion: 1,
+    configSchema: z.object({ region: z.string() }),
+    credentialsSchema: z.object({ apiToken: z.string() }),
+    contributes: {
+      toolSets: [
+        {
+          id: "managed",
+          name: "Managed",
+          category: "Test",
+          tools: (_ctx, plugin) => {
+            seen.toolSet = plugin;
+            return {};
+          },
+        },
+      ],
+      sandboxBackends: [
+        {
+          backend: "cloud",
+          name: "Cloud",
+          configSchema: z.object({}),
+          credentialsSchema: z.object({}),
+          create: (_config, _credentials, plugin) => {
+            seen.sandbox = plugin;
+            return {} as unknown as SandboxBackend;
+          },
+        },
+      ],
+    },
+  });
+
+  it("validates and injects resolved config/credentials into every factory", async () => {
+    const seen: {
+      toolSet?: PluginConfigContext;
+      sandbox?: PluginConfigContext;
+    } = {};
+    const registered: Record<string, Omit<ToolSetContribution, "id">> = {};
+    const register = (id: string, def: Omit<ToolSetContribution, "id">) => {
+      registered[id] = def;
+    };
+    const sandboxCalls: SandboxBackendContribution[] = [];
+    const registerSandbox = (c: SandboxBackendContribution) => {
+      sandboxCalls.push(c);
+    };
+
+    await loadPlugins({
+      pluginNames: ["@acme/cloud"],
+      builtinPlugins: {},
+      importPlugin: () =>
+        Promise.resolve({ plugin: configuredManifest("@acme/cloud", seen) }),
+      register,
+      registerSandbox,
+      pluginConfig: {
+        "@acme/cloud": {
+          config: { region: "eu" },
+          credentials: { apiToken: "tok_123" },
+        },
+      },
+    });
+
+    // Tool-set factory: invoked as core would at Chat-turn time, with ctx only.
+    const toolsFactory = registered.managed.tools;
+    expect(typeof toolsFactory).toBe("function");
+    await (toolsFactory as (ctx: unknown) => unknown)({
+      workspaceId: "w",
+      agentId: "a",
+      orgId: "o",
+      frontendUrl: undefined,
+      userId: "u",
+    });
+
+    // Sandbox create(): invoked as core would, with the per-Workspace values.
+    sandboxCalls[0].create({}, {}, undefined as unknown as PluginConfigContext);
+
+    expect(seen.toolSet).toEqual({
+      config: { region: "eu" },
+      credentials: { apiToken: "tok_123" },
+    });
+    expect(seen.sandbox).toEqual({
+      config: { region: "eu" },
+      credentials: { apiToken: "tok_123" },
+    });
+  });
+
+  it("shares one credential block across contributions (same object identity)", async () => {
+    const seen: {
+      toolSet?: PluginConfigContext;
+      sandbox?: PluginConfigContext;
+    } = {};
+    const registered: Record<string, Omit<ToolSetContribution, "id">> = {};
+    const register = (id: string, def: Omit<ToolSetContribution, "id">) => {
+      registered[id] = def;
+    };
+    const sandboxCalls: SandboxBackendContribution[] = [];
+
+    await loadPlugins({
+      pluginNames: ["@acme/cloud"],
+      builtinPlugins: {},
+      importPlugin: () =>
+        Promise.resolve({ plugin: configuredManifest("@acme/cloud", seen) }),
+      register,
+      registerSandbox: (c) => sandboxCalls.push(c),
+      pluginConfig: {
+        "@acme/cloud": {
+          config: { region: "eu" },
+          credentials: { apiToken: "tok_123" },
+        },
+      },
+    });
+
+    await (registered.managed.tools as (ctx: unknown) => unknown)({
+      workspaceId: "w",
+      agentId: "a",
+      orgId: "o",
+      frontendUrl: undefined,
+      userId: "u",
+    });
+    sandboxCalls[0].create({}, {}, undefined as unknown as PluginConfigContext);
+
+    // The two contributions must be handed the *same* resolved block — one
+    // credential block per plugin, shared deployment-wide (ADR-0013).
+    expect(seen.toolSet).toBe(seen.sandbox);
+  });
+
+  it("aborts (fail-loud) when deploy-time credentials fail validation", async () => {
+    await expect(
+      loadPlugins({
+        pluginNames: ["@acme/cloud"],
+        builtinPlugins: {},
+        importPlugin: () =>
+          Promise.resolve({ plugin: configuredManifest("@acme/cloud", {}) }),
+        register: () => {},
+        registerSandbox: () => {},
+        pluginConfig: {
+          "@acme/cloud": {
+            config: { region: "eu" },
+            // apiToken missing → credentialsSchema rejects.
+            credentials: {},
+          },
+        },
+      }),
+    ).rejects.toThrow(/@acme\/cloud.*credentials failed validation/s);
+  });
+
+  it("aborts (fail-loud) when deploy-time config fails validation", async () => {
+    await expect(
+      loadPlugins({
+        pluginNames: ["@acme/cloud"],
+        builtinPlugins: {},
+        importPlugin: () =>
+          Promise.resolve({ plugin: configuredManifest("@acme/cloud", {}) }),
+        register: () => {},
+        registerSandbox: () => {},
+        pluginConfig: {
+          "@acme/cloud": {
+            // region missing → configSchema rejects.
+            config: {},
+            credentials: { apiToken: "tok_123" },
+          },
+        },
+      }),
+    ).rejects.toThrow(/@acme\/cloud.*config failed validation/s);
+  });
+
+  it("passes undefined config/credentials to plugins declaring no schemas", async () => {
+    let seenPlugin: PluginConfigContext | undefined;
+    const registered: Record<string, Omit<ToolSetContribution, "id">> = {};
+
+    await loadPlugins({
+      pluginNames: ["@no/schema"],
+      builtinPlugins: {},
+      importPlugin: () =>
+        Promise.resolve({
+          plugin: {
+            name: "@no/schema",
+            version: "0.1.0",
+            apiVersion: 1,
+            contributes: {
+              toolSets: [
+                {
+                  id: "plain",
+                  name: "Plain",
+                  category: "Test",
+                  tools: (_ctx, plugin) => {
+                    seenPlugin = plugin;
+                    return {};
+                  },
+                },
+              ],
+            },
+          } satisfies PlatypusPlugin,
+        }),
+      register: (id, def) => {
+        registered[id] = def;
+      },
+    });
+
+    await (registered.plain.tools as (ctx: unknown) => unknown)({
+      workspaceId: "w",
+      agentId: "a",
+      orgId: "o",
+      frontendUrl: undefined,
+      userId: "u",
+    });
+
+    expect(seenPlugin).toEqual({ config: undefined, credentials: undefined });
+  });
+});
+
+describe("loadPlugins — example third-party plugin", () => {
+  // Proves the documented example plugin wires one shared credential block into
+  // BOTH its Sandbox backend and its management Tool set (ADR-0013).
+  it("shares one credential block across its two contributions", async () => {
+    const registered: Record<string, Omit<ToolSetContribution, "id">> = {};
+    const sandboxCalls: SandboxBackendContribution[] = [];
+
+    const loaded = await loadPlugins({
+      pluginNames: ["@example/cloud-sandbox"],
+      builtinPlugins: {},
+      importPlugin: () => Promise.resolve({ plugin: examplePlugin }),
+      register: (id, def) => {
+        registered[id] = def;
+      },
+      registerSandbox: (c) => sandboxCalls.push(c),
+      pluginConfig: {
+        "@example/cloud-sandbox": {
+          config: { region: "ap" },
+          credentials: { apiToken: "dtn_shared_token" },
+        },
+      },
+    });
+
+    expect(loaded[0]).toMatchObject({
+      name: "@example/cloud-sandbox",
+      origin: "third-party",
+      toolSetIds: ["management"],
+      sandboxBackendIds: ["sandbox"],
+    });
+
+    // Sandbox backend: create() with per-Workspace values; the adapter reads
+    // the deploy-time token/region injected as the third argument.
+    const backend = sandboxCalls[0].create(
+      {},
+      {},
+      undefined as unknown as PluginConfigContext,
+    ) as unknown as { apiToken: string; region: string };
+    expect(backend.apiToken).toBe("dtn_shared_token");
+    expect(backend.region).toBe("ap");
+
+    // Management tool set: its tool description reflects the SAME token/region.
+    const toolsFactory = registered.management.tools as unknown as (
+      ctx: unknown,
+    ) => Promise<Record<string, { execute: (i: unknown) => Promise<string> }>>;
+    const tools = await toolsFactory({
+      workspaceId: "w",
+      agentId: "a",
+      orgId: "o",
+      frontendUrl: undefined,
+      userId: "u",
+    });
+    const msg = await tools.listSandboxes.execute({});
+    expect(msg).toContain("ap");
+    expect(msg).toContain("dtn");
+  });
+
+  it("aborts (fail-loud) when the example plugin's token is missing", async () => {
+    await expect(
+      loadPlugins({
+        pluginNames: ["@example/cloud-sandbox"],
+        builtinPlugins: {},
+        importPlugin: () => Promise.resolve({ plugin: examplePlugin }),
+        register: () => {},
+        registerSandbox: () => {},
+        pluginConfig: {
+          "@example/cloud-sandbox": { config: { region: "ap" } },
+        },
+      }),
+    ).rejects.toThrow(
+      /@example\/cloud-sandbox.*credentials failed validation/s,
+    );
   });
 });
