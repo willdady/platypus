@@ -219,6 +219,12 @@ const validateManifest = (name: string, mod: PluginModule): PlatypusPlugin => {
  * via their static thunk; third-party plugins load via dynamic `import()`.
  * "Loaded identically" means an identical manifest → register flow, not
  * identical module resolution.
+ *
+ * Contribution ids are namespaced by origin (ADR-0013): core keeps flat, bare
+ * ids; third-party ids are auto-prefixed with the plugin's manifest `name`
+ * (`example.<id>`). The built-in map is the sole authority for "core", so a
+ * package borrowing an `@platypus/*` name but absent from the map is treated as
+ * third-party and prefixed.
  */
 export async function loadPlugins(
   opts: LoadPluginsOptions = {},
@@ -242,6 +248,11 @@ export async function loadPlugins(
   const loaded: LoadedPlugin[] = [];
 
   for (const name of names) {
+    // The static built-in map IS the core allowlist and the SOLE authority for
+    // "core" (ADR-0013): membership here — not the `@platypus/*` scope on the
+    // package or the manifest name — decides origin. A package that borrows an
+    // `@platypus/*` name but is absent from the map is third-party, so scope
+    // impersonation cannot smuggle a package in as core.
     const isCore = Object.prototype.hasOwnProperty.call(builtins, name);
     const origin: LoadedPlugin["origin"] = isCore ? "core" : "third-party";
 
@@ -267,15 +278,24 @@ export async function loadPlugins(
       pluginConfig[manifest.name] ?? {},
     );
 
+    // Core Contributions keep their flat, bare ids (no data migration — every
+    // persisted `agent.toolSetIds` / `sandbox.backend` reference keeps working).
+    // Third-party Contributions are auto-namespaced by the plugin's manifest
+    // `name` (`example.<id>`): authors write bare ids, core prefixes at load so a
+    // third-party id can never collide with a current or future core built-in.
+    const contributionId = (id: string): string =>
+      isCore ? id : `${manifest.name}.${id}`;
+
     const toolSetIds: string[] = [];
 
     for (const contribution of manifest.contributes.toolSets ?? []) {
       const { id, name: tsName, category, description, tools } = contribution;
+      const effectiveId = contributionId(id);
 
-      const existingOwner = owners.get(id);
+      const existingOwner = owners.get(effectiveId);
       if (existingOwner) {
         throw new Error(
-          `Tool set id "${id}" is contributed by both "${existingOwner}" and "${manifest.name}".`,
+          `Tool set id "${effectiveId}" is contributed by both "${existingOwner}" and "${manifest.name}".`,
         );
       }
 
@@ -289,7 +309,7 @@ export async function loadPlugins(
           : tools;
 
       try {
-        register(id, {
+        register(effectiveId, {
           name: tsName,
           category,
           description,
@@ -299,34 +319,37 @@ export async function loadPlugins(
         // A collision with a Tool set registered outside the loader (a legacy
         // static registration) surfaces here — re-throw with plugin attribution.
         throw new Error(
-          `Plugin "${manifest.name}": failed to register tool set "${id}" (${
+          `Plugin "${manifest.name}": failed to register tool set "${effectiveId}" (${
             cause instanceof Error ? cause.message : String(cause)
           }).`,
           { cause },
         );
       }
 
-      owners.set(id, manifest.name);
-      toolSetIds.push(id);
+      owners.set(effectiveId, manifest.name);
+      toolSetIds.push(effectiveId);
     }
 
     const sandboxBackendIds: string[] = [];
 
     for (const contribution of manifest.contributes.sandboxBackends ?? []) {
-      const { backend } = contribution;
+      const effectiveBackend = contributionId(contribution.backend);
 
-      const existingOwner = sandboxOwners.get(backend);
+      const existingOwner = sandboxOwners.get(effectiveBackend);
       if (existingOwner) {
         throw new Error(
-          `Sandbox backend id "${backend}" is contributed by both "${existingOwner}" and "${manifest.name}".`,
+          `Sandbox backend id "${effectiveBackend}" is contributed by both "${existingOwner}" and "${manifest.name}".`,
         );
       }
 
       // Bind the same shared plugin config into create() so core's per-turn
       // callers (chat resolution, teardown) keep calling create(config,
-      // credentials) with the per-Workspace values only.
+      // credentials) with the per-Workspace values only. Third-party backends
+      // also register under the namespaced discriminator, so the
+      // `sandbox.backend` column resolves to the prefixed id (mirroring tool sets).
       const boundContribution: SandboxBackendContribution = {
         ...contribution,
+        backend: effectiveBackend,
         create: (config, credentials) =>
           contribution.create(config, credentials, pluginCtx),
       };
@@ -337,15 +360,15 @@ export async function loadPlugins(
         // A collision with a backend registered outside the loader surfaces
         // here — re-throw with plugin attribution.
         throw new Error(
-          `Plugin "${manifest.name}": failed to register sandbox backend "${backend}" (${
+          `Plugin "${manifest.name}": failed to register sandbox backend "${effectiveBackend}" (${
             cause instanceof Error ? cause.message : String(cause)
           }).`,
           { cause },
         );
       }
 
-      sandboxOwners.set(backend, manifest.name);
-      sandboxBackendIds.push(backend);
+      sandboxOwners.set(effectiveBackend, manifest.name);
+      sandboxBackendIds.push(effectiveBackend);
     }
 
     loaded.push({

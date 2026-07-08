@@ -53,6 +53,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@platypus-examples/tool-set": "workspace:*",
     "@types/dockerode": "^4.0.1",
     "@types/jsdom": "^28.0.3",
     "@types/node": "^24.13.2",
