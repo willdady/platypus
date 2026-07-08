@@ -1,7 +1,9 @@
-import type {
-  PlatypusPlugin,
-  SandboxBackendContribution,
-  ToolSetContribution,
+import {
+  OLDEST_SUPPORTED_API_VERSION,
+  PLUGIN_API_VERSION,
+  type PlatypusPlugin,
+  type SandboxBackendContribution,
+  type ToolSetContribution,
 } from "@platypuschat/plugin-sdk";
 import { BUILTIN_PLUGINS } from "./builtin.ts";
 import { registerToolSet } from "../tools/index.ts";
@@ -43,8 +45,9 @@ export const parsePluginList = (raw: string | undefined): string[] =>
     .filter(Boolean);
 
 // Validate an imported module's `plugin` export into a typed manifest, or throw
-// a plugin-named error explaining why. Shape-only for this slice — apiVersion
-// compatibility windowing lands in a follow-up.
+// a plugin-named error explaining why. Covers manifest shape and the ADR-0013
+// apiVersion compatibility window (N and N−1): a plugin needing a newer API than
+// core provides, or targeting a dropped major, is rejected fail-loud at boot.
 const validateManifest = (name: string, mod: PluginModule): PlatypusPlugin => {
   const p = mod.plugin;
   if (!p || typeof p !== "object") {
@@ -62,6 +65,18 @@ const validateManifest = (name: string, mod: PluginModule): PlatypusPlugin => {
   if (typeof m.apiVersion !== "number" || !Number.isFinite(m.apiVersion)) {
     throw new Error(
       `Plugin "${name}": manifest "apiVersion" must be a number.`,
+    );
+  }
+  // Compatibility window (ADR-0013): apiVersion is a *minimum*. Core supports the
+  // current major and one previous (N and N−1). Reject only outside that window.
+  if (m.apiVersion > PLUGIN_API_VERSION) {
+    throw new Error(
+      `Plugin "${name}": needs API v${m.apiVersion}, but core supports up to v${PLUGIN_API_VERSION}. Upgrade core.`,
+    );
+  }
+  if (m.apiVersion < OLDEST_SUPPORTED_API_VERSION) {
+    throw new Error(
+      `Plugin "${name}": targets API v${m.apiVersion}, below the oldest core supports (v${OLDEST_SUPPORTED_API_VERSION}). Core supports v${OLDEST_SUPPORTED_API_VERSION}–v${PLUGIN_API_VERSION} (N and N−1).`,
     );
   }
   if (!m.contributes || typeof m.contributes !== "object") {

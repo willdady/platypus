@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import { z } from "zod";
 import { tool } from "ai";
 import {
+  OLDEST_SUPPORTED_API_VERSION,
   PLUGIN_API_VERSION,
   type PlatypusPlugin,
   type ToolSetContribution,
@@ -10,6 +11,10 @@ import {
 describe("@platypuschat/plugin-sdk", () => {
   it("pins the plugin API version", () => {
     expect(PLUGIN_API_VERSION).toBe(1);
+  });
+
+  it("supports exactly one previous major (N and N−1)", () => {
+    expect(OLDEST_SUPPORTED_API_VERSION).toBe(PLUGIN_API_VERSION - 1);
   });
 
   it("accepts a well-formed manifest with a static-map tool set", () => {
