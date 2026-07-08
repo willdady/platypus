@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import { getToolSets } from "../tools/index.ts";
+import { getToolSetPlugin } from "../plugins/registry.ts";
 import { db } from "../index.ts";
 import { mcp as mcpTable } from "../db/schema.ts";
 import { eq } from "drizzle-orm";
@@ -20,12 +21,15 @@ tool.get(
   requireWorkspaceAccess,
   async (c) => {
     const workspaceId = c.req.param("workspaceId")!;
-    // Get static tools
+    // Get static tools. Each set is annotated with the `plugin` that
+    // contributed it (ADR-0013 observability); `null` for the core-internal
+    // `sandbox` set, which is a static registration, not a plugin contribution.
     const toolSetsList = Object.entries(getToolSets()).map(([id, toolSet]) => ({
       id,
       name: toolSet.name,
       category: toolSet.category,
       description: toolSet.description,
+      plugin: getToolSetPlugin(id) ?? null,
       tools:
         typeof toolSet.tools === "function"
           ? []

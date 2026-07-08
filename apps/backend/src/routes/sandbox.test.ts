@@ -1,6 +1,23 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
+import { z } from "zod";
 import { mockDb, mockSession, resetMockDb } from "../test-utils.ts";
 import app from "../server.ts";
+import { registerSandboxBackend } from "../sandbox/index.ts";
+import { setLoadedPlugins } from "../plugins/registry.ts";
+
+// Register a backend directly (bypassing the loader) so the /backends catalog
+// has a stable entry to assert against, and record its owning plugin in the
+// registry so the annotation (ADR-0013) has something to resolve.
+const ANNOTATED_BACKEND = "test-annotated";
+registerSandboxBackend({
+  backend: ANNOTATED_BACKEND,
+  name: "Test Annotated",
+  configSchema: z.object({}),
+  credentialsSchema: z.object({}),
+  create: () => {
+    throw new Error("not used in this test");
+  },
+});
 
 describe("Sandbox Routes", () => {
   beforeEach(() => {
@@ -22,27 +39,46 @@ describe("Sandbox Routes", () => {
   };
 
   describe("GET /backends", () => {
-    it("returns the list of registered backends with name and id only", async () => {
+    it("returns registered backends with id, name, and originating plugin", async () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
       mockDb.limit.mockResolvedValueOnce([
         { ownerId: "user-1", organizationId: "org-1" },
       ]);
+      // Attribute the pre-registered backend to a plugin (ADR-0013).
+      setLoadedPlugins([
+        {
+          name: "@platypus/test",
+          version: "1.0.0",
+          origin: "core",
+          toolSetIds: [],
+          sandboxBackendIds: [ANNOTATED_BACKEND],
+        },
+      ]);
 
       const res = await app.request(`${baseUrl}/backends`);
       expect(res.status).toBe(200);
       const body = (await res.json()) as {
-        results: Array<{ backend: string; name: string }>;
+        results: Array<{
+          backend: string;
+          name: string;
+          plugin: string | null;
+        }>;
       };
-      // The registry is process-wide; tests don't run the plugin loader, so
-      // the Docker adapter (contributed by @platypus/docker) is not registered
-      // here. We assert the list shape, not specific entries.
+      // Every entry carries backend/name/plugin — plugin is `null` when the id
+      // belongs to no loaded plugin, and the contributing plugin's name when it
+      // does.
       expect(Array.isArray(body.results)).toBe(true);
       for (const r of body.results) {
         expect(typeof r.backend).toBe("string");
         expect(typeof r.name).toBe("string");
-        expect(Object.keys(r).sort()).toEqual(["backend", "name"]);
+        expect(Object.keys(r).sort()).toEqual(["backend", "name", "plugin"]);
       }
+      expect(body.results).toContainEqual({
+        backend: ANNOTATED_BACKEND,
+        name: "Test Annotated",
+        plugin: "@platypus/test",
+      });
     });
   });
 

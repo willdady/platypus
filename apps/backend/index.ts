@@ -14,6 +14,7 @@ import { logger } from "./src/logger.ts";
 import { startMemoryScheduler } from "./src/jobs/memory-scheduler.ts";
 import { startTriggerScheduler } from "./src/jobs/trigger-scheduler.ts";
 import { loadPlugins } from "./src/plugins/loader.ts";
+import { setLoadedPlugins } from "./src/plugins/registry.ts";
 
 const PORT = process.env.PORT || "4001";
 
@@ -106,10 +107,25 @@ const main = async () => {
   // contributions are registered by the time Chat turns resolve tools. Fail-loud
   // and all-or-nothing: a bad plugin aborts startup (ADR-0013).
   const loadedPlugins = await loadPlugins();
-  logger.info(
-    { plugins: loadedPlugins },
-    `Loaded ${loadedPlugins.length} plugin(s)`,
-  );
+
+  // Enumerate each loaded plugin — version, origin, and the contributions it
+  // fills — so the boot log is a complete, auditable statement of what runs
+  // (ADR-0013 observability). Then hand the result to the registry, the single
+  // read-only source behind `GET /plugins` and the catalog annotations.
+  for (const p of loadedPlugins) {
+    logger.info(
+      {
+        plugin: p.name,
+        version: p.version,
+        origin: p.origin,
+        toolSets: p.toolSetIds,
+        sandboxBackends: p.sandboxBackendIds,
+      },
+      `Loaded plugin ${p.name}@${p.version} (${p.origin}): ${p.toolSetIds.length} tool set(s), ${p.sandboxBackendIds.length} sandbox backend(s)`,
+    );
+  }
+  setLoadedPlugins(loadedPlugins);
+  logger.info(`Loaded ${loadedPlugins.length} plugin(s)`);
 
   serve({
     fetch: app.fetch,
