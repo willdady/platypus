@@ -2,15 +2,46 @@ import type { Tool } from "ai";
 import type { z } from "zod";
 
 /**
- * Minimum core API a plugin declares it needs, via its manifest `apiVersion`.
+ * The current major of the plugin API surface. A plugin's manifest `apiVersion`
+ * states the **minimum** core API it needs, not an exact match.
  *
- * Compatibility is forward-compatible and append-only: contracts grow only by
- * optional members, and core supports the current major and one previous (N and
- * N−1). This slice publishes the surface and the constant; the boot-time
- * compatibility window (rejecting plugins that need a newer or dropped major) is
- * enforced in a follow-up. See ADR-0013.
+ * ## Compatibility policy (enforced at boot; see ADR-0013)
+ *
+ * Compatibility is **forward-compatible with minimum-version semantics** — a
+ * core upgrade must never break an in-the-wild plugin. Core supports the current
+ * major **and one previous (N and N−1)** simultaneously, so the accepted window
+ * is `[OLDEST_SUPPORTED_API_VERSION, PLUGIN_API_VERSION]`. At boot core rejects a
+ * plugin only when its `apiVersion` is:
+ *
+ * - **newer than core** (`apiVersion > PLUGIN_API_VERSION`) — the plugin needs a
+ *   capability this core does not yet provide; the Operator fixes it by
+ *   upgrading core, which they control; or
+ * - **below core's oldest supported major** (`apiVersion <
+ *   OLDEST_SUPPORTED_API_VERSION`) — the plugin targets a dropped, long-
+ *   deprecated major.
+ *
+ * ## The append-only contract policy
+ *
+ * Within a major, every Extension-point contract in this SDK evolves
+ * **append-only**: a new capability arrives as an **optional** member (an
+ * optional method or field), never as a new required member. That is what lets a
+ * plugin built against an older minor keep working after a core bump — the older
+ * plugin simply doesn't use the members it never knew about. Adding a whole
+ * Extension point (e.g. a messaging gateway) is likewise additive: a new optional
+ * key on {@link PluginContributions}.
+ *
+ * A genuinely **breaking** change — removing or re-signing a required member — is
+ * a **windowed major bump**: the major increments, and during the window core
+ * runs both N and N−1 so authors have a release to migrate.
  */
 export const PLUGIN_API_VERSION = 1 as const;
+
+/**
+ * The oldest plugin API major core still accepts — one below the current major
+ * (the "N−1" of the N-and-N−1 window). A plugin whose `apiVersion` is below this
+ * targets a dropped major and is rejected at boot. See {@link PLUGIN_API_VERSION}.
+ */
+export const OLDEST_SUPPORTED_API_VERSION = PLUGIN_API_VERSION - 1;
 
 /**
  * Runtime scope handed to a Tool set factory at Chat-turn time. This SDK is the
@@ -221,7 +252,11 @@ export interface PluginContributions {
 export interface PlatypusPlugin {
   name: string;
   version: string;
-  /** Minimum core API this plugin needs. */
+  /**
+   * The **minimum** core API major this plugin needs. Core accepts it when it
+   * falls in the N-and-N−1 window `[OLDEST_SUPPORTED_API_VERSION,
+   * PLUGIN_API_VERSION]`; see {@link PLUGIN_API_VERSION} for the policy.
+   */
   apiVersion: number;
   configSchema?: z.ZodType;
   credentialsSchema?: z.ZodType;
