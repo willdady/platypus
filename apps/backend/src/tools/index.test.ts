@@ -32,8 +32,11 @@ describe("Tool Set Registry", () => {
 
     it("includes the expected built-in tool sets", () => {
       const sets = getToolSets();
-      expect(sets).toHaveProperty("math-conversions");
-      expect(sets).toHaveProperty("time");
+      // `math-conversions` and `time` now ship as the @platypus/tools-basic
+      // plugin (loaded via the plugin loader), so they are absent from this
+      // statically-registered set. See apps/backend/src/plugins/tools-basic.
+      expect(sets).not.toHaveProperty("math-conversions");
+      expect(sets).not.toHaveProperty("time");
       expect(sets).toHaveProperty("web-fetch");
       expect(sets).toHaveProperty("kanban");
       expect(sets).toHaveProperty("triggers");
@@ -46,10 +49,10 @@ describe("Tool Set Registry", () => {
 
   describe("getToolSet", () => {
     it("returns a tool set by id", () => {
-      const set = getToolSet("math-conversions");
+      const set = getToolSet("web-fetch");
       expect(set).toBeDefined();
-      expect(set.name).toBe("Math Conversions");
-      expect(set.category).toBe("Math");
+      expect(set.name).toBe("Web Fetch");
+      expect(set.category).toBe("Web");
     });
 
     it("throws for an unregistered id", () => {
@@ -62,34 +65,16 @@ describe("Tool Set Registry", () => {
   describe("registerToolSet", () => {
     it("throws when registering a duplicate id", () => {
       expect(() =>
-        registerToolSet("math-conversions", {
+        registerToolSet("web-fetch", {
           name: "Duplicate",
           category: "Test",
           tools: {},
         }),
-      ).toThrow(
-        "Tool set with id 'math-conversions' has already been registered.",
-      );
+      ).toThrow("Tool set with id 'web-fetch' has already been registered.");
     });
   });
 
   describe("tool set metadata", () => {
-    it("math-conversions has static tools object", () => {
-      const set = getToolSet("math-conversions");
-      expect(typeof set.tools).toBe("object");
-      expect(set.tools).toHaveProperty("convertTemperature");
-      expect(set.tools).toHaveProperty("convertDistance");
-      expect(set.tools).toHaveProperty("convertWeight");
-      expect(set.tools).toHaveProperty("convertVolume");
-    });
-
-    it("time has static tools object", () => {
-      const set = getToolSet("time");
-      expect(typeof set.tools).toBe("object");
-      expect(set.tools).toHaveProperty("getCurrentTime");
-      expect(set.tools).toHaveProperty("convertTimezone");
-    });
-
     it("web-fetch has static tools object", () => {
       const set = getToolSet("web-fetch");
       expect(typeof set.tools).toBe("object");

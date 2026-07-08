@@ -69,6 +69,29 @@ at `/auth/*` on the backend. The essentials:
 The deeper model — Providers, the role ladder, and the default admin — lives in
 [Providers & authentication](/self-hosting/providers-and-auth).
 
+## Plugins
+
+Platypus loads its extensions — starting with Tool sets — as **plugins**, and
+`PLATYPUS_PLUGINS` is the single, auditable statement of what runs. It's a
+comma-separated list of plugin names; core built-ins are listed too (e.g.
+`@platypus/tools-basic`).
+
+- **List membership both loads and enables a plugin.** There is no separate
+  enable switch — adding a name turns a plugin on, removing it turns it off.
+  Both take effect on the next backend restart (this is a deploy-time trust
+  boundary — there is no in-app install button).
+- **An empty list yields a deployment with no plugin-provided tools** (the
+  `@platypus/tools-basic` math/time tools disappear, for example). That's
+  accepted and self-documenting.
+- **Boot is fail-loud.** A listed plugin that can't be resolved or exports an
+  invalid manifest, or two plugins whose tool-set ids collide, aborts startup
+  with a plugin-named error — a misconfigured plugin never silently drops tools.
+- **New core plugins in a later release are not auto-enabled** — add them to your
+  pinned list to opt in.
+
+See [Extending → the plugin model](/extending#the-plugin-model) for how a
+manifest's `contributes` block fills extension points.
+
 ## Sandbox
 
 The [Sandbox](/concepts) (agent shell/filesystem access) is **off by default**.
@@ -98,9 +121,9 @@ These rarely need changing but exist when you need them — see the
 
 ## Where the exhaustive lists live
 
-| You want…                                   | Go to                                         |
-| ------------------------------------------- | --------------------------------------------- |
-| Why a setting exists and how it relates     | **This page**                                 |
-| Every backend variable + default            | [Reference](/reference) — backend config      |
-| Every frontend variable + default           | [Reference](/reference) — frontend config     |
-| The sandbox security model                  | [Sandbox infrastructure](/self-hosting/sandbox) |
+| You want…                               | Go to                                           |
+| --------------------------------------- | ----------------------------------------------- |
+| Why a setting exists and how it relates | **This page**                                   |
+| Every backend variable + default        | [Reference](/reference) — backend config        |
+| Every frontend variable + default       | [Reference](/reference) — frontend config       |
+| The sandbox security model              | [Sandbox infrastructure](/self-hosting/sandbox) |
