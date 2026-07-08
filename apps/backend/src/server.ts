@@ -30,6 +30,7 @@ import { dashboard } from "./routes/dashboard.ts";
 import { notification } from "./routes/notification.ts";
 import { webhook } from "./routes/webhook.ts";
 import { mcpOauthCallback } from "./routes/mcp-oauth-callback.ts";
+import { plugins } from "./routes/plugins.ts";
 import { organizationMember } from "./db/schema.ts";
 import { logger } from "./logger.ts";
 import { mapError } from "./errors.ts";
@@ -177,6 +178,10 @@ app.route("/organizations/:orgId/members", member);
 app.route("/users/me/invitations", userInvitation);
 app.route("/users/me/contexts", context);
 app.route("/oauth/mcp/callback", mcpOauthCallback);
+// Read-only, deployment-wide plugin catalog (ADR-0013), backing the Org-Admin
+// "Installed plugins" view (#295). Org-scoped for access control only — the
+// payload is identical across orgs; the handler gates it to Org Admins.
+app.route("/organizations/:orgId/plugins", plugins);
 
 // Central error seam (ADR-0010): typed domain errors and Postgres unique
 // violations map to their HTTP status here, so routes throw instead of
