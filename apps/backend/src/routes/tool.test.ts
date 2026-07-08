@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { mockDb, mockSession, resetMockDb } from "../test-utils.ts";
 import app from "../server.ts";
+import { setLoadedPlugins } from "../plugins/registry.ts";
 
 vi.mock("../tools/index.ts", () => ({
   getToolSets: vi.fn().mockReturnValue({
@@ -12,6 +13,14 @@ vi.mock("../tools/index.ts", () => ({
         add: { description: "Add numbers" },
       },
     },
+    // A core-internal static set (e.g. `sandbox`) with no owning plugin: it
+    // must annotate as `plugin: null`, not crash.
+    sandbox: {
+      name: "Sandbox",
+      category: "Sandbox",
+      description: "Sandbox tools",
+      tools: () => ({}),
+    },
   }),
 }));
 
@@ -20,6 +29,18 @@ describe("Tool Routes", () => {
     resetMockDb();
     vi.clearAllMocks();
     mockDb.where.mockReturnValue(mockDb);
+    // Seed the plugin registry so the Tools listing can annotate the `math`
+    // set with its originating plugin (ADR-0013). `sandbox` is intentionally
+    // absent — it is a static registration, not a plugin contribution.
+    setLoadedPlugins([
+      {
+        name: "@platypus/tools-basic",
+        version: "1.0.0",
+        origin: "core",
+        toolSetIds: ["math"],
+        sandboxBackendIds: [],
+      },
+    ]);
   });
 
   const orgId = "org-1";
@@ -44,12 +65,22 @@ describe("Tool Routes", () => {
       expect(res.status).toBe(200);
       const json = (await res.json()) as Record<string, unknown>;
 
-      // Static tools
+      // Static tools, annotated with the contributing plugin (ADR-0013).
       expect(json.results).toContainEqual(
         expect.objectContaining({
           id: "math",
           name: "Math",
           category: "Utilities",
+          plugin: "@platypus/tools-basic",
+        }),
+      );
+
+      // A set with no owning plugin annotates as null, not undefined/omitted.
+      expect(json.results).toContainEqual(
+        expect.objectContaining({
+          id: "sandbox",
+          name: "Sandbox",
+          plugin: null,
         }),
       );
 

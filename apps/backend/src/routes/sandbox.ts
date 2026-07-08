@@ -14,7 +14,8 @@ import {
 import type { Variables } from "../server.ts";
 import { destroySandboxRow } from "../sandbox/teardown.ts";
 import { getSandboxBackend, getSandboxBackends } from "../sandbox/index.ts";
-import { readAllowedDockerNetworks } from "../sandbox/backends/docker.ts";
+import { readAllowedDockerNetworks } from "../plugins/docker/backend.ts";
+import { getSandboxBackendPlugin } from "../plugins/registry.ts";
 import { logger } from "../logger.ts";
 
 type SandboxRecord = typeof sandboxTable.$inferSelect;
@@ -70,7 +71,9 @@ const sanitizeSandboxResponse = (record: SandboxRecord, isAdmin: boolean) => {
 
 // List the Sandbox backends registered in this process. Returns metadata only
 // (no Zod schemas); the frontend renders forms per known backend type for v1.
-// Declared before "/" so the literal "/backends" path takes precedence.
+// Each entry is annotated with the `plugin` that contributed it (ADR-0013
+// observability); `null` when the id belongs to no loaded plugin. Declared
+// before "/" so the literal "/backends" path takes precedence.
 sandbox.get(
   "/backends",
   requireAuth,
@@ -80,6 +83,7 @@ sandbox.get(
     const results = getSandboxBackends().map((r) => ({
       backend: r.backend,
       name: r.name,
+      plugin: getSandboxBackendPlugin(r.backend) ?? null,
     }));
     return c.json({ results });
   },

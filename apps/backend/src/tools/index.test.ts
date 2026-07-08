@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 
-// Mock the db used by transitive imports (kanban, trigger, etc.)
+// Mock the db used by transitive imports (the sandbox tool set, etc.)
 vi.mock("../index.ts", () => ({
   db: {},
 }));
@@ -21,35 +21,58 @@ vi.mock("../storage/index.ts", () => ({
   getStorage: vi.fn(),
 }));
 
-import { getToolSets, getToolSet, registerToolSet } from "./index.ts";
+import {
+  getToolSets,
+  getToolSet,
+  registerToolSet,
+  SANDBOX_TOOLSET_ID,
+} from "./index.ts";
 
 describe("Tool Set Registry", () => {
   describe("getToolSets", () => {
-    it("returns all registered tool sets", () => {
+    it("returns the statically-registered tool sets", () => {
       const sets = getToolSets();
       expect(Object.keys(sets).length).toBeGreaterThan(0);
     });
 
-    it("includes the expected built-in tool sets", () => {
+    it("no longer statically registers the plugin-migrated tool sets", () => {
+      // Every native Tool set now ships as a core plugin loaded via the plugin
+      // loader (ADR-0013): `math-conversions`/`time` → @platypus/tools-basic,
+      // `web-fetch` → @platypus/web-fetch, and the Platypus-domain sets →
+      // @platypus/tools-platform. None register at import time here anymore.
       const sets = getToolSets();
-      expect(sets).toHaveProperty("math-conversions");
-      expect(sets).toHaveProperty("time");
-      expect(sets).toHaveProperty("web-fetch");
-      expect(sets).toHaveProperty("kanban");
-      expect(sets).toHaveProperty("triggers");
-      expect(sets).toHaveProperty("agent-discovery");
-      expect(sets).toHaveProperty("skill-management");
-      expect(sets).toHaveProperty("agent-management");
-      expect(sets).toHaveProperty("notifications");
+      for (const id of [
+        "math-conversions",
+        "time",
+        "web-fetch",
+        "kanban",
+        "dashboards",
+        "triggers",
+        "agent-discovery",
+        "skill-management",
+        "agent-management",
+        "notifications",
+        "memory",
+      ]) {
+        expect(sets).not.toHaveProperty(id);
+      }
+    });
+
+    it("still statically registers the sandbox tool set (core sandbox infra)", () => {
+      // The `sandbox` set is the consumer side of the Sandbox-backend extension
+      // point (ADR-0002), not a native Tool set, so it stays a core-internal
+      // static registration — the lone one left in tools/index.ts.
+      expect(getToolSets()).toHaveProperty(SANDBOX_TOOLSET_ID);
     });
   });
 
   describe("getToolSet", () => {
-    it("returns a tool set by id", () => {
-      const set = getToolSet("math-conversions");
+    it("returns the sandbox tool set by id", () => {
+      const set = getToolSet(SANDBOX_TOOLSET_ID);
       expect(set).toBeDefined();
-      expect(set.name).toBe("Math Conversions");
-      expect(set.category).toBe("Math");
+      expect(set.name).toBe("Sandbox");
+      expect(set.category).toBe("Sandbox");
+      expect(typeof set.tools).toBe("function");
     });
 
     it("throws for an unregistered id", () => {
@@ -62,105 +85,24 @@ describe("Tool Set Registry", () => {
   describe("registerToolSet", () => {
     it("throws when registering a duplicate id", () => {
       expect(() =>
-        registerToolSet("math-conversions", {
+        registerToolSet(SANDBOX_TOOLSET_ID, {
           name: "Duplicate",
           category: "Test",
           tools: {},
         }),
       ).toThrow(
-        "Tool set with id 'math-conversions' has already been registered.",
-      );
-    });
-  });
-
-  describe("tool set metadata", () => {
-    it("math-conversions has static tools object", () => {
-      const set = getToolSet("math-conversions");
-      expect(typeof set.tools).toBe("object");
-      expect(set.tools).toHaveProperty("convertTemperature");
-      expect(set.tools).toHaveProperty("convertDistance");
-      expect(set.tools).toHaveProperty("convertWeight");
-      expect(set.tools).toHaveProperty("convertVolume");
-    });
-
-    it("time has static tools object", () => {
-      const set = getToolSet("time");
-      expect(typeof set.tools).toBe("object");
-      expect(set.tools).toHaveProperty("getCurrentTime");
-      expect(set.tools).toHaveProperty("convertTimezone");
-    });
-
-    it("web-fetch has static tools object", () => {
-      const set = getToolSet("web-fetch");
-      expect(typeof set.tools).toBe("object");
-      expect(set.tools).toHaveProperty("fetchUrl");
-    });
-
-    it("kanban has a factory function for tools", () => {
-      const set = getToolSet("kanban");
-      expect(typeof set.tools).toBe("function");
-    });
-
-    it("triggers has a factory function for tools", () => {
-      const set = getToolSet("triggers");
-      expect(typeof set.tools).toBe("function");
-    });
-
-    it("agent-discovery has a factory function for tools", () => {
-      const set = getToolSet("agent-discovery");
-      expect(typeof set.tools).toBe("function");
-    });
-
-    it("skill-management has a factory function for tools", () => {
-      const set = getToolSet("skill-management");
-      expect(typeof set.tools).toBe("function");
-    });
-
-    it("agent-management has a factory function for tools", () => {
-      const set = getToolSet("agent-management");
-      expect(typeof set.tools).toBe("function");
-    });
-  });
-
-  describe("agent-management split toolsets contain expected tools", () => {
-    const ctx = {
-      workspaceId: "ws-1",
-      agentId: "a-1",
-      orgId: "org-1",
-      frontendUrl: "http://localhost:3000",
-      userId: "u-1",
-    };
-
-    it("agent-discovery exposes read-only agent and catalogue tools", () => {
-      const set = getToolSet("agent-discovery");
-      const tools =
-        typeof set.tools === "function" ? set.tools(ctx) : set.tools;
-      expect(Object.keys(tools).sort()).toEqual(
-        ["getAgent", "listAgents", "listModelProviders", "listToolSets"].sort(),
+        `Tool set with id '${SANDBOX_TOOLSET_ID}' has already been registered.`,
       );
     });
 
-    it("skill-management exposes the skill CRUD tools", () => {
-      const set = getToolSet("skill-management");
-      const tools =
-        typeof set.tools === "function" ? set.tools(ctx) : set.tools;
-      expect(Object.keys(tools).sort()).toEqual(
-        ["deleteSkill", "getSkill", "listSkills", "upsertSkill"].sort(),
-      );
-    });
-
-    it("agent-management exposes only write-side agent tools", () => {
-      const set = getToolSet("agent-management");
-      const tools =
-        typeof set.tools === "function" ? set.tools(ctx) : set.tools;
-      expect(Object.keys(tools).sort()).toEqual(
-        ["createAgent", "deleteAgent", "updateAgent"].sort(),
-      );
-    });
-
-    it("notifications has a factory function for tools", () => {
-      const set = getToolSet("notifications");
-      expect(typeof set.tools).toBe("function");
+    it("registers a new tool set and returns it with its id folded in", () => {
+      const set = registerToolSet("test-only-set", {
+        name: "Test Only",
+        category: "Test",
+        tools: {},
+      });
+      expect(set.id).toBe("test-only-set");
+      expect(getToolSet("test-only-set")).toBe(set);
     });
   });
 });

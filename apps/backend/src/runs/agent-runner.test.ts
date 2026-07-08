@@ -46,8 +46,7 @@ const { mockPrepareChatTurn, mockGenerateText, mockStreamText, streamHarness } =
         // drive step-completion and stream-completion by hand.
         onStepFinish: undefined as ((step: unknown) => void) | undefined,
         onFinish: undefined as
-          | ((ctx: { messages: unknown[] }) => Promise<void> | void)
-          | undefined,
+          ((ctx: { messages: unknown[] }) => Promise<void> | void) | undefined,
         responseSentinel: { __isResponse: true },
       },
     };
@@ -262,6 +261,90 @@ describe("AgentRunner.generate", () => {
     const resolved = sink.events.find((e) => e.name === "onResolved");
     expect(resolved?.plan.resolved.agentId).toBe("agent-1");
     expect(resolved?.plan.resolved.providerId).toBe("p1");
+  });
+
+  // Unattended runs include a no-progress stop condition alongside the step
+  // ceiling. A board re-read whose result is identical K times trips it.
+  const repeatedReadSteps = () => {
+    const board = { cards: [] };
+    const read = {
+      toolResults: [
+        {
+          type: "tool-result" as const,
+          toolCallId: "r",
+          toolName: "getBoardState",
+          input: { boardId: "b1" },
+          output: board,
+        },
+      ],
+    };
+    return [read, read, read];
+  };
+
+  it("enables no-progress detection and records a no_progress failure when it trips", async () => {
+    mockPrepareChatTurn.mockResolvedValueOnce(fakeTurn());
+    let capturedStopWhen: unknown[] = [];
+    mockGenerateText.mockImplementation(
+      async ({ stopWhen }: { stopWhen: Array<(o: unknown) => unknown> }) => {
+        capturedStopWhen = stopWhen;
+        // The detector is the second condition (the first is the mocked
+        // stepCountIs). Drive it as the SDK loop would, with repeated steps.
+        await stopWhen[1]({ steps: repeatedReadSteps() });
+        return fakeGenerateResult;
+      },
+    );
+
+    const sink = new RecordingSink();
+    await runner.generate({
+      scope,
+      input: { ...baseInput, runId: "np-1" },
+      sink,
+    });
+
+    // Two stop conditions for an unattended run: step ceiling + no-progress.
+    expect(capturedStopWhen).toHaveLength(2);
+    const finish = sink.events.at(-1) as Extract<
+      LifecycleEvent,
+      { name: "onFinish" }
+    >;
+    expect(finish.status).toBe("failed");
+    expect(finish.error).toContain("no_progress");
+    expect(finish.error).toContain("getBoardState");
+  });
+
+  it("does not abort when a repeated call's result changes (no trip)", async () => {
+    mockPrepareChatTurn.mockResolvedValueOnce(fakeTurn());
+    mockGenerateText.mockImplementation(
+      async ({ stopWhen }: { stopWhen: Array<(o: unknown) => unknown> }) => {
+        const mk = (cards: number) => ({
+          toolResults: [
+            {
+              type: "tool-result" as const,
+              toolCallId: "r",
+              toolName: "getBoardState",
+              input: { boardId: "b1" },
+              output: { cards },
+            },
+          ],
+        });
+        await stopWhen[1]({ steps: [mk(0), mk(1), mk(2)] });
+        return fakeGenerateResult;
+      },
+    );
+
+    const sink = new RecordingSink();
+    await runner.generate({
+      scope,
+      input: { ...baseInput, runId: "np-2" },
+      sink,
+    });
+
+    const finish = sink.events.at(-1) as Extract<
+      LifecycleEvent,
+      { name: "onFinish" }
+    >;
+    expect(finish.status).toBe("succeeded");
+    expect(finish.error).toBeUndefined();
   });
 });
 
@@ -487,6 +570,45 @@ describe("AgentRunner.stream — success & interruption", () => {
     expect(finish.messages).toEqual(finalMessages);
     expect(dispose).toHaveBeenCalledTimes(1);
     expect(runRegistry.has("s-ok")).toBe(false);
+  });
+
+  it("interactive stream runs are NOT subject to no-progress detection", async () => {
+    mockPrepareChatTurn.mockResolvedValueOnce(fakeTurn());
+    const queue = new streamHarness.AsyncQueue();
+    streamHarness.queue = queue;
+    let capturedStopWhen: unknown[] = [];
+    mockStreamText.mockImplementation(
+      (opts: {
+        stopWhen: unknown[];
+        onStepFinish: (step: unknown) => void;
+      }) => {
+        capturedStopWhen = opts.stopWhen;
+        streamHarness.onStepFinish = opts.onStepFinish;
+        return {
+          toUIMessageStream: (uiOpts: {
+            onFinish: (ctx: { messages: unknown[] }) => Promise<void> | void;
+          }) => {
+            streamHarness.onFinish = uiOpts.onFinish;
+            return { tee: () => [{}, {}] };
+          },
+        };
+      },
+    );
+
+    const sink = new RecordingSink();
+    await runner.stream({
+      scope,
+      input: { ...baseInput, runId: "s-no-detector" },
+      sink,
+      options: { origin: "http://test" },
+    });
+
+    // Only the step ceiling — no no-progress condition for interactive runs.
+    expect(capturedStopWhen).toHaveLength(1);
+
+    await streamHarness.onFinish!({ messages: [] });
+    queue.end();
+    await tick();
   });
 
   it("finalises as cancelled with the partial messages when cancelled mid-stream", async () => {

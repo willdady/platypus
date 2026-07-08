@@ -508,7 +508,7 @@ const SandboxSettings = ({
             {!isOrgAdmin
               ? "No sandbox is configured for this workspace. Ask an organization admin to set one up."
               : noBackends
-                ? "No sandbox backends are registered on this server. Set PLATYPUS_SANDBOX_DOCKER_ENABLED=true (or register another backend) and restart the backend."
+                ? "No sandbox backends are registered on this server. Add @platypus/docker to PLATYPUS_PLUGINS (or register another backend) and restart the backend."
                 : "Configure a sandbox to run agent code in an isolated environment."}
           </EmptyDescription>
         </EmptyHeader>

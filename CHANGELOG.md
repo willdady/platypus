@@ -1,5 +1,34 @@
 # Changelog
 
+## [1.101.0](https://github.com/willdady/platypus/compare/v1.100.0...v1.101.0) (2026-07-01)
+
+
+### Features
+
+* **docs:** add Platypus logo lockup to top bar ([#278](https://github.com/willdady/platypus/issues/278)) ([52d6d90](https://github.com/willdady/platypus/commit/52d6d90f3d6bd800c3350b945503e1b30c121018))
+* generate Open Graph image for website and docs via Playwright ([8e0ba1f](https://github.com/willdady/platypus/commit/8e0ba1f10bfa07647b5dd11a53aafbad1a555382))
+
+
+### Bug Fixes
+
+* **frontend:** left-align attach dialog text on mobile ([#279](https://github.com/willdady/platypus/issues/279)) ([0c02ae4](https://github.com/willdady/platypus/commit/0c02ae4f9ce723fb5495ce631e1668e3dfb56e63))
+* **website:** correct board copy, icon, step count, and workspace description ([a0abf0d](https://github.com/willdady/platypus/commit/a0abf0d8c3efd420ec8781b6ebbcdd5241885494))
+
+## [1.100.0](https://github.com/willdady/platypus/compare/v1.99.1...v1.100.0) (2026-06-26)
+
+
+### Features
+
+* **backend:** add orgId to webhook event envelope and document webhooks ([#273](https://github.com/willdady/platypus/issues/273)) ([2e0635b](https://github.com/willdady/platypus/commit/2e0635bc80d917663b570b08ae28789d28baf901))
+
+## [1.99.1](https://github.com/willdady/platypus/compare/v1.99.0...v1.99.1) (2026-06-23)
+
+
+### Bug Fixes
+
+* **backend:** abort no-progress unattended runs and lower maxSteps defaults ([#271](https://github.com/willdady/platypus/issues/271)) ([908d0a0](https://github.com/willdady/platypus/commit/908d0a0e933164a8dc1b35d82cb833415f09a7a9))
+* **backend:** stop event triggers from re-firing on their own agent's writes ([#269](https://github.com/willdady/platypus/issues/269)) ([64ebec2](https://github.com/willdady/platypus/commit/64ebec200bddd514d5d14bbd994023a1ad8439a8))
+
 ## [1.99.0](https://github.com/willdady/platypus/compare/v1.98.0...v1.99.0) (2026-06-20)
 
 

@@ -27,7 +27,7 @@ An Agent referenced by a parent Agent and exposed to it as a delegate Tool.
 A configured connection to an AI vendor (OpenAI, OpenRouter, Bedrock, Anthropic, Google, …). Carries credentials, base URL, the enabled `modelIds`, and a `taskModelId` for one-shot tasks. Lives at either Organization or Workspace scope.
 
 **Tool set**:
-A named bundle of Tools an Agent can be granted. Either statically registered in code or backed by an MCP server.
+A named bundle of Tools an Agent can be granted. Either contributed by a Plugin (registered in code) or backed by an MCP server.
 
 **MCP**:
 A Model Context Protocol server registered at Workspace scope, or — as a Shared resource — at Organization scope. Resolves to a Tool set at Chat-turn time.
@@ -36,7 +36,22 @@ A Model Context Protocol server registered at Workspace scope, or — as a Share
 A named capability with a description, attached to an Agent. Surfaced to the model so it can request the skill's instructions on demand via the `loadSkill` Tool. Lives at Workspace scope, or — as a Shared resource — at Organization scope.
 
 **Sandbox**:
-A configured, isolated execution environment registered in a Workspace, providing shell and filesystem tools that operate inside it. Resolves to a Tool set at Chat-turn time. The Sandbox interface is pluggable so different backends (local container, remote VM, hosted sandbox-as-a-service, …) can be contributed. A Sandbox also carries workspace-default environment variables that are merged into every shell execution without transiting the model.
+A configured, isolated execution environment registered in a Workspace, providing shell and filesystem tools that operate inside it. Resolves to a Tool set at Chat-turn time. The Sandbox interface is an Extension point: different backends (local container, remote VM, hosted sandbox-as-a-service, …) are contributed by Plugins. A Sandbox also carries workspace-default environment variables that are merged into every shell execution without transiting the model.
+
+**Plugin**:
+A distributable bundle — one package, one version, one config namespace, one enable/disable switch — that the Operator installs at deploy time to extend Platypus without maintaining a fork. Runs in-process (no isolation); the trust boundary is the deployment, not an in-app install step. A Plugin makes one or more Contributions to Extension points, possibly across several points sharing one config namespace (e.g. a Sandbox backend and a Tool set on one credential block). Core Plugins ship pre-bundled; third-party Plugins are installed alongside them and loaded identically. Not hot-loaded; not a marketplace.
+_Avoid_: extension (reserve for Extension point), add-on, module.
+
+**Extension point**:
+A typed slot, defined and owned by core, that a Plugin fills. The set is fixed — Plugins cannot define new ones. The initial Extension points are Sandbox backends and Tool sets; a messaging-gateway adapter is planned as a third.
+_Avoid_: hook, slot.
+
+**Contribution**:
+A single filling of one Extension point by one Plugin — one Sandbox backend, or one Tool set. Each Contribution has a globally unique id: a core Plugin's ids stand alone; a third-party Plugin's ids are qualified by the Plugin name. A Plugin may make several Contributions.
+_Avoid_: registration, extension.
+
+**Plugin config**:
+Deployment-wide configuration and credentials for a Plugin, set by the Operator at deploy time and shared across all of that Plugin's Contributions and all tenants. Distinct from per-Workspace resource settings (e.g. a Sandbox's per-Workspace config and credentials), which remain Org-Admin- and Workspace-Owner-governed.
 
 **Memory**:
 A persisted summary of prior activity, retrieved per-User per-Workspace and rendered into the system prompt when the Agent's Tool sets include the memory tool set.
@@ -45,7 +60,7 @@ A persisted summary of prior activity, retrieved per-User per-Workspace and rend
 Free-text notes a User attaches at global or per-Workspace scope, rendered into the system prompt.
 
 **Operator**:
-The actor who controls a Platypus deployment — process environment, compose files, and infrastructure. Equivalent to the platform super-admin (`user.role = "admin"`), who bypasses all in-app authorization. Declares deployment-time allowlists (e.g. the eligible Docker Sandbox networks) that bound what an Org Admin can configure in-app.
+The actor who controls a Platypus deployment — process environment, compose files, and infrastructure. Equivalent to the platform super-admin (`user.role = "admin"`), who bypasses all in-app authorization. Installs and enables Plugins and sets their deploy-time Plugin config, and declares deployment-time allowlists (e.g. the eligible Docker Sandbox networks) that bound what an Org Admin can configure in-app.
 _Avoid_: sysadmin, root, host owner.
 
 **Org Admin**:

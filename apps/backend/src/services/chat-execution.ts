@@ -68,6 +68,14 @@ import {
 } from "../runs/compaction.ts";
 import type { RecoveryContext } from "../runs/recovery.ts";
 
+/**
+ * Default agentic step ceiling for an agent that has no explicit `maxSteps`.
+ * Mirrors the new-agent create-form default. Keeps API-created agents sane
+ * (a single step never lets a tool-calling agent finish its work) while
+ * staying low enough to bound a model that fails to converge.
+ */
+export const DEFAULT_AGENT_MAX_STEPS = 15;
+
 // --- Errors ---
 
 /**
@@ -1340,7 +1348,7 @@ const resolveChatContext = async (
     agent = found;
     resolvedProviderId = agent.providerId;
     resolvedModelId = agent.modelId;
-    resolvedMaxSteps = agent.maxSteps ?? 1;
+    resolvedMaxSteps = agent.maxSteps ?? DEFAULT_AGENT_MAX_STEPS;
   } else if (providerId && modelId) {
     resolvedProviderId = providerId;
     resolvedModelId = modelId;

@@ -7,10 +7,10 @@ import {
   Bot,
   Brain,
   Check,
-  Kanban,
   Layers,
   Plug,
   Server,
+  SquareKanban,
   Wrench,
   Zap,
 } from "lucide-react";
@@ -242,12 +242,12 @@ export default function HomePage() {
         {/* Boards */}
         <FeatureSection
           id="boards"
-          icon={Kanban}
+          icon={SquareKanban}
           eyebrow="Kanban boards"
           title="A shared surface for you and your agents"
           body="A board is scoped to your workspace — columns, cards, labels, and priorities. Both you and your agents read and update the same board, so it's a natural place to track and hand off work."
           points={[
-            "Drag cards across columns and assign them to a teammate or an agent",
+            "Drag cards across columns, with labels and priorities to organize your work",
             "Grant the Kanban tool set and an agent can create, move, and comment on cards",
             "Board changes fire event triggers that can kick off the next agent run",
           ]}
@@ -275,7 +275,7 @@ export default function HomePage() {
               },
               {
                 name: "Workspace",
-                body: "A scoped environment holding chats, agents, MCPs, skills, and providers.",
+                body: "A scoped environment holding chats, agents, tools, skills, and providers.",
               },
               {
                 name: "Agent",
@@ -314,7 +314,7 @@ export default function HomePage() {
                 </h2>
                 <p className="mt-4 text-lg text-muted-foreground">
                   Clone the repo and bring it up with Docker Compose, then
-                  follow the five-step loop to your first streamed reply.
+                  follow the four-step loop to your first streamed reply.
                 </p>
                 <div className="mt-8 flex flex-col gap-3 sm:flex-row">
                   <a

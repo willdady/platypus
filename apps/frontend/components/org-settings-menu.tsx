@@ -9,6 +9,7 @@ import {
   SidebarMenu,
 } from "@/components/ui/sidebar";
 import {
+  Blocks,
   Bot,
   Layers,
   Mail,
@@ -35,6 +36,7 @@ export function OrgSettingsMenu({ orgId }: OrgSettingsMenuProps) {
   const skillsHref = `/${orgId}/settings/skills`;
   const agentsHref = `/${orgId}/settings/agents`;
   const blueprintsHref = `/${orgId}/settings/blueprints`;
+  const pluginsHref = `/${orgId}/settings/plugins`;
 
   return (
     <SidebarContent>
@@ -115,6 +117,16 @@ export function OrgSettingsMenu({ orgId }: OrgSettingsMenuProps) {
               >
                 <Link href={blueprintsHref}>
                   <Layers /> Blueprints
+                </Link>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+            <SidebarMenuItem>
+              <SidebarMenuButton
+                asChild
+                isActive={pathname.startsWith(pluginsHref)}
+              >
+                <Link href={pluginsHref}>
+                  <Blocks /> Plugins
                 </Link>
               </SidebarMenuButton>
             </SidebarMenuItem>

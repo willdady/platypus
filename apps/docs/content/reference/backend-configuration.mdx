@@ -29,6 +29,17 @@ For a guided walkthrough of configuring a deployment, see
 | `TIMEZONE`        | IANA timezone (e.g. `America/New_York`, `Europe/London`). Falls back to UTC if unset. | `UTC`                                                    | No       |
 | `NODE_OPTIONS`    | Node runtime flags. Ships set to silence the experimental-feature warning.            | `--disable-warning=ExperimentalWarning`                  | No       |
 
+## Plugins
+
+| Variable                 | Purpose                                                                                                                                                                                                                                                                                                                                          | Default                 | Required |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------- | -------- |
+| `PLATYPUS_PLUGINS`       | Comma-separated list of plugins to load and enable at boot (core built-ins included). List membership both loads _and_ enables a plugin. Empty ⇒ no plugin-provided tools. Fail-loud at boot.                                                                                                                                                     | `@platypus/tools-basic` | No       |
+| `PLATYPUS_PLUGIN_CONFIG` | Deploy-time, Operator-owned plugin config/credentials as a JSON object keyed by plugin name, each `{ "config": {…}, "credentials": {…} }`. Validated at boot against the plugin's manifest schemas (fail-loud). One block is shared deployment-wide across all of a plugin's contributions and tenants. Distinct from per-Workspace Sandbox config. | _(unset)_               | No       |
+
+See [Extending → the plugin model](/extending#the-plugin-model) and
+[Configuration → Plugins](/self-hosting/configuration#plugins) (incl.
+[plugin config & credentials](/self-hosting/configuration#plugin-config--credentials)).
+
 ## Authentication
 
 | Variable                 | Purpose                                                                                                                  | Default                                                    | Required |
@@ -61,6 +72,20 @@ within the app. See [Getting Started](/getting-started) for the first-run flow.
 | `SCHEDULE_SCHEDULER_INTERVAL_MS` | How often the schedule scheduler polls for due runs, in milliseconds. | `60000` (1 minute)   | No       |
 | `SCHEDULE_MAX_CONCURRENT`        | Maximum parallel schedule executions.                                 | `5`                  | No       |
 
+## Triggers
+
+Timeouts that bound an unattended (Trigger / scheduled) Agent run. They're the
+wall-clock backstop alongside the Agent's **Max steps** ceiling and the
+no-progress guard (which stops a run that keeps repeating the same tool call for
+the same result). Headless runs aren't user-facing, so the defaults are generous
+— raise them for long multi-step research or MCP work, lower them to fail a stuck
+run sooner.
+
+| Variable                      | Purpose                                                                               | Default                | Required |
+| ----------------------------- | ------------------------------------------------------------------------------------- | ---------------------- | -------- |
+| `TRIGGER_PER_STEP_TIMEOUT_MS` | Idle timeout between steps of a Trigger run; a step that makes no progress aborts it. | `600000` (10 minutes)  | No       |
+| `TRIGGER_PER_RUN_TIMEOUT_MS`  | Wall-clock timeout for an entire Trigger run.                                         | `3600000` (60 minutes) | No       |
+
 ## Tools
 
 | Variable                       | Purpose                                                                    | Default                 | Required |
@@ -87,11 +112,13 @@ is the production option.
 ## Sandbox
 
 The Docker reference Sandbox adapter. Disabled by default and scoped to
-development / single-node self-hosting only. See
+development / single-node self-hosting only. Enable it by listing
+`@platypus/docker` in `PLATYPUS_PLUGINS` (it ships as a core plugin — see
+[Plugins](#plugins) above); this requires a reachable Docker daemon and the
+`compose.sandbox.yaml` overlay. See
 [ADR-0003](https://github.com/willdady/platypus/blob/main/docs/adr/0003-docker-reference-sandbox-adapter-socket-mount.md)
 and the [Extending](/extending#sandbox-backends) section.
 
 | Variable                                   | Purpose                                                                                                                                            | Default   | Required |
 | ------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------- | --------- | -------- |
-| `PLATYPUS_SANDBOX_DOCKER_ENABLED`          | Set `true` to register the Docker reference adapter. Requires a reachable Docker daemon and the `compose.sandbox.yaml` overlay.                    | `false`   | No       |
 | `PLATYPUS_SANDBOX_DOCKER_ALLOWED_NETWORKS` | Comma-separated Docker networks a Sandbox may attach to. Admins select a per-Sandbox subset; unset/empty means none are attachable (default-deny). | _(unset)_ | No       |

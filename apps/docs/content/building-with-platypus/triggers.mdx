@@ -85,6 +85,12 @@ A few details worth knowing:
   (one-off Triggers disable themselves instead).
 - **Event runs** fire when a matching event occurs, with a short debounce so a
   burst of rapid events coalesces into one run.
+- **No-progress runs stop early.** Because no one is watching a Trigger run,
+  Platypus ends it if the Agent stops making progress — repeating the same tool
+  call and getting the same result several times in a row. The run is recorded as
+  _failed_ with a reason naming the repeated tool, so it can't quietly burn its
+  whole step budget. (This guard is unattended-only; interactive Chats are never
+  stopped this way.)
 - Older run records beyond **Max Runs to Keep** are pruned automatically.
 
 ## Review run history

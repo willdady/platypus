@@ -55,8 +55,11 @@ available Provider has it enabled — that's an Org Admin setting (see
 Two levels of control over how the model generates:
 
 - **Max steps** — how many steps a tool-calling loop may run before it stops.
-  This lives in the main form (default `30`). Raise it for Agents that chain many
-  tool calls; lower it to cap runaway loops.
+  This lives in the main form (default `15`). Raise it for Agents that chain many
+  tool calls; lower it to cap runaway loops. Unattended runs (triggers and
+  scheduled Agents) also stop early if the model makes no progress — repeating
+  the same tool call for the same result — so a stuck run won't burn its whole
+  step budget.
 - **Advanced settings** — expand this section for the optional sampling
   parameters. Leave any blank to use the Provider's default.
 
