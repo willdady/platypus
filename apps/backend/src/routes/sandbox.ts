@@ -15,8 +15,15 @@ import type { Variables } from "../server.ts";
 import { destroySandboxRow } from "../sandbox/teardown.ts";
 import { getSandboxBackend, getSandboxBackends } from "../sandbox/index.ts";
 import { readAllowedDockerNetworks } from "../plugins/docker/backend.ts";
-import { getSandboxBackendPlugin } from "../plugins/registry.ts";
+import {
+  getPluginConfig,
+  getSandboxBackendPlugin,
+} from "../plugins/registry.ts";
 import { logger } from "../logger.ts";
+
+// Manifest name of the core Docker plugin — the key its boot-resolved config
+// (the network allowlist) is stored under in the plugin registry (ADR-0013).
+const DOCKER_PLUGIN = "@platypus/docker";
 
 type SandboxRecord = typeof sandboxTable.$inferSelect;
 
@@ -116,7 +123,9 @@ sandbox.get(
   requireWorkspaceAccess,
   requireSandboxAdmin,
   (c) => {
-    return c.json({ results: readAllowedDockerNetworks() });
+    return c.json({
+      results: readAllowedDockerNetworks(getPluginConfig(DOCKER_PLUGIN)),
+    });
   },
 );
 

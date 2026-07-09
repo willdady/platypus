@@ -38,16 +38,28 @@ const MEMORY_BYTES = 2 * 1024 * 1024 * 1024; // 2 GB
 const NANO_CPUS = 2 * 1_000_000_000; // 2 CPUs
 const SECURITY_OPT = ["no-new-privileges:true"];
 
+// Plugin-level, Operator-owned config for @platypus/docker (ADR-0013), supplied
+// via PLATYPUS_PLUGIN_CONFIG and validated at boot. `allowedNetworks` is the
 // Operator-declared allowlist of Docker networks a Sandbox may attach to
-// (ADR-0005). Comma-separated; unset/empty means no network is attachable. The
-// DOCKER segment in the name disambiguates from future backends' allowlists.
-export function readAllowedDockerNetworks(): string[] {
-  const raw = process.env.PLATYPUS_SANDBOX_DOCKER_ALLOWED_NETWORKS;
-  if (!raw) return [];
-  return raw
-    .split(",")
-    .map((s) => s.trim())
-    .filter((s) => s.length > 0);
+// (ADR-0005), defaulting to `[]` — an empty allowlist keeps the default-deny
+// posture when the Operator lists the plugin but supplies no config block. Pure
+// JSON array (no comma-separated string). Docker has no plugin-level secrets, so
+// there is no companion credentialsSchema.
+export const dockerPluginConfigSchema = z
+  .object({
+    allowedNetworks: z.array(z.string().min(1)).default([]),
+  })
+  .strict();
+
+export type DockerPluginConfig = z.infer<typeof dockerPluginConfigSchema>;
+
+// Read the Operator network allowlist out of @platypus/docker's boot-resolved
+// plugin config. Defensive-parses so a caller can pass the raw registry value;
+// an absent/invalid block yields `[]` (default-deny). Feeds the admin
+// multi-select endpoint (GET .../sandbox/networks).
+export function readAllowedDockerNetworks(pluginConfig: unknown): string[] {
+  const parsed = dockerPluginConfigSchema.safeParse(pluginConfig ?? {});
+  return parsed.success ? parsed.data.allowedNetworks : [];
 }
 
 // A single ExtraHosts entry: `hostname:target` where target is `host-gateway`,
@@ -56,10 +68,9 @@ export function readAllowedDockerNetworks(): string[] {
 const EXTRA_HOST_PATTERN =
   /^[A-Za-z0-9.-]+:(?:host-gateway|[0-9.]+|[0-9A-Fa-f:]+)$/;
 
-// Per-Sandbox host reachability (ADR-0005). Both default to empty: a new
-// Sandbox reaches no host service until an org admin grants it. `networks` is
-// validated against the operator allowlist; out-of-allowlist entries fail.
-export const dockerSandboxConfigSchema = z
+// Per-Sandbox host reachability (ADR-0005). Both default to empty: a new Sandbox
+// reaches no host service until an org admin grants it.
+const dockerSandboxConfigBase = z
   .object({
     networks: z.array(z.string().min(1)).default([]),
     extraHosts: z
@@ -71,22 +82,38 @@ export const dockerSandboxConfigSchema = z
       )
       .default([]),
   })
-  .strict()
-  .superRefine((cfg, ctx) => {
-    const allowed = new Set(readAllowedDockerNetworks());
+  .strict();
+
+export type DockerSandboxConfig = z.infer<typeof dockerSandboxConfigBase>;
+
+// Factory form (ADR-0013): the per-Workspace config schema closes over the
+// Operator's `allowedNetworks` from the plugin config injected at load, so an
+// out-of-allowlist `networks` entry is rejected at config-save time (ADR-0005).
+// The loader resolves this against the boot-validated plugin config into a
+// concrete schema before core's static safeParse consumers see it. The argument
+// arrives as `unknown` (the SDK's opaque plugin-config shape); we re-validate it
+// through the plugin schema so the factory is self-contained and defensively
+// defaults to an empty allowlist (default-deny).
+export const dockerSandboxConfigSchema = (pluginConfig: unknown) => {
+  const { allowedNetworks } = dockerPluginConfigSchema.parse(
+    pluginConfig ?? {},
+  );
+  const allowed = new Set(allowedNetworks);
+  return dockerSandboxConfigBase.superRefine((cfg, ctx) => {
     for (const n of cfg.networks) {
       if (!allowed.has(n)) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           path: ["networks"],
-          message: `Network '${n}' is not in the operator allowlist (PLATYPUS_SANDBOX_DOCKER_ALLOWED_NETWORKS)`,
+          message: `Network '${n}' is not in the operator allowlist (@platypus/docker plugin config 'allowedNetworks')`,
         });
       }
     }
   });
+};
+
 export const dockerSandboxCredentialsSchema = z.object({}).strict();
 
-export type DockerSandboxConfig = z.infer<typeof dockerSandboxConfigSchema>;
 export type DockerSandboxCredentials = z.infer<
   typeof dockerSandboxCredentialsSchema
 >;

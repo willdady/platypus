@@ -670,12 +670,8 @@ const SandboxSettings = ({
                 <FieldLabel>Networks</FieldLabel>
                 <FieldDescription>
                   Docker networks this sandbox may attach to. The list is
-                  declared by the operator via
-                  <span className="font-mono">
-                    {" "}
-                    PLATYPUS_SANDBOX_DOCKER_ALLOWED_NETWORKS
-                  </span>
-                  . Off by default.
+                  declared by the operator in the deployment&apos;s plugin
+                  configuration. Off by default.
                 </FieldDescription>
                 {allowedNetworks.length === 0 ? (
                   <p className="text-sm text-muted-foreground">

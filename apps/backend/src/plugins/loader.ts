@@ -8,7 +8,10 @@ import {
 } from "@platypuschat/plugin-sdk";
 import { ALWAYS_ON_PLUGINS, BUILTIN_PLUGINS } from "./builtin.ts";
 import { registerToolSet } from "../tools/index.ts";
-import { registerSandboxBackend } from "../sandbox/index.ts";
+import {
+  registerSandboxBackend,
+  type SandboxBackendRegistration,
+} from "../sandbox/index.ts";
 
 // Summary of one loaded plugin, for the boot log line and observability.
 export interface LoadedPlugin {
@@ -17,6 +20,15 @@ export interface LoadedPlugin {
   origin: "core" | "third-party";
   toolSetIds: string[];
   sandboxBackendIds: string[];
+  /**
+   * The plugin's boot-resolved, Operator-owned deploy-time **config** (never
+   * credentials), or `undefined` when the manifest declares no `configSchema`.
+   * Carried so the registry can serve it to request handlers that need a
+   * plugin's resolved config without re-parsing the environment — e.g. the
+   * Docker network-allowlist endpoint (ADR-0005/0013). The read-only `GET
+   * /plugins` catalog cherry-picks fields and never exposes this.
+   */
+  config?: unknown;
 }
 
 // A module that exports a plugin manifest. Values are `unknown` until validated.
@@ -395,14 +407,29 @@ export async function loadPlugins(
         );
       }
 
+      // Resolve a factory-form configSchema against the boot-resolved plugin
+      // config so the three static `configSchema.safeParse` consumers (save
+      // route, teardown, tool resolver) always receive a concrete schema — they
+      // never see plugin config. A plain schema passes through untouched
+      // (append-only: plugin-config-agnostic backends are unaffected).
+      const resolvedConfigSchema =
+        typeof contribution.configSchema === "function"
+          ? contribution.configSchema(pluginCtx.config)
+          : contribution.configSchema;
+
       // Bind the same shared plugin config into create() so core's per-turn
       // callers (chat resolution, teardown) keep calling create(config,
       // credentials) with the per-Workspace values only. Third-party backends
       // also register under the namespaced discriminator, so the
       // `sandbox.backend` column resolves to the prefixed id (mirroring tool sets).
-      const boundContribution: SandboxBackendContribution = {
+      //
+      // Typed as the core registration (concrete configSchema): the factory form
+      // has been resolved away above, so what we register — and what the static
+      // safeParse consumers receive — is always a plain schema.
+      const boundContribution: SandboxBackendRegistration = {
         ...contribution,
         backend: effectiveBackend,
+        configSchema: resolvedConfigSchema,
         create: (config, credentials) =>
           contribution.create(config, credentials, pluginCtx),
       };
@@ -430,6 +457,9 @@ export async function loadPlugins(
       origin,
       toolSetIds,
       sandboxBackendIds,
+      // Carry the resolved deploy-time config (config only, never credentials)
+      // so request handlers can read it via the registry (ADR-0013).
+      config: pluginCtx.config,
     });
   }
 

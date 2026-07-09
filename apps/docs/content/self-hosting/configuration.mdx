@@ -173,8 +173,10 @@ a single JSON object keyed by plugin name, each value an optional `config`
   merge.
 - **Only plugins that declare schemas consume it.** A plugin with no
   plugin-level `configSchema` / `credentialsSchema` (e.g. `@platypus/tools-basic`)
-  ignores any entry. `@platypus/docker` keeps taking its per-Workspace config as
-  before and needs no entry here.
+  ignores any entry. `@platypus/docker` **does** take an entry — its Operator
+  network allowlist lives here as `config.allowedNetworks` (see the Docker bullet
+  under [Sandbox](#sandbox) below); its genuinely per-Workspace settings still
+  live on the Sandbox row.
 
 Treat `PLATYPUS_PLUGIN_CONFIG` like any secret-bearing env var: inject it from
 your secret manager, never commit it.
@@ -187,10 +189,10 @@ Platypus ships two reference backends, each enabled by listing its plugin in
 and its sandbox configuration is inert:
 
 - **Docker** — `@platypus/docker`. One container per Workspace on the local
-  daemon; development / single-node only. Its Operator allowlist,
-  `PLATYPUS_SANDBOX_DOCKER_ALLOWED_NETWORKS`, bounds which Docker networks an Org
-  Admin may attach a sandbox to (default-deny), and it needs the opt-in
-  `compose.sandbox.yaml` overlay.
+  daemon; development / single-node only. Its Operator allowlist —
+  `config.allowedNetworks` in the plugin's `PLATYPUS_PLUGIN_CONFIG` entry — bounds
+  which Docker networks an Org Admin may attach a sandbox to (default-deny), and
+  it needs the opt-in `compose.sandbox.yaml` overlay.
 - **SSH** — `@platypus/ssh`. Attaches to a pre-existing, operator-owned host over
   SSH. It takes **no deployment env vars** — the connection target (host, user,
   key, optional host-key pin) is per-Workspace Sandbox config set in-app. It is the
