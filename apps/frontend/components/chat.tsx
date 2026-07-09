@@ -36,6 +36,7 @@ import {
 import { type PlatypusUIMessage } from "@platypus/backend/src/types";
 import useSWR from "swr";
 import { fetcher, joinUrl } from "@/lib/utils";
+import { useResetOnChange } from "@/hooks/use-reset-on-change";
 import { useChatSettings } from "@/hooks/use-chat-settings";
 import { useModelSelection } from "@/hooks/use-model-selection";
 import { useMessageEditing } from "@/hooks/use-message-editing";
@@ -174,7 +175,10 @@ export const Chat = ({
     // Transport: `body` is a function so it's re-evaluated on every request.
     // This ensures dynamic values like agentId and model config are always current.
     // We use `getRequestBodyRef` (a ref) to avoid stale closures since this
-    // transport instance is created once and captured by useChat.
+    // transport instance is created once and captured by useChat. The `body`
+    // callback reads the ref at request time (not during render), which the
+    // static analysis can't prove from the construction site.
+    // eslint-disable-next-line react-hooks/refs
     transport: new DefaultChatTransport({
       api: joinUrl(
         backendUrl || "",
@@ -244,7 +248,9 @@ export const Chat = ({
   } = chatUI;
 
   // Use ref to store getRequestBody so the transport callback can access current values
-  const getRequestBodyRef = useRef<(() => any) | undefined>(undefined);
+  const getRequestBodyRef = useRef<(() => Record<string, unknown>) | undefined>(
+    undefined,
+  );
 
   // Create getRequestBody function that depends on extracted values
   const getRequestBody = useCallback(() => {
@@ -278,8 +284,11 @@ export const Chat = ({
     search,
   ]);
 
-  // Update ref whenever getRequestBody changes
-  getRequestBodyRef.current = getRequestBody;
+  // Update ref whenever getRequestBody changes. Written in an effect (not
+  // during render) so the transport body callback reads the latest value.
+  useEffect(() => {
+    getRequestBodyRef.current = getRequestBody;
+  }, [getRequestBody]);
 
   // Message editing hook (needs getRequestBody to be defined)
   const messageEditing = useMessageEditing(
@@ -303,7 +312,11 @@ export const Chat = ({
   // the streaming status transitions. Without this, ending a stream would
   // trigger the effect and overwrite the fresh messages with stale SWR data.
   const statusRef = useRef(status);
-  statusRef.current = status;
+  // Written in an effect (not during render) so the hydrate effect below reads
+  // the status committed by the previous render.
+  useEffect(() => {
+    statusRef.current = status;
+  }, [status]);
 
   useEffect(() => {
     if (
@@ -337,9 +350,7 @@ export const Chat = ({
   }, [initialAgentId, agentId, chatData, modelSetters]);
 
   // Reset search when model or provider changes
-  useEffect(() => {
-    setSearch(false);
-  }, [modelId, providerId]);
+  useResetOnChange(`${modelId}:${providerId}`, () => setSearch(false));
 
   const handleCopyMessage = useCallback(
     async (content: string, messageId: string) => {
@@ -382,10 +393,20 @@ export const Chat = ({
   }
 
   const selectedAgent = agentId ? agents.find((a) => a.id === agentId) : null;
-  const currentProvider = providerId
-    ? providers.find((p) => p.id === providerId)
+  // Resolve the provider backing the current selection, whether that's a raw
+  // model (providerId) or an agent (which carries its own providerId). Used to
+  // decide whether the chat search toggle is shown.
+  const resolvedProviderId = agentId ? selectedAgent?.providerId : providerId;
+  const resolvedProvider = resolvedProviderId
+    ? providers.find((p) => p.id === resolvedProviderId)
     : null;
-  const currentProviderType = currentProvider?.providerType;
+  // Show the search toggle only when the resolved provider supports native
+  // search (not Bedrock) and hasn't disabled it. Hidden when nothing is
+  // resolved yet — we can't search without a model. (#167)
+  const canSearch =
+    !!resolvedProvider &&
+    resolvedProvider.providerType !== "Bedrock" &&
+    resolvedProvider.nativeSearchEnabled !== false;
 
   // Treat a server-side run-in-progress as if we were locally streaming,
   // so a tab that reconnects mid-run (or an unrelated tab opened on the
@@ -496,7 +517,7 @@ export const Chat = ({
           <div className="w-full xl:w-4/5 max-w-4xl">
             {isWorkspaceOwner ? (
               <PromptInput
-                onSubmit={(message, event) => {
+                onSubmit={(message) => {
                   handleSubmit(message);
                   setInputValue("");
                 }}
@@ -541,8 +562,7 @@ export const Chat = ({
                       </TooltipTrigger>
                       <TooltipContent>Microphone</TooltipContent>
                     </Tooltip>
-                    {(!currentProviderType ||
-                      currentProviderType !== "Bedrock") && (
+                    {canSearch && (
                       <Tooltip delayDuration={1000}>
                         <TooltipTrigger asChild>
                           <PromptInputButton

@@ -13,10 +13,17 @@ pnpm dev               # frontend + backend + local Postgres
 pnpm drizzle-kit-push  # apply schema changes (requires `pnpm dev` running)
 pnpm build
 pnpm format
+pnpm lint
+pnpm typecheck         # tsc --noEmit (currently apps/backend); gated in CI
 pnpm test              # all tests (Vitest, orchestrated by Turborepo)
 ```
 
-Per-package: `pnpm --filter <pkg> test|test:watch|test:coverage`.
+Per-package: `pnpm --filter <pkg> test|test:watch|test:coverage|typecheck`.
+
+`pnpm typecheck` runs `tsc --noEmit` for every package exposing a `typecheck`
+script (currently `apps/backend`). CI fails on any type error — ESLint does not
+catch them, so run it before pushing. Other packages join the gate by adding
+their own `typecheck` script.
 
 Default admin on first startup: `admin@example.com` / `admin123` (override via `ADMIN_EMAIL` / `ADMIN_PASSWORD`).
 

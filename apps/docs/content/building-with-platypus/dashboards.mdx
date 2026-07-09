@@ -1,0 +1,104 @@
+---
+title: Dashboards
+description: Build a dashboard in a Workspace — add widgets (metric, text, image, weather, and charts), arrange them in an editable grid, and let Agents keep widget data up to date.
+---
+
+import { Callout, Steps } from "nextra/components";
+
+# Dashboards
+
+A **Dashboard** displays structured data as a grid of **widgets** in your
+Workspace. The split is deliberate: _you_ own the layout and the set of widgets,
+while an **Agent** can keep each widget's **data** current. That makes a dashboard
+a live readout — KPIs, status, charts — that an Agent updates as things change.
+
+## Create a dashboard
+
+<Steps>
+
+### Open the create form
+
+From your Workspace, go to the **Dashboards** section and click **Create
+dashboard**.
+
+### Name it
+
+- **Name** — must be unique within the Workspace (1–200 characters).
+- **Description** _(optional)_ — up to 500 characters.
+
+Save to land on the empty dashboard.
+
+</Steps>
+
+## Add and arrange widgets
+
+Click **Edit** (top right) to enter edit mode. Editing happens on desktop — the
+button is hidden on small viewports.
+
+<Steps>
+
+### Add a widget
+
+Click **Add widget**, choose a **type**, give it a **title**, and **Add**. It
+drops onto the grid with placeholder data.
+
+### Lay it out
+
+Drag widgets by their header and resize them on the grid. Switch between the
+**Desktop** and **Mobile** layout tabs to arrange each breakpoint — the mobile
+layout is edited here on desktop (it's read-only on a phone).
+
+### Edit widget data
+
+Click a widget's pencil icon to edit its data inline (the fields depend on the
+type), then save the widget.
+
+### Save the dashboard
+
+Click **Save** to persist your layout and widget changes, or **Cancel** to
+discard them and exit edit mode.
+
+</Steps>
+
+<Callout type="info">
+  In view mode a dashboard refreshes itself every few seconds, so changes —
+  yours or an Agent's — appear without a manual reload. Polling pauses while
+  you're editing.
+</Callout>
+
+## Widget types
+
+| Type                | Shows                                                            |
+| ------------------- | ---------------------------------------------------------------- |
+| **Metric**          | A single value with a label, optional unit, and change indicator |
+| **Text / Markdown** | Free-form Markdown content                                       |
+| **Image**           | An image by URL                                                  |
+| **Weather**         | A location's conditions and temperature                          |
+| **Line chart**      | One or more series over shared categories                        |
+| **Pie chart**       | A donut of labelled segments with an optional centre label       |
+| **Bar chart**       | One or more series over shared categories                        |
+
+## Agents and dashboards
+
+Grant an Agent the **Dashboards** tool set (in the [Agent form](/building-with-platypus/agents)'s
+**Tools** card, under _Productivity_) and it can keep your dashboards current. The
+tool set lets an Agent **list dashboards**, **list a dashboard's widgets**, **read
+a widget's full data**, and **update a widget's data**.
+
+<Callout type="warning">
+  Agents can change widget **data only** — never the layout, and they can't add
+  or remove widgets. You decide what's on the dashboard and where it sits; the
+  Agent fills in the numbers. (Updating a widget also requires matching its
+  type, so an Agent can't accidentally turn a chart into a metric.)
+</Callout>
+
+Pair this with a [Trigger](/building-with-platypus/triggers): a scheduled Agent
+run can refresh a dashboard's metrics or charts on a cadence, so the readout stays
+live without anyone opening a Chat.
+
+## Where to next
+
+- **[Agents & sub-agents](/building-with-platypus/agents)** — grant the
+  Dashboards tool set to an Agent.
+- **[Triggers](/building-with-platypus/triggers)** — refresh a dashboard on a
+  schedule.

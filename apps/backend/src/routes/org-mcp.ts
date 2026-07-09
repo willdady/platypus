@@ -6,10 +6,7 @@ import {
   auth as mcpAuth,
 } from "@ai-sdk/mcp";
 import { db } from "../index.ts";
-import {
-  mcp as mcpTable,
-  attachment as attachmentTable,
-} from "../db/schema.ts";
+import { mcp as mcpTable } from "../db/schema.ts";
 import {
   mcpCreateSchema,
   mcpUpdateSchema,
@@ -18,6 +15,8 @@ import {
 import { eq, and } from "drizzle-orm";
 import { requireAuth } from "../middleware/authentication.ts";
 import { requireOrgAccess } from "../middleware/authorization.ts";
+import { scrubDeletedAgentReference } from "../services/agent-references.ts";
+import { requireSharedDeletable } from "../services/scoped-resource.ts";
 import type { Variables } from "../server.ts";
 import { logger } from "../logger.ts";
 import {
@@ -27,22 +26,12 @@ import {
   buildMcpTransportConfig,
 } from "../services/mcp-oauth-provider.ts";
 import { OAUTH_TOKEN_CLEAR_FIELDS, sanitizeMcpResponse } from "./mcp.ts";
+import { NotFoundError } from "../errors.ts";
 
 // Org-scoped MCPs are Shared resources (ADR-0007). They introduce credentials
 // and external reach, so all mutations are org-admin-only (ADR-0006) — there is
 // no per-workspace delegation at org scope.
 const orgMcp = new Hono<{ Variables: Variables }>();
-
-/** Detects a Postgres unique-constraint violation across driver shapes. */
-const isUniqueViolation = (error: any): boolean =>
-  error.code === "23505" ||
-  error.cause?.code === "23505" ||
-  error.message?.includes("unique constraint") ||
-  error.cause?.message?.includes("unique constraint");
-
-const NAME_CONFLICT = {
-  error: "An MCP with this name already exists in this organization",
-} as const;
 
 /** Create an org-scoped MCP (admin only) */
 orgMcp.post(
@@ -54,23 +43,18 @@ orgMcp.post(
     const orgId = c.req.param("orgId")!;
     const data = c.req.valid("json");
 
-    try {
-      const record = await db
-        .insert(mcpTable)
-        .values({
-          id: nanoid(),
-          ...data,
-          organizationId: orgId,
-          workspaceId: null,
-        })
-        .returning();
-      return c.json(sanitizeMcpResponse(record[0]), 201);
-    } catch (error: any) {
-      if (isUniqueViolation(error)) {
-        return c.json(NAME_CONFLICT, 409);
-      }
-      throw error;
-    }
+    // A duplicate name surfaces as a Postgres unique violation, mapped to 409
+    // by the central onError (ADR-0010).
+    const record = await db
+      .insert(mcpTable)
+      .values({
+        id: nanoid(),
+        ...data,
+        organizationId: orgId,
+        workspaceId: null,
+      })
+      .returning();
+    return c.json(sanitizeMcpResponse(record[0]), 201);
   },
 );
 
@@ -94,7 +78,7 @@ orgMcp.get("/:mcpId", requireAuth, requireOrgAccess(), async (c) => {
     .where(and(eq(mcpTable.id, mcpId), eq(mcpTable.organizationId, orgId)))
     .limit(1);
   if (record.length === 0) {
-    return c.json({ error: "MCP not found" }, 404);
+    throw new NotFoundError("MCP not found");
   }
   return c.json(sanitizeMcpResponse(record[0]));
 });
@@ -119,30 +103,25 @@ orgMcp.put(
 
     const urlChanged = existing.length > 0 && existing[0].url !== data.url;
 
-    try {
-      const record = await db
-        .update(mcpTable)
-        .set({
-          ...data,
-          ...(urlChanged && {
-            ...OAUTH_TOKEN_CLEAR_FIELDS,
-            oauthClientId: null,
-            oauthClientSecret: null,
-          }),
-          updatedAt: new Date(),
-        })
-        .where(and(eq(mcpTable.id, mcpId), eq(mcpTable.organizationId, orgId)))
-        .returning();
-      if (record.length === 0) {
-        return c.json({ error: "MCP not found" }, 404);
-      }
-      return c.json(sanitizeMcpResponse(record[0]), 200);
-    } catch (error: any) {
-      if (isUniqueViolation(error)) {
-        return c.json(NAME_CONFLICT, 409);
-      }
-      throw error;
+    // A duplicate name surfaces as a Postgres unique violation, mapped to 409
+    // by the central onError (ADR-0010).
+    const record = await db
+      .update(mcpTable)
+      .set({
+        ...data,
+        ...(urlChanged && {
+          ...OAUTH_TOKEN_CLEAR_FIELDS,
+          oauthClientId: null,
+          oauthClientSecret: null,
+        }),
+        updatedAt: new Date(),
+      })
+      .where(and(eq(mcpTable.id, mcpId), eq(mcpTable.organizationId, orgId)))
+      .returning();
+    if (record.length === 0) {
+      throw new NotFoundError("MCP not found");
     }
+    return c.json(sanitizeMcpResponse(record[0]), 200);
   },
 );
 
@@ -155,34 +134,25 @@ orgMcp.delete(
     const orgId = c.req.param("orgId")!;
     const mcpId = c.req.param("mcpId");
 
-    // A Shared resource cannot be deleted while any Attachment references it
-    // (ADR-0007) — detach it from every Workspace first.
-    const [attached] = await db
-      .select()
-      .from(attachmentTable)
-      .where(
-        and(
-          eq(attachmentTable.resourceType, "mcp"),
-          eq(attachmentTable.resourceId, mcpId),
-        ),
-      )
-      .limit(1);
-    if (attached) {
-      return c.json(
-        {
-          error:
-            "Cannot delete: this MCP is attached to one or more workspaces. Detach it first.",
-        },
-        409,
-      );
-    }
+    // A Shared resource cannot be deleted while anything still points at it —
+    // an Attachment (ADR-0007) or a Blueprint (ADR-0008). Throws ConflictError
+    // → 409 via the central onError (ADR-0010).
+    await requireSharedDeletable(db, "mcp", mcpId);
 
-    const result = await db
-      .delete(mcpTable)
-      .where(and(eq(mcpTable.id, mcpId), eq(mcpTable.organizationId, orgId)))
-      .returning();
+    // Delete the MCP and scrub its (now-dead) id from any Agent's toolSetIds in
+    // the same transaction, so deletion never leaves dangling references.
+    const result = await db.transaction(async (tx) => {
+      const rows = await tx
+        .delete(mcpTable)
+        .where(and(eq(mcpTable.id, mcpId), eq(mcpTable.organizationId, orgId)))
+        .returning();
+      if (rows.length > 0) {
+        await scrubDeletedAgentReference(tx, "toolSetIds", mcpId);
+      }
+      return rows;
+    });
     if (result.length === 0) {
-      return c.json({ error: "MCP not found" }, 404);
+      throw new NotFoundError("MCP not found");
     }
     return c.json({ message: "MCP deleted" });
   },
@@ -299,6 +269,9 @@ orgMcp.post(
     if (!mcpRecord[0].url) {
       return c.json({ error: "MCP URL is not configured" }, 400);
     }
+    // Capture the narrowed URL before the `force` block reassigns
+    // `mcpRecord[0]`, which widens the property back to `string | null`.
+    const serverUrl = mcpRecord[0].url;
 
     // `force=true` clears stored tokens before the OAuth flow so mcpAuth always
     // returns REDIRECT (see mcp.ts for the full rationale). DCR/static client
@@ -320,7 +293,7 @@ orgMcp.post(
       );
 
       const result = await mcpAuth(provider, {
-        serverUrl: mcpRecord[0].url,
+        serverUrl,
         fetchFn: oauthFetchFn,
       });
 

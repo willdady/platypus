@@ -1,5 +1,19 @@
 # Sandbox host reachability is an admin-curated, default-deny capability bounded by an operator allowlist
 
+> **Update — see [ADR-0013](0013-plugin-system-manifest-driven-in-process-extension-points.md):**
+> the `PLATYPUS_SANDBOX_DOCKER_ENABLED` gate referenced below (as a naming parallel
+> for the allowlist env var) has since been retired; Docker enablement moved to
+> plugin-list membership. `PLATYPUS_SANDBOX_DOCKER_ALLOWED_NETWORKS` and the
+> reachability model this ADR decides are unchanged.
+>
+> **Update — [#312](https://github.com/willdady/platypus/issues/312):** the
+> Operator allowlist _source_ has since moved off the dedicated
+> `PLATYPUS_SANDBOX_DOCKER_ALLOWED_NETWORKS` env var onto `@platypus/docker`'s
+> plugin-level config — `config.allowedNetworks` supplied via
+> `PLATYPUS_PLUGIN_CONFIG` (ADR-0013). The env var is removed (hard cutover). Only
+> the declaration surface moved; the default-deny, admin-curated reachability
+> model decided below — including save-time allowlist validation — is unchanged.
+
 The Docker reference Sandbox adapter exposes host/service reachability as two per-Sandbox config fields — `networks` (Docker networks to attach) and `extraHosts` (host-gateway aliases) — both defaulting to empty: a new Sandbox can reach no host service until reachability is explicitly granted. The eligible set is declared by the Operator at deployment time via `PLATYPUS_SANDBOX_DOCKER_ALLOWED_NETWORKS`; an Org Admin selects a subset per Sandbox; the submitted subset is validated server-side against the allowlist. Both fields are org-admin-only (a non-admin Workspace Owner receives 403). Reach changes take effect only on container recreate, honoring ADR-0003's frozen-container rule.
 
 ## Considered Options

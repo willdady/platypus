@@ -118,7 +118,7 @@ export const TriggerList = ({
         setDeleteDialogOpen(false);
         setTriggerToDelete(null);
       }
-    } catch (error) {
+    } catch {
       toast.error("Failed to delete trigger");
     } finally {
       setIsDeleting(false);
@@ -151,7 +151,7 @@ export const TriggerList = ({
       if (response.ok) {
         mutate();
       }
-    } catch (error) {
+    } catch {
       toast.error("Failed to toggle trigger");
     } finally {
       setIsToggling(false);
@@ -264,7 +264,7 @@ export const TriggerList = ({
                           className="cursor-pointer"
                           href={`/${orgId}/workspace/${workspaceId}/triggers/${trigger.id}/runs`}
                         >
-                          <List /> View Runs
+                          <List /> View runs
                         </Link>
                       </DropdownMenuItem>
                       <DropdownMenuItem

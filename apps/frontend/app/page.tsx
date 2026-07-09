@@ -19,7 +19,7 @@ import {
   EmptyTitle,
 } from "@/components/ui/empty";
 import { useAuth } from "@/components/auth-provider";
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 
 export default function Home() {
@@ -32,7 +32,7 @@ export default function Home() {
     fetcher,
   );
 
-  const organizations = data?.results || [];
+  const organizations = useMemo(() => data?.results || [], [data]);
 
   // Redirect to first organization if available
   useEffect(() => {
@@ -96,7 +96,7 @@ export default function Home() {
               <EmptyContent>
                 <Button asChild className="w-full">
                   <Link href="/create">
-                    <Plus className="h-4 w-4" /> Create Organization
+                    <Plus className="h-4 w-4" /> Create organization
                   </Link>
                 </Button>
               </EmptyContent>

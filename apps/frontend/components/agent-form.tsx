@@ -20,9 +20,18 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import { ConfirmDialog } from "@/components/confirm-dialog";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { ChevronsUpDown, Trash2, ImageIcon, Camera, X } from "lucide-react";
+import { useResetOnChange } from "@/hooks/use-reset-on-change";
+import Link from "next/link";
+import {
+  ChevronsUpDown,
+  Trash2,
+  ImageIcon,
+  Camera,
+  X,
+  Building,
+} from "lucide-react";
 import {
   Select,
   SelectContent,
@@ -53,13 +62,18 @@ const AgentForm = ({
   agentId,
   toolSets,
   agents: propAgents,
+  orgScoped = false,
 }: {
   classNames?: string;
   orgId: string;
-  workspaceId: string;
+  workspaceId?: string;
   agentId?: string;
   toolSets: ToolSet[];
   agents?: Agent[];
+  // When true the form edits an org-scoped (Shared) Agent on the Organization
+  // surface, pulling its references from org-scoped lists and writing via the
+  // org Agent routes (ADR-0007). Otherwise it edits a workspace Agent.
+  orgScoped?: boolean;
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
@@ -69,54 +83,57 @@ const AgentForm = ({
   const backendUrl = useBackendUrl();
   const { mutate } = useSWRConfig();
 
+  // Resource base paths differ by scope: the Organization surface lists/writes
+  // org-scoped references, the Workspace surface its own.
+  const agentsBase = orgScoped
+    ? `/organizations/${orgId}/agents`
+    : `/organizations/${orgId}/workspaces/${workspaceId}/agents`;
+  const providersBase = orgScoped
+    ? `/organizations/${orgId}/providers`
+    : `/organizations/${orgId}/workspaces/${workspaceId}/providers`;
+  const skillsBase = orgScoped
+    ? `/organizations/${orgId}/skills`
+    : `/organizations/${orgId}/workspaces/${workspaceId}/skills`;
+  const doneHref = orgScoped
+    ? `/${orgId}/settings/agents`
+    : `/${orgId}/workspace/${workspaceId}`;
+
   // Fetch providers
   const { data: providersData, isLoading: providersLoading } = useSWR<{
     results: Provider[];
-  }>(
-    backendUrl && user
-      ? joinUrl(
-          backendUrl,
-          `/organizations/${orgId}/workspaces/${workspaceId}/providers`,
-        )
-      : null,
-    fetcher,
+  }>(backendUrl && user ? joinUrl(backendUrl, providersBase) : null, fetcher);
+  const providers = useMemo(
+    () => providersData?.results || [],
+    [providersData],
   );
-  const providers = providersData?.results || [];
 
   // Fetch skills
   const { data: skillsData } = useSWR<{ results: Skill[] }>(
-    backendUrl && user
-      ? joinUrl(
-          backendUrl,
-          `/organizations/${orgId}/workspaces/${workspaceId}/skills`,
-        )
-      : null,
+    backendUrl && user ? joinUrl(backendUrl, skillsBase) : null,
     fetcher,
   );
   const skills = skillsData?.results || [];
 
   // Fetch agents for sub-agent selection
   const { data: agentsData } = useSWR<{ results: Agent[] }>(
-    backendUrl && user
-      ? joinUrl(
-          backendUrl,
-          `/organizations/${orgId}/workspaces/${workspaceId}/agents`,
-        )
-      : null,
+    backendUrl && user ? joinUrl(backendUrl, agentsBase) : null,
     fetcher,
   );
   const agents = propAgents || agentsData?.results || [];
 
   // Fetch existing agent data if editing
-  const { data: agent, isLoading: agentLoading } = useSWR<Agent>(
-    agentId && user
-      ? joinUrl(
-          backendUrl,
-          `/organizations/${orgId}/workspaces/${workspaceId}/agents/${agentId}`,
-        )
-      : null,
+  const { data: agent, isLoading: agentLoading } = useSWR<
+    Agent & { scope?: "organization" | "workspace" }
+  >(
+    agentId && user ? joinUrl(backendUrl, `${agentsBase}/${agentId}`) : null,
     fetcher,
   );
+
+  // A Shared Agent opened on the Workspace surface is read-only for everyone —
+  // it is edited only on the Organization surface (ADR-0007). In org mode the
+  // form is the canonical editor, so it is always editable.
+  const isOrgScoped = agent?.scope === "organization";
+  const readOnly = isOrgScoped && !orgScoped;
 
   const [formData, setFormData] = useState({
     name: "",
@@ -125,7 +142,7 @@ const AgentForm = ({
     systemPrompt: "",
     providerId: "",
     modelId: "",
-    maxSteps: 30,
+    maxSteps: 15,
     temperature: undefined as number | undefined,
     toolSetIds: [] as string[],
     skillIds: [] as string[],
@@ -148,23 +165,26 @@ const AgentForm = ({
   const router = useRouter();
 
   // Initialize with first provider's first model once providers are loaded
-  useEffect(() => {
-    if (
-      providers.length > 0 &&
-      !formData.modelId &&
-      !formData.providerId &&
-      !agentId
-    ) {
-      setFormData((prevData) => ({
-        ...prevData,
-        modelId: providers[0].modelIds[0],
-        providerId: providers[0].id,
-      }));
-    }
-  }, [providers, formData.modelId, formData.providerId, agentId]);
+  useResetOnChange(
+    `${providers.length}:${formData.modelId ?? ""}:${formData.providerId ?? ""}:${agentId ?? ""}`,
+    () => {
+      if (
+        providers.length > 0 &&
+        !formData.modelId &&
+        !formData.providerId &&
+        !agentId
+      ) {
+        setFormData((prevData) => ({
+          ...prevData,
+          modelId: providers[0].modelIds[0],
+          providerId: providers[0].id,
+        }));
+      }
+    },
+  );
 
   // Initialize form with existing agent data when editing
-  useEffect(() => {
+  useResetOnChange(agent, () => {
     if (agent) {
       setFormData({
         name: agent.name,
@@ -173,7 +193,7 @@ const AgentForm = ({
         systemPrompt: agent.systemPrompt || "",
         providerId: agent.providerId,
         modelId: agent.modelId,
-        maxSteps: agent.maxSteps || 30,
+        maxSteps: agent.maxSteps || 15,
         temperature: agent.temperature ?? undefined,
         topP: agent.topP ?? undefined,
         topK: agent.topK ?? undefined,
@@ -189,7 +209,7 @@ const AgentForm = ({
         setAvatarDeleted(false);
       }
     }
-  }, [agent]);
+  });
 
   const handleChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>,
@@ -225,20 +245,23 @@ const AgentForm = ({
     }));
   };
 
+  const setAvatarFromFile = useCallback(
+    (file: File) => {
+      if (avatarPreviewUrl) {
+        URL.revokeObjectURL(avatarPreviewUrl);
+      }
+      setAvatarFile(file);
+      setAvatarPreviewUrl(URL.createObjectURL(file));
+      setAvatarDeleted(false);
+    },
+    [avatarPreviewUrl],
+  );
+
   const handleAvatarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
       setAvatarFromFile(file);
     }
-  };
-
-  const setAvatarFromFile = (file: File) => {
-    if (avatarPreviewUrl) {
-      URL.revokeObjectURL(avatarPreviewUrl);
-    }
-    setAvatarFile(file);
-    setAvatarPreviewUrl(URL.createObjectURL(file));
-    setAvatarDeleted(false);
   };
 
   const handleAvatarDelete = () => {
@@ -266,12 +289,12 @@ const AgentForm = ({
     };
     document.addEventListener("paste", handlePaste);
     return () => document.removeEventListener("paste", handlePaste);
-  }, [avatarPreviewUrl]);
+  }, [setAvatarFromFile]);
 
   const handleModelChange = (value: string) => {
     if (value.startsWith("provider:")) {
       // Provider/model selected
-      const [_, newProviderId, ...modelIdParts] = value.split(":");
+      const [, newProviderId, ...modelIdParts] = value.split(":");
       const newModelId = modelIdParts.join(":");
       setFormData((prevData) => ({
         ...prevData,
@@ -286,7 +309,8 @@ const AgentForm = ({
     setValidationErrors({});
     try {
       const payload: Omit<Agent, "id" | "createdAt" | "updatedAt"> = {
-        workspaceId,
+        // Scope comes from the route, not the body; the org PUT ignores this.
+        workspaceId: orgScoped ? undefined : workspaceId,
         providerId: formData.providerId,
         name: formData.name,
         description: formData.description,
@@ -294,26 +318,23 @@ const AgentForm = ({
         systemPrompt: formData.systemPrompt,
         modelId: formData.modelId,
         maxSteps: formData.maxSteps,
-        temperature: formData.temperature,
-        topP: formData.topP,
-        topK: formData.topK,
-        seed: formData.seed,
-        presencePenalty: formData.presencePenalty,
-        frequencyPenalty: formData.frequencyPenalty,
+        // Send null (not undefined) for cleared sampling params so the key
+        // survives JSON.stringify and the backend persists the cleared value
+        // instead of silently keeping the previous one (#263).
+        temperature: formData.temperature ?? null,
+        topP: formData.topP ?? null,
+        topK: formData.topK ?? null,
+        seed: formData.seed ?? null,
+        presencePenalty: formData.presencePenalty ?? null,
+        frequencyPenalty: formData.frequencyPenalty ?? null,
         toolSetIds: formData.toolSetIds,
         skillIds: formData.skillIds,
         subAgentIds: formData.subAgentIds,
       };
 
       const url = agentId
-        ? joinUrl(
-            backendUrl,
-            `/organizations/${orgId}/workspaces/${workspaceId}/agents/${agentId}`,
-          )
-        : joinUrl(
-            backendUrl,
-            `/organizations/${orgId}/workspaces/${workspaceId}/agents`,
-          );
+        ? joinUrl(backendUrl, `${agentsBase}/${agentId}`)
+        : joinUrl(backendUrl, agentsBase);
 
       const method = agentId ? "PUT" : "POST";
 
@@ -332,10 +353,7 @@ const AgentForm = ({
 
         if (avatarDeleted && agentId) {
           await fetch(
-            joinUrl(
-              backendUrl,
-              `/organizations/${orgId}/workspaces/${workspaceId}/agents/${savedAgentId}/avatar`,
-            ),
+            joinUrl(backendUrl, `${agentsBase}/${savedAgentId}/avatar`),
             {
               method: "DELETE",
               credentials: "include",
@@ -345,10 +363,7 @@ const AgentForm = ({
           const avatarFormData = new FormData();
           avatarFormData.append("file", avatarFile);
           await fetch(
-            joinUrl(
-              backendUrl,
-              `/organizations/${orgId}/workspaces/${workspaceId}/agents/${savedAgentId}/avatar`,
-            ),
+            joinUrl(backendUrl, `${agentsBase}/${savedAgentId}/avatar`),
             {
               method: "POST",
               body: avatarFormData,
@@ -357,13 +372,8 @@ const AgentForm = ({
           );
         }
 
-        await mutate(
-          joinUrl(
-            backendUrl,
-            `/organizations/${orgId}/workspaces/${workspaceId}/agents`,
-          ),
-        );
-        router.push(`/${orgId}/workspace/${workspaceId}`);
+        await mutate(joinUrl(backendUrl, agentsBase));
+        router.push(doneHref);
       } else {
         // Parse standardschema.dev validation errors
         const errorData = await response.json();
@@ -384,10 +394,7 @@ const AgentForm = ({
     setIsDeleting(true);
     try {
       const response = await fetch(
-        joinUrl(
-          backendUrl,
-          `/organizations/${orgId}/workspaces/${workspaceId}/agents/${agentId}`,
-        ),
+        joinUrl(backendUrl, `${agentsBase}/${agentId}`),
         {
           method: "DELETE",
           credentials: "include",
@@ -395,7 +402,7 @@ const AgentForm = ({
       );
 
       if (response.ok) {
-        router.push(`/${orgId}/workspace/${workspaceId}`);
+        router.push(doneHref);
       } else {
         console.error("Failed to delete agent");
         toast.error("Failed to delete agent");
@@ -453,6 +460,22 @@ const AgentForm = ({
 
   return (
     <div className={classNames}>
+      {readOnly && (
+        <div className="mb-6 rounded-md border bg-secondary/50 p-3 text-sm flex items-center gap-2">
+          <Building className="size-4 shrink-0" />
+          <span>
+            This is a shared organization agent and is read-only here. Edit it
+            in{" "}
+            <Link
+              href={`/${orgId}/settings/agents/${agentId}`}
+              className="underline"
+            >
+              Organization settings
+            </Link>
+            .
+          </span>
+        </div>
+      )}
       <FieldSet className="mb-6">
         <div className="flex flex-col items-center">
           <div className="relative">
@@ -460,10 +483,13 @@ const AgentForm = ({
               type="button"
               onClick={() => avatarInputRef.current?.click()}
               className="relative group cursor-pointer flex"
-              disabled={isSubmitting}
+              disabled={isSubmitting || readOnly}
             >
               <div className="w-20 h-20 rounded-2xl bg-muted flex items-center justify-center overflow-hidden border-2 border-dashed border-muted-foreground/20 hover:border-muted-foreground/40 transition-colors">
                 {avatarPreviewUrl ? (
+                  // Local blob:/object-URL preview of the chosen file; the Next
+                  // image optimizer cannot process object URLs.
+                  // eslint-disable-next-line @next/next/no-img-element
                   <img
                     src={avatarPreviewUrl}
                     alt="Avatar"
@@ -486,7 +512,7 @@ const AgentForm = ({
                 type="button"
                 onClick={handleAvatarDelete}
                 className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-destructive whitespace-nowrap"
-                disabled={isSubmitting}
+                disabled={isSubmitting || readOnly}
               >
                 <X className="w-4 h-4" />
                 Remove
@@ -499,7 +525,7 @@ const AgentForm = ({
             accept="image/*"
             onChange={handleAvatarChange}
             className="hidden"
-            disabled={isSubmitting}
+            disabled={isSubmitting || readOnly}
           />
         </div>
 
@@ -511,7 +537,7 @@ const AgentForm = ({
               placeholder="Name"
               value={formData.name}
               onChange={handleChange}
-              disabled={isSubmitting}
+              disabled={isSubmitting || readOnly}
               aria-invalid={!!validationErrors.name}
               autoFocus
             />
@@ -527,7 +553,7 @@ const AgentForm = ({
               placeholder="Description of the agent..."
               value={formData.description}
               onChange={handleChange}
-              disabled={isSubmitting}
+              disabled={isSubmitting || readOnly}
               maxLength={128}
               aria-invalid={!!validationErrors.description}
               error={validationErrors.description}
@@ -542,7 +568,7 @@ const AgentForm = ({
               placeholder="What would you like to know?"
               value={formData.inputPlaceholder}
               onChange={handleChange}
-              disabled={isSubmitting}
+              disabled={isSubmitting || readOnly}
               maxLength={100}
               aria-invalid={!!validationErrors.inputPlaceholder}
             />
@@ -561,7 +587,7 @@ const AgentForm = ({
               placeholder="You are a helpful agent..."
               value={formData.systemPrompt}
               onChange={handleChange}
-              disabled={isSubmitting}
+              disabled={isSubmitting || readOnly}
               className="!font-mono"
             />
           </Field>
@@ -570,9 +596,9 @@ const AgentForm = ({
             <Select
               value={`provider:${formData.providerId}:${formData.modelId}`}
               onValueChange={handleModelChange}
-              disabled={isSubmitting}
+              disabled={isSubmitting || readOnly}
             >
-              <SelectTrigger disabled={isSubmitting}>
+              <SelectTrigger disabled={isSubmitting || readOnly}>
                 <SelectValue placeholder="Select a model" />
               </SelectTrigger>
               <SelectContent>
@@ -600,7 +626,7 @@ const AgentForm = ({
               min="1"
               value={formData.maxSteps}
               onChange={(e) => handleNumberChange("maxSteps", e.target.value)}
-              disabled={isSubmitting}
+              disabled={isSubmitting || readOnly}
             />
             <FieldDescription>
               Controls when a tool-calling loop should stop based on the number
@@ -661,7 +687,7 @@ const AgentForm = ({
                                 };
                               });
                             }}
-                            disabled={isSubmitting}
+                            disabled={isSubmitting || readOnly}
                           />
                           <FieldLabel htmlFor={toolSet.id}>
                             <div className="flex flex-col">
@@ -707,7 +733,7 @@ const AgentForm = ({
                           };
                         });
                       }}
-                      disabled={isSubmitting}
+                      disabled={isSubmitting || readOnly}
                     />
                     <FieldLabel htmlFor={`skill-${skill.id}`}>
                       <div className="flex flex-col">
@@ -754,7 +780,7 @@ const AgentForm = ({
                                 ),
                           }));
                         }}
-                        disabled={isSubmitting}
+                        disabled={isSubmitting || readOnly}
                       />
                       <FieldLabel htmlFor={`subagent-${agent.id}`}>
                         <div className="flex items-center gap-2">
@@ -801,7 +827,7 @@ const AgentForm = ({
                   onChange={(e) =>
                     handleFloatChange("temperature", e.target.value)
                   }
-                  disabled={isSubmitting}
+                  disabled={isSubmitting || readOnly}
                 />
               </Field>
               <Field>
@@ -811,7 +837,7 @@ const AgentForm = ({
                   type="number"
                   value={formData.seed ?? ""}
                   onChange={(e) => handleNumberChange("seed", e.target.value)}
-                  disabled={isSubmitting}
+                  disabled={isSubmitting || readOnly}
                 />
               </Field>
               <Field>
@@ -824,7 +850,7 @@ const AgentForm = ({
                   step="0.1"
                   value={formData.topP ?? ""}
                   onChange={(e) => handleFloatChange("topP", e.target.value)}
-                  disabled={isSubmitting}
+                  disabled={isSubmitting || readOnly}
                 />
               </Field>
               <Field>
@@ -835,7 +861,7 @@ const AgentForm = ({
                   min="1"
                   value={formData.topK ?? ""}
                   onChange={(e) => handleNumberChange("topK", e.target.value)}
-                  disabled={isSubmitting}
+                  disabled={isSubmitting || readOnly}
                 />
               </Field>
               <Field>
@@ -852,7 +878,7 @@ const AgentForm = ({
                   onChange={(e) =>
                     handleFloatChange("presencePenalty", e.target.value)
                   }
-                  disabled={isSubmitting}
+                  disabled={isSubmitting || readOnly}
                 />
               </Field>
               <Field>
@@ -869,7 +895,7 @@ const AgentForm = ({
                   onChange={(e) =>
                     handleFloatChange("frequencyPenalty", e.target.value)
                   }
-                  disabled={isSubmitting}
+                  disabled={isSubmitting || readOnly}
                 />
               </Field>
             </FieldGroup>
@@ -881,12 +907,14 @@ const AgentForm = ({
         <Button
           className="cursor-pointer"
           onClick={handleSubmit}
-          disabled={isSubmitting || Object.keys(validationErrors).length > 0}
+          disabled={
+            isSubmitting || readOnly || Object.keys(validationErrors).length > 0
+          }
         >
           {agentId ? "Update" : "Save"}
         </Button>
 
-        {agentId && (
+        {agentId && !isOrgScoped && (
           <Button
             className="cursor-pointer"
             variant="outline"

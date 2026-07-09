@@ -19,6 +19,13 @@
       "persistent": true,
       "with": ["start-local-db"]
     },
+    "lint": {
+      "outputs": []
+    },
+    "typecheck": {
+      "dependsOn": ["^build"],
+      "outputs": []
+    },
     "drizzle-kit-push": {
       "cache": false
     },

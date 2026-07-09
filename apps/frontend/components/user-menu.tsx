@@ -52,7 +52,7 @@ export function UserMenu({ orgId, workspaceId }: UserMenuProps) {
           onClick={() => router.push(`/settings`)}
           className="cursor-pointer"
         >
-          <Settings className="size-4" /> My Settings
+          <Settings className="size-4" /> My settings
         </DropdownMenuItem>
         {orgId && workspaceId && (
           <DropdownMenuItem
@@ -61,7 +61,7 @@ export function UserMenu({ orgId, workspaceId }: UserMenuProps) {
             }
             className="cursor-pointer"
           >
-            <Settings className="size-4" /> Workspace Settings
+            <Settings className="size-4" /> Workspace settings
           </DropdownMenuItem>
         )}
         <DropdownMenuSeparator />

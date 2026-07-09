@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
+import { useResetOnChange } from "@/hooks/use-reset-on-change";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid } from "recharts";
 import type { Widget, LineChartWidgetData } from "@platypus/schemas";
 import {
@@ -43,17 +44,13 @@ export function LineChartWidget({
     toSeriesEntries(data?.series),
   );
 
-  useEffect(() => {
-    setTitle(widget.title);
-  }, [widget.title]);
-
-  useEffect(() => {
+  useResetOnChange(widget.title, () => setTitle(widget.title));
+  // updatedAt tracks server-side changes; array refs are not stable across renders
+  useResetOnChange(String(widget.updatedAt), () => {
     setYAxisLabel(data?.yAxisLabel ?? "");
     setCategoriesText(data?.categories?.join(", ") ?? "");
     setSeries(toSeriesEntries(data?.series));
-    // updatedAt tracks server-side changes; array refs are not stable across renders
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [String(widget.updatedAt)]);
+  });
 
   if (editing) {
     return (

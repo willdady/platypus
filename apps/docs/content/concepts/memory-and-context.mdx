@@ -1,0 +1,38 @@
+---
+title: Memory & context
+description: Memory lets an agent recall past activity; Context is the free-text notes you give it. Both shape the assistant's replies.
+---
+
+# Memory & context
+
+Two related ideas control what an **Agent** knows about _you_ and your past
+activity, beyond the messages in the current Chat: **Memory** and **Context**.
+
+## Memory
+
+**Memory** is a running summary of your prior activity that an Agent can recall.
+It's kept per person, per **Workspace**, and when an Agent is configured to use
+it, that summary is folded into the Agent's instructions automatically.
+
+**Why you'd use it:** so the assistant doesn't start from scratch every time.
+With Memory, an Agent can carry forward what it learned about your preferences,
+your projects, and earlier conversations — without you repeating yourself.
+
+Memory only comes into play when the Agent's tools include the memory tool set,
+so it's something you opt an Agent into rather than something that's always on.
+
+## Context
+
+**Context** is free-text notes _you_ write and attach for the assistant to read.
+You can set Context at two levels:
+
+- **global** — notes that apply everywhere you work, or
+- **per-Workspace** — notes specific to one Workspace.
+
+Whatever you put there is rendered into the Agent's instructions, so it's a
+direct way to tell the assistant standing facts: who you are, how you like
+answers formatted, what a project is about.
+
+**Memory vs. Context:** Memory is built up automatically from your activity;
+Context is written deliberately by you. They work together — Memory remembers,
+Context instructs.

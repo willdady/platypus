@@ -4,8 +4,16 @@ import {
   organizationMember,
   workspace as workspaceTable,
 } from "../db/schema.ts";
-import type { SuperAdminOrgMembership, OrgRole } from "../server.ts";
+import type {
+  SuperAdminOrgMembership,
+  OrgRole,
+  OrganizationMembership,
+  Variables,
+} from "../server.ts";
 import { orgScope, userScope, workspaceScope } from "../scope.ts";
+
+/** Hono environment for these middleware: carries the request-scoped Variables. */
+type Env = { Variables: Variables };
 
 /**
  * Checks if a user is a super admin based on their role field.
@@ -21,8 +29,8 @@ import { orgScope, userScope, workspaceScope } from "../scope.ts";
  * }
  * ```
  */
-const isSuperAdmin = (user: { role: string }): boolean => {
-  return user.role === "admin";
+const isSuperAdmin = (user: { role?: string | null } | undefined): boolean => {
+  return user?.role === "admin";
 };
 
 /**
@@ -45,9 +53,13 @@ const isSuperAdmin = (user: { role: string }): boolean => {
  * ```
  */
 const isSuperAdminMembership = (
-  membership: any,
+  membership: OrganizationMembership | SuperAdminOrgMembership | undefined,
 ): membership is SuperAdminOrgMembership => {
-  return membership?.isSuperAdmin === true;
+  return (
+    membership != null &&
+    "isSuperAdmin" in membership &&
+    membership.isSuperAdmin === true
+  );
 };
 
 /**
@@ -79,8 +91,9 @@ const isSuperAdminMembership = (
  * ```
  */
 export const requireOrgAccess = (requiredRoles?: OrgRole[]) =>
-  createMiddleware(async (c, next) => {
-    const user = c.get("user");
+  createMiddleware<Env>(async (c, next) => {
+    // requireAuth runs first, so user is always set here.
+    const user = c.get("user")!;
     const db = c.get("db");
 
     const parentScope = c.get("userScope") ?? userScope(user);
@@ -154,40 +167,20 @@ export const requireOrgAccess = (requiredRoles?: OrgRole[]) =>
  * app.get("/chats", requireAuth, requireOrgAccess(), requireWorkspaceAccess, handler);
  * ```
  */
-export const requireWorkspaceAccess = createMiddleware(async (c, next) => {
-  const user = c.get("user");
+export const requireWorkspaceAccess = createMiddleware<Env>(async (c, next) => {
+  // requireAuth and requireOrgAccess run first, so user and orgMembership are set.
+  const user = c.get("user")!;
   const db = c.get("db");
-  const orgMembership = c.get("orgMembership");
+  const orgMembership = c.get("orgMembership")!;
 
   const workspaceId = c.req.param("workspaceId");
+  const orgId = c.req.param("orgId");
 
   if (!workspaceId) {
     return c.json({ error: "Workspace ID required" }, 400);
   }
 
-  // Super admins bypass all checks but still check ownership
-  if (isSuperAdmin(user)) {
-    const [ws] = await db
-      .select()
-      .from(workspaceTable)
-      .where(eq(workspaceTable.id, workspaceId))
-      .limit(1);
-
-    if (!ws) {
-      return c.json({ error: "Workspace not found" }, 404);
-    }
-
-    const isOwner = ws.ownerId === user.id;
-    c.set("isWorkspaceOwner", isOwner);
-    const parent = c.get("orgScope");
-    if (parent) {
-      c.set("workspaceScope", workspaceScope(parent, workspaceId, isOwner));
-    }
-    await next();
-    return;
-  }
-
-  // Fetch workspace to check ownership
+  // Fetch the workspace once for every role branch below.
   const [ws] = await db
     .select()
     .from(workspaceTable)
@@ -198,9 +191,29 @@ export const requireWorkspaceAccess = createMiddleware(async (c, next) => {
     return c.json({ error: "Workspace not found" }, 404);
   }
 
+  // Cross-org guard: the workspace must belong to the organization named in
+  // the path. Without this, an admin (or super admin) of org A who knows a
+  // workspace id in org B could operate on it via /organizations/A/workspaces/B.
+  // Reply 404 (not 403) so we don't leak the existence of other orgs' workspaces.
+  // Applies uniformly to the member, org-admin, and super-admin branches below.
+  if (orgId && ws.organizationId !== orgId) {
+    return c.json({ error: "Workspace not found" }, 404);
+  }
+
   const isOwner = ws.ownerId === user.id;
 
-  // Org admins have access to all workspaces
+  // Super admins bypass ownership checks but still record ownership.
+  if (isSuperAdmin(user)) {
+    c.set("isWorkspaceOwner", isOwner);
+    const parent = c.get("orgScope");
+    if (parent) {
+      c.set("workspaceScope", workspaceScope(parent, workspaceId, isOwner));
+    }
+    await next();
+    return;
+  }
+
+  // Org admins have access to all workspaces in their organization.
   if (orgMembership.role === "admin") {
     c.set("isWorkspaceOwner", isOwner);
     const parent = c.get("orgScope");
@@ -253,7 +266,7 @@ export const requireWorkspaceAccess = createMiddleware(async (c, next) => {
 export const requireWorkspaceConfigAccess = (
   delegationFlag?: "providerSelfManagement" | "mcpSelfManagement",
 ) =>
-  createMiddleware(async (c, next) => {
+  createMiddleware<Env>(async (c, next) => {
     const user = c.get("user");
     const orgMembership = c.get("orgMembership");
 
@@ -322,7 +335,7 @@ export const requireWorkspaceConfigAccess = (
  * app.put("/system/settings", requireAuth, requireSuperAdmin, handler);
  * ```
  */
-export const requireSuperAdmin = createMiddleware(async (c, next) => {
+export const requireSuperAdmin = createMiddleware<Env>(async (c, next) => {
   const user = c.get("user");
 
   if (!isSuperAdmin(user)) {
@@ -361,7 +374,7 @@ export const requireSuperAdmin = createMiddleware(async (c, next) => {
  * app.post("/chats/:id/messages", requireAuth, requireOrgAccess(), requireWorkspaceAccess, requireWorkspaceOwner, handler);
  * ```
  */
-export const requireWorkspaceOwner = createMiddleware(async (c, next) => {
+export const requireWorkspaceOwner = createMiddleware<Env>(async (c, next) => {
   const isWorkspaceOwner = c.get("isWorkspaceOwner");
 
   if (!isWorkspaceOwner) {

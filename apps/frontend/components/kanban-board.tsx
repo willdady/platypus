@@ -1,6 +1,13 @@
 "use client";
 
-import { useState, useCallback, useRef, useEffect } from "react";
+import {
+  useState,
+  useCallback,
+  useRef,
+  useEffect,
+  useMemo,
+  useSyncExternalStore,
+} from "react";
 import useSWR from "swr";
 import {
   DndContext,
@@ -165,24 +172,38 @@ export function KanbanBoard({
   const [deleteColumnId, setDeleteColumnId] = useState<string | null>(null);
   const [deleteColumnHasCards, setDeleteColumnHasCards] = useState(false);
 
-  const columns: ColumnWithCards[] = localColumns ?? data?.columns ?? [];
+  const columns: ColumnWithCards[] = useMemo(
+    () => localColumns ?? data?.columns ?? [],
+    [localColumns, data],
+  );
   const labels = data?.board.labels ?? [];
 
-  const prevDataRef = useRef(data);
-  if (data !== prevDataRef.current && !activeId) {
-    prevDataRef.current = data;
-    if (localColumns) setLocalColumns(null);
+  // When fresh server data arrives (and we're not mid-drag), drop the local
+  // optimistic copy so the board reflects the server. Uses React's "adjust
+  // state during render" pattern (state, not a ref, to avoid reading/writing
+  // a ref during render).
+  const [prevData, setPrevData] = useState(data);
+  if (data !== prevData && !activeId) {
+    setPrevData(data);
+    // Use the raw state setter here: setLocalColumns writes localColumnsRef,
+    // and refs must not be written during render. The ref is re-synced on the
+    // next drag start (and only ever read inside drag handlers), so leaving it
+    // until then is safe.
+    if (localColumns) _setLocalColumns(null);
   }
 
-  // Detect desktop via pointer: fine media query to disable drag on touch devices
-  const [isDesktop, setIsDesktop] = useState(false);
-  useEffect(() => {
-    const mql = window.matchMedia("(pointer: fine)");
-    setIsDesktop(mql.matches);
-    const onChange = () => setIsDesktop(mql.matches);
-    mql.addEventListener("change", onChange);
-    return () => mql.removeEventListener("change", onChange);
-  }, []);
+  // Detect desktop via pointer: fine media query to disable drag on touch
+  // devices. useSyncExternalStore subscribes to the media query without a
+  // setState-in-effect and stays SSR-safe (server snapshot is false).
+  const isDesktop = useSyncExternalStore(
+    (onChange) => {
+      const mql = window.matchMedia("(pointer: fine)");
+      mql.addEventListener("change", onChange);
+      return () => mql.removeEventListener("change", onChange);
+    },
+    () => window.matchMedia("(pointer: fine)").matches,
+    () => false,
+  );
 
   const updateCardIdParam = useCallback(
     (cardId: string | null) => {
@@ -198,7 +219,9 @@ export function KanbanBoard({
     [searchParams, router, pathname],
   );
 
-  // Open card dialog from URL query param on initial data load
+  // Open card dialog from URL query param on initial data load. Runs once when
+  // data first arrives, reads the URL, and may navigate (updateCardIdParam) —
+  // genuine effect work, so opening the dialog via setState here is intended.
   const deepLinkHandledRef = useRef(false);
   useEffect(() => {
     if (deepLinkHandledRef.current || !data) return;
@@ -209,6 +232,7 @@ export function KanbanBoard({
       .flatMap((col) => col.cards)
       .find((c) => c.id === cardId);
     if (card) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setSelectedCard(card);
       setDialogOpen(true);
     } else {
@@ -248,13 +272,6 @@ export function KanbanBoard({
     [columnIds],
   );
 
-  const findColumnByCardId = useCallback(
-    (cardId: string): ColumnWithCards | undefined => {
-      return columns.find((col) => col.cards.some((c) => c.id === cardId));
-    },
-    [columns],
-  );
-
   const handleDragStart = useCallback(
     (event: DragStartEvent) => {
       const { active } = event;
@@ -264,99 +281,102 @@ export function KanbanBoard({
       activeTypeRef.current = type;
       setLocalColumns([...columns.map((c) => ({ ...c, cards: [...c.cards] }))]);
     },
-    [columns],
+    [columns, setLocalColumns],
   );
 
-  const handleDragOver = useCallback((event: DragOverEvent) => {
-    const { active, over } = event;
-    if (!over || activeTypeRef.current !== "card") return;
+  const handleDragOver = useCallback(
+    (event: DragOverEvent) => {
+      const { active, over } = event;
+      if (!over || activeTypeRef.current !== "card") return;
 
-    // Skip if we already scheduled an update this frame: a previous
-    // drag-over already set localColumns, and processing another one before
-    // React flushes can re-trigger this handler off the resulting layout
-    // shift.
-    if (dragOverFrameRef.current !== null) return;
+      // Skip if we already scheduled an update this frame: a previous
+      // drag-over already set localColumns, and processing another one before
+      // React flushes can re-trigger this handler off the resulting layout
+      // shift.
+      if (dragOverFrameRef.current !== null) return;
 
-    const cols = localColumnsRef.current;
-    if (!cols) return;
+      const cols = localColumnsRef.current;
+      if (!cols) return;
 
-    const activeColumn = cols.find((col) =>
-      col.cards.some((c) => c.id === active.id),
-    );
-    const overId = String(over.id);
-    const droppableColumnId = parseDropZoneId(overId);
-    const overColumn =
-      (droppableColumnId
-        ? cols.find((col) => col.id === droppableColumnId)
-        : null) ??
-      cols.find((col) => col.id === over.id) ??
-      cols.find((col) => col.cards.some((c) => c.id === over.id));
-
-    if (!activeColumn || !overColumn) return;
-
-    const scheduleNextFrame = () => {
-      dragOverFrameRef.current = requestAnimationFrame(() => {
-        dragOverFrameRef.current = null;
-      });
-    };
-
-    // Same column reorder
-    if (activeColumn.id === overColumn.id) {
-      const activeIndex = activeColumn.cards.findIndex(
-        (c) => c.id === active.id,
+      const activeColumn = cols.find((col) =>
+        col.cards.some((c) => c.id === active.id),
       );
-      const overIndex = overColumn.cards.findIndex((c) => c.id === over.id);
-      // overIndex === -1 means hovering over the column drop zone → move to end
-      const targetIndex =
-        overIndex === -1 ? activeColumn.cards.length - 1 : overIndex;
-      if (activeIndex !== targetIndex) {
-        scheduleNextFrame();
-        setLocalColumns((prev) => {
-          if (!prev) return prev;
-          return prev.map((c) =>
-            c.id === activeColumn.id
-              ? { ...c, cards: arrayMove(c.cards, activeIndex, targetIndex) }
-              : c,
-          );
-        });
-      }
-      return;
-    }
+      const overId = String(over.id);
+      const droppableColumnId = parseDropZoneId(overId);
+      const overColumn =
+        (droppableColumnId
+          ? cols.find((col) => col.id === droppableColumnId)
+          : null) ??
+        cols.find((col) => col.id === over.id) ??
+        cols.find((col) => col.cards.some((c) => c.id === over.id));
 
-    // Cross-column move
-    const activeColId = activeColumn.id;
-    const overColId = overColumn.id;
-    const overCardId = over.id;
-    scheduleNextFrame();
-    setLocalColumns((prev) => {
-      if (!prev) return prev;
-      return prev.map((c) => {
-        if (c.id === activeColId) {
-          return {
-            ...c,
-            cards: c.cards.filter((card) => card.id !== active.id),
-          };
+      if (!activeColumn || !overColumn) return;
+
+      const scheduleNextFrame = () => {
+        dragOverFrameRef.current = requestAnimationFrame(() => {
+          dragOverFrameRef.current = null;
+        });
+      };
+
+      // Same column reorder
+      if (activeColumn.id === overColumn.id) {
+        const activeIndex = activeColumn.cards.findIndex(
+          (c) => c.id === active.id,
+        );
+        const overIndex = overColumn.cards.findIndex((c) => c.id === over.id);
+        // overIndex === -1 means hovering over the column drop zone → move to end
+        const targetIndex =
+          overIndex === -1 ? activeColumn.cards.length - 1 : overIndex;
+        if (activeIndex !== targetIndex) {
+          scheduleNextFrame();
+          setLocalColumns((prev) => {
+            if (!prev) return prev;
+            return prev.map((c) =>
+              c.id === activeColumn.id
+                ? { ...c, cards: arrayMove(c.cards, activeIndex, targetIndex) }
+                : c,
+            );
+          });
         }
-        if (c.id === overColId) {
-          const movedCard = activeColumn.cards.find(
-            (card) => card.id === active.id,
-          );
-          if (!movedCard) return c;
-          const newCards = [...c.cards];
-          const overIndex = newCards.findIndex(
-            (card) => card.id === overCardId,
-          );
-          if (overIndex >= 0) {
-            newCards.splice(overIndex, 0, movedCard);
-          } else {
-            newCards.push(movedCard);
+        return;
+      }
+
+      // Cross-column move
+      const activeColId = activeColumn.id;
+      const overColId = overColumn.id;
+      const overCardId = over.id;
+      scheduleNextFrame();
+      setLocalColumns((prev) => {
+        if (!prev) return prev;
+        return prev.map((c) => {
+          if (c.id === activeColId) {
+            return {
+              ...c,
+              cards: c.cards.filter((card) => card.id !== active.id),
+            };
           }
-          return { ...c, cards: newCards };
-        }
-        return c;
+          if (c.id === overColId) {
+            const movedCard = activeColumn.cards.find(
+              (card) => card.id === active.id,
+            );
+            if (!movedCard) return c;
+            const newCards = [...c.cards];
+            const overIndex = newCards.findIndex(
+              (card) => card.id === overCardId,
+            );
+            if (overIndex >= 0) {
+              newCards.splice(overIndex, 0, movedCard);
+            } else {
+              newCards.push(movedCard);
+            }
+            return { ...c, cards: newCards };
+          }
+          return c;
+        });
       });
-    });
-  }, []);
+    },
+    [setLocalColumns],
+  );
 
   const handleDragEnd = useCallback(
     async (event: DragEndEvent) => {
@@ -521,7 +541,7 @@ export function KanbanBoard({
         setLocalColumns(null);
       }
     },
-    [baseUrl, mutate],
+    [baseUrl, mutate, setLocalColumns],
   );
 
   const handleAddColumn = useCallback(() => {
@@ -653,7 +673,7 @@ export function KanbanBoard({
         setLocalColumns(null);
       }
     },
-    [data?.columns, baseUrl, mutate],
+    [data?.columns, baseUrl, mutate, setLocalColumns],
   );
 
   const handleCardSave = useCallback(
@@ -878,7 +898,7 @@ export function KanbanBoard({
               className="flex flex-col items-center justify-center w-40 min-w-40 shrink-0 bg-muted/30 rounded-lg border border-dashed border-muted-foreground/30 text-muted-foreground hover:bg-muted/50 transition-colors cursor-pointer"
             >
               <Plus className="h-8 w-8" />
-              <span className="text-sm">Add Column</span>
+              <span className="text-sm">Add column</span>
             </button>
           </div>
         </div>
@@ -940,7 +960,7 @@ export function KanbanBoard({
             >
               Cancel
             </Button>
-            <Button onClick={confirmAddColumn}>Add Column</Button>
+            <Button onClick={confirmAddColumn}>Add column</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -1001,7 +1021,7 @@ export function KanbanBoard({
             >
               Cancel
             </Button>
-            <Button onClick={confirmAddCard}>Add Card</Button>
+            <Button onClick={confirmAddCard}>Add card</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

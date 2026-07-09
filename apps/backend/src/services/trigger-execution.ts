@@ -105,7 +105,7 @@ export const executeTrigger = async (
       id: nanoid(),
       role: "user",
       parts: [{ type: "text", text: effectiveInstruction }],
-    } as PlatypusUIMessage,
+    },
   ];
 
   const input: RunInput = {

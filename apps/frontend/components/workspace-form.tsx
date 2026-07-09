@@ -27,7 +27,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { useState, useEffect } from "react";
+import { useState } from "react";
+import { useResetOnChange } from "@/hooks/use-reset-on-change";
 import { useRouter } from "next/navigation";
 import { type Workspace, type Provider } from "@platypus/schemas";
 import { fetcher, parseValidationErrors, joinUrl } from "@/lib/utils";
@@ -84,17 +85,33 @@ const WorkspaceForm = ({
   );
   const members = membersData?.results || [];
 
-  const [formData, setFormData] = useState({
+  // Owner options for the create form. A super-admin acting on an org they're
+  // not enrolled in (e.g. a brand-new org with no members) won't appear in
+  // /members, but the backend lets them own a workspace by defaulting to
+  // themselves (ADR-0008). Always offer the current user so the "defaults to
+  // you" default resolves to a real, selectable option.
+  const ownerOptions =
+    user && !members.some((m) => m.userId === user.id)
+      ? [
+          { userId: user.id, user: { name: user.name, email: user.email } },
+          ...members,
+        ]
+      : members;
+
+  const [formData, setFormData] = useState(() => ({
     name: "",
     context: "",
-    ownerId: "" as string,
+    // Default the owner to the current user when creating. The session is
+    // usually cached, so `user` is available synchronously on first render;
+    // the useResetOnChange below covers the case where it loads later.
+    ownerId: (!workspaceId && user?.id) || ("" as string),
     taskModelProviderId: null as string | null,
     memoryExtractionProviderId: null as string | null,
     memoryEmbeddingProviderId: null as string | null,
     maxDailySummaries: 90,
     providerSelfManagement: false,
     mcpSelfManagement: false,
-  });
+  }));
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [validationErrors, setValidationErrors] = useState<
     Record<string, string>
@@ -106,15 +123,15 @@ const WorkspaceForm = ({
 
   // When creating, default the owner to the current admin until they pick
   // another member.
-  useEffect(() => {
+  useResetOnChange(`${workspaceId ?? ""}:${user?.id ?? ""}`, () => {
     if (!workspaceId && user) {
       setFormData((prev) =>
         prev.ownerId ? prev : { ...prev, ownerId: user.id },
       );
     }
-  }, [workspaceId, user]);
+  });
 
-  useEffect(() => {
+  useResetOnChange(workspace, () => {
     if (workspace) {
       setFormData({
         name: workspace.name,
@@ -129,7 +146,7 @@ const WorkspaceForm = ({
         mcpSelfManagement: workspace.mcpSelfManagement ?? false,
       });
     }
-  }, [workspace]);
+  });
 
   const handleChange = (
     e:
@@ -248,7 +265,7 @@ const WorkspaceForm = ({
         setIsDeleting(false);
         setIsDeleteDialogOpen(false);
       }
-    } catch (error) {
+    } catch {
       toast.error("Error deleting workspace");
       setIsDeleting(false);
       setIsDeleteDialogOpen(false);
@@ -290,7 +307,7 @@ const WorkspaceForm = ({
                   <SelectValue placeholder="Select an owner" />
                 </SelectTrigger>
                 <SelectContent>
-                  {members.map((m) => (
+                  {ownerOptions.map((m) => (
                     <SelectItem key={m.userId} value={m.userId}>
                       {m.user.name || m.user.email}
                       {m.userId === user?.id ? " (you)" : ""}
@@ -427,7 +444,10 @@ const WorkspaceForm = ({
                 <SelectContent>
                   <SelectItem value="none">Disabled</SelectItem>
                   {providers
-                    .filter((p) => (p as any).embeddingModelId)
+                    .filter(
+                      (p) =>
+                        (p as { embeddingModelId?: string }).embeddingModelId,
+                    )
                     .map((provider) => (
                       <SelectItem key={provider.id} value={provider.id}>
                         {provider.name}

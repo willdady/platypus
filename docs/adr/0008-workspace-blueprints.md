@@ -41,10 +41,11 @@ semantics are therefore deliberately out of scope.
 
 ## Application — Org Admins only
 
-- **On an invitation.** The invitation carries an optional `blueprintId` and an optional
-  Workspace name (default `"<member>'s Workspace"`). **Accepting an invitation always creates
-  a Workspace owned by the accepting member**; if a Blueprint was set, the macro runs against
-  it. A Blueprint-less invite yields an empty Workspace, not no Workspace.
+- **On an invitation.** The invitation carries an optional _ordered set_ of Blueprints
+  (refined from the original single `blueprintId` — see ADR-0009) and an optional Workspace
+  name (default `"<member>'s Workspace"`). **Accepting an invitation always creates a
+  Workspace owned by the accepting member**; any Blueprints set are applied in order. A
+  Blueprint-less invite yields an empty Workspace, not no Workspace.
 - **Ad-hoc re-apply.** An Org Admin runs a Blueprint against an existing Workspace from the
   Organization surface.
 - Members never select Blueprints themselves (that would let a non-admin attach

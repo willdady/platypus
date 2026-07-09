@@ -1,17 +1,28 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
+import type { Mock } from "vitest";
+import type { Provider } from "@platypus/schemas";
+
+type ProviderInstance = Mock<
+  (modelId: string) => { modelId: string; _sentinel: boolean }
+> & {
+  chat: Mock<
+    (modelId: string) => { modelId: string; _sentinel: boolean; _mode: string }
+  >;
+};
 
 const {
   mockCreateOpenAI,
+  mockCreateOpenAICompatible,
   mockCreateOpenRouter,
   mockCreateAmazonBedrock,
   mockCreateGoogleGenerativeAI,
   mockCreateAnthropic,
 } = vi.hoisted(() => {
   const makeMock = () => {
-    const instance: any = vi.fn((modelId: string) => ({
+    const instance = vi.fn((modelId: string) => ({
       modelId,
       _sentinel: true,
-    }));
+    })) as ProviderInstance;
     instance.chat = vi.fn((modelId: string) => ({
       modelId,
       _sentinel: true,
@@ -20,8 +31,18 @@ const {
     const creator = vi.fn(() => instance);
     return { creator, instance };
   };
+  // openai-compatible exposes `chatModel(id)`, not a callable instance.
+  const compatChatModel = vi.fn((modelId: string) => ({
+    modelId,
+    _compat: true,
+  }));
+  const mockCreateOpenAICompatible = {
+    creator: vi.fn(() => ({ chatModel: compatChatModel })),
+    chatModel: compatChatModel,
+  };
   return {
     mockCreateOpenAI: makeMock(),
+    mockCreateOpenAICompatible,
     mockCreateOpenRouter: makeMock(),
     mockCreateAmazonBedrock: makeMock(),
     mockCreateGoogleGenerativeAI: makeMock(),
@@ -30,6 +51,9 @@ const {
 });
 
 vi.mock("@ai-sdk/openai", () => ({ createOpenAI: mockCreateOpenAI.creator }));
+vi.mock("@ai-sdk/openai-compatible", () => ({
+  createOpenAICompatible: mockCreateOpenAICompatible.creator,
+}));
 vi.mock("@openrouter/ai-sdk-provider", () => ({
   createOpenRouter: mockCreateOpenRouter.creator,
 }));
@@ -45,21 +69,18 @@ vi.mock("@ai-sdk/anthropic", () => ({
 
 import { openProvider } from "./provider.ts";
 
-const baseProvider = {
+const baseProvider: Provider = {
   id: "p1",
   name: "Test",
   organizationId: "org-1",
   workspaceId: "ws-1",
-  providerType: "OpenAI" as const,
+  providerType: "OpenAI",
   modelIds: ["gpt-4"],
   apiKey: "sk-test",
-  apiMode: "chat" as const,
-  baseUrl: null,
-  headers: null,
-  organization: null,
-  project: null,
-  region: null,
-  extraBody: null,
+  apiMode: "chat",
+  nativeSearchEnabled: true,
+  taskModelId: "gpt-4",
+  memoryExtractionModelId: "gpt-4",
   createdAt: new Date(),
   updatedAt: new Date(),
 };
@@ -78,6 +99,50 @@ describe("openProvider", () => {
       organization: undefined,
       project: undefined,
     });
+  });
+
+  it("routes chat-completions language model through openai-compatible", () => {
+    // apiMode "chat" (self-hosted vLLM/SGLang/etc.) must use the compatible
+    // provider so `reasoning_content` is surfaced as reasoning parts.
+    openProvider({
+      ...baseProvider,
+      apiMode: "chat",
+      name: "vLLM Local",
+      baseUrl: "http://localhost:8000/v1",
+    }).languageModel("qwen3");
+    expect(mockCreateOpenAICompatible.creator).toHaveBeenCalledWith({
+      name: "vLLM Local",
+      baseURL: "http://localhost:8000/v1",
+      apiKey: "sk-test",
+      headers: undefined,
+      includeUsage: true,
+    });
+    expect(mockCreateOpenAICompatible.chatModel).toHaveBeenCalledWith("qwen3");
+    // OpenAI SDK is still instantiated for embeddings + native search tools.
+    expect(mockCreateOpenAI.creator).toHaveBeenCalled();
+  });
+
+  it("falls back to OpenAI's endpoint for chat mode without a baseUrl", () => {
+    // baseUrl is optional, so a real-OpenAI provider in chat mode arrives with
+    // it empty. The compatible client must still target OpenAI rather than an
+    // empty URL.
+    openProvider({
+      ...baseProvider,
+      apiMode: "chat",
+      baseUrl: undefined,
+    }).languageModel("gpt-4");
+    expect(mockCreateOpenAICompatible.creator).toHaveBeenCalledWith(
+      expect.objectContaining({ baseURL: "https://api.openai.com/v1" }),
+    );
+  });
+
+  it("uses the OpenAI Responses model when apiMode is responses", () => {
+    openProvider({
+      ...baseProvider,
+      apiMode: "responses",
+    }).languageModel("gpt-4");
+    expect(mockCreateOpenAICompatible.creator).not.toHaveBeenCalled();
+    expect(mockCreateOpenAI.instance).toHaveBeenCalledWith("gpt-4");
   });
 
   it("dispatches OpenRouter to the OpenRouter SDK", () => {
@@ -114,7 +179,10 @@ describe("openProvider", () => {
 
   it("throws for unknown provider type", () => {
     expect(() =>
-      openProvider({ ...baseProvider, providerType: "Unknown" as any }),
+      openProvider({
+        ...baseProvider,
+        providerType: "Unknown" as Provider["providerType"],
+      }),
     ).toThrow("Unrecognized provider type 'Unknown'");
   });
 
@@ -123,7 +191,7 @@ describe("openProvider", () => {
       ...baseProvider,
       providerType: "Anthropic" as const,
     });
-    expect(opened.embeddingModel).toBeUndefined();
+    expect(Object.hasOwn(opened, "embeddingModel")).toBe(false);
   });
 
   it("omits searchTools for Bedrock (no vendor-native search)", () => {
@@ -131,7 +199,7 @@ describe("openProvider", () => {
       ...baseProvider,
       providerType: "Bedrock" as const,
     });
-    expect(opened.searchTools).toBeUndefined();
+    expect(Object.hasOwn(opened, "searchTools")).toBe(false);
   });
 
   it("exposes embeddingModel and searchTools for OpenAI", () => {

@@ -42,7 +42,7 @@ describe("Files Routes", () => {
       mockSession();
       const res = await app.request("/files/");
       expect(res.status).toBe(400);
-      const body = await res.json();
+      const body = (await res.json()) as Record<string, unknown>;
       expect(body.error).toBe("File key required");
     });
 
@@ -50,7 +50,7 @@ describe("Files Routes", () => {
       mockSession();
       const res = await app.request("/files/just-one-segment");
       expect(res.status).toBe(400);
-      const body = await res.json();
+      const body = (await res.json()) as Record<string, unknown>;
       expect(body.error).toBe("Invalid file key format");
     });
 
@@ -75,7 +75,7 @@ describe("Files Routes", () => {
 
       const res = await app.request(baseUrl);
       expect(res.status).toBe(403);
-      const body = await res.json();
+      const body = (await res.json()) as Record<string, unknown>;
       expect(body.error).toBe("Access denied");
     });
 
@@ -102,7 +102,7 @@ describe("Files Routes", () => {
 
       const res = await app.request(baseUrl);
       expect(res.status).toBe(404);
-      const body = await res.json();
+      const body = (await res.json()) as Record<string, unknown>;
       expect(body.error).toBe("Workspace not found");
     });
 
@@ -115,7 +115,7 @@ describe("Files Routes", () => {
 
       const res = await app.request(baseUrl);
       expect(res.status).toBe(403);
-      const body = await res.json();
+      const body = (await res.json()) as Record<string, unknown>;
       expect(body.error).toBe("Access denied");
     });
 
@@ -142,7 +142,7 @@ describe("Files Routes", () => {
 
       const res = await app.request(baseUrl);
       expect(res.status).toBe(404);
-      const body = await res.json();
+      const body = (await res.json()) as Record<string, unknown>;
       expect(body.error).toBe("File not found");
     });
 

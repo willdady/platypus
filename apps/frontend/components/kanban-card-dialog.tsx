@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
+import { useResetOnChange } from "@/hooks/use-reset-on-change";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { format } from "date-fns";
@@ -282,20 +283,25 @@ export function KanbanCardDialog({
     setIsEditing(true);
   };
 
-  useEffect(() => {
-    if (card) {
-      setTitle(card.title);
-      setBody(card.body ?? "");
-      setSelectedLabelIds(card.labelIds ?? []);
-      setSelectedAssignees(card.assignees ?? []);
-      setSelectedDueDate((card.dueDate as string) ?? null);
-      setSelectedPriority(card.priority ?? "none");
-      setSelectedColumnId(initialColumnId);
-      setIsEditing(false);
-      setNewCommentBody("");
-      setEditingCommentId(null);
-    }
-  }, [card, initialColumnId]);
+  // Re-initialise the dialog whenever a different card is shown, the card is
+  // updated server-side, or the target column changes.
+  useResetOnChange(
+    `${card?.id ?? ""}:${String(card?.updatedAt ?? "")}:${initialColumnId ?? ""}`,
+    () => {
+      if (card) {
+        setTitle(card.title);
+        setBody(card.body ?? "");
+        setSelectedLabelIds(card.labelIds ?? []);
+        setSelectedAssignees(card.assignees ?? []);
+        setSelectedDueDate((card.dueDate as string) ?? null);
+        setSelectedPriority(card.priority ?? "none");
+        setSelectedColumnId(initialColumnId);
+        setIsEditing(false);
+        setNewCommentBody("");
+        setEditingCommentId(null);
+      }
+    },
+  );
 
   if (!card) return null;
 

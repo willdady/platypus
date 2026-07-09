@@ -147,7 +147,7 @@ chat.post(
     const input: RunInput = {
       runId: data.id,
       request: data,
-      messages: data.messages ?? [],
+      messages: (data.messages as PlatypusUIMessage[] | undefined) ?? [],
     };
 
     const sink = new ChatSink({
@@ -388,7 +388,7 @@ chat.post(
     promptParts.push(`Conversation:\n${conversationText}`);
 
     const { output } = await generateText({
-      model: model as any,
+      model,
       output: Output.object({
         schema: z.object({
           title: z.string(),

@@ -26,7 +26,7 @@ export default function OrgPage({
 }) {
   const { orgId } = use(params);
   const backendUrl = useBackendUrl();
-  const { user, isOrgAdmin } = useAuth();
+  const { user, isOrgAdmin, isAuthLoading } = useAuth();
 
   const { data: workspacesData } = useSWR<{
     results: Workspace[];
@@ -37,7 +37,12 @@ export default function OrgPage({
     fetcher,
   );
 
-  const isReady = !!workspacesData;
+  // Wait for the org-membership fetch too, not just workspaces. Switching orgs
+  // clears orgMembership and re-fetches it; if workspaces resolve first,
+  // isOrgAdmin is briefly false and the admin-only "Add workspace" button would
+  // render late, shifting the toolbar. Gating on isAuthLoading keeps the button
+  // row hidden until admin status is known so it appears fully formed.
+  const isReady = !!workspacesData && !isAuthLoading;
   const workspaces = workspacesData?.results || [];
 
   return (
@@ -58,7 +63,7 @@ export default function OrgPage({
             )}
             <Button variant="outline" asChild>
               <Link href={`/${orgId}/settings`}>
-                <Settings className="size-4" /> Organization Settings
+                <Settings className="size-4" /> Organization settings
               </Link>
             </Button>
           </div>
@@ -82,13 +87,13 @@ export default function OrgPage({
               {isOrgAdmin && (
                 <Button asChild className="flex-1">
                   <Link href={`/${orgId}/create`}>
-                    <Plus className="h-4 w-4" /> Create Workspace
+                    <Plus className="h-4 w-4" /> Create workspace
                   </Link>
                 </Button>
               )}
               <Button variant="outline" asChild>
                 <Link href={`/${orgId}/settings`}>
-                  <Settings className="size-4" /> Organization Settings
+                  <Settings className="size-4" /> Organization settings
                 </Link>
               </Button>
             </div>

@@ -8,7 +8,7 @@ import {
   organization as organizationTable,
 } from "../db/schema.ts";
 import { contextCreateSchema, contextUpdateSchema } from "@platypus/schemas";
-import { eq, and, isNull, sql } from "drizzle-orm";
+import { eq, and, sql } from "drizzle-orm";
 import { requireAuth } from "../middleware/authentication.ts";
 import type { Variables } from "../server.ts";
 import { logger } from "../logger.ts";
@@ -97,9 +97,9 @@ context.post(
         .returning();
 
       return c.json(record[0], 201);
-    } catch (error: any) {
+    } catch (error) {
       // Handle unique constraint violation
-      if (error.code === "23505") {
+      if ((error as { code?: string }).code === "23505") {
         return c.json(
           { error: "You already have a context for this scope" },
           409,

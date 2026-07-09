@@ -1,0 +1,830 @@
+import {
+  Client,
+  type ClientChannel,
+  type ConnectConfig,
+  type OpenMode,
+  type SFTPWrapper,
+} from "ssh2";
+import { z } from "zod";
+import { logger } from "../../logger.ts";
+import {
+  DEFAULT_SHELL_TIMEOUT_MS,
+  MAX_LIST_ENTRIES,
+  MAX_READ_BYTES,
+  MAX_SHELL_OUTPUT_BYTES,
+  MAX_SHELL_TIMEOUT_MS,
+} from "../../sandbox/index.ts";
+import type {
+  FsEditInput,
+  FsEditOutput,
+  FsListEntry,
+  FsListInput,
+  FsListOutput,
+  FsReadInput,
+  FsReadOutput,
+  FsWriteInput,
+  FsWriteOutput,
+  SandboxBackend,
+  SandboxContext,
+  ShellExecInput,
+  ShellExecOutput,
+} from "../../sandbox/types.ts";
+
+// The SSH reference Sandbox adapter (ADR-0012). Attaches to a pre-existing,
+// operator-owned host over SSH (public-key auth only) and runs the fixed tool
+// core against it. `shell.exec` runs over the `exec` channel; `fs.read`,
+// `fs.write`, and `fs.edit` run over the SFTP subsystem (the faithful analogue
+// of Docker's `putArchive` writes — literal paths, no shell-injection surface,
+// native `wx`=create / `w`=overwrite). `fs.list` runs over `exec` as a single
+// `find -printf` recursive listing (ADR-0012 rejected a client-side SFTP walk),
+// making it the sole shell-injection surface in `fs.*` — every model-supplied
+// value it interpolates is single-quoted. The adapter never provisions or
+// destroys the machine.
+
+const DEFAULT_SSH_PORT = 22;
+// rootDir default (ADR-0012): resolved to `$HOME/platypus-workspace` on the host
+// at connect time. SFTP does not expand `~`, so $HOME is resolved once per
+// connection and the physical root is absolute.
+const DEFAULT_ROOT_DIR_NAME = "platypus-workspace";
+
+// Self-managed connection lifecycle (ADR-0012): a single connection is reused
+// across all tool calls within a Chat turn and closed by this idle reaper after
+// inactivity. The timer is `unref()`'d so it never keeps the process alive.
+const IDLE_TIMEOUT_MS = 60_000;
+
+// Per-Workspace Sandbox config/credentials (ADR-0001/0006). These remain
+// per-Workspace settings — ADR-0013's deploy-time *plugin* config does not apply
+// here. Every field except a hypothetical display name is admin-only (ADR-0006);
+// the route enforces that gating, so no per-field logic is needed here.
+export const sshSandboxConfigSchema = z
+  .object({
+    host: z.string().min(1),
+    port: z.number().int().min(1).max(65535).default(DEFAULT_SSH_PORT),
+    user: z.string().min(1),
+    // Optional; defaults to `$HOME/platypus-workspace`, resolved on connect. A
+    // relative value is resolved against the login `$HOME`; an absolute value is
+    // used verbatim.
+    rootDir: z.string().min(1).optional(),
+    // Optional host-key pin (ADR-0012). When set, the presented host key is
+    // strictly verified against it and a mismatch aborts the connection; when
+    // absent, we connect with a loud MITM warning (the frictionless fallback).
+    // Accepts `ssh-keyscan`/known_hosts output (`[host] <type> <base64>`) or a
+    // bare base64 key blob — see parseHostKeyPin.
+    hostKey: z.string().min(1).optional(),
+  })
+  .strict();
+
+// Public-key auth only (ADR-0012). `privateKey` is a PEM/OpenSSH private key;
+// `passphrase` decrypts it when it is encrypted. Both are server-side secrets,
+// never returned to non-admins or the model.
+export const sshSandboxCredentialsSchema = z
+  .object({
+    privateKey: z.string().min(1),
+    passphrase: z.string().optional(),
+  })
+  .strict();
+
+export type SshSandboxConfig = z.infer<typeof sshSandboxConfigSchema>;
+export type SshSandboxCredentials = z.infer<typeof sshSandboxCredentialsSchema>;
+
+// A live, ready connection plus the absolute workspace root resolved on it.
+// `sftp` is opened lazily on the first fs.* call and reused for the rest of the
+// turn (it rides the same connection; closing the client tears it down too).
+type Connection = {
+  client: Client;
+  rootDir: string;
+  sftp: SFTPWrapper | null;
+};
+
+type ExecResult = {
+  stdout: Buffer;
+  stderr: Buffer;
+  exitCode: number;
+  durationMs: number;
+  timedOut: boolean;
+};
+
+// Single-quote a value for safe interpolation into a `/bin/sh` command line.
+// Wraps in single quotes and escapes embedded single quotes with the classic
+// `'\''` idiom. Used for the operator-supplied rootDir and for model-supplied
+// cwd/env values so neither can break out into shell syntax.
+function shQuote(value: string): string {
+  return `'${value.replace(/'/g, `'\\''`)}'`;
+}
+
+// A valid POSIX environment-variable name. `adminEnv`/`userEnv` are already held
+// to this by the schema, but the model-supplied `input.env` keys are not — so we
+// guard here before interpolating a key into the shell string. A key that isn't
+// a valid identifier can't be a usable env var anyway (`export 1FOO=…` errors),
+// so dropping it is both safe and correct.
+const ENV_KEY_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/;
+
+// Build the `export KEY=val;` prefix for the merged env (ADR-0004). Applied via
+// export statements rather than the ssh2 `env` option, since sshd's `AcceptEnv`
+// rejects arbitrary variables by default (ADR-0012). Keys are guarded to POSIX
+// identifiers (above) so they can't inject shell syntax; values are single-quoted.
+function buildEnvPrefix(env: Record<string, string> | undefined): string {
+  if (!env) return "";
+  return Object.entries(env)
+    .filter(([k]) => ENV_KEY_PATTERN.test(k))
+    .map(([k, v]) => `export ${k}=${shQuote(v)}; `)
+    .join("");
+}
+
+// Cap for `fs.list` find(1) output. Larger than MAX_SHELL_OUTPUT_BYTES because a
+// recursive listing of up to MAX_LIST_ENTRIES rows can exceed the shell-output
+// cap; matches the Docker adapter's 4 MiB list buffer. Node-side truncation to
+// MAX_LIST_ENTRIES is the authoritative bound (this only guards memory).
+const FS_LIST_OUTPUT_CAP = 4 * 1024 * 1024;
+
+// Resolve a workspace-root-relative path to an absolute path on the host. The
+// schema already enforces the path is relative; SFTP takes the result literally,
+// so there is no shell quoting and no injection surface (ADR-0012).
+function absPath(rootDir: string, relative: string): string {
+  return `${rootDir}/${relative.replace(/^\/+/, "")}`;
+}
+
+// Count lines the same way the Docker adapter does: newline count, less one for a
+// trailing newline. Empty content is zero lines.
+function countLines(content: string): number {
+  if (content.length === 0) return 0;
+  let lineCount = content.split("\n").length;
+  if (content.endsWith("\n")) lineCount -= 1;
+  return lineCount;
+}
+
+// Decode a Buffer as strict UTF-8, rejecting non-UTF-8 bytes (matching the
+// Docker adapter, which decodes with `new TextDecoder("utf-8", { fatal: true })`).
+function decodeUtf8Strict(buf: Buffer, tool: string, path: string): string {
+  try {
+    return new TextDecoder("utf-8", { fatal: true }).decode(buf);
+  } catch {
+    throw new Error(`${tool}: file is not valid UTF-8 (${path})`);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Promisified SFTP primitives. ssh2's SFTP API is callback-based; these thin
+// wrappers make the fs.* methods readable. `write()`/`read()` handle packet
+// overflow internally (recursing on the remaining range), so one call transfers
+// the whole requested span and fires its callback once.
+// ---------------------------------------------------------------------------
+
+function sftpStatExists(sftp: SFTPWrapper, path: string): Promise<boolean> {
+  return new Promise((resolve) => {
+    sftp.stat(path, (err) => resolve(!err));
+  });
+}
+
+function sftpMkdir(sftp: SFTPWrapper, path: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    sftp.mkdir(path, (err) => (err ? reject(err) : resolve()));
+  });
+}
+
+function sftpOpen(
+  sftp: SFTPWrapper,
+  path: string,
+  flag: OpenMode,
+): Promise<Buffer> {
+  return new Promise((resolve, reject) => {
+    sftp.open(path, flag, (err, handle) =>
+      err ? reject(err) : resolve(handle),
+    );
+  });
+}
+
+function sftpClose(sftp: SFTPWrapper, handle: Buffer): Promise<void> {
+  return new Promise((resolve, reject) => {
+    sftp.close(handle, (err) => (err ? reject(err) : resolve()));
+  });
+}
+
+function sftpFstatSize(sftp: SFTPWrapper, handle: Buffer): Promise<number> {
+  return new Promise((resolve, reject) => {
+    sftp.fstat(handle, (err, stats) =>
+      err ? reject(err) : resolve(stats.size),
+    );
+  });
+}
+
+// Write the whole buffer at offset 0. ssh2's write splits oversized buffers into
+// packets internally, so a single call suffices.
+function sftpWriteAll(
+  sftp: SFTPWrapper,
+  handle: Buffer,
+  buf: Buffer,
+): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (buf.length === 0) {
+      resolve();
+      return;
+    }
+    sftp.write(handle, buf, 0, buf.length, 0, (err) =>
+      err ? reject(err) : resolve(),
+    );
+  });
+}
+
+// Read up to `cap` bytes from an open handle. Loops defensively over short reads
+// (a server may return fewer bytes than requested); stops at EOF (a zero-byte
+// read) or once the cap is reached.
+async function sftpReadCapped(
+  sftp: SFTPWrapper,
+  handle: Buffer,
+  cap: number,
+): Promise<Buffer> {
+  const buf = Buffer.alloc(cap);
+  let total = 0;
+  while (total < cap) {
+    const bytesRead = await new Promise<number>((resolve, reject) => {
+      sftp.read(handle, buf, total, cap - total, total, (err, n) =>
+        err ? reject(err) : resolve(n),
+      );
+    });
+    if (bytesRead <= 0) break;
+    total += bytesRead;
+  }
+  return buf.subarray(0, total);
+}
+
+// Parse an operator-supplied host-key pin to the raw public-key blob bytes that
+// ssh2's `hostVerifier` presents (with no `hostHash` set, it receives the raw
+// key Buffer). Accepts three shapes: a full `ssh-keyscan` / known_hosts line
+// (`[host] <type> <base64> [comment]`), a `<type> <base64>` pair, or a bare
+// base64 blob. Every SSH public-key blob base64-encodes a length-prefixed
+// algorithm name, so the blob token always begins with `AAAA` — we pick that
+// token when the input has several, else treat the sole token as the blob.
+// Throws on input we cannot turn into a non-empty key so a misconfigured pin
+// surfaces at connect time rather than silently failing every handshake.
+function parseHostKeyPin(pin: string): Buffer {
+  const firstLine = pin
+    .split("\n")
+    .map((line) => line.trim())
+    .find((line) => line.length > 0 && !line.startsWith("#"));
+  if (!firstLine) {
+    throw new Error("SSH sandbox: `hostKey` is empty or comment-only");
+  }
+  const tokens = firstLine.split(/\s+/);
+  const blob =
+    tokens.find((t) => t.startsWith("AAAA")) ??
+    (tokens.length === 1 ? tokens[0] : undefined);
+  if (!blob) {
+    throw new Error(
+      "SSH sandbox: could not find a base64 host key in `hostKey` " +
+        "(expected `ssh-keyscan` output or a base64 key blob)",
+    );
+  }
+  const decoded = Buffer.from(blob, "base64");
+  if (decoded.length === 0) {
+    throw new Error("SSH sandbox: `hostKey` did not decode to a valid key");
+  }
+  return decoded;
+}
+
+export class SshSandboxBackend implements SandboxBackend {
+  private config: SshSandboxConfig;
+  private credentials: SshSandboxCredentials;
+  // Single reused connection and its in-flight promise (mirrors the Docker
+  // adapter's ensureContainer): concurrent first-callers share one connect.
+  private connection: Connection | null;
+  private inflight: Promise<Connection> | null;
+  private idleTimer: NodeJS.Timeout | null;
+
+  constructor(config: SshSandboxConfig, credentials: SshSandboxCredentials) {
+    this.config = config;
+    this.credentials = credentials;
+    this.connection = null;
+    this.inflight = null;
+    this.idleTimer = null;
+  }
+
+  // Lazy-connect on first use; reuse the single connection across all tool calls
+  // in the turn. Concurrent callers before the connection is ready share the one
+  // in-flight promise. Every call refreshes the idle reaper.
+  private ensureConnection(): Promise<Connection> {
+    if (this.connection) {
+      this.touchIdleTimer();
+      return Promise.resolve(this.connection);
+    }
+    if (this.inflight) return this.inflight;
+
+    const p = this.connect()
+      .then((conn) => {
+        this.connection = conn;
+        this.inflight = null;
+        this.touchIdleTimer();
+        return conn;
+      })
+      .catch((err) => {
+        this.inflight = null;
+        throw err;
+      });
+    this.inflight = p;
+    return p;
+  }
+
+  // Open the SSH connection (public-key auth), then resolve $HOME and `mkdir -p`
+  // the workspace root in a single exec, returning the absolute root.
+  private async connect(): Promise<Connection> {
+    const { host, port, user, hostKey } = this.config;
+    const { privateKey, passphrase } = this.credentials;
+
+    // Parse the pin up front so a malformed value fails loudly here rather than
+    // silently rejecting every handshake. Absent → connect with a loud MITM
+    // warning (the frictionless fallback for localhost/dev; ADR-0012).
+    const expectedHostKey = hostKey ? parseHostKeyPin(hostKey) : null;
+    if (!expectedHostKey) {
+      // Public-key auth still prevents credential theft by an impostor host; the
+      // residual risk is session/output exposure to a MITM. Pin `hostKey` on
+      // internet-facing hosts.
+      logger.warn(
+        { host, port },
+        "SSH sandbox connecting WITHOUT host-key verification — session and injected env are exposed to a MITM. Set `hostKey` to pin the host.",
+      );
+    }
+
+    const client = new Client();
+    const connectConfig: ConnectConfig = {
+      host,
+      port: port ?? DEFAULT_SSH_PORT,
+      username: user,
+      privateKey,
+      ...(passphrase ? { passphrase } : {}),
+    };
+
+    // Strict host-key pinning (ADR-0012). ssh2 calls this synchronous verifier
+    // with the presented raw key blob during the handshake; returning false
+    // aborts with a handshake `error`. `hostKeyMismatch` lets onError turn that
+    // opaque failure into a clear, actionable message.
+    let hostKeyMismatch = false;
+    if (expectedHostKey) {
+      const expected = expectedHostKey;
+      connectConfig.hostVerifier = (presented: Buffer): boolean => {
+        const match = presented.equals(expected);
+        if (!match) hostKeyMismatch = true;
+        return match;
+      };
+    }
+
+    await new Promise<void>((resolve, reject) => {
+      const onError = (err: Error) => {
+        client.removeListener("ready", onReady);
+        if (hostKeyMismatch) {
+          reject(
+            new Error(
+              `SSH sandbox: host-key verification failed for ${host}:${port ?? DEFAULT_SSH_PORT} — the presented host key does not match the pinned \`hostKey\`. Refusing to connect.`,
+              { cause: err },
+            ),
+          );
+          return;
+        }
+        reject(err);
+      };
+      const onReady = () => {
+        client.removeListener("error", onError);
+        resolve();
+      };
+      client.once("ready", onReady);
+      client.once("error", onError);
+      client.connect(connectConfig);
+    });
+
+    // Resolve $HOME and create the root in one round-trip. A relative rootDir is
+    // resolved against $HOME; an absolute one is used verbatim. The command
+    // prints the resolved absolute path on stdout.
+    const rootExpr = this.config.rootDir
+      ? shQuote(this.config.rootDir)
+      : `"$HOME/${DEFAULT_ROOT_DIR_NAME}"`;
+    const resolveCmd =
+      `ROOT=${rootExpr}; ` +
+      `case "$ROOT" in /*) ;; *) ROOT="$HOME/$ROOT" ;; esac; ` +
+      `mkdir -p "$ROOT" && printf %s "$ROOT"`;
+
+    const res = await this.runExec(
+      client,
+      resolveCmd,
+      DEFAULT_SHELL_TIMEOUT_MS,
+    );
+    if (res.exitCode !== 0) {
+      const detail = res.stderr.toString("utf8").trim() || "unknown error";
+      try {
+        client.end();
+      } catch {
+        // ignore
+      }
+      throw new Error(
+        `SSH sandbox: failed to create workspace root on ${host}: ${detail}`,
+      );
+    }
+    const rootDir = res.stdout.toString("utf8").trim();
+
+    return { client, rootDir, sftp: null };
+  }
+
+  // (Re)arm the idle reaper. Closes the connection after IDLE_TIMEOUT_MS of
+  // inactivity. `unref()` so a pending timer never keeps the process alive.
+  private touchIdleTimer(): void {
+    if (this.idleTimer) clearTimeout(this.idleTimer);
+    this.idleTimer = setTimeout(() => {
+      this.closeConnection();
+    }, IDLE_TIMEOUT_MS);
+    this.idleTimer.unref?.();
+  }
+
+  // Close the connection (if any) and cancel the idle reaper. Idempotent.
+  private closeConnection(): void {
+    if (this.idleTimer) {
+      clearTimeout(this.idleTimer);
+      this.idleTimer = null;
+    }
+    const conn = this.connection;
+    this.connection = null;
+    if (conn) {
+      try {
+        conn.client.end();
+      } catch {
+        // best-effort — the connection may already be gone
+      }
+    }
+  }
+
+  // Run a single command over `exec`, capping stdout/stderr at `outputCap`
+  // (default MAX_SHELL_OUTPUT_BYTES; fs.list raises it) and enforcing a timeout.
+  // On timeout the channel is closed and exit code 124 is reported (a remote
+  // command may keep running as an orphan — the host is not ours to reap;
+  // ADR-0012).
+  private runExec(
+    client: Client,
+    command: string,
+    timeoutMs: number,
+    outputCap: number = MAX_SHELL_OUTPUT_BYTES,
+  ): Promise<ExecResult> {
+    return new Promise<ExecResult>((resolve, reject) => {
+      const started = Date.now();
+      client.exec(command, (err: Error | undefined, stream: ClientChannel) => {
+        if (err) {
+          reject(err);
+          return;
+        }
+
+        const stdoutChunks: Buffer[] = [];
+        const stderrChunks: Buffer[] = [];
+        let stdoutBytes = 0;
+        let stderrBytes = 0;
+        let exitCode = 0;
+        let timedOut = false;
+        let settled = false;
+
+        const timer = setTimeout(() => {
+          timedOut = true;
+          try {
+            stream.close();
+          } catch {
+            // ignore — resolve on the close event regardless
+          }
+        }, timeoutMs);
+        timer.unref?.();
+
+        const capture = (
+          chunk: Buffer,
+          chunks: Buffer[],
+          bytes: number,
+        ): number => {
+          if (bytes >= outputCap) return bytes;
+          const room = outputCap - bytes;
+          const take = chunk.length <= room ? chunk : chunk.subarray(0, room);
+          chunks.push(take);
+          return bytes + take.length;
+        };
+
+        stream.on("data", (chunk: Buffer) => {
+          stdoutBytes = capture(chunk, stdoutChunks, stdoutBytes);
+        });
+        stream.stderr.on("data", (chunk: Buffer) => {
+          stderrBytes = capture(chunk, stderrChunks, stderrBytes);
+        });
+        // The exit code arrives on `exit`; `close` fires afterwards and is when
+        // we settle. A signal-killed process reports a null code.
+        stream.on("exit", (code: number | null) => {
+          if (typeof code === "number") exitCode = code;
+        });
+        stream.on("close", () => {
+          clearTimeout(timer);
+          if (settled) return;
+          settled = true;
+          resolve({
+            stdout: Buffer.concat(stdoutChunks),
+            stderr: Buffer.concat(stderrChunks),
+            exitCode: timedOut ? 124 : exitCode,
+            durationMs: Date.now() - started,
+            timedOut,
+          });
+        });
+        stream.on("error", (streamErr: Error) => {
+          clearTimeout(timer);
+          if (settled) return;
+          settled = true;
+          reject(streamErr);
+        });
+      });
+    });
+  }
+
+  async shellExec(
+    _ctx: SandboxContext,
+    input: ShellExecInput,
+  ): Promise<ShellExecOutput> {
+    const conn = await this.ensureConnection();
+    const timeoutMs = Math.min(
+      input.timeoutMs ?? DEFAULT_SHELL_TIMEOUT_MS,
+      MAX_SHELL_TIMEOUT_MS,
+    );
+
+    // Honour cwd by prefixing `cd <rootDir>/<cwd> && …` (no native WorkingDir
+    // over SSH). cwd is model input (schema-validated relative); rootDir is
+    // resolved-absolute. Both are single-quoted so neither escapes into shell
+    // syntax. The merged env (ADR-0004) is applied via `export` statements.
+    const cwd = input.cwd ? `${conn.rootDir}/${input.cwd}` : conn.rootDir;
+    const envPrefix = buildEnvPrefix(input.env);
+    const command = `cd ${shQuote(cwd)} && ${envPrefix}${input.command}`;
+
+    const res = await this.runExec(conn.client, command, timeoutMs);
+    this.touchIdleTimer();
+
+    const truncated =
+      res.stdout.length >= MAX_SHELL_OUTPUT_BYTES ||
+      res.stderr.length >= MAX_SHELL_OUTPUT_BYTES;
+
+    return {
+      stdout: res.stdout.toString("utf8"),
+      stderr: res.stderr.toString("utf8"),
+      exitCode: res.exitCode,
+      truncated,
+      durationMs: res.durationMs,
+    };
+  }
+
+  // Open the SFTP subsystem lazily and reuse it for the rest of the turn. It
+  // rides the single reused connection, so closing the client (idle reaper /
+  // destroy) tears it down too.
+  private getSftp(conn: Connection): Promise<SFTPWrapper> {
+    if (conn.sftp) return Promise.resolve(conn.sftp);
+    return new Promise<SFTPWrapper>((resolve, reject) => {
+      conn.client.sftp((err, sftp) => {
+        if (err) {
+          reject(err);
+          return;
+        }
+        conn.sftp = sftp;
+        resolve(sftp);
+      });
+    });
+  }
+
+  // `mkdir -p` the parent directories of a workspace-relative file path over
+  // SFTP (which has no recursive mkdir). Each segment is stat-probed first and
+  // created only if absent; the workspace root itself already exists. Literal
+  // paths throughout — no shell.
+  private async ensureParentDirs(
+    sftp: SFTPWrapper,
+    rootDir: string,
+    relative: string,
+  ): Promise<void> {
+    const cleaned = relative.replace(/^\/+/, "");
+    const idx = cleaned.lastIndexOf("/");
+    if (idx === -1) return; // top-level file — parent is the (existing) root
+    const segments = cleaned
+      .slice(0, idx)
+      .split("/")
+      .filter((s) => s.length > 0);
+    let dir = rootDir;
+    for (const seg of segments) {
+      dir = `${dir}/${seg}`;
+      if (!(await sftpStatExists(sftp, dir))) {
+        await sftpMkdir(sftp, dir);
+      }
+    }
+  }
+
+  async fsRead(
+    _ctx: SandboxContext,
+    input: FsReadInput,
+  ): Promise<FsReadOutput> {
+    const conn = await this.ensureConnection();
+    const sftp = await this.getSftp(conn);
+    const target = absPath(conn.rootDir, input.path);
+
+    // Open, size, and read at most MAX_READ_BYTES. Reading min(size, cap) keeps
+    // memory bounded and makes `truncated` use the same `>=` convention as the
+    // Docker adapter (a file exactly at the cap reads `cap` bytes → truncated).
+    const handle = await sftpOpen(sftp, target, "r");
+    let raw: Buffer;
+    try {
+      const size = await sftpFstatSize(sftp, handle);
+      const readLen = Math.min(size, MAX_READ_BYTES);
+      raw = await sftpReadCapped(sftp, handle, readLen);
+    } finally {
+      await sftpClose(sftp, handle);
+    }
+    this.touchIdleTimer();
+
+    const truncated = raw.length >= MAX_READ_BYTES;
+    let content = decodeUtf8Strict(raw, "fs.read", input.path);
+
+    // Optional line window. SFTP has no server-side `sed`, so we slice the
+    // (already byte-capped) content in Node — each selected line is emitted with
+    // a trailing newline, matching `sed -n 'a,bp'`. Caveat: for a file larger
+    // than MAX_READ_BYTES the byte cap is hit before late lines are reached.
+    if (input.lineRange) {
+      const [start, end] = input.lineRange;
+      const body = content.endsWith("\n") ? content.slice(0, -1) : content;
+      const lines = body.length === 0 ? [] : body.split("\n");
+      content = lines
+        .slice(start - 1, end)
+        .map((line) => `${line}\n`)
+        .join("");
+    }
+
+    return { content, lineCount: countLines(content), truncated };
+  }
+
+  async fsWrite(
+    _ctx: SandboxContext,
+    input: FsWriteInput,
+  ): Promise<FsWriteOutput> {
+    const conn = await this.ensureConnection();
+    const sftp = await this.getSftp(conn);
+    const target = absPath(conn.rootDir, input.path);
+
+    await this.ensureParentDirs(sftp, conn.rootDir, input.path);
+
+    // `wx` fails atomically if the file exists (native create — no racy stat/open
+    // window); `w` truncates-or-creates for overwrite (ADR-0012).
+    const flag: OpenMode = input.mode === "create" ? "wx" : "w";
+    const contentBuf = Buffer.from(input.content, "utf8");
+
+    let handle: Buffer;
+    try {
+      handle = await sftpOpen(sftp, target, flag);
+    } catch (err) {
+      // Disambiguate the expected create-collision from a genuine open error
+      // (e.g. permissions) by checking existence after the fact.
+      if (input.mode === "create" && (await sftpStatExists(sftp, target))) {
+        throw new Error(
+          `fs.write: path already exists (mode=create): ${input.path}`,
+          { cause: err },
+        );
+      }
+      throw err;
+    }
+    try {
+      await sftpWriteAll(sftp, handle, contentBuf);
+    } finally {
+      await sftpClose(sftp, handle);
+    }
+    this.touchIdleTimer();
+
+    return { bytesWritten: contentBuf.length };
+  }
+
+  async fsEdit(
+    _ctx: SandboxContext,
+    input: FsEditInput,
+  ): Promise<FsEditOutput> {
+    const conn = await this.ensureConnection();
+    const sftp = await this.getSftp(conn);
+    const target = absPath(conn.rootDir, input.path);
+
+    // Read (capped, matching the Docker adapter), replace a unique occurrence,
+    // then overwrite. Same capped-read caveat as fs.read for very large files.
+    const readHandle = await sftpOpen(sftp, target, "r");
+    let raw: Buffer;
+    try {
+      const size = await sftpFstatSize(sftp, readHandle);
+      raw = await sftpReadCapped(
+        sftp,
+        readHandle,
+        Math.min(size, MAX_READ_BYTES),
+      );
+    } finally {
+      await sftpClose(sftp, readHandle);
+    }
+
+    const original = decodeUtf8Strict(raw, "fs.edit", input.path);
+    const first = original.indexOf(input.oldString);
+    if (first === -1) {
+      throw new Error(`fs.edit: oldString not found in ${input.path}`);
+    }
+    const second = original.indexOf(input.oldString, first + 1);
+    if (second !== -1) {
+      throw new Error(`fs.edit: oldString is not unique in ${input.path}`);
+    }
+
+    const updated =
+      original.slice(0, first) +
+      input.newString +
+      original.slice(first + input.oldString.length);
+
+    const writeHandle = await sftpOpen(sftp, target, "w");
+    try {
+      await sftpWriteAll(sftp, writeHandle, Buffer.from(updated, "utf8"));
+    } finally {
+      await sftpClose(sftp, writeHandle);
+    }
+    this.touchIdleTimer();
+
+    return { replacements: 1 };
+  }
+
+  // List directory entries via a single `find -printf` over `exec` (ADR-0012:
+  // one round-trip recursive listing, vs a per-directory SFTP walk). This is the
+  // only shell-injection surface in fs.*, so both model-supplied values that
+  // reach the command line — the list path and the glob — are single-quoted.
+  async fsList(
+    _ctx: SandboxContext,
+    input: FsListInput,
+  ): Promise<FsListOutput> {
+    const conn = await this.ensureConnection();
+    const target = input.path
+      ? absPath(conn.rootDir, input.path)
+      : conn.rootDir;
+
+    // Node-side truncation (below) is authoritative; `find` is not `| head`ed.
+    const parts = ["find", shQuote(target)];
+    if (!input.recursive) parts.push("-maxdepth", "1");
+    parts.push("-mindepth", "1");
+    if (input.glob) {
+      // -name matches a bare file-name glob; -path matches a pattern that
+      // contains a slash or `**`. `**` collapses to `*` for find(1) — a lossy
+      // but pragmatic translation (documented in the tool description), matching
+      // the Docker adapter. Single-quoting also stops the login shell from
+      // expanding the glob before find sees it, so find(1) does the matching.
+      if (input.glob.includes("/") || input.glob.includes("**")) {
+        parts.push("-path", shQuote(`*/${input.glob.replace(/\*\*/g, "*")}`));
+      } else {
+        parts.push("-name", shQuote(input.glob));
+      }
+    }
+    // Single-quoted so find receives the `\t`/`\n` escapes literally and
+    // interprets them itself (rather than the shell mangling them).
+    parts.push("-printf", `'%y\\t%s\\t%P\\n'`);
+    const command = parts.join(" ");
+
+    const res = await this.runExec(
+      conn.client,
+      command,
+      DEFAULT_SHELL_TIMEOUT_MS,
+      FS_LIST_OUTPUT_CAP,
+    );
+    this.touchIdleTimer();
+
+    // find exits non-zero on partial errors (e.g. an unreadable subdirectory)
+    // while still printing what it could — only fail hard when nothing came out.
+    if (res.exitCode !== 0 && res.stdout.length === 0) {
+      const detail = res.stderr.toString("utf8").trim() || "fs.list failed";
+      throw new Error(`fs.list: ${detail}`);
+    }
+
+    const lines = res.stdout
+      .toString("utf8")
+      .split("\n")
+      .filter((l) => l.length > 0);
+
+    const entries: FsListEntry[] = [];
+    let truncated = false;
+    for (const line of lines) {
+      const tab1 = line.indexOf("\t");
+      const tab2 = line.indexOf("\t", tab1 + 1);
+      if (tab1 === -1 || tab2 === -1) continue;
+      const typeChar = line.slice(0, tab1);
+      const sizeStr = line.slice(tab1 + 1, tab2);
+      const path = line.slice(tab2 + 1);
+      let type: "file" | "dir";
+      if (typeChar === "f") type = "file";
+      else if (typeChar === "d") type = "dir";
+      else continue; // ignore symlinks / sockets / devices in v1
+      const size = Number.parseInt(sizeStr, 10);
+      entries.push({
+        path,
+        type,
+        ...(Number.isFinite(size) ? { size } : {}),
+      });
+      if (entries.length >= MAX_LIST_ENTRIES) {
+        // Mark truncated only if find emitted more rows than we kept.
+        truncated = entries.length < lines.length;
+        break;
+      }
+    }
+
+    return { entries, truncated };
+  }
+
+  // destroy() is a no-op beyond disconnecting (ADR-0012): the host is not
+  // Platypus-owned, so we never mutate its filesystem. Just tear down our
+  // connection so no socket or idle timer leaks.
+  destroy(_ctx: SandboxContext): Promise<void> {
+    this.closeConnection();
+    return Promise.resolve();
+  }
+}

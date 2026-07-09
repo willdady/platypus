@@ -115,7 +115,7 @@ export function DeleteUserDialog({
             disabled={isSubmitting || !isConfirmed}
             className={isSubmitting ? "opacity-50" : ""}
           >
-            {isSubmitting ? "Deleting..." : "Delete User"}
+            {isSubmitting ? "Deleting..." : "Delete user"}
           </Button>
         </DialogFooter>
       </DialogContent>

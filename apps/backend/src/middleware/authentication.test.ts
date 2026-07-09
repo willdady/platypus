@@ -29,7 +29,9 @@ describe("Authentication Middleware", () => {
     // Overwrite session id if needed, but mockSession sets it to session-1
     mockAuth.api.getSession.mockResolvedValue(sessionData);
 
-    const app = new Hono<{ Variables: { user: any; session: any } }>();
+    const app = new Hono<{
+      Variables: { user: unknown; session: unknown };
+    }>();
     app.use("*", requireAuth);
     app.get("/test", (c) => {
       const user = c.get("user");

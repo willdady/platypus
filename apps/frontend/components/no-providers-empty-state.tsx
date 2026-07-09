@@ -42,7 +42,7 @@ export const NoProvidersEmptyState = ({
               href={`/${orgId}/workspace/${workspaceId}/settings/providers`}
             >
               <Plus />
-              Add Provider
+              Add provider
             </Link>
           </Button>
         </EmptyContent>

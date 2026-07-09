@@ -14,7 +14,8 @@ import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { ConfirmDialog } from "@/components/confirm-dialog";
-import { useState, useEffect } from "react";
+import { useState } from "react";
+import { useResetOnChange } from "@/hooks/use-reset-on-change";
 import { useRouter } from "next/navigation";
 import { Trash2 } from "lucide-react";
 import { type Skill, type Agent } from "@platypus/schemas";
@@ -32,7 +33,9 @@ const SkillForm = ({
 }: {
   classNames?: string;
   orgId: string;
-  workspaceId: string;
+  // Absent on the Organization settings surface, where the form manages an
+  // org-scoped Shared Skill (ADR-0007).
+  workspaceId?: string;
   skillId?: string;
 }) => {
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
@@ -42,22 +45,25 @@ const SkillForm = ({
   const { user } = useAuth();
   const backendUrl = useBackendUrl();
 
-  // Fetch existing skill data if editing (includes agentIds)
+  // The scope determines the backend collection and where we return after save.
+  const collectionUrl = workspaceId
+    ? `/organizations/${orgId}/workspaces/${workspaceId}/skills`
+    : `/organizations/${orgId}/skills`;
+  const returnPath = workspaceId
+    ? `/${orgId}/workspace/${workspaceId}`
+    : `/${orgId}/settings/skills`;
+
+  // Fetch existing skill data if editing (includes agentIds in workspace mode)
   const { data: skill, isLoading: skillLoading } = useSWR<
     Skill & { agentIds?: string[] }
   >(
-    skillId && user
-      ? joinUrl(
-          backendUrl,
-          `/organizations/${orgId}/workspaces/${workspaceId}/skills/${skillId}`,
-        )
-      : null,
+    skillId && user ? joinUrl(backendUrl, `${collectionUrl}/${skillId}`) : null,
     fetcher,
   );
 
-  // Fetch agents for association
+  // Agent associations are a workspace concern; only fetched on that surface.
   const { data: agentsData } = useSWR<{ results: Agent[] }>(
-    backendUrl && user
+    backendUrl && user && workspaceId
       ? joinUrl(
           backendUrl,
           `/organizations/${orgId}/workspaces/${workspaceId}/agents`,
@@ -82,7 +88,7 @@ const SkillForm = ({
   const router = useRouter();
 
   // Initialize form with existing skill data when editing
-  useEffect(() => {
+  useResetOnChange(skill, () => {
     if (skill) {
       setFormData({
         name: skill.name,
@@ -90,14 +96,14 @@ const SkillForm = ({
         body: skill.body,
       });
     }
-  }, [skill]);
+  });
 
   // Initialize agent selections from the skill's agentIds
-  useEffect(() => {
+  useResetOnChange(skill, () => {
     if (skill?.agentIds) {
       setSelectedAgentIds(skill.agentIds);
     }
-  }, [skill]);
+  });
 
   if (skillLoading) {
     return <div className={classNames}>Loading...</div>;
@@ -130,22 +136,18 @@ const SkillForm = ({
     setValidationErrors({});
     try {
       const payload = {
-        workspaceId,
         name: formData.name,
         description: formData.description,
         body: formData.body,
-        agentIds: selectedAgentIds,
+        // Scope and agent associations only apply to the workspace surface.
+        ...(workspaceId
+          ? { workspaceId, agentIds: selectedAgentIds }
+          : { organizationId: orgId }),
       };
 
       const url = skillId
-        ? joinUrl(
-            backendUrl,
-            `/organizations/${orgId}/workspaces/${workspaceId}/skills/${skillId}`,
-          )
-        : joinUrl(
-            backendUrl,
-            `/organizations/${orgId}/workspaces/${workspaceId}/skills`,
-          );
+        ? joinUrl(backendUrl, `${collectionUrl}/${skillId}`)
+        : joinUrl(backendUrl, collectionUrl);
 
       const method = skillId ? "PUT" : "POST";
 
@@ -159,11 +161,13 @@ const SkillForm = ({
       });
 
       if (response.ok) {
-        router.push(`/${orgId}/workspace/${workspaceId}`);
+        router.push(returnPath);
       } else {
         const errorData = await response.json();
         if (response.status === 409) {
-          setValidationErrors({ name: errorData.message });
+          setValidationErrors({
+            name: errorData.error || errorData.message,
+          });
         } else {
           setValidationErrors(parseValidationErrors(errorData));
         }
@@ -183,10 +187,7 @@ const SkillForm = ({
     setDeleteError(null);
     try {
       const response = await fetch(
-        joinUrl(
-          backendUrl,
-          `/organizations/${orgId}/workspaces/${workspaceId}/skills/${skillId}`,
-        ),
+        joinUrl(backendUrl, `${collectionUrl}/${skillId}`),
         {
           method: "DELETE",
           credentials: "include",
@@ -194,10 +195,12 @@ const SkillForm = ({
       );
 
       if (response.ok) {
-        router.push(`/${orgId}/workspace/${workspaceId}`);
+        router.push(returnPath);
       } else {
         const errorData = await response.json();
-        setDeleteError(errorData.message || "Failed to delete skill");
+        setDeleteError(
+          errorData.error || errorData.message || "Failed to delete skill",
+        );
         setIsDeleting(false);
       }
     } catch (error) {

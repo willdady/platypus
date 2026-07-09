@@ -36,23 +36,28 @@ function ExpandableTextarea({
   );
   const [draftValue, setDraftValue] = React.useState("");
   const textareaRef = React.useRef<HTMLTextAreaElement>(null);
+  // Mirror draftValue into a ref so commitDraft reads the latest value even
+  // from the Escape-key effect's stale closure. Updated in an effect rather
+  // than during render (refs must not be written during render).
   const draftRef = React.useRef(draftValue);
-  draftRef.current = draftValue;
+  React.useEffect(() => {
+    draftRef.current = draftValue;
+  }, [draftValue]);
 
-  const commitDraft = () => {
+  const commitDraft = React.useCallback(() => {
     if (onChange && draftRef.current !== value) {
       const event = {
         target: { value: draftRef.current, id: id ?? "" },
       } as React.ChangeEvent<HTMLTextAreaElement>;
       onChange(event);
     }
-  };
+  }, [onChange, value, id]);
 
-  const closeExpanded = () => {
+  const closeExpanded = React.useCallback(() => {
     commitDraft();
     setActiveTab("write");
     setIsExpanded(false);
-  };
+  }, [commitDraft]);
 
   const openExpanded = () => {
     setDraftValue(typeof value === "string" ? value : "");
@@ -75,7 +80,7 @@ function ExpandableTextarea({
     };
     window.addEventListener("keydown", handleEsc);
     return () => window.removeEventListener("keydown", handleEsc);
-  }, [isExpanded]);
+  }, [isExpanded, closeExpanded]);
 
   const displayValue = isExpanded ? draftValue : value;
   const currentLength =

@@ -1,4 +1,7 @@
-import { experimental_createMCPClient as createMCPClient } from "@ai-sdk/mcp";
+import {
+  experimental_createMCPClient as createMCPClient,
+  type MCPClient,
+} from "@ai-sdk/mcp";
 import { openProvider } from "./provider.ts";
 import { and, eq, or, inArray } from "drizzle-orm";
 import { db } from "../index.ts";
@@ -23,16 +26,20 @@ import {
   retrieveRecentSummaries,
   type MemorySummary,
 } from "./memory-retrieval.ts";
-import type {
-  ChatSubmitData as ChatSubmitDataSchema,
-  Provider,
-  Skill,
-} from "@platypus/schemas";
-import type { Tool } from "ai";
+import type { Provider, Skill } from "@platypus/schemas";
+import type { LanguageModel, Tool } from "ai";
 import { logger } from "../logger.ts";
 import { buildMcpTransportConfig } from "./mcp-oauth-provider.ts";
 import { inlineFileUrls } from "../storage/utils.ts";
 import type { PlatypusUIMessage } from "../types.ts";
+
+/**
+ * Default agentic step ceiling for an agent that has no explicit `maxSteps`.
+ * Mirrors the new-agent create-form default. Keeps API-created agents sane
+ * (a single step never lets a tool-calling agent finish its work) while
+ * staying low enough to bound a model that fails to converge.
+ */
+export const DEFAULT_AGENT_MAX_STEPS = 15;
 
 // --- Errors ---
 
@@ -85,7 +92,13 @@ type GenerationConfig = {
   skills?: Array<Pick<Skill, "name" | "description">>;
 };
 
-type ChatSubmitData = {
+/**
+ * The slim request shape `prepareChatTurn` actually consumes: agent/provider
+ * selection plus generation overrides. Distinct from `@platypus/schemas`'
+ * `ChatSubmitData` (the HTTP payload, which also carries id/workspaceId/
+ * messages) — those arrive as separate `PrepareChatTurnInput` fields.
+ */
+export type ChatTurnRequest = {
   agentId?: string;
   providerId?: string;
   modelId?: string;
@@ -101,7 +114,7 @@ type ChatSubmitData = {
 
 export type ChatTurn = {
   stream: {
-    model: any;
+    model: LanguageModel;
     tools: Record<string, Tool>;
     system: string;
     messages: PlatypusUIMessage[];
@@ -132,7 +145,7 @@ export type PrepareChatTurnInput = {
   orgId: string;
   workspaceId: string;
   user: { id: string; name: string };
-  request: ChatSubmitDataSchema;
+  request: ChatTurnRequest;
   messages: PlatypusUIMessage[];
   /**
    * Used to rewrite `storage://` URLs in messages to absolute HTTP URLs so
@@ -178,7 +191,11 @@ export type ToolActivityEvent = {
  */
 export type ChatTurnQueries = {
   getWorkspace(id: string): Promise<WorkspaceRow | null>;
-  getAgent(id: string, workspaceId: string): Promise<AgentRow | null>;
+  getAgent(
+    id: string,
+    orgId: string,
+    workspaceId: string,
+  ): Promise<AgentRow | null>;
   getProvider(
     id: string,
     orgId: string,
@@ -186,6 +203,7 @@ export type ChatTurnQueries = {
   ): Promise<Provider | null>;
   getSkillsByIds(
     ids: string[],
+    orgId: string,
     workspaceId: string,
   ): Promise<Array<Pick<Skill, "name" | "description">>>;
   getMcp(
@@ -214,7 +232,7 @@ export type ChatTurnQueries = {
  * (ADR-0007). Org-scoped resources resolve at Chat-turn time only where attached.
  */
 const isAttached = async (
-  resourceType: "mcp" | "provider",
+  resourceType: "mcp" | "provider" | "skill" | "agent",
   resourceId: string,
   workspaceId: string,
 ): Promise<boolean> => {
@@ -242,15 +260,34 @@ export const drizzleChatTurnQueries: ChatTurnQueries = {
     return rows[0] ?? null;
   },
 
-  async getAgent(id, workspaceId) {
+  async getAgent(id, orgId, workspaceId) {
+    // Resolve an Agent at either scope: the invoking workspace, or the
+    // organization (a Shared Agent — ADR-0007).
     const rows = await db
       .select()
       .from(agentTable)
       .where(
-        and(eq(agentTable.id, id), eq(agentTable.workspaceId, workspaceId)),
+        and(
+          eq(agentTable.id, id),
+          or(
+            eq(agentTable.workspaceId, workspaceId),
+            eq(agentTable.organizationId, orgId),
+          ),
+        ),
       )
       .limit(1);
-    return rows[0] ?? null;
+    const row = rows[0];
+    if (!row) return null;
+    // A Shared Agent runs only in a Workspace it is attached to (ADR-0007); its
+    // Sandbox/MCP tools still rebind to that invoking Workspace via loadTools.
+    if (
+      row.organizationId &&
+      !row.workspaceId &&
+      !(await isAttached("agent", id, workspaceId))
+    ) {
+      return null;
+    }
+    return row;
   },
 
   async getProvider(id, orgId, workspaceId) {
@@ -280,9 +317,10 @@ export const drizzleChatTurnQueries: ChatTurnQueries = {
     return row as Provider;
   },
 
-  async getSkillsByIds(ids, workspaceId) {
+  async getSkillsByIds(ids, orgId, workspaceId) {
     if (ids.length === 0) return [];
-    return db
+    // Workspace-scoped Skills referenced by the Agent.
+    const workspaceSkills = await db
       .select({ name: skillTable.name, description: skillTable.description })
       .from(skillTable)
       .where(
@@ -291,6 +329,30 @@ export const drizzleChatTurnQueries: ChatTurnQueries = {
           inArray(skillTable.id, ids),
         ),
       );
+
+    // Org-scoped (Shared) Skills resolve only where attached (ADR-0007) — gate
+    // by an inner join on the Attachment table for the invoking workspace.
+    const orgSkills = await db
+      .select({ name: skillTable.name, description: skillTable.description })
+      .from(skillTable)
+      .innerJoin(
+        attachmentTable,
+        and(
+          eq(attachmentTable.resourceId, skillTable.id),
+          eq(attachmentTable.resourceType, "skill"),
+          eq(attachmentTable.workspaceId, workspaceId),
+        ),
+      )
+      .where(
+        and(eq(skillTable.organizationId, orgId), inArray(skillTable.id, ids)),
+      );
+
+    // A workspace-scoped Skill wins a name collision with an attached org-scoped
+    // one, matching loadSkill's workspace-first resolution — so the advertised
+    // list and the tool agree on which body the model loads, with no duplicate
+    // entry in the system prompt.
+    const seen = new Set(workspaceSkills.map((s) => s.name));
+    return [...workspaceSkills, ...orgSkills.filter((s) => !seen.has(s.name))];
   },
 
   async getMcp(id, orgId, workspaceId) {
@@ -364,6 +426,21 @@ export const drizzleChatTurnQueries: ChatTurnQueries = {
   },
 };
 
+/**
+ * Whether the provider's native web_search tool should be injected for this
+ * turn. True only when the request opted into search AND the provider hasn't
+ * disabled native search. This is the authority over the chat search toggle:
+ * it covers both the raw-model and agent paths and ignores a stale client that
+ * still sends `search: true` for a provider whose native search was turned off
+ * (#167). `nativeSearchEnabled` is undefined for legacy provider rows, which is
+ * treated as enabled.
+ */
+export const shouldInjectNativeSearch = (
+  requestedSearch: boolean | undefined,
+  provider: Pick<Provider, "nativeSearchEnabled">,
+): boolean =>
+  Boolean(requestedSearch) && provider.nativeSearchEnabled !== false;
+
 // --- Public Module: prepare a Chat turn ---
 
 /**
@@ -401,7 +478,7 @@ export const prepareChatTurn = async (
 
   const context = await resolveChatContext(
     queries,
-    request as ChatSubmitData,
+    request,
     orgId,
     workspaceId,
   );
@@ -419,7 +496,7 @@ export const prepareChatTurn = async (
     sandboxEnvKeys,
   ] = await Promise.all([
     loadTools(queries, agent, workspaceId, orgId, frontendUrl, user.id),
-    loadSkills(queries, agent, workspaceId),
+    loadSkills(queries, agent, orgId, workspaceId),
     loadSubAgents(queries, agent, orgId, workspaceId, frontendUrl, onActivity),
     queries.getUserContexts(user.id, workspaceId),
     queries.getRecentMemories(user.id, workspaceId),
@@ -428,7 +505,7 @@ export const prepareChatTurn = async (
 
   const allMcpClients = [...mcpClients, ...subAgentMcpClients];
 
-  if (request.search) {
+  if (shouldInjectNativeSearch(request.search, provider)) {
     Object.assign(tools, opened.searchTools?.() ?? {});
   }
 
@@ -451,14 +528,10 @@ export const prepareChatTurn = async (
     runMode,
   };
 
-  const generation = resolveGenerationConfig(
-    request as ChatSubmitData,
-    agent,
-    promptCtx,
-  );
+  const generation = resolveGenerationConfig(request, agent, promptCtx);
 
   if (skills.length > 0) {
-    tools.loadSkill = createLoadSkillTool(workspaceId);
+    tools.loadSkill = createLoadSkillTool(orgId, workspaceId);
   }
 
   const heartbeat = onActivity ? createToolHeartbeat(onActivity) : null;
@@ -608,14 +681,15 @@ const wrapToolsWithBump = (
 ): Record<string, Tool> => {
   const wrapped: Record<string, Tool> = {};
   for (const [name, t] of Object.entries(tools)) {
-    const execute = (t as any).execute;
+    const execute = (t as { execute?: unknown }).execute;
     if (typeof execute !== "function") {
       wrapped[name] = t;
       continue;
     }
+    const runExecute = execute as (args: unknown, options: unknown) => unknown;
     wrapped[name] = {
       ...t,
-      execute: function (args: any, options: any) {
+      execute: (args: unknown, options: unknown) => {
         const startedAt = Date.now();
         onToolStart();
         onActivity({ phase: "start", toolName: name });
@@ -629,19 +703,23 @@ const wrapToolsWithBump = (
         };
         let result: unknown;
         try {
-          result = execute.call(t, args, options);
+          result = runExecute.call(t, args, options);
         } catch (err) {
           finish();
           throw err;
         }
-        if (result && typeof (result as any).then === "function") {
-          return (result as Promise<any>).finally(finish);
+        if (
+          result != null &&
+          typeof (result as { then?: unknown }).then === "function"
+        ) {
+          return (result as Promise<unknown>).finally(finish);
         }
         // Async iterable / generator path (sub-agent tools). Wrap it so the
         // counter decrements once the consumer drains the iterator.
         if (
-          result &&
-          typeof (result as any)[Symbol.asyncIterator] === "function"
+          result != null &&
+          typeof (result as Record<symbol, unknown>)[Symbol.asyncIterator] ===
+            "function"
         ) {
           const inner = result as AsyncIterable<unknown>;
           return (async function* () {
@@ -657,14 +735,14 @@ const wrapToolsWithBump = (
         finish();
         return result;
       },
-    } as Tool;
+    };
   }
   return wrapped;
 };
 
 const resolveChatContext = async (
   queries: ChatTurnQueries,
-  data: ChatSubmitData,
+  data: ChatTurnRequest,
   orgId: string,
   workspaceId: string,
 ): Promise<ChatContext> => {
@@ -678,12 +756,12 @@ const resolveChatContext = async (
 
   if (agentId) {
     resolvedAgentId = agentId;
-    const found = await queries.getAgent(agentId, workspaceId);
+    const found = await queries.getAgent(agentId, orgId, workspaceId);
     if (!found) throw new NotFoundError(`Agent '${agentId}' not found`);
     agent = found;
     resolvedProviderId = agent.providerId;
     resolvedModelId = agent.modelId;
-    resolvedMaxSteps = agent.maxSteps ?? 1;
+    resolvedMaxSteps = agent.maxSteps ?? DEFAULT_AGENT_MAX_STEPS;
   } else if (providerId && modelId) {
     resolvedProviderId = providerId;
     resolvedModelId = modelId;
@@ -723,14 +801,14 @@ const resolveChatContext = async (
 
 const loadTools = async (
   queries: ChatTurnQueries,
-  agent: AgentRow | undefined,
+  agent: Pick<AgentRow, "id" | "toolSetIds"> | undefined,
   workspaceId: string,
   orgId: string,
   frontendUrl: string | undefined,
   userId?: string,
-): Promise<{ tools: Record<string, Tool>; mcpClients: any[] }> => {
+): Promise<{ tools: Record<string, Tool>; mcpClients: MCPClient[] }> => {
   const tools: Record<string, Tool> = {};
-  const mcpClients: any[] = [];
+  const mcpClients: MCPClient[] = [];
 
   if (!agent || !agent.toolSetIds || agent.toolSetIds.length === 0) {
     return { tools, mcpClients };
@@ -785,7 +863,7 @@ const loadTools = async (
 };
 
 const resolveGenerationConfig = (
-  data: ChatSubmitData,
+  data: ChatTurnRequest,
   agent: AgentRow | undefined,
   promptCtx: SystemPromptContext,
 ): GenerationConfig => {
@@ -812,10 +890,11 @@ const resolveGenerationConfig = (
 const loadSkills = async (
   queries: ChatTurnQueries,
   agent: AgentRow | undefined,
+  orgId: string,
   workspaceId: string,
 ): Promise<Array<Pick<Skill, "name" | "description">>> => {
   if (!agent?.skillIds || agent.skillIds.length === 0) return [];
-  return queries.getSkillsByIds(agent.skillIds, workspaceId);
+  return queries.getSkillsByIds(agent.skillIds, orgId, workspaceId);
 };
 
 const loadSubAgents = async (
@@ -828,7 +907,7 @@ const loadSubAgents = async (
 ): Promise<{
   subAgents: Array<{ id: string; name: string; description?: string | null }>;
   subAgentTools: Record<string, Tool>;
-  subAgentMcpClients: any[];
+  subAgentMcpClients: MCPClient[];
 }> => {
   if (!agent?.subAgentIds || agent.subAgentIds.length === 0) {
     return { subAgents: [], subAgentTools: {}, subAgentMcpClients: [] };
@@ -842,7 +921,7 @@ const loadSubAgents = async (
     description: sa.description,
   }));
 
-  const subAgentMcpClients: any[] = [];
+  const subAgentMcpClients: MCPClient[] = [];
 
   const subAgentTools = await createSubAgentTools(
     subAgentRecords,
@@ -861,7 +940,7 @@ const loadSubAgents = async (
       const subAgentRecord = subAgentRecords.find((sa) => sa.id === subAgentId);
       const { tools: subTools, mcpClients } = await loadTools(
         queries,
-        subAgentRecord ?? ({ id: subAgentId, toolSetIds } as any),
+        subAgentRecord ?? { id: subAgentId, toolSetIds },
         workspaceId,
         orgId,
         frontendUrl,

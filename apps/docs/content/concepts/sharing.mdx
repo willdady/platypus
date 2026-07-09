@@ -1,0 +1,74 @@
+---
+title: Sharing across workspaces
+description: How an Organization reuses one resource across many Workspaces — Shared resources, Attachments, and Blueprints.
+---
+
+import { Callout } from "nextra/components";
+
+# Sharing across workspaces
+
+Most of the things you build — **Agents**, **Skills**, **MCP** servers, and
+**Providers** — live inside a single **Workspace**. But an Organization often
+wants _one_ of something used everywhere: a single approved Provider, a standard
+support Agent, a company-wide Skill. That's what this page is about.
+
+These four resource types — Agent, Skill, MCP, and Provider — can each live at
+either **Workspace scope** (private to one Workspace) or **Organization scope**
+(shared). A resource always lives at exactly one of those scopes, never both.
+
+## Shared resource
+
+A **Shared resource** is one of those resources defined once at the Organization
+level and _referenced_ by many Workspaces — not copied into each one. There's a
+single source of truth: only **Org Admins** edit it, and it shows up as **locked**
+to Workspace Owners, who can use it but not change it.
+
+**Why this matters:** when the Org Admin updates a Shared Agent's prompt or
+rotates a Shared Provider's credentials, every Workspace using it gets the change
+at once. No drift, no copy-paste.
+
+<Callout type="info">
+  A Shared resource may only reference other Shared resources. Sharing is always
+  explicit and per-resource — it never cascades implicitly.
+</Callout>
+
+## Attachment
+
+A Shared resource doesn't automatically appear in every Workspace. An
+**Attachment** is the explicit link that makes a Shared resource show up inside a
+particular Workspace. No Attachment, no appearance — the resource simply isn't in
+that Workspace's lists.
+
+This keeps sharing deliberate: an Org Admin attaches exactly the Shared resources
+each Workspace should see, and manages all of them from the Organization surface
+regardless of where they're attached.
+
+## Promote
+
+**Promote** is the Org Admin action that turns a Workspace-private resource into a
+Shared one. It re-scopes the resource up to the Organization, automatically
+attaches it back to the Workspace it came from, and hands governance of it to Org
+Admins.
+
+**Why you'd use it:** you built a great Agent in your own Workspace, and now the
+whole Organization should have it. Promoting it makes it shared without rebuilding
+it from scratch.
+
+## Blueprint
+
+A **Blueprint** is a named, Organization-level recipe for setting up a Workspace
+in one step. Applying a Blueprint to a Workspace does two things at once:
+
+1. **attaches a chosen set of Shared resources** to the Workspace, and
+2. **sets the Workspace's defaults** — its task and memory **Providers**, and a
+   default **[Context](/concepts/memory-and-context)**.
+
+**Why you'd use one:** onboarding. Instead of hand-configuring every new
+Workspace, an Org Admin defines a Blueprint once and applies it whenever a
+Workspace is provisioned — often automatically when someone accepts an invitation.
+
+<Callout type="warning">
+  A Blueprint runs **once**, at the moment it's applied — it isn't a live link.
+  Editing a Blueprint later only affects Workspaces provisioned _after_ the
+  edit; Workspaces already set up are left unchanged.
+</Callout>

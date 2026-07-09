@@ -8,7 +8,6 @@ import {
   readUIMessageStream,
   stepCountIs,
   streamText,
-  type LanguageModel,
 } from "ai";
 import {
   prepareChatTurn,
@@ -24,6 +23,11 @@ import {
   type RegisterOptions,
   type RunHandle,
 } from "./run-registry.ts";
+import {
+  createNoProgressDetector,
+  NoProgressError,
+  type NoProgressDetector,
+} from "./no-progress.ts";
 import type {
   ResolvedRunPlan,
   RunId,
@@ -145,6 +149,17 @@ const makeActivityHandler =
     }
   };
 
+/** Mutable per-run state shared by `setup`, the timeout handler, and the
+ *  consumer-shaped entry point. A background timer (the timeout) and the
+ *  foreground model call both read/write it, so it lives in one object both
+ *  can reach. */
+type RunState = {
+  turn?: ChatTurn;
+  stats: RunStats;
+  messages: PlatypusUIMessage[];
+  terminated: boolean;
+};
+
 /**
  * Orchestrates an end-to-end agent run.
  *
@@ -189,28 +204,48 @@ export class AgentRunner {
     return runRegistry.cancel(runId);
   }
 
-  async stream(params: {
+  /**
+   * Shared run scaffolding: the sink lifecycle (`onStart` → `onResolved`),
+   * the registry + timeout wiring, `prepare`, the per-step callback, and the
+   * once-only `finalize`. Both `stream` and `generate` build on this; only the
+   * model invocation and the consumer-shaped return value differ.
+   *
+   * `finalize` and the timeout handler live here but read `state`, which the
+   * caller keeps writing (the streamed messages) after `setup` returns — so a
+   * timeout firing mid-stream still persists the partial answer.
+   */
+  private async setup(params: {
     scope: WorkspaceScope;
     input: RunInput;
     sink: RunSink;
-    options: StreamOptions;
-  }): Promise<Response> {
-    const { scope, input, sink, options } = params;
+    origin?: string;
+    frontendUrl?: string;
+    timeouts?: Pick<RegisterOptions, "perStepTimeoutMs" | "perRunTimeoutMs">;
+    /**
+     * Unattended (trigger/scheduled) runs enable no-progress detection: a
+     * stuck model that re-issues the same call for the same result is aborted
+     * before it burns compute up to the step ceiling. Interactive runs leave
+     * it off — a human can stop those themselves.
+     */
+    unattended?: boolean;
+  }) {
+    const { scope, input, sink } = params;
     await sink.onStart({ runId: input.runId, messages: input.messages });
 
-    let turn: ChatTurn | undefined;
-    let lastMessages: PlatypusUIMessage[] = input.messages;
-    let lastStats: RunStats = {};
-    let terminated = false;
+    const state: RunState = {
+      stats: {},
+      messages: input.messages,
+      terminated: false,
+    };
 
     const finalize = async (
       status: RunStatus,
       error?: Error,
     ): Promise<void> => {
-      if (terminated) return;
-      terminated = true;
+      if (state.terminated) return;
+      state.terminated = true;
       try {
-        await turn?.dispose();
+        await state.turn?.dispose();
       } catch (err) {
         logger.error({ err, runId: input.runId }, "Error disposing turn");
       }
@@ -218,25 +253,25 @@ export class AgentRunner {
         await sink.onFinish({
           runId: input.runId,
           status,
-          messages: lastMessages,
-          stats: lastStats,
+          messages: state.messages,
+          stats: state.stats,
           error,
         });
       } catch (err) {
-        logger.error({ err, runId: input.runId }, "Error in stream onFinish");
+        logger.error({ err, runId: input.runId }, "Error in onFinish");
       }
       runRegistry.unregister(input.runId);
     };
 
     const handle: RunHandle = runRegistry.register(input.runId, {
-      ...options.timeouts,
+      ...params.timeouts,
       onTimeout: (error) => {
         logger.error(
           {
             runId: input.runId,
             kind: error.kind,
             message: error.message,
-            stats: lastStats,
+            stats: state.stats,
           },
           "Run timed out",
         );
@@ -247,66 +282,106 @@ export class AgentRunner {
     const onActivity = makeActivityHandler(handle, input.runId);
 
     try {
-      turn = await this.prepare(
+      state.turn = await this.prepare(
         scope,
         input,
-        options.origin,
-        options.frontendUrl,
+        params.origin,
+        params.frontendUrl,
         onActivity,
       );
     } catch (error) {
       const err = error instanceof Error ? error : new Error(String(error));
+      logger.error(
+        { error, runId: input.runId },
+        "Run prepare failed before model invocation",
+      );
       await finalize("failed", err);
       throw err;
     }
 
-    const plan: ResolvedRunPlan = { resolved: turn.resolved };
+    const plan: ResolvedRunPlan = { resolved: state.turn.resolved };
     await sink.onResolved({ runId: input.runId, plan });
 
-    logger.debug(
-      { systemPrompt: turn.stream.system },
-      "System prompt for chat",
-    );
+    const onStep = (step: {
+      toolCalls?: Array<{ toolName: string }>;
+      usage?: { inputTokens?: number; outputTokens?: number };
+    }): void => {
+      handle.bumpStep();
+      accumulateStepStats(state.stats, step);
+      logger.info(
+        {
+          runId: input.runId,
+          step: state.stats.steps,
+          toolCalls: step.toolCalls?.map((tc) => tc.toolName) ?? [],
+          stats: state.stats,
+        },
+        "Step finished",
+      );
+      // Sink decides write cadence (FlushScheduler in ChatSink).
+      void sink
+        .onProgress({
+          runId: input.runId,
+          messages: state.messages,
+          stats: state.stats,
+        })
+        .catch((err) =>
+          logger.error({ err, runId: input.runId }, "Error in onProgress"),
+        );
+    };
+
+    // Unattended runs gain a second stop condition alongside the step
+    // ceiling: when the model makes no progress (same call → same result,
+    // K times) the loop halts before issuing yet another wasteful step.
+    // `tripped()` is read after generation to record the run as failed.
+    const noProgress: NoProgressDetector | null = params.unattended
+      ? createNoProgressDetector()
+      : null;
+
+    // Built once and shared by both invocations. Generation params pass
+    // through as-is (including `undefined`): the SDK treats an absent key and
+    // an `undefined` value identically, and the streaming path has always
+    // passed them this way in production.
+    const modelArgs = {
+      model: state.turn.stream.model,
+      messages: await convertToModelMessages(state.turn.stream.messages),
+      system: state.turn.stream.system,
+      tools: state.turn.stream.tools,
+      stopWhen: noProgress
+        ? [stepCountIs(state.turn.stream.maxSteps), noProgress.stopCondition]
+        : [stepCountIs(state.turn.stream.maxSteps)],
+      abortSignal: handle.signal,
+      temperature: state.turn.stream.temperature,
+      topP: state.turn.stream.topP,
+      topK: state.turn.stream.topK,
+      frequencyPenalty: state.turn.stream.frequencyPenalty,
+      presencePenalty: state.turn.stream.presencePenalty,
+      seed: state.turn.stream.seed,
+    };
+
+    return { state, handle, finalize, onStep, modelArgs, noProgress };
+  }
+
+  async stream(params: {
+    scope: WorkspaceScope;
+    input: RunInput;
+    sink: RunSink;
+    options: StreamOptions;
+  }): Promise<Response> {
+    const { input, options } = params;
+    const { state, handle, finalize, onStep, modelArgs } = await this.setup({
+      scope: params.scope,
+      input,
+      sink: params.sink,
+      origin: options.origin,
+      frontendUrl: options.frontendUrl,
+      timeouts: options.timeouts,
+    });
+
+    logger.debug({ systemPrompt: modelArgs.system }, "System prompt for chat");
 
     const result = streamText({
-      model: turn.stream.model,
-      messages: await convertToModelMessages(turn.stream.messages),
-      stopWhen: [stepCountIs(turn.stream.maxSteps)],
-      tools: turn.stream.tools,
-      system: turn.stream.system,
-      abortSignal: handle.signal,
-      temperature: turn.stream.temperature,
-      topP: turn.stream.topP,
-      topK: turn.stream.topK,
-      frequencyPenalty: turn.stream.frequencyPenalty,
-      presencePenalty: turn.stream.presencePenalty,
-      seed: turn.stream.seed,
-      onStepFinish: (step) => {
-        handle.bumpStep();
-        accumulateStepStats(lastStats, step);
-        logger.info(
-          {
-            runId: input.runId,
-            step: lastStats.steps,
-            toolCalls: step.toolCalls?.map((tc) => tc.toolName) ?? [],
-            stats: lastStats,
-          },
-          "Step finished",
-        );
-        // Sink decides write cadence (FlushScheduler in ChatSink).
-        void sink
-          .onProgress({
-            runId: input.runId,
-            messages: lastMessages,
-            stats: lastStats,
-          })
-          .catch((err) =>
-            logger.error(
-              { err, runId: input.runId },
-              "Error in stream onProgress",
-            ),
-          );
-      },
+      ...modelArgs,
+      onStepFinish: (step) => onStep(step),
     });
 
     // Build the UI message stream and tee it. The response body consumes
@@ -319,14 +394,16 @@ export class AgentRunner {
       originalMessages: input.messages,
       generateMessageId: createIdGenerator({ prefix: "msg", size: 16 }),
       messageMetadata: () =>
-        turn.resolved.agentId ? { agentId: turn.resolved.agentId } : undefined,
+        state.turn?.resolved.agentId
+          ? { agentId: state.turn.resolved.agentId }
+          : undefined,
       onError: (error) => formatStreamError(error),
       onFinish: async ({ messages: finalMessages }) => {
-        lastMessages = finalMessages;
+        state.messages = finalMessages;
         let status: RunStatus = "succeeded";
         let err: Error | undefined;
         if (handle.signal.aborted) {
-          const reason = handle.signal.reason;
+          const reason: unknown = handle.signal.reason;
           if (reason instanceof TimeoutError) {
             status = "failed";
             err = reason;
@@ -340,7 +417,7 @@ export class AgentRunner {
 
     const [forResponse, forSnapshot] = uiStream.tee();
 
-    // Read the snapshot branch as message snapshots and keep `lastMessages`
+    // Read the snapshot branch as message snapshots and keep `state.messages`
     // up to date. ChatSink's FlushScheduler then writes the in-progress
     // assistant message to the DB on each onProgress bump, so a user who
     // reconnects mid-run sees the partial answer (not just their own
@@ -355,7 +432,7 @@ export class AgentRunner {
               "Snapshot stream parse error",
             ),
         })) {
-          lastMessages = [...input.messages, message];
+          state.messages = [...input.messages, message];
         }
       } catch (err) {
         logger.error(
@@ -378,122 +455,50 @@ export class AgentRunner {
     sink: RunSink;
     options?: GenerateOptions;
   }): Promise<GenerateResult> {
-    const { scope, input, sink } = params;
+    const { input } = params;
     const options = params.options ?? {};
-
-    await sink.onStart({ runId: input.runId, messages: input.messages });
-
-    let turn: ChatTurn | undefined;
-    let lastStats: RunStats = {};
-    let terminated = false;
-
-    const finalize = async (
-      status: RunStatus,
-      error?: Error,
-    ): Promise<void> => {
-      if (terminated) return;
-      terminated = true;
-      try {
-        await sink.onFinish({
-          runId: input.runId,
-          status,
-          messages: [],
-          stats: lastStats,
-          error,
-        });
-      } catch (err) {
-        logger.error({ err, runId: input.runId }, "Error in generate onFinish");
-      }
-      runRegistry.unregister(input.runId);
-    };
-
-    const handle: RunHandle = runRegistry.register(input.runId, {
-      ...options.timeouts,
-      onTimeout: (error) => {
-        logger.error(
-          {
-            runId: input.runId,
-            kind: error.kind,
-            message: error.message,
-            stats: lastStats,
-          },
-          "Run timed out",
-        );
-        void finalize("failed", error);
-      },
-    });
-
-    const onActivity = makeActivityHandler(handle, input.runId);
-
-    try {
-      // No `origin`: headless callers don't have file URLs to inline.
-      turn = await this.prepare(
-        scope,
+    // No `origin`: headless callers don't have file URLs to inline.
+    // Headless runs are unattended → enable no-progress detection.
+    const { state, handle, finalize, onStep, modelArgs, noProgress } =
+      await this.setup({
+        scope: params.scope,
         input,
-        undefined,
-        options.frontendUrl,
-        onActivity,
-      );
-    } catch (error) {
-      const err = error instanceof Error ? error : new Error(String(error));
-      logger.error(
-        { error, runId: input.runId },
-        "Run prepare failed before model invocation",
-      );
-      await finalize("failed", err);
-      throw err;
-    }
-
-    const plan: ResolvedRunPlan = { resolved: turn.resolved };
-    await sink.onResolved({ runId: input.runId, plan });
+        sink: params.sink,
+        frontendUrl: options.frontendUrl,
+        timeouts: options.timeouts,
+        unattended: true,
+      });
 
     const startTime = Date.now();
     try {
       const result = await generateText({
-        model: turn.stream.model as LanguageModel,
-        messages: await convertToModelMessages(turn.stream.messages),
-        tools: turn.stream.tools,
-        system: turn.stream.system,
-        stopWhen: [stepCountIs(turn.stream.maxSteps)],
-        abortSignal: handle.signal,
-        onStepFinish: (step) => {
-          handle.bumpStep();
-          accumulateStepStats(lastStats, step);
-          logger.info(
-            {
-              runId: input.runId,
-              step: lastStats.steps,
-              toolCalls: step.toolCalls?.map((tc) => tc.toolName) ?? [],
-              stats: lastStats,
-            },
-            "Step finished",
-          );
-          void sink
-            .onProgress({
-              runId: input.runId,
-              messages: [],
-              stats: lastStats,
-            })
-            .catch((err) =>
-              logger.error(
-                { err, runId: input.runId },
-                "Error in generate onProgress",
-              ),
-            );
-        },
-        ...Object.fromEntries(
-          Object.entries({
-            temperature: turn.stream.temperature,
-            topP: turn.stream.topP,
-            topK: turn.stream.topK,
-            frequencyPenalty: turn.stream.frequencyPenalty,
-            presencePenalty: turn.stream.presencePenalty,
-          }).filter(([, v]) => v !== undefined),
-        ),
+        ...modelArgs,
+        onStepFinish: (step) => onStep(step),
       });
 
-      const stats = computeStats(result as any);
-      lastStats = stats;
+      const stats = computeStats(result as Parameters<typeof computeStats>[0]);
+      state.stats = stats;
+
+      // The no-progress stop condition halts the loop cleanly (the SDK
+      // resolves normally), so the abort is surfaced here rather than via the
+      // catch path. Record the run as failed with a machine-readable reason.
+      const trip = noProgress?.tripped() ?? null;
+      if (trip) {
+        const err = new NoProgressError(trip.toolName, trip.count);
+        logger.warn(
+          {
+            runId: input.runId,
+            toolName: trip.toolName,
+            count: trip.count,
+            duration: Date.now() - startTime,
+            stats,
+          },
+          "Run aborted: no progress",
+        );
+        await finalize("failed", err);
+        return { text: result.text, stats };
+      }
+
       logger.info(
         {
           runId: input.runId,
@@ -525,15 +530,6 @@ export class AgentRunner {
       }
       await finalize(status, err);
       throw err;
-    } finally {
-      try {
-        await turn?.dispose();
-      } catch (err) {
-        logger.error(
-          { err, runId: input.runId },
-          "Error disposing turn after generate",
-        );
-      }
     }
   }
 }

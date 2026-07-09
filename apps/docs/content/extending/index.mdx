@@ -1,0 +1,604 @@
+---
+title: Extending
+---
+
+import { Callout } from "nextra/components";
+
+# Extending
+
+This section is for **contributors** working in the Platypus codebase and for
+**plugin authors** extending Platypus without forking it. It maps the
+extension points — the core-owned seams a plugin's manifest fills — and points
+at the [Architecture Decision
+Records](https://github.com/willdady/platypus/tree/main/docs/adr) that explain
+_why_ each one is shaped the way it is.
+
+Platypus extends itself through **plugins** (see
+[the plugin model](#the-plugin-model) below). A plugin exports a typed
+**manifest** whose `contributes` block declares one or more **Contributions** to
+a fixed set of core-owned **Extension points**:
+
+- **[Tool sets](#tool-sets)** — a named group of tools that Agents can be
+  granted.
+- **[Sandbox backends](#sandbox-backends)** — implement the `SandboxBackend`
+  interface to run shell and filesystem tools on a new execution environment
+  (Modal, Daytona, E2B, a remote host…).
+- **[MCP servers](#mcp-vs-static-tool-sets)** are _not_ a plugin extension point
+  — they're the runtime, open-ended way to add tools without touching the
+  codebase. Reach for them first; see the comparison below.
+
+<Callout type="info">
+  Every native Tool set now ships as a core plugin loaded through the manifest
+  loader (see
+  [ADR-0013](https://github.com/willdady/platypus/blob/main/docs/adr/0013-plugin-system-manifest-driven-in-process-extension-points.md)):
+  `@platypus/tools-basic` (math, time), `@platypus/web-fetch` (web fetch, split
+  out so its network egress can be denied in isolation),
+  `@platypus/tools-platform` (the Platypus-domain sets — kanban, dashboards,
+  triggers, memory, notifications, agent discovery/management, skill
+  management), and `@platypus/docker` (the Sandbox backend). **Third-party
+  plugins** load the same way from installed npm packages, with their
+  contribution ids namespaced by plugin name. The one remaining in-tree
+  registration is the `sandbox` Tool set — the consumer side of the
+  Sandbox-backend extension point, core glue rather than a native Tool set.
+  Either way the underlying `registerToolSet` / `registerSandboxBackend`
+  functions are the same — they are now **core-internal**, driven by the loader
+  rather than called by plugin authors.
+</Callout>
+
+## The plugin model
+
+A **plugin** is a distributable bundle — one version, one config namespace, one
+enable/disable switch — that an Operator installs at deploy time and that core
+loads **in-process** (no isolation). Each plugin exports a typed manifest from
+its package entry:
+
+```ts
+import type { PlatypusPlugin } from "@platypuschat/plugin-sdk";
+import { PLUGIN_API_VERSION } from "@platypuschat/plugin-sdk";
+
+export const plugin: PlatypusPlugin = {
+  name: "@example/my-plugin",
+  version: "0.1.0",
+  apiVersion: PLUGIN_API_VERSION,
+  contributes: {
+    toolSets: [/* Tool set contributions — see below */],
+  },
+};
+```
+
+The compile-time contract — the manifest type, the Contribution types, and
+`PLUGIN_API_VERSION` — lives in the published
+[`@platypuschat/plugin-sdk`](https://www.npmjs.com/package/@platypuschat/plugin-sdk)
+package. Third-party authors depend on it from npm; core plugins consume the
+same types via a workspace link.
+
+### API versioning & compatibility
+
+Set `apiVersion` from the SDK's `PLUGIN_API_VERSION` constant. It declares the
+**minimum** core API major your plugin needs — not an exact match. The policy is
+**forward-compatible with minimum-version semantics**: a core upgrade must never
+break a plugin already in the wild.
+
+Core supports the **current major and one previous — N and N−1** — at the same
+time. At boot, core rejects a listed plugin only when its `apiVersion` is:
+
+- **newer than core** (needs a capability this core doesn't provide yet) — the
+  Operator fixes it by upgrading core, which they control; or
+- **below core's oldest supported major** (targets a dropped, long-deprecated
+  major).
+
+Anything inside the `[N−1, N]` window loads. Rejection is
+[fail-loud](#the-plugin-model): the boot error names the plugin and both
+versions (`plugin X needs API vY, core supports vZ`).
+
+**Contracts evolve append-only.** Within a major, every extension-point contract
+grows only by **optional** members — a new capability is an optional method or
+field, never a new required one. That is what lets a plugin built against an
+older minor keep working after a core bump: it simply doesn't use members it
+never knew about. Adding a whole extension point (a new `contributes` key) is
+likewise additive. A genuinely breaking change — removing or re-signing a
+required member — is a **windowed major bump**: the major increments and core
+runs both N and N−1 for a release so authors can migrate.
+
+**Loading.** Before the HTTP server starts, core loads the always-on core set
+(`@platypus/tools-basic`, `@platypus/tools-platform`) unconditionally, then reads
+the Operator-supplied [`PLATYPUS_PLUGINS`](/self-hosting/configuration#plugins)
+list of **gate-able** plugins, resolves each, reads its manifest, and drives
+registration by calling the internal `register*()` per `contributes` entry. The
+always-on set is not gated by the list — it is a core-shipped constant, a subset
+of the built-in map — so listing one of its members is a fail-loud
+misconfiguration, and an empty list still yields the core tool sets. Resolution
+differs by origin:
+
+- **Core plugins** are internal backend modules under
+  `apps/backend/src/plugins/<name>/`, reached through a **static built-in map**
+  (`apps/backend/src/plugins/builtin.ts`) — which _is_ the core allowlist. Their
+  `@platypus/*` names are logical ids, not published packages.
+- **Third-party plugins** are installed npm packages reached via dynamic
+  `import()`.
+
+"Loaded identically" means an identical manifest → register flow, not identical
+module resolution.
+
+**Boot is fail-loud and all-or-nothing.** A listed plugin that can't resolve,
+exports an invalid manifest, whose deploy-time config/credentials fail schema
+validation, or whose Contribution ids collide with another plugin's aborts
+startup with a plugin-named error. Runtime Chat-turn resolution stays graceful (a
+Workspace pointing at a since-removed Tool set degrades to no tools, as before) —
+strict at boot, forgiving at runtime.
+
+### Deploy-time plugin config & credentials
+
+A plugin can declare **plugin-level** `configSchema` / `credentialsSchema` on its
+manifest — separate from the per-contribution schemas a Sandbox backend declares
+for its per-Workspace `config` / `credentials`. These describe deploy-time,
+**Operator-owned** settings: a region, an API token. The Operator supplies them
+through [`PLATYPUS_PLUGIN_CONFIG`](/self-hosting/configuration#plugin-config--credentials)
+— a JSON object keyed by plugin name.
+
+Core validates the supplied values at boot (fail-loud) and injects the resolved
+block into **every** one of that plugin's contribution factories:
+
+- A **Tool set** factory receives it as an appended second argument,
+  `(ctx, plugin) => …`.
+- A **Sandbox backend** `create(config, credentials, plugin)` receives it as a
+  third argument, alongside the per-Workspace `config` / `credentials`.
+
+Both arguments are optional to consume, so existing factories keep working
+unchanged. The key property: **one block is shared** across all of a plugin's
+contributions and all tenants (it is a _deployment_ layer, not per-Workspace).
+That is how a plugin's Sandbox backend and its management Tool set authenticate
+with the **same** credential — e.g. one Daytona token driving both:
+
+```ts
+export const plugin: PlatypusPlugin = {
+  name: "@example/cloud-sandbox",
+  version: "0.1.0",
+  apiVersion: PLUGIN_API_VERSION,
+  // Plugin-level, deploy-time schemas — validated at boot.
+  configSchema: z.object({ region: z.string().default("us") }),
+  credentialsSchema: z.object({ apiToken: z.string() }),
+  contributes: {
+    sandboxBackends: [
+      {
+        backend: "sandbox",
+        name: "Example Cloud Sandbox",
+        configSchema: z.object({}), // per-Workspace (none here)
+        credentialsSchema: z.object({}),
+        // The shared deploy-time token arrives as the third argument.
+        create: (_cfg, _creds, plugin) => new ExampleBackend(plugin),
+      },
+    ],
+    toolSets: [
+      {
+        id: "management",
+        name: "Example Management",
+        category: "Sandbox",
+        // …and the SAME block arrives here as the second argument.
+        tools: (_ctx, plugin) => createManagementTools(plugin.credentials),
+      },
+    ],
+  },
+};
+```
+
+The in-repo reference is `apps/backend/src/plugins/example/` — a two-contribution
+plugin that proves the single credential block reaches both. This is distinct
+from, and layers above, the per-Workspace Sandbox `config` / `credentials`
+(unchanged); the two do not merge.
+
+## Sandbox backends
+
+A **Sandbox** is a persistent, Workspace-keyed execution environment that
+exposes a fixed set of shell and filesystem tools to Agents. The contract every
+backend implements is small and fixed on purpose: an Agent's prompt should not
+care _which_ backend it's running on, so you can swap the reference Docker
+adapter for Modal or Daytona without re-prompting.
+
+> See [ADR-0001](https://github.com/willdady/platypus/blob/main/docs/adr/0001-sandbox-as-workspace-keyed-execution-environment.md)
+> for why a Sandbox is a Workspace-keyed sibling of Provider (not a Provider
+> variant, an MCP server, or a generic plugin), and
+> [ADR-0002](https://github.com/willdady/platypus/blob/main/docs/adr/0002-sandbox-fixed-five-tool-core.md)
+> for why the interface is a fixed five-tool core.
+
+### The interface
+
+A backend is anything that implements `SandboxBackend`
+(`apps/backend/src/sandbox/types.ts`). It is exactly five tools plus an
+idempotent teardown — adapters **cannot** add, rename, or re-sign tools:
+
+```ts
+export interface SandboxBackend {
+  shellExec(
+    ctx: SandboxContext,
+    input: ShellExecInput,
+  ): Promise<ShellExecOutput>;
+  fsRead(ctx: SandboxContext, input: FsReadInput): Promise<FsReadOutput>;
+  fsWrite(ctx: SandboxContext, input: FsWriteInput): Promise<FsWriteOutput>;
+  fsEdit(ctx: SandboxContext, input: FsEditInput): Promise<FsEditOutput>;
+  fsList(ctx: SandboxContext, input: FsListInput): Promise<FsListOutput>;
+  destroy(ctx: SandboxContext): Promise<void>;
+}
+```
+
+Every method receives a `SandboxContext` — the stable identity key your adapter
+uses to find or provision the environment:
+
+```ts
+export type SandboxContext = {
+  orgId: string;
+  workspaceId: string;
+  userId: string;
+};
+```
+
+State (filesystem, environment) is expected to **persist across Chat turns**,
+keyed on `(orgId, workspaceId)`. That persistence is the whole point —
+Hermes / Claude-Code-style workflows depend on it.
+
+Contract rules your adapter must honour (all from
+[ADR-0002](https://github.com/willdady/platypus/blob/main/docs/adr/0002-sandbox-fixed-five-tool-core.md)):
+
+- **Paths are workspace-root-relative.** The root is conventionally
+  `/workspace`; reject absolute paths.
+- **`shellExec` is stateless** — a fresh shell per call with an explicit `cwd`,
+  no session state between calls. Default 60s timeout, hard cap 600s.
+- **`fsWrite` requires explicit `mode: "create" | "overwrite"`** — no silent
+  create-or-overwrite.
+- **`fsEdit` uses `oldString` / `newString` semantics** (Claude Code style), not
+  patch/diff format.
+- **Every response carries a `truncated` flag** with the Platypus-defined byte /
+  entry caps. If your backend can't honour the cap natively, truncate yourself.
+- **`destroy` must be idempotent** — it fires on row delete, on a `backend`
+  change, and best-effort on Workspace cascade.
+
+### Contributing a backend
+
+Backends are contributed through the `contributes.sandboxBackends` array in a
+plugin manifest; each entry is a `SandboxBackendContribution` from the SDK. Core
+reads the manifest and drives the internal `registerSandboxBackend` itself — you
+never call it directly. A contribution declares a `backend` discriminator, a
+display `name`, Zod schemas for the per-Sandbox `config` and `credentials`, and
+a `create` factory:
+
+```ts
+import type { SandboxBackendContribution } from "@platypuschat/plugin-sdk";
+
+export interface SandboxBackendContribution<
+  TConfig = unknown,
+  TCredentials = unknown,
+> {
+  backend: string;
+  name: string;
+  configSchema: z.ZodType<TConfig>;
+  credentialsSchema: z.ZodType<TCredentials>;
+  create(config: TConfig, credentials: TCredentials): SandboxBackend;
+}
+```
+
+The reference **Docker** adapter ships as the core plugin `@platypus/docker`
+(`apps/backend/src/plugins/docker/`) and shows the pattern — its manifest
+contributes the backend:
+
+```ts
+export const plugin: PlatypusPlugin = {
+  name: "@platypus/docker",
+  version: "0.1.0",
+  apiVersion: PLUGIN_API_VERSION,
+  contributes: {
+    sandboxBackends: [
+      {
+        backend: "docker",
+        name: "Local Docker",
+        configSchema: dockerSandboxConfigSchema,
+        credentialsSchema: dockerSandboxCredentialsSchema,
+        create: (config, credentials) =>
+          new DockerSandboxBackend(config, credentials),
+      },
+    ],
+  },
+};
+```
+
+The plugin is **off unless listed**: enable Docker by adding `@platypus/docker`
+to `PLATYPUS_PLUGINS`. Omit it and the `"docker"` backend type is never
+registered, so an un-runnable Sandbox row can't be created. Plugin-list
+membership _is_ the enable switch — there is no separate per-backend env gate
+(see [the plugin model](#the-plugin-model)).
+
+**To add a backend:**
+
+1. Implement `SandboxBackend` in a new plugin under
+   `apps/backend/src/plugins/<name>/` (or an external package).
+2. Define `configSchema` and `credentialsSchema` (Zod). `config` is non-secret
+   shape (e.g. region, image); `credentials` is secret material (e.g. API
+   tokens).
+3. Contribute it via `contributes.sandboxBackends` in the plugin manifest, then
+   enable the plugin by listing it in `PLATYPUS_PLUGINS`.
+
+<Callout type="warning">
+  The Docker reference adapter mounts the host Docker socket and is scoped to
+  **development and single-node self-hosting only** — explicitly not for
+  multi-tenant or hostile-tenant environments. Reach / network exposure is
+  default-deny and admin-curated. See
+  [ADR-0003](https://github.com/willdady/platypus/blob/main/docs/adr/0003-docker-reference-sandbox-adapter-socket-mount.md)
+  and
+  [ADR-0005](https://github.com/willdady/platypus/blob/main/docs/adr/0005-sandbox-host-reachability-is-admin-curated-default-deny.md)
+  before shipping a backend with host reach.
+</Callout>
+
+## Tool sets
+
+A **tool set** is a named, categorised group of tools that an Agent can be
+granted. A plugin contributes tool sets through the `contributes.toolSets` array
+in its manifest; each entry is a `ToolSetContribution` from the SDK:
+
+```ts
+import type {
+  ToolSetContribution,
+  ToolSetContext,
+} from "@platypuschat/plugin-sdk";
+
+interface ToolSetContribution {
+  id: string;
+  name: string;
+  category: string;
+  description?: string;
+  tools:
+    | { [toolId: string]: Tool }
+    | ((
+        ctx: ToolSetContext,
+      ) => Record<string, Tool> | Promise<Record<string, Tool>>);
+}
+```
+
+`tools` is either a **static map** of tools, or a **factory** that receives a
+`ToolSetContext` at Chat-turn time — use the factory form when tools need
+runtime scope:
+
+```ts
+export interface ToolSetContext {
+  workspaceId: string;
+  agentId: string;
+  orgId: string;
+  frontendUrl: string | undefined;
+  userId: string;
+}
+```
+
+Individual tools are Vercel AI SDK tools (`tool()` from the `ai` package) with a
+Zod `inputSchema` and an `execute` function. The simplest contribution uses a
+static map; the `@platypus/tools-basic` core plugin
+(`apps/backend/src/plugins/tools-basic/`) is the reference:
+
+```ts
+export const plugin: PlatypusPlugin = {
+  name: "@platypus/tools-basic",
+  version: "0.1.0",
+  apiVersion: PLUGIN_API_VERSION,
+  contributes: {
+    toolSets: [
+      {
+        id: "math-conversions",
+        name: "Math Conversions",
+        category: "Math",
+        description: "Temperature and unit conversions",
+        tools: {
+          convertTemperature,
+          convertDistance,
+          convertWeight,
+          convertVolume,
+        },
+      },
+    ],
+  },
+};
+```
+
+When tools need the Workspace / Agent context, use a factory for the `tools`
+field instead:
+
+```ts
+{
+  id: "kanban",
+  name: "Kanban",
+  category: "Productivity",
+  description: "Manage kanban boards in this workspace",
+  tools: ({ workspaceId, agentId, orgId, frontendUrl }) =>
+    createKanbanTools(workspaceId, agentId, orgId, frontendUrl),
+}
+```
+
+**To add a core tool set (in-tree plugin):**
+
+A core tool set is a **contribution in a plugin manifest's `contributes.toolSets`
+array** — you never call `registerToolSet` directly (it is core-internal, driven
+by the loader). Concretely:
+
+1. Define your tools with `tool({ description, inputSchema, execute })`. Put
+   them in a new file under `apps/backend/src/tools/` (see `math.ts` for a
+   stateless example, `kanban.ts` for a context-factory example).
+2. Add a `ToolSetContribution` entry to the `contributes.toolSets` array of the
+   fitting core plugin's manifest — a Platypus-domain set belongs in
+   `@platypus/tools-platform` (`apps/backend/src/plugins/tools-platform/`), a
+   pure utility in `@platypus/tools-basic`. If the capability is one an Operator
+   would plausibly want to deny in isolation (network egress, infra), give it its
+   own plugin instead — mirror `@platypus/web-fetch` — under
+   `apps/backend/src/plugins/<name>/index.ts` and register its logical
+   `@platypus/*` name in `apps/backend/src/plugins/builtin.ts` (the built-in map
+   / core allowlist).
+3. It now loads according to its plugin's tier. Adding a tool set to
+   `@platypus/tools-platform` or `@platypus/tools-basic` needs nothing further —
+   they are **always-on** (listed in `ALWAYS_ON_PLUGINS` in
+   `apps/backend/src/plugins/builtin.ts`) and load unconditionally. A new
+   **gate-able** plugin (e.g. a fresh egress/infra one) must be added to the
+   deployment's `PLATYPUS_PLUGINS` list to load; the default list is in
+   `.env.example`.
+
+Core Contribution ids stay unprefixed (`math-conversions`, `web-fetch`,
+`kanban`) so persisted `agent.toolSetIds` references keep working. A tool set is
+granted to Agents like any other; if its dependencies aren't present at turn time
+it degrades gracefully (the `sandbox` tool set, for example, resolves to no tools
+when a Workspace has no Sandbox configured).
+
+<Callout type="info">
+  The `sandbox` tool set is the one core tool set **not** contributed through a
+  manifest — it is the consumer side of the Sandbox-backend extension point
+  (ADR-0002), core glue that turns whichever backend a Workspace configured into
+  the fixed five tools, so it stays a core-internal static registration in
+  `apps/backend/src/tools/index.ts`. It is not a template for new tool sets;
+  contribute those through a plugin manifest as above.
+</Callout>
+
+### Third-party plugins
+
+A **third-party plugin** is any plugin that isn't one of the core built-ins — it
+lives out of tree, ships as its own npm package, and is enabled by adding its
+package name to `PLATYPUS_PLUGINS`. You don't fork Platypus to ship one.
+
+1. Create a package that depends on
+   [`@platypuschat/plugin-sdk`](https://www.npmjs.com/package/@platypuschat/plugin-sdk)
+   and exports a `plugin` manifest from its entry point. Author your
+   contributions exactly as a core plugin does — the SDK types are identical.
+2. Install it into the deployment (`pnpm add my-platypus-plugin`) so it resolves
+   from `node_modules`; core loads third-party plugins by dynamic
+   `import(packageName)`.
+3. Add the **package name** to `PLATYPUS_PLUGINS`.
+
+```ts
+import type { PlatypusPlugin } from "@platypuschat/plugin-sdk";
+import { PLUGIN_API_VERSION } from "@platypuschat/plugin-sdk";
+import { tool } from "ai";
+import { z } from "zod";
+
+export const plugin: PlatypusPlugin = {
+  name: "example", // ← the namespace slug prefix, not the npm package name (see below)
+  version: "0.1.0",
+  apiVersion: PLUGIN_API_VERSION,
+  contributes: {
+    toolSets: [
+      {
+        id: "greeting", // ← bare id; core prefixes it to `example.greeting`
+        name: "Greeting",
+        category: "Examples",
+        tools: {
+          greet: tool({
+            description: "Return a friendly greeting.",
+            inputSchema: z.object({ name: z.string() }),
+            execute: ({ name }) => `Hello, ${name}!`,
+          }),
+        },
+      },
+    ],
+  },
+};
+```
+
+The repo ships this exact plugin as a runnable reference under
+[`packages/example-plugin`](https://github.com/willdady/platypus/tree/main/packages/example-plugin)
+(the `@platypus-examples/tool-set` package). A second in-repo example,
+`apps/backend/src/plugins/example`, demonstrates the
+[deploy-time config & shared credentials](#deploy-time-plugin-config--credentials)
+mechanics.
+
+#### Contribution-id namespacing
+
+Third-party Contribution ids are **auto-prefixed with the plugin's manifest
+`name`** at load — `example.greeting`, and so on. You write **bare** ids in your
+manifest; core prefixes them. Core built-in ids stay flat and un-prefixed
+(`math-conversions`, `time`, `docker`). This split (ADR-0013) means a
+third-party id can never collide with a current — or _future_ — core built-in
+and silently break a deployment on upgrade.
+
+Because it becomes the id prefix, a third-party `name` **must be a short,
+url-safe slug** — lowercase letters, digits, and hyphens (`cloud-sandbox`,
+`example`) — validated at boot. It is **distinct from the npm package specifier**
+you list in `PLATYPUS_PLUGINS` and install: a package published as
+`@acme/platypus-widgets` may set `name: "widgets"`, so you list
+`@acme/platypus-widgets` but reference `widgets.<id>` (and key its
+`PLATYPUS_PLUGIN_CONFIG` block under `widgets`).
+
+Two consequences worth internalising:
+
+- **Grant and reference the namespaced id.** An Agent that uses the tool set
+  above stores `example.greeting` in its `toolSetIds`, and that's the id a Chat
+  turn resolves.
+- **The core allowlist is the sole authority for "core".** Membership in the
+  built-in map (`apps/backend/src/plugins/builtin.ts`) — _not_ the package scope
+  — decides origin. A package that installs itself under an `@platypus/*` name
+  it doesn't own is still absent from the allowlist, so it's treated as
+  third-party and prefixed. Scope impersonation can't smuggle a package in as
+  core.
+
+<Callout type="info">
+  Frontend tool / tool-set presentation (icons, custom UI) lives separately. If
+  you're wiring a new tool set end to end, see the `tools` skill in the repo for
+  the frontend icon mapping and custom-UI conventions.
+</Callout>
+
+### MCP vs static tool sets
+
+Static tool sets and MCP servers are deliberately different surfaces — pick the
+right one:
+
+- **MCP server** — the open-ended, runtime way to expose arbitrary tools
+  _without changing Platypus_. Configured per Workspace (or shared at the Org
+  level). This is the default answer to "I want my Agent to call X."
+- **Static tool set** — for tools that ship _with_ Platypus and are part of the
+  product surface (Kanban, math, sandbox…). Adding one means adding code and
+  rebuilding.
+
+If you're integrating an external service for your own use, you almost always
+want an MCP server, not a code change.
+
+## Shared resources
+
+Agents, Skills, and MCPs can be **Promoted** to Organization scope and become
+**Shared resources** that many Workspaces reference (never copy). The defining
+rule is **no implicit sharing** — a Shared resource may reference only other
+Shared resources. If you're touching the resource model (adding a new shareable
+resource type, or a reference between resources), read
+[ADR-0007](https://github.com/willdady/platypus/blob/main/docs/adr/0007-organization-scoped-shared-resources.md)
+first; the promotion-prerequisite rule has wide-reaching consequences.
+
+## Migration status
+
+The plugin loader is landing incrementally
+([ADR-0013](https://github.com/willdady/platypus/blob/main/docs/adr/0013-plugin-system-manifest-driven-in-process-extension-points.md)).
+What's live and what's still in-tree today:
+
+- **Live:** the `@platypuschat/plugin-sdk` surface (Tool sets _and_
+  Sandbox-backend contributions), the boot-time loader with the
+  [`apiVersion` compatibility window](#api-versioning--compatibility) (N and
+  N−1), the built-in map / core allowlist, the first core plugin
+  `@platypus/tools-basic` (math, time), the Docker Sandbox backend as the core
+  plugin `@platypus/docker`,
+  [deploy-time plugin config/credentials](#deploy-time-plugin-config--credentials)
+  (the shared credential block), and
+  [third-party plugin loading with contribution-id namespacing](#third-party-plugins)
+  (dynamic `import()` of an installed package, ids prefixed by the manifest
+  `name`; see the `@platypus-examples/tool-set` reference plugin) — each flowing
+  manifest → loader → registry in a Chat turn. Observability is live too: a boot
+  log enumerating loaded plugins, a read-only `GET /plugins` catalog, and
+  originating-plugin annotations on the `GET /backends` and Tools listings. That
+  catalog backs the read-only
+  [**Installed plugins** Org-Admin view](/self-hosting/configuration#inspecting-installed-plugins)
+  — versions and contributions per plugin, no enable/disable (enablement is the
+  deploy-time `PLATYPUS_PLUGINS` list).
+- **Still in-tree, pending migration:** the remaining built-in Tool sets
+  (`kanban`, `triggers`, `sandbox`, …) still call `registerToolSet` directly at
+  boot. They keep working unchanged; the same registration functions are what the
+  loader drives.
+
+## Reference ADRs
+
+| ADR                                                                                                                               | Topic                                              |
+| --------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------- |
+| [0001](https://github.com/willdady/platypus/blob/main/docs/adr/0001-sandbox-as-workspace-keyed-execution-environment.md)          | Sandbox is a Workspace-keyed execution environment |
+| [0002](https://github.com/willdady/platypus/blob/main/docs/adr/0002-sandbox-fixed-five-tool-core.md)                              | Fixed five-tool Sandbox interface                  |
+| [0003](https://github.com/willdady/platypus/blob/main/docs/adr/0003-docker-reference-sandbox-adapter-socket-mount.md)             | Docker reference adapter (socket mount)            |
+| [0004](https://github.com/willdady/platypus/blob/main/docs/adr/0004-sandbox-workspace-default-env-vars.md)                        | Sandbox default environment variables              |
+| [0005](https://github.com/willdady/platypus/blob/main/docs/adr/0005-sandbox-host-reachability-is-admin-curated-default-deny.md)   | Host reachability is admin-curated, default-deny   |
+| [0006](https://github.com/willdady/platypus/blob/main/docs/adr/0006-credential-and-reach-bearing-config-is-admin-managed.md)      | Credential/reach config is admin-managed           |
+| [0007](https://github.com/willdady/platypus/blob/main/docs/adr/0007-organization-scoped-shared-resources.md)                      | Organization-scoped Shared resources               |
+| [0013](https://github.com/willdady/platypus/blob/main/docs/adr/0013-plugin-system-manifest-driven-in-process-extension-points.md) | Manifest-driven plugin system                      |

@@ -53,7 +53,9 @@ const eventTrigger = {
 const stubAuthLookups = () => {
   mockSession();
   mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
-  mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]);
+  mockDb.limit.mockResolvedValueOnce([
+    { ownerId: "user-1", organizationId: "org-1" },
+  ]);
 };
 
 describe("Trigger Routes", () => {
@@ -91,7 +93,7 @@ describe("Trigger Routes", () => {
 
       const res = await app.request(`${baseUrl}/trig-1`);
       expect(res.status).toBe(200);
-      const body = await res.json();
+      const body = (await res.json()) as Record<string, unknown>;
       expect(body).toMatchObject({ id: "trig-1", agentId: "agent-1" });
     });
 
@@ -264,7 +266,7 @@ describe("Trigger Routes", () => {
         headers: { "Content-Type": "application/json" },
       });
       expect(res.status).toBe(200);
-      const setArg = mockDb.set.mock.calls[0][0];
+      const setArg = mockDb.set.mock.calls[0][0] as Record<string, unknown>;
       expect(setArg.nextRunAt).toBeNull();
     });
   });

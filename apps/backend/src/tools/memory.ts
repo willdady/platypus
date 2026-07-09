@@ -89,16 +89,22 @@ export const createMemoryTools = (
           LIMIT ${limit}
         `);
 
+        const rows = results.rows as Array<{
+          summary_date: string;
+          summary: string;
+          relevance: number;
+        }>;
         return {
-          results: results.rows.map((row: any) => ({
+          results: rows.map((row) => ({
             date: row.summary_date,
             summary: row.summary,
             relevance: Math.round(Number(row.relevance) * 1000) / 1000,
           })),
         };
-      } catch (error: any) {
+      } catch (error) {
         logger.error({ error }, "memorySearch tool failed");
-        return { error: `Memory search failed: ${error.message}` };
+        const message = error instanceof Error ? error.message : String(error);
+        return { error: `Memory search failed: ${message}` };
       }
     },
   });
@@ -133,9 +139,10 @@ export const createMemoryTools = (
           date: result.summaryDate,
           summary: result.summary,
         };
-      } catch (error: any) {
+      } catch (error) {
         logger.error({ error }, "memoryGet tool failed");
-        return { error: `Memory get failed: ${error.message}` };
+        const message = error instanceof Error ? error.message : String(error);
+        return { error: `Memory get failed: ${message}` };
       }
     },
   });

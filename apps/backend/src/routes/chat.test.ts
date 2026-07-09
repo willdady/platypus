@@ -102,7 +102,9 @@ describe("Chat Routes", () => {
     it("should list chats", async () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
-      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]); // requireWorkspaceAccess
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-1", organizationId: "org-1" },
+      ]); // requireWorkspaceAccess
 
       const mockChats = [{ id: "chat-1", title: "Chat 1" }];
       mockDb.offset.mockResolvedValueOnce(mockChats);
@@ -121,7 +123,9 @@ describe("Chat Routes", () => {
     it("should filter chats by single tag", async () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
-      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]); // requireWorkspaceAccess
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-1", organizationId: "org-1" },
+      ]); // requireWorkspaceAccess
 
       const mockChats = [
         { id: "chat-1", title: "Chat 1", tags: ["typescript"] },
@@ -142,7 +146,9 @@ describe("Chat Routes", () => {
     it("should filter chats by multiple tags (OR logic)", async () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
-      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]); // requireWorkspaceAccess
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-1", organizationId: "org-1" },
+      ]); // requireWorkspaceAccess
 
       const mockChats = [
         { id: "chat-1", title: "Chat 1", tags: ["typescript"] },
@@ -164,7 +170,9 @@ describe("Chat Routes", () => {
     it("should return empty array when tag filter has no matches", async () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
-      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]); // requireWorkspaceAccess
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-1", organizationId: "org-1" },
+      ]); // requireWorkspaceAccess
 
       mockDb.offset.mockResolvedValueOnce([]);
       mockDb.where
@@ -181,7 +189,9 @@ describe("Chat Routes", () => {
     it("should return all chats when tags param is not provided (backward compatible)", async () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
-      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]); // requireWorkspaceAccess
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-1", organizationId: "org-1" },
+      ]); // requireWorkspaceAccess
 
       const mockChats = [
         { id: "chat-1", title: "Chat 1", tags: ["typescript"] },
@@ -205,7 +215,9 @@ describe("Chat Routes", () => {
     it("should return chat", async () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
-      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]); // requireWorkspaceAccess
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-1", organizationId: "org-1" },
+      ]); // requireWorkspaceAccess
 
       const mockChat = { id: "chat-1", title: "Chat 1" };
       mockDb.limit.mockResolvedValueOnce([mockChat]);
@@ -224,7 +236,9 @@ describe("Chat Routes", () => {
         email: "test@example.com",
       });
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
-      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]); // requireWorkspaceAccess
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-1", organizationId: "org-1" },
+      ]); // requireWorkspaceAccess
 
       // ChatSink.onStart upserts the chat row with status=running before
       // prepareChatTurn runs. Returning a non-empty array skips the insert
@@ -271,7 +285,9 @@ describe("Chat Routes", () => {
     it("should delete chat", async () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
-      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]); // requireWorkspaceAccess
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-1", organizationId: "org-1" },
+      ]); // requireWorkspaceAccess
 
       // Mock for fetching chat record before delete (for file cleanup)
       mockDb.limit.mockResolvedValueOnce([{ id: "chat-1", messages: [] }]);
@@ -290,7 +306,9 @@ describe("Chat Routes", () => {
     it("returns 200 when cancelling an existing chat (idempotent on inactive runs)", async () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
-      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]); // requireWorkspaceAccess
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-1", organizationId: "org-1" },
+      ]); // requireWorkspaceAccess
       // chat row lookup
       mockDb.limit.mockResolvedValueOnce([{ id: "chat-1" }]);
 
@@ -298,7 +316,7 @@ describe("Chat Routes", () => {
         method: "POST",
       });
       expect(res.status).toBe(200);
-      const body = await res.json();
+      const body = (await res.json()) as Record<string, unknown>;
       expect(body.message).toMatch(/cancel/i);
     });
 
@@ -306,7 +324,9 @@ describe("Chat Routes", () => {
       for (let i = 0; i < 2; i++) {
         mockSession();
         mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
-        mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]);
+        mockDb.limit.mockResolvedValueOnce([
+          { ownerId: "user-1", organizationId: "org-1" },
+        ]);
         mockDb.limit.mockResolvedValueOnce([{ id: "chat-1" }]);
 
         const res = await app.request(`${baseUrl}/chat-1/cancel`, {
@@ -319,7 +339,9 @@ describe("Chat Routes", () => {
     it("returns 404 when the chat does not belong to the workspace", async () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
-      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]);
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-1", organizationId: "org-1" },
+      ]);
       mockDb.limit.mockResolvedValueOnce([]); // chat lookup misses
 
       const res = await app.request(`${baseUrl}/chat-other/cancel`, {
@@ -341,7 +363,9 @@ describe("Chat Routes", () => {
     it("should update chat", async () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
-      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]); // requireWorkspaceAccess
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-1", organizationId: "org-1" },
+      ]); // requireWorkspaceAccess
 
       const mockChat = { id: "chat-1", title: "Updated Title" };
       mockDb.returning.mockResolvedValueOnce([mockChat]);
@@ -364,7 +388,9 @@ describe("Chat Routes", () => {
     it("should generate metadata", async () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
-      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]); // requireWorkspaceAccess
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-1", organizationId: "org-1" },
+      ]); // requireWorkspaceAccess
 
       // Fetch chat
       mockDb.limit.mockResolvedValueOnce([{ id: "chat-1", messages: [] }]);
@@ -404,7 +430,9 @@ describe("Chat Routes", () => {
     it("should use workspace taskModelProviderId when set", async () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
-      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]); // requireWorkspaceAccess
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-1", organizationId: "org-1" },
+      ]); // requireWorkspaceAccess
 
       // Fetch chat
       mockDb.limit.mockResolvedValueOnce([{ id: "chat-1", messages: [] }]);

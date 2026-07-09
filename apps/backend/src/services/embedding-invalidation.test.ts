@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { mockDb, resetMockDb } from "../test-utils.ts";
+import type { ProviderUpdateData } from "@platypus/schemas";
 
 vi.mock("../logger.ts", () => ({
   logger: { info: vi.fn(), error: vi.fn(), warn: vi.fn(), debug: vi.fn() },
@@ -36,7 +37,9 @@ describe("handleEmbeddingConfigChange", () => {
   });
 
   it("is a no-op when neither embedding field is in the update payload", async () => {
-    await handleEmbeddingConfigChange("p1", { name: "renamed" } as any);
+    await handleEmbeddingConfigChange("p1", {
+      name: "renamed",
+    } as ProviderUpdateData);
 
     expect(mockDb.select).not.toHaveBeenCalled();
     expect(mockDb.execute).not.toHaveBeenCalled();
@@ -50,7 +53,7 @@ describe("handleEmbeddingConfigChange", () => {
 
     await handleEmbeddingConfigChange("p1", {
       embeddingModelId: "new-model",
-    } as any);
+    } as ProviderUpdateData);
 
     expect(mockDb.execute).toHaveBeenCalledTimes(1);
   });
@@ -63,7 +66,7 @@ describe("handleEmbeddingConfigChange", () => {
 
     await handleEmbeddingConfigChange("p1", {
       embeddingDimensions: 3072,
-    } as any);
+    } as ProviderUpdateData);
 
     expect(mockDb.execute).toHaveBeenCalledTimes(1);
   });
@@ -76,7 +79,7 @@ describe("handleEmbeddingConfigChange", () => {
     await handleEmbeddingConfigChange("p1", {
       embeddingModelId: "same-model",
       embeddingDimensions: 1536,
-    } as any);
+    } as ProviderUpdateData);
 
     expect(mockDb.execute).not.toHaveBeenCalled();
   });
@@ -86,7 +89,7 @@ describe("handleEmbeddingConfigChange", () => {
 
     await handleEmbeddingConfigChange("p1", {
       embeddingModelId: "new",
-    } as any);
+    } as ProviderUpdateData);
 
     expect(mockDb.execute).not.toHaveBeenCalled();
   });

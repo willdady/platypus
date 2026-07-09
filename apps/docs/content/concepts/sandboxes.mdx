@@ -1,0 +1,44 @@
+---
+title: Sandboxes
+description: A Sandbox is an isolated execution environment that gives an agent shell and filesystem tools, safely separated from everything else.
+---
+
+import { Callout } from "nextra/components";
+
+# Sandboxes
+
+## Sandbox
+
+A **Sandbox** is an isolated, self-contained environment where an **Agent** can
+run shell commands and work with files. It's registered in a **Workspace**, and
+when it's available, the Agent gains shell and filesystem tools that operate
+_inside_ that environment — not on the machine running Platypus.
+
+**Why you'd use one:** lots of useful work involves actually executing
+something — running a script, building a project, inspecting files. A Sandbox
+lets an Agent do that safely, because the work happens in an isolated environment
+rather than touching anything outside it.
+
+Like an MCP, a Sandbox resolves to a **[tool set](/concepts/tools)** at Chat-turn
+time — the shell and filesystem tools it provides.
+
+## Pluggable backends
+
+The Sandbox is designed to be pluggable: the same Agent-facing tools can be
+powered by different backends — a local container, a remote VM, or a hosted
+sandbox-as-a-service. Which backend a deployment offers is an Operator decision;
+contributors can add new ones (see [Extending](/extending)).
+
+## Default environment variables
+
+A Sandbox can also carry **environment variables** that are merged into every
+shell command it runs. This is handy for things like API keys or configuration a
+command needs — and importantly, those values are applied directly to the
+execution **without being sent through the model**, so secrets stay out of the
+conversation.
+
+<Callout type="info">
+  Setting up a Sandbox is an infrastructure task. See [Self-Hosting → Sandbox
+  infrastructure](/self-hosting) for how an Operator and Org Admin configure the
+  available backends.
+</Callout>

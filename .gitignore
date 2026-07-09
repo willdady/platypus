@@ -41,3 +41,6 @@ compose.override.yaml
 data
 .playwright-cli
 .opencode/
+
+# Claude Code worktrees
+.claude/worktrees/

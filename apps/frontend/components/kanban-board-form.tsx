@@ -200,7 +200,7 @@ export function KanbanBoardForm({
           className="mt-1"
         >
           <Plus className="h-4 w-4" />
-          Add Label
+          Add label
         </Button>
       </div>
 
@@ -209,7 +209,7 @@ export function KanbanBoardForm({
           type="submit"
           disabled={isSubmitting || isDeleting || !name.trim()}
         >
-          {isEditing ? "Update" : "Create Board"}
+          {isEditing ? "Update" : "Create board"}
         </Button>
         {isEditing && onDelete && (
           <Button

@@ -26,7 +26,7 @@ describe("event-trigger-debounce", () => {
     vi.useRealTimers();
   });
 
-  it("should fire after 5s delay", async () => {
+  it("should fire after 5s delay", () => {
     const executeFn = vi.fn().mockResolvedValue(undefined);
     const trigger = makeTrigger("t-1");
     const ctx = makeContext({ id: "card-1" });
@@ -41,7 +41,7 @@ describe("event-trigger-debounce", () => {
     expect(executeFn).toHaveBeenCalledWith(trigger, ctx);
   });
 
-  it("should coalesce rapid events and use latest data", async () => {
+  it("should coalesce rapid events and use latest data", () => {
     const executeFn = vi.fn().mockResolvedValue(undefined);
     const trigger = makeTrigger("t-1");
 
@@ -65,7 +65,7 @@ describe("event-trigger-debounce", () => {
     expect(executeFn).toHaveBeenCalledWith(trigger, ctx3);
   });
 
-  it("should fire independently for different debounce keys", async () => {
+  it("should fire independently for different debounce keys", () => {
     const executeFn = vi.fn().mockResolvedValue(undefined);
     const trigger1 = makeTrigger("t-1");
     const trigger2 = makeTrigger("t-2");
@@ -82,7 +82,7 @@ describe("event-trigger-debounce", () => {
     expect(executeFn).toHaveBeenCalledWith(trigger2, ctx2);
   });
 
-  it("should reset timer on each new event", async () => {
+  it("should reset timer on each new event", () => {
     const executeFn = vi.fn().mockResolvedValue(undefined);
     const trigger = makeTrigger("t-1");
 
@@ -110,7 +110,7 @@ describe("event-trigger-debounce", () => {
     expect(executeFn).toHaveBeenCalledWith(trigger, latestCtx);
   });
 
-  it("should cancel all pending executions with clearPendingTriggers", async () => {
+  it("should cancel all pending executions with clearPendingTriggers", () => {
     const executeFn = vi.fn().mockResolvedValue(undefined);
 
     debounceTriggerExecution(

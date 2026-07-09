@@ -8,7 +8,17 @@ import {
   SidebarMenuItem,
   SidebarMenu,
 } from "@/components/ui/sidebar";
-import { Mail, Plug, Settings, Unplug, Users } from "lucide-react";
+import {
+  Blocks,
+  Bot,
+  Layers,
+  Mail,
+  Plug,
+  Settings,
+  Sparkles,
+  Unplug,
+  Users,
+} from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
@@ -23,6 +33,10 @@ export function OrgSettingsMenu({ orgId }: OrgSettingsMenuProps) {
   const invitationsHref = `/${orgId}/settings/invitations`;
   const providersHref = `/${orgId}/settings/providers`;
   const mcpHref = `/${orgId}/settings/mcp`;
+  const skillsHref = `/${orgId}/settings/skills`;
+  const agentsHref = `/${orgId}/settings/agents`;
+  const blueprintsHref = `/${orgId}/settings/blueprints`;
+  const pluginsHref = `/${orgId}/settings/plugins`;
 
   return (
     <SidebarContent>
@@ -73,6 +87,46 @@ export function OrgSettingsMenu({ orgId }: OrgSettingsMenuProps) {
               >
                 <Link href={mcpHref}>
                   <Plug /> MCP
+                </Link>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+            <SidebarMenuItem>
+              <SidebarMenuButton
+                asChild
+                isActive={pathname.startsWith(skillsHref)}
+              >
+                <Link href={skillsHref}>
+                  <Sparkles /> Skills
+                </Link>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+            <SidebarMenuItem>
+              <SidebarMenuButton
+                asChild
+                isActive={pathname.startsWith(agentsHref)}
+              >
+                <Link href={agentsHref}>
+                  <Bot /> Agents
+                </Link>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+            <SidebarMenuItem>
+              <SidebarMenuButton
+                asChild
+                isActive={pathname.startsWith(blueprintsHref)}
+              >
+                <Link href={blueprintsHref}>
+                  <Layers /> Blueprints
+                </Link>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+            <SidebarMenuItem>
+              <SidebarMenuButton
+                asChild
+                isActive={pathname.startsWith(pluginsHref)}
+              >
+                <Link href={pluginsHref}>
+                  <Blocks /> Plugins
                 </Link>
               </SidebarMenuButton>
             </SidebarMenuItem>

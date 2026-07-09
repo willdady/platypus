@@ -94,10 +94,8 @@ export class ChatSink implements RunSink {
     }
   }
 
-  async onResolved(ctx: {
-    runId: RunId;
-    plan: ResolvedRunPlan;
-  }): Promise<void> {
+  // Synchronous work; returns a resolved promise to satisfy the async RunSink contract.
+  onResolved(ctx: { runId: RunId; plan: ResolvedRunPlan }): Promise<void> {
     this.plan = ctx.plan;
 
     // Lazily create the FlushScheduler now that we have a plan to write.
@@ -108,15 +106,18 @@ export class ChatSink implements RunSink {
         messages: this.latestMessages,
       });
     });
+    return Promise.resolve();
   }
 
-  async onProgress(ctx: {
+  // Synchronous work; returns a resolved promise to satisfy the async RunSink contract.
+  onProgress(ctx: {
     runId: RunId;
     messages: PlatypusUIMessage[];
     stats: RunStats;
   }): Promise<void> {
     this.latestMessages = ctx.messages;
     this.flusher?.bump();
+    return Promise.resolve();
   }
 
   async onFinish(ctx: {

@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useMemo, useState } from "react";
+import { useResetOnChange } from "@/hooks/use-reset-on-change";
 import useSWR from "swr";
 import { toast } from "sonner";
 import { Box, Plus, Trash2, X } from "lucide-react";
@@ -45,6 +46,12 @@ type SandboxBackend = { backend: string; name: string };
 // fields. See ADR-0005. Other backends ignore them.
 const DOCKER_BACKEND = "docker";
 
+// The SSH reference backend (ADR-0012) attaches to a pre-existing host. Its
+// config (host/port/user/rootDir) and credentials (privateKey/passphrase) are
+// all admin-only, inherited from the existing requireSandboxAdmin gating.
+const SSH_BACKEND = "ssh";
+const DEFAULT_SSH_PORT = "22";
+
 // Rows are kept as an ordered array (not a Record) so a user can edit keys, add
 // empties, and tolerate duplicate-during-edit without the UI reshuffling on
 // every keystroke. Converted on save.
@@ -59,6 +66,18 @@ type SandboxFormData = {
   // Docker host reachability (ADR-0005), admin-only.
   networks: string[];
   extraHosts: Row[]; // key = hostname, value = ip / host-gateway
+  // SSH connection (ADR-0012), admin-only. Port is kept as a string for the
+  // input and parsed on save. privateKey/passphrase are credentials (never
+  // returned by GET, so blank on edit means "keep the stored value").
+  sshHost: string;
+  sshPort: string;
+  sshUser: string;
+  sshRootDir: string;
+  // Optional host-key pin (ADR-0012). Part of config, not credentials — returned
+  // by GET like the rest of the SSH config.
+  sshHostKey: string;
+  sshPrivateKey: string;
+  sshPassphrase: string;
 };
 
 const DEFAULT_FORM: SandboxFormData = {
@@ -68,6 +87,13 @@ const DEFAULT_FORM: SandboxFormData = {
   userEnv: [],
   networks: [],
   extraHosts: [],
+  sshHost: "",
+  sshPort: DEFAULT_SSH_PORT,
+  sshUser: "",
+  sshRootDir: "",
+  sshHostKey: "",
+  sshPrivateKey: "",
+  sshPassphrase: "",
 };
 
 const recordToRows = (rec: Record<string, string> | undefined): Row[] =>
@@ -210,10 +236,12 @@ const SandboxSettings = ({
     const res = await fetch(url, { credentials: "include" });
     if (res.status === 404) return null;
     if (!res.ok) {
-      const error = new Error("Failed to load sandbox");
+      const error: Error & { info?: unknown; status?: number } = new Error(
+        "Failed to load sandbox",
+      );
       const info = await res.json().catch(() => ({}));
-      (error as any).info = info;
-      (error as any).status = res.status;
+      error.info = info;
+      error.status = res.status;
       throw error;
     }
     return res.json();
@@ -227,7 +255,7 @@ const SandboxSettings = ({
   const { data: backendsData, isLoading: backendsLoading } = useSWR<{
     results: SandboxBackend[];
   }>(backendUrl && user ? `${sandboxUrl}/backends` : null, fetcher);
-  const backends = backendsData?.results ?? [];
+  const backends = useMemo(() => backendsData?.results ?? [], [backendsData]);
 
   // Operator network allowlist — admin-only endpoint (ADR-0005).
   const { data: networksData } = useSWR<{ results: string[] }>(
@@ -253,26 +281,45 @@ const SandboxSettings = ({
   }>({ open: false, kind: null, message: "" });
   const [isForcing, setIsForcing] = useState(false);
 
-  useEffect(() => {
+  useResetOnChange(data, () => {
     if (data) {
       const config = (data.config ?? {}) as {
         networks?: string[];
         extraHosts?: string[];
+        host?: string;
+        port?: number;
+        user?: string;
+        rootDir?: string;
+        hostKey?: string;
       };
       setFormData({
+        ...DEFAULT_FORM,
         name: data.name,
         backend: data.backend,
         adminEnv: recordToRows(data.adminEnv),
         userEnv: recordToRows(data.userEnv),
         networks: config.networks ?? [],
         extraHosts: extraHostsToRows(config.extraHosts),
+        // SSH config (credentials are stripped by GET, so left blank — an edit
+        // that doesn't re-enter the key preserves the stored one server-side).
+        sshHost: config.host ?? "",
+        sshPort: config.port ? String(config.port) : DEFAULT_SSH_PORT,
+        sshUser: config.user ?? "",
+        sshRootDir: config.rootDir ?? "",
+        sshHostKey: config.hostKey ?? "",
       });
-    } else if (backends.length > 0) {
+    }
+  });
+
+  // When creating (no existing record), default the backend to the first
+  // available one until the user picks another.
+  useResetOnChange(backends, () => {
+    if (!data && backends.length > 0) {
       setFormData((prev) =>
         prev.backend ? prev : { ...prev, backend: backends[0].backend },
       );
     }
-  }, [data, backends]);
+  });
 
   const clearError = (field: string) => {
     if (validationErrors[field]) {
@@ -285,6 +332,7 @@ const SandboxSettings = ({
   };
 
   const isDocker = formData.backend === DOCKER_BACKEND;
+  const isSsh = formData.backend === SSH_BACKEND;
 
   const performSave = async (
     options: { force?: boolean } = {},
@@ -295,6 +343,50 @@ const SandboxSettings = ({
     const url =
       isCreate || !options.force ? sandboxUrl : `${sandboxUrl}?force=true`;
 
+    // Backend-specific config. Docker carries host reachability (ADR-0005); SSH
+    // carries the connection target (ADR-0012). Other backends take no config.
+    const config = isDocker
+      ? {
+          networks: formData.networks,
+          extraHosts: rowsToExtraHosts(formData.extraHosts),
+        }
+      : isSsh
+        ? {
+            host: formData.sshHost.trim(),
+            port: Number(formData.sshPort) || Number(DEFAULT_SSH_PORT),
+            user: formData.sshUser.trim(),
+            // rootDir is optional — omit when blank so the backend applies its
+            // `$HOME/platypus-workspace` default.
+            ...(formData.sshRootDir.trim()
+              ? { rootDir: formData.sshRootDir.trim() }
+              : {}),
+            // hostKey is optional — omit when blank so the backend connects with
+            // the MITM warning rather than pinning.
+            ...(formData.sshHostKey.trim()
+              ? { hostKey: formData.sshHostKey.trim() }
+              : {}),
+          }
+        : {};
+
+    // The `credentials` slice of the payload (spread below). For SSH (ADR-0012)
+    // we only send credentials when a private key was entered: on edit the key
+    // comes back blank (GET strips it), so omitting `credentials` preserves the
+    // stored value server-side rather than clearing it. Other backends send an
+    // empty credentials object, as before.
+    const credentialsPayload =
+      isSsh && formData.sshPrivateKey.trim()
+        ? {
+            credentials: {
+              privateKey: formData.sshPrivateKey,
+              ...(formData.sshPassphrase
+                ? { passphrase: formData.sshPassphrase }
+                : {}),
+            },
+          }
+        : isSsh
+          ? {} // omit credentials — preserve stored
+          : { credentials: {} };
+
     // Non-admin owners may only change name + userEnv (ADR-0006); everything
     // else is admin-controlled and ignored server-side, so we don't send it.
     const payload = isOrgAdmin
@@ -302,13 +394,8 @@ const SandboxSettings = ({
           ...(isCreate ? { workspaceId } : {}),
           name: formData.name,
           backend: formData.backend,
-          config: isDocker
-            ? {
-                networks: formData.networks,
-                extraHosts: rowsToExtraHosts(formData.extraHosts),
-              }
-            : {},
-          credentials: {},
+          config,
+          ...credentialsPayload,
           adminEnv: rowsToRecord(formData.adminEnv),
           userEnv: rowsToRecord(formData.userEnv),
         }
@@ -327,16 +414,15 @@ const SandboxSettings = ({
 
     if (response.ok) return { ok: true };
 
-    const errorData = await response.json().catch(() => ({}));
+    const errorData = (await response.json().catch(() => ({}))) as {
+      error?: string;
+    };
 
-    if (
-      response.status === 500 &&
-      isForceRetryError((errorData as any)?.error)
-    ) {
+    if (response.status === 500 && isForceRetryError(errorData?.error)) {
       return {
         ok: false,
         forceRetry: true,
-        errorMessage: (errorData as any).error,
+        errorMessage: errorData.error,
       };
     }
 
@@ -344,7 +430,7 @@ const SandboxSettings = ({
     if (Object.keys(fieldErrors).length > 0) {
       setValidationErrors(fieldErrors);
     } else {
-      toast.error((errorData as any)?.error || "Failed to save sandbox");
+      toast.error(errorData?.error || "Failed to save sandbox");
     }
     return { ok: false };
   };
@@ -394,14 +480,13 @@ const SandboxSettings = ({
 
     if (response.ok) return { ok: true };
 
-    const errorData = await response.json().catch(() => ({}));
-    if (
-      response.status === 500 &&
-      isForceRetryError((errorData as any)?.error)
-    ) {
+    const errorData = (await response.json().catch(() => ({}))) as {
+      error?: string;
+    };
+    if (response.status === 500 && isForceRetryError(errorData?.error)) {
       return { ok: false, forceRetry: true };
     }
-    toast.error((errorData as any)?.error || "Failed to delete sandbox");
+    toast.error(errorData?.error || "Failed to delete sandbox");
     return { ok: false };
   };
 
@@ -501,7 +586,7 @@ const SandboxSettings = ({
             {!isOrgAdmin
               ? "No sandbox is configured for this workspace. Ask an organization admin to set one up."
               : noBackends
-                ? "No sandbox backends are registered on this server. Set PLATYPUS_SANDBOX_DOCKER_ENABLED=true (or register another backend) and restart the backend."
+                ? "No sandbox backends are registered on this server. Add @platypus/docker to PLATYPUS_PLUGINS (or register another backend) and restart the backend."
                 : "Configure a sandbox to run agent code in an isolated environment."}
           </EmptyDescription>
         </EmptyHeader>
@@ -585,12 +670,8 @@ const SandboxSettings = ({
                 <FieldLabel>Networks</FieldLabel>
                 <FieldDescription>
                   Docker networks this sandbox may attach to. The list is
-                  declared by the operator via
-                  <span className="font-mono">
-                    {" "}
-                    PLATYPUS_SANDBOX_DOCKER_ALLOWED_NETWORKS
-                  </span>
-                  . Off by default.
+                  declared by the operator in the deployment&apos;s plugin
+                  configuration. Off by default.
                 </FieldDescription>
                 {allowedNetworks.length === 0 ? (
                   <p className="text-sm text-muted-foreground">
@@ -651,6 +732,177 @@ const SandboxSettings = ({
                 {validationErrors.config && (
                   <FieldError>{validationErrors.config}</FieldError>
                 )}
+              </Field>
+            </>
+          )}
+
+          {/* SSH connection (ADR-0012) — admin-only, ssh backend only. */}
+          {isOrgAdmin && isSsh && (
+            <>
+              <Field data-invalid={!!validationErrors.config}>
+                <FieldLabel htmlFor="ssh-host">Host</FieldLabel>
+                <Input
+                  id="ssh-host"
+                  placeholder="ssh.example.com"
+                  value={formData.sshHost}
+                  onChange={(e) => {
+                    clearError("config");
+                    setFormData((prev) => ({
+                      ...prev,
+                      sshHost: e.target.value,
+                    }));
+                  }}
+                  disabled={isSubmitting}
+                  className="font-mono"
+                />
+                <FieldDescription>
+                  Hostname or IP of the operator-owned host to attach to.
+                </FieldDescription>
+              </Field>
+
+              <Field>
+                <FieldLabel htmlFor="ssh-port">Port</FieldLabel>
+                <Input
+                  id="ssh-port"
+                  type="number"
+                  placeholder={DEFAULT_SSH_PORT}
+                  value={formData.sshPort}
+                  onChange={(e) =>
+                    setFormData((prev) => ({
+                      ...prev,
+                      sshPort: e.target.value,
+                    }))
+                  }
+                  disabled={isSubmitting}
+                  className="font-mono"
+                />
+              </Field>
+
+              <Field>
+                <FieldLabel htmlFor="ssh-user">User</FieldLabel>
+                <Input
+                  id="ssh-user"
+                  placeholder="platypus"
+                  value={formData.sshUser}
+                  onChange={(e) => {
+                    clearError("config");
+                    setFormData((prev) => ({
+                      ...prev,
+                      sshUser: e.target.value,
+                    }));
+                  }}
+                  disabled={isSubmitting}
+                  className="font-mono"
+                />
+                <FieldDescription>
+                  SSH login user. Public-key auth only.
+                </FieldDescription>
+              </Field>
+
+              <Field>
+                <FieldLabel htmlFor="ssh-root-dir">
+                  Workspace root (optional)
+                </FieldLabel>
+                <Input
+                  id="ssh-root-dir"
+                  placeholder="$HOME/platypus-workspace"
+                  value={formData.sshRootDir}
+                  onChange={(e) =>
+                    setFormData((prev) => ({
+                      ...prev,
+                      sshRootDir: e.target.value,
+                    }))
+                  }
+                  disabled={isSubmitting}
+                  className="font-mono"
+                />
+                <FieldDescription>
+                  Absolute or $HOME-relative directory the sandbox works in.
+                  Defaults to{" "}
+                  <span className="font-mono">$HOME/platypus-workspace</span>,
+                  created on first connect.
+                </FieldDescription>
+              </Field>
+
+              <Field>
+                <FieldLabel htmlFor="ssh-host-key">
+                  Host key (optional)
+                </FieldLabel>
+                <textarea
+                  id="ssh-host-key"
+                  placeholder="ssh-ed25519 AAAAC3NzaC1lZDI1NTE5..."
+                  value={formData.sshHostKey}
+                  onChange={(e) =>
+                    setFormData((prev) => ({
+                      ...prev,
+                      sshHostKey: e.target.value,
+                    }))
+                  }
+                  disabled={isSubmitting}
+                  rows={3}
+                  autoComplete="off"
+                  spellCheck={false}
+                  className="flex w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm font-mono shadow-xs focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+                />
+                <FieldDescription>
+                  Pin the host&apos;s public key to reject a man-in-the-middle.
+                  Obtain it with{" "}
+                  <span className="font-mono">
+                    ssh-keyscan -t ed25519 {formData.sshHost || "<host>"}
+                  </span>
+                  . Leave blank to connect unverified (a warning is logged).
+                </FieldDescription>
+              </Field>
+
+              <Field>
+                <FieldLabel htmlFor="ssh-private-key">Private key</FieldLabel>
+                <textarea
+                  id="ssh-private-key"
+                  placeholder={
+                    hasSandbox
+                      ? "Leave blank to keep the stored key"
+                      : "-----BEGIN OPENSSH PRIVATE KEY-----"
+                  }
+                  value={formData.sshPrivateKey}
+                  onChange={(e) =>
+                    setFormData((prev) => ({
+                      ...prev,
+                      sshPrivateKey: e.target.value,
+                    }))
+                  }
+                  disabled={isSubmitting}
+                  rows={5}
+                  autoComplete="off"
+                  spellCheck={false}
+                  className="flex w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm font-mono shadow-xs focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+                />
+                <FieldDescription>
+                  PEM or OpenSSH private key. Kept server-side, never sent to
+                  the model.
+                  {hasSandbox &&
+                    " Leave blank to keep the currently stored key."}
+                </FieldDescription>
+              </Field>
+
+              <Field>
+                <FieldLabel htmlFor="ssh-passphrase">
+                  Key passphrase (optional)
+                </FieldLabel>
+                <Input
+                  id="ssh-passphrase"
+                  type="password"
+                  placeholder="Passphrase for the private key"
+                  value={formData.sshPassphrase}
+                  onChange={(e) =>
+                    setFormData((prev) => ({
+                      ...prev,
+                      sshPassphrase: e.target.value,
+                    }))
+                  }
+                  disabled={isSubmitting}
+                  autoComplete="off"
+                  className="font-mono"
+                />
               </Field>
             </>
           )}

@@ -1,5 +1,5 @@
 import type { PlatypusUIMessage } from "../types.ts";
-import type { ChatSubmitData, ChatTurn } from "../services/chat-execution.ts";
+import type { ChatTurnRequest, ChatTurn } from "../services/chat-execution.ts";
 
 export type RunId = string;
 
@@ -19,7 +19,7 @@ export type RunStats = {
  */
 export type RunInput = {
   runId: RunId;
-  request: ChatSubmitData;
+  request: ChatTurnRequest;
   messages: PlatypusUIMessage[];
 };
 

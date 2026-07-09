@@ -4,8 +4,10 @@ import { nanoid } from "nanoid";
 import { db } from "../index.ts";
 import {
   attachment as attachmentTable,
+  agent as agentTable,
   mcp as mcpTable,
   provider as providerTable,
+  skill as skillTable,
 } from "../db/schema.ts";
 import { attachmentCreateSchema } from "@platypus/schemas";
 import { eq, and } from "drizzle-orm";
@@ -14,6 +16,7 @@ import {
   requireOrgAccess,
   requireWorkspaceAccess,
 } from "../middleware/authorization.ts";
+import { isUniqueViolation } from "../errors.ts";
 import type { Variables } from "../server.ts";
 
 // Attachment is the explicit reference that surfaces an org-scoped Shared
@@ -21,13 +24,6 @@ import type { Variables } from "../server.ts";
 // action — `requireOrgAccess(["admin"])` rejects non-admins with 403 — scoped
 // to a specific Workspace via `requireWorkspaceAccess`.
 const attachment = new Hono<{ Variables: Variables }>();
-
-/** Detects a Postgres unique-constraint violation across driver shapes. */
-const isUniqueViolation = (error: any): boolean =>
-  error.code === "23505" ||
-  error.cause?.code === "23505" ||
-  error.message?.includes("unique constraint") ||
-  error.cause?.message?.includes("unique constraint");
 
 /** List attachments for this workspace (admin only) */
 attachment.get(
@@ -59,7 +55,14 @@ attachment.post(
 
     // The resource must be org-scoped and belong to this organization — you can
     // only attach a Shared resource, never a workspace-scoped one.
-    const table = resourceType === "mcp" ? mcpTable : providerTable;
+    const table =
+      resourceType === "mcp"
+        ? mcpTable
+        : resourceType === "skill"
+          ? skillTable
+          : resourceType === "agent"
+            ? agentTable
+            : providerTable;
     const resource = await db
       .select({ id: table.id })
       .from(table)
@@ -78,7 +81,7 @@ attachment.post(
         .values({ id: nanoid(), workspaceId, resourceType, resourceId })
         .returning();
       return c.json(record[0], 201);
-    } catch (error: any) {
+    } catch (error) {
       if (isUniqueViolation(error)) {
         return c.json(
           { error: "This resource is already attached to this workspace" },
@@ -106,7 +109,10 @@ attachment.delete(
       .where(
         and(
           eq(attachmentTable.workspaceId, workspaceId),
-          eq(attachmentTable.resourceType, resourceType as "mcp" | "provider"),
+          eq(
+            attachmentTable.resourceType,
+            resourceType as "mcp" | "provider" | "skill" | "agent",
+          ),
           eq(attachmentTable.resourceId, resourceId),
         ),
       )

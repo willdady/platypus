@@ -1,7 +1,11 @@
 import { describe, it, expect } from "vitest";
+import type { Context } from "hono";
 import { getOrigin } from "./get-origin.ts";
 
-function makeContext(url: string, headers: Record<string, string> = {}): any {
+function makeContext(
+  url: string,
+  headers: Record<string, string> = {},
+): Parameters<typeof getOrigin>[0] {
   return {
     req: {
       url,
@@ -9,7 +13,7 @@ function makeContext(url: string, headers: Record<string, string> = {}): any {
         return headers[name.toLowerCase()];
       },
     },
-  };
+  } as unknown as Context;
 }
 
 describe("getOrigin", () => {

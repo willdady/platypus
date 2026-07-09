@@ -750,7 +750,10 @@ kanban.post(
       .returning();
 
     const workspaceId = c.req.param("workspaceId")!;
-    dispatchEvent(workspaceId, "card.created", { ...record[0], boardId });
+    dispatchEvent(c.req.param("orgId")!, workspaceId, "card.created", {
+      ...record[0],
+      boardId,
+    });
 
     return c.json(record[0], 201);
   },
@@ -831,7 +834,10 @@ kanban.put(
     }
 
     const workspaceId = c.req.param("workspaceId")!;
-    dispatchEvent(workspaceId, "card.updated", { ...record[0], boardId });
+    dispatchEvent(c.req.param("orgId")!, workspaceId, "card.updated", {
+      ...record[0],
+      boardId,
+    });
 
     return c.json(record[0]);
   },
@@ -913,7 +919,10 @@ kanban.post(
 
     const workspaceId = c.req.param("workspaceId")!;
     const boardId = c.req.param("boardId");
-    dispatchEvent(workspaceId, "card.updated", { ...updated[0], boardId });
+    dispatchEvent(c.req.param("orgId")!, workspaceId, "card.updated", {
+      ...updated[0],
+      boardId,
+    });
 
     return c.json(updated[0]);
   },
@@ -951,7 +960,7 @@ kanban.delete(
     }
 
     const workspaceId = c.req.param("workspaceId")!;
-    dispatchEvent(workspaceId, "card.deleted", {
+    dispatchEvent(c.req.param("orgId")!, workspaceId, "card.deleted", {
       cardId,
       boardId,
       columnId: result[0].columnId,
@@ -1133,8 +1142,7 @@ kanban.put(
 
     // Check ownership: super admins, org admins can moderate; others must own the comment
     const canModerate =
-      isSuperAdmin(currentUser as { role: string }) ||
-      orgMembership?.role === "admin";
+      isSuperAdmin(currentUser) || orgMembership?.role === "admin";
     if (!canModerate && existingComment.createdByUserId !== currentUser.id) {
       return c.json({ error: "You can only edit your own comments" }, 403);
     }
@@ -1185,8 +1193,7 @@ kanban.delete(
 
     // Check ownership: super admins, org admins can moderate; others must own the comment
     const canModerate =
-      isSuperAdmin(currentUser as { role: string }) ||
-      orgMembership?.role === "admin";
+      isSuperAdmin(currentUser) || orgMembership?.role === "admin";
     if (!canModerate && existingComment.createdByUserId !== currentUser.id) {
       return c.json({ error: "You can only delete your own comments" }, 403);
     }

@@ -39,6 +39,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
@@ -94,6 +95,7 @@ const ProviderForm = ({
     organization: "",
     project: "",
     apiMode: "responses",
+    nativeSearchEnabled: true,
     modelIds: [],
     taskModelId: "",
     memoryExtractionModelId: "",
@@ -152,6 +154,7 @@ const ProviderForm = ({
         organization: provider.organization || "",
         project: provider.project || "",
         apiMode: provider.apiMode ?? "responses",
+        nativeSearchEnabled: provider.nativeSearchEnabled ?? true,
         modelIds: provider.modelIds || [],
         taskModelId: provider.taskModelId,
         memoryExtractionModelId: provider.memoryExtractionModelId,
@@ -273,6 +276,7 @@ const ProviderForm = ({
         organization: formData.organization || undefined,
         project: formData.project || undefined,
         apiMode: formData.apiMode,
+        nativeSearchEnabled: formData.nativeSearchEnabled,
         modelIds: formData.modelIds,
         taskModelId: formData.taskModelId,
         memoryExtractionModelId: formData.memoryExtractionModelId,
@@ -660,7 +664,7 @@ const ProviderForm = ({
                       </SelectContent>
                     </Select>
                     <FieldDescription>
-                      Responses is OpenAI's default and supports hosted
+                      Responses is OpenAI&apos;s default and supports hosted
                       web_search, reasoning summaries, and previous_response_id.
                       Switch to Chat Completions when pointing at an
                       OpenAI-compatible server that does not implement
@@ -752,6 +756,36 @@ const ProviderForm = ({
                       {extraBodyError || validationErrors.extraBody}
                     </FieldError>
                   )}
+                </Field>
+              )}
+
+              {formData.providerType !== "Bedrock" && (
+                <Field
+                  orientation="horizontal"
+                  className="items-center justify-between"
+                >
+                  <div>
+                    <FieldLabel htmlFor="nativeSearchEnabled">
+                      Native web search
+                    </FieldLabel>
+                    <FieldDescription>
+                      Use this provider&apos;s built-in web_search tool. Turn
+                      off for endpoints that don&apos;t implement it (e.g. vLLM,
+                      Ollama, LiteLLM). This also hides the search toggle in
+                      chat.
+                    </FieldDescription>
+                  </div>
+                  <Switch
+                    id="nativeSearchEnabled"
+                    checked={formData.nativeSearchEnabled}
+                    disabled={isSubmitting || isReadOnly}
+                    onCheckedChange={(checked) =>
+                      setFormData((prev) => ({
+                        ...prev,
+                        nativeSearchEnabled: checked,
+                      }))
+                    }
+                  />
                 </Field>
               )}
             </FieldGroup>

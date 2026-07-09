@@ -1,0 +1,54 @@
+---
+title: Tools, tool sets & MCP
+description: Tools let an agent do things, not just talk. Tool sets bundle them, and MCP servers contribute tool sets from outside Platypus.
+---
+
+# Tools, tool sets & MCP
+
+An **Agent** that can only talk is limited. Tools are how an Agent _acts_ —
+searching the web, reading a file, calling an API, running a command. This page
+explains how tools are bundled and where they come from.
+
+## Tool set
+
+A **Tool set** is a named bundle of tools you can grant to an **Agent**. Instead
+of wiring up individual tools one by one, you give an Agent a whole tool set.
+
+Tool sets come from two kinds of source:
+
+- **contributed by a plugin** — a plugin declares tool sets in its manifest and
+  core loads them at boot. This covers both the **core built-ins** that ship
+  with Platypus (math, Kanban, sandbox…) and **third-party plugins** installed
+  as npm packages. See [Extending → Tool sets](/extending#tool-sets).
+- **backed by an MCP server** — contributed at runtime from outside Platypus,
+  without a code change or a plugin install (see below).
+
+When an Agent runs, each tool set it's been granted is resolved into the actual
+tools the model can call.
+
+## MCP
+
+**MCP** stands for the Model Context Protocol — an open standard for exposing
+tools to AI models. An **MCP** in Platypus is a registered MCP server. At
+Chat-turn time it resolves to a **tool set**, so the tools that server offers
+become available to the Agent.
+
+**Why you'd use one:** MCP is how you connect Platypus to capabilities that don't
+ship with it — your own internal services, third-party integrations, or community
+MCP servers. Register the server once, then grant its tool set to any Agent that
+needs it.
+
+An MCP can live at **Workspace scope** (private to one Workspace) or be shared at
+**Organization scope** as a [Shared resource](/concepts/sharing). See
+[Building with Platypus → MCP servers](/building-with-platypus/mcp) for how to set
+one up.
+
+## How it fits together
+
+> An **Agent** is granted zero or more **tool sets**. Each tool set is either
+> contributed by a **plugin** (a core built-in or a third-party plugin) or
+> backed by an **MCP** server, and resolves to a concrete set of tools the model
+> can call during a **Chat turn**.
+
+A **[Sandbox](/concepts/sandboxes)** also resolves to a tool set — its shell and
+filesystem tools — which is why sandboxes get their own page.

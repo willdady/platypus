@@ -13,7 +13,7 @@ export const convertTemperature = tool({
       .enum(["fahrenheit", "celsius", "kelvin"])
       .describe("The unit to convert to"),
   }),
-  execute: async ({ value, from, to }) => {
+  execute: ({ value, from, to }) => {
     let celsius: number;
     if (from === "celsius") celsius = value;
     else if (from === "fahrenheit") celsius = (value - 32) * (5 / 9);
@@ -49,7 +49,7 @@ export const convertDistance = tool({
       .enum(["meters", "centimeters", "kilometers", "miles", "feet", "inches"])
       .describe("The unit to convert to"),
   }),
-  execute: async ({ value, from, to }) => {
+  execute: ({ value, from, to }) => {
     if (from === to) return { result: value, unit: to };
     const meters = value * DISTANCE_TO_METERS[from];
     const result = meters / DISTANCE_TO_METERS[to];
@@ -65,7 +65,7 @@ export const convertWeight = tool({
     from: z.enum(["kilograms", "pounds"]).describe("The unit to convert from"),
     to: z.enum(["kilograms", "pounds"]).describe("The unit to convert to"),
   }),
-  execute: async ({ value, from, to }) => {
+  execute: ({ value, from, to }) => {
     if (from === to) return { result: value, unit: to };
     const result = from === "kilograms" ? value * 2.20462 : value / 2.20462;
     return { result: Math.round(result * 100) / 100, unit: to };
@@ -80,7 +80,7 @@ export const convertVolume = tool({
     from: z.enum(["liters", "gallons"]).describe("The unit to convert from"),
     to: z.enum(["liters", "gallons"]).describe("The unit to convert to"),
   }),
-  execute: async ({ value, from, to }) => {
+  execute: ({ value, from, to }) => {
     if (from === to) return { result: value, unit: to };
     const result = from === "liters" ? value * 0.264172 : value / 0.264172;
     return { result: Math.round(result * 100) / 100, unit: to };

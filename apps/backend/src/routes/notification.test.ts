@@ -33,7 +33,9 @@ describe("Notification Routes", () => {
     it("should return notifications with agent name, avatar URL, and read status", async () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
-      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]); // requireWorkspaceAccess
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-1", organizationId: "org-1" },
+      ]); // requireWorkspaceAccess
 
       const mockNotifications = [
         {
@@ -53,7 +55,13 @@ describe("Notification Routes", () => {
 
       const res = await app.request(baseUrl);
       expect(res.status).toBe(200);
-      const body = await res.json();
+      const body = (await res.json()) as {
+        results: {
+          agentName: string;
+          isRead: boolean;
+          agentAvatarUrl?: string;
+        }[];
+      };
       expect(body.results).toHaveLength(1);
       expect(body.results[0].agentName).toBe("My Agent");
       expect(body.results[0].isRead).toBe(false);
@@ -63,12 +71,14 @@ describe("Notification Routes", () => {
     it("should return empty array when no notifications exist", async () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
-      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]); // requireWorkspaceAccess
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-1", organizationId: "org-1" },
+      ]); // requireWorkspaceAccess
       mockDb.offset.mockResolvedValueOnce([]);
 
       const res = await app.request(baseUrl);
       expect(res.status).toBe(200);
-      const body = await res.json();
+      const body = (await res.json()) as Record<string, unknown>;
       expect(body.results).toHaveLength(0);
     });
   });
@@ -83,7 +93,9 @@ describe("Notification Routes", () => {
     it("should return correct unread count", async () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
-      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]); // requireWorkspaceAccess
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-1", organizationId: "org-1" },
+      ]); // requireWorkspaceAccess
       // where() is used by middleware (sync chaining) then by handler (terminal)
       mockDb.where
         .mockReturnValueOnce(mockDb) // requireOrgAccess
@@ -92,14 +104,16 @@ describe("Notification Routes", () => {
 
       const res = await app.request(`${baseUrl}/unread-count`);
       expect(res.status).toBe(200);
-      const body = await res.json();
+      const body = (await res.json()) as Record<string, unknown>;
       expect(body.count).toBe(3);
     });
 
     it("should return 0 when all notifications read", async () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
-      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]); // requireWorkspaceAccess
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-1", organizationId: "org-1" },
+      ]); // requireWorkspaceAccess
       mockDb.where
         .mockReturnValueOnce(mockDb) // requireOrgAccess
         .mockReturnValueOnce(mockDb) // requireWorkspaceAccess
@@ -107,7 +121,7 @@ describe("Notification Routes", () => {
 
       const res = await app.request(`${baseUrl}/unread-count`);
       expect(res.status).toBe(200);
-      const body = await res.json();
+      const body = (await res.json()) as Record<string, unknown>;
       expect(body.count).toBe(0);
     });
   });
@@ -124,7 +138,9 @@ describe("Notification Routes", () => {
     it("should mark notification as read", async () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
-      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]); // requireWorkspaceAccess
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-1", organizationId: "org-1" },
+      ]); // requireWorkspaceAccess
       mockDb.limit.mockResolvedValueOnce([{ id: "notif-1" }]); // notification exists
 
       // onConflictDoNothing returns the mock chain
@@ -135,14 +151,16 @@ describe("Notification Routes", () => {
         method: "POST",
       });
       expect(res.status).toBe(200);
-      const body = await res.json();
+      const body = (await res.json()) as Record<string, unknown>;
       expect(body.success).toBe(true);
     });
 
     it("should return 404 if notification does not exist", async () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
-      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]); // requireWorkspaceAccess
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-1", organizationId: "org-1" },
+      ]); // requireWorkspaceAccess
       mockDb.limit.mockResolvedValueOnce([]); // notification not found
 
       const res = await app.request(`${baseUrl}/notif-1/read`, {
@@ -164,7 +182,9 @@ describe("Notification Routes", () => {
     it("should mark all workspace notifications as read", async () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
-      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]); // requireWorkspaceAccess
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-1", organizationId: "org-1" },
+      ]); // requireWorkspaceAccess
 
       // where() is used by middleware (sync chaining) then by handler (terminal)
       mockDb.where
@@ -179,7 +199,7 @@ describe("Notification Routes", () => {
         method: "POST",
       });
       expect(res.status).toBe(200);
-      const body = await res.json();
+      const body = (await res.json()) as Record<string, unknown>;
       expect(body.success).toBe(true);
     });
   });
@@ -196,21 +216,25 @@ describe("Notification Routes", () => {
     it("should delete notification successfully", async () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
-      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]); // requireWorkspaceAccess
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-1", organizationId: "org-1" },
+      ]); // requireWorkspaceAccess
       mockDb.returning.mockResolvedValueOnce([{ id: "notif-1" }]);
 
       const res = await app.request(`${baseUrl}/notif-1`, {
         method: "DELETE",
       });
       expect(res.status).toBe(200);
-      const body = await res.json();
+      const body = (await res.json()) as Record<string, unknown>;
       expect(body.message).toBe("Notification deleted");
     });
 
     it("should return 404 if notification does not exist", async () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
-      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]); // requireWorkspaceAccess
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-1", organizationId: "org-1" },
+      ]); // requireWorkspaceAccess
       mockDb.returning.mockResolvedValueOnce([]);
 
       const res = await app.request(`${baseUrl}/notif-1`, {

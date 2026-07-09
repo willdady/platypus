@@ -90,10 +90,16 @@ export function AuthProvider({
 
   const orgId = params.orgId as string | undefined;
   const workspaceId = params.workspaceId as string | undefined;
+  // Depend on the user id rather than the user object so SWR revalidations
+  // (which produce a new object identity) don't re-trigger these fetches.
+  const userId = data?.user?.id;
 
-  // Fetch org membership when orgId changes
+  // Manually fetch org membership when the org/user changes. This is a
+  // data-fetching effect; the synchronous resets and loading flags below are
+  // part of its fetch lifecycle (a future refactor could move this to SWR).
   useEffect(() => {
-    if (!data?.user || !orgId) {
+    /* eslint-disable react-hooks/set-state-in-effect */
+    if (!userId || !orgId) {
       setOrgMembership(null);
       setHasFetchedOrg(false);
       setIsOrgMembershipLoading(false);
@@ -108,6 +114,7 @@ export function AuthProvider({
     setOrgMembership(null);
     setHasFetchedOrg(false);
     setIsOrgMembershipLoading(true);
+    /* eslint-enable react-hooks/set-state-in-effect */
     fetch(`${backendUrl}/organizations/${orgId}/membership`, {
       credentials: "include",
     })
@@ -122,11 +129,14 @@ export function AuthProvider({
         setIsOrgMembershipLoading(false);
         setHasFetchedOrg(true);
       });
-  }, [data?.user?.id, orgId, backendUrl]);
+  }, [userId, orgId, backendUrl, orgMembership?.organizationId]);
 
-  // Fetch workspace data when workspaceId changes (to determine ownership)
+  // Manually fetch workspace data when the workspace/org/user changes (to
+  // determine ownership). Data-fetching effect; the synchronous resets and
+  // loading flags below are part of its fetch lifecycle.
   useEffect(() => {
-    if (!data?.user || !workspaceId || !orgId) {
+    /* eslint-disable react-hooks/set-state-in-effect */
+    if (!userId || !workspaceId || !orgId) {
       setWorkspaceData(null);
       setHasFetchedWorkspace(false);
       setIsWorkspaceLoading(false);
@@ -136,6 +146,7 @@ export function AuthProvider({
     setWorkspaceData(null);
     setHasFetchedWorkspace(false);
     setIsWorkspaceLoading(true);
+    /* eslint-enable react-hooks/set-state-in-effect */
     fetch(`${backendUrl}/organizations/${orgId}/workspaces/${workspaceId}`, {
       credentials: "include",
     })
@@ -150,7 +161,7 @@ export function AuthProvider({
         setIsWorkspaceLoading(false);
         setHasFetchedWorkspace(true);
       });
-  }, [data?.user?.id, orgId, workspaceId, backendUrl]);
+  }, [userId, orgId, workspaceId, backendUrl]);
 
   // Computed permissions
   const isOrgAdmin = orgMembership?.role === "admin";

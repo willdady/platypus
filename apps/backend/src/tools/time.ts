@@ -8,7 +8,7 @@ export const getCurrentTime = tool({
   description:
     "Get the current date and time. Use this when the user asks what time it is, what day it is, or needs to know the current date.",
   inputSchema: z.object({}),
-  execute: async () => {
+  execute: () => {
     const now = new Date();
     const formatted = formatInTimeZone(
       now,
@@ -45,7 +45,7 @@ export const convertTimezone = tool({
         'Target IANA timezone name (e.g., "Europe/London", "Asia/Tokyo").',
       ),
   }),
-  execute: async ({ dateTime, fromTimezone, toTimezone }) => {
+  execute: ({ dateTime, fromTimezone, toTimezone }) => {
     // Parse the input date
     const date = new Date(dateTime);
 

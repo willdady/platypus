@@ -1,9 +1,10 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import type { Widget } from "@platypus/schemas";
+import { useResetOnChange } from "@/hooks/use-reset-on-change";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -23,13 +24,8 @@ export function TextWidget({
   const [title, setTitle] = useState(widget.title);
   const [content, setContent] = useState(data?.content ?? "");
 
-  useEffect(() => {
-    setTitle(widget.title);
-  }, [widget.title]);
-
-  useEffect(() => {
-    setContent(data?.content ?? "");
-  }, [data?.content]);
+  useResetOnChange(widget.title, () => setTitle(widget.title));
+  useResetOnChange(data?.content, () => setContent(data?.content ?? ""));
 
   if (editing) {
     return (

@@ -58,13 +58,15 @@ function scheduleMemoryExtractionAligned(
     const nextTick = Math.ceil(now / intervalMs) * intervalMs;
     const delay = nextTick - now;
 
-    setTimeout(async () => {
-      try {
-        await fn();
-      } catch (error) {
-        logger.error({ error }, "Memory extraction job failed");
-      }
-      scheduleNext();
+    setTimeout(() => {
+      void (async () => {
+        try {
+          await fn();
+        } catch (error) {
+          logger.error({ error }, "Memory extraction job failed");
+        }
+        scheduleNext();
+      })();
     }, delay);
   }
 

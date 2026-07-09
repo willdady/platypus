@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useAuth } from "@/components/auth-provider";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
@@ -24,14 +24,17 @@ const ContextsPage = () => {
     results: ContextWithWorkspaceName[];
   }>(user ? joinUrl(backendUrl, "/users/me/contexts") : null, fetcher);
 
-  // Sync global context content to local state
-  useEffect(() => {
-    const globalCtx = contexts?.results.find((c) => !c.workspaceId);
-    setGlobalContextContent(globalCtx?.content || "");
-  }, [contexts]);
-
   const [globalContextContent, setGlobalContextContent] = useState("");
   const [isSavingGlobal, setIsSavingGlobal] = useState(false);
+
+  // Sync server-provided global context into editable local state whenever the
+  // fetched data changes, using React's "adjust state during render" pattern.
+  const [prevContexts, setPrevContexts] = useState(contexts);
+  if (contexts !== prevContexts) {
+    setPrevContexts(contexts);
+    const globalCtx = contexts?.results.find((c) => !c.workspaceId);
+    setGlobalContextContent(globalCtx?.content || "");
+  }
 
   const handleSaveGlobal = async () => {
     const globalCtx = contexts?.results.find((c) => !c.workspaceId);
@@ -80,14 +83,12 @@ const ContextsPage = () => {
           toast.error("Failed to create context");
         }
       }
-    } catch (error) {
+    } catch {
       toast.error("Error saving context");
     } finally {
       setIsSavingGlobal(false);
     }
   };
-
-  const globalContext = contexts?.results.find((c) => !c.workspaceId);
 
   return (
     <div>

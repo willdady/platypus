@@ -1,34 +1,15 @@
 import { type Tool } from "ai";
 import { eq } from "drizzle-orm";
-import {
-  convertTemperature,
-  convertDistance,
-  convertWeight,
-  convertVolume,
-} from "./math.ts";
-import { getCurrentTime, convertTimezone } from "./time.ts";
-import { fetchUrl } from "./fetch.ts";
-import { createKanbanTools } from "./kanban.ts";
-import { createDashboardTools } from "./dashboard.ts";
-import { createTriggerTools } from "./trigger.ts";
-import { createAgentDiscoveryTools } from "./agent-discovery.ts";
-import { createSkillManagementTools } from "./skill-management.ts";
-import { createAgentManagementTools } from "./agent-management.ts";
-import { createNotificationTools } from "./notification.ts";
-import { createMemoryTools } from "./memory.ts";
 import { db } from "../index.ts";
 import { sandbox as sandboxTable } from "../db/schema.ts";
 import { getSandboxBackend } from "../sandbox/index.ts";
 import { createSandboxTools } from "../sandbox/tools.ts";
 import { logger } from "../logger.ts";
 
-export type ToolSetContext = {
-  workspaceId: string;
-  agentId: string;
-  orgId: string;
-  frontendUrl: string | undefined;
-  userId: string;
-};
+// The Extension-point surface lives in the published SDK; re-export the context
+// type so core's internal callers keep importing it from here.
+export type { ToolSetContext } from "@platypuschat/plugin-sdk";
+import type { ToolSetContext } from "@platypuschat/plugin-sdk";
 
 type ToolSet = {
   id: string;
@@ -36,7 +17,7 @@ type ToolSet = {
   category: string;
   description?: string;
   tools:
-    | { [toolId: string]: Tool<any, any> }
+    | { [toolId: string]: Tool }
     | ((
         context: ToolSetContext,
       ) => Record<string, Tool> | Promise<Record<string, Tool>>);
@@ -72,106 +53,20 @@ export const getToolSets = (): typeof TOOL_SETS_REGISTRY => TOOL_SETS_REGISTRY;
 export const MEMORY_TOOLSET_ID = "memory";
 
 // REGISTER TOOL SETS HERE!
-registerToolSet("math-conversions", {
-  name: "Math Conversions",
-  category: "Math",
-  description: "Temperature and unit conversions",
-  tools: {
-    convertTemperature,
-    convertDistance,
-    convertWeight,
-    convertVolume,
-  },
-});
-
-registerToolSet("time", {
-  name: "Time",
-  category: "Utilities",
-  description:
-    "Tools for getting current time and converting between timezones",
-  tools: {
-    getCurrentTime,
-    convertTimezone,
-  },
-});
-
-registerToolSet("web-fetch", {
-  name: "Web Fetch",
-  category: "Web",
-  description: "Fetch content from URLs on the web",
-  tools: {
-    fetchUrl,
-  },
-});
-
-registerToolSet("kanban", {
-  name: "Kanban",
-  category: "Productivity",
-  description: "Manage kanban boards in this workspace",
-  tools: ({ workspaceId, agentId, orgId, frontendUrl }) =>
-    createKanbanTools(workspaceId, agentId, orgId, frontendUrl),
-});
-
-registerToolSet("dashboards", {
-  name: "Dashboards",
-  category: "Productivity",
-  description:
-    "List dashboards and widgets, and update widget data in this workspace",
-  tools: ({ workspaceId }) => createDashboardTools(workspaceId),
-});
-
-registerToolSet("triggers", {
-  name: "Triggers",
-  category: "Automation",
-  description:
-    "Manage triggers (cron schedules and event-based) including listing agents, creating, editing, and viewing triggers",
-  tools: ({ workspaceId, orgId, frontendUrl }) =>
-    createTriggerTools(workspaceId, orgId, frontendUrl),
-});
-
-registerToolSet("agent-discovery", {
-  name: "Agent Discovery",
-  category: "Productivity",
-  description:
-    "Read-only tools for discovering agents, providers, and tool sets in this workspace",
-  tools: ({ workspaceId, orgId, frontendUrl }) =>
-    createAgentDiscoveryTools(workspaceId, orgId, frontendUrl),
-});
-
-registerToolSet("skill-management", {
-  name: "Skill Management",
-  category: "Productivity",
-  description: "List, create, update, and delete skills in this workspace",
-  tools: ({ workspaceId, orgId, frontendUrl }) =>
-    createSkillManagementTools(workspaceId, orgId, frontendUrl),
-});
-
-registerToolSet("agent-management", {
-  name: "Agent Management",
-  category: "Productivity",
-  description: "Create, update, and delete agents in this workspace",
-  tools: ({ workspaceId, orgId, frontendUrl }) =>
-    createAgentManagementTools(workspaceId, orgId, frontendUrl),
-});
-
-registerToolSet("notifications", {
-  name: "Notifications",
-  category: "Communication",
-  description: "Post notifications visible to users in this workspace",
-  tools: ({ workspaceId, agentId }) =>
-    createNotificationTools(workspaceId, agentId),
-});
-
-registerToolSet("memory", {
-  name: "Memory",
-  category: "Memory",
-  description: "Search and retrieve memories from past conversations",
-  tools: ({ workspaceId, userId }) => createMemoryTools(workspaceId, userId),
-});
-
-// The sandbox tool set resolves at chat-turn time: load the Workspace's
-// sandbox row, look up the registered adapter, validate config/credentials,
-// then build the five AI SDK Tools. Missing-row, unregistered-backend, and
+// Note: the native Tool sets now ship as core plugins loaded via the plugin
+// loader from `PLATYPUS_PLUGINS` (see ADR-0013) — `math-conversions`/`time` as
+// `@platypus/tools-basic`, `web-fetch` as `@platypus/web-fetch`, and the
+// Platypus-domain sets (kanban, dashboards, triggers, agent-discovery,
+// skill-management, agent-management, notifications, memory) as
+// `@platypus/tools-platform`. Their factories live in `./*.ts`; the manifests
+// live under `apps/backend/src/plugins/`.
+//
+// The `sandbox` Tool set below is the lone exception: it is the consumer side of
+// the Sandbox-backend extension point (ADR-0002) rather than a native Tool set,
+// so it stays a core-internal static registration here. It resolves at chat-turn
+// time: load the Workspace's sandbox row, look up the registered adapter,
+// validate config/credentials, then build the five AI SDK Tools. Missing-row,
+// unregistered-backend, and
 // validation failures all degrade gracefully to "no tools this turn" (with a
 // warning log). See ADR-0001 / ADR-0002.
 export const SANDBOX_TOOLSET_ID = "sandbox";

@@ -91,10 +91,8 @@ export class S3Storage implements StorageBackend {
 
       return { data, contentType };
     } catch (error) {
-      if (
-        (error as any).name === "NoSuchKey" ||
-        (error as any).Code === "NoSuchKey"
-      ) {
+      const e = error as { name?: string; Code?: string };
+      if (e.name === "NoSuchKey" || e.Code === "NoSuchKey") {
         return null;
       }
       throw error;

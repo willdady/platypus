@@ -15,7 +15,21 @@ import {
 import { Item, ItemActions, ItemContent, ItemTitle } from "./ui/item";
 import { useState } from "react";
 
-type ResourceType = "mcp" | "provider";
+type ResourceType = "mcp" | "provider" | "skill" | "agent";
+
+const COLLECTION: Record<ResourceType, string> = {
+  mcp: "mcps",
+  provider: "providers",
+  skill: "skills",
+  agent: "agents",
+};
+
+const LABEL: Record<ResourceType, string> = {
+  mcp: "MCP server",
+  provider: "provider",
+  skill: "skill",
+  agent: "agent",
+};
 
 /**
  * Admin-only picker for attaching an org-scoped Shared resource to a Workspace
@@ -40,8 +54,8 @@ const AttachSharedResourceDialog = ({
   onAttached: () => void;
 }) => {
   const backendUrl = useBackendUrl();
-  const collection = resourceType === "mcp" ? "mcps" : "providers";
-  const label = resourceType === "mcp" ? "MCP server" : "provider";
+  const collection = COLLECTION[resourceType];
+  const label = LABEL[resourceType];
 
   const { data } = useSWR<{ results: { id: string; name: string }[] }>(
     open && backendUrl
@@ -88,7 +102,7 @@ const AttachSharedResourceDialog = ({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
-        <DialogHeader>
+        <DialogHeader className="text-left">
           <DialogTitle>Attach a shared {label}</DialogTitle>
           <DialogDescription>
             Organization {label}s appear in this workspace only where attached.

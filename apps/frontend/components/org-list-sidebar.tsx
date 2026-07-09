@@ -88,7 +88,7 @@ export function OrgListSidebar({ currentOrgId }: OrgListSidebarProps) {
                 <SidebarMenuButton asChild>
                   <Link href="/create">
                     <Plus className="size-4" />
-                    <span>Add Organization</span>
+                    <span>Add organization</span>
                   </Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>

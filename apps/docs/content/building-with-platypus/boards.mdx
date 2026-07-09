@@ -1,0 +1,84 @@
+---
+title: Boards
+description: Kanban boards in a Workspace — create a board with columns, labels, and cards, and let Agents read and update it through the Kanban tool set.
+---
+
+import { Callout, Steps } from "nextra/components";
+
+# Boards
+
+A **Board** is a Kanban board scoped to your Workspace: columns you arrange
+left-to-right, and cards you drag between them. Boards are a shared working
+surface — both you and your Agents can read and update the same board, which
+makes them a natural place for an Agent to track tasks, triage items, or hand
+work back to you.
+
+## Create a board
+
+<Steps>
+
+### Open the board form
+
+From your Workspace, go to the **Boards** section and click **Create board**.
+
+### Name it and add labels
+
+- **Name** — what to call the board (1–100 characters).
+- **Description** _(optional)_ — up to 500 characters.
+- **Labels** _(optional)_ — add colour-coded labels (each has a name and a colour
+  from a fixed palette) that you can later apply to cards. Use **Add label** for
+  each, and the delete button to remove one.
+
+Save to create the board. You can edit the name, description, and labels anytime
+from the board's **Settings** (the gear icon).
+
+</Steps>
+
+## Work the board
+
+The board view scrolls horizontally across its **columns**. From here you:
+
+- **Add columns** with the dashed **add column** button at the end of the row;
+  rename, delete, or move a column left/right from its three-dot menu.
+- **Add cards** with **Add card** at the bottom of a column.
+- **Drag** cards between and within columns, and reorder columns.
+- **Switch boards** from the name dropdown in the header.
+
+Click a card to open its detail dialog, where you can edit:
+
+- **Title** and **Description** (the description supports Markdown).
+- **Column**, **Labels**, and **Priority** (None, Low, Medium, High, Urgent).
+- **Due Date** and a single **Assignee** — which can be a Workspace member _or an
+  Agent_.
+- **Comments** — a threaded discussion on the card (also Markdown).
+
+<Callout type="info">
+  Cards record who created and last edited them — and that can be an **Agent**,
+  not just a person. When an Agent works a board, its activity shows up in the
+  card metadata and comments just like a teammate's.
+</Callout>
+
+## Agents and boards
+
+Grant an Agent the **Kanban** tool set (in the [Agent form](/building-with-platypus/agents)'s
+**Tools** card, under _Productivity_) and it can operate boards directly. The tool
+set lets an Agent:
+
+- **list boards** and **read a board's state** (columns and card summaries),
+- **read, create, and update cards** — title, description, labels, priority, due
+  date, and assignee,
+- **move cards** between and within columns, **copy** and **delete** cards, and
+  **bulk-edit** many cards at once,
+- **read, add, and edit comments** on a card.
+
+This is what makes boards a two-way surface: you arrange the work, and an Agent —
+in a Chat or on a schedule via a [Trigger](/building-with-platypus/triggers) — can
+keep it moving. Board activity (cards created, updated, or deleted) can in turn
+fire **Event** Triggers, so a change on a board can kick off another Agent run.
+
+## Where to next
+
+- **[Triggers](/building-with-platypus/triggers)** — fire an Agent when a card
+  changes, or update a board on a schedule.
+- **[Dashboards](/building-with-platypus/dashboards)** — the other Agent-driven
+  Workspace surface, for displaying structured data.

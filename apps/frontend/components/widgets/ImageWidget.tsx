@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import type { Widget } from "@platypus/schemas";
+import { useResetOnChange } from "@/hooks/use-reset-on-change";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -20,13 +21,8 @@ export function ImageWidget({
   const [title, setTitle] = useState(widget.title);
   const [url, setUrl] = useState(data?.url ?? "");
 
-  useEffect(() => {
-    setTitle(widget.title);
-  }, [widget.title]);
-
-  useEffect(() => {
-    setUrl(data?.url ?? "");
-  }, [data?.url]);
+  useResetOnChange(widget.title, () => setTitle(widget.title));
+  useResetOnChange(data?.url, () => setUrl(data?.url ?? ""));
 
   if (editing) {
     return (

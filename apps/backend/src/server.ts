@@ -11,10 +11,14 @@ import { skill } from "./routes/skill.ts";
 import { tool } from "./routes/tool.ts";
 import { mcp } from "./routes/mcp.ts";
 import { sandbox } from "./routes/sandbox.ts";
-import "./sandbox/backends/index.ts";
 import { provider } from "./routes/provider.ts";
 import { orgProvider } from "./routes/org-provider.ts";
 import { orgMcp } from "./routes/org-mcp.ts";
+import { orgSkill } from "./routes/org-skill.ts";
+import { orgAgent } from "./routes/org-agent.ts";
+import { orgTool } from "./routes/org-tool.ts";
+import { orgAttachment } from "./routes/org-attachment.ts";
+import { orgBlueprint } from "./routes/org-blueprint.ts";
 import { attachment } from "./routes/attachment.ts";
 import { invitation } from "./routes/invitation.ts";
 import { userInvitation } from "./routes/user-invitation.ts";
@@ -26,8 +30,10 @@ import { dashboard } from "./routes/dashboard.ts";
 import { notification } from "./routes/notification.ts";
 import { webhook } from "./routes/webhook.ts";
 import { mcpOauthCallback } from "./routes/mcp-oauth-callback.ts";
+import { plugins } from "./routes/plugins.ts";
 import { organizationMember } from "./db/schema.ts";
 import { logger } from "./logger.ts";
+import { mapError } from "./errors.ts";
 import type { UserScope, OrgScope, WorkspaceScope } from "./scope.ts";
 
 const ALLOWED_ORIGINS = process.env.ALLOWED_ORIGINS!.split(",");
@@ -146,6 +152,11 @@ app.route("/organizations/:orgId/workspaces/:workspaceId/skills", skill);
 app.route("/organizations/:orgId/workspaces/:workspaceId/providers", provider);
 app.route("/organizations/:orgId/providers", orgProvider);
 app.route("/organizations/:orgId/mcps", orgMcp);
+app.route("/organizations/:orgId/skills", orgSkill);
+app.route("/organizations/:orgId/agents", orgAgent);
+app.route("/organizations/:orgId/tools", orgTool);
+app.route("/organizations/:orgId/attachments", orgAttachment);
+app.route("/organizations/:orgId/blueprints", orgBlueprint);
 app.route(
   "/organizations/:orgId/workspaces/:workspaceId/attachments",
   attachment,
@@ -167,5 +178,22 @@ app.route("/organizations/:orgId/members", member);
 app.route("/users/me/invitations", userInvitation);
 app.route("/users/me/contexts", context);
 app.route("/oauth/mcp/callback", mcpOauthCallback);
+// Read-only, deployment-wide plugin catalog (ADR-0013), backing the Org-Admin
+// "Installed plugins" view (#295). Org-scoped for access control only — the
+// payload is identical across orgs; the handler gates it to Org Admins.
+app.route("/organizations/:orgId/plugins", plugins);
+
+// Central error seam (ADR-0010): typed domain errors and Postgres unique
+// violations map to their HTTP status here, so routes throw instead of
+// hand-rolling `c.json({ error }, status)` for these cross-cutting modes.
+// Anything unmapped is an unexpected fault → 500.
+app.onError((error, c) => {
+  const mapped = mapError(error);
+  if (mapped) {
+    return c.json({ error: mapped.message }, mapped.status);
+  }
+  logger.error({ error }, "Unhandled error");
+  return c.json({ error: "Internal Server Error" }, 500);
+});
 
 export default app;

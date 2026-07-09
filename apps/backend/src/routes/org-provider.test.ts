@@ -68,12 +68,16 @@ describe("Organization Provider Routes", () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]); // requireOrgAccess
 
-      const drizzleError = new Error("DrizzleQueryError: Failed query");
-      (drizzleError as any).cause = {
-        code: "23505",
-        message:
-          'duplicate key value violates unique constraint "unique_provider_name_org"',
-      };
+      const drizzleError = Object.assign(
+        new Error("DrizzleQueryError: Failed query"),
+        {
+          cause: {
+            code: "23505",
+            message:
+              'duplicate key value violates unique constraint "unique_provider_name_org"',
+          },
+        },
+      );
 
       mockDb.returning.mockRejectedValueOnce(drizzleError);
 
@@ -91,9 +95,10 @@ describe("Organization Provider Routes", () => {
         headers: { "Content-Type": "application/json" },
       });
 
+      // The unique violation flows through the central onError (ADR-0010).
       expect(res.status).toBe(409);
       expect(await res.json()).toEqual({
-        error: "A provider with this name already exists in this organization",
+        error: "A resource with that name already exists",
       });
     });
   });
@@ -136,7 +141,8 @@ describe("Organization Provider Routes", () => {
       mockSession();
       mockDb.limit
         .mockResolvedValueOnce([{ role: "admin" }]) // requireOrgAccess
-        .mockResolvedValueOnce([]); // attachment guard: none
+        .mockResolvedValueOnce([]) // attachment guard: none
+        .mockResolvedValueOnce([]); // blueprint guard: none
       mockDb.returning.mockResolvedValueOnce([{ id: "p1" }]);
 
       const res = await app.request(`${baseUrl}/p1`, { method: "DELETE" });
@@ -149,6 +155,17 @@ describe("Organization Provider Routes", () => {
       mockDb.limit
         .mockResolvedValueOnce([{ role: "admin" }]) // requireOrgAccess
         .mockResolvedValueOnce([{ id: "att-1" }]); // attachment guard: attached
+
+      const res = await app.request(`${baseUrl}/p1`, { method: "DELETE" });
+      expect(res.status).toBe(409);
+    });
+
+    it("returns 409 when the provider is listed in a blueprint", async () => {
+      mockSession();
+      mockDb.limit
+        .mockResolvedValueOnce([{ role: "admin" }]) // requireOrgAccess
+        .mockResolvedValueOnce([]) // attachment guard: none
+        .mockResolvedValueOnce([{ id: "bpi-1" }]); // blueprint guard: listed
 
       const res = await app.request(`${baseUrl}/p1`, { method: "DELETE" });
       expect(res.status).toBe(409);

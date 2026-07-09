@@ -18,7 +18,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { useState, useEffect } from "react";
+import { useState } from "react";
+import { useResetOnChange } from "@/hooks/use-reset-on-change";
 import { useRouter } from "next/navigation";
 import { type Organization, type AgentRunSettings } from "@platypus/schemas";
 import { fetcher, parseValidationErrors, joinUrl } from "@/lib/utils";
@@ -99,7 +100,7 @@ const OrganizationForm = ({ classNames, orgId }: OrganizationFormProps) => {
   const [deleteInput, setDeleteInput] = useState("");
   const [isDeleting, setIsDeleting] = useState(false);
 
-  useEffect(() => {
+  useResetOnChange(organization, () => {
     if (organization) {
       setFormData({ name: organization.name });
       const s: AgentRunSettings | undefined =
@@ -111,7 +112,7 @@ const OrganizationForm = ({ classNames, orgId }: OrganizationFormProps) => {
         triggerPerStepMin: msToMinutes(s?.triggerPerStepTimeoutMs),
       });
     }
-  }, [organization]);
+  });
 
   const handleRunSettingChange = (
     id: keyof RunSettingsFormState,
@@ -270,7 +271,7 @@ const OrganizationForm = ({ classNames, orgId }: OrganizationFormProps) => {
         setIsDeleting(false);
         setIsDeleteDialogOpen(false);
       }
-    } catch (error) {
+    } catch {
       toast.error("Error deleting organization");
       setIsDeleting(false);
       setIsDeleteDialogOpen(false);

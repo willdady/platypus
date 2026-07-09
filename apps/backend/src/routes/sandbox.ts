@@ -14,8 +14,16 @@ import {
 import type { Variables } from "../server.ts";
 import { destroySandboxRow } from "../sandbox/teardown.ts";
 import { getSandboxBackend, getSandboxBackends } from "../sandbox/index.ts";
-import { readAllowedDockerNetworks } from "../sandbox/backends/docker.ts";
+import { readAllowedDockerNetworks } from "../plugins/docker/backend.ts";
+import {
+  getPluginConfig,
+  getSandboxBackendPlugin,
+} from "../plugins/registry.ts";
 import { logger } from "../logger.ts";
+
+// Manifest name of the core Docker plugin — the key its boot-resolved config
+// (the network allowlist) is stored under in the plugin registry (ADR-0013).
+const DOCKER_PLUGIN = "@platypus/docker";
 
 type SandboxRecord = typeof sandboxTable.$inferSelect;
 
@@ -37,6 +45,23 @@ const validateSandboxConfig = (
   const registration = getSandboxBackend(backend);
   if (!registration) return null;
   const result = registration.configSchema.safeParse(config ?? {});
+  if (result.success) return null;
+  return result.error.issues.map((i) => i.message).join("; ");
+};
+
+// Validate adapter-specific credentials at write time, same rationale as
+// {@link validateSandboxConfig}: catch e.g. an SSH sandbox saved without a
+// private key as an immediate 400 rather than a silent "no sandbox tools" at
+// chat-turn time. Returns an error message, or null when valid / backend not
+// registered. Callers pass `undefined` to skip (a PUT that preserves stored
+// credentials, which GET never returns).
+const validateSandboxCredentials = (
+  backend: string,
+  credentials: Record<string, unknown> | undefined,
+): string | null => {
+  const registration = getSandboxBackend(backend);
+  if (!registration) return null;
+  const result = registration.credentialsSchema.safeParse(credentials ?? {});
   if (result.success) return null;
   return result.error.issues.map((i) => i.message).join("; ");
 };
@@ -70,16 +95,19 @@ const sanitizeSandboxResponse = (record: SandboxRecord, isAdmin: boolean) => {
 
 // List the Sandbox backends registered in this process. Returns metadata only
 // (no Zod schemas); the frontend renders forms per known backend type for v1.
-// Declared before "/" so the literal "/backends" path takes precedence.
+// Each entry is annotated with the `plugin` that contributed it (ADR-0013
+// observability); `null` when the id belongs to no loaded plugin. Declared
+// before "/" so the literal "/backends" path takes precedence.
 sandbox.get(
   "/backends",
   requireAuth,
   requireOrgAccess(),
   requireWorkspaceAccess,
-  async (c) => {
+  (c) => {
     const results = getSandboxBackends().map((r) => ({
       backend: r.backend,
       name: r.name,
+      plugin: getSandboxBackendPlugin(r.backend) ?? null,
     }));
     return c.json({ results });
   },
@@ -94,8 +122,10 @@ sandbox.get(
   requireOrgAccess(),
   requireWorkspaceAccess,
   requireSandboxAdmin,
-  async (c) => {
-    return c.json({ results: readAllowedDockerNetworks() });
+  (c) => {
+    return c.json({
+      results: readAllowedDockerNetworks(getPluginConfig(DOCKER_PLUGIN)),
+    });
   },
 );
 
@@ -135,6 +165,17 @@ sandbox.post(
     const configError = validateSandboxConfig(data.backend, data.config);
     if (configError) {
       return c.json({ error: `Invalid sandbox config: ${configError}` }, 400);
+    }
+
+    const credentialsError = validateSandboxCredentials(
+      data.backend,
+      data.credentials,
+    );
+    if (credentialsError) {
+      return c.json(
+        { error: `Invalid sandbox credentials: ${credentialsError}` },
+        400,
+      );
     }
 
     const collisions = envCollisions(data.adminEnv, data.userEnv);
@@ -242,6 +283,21 @@ sandbox.put(
     const configError = validateSandboxConfig(data.backend, data.config);
     if (configError) {
       return c.json({ error: `Invalid sandbox config: ${configError}` }, 400);
+    }
+    // Validate credentials only when present — GET strips them, so an edit that
+    // leaves the field untouched preserves the stored value (Drizzle skips
+    // undefined columns) and must not be rejected for being absent.
+    if (data.credentials !== undefined) {
+      const credentialsError = validateSandboxCredentials(
+        data.backend,
+        data.credentials,
+      );
+      if (credentialsError) {
+        return c.json(
+          { error: `Invalid sandbox credentials: ${credentialsError}` },
+          400,
+        );
+      }
     }
     const collisions = envCollisions(
       data.adminEnv ?? current.adminEnv,

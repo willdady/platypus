@@ -21,11 +21,13 @@ export function joinUrl(base: string, path: string): string {
 export const fetcher = async (input: RequestInfo | URL, init?: RequestInit) => {
   const res = await fetch(input, { ...init, credentials: "include" });
   if (!res.ok) {
-    const error = new Error("An error occurred while fetching the data.");
+    const error: Error & { info?: unknown; status?: number } = new Error(
+      "An error occurred while fetching the data.",
+    );
     // Attach extra info to the error object.
     const info = await res.json().catch(() => ({}));
-    (error as any).info = info;
-    (error as any).status = res.status;
+    error.info = info;
+    error.status = res.status;
     throw error;
   }
   return res.json();

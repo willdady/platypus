@@ -48,7 +48,7 @@ describe("Context Routes", () => {
 
       const res = await app.request(baseUrl);
       expect(res.status).toBe(200);
-      const result = await res.json();
+      const result = (await res.json()) as Record<string, unknown>;
       expect(result).toEqual({
         results: mockContexts.map((ctx) => ({
           ...ctx,

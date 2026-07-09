@@ -1,45 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-
-const { mockDb, dbMethods } = vi.hoisted(() => {
-  const mock: any = {};
-  const methods = [
-    "select",
-    "from",
-    "where",
-    "limit",
-    "orderBy",
-    "insert",
-    "values",
-    "update",
-    "set",
-    "delete",
-    "returning",
-    "onConflictDoUpdate",
-  ];
-  methods.forEach((method) => {
-    mock[method] = vi.fn().mockReturnValue(mock);
-  });
-  return { mockDb: mock, dbMethods: methods };
-});
-
-vi.mock("../index.ts", () => ({
-  db: mockDb,
-}));
-
-vi.mock("drizzle-orm", async () => {
-  const actual = await vi.importActual("drizzle-orm");
-  return {
-    ...actual,
-    eq: vi.fn(),
-    and: vi.fn((...args) => args.filter(Boolean)),
-    sql: Object.assign(
-      vi.fn((strings: TemplateStringsArray, ..._values: any[]) => ({
-        getSQL: () => ({ query: strings.join("?") }),
-      })),
-      { raw: vi.fn() },
-    ),
-  };
-});
+import { mockDb, resetMockDb } from "../test-utils.ts";
 
 import { createSkillManagementTools } from "./skill-management.ts";
 
@@ -48,18 +8,12 @@ const workspaceId = "ws-1";
 const orgId = "org-1";
 const frontendUrl = "http://localhost:3000";
 
-function resetDb() {
-  dbMethods.forEach((method) => {
-    mockDb[method] = vi.fn().mockReturnValue(mockDb);
-  });
-}
-
 describe("createSkillManagementTools", () => {
   let tools: ReturnType<typeof createSkillManagementTools>;
 
   beforeEach(() => {
     vi.clearAllMocks();
-    resetDb();
+    resetMockDb();
     tools = createSkillManagementTools(workspaceId, orgId, frontendUrl);
   });
 
@@ -77,8 +31,7 @@ describe("createSkillManagementTools", () => {
       const skills = [{ id: "s1", name: "my-skill" }];
       mockDb.where.mockResolvedValue(skills);
 
-      const result = await tools.listSkills.execute({}, ctx);
-      expect(result).toEqual(skills);
+      expect(await tools.listSkills.execute!({}, ctx)).toEqual(skills);
     });
   });
 
@@ -86,15 +39,20 @@ describe("createSkillManagementTools", () => {
     it("returns error when skill not found", async () => {
       mockDb.limit.mockResolvedValue([]);
 
-      const result = await tools.getSkill.execute({ name: "nonexistent" }, ctx);
-      expect(result).toEqual({ error: "Skill not found" });
+      expect(
+        await tools.getSkill.execute!({ name: "nonexistent" }, ctx),
+      ).toEqual({ error: "Skill not found" });
     });
 
     it("returns skill details when found", async () => {
       const skill = { id: "s1", name: "my-skill", body: "content" };
       mockDb.limit.mockResolvedValue([skill]);
 
-      const result = await tools.getSkill.execute({ name: "my-skill" }, ctx);
+      const result = (await tools.getSkill.execute!(
+        { name: "my-skill" },
+        ctx,
+      )) as { name: string; url?: string };
+
       expect(result).toMatchObject({ name: "my-skill" });
       expect(result.url).toContain("skills/s1");
     });
@@ -105,16 +63,16 @@ describe("createSkillManagementTools", () => {
       const skill = { id: "s1", name: "my-skill", body: "content" };
       mockDb.returning.mockResolvedValue([skill]);
 
-      const result = await tools.upsertSkill.execute(
-        {
-          name: "my-skill",
-          description: "A skill for testing purposes",
-          body: "This is the skill body content that should be long enough to pass validation",
-        },
-        ctx,
-      );
-
-      expect(result).toMatchObject({ name: "my-skill" });
+      expect(
+        await tools.upsertSkill.execute!(
+          {
+            name: "my-skill",
+            description: "A skill for testing purposes",
+            body: "This is the skill body content that should be long enough to pass validation",
+          },
+          ctx,
+        ),
+      ).toMatchObject({ name: "my-skill" });
     });
   });
 
@@ -122,21 +80,20 @@ describe("createSkillManagementTools", () => {
     it("returns error when skill not found", async () => {
       mockDb.limit.mockResolvedValue([]);
 
-      const result = await tools.deleteSkill.execute(
-        { name: "nonexistent" },
-        ctx,
-      );
-      expect(result).toEqual({ error: "Skill not found" });
+      expect(
+        await tools.deleteSkill.execute!({ name: "nonexistent" }, ctx),
+      ).toEqual({ error: "Skill not found" });
     });
 
     it("returns error when skill is referenced by agents", async () => {
       mockDb.limit.mockResolvedValueOnce([{ id: "s1" }]);
       mockDb.limit.mockResolvedValueOnce([{ id: "a1" }]);
 
-      const result = await tools.deleteSkill.execute(
+      const result = (await tools.deleteSkill.execute!(
         { name: "referenced-skill" },
         ctx,
-      );
+      )) as { error?: string };
+
       expect(result.error).toContain("referenced by one or more agents");
     });
 
@@ -144,11 +101,9 @@ describe("createSkillManagementTools", () => {
       mockDb.limit.mockResolvedValueOnce([{ id: "s1" }]);
       mockDb.limit.mockResolvedValueOnce([]);
 
-      const result = await tools.deleteSkill.execute(
-        { name: "unused-skill" },
-        ctx,
-      );
-      expect(result).toEqual({ success: true });
+      expect(
+        await tools.deleteSkill.execute!({ name: "unused-skill" }, ctx),
+      ).toEqual({ success: true });
     });
   });
 });

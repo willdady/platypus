@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/select";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { useState, useEffect } from "react";
+import { useResetOnChange } from "@/hooks/use-reset-on-change";
 import { useRouter } from "next/navigation";
 import { type MCP } from "@platypus/schemas";
 import useSWR from "swr";
@@ -116,11 +117,10 @@ const McpForm = ({
     fetcher,
   );
 
-  useEffect(() => {
+  useResetOnChange(mcp, () => {
     if (mcp) {
-      const existingHeaders = (mcp as any).headers as
-        | Record<string, string>
-        | undefined;
+      const existingHeaders = (mcp as { headers?: Record<string, string> })
+        .headers;
       const headerRows: HeaderRow[] = existingHeaders
         ? Object.entries(existingHeaders).map(([key, value]) => ({
             key,
@@ -138,7 +138,7 @@ const McpForm = ({
         headerRows,
       });
     }
-  }, [mcp]);
+  });
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { id, value } = e.target;
@@ -737,7 +737,7 @@ const McpForm = ({
               disabled={isSubmitting}
             >
               <Plus className="h-4 w-4" />
-              Add Header
+              Add header
             </Button>
           </div>
 
@@ -811,7 +811,7 @@ const McpForm = ({
             }
           >
             <Plug />
-            {isTesting ? "Testing..." : "Test Connection"}
+            {isTesting ? "Testing..." : "Test connection"}
           </Button>
 
           {/* Display test results */}

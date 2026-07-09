@@ -6,13 +6,13 @@ import {
 } from "ai";
 import * as mathTools from "./tools/math.ts";
 import * as timeTools from "./tools/time.ts";
-import * as fetchTools from "./tools/fetch.ts";
+import { createWebFetchTools } from "./tools/fetch.ts";
 import { createLoadSkillTool } from "./tools/skill.ts";
 import { createTriggerTools } from "./tools/trigger.ts";
 
 export type MathTools = InferUITools<typeof mathTools>;
 export type TimeTools = InferUITools<typeof timeTools>;
-export type FetchTools = InferUITools<typeof fetchTools>;
+export type FetchTools = InferUITools<ReturnType<typeof createWebFetchTools>>;
 
 export type SkillTools = {
   loadSkill: InferUITool<ReturnType<typeof createLoadSkillTool>>;
@@ -30,4 +30,4 @@ export type PlatypusTools = MathTools &
   SkillTools &
   TriggerTools;
 
-export type PlatypusUIMessage = UIMessage<any, UIDataTypes, PlatypusTools>;
+export type PlatypusUIMessage = UIMessage<unknown, UIDataTypes, PlatypusTools>;

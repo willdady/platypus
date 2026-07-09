@@ -1,0 +1,225 @@
+---
+title: Configuration & environment
+description: How the meaningful configuration areas of a Platypus deployment fit together.
+---
+
+import { Callout } from "nextra/components";
+
+# Configuration & environment
+
+This page is the **narrative** guide to configuring a deployment — the
+configuration areas that matter and how they relate to one another. It is not an
+exhaustive variable list; for every supported variable and its default, see the
+[Reference](/reference) (split into backend and frontend tables). Where this page
+names a variable, treat it as an illustration of the _area_, not the complete
+set.
+
+<Callout type="info">
+  Both services read the same root `.env` (via compose `env_file`). This page
+  explains what the settings do; check the [Reference](/reference) for exact
+  variable names and defaults.
+</Callout>
+
+## Service URLs
+
+The most common source of first-deploy confusion is URL wiring, because the
+frontend reaches the backend by two different paths:
+
+- **`BACKEND_URL`** — the **browser-facing** backend URL. The browser uses this
+  to call the API and the `/auth/*` endpoints, so it must be reachable from the
+  user's machine (e.g. `http://localhost:4000` locally, or
+  `https://api.your-host` in production).
+- **`INTERNAL_BACKEND_URL`** — the **server-to-server** URL the frontend uses
+  during server-side rendering. In compose this is `http://backend:4000` (the
+  service name on the private network); it never leaves the cluster.
+- **`BETTER_AUTH_URL`** — the canonical base URL of the auth server. In compose
+  it is derived from `BACKEND_URL`; auth cookies and redirects are issued
+  against it, so it must match the URL the browser actually uses.
+- **`FRONTEND_URL`** — used by the backend to build links back into the web app
+  (e.g. resource links in tool output and MCP OAuth redirects).
+
+These have to agree. If the browser loads the app from one origin but
+`BETTER_AUTH_URL` points somewhere else, sign-in cookies won't stick.
+
+### CORS / trusted origins
+
+`ALLOWED_ORIGINS` is a comma-separated list of origins permitted to call the
+backend. It feeds both the API's CORS policy and better-auth's trusted-origins
+list. Include every origin the browser loads the frontend from; a missing entry
+shows up as blocked cross-origin requests or failed sign-in.
+
+## Database
+
+`DATABASE_URL` is the PostgreSQL connection string. In compose it points at the
+bundled `database` service. The database must be PostgreSQL 17 with the
+`pgvector` extension available (the backend enables the extension on startup);
+embeddings for [Memory](/concepts) are stored as vectors, so `pgvector` is not
+optional. PostgreSQL 18 is not supported.
+
+## Authentication
+
+Authentication is handled by [better-auth](https://www.better-auth.com/), mounted
+at `/auth/*` on the backend. The essentials:
+
+- **`BETTER_AUTH_SECRET`** — the signing secret for sessions and tokens. Set a
+  strong, unique value; rotating it invalidates existing sessions.
+- **`ADMIN_EMAIL` / `ADMIN_PASSWORD`** — used only to seed the first admin user
+  on an empty database (see [Deploy with Docker Compose](/self-hosting/docker-compose)).
+
+The deeper model — Providers, the role ladder, and the default admin — lives in
+[Providers & authentication](/self-hosting/providers-and-auth).
+
+## Plugins
+
+Platypus loads its extensions — starting with Tool sets — as **plugins**.
+Plugins come in two tiers:
+
+- **Always-on core** — `@platypus/tools-basic` (math, time) and
+  `@platypus/tools-platform` (kanban, dashboards, triggers, memory,
+  notifications, agent discovery/management, skill management). These load
+  **unconditionally**; you neither list them nor can you disable them. They carry
+  Platypus's essential tools — none is something an Operator would plausibly deny
+  in isolation — so gating them behind a list would only risk silently
+  tool-stripping every Agent.
+- **Gate-able** — everything the Operator turns on and off via `PLATYPUS_PLUGINS`:
+  the deny-worthy core plugins plus any third-party packages. `PLATYPUS_PLUGINS`
+  is the single, auditable statement of what _optional_ plugins run — a
+  comma-separated list of plugin names.
+
+**The default `PLATYPUS_PLUGINS` shipped in `.env.example`:**
+
+```
+PLATYPUS_PLUGINS=@platypus/web-fetch
+```
+
+- `@platypus/web-fetch` — the web-fetch Tool set. It ships as its own gate-able
+  plugin so its **network egress** can be denied in isolation: drop it from the
+  list and the always-on core tools stay.
+- `@platypus/docker` — the Docker Sandbox backend — is **intentionally not** in
+  the default. It's opt-in infra; add it only when you want a Sandbox (see
+  [Sandbox](#sandbox)).
+
+Since `compose.yaml` reads the backend's `env_file: .env`, a deployment seeded
+from `.env.example` gets this list; pin your own by editing the value.
+
+- **For a gate-able plugin, list membership both loads and enables it.** There is
+  no separate enable switch — adding a name turns a plugin on, removing it turns
+  it off. Both take effect on the next backend restart (this is a deploy-time
+  trust boundary — there is no in-app install button).
+- **Listing an always-on plugin is a fail-loud misconfiguration.** It is not an
+  enable switch; put `@platypus/tools-basic` or `@platypus/tools-platform` in
+  `PLATYPUS_PLUGINS` and boot aborts with a plugin-named error telling you to
+  remove it.
+- **An empty list yields the always-on core tool sets only** — never zero tools.
+  The gate-able plugins (web-fetch, docker, third-party) are simply absent.
+- **Boot is fail-loud.** A listed plugin that can't be resolved or exports an
+  invalid manifest, or two plugins whose tool-set ids collide, aborts startup
+  with a plugin-named error — a misconfigured plugin never silently drops tools.
+- **New gate-able core plugins in a later release are not auto-enabled** — add
+  them to your pinned list to opt in.
+
+See [Extending → the plugin model](/extending#the-plugin-model) for how a
+manifest's `contributes` block fills extension points.
+
+### Inspecting installed plugins
+
+An **Org Admin** can confirm what's actually loaded from the app:
+**Organization settings → Plugins** lists every plugin loaded at boot, its
+version, its origin (**Core** or **Third-party**), and the contributions it
+registered — the Tool sets and Sandbox backends it provides. That last part ties
+a Tool set or Sandbox backend back to the plugin it came from.
+
+The view is **strictly read-only**: there is no enable / disable / install
+control, because enablement is the deploy-time `PLATYPUS_PLUGINS` list above — a
+trust boundary owned by the operator, not an in-app action. It simply reflects
+the current `GET /plugins` response, so it changes only when you edit the list
+and restart the backend. To add or remove a plugin, edit `PLATYPUS_PLUGINS` and
+restart.
+
+### Plugin config & credentials
+
+Some plugins need deploy-time settings — a region, an API token — that are the
+**Operator's** to set, not an end user's. `PLATYPUS_PLUGIN_CONFIG` carries them:
+a single JSON object keyed by plugin name, each value an optional `config`
+(non-secret) and `credentials` (secret) block.
+
+```jsonc
+// PLATYPUS_PLUGIN_CONFIG (as a single-line env value)
+{
+  "cloud-sandbox": {
+    "config": { "region": "eu" },
+    "credentials": { "apiToken": "dtn_live_…" },
+  },
+}
+```
+
+- **One namespace, one block per plugin.** A plugin's config/credentials are
+  keyed by its **plugin name** (the manifest `name` — for a third-party plugin a
+  short slug like `cloud-sandbox`, _not_ the npm package specifier you list in
+  `PLATYPUS_PLUGINS`) and validated **at boot** against the schemas its manifest
+  declares. A malformed or missing required value is **fail-loud** — startup
+  aborts with a plugin-named error, the same posture as the plugin list. A config
+  entry whose key matches no loaded plugin is itself fail-loud (a typo never
+  silently drops a credential).
+- **The credential block is shared, deployment-wide.** The one block is injected
+  into _every_ one of that plugin's contributions and serves _all_ tenants — a
+  plugin's Sandbox backend and its management Tool set read the same token. This
+  is not a per-user or per-Workspace secret.
+- **Distinct from per-Workspace Sandbox config.** The genuinely tenant-specific
+  settings — which Docker networks _this_ Workspace's sandbox may attach to, its
+  environment variables — still live on the per-Workspace Sandbox row (see
+  [Sandbox](#sandbox) below) and are unchanged. Plugin config is a _deployment_
+  layer **above** per-Workspace _resource_ config; the two layer, they do not
+  merge.
+- **Only plugins that declare schemas consume it.** A plugin with no
+  plugin-level `configSchema` / `credentialsSchema` (e.g. `@platypus/tools-basic`)
+  ignores any entry. `@platypus/docker` **does** take an entry — its Operator
+  network allowlist lives here as `config.allowedNetworks` (see the Docker bullet
+  under [Sandbox](#sandbox) below); its genuinely per-Workspace settings still
+  live on the Sandbox row.
+
+Treat `PLATYPUS_PLUGIN_CONFIG` like any secret-bearing env var: inject it from
+your secret manager, never commit it.
+
+## Sandbox
+
+The [Sandbox](/concepts) (agent shell/filesystem access) is **off by default**.
+Platypus ships two reference backends, each enabled by listing its plugin in
+`PLATYPUS_PLUGINS`. Without the plugin listed, that backend type isn't registered
+and its sandbox configuration is inert:
+
+- **Docker** — `@platypus/docker`. One container per Workspace on the local
+  daemon; development / single-node only. Its Operator allowlist —
+  `config.allowedNetworks` in the plugin's `PLATYPUS_PLUGIN_CONFIG` entry — bounds
+  which Docker networks an Org Admin may attach a sandbox to (default-deny), and
+  it needs the opt-in `compose.sandbox.yaml` overlay.
+- **SSH** — `@platypus/ssh`. Attaches to a pre-existing, operator-owned host over
+  SSH. It takes **no deployment env vars** — the connection target (host, user,
+  key, optional host-key pin) is per-Workspace Sandbox config set in-app. It is the
+  only backend that runs in **horizontally-scaled deployments**, where Docker
+  cannot.
+
+See [Sandbox infrastructure](/self-hosting/sandbox) for the full security model,
+the SSH connection fields, host-key pinning, and the opt-in `compose.sandbox.yaml`
+overlay.
+
+## Other operational areas
+
+These rarely need changing but exist when you need them — see the
+[Reference](/reference) for names and defaults:
+
+- **Storage** — uploaded files go to local disk by default; an S3-compatible
+  backend can be selected instead.
+- **Logging** — log verbosity is configurable.
+- **Time** — a deployment-wide IANA timezone for time-aware tools and schedules.
+- **Schedulers & runs** — concurrency caps and per-run / per-step timeouts for
+  scheduled and triggered agent executions.
+
+## Where the exhaustive lists live
+
+| You want…                               | Go to                                           |
+| --------------------------------------- | ----------------------------------------------- |
+| Why a setting exists and how it relates | **This page**                                   |
+| Every backend variable + default        | [Reference](/reference) — backend config        |
+| Every frontend variable + default       | [Reference](/reference) — frontend config       |
+| The sandbox security model              | [Sandbox infrastructure](/self-hosting/sandbox) |

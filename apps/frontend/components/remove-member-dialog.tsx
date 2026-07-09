@@ -52,7 +52,7 @@ export function RemoveMemberDialog({
         const data = await response.json();
         toast.error(data.error || data.message || "Failed to remove member");
       }
-    } catch (error) {
+    } catch {
       toast.error("Error removing member");
     } finally {
       setIsSubmitting(false);
@@ -93,7 +93,7 @@ export function RemoveMemberDialog({
             onClick={handleSubmit}
             disabled={isSubmitting}
           >
-            {isSubmitting ? "Removing..." : "Remove Member"}
+            {isSubmitting ? "Removing..." : "Remove member"}
           </Button>
         </DialogFooter>
       </DialogContent>

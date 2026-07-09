@@ -1,5 +1,169 @@
 # Changelog
 
+## [1.101.0](https://github.com/willdady/platypus/compare/v1.100.0...v1.101.0) (2026-07-01)
+
+
+### Features
+
+* **docs:** add Platypus logo lockup to top bar ([#278](https://github.com/willdady/platypus/issues/278)) ([52d6d90](https://github.com/willdady/platypus/commit/52d6d90f3d6bd800c3350b945503e1b30c121018))
+* generate Open Graph image for website and docs via Playwright ([8e0ba1f](https://github.com/willdady/platypus/commit/8e0ba1f10bfa07647b5dd11a53aafbad1a555382))
+
+
+### Bug Fixes
+
+* **frontend:** left-align attach dialog text on mobile ([#279](https://github.com/willdady/platypus/issues/279)) ([0c02ae4](https://github.com/willdady/platypus/commit/0c02ae4f9ce723fb5495ce631e1668e3dfb56e63))
+* **website:** correct board copy, icon, step count, and workspace description ([a0abf0d](https://github.com/willdady/platypus/commit/a0abf0d8c3efd420ec8781b6ebbcdd5241885494))
+
+## [1.100.0](https://github.com/willdady/platypus/compare/v1.99.1...v1.100.0) (2026-06-26)
+
+
+### Features
+
+* **backend:** add orgId to webhook event envelope and document webhooks ([#273](https://github.com/willdady/platypus/issues/273)) ([2e0635b](https://github.com/willdady/platypus/commit/2e0635bc80d917663b570b08ae28789d28baf901))
+
+## [1.99.1](https://github.com/willdady/platypus/compare/v1.99.0...v1.99.1) (2026-06-23)
+
+
+### Bug Fixes
+
+* **backend:** abort no-progress unattended runs and lower maxSteps defaults ([#271](https://github.com/willdady/platypus/issues/271)) ([908d0a0](https://github.com/willdady/platypus/commit/908d0a0e933164a8dc1b35d82cb833415f09a7a9))
+* **backend:** stop event triggers from re-firing on their own agent's writes ([#269](https://github.com/willdady/platypus/issues/269)) ([64ebec2](https://github.com/willdady/platypus/commit/64ebec200bddd514d5d14bbd994023a1ad8439a8))
+
+## [1.99.0](https://github.com/willdady/platypus/compare/v1.98.0...v1.99.0) (2026-06-20)
+
+
+### Features
+
+* **backend:** surface self-hosted reasoning via @ai-sdk/openai-compatible ([#262](https://github.com/willdady/platypus/issues/262)) ([1088b63](https://github.com/willdady/platypus/commit/1088b639ec381c78aa43b5c8474d30c6f7ee52a1))
+
+
+### Bug Fixes
+
+* **backend:** default chat-mode baseUrl to OpenAI's endpoint ([#266](https://github.com/willdady/platypus/issues/266)) ([2490a8d](https://github.com/willdady/platypus/commit/2490a8d9e35172dd1dc95fa56b68ac1c850c4feb))
+
+## [1.98.0](https://github.com/willdady/platypus/compare/v1.97.0...v1.98.0) (2026-06-18)
+
+
+### Features
+
+* **website:** add platypus.chat marketing site ([#258](https://github.com/willdady/platypus/issues/258)) ([202ec9e](https://github.com/willdady/platypus/commit/202ec9e2276a6838118829d0a4fa5fb14a541751))
+
+
+### Bug Fixes
+
+* **frontend:** persist cleared sampling params as null ([#263](https://github.com/willdady/platypus/issues/263)) ([#264](https://github.com/willdady/platypus/issues/264)) ([38b17b1](https://github.com/willdady/platypus/commit/38b17b1259f57d573d3a429950877aae801d7e09))
+
+## [1.97.0](https://github.com/willdady/platypus/compare/v1.96.0...v1.97.0) (2026-06-13)
+
+
+### Features
+
+* **docs:** add Open Graph and Twitter Card metadata ([#244](https://github.com/willdady/platypus/issues/244)) ([d79cf2b](https://github.com/willdady/platypus/commit/d79cf2b9ad15f656edfc7f11ad4aebc02d80d48a))
+
+
+### Bug Fixes
+
+* **backend:** adopt typed DB mocks across the test suite ([#239](https://github.com/willdady/platypus/issues/239)–[#242](https://github.com/willdady/platypus/issues/242)) ([#248](https://github.com/willdady/platypus/issues/248)) ([1cee254](https://github.com/willdady/platypus/commit/1cee254f0113097c9d80cf85604052cd1c77afad))
+* **backend:** eliminate any/unsafe lint warnings in source code ([#247](https://github.com/willdady/platypus/issues/247)) ([2a88db3](https://github.com/willdady/platypus/commit/2a88db36c80fe24865b2997d5afc91fdf4d1a0ea))
+* **backend:** type the shared test DB/auth mock harness ([#246](https://github.com/willdady/platypus/issues/246)) ([842f628](https://github.com/willdady/platypus/commit/842f628034b366246ba9299e88c316d0ea945282))
+
+## [1.96.0](https://github.com/willdady/platypus/compare/v1.95.1...v1.96.0) (2026-06-13)
+
+
+### Features
+
+* **docs:** deploy to Cloudflare Workers via OpenNext + slim README ([#235](https://github.com/willdady/platypus/issues/235)) ([f736ef9](https://github.com/willdady/platypus/commit/f736ef9b2635d9e0a84f7fa633c1f08d2f89a9f3))
+
+## [1.95.1](https://github.com/willdady/platypus/compare/v1.95.0...v1.95.1) (2026-06-13)
+
+
+### Bug Fixes
+
+* **backend:** resolve source-level tsc errors in apps/backend ([#232](https://github.com/willdady/platypus/issues/232)) ([75c1439](https://github.com/willdady/platypus/commit/75c14394c0b2032fed06e86b9a1f1cd3111924cc))
+
+## [1.95.0](https://github.com/willdady/platypus/compare/v1.94.0...v1.95.0) (2026-06-08)
+
+
+### Features
+
+* **docs:** add Self-Hosting section pages ([#228](https://github.com/willdady/platypus/issues/228)) ([b3d444f](https://github.com/willdady/platypus/commit/b3d444fbd9459c0dd67104dc60e97f90cf07f9d4))
+* **docs:** Extending section & Reference config pages ([#230](https://github.com/willdady/platypus/issues/230)) ([c068907](https://github.com/willdady/platypus/commit/c068907d9f3ec527dba86c02a498992341b6e6ca))
+* **docs:** Getting Started — quick start & first run ([#213](https://github.com/willdady/platypus/issues/213)) ([#227](https://github.com/willdady/platypus/issues/227)) ([76687b3](https://github.com/willdady/platypus/commit/76687b34f69ad8c6f80388413f6d9c4c77615ff0))
+* **docs:** scaffold Nextra 4 documentation site ([#206](https://github.com/willdady/platypus/issues/206)) ([#210](https://github.com/willdady/platypus/issues/210)) ([9428886](https://github.com/willdady/platypus/commit/94288869eb938aef21d6771f6627bafbce5eee06))
+* **docs:** write the Building with Platypus section ([#231](https://github.com/willdady/platypus/issues/231)) ([ee29d60](https://github.com/willdady/platypus/commit/ee29d601a68605d37bf17dee44e01c33ae0f29d3))
+* **docs:** write the Concepts section ([#212](https://github.com/willdady/platypus/issues/212)) ([#229](https://github.com/willdady/platypus/issues/229)) ([e4ebece](https://github.com/willdady/platypus/commit/e4ebece6bd65952ef93504fa14b96456d0cbe3b7))
+
+
+### Bug Fixes
+
+* **docs:** use green brand accent instead of Nextra default blue ([ce9ef19](https://github.com/willdady/platypus/commit/ce9ef19802d9df08bb2d1f376ed1e4f02a25cd70))
+
+## [1.94.0](https://github.com/willdady/platypus/compare/v1.93.0...v1.94.0) (2026-06-07)
+
+
+### Features
+
+* **backend:** migrate MCP routes onto ScopedResource ([#189](https://github.com/willdady/platypus/issues/189)) ([#196](https://github.com/willdady/platypus/issues/196)) ([c23a420](https://github.com/willdady/platypus/commit/c23a420fbccaa14c3f94cec81dd5c49c587003ae))
+* **backend:** migrate Provider routes onto ScopedResource ([#190](https://github.com/willdady/platypus/issues/190)) ([#197](https://github.com/willdady/platypus/issues/197)) ([0f999ab](https://github.com/willdady/platypus/commit/0f999ab99d8d7ee34a73b15f974726cfe6296e5b))
+* **backend:** migrate Skill routes onto ScopedResource ([#188](https://github.com/willdady/platypus/issues/188)) ([#198](https://github.com/willdady/platypus/issues/198)) ([814ffa5](https://github.com/willdady/platypus/commit/814ffa5f19bf78c3da4d2b1e815d169ed83d1e97))
+* **backend:** ScopedResource read module + typed-error seam (proven on Agent) ([#195](https://github.com/willdady/platypus/issues/195)) ([aadd822](https://github.com/willdady/platypus/commit/aadd822244be0265371e65e9d8f122c1f984a9b6))
+
+
+### Bug Fixes
+
+* **backend:** type ScopedResource registry as the real table union ([#199](https://github.com/willdady/platypus/issues/199)) ([c036a18](https://github.com/willdady/platypus/commit/c036a189acb3294a9b74b94687ebdbfc3ccf20d3))
+* **frontend:** default workspace owner to current user on create ([4ce66e1](https://github.com/willdady/platypus/commit/4ce66e18a4f7cb2330247a005da0bfb7f7a80dfd))
+* **frontend:** defer org toolbar until membership loads ([35e209b](https://github.com/willdady/platypus/commit/35e209bc93611a137cb77445df3d6504a789ce0c))
+* **frontend:** show current user as owner option on workspace create ([a41e3b9](https://github.com/willdady/platypus/commit/a41e3b95a8e6c482085285674d4921d01037ef84))
+
+## [1.93.0](https://github.com/willdady/platypus/compare/v1.92.0...v1.93.0) (2026-06-07)
+
+
+### Features
+
+* blueprints on invitations + Tier 2 workspace settings ([#192](https://github.com/willdady/platypus/issues/192)) ([9007394](https://github.com/willdady/platypus/commit/900739416aa0fa079893a60e7f1dc5e4e7b3102e))
+
+## [1.92.0](https://github.com/willdady/platypus/compare/v1.91.0...v1.92.0) (2026-06-06)
+
+
+### Features
+
+* Blueprint CRUD + apply macro (Tier 1) ([#184](https://github.com/willdady/platypus/issues/184)) ([66b9499](https://github.com/willdady/platypus/commit/66b9499e274c49df148b3b91f72d9fc6194a9e48))
+
+## [1.91.0](https://github.com/willdady/platypus/compare/v1.90.0...v1.91.0) (2026-06-06)
+
+
+### Features
+
+* **provider:** add per-provider toggle to disable native web search ([#183](https://github.com/willdady/platypus/issues/183)) ([ddeb861](https://github.com/willdady/platypus/commit/ddeb8614cc167b0d109dffb51343feac9d294696))
+
+
+### Bug Fixes
+
+* **frontend:** resolve deferred react-hooks & no-img-element lint errors ([#181](https://github.com/willdady/platypus/issues/181)) ([a938aef](https://github.com/willdady/platypus/commit/a938aefc6b423901a35b27492204d544d06d05ed))
+
+## [1.90.0](https://github.com/willdady/platypus/compare/v1.89.1...v1.90.0) (2026-06-02)
+
+
+### Features
+
+* org-scoped agents + promote, shared-resource editing & central attachments ([#177](https://github.com/willdady/platypus/issues/177)) ([a8af7eb](https://github.com/willdady/platypus/commit/a8af7ebd8a9ab65a43f711c87bed8382b33ed5b9))
+
+## [1.89.1](https://github.com/willdady/platypus/compare/v1.89.0...v1.89.1) (2026-06-01)
+
+
+### Bug Fixes
+
+* **backend:** verify workspace belongs to path orgId in requireWorkspaceAccess ([#175](https://github.com/willdady/platypus/issues/175)) ([71b8cae](https://github.com/willdady/platypus/commit/71b8cae69c7ba98ad4566e73c097bd2b808f0a2d))
+* **frontend:** unbreak ESLint 10 lint + clear mechanical lint errors ([#173](https://github.com/willdady/platypus/issues/173)) ([9c3132b](https://github.com/willdady/platypus/commit/9c3132b0153461ee28a1facc21960fb677892d2d))
+
+## [1.89.0](https://github.com/willdady/platypus/compare/v1.88.0...v1.89.0) (2026-05-31)
+
+
+### Features
+
+* org-scoped Skills + Promote action for shared resources ([#155](https://github.com/willdady/platypus/issues/155)) ([#170](https://github.com/willdady/platypus/issues/170)) ([c865543](https://github.com/willdady/platypus/commit/c865543f2eb2d4b625af93a2c2eae8342fa26145))
+
 ## [1.88.0](https://github.com/willdady/platypus/compare/v1.87.0...v1.88.0) (2026-05-31)
 
 

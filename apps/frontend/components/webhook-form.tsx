@@ -12,7 +12,8 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { ConfirmDialog } from "@/components/confirm-dialog";
-import { useState, useEffect, useRef } from "react";
+import { useState } from "react";
+import { useResetOnChange } from "@/hooks/use-reset-on-change";
 import { useRouter } from "next/navigation";
 import useSWR from "swr";
 import { fetcher, parseValidationErrors, joinUrl } from "@/lib/utils";
@@ -40,31 +41,30 @@ interface WebhookFormProps {
   webhookId?: string;
 }
 
+const ALL_EVENTS = [
+  "notification.created",
+  "notification.updated",
+  "notification.read",
+  "notification.dismissed",
+  "card.created",
+  "card.updated",
+  "card.deleted",
+] as const;
+
+const EVENT_LABELS: Record<string, string> = {
+  "notification.created": "Notification created",
+  "notification.updated": "Notification updated",
+  "notification.read": "Notification read",
+  "notification.dismissed": "Notification dismissed",
+  "card.created": "Card created",
+  "card.updated": "Card updated",
+  "card.deleted": "Card deleted",
+};
+
 const WebhookForm = ({ orgId, workspaceId, webhookId }: WebhookFormProps) => {
   const { user } = useAuth();
   const backendUrl = useBackendUrl();
   const router = useRouter();
-  const hasInitialized = useRef(false);
-
-  const ALL_EVENTS = [
-    "notification.created",
-    "notification.updated",
-    "notification.read",
-    "notification.dismissed",
-    "card.created",
-    "card.updated",
-    "card.deleted",
-  ] as const;
-
-  const EVENT_LABELS: Record<string, string> = {
-    "notification.created": "Notification created",
-    "notification.updated": "Notification updated",
-    "notification.read": "Notification read",
-    "notification.dismissed": "Notification dismissed",
-    "card.created": "Card created",
-    "card.updated": "Card updated",
-    "card.deleted": "Card deleted",
-  };
 
   const [name, setName] = useState("");
   const [url, setUrl] = useState("");
@@ -84,11 +84,6 @@ const WebhookForm = ({ orgId, workspaceId, webhookId }: WebhookFormProps) => {
 
   const isEditMode = !!webhookId;
 
-  // Reset initialization when webhookId changes
-  useEffect(() => {
-    hasInitialized.current = false;
-  }, [webhookId]);
-
   const fetchUrl =
     webhookId && user
       ? joinUrl(
@@ -103,8 +98,9 @@ const WebhookForm = ({ orgId, workspaceId, webhookId }: WebhookFormProps) => {
     mutate,
   } = useSWR<Webhook>(fetchUrl, fetcher);
 
-  useEffect(() => {
-    if (webhook && !hasInitialized.current) {
+  // Initialise the form from the loaded webhook, once per webhook id.
+  useResetOnChange(webhook?.id, () => {
+    if (webhook) {
       setName(webhook.name);
       setUrl(webhook.url);
       setEnabled(webhook.enabled);
@@ -119,9 +115,8 @@ const WebhookForm = ({ orgId, workspaceId, webhookId }: WebhookFormProps) => {
       } else {
         setHeaders([]);
       }
-      hasInitialized.current = true;
     }
-  }, [webhook]);
+  });
 
   const toggleEvent = (event: string) => {
     setEvents((prev) => {
@@ -462,7 +457,7 @@ const WebhookForm = ({ orgId, workspaceId, webhookId }: WebhookFormProps) => {
                 onClick={addHeader}
                 disabled={isSubmitting}
               >
-                <Plus className="h-4 w-4" /> Add Header
+                <Plus className="h-4 w-4" /> Add header
               </Button>
             </div>
           </Field>

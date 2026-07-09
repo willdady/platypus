@@ -55,6 +55,9 @@ export function MembersList({ orgId, members, onUpdate }: MembersListProps) {
                   <div className="flex items-center gap-3">
                     <div className="h-8 w-8 rounded-full bg-muted flex items-center justify-center overflow-hidden">
                       {member.user.image ? (
+                        // Avatar URL comes from an arbitrary OAuth/external
+                        // host; not routable through the Next image optimizer.
+                        // eslint-disable-next-line @next/next/no-img-element
                         <img
                           src={member.user.image}
                           alt={member.user.name}
@@ -106,7 +109,7 @@ export function MembersList({ orgId, members, onUpdate }: MembersListProps) {
                             onClick={() => setEditingMember(member)}
                             className="cursor-pointer"
                           >
-                            <Edit className="h-4 w-4" /> Edit Org Role
+                            <Edit className="h-4 w-4" /> Edit org role
                           </DropdownMenuItem>
                           <DropdownMenuSeparator />
                           <DropdownMenuItem

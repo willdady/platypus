@@ -1,29 +1,20 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
+import { createWebFetchTools } from "./fetch.ts";
+import { callTool, callOkTool } from "../test-utils.ts";
 
-const ctx = { toolCallId: "test", messages: [] };
-
-// Preserve original env
-const originalEnv = process.env.FETCH_TOOL_IGNORE_ROBOTS_TXT;
+// `ignoreRobotsTxt` is now a plugin-config value (ADR-0013) passed into the
+// factory, not a module-level env read — so tests build the tool with the flag
+// they want rather than mutating process.env.
 
 describe("fetchUrl", () => {
-  let fetchUrl: any;
+  // Build with robots.txt checks skipped so these content tests don't need to
+  // mock a robots.txt round-trip.
+  const { fetchUrl } = createWebFetchTools(true);
   const mockFetch = vi.fn();
 
-  beforeEach(async () => {
-    vi.resetModules();
+  beforeEach(() => {
     global.fetch = mockFetch;
     mockFetch.mockReset();
-    process.env.FETCH_TOOL_IGNORE_ROBOTS_TXT = "true";
-    const mod = await import("./fetch.ts");
-    fetchUrl = mod.fetchUrl;
-  });
-
-  afterEach(() => {
-    if (originalEnv !== undefined) {
-      process.env.FETCH_TOOL_IGNORE_ROBOTS_TXT = originalEnv;
-    } else {
-      delete process.env.FETCH_TOOL_IGNORE_ROBOTS_TXT;
-    }
   });
 
   it("fetches and returns plain text content", async () => {
@@ -33,15 +24,12 @@ describe("fetchUrl", () => {
       text: vi.fn().mockResolvedValue("Hello, world!"),
     });
 
-    const result = await fetchUrl.execute(
-      {
-        url: "https://example.com/data.txt",
-        max_length: 5000,
-        start_index: 0,
-        raw: false,
-      },
-      ctx,
-    );
+    const result = await callOkTool(fetchUrl, {
+      url: "https://example.com/data.txt",
+      max_length: 5000,
+      start_index: 0,
+      raw: false,
+    });
 
     expect(result.content).toBe("Hello, world!");
     expect(result.url).toBe("https://example.com/data.txt");
@@ -56,15 +44,12 @@ describe("fetchUrl", () => {
       text: vi.fn().mockResolvedValue(mdContent),
     });
 
-    const result = await fetchUrl.execute(
-      {
-        url: "https://example.com/page.md",
-        max_length: 5000,
-        start_index: 0,
-        raw: false,
-      },
-      ctx,
-    );
+    const result = await callOkTool(fetchUrl, {
+      url: "https://example.com/page.md",
+      max_length: 5000,
+      start_index: 0,
+      raw: false,
+    });
 
     expect(result.content).toBe(mdContent);
   });
@@ -77,15 +62,12 @@ describe("fetchUrl", () => {
       text: vi.fn().mockResolvedValue(longContent),
     });
 
-    const result = await fetchUrl.execute(
-      {
-        url: "https://example.com/long.txt",
-        max_length: 50,
-        start_index: 0,
-        raw: false,
-      },
-      ctx,
-    );
+    const result = await callOkTool(fetchUrl, {
+      url: "https://example.com/long.txt",
+      max_length: 50,
+      start_index: 0,
+      raw: false,
+    });
 
     expect(result.truncated).toBe(true);
     expect(result.next_start_index).toBe(50);
@@ -100,15 +82,12 @@ describe("fetchUrl", () => {
       text: vi.fn().mockResolvedValue(content),
     });
 
-    const result = await fetchUrl.execute(
-      {
-        url: "https://example.com/page.txt",
-        max_length: 5000,
-        start_index: 2,
-        raw: false,
-      },
-      ctx,
-    );
+    const result = await callOkTool(fetchUrl, {
+      url: "https://example.com/page.txt",
+      max_length: 5000,
+      start_index: 2,
+      raw: false,
+    });
 
     expect(result.content).toBe("BBCC");
     expect(result.truncated).toBe(false);
@@ -126,15 +105,12 @@ describe("fetchUrl", () => {
       text: vi.fn().mockResolvedValue(html),
     });
 
-    const result = await fetchUrl.execute(
-      {
-        url: "https://example.com/page.html",
-        max_length: 5000,
-        start_index: 0,
-        raw: false,
-      },
-      ctx,
-    );
+    const result = await callOkTool(fetchUrl, {
+      url: "https://example.com/page.html",
+      max_length: 5000,
+      start_index: 0,
+      raw: false,
+    });
 
     // Should contain converted markdown, not raw HTML tags
     expect(result.content).not.toContain("<h1>");
@@ -149,15 +125,12 @@ describe("fetchUrl", () => {
       text: vi.fn().mockResolvedValue(html),
     });
 
-    const result = await fetchUrl.execute(
-      {
-        url: "https://example.com/page.html",
-        max_length: 5000,
-        start_index: 0,
-        raw: true,
-      },
-      ctx,
-    );
+    const result = await callOkTool(fetchUrl, {
+      url: "https://example.com/page.html",
+      max_length: 5000,
+      start_index: 0,
+      raw: true,
+    });
 
     expect(result.content).toContain("<p>Hello</p>");
   });
@@ -169,67 +142,47 @@ describe("fetchUrl", () => {
       text: vi.fn().mockResolvedValue("redirected"),
     });
 
-    const result = await fetchUrl.execute(
-      {
-        url: "https://example.com/redirect",
-        max_length: 5000,
-        start_index: 0,
-        raw: false,
-      },
-      ctx,
-    );
+    const result = await callOkTool(fetchUrl, {
+      url: "https://example.com/redirect",
+      max_length: 5000,
+      start_index: 0,
+      raw: false,
+    });
 
     expect(result.url).toBe("https://example.com/final-page");
   });
 });
 
 describe("robots.txt checking", () => {
+  // Build with robots.txt checks ENABLED (ignoreRobotsTxt = false).
+  const { fetchUrl } = createWebFetchTools(false);
   const mockFetch = vi.fn();
 
-  beforeEach(async () => {
-    vi.resetModules();
+  beforeEach(() => {
     global.fetch = mockFetch;
     mockFetch.mockReset();
   });
 
-  afterEach(() => {
-    if (originalEnv !== undefined) {
-      process.env.FETCH_TOOL_IGNORE_ROBOTS_TXT = originalEnv;
-    } else {
-      delete process.env.FETCH_TOOL_IGNORE_ROBOTS_TXT;
-    }
-  });
-
   it("blocks fetching when robots.txt disallows", async () => {
-    delete process.env.FETCH_TOOL_IGNORE_ROBOTS_TXT;
-
-    const mod = await import("./fetch.ts");
-
     // First call: robots.txt
     mockFetch.mockResolvedValueOnce({
       ok: true,
       text: vi.fn().mockResolvedValue("User-agent: *\nDisallow: /"),
     });
 
-    const result = await mod.fetchUrl.execute(
-      {
-        url: "https://blocked.com/page",
-        max_length: 5000,
-        start_index: 0,
-        raw: false,
-      },
-      { toolCallId: "test", messages: [] },
-    );
+    const result = await callTool(fetchUrl, {
+      url: "https://blocked.com/page",
+      max_length: 5000,
+      start_index: 0,
+      raw: false,
+    });
 
     expect(result).toHaveProperty("error");
+    if (!("error" in result)) throw new Error("expected an error result");
     expect(result.error).toContain("robots.txt");
   });
 
   it("allows fetching when robots.txt fetch fails", async () => {
-    delete process.env.FETCH_TOOL_IGNORE_ROBOTS_TXT;
-
-    const mod = await import("./fetch.ts");
-
     // robots.txt fetch fails
     mockFetch.mockResolvedValueOnce({ ok: false });
     // Actual page fetch
@@ -239,15 +192,12 @@ describe("robots.txt checking", () => {
       text: vi.fn().mockResolvedValue("content"),
     });
 
-    const result = await mod.fetchUrl.execute(
-      {
-        url: "https://example.com/page",
-        max_length: 5000,
-        start_index: 0,
-        raw: false,
-      },
-      { toolCallId: "test", messages: [] },
-    );
+    const result = await callOkTool(fetchUrl, {
+      url: "https://example.com/page",
+      max_length: 5000,
+      start_index: 0,
+      raw: false,
+    });
 
     expect(result.content).toBe("content");
   });

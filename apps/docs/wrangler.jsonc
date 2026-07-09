@@ -1,0 +1,14 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "platypus-docs",
+  "main": ".open-next/worker.js",
+  "compatibility_date": "2025-04-01",
+  "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
+  "assets": {
+    "directory": ".open-next/assets",
+    "binding": "ASSETS",
+  },
+  // `platypus.chat` is a zone in the Cloudflare account; `custom_domain: true`
+  // makes Wrangler provision the DNS record + TLS cert on first deploy.
+  "routes": [{ "pattern": "docs.platypus.chat", "custom_domain": true }],
+}

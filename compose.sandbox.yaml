@@ -5,6 +5,14 @@
 #
 #   docker compose -f compose.yaml -f compose.sandbox.yaml up
 #
+# The Docker backend ships as the core plugin "@platypus/docker"; this overlay
+# enables it by setting PLATYPUS_PLUGINS below. NOTE: Compose `environment:`
+# *replaces* the value from the base `.env` — it does not append — so the list
+# here must be the deployment's COMPLETE gate-able set, not just Docker. Adjust
+# it to match the plugins your deployment runs. (The always-on core tool sets —
+# @platypus/tools-basic and @platypus/tools-platform — load unconditionally and
+# are never listed here; see ADR-0013.)
+#
 # SECURITY: This overlay bind-mounts the host Docker socket into the backend
 # container. The backend container therefore has effective root on the host —
 # any code it executes can control the host's Docker daemon. Use only on
@@ -18,6 +26,6 @@
 services:
   backend:
     environment:
-      PLATYPUS_SANDBOX_DOCKER_ENABLED: "true"
+      PLATYPUS_PLUGINS: "@platypus/web-fetch,@platypus/docker"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock

@@ -1,6 +1,36 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
+import { z } from "zod";
 import { mockDb, mockSession, resetMockDb } from "../test-utils.ts";
 import app from "../server.ts";
+import { registerSandboxBackend } from "../sandbox/index.ts";
+import { setLoadedPlugins } from "../plugins/registry.ts";
+
+// Register a backend directly (bypassing the loader) so the /backends catalog
+// has a stable entry to assert against, and record its owning plugin in the
+// registry so the annotation (ADR-0013) has something to resolve.
+const ANNOTATED_BACKEND = "test-annotated";
+registerSandboxBackend({
+  backend: ANNOTATED_BACKEND,
+  name: "Test Annotated",
+  configSchema: z.object({}),
+  credentialsSchema: z.object({}),
+  create: () => {
+    throw new Error("not used in this test");
+  },
+});
+
+// A backend whose credentials schema requires a field, so the route's
+// credentials validation (ADR-0012 / ADR-0013) has something to reject against.
+const CREDS_BACKEND = "test-creds";
+registerSandboxBackend({
+  backend: CREDS_BACKEND,
+  name: "Test Creds",
+  configSchema: z.object({}).strict(),
+  credentialsSchema: z.object({ privateKey: z.string().min(1) }).strict(),
+  create: () => {
+    throw new Error("not used in this test");
+  },
+});
 
 describe("Sandbox Routes", () => {
   beforeEach(() => {
@@ -22,25 +52,46 @@ describe("Sandbox Routes", () => {
   };
 
   describe("GET /backends", () => {
-    it("returns the list of registered backends with name and id only", async () => {
+    it("returns registered backends with id, name, and originating plugin", async () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
-      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]);
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-1", organizationId: "org-1" },
+      ]);
+      // Attribute the pre-registered backend to a plugin (ADR-0013).
+      setLoadedPlugins([
+        {
+          name: "@platypus/test",
+          version: "1.0.0",
+          origin: "core",
+          toolSetIds: [],
+          sandboxBackendIds: [ANNOTATED_BACKEND],
+        },
+      ]);
 
       const res = await app.request(`${baseUrl}/backends`);
       expect(res.status).toBe(200);
       const body = (await res.json()) as {
-        results: Array<{ backend: string; name: string }>;
+        results: Array<{
+          backend: string;
+          name: string;
+          plugin: string | null;
+        }>;
       };
-      // The registry is process-wide; tests don't register the Docker adapter
-      // (no PLATYPUS_SANDBOX_DOCKER_ENABLED), so the list shape is what we
-      // assert — not specific entries.
+      // Every entry carries backend/name/plugin — plugin is `null` when the id
+      // belongs to no loaded plugin, and the contributing plugin's name when it
+      // does.
       expect(Array.isArray(body.results)).toBe(true);
       for (const r of body.results) {
         expect(typeof r.backend).toBe("string");
         expect(typeof r.name).toBe("string");
-        expect(Object.keys(r).sort()).toEqual(["backend", "name"]);
+        expect(Object.keys(r).sort()).toEqual(["backend", "name", "plugin"]);
       }
+      expect(body.results).toContainEqual({
+        backend: ANNOTATED_BACKEND,
+        name: "Test Annotated",
+        plugin: "@platypus/test",
+      });
     });
   });
 
@@ -48,7 +99,9 @@ describe("Sandbox Routes", () => {
     it("creates a sandbox and returns 201 with credentials stripped", async () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]); // requireOrgAccess
-      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]); // requireWorkspaceAccess
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-1", organizationId: "org-1" },
+      ]); // requireWorkspaceAccess
       mockDb.limit.mockResolvedValueOnce([]); // existing-row check
 
       mockDb.returning.mockResolvedValueOnce([
@@ -69,16 +122,42 @@ describe("Sandbox Routes", () => {
       });
 
       expect(res.status).toBe(201);
-      const body = await res.json();
+      const body = (await res.json()) as Record<string, unknown>;
       expect(body).not.toHaveProperty("credentials");
       expect(body.id).toBe("sbx-1");
       expect(body.backend).toBe("docker");
     });
 
+    it("returns 400 when credentials fail the backend's schema", async () => {
+      mockSession();
+      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]);
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-1", organizationId: "org-1" },
+      ]);
+
+      const res = await app.request(baseUrl, {
+        method: "POST",
+        body: JSON.stringify({
+          workspaceId,
+          name: "Creds backend",
+          backend: CREDS_BACKEND,
+          config: {},
+          credentials: {}, // missing required privateKey
+        }),
+        headers: { "Content-Type": "application/json" },
+      });
+
+      expect(res.status).toBe(400);
+      const body = (await res.json()) as Record<string, unknown>;
+      expect(body.error).toMatch(/Invalid sandbox credentials/);
+    });
+
     it("returns 409 when a sandbox already exists for the workspace", async () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]);
-      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]);
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-1", organizationId: "org-1" },
+      ]);
       mockDb.limit.mockResolvedValueOnce([{ id: "existing-sbx" }]);
 
       const res = await app.request(baseUrl, {
@@ -95,7 +174,9 @@ describe("Sandbox Routes", () => {
     it("returns the sandbox with credentials stripped", async () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
-      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]);
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-1", organizationId: "org-1" },
+      ]);
       mockDb.limit.mockResolvedValueOnce([
         {
           id: "sbx-1",
@@ -109,7 +190,7 @@ describe("Sandbox Routes", () => {
 
       const res = await app.request(baseUrl);
       expect(res.status).toBe(200);
-      const body = await res.json();
+      const body = (await res.json()) as Record<string, unknown>;
       expect(body).not.toHaveProperty("credentials");
       expect(body.id).toBe("sbx-1");
     });
@@ -117,7 +198,9 @@ describe("Sandbox Routes", () => {
     it("returns 404 when no sandbox is configured", async () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
-      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]);
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-1", organizationId: "org-1" },
+      ]);
       mockDb.limit.mockResolvedValueOnce([]);
 
       const res = await app.request(baseUrl);
@@ -129,7 +212,9 @@ describe("Sandbox Routes", () => {
     it("updates the sandbox when the backend is unchanged", async () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]);
-      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]);
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-1", organizationId: "org-1" },
+      ]);
       // Existence check — same backend, no destroy will fire
       mockDb.limit.mockResolvedValueOnce([
         {
@@ -164,7 +249,7 @@ describe("Sandbox Routes", () => {
       });
 
       expect(res.status).toBe(200);
-      const body = await res.json();
+      const body = (await res.json()) as Record<string, unknown>;
       expect(body).not.toHaveProperty("credentials");
       expect(body.name).toBe("Renamed");
     });
@@ -172,7 +257,9 @@ describe("Sandbox Routes", () => {
     it("returns 500 when changing backend and the previous adapter's destroy() fails", async () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]);
-      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]);
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-1", organizationId: "org-1" },
+      ]);
       // Existing row uses an unregistered backend → destroy throws
       mockDb.limit.mockResolvedValueOnce([
         {
@@ -196,14 +283,16 @@ describe("Sandbox Routes", () => {
       });
 
       expect(res.status).toBe(500);
-      const body = await res.json();
+      const body = (await res.json()) as Record<string, unknown>;
       expect(body.error).toMatch(/force=true/);
     });
 
     it("skips destroy() and switches backend when ?force=true", async () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]);
-      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]);
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-1", organizationId: "org-1" },
+      ]);
       mockDb.limit.mockResolvedValueOnce([
         {
           id: "sbx-1",
@@ -242,7 +331,9 @@ describe("Sandbox Routes", () => {
     it("returns 404 when no sandbox is configured", async () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]);
-      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]);
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-1", organizationId: "org-1" },
+      ]);
       // Existence check returns empty
       mockDb.limit.mockResolvedValueOnce([]);
 
@@ -265,7 +356,9 @@ describe("Sandbox Routes", () => {
     it("force-deletes the sandbox without invoking destroy()", async () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]);
-      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]);
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-1", organizationId: "org-1" },
+      ]);
       // Existence check
       mockDb.limit.mockResolvedValueOnce([
         {
@@ -287,7 +380,9 @@ describe("Sandbox Routes", () => {
     it("returns 500 when destroy() fails and preserves the row", async () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]);
-      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]);
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-1", organizationId: "org-1" },
+      ]);
       // Existence check returns a row whose backend is not registered →
       // destroySandboxRow throws → 500.
       mockDb.limit.mockResolvedValueOnce([
@@ -302,7 +397,7 @@ describe("Sandbox Routes", () => {
 
       const res = await app.request(baseUrl, { method: "DELETE" });
       expect(res.status).toBe(500);
-      const body = await res.json();
+      const body = (await res.json()) as Record<string, unknown>;
       expect(body.error).toMatch(/no-such-backend/);
       expect(body.error).toMatch(/force=true/);
     });
@@ -310,7 +405,9 @@ describe("Sandbox Routes", () => {
     it("returns 404 when no sandbox is configured", async () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]);
-      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]);
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-1", organizationId: "org-1" },
+      ]);
       // Existence check returns empty
       mockDb.limit.mockResolvedValueOnce([]);
 
@@ -324,7 +421,9 @@ describe("Sandbox Routes", () => {
     it("POST / returns 403 for a non-admin workspace owner", async () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
-      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]); // requireWorkspaceAccess (owner)
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-1", organizationId: "org-1" },
+      ]); // requireWorkspaceAccess (owner)
 
       const res = await app.request(baseUrl, {
         method: "POST",
@@ -337,7 +436,9 @@ describe("Sandbox Routes", () => {
     it("DELETE / returns 403 for a non-admin workspace owner", async () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
-      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]);
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-1", organizationId: "org-1" },
+      ]);
 
       const res = await app.request(baseUrl, { method: "DELETE" });
       expect(res.status).toBe(403);
@@ -346,7 +447,9 @@ describe("Sandbox Routes", () => {
     it("GET /networks returns 403 for a non-admin workspace owner", async () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
-      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]);
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-1", organizationId: "org-1" },
+      ]);
 
       const res = await app.request(`${baseUrl}/networks`);
       expect(res.status).toBe(403);
@@ -355,7 +458,9 @@ describe("Sandbox Routes", () => {
     it("POST / rejects userEnv keys that collide with adminEnv (400)", async () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]);
-      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]);
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-1", organizationId: "org-1" },
+      ]);
 
       const res = await app.request(baseUrl, {
         method: "POST",
@@ -367,14 +472,16 @@ describe("Sandbox Routes", () => {
         headers: { "Content-Type": "application/json" },
       });
       expect(res.status).toBe(400);
-      const body = await res.json();
+      const body = (await res.json()) as Record<string, unknown>;
       expect(body.error).toMatch(/SHARED/);
     });
 
     it("PUT / lets a non-admin owner change name and userEnv only", async () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
-      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]); // requireWorkspaceAccess
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-1", organizationId: "org-1" },
+      ]); // requireWorkspaceAccess
       // Existing row: admin-owned backend/config plus an admin env key.
       mockDb.limit.mockResolvedValueOnce([
         {
@@ -420,7 +527,9 @@ describe("Sandbox Routes", () => {
     it("PUT / rejects a non-admin owner's userEnv that collides with stored adminEnv (400)", async () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
-      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]);
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-1", organizationId: "org-1" },
+      ]);
       mockDb.limit.mockResolvedValueOnce([
         {
           id: "sbx-1",
@@ -442,7 +551,7 @@ describe("Sandbox Routes", () => {
         headers: { "Content-Type": "application/json" },
       });
       expect(res.status).toBe(400);
-      const body = await res.json();
+      const body = (await res.json()) as Record<string, unknown>;
       expect(body.error).toMatch(/ADMIN_KEY/);
     });
   });

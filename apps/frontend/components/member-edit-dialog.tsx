@@ -64,7 +64,7 @@ export function MemberEditDialog({
           data.error || data.message || "Failed to update member role",
         );
       }
-    } catch (error) {
+    } catch {
       toast.error("Error updating member role");
     } finally {
       setIsSubmitting(false);
@@ -115,7 +115,7 @@ export function MemberEditDialog({
             disabled={isSubmitting || role === member.role}
             className={isSubmitting ? "opacity-50" : ""}
           >
-            {isSubmitting ? "Saving..." : "Save Changes"}
+            {isSubmitting ? "Saving..." : "Save changes"}
           </Button>
         </DialogFooter>
       </DialogContent>

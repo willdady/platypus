@@ -1,0 +1,16 @@
+@import "nextra-theme-docs/style.css";
+@import "tailwindcss";
+
+@variant dark (&:where(.dark *));
+
+/*
+ * Brand cohesion with apps/frontend (ADR-0011): re-use the Platypus brand
+ * tokens rather than fork the design system. The Nextra accent (links, active
+ * nav, focus rings) is driven by `--nextra-primary-*`, but those are injected
+ * as an inline <style> by Nextra's <Head> and override CSS — so the green
+ * accent is set there via the `color` prop in app/layout.tsx, not here.
+ */
+:root {
+  --primary: oklch(0.488 0.243 180);
+  --primary-foreground: oklch(0.97 0.014 180);
+}

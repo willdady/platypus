@@ -68,12 +68,16 @@ describe("Organization MCP Routes", () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]); // requireOrgAccess
 
-      const drizzleError = new Error("DrizzleQueryError: Failed query");
-      (drizzleError as any).cause = {
-        code: "23505",
-        message:
-          'duplicate key value violates unique constraint "unique_mcp_name_org"',
-      };
+      const drizzleError = Object.assign(
+        new Error("DrizzleQueryError: Failed query"),
+        {
+          cause: {
+            code: "23505",
+            message:
+              'duplicate key value violates unique constraint "unique_mcp_name_org"',
+          },
+        },
+      );
       mockDb.returning.mockRejectedValueOnce(drizzleError);
 
       const res = await app.request(baseUrl, {
@@ -82,9 +86,10 @@ describe("Organization MCP Routes", () => {
         headers: { "Content-Type": "application/json" },
       });
 
+      // The conflict now flows through the central onError (ADR-0010).
       expect(res.status).toBe(409);
       expect(await res.json()).toEqual({
-        error: "An MCP with this name already exists in this organization",
+        error: "A resource with that name already exists",
       });
     });
   });
@@ -101,7 +106,7 @@ describe("Organization MCP Routes", () => {
 
       const res = await app.request(baseUrl);
       expect(res.status).toBe(200);
-      const body = await res.json();
+      const body = (await res.json()) as { results: unknown[] };
       expect(body.results).toEqual([
         expect.objectContaining({ id: "mcp-1", name: "Org MCP" }),
       ]);
@@ -132,7 +137,8 @@ describe("Organization MCP Routes", () => {
       mockSession();
       mockDb.limit
         .mockResolvedValueOnce([{ role: "admin" }]) // requireOrgAccess
-        .mockResolvedValueOnce([]); // attachment guard: none
+        .mockResolvedValueOnce([]) // attachment guard: none
+        .mockResolvedValueOnce([]); // blueprint guard: none
       mockDb.returning.mockResolvedValueOnce([{ id: "mcp-1" }]);
 
       const res = await app.request(`${baseUrl}/mcp-1`, { method: "DELETE" });
@@ -145,6 +151,17 @@ describe("Organization MCP Routes", () => {
       mockDb.limit
         .mockResolvedValueOnce([{ role: "admin" }]) // requireOrgAccess
         .mockResolvedValueOnce([{ id: "att-1" }]); // attachment guard: attached
+
+      const res = await app.request(`${baseUrl}/mcp-1`, { method: "DELETE" });
+      expect(res.status).toBe(409);
+    });
+
+    it("returns 409 when the MCP is listed in a blueprint", async () => {
+      mockSession();
+      mockDb.limit
+        .mockResolvedValueOnce([{ role: "admin" }]) // requireOrgAccess
+        .mockResolvedValueOnce([]) // attachment guard: none
+        .mockResolvedValueOnce([{ id: "bpi-1" }]); // blueprint guard: listed
 
       const res = await app.request(`${baseUrl}/mcp-1`, { method: "DELETE" });
       expect(res.status).toBe(409);
@@ -180,12 +197,14 @@ describe("Organization MCP Routes", () => {
       mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]); // requireOrgAccess
       mockDb.limit.mockResolvedValueOnce([{ ...mcpRecord }]); // MCP lookup
 
-      (mcpAuth as any).mockImplementationOnce(async (provider: any) => {
-        await provider.redirectToAuthorization(
-          new URL("https://provider.example.com/authorize?x=1"),
-        );
-        return "REDIRECT";
-      });
+      vi.mocked(mcpAuth).mockImplementationOnce(
+        (provider: { redirectToAuthorization: (url: URL) => void }) => {
+          provider.redirectToAuthorization(
+            new URL("https://provider.example.com/authorize?x=1"),
+          );
+          return Promise.resolve("REDIRECT");
+        },
+      );
 
       const res = await app.request(
         `${baseUrl}/${mcpId}/oauth/authorize?force=true`,

@@ -206,7 +206,7 @@ export const AgentInfoDialog = ({
       </div>
       <DialogFooter className="sm:justify-between">
         <Button variant="outline" onClick={handleEdit}>
-          <Pencil className="size-4" /> Edit Agent
+          <Pencil className="size-4" /> Edit agent
         </Button>
         <Button onClick={onClose}>Close</Button>
       </DialogFooter>

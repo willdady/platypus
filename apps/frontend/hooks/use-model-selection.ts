@@ -30,7 +30,7 @@ export const useModelSelection = (
       setModelId("");
     } else if (value.startsWith("provider:")) {
       // Provider/model selected
-      const [_, newProviderId, ...modelIdParts] = value.split(":");
+      const [, newProviderId, ...modelIdParts] = value.split(":");
       const newModelId = modelIdParts.join(":");
       setProviderId(newProviderId);
       setModelId(newModelId);
@@ -38,8 +38,13 @@ export const useModelSelection = (
     }
   };
 
-  // Restore persisted agent/provider/model from chat data or localStorage, with validation and fallback
+  // Restore persisted agent/provider/model from chat data or localStorage, with
+  // validation and fallback. This runs once the async providers/agents/chat
+  // data are available (and only while nothing is selected), reading
+  // client-only localStorage — work that belongs in an effect, so the
+  // restoring setState calls below are intentional.
   useEffect(() => {
+    /* eslint-disable react-hooks/set-state-in-effect */
     if (isLoading || providers.length === 0) return;
 
     // If we already have a selection, do nothing
@@ -132,6 +137,7 @@ export const useModelSelection = (
     // PRIORITY 3: Fall back to first provider's first model (for new chats, invalid persisted data, or missing chatData)
     setModelId(providers[0].modelIds[0]);
     setProviderId(providers[0].id);
+    /* eslint-enable react-hooks/set-state-in-effect */
   }, [
     chatData,
     providers,

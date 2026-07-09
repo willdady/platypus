@@ -1,0 +1,46 @@
+---
+title: Providers & models
+description: A Provider is a configured connection to an AI vendor, carrying credentials and the set of models you're allowed to use.
+---
+
+import { Callout } from "nextra/components";
+
+# Providers & models
+
+## Provider
+
+A **Provider** is a configured connection to an AI vendor — OpenAI, OpenRouter,
+Bedrock, Anthropic, Google, and others. It's what lets Platypus actually talk to
+a model on your behalf.
+
+A Provider carries:
+
+- the **credentials** (such as an API key) for that vendor,
+- an optional **base URL** for self-hosted or proxied endpoints,
+- the list of **models** that have been enabled for use,
+- and a default **task model** used for quick one-shot jobs (like generating a
+  title for a Chat) rather than full conversations.
+
+When you run a Chat turn, you either pick a Provider and one of its models
+directly, or you select an **[Agent](/concepts/agents)** that already points at a
+Provider and model for you.
+
+## Where Providers live
+
+A Provider lives at one of two levels:
+
+- **Organization scope** — set up once and made available across many Workspaces
+  (a [Shared resource](/concepts/sharing)).
+- **Workspace scope** — private to a single Workspace.
+
+<Callout type="info">
+  Providers carry credentials, so they're usually configured by an **Org
+  Admin**. A Workspace Owner can manage them only where an Org Admin has
+  delegated that. See [Self-Hosting → Providers & authentication](/self-hosting)
+  for setup.
+</Callout>
+
+**Why this matters to you:** the models you can pick on a Chat or an Agent come
+from the Providers available in your Workspace. If a model you expect isn't
+there, it's because no available Provider has it enabled — an Org Admin controls
+that list.

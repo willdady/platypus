@@ -1,4 +1,13 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import type { Mock } from "vitest";
+
+type ProviderInstance = Mock<
+  (modelId: string) => { modelId: string; _sentinel: boolean }
+> & {
+  chat: Mock<
+    (modelId: string) => { modelId: string; _sentinel: boolean; _mode: string }
+  >;
+};
 
 const {
   mockCreateOpenAI,
@@ -8,10 +17,10 @@ const {
   mockCreateAnthropic,
 } = vi.hoisted(() => {
   const makeMock = () => {
-    const instance: any = vi.fn((modelId: string) => ({
+    const instance = vi.fn((modelId: string) => ({
       modelId,
       _sentinel: true,
-    }));
+    })) as ProviderInstance;
     instance.chat = vi.fn((modelId: string) => ({
       modelId,
       _sentinel: true,
@@ -61,6 +70,7 @@ import {
   NotFoundError,
   ValidationError,
   createToolHeartbeat,
+  shouldInjectNativeSearch,
 } from "./chat-execution.ts";
 import { createInMemoryChatTurnQueries } from "./chat-execution.test-fixtures.ts";
 
@@ -73,12 +83,9 @@ const baseProvider = {
   modelIds: ["gpt-4"],
   apiKey: "sk-test",
   apiMode: "chat" as const,
-  baseUrl: null,
-  headers: null,
-  organization: null,
-  project: null,
-  region: null,
-  extraBody: null,
+  nativeSearchEnabled: true,
+  taskModelId: "gpt-4",
+  memoryExtractionModelId: "gpt-4",
   createdAt: new Date(),
   updatedAt: new Date(),
 };
@@ -86,6 +93,7 @@ const baseProvider = {
 const baseAgent = {
   id: "agent-1",
   name: "Test Agent",
+  organizationId: null,
   workspaceId: "ws-1",
   providerId: "p1",
   modelId: "gpt-4",
@@ -100,7 +108,9 @@ const baseAgent = {
   toolSetIds: [],
   skillIds: [],
   subAgentIds: [],
-  description: null,
+  description: "Test agent",
+  inputPlaceholder: null,
+  avatarKey: null,
   createdAt: new Date(),
   updatedAt: new Date(),
 };
@@ -115,6 +125,8 @@ const baseWorkspace = {
   memoryExtractionProviderId: null,
   memoryEmbeddingProviderId: null,
   maxDailySummaries: 30,
+  providerSelfManagement: false,
+  mcpSelfManagement: false,
   createdAt: new Date(),
   updatedAt: new Date(),
 };
@@ -137,8 +149,8 @@ describe("chat-execution", () => {
       const agentWithSkill = { ...baseAgent, skillIds: ["skill-1"] };
       const queries = createInMemoryChatTurnQueries({
         workspaces: [baseWorkspace],
-        agents: [agentWithSkill as any],
-        providers: [baseProvider as any],
+        agents: [agentWithSkill],
+        providers: [baseProvider],
         skills: [
           {
             id: "skill-1",
@@ -150,7 +162,7 @@ describe("chat-execution", () => {
       });
 
       const turn = await prepareChatTurn(
-        { ...baseInput, request: { id: "chat-1", agentId: agentWithSkill.id } },
+        { ...baseInput, request: { agentId: agentWithSkill.id } },
         queries,
       );
 
@@ -174,17 +186,135 @@ describe("chat-execution", () => {
       await expect(turn.dispose()).resolves.toBeUndefined();
     });
 
+    it("resolves an org-scoped (Shared) Skill referenced by the Agent only where attached", async () => {
+      const agentWithSkill = { ...baseAgent, skillIds: ["org-skill-1"] };
+      const orgSkill = {
+        id: "org-skill-1",
+        organizationId: "org-1",
+        workspaceId: null,
+        name: "shared-skill",
+        description: "An organization-shared skill",
+      };
+
+      // Attached → the Skill surfaces in the system prompt.
+      const attached = createInMemoryChatTurnQueries({
+        workspaces: [baseWorkspace],
+        agents: [agentWithSkill],
+        providers: [baseProvider],
+        skills: [orgSkill],
+        attachments: [
+          {
+            workspaceId: "ws-1",
+            resourceType: "skill",
+            resourceId: "org-skill-1",
+          },
+        ],
+      });
+
+      const attachedTurn = await prepareChatTurn(
+        {
+          ...baseInput,
+          request: { agentId: agentWithSkill.id },
+        },
+        attached,
+      );
+      expect(attachedTurn.stream.system).toContain("shared-skill");
+      expect(attachedTurn.stream.tools).toHaveProperty("loadSkill");
+
+      // Not attached → the Skill is invisible to this workspace.
+      const detached = createInMemoryChatTurnQueries({
+        workspaces: [baseWorkspace],
+        agents: [agentWithSkill],
+        providers: [baseProvider],
+        skills: [orgSkill],
+      });
+
+      const detachedTurn = await prepareChatTurn(
+        {
+          ...baseInput,
+          request: { agentId: agentWithSkill.id },
+        },
+        detached,
+      );
+      expect(detachedTurn.stream.system).not.toContain("shared-skill");
+      expect(detachedTurn.stream.tools).not.toHaveProperty("loadSkill");
+    });
+
+    it("runs a Shared (org-scoped) Agent invoked from a borrowing Workspace where attached", async () => {
+      const borrowingWorkspace = { ...baseWorkspace, id: "ws-2" };
+      const orgProvider = {
+        ...baseProvider,
+        id: "p-org",
+        organizationId: "org-1",
+        workspaceId: undefined,
+      };
+      const sharedAgent = {
+        ...baseAgent,
+        id: "shared-agent",
+        organizationId: "org-1",
+        workspaceId: null,
+        providerId: "p-org",
+      };
+
+      // Attached to the borrowing Workspace → the Shared Agent (and its
+      // org-scoped Provider) resolve against that Workspace (ADR-0007).
+      const attached = createInMemoryChatTurnQueries({
+        workspaces: [borrowingWorkspace],
+        agents: [sharedAgent],
+        providers: [orgProvider],
+        attachments: [
+          {
+            workspaceId: "ws-2",
+            resourceType: "agent",
+            resourceId: "shared-agent",
+          },
+          {
+            workspaceId: "ws-2",
+            resourceType: "provider",
+            resourceId: "p-org",
+          },
+        ],
+      });
+
+      const turn = await prepareChatTurn(
+        {
+          ...baseInput,
+          workspaceId: "ws-2",
+          request: { agentId: "shared-agent" },
+        },
+        attached,
+      );
+      expect(turn.resolved.agentId).toBe("shared-agent");
+      expect(turn.resolved.providerId).toBe("p-org");
+
+      // Not attached → the Shared Agent is invisible to this Workspace.
+      const detached = createInMemoryChatTurnQueries({
+        workspaces: [borrowingWorkspace],
+        agents: [sharedAgent],
+        providers: [orgProvider],
+      });
+      await expect(
+        prepareChatTurn(
+          {
+            ...baseInput,
+            workspaceId: "ws-2",
+            request: { agentId: "shared-agent" },
+          },
+          detached,
+        ),
+      ).rejects.toBeInstanceOf(NotFoundError);
+    });
+
     it("Direct Provider+Model selection populates resolved.systemPrompt and merges request overrides", async () => {
       const queries = createInMemoryChatTurnQueries({
         workspaces: [baseWorkspace],
-        providers: [baseProvider as any],
+        providers: [baseProvider],
       });
 
       const turn = await prepareChatTurn(
         {
           ...baseInput,
           request: {
-            id: "chat-2",
             providerId: baseProvider.id,
             modelId: "gpt-4",
             systemPrompt: "Be terse.",
@@ -209,16 +339,29 @@ describe("chat-execution", () => {
       expect(turn.stream.maxSteps).toBe(1);
     });
 
+    it("Agent without an explicit maxSteps falls back to the default (15), not 1", async () => {
+      const agentNoMaxSteps = { ...baseAgent, maxSteps: null };
+      const queries = createInMemoryChatTurnQueries({
+        workspaces: [baseWorkspace],
+        agents: [agentNoMaxSteps],
+        providers: [baseProvider],
+      });
+
+      const turn = await prepareChatTurn(
+        { ...baseInput, request: { agentId: agentNoMaxSteps.id } },
+        queries,
+      );
+
+      expect(turn.stream.maxSteps).toBe(15);
+    });
+
     it("throws ValidationError when neither agentId nor providerId+modelId is supplied", async () => {
       const queries = createInMemoryChatTurnQueries({
         workspaces: [baseWorkspace],
       });
 
       await expect(
-        prepareChatTurn(
-          { ...baseInput, request: { id: "chat-3" } as any },
-          queries,
-        ),
+        prepareChatTurn({ ...baseInput, request: {} }, queries),
       ).rejects.toBeInstanceOf(ValidationError);
     });
 
@@ -231,7 +374,7 @@ describe("chat-execution", () => {
         prepareChatTurn(
           {
             ...baseInput,
-            request: { id: "chat-4", agentId: "agent-missing" },
+            request: { agentId: "agent-missing" },
           },
           queries,
         ),
@@ -248,7 +391,6 @@ describe("chat-execution", () => {
           {
             ...baseInput,
             request: {
-              id: "chat-5",
               providerId: "p-missing",
               modelId: "gpt-4",
             },
@@ -261,7 +403,7 @@ describe("chat-execution", () => {
     it("throws ValidationError when the model id is not enabled on the Provider", async () => {
       const queries = createInMemoryChatTurnQueries({
         workspaces: [baseWorkspace],
-        providers: [{ ...baseProvider, modelIds: ["gpt-3.5"] } as any],
+        providers: [{ ...baseProvider, modelIds: ["gpt-3.5"] }],
       });
 
       await expect(
@@ -269,7 +411,6 @@ describe("chat-execution", () => {
           {
             ...baseInput,
             request: {
-              id: "chat-6",
               providerId: baseProvider.id,
               modelId: "gpt-4",
             },
@@ -287,7 +428,6 @@ describe("chat-execution", () => {
           {
             ...baseInput,
             request: {
-              id: "chat-7",
               providerId: baseProvider.id,
               modelId: "gpt-4",
             },
@@ -333,9 +473,9 @@ describe("chat-execution", () => {
       const orgMcp = { ...baseMcp, organizationId: "org-1" };
       const queries = createInMemoryChatTurnQueries({
         workspaces: [baseWorkspace],
-        agents: [agentWithMcp as any],
-        providers: [baseProvider as any],
-        mcps: [orgMcp as any],
+        agents: [agentWithMcp],
+        providers: [baseProvider],
+        mcps: [orgMcp],
         attachments: [
           {
             workspaceId: baseWorkspace.id,
@@ -346,7 +486,7 @@ describe("chat-execution", () => {
       });
 
       const turn = await prepareChatTurn(
-        { ...baseInput, request: { id: "chat-mcp", agentId: agentWithMcp.id } },
+        { ...baseInput, request: { agentId: agentWithMcp.id } },
         queries,
       );
 
@@ -364,14 +504,14 @@ describe("chat-execution", () => {
       const orgMcp = { ...baseMcp, organizationId: "org-1" };
       const queries = createInMemoryChatTurnQueries({
         workspaces: [baseWorkspace],
-        agents: [agentWithMcp as any],
-        providers: [baseProvider as any],
-        mcps: [orgMcp as any],
+        agents: [agentWithMcp],
+        providers: [baseProvider],
+        mcps: [orgMcp],
         // no attachments
       });
 
       const turn = await prepareChatTurn(
-        { ...baseInput, request: { id: "chat-mcp", agentId: agentWithMcp.id } },
+        { ...baseInput, request: { agentId: agentWithMcp.id } },
         queries,
       );
 
@@ -387,9 +527,9 @@ describe("chat-execution", () => {
       const orgMcp = { ...baseMcp, organizationId: "org-1" };
       const queries = createInMemoryChatTurnQueries({
         workspaces: [baseWorkspace],
-        agents: [agentWithMcp as any],
-        providers: [baseProvider as any],
-        mcps: [orgMcp as any],
+        agents: [agentWithMcp],
+        providers: [baseProvider],
+        mcps: [orgMcp],
         attachments: [
           {
             workspaceId: baseWorkspace.id,
@@ -401,7 +541,7 @@ describe("chat-execution", () => {
 
       // The unreachable MCP must not kill the Chat turn.
       const turn = await prepareChatTurn(
-        { ...baseInput, request: { id: "chat-mcp", agentId: agentWithMcp.id } },
+        { ...baseInput, request: { agentId: agentWithMcp.id } },
         queries,
       );
 
@@ -493,6 +633,37 @@ describe("chat-execution", () => {
 
       vi.advanceTimersByTime(5000);
       expect(bump).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("shouldInjectNativeSearch", () => {
+    it("injects when search is requested and native search is enabled", () => {
+      expect(
+        shouldInjectNativeSearch(true, { nativeSearchEnabled: true }),
+      ).toBe(true);
+    });
+
+    it("does not inject when search is requested but native search is disabled", () => {
+      expect(
+        shouldInjectNativeSearch(true, { nativeSearchEnabled: false }),
+      ).toBe(false);
+    });
+
+    it("does not inject when search is not requested, regardless of provider", () => {
+      expect(
+        shouldInjectNativeSearch(false, { nativeSearchEnabled: true }),
+      ).toBe(false);
+      expect(
+        shouldInjectNativeSearch(undefined, { nativeSearchEnabled: true }),
+      ).toBe(false);
+    });
+
+    it("treats a legacy provider (nativeSearchEnabled undefined) as enabled", () => {
+      expect(
+        shouldInjectNativeSearch(true, {
+          nativeSearchEnabled: undefined as unknown as boolean,
+        }),
+      ).toBe(true);
     });
   });
 });
