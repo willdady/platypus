@@ -32,16 +32,17 @@ a fixed set of core-owned **Extension points**:
   loader (see
   [ADR-0013](https://github.com/willdady/platypus/blob/main/docs/adr/0013-plugin-system-manifest-driven-in-process-extension-points.md)):
   `@platypus/tools-basic` (math, time), `@platypus/web-fetch` (web fetch, split
-  out so its network egress can be denied in isolation), `@platypus/tools-platform`
-  (the Platypus-domain sets — kanban, dashboards, triggers, memory, notifications,
-  agent discovery/management, skill management), and `@platypus/docker` (the
-  Sandbox backend). **Third-party plugins** load the same way from installed npm
-  packages, with their contribution ids namespaced by plugin name. The one
-  remaining in-tree registration is the `sandbox` Tool set — the consumer side of
-  the Sandbox-backend extension point, core glue rather than a native Tool set.
-  Either way the underlying `registerToolSet` / `registerSandboxBackend` functions
-  are the same — they are now **core-internal**, driven by the loader rather than
-  called by plugin authors.
+  out so its network egress can be denied in isolation),
+  `@platypus/tools-platform` (the Platypus-domain sets — kanban, dashboards,
+  triggers, memory, notifications, agent discovery/management, skill
+  management), and `@platypus/docker` (the Sandbox backend). **Third-party
+  plugins** load the same way from installed npm packages, with their
+  contribution ids namespaced by plugin name. The one remaining in-tree
+  registration is the `sandbox` Tool set — the consumer side of the
+  Sandbox-backend extension point, core glue rather than a native Tool set.
+  Either way the underlying `registerToolSet` / `registerSandboxBackend`
+  functions are the same — they are now **core-internal**, driven by the loader
+  rather than called by plugin authors.
 </Callout>
 
 ## The plugin model
@@ -99,10 +100,15 @@ likewise additive. A genuinely breaking change — removing or re-signing a
 required member — is a **windowed major bump**: the major increments and core
 runs both N and N−1 for a release so authors can migrate.
 
-**Loading.** Before the HTTP server starts, core reads the Operator-supplied
-[`PLATYPUS_PLUGINS`](/self-hosting/configuration#plugins) list, resolves each
-plugin, reads its manifest, and drives registration by calling the internal
-`register*()` per `contributes` entry. Resolution differs by origin:
+**Loading.** Before the HTTP server starts, core loads the always-on core set
+(`@platypus/tools-basic`, `@platypus/tools-platform`) unconditionally, then reads
+the Operator-supplied [`PLATYPUS_PLUGINS`](/self-hosting/configuration#plugins)
+list of **gate-able** plugins, resolves each, reads its manifest, and drives
+registration by calling the internal `register*()` per `contributes` entry. The
+always-on set is not gated by the list — it is a core-shipped constant, a subset
+of the built-in map — so listing one of its members is a fail-loud
+misconfiguration, and an empty list still yields the core tool sets. Resolution
+differs by origin:
 
 - **Core plugins** are internal backend modules under
   `apps/backend/src/plugins/<name>/`, reached through a **static built-in map**
@@ -421,8 +427,13 @@ by the loader). Concretely:
    `apps/backend/src/plugins/<name>/index.ts` and register its logical
    `@platypus/*` name in `apps/backend/src/plugins/builtin.ts` (the built-in map
    / core allowlist).
-3. Add the plugin name to the deployment's `PLATYPUS_PLUGINS` list so it loads
-   (the standard core set is in `.env.example`).
+3. It now loads according to its plugin's tier. Adding a tool set to
+   `@platypus/tools-platform` or `@platypus/tools-basic` needs nothing further —
+   they are **always-on** (listed in `ALWAYS_ON_PLUGINS` in
+   `apps/backend/src/plugins/builtin.ts`) and load unconditionally. A new
+   **gate-able** plugin (e.g. a fresh egress/infra one) must be added to the
+   deployment's `PLATYPUS_PLUGINS` list to load; the default list is in
+   `.env.example`.
 
 Core Contribution ids stay unprefixed (`math-conversions`, `web-fetch`,
 `kanban`) so persisted `agent.toolSetIds` references keep working. A tool set is
@@ -461,7 +472,7 @@ import { tool } from "ai";
 import { z } from "zod";
 
 export const plugin: PlatypusPlugin = {
-  name: "example", // ← the namespace prefix (see below)
+  name: "example", // ← the namespace slug prefix, not the npm package name (see below)
   version: "0.1.0",
   apiVersion: PLUGIN_API_VERSION,
   contributes: {
@@ -498,6 +509,14 @@ manifest; core prefixes them. Core built-in ids stay flat and un-prefixed
 (`math-conversions`, `time`, `docker`). This split (ADR-0013) means a
 third-party id can never collide with a current — or _future_ — core built-in
 and silently break a deployment on upgrade.
+
+Because it becomes the id prefix, a third-party `name` **must be a short,
+url-safe slug** — lowercase letters, digits, and hyphens (`cloud-sandbox`,
+`example`) — validated at boot. It is **distinct from the npm package specifier**
+you list in `PLATYPUS_PLUGINS` and install: a package published as
+`@acme/platypus-widgets` may set `name: "widgets"`, so you list
+`@acme/platypus-widgets` but reference `widgets.<id>` (and key its
+`PLATYPUS_PLUGIN_CONFIG` block under `widgets`).
 
 Two consequences worth internalising:
 

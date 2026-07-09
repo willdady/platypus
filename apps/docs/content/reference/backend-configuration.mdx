@@ -31,10 +31,10 @@ For a guided walkthrough of configuring a deployment, see
 
 ## Plugins
 
-| Variable                 | Purpose                                                                                                                                                                                                                                                                                                                                          | Default                 | Required |
-| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------- | -------- |
-| `PLATYPUS_PLUGINS`       | Comma-separated list of plugins to load and enable at boot (core built-ins included). List membership both loads _and_ enables a plugin. Empty ⇒ no plugin-provided tools. Fail-loud at boot.                                                                                                                                                     | `@platypus/tools-basic` | No       |
-| `PLATYPUS_PLUGIN_CONFIG` | Deploy-time, Operator-owned plugin config/credentials as a JSON object keyed by plugin name, each `{ "config": {…}, "credentials": {…} }`. Validated at boot against the plugin's manifest schemas (fail-loud). One block is shared deployment-wide across all of a plugin's contributions and tenants. Distinct from per-Workspace Sandbox config. | _(unset)_               | No       |
+| Variable                 | Purpose                                                                                                                                                                                                                                                                                                                                                                                                                                                                           | Default               | Required |
+| ------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------- | -------- |
+| `PLATYPUS_PLUGINS`       | Comma-separated list of the **gate-able** plugins to load and enable at boot (deny-worthy core plugins + third-party). The always-on core tool sets (`@platypus/tools-basic`, `@platypus/tools-platform`) load unconditionally and must **not** be listed (listing one is fail-loud). List membership both loads _and_ enables a gate-able plugin. Empty ⇒ always-on core tool sets only (never zero tools). Fail-loud at boot.                                                   | `@platypus/web-fetch` | No       |
+| `PLATYPUS_PLUGIN_CONFIG` | Deploy-time, Operator-owned plugin config/credentials as a JSON object keyed by plugin name (the manifest `name`; a third-party name is a slug, not the npm specifier), each `{ "config": {…}, "credentials": {…} }`. Validated at boot against the plugin's manifest schemas (fail-loud); a key matching no loaded plugin is also fail-loud. One block is shared deployment-wide across all of a plugin's contributions and tenants. Distinct from per-Workspace Sandbox config. | _(unset)_             | No       |
 
 See [Extending → the plugin model](/extending#the-plugin-model) and
 [Configuration → Plugins](/self-hosting/configuration#plugins) (incl.
@@ -88,10 +88,15 @@ run sooner.
 
 ## Tools
 
-| Variable                       | Purpose                                                                    | Default                 | Required |
-| ------------------------------ | -------------------------------------------------------------------------- | ----------------------- | -------- |
-| `FETCH_TOOL_IGNORE_ROBOTS_TXT` | Set `true` to skip `robots.txt` checks when the fetch tool retrieves URLs. | `false`                 | No       |
-| `FRONTEND_URL`                 | Frontend URL used to build resource links inside tool responses.           | `http://localhost:3001` | No       |
+| Variable       | Purpose                                                          | Default                 | Required |
+| -------------- | ---------------------------------------------------------------- | ----------------------- | -------- |
+| `FRONTEND_URL` | Frontend URL used to build resource links inside tool responses. | `http://localhost:3001` | No       |
+
+`robots.txt` handling for the fetch tool moved to plugin config: set
+`config.ignoreRobotsTxt` on `@platypus/web-fetch` via `PLATYPUS_PLUGIN_CONFIG`
+(see [Plugins](#plugins)) — e.g.
+`PLATYPUS_PLUGIN_CONFIG={"@platypus/web-fetch":{"config":{"ignoreRobotsTxt":true}}}`.
+The former `FETCH_TOOL_IGNORE_ROBOTS_TXT` env var is removed.
 
 ## Storage
 

@@ -40,8 +40,12 @@ export const PLUGIN_API_VERSION = 1 as const;
  * The oldest plugin API major core still accepts — one below the current major
  * (the "N−1" of the N-and-N−1 window). A plugin whose `apiVersion` is below this
  * targets a dropped major and is rejected at boot. See {@link PLUGIN_API_VERSION}.
+ *
+ * Floored at `1`: there is no major `0`, so at the first major (N = 1) the window
+ * collapses to `[1, 1]` rather than admitting a phantom `v0`. Once core reaches
+ * major 2 this becomes `1`, opening the genuine N−1 slot.
  */
-export const OLDEST_SUPPORTED_API_VERSION = PLUGIN_API_VERSION - 1;
+export const OLDEST_SUPPORTED_API_VERSION = Math.max(1, PLUGIN_API_VERSION - 1);
 
 /**
  * Runtime scope handed to a Tool set factory at Chat-turn time. This SDK is the
@@ -250,6 +254,20 @@ export interface PluginContributions {
  * {@link PluginConfigContext} into every contribution factory.
  */
 export interface PlatypusPlugin {
+  /**
+   * The plugin's identity — its config namespace and, for third-party plugins,
+   * the prefix core prepends to every contribution id (`${name}.${id}`).
+   *
+   * This is **distinct from the npm package specifier** an Operator lists in
+   * `PLATYPUS_PLUGINS`: a package published as `@acme/platypus-widgets` may set
+   * `name: "widgets"`, and its `greeting` tool set then registers as
+   * `widgets.greeting`. For a **third-party** plugin `name` MUST be a short,
+   * url-safe slug — lowercase letters, digits, and hyphens
+   * (`/^[a-z0-9]+(?:-[a-z0-9]+)*$/`) — so the prefixed id stays clean and
+   * unambiguous (no `.`, `/`, `@`, or whitespace to muddle the `name.id`
+   * boundary or a URL path). Core plugins are exempt: their `@platypus/*` names
+   * are logical ids reached through the built-in map and never used as a prefix.
+   */
   name: string;
   version: string;
   /**
