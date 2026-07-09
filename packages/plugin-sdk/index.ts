@@ -204,10 +204,34 @@ export interface SandboxBackend {
 }
 
 /**
+ * A contribution's per-Workspace `configSchema`: either a concrete Zod schema
+ * or a **factory** of the plugin's deploy-time config, resolved by the loader at
+ * load time into a concrete schema (see {@link SandboxBackendContribution}).
+ *
+ * The factory form lets a backend derive its per-Workspace validation from
+ * Operator-owned plugin config — e.g. `@platypus/docker` closes over the
+ * Operator's network allowlist so an out-of-allowlist `networks` entry is
+ * rejected at config-save time. This is **append-only** within the major API
+ * version: a plain schema stays valid, so backends that don't need plugin config
+ * are untouched. Core resolves the factory against the boot-validated {@link
+ * PluginConfigContext.config} before the three static `configSchema.safeParse`
+ * consumers (save route, teardown, tool resolver) ever see it — they always
+ * receive a concrete schema.
+ */
+export type SandboxConfigSchema<TConfig = unknown> =
+  z.ZodType<TConfig> | ((pluginConfig: unknown) => z.ZodType<TConfig>);
+
+/**
  * A single Sandbox-backend contribution — the payload core's internal
  * `registerSandboxBackend` accepts. `backend` is the discriminator stored in the
  * `sandbox.backend` column; `configSchema` / `credentialsSchema` validate the
  * per-Workspace jsonb columns before `create()` instantiates an adapter.
+ *
+ * `configSchema` may be a plain Zod schema or a {@link SandboxConfigSchema}
+ * factory of the plugin's deploy-time config (resolved at load, append-only).
+ * The factory receives the boot-validated {@link PluginConfigContext.config} as
+ * `unknown` — the same opaque shape `create()`'s `plugin` argument carries — and
+ * narrows it itself (a plugin knows its own config schema).
  */
 export interface SandboxBackendContribution<
   TConfig = unknown,
@@ -215,7 +239,7 @@ export interface SandboxBackendContribution<
 > {
   backend: string;
   name: string;
-  configSchema: z.ZodType<TConfig>;
+  configSchema: SandboxConfigSchema<TConfig>;
   credentialsSchema: z.ZodType<TCredentials>;
   /**
    * Instantiate the adapter. `config` / `credentials` are the per-Workspace

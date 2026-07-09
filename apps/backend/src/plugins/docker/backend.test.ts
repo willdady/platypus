@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { describe, it, expect, beforeEach, vi } from "vitest";
 import { PassThrough } from "node:stream";
 
 // ---------------------------------------------------------------------------
@@ -726,39 +726,54 @@ describe("DockerSandboxBackend — host reachability (ADR-0005)", () => {
     expect(mockState.networkConnectCalls).toHaveLength(0);
   });
 
-  describe("dockerSandboxConfigSchema", () => {
-    const original = process.env.PLATYPUS_SANDBOX_DOCKER_ALLOWED_NETWORKS;
-    afterEach(() => {
-      if (original === undefined) {
-        delete process.env.PLATYPUS_SANDBOX_DOCKER_ALLOWED_NETWORKS;
-      } else {
-        process.env.PLATYPUS_SANDBOX_DOCKER_ALLOWED_NETWORKS = original;
-      }
-    });
-
+  // The per-Workspace config schema is now a factory of the plugin's resolved
+  // deploy-time config (ADR-0013): the operator allowlist arrives as
+  // `allowedNetworks`, no longer from process.env.
+  describe("dockerSandboxConfigSchema (factory of plugin config)", () => {
     it("defaults to empty arrays for {}", () => {
-      const parsed = dockerSandboxConfigSchema.parse({});
+      const parsed = dockerSandboxConfigSchema({ allowedNetworks: [] }).parse(
+        {},
+      );
       expect(parsed).toEqual({ networks: [], extraHosts: [] });
     });
 
     it("accepts networks that are in the operator allowlist", () => {
-      process.env.PLATYPUS_SANDBOX_DOCKER_ALLOWED_NETWORKS = "shared, tools";
-      const parsed = dockerSandboxConfigSchema.parse({ networks: ["shared"] });
+      const parsed = dockerSandboxConfigSchema({
+        allowedNetworks: ["shared", "tools"],
+      }).parse({ networks: ["shared"] });
       expect(parsed.networks).toEqual(["shared"]);
     });
 
     it("rejects networks outside the operator allowlist", () => {
-      process.env.PLATYPUS_SANDBOX_DOCKER_ALLOWED_NETWORKS = "shared";
-      const result = dockerSandboxConfigSchema.safeParse({
-        networks: ["not-allowed"],
-      });
+      const result = dockerSandboxConfigSchema({
+        allowedNetworks: ["shared"],
+      }).safeParse({ networks: ["not-allowed"] });
       expect(result.success).toBe(false);
     });
 
+    it("rejects any network under an empty allowlist (default-deny)", () => {
+      const result = dockerSandboxConfigSchema({
+        allowedNetworks: [],
+      }).safeParse({ networks: ["shared"] });
+      expect(result.success).toBe(false);
+    });
+
+    it("names the plugin-config allowlist source in the error", () => {
+      const result = dockerSandboxConfigSchema({
+        allowedNetworks: [],
+      }).safeParse({ networks: ["nope"] });
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        expect(result.error.issues[0].message).toContain(
+          "@platypus/docker plugin config 'allowedNetworks'",
+        );
+      }
+    });
+
     it("rejects malformed extraHosts entries", () => {
-      const result = dockerSandboxConfigSchema.safeParse({
-        extraHosts: ["not a valid entry"],
-      });
+      const result = dockerSandboxConfigSchema({
+        allowedNetworks: [],
+      }).safeParse({ extraHosts: ["not a valid entry"] });
       expect(result.success).toBe(false);
     });
   });

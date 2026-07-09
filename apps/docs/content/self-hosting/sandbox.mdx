@@ -81,8 +81,8 @@ per-Sandbox fields on the Docker adapter, both defaulting to empty:
 The authority chain is honest and runs top-down:
 
 - The **Operator** declares the eligible set at deployment time via
-  `PLATYPUS_SANDBOX_DOCKER_ALLOWED_NETWORKS` — a deployment env var, *not* an
-  in-app screen.
+  `config.allowedNetworks` on `@platypus/docker` in `PLATYPUS_PLUGIN_CONFIG` — a
+  JSON array set at the deployment layer, *not* an in-app screen.
 - An **Org Admin** selects a per-Sandbox subset of that allowlist. Submissions
   are validated server-side against the allowlist; out-of-allowlist entries are
   rejected.

@@ -486,6 +486,84 @@ describe("loadPlugins — sandbox backends", () => {
       }),
     ).rejects.toThrow(/@bad\/plugin.*sandboxBackends.*array/s);
   });
+
+  it("resolves a factory-form configSchema against the plugin config at load", async () => {
+    const { register } = makeRegister();
+    const { registerSandbox, calls } = makeSandboxRegister();
+
+    // A backend whose per-Workspace configSchema is a FACTORY of the plugin's
+    // resolved deploy-time config: it closes over an operator allowlist and
+    // rejects out-of-allowlist values (mirrors @platypus/docker). The loader
+    // must resolve it to a concrete schema before registering — the registry and
+    // core's static safeParse consumers only ever see plain schemas.
+    const factoryBackend: SandboxBackendContribution = {
+      backend: "fenced",
+      name: "Fenced",
+      configSchema: (pluginConfig) => {
+        const { allowed } = pluginConfig as { allowed: string[] };
+        return z
+          .object({ net: z.string() })
+          .refine((c) => allowed.includes(c.net), { message: "not allowed" });
+      },
+      credentialsSchema: z.object({}),
+      create: () => ({}) as unknown as SandboxBackend,
+    };
+
+    await loadPlugins({
+      pluginNames: ["fencedpkg"],
+      builtinPlugins: {},
+      importPlugin: () =>
+        Promise.resolve({
+          plugin: {
+            name: "fenced",
+            version: "0.1.0",
+            apiVersion: 1,
+            configSchema: z.object({
+              allowed: z.array(z.string()).default([]),
+            }),
+            contributes: { sandboxBackends: [factoryBackend] },
+          } satisfies PlatypusPlugin,
+        }),
+      register,
+      registerSandbox,
+      pluginConfig: { fenced: { config: { allowed: ["ok"] } } },
+    });
+
+    const [registered] = calls;
+    // Registered as a CONCRETE schema (the factory is resolved away), reflecting
+    // the resolved plugin config.
+    expect(typeof registered.configSchema).not.toBe("function");
+    const schema = registered.configSchema as z.ZodType;
+    expect(schema.safeParse({ net: "ok" }).success).toBe(true);
+    expect(schema.safeParse({ net: "blocked" }).success).toBe(false);
+  });
+
+  it("registers a plain (non-factory) configSchema unchanged", async () => {
+    const { register } = makeRegister();
+    const { registerSandbox, calls } = makeSandboxRegister();
+    const plain = z.object({ a: z.string() });
+    const backend: SandboxBackendContribution = {
+      backend: "plain",
+      name: "Plain",
+      configSchema: plain,
+      credentialsSchema: z.object({}),
+      create: () => ({}) as unknown as SandboxBackend,
+    };
+
+    await loadPlugins({
+      pluginNames: ["plainpkg"],
+      builtinPlugins: {},
+      importPlugin: () =>
+        Promise.resolve({
+          plugin: sandboxManifest("plainpkg", [backend]),
+        }),
+      register,
+      registerSandbox,
+    });
+
+    // A plain schema passes through by identity — append-only compatibility.
+    expect(calls[0].configSchema).toBe(plain);
+  });
 });
 
 describe("parsePluginConfig", () => {

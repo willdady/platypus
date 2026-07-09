@@ -134,9 +134,18 @@ backend type; omit it and that backend can't be selected at all. See the
 
 ### Docker
 
-| Variable                                   | Purpose                                                                                                                                            | Default   | Required |
-| ------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------- | --------- | -------- |
-| `PLATYPUS_SANDBOX_DOCKER_ALLOWED_NETWORKS` | Comma-separated Docker networks a Sandbox may attach to. Admins select a per-Sandbox subset; unset/empty means none are attachable (default-deny). | _(unset)_ | No       |
+The Docker backend takes **no dedicated deployment environment variables**. Its
+Operator network allowlist moved onto plugin config: set `config.allowedNetworks`
+on `@platypus/docker` via `PLATYPUS_PLUGIN_CONFIG` (see [Plugins](#plugins)) — a
+JSON array of Docker networks a Sandbox may attach to. Admins select a
+per-Sandbox subset of that list; unset/empty means none are attachable
+(default-deny). For example:
+
+```
+PLATYPUS_PLUGIN_CONFIG={"@platypus/docker":{"config":{"allowedNetworks":["shared-services","public-tools"]}}}
+```
+
+The former `PLATYPUS_SANDBOX_DOCKER_ALLOWED_NETWORKS` env var is removed.
 
 ### SSH
 
