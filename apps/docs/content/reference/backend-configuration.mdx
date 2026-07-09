@@ -116,14 +116,34 @@ is the production option.
 
 ## Sandbox
 
-The Docker reference Sandbox adapter. Disabled by default and scoped to
-development / single-node self-hosting only. Enable it by listing
-`@platypus/docker` in `PLATYPUS_PLUGINS` (it ships as a core plugin — see
-[Plugins](#plugins) above); this requires a reachable Docker daemon and the
-`compose.sandbox.yaml` overlay. See
-[ADR-0003](https://github.com/willdady/platypus/blob/main/docs/adr/0003-docker-reference-sandbox-adapter-socket-mount.md)
-and the [Extending](/extending#sandbox-backends) section.
+Platypus ships two reference Sandbox adapters, both **off by default** and each
+enabled by listing its plugin in `PLATYPUS_PLUGINS` (both ship as core plugins —
+see [Plugins](#plugins) above). Adding the name both loads _and_ registers the
+backend type; omit it and that backend can't be selected at all. See the
+[Extending](/extending#sandbox-backends) section and
+[Sandbox infrastructure](/self-hosting/sandbox).
+
+- **Docker** (`@platypus/docker`) — one container per Workspace via the host's
+  Docker daemon. Scoped to development / single-node self-hosting; requires a
+  reachable Docker daemon and the `compose.sandbox.yaml` overlay. See
+  [ADR-0003](https://github.com/willdady/platypus/blob/main/docs/adr/0003-docker-reference-sandbox-adapter-socket-mount.md).
+- **SSH** (`@platypus/ssh`) — attaches to a pre-existing, operator-owned host
+  over SSH (bring-your-own-host). The one backend viable in horizontally-scaled
+  deployments, where Docker cannot run. See
+  [ADR-0012](https://github.com/willdady/platypus/blob/main/docs/adr/0012-ssh-reference-sandbox-byo-host-adapter.md).
+
+### Docker
 
 | Variable                                   | Purpose                                                                                                                                            | Default   | Required |
 | ------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------- | --------- | -------- |
 | `PLATYPUS_SANDBOX_DOCKER_ALLOWED_NETWORKS` | Comma-separated Docker networks a Sandbox may attach to. Admins select a per-Sandbox subset; unset/empty means none are attachable (default-deny). | _(unset)_ | No       |
+
+### SSH
+
+The SSH backend takes **no deployment environment variables**. Its entire
+connection surface — host, port, user, workspace root, optional host-key pin, and
+the private-key credential — is **per-Workspace** Sandbox configuration set in the
+app by an Org Admin, not env vars. See
+[Sandbox infrastructure](/self-hosting/sandbox) for the setup narrative and the
+security model (notably: no resource limits and no `networks`/`extraHosts`
+reachability model).

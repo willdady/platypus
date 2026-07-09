@@ -182,18 +182,24 @@ your secret manager, never commit it.
 ## Sandbox
 
 The [Sandbox](/concepts) (agent shell/filesystem access) is **off by default**.
-Enabling the Docker reference backend and curating what it can reach is an
-Operator concern with its own page:
+Platypus ships two reference backends, each enabled by listing its plugin in
+`PLATYPUS_PLUGINS`. Without the plugin listed, that backend type isn't registered
+and its sandbox configuration is inert:
 
-- **Enable Docker by listing `@platypus/docker` in `PLATYPUS_PLUGINS`** — the
-  Docker backend ships as a core plugin; without it in the list, sandbox
-  configuration is inert.
-- **`PLATYPUS_SANDBOX_DOCKER_ALLOWED_NETWORKS`** — the Operator's allowlist that
-  bounds which Docker networks an Org Admin may attach a sandbox to
-  (default-deny).
+- **Docker** — `@platypus/docker`. One container per Workspace on the local
+  daemon; development / single-node only. Its Operator allowlist,
+  `PLATYPUS_SANDBOX_DOCKER_ALLOWED_NETWORKS`, bounds which Docker networks an Org
+  Admin may attach a sandbox to (default-deny), and it needs the opt-in
+  `compose.sandbox.yaml` overlay.
+- **SSH** — `@platypus/ssh`. Attaches to a pre-existing, operator-owned host over
+  SSH. It takes **no deployment env vars** — the connection target (host, user,
+  key, optional host-key pin) is per-Workspace Sandbox config set in-app. It is the
+  only backend that runs in **horizontally-scaled deployments**, where Docker
+  cannot.
 
-See [Sandbox infrastructure](/self-hosting/sandbox) for the security model and
-the opt-in `compose.sandbox.yaml` overlay.
+See [Sandbox infrastructure](/self-hosting/sandbox) for the full security model,
+the SSH connection fields, host-key pinning, and the opt-in `compose.sandbox.yaml`
+overlay.
 
 ## Other operational areas
 

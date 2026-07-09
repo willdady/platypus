@@ -10,8 +10,10 @@ import { Callout } from "nextra/components";
 A **Sandbox** is a configured, isolated execution environment registered on a
 [Workspace](/concepts), giving agents shell and filesystem tools that run inside
 it. The Sandbox interface is pluggable so different backends — local container,
-remote VM, hosted sandbox-as-a-service — can be contributed. Platypus ships one
-reference backend: **Docker**.
+remote VM, hosted sandbox-as-a-service — can be contributed. Platypus ships two
+reference backends: **Docker** (one container per Workspace on the local daemon)
+and **SSH** (attach to a pre-existing, operator-owned host). Neither is enabled by
+default — each is turned on by listing its plugin in `PLATYPUS_PLUGINS`.
 
 This page is for the **Operator** and **Org Admin** who stand up and curate that
 infrastructure.
@@ -97,6 +99,114 @@ badge with a "Recreate now" action.
   your allowlist configuration, not a structural guarantee — don't add the
   database network.
 </Callout>
+
+## The SSH reference adapter
+
+The SSH adapter (`backend: "ssh"`) attaches to a host you already run: Platypus
+connects, ensures a workspace directory exists, and runs tools over the
+connection. The host must let the login user open a shell and expose the SFTP
+subsystem — both are on by default in a stock OpenSSH `sshd`.
+
+Unlike the Docker adapter, the SSH adapter **works in horizontally-scaled
+deployments**. Because the target host is external and shared, any backend replica
+can connect to the same host and see the same filesystem state — so it's the
+recommended backend for multi-node / HA topologies, where Docker cannot run.
+
+### Enabling it
+
+Add `@platypus/ssh` to `PLATYPUS_PLUGINS` and restart the backend:
+
+```
+PLATYPUS_PLUGINS=@platypus/web-fetch,@platypus/ssh
+```
+
+It ships as a core plugin, so no package install is needed; plugin-list membership
+is the enable switch (see
+[Configuration → Plugins](/self-hosting/configuration#plugins)). Omit the name and
+the `"ssh"` backend type isn't registered, so it can't be selected when
+configuring a Sandbox. Unlike Docker, the SSH backend needs no compose overlay and
+no daemon socket.
+
+### Per-Workspace connection config
+
+Everything the adapter needs to reach a host lives on the per-Workspace Sandbox
+row, set in the app under **Workspace settings → Sandbox** by an Org Admin (like
+every credential-bearing Sandbox field, it is **not** delegatable to a Workspace
+Owner). It is _not_ deployment env or plugin config.
+
+| Field              | Required | Meaning                                                                                                                                 |
+| ------------------ | -------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| **Host**           | Yes      | Hostname or IP of the operator-owned host to attach to.                                                                                 |
+| **Port**           | No       | SSH port. Defaults to `22`.                                                                                                             |
+| **User**           | Yes      | SSH login user. Public-key auth only.                                                                                                   |
+| **Workspace root** | No       | Directory the sandbox works in. Absolute, or resolved against the login `$HOME`. Defaults to `$HOME/platypus-workspace`, `mkdir -p`'d on first connect. |
+| **Host key**       | No       | Optional host-key pin (see [below](#host-key-verification)). Blank ⇒ connect unverified with a logged warning.                          |
+| **Private key**    | Yes      | PEM or OpenSSH private key for the login user. Kept server-side, never sent to the model. On edit, leave blank to keep the stored key.  |
+| **Key passphrase** | No       | Passphrase decrypting the private key, when it is encrypted.                                                                            |
+
+### Public-key setup
+
+The adapter authenticates with a private key only — there is no password option.
+Generate a dedicated key pair for Platypus and authorize its public half on the
+host, under the login **User** above:
+
+```bash
+# On a machine you control
+ssh-keygen -t ed25519 -f platypus_sandbox -C platypus-sandbox
+
+# Authorize the public key on the target host (as the login user)
+ssh-copy-id -i platypus_sandbox.pub platypus@ssh.example.com
+```
+
+Paste the **private** key (`platypus_sandbox`) into the Sandbox's **Private key**
+field; if you protected it with a passphrase, put that in **Key passphrase**. The
+private key is stored server-side and is never returned to non-admins or exposed
+to the model. Use a key scoped to this host so it can be rotated or revoked
+independently.
+
+### Host-key verification
+
+The **Host key** field pins the host's public key so a man-in-the-middle can't
+impersonate the host. Fetch it with `ssh-keyscan` and paste the output in:
+
+```bash
+ssh-keyscan -t ed25519 ssh.example.com
+```
+
+The field accepts full `ssh-keyscan` / `known_hosts` output or a bare base64 key
+blob. When set, the presented host key is strictly verified on every connect and a
+mismatch aborts the connection with a clear error.
+
+<Callout type="warning">
+  Leaving **Host key** blank connects **without** host-key verification — the
+  backend logs a loud MITM warning and proceeds. Public-key auth still stops an
+  impostor host from stealing your credentials, but session traffic and the
+  server-injected environment (including secrets) are exposed to a
+  man-in-the-middle. **Pin the host key on any host reached over an untrusted
+  network.**
+</Callout>
+
+### Security posture
+
+The SSH adapter, like Docker, is scoped to hosts and network paths you trust; it
+is **not** a hostile-tenant isolation boundary. But its guarantees differ from
+Docker's in ways you must plan around:
+
+- **No Platypus-layer resource limits.** Docker's process, memory, and CPU caps
+  (`PidsLimit` / memory ceiling / `no-new-privileges`, per
+  [ADR-0003](https://github.com/willdady/platypus/blob/main/docs/adr/0003-docker-reference-sandbox-adapter-socket-mount.md))
+  have **no** SSH equivalent. A runaway or hostile workload — a fork bomb, a
+  memory hog — is bounded only by the host itself. Protecting the host (via
+  `ulimit`, `systemd-run`, cgroups, a dedicated user, or a throwaway VM) is the
+  **operator's** responsibility.
+- **No `networks` / `extraHosts` model, and the "database is unreachable"
+  property does _not_ hold.** There is no default-deny reachability allowlist
+  ([ADR-0005](https://github.com/willdady/platypus/blob/main/docs/adr/0005-sandbox-host-reachability-is-admin-curated-default-deny.md)
+  is Docker-only). The sandbox reaches **whatever the host can route to** —
+  including the Platypus database if the network permits it. Reachability is
+  entirely your host and network posture; isolate the host accordingly.
+- **Not a tenant isolation boundary.** Trust rests on the host and the network
+  path, not on the adapter.
 
 ## Workspace-default environment variables
 
