@@ -73,6 +73,9 @@ type SandboxFormData = {
   sshPort: string;
   sshUser: string;
   sshRootDir: string;
+  // Optional host-key pin (ADR-0012). Part of config, not credentials — returned
+  // by GET like the rest of the SSH config.
+  sshHostKey: string;
   sshPrivateKey: string;
   sshPassphrase: string;
 };
@@ -88,6 +91,7 @@ const DEFAULT_FORM: SandboxFormData = {
   sshPort: DEFAULT_SSH_PORT,
   sshUser: "",
   sshRootDir: "",
+  sshHostKey: "",
   sshPrivateKey: "",
   sshPassphrase: "",
 };
@@ -286,6 +290,7 @@ const SandboxSettings = ({
         port?: number;
         user?: string;
         rootDir?: string;
+        hostKey?: string;
       };
       setFormData({
         ...DEFAULT_FORM,
@@ -301,6 +306,7 @@ const SandboxSettings = ({
         sshPort: config.port ? String(config.port) : DEFAULT_SSH_PORT,
         sshUser: config.user ?? "",
         sshRootDir: config.rootDir ?? "",
+        sshHostKey: config.hostKey ?? "",
       });
     }
   });
@@ -353,6 +359,11 @@ const SandboxSettings = ({
             // `$HOME/platypus-workspace` default.
             ...(formData.sshRootDir.trim()
               ? { rootDir: formData.sshRootDir.trim() }
+              : {}),
+            // hostKey is optional — omit when blank so the backend connects with
+            // the MITM warning rather than pinning.
+            ...(formData.sshHostKey.trim()
+              ? { hostKey: formData.sshHostKey.trim() }
               : {}),
           }
         : {};
@@ -814,6 +825,36 @@ const SandboxSettings = ({
                   Defaults to{" "}
                   <span className="font-mono">$HOME/platypus-workspace</span>,
                   created on first connect.
+                </FieldDescription>
+              </Field>
+
+              <Field>
+                <FieldLabel htmlFor="ssh-host-key">
+                  Host key (optional)
+                </FieldLabel>
+                <textarea
+                  id="ssh-host-key"
+                  placeholder="ssh-ed25519 AAAAC3NzaC1lZDI1NTE5..."
+                  value={formData.sshHostKey}
+                  onChange={(e) =>
+                    setFormData((prev) => ({
+                      ...prev,
+                      sshHostKey: e.target.value,
+                    }))
+                  }
+                  disabled={isSubmitting}
+                  rows={3}
+                  autoComplete="off"
+                  spellCheck={false}
+                  className="flex w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm font-mono shadow-xs focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+                />
+                <FieldDescription>
+                  Pin the host&apos;s public key to reject a man-in-the-middle.
+                  Obtain it with{" "}
+                  <span className="font-mono">
+                    ssh-keyscan -t ed25519 {formData.sshHost || "<host>"}
+                  </span>
+                  . Leave blank to connect unverified (a warning is logged).
                 </FieldDescription>
               </Field>
 

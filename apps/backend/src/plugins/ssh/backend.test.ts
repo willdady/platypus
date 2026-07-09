@@ -39,6 +39,10 @@ type MockState = {
   sftpOpens: number;
   // When set, client.sftp() invokes its callback with this error.
   sftpShouldFail: Error | null;
+  // The raw host-key blob the fake server presents to a configured
+  // hostVerifier. When a verifier is present and rejects it, connect() emits an
+  // "error" instead of "ready" (mirroring ssh2's handshake failure).
+  presentedHostKey: Buffer | null;
 };
 
 // The factory closure reads `mockState` lazily (at call time), by which point
@@ -195,9 +199,21 @@ vi.mock("ssh2", () => {
       // a synchronous emit is safe and keeps awaits resolving via microtasks.
       if (mockState.connectShouldFail) {
         this.emit("error", mockState.connectShouldFail);
-      } else {
-        this.emit("ready");
+        return this;
       }
+      // Honour a configured hostVerifier (sync form: returns boolean). ssh2
+      // presents the raw key blob during the handshake; a false result aborts
+      // with a handshake error rather than reaching "ready".
+      const verifier = config.hostVerifier as
+        ((key: Buffer) => boolean) | undefined;
+      if (typeof verifier === "function") {
+        const presented = mockState.presentedHostKey ?? Buffer.alloc(0);
+        if (!verifier(presented)) {
+          this.emit("error", new Error("Handshake failed: host key rejected"));
+          return this;
+        }
+      }
+      this.emit("ready");
       return this;
     }
 
@@ -291,6 +307,15 @@ const CONFIG = {
 };
 const CREDENTIALS = { privateKey: "PRIVATE_KEY_PEM" };
 
+// Fake ed25519-shaped host-key blobs (base64). Real SSH key blobs base64-encode
+// a length-prefixed algorithm name, so they begin with "AAAA" — the adapter's
+// pin parser keys off that. The adapter compares the decoded bytes of the pin
+// against the raw blob the (mock) server presents.
+const HOST_KEY_B64 =
+  "AAAAC3NzaC1lZDI1NTE5AAAAIExampleHostKeyBlobBytesForTestingAbc123";
+const WRONG_HOST_KEY_B64 =
+  "AAAAC3NzaC1lZDI1NTE5AAAAIWrongWrongWrongWrongWrongWrongWrong99999";
+
 function resetMockState() {
   mockState = {
     connectConfigs: [],
@@ -306,6 +331,7 @@ function resetMockState() {
     nextHandle: 1,
     sftpOpens: 0,
     sftpShouldFail: null,
+    presentedHostKey: null,
   };
 }
 
@@ -417,6 +443,65 @@ describe("SshSandboxBackend — connect", () => {
     await expect(backend.shellExec(ctx, { command: "true" })).rejects.toThrow(
       /failed to create workspace root/,
     );
+  });
+});
+
+describe("SshSandboxBackend — host-key verification", () => {
+  it("connects when the pinned hostKey matches the presented host key", async () => {
+    queueExec({ exitCode: 0 });
+    mockState.presentedHostKey = Buffer.from(HOST_KEY_B64, "base64");
+    const backend = new SshSandboxBackend(
+      // A full `ssh-keyscan`-style line: the parser picks the base64 blob token.
+      { ...CONFIG, hostKey: `ssh-ed25519 ${HOST_KEY_B64}` },
+      CREDENTIALS,
+    );
+    await backend.shellExec(ctx, { command: "true" });
+
+    expect(mockState.connectConfigs).toHaveLength(1);
+    expect(typeof mockState.connectConfigs[0].hostVerifier).toBe("function");
+    // The root-resolution exec ran → the connection is live.
+    expect(mockState.execCommands.length).toBeGreaterThan(0);
+    // No MITM warning is emitted when a pin is enforced.
+    expect(logger.warn).not.toHaveBeenCalled();
+  });
+
+  it("rejects the connection with a clear error when the pin mismatches", async () => {
+    // A bare base64 blob (single token) is also accepted as a pin.
+    mockState.presentedHostKey = Buffer.from(HOST_KEY_B64, "base64");
+    const backend = new SshSandboxBackend(
+      { ...CONFIG, hostKey: WRONG_HOST_KEY_B64 },
+      CREDENTIALS,
+    );
+    await expect(backend.shellExec(ctx, { command: "true" })).rejects.toThrow(
+      /host-key verification failed/,
+    );
+    // No tools run — connect aborts before the root-resolution exec.
+    expect(mockState.execCommands).toHaveLength(0);
+  });
+
+  it("connects without a hostVerifier and warns exactly once when no hostKey is pinned", async () => {
+    queueExec({ exitCode: 0 });
+    const backend = new SshSandboxBackend(CONFIG, CREDENTIALS);
+    await backend.shellExec(ctx, { command: "true" });
+
+    expect(mockState.connectConfigs[0].hostVerifier).toBeUndefined();
+    expect(logger.warn).toHaveBeenCalledTimes(1);
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({ host: "ssh.example.com" }),
+      expect.stringContaining("WITHOUT host-key verification"),
+    );
+  });
+
+  it("throws a clear error when the pinned hostKey cannot be parsed", async () => {
+    const backend = new SshSandboxBackend(
+      { ...CONFIG, hostKey: "# not a key" },
+      CREDENTIALS,
+    );
+    await expect(backend.shellExec(ctx, { command: "true" })).rejects.toThrow(
+      /hostKey/,
+    );
+    // Never even attempted to connect.
+    expect(mockState.connectConfigs).toHaveLength(0);
   });
 });
 

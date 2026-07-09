@@ -65,9 +65,11 @@ export const sshSandboxConfigSchema = z
     // relative value is resolved against the login `$HOME`; an absolute value is
     // used verbatim.
     rootDir: z.string().min(1).optional(),
-    // Accepted now for forward-compatibility; strict host-key verification is a
-    // follow-up slice (ADR-0012). This slice connects with a loud MITM warning
-    // when it is absent — the shipped fallback.
+    // Optional host-key pin (ADR-0012). When set, the presented host key is
+    // strictly verified against it and a mismatch aborts the connection; when
+    // absent, we connect with a loud MITM warning (the frictionless fallback).
+    // Accepts `ssh-keyscan`/known_hosts output (`[host] <type> <base64>`) or a
+    // bare base64 key blob — see parseHostKeyPin.
     hostKey: z.string().min(1).optional(),
   })
   .strict();
@@ -246,6 +248,40 @@ async function sftpReadCapped(
   return buf.subarray(0, total);
 }
 
+// Parse an operator-supplied host-key pin to the raw public-key blob bytes that
+// ssh2's `hostVerifier` presents (with no `hostHash` set, it receives the raw
+// key Buffer). Accepts three shapes: a full `ssh-keyscan` / known_hosts line
+// (`[host] <type> <base64> [comment]`), a `<type> <base64>` pair, or a bare
+// base64 blob. Every SSH public-key blob base64-encodes a length-prefixed
+// algorithm name, so the blob token always begins with `AAAA` — we pick that
+// token when the input has several, else treat the sole token as the blob.
+// Throws on input we cannot turn into a non-empty key so a misconfigured pin
+// surfaces at connect time rather than silently failing every handshake.
+function parseHostKeyPin(pin: string): Buffer {
+  const firstLine = pin
+    .split("\n")
+    .map((line) => line.trim())
+    .find((line) => line.length > 0 && !line.startsWith("#"));
+  if (!firstLine) {
+    throw new Error("SSH sandbox: `hostKey` is empty or comment-only");
+  }
+  const tokens = firstLine.split(/\s+/);
+  const blob =
+    tokens.find((t) => t.startsWith("AAAA")) ??
+    (tokens.length === 1 ? tokens[0] : undefined);
+  if (!blob) {
+    throw new Error(
+      "SSH sandbox: could not find a base64 host key in `hostKey` " +
+        "(expected `ssh-keyscan` output or a base64 key blob)",
+    );
+  }
+  const decoded = Buffer.from(blob, "base64");
+  if (decoded.length === 0) {
+    throw new Error("SSH sandbox: `hostKey` did not decode to a valid key");
+  }
+  return decoded;
+}
+
 export class SshSandboxBackend implements SandboxBackend {
   private config: SshSandboxConfig;
   private credentials: SshSandboxCredentials;
@@ -294,22 +330,17 @@ export class SshSandboxBackend implements SandboxBackend {
     const { host, port, user, hostKey } = this.config;
     const { privateKey, passphrase } = this.credentials;
 
-    if (!hostKey) {
-      // Shipped fallback for this slice (ADR-0012): connect without host-key
-      // verification and warn loudly. Public-key auth still prevents credential
-      // theft by an impostor host; the residual risk is session/output exposure
-      // to a MITM. Pin `hostKey` on internet-facing hosts.
+    // Parse the pin up front so a malformed value fails loudly here rather than
+    // silently rejecting every handshake. Absent → connect with a loud MITM
+    // warning (the frictionless fallback for localhost/dev; ADR-0012).
+    const expectedHostKey = hostKey ? parseHostKeyPin(hostKey) : null;
+    if (!expectedHostKey) {
+      // Public-key auth still prevents credential theft by an impostor host; the
+      // residual risk is session/output exposure to a MITM. Pin `hostKey` on
+      // internet-facing hosts.
       logger.warn(
         { host, port },
         "SSH sandbox connecting WITHOUT host-key verification — session and injected env are exposed to a MITM. Set `hostKey` to pin the host.",
-      );
-    } else {
-      // hostKey is accepted but strict verification is not wired yet — a
-      // follow-up slice. Be explicit so an operator who pinned a key is not
-      // misled into thinking it is enforced.
-      logger.warn(
-        { host, port },
-        "SSH sandbox `hostKey` is set but strict verification is not yet enforced (follow-up slice); connecting without pinning.",
       );
     }
 
@@ -322,9 +353,32 @@ export class SshSandboxBackend implements SandboxBackend {
       ...(passphrase ? { passphrase } : {}),
     };
 
+    // Strict host-key pinning (ADR-0012). ssh2 calls this synchronous verifier
+    // with the presented raw key blob during the handshake; returning false
+    // aborts with a handshake `error`. `hostKeyMismatch` lets onError turn that
+    // opaque failure into a clear, actionable message.
+    let hostKeyMismatch = false;
+    if (expectedHostKey) {
+      const expected = expectedHostKey;
+      connectConfig.hostVerifier = (presented: Buffer): boolean => {
+        const match = presented.equals(expected);
+        if (!match) hostKeyMismatch = true;
+        return match;
+      };
+    }
+
     await new Promise<void>((resolve, reject) => {
       const onError = (err: Error) => {
         client.removeListener("ready", onReady);
+        if (hostKeyMismatch) {
+          reject(
+            new Error(
+              `SSH sandbox: host-key verification failed for ${host}:${port ?? DEFAULT_SSH_PORT} — the presented host key does not match the pinned \`hostKey\`. Refusing to connect.`,
+              { cause: err },
+            ),
+          );
+          return;
+        }
         reject(err);
       };
       const onReady = () => {
