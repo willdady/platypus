@@ -271,7 +271,11 @@ import {
   sshSandboxCredentialsSchema,
 } from "./backend.ts";
 import { logger } from "../../logger.ts";
-import { MAX_READ_BYTES, MAX_SHELL_OUTPUT_BYTES } from "../../sandbox/index.ts";
+import {
+  MAX_LIST_ENTRIES,
+  MAX_READ_BYTES,
+  MAX_SHELL_OUTPUT_BYTES,
+} from "../../sandbox/index.ts";
 import type { SandboxContext } from "../../sandbox/types.ts";
 
 const ctx: SandboxContext = {
@@ -784,9 +788,180 @@ describe("SshSandboxBackend — SFTP session lifecycle", () => {
   });
 });
 
-describe("SshSandboxBackend — fs.list still deferred", () => {
-  it("fsList throws not-implemented", async () => {
+// Build a `find -printf '%y\t%s\t%P\n'` line for the mocked exec output.
+function findLine(type: "f" | "d" | "l", size: number, path: string): string {
+  return `${type}\t${size}\t${path}`;
+}
+
+// The find command is the second exec (execCommands[0] is the connect-time root
+// resolution). Grab it for command-shape assertions.
+const lastFindCommand = () =>
+  mockState.execCommands[mockState.execCommands.length - 1];
+
+describe("SshSandboxBackend — fs.list (exec find)", () => {
+  it("lists a flat directory non-recursively with type and size", async () => {
+    queueExec({
+      stdout:
+        [
+          findLine("f", 12, "a.txt"),
+          findLine("d", 4096, "sub"),
+          findLine("f", 0, "empty.txt"),
+        ].join("\n") + "\n",
+      exitCode: 0,
+    });
     const backend = new SshSandboxBackend(CONFIG, CREDENTIALS);
-    await expect(backend.fsList(ctx, {})).rejects.toThrow(/not yet supported/);
+    const res = await backend.fsList(ctx, {});
+
+    expect(res.truncated).toBe(false);
+    expect(res.entries).toEqual([
+      { path: "a.txt", type: "file", size: 12 },
+      { path: "sub", type: "dir", size: 4096 },
+      { path: "empty.txt", type: "file", size: 0 },
+    ]);
+
+    // Non-recursive → -maxdepth 1; roots at the resolved workspace root.
+    const cmd = lastFindCommand();
+    expect(cmd).toBe(
+      `find '${ROOT}' -maxdepth 1 -mindepth 1 -printf '%y\\t%s\\t%P\\n'`,
+    );
+  });
+
+  it("lists recursively (no -maxdepth) under a subpath", async () => {
+    queueExec({
+      stdout:
+        [findLine("f", 3, "x"), findLine("f", 3, "d/y")].join("\n") + "\n",
+      exitCode: 0,
+    });
+    const backend = new SshSandboxBackend(CONFIG, CREDENTIALS);
+    const res = await backend.fsList(ctx, { path: "src", recursive: true });
+
+    expect(res.entries.map((e) => e.path)).toEqual(["x", "d/y"]);
+    const cmd = lastFindCommand();
+    expect(cmd).toBe(
+      `find '${ROOT}/src' -mindepth 1 -printf '%y\\t%s\\t%P\\n'`,
+    );
+    expect(cmd).not.toContain("-maxdepth");
+  });
+
+  it("ignores symlinks / sockets / devices (only file and dir)", async () => {
+    queueExec({
+      stdout:
+        [
+          findLine("f", 1, "real.txt"),
+          findLine("l", 7, "link"),
+          "s\t0\tsock",
+        ].join("\n") + "\n",
+      exitCode: 0,
+    });
+    const backend = new SshSandboxBackend(CONFIG, CREDENTIALS);
+    const res = await backend.fsList(ctx, {});
+    expect(res.entries).toEqual([{ path: "real.txt", type: "file", size: 1 }]);
+  });
+
+  it("translates a bare glob to -name (single-quoted, no shell expansion)", async () => {
+    queueExec({ stdout: findLine("f", 5, "a.ts") + "\n", exitCode: 0 });
+    const backend = new SshSandboxBackend(CONFIG, CREDENTIALS);
+    await backend.fsList(ctx, { glob: "*.ts" });
+    const cmd = lastFindCommand();
+    expect(cmd).toContain("-name '*.ts'");
+    expect(cmd).not.toContain("-path");
+  });
+
+  it("translates a slashed glob to -path", async () => {
+    queueExec({ stdout: findLine("f", 5, "src/a.ts") + "\n", exitCode: 0 });
+    const backend = new SshSandboxBackend(CONFIG, CREDENTIALS);
+    await backend.fsList(ctx, { glob: "src/*.ts", recursive: true });
+    expect(lastFindCommand()).toContain("-path '*/src/*.ts'");
+  });
+
+  it("collapses ** to * for -path (documented lossy translation)", async () => {
+    queueExec({ stdout: "", exitCode: 0 });
+    const backend = new SshSandboxBackend(CONFIG, CREDENTIALS);
+    await backend.fsList(ctx, { glob: "**/*.ts", recursive: true });
+    expect(lastFindCommand()).toContain("-path '*/*/*.ts'");
+  });
+
+  it("truncates to MAX_LIST_ENTRIES and flags truncated", async () => {
+    const lines: string[] = [];
+    for (let i = 0; i < MAX_LIST_ENTRIES + 1; i++) {
+      lines.push(findLine("f", 1, `f${i}.txt`));
+    }
+    queueExec({ stdout: lines.join("\n") + "\n", exitCode: 0 });
+    const backend = new SshSandboxBackend(CONFIG, CREDENTIALS);
+    const res = await backend.fsList(ctx, { recursive: true });
+    expect(res.entries).toHaveLength(MAX_LIST_ENTRIES);
+    expect(res.truncated).toBe(true);
+  });
+
+  it("does not flag truncated at exactly MAX_LIST_ENTRIES entries", async () => {
+    const lines: string[] = [];
+    for (let i = 0; i < MAX_LIST_ENTRIES; i++) {
+      lines.push(findLine("f", 1, `f${i}.txt`));
+    }
+    queueExec({ stdout: lines.join("\n") + "\n", exitCode: 0 });
+    const backend = new SshSandboxBackend(CONFIG, CREDENTIALS);
+    const res = await backend.fsList(ctx, { recursive: true });
+    expect(res.entries).toHaveLength(MAX_LIST_ENTRIES);
+    expect(res.truncated).toBe(false);
+  });
+
+  it("single-quotes the list path so shell metacharacters cannot break out", async () => {
+    queueExec({ stdout: "", exitCode: 0 });
+    const backend = new SshSandboxBackend(CONFIG, CREDENTIALS);
+    // A metachar-laden path (schema rejects absolute/`..`, but quote defensively).
+    await backend.fsList(ctx, { path: `foo; rm -rf ~` });
+    const cmd = lastFindCommand();
+    // The whole path is inside one single-quoted argument.
+    expect(cmd).toBe(
+      `find '${ROOT}/foo; rm -rf ~' -maxdepth 1 -mindepth 1 -printf '%y\\t%s\\t%P\\n'`,
+    );
+  });
+
+  it("escapes an embedded single quote in the path", async () => {
+    queueExec({ stdout: "", exitCode: 0 });
+    const backend = new SshSandboxBackend(CONFIG, CREDENTIALS);
+    await backend.fsList(ctx, { path: `it's` });
+    // classic '\'' escape idiom, matching shQuote.
+    expect(lastFindCommand()).toContain(`find '${ROOT}/it'\\''s'`);
+  });
+
+  it("returns an empty list for an empty directory", async () => {
+    queueExec({ stdout: "", exitCode: 0 });
+    const backend = new SshSandboxBackend(CONFIG, CREDENTIALS);
+    const res = await backend.fsList(ctx, {});
+    expect(res.entries).toEqual([]);
+    expect(res.truncated).toBe(false);
+  });
+
+  it("emits partial results when find exits non-zero but printed rows", async () => {
+    queueExec({
+      stdout: findLine("f", 1, "readable.txt") + "\n",
+      stderr: "find: 'sub': Permission denied",
+      exitCode: 1,
+    });
+    const backend = new SshSandboxBackend(CONFIG, CREDENTIALS);
+    const res = await backend.fsList(ctx, { recursive: true });
+    expect(res.entries).toEqual([
+      { path: "readable.txt", type: "file", size: 1 },
+    ]);
+  });
+
+  it("throws when find fails with no output", async () => {
+    queueExec({
+      stdout: "",
+      stderr: "find: '/nope': No such file or directory",
+      exitCode: 1,
+    });
+    const backend = new SshSandboxBackend(CONFIG, CREDENTIALS);
+    await expect(backend.fsList(ctx, { path: "nope" })).rejects.toThrow(
+      /No such file or directory/,
+    );
+  });
+
+  it("omits size for a file with an unparseable size field", async () => {
+    queueExec({ stdout: "f\t?\tweird.txt\n", exitCode: 0 });
+    const backend = new SshSandboxBackend(CONFIG, CREDENTIALS);
+    const res = await backend.fsList(ctx, {});
+    expect(res.entries).toEqual([{ path: "weird.txt", type: "file" }]);
   });
 });
