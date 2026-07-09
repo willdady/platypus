@@ -5,6 +5,7 @@ import type {
 import { PLUGIN_API_VERSION } from "@platypuschat/plugin-sdk";
 import {
   DockerSandboxBackend,
+  dockerPluginConfigSchema,
   dockerSandboxConfigSchema,
   dockerSandboxCredentialsSchema,
   type DockerSandboxConfig,
@@ -23,6 +24,9 @@ const dockerBackend: SandboxBackendContribution<
 > = {
   backend: "docker",
   name: "Local Docker",
+  // Factory form (ADR-0013): the per-Workspace config schema is derived from the
+  // Operator's `allowedNetworks`, resolved by the loader against this plugin's
+  // deploy-time config (below) at load time.
   configSchema: dockerSandboxConfigSchema,
   credentialsSchema: dockerSandboxCredentialsSchema,
   create: (config, credentials) =>
@@ -33,6 +37,10 @@ export const plugin: PlatypusPlugin = {
   name: "@platypus/docker",
   version: "0.1.0",
   apiVersion: PLUGIN_API_VERSION,
+  // Plugin-level, Operator-owned config (ADR-0013): the network allowlist is
+  // declared here as `allowedNetworks` and consumed via PLATYPUS_PLUGIN_CONFIG.
+  // No credentialsSchema — Docker has no plugin-level secrets.
+  configSchema: dockerPluginConfigSchema,
   contributes: {
     sandboxBackends: [dockerBackend],
   },

@@ -40,8 +40,12 @@ export const PLUGIN_API_VERSION = 1 as const;
  * The oldest plugin API major core still accepts — one below the current major
  * (the "N−1" of the N-and-N−1 window). A plugin whose `apiVersion` is below this
  * targets a dropped major and is rejected at boot. See {@link PLUGIN_API_VERSION}.
+ *
+ * Floored at `1`: there is no major `0`, so at the first major (N = 1) the window
+ * collapses to `[1, 1]` rather than admitting a phantom `v0`. Once core reaches
+ * major 2 this becomes `1`, opening the genuine N−1 slot.
  */
-export const OLDEST_SUPPORTED_API_VERSION = PLUGIN_API_VERSION - 1;
+export const OLDEST_SUPPORTED_API_VERSION = Math.max(1, PLUGIN_API_VERSION - 1);
 
 /**
  * Runtime scope handed to a Tool set factory at Chat-turn time. This SDK is the
@@ -200,10 +204,34 @@ export interface SandboxBackend {
 }
 
 /**
+ * A contribution's per-Workspace `configSchema`: either a concrete Zod schema
+ * or a **factory** of the plugin's deploy-time config, resolved by the loader at
+ * load time into a concrete schema (see {@link SandboxBackendContribution}).
+ *
+ * The factory form lets a backend derive its per-Workspace validation from
+ * Operator-owned plugin config — e.g. `@platypus/docker` closes over the
+ * Operator's network allowlist so an out-of-allowlist `networks` entry is
+ * rejected at config-save time. This is **append-only** within the major API
+ * version: a plain schema stays valid, so backends that don't need plugin config
+ * are untouched. Core resolves the factory against the boot-validated {@link
+ * PluginConfigContext.config} before the three static `configSchema.safeParse`
+ * consumers (save route, teardown, tool resolver) ever see it — they always
+ * receive a concrete schema.
+ */
+export type SandboxConfigSchema<TConfig = unknown> =
+  z.ZodType<TConfig> | ((pluginConfig: unknown) => z.ZodType<TConfig>);
+
+/**
  * A single Sandbox-backend contribution — the payload core's internal
  * `registerSandboxBackend` accepts. `backend` is the discriminator stored in the
  * `sandbox.backend` column; `configSchema` / `credentialsSchema` validate the
  * per-Workspace jsonb columns before `create()` instantiates an adapter.
+ *
+ * `configSchema` may be a plain Zod schema or a {@link SandboxConfigSchema}
+ * factory of the plugin's deploy-time config (resolved at load, append-only).
+ * The factory receives the boot-validated {@link PluginConfigContext.config} as
+ * `unknown` — the same opaque shape `create()`'s `plugin` argument carries — and
+ * narrows it itself (a plugin knows its own config schema).
  */
 export interface SandboxBackendContribution<
   TConfig = unknown,
@@ -211,7 +239,7 @@ export interface SandboxBackendContribution<
 > {
   backend: string;
   name: string;
-  configSchema: z.ZodType<TConfig>;
+  configSchema: SandboxConfigSchema<TConfig>;
   credentialsSchema: z.ZodType<TCredentials>;
   /**
    * Instantiate the adapter. `config` / `credentials` are the per-Workspace
@@ -250,6 +278,20 @@ export interface PluginContributions {
  * {@link PluginConfigContext} into every contribution factory.
  */
 export interface PlatypusPlugin {
+  /**
+   * The plugin's identity — its config namespace and, for third-party plugins,
+   * the prefix core prepends to every contribution id (`${name}.${id}`).
+   *
+   * This is **distinct from the npm package specifier** an Operator lists in
+   * `PLATYPUS_PLUGINS`: a package published as `@acme/platypus-widgets` may set
+   * `name: "widgets"`, and its `greeting` tool set then registers as
+   * `widgets.greeting`. For a **third-party** plugin `name` MUST be a short,
+   * url-safe slug — lowercase letters, digits, and hyphens
+   * (`/^[a-z0-9]+(?:-[a-z0-9]+)*$/`) — so the prefixed id stays clean and
+   * unambiguous (no `.`, `/`, `@`, or whitespace to muddle the `name.id`
+   * boundary or a URL path). Core plugins are exempt: their `@platypus/*` names
+   * are logical ids reached through the built-in map and never used as a prefix.
+   */
   name: string;
   version: string;
   /**

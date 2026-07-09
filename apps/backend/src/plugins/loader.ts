@@ -6,9 +6,12 @@ import {
   type SandboxBackendContribution,
   type ToolSetContribution,
 } from "@platypuschat/plugin-sdk";
-import { BUILTIN_PLUGINS } from "./builtin.ts";
+import { ALWAYS_ON_PLUGINS, BUILTIN_PLUGINS } from "./builtin.ts";
 import { registerToolSet } from "../tools/index.ts";
-import { registerSandboxBackend } from "../sandbox/index.ts";
+import {
+  registerSandboxBackend,
+  type SandboxBackendRegistration,
+} from "../sandbox/index.ts";
 
 // Summary of one loaded plugin, for the boot log line and observability.
 export interface LoadedPlugin {
@@ -17,6 +20,15 @@ export interface LoadedPlugin {
   origin: "core" | "third-party";
   toolSetIds: string[];
   sandboxBackendIds: string[];
+  /**
+   * The plugin's boot-resolved, Operator-owned deploy-time **config** (never
+   * credentials), or `undefined` when the manifest declares no `configSchema`.
+   * Carried so the registry can serve it to request handlers that need a
+   * plugin's resolved config without re-parsing the environment — e.g. the
+   * Docker network-allowlist endpoint (ADR-0005/0013). The read-only `GET
+   * /plugins` catalog cherry-picks fields and never exposes this.
+   */
+  config?: unknown;
 }
 
 // A module that exports a plugin manifest. Values are `unknown` until validated.
@@ -37,6 +49,14 @@ export type PluginConfigMap = Record<string, RawPluginConfig>;
 export interface LoadPluginsOptions {
   /** Plugin names to load. Defaults to parsing `PLATYPUS_PLUGINS`. */
   pluginNames?: string[];
+  /**
+   * Core plugins loaded unconditionally, ahead of the gate-able list. Defaults
+   * to {@link ALWAYS_ON_PLUGINS} on the env-default path (when `pluginNames` is
+   * unset) and to `[]` when a caller supplies an explicit `pluginNames` (so the
+   * caller owns both lists). Listing any of these in the gate-able list is a
+   * fail-loud misconfiguration (they are not enable switches).
+   */
+  alwaysOnPlugins?: readonly string[];
   /** The core allowlist / static built-in map. Defaults to {@link BUILTIN_PLUGINS}. */
   builtinPlugins?: Record<string, () => Promise<PluginModule>>;
   /** Resolves a third-party plugin. Defaults to dynamic `import()`. */
@@ -160,9 +180,13 @@ const validateManifest = (name: string, mod: PluginModule): PlatypusPlugin => {
   if (typeof m.version !== "string" || m.version.length === 0) {
     throw new Error(`Plugin "${name}": manifest is missing a "version".`);
   }
-  if (typeof m.apiVersion !== "number" || !Number.isFinite(m.apiVersion)) {
+  if (
+    typeof m.apiVersion !== "number" ||
+    !Number.isInteger(m.apiVersion) ||
+    m.apiVersion < 1
+  ) {
     throw new Error(
-      `Plugin "${name}": manifest "apiVersion" must be a number.`,
+      `Plugin "${name}": manifest "apiVersion" must be a positive integer (it names a major API version).`,
     );
   }
   // Compatibility window (ADR-0013): apiVersion is a *minimum*. Core supports the
@@ -203,8 +227,14 @@ const validateManifest = (name: string, mod: PluginModule): PlatypusPlugin => {
 };
 
 /**
- * Load and register every plugin in the list. Runs before the HTTP server so
- * registries are populated by the time Chat turns resolve tools.
+ * Load and register every plugin. Runs before the HTTP server so registries are
+ * populated by the time Chat turns resolve tools.
+ *
+ * The always-on core set ({@link ALWAYS_ON_PLUGINS}) loads first and
+ * unconditionally — independent of `PLATYPUS_PLUGINS` (ADR-0013 amendment) — so
+ * a deployment always has Platypus's essential tools even with an empty list.
+ * `PLATYPUS_PLUGINS` gates only the deny-worthy core plugins and third-party
+ * ones. Listing an always-on plugin there is a fail-loud misconfiguration.
  *
  * Boot is fail-loud and all-or-nothing (ADR-0013): a plugin that can't resolve,
  * has an invalid manifest, whose deploy-time config/credentials fail schema
@@ -229,8 +259,32 @@ const validateManifest = (name: string, mod: PluginModule): PlatypusPlugin => {
 export async function loadPlugins(
   opts: LoadPluginsOptions = {},
 ): Promise<LoadedPlugin[]> {
-  const names =
+  const listedNames =
     opts.pluginNames ?? parsePluginList(process.env.PLATYPUS_PLUGINS);
+  // The always-on core set is injected on the env-default path (production,
+  // where `pluginNames` is unset). A caller that supplies an explicit
+  // `pluginNames` also owns its always-on set — it defaults to none — so tests
+  // and embedders load exactly what they pass unless they opt in via
+  // `alwaysOnPlugins`.
+  const alwaysOn =
+    opts.alwaysOnPlugins ??
+    (opts.pluginNames === undefined ? ALWAYS_ON_PLUGINS : []);
+
+  // Always-on core plugins load unconditionally, so listing one in
+  // PLATYPUS_PLUGINS is a misconfiguration — the list is not their enable switch.
+  // Fail-loud (ADR-0013 amendment): a listed always-on name aborts boot rather
+  // than double-loading (which would collide) or being silently ignored.
+  for (const listed of listedNames) {
+    if (alwaysOn.includes(listed)) {
+      throw new Error(
+        `Plugin "${listed}" is always-on (loaded unconditionally) and must not appear in PLATYPUS_PLUGINS. Remove it from the list.`,
+      );
+    }
+  }
+
+  // Compose the load order: the always-on core set first, then the Operator's
+  // gate-able list. Duplicate ids across the combined set still fail-loud below.
+  const names = [...alwaysOn, ...listedNames];
   const builtins = opts.builtinPlugins ?? BUILTIN_PLUGINS;
   const importPlugin =
     opts.importPlugin ??
@@ -269,6 +323,17 @@ export async function loadPlugins(
     }
 
     const manifest = validateManifest(name, mod);
+
+    // A third-party manifest name becomes the contribution-id prefix
+    // (`${name}.${id}`), so it must be a clean, url-safe slug — no `.`, `/`, `@`,
+    // or whitespace to muddle the `name.id` boundary or a URL path. Core plugins
+    // are exempt: their `@platypus/*` names are logical ids reached through the
+    // built-in map and never used as a prefix.
+    if (!isCore && !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(manifest.name)) {
+      throw new Error(
+        `Plugin "${name}": third-party manifest name "${manifest.name}" must be a url-safe slug (lowercase letters, digits, and hyphens) — it becomes the contribution-id prefix. Rename it in the manifest.`,
+      );
+    }
 
     // Resolve the plugin's deploy-time config/credentials once (fail-loud) and
     // share the single block across every contribution factory below — this
@@ -342,14 +407,29 @@ export async function loadPlugins(
         );
       }
 
+      // Resolve a factory-form configSchema against the boot-resolved plugin
+      // config so the three static `configSchema.safeParse` consumers (save
+      // route, teardown, tool resolver) always receive a concrete schema — they
+      // never see plugin config. A plain schema passes through untouched
+      // (append-only: plugin-config-agnostic backends are unaffected).
+      const resolvedConfigSchema =
+        typeof contribution.configSchema === "function"
+          ? contribution.configSchema(pluginCtx.config)
+          : contribution.configSchema;
+
       // Bind the same shared plugin config into create() so core's per-turn
       // callers (chat resolution, teardown) keep calling create(config,
       // credentials) with the per-Workspace values only. Third-party backends
       // also register under the namespaced discriminator, so the
       // `sandbox.backend` column resolves to the prefixed id (mirroring tool sets).
-      const boundContribution: SandboxBackendContribution = {
+      //
+      // Typed as the core registration (concrete configSchema): the factory form
+      // has been resolved away above, so what we register — and what the static
+      // safeParse consumers receive — is always a plain schema.
+      const boundContribution: SandboxBackendRegistration = {
         ...contribution,
         backend: effectiveBackend,
+        configSchema: resolvedConfigSchema,
         create: (config, credentials) =>
           contribution.create(config, credentials, pluginCtx),
       };
@@ -377,7 +457,24 @@ export async function loadPlugins(
       origin,
       toolSetIds,
       sandboxBackendIds,
+      // Carry the resolved deploy-time config (config only, never credentials)
+      // so request handlers can read it via the registry (ADR-0013).
+      config: pluginCtx.config,
     });
+  }
+
+  // Fail-loud (ADR-0013) on deploy-time config that targets no loaded plugin.
+  // PLATYPUS_PLUGIN_CONFIG is keyed by manifest name; a key matching nothing is
+  // almost always a typo or a plugin missing from PLATYPUS_PLUGINS — silently
+  // dropping the block (so a credential never reaches its factory) is exactly the
+  // kind of quiet misconfiguration the fail-loud boot posture exists to catch.
+  const loadedNames = new Set(loaded.map((p) => p.name));
+  for (const key of Object.keys(pluginConfig)) {
+    if (!loadedNames.has(key)) {
+      throw new Error(
+        `PLATYPUS_PLUGIN_CONFIG has an entry for "${key}", but no loaded plugin has that name. Config is keyed by the plugin's manifest name — check for a typo, or a plugin missing from PLATYPUS_PLUGINS.`,
+      );
+    }
   }
 
   return loaded;

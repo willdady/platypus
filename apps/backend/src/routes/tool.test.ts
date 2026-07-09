@@ -14,7 +14,7 @@ vi.mock("../tools/index.ts", () => ({
       },
     },
     // A core-internal static set (e.g. `sandbox`) with no owning plugin: it
-    // must annotate as `plugin: null`, not crash.
+    // must annotate as core/built-in, not crash.
     sandbox: {
       name: "Sandbox",
       category: "Sandbox",
@@ -75,12 +75,12 @@ describe("Tool Routes", () => {
         }),
       );
 
-      // A set with no owning plugin annotates as null, not undefined/omitted.
+      // A set with no owning plugin annotates as core/built-in, not blank.
       expect(json.results).toContainEqual(
         expect.objectContaining({
           id: "sandbox",
           name: "Sandbox",
-          plugin: null,
+          plugin: "core (built-in)",
         }),
       );
 

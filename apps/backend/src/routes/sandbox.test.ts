@@ -19,6 +19,19 @@ registerSandboxBackend({
   },
 });
 
+// A backend whose credentials schema requires a field, so the route's
+// credentials validation (ADR-0012 / ADR-0013) has something to reject against.
+const CREDS_BACKEND = "test-creds";
+registerSandboxBackend({
+  backend: CREDS_BACKEND,
+  name: "Test Creds",
+  configSchema: z.object({}).strict(),
+  credentialsSchema: z.object({ privateKey: z.string().min(1) }).strict(),
+  create: () => {
+    throw new Error("not used in this test");
+  },
+});
+
 describe("Sandbox Routes", () => {
   beforeEach(() => {
     resetMockDb();
@@ -113,6 +126,30 @@ describe("Sandbox Routes", () => {
       expect(body).not.toHaveProperty("credentials");
       expect(body.id).toBe("sbx-1");
       expect(body.backend).toBe("docker");
+    });
+
+    it("returns 400 when credentials fail the backend's schema", async () => {
+      mockSession();
+      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]);
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-1", organizationId: "org-1" },
+      ]);
+
+      const res = await app.request(baseUrl, {
+        method: "POST",
+        body: JSON.stringify({
+          workspaceId,
+          name: "Creds backend",
+          backend: CREDS_BACKEND,
+          config: {},
+          credentials: {}, // missing required privateKey
+        }),
+        headers: { "Content-Type": "application/json" },
+      });
+
+      expect(res.status).toBe(400);
+      const body = (await res.json()) as Record<string, unknown>;
+      expect(body.error).toMatch(/Invalid sandbox credentials/);
     });
 
     it("returns 409 when a sandbox already exists for the workspace", async () => {

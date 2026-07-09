@@ -15,8 +15,12 @@ describe("@platypuschat/plugin-sdk", () => {
     expect(PLUGIN_API_VERSION).toBe(1);
   });
 
-  it("supports exactly one previous major (N and N−1)", () => {
-    expect(OLDEST_SUPPORTED_API_VERSION).toBe(PLUGIN_API_VERSION - 1);
+  it("supports one previous major (N and N−1), floored at 1 (no phantom v0)", () => {
+    expect(OLDEST_SUPPORTED_API_VERSION).toBe(
+      Math.max(1, PLUGIN_API_VERSION - 1),
+    );
+    // There is no major 0, so the oldest supported major is never below 1.
+    expect(OLDEST_SUPPORTED_API_VERSION).toBeGreaterThanOrEqual(1);
   });
 
   it("accepts a well-formed manifest with a static-map tool set", () => {

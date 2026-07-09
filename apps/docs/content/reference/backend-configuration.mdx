@@ -31,10 +31,10 @@ For a guided walkthrough of configuring a deployment, see
 
 ## Plugins
 
-| Variable                 | Purpose                                                                                                                                                                                                                                                                                                                                          | Default                 | Required |
-| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------- | -------- |
-| `PLATYPUS_PLUGINS`       | Comma-separated list of plugins to load and enable at boot (core built-ins included). List membership both loads _and_ enables a plugin. Empty ⇒ no plugin-provided tools. Fail-loud at boot.                                                                                                                                                     | `@platypus/tools-basic` | No       |
-| `PLATYPUS_PLUGIN_CONFIG` | Deploy-time, Operator-owned plugin config/credentials as a JSON object keyed by plugin name, each `{ "config": {…}, "credentials": {…} }`. Validated at boot against the plugin's manifest schemas (fail-loud). One block is shared deployment-wide across all of a plugin's contributions and tenants. Distinct from per-Workspace Sandbox config. | _(unset)_               | No       |
+| Variable                 | Purpose                                                                                                                                                                                                                                                                                                                                                                                                                                                                           | Default               | Required |
+| ------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------- | -------- |
+| `PLATYPUS_PLUGINS`       | Comma-separated list of the **gate-able** plugins to load and enable at boot (deny-worthy core plugins + third-party). The always-on core tool sets (`@platypus/tools-basic`, `@platypus/tools-platform`) load unconditionally and must **not** be listed (listing one is fail-loud). List membership both loads _and_ enables a gate-able plugin. Empty ⇒ always-on core tool sets only (never zero tools). Fail-loud at boot.                                                   | `@platypus/web-fetch` | No       |
+| `PLATYPUS_PLUGIN_CONFIG` | Deploy-time, Operator-owned plugin config/credentials as a JSON object keyed by plugin name (the manifest `name`; a third-party name is a slug, not the npm specifier), each `{ "config": {…}, "credentials": {…} }`. Validated at boot against the plugin's manifest schemas (fail-loud); a key matching no loaded plugin is also fail-loud. One block is shared deployment-wide across all of a plugin's contributions and tenants. Distinct from per-Workspace Sandbox config. | _(unset)_             | No       |
 
 See [Extending → the plugin model](/extending#the-plugin-model) and
 [Configuration → Plugins](/self-hosting/configuration#plugins) (incl.
@@ -88,10 +88,15 @@ run sooner.
 
 ## Tools
 
-| Variable                       | Purpose                                                                    | Default                 | Required |
-| ------------------------------ | -------------------------------------------------------------------------- | ----------------------- | -------- |
-| `FETCH_TOOL_IGNORE_ROBOTS_TXT` | Set `true` to skip `robots.txt` checks when the fetch tool retrieves URLs. | `false`                 | No       |
-| `FRONTEND_URL`                 | Frontend URL used to build resource links inside tool responses.           | `http://localhost:3001` | No       |
+| Variable       | Purpose                                                          | Default                 | Required |
+| -------------- | ---------------------------------------------------------------- | ----------------------- | -------- |
+| `FRONTEND_URL` | Frontend URL used to build resource links inside tool responses. | `http://localhost:3001` | No       |
+
+`robots.txt` handling for the fetch tool moved to plugin config: set
+`config.ignoreRobotsTxt` on `@platypus/web-fetch` via `PLATYPUS_PLUGIN_CONFIG`
+(see [Plugins](#plugins)) — e.g.
+`PLATYPUS_PLUGIN_CONFIG={"@platypus/web-fetch":{"config":{"ignoreRobotsTxt":true}}}`.
+The former `FETCH_TOOL_IGNORE_ROBOTS_TXT` env var is removed.
 
 ## Storage
 
@@ -111,14 +116,43 @@ is the production option.
 
 ## Sandbox
 
-The Docker reference Sandbox adapter. Disabled by default and scoped to
-development / single-node self-hosting only. Enable it by listing
-`@platypus/docker` in `PLATYPUS_PLUGINS` (it ships as a core plugin — see
-[Plugins](#plugins) above); this requires a reachable Docker daemon and the
-`compose.sandbox.yaml` overlay. See
-[ADR-0003](https://github.com/willdady/platypus/blob/main/docs/adr/0003-docker-reference-sandbox-adapter-socket-mount.md)
-and the [Extending](/extending#sandbox-backends) section.
+Platypus ships two reference Sandbox adapters, both **off by default** and each
+enabled by listing its plugin in `PLATYPUS_PLUGINS` (both ship as core plugins —
+see [Plugins](#plugins) above). Adding the name both loads _and_ registers the
+backend type; omit it and that backend can't be selected at all. See the
+[Extending](/extending#sandbox-backends) section and
+[Sandbox infrastructure](/self-hosting/sandbox).
 
-| Variable                                   | Purpose                                                                                                                                            | Default   | Required |
-| ------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------- | --------- | -------- |
-| `PLATYPUS_SANDBOX_DOCKER_ALLOWED_NETWORKS` | Comma-separated Docker networks a Sandbox may attach to. Admins select a per-Sandbox subset; unset/empty means none are attachable (default-deny). | _(unset)_ | No       |
+- **Docker** (`@platypus/docker`) — one container per Workspace via the host's
+  Docker daemon. Scoped to development / single-node self-hosting; requires a
+  reachable Docker daemon and the `compose.sandbox.yaml` overlay. See
+  [ADR-0003](https://github.com/willdady/platypus/blob/main/docs/adr/0003-docker-reference-sandbox-adapter-socket-mount.md).
+- **SSH** (`@platypus/ssh`) — attaches to a pre-existing, operator-owned host
+  over SSH (bring-your-own-host). The one backend viable in horizontally-scaled
+  deployments, where Docker cannot run. See
+  [ADR-0012](https://github.com/willdady/platypus/blob/main/docs/adr/0012-ssh-reference-sandbox-byo-host-adapter.md).
+
+### Docker
+
+The Docker backend takes **no dedicated deployment environment variables**. Its
+Operator network allowlist moved onto plugin config: set `config.allowedNetworks`
+on `@platypus/docker` via `PLATYPUS_PLUGIN_CONFIG` (see [Plugins](#plugins)) — a
+JSON array of Docker networks a Sandbox may attach to. Admins select a
+per-Sandbox subset of that list; unset/empty means none are attachable
+(default-deny). For example:
+
+```
+PLATYPUS_PLUGIN_CONFIG={"@platypus/docker":{"config":{"allowedNetworks":["shared-services","public-tools"]}}}
+```
+
+The former `PLATYPUS_SANDBOX_DOCKER_ALLOWED_NETWORKS` env var is removed.
+
+### SSH
+
+The SSH backend takes **no deployment environment variables**. Its entire
+connection surface — host, port, user, workspace root, optional host-key pin, and
+the private-key credential — is **per-Workspace** Sandbox configuration set in the
+app by an Org Admin, not env vars. See
+[Sandbox infrastructure](/self-hosting/sandbox) for the setup narrative and the
+security model (notably: no resource limits and no `networks`/`extraHosts`
+reachability model).

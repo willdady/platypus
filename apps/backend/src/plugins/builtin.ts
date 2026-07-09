@@ -16,4 +16,23 @@ export const BUILTIN_PLUGINS: Record<
   "@platypus/web-fetch": () => import("./web-fetch/index.ts"),
   "@platypus/tools-platform": () => import("./tools-platform/index.ts"),
   "@platypus/docker": () => import("./docker/index.ts"),
+  "@platypus/ssh": () => import("./ssh/index.ts"),
 };
+
+// The always-on core set (ADR-0013 amendment): these core plugins load
+// unconditionally, independent of `PLATYPUS_PLUGINS`. They carry Platypus's own
+// essential tools — pure utilities (`tools-basic`) and the domain Tool sets
+// (`tools-platform`) — none of which an Operator would plausibly want to deny in
+// isolation, so gating them behind the list only invites the "forgot to list →
+// silently no tools" footgun. They remain full plugins (boot log, `GET /plugins`,
+// catalog annotations); the list gates only the deny-worthy plugins
+// (`@platypus/web-fetch` egress, `@platypus/docker` infra) and third-party ones.
+//
+// A name here is therefore rejected fail-loud if it also appears in
+// `PLATYPUS_PLUGINS` — it is not a valid enable switch, so listing it is a
+// misconfiguration, not a redundancy. Every entry must be a key of
+// {@link BUILTIN_PLUGINS}.
+export const ALWAYS_ON_PLUGINS: readonly string[] = [
+  "@platypus/tools-basic",
+  "@platypus/tools-platform",
+];

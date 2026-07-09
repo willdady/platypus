@@ -88,17 +88,14 @@ describe("loadPlugins — apiVersion compatibility window (N and N−1)", () => 
       builtinPlugins: {},
       importPlugin: () =>
         Promise.resolve({
-          plugin: manifest(
-            "@exact/plugin",
-            [toolSet("exact")],
-            PLUGIN_API_VERSION,
-          ),
+          plugin: manifest("exactpkg", [toolSet("exact")], PLUGIN_API_VERSION),
         }),
       register,
     });
-    // Third-party ids are namespaced by the manifest name.
-    expect(calls.map((c) => c.id)).toEqual(["@exact/plugin.exact"]);
-    expect(loaded[0].name).toBe("@exact/plugin");
+    // Third-party ids are namespaced by the manifest name (a slug), not the
+    // list specifier.
+    expect(calls.map((c) => c.id)).toEqual(["exactpkg.exact"]);
+    expect(loaded[0].name).toBe("exactpkg");
   });
 
   it("accepts a plugin on the previous major (N−1)", async () => {
@@ -109,15 +106,15 @@ describe("loadPlugins — apiVersion compatibility window (N and N−1)", () => 
       importPlugin: () =>
         Promise.resolve({
           plugin: manifest(
-            "@nminus1/plugin",
+            "nminus1",
             [toolSet("older")],
             OLDEST_SUPPORTED_API_VERSION,
           ),
         }),
       register,
     });
-    expect(calls.map((c) => c.id)).toEqual(["@nminus1/plugin.older"]);
-    expect(loaded[0].name).toBe("@nminus1/plugin");
+    expect(calls.map((c) => c.id)).toEqual(["nminus1.older"]);
+    expect(loaded[0].name).toBe("nminus1");
   });
 
   it("rejects (fail-loud) a plugin needing a newer API than core provides", async () => {
@@ -161,10 +158,11 @@ describe("loadPlugins — apiVersion compatibility window (N and N−1)", () => 
         register,
       }),
     ).rejects.toThrow(
-      new RegExp(
-        `@ancient/plugin.*targets API v${OLDEST_SUPPORTED_API_VERSION - 1}.*below the oldest`,
-        "s",
-      ),
+      // At core major 1 the oldest-supported floor is 1, so there is no valid
+      // positive-integer major below it — a sub-floor value (0) is rejected by
+      // the positive-integer guard. The "below the oldest" branch only becomes
+      // reachable once core reaches major ≥ 2.
+      /@ancient\/plugin.*apiVersion.*must be a positive integer/s,
     );
   });
 });
@@ -215,7 +213,7 @@ describe("loadPlugins", () => {
     const { register, calls } = makeRegister();
     const importPlugin = vi.fn((_name: string) =>
       Promise.resolve({
-        plugin: manifest("@third/party", [toolSet("custom")]),
+        plugin: manifest("thirdparty", [toolSet("custom")]),
       }),
     );
 
@@ -229,9 +227,9 @@ describe("loadPlugins", () => {
     expect(importPlugin).toHaveBeenCalledWith("@third/party");
     // Third-party ids are auto-prefixed with the manifest name at load; authors
     // write the bare `custom`.
-    expect(calls.map((c) => c.id)).toEqual(["@third/party.custom"]);
+    expect(calls.map((c) => c.id)).toEqual(["thirdparty.custom"]);
     expect(loaded[0].origin).toBe("third-party");
-    expect(loaded[0].toolSetIds).toEqual(["@third/party.custom"]);
+    expect(loaded[0].toolSetIds).toEqual(["thirdparty.custom"]);
   });
 
   it("exercises both resolution paths in one load", async () => {
@@ -244,7 +242,7 @@ describe("loadPlugins", () => {
     };
     const importPlugin = vi.fn((_name: string) =>
       Promise.resolve({
-        plugin: manifest("@third/party", [toolSet("custom")]),
+        plugin: manifest("thirdparty", [toolSet("custom")]),
       }),
     );
 
@@ -258,7 +256,7 @@ describe("loadPlugins", () => {
     expect(importPlugin).toHaveBeenCalledTimes(1);
     expect(importPlugin).toHaveBeenCalledWith("@third/party");
     // Core keeps its bare id; third-party is prefixed with its manifest name.
-    expect(calls.map((c) => c.id)).toEqual(["time", "@third/party.custom"]);
+    expect(calls.map((c) => c.id)).toEqual(["time", "thirdparty.custom"]);
     expect(loaded.map((p) => p.origin)).toEqual(["core", "third-party"]);
   });
 
@@ -488,6 +486,84 @@ describe("loadPlugins — sandbox backends", () => {
       }),
     ).rejects.toThrow(/@bad\/plugin.*sandboxBackends.*array/s);
   });
+
+  it("resolves a factory-form configSchema against the plugin config at load", async () => {
+    const { register } = makeRegister();
+    const { registerSandbox, calls } = makeSandboxRegister();
+
+    // A backend whose per-Workspace configSchema is a FACTORY of the plugin's
+    // resolved deploy-time config: it closes over an operator allowlist and
+    // rejects out-of-allowlist values (mirrors @platypus/docker). The loader
+    // must resolve it to a concrete schema before registering — the registry and
+    // core's static safeParse consumers only ever see plain schemas.
+    const factoryBackend: SandboxBackendContribution = {
+      backend: "fenced",
+      name: "Fenced",
+      configSchema: (pluginConfig) => {
+        const { allowed } = pluginConfig as { allowed: string[] };
+        return z
+          .object({ net: z.string() })
+          .refine((c) => allowed.includes(c.net), { message: "not allowed" });
+      },
+      credentialsSchema: z.object({}),
+      create: () => ({}) as unknown as SandboxBackend,
+    };
+
+    await loadPlugins({
+      pluginNames: ["fencedpkg"],
+      builtinPlugins: {},
+      importPlugin: () =>
+        Promise.resolve({
+          plugin: {
+            name: "fenced",
+            version: "0.1.0",
+            apiVersion: 1,
+            configSchema: z.object({
+              allowed: z.array(z.string()).default([]),
+            }),
+            contributes: { sandboxBackends: [factoryBackend] },
+          } satisfies PlatypusPlugin,
+        }),
+      register,
+      registerSandbox,
+      pluginConfig: { fenced: { config: { allowed: ["ok"] } } },
+    });
+
+    const [registered] = calls;
+    // Registered as a CONCRETE schema (the factory is resolved away), reflecting
+    // the resolved plugin config.
+    expect(typeof registered.configSchema).not.toBe("function");
+    const schema = registered.configSchema as z.ZodType;
+    expect(schema.safeParse({ net: "ok" }).success).toBe(true);
+    expect(schema.safeParse({ net: "blocked" }).success).toBe(false);
+  });
+
+  it("registers a plain (non-factory) configSchema unchanged", async () => {
+    const { register } = makeRegister();
+    const { registerSandbox, calls } = makeSandboxRegister();
+    const plain = z.object({ a: z.string() });
+    const backend: SandboxBackendContribution = {
+      backend: "plain",
+      name: "Plain",
+      configSchema: plain,
+      credentialsSchema: z.object({}),
+      create: () => ({}) as unknown as SandboxBackend,
+    };
+
+    await loadPlugins({
+      pluginNames: ["plainpkg"],
+      builtinPlugins: {},
+      importPlugin: () =>
+        Promise.resolve({
+          plugin: sandboxManifest("plainpkg", [backend]),
+        }),
+      register,
+      registerSandbox,
+    });
+
+    // A plain schema passes through by identity — append-only compatibility.
+    expect(calls[0].configSchema).toBe(plain);
+  });
 });
 
 describe("parsePluginConfig", () => {
@@ -595,14 +671,14 @@ describe("loadPlugins — deploy-time plugin config injection", () => {
     };
 
     await loadPlugins({
-      pluginNames: ["@acme/cloud"],
+      pluginNames: ["acmecloud"],
       builtinPlugins: {},
       importPlugin: () =>
-        Promise.resolve({ plugin: configuredManifest("@acme/cloud", seen) }),
+        Promise.resolve({ plugin: configuredManifest("acmecloud", seen) }),
       register,
       registerSandbox,
       pluginConfig: {
-        "@acme/cloud": {
+        acmecloud: {
           config: { region: "eu" },
           credentials: { apiToken: "tok_123" },
         },
@@ -611,7 +687,7 @@ describe("loadPlugins — deploy-time plugin config injection", () => {
 
     // Tool-set factory: invoked as core would at Chat-turn time, with ctx only.
     // Third-party ids are namespaced, so the registry key is prefixed.
-    const toolsFactory = registered["@acme/cloud.managed"].tools;
+    const toolsFactory = registered["acmecloud.managed"].tools;
     expect(typeof toolsFactory).toBe("function");
     await (toolsFactory as (ctx: unknown) => unknown)({
       workspaceId: "w",
@@ -646,23 +722,21 @@ describe("loadPlugins — deploy-time plugin config injection", () => {
     const sandboxCalls: SandboxBackendContribution[] = [];
 
     await loadPlugins({
-      pluginNames: ["@acme/cloud"],
+      pluginNames: ["acmecloud"],
       builtinPlugins: {},
       importPlugin: () =>
-        Promise.resolve({ plugin: configuredManifest("@acme/cloud", seen) }),
+        Promise.resolve({ plugin: configuredManifest("acmecloud", seen) }),
       register,
       registerSandbox: (c) => sandboxCalls.push(c),
       pluginConfig: {
-        "@acme/cloud": {
+        acmecloud: {
           config: { region: "eu" },
           credentials: { apiToken: "tok_123" },
         },
       },
     });
 
-    await (
-      registered["@acme/cloud.managed"].tools as (ctx: unknown) => unknown
-    )({
+    await (registered["acmecloud.managed"].tools as (ctx: unknown) => unknown)({
       workspaceId: "w",
       agentId: "a",
       orgId: "o",
@@ -679,41 +753,41 @@ describe("loadPlugins — deploy-time plugin config injection", () => {
   it("aborts (fail-loud) when deploy-time credentials fail validation", async () => {
     await expect(
       loadPlugins({
-        pluginNames: ["@acme/cloud"],
+        pluginNames: ["acmecloud"],
         builtinPlugins: {},
         importPlugin: () =>
-          Promise.resolve({ plugin: configuredManifest("@acme/cloud", {}) }),
+          Promise.resolve({ plugin: configuredManifest("acmecloud", {}) }),
         register: () => {},
         registerSandbox: () => {},
         pluginConfig: {
-          "@acme/cloud": {
+          acmecloud: {
             config: { region: "eu" },
             // apiToken missing → credentialsSchema rejects.
             credentials: {},
           },
         },
       }),
-    ).rejects.toThrow(/@acme\/cloud.*credentials failed validation/s);
+    ).rejects.toThrow(/acmecloud.*credentials failed validation/s);
   });
 
   it("aborts (fail-loud) when deploy-time config fails validation", async () => {
     await expect(
       loadPlugins({
-        pluginNames: ["@acme/cloud"],
+        pluginNames: ["acmecloud"],
         builtinPlugins: {},
         importPlugin: () =>
-          Promise.resolve({ plugin: configuredManifest("@acme/cloud", {}) }),
+          Promise.resolve({ plugin: configuredManifest("acmecloud", {}) }),
         register: () => {},
         registerSandbox: () => {},
         pluginConfig: {
-          "@acme/cloud": {
+          acmecloud: {
             // region missing → configSchema rejects.
             config: {},
             credentials: { apiToken: "tok_123" },
           },
         },
       }),
-    ).rejects.toThrow(/@acme\/cloud.*config failed validation/s);
+    ).rejects.toThrow(/acmecloud.*config failed validation/s);
   });
 
   it("passes undefined config/credentials to plugins declaring no schemas", async () => {
@@ -721,12 +795,12 @@ describe("loadPlugins — deploy-time plugin config injection", () => {
     const registered: Record<string, Omit<ToolSetContribution, "id">> = {};
 
     await loadPlugins({
-      pluginNames: ["@no/schema"],
+      pluginNames: ["noschema"],
       builtinPlugins: {},
       importPlugin: () =>
         Promise.resolve({
           plugin: {
-            name: "@no/schema",
+            name: "noschema",
             version: "0.1.0",
             apiVersion: 1,
             contributes: {
@@ -749,7 +823,7 @@ describe("loadPlugins — deploy-time plugin config injection", () => {
       },
     });
 
-    await (registered["@no/schema.plain"].tools as (ctx: unknown) => unknown)({
+    await (registered["noschema.plain"].tools as (ctx: unknown) => unknown)({
       workspaceId: "w",
       agentId: "a",
       orgId: "o",
@@ -769,7 +843,7 @@ describe("loadPlugins — example third-party plugin", () => {
     const sandboxCalls: SandboxBackendContribution[] = [];
 
     const loaded = await loadPlugins({
-      pluginNames: ["@example/cloud-sandbox"],
+      pluginNames: ["example-cloud-sandbox"],
       builtinPlugins: {},
       importPlugin: () => Promise.resolve({ plugin: examplePlugin }),
       register: (id, def) => {
@@ -777,7 +851,7 @@ describe("loadPlugins — example third-party plugin", () => {
       },
       registerSandbox: (c) => sandboxCalls.push(c),
       pluginConfig: {
-        "@example/cloud-sandbox": {
+        "example-cloud-sandbox": {
           config: { region: "ap" },
           credentials: { apiToken: "dtn_shared_token" },
         },
@@ -785,11 +859,11 @@ describe("loadPlugins — example third-party plugin", () => {
     });
 
     expect(loaded[0]).toMatchObject({
-      name: "@example/cloud-sandbox",
+      name: "example-cloud-sandbox",
       origin: "third-party",
       // Third-party contribution ids are namespaced by the manifest name.
-      toolSetIds: ["@example/cloud-sandbox.management"],
-      sandboxBackendIds: ["@example/cloud-sandbox.sandbox"],
+      toolSetIds: ["example-cloud-sandbox.management"],
+      sandboxBackendIds: ["example-cloud-sandbox.sandbox"],
     });
 
     // Sandbox backend: create() with per-Workspace values; the adapter reads
@@ -802,7 +876,7 @@ describe("loadPlugins — example third-party plugin", () => {
     expect(backend.region).toBe("ap");
 
     // Management tool set: its tool description reflects the SAME token/region.
-    const toolsFactory = registered["@example/cloud-sandbox.management"]
+    const toolsFactory = registered["example-cloud-sandbox.management"]
       .tools as unknown as (
       ctx: unknown,
     ) => Promise<Record<string, { execute: (i: unknown) => Promise<string> }>>;
@@ -821,18 +895,206 @@ describe("loadPlugins — example third-party plugin", () => {
   it("aborts (fail-loud) when the example plugin's token is missing", async () => {
     await expect(
       loadPlugins({
-        pluginNames: ["@example/cloud-sandbox"],
+        pluginNames: ["example-cloud-sandbox"],
         builtinPlugins: {},
         importPlugin: () => Promise.resolve({ plugin: examplePlugin }),
         register: () => {},
         registerSandbox: () => {},
         pluginConfig: {
-          "@example/cloud-sandbox": { config: { region: "ap" } },
+          "example-cloud-sandbox": { config: { region: "ap" } },
         },
       }),
+    ).rejects.toThrow(/example-cloud-sandbox.*credentials failed validation/s);
+  });
+});
+
+describe("loadPlugins — always-on core set (ADR-0013 amendment)", () => {
+  it("loads always-on plugins even when the gate-able list is empty", async () => {
+    const { register, calls } = makeRegister();
+    const builtinPlugins = {
+      "@platypus/tools-basic": () =>
+        Promise.resolve({
+          plugin: manifest("@platypus/tools-basic", [toolSet("time")]),
+        }),
+      "@platypus/tools-platform": () =>
+        Promise.resolve({
+          plugin: manifest("@platypus/tools-platform", [toolSet("kanban")]),
+        }),
+    };
+
+    const loaded = await loadPlugins({
+      pluginNames: [],
+      alwaysOnPlugins: ["@platypus/tools-basic", "@platypus/tools-platform"],
+      builtinPlugins,
+      register,
+    });
+
+    // Both always-on core plugins load and register their (bare, core) ids,
+    // despite an empty gate-able list.
+    expect(calls.map((c) => c.id)).toEqual(["time", "kanban"]);
+    expect(loaded.map((p) => p.name)).toEqual([
+      "@platypus/tools-basic",
+      "@platypus/tools-platform",
+    ]);
+    expect(loaded.every((p) => p.origin === "core")).toBe(true);
+  });
+
+  it("loads always-on ahead of the gate-able list", async () => {
+    const { register, calls } = makeRegister();
+    const builtinPlugins = {
+      "@platypus/tools-basic": () =>
+        Promise.resolve({
+          plugin: manifest("@platypus/tools-basic", [toolSet("time")]),
+        }),
+      "@platypus/web-fetch": () =>
+        Promise.resolve({
+          plugin: manifest("@platypus/web-fetch", [toolSet("webFetch")]),
+        }),
+    };
+
+    await loadPlugins({
+      pluginNames: ["@platypus/web-fetch"],
+      alwaysOnPlugins: ["@platypus/tools-basic"],
+      builtinPlugins,
+      register,
+    });
+
+    // Always-on first, then the listed gate-able plugin.
+    expect(calls.map((c) => c.id)).toEqual(["time", "webFetch"]);
+  });
+
+  it("aborts (fail-loud) when an always-on plugin is listed in PLATYPUS_PLUGINS", async () => {
+    const { register } = makeRegister();
+    const builtinPlugins = {
+      "@platypus/tools-basic": () =>
+        Promise.resolve({
+          plugin: manifest("@platypus/tools-basic", [toolSet("time")]),
+        }),
+    };
+
+    await expect(
+      loadPlugins({
+        pluginNames: ["@platypus/tools-basic"],
+        alwaysOnPlugins: ["@platypus/tools-basic"],
+        builtinPlugins,
+        register,
+      }),
     ).rejects.toThrow(
-      /@example\/cloud-sandbox.*credentials failed validation/s,
+      /@platypus\/tools-basic.*always-on.*must not appear in PLATYPUS_PLUGINS/s,
     );
+  });
+});
+
+describe("loadPlugins — deploy-time config targeting (ADR-0013)", () => {
+  it("aborts (fail-loud) when a config entry matches no loaded plugin", async () => {
+    await expect(
+      loadPlugins({
+        pluginNames: ["@third/party"],
+        builtinPlugins: {},
+        importPlugin: () =>
+          Promise.resolve({ plugin: manifest("acme", [toolSet("custom")]) }),
+        register: () => {},
+        pluginConfig: {
+          // Keyed by a name no loaded plugin carries — a typo or a missing
+          // plugin. Silently dropping it would hide a real misconfiguration.
+          "acme-typo": { credentials: { apiToken: "x" } },
+        },
+      }),
+    ).rejects.toThrow(/PLATYPUS_PLUGIN_CONFIG.*"acme-typo".*no loaded plugin/s);
+  });
+
+  it("accepts a config entry keyed by the manifest name (not the list specifier)", async () => {
+    // The list entry is the import specifier; config is keyed by manifest name.
+    await expect(
+      loadPlugins({
+        pluginNames: ["@acme/platypus-widgets"],
+        builtinPlugins: {},
+        importPlugin: () =>
+          Promise.resolve({
+            plugin: {
+              name: "widgets",
+              version: "0.1.0",
+              apiVersion: 1,
+              configSchema: z.object({ region: z.string() }),
+              contributes: { toolSets: [toolSet("w")] },
+            } satisfies PlatypusPlugin,
+          }),
+        register: () => {},
+        pluginConfig: { widgets: { config: { region: "eu" } } },
+      }),
+    ).resolves.toBeDefined();
+  });
+});
+
+describe("loadPlugins — apiVersion integer hardening (ADR-0013)", () => {
+  it("rejects a non-integer apiVersion", async () => {
+    await expect(
+      loadPlugins({
+        pluginNames: ["@bad/plugin"],
+        builtinPlugins: {},
+        importPlugin: () =>
+          Promise.resolve({
+            plugin: {
+              name: "bad",
+              version: "0.1.0",
+              apiVersion: 1.5,
+              contributes: {},
+            },
+          }),
+        register: () => {},
+      }),
+    ).rejects.toThrow(/@bad\/plugin.*apiVersion.*positive integer/s);
+  });
+
+  it("rejects a zero apiVersion (no phantom v0)", async () => {
+    await expect(
+      loadPlugins({
+        pluginNames: ["@bad/plugin"],
+        builtinPlugins: {},
+        importPlugin: () =>
+          Promise.resolve({
+            plugin: {
+              name: "bad",
+              version: "0.1.0",
+              apiVersion: 0,
+              contributes: {},
+            },
+          }),
+        register: () => {},
+      }),
+    ).rejects.toThrow(/@bad\/plugin.*apiVersion.*positive integer/s);
+  });
+});
+
+describe("loadPlugins — third-party name slug validation (ADR-0013)", () => {
+  it("rejects a third-party manifest name that is not a url-safe slug", async () => {
+    await expect(
+      loadPlugins({
+        pluginNames: ["@acme/pkg"],
+        builtinPlugins: {},
+        importPlugin: () =>
+          Promise.resolve({
+            // A scoped, slash-bearing name would produce an ugly, fragile
+            // `@acme/thing.custom` contribution id.
+            plugin: manifest("@acme/thing", [toolSet("custom")]),
+          }),
+        register: () => {},
+      }),
+    ).rejects.toThrow(/@acme\/pkg.*"@acme\/thing".*url-safe slug/s);
+  });
+
+  it("accepts a clean slug name and prefixes contribution ids with it", async () => {
+    const { register, calls } = makeRegister();
+    const loaded = await loadPlugins({
+      pluginNames: ["@acme/platypus-widgets"],
+      builtinPlugins: {},
+      importPlugin: () =>
+        Promise.resolve({ plugin: manifest("widgets", [toolSet("greeting")]) }),
+      register,
+    });
+
+    expect(calls.map((c) => c.id)).toEqual(["widgets.greeting"]);
+    expect(loaded[0].name).toBe("widgets");
   });
 });
 
@@ -889,7 +1151,7 @@ describe("loadPlugins — third-party namespacing (ADR-0013)", () => {
     // scope it is third-party — prefixed, not smuggled in as core.
     const importPlugin = vi.fn(() =>
       Promise.resolve({
-        plugin: manifest("@platypus/impostor", [toolSet("kanban")]),
+        plugin: manifest("impostor", [toolSet("kanban")]),
       }),
     );
 
@@ -901,8 +1163,9 @@ describe("loadPlugins — third-party namespacing (ADR-0013)", () => {
     });
 
     expect(importPlugin).toHaveBeenCalledWith("@platypus/impostor");
-    // Prefixed — it cannot claim the bare `kanban` core namespace.
-    expect(calls.map((c) => c.id)).toEqual(["@platypus/impostor.kanban"]);
+    // Prefixed by the manifest slug — it cannot claim the bare `kanban` core
+    // namespace even though its list specifier borrows the `@platypus/*` scope.
+    expect(calls.map((c) => c.id)).toEqual(["impostor.kanban"]);
     expect(loaded[0].origin).toBe("third-party");
   });
 });
