@@ -117,7 +117,11 @@ const exampleManagementToolSet: ToolSetContribution = {
 };
 
 export const plugin: PlatypusPlugin = {
-  name: "@example/cloud-sandbox",
+  // A third-party manifest name is a url-safe slug (it becomes the
+  // contribution-id prefix), distinct from the npm package specifier an Operator
+  // would list in PLATYPUS_PLUGINS. See PlatypusPlugin.name in
+  // @platypuschat/plugin-sdk.
+  name: "example-cloud-sandbox",
   version: "0.1.0",
   apiVersion: PLUGIN_API_VERSION,
   configSchema: examplePluginConfigSchema,

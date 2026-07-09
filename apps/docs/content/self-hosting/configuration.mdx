@@ -71,23 +71,30 @@ The deeper model — Providers, the role ladder, and the default admin — lives
 
 ## Plugins
 
-Platypus loads its extensions — starting with Tool sets — as **plugins**, and
-`PLATYPUS_PLUGINS` is the single, auditable statement of what runs. It's a
-comma-separated list of plugin names; core built-ins are listed too (e.g.
-`@platypus/tools-basic`).
+Platypus loads its extensions — starting with Tool sets — as **plugins**.
+Plugins come in two tiers:
 
-**The default list shipped in `.env.example`** is the standard core tool set:
+- **Always-on core** — `@platypus/tools-basic` (math, time) and
+  `@platypus/tools-platform` (kanban, dashboards, triggers, memory,
+  notifications, agent discovery/management, skill management). These load
+  **unconditionally**; you neither list them nor can you disable them. They carry
+  Platypus's essential tools — none is something an Operator would plausibly deny
+  in isolation — so gating them behind a list would only risk silently
+  tool-stripping every Agent.
+- **Gate-able** — everything the Operator turns on and off via `PLATYPUS_PLUGINS`:
+  the deny-worthy core plugins plus any third-party packages. `PLATYPUS_PLUGINS`
+  is the single, auditable statement of what _optional_ plugins run — a
+  comma-separated list of plugin names.
+
+**The default `PLATYPUS_PLUGINS` shipped in `.env.example`:**
 
 ```
-PLATYPUS_PLUGINS=@platypus/tools-basic,@platypus/web-fetch,@platypus/tools-platform
+PLATYPUS_PLUGINS=@platypus/web-fetch
 ```
 
-- `@platypus/tools-basic` — pure utilities (math conversions, time).
-- `@platypus/web-fetch` — the web-fetch Tool set. It ships as its own plugin so
-  its **network egress** can be denied in isolation: drop it from the list and
-  the rest of the standard tools stay.
-- `@platypus/tools-platform` — the Platypus-domain sets (kanban, dashboards,
-  triggers, memory, notifications, agent discovery/management, skill management).
+- `@platypus/web-fetch` — the web-fetch Tool set. It ships as its own gate-able
+  plugin so its **network egress** can be denied in isolation: drop it from the
+  list and the always-on core tools stay.
 - `@platypus/docker` — the Docker Sandbox backend — is **intentionally not** in
   the default. It's opt-in infra; add it only when you want a Sandbox (see
   [Sandbox](#sandbox)).
@@ -95,18 +102,21 @@ PLATYPUS_PLUGINS=@platypus/tools-basic,@platypus/web-fetch,@platypus/tools-platf
 Since `compose.yaml` reads the backend's `env_file: .env`, a deployment seeded
 from `.env.example` gets this list; pin your own by editing the value.
 
-- **List membership both loads and enables a plugin.** There is no separate
-  enable switch — adding a name turns a plugin on, removing it turns it off.
-  Both take effect on the next backend restart (this is a deploy-time trust
-  boundary — there is no in-app install button).
-- **An empty list yields a deployment with no plugin-provided tools** (all the
-  Tool sets above disappear — an Agent granted `kanban` resolves to no tools).
-  That's accepted and self-documenting.
+- **For a gate-able plugin, list membership both loads and enables it.** There is
+  no separate enable switch — adding a name turns a plugin on, removing it turns
+  it off. Both take effect on the next backend restart (this is a deploy-time
+  trust boundary — there is no in-app install button).
+- **Listing an always-on plugin is a fail-loud misconfiguration.** It is not an
+  enable switch; put `@platypus/tools-basic` or `@platypus/tools-platform` in
+  `PLATYPUS_PLUGINS` and boot aborts with a plugin-named error telling you to
+  remove it.
+- **An empty list yields the always-on core tool sets only** — never zero tools.
+  The gate-able plugins (web-fetch, docker, third-party) are simply absent.
 - **Boot is fail-loud.** A listed plugin that can't be resolved or exports an
   invalid manifest, or two plugins whose tool-set ids collide, aborts startup
   with a plugin-named error — a misconfigured plugin never silently drops tools.
-- **New core plugins in a later release are not auto-enabled** — add them to your
-  pinned list to opt in.
+- **New gate-able core plugins in a later release are not auto-enabled** — add
+  them to your pinned list to opt in.
 
 See [Extending → the plugin model](/extending#the-plugin-model) for how a
 manifest's `contributes` block fills extension points.
@@ -136,17 +146,21 @@ a single JSON object keyed by plugin name, each value an optional `config`
 ```jsonc
 // PLATYPUS_PLUGIN_CONFIG (as a single-line env value)
 {
-  "@acme/cloud-sandbox": {
+  "cloud-sandbox": {
     "config": { "region": "eu" },
-    "credentials": { "apiToken": "dtn_live_…" }
-  }
+    "credentials": { "apiToken": "dtn_live_…" },
+  },
 }
 ```
 
 - **One namespace, one block per plugin.** A plugin's config/credentials are
-  keyed by its plugin name and validated **at boot** against the schemas its
-  manifest declares. A malformed or missing required value is **fail-loud** —
-  startup aborts with a plugin-named error, the same posture as the plugin list.
+  keyed by its **plugin name** (the manifest `name` — for a third-party plugin a
+  short slug like `cloud-sandbox`, _not_ the npm package specifier you list in
+  `PLATYPUS_PLUGINS`) and validated **at boot** against the schemas its manifest
+  declares. A malformed or missing required value is **fail-loud** — startup
+  aborts with a plugin-named error, the same posture as the plugin list. A config
+  entry whose key matches no loaded plugin is itself fail-loud (a typo never
+  silently drops a credential).
 - **The credential block is shared, deployment-wide.** The one block is injected
   into _every_ one of that plugin's contributions and serves _all_ tenants — a
   plugin's Sandbox backend and its management Tool set read the same token. This

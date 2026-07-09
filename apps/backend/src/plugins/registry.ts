@@ -10,6 +10,15 @@ import type { LoadedPlugin } from "./loader.ts";
 // enable/disable is deploy-time only (ADR-0013), so this module exposes setters
 // for boot/tests and getters for request handlers, nothing more.
 
+/**
+ * Owner label for a Tool set (or Sandbox backend) that is a core built-in rather
+ * than a plugin contribution — currently only the consumer-side `sandbox` Tool
+ * set, which is a static registration (see `tools/index.ts`), not something any
+ * plugin contributes. Catalogs annotate such entries with this so they read as
+ * core/built-in instead of a blank/unknown owner (ADR-0013 observability).
+ */
+export const CORE_BUILTIN_OWNER = "core (built-in)";
+
 let loadedPlugins: readonly LoadedPlugin[] = [];
 let toolSetOwners = new Map<string, string>();
 let sandboxBackendOwners = new Map<string, string>();

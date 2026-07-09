@@ -16,10 +16,31 @@ describe("@platypus/web-fetch plugin manifest", () => {
     expect(ids).toEqual(["web-fetch"]);
   });
 
-  it("exposes fetchUrl as a static tool map", () => {
+  it("declares a plugin-level configSchema (ignoreRobotsTxt, deploy-time)", () => {
+    expect(plugin.configSchema).toBeDefined();
+    // Defaults to robots.txt-respecting when the Operator supplies nothing.
+    expect(plugin.configSchema?.parse({})).toEqual({ ignoreRobotsTxt: false });
+    expect(plugin.configSchema?.parse({ ignoreRobotsTxt: true })).toEqual({
+      ignoreRobotsTxt: true,
+    });
+  });
+
+  it("exposes web-fetch as a config-driven tool factory yielding fetchUrl", () => {
     const [webFetch] = plugin.contributes.toolSets ?? [];
-    expect(typeof webFetch.tools).not.toBe("function");
-    expect(webFetch.tools).toHaveProperty("fetchUrl");
+    expect(typeof webFetch.tools).toBe("function");
+    if (typeof webFetch.tools !== "function")
+      throw new Error("expected factory");
+    const tools = webFetch.tools(
+      {
+        workspaceId: "w",
+        agentId: "a",
+        orgId: "o",
+        frontendUrl: undefined,
+        userId: "u",
+      },
+      { config: { ignoreRobotsTxt: false }, credentials: undefined },
+    );
+    expect(tools).toHaveProperty("fetchUrl");
   });
 
   it("registers the web-fetch tool set into the core registry when loaded", async () => {
@@ -40,6 +61,17 @@ describe("@platypus/web-fetch plugin manifest", () => {
     const set = getToolSet("web-fetch");
     expect(set.name).toBe("Web Fetch");
     expect(set.category).toBe("Web");
-    expect(set.tools).toHaveProperty("fetchUrl");
+    // The loader binds the plugin config into a factory; resolving it (as a Chat
+    // turn would) yields the fetchUrl tool.
+    expect(typeof set.tools).toBe("function");
+    if (typeof set.tools !== "function") throw new Error("expected factory");
+    const tools = await set.tools({
+      workspaceId: "w",
+      agentId: "a",
+      orgId: "o",
+      frontendUrl: undefined,
+      userId: "u",
+    });
+    expect(tools).toHaveProperty("fetchUrl");
   });
 });
