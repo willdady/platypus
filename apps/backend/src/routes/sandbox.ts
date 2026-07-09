@@ -42,6 +42,23 @@ const validateSandboxConfig = (
   return result.error.issues.map((i) => i.message).join("; ");
 };
 
+// Validate adapter-specific credentials at write time, same rationale as
+// {@link validateSandboxConfig}: catch e.g. an SSH sandbox saved without a
+// private key as an immediate 400 rather than a silent "no sandbox tools" at
+// chat-turn time. Returns an error message, or null when valid / backend not
+// registered. Callers pass `undefined` to skip (a PUT that preserves stored
+// credentials, which GET never returns).
+const validateSandboxCredentials = (
+  backend: string,
+  credentials: Record<string, unknown> | undefined,
+): string | null => {
+  const registration = getSandboxBackend(backend);
+  if (!registration) return null;
+  const result = registration.credentialsSchema.safeParse(credentials ?? {});
+  if (result.success) return null;
+  return result.error.issues.map((i) => i.message).join("; ");
+};
+
 // The owner may never override an admin-set env key (ADR-0004 amendment).
 // Returns the colliding keys, or [] when there is no overlap.
 const envCollisions = (
@@ -139,6 +156,17 @@ sandbox.post(
     const configError = validateSandboxConfig(data.backend, data.config);
     if (configError) {
       return c.json({ error: `Invalid sandbox config: ${configError}` }, 400);
+    }
+
+    const credentialsError = validateSandboxCredentials(
+      data.backend,
+      data.credentials,
+    );
+    if (credentialsError) {
+      return c.json(
+        { error: `Invalid sandbox credentials: ${credentialsError}` },
+        400,
+      );
     }
 
     const collisions = envCollisions(data.adminEnv, data.userEnv);
@@ -246,6 +274,21 @@ sandbox.put(
     const configError = validateSandboxConfig(data.backend, data.config);
     if (configError) {
       return c.json({ error: `Invalid sandbox config: ${configError}` }, 400);
+    }
+    // Validate credentials only when present — GET strips them, so an edit that
+    // leaves the field untouched preserves the stored value (Drizzle skips
+    // undefined columns) and must not be rejected for being absent.
+    if (data.credentials !== undefined) {
+      const credentialsError = validateSandboxCredentials(
+        data.backend,
+        data.credentials,
+      );
+      if (credentialsError) {
+        return c.json(
+          { error: `Invalid sandbox credentials: ${credentialsError}` },
+          400,
+        );
+      }
     }
     const collisions = envCollisions(
       data.adminEnv ?? current.adminEnv,
