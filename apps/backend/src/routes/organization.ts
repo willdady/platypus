@@ -161,7 +161,7 @@ organization.get(
   "/:orgId/agent-run-settings/ceilings",
   requireAuth,
   requireOrgAccess(),
-  async (c) => {
+  (c) => {
     return c.json({
       chat: readRunTimeoutCeilings("chat"),
       trigger: readRunTimeoutCeilings("trigger"),

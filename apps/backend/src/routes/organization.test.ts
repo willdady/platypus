@@ -139,7 +139,7 @@ describe("Organization Routes", () => {
       });
 
       expect(res.status).toBe(400);
-      const body = await res.json();
+      const body = (await res.json()) as { error: string };
       // Convention: errors use the singular `error` key.
       expect(body.error).toContain("RUN_PER_RUN_TIMEOUT_MS");
       expect(mockDb.update).not.toHaveBeenCalled();
