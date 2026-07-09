@@ -9,6 +9,7 @@ import { z } from "zod";
 import { logger } from "../../logger.ts";
 import {
   DEFAULT_SHELL_TIMEOUT_MS,
+  MAX_LIST_ENTRIES,
   MAX_READ_BYTES,
   MAX_SHELL_OUTPUT_BYTES,
   MAX_SHELL_TIMEOUT_MS,
@@ -16,6 +17,7 @@ import {
 import type {
   FsEditInput,
   FsEditOutput,
+  FsListEntry,
   FsListInput,
   FsListOutput,
   FsReadInput,
@@ -33,8 +35,11 @@ import type {
 // core against it. `shell.exec` runs over the `exec` channel; `fs.read`,
 // `fs.write`, and `fs.edit` run over the SFTP subsystem (the faithful analogue
 // of Docker's `putArchive` writes — literal paths, no shell-injection surface,
-// native `wx`=create / `w`=overwrite). `fs.list` lands in a follow-up slice.
-// The adapter never provisions or destroys the machine.
+// native `wx`=create / `w`=overwrite). `fs.list` runs over `exec` as a single
+// `find -printf` recursive listing (ADR-0012 rejected a client-side SFTP walk),
+// making it the sole shell-injection surface in `fs.*` — every model-supplied
+// value it interpolates is single-quoted. The adapter never provisions or
+// destroys the machine.
 
 const DEFAULT_SSH_PORT = 22;
 // rootDir default (ADR-0012): resolved to `$HOME/platypus-workspace` on the host
@@ -124,17 +129,11 @@ function buildEnvPrefix(env: Record<string, string> | undefined): string {
     .join("");
 }
 
-// A method not carried by this slice. `fs.list` lands in a follow-up slice
-// (ADR-0012: `find -printf`); until then it fails loudly rather than silently
-// misbehaving. The Sandbox tool set still exposes all five tools (there is no
-// per-backend tool filtering), so a model that calls it gets this as its result.
-function notImplemented(tool: string): Promise<never> {
-  return Promise.reject(
-    new Error(
-      `${tool} is not yet supported by the SSH sandbox backend (follow-up slice).`,
-    ),
-  );
-}
+// Cap for `fs.list` find(1) output. Larger than MAX_SHELL_OUTPUT_BYTES because a
+// recursive listing of up to MAX_LIST_ENTRIES rows can exceed the shell-output
+// cap; matches the Docker adapter's 4 MiB list buffer. Node-side truncation to
+// MAX_LIST_ENTRIES is the authoritative bound (this only guards memory).
+const FS_LIST_OUTPUT_CAP = 4 * 1024 * 1024;
 
 // Resolve a workspace-root-relative path to an absolute path on the host. The
 // schema already enforces the path is relative; SFTP takes the result literally,
@@ -396,14 +395,16 @@ export class SshSandboxBackend implements SandboxBackend {
     }
   }
 
-  // Run a single command over `exec`, capping stdout/stderr at
-  // MAX_SHELL_OUTPUT_BYTES and enforcing a timeout. On timeout the channel is
-  // closed and exit code 124 is reported (a remote command may keep running as
-  // an orphan — the host is not ours to reap; ADR-0012).
+  // Run a single command over `exec`, capping stdout/stderr at `outputCap`
+  // (default MAX_SHELL_OUTPUT_BYTES; fs.list raises it) and enforcing a timeout.
+  // On timeout the channel is closed and exit code 124 is reported (a remote
+  // command may keep running as an orphan — the host is not ours to reap;
+  // ADR-0012).
   private runExec(
     client: Client,
     command: string,
     timeoutMs: number,
+    outputCap: number = MAX_SHELL_OUTPUT_BYTES,
   ): Promise<ExecResult> {
     return new Promise<ExecResult>((resolve, reject) => {
       const started = Date.now();
@@ -436,8 +437,8 @@ export class SshSandboxBackend implements SandboxBackend {
           chunks: Buffer[],
           bytes: number,
         ): number => {
-          if (bytes >= MAX_SHELL_OUTPUT_BYTES) return bytes;
-          const room = MAX_SHELL_OUTPUT_BYTES - bytes;
+          if (bytes >= outputCap) return bytes;
+          const room = outputCap - bytes;
           const take = chunk.length <= room ? chunk : chunk.subarray(0, room);
           chunks.push(take);
           return bytes + take.length;
@@ -682,9 +683,87 @@ export class SshSandboxBackend implements SandboxBackend {
     return { replacements: 1 };
   }
 
-  // fs.list is deferred to a follow-up slice (ADR-0012: `find -printf`).
-  fsList(_ctx: SandboxContext, _input: FsListInput): Promise<FsListOutput> {
-    return notImplemented("fs.list");
+  // List directory entries via a single `find -printf` over `exec` (ADR-0012:
+  // one round-trip recursive listing, vs a per-directory SFTP walk). This is the
+  // only shell-injection surface in fs.*, so both model-supplied values that
+  // reach the command line — the list path and the glob — are single-quoted.
+  async fsList(
+    _ctx: SandboxContext,
+    input: FsListInput,
+  ): Promise<FsListOutput> {
+    const conn = await this.ensureConnection();
+    const target = input.path
+      ? absPath(conn.rootDir, input.path)
+      : conn.rootDir;
+
+    // Node-side truncation (below) is authoritative; `find` is not `| head`ed.
+    const parts = ["find", shQuote(target)];
+    if (!input.recursive) parts.push("-maxdepth", "1");
+    parts.push("-mindepth", "1");
+    if (input.glob) {
+      // -name matches a bare file-name glob; -path matches a pattern that
+      // contains a slash or `**`. `**` collapses to `*` for find(1) — a lossy
+      // but pragmatic translation (documented in the tool description), matching
+      // the Docker adapter. Single-quoting also stops the login shell from
+      // expanding the glob before find sees it, so find(1) does the matching.
+      if (input.glob.includes("/") || input.glob.includes("**")) {
+        parts.push("-path", shQuote(`*/${input.glob.replace(/\*\*/g, "*")}`));
+      } else {
+        parts.push("-name", shQuote(input.glob));
+      }
+    }
+    // Single-quoted so find receives the `\t`/`\n` escapes literally and
+    // interprets them itself (rather than the shell mangling them).
+    parts.push("-printf", `'%y\\t%s\\t%P\\n'`);
+    const command = parts.join(" ");
+
+    const res = await this.runExec(
+      conn.client,
+      command,
+      DEFAULT_SHELL_TIMEOUT_MS,
+      FS_LIST_OUTPUT_CAP,
+    );
+    this.touchIdleTimer();
+
+    // find exits non-zero on partial errors (e.g. an unreadable subdirectory)
+    // while still printing what it could — only fail hard when nothing came out.
+    if (res.exitCode !== 0 && res.stdout.length === 0) {
+      const detail = res.stderr.toString("utf8").trim() || "fs.list failed";
+      throw new Error(`fs.list: ${detail}`);
+    }
+
+    const lines = res.stdout
+      .toString("utf8")
+      .split("\n")
+      .filter((l) => l.length > 0);
+
+    const entries: FsListEntry[] = [];
+    let truncated = false;
+    for (const line of lines) {
+      const tab1 = line.indexOf("\t");
+      const tab2 = line.indexOf("\t", tab1 + 1);
+      if (tab1 === -1 || tab2 === -1) continue;
+      const typeChar = line.slice(0, tab1);
+      const sizeStr = line.slice(tab1 + 1, tab2);
+      const path = line.slice(tab2 + 1);
+      let type: "file" | "dir";
+      if (typeChar === "f") type = "file";
+      else if (typeChar === "d") type = "dir";
+      else continue; // ignore symlinks / sockets / devices in v1
+      const size = Number.parseInt(sizeStr, 10);
+      entries.push({
+        path,
+        type,
+        ...(Number.isFinite(size) ? { size } : {}),
+      });
+      if (entries.length >= MAX_LIST_ENTRIES) {
+        // Mark truncated only if find emitted more rows than we kept.
+        truncated = entries.length < lines.length;
+        break;
+      }
+    }
+
+    return { entries, truncated };
   }
 
   // destroy() is a no-op beyond disconnecting (ADR-0012): the host is not
