@@ -217,24 +217,45 @@ export function pickKeepBoundary(
  * Prunes bulky tool-result outputs in a UIMessage in place on a shallow copy.
  * The tool part is kept (never dropped — the assistant tool message is atomic,
  * ADR-0012 §Tier 1); only its `output` is soft-trimmed. Returns the (possibly) pruned message.
+ *
+ * With `includeText`, also soft-trims oversized `text` parts (e.g. a large
+ * assistant code answer): the keep-window otherwise protects such answers from
+ * summarization, so a couple of large recent answers can dominate the window and
+ * never get condensed. Trimming them is view-only (raw stays in the DB per
+ * ADR-0012 §View, not delete). Off by default so the prefix/Stage-1 path that
+ * feeds the summarizer verbatim is unaffected — only the retained-message
+ * wall-trim opts in.
  */
 function pruneUIMessage(
   message: PlatypusUIMessage,
   minPrunableChars: number,
+  opts: { includeText?: boolean } = {},
 ): { message: PlatypusUIMessage; changed: boolean } {
   let changed = false;
   const parts = (message.parts ?? []).map((part) => {
-    const anyPart = part as { type: string; output?: unknown };
+    const anyPart = part as { type: string; output?: unknown; text?: unknown };
     const isTool =
       anyPart.type === "dynamic-tool" || anyPart.type.startsWith("tool-");
-    if (!isTool || anyPart.output === undefined) return part;
-    const serialized =
-      typeof anyPart.output === "string"
-        ? anyPart.output
-        : JSON.stringify(anyPart.output);
-    if (serialized.length <= minPrunableChars) return part;
-    changed = true;
-    return { ...anyPart, output: softTrim(serialized) };
+    if (isTool && anyPart.output !== undefined) {
+      const serialized =
+        typeof anyPart.output === "string"
+          ? anyPart.output
+          : JSON.stringify(anyPart.output);
+      if (serialized.length <= minPrunableChars) return part;
+      changed = true;
+      return { ...anyPart, output: softTrim(serialized) };
+    }
+    // Oversized text parts (opt-in via includeText).
+    if (
+      opts.includeText &&
+      anyPart.type === "text" &&
+      typeof anyPart.text === "string" &&
+      anyPart.text.length > minPrunableChars
+    ) {
+      changed = true;
+      return { ...anyPart, text: softTrim(anyPart.text) };
+    }
+    return part;
   });
   return changed
     ? { message: { ...message, parts } as PlatypusUIMessage, changed }
@@ -610,7 +631,11 @@ export async function compactUIMessages(
     let changed = false;
     const messages = msgs.map((m, i) => {
       if (i === msgs.length - 1) return m; // newest always exempt
-      const pruned = pruneUIMessage(m, recentThreshold);
+      // Include oversized text parts (e.g. large recent code answers), not just
+      // tool outputs. This is the hard-wall path (the view would otherwise breach
+      // inputBudget), so trimming a recent answer's view beats overflowing; the
+      // raw message stays in the DB (ADR-0012 §View, not delete).
+      const pruned = pruneUIMessage(m, recentThreshold, { includeText: true });
       if (pruned.changed) changed = true;
       return pruned.message;
     });
@@ -963,7 +988,12 @@ export const DEFAULT_COMPACTION_CONFIG: CompactionConfig = {
   triggerRatio: 0.8,
   targetRatio: 0.5,
   reserveRatio: 0.05,
-  keepRecentMessages: 10,
+  // A fixed message *count* is a poor proxy when messages vary wildly in size: a
+  // few large recent answers can dominate the window while the keep-window
+  // shields them from summarization, so a smaller window lets summarization reach
+  // more of the bulk. Tunable via COMPACTION_KEEP_RECENT; the newest message is
+  // always exempt regardless (ADR-0012 §Hard window wall).
+  keepRecentMessages: 5,
   minPrunableChars: 2000,
   minRecentPrunableChars: 10000,
   contextEditingEnabled: true,
