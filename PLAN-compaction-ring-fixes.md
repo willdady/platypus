@@ -19,7 +19,8 @@
 - **(c) Skip #2, do only #1** — just make the ring survive reload; leave the estimate
   as-is. The overhead optimism + next-turn jump remain.
 
-**DECISION: _______**
+**DECISION: (a) anchor to actual** — report post-compact "after" as `lastProviderActual −
+estimatedSaved` so badge/ring speak provider-actual units. (2026-07-10)
 
 ### Q2 — What to do about #3 (compaction leaves large recent messages untouched)
 
@@ -33,7 +34,13 @@
 - **(d) Other** — user selected "Other" on 2026-07-10; intent not yet captured. Clarify
   before doing anything on #3.
 
-**DECISION: _______**
+**DECISION: (c)+(b) blend** — lower `keepRecentMessages` default 10 → 5 (tune the trigger), AND
+extend the retained-message wall-trim to condense large _retained_ parts above a size gate —
+**tool results _and_ assistant text** (the dominant content in this chat's "big code answers" case),
+newest message exempt, only when the kept view would breach the hard window wall. Broader than
+Anthropic's `clear_tool_uses` (which is tool-results-only), since the user's bulk is assistant prose;
+view-only per §View, not delete (raw stays in the DB). Token/size-driven, not message-count driven.
+(2026-07-10)
 
 ---
 
