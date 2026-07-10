@@ -48,6 +48,10 @@ const { mockPrepareChatTurn, mockGenerateText, mockStreamText, streamHarness } =
         onFinish: undefined as
           ((ctx: { messages: unknown[] }) => Promise<void> | void) | undefined,
         responseSentinel: { __isResponse: true },
+        // The response-branch stream handed to createUIMessageStreamResponse.
+        // Captured so a test can read the raw chunks the writer emitted (e.g. the
+        // live compact_context in-progress/done pair).
+        responseStream: null as ReadableStream<unknown> | null,
       },
     };
   });
@@ -66,7 +70,12 @@ vi.mock("ai", async () => {
     createIdGenerator: vi.fn().mockReturnValue(() => "msg-1"),
     stepCountIs: vi.fn(),
     readUIMessageStream: () => streamHarness.queue,
-    createUIMessageStreamResponse: () => streamHarness.responseSentinel,
+    createUIMessageStreamResponse: (opts: {
+      stream: ReadableStream<unknown>;
+    }) => {
+      streamHarness.responseStream = opts.stream;
+      return streamHarness.responseSentinel;
+    },
   };
 });
 
@@ -79,11 +88,7 @@ vi.mock("../logger.ts", () => ({
   },
 }));
 
-import {
-  AgentRunner,
-  prependCompactionChunks,
-  stripCompactionTraceParts,
-} from "./agent-runner.ts";
+import { AgentRunner, stripCompactionTraceParts } from "./agent-runner.ts";
 import { buildTier2PrepareStep } from "./compaction.ts";
 import type { UIMessageChunk } from "ai";
 import { runRegistry, TimeoutError } from "./run-registry.ts";
@@ -349,32 +354,42 @@ describe("AgentRunner.generate", () => {
 
 describe("AgentRunner.stream — failure paths", () => {
   let runner: AgentRunner;
+  const tick = () => new Promise((r) => setTimeout(r, 0));
   beforeEach(() => {
     runner = new AgentRunner();
     vi.clearAllMocks();
+    streamHarness.queue = null;
   });
 
-  it("invariant: reaches onFinish when prepareChatTurn throws", async () => {
+  it("invariant: reaches onFinish (failed) when prepareChatTurn throws", async () => {
     mockPrepareChatTurn.mockRejectedValueOnce(new Error("Workspace missing"));
+    // prepare now fails INSIDE the UI stream's execute (opened before prepare),
+    // so stream() itself resolves with the response; the run finalises "failed"
+    // via runPrepare's own finalize rather than throwing out of stream().
+    const queue = new streamHarness.AsyncQueue();
+    streamHarness.queue = queue;
 
     const sink = new RecordingSink();
-    await expect(
-      runner.stream({
-        scope,
-        input: baseInput,
-        sink,
-        options: { origin: "http://test" },
-      }),
-    ).rejects.toThrow("Workspace missing");
+    const res = await runner.stream({
+      scope,
+      input: baseInput,
+      sink,
+      options: { origin: "http://test" },
+    });
+    expect(res).toBe(streamHarness.responseSentinel);
+    // Let execute run (prepare rejects → finalize), then drain the snapshot.
+    await tick();
+    queue.end();
+    await tick();
 
     expect(sink.names()).toEqual(["onStart", "onFinish"]);
-    const finish = sink.events[1] as Extract<
+    const finish = sink.events.at(-1) as Extract<
       LifecycleEvent,
       { name: "onFinish" }
     >;
     expect(finish.status).toBe("failed");
     expect(finish.error).toBe("Workspace missing");
-    // Stream was never invoked
+    // The model stream was never invoked (prepare failed first).
     expect(mockStreamText).not.toHaveBeenCalled();
   });
 });
@@ -534,6 +549,10 @@ describe("AgentRunner.stream — success & interruption", () => {
     });
     expect(res).toBe(streamHarness.responseSentinel);
 
+    // streamText now runs inside the UI stream's execute (after prepare), so let
+    // the eager execute reach it before driving its callbacks.
+    await tick();
+
     // A step completes -> onProgress.
     streamHarness.onStepFinish!({
       usage: { inputTokens: 3, outputTokens: 4 },
@@ -605,6 +624,9 @@ describe("AgentRunner.stream — success & interruption", () => {
       sink,
       options: { origin: "http://test" },
     });
+
+    // streamText runs inside execute (after prepare); wait for it to be called.
+    await tick();
 
     // Only the step ceiling — no no-progress condition for interactive runs.
     expect(capturedStopWhen).toHaveLength(1);
@@ -700,91 +722,222 @@ describe("AgentRunner timeout types", () => {
   });
 });
 
-describe("prependCompactionChunks", () => {
-  const collect = async (
-    stream: ReadableStream<UIMessageChunk>,
-  ): Promise<UIMessageChunk[]> => {
-    const out: UIMessageChunk[] = [];
+describe("AgentRunner.stream — live compaction trace (ADR-0012 §Compaction trace in the timeline)", () => {
+  let runner: AgentRunner;
+  const tick = () => new Promise((r) => setTimeout(r, 0));
+  beforeEach(() => {
+    runner = new AgentRunner();
+    vi.clearAllMocks();
+    streamHarness.queue = null;
+    streamHarness.responseStream = null;
+  });
+
+  // Read the response-branch chunks the writer emitted (captured via the
+  // createUIMessageStreamResponse mock). Filters to the fields the assertions
+  // need; the merged model stream is empty in these tests.
+  const collectResponse = async (): Promise<
+    Array<{ type: string } & Record<string, unknown>>
+  > => {
+    const stream = streamHarness.responseStream;
+    if (!stream) throw new Error("no response stream captured");
+    const out: Array<{ type: string } & Record<string, unknown>> = [];
     const reader = stream.getReader();
     for (;;) {
       const { done, value } = await reader.read();
       if (done) break;
-      out.push(value);
+      out.push(value as { type: string } & Record<string, unknown>);
     }
     return out;
   };
 
-  const sourceOf = (chunks: UIMessageChunk[]): ReadableStream<UIMessageChunk> =>
-    new ReadableStream<UIMessageChunk>({
-      start(controller) {
-        for (const chunk of chunks) controller.enqueue(chunk);
-        controller.close();
+  const primeEmptyStreamText = () => {
+    mockStreamText.mockImplementation(() => ({
+      toUIMessageStream: () =>
+        new ReadableStream<UIMessageChunk>({
+          start(controller) {
+            controller.close();
+          },
+        }),
+    }));
+  };
+
+  it("writes in-progress before, and done after, the model stream — paired ids and split stats", async () => {
+    // prepareChatTurn fires the summarize-start callback mid-prepare (in-progress
+    // chunk) and returns a turn carrying the finished trace (done chunk).
+    mockPrepareChatTurn.mockImplementationOnce(
+      (input: {
+        onCompactionSummarizeStart?: (b: {
+          tokensBefore: number;
+          messagesBefore: number;
+        }) => void;
+      }) => {
+        input.onCompactionSummarizeStart?.({
+          tokensBefore: 1000,
+          messagesBefore: 12,
+        });
+        return {
+          ...fakeTurn(),
+          compactionTrace: {
+            messagesDropped: 5,
+            summaryExcerpt: "did things",
+            tokensBefore: 1000,
+            tokensAfter: 400,
+            messagesBefore: 12,
+          },
+        };
       },
-    });
-
-  it("injects a compact_context tool-call/result pair right after start, before any text", async () => {
-    const out = await collect(
-      prependCompactionChunks(
-        sourceOf([
-          { type: "start" },
-          { type: "text-start", id: "t" },
-          { type: "text-delta", id: "t", delta: "hi" },
-        ]),
-        { messagesDropped: 12, summaryExcerpt: "the user did X" },
-        () => "cc1",
-      ),
     );
+    const queue = new streamHarness.AsyncQueue();
+    streamHarness.queue = queue;
+    primeEmptyStreamText();
 
-    expect(out.map((c) => c.type)).toEqual([
-      "start",
-      "tool-input-available",
-      "tool-output-available",
-      "text-start",
-      "text-delta",
-    ]);
-    const input = out[1] as Extract<
-      UIMessageChunk,
-      { type: "tool-input-available" }
-    >;
-    expect(input.toolName).toBe("compact_context");
-    expect(input.toolCallId).toBe("cc1");
-    const output = out[2] as Extract<
-      UIMessageChunk,
-      { type: "tool-output-available" }
-    >;
-    expect(output.toolCallId).toBe("cc1");
-    expect(output.output).toEqual({
-      messagesDropped: 12,
-      summaryExcerpt: "the user did X",
+    const sink = new RecordingSink();
+    await runner.stream({
+      scope,
+      input: { ...baseInput, runId: "s-trace" },
+      sink,
+      options: { origin: "http://test" },
+    });
+    // Let execute run to completion, then settle the snapshot drain.
+    await tick();
+    queue.end();
+    await tick();
+
+    const chunks = await collectResponse();
+    const inIdx = chunks.findIndex((c) => c.type === "tool-input-available");
+    const outIdx = chunks.findIndex((c) => c.type === "tool-output-available");
+    expect(inIdx).toBeGreaterThanOrEqual(0);
+    expect(outIdx).toBeGreaterThan(inIdx); // in-progress precedes done
+
+    const inChunk = chunks[inIdx];
+    expect(inChunk.toolName).toBe("compact_context");
+    expect(inChunk.input).toEqual({ tokensBefore: 1000, messagesBefore: 12 });
+
+    const outChunk = chunks[outIdx];
+    // Paired to the same tool call so the badge flips in place.
+    expect(outChunk.toolCallId).toBe(inChunk.toolCallId);
+    expect(outChunk.output).toEqual({
+      tokensAfter: 400,
+      tokensSaved: 600,
+      reductionPct: 60,
+      messagesDropped: 5,
+      summaryExcerpt: "did things",
     });
   });
 
-  it("omits summaryExcerpt when absent", async () => {
-    const out = await collect(
-      prependCompactionChunks(
-        sourceOf([{ type: "start" }]),
-        { messagesDropped: 3 },
-        () => "cc2",
-      ),
-    );
-    const output = out[2] as Extract<
-      UIMessageChunk,
-      { type: "tool-output-available" }
-    >;
-    expect(output.output).toEqual({ messagesDropped: 3 });
+  it("emits no compact_context chunk when the turn produced no trace", async () => {
+    mockPrepareChatTurn.mockResolvedValueOnce(fakeTurn());
+    const queue = new streamHarness.AsyncQueue();
+    streamHarness.queue = queue;
+    primeEmptyStreamText();
+
+    const sink = new RecordingSink();
+    await runner.stream({
+      scope,
+      input: { ...baseInput, runId: "s-no-trace" },
+      sink,
+      options: { origin: "http://test" },
+    });
+    await tick();
+    queue.end();
+    await tick();
+
+    const chunks = await collectResponse();
+    expect(chunks.some((c) => c.type.startsWith("tool-"))).toBe(false);
   });
 
-  it("injects only once even if multiple start events appear", async () => {
-    const out = await collect(
-      prependCompactionChunks(
-        sourceOf([{ type: "start" }, { type: "start" }]),
-        { messagesDropped: 1 },
-        () => "cc3",
-      ),
+  it("closes a fired spinner with a degraded Done when the summary produced no trace", async () => {
+    // Summarize started (in-progress written) but the turn returns no trace
+    // (CAS race / swallowed throw). A terminal chunk must still follow.
+    mockPrepareChatTurn.mockImplementationOnce(
+      (input: {
+        onCompactionSummarizeStart?: (b: {
+          tokensBefore: number;
+          messagesBefore: number;
+        }) => void;
+      }) => {
+        input.onCompactionSummarizeStart?.({
+          tokensBefore: 800,
+          messagesBefore: 9,
+        });
+        return { ...fakeTurn() }; // no compactionTrace
+      },
     );
-    expect(out.filter((c) => c.type === "tool-input-available")).toHaveLength(
-      1,
+    const queue = new streamHarness.AsyncQueue();
+    streamHarness.queue = queue;
+    primeEmptyStreamText();
+
+    const sink = new RecordingSink();
+    await runner.stream({
+      scope,
+      input: { ...baseInput, runId: "s-degraded" },
+      sink,
+      options: { origin: "http://test" },
+    });
+    await tick();
+    queue.end();
+    await tick();
+
+    const chunks = await collectResponse();
+    const inChunk = chunks.find((c) => c.type === "tool-input-available");
+    const outChunk = chunks.find((c) => c.type === "tool-output-available");
+    expect(inChunk).toBeDefined();
+    // Terminal chunk present so the badge never hangs on "Running".
+    expect(outChunk).toBeDefined();
+    expect(outChunk!.toolCallId).toBe(inChunk!.toolCallId);
+    expect(outChunk!.output).toMatchObject({
+      note: "Context compaction ran; summary not persisted this turn.",
+    });
+  });
+
+  it("flips a fired spinner to Error when prepare throws after summarize started", async () => {
+    // Spinner written (summarize began), then prepare throws (e.g. a post-summary
+    // step fails). The execute catch must emit a terminal tool-output-error so the
+    // badge flips to Error instead of hanging, and the run finalises "failed".
+    mockPrepareChatTurn.mockImplementationOnce(
+      (input: {
+        onCompactionSummarizeStart?: (b: {
+          tokensBefore: number;
+          messagesBefore: number;
+        }) => void;
+      }) => {
+        input.onCompactionSummarizeStart?.({
+          tokensBefore: 700,
+          messagesBefore: 8,
+        });
+        throw new Error("prepare failed after summarize");
+      },
     );
+    const queue = new streamHarness.AsyncQueue();
+    streamHarness.queue = queue;
+
+    const sink = new RecordingSink();
+    const res = await runner.stream({
+      scope,
+      input: { ...baseInput, runId: "s-error" },
+      sink,
+      options: { origin: "http://test" },
+    });
+    expect(res).toBe(streamHarness.responseSentinel);
+    await tick();
+    queue.end();
+    await tick();
+
+    const chunks = await collectResponse();
+    const inChunk = chunks.find((c) => c.type === "tool-input-available");
+    const errChunk = chunks.find((c) => c.type === "tool-output-error");
+    expect(inChunk).toBeDefined();
+    // Terminal error chunk paired to the same tool call so the badge flips in place.
+    expect(errChunk).toBeDefined();
+    expect(errChunk!.toolCallId).toBe(inChunk!.toolCallId);
+    expect(errChunk!.errorText).toBe("Context compaction failed.");
+    // The model stream never ran, and the run finalised "failed".
+    expect(mockStreamText).not.toHaveBeenCalled();
+    const finish = sink.events.at(-1) as Extract<
+      LifecycleEvent,
+      { name: "onFinish" }
+    >;
+    expect(finish.status).toBe("failed");
   });
 });
 

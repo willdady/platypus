@@ -1097,6 +1097,18 @@ export type Tier1Input = {
   /** Provider-reported `usage.inputTokens` from the prior turn (ADR-0012 §Tier 1 (trigger projection), via ADR-0012 §Context-usage ring). */
   lastInputTokens?: number;
   onEvent?: (event: CompactionEvent) => void;
+  /**
+   * Fires once, the instant Stage 2's first model summarize call begins
+   * (ADR-0012 §Compaction trace in the timeline — live In-Progress). Carries the
+   * before-stats so the runner can write the in-progress chunk's Input. NOT
+   * fired on the prune-only / no-op path — which is exactly when no trace is
+   * produced, so the spinner appears iff a trace will follow. Map-reduce calls
+   * summarize N times; this dedupes to one fire.
+   */
+  onSummarizeStart?: (before: {
+    tokensBefore: number;
+    messagesBefore: number;
+  }) => void;
 };
 
 export type CompactionTrace = {
@@ -1104,7 +1116,45 @@ export type CompactionTrace = {
   messagesDropped: number;
   /** First ~120 chars of the LLM-generated summary. */
   summaryExcerpt?: string;
+  /** Char/4 estimate of the pre-compaction view (basis: messages + prior summary + overhead). */
+  tokensBefore: number;
+  /** Char/4 estimate of the post-compaction view (same basis). */
+  tokensAfter: number;
+  /** Message count of the compacted view before this run (post-watermark, edited view — same basis as tokensBefore). */
+  messagesBefore: number;
 };
+
+/**
+ * The two chunk payloads for the `compact_context` trace, so the live stream
+ * writer (agent-runner, ADR-0012 §Compaction trace in the timeline) and the
+ * standalone persisted-message builder ({@link buildCompactionTraceMessage},
+ * ADR-0012 §Force-compact on demand) render identically. Input carries the
+ * "before" stats (shown during the Running phase); Output carries the "after"
+ * stats + reduction + summary excerpt (shown when Completed).
+ */
+export function compactionTracePayloads(trace: CompactionTrace): {
+  input: Record<string, unknown>;
+  output: Record<string, unknown>;
+} {
+  const tokensSaved = Math.max(0, trace.tokensBefore - trace.tokensAfter);
+  const reductionPct =
+    trace.tokensBefore > 0
+      ? Math.round((tokensSaved / trace.tokensBefore) * 100)
+      : 0;
+  return {
+    input: {
+      tokensBefore: trace.tokensBefore,
+      messagesBefore: trace.messagesBefore,
+    },
+    output: {
+      tokensAfter: trace.tokensAfter,
+      tokensSaved,
+      reductionPct,
+      messagesDropped: trace.messagesDropped,
+      ...(trace.summaryExcerpt ? { summaryExcerpt: trace.summaryExcerpt } : {}),
+    },
+  };
+}
 
 /** Tool name for the synthetic compaction-trace tool-call/result pair (ADR-0012 §Compaction trace in the timeline).
  * Shared by the stream-trace producer (agent-runner), the strip filter that
@@ -1122,6 +1172,7 @@ export function buildCompactionTraceMessage(
   trace: CompactionTrace,
   id: string,
 ): PlatypusUIMessage {
+  const { input, output } = compactionTracePayloads(trace);
   return {
     id,
     role: "assistant",
@@ -1130,13 +1181,8 @@ export function buildCompactionTraceMessage(
         type: `tool-${COMPACT_CONTEXT_TOOL_NAME}`,
         toolCallId: `${id}-call`,
         state: "output-available",
-        input: { messagesDropped: trace.messagesDropped },
-        output: {
-          messagesDropped: trace.messagesDropped,
-          ...(trace.summaryExcerpt
-            ? { summaryExcerpt: trace.summaryExcerpt }
-            : {}),
-        },
+        input,
+        output,
       },
     ],
   } as unknown as PlatypusUIMessage;
@@ -1293,6 +1339,24 @@ export async function applyTier1Compaction(
   // soft target. Recent tool results are trimmed only when this is breached.
   const effectiveInputBudget = Math.max(0, budget.inputBudget - overheadTokens);
 
+  // One-shot wrap of the summarizer: fire onSummarizeStart the instant Stage 2's
+  // first model call begins (ADR-0012 §Compaction trace in the timeline). This is
+  // the point where the before-stats are in scope (charOnlyBasis / editedView),
+  // and it fires ONLY on the summarize path — never on the prune-only early
+  // return — so the live in-progress spinner appears iff a trace will follow.
+  // Map-reduce invokes summarize repeatedly; the guard dedupes to one fire.
+  let summarizeStartFired = false;
+  const summarize: Summarize = async (text) => {
+    if (!summarizeStartFired) {
+      summarizeStartFired = true;
+      input.onSummarizeStart?.({
+        tokensBefore: charOnlyBasis,
+        messagesBefore: editedView.length,
+      });
+    }
+    return input.summarize(text);
+  };
+
   const result = await compactUIMessages(editedView, {
     targetTokens: effectiveTarget,
     inputBudget: effectiveInputBudget,
@@ -1301,7 +1365,7 @@ export async function applyTier1Compaction(
     minRecentPrunableChars: config.minRecentPrunableChars,
     imageProvider,
     priorSummary,
-    summarize: input.summarize,
+    summarize,
     summarizerWindow: input.summarizerWindow,
     // When dirty-forced the estimator already proved wrong (ADR-0012 §Recovery): bypass the
     // no-op gate so recovery's dirty flag actually shrinks the history. Also
@@ -1385,6 +1449,9 @@ export async function applyTier1Compaction(
       ? {
           messagesDropped: result.messagesDropped,
           summaryExcerpt: result.summaryText.slice(0, 120),
+          tokensBefore: charOnlyBasis,
+          tokensAfter: result.estimatedTokens + overheadTokens,
+          messagesBefore: editedView.length,
         }
       : undefined;
 

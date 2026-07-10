@@ -3,6 +3,7 @@ import {
   LoadAPIKeyError,
   convertToModelMessages,
   createIdGenerator,
+  createUIMessageStream,
   createUIMessageStreamResponse,
   generateText,
   readUIMessageStream,
@@ -10,7 +11,7 @@ import {
   streamText,
   wrapLanguageModel,
   type LanguageModel,
-  type UIMessageChunk,
+  type UIMessageStreamWriter,
 } from "ai";
 import {
   contextOverflowRecoveryMiddleware,
@@ -19,6 +20,7 @@ import {
 import {
   buildTier2PrepareStep,
   COMPACT_CONTEXT_TOOL_NAME,
+  compactionTracePayloads,
   type CompactionTrace,
 } from "./compaction.ts";
 import {
@@ -50,51 +52,38 @@ import type {
   RunStatus,
 } from "./types.ts";
 
+/** Before-stats carried by the one-shot compaction-summarize callback (ADR-0012 §Compaction trace in the timeline live In-Progress). */
+type CompactionBeforeStats = { tokensBefore: number; messagesBefore: number };
+
 /**
- * Injects synthetic `compact_context` tool-call + tool-result chunks into a
- * UIMessage stream immediately after the `start` event (ADR-0012 §Compaction trace in the timeline). Makes Tier
- * 1 compaction visible in the chat timeline without a custom renderer — the
- * existing tool-call expander handles it automatically.
- *
- * Exported for unit testing.
+ * Resolves the live in-progress `compact_context` chunk (ADR-0012 §Compaction
+ * trace in the timeline). Once the in-progress chunk has been written (i.e. a
+ * model summary began → `toolCallId` is set), a terminal chunk MUST always
+ * follow, otherwise the badge hangs on a permanent "Running" spinner. Two live
+ * paths write in-progress but yield no trace: a concurrent CAS writer advancing
+ * the version (summary ran, commit skipped) and a swallowed `summarize` throw —
+ * both leave `prepare` succeeding with `compactionTrace: undefined`. In those
+ * cases the in-memory view WAS compacted this turn, so a benign Done reads truer
+ * than an error badge.
  */
-export function prependCompactionChunks(
-  stream: ReadableStream<UIMessageChunk>,
-  trace: CompactionTrace,
-  generateId: () => string = createIdGenerator({ prefix: "cc", size: 12 }),
-): ReadableStream<UIMessageChunk> {
-  const toolCallId = generateId();
-  const syntheticChunks: UIMessageChunk[] = [
-    {
-      type: "tool-input-available",
-      toolCallId,
-      toolName: COMPACT_CONTEXT_TOOL_NAME,
-      title: "Context compaction",
-      input: { messagesDropped: trace.messagesDropped },
-    },
-    {
+function finalizeCompactionTrace(
+  writer: UIMessageStreamWriter<PlatypusUIMessage>,
+  toolCallId: string | undefined,
+  trace: CompactionTrace | undefined,
+): void {
+  if (!toolCallId) return; // Stage 2 never ran → no spinner to close.
+  if (trace) {
+    const { output } = compactionTracePayloads(trace);
+    writer.write({ type: "tool-output-available", toolCallId, output });
+  } else {
+    writer.write({
       type: "tool-output-available",
       toolCallId,
       output: {
-        messagesDropped: trace.messagesDropped,
-        ...(trace.summaryExcerpt
-          ? { summaryExcerpt: trace.summaryExcerpt }
-          : {}),
+        note: "Context compaction ran; summary not persisted this turn.",
       },
-    },
-  ];
-  let injected = false;
-  return stream.pipeThrough(
-    new TransformStream<UIMessageChunk, UIMessageChunk>({
-      transform(chunk, controller) {
-        controller.enqueue(chunk);
-        if (!injected && chunk.type === "start") {
-          injected = true;
-          for (const c of syntheticChunks) controller.enqueue(c);
-        }
-      },
-    }),
-  );
+    });
+  }
 }
 
 const COMPACT_CONTEXT_PART_TYPE = `tool-${COMPACT_CONTEXT_TOOL_NAME}`;
@@ -324,6 +313,7 @@ export class AgentRunner {
     onActivity?: (event?: ToolActivityEvent) => void,
     priorMessages?: PlatypusUIMessage[],
     signal?: AbortSignal,
+    onCompactionSummarizeStart?: (before: CompactionBeforeStats) => void,
   ): Promise<ChatTurn> {
     return prepareChatTurn({
       orgId: scope.orgId,
@@ -337,6 +327,7 @@ export class AgentRunner {
       onActivity,
       priorMessages,
       signal,
+      onCompactionSummarizeStart,
     });
   }
 
@@ -442,29 +433,6 @@ export class AgentRunner {
 
     const onActivity = makeActivityHandler(handle, input.runId);
 
-    try {
-      state.turn = await this.prepare(
-        scope,
-        input,
-        params.origin,
-        params.frontendUrl,
-        onActivity,
-        priorMessages,
-        handle.signal,
-      );
-    } catch (error) {
-      const err = error instanceof Error ? error : new Error(String(error));
-      logger.error(
-        { error, runId: input.runId },
-        "Run prepare failed before model invocation",
-      );
-      await finalize("failed", err);
-      throw err;
-    }
-
-    const plan: ResolvedRunPlan = { resolved: state.turn.resolved };
-    await sink.onResolved({ runId: input.runId, plan });
-
     const onStep = (step: {
       toolCalls?: Array<{ toolName: string }>;
       usage?: { inputTokens?: number; outputTokens?: number };
@@ -502,42 +470,79 @@ export class AgentRunner {
       ? createNoProgressDetector()
       : null;
 
-    // Built once and shared by both invocations. Generation params pass
-    // through as-is (including `undefined`): the SDK treats an absent key and
-    // an `undefined` value identically, and the streaming path has always
-    // passed them this way in production.
-    const modelArgs = {
-      // Recovery middleware (ADR-0012 §Recovery): every model call — first call and every
-      // tool-loop step, stream and generate alike — gets one trim-and-retry on
-      // a provider "context too long" rejection. Always on; not gated by ADR-0012 §Config & kill switch.
-      model: withOverflowRecovery(state.turn),
-      // Strip the UI-only synthetic compact_context trace parts (ADR-0012 §Compaction trace in the timeline) before
-      // sending history to the provider — replaying them surfaces a phantom tool
-      // call for a tool the model was never given. Applied here so both the
-      // streaming and generate paths (which share modelArgs) are covered.
-      messages: await convertToModelMessages(
-        stripCompactionTraceParts(state.turn.stream.messages),
-      ),
-      system: state.turn.stream.system,
-      tools: state.turn.stream.tools,
-      stopWhen: noProgress
-        ? [stepCountIs(state.turn.stream.maxSteps), noProgress.stopCondition]
-        : [stepCountIs(state.turn.stream.maxSteps)],
-      abortSignal: handle.signal,
-      // Tier 2 (ADR-0012 §Tier 2): in-turn compaction before each step when the live window
-      // nears the limit. Undefined when the turn has no Tier 2 runtime.
-      prepareStep: state.turn.tier2
-        ? buildTier2PrepareStep(state.turn.tier2)
-        : undefined,
-      temperature: state.turn.stream.temperature,
-      topP: state.turn.stream.topP,
-      topK: state.turn.stream.topK,
-      frequencyPenalty: state.turn.stream.frequencyPenalty,
-      presencePenalty: state.turn.stream.presencePenalty,
-      seed: state.turn.stream.seed,
+    // `runPrepare` runs `prepare` → `sink.onResolved` → build `modelArgs`, in that
+    // order. It is deferred behind a thunk (rather than run inline in `setup`) so
+    // the streaming path can open the client UI stream FIRST and invoke it inside
+    // the stream's `execute` — that is what lets a mid-prepare model summary write
+    // a live in-progress `compact_context` chunk (ADR-0012 §Compaction trace in
+    // the timeline). `generate()` (headless) calls it inline with no callback. The
+    // prepare-failure path finalizes "failed" and rethrows; both consumers handle
+    // the rethrow (stream inside `execute`, generate at the top of its try).
+    const runPrepare = async (
+      onCompactionSummarizeStart?: (before: CompactionBeforeStats) => void,
+    ) => {
+      try {
+        state.turn = await this.prepare(
+          scope,
+          input,
+          params.origin,
+          params.frontendUrl,
+          onActivity,
+          priorMessages,
+          handle.signal,
+          onCompactionSummarizeStart,
+        );
+      } catch (error) {
+        const err = error instanceof Error ? error : new Error(String(error));
+        logger.error(
+          { error, runId: input.runId },
+          "Run prepare failed before model invocation",
+        );
+        await finalize("failed", err);
+        throw err;
+      }
+
+      const plan: ResolvedRunPlan = { resolved: state.turn.resolved };
+      await sink.onResolved({ runId: input.runId, plan });
+
+      // Built once per turn. Generation params pass through as-is (including
+      // `undefined`): the SDK treats an absent key and an `undefined` value
+      // identically, and the streaming path has always passed them this way.
+      const modelArgs = {
+        // Recovery middleware (ADR-0012 §Recovery): every model call — first call and every
+        // tool-loop step, stream and generate alike — gets one trim-and-retry on
+        // a provider "context too long" rejection. Always on; not gated by ADR-0012 §Config & kill switch.
+        model: withOverflowRecovery(state.turn),
+        // Strip the UI-only synthetic compact_context trace parts (ADR-0012 §Compaction trace in the timeline) before
+        // sending history to the provider — replaying them surfaces a phantom tool
+        // call for a tool the model was never given. Applied here so both the
+        // streaming and generate paths (which share modelArgs) are covered.
+        messages: await convertToModelMessages(
+          stripCompactionTraceParts(state.turn.stream.messages),
+        ),
+        system: state.turn.stream.system,
+        tools: state.turn.stream.tools,
+        stopWhen: noProgress
+          ? [stepCountIs(state.turn.stream.maxSteps), noProgress.stopCondition]
+          : [stepCountIs(state.turn.stream.maxSteps)],
+        abortSignal: handle.signal,
+        // Tier 2 (ADR-0012 §Tier 2): in-turn compaction before each step when the live window
+        // nears the limit. Undefined when the turn has no Tier 2 runtime.
+        prepareStep: state.turn.tier2
+          ? buildTier2PrepareStep(state.turn.tier2)
+          : undefined,
+        temperature: state.turn.stream.temperature,
+        topP: state.turn.stream.topP,
+        topK: state.turn.stream.topK,
+        frequencyPenalty: state.turn.stream.frequencyPenalty,
+        presencePenalty: state.turn.stream.presencePenalty,
+        seed: state.turn.stream.seed,
+      };
+
+      return { modelArgs };
     };
 
-    return { state, handle, finalize, onStep, modelArgs, noProgress };
+    return { state, handle, finalize, onStep, noProgress, runPrepare };
   }
 
   async stream(params: {
@@ -547,7 +552,7 @@ export class AgentRunner {
     options: StreamOptions;
   }): Promise<Response> {
     const { input, options } = params;
-    const { state, handle, finalize, onStep, modelArgs } = await this.setup({
+    const { state, handle, finalize, onStep, runPrepare } = await this.setup({
       scope: params.scope,
       input,
       sink: params.sink,
@@ -555,8 +560,6 @@ export class AgentRunner {
       frontendUrl: options.frontendUrl,
       timeouts: options.timeouts,
     });
-
-    logger.debug({ systemPrompt: modelArgs.system }, "System prompt for chat");
 
     const startedAt = new Date().toISOString();
     let firstTokenAt: string | undefined;
@@ -584,58 +587,111 @@ export class AgentRunner {
       };
     };
 
-    const result = streamText({
-      ...modelArgs,
-      onStepFinish: (step) => onStep(step),
-      // TTFT: stamp the first text token here (fires before the `finish` event),
-      // so the stats are complete by the time messageMetadata emits them.
-      onChunk: ({ chunk }) => {
-        if (!firstTokenAt && chunk.type === "text-delta") {
-          firstTokenAt = new Date().toISOString();
-        }
-      },
-    });
+    // Live compaction trace (ADR-0012 §Compaction trace in the timeline): a model
+    // summary that begins mid-prepare writes an in-progress `compact_context`
+    // chunk; the terminal chunk follows once prepare returns. `ccToolCallId` is
+    // set iff the in-progress chunk was written — {@link finalizeCompactionTrace}
+    // then guarantees a matching terminal chunk so the badge never hangs.
+    const ccIdGen = createIdGenerator({ prefix: "cc", size: 12 });
+    let ccToolCallId: string | undefined;
 
-    // Build the UI message stream and tee it. The response body consumes
-    // one branch; we drain the other server-side so a disconnected
-    // client (cancelling the response branch) doesn't propagate back to
-    // the source. The source keeps pulling as long as the snapshot
-    // branch is being read.
-    const uiStream = result.toUIMessageStream<PlatypusUIMessage>({
+    // Open the client UI stream BEFORE prepare, so a mid-prepare summarize can
+    // write the in-progress chunk into it. `execute` runs prepare, resolves the
+    // trace, then merges the model stream. Only this OUTER stream owns message
+    // identity (`generateId`) and the single start/finish pair; the inner merged
+    // stream carries only per-message metadata + error formatting.
+    const uiStream = createUIMessageStream<PlatypusUIMessage>({
       originalMessages: input.messages,
-      generateMessageId: createIdGenerator({ prefix: "msg", size: 16 }),
-      // Emit the ADR-0012 §Context-usage ring / §Per-message stats with the `finish` event so the client gets them on
-      // the final stream chunk — the (i) stats action then appears the instant
-      // the answer completes, not a DB-refetch round-trip later. `start` carries
-      // only agentId (timing/usage don't exist yet). The post-stream stamp in
-      // the finally still writes them to the persisted message for reload.
-      messageMetadata: ({ part }) => {
-        const agentId = state.turn?.resolved.agentId
-          ? { agentId: state.turn.resolved.agentId }
-          : undefined;
-        if (part.type === "finish") {
-          finishedAt = new Date().toISOString();
-          const stats = buildMessageStats(finishedAt);
-          return stats ? { ...agentId, stats } : agentId;
-        }
-        return agentId;
-      },
+      generateId: createIdGenerator({ prefix: "msg", size: 16 }),
       onError: (error) => formatStreamError(error),
+      execute: async ({ writer }) => {
+        let modelArgs;
+        try {
+          ({ modelArgs } = await runPrepare((before) => {
+            if (ccToolCallId) return; // one-shot (defensive)
+            ccToolCallId = ccIdGen();
+            writer.write({
+              type: "tool-input-available",
+              toolCallId: ccToolCallId,
+              toolName: COMPACT_CONTEXT_TOOL_NAME,
+              title: "Context compaction",
+              input: {
+                tokensBefore: before.tokensBefore,
+                messagesBefore: before.messagesBefore,
+              },
+            });
+          }));
+        } catch {
+          // runPrepare already finalized "failed"; surface a terminal error chunk
+          // so an in-progress compaction badge flips to Error instead of hanging.
+          // The snapshot drain's finally is a no-op (already terminated).
+          if (ccToolCallId) {
+            writer.write({
+              type: "tool-output-error",
+              toolCallId: ccToolCallId,
+              errorText: "Context compaction failed.",
+            });
+          }
+          return;
+        }
+
+        logger.debug(
+          { systemPrompt: modelArgs.system },
+          "System prompt for chat",
+        );
+
+        // ALWAYS resolve the in-progress badge (ADR-0012 §Compaction trace in the
+        // timeline): present trace → Done + after-stats; spinner fired but no
+        // trace (CAS race / swallowed summarize throw) → degraded Done.
+        finalizeCompactionTrace(
+          writer,
+          ccToolCallId,
+          state.turn?.compactionTrace,
+        );
+
+        const result = streamText({
+          ...modelArgs,
+          onStepFinish: (step) => onStep(step),
+          // TTFT: stamp the first text token here (fires before the `finish` event),
+          // so the stats are complete by the time messageMetadata emits them.
+          onChunk: ({ chunk }) => {
+            if (!firstTokenAt && chunk.type === "text-delta") {
+              firstTokenAt = new Date().toISOString();
+            }
+          },
+        });
+
+        writer.merge(
+          result.toUIMessageStream<PlatypusUIMessage>({
+            // Emit the ADR-0012 §Context-usage ring / §Per-message stats with the `finish` event so the client gets them on
+            // the final stream chunk — the (i) stats action then appears the instant
+            // the answer completes, not a DB-refetch round-trip later. `start` carries
+            // only agentId (timing/usage don't exist yet). The post-stream stamp in
+            // the finally still writes them to the persisted message for reload.
+            // NB: no originalMessages/generateMessageId here — the outer stream
+            // owns message identity and the start/finish pair.
+            messageMetadata: ({ part }) => {
+              const agentId = state.turn?.resolved.agentId
+                ? { agentId: state.turn.resolved.agentId }
+                : undefined;
+              if (part.type === "finish") {
+                finishedAt = new Date().toISOString();
+                const stats = buildMessageStats(finishedAt);
+                return stats ? { ...agentId, stats } : agentId;
+              }
+              return agentId;
+            },
+            onError: (error) => formatStreamError(error),
+          }),
+        );
+      },
     });
 
-    // ADR-0012 §Compaction trace in the timeline: if Tier 1 compaction fired this turn, prepend synthetic
-    // compact_context tool-call + tool-result chunks so the compaction is
-    // visible in the chat timeline. Injected after the 'start' event so the
-    // AI SDK builds them into the same assistant message as the response.
-    const tracedStream: ReadableStream<UIMessageChunk> = state.turn
-      ?.compactionTrace
-      ? prependCompactionChunks(
-          uiStream as ReadableStream<UIMessageChunk>,
-          state.turn.compactionTrace,
-        )
-      : (uiStream as ReadableStream<UIMessageChunk>);
-
-    const [forResponse, forSnapshot] = tracedStream.tee();
+    // Tee the UI stream. The response body consumes one branch; we drain the
+    // other server-side so a disconnected client (cancelling the response
+    // branch) doesn't propagate back to the source. The source keeps pulling as
+    // long as the snapshot branch is being read.
+    const [forResponse, forSnapshot] = uiStream.tee();
 
     // Read the snapshot branch as message snapshots and keep `state.messages`
     // up to date. ChatSink's FlushScheduler then writes the in-progress
@@ -723,7 +779,7 @@ export class AgentRunner {
     const options = params.options ?? {};
     // No `origin`: headless callers don't have file URLs to inline.
     // Headless runs are unattended → enable no-progress detection.
-    const { state, handle, finalize, onStep, modelArgs, noProgress } =
+    const { state, handle, finalize, onStep, noProgress, runPrepare } =
       await this.setup({
         scope: params.scope,
         input,
@@ -732,6 +788,11 @@ export class AgentRunner {
         timeouts: options.timeouts,
         unattended: true,
       });
+
+    // Headless: no live stream, so no in-progress compaction chunk — run prepare
+    // inline. A prepare failure rethrows here (runPrepare already finalized
+    // "failed"), matching the pre-refactor behaviour where setup threw.
+    const { modelArgs } = await runPrepare();
 
     const startTime = Date.now();
     try {

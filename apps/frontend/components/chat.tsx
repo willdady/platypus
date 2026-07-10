@@ -472,6 +472,27 @@ export const Chat = ({
   const runCompact = useCallback(async () => {
     if (!backendUrl) return;
     setIsCompacting(true);
+    // ADR-0012 §Compaction trace in the timeline: optimistically append an
+    // in-progress `compact_context` part so the timeline shows "Running"
+    // immediately (alongside the ring spinner). Swapped for the persisted Done
+    // trace on success, removed on error. No real before-stats at POST time, so
+    // the Input is left empty — the after-stats arrive with the Done trace.
+    const tempId = `cc-optimistic-${chatId}`;
+    const optimistic = {
+      id: tempId,
+      role: "assistant",
+      parts: [
+        {
+          type: "tool-compact_context",
+          toolCallId: `${tempId}-call`,
+          state: "input-available",
+          input: {},
+        },
+      ],
+    } as unknown as PlatypusUIMessage;
+    setMessages((prev) => [...prev, optimistic]);
+    const dropOptimistic = () =>
+      setMessages((prev) => prev.filter((m) => m.id !== tempId));
     try {
       // A deferred compact fires the instant local streaming flips to idle, but
       // the backend unregisters the run only after it disposes/persists — so the
@@ -493,6 +514,7 @@ export const Chat = ({
         await new Promise((r) => setTimeout(r, 300 * 2 ** attempt));
       }
       if (!res || !res.ok) {
+        dropOptimistic();
         const body = res ? await res.json().catch(() => ({})) : {};
         toast.error((body as { error?: string }).error ?? "Compact failed");
         return;
@@ -521,19 +543,23 @@ export const Chat = ({
           tokens: body.inputTokens,
         });
       }
-      // ADR-0012 §Compaction trace in the timeline: append the persisted compaction-trace message so it shows in the
-      // timeline immediately. It carries the id the backend persisted, so a
-      // later SWR revalidation reconciles rather than duplicating it.
-      if (body.traceMessage) {
+      // ADR-0012 §Compaction trace in the timeline: swap the optimistic Running
+      // part for the persisted Done trace message so it flips to "Completed" with
+      // the after-stats Output. The trace carries the id the backend persisted,
+      // so a later SWR revalidation reconciles rather than duplicating it. When no
+      // summary was produced (traceMessage undefined) the optimistic part is just
+      // removed, matching today's "nothing changed" UX.
+      setMessages((prev) => {
+        const withoutTemp = prev.filter((m) => m.id !== tempId);
         const traceMessage = body.traceMessage;
-        setMessages((prev) =>
-          prev.some((m) => m.id === traceMessage.id)
-            ? prev
-            : [...prev, traceMessage],
-        );
-      }
+        if (!traceMessage) return withoutTemp;
+        return withoutTemp.some((m) => m.id === traceMessage.id)
+          ? withoutTemp
+          : [...withoutTemp, traceMessage];
+      });
       toast.success("Context compacted");
     } catch {
+      dropOptimistic();
       toast.error("Compact request failed");
     } finally {
       setIsCompacting(false);

@@ -247,6 +247,17 @@ export type PrepareChatTurnInput = {
    * run (tests, ad-hoc) omit it and the summarize call simply runs uncancelled.
    */
   signal?: AbortSignal;
+  /**
+   * Fires once, the instant a Tier 1 model summary begins, carrying the
+   * before-stats (ADR-0012 §Compaction trace in the timeline live In-Progress).
+   * agent-runner uses it to write the in-progress `compact_context` chunk into
+   * the live stream before the model response. Not fired on prune-only/no-op
+   * turns (no trace) or headless runs (no chat id).
+   */
+  onCompactionSummarizeStart?: (before: {
+    tokensBefore: number;
+    messagesBefore: number;
+  }) => void;
 };
 
 /**
@@ -842,6 +853,11 @@ type ApplyTier1Args = {
   overheadTokens: number;
   /** Provider-reported `usage.inputTokens` from the prior turn (ADR-0012 §Tier 1 (trigger projection), ADR-0012 §Context-usage ring). */
   lastInputTokens?: number;
+  /** Fires once when a model summary begins, carrying before-stats (ADR-0012 §Compaction trace in the timeline live In-Progress). */
+  onSummarizeStart?: (before: {
+    tokensBefore: number;
+    messagesBefore: number;
+  }) => void;
 };
 
 type Tier1IfNeededResult = {
@@ -901,6 +917,7 @@ async function applyTier1IfNeeded(
       store,
       onEvent: (event) =>
         logger.info({ chatId, ...event }, "context-compacted"),
+      onSummarizeStart: args.onSummarizeStart,
     });
 
     return {
@@ -1107,6 +1124,10 @@ export const prepareChatTurn = async (
         // corrective baseline for the Tier 1 trigger projection on turns ≥ 2.
         // Absent on turn 1 → cold-start margin applies.
         lastInputTokens: findLastInputTokens(messages),
+        // Live In-Progress trace (ADR-0012 §Compaction trace in the timeline):
+        // fires the instant a model summary starts so agent-runner can write
+        // the in-progress chunk before the model response streams.
+        onSummarizeStart: input.onCompactionSummarizeStart,
       })
     : { messages: inlinedMessages };
   const compactedMessages = tier1Result.messages;

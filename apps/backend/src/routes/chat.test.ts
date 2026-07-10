@@ -549,6 +549,46 @@ describe("Chat Routes", () => {
       );
     });
 
+    it("passes the persisted trace message (with before/after stats) through to the client", async () => {
+      ownerAccess();
+      const traceMessage = {
+        id: "msg-trace",
+        role: "assistant",
+        parts: [
+          {
+            type: "tool-compact_context",
+            toolCallId: "msg-trace-call",
+            state: "output-available",
+            input: { tokensBefore: 1000, messagesBefore: 12 },
+            output: {
+              tokensAfter: 400,
+              tokensSaved: 600,
+              reductionPct: 60,
+              messagesDropped: 5,
+              summaryExcerpt: "did things",
+            },
+          },
+        ],
+      };
+      mockForceCompactChat.mockResolvedValueOnce({
+        estimatedTokens: 400,
+        tokensBefore: 1000,
+        messagesDropped: 5,
+        keepRecentMessages: 10,
+        contextWindow: 8192,
+        contextWindowIsDefault: false,
+        traceMessage,
+      });
+
+      const res = await app.request(`${baseUrl}/chat-1/compact`, {
+        method: "POST",
+      });
+
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as { traceMessage?: typeof traceMessage };
+      expect(body.traceMessage).toEqual(traceMessage);
+    });
+
     it("returns 409 when a run is in progress (does not compact)", async () => {
       ownerAccess();
       // runRegistry is keyed by runId, which equals the chatId for top-level

@@ -606,9 +606,15 @@ import {
 } from "./compaction.ts";
 
 describe("buildCompactionTraceMessage (ADR-0012 §Force-compact on demand)", () => {
-  it("builds an assistant message with a completed compact_context tool part", () => {
+  it("splits before-stats into Input and after-stats into Output", () => {
     const msg = buildCompactionTraceMessage(
-      { messagesDropped: 7, summaryExcerpt: "did things" },
+      {
+        messagesDropped: 7,
+        summaryExcerpt: "did things",
+        tokensBefore: 1000,
+        tokensAfter: 400,
+        messagesBefore: 12,
+      },
       "msg-abc",
     );
     expect(msg.id).toBe("msg-abc");
@@ -618,21 +624,43 @@ describe("buildCompactionTraceMessage (ADR-0012 §Force-compact on demand)", () 
       type: string;
       state: string;
       toolCallId: string;
+      input: unknown;
       output: unknown;
     };
     expect(part.type).toBe("tool-compact_context");
     expect(part.state).toBe("output-available");
     expect(part.toolCallId).toBe("msg-abc-call");
+    // Input = before-stats (shown during the Running phase).
+    expect(part.input).toEqual({ tokensBefore: 1000, messagesBefore: 12 });
+    // Output = after-stats + derived reduction + summary excerpt.
     expect(part.output).toEqual({
+      tokensAfter: 400,
+      tokensSaved: 600,
+      reductionPct: 60,
       messagesDropped: 7,
       summaryExcerpt: "did things",
     });
   });
 
   it("omits summaryExcerpt from the output when absent", () => {
-    const msg = buildCompactionTraceMessage({ messagesDropped: 1 }, "msg-x");
-    const part = msg.parts[0] as { output: unknown };
-    expect(part.output).toEqual({ messagesDropped: 1 });
+    const msg = buildCompactionTraceMessage(
+      {
+        messagesDropped: 1,
+        tokensBefore: 100,
+        tokensAfter: 100,
+        messagesBefore: 3,
+      },
+      "msg-x",
+    );
+    const part = msg.parts[0] as { output: Record<string, unknown> };
+    expect(part.output).not.toHaveProperty("summaryExcerpt");
+    // Zero reduction is reported honestly, not as a divide-by-zero NaN.
+    expect(part.output).toMatchObject({
+      tokensAfter: 100,
+      tokensSaved: 0,
+      reductionPct: 0,
+      messagesDropped: 1,
+    });
   });
 });
 
@@ -751,12 +779,73 @@ describe("applyTier1Compaction", () => {
     expect(store.state.version).toBe(1);
     expect(out.messages[0].id).toBe("context-summary");
     expect(onEvent).toHaveBeenCalledOnce();
-    // ADR-0012 §Compaction trace in the timeline: a summary ran → a trace is surfaced with the dropped count and a
-    // summary excerpt.
-    expect(out.compactionTrace).toEqual({
+    // ADR-0012 §Compaction trace in the timeline: a summary ran → a trace is surfaced with the dropped count, a
+    // summary excerpt, and before/after stats (same char/4 + overhead basis).
+    expect(out.compactionTrace).toMatchObject({
       messagesDropped: 2,
       summaryExcerpt: "SUMMARY",
     });
+    expect(out.compactionTrace?.tokensBefore).toBeGreaterThan(0);
+    expect(out.compactionTrace?.tokensAfter).toBeGreaterThanOrEqual(0);
+    // messagesBefore = the pre-run post-watermark view (all 4 messages here).
+    expect(out.compactionTrace?.messagesBefore).toBe(4);
+  });
+
+  it("fires onSummarizeStart once with before-stats on the summary path (ADR-0012 §Compaction trace in the timeline live In-Progress)", async () => {
+    const store = storeFromState({ version: 0 });
+    const onSummarizeStart = vi.fn();
+    const messages = [
+      bigText("p1", "user"),
+      bigText("p2", "assistant"),
+      uiText("r1", "user", "a"),
+      uiText("r2", "assistant", "b"),
+    ];
+    const out = await applyTier1Compaction({
+      chatId: "c",
+      messages,
+      state: {
+        version: 0,
+        summaryWatermark: null,
+        contextSummary: null,
+        compactionDirty: false,
+      },
+      budget: baseBudget,
+      config: cfg(),
+      imageProvider: "default",
+      summarize: noopSummarize,
+      store,
+      onSummarizeStart,
+    });
+    expect(out.compactionTrace).toBeDefined();
+    expect(onSummarizeStart).toHaveBeenCalledOnce();
+    // before-stats share the trace's tokensBefore basis and the pre-run view size.
+    expect(onSummarizeStart.mock.calls[0][0]).toEqual({
+      tokensBefore: out.compactionTrace!.tokensBefore,
+      messagesBefore: out.compactionTrace!.messagesBefore,
+    });
+  });
+
+  it("does NOT fire onSummarizeStart when not triggered (no summary path)", async () => {
+    const store = storeFromState({ version: 0 });
+    const onSummarizeStart = vi.fn();
+    const out = await applyTier1Compaction({
+      chatId: "c",
+      messages: [uiText("r1", "user", "a"), uiText("r2", "assistant", "b")],
+      state: {
+        version: 0,
+        summaryWatermark: null,
+        contextSummary: null,
+        compactionDirty: false,
+      },
+      budget: baseBudget,
+      config: cfg(),
+      imageProvider: "default",
+      summarize: noopSummarize,
+      store,
+      onSummarizeStart,
+    });
+    expect(out.compacted).toBe(false);
+    expect(onSummarizeStart).not.toHaveBeenCalled();
   });
 
   it("disabled + not dirty: no compaction even when over the trigger", async () => {

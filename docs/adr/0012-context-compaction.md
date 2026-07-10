@@ -247,14 +247,39 @@ an estimated reduction `> 30%` of history — below that it runs immediately. Pe
 ### Compaction trace in the timeline
 
 Compaction is surfaced as a synthetic `compact_context` tool-call + tool-result
-pair, reusing the existing tool-call UI (active spinner → collapsed expander with
-a summary excerpt). The Tier 1 path injects the pair into the response stream; the
-force-compact path (no live stream) persists a standalone synthetic assistant
-message **above** the watermark. The trace part is **stripped before
+pair, reusing the existing tool-call UI (Running spinner → collapsed "Completed"
+expander). It emits **live, in two phases**: a `tool-input-available` chunk the
+instant a model summary _begins_ (badge shows "Running"), then a
+`tool-output-available` chunk once the summary lands (flips to "Completed"). The
+**Input carries the before-stats** (`tokensBefore`, `messagesBefore`) shown during
+the Running phase; the **Output carries the after-stats** (`tokensAfter`,
+`tokensSaved`, `reductionPct`, `messagesDropped`, `summaryExcerpt`). A single
+`compactionTracePayloads(trace)` helper builds both payloads so the auto and
+force paths render identically.
+
+For the **Tier 1 (auto)** path, `agentRunner.stream()` opens the client UI stream
+(`createUIMessageStream({ execute })`) **before** `prepare` runs, and the summarizer
+fires a one-shot `onSummarizeStart(before)` callback that writes the in-progress
+chunk mid-prepare; the terminal chunk is written once `prepare` returns. Because
+the in-progress chunk fires only when Stage 2's model call actually begins, it never
+appears on prune-only / no-op turns. **Invariant:** once the in-progress chunk is
+written a terminal chunk always follows — if the summary ran but produced no durable
+trace (CAS version race, or a swallowed `summarize` throw), the runner writes a
+_degraded Done_ (a benign note) rather than leaving the badge stuck on "Running".
+
+The **force-compact** path (no live stream) persists a standalone synthetic
+assistant message **above** the watermark; the frontend also shows an optimistic
+in-progress part at POST time that it swaps for the persisted Done trace on
+success (removed on error). The trace part is **stripped before
 `convertToModelMessages`** at both call sites so it never replays to the provider
 as a phantom tool call; a trace-only message is dropped entirely. The trace is
 emitted only when an actual model summary ran (not for prune-only or
 dirty-within-target no-ops).
+
+Note: the auto path's before/after basis includes per-turn overhead (system + tool
+schemas); the force path's excludes it (overhead is not passed there). The two
+numbers are therefore not directly comparable _across_ paths — each is
+self-consistent within its own path.
 
 ### Stage 0 — context editing (prune, don't summarize)
 
@@ -342,9 +367,6 @@ Consciously deferred, with rationale — recorded so the _why-not-yet_ isn't los
   the `cas.conflict` metric actually showing waste before it's touched.
 - **The estimate-vs-real divergence metric** (see §Token estimation) stays log-only
   until the image-constant tuning work is picked up.
-- **Live `Pending → Running` compaction trace** is deferred; the trace renders
-  post-hoc "Completed" only. Run/connection decoupling already neutralizes the
-  data-loss vector, so this is a liveness/UX gap, not correctness.
 - **Also deferred:** a message-count force-compact valve (a count-based backstop
   independent of the token estimate), a projected-input arc on the ring, persisting
   Tier 2 output, model-aware trim aggressiveness, and Anthropic's `count_tokens` for
