@@ -597,9 +597,13 @@ export class AgentRunner {
 
     // Open the client UI stream BEFORE prepare, so a mid-prepare summarize can
     // write the in-progress chunk into it. `execute` runs prepare, resolves the
-    // trace, then merges the model stream. Only this OUTER stream owns message
-    // identity (`generateId`) and the single start/finish pair; the inner merged
-    // stream carries only per-message metadata + error formatting.
+    // trace, then merges the model stream. The message must have exactly ONE
+    // `start`: when a compaction summary fires mid-prepare the callback writes it
+    // (before the in-progress chunk) and the merged model stream suppresses its
+    // own (`sendStart:false`); otherwise the merged stream provides the sole
+    // start. Either way the outer `generateId` is injected into that start, so
+    // the message id is stable from its first client-visible chunk (no re-key
+    // flicker).
     const uiStream = createUIMessageStream<PlatypusUIMessage>({
       originalMessages: input.messages,
       generateId: createIdGenerator({ prefix: "msg", size: 16 }),
@@ -610,6 +614,19 @@ export class AgentRunner {
           ({ modelArgs } = await runPrepare((before) => {
             if (ccToolCallId) return; // one-shot (defensive)
             ccToolCallId = ccIdGen();
+            // Open the assistant message BEFORE the in-progress chunk so it
+            // carries a stable message id from its first client-visible chunk.
+            // Without this, the in-progress part is the stream's first chunk and
+            // no `start` precedes it — the merged model stream's `start` lands
+            // ~1s later (after summarize), and only then does the client learn
+            // the real message id. In that window the client renders the badge
+            // under a locally-generated id, then re-pushes it under the server
+            // id when `start` arrives — the badge visibly disappears and
+            // reappears as Completed (the reported flicker). `handleUIMessage
+            // StreamFinish` injects the outer `generateId` into this start; the
+            // merged model stream below suppresses its own `start` so this stays
+            // the single message-start.
+            writer.write({ type: "start" });
             writer.write({
               type: "tool-input-available",
               toolCallId: ccToolCallId,
@@ -631,6 +648,12 @@ export class AgentRunner {
               toolCallId: ccToolCallId,
               errorText: "Context compaction failed.",
             });
+            // Balance the manual `start` (written when the spinner fired) with a
+            // terminal `finish` so the streaming message closes as a matched
+            // start/finish pair. On this path the merged model stream — which
+            // normally owns the finish — never runs, so without this the client
+            // sees a start it can never pair, leaving the message mid-stream.
+            writer.write({ type: "finish", finishReason: "error" });
           }
           return;
         }
@@ -670,6 +693,13 @@ export class AgentRunner {
             // the finally still writes them to the persisted message for reload.
             // NB: no originalMessages/generateMessageId here — the outer stream
             // owns message identity and the start/finish pair.
+            //
+            // Suppress this stream's own `start` when the in-progress compaction
+            // chunk already opened the message (ccToolCallId set) — a second
+            // `start` would re-key the streaming message on the client and make
+            // the compaction badge flicker. When no compaction fired, this is the
+            // message's only `start`, so let it through.
+            sendStart: ccToolCallId === undefined,
             messageMetadata: ({ part }) => {
               const agentId = state.turn?.resolved.agentId
                 ? { agentId: state.turn.resolved.agentId }

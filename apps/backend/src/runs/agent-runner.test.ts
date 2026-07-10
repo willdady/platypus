@@ -752,9 +752,17 @@ describe("AgentRunner.stream — live compaction trace (ADR-0012 §Compaction tr
 
   const primeEmptyStreamText = () => {
     mockStreamText.mockImplementation(() => ({
-      toUIMessageStream: () =>
+      // Honor `sendStart` so the suppression path is actually exercised: the
+      // merged model stream emits its own `start` unless the caller passes
+      // sendStart:false. When a compaction spinner already opened the message,
+      // production sets sendStart:false — if that regressed, this mock would
+      // emit a second `start` and the "exactly one start" assertion would fail.
+      toUIMessageStream: (opts?: { sendStart?: boolean }) =>
         new ReadableStream<UIMessageChunk>({
           start(controller) {
+            if (opts?.sendStart !== false) {
+              controller.enqueue({ type: "start" });
+            }
             controller.close();
           },
         }),
@@ -804,9 +812,16 @@ describe("AgentRunner.stream — live compaction trace (ADR-0012 §Compaction tr
     await tick();
 
     const chunks = await collectResponse();
+    const startIdx = chunks.findIndex((c) => c.type === "start");
     const inIdx = chunks.findIndex((c) => c.type === "tool-input-available");
     const outIdx = chunks.findIndex((c) => c.type === "tool-output-available");
-    expect(inIdx).toBeGreaterThanOrEqual(0);
+    // The message opens with a `start` BEFORE the in-progress chunk, so the
+    // streaming message carries a stable id from its first client-visible chunk
+    // (no re-key flicker when the model stream lands ~1s later). Exactly one
+    // start: the merged model stream suppresses its own (sendStart:false).
+    expect(startIdx).toBeGreaterThanOrEqual(0);
+    expect(inIdx).toBeGreaterThan(startIdx);
+    expect(chunks.filter((c) => c.type === "start")).toHaveLength(1);
     expect(outIdx).toBeGreaterThan(inIdx); // in-progress precedes done
 
     const inChunk = chunks[inIdx];
@@ -931,6 +946,13 @@ describe("AgentRunner.stream — live compaction trace (ADR-0012 §Compaction tr
     expect(errChunk).toBeDefined();
     expect(errChunk!.toolCallId).toBe(inChunk!.toolCallId);
     expect(errChunk!.errorText).toBe("Context compaction failed.");
+    // The manual `start` is closed by a terminal `finish` (after the error
+    // chunk) so the streaming message is a matched start/finish pair — the
+    // merged model stream that normally emits the finish never ran here.
+    expect(chunks.filter((c) => c.type === "start")).toHaveLength(1);
+    const errIdx = chunks.findIndex((c) => c.type === "tool-output-error");
+    const finishIdx = chunks.findIndex((c) => c.type === "finish");
+    expect(finishIdx).toBeGreaterThan(errIdx);
     // The model stream never ran, and the run finalised "failed".
     expect(mockStreamText).not.toHaveBeenCalled();
     const finish = sink.events.at(-1) as Extract<
