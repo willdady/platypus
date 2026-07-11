@@ -440,10 +440,13 @@ export const Chat = ({
   // (metadata.stats.contextTokens), or a compaction trace's estimated
   // `output.tokensAfter` (flagged `estimated` for the tooltip). This does not
   // alter the backend `findLastInputTokens` projection, which still skips the trace.
-  const ringUsedTokens = useMemo<{
+  // Plain computation (not useMemo): the React Compiler can't preserve manual
+  // memoization for this loop-with-early-return shape and errors on it. Left
+  // uncompiled it auto-memoizes on `messages`, so behavior is unchanged.
+  const ringUsedTokens = ((): {
     tokens: number;
     estimated: boolean;
-  } | null>(() => {
+  } | null => {
     for (let i = messages.length - 1; i >= 0; i--) {
       const msg = messages[i];
       if (msg.role !== "assistant") continue;
@@ -458,7 +461,7 @@ export const Chat = ({
       }
     }
     return null;
-  }, [messages]);
+  })();
 
   const selectedAgent = agentId ? agents.find((a) => a.id === agentId) : null;
   // Resolve the provider backing the current selection, whether that's a raw
