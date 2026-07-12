@@ -1210,7 +1210,7 @@ describe("loadPlugins — example third-party npm package (end to end)", () => {
     }
     const result = (await set.tools.greet.execute!(
       { name: "Ada" },
-      { toolCallId: "t1", messages: [] },
+      { toolCallId: "t1", messages: [], context: {} },
     )) as string;
     expect(result).toContain("Ada");
   });

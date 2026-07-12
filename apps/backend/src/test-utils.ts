@@ -3,11 +3,15 @@ import type {
   InferToolInput,
   InferToolOutput,
   Tool,
-  ToolCallOptions,
+  ToolExecutionOptions,
 } from "ai";
 
 /** Default tool-call context for tests; tools rarely read these fields. */
-const TEST_TOOL_OPTIONS: ToolCallOptions = { toolCallId: "test", messages: [] };
+const TEST_TOOL_OPTIONS: ToolExecutionOptions<unknown> = {
+  toolCallId: "test",
+  messages: [],
+  context: undefined,
+};
 
 /**
  * Invokes a tool's `execute` in tests. The AI SDK types `execute` as optional
@@ -19,7 +23,7 @@ const TEST_TOOL_OPTIONS: ToolCallOptions = { toolCallId: "test", messages: [] };
 export async function callTool<TOOL extends Tool>(
   tool: TOOL,
   input: InferToolInput<TOOL>,
-  options: ToolCallOptions = TEST_TOOL_OPTIONS,
+  options: ToolExecutionOptions<unknown> = TEST_TOOL_OPTIONS,
 ): Promise<Exclude<InferToolOutput<TOOL>, AsyncIterable<unknown>>> {
   if (typeof tool.execute !== "function") {
     throw new Error("Tool has no execute function");
@@ -48,7 +52,7 @@ export function expectOk<T>(result: T): Exclude<T, { error: string }> {
 export async function callOkTool<TOOL extends Tool>(
   tool: TOOL,
   input: InferToolInput<TOOL>,
-  options: ToolCallOptions = TEST_TOOL_OPTIONS,
+  options: ToolExecutionOptions<unknown> = TEST_TOOL_OPTIONS,
 ): Promise<
   Exclude<InferToolOutput<TOOL>, AsyncIterable<unknown> | { error: string }>
 > {

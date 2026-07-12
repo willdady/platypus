@@ -3,7 +3,7 @@ import { mockDb, resetMockDb } from "../test-utils.ts";
 
 import { createDashboardTools } from "./dashboard.ts";
 
-const ctx = { toolCallId: "test", messages: [] };
+const ctx = { toolCallId: "test", messages: [], context: {} };
 const workspaceId = "ws-1";
 const dashboardId = "dash-1";
 const widgetId = "widget-1";

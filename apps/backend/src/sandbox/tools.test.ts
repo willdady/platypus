@@ -4,7 +4,11 @@ import type { ToolExecuteFunction } from "ai";
 import { createSandboxTools } from "./tools.ts";
 import type { SandboxBackend, SandboxContext } from "./types.ts";
 
-type TypedExecute = ToolExecuteFunction<Record<string, unknown>, unknown>;
+type TypedExecute = ToolExecuteFunction<
+  Record<string, unknown>,
+  unknown,
+  unknown
+>;
 
 /** Call a tool's execute function without casting to `any`. */
 function callExecute(
@@ -14,7 +18,9 @@ function callExecute(
 ): Promise<unknown> {
   const fn = tools[name]?.execute as TypedExecute | undefined;
   if (!fn) throw new Error(`tool "${name}" has no execute function`);
-  return Promise.resolve(fn(input, { toolCallId: "test", messages: [] }));
+  return Promise.resolve(
+    fn(input, { toolCallId: "test", messages: [], context: {} }),
+  );
 }
 
 const ctx: SandboxContext = {

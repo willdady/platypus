@@ -8,7 +8,7 @@ vi.mock("../services/event-dispatch.ts", () => ({
 
 import { createKanbanTools } from "./kanban.ts";
 
-const ctx = { toolCallId: "test", messages: [] };
+const ctx = { toolCallId: "test", messages: [], context: {} };
 const workspaceId = "ws-1";
 const agentId = "agent-1";
 const orgId = "org-1";
