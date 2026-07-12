@@ -691,7 +691,31 @@ export const createToolHeartbeat = (
  * yields continue to bump the timer via `onProgress` for visibility, but
  * correctness no longer depends on those yields being frequent enough.
  */
-const wrapToolsWithBump = (
+/**
+ * Normalize a tool's final result into a JSON-serializable value.
+ *
+ * AI SDK v7 feeds each tool result into the next model step, where
+ * `standardizePrompt()` validates tool-result parts against a strict JSON-value
+ * schema. Non-JSON values — most commonly a raw `Date` from a Drizzle/`pg` query
+ * row (a `createdAt`/`updatedAt` timestamp) — fail that validation and crash the
+ * turn with `InvalidPromptError`. A JSON round-trip converts `Date` → ISO string
+ * and drops `undefined`. Applied at the wrapper's result paths (promise-resolved
+ * and synchronous return), it covers every current and future value-returning
+ * tool at once. The async-iterable path (sub-agent tools) is intentionally
+ * exempt — its yields are streamed UI parts, not the result fed to the model.
+ *
+ * Deliberate trade-off: a plain round-trip throws on `BigInt`. Tools are not
+ * expected to return `BigInt`, so we accept that rather than complicate the
+ * normalizer. A top-level `undefined`/function return (whose `JSON.stringify` is
+ * `undefined`) is passed through unchanged instead of crashing `JSON.parse`.
+ */
+export const normalizeToolResult = (value: unknown): unknown => {
+  const json = JSON.stringify(value);
+  if (json === undefined) return value;
+  return JSON.parse(json);
+};
+
+export const wrapToolsWithBump = (
   tools: Record<string, Tool>,
   onActivity: (event?: ToolActivityEvent) => void,
   onToolStart: () => void,
@@ -730,7 +754,9 @@ const wrapToolsWithBump = (
           result != null &&
           typeof (result as { then?: unknown }).then === "function"
         ) {
-          return (result as Promise<unknown>).finally(finish);
+          return (result as Promise<unknown>)
+            .then(normalizeToolResult)
+            .finally(finish);
         }
         // Async iterable / generator path (sub-agent tools). Wrap it so the
         // counter decrements once the consumer drains the iterator.
@@ -750,8 +776,11 @@ const wrapToolsWithBump = (
             }
           })();
         }
+        // Normalize before finish() so the sync path mirrors the promise path:
+        // a throw (e.g. a BigInt in the result) happens before the "end" event.
+        const normalized = normalizeToolResult(result);
         finish();
-        return result;
+        return normalized;
       },
     };
   }
