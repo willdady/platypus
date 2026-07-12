@@ -1,5 +1,17 @@
 # Changelog
 
+## [2.1.0](https://github.com/willdady/platypus/compare/v2.0.0...v2.1.0) (2026-07-12)
+
+
+### Features
+
+* **provider:** free-text security guardrails and org identity context ([#306](https://github.com/willdady/platypus/issues/306)) ([bfb0ddd](https://github.com/willdady/platypus/commit/bfb0ddd129c466a7af84a3a8f9d082e6f2b2c9bf))
+
+
+### Bug Fixes
+
+* **frontend:** show agent indicator on org-scoped skill cards ([#320](https://github.com/willdady/platypus/issues/320)) ([173bf37](https://github.com/willdady/platypus/commit/173bf37846ad1c8b6c852e6bd733585eed6bf248))
+
 ## [2.0.0](https://github.com/willdady/platypus/compare/v1.101.0...v2.0.0) (2026-07-12)
 
 
