@@ -42,17 +42,18 @@ jobs:
       - name: Install pnpm
         uses: pnpm/action-setup@v6
 
+      # registry-url writes the .npmrc that points npm at the public registry —
+      # required for the OIDC flow. It also injects a placeholder NODE_AUTH_TOKEN,
+      # which is harmless ONLY because we publish with `--provenance` below: a
+      # provenance attestation requires the OIDC identity, so npm performs the
+      # OIDC exchange rather than sending the placeholder token. (Without
+      # --provenance npm uses that placeholder and the registry replies 404.)
       - name: Set up Node.js
         uses: actions/setup-node@v6
         with:
           node-version-file: .nvmrc
           cache: pnpm
           registry-url: https://registry.npmjs.org
-
-      # Trusted publishing needs npm CLI >= 11.5.1; the runner's bundled npm can
-      # be older, which fails with a misleading E404. Pin to a compatible npm.
-      - name: Upgrade npm for OIDC support
-        run: npm install -g npm@^11.5.1
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -76,9 +77,17 @@ jobs:
             echo "publish=true" >> "$GITHUB_OUTPUT"
           fi
 
-      # No token: npm detects the OIDC environment and authenticates via the
-      # trusted-publisher trust, then attaches provenance automatically.
+      # Trusted publishing needs npm CLI >= 11.5.1; Node's bundled npm is too old,
+      # so upgrade and publish in the SAME step (a global upgrade in a prior step
+      # doesn't reliably become the `npm` this step resolves) with `hash -r` so
+      # bash re-resolves the binary. `--provenance` is what forces the OIDC
+      # exchange (see the setup-node note above); no token env is needed.
       - name: Publish to npm
         if: steps.check.outputs.publish == 'true'
         working-directory: packages/plugin-sdk
-        run: npm publish
+        run: |
+          npm install -g npm@latest
+          hash -r
+          echo "Publishing with npm $(npm --version) on node $(node --version)"
+          echo "OIDC token endpoint present: ${ACTIONS_ID_TOKEN_REQUEST_URL:+yes}"
+          npm publish --provenance
