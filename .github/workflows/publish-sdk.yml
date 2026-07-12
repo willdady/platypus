@@ -42,16 +42,18 @@ jobs:
       - name: Install pnpm
         uses: pnpm/action-setup@v6
 
-      # NOTE: deliberately NO `registry-url` here. setup-node's registry-url
-      # writes an .npmrc with `_authToken=${NODE_AUTH_TOKEN}` + `always-auth=true`
-      # and injects a placeholder NODE_AUTH_TOKEN; npm then sends that bogus token
-      # and never attempts the OIDC handshake (registry replies 404 on PUT). With
-      # no auth configured, npm uses OIDC against the default registry.
+      # registry-url writes the .npmrc that points npm at the public registry —
+      # required for the OIDC flow. It also injects a placeholder NODE_AUTH_TOKEN,
+      # which is harmless ONLY because we publish with `--provenance` below: a
+      # provenance attestation requires the OIDC identity, so npm performs the
+      # OIDC exchange rather than sending the placeholder token. (Without
+      # --provenance npm uses that placeholder and the registry replies 404.)
       - name: Set up Node.js
         uses: actions/setup-node@v6
         with:
           node-version-file: .nvmrc
           cache: pnpm
+          registry-url: https://registry.npmjs.org
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -75,13 +77,11 @@ jobs:
             echo "publish=true" >> "$GITHUB_OUTPUT"
           fi
 
-      # Trusted publishing needs npm CLI >= 11.5.1; Node's bundled npm (11.3.x on
-      # Node 24) is too old and fails with a misleading E404 (the registry treats
-      # an unsupported OIDC handshake as anonymous). Upgrade and publish in the
-      # SAME step — a global upgrade in a prior step doesn't reliably become the
-      # `npm` this step resolves — with `hash -r` so bash re-resolves the binary.
-      # No token env: npm detects the OIDC environment and authenticates via the
-      # trusted-publisher trust, then attaches provenance automatically.
+      # Trusted publishing needs npm CLI >= 11.5.1; Node's bundled npm is too old,
+      # so upgrade and publish in the SAME step (a global upgrade in a prior step
+      # doesn't reliably become the `npm` this step resolves) with `hash -r` so
+      # bash re-resolves the binary. `--provenance` is what forces the OIDC
+      # exchange (see the setup-node note above); no token env is needed.
       - name: Publish to npm
         if: steps.check.outputs.publish == 'true'
         working-directory: packages/plugin-sdk
@@ -90,4 +90,4 @@ jobs:
           hash -r
           echo "Publishing with npm $(npm --version) on node $(node --version)"
           echo "OIDC token endpoint present: ${ACTIONS_ID_TOKEN_REQUEST_URL:+yes}"
-          npm publish
+          npm publish --provenance
