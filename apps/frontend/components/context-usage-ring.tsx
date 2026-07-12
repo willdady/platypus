@@ -28,6 +28,7 @@ export function ContextUsageRing({
   isStreaming,
   isPending,
   isCompacting,
+  estimated,
 }: {
   usedTokens?: number;
   contextWindow?: number | null;
@@ -35,6 +36,10 @@ export function ContextUsageRing({
   isStreaming?: boolean;
   isPending?: boolean;
   isCompacting?: boolean;
+  /** The numerator is a post-compaction char/4 estimate recovered from a
+   *  persisted trace on reload (not a provider-reported count). Notes it in the
+   *  tooltip so the value isn't read as authoritative. */
+  estimated?: boolean;
 }) {
   const r = 7;
   const circumference = 2 * Math.PI * r;
@@ -73,6 +78,8 @@ export function ContextUsageRing({
     } else {
       tooltipLabel = `No messages yet · ${contextWindow.toLocaleString()} token window${clickHint}`;
     }
+  } else if (estimated) {
+    tooltipLabel = `~${usedTokens!.toLocaleString()} / ${contextWindow!.toLocaleString()} (${Math.round(fill * 100)}%) · estimated after compaction, updates on next response${clickHint}`;
   } else {
     tooltipLabel = `Last response: ${usedTokens!.toLocaleString()} / ${contextWindow!.toLocaleString()} (${Math.round(fill * 100)}%) · current input not yet counted${clickHint}`;
   }

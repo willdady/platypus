@@ -1796,18 +1796,31 @@ export async function forceCompactChat(
     summarizerWindow: runtime.summarizerWindow,
   });
 
-  // Message-only estimate (no per-turn system/tool overhead): the ring uses it
-  // as a transient post-compact value that the next response's provider count
-  // supersedes. It therefore reads slightly low vs the live ring numerator
-  // (which includes overhead) — acceptable for an immediate visual refresh.
-  const estimatedTokens = estimateTokens(
+  // Message-only estimate (no per-turn system/tool overhead) of the compacted
+  // view, and of the pre-compaction view (same basis) so the client can decide
+  // whether the drop is significant enough to confirm — ADR-0012 §Force-compact
+  // on demand.
+  const estimatedAfter = estimateTokens(
     uiMessagesToCountUnits(result.messages, runtime.imageProvider),
   );
-  // Pre-compaction estimate (same basis) so the client can decide whether the
-  // drop is significant enough to confirm — ADR-0012 §Force-compact on demand.
-  const tokensBefore = estimateTokens(
+  const estimatedBefore = estimateTokens(
     uiMessagesToCountUnits(messages, runtime.imageProvider),
   );
+
+  // Anchor the reported "after" to provider-actual units. The message-only
+  // estimate omits the per-turn system+tool overhead the provider counts, so it
+  // reads low and the ring "jumps up" on the next real response; the reduction,
+  // being a delta between two same-basis estimates, cancels that overhead and
+  // stays reliable, so we anchor it onto the last provider-reported input count.
+  // Falls back to the raw estimate when there is no prior actual (fresh chat, or
+  // a usage-less provider); `findLastInputTokens` returns the genuine baseline.
+  const lastProviderActual = findLastInputTokens(messages);
+  const tokensSaved = Math.max(0, estimatedBefore - estimatedAfter);
+  const tokensBefore = lastProviderActual ?? estimatedBefore;
+  const estimatedTokens =
+    lastProviderActual !== undefined
+      ? Math.max(0, lastProviderActual - tokensSaved)
+      : estimatedAfter;
 
   // ADR-0012 §Compaction trace in the timeline: a forced compaction has no live stream to inject the trace into, so
   // persist it as a standalone synthetic assistant message. Appended after the
@@ -1818,8 +1831,21 @@ export async function forceCompactChat(
   // otherwise — see Tier1Output).
   let traceMessage: PlatypusUIMessage | undefined;
   if (result.compactionTrace) {
+    // Anchor the trace's before/after to the same provider-actual baseline as
+    // the returned estimate, so the reloaded ring (which reads output.tokensAfter)
+    // and the timeline expander's reduction agree with the live ring. The
+    // reduction is preserved; only the absolute anchor moves. Left as raw
+    // estimates when there's no prior actual.
+    const anchoredTrace =
+      lastProviderActual !== undefined
+        ? {
+            ...result.compactionTrace,
+            tokensBefore,
+            tokensAfter: estimatedTokens,
+          }
+        : result.compactionTrace;
     traceMessage = buildCompactionTraceMessage(
-      result.compactionTrace,
+      anchoredTrace,
       createIdGenerator({ prefix: "msg", size: 16 })(),
     );
     // Atomic jsonb append: concatenate at the DB rather than overwrite

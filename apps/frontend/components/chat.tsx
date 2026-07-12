@@ -60,6 +60,32 @@ import { ContextUsageRing } from "./context-usage-ring";
 import { ModelSelectorDialog } from "./model-selector-dialog";
 import { toast } from "sonner";
 
+// Reads the post-compaction estimate (`tokensAfter`) off a persisted
+// `compact_context` trace message so the ring can recover it on reload. The part
+// shape is set by the backend trace builder (ADR-0012 §Compaction trace in the
+// timeline: `type: "tool-compact_context"`, `output.tokensAfter`). Kept as a
+// string literal rather than an import so backend runtime isn't pulled into the
+// frontend bundle.
+function compactionTraceTokensAfter(
+  msg: PlatypusUIMessage,
+): number | undefined {
+  const parts = (
+    msg as {
+      parts?: Array<{ type?: string; output?: { tokensAfter?: number } }>;
+    }
+  ).parts;
+  if (!parts) return undefined;
+  for (const part of parts) {
+    if (
+      part?.type === "tool-compact_context" &&
+      typeof part.output?.tokensAfter === "number"
+    ) {
+      return part.output.tokensAfter;
+    }
+  }
+  return undefined;
+}
+
 export const Chat = ({
   orgId,
   workspaceId,
@@ -407,19 +433,35 @@ export const Chat = ({
     fetcher,
   );
 
-  // Stats from the last completed assistant message for the ring (ADR-0012 §Context-usage ring) and
-  // per-message stats popover (ADR-0012 §Per-message stats).
-  const lastAssistantStats = useMemo<MessageStats | null>(() => {
+  // Ring numerator recovered from the persisted timeline so it survives a reload
+  // (the post-compact `compacted` React state is wiped on refresh, which would
+  // otherwise make the ring revert to the pre-compaction value). Scanning
+  // newest-first, whichever is newer wins: a real provider count
+  // (metadata.stats.contextTokens), or a compaction trace's estimated
+  // `output.tokensAfter` (flagged `estimated` for the tooltip). This does not
+  // alter the backend `findLastInputTokens` projection, which still skips the trace.
+  // Plain computation (not useMemo): the React Compiler can't preserve manual
+  // memoization for this loop-with-early-return shape and errors on it. Left
+  // uncompiled it auto-memoizes on `messages`, so behavior is unchanged.
+  const ringUsedTokens = ((): {
+    tokens: number;
+    estimated: boolean;
+  } | null => {
     for (let i = messages.length - 1; i >= 0; i--) {
       const msg = messages[i];
-      const stats = (msg.metadata as { stats?: MessageStats } | undefined)
-        ?.stats;
-      if (msg.role === "assistant" && stats) {
-        return stats;
+      if (msg.role !== "assistant") continue;
+      const ct = (msg.metadata as { stats?: MessageStats } | undefined)?.stats
+        ?.contextTokens;
+      if (typeof ct === "number" && ct > 0) {
+        return { tokens: ct, estimated: false };
+      }
+      const tokensAfter = compactionTraceTokensAfter(msg);
+      if (typeof tokensAfter === "number") {
+        return { tokens: tokensAfter, estimated: true };
       }
     }
     return null;
-  }, [messages]);
+  })();
 
   const selectedAgent = agentId ? agents.find((a) => a.id === agentId) : null;
   // Resolve the provider backing the current selection, whether that's a raw
@@ -584,7 +626,7 @@ export const Chat = ({
     // is non-destructive either way per ADR-0012 §View, not delete.)
     // Confirm at click time (not after the deferred run fires) so the prompt never
     // surprises the user mid-stream.
-    const keepRecent = contextWindowData?.keepRecentMessages ?? 10;
+    const keepRecent = contextWindowData?.keepRecentMessages ?? 5;
     const significant = messages.length > keepRecent * 2;
     if (
       significant &&
@@ -798,7 +840,13 @@ export const Chat = ({
                         compacted?.atAssistantMessageCount ===
                         assistantMessageCount
                           ? compacted.tokens
-                          : lastAssistantStats?.contextTokens
+                          : ringUsedTokens?.tokens
+                      }
+                      estimated={
+                        compacted?.atAssistantMessageCount ===
+                        assistantMessageCount
+                          ? true
+                          : ringUsedTokens?.estimated
                       }
                       contextWindow={contextWindowData?.contextWindow}
                       onClick={chatId ? handleCompact : undefined}

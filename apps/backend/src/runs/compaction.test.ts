@@ -489,6 +489,62 @@ describe("compactUIMessages (Tier 1)", () => {
     expect((out(0) as string).length).toBeLessThan(12000); // r1 trimmed
     expect(out(1)).toBe("Y".repeat(12000)); // r2 (newest) exempt
   });
+
+  it("ADR-0012 §Hard window wall: trims a large retained TEXT part (not just tool results) when the kept view breaches inputBudget, exempting newest", async () => {
+    // Large assistant text answers, not tool results, can dominate the window.
+    // Two big retained text messages breach the wall → the older one's text is
+    // soft-trimmed in the model view; the single newest stays verbatim.
+    const msgs = [
+      uiText("p1", "user", "P".repeat(4000)),
+      uiText("p2", "assistant", "Q".repeat(4000)),
+      uiText("r1", "assistant", "R".repeat(12000)), // older recent → trimmed
+      uiText("r2", "user", "S".repeat(12000)), // newest → exempt
+    ];
+    const res = await compactUIMessages(msgs, {
+      ...baseOpts,
+      summarize: noopSummarize,
+      targetTokens: 300,
+      minRecentPrunableChars: 5000,
+      inputBudget: 100, // wall well below the kept view → trim
+    });
+    expect(res.usedModelCall).toBe(true);
+    const textOf = (i: number) =>
+      (
+        res.keptMessages[i].parts?.find(
+          (p) => (p as { type: string }).type === "text",
+        ) as { text?: string } | undefined
+      )?.text;
+    // Summary is returned separately (res.summaryText); keptMessages = the recent
+    // set only: [r1, r2]. r1 trimmed, r2 (newest) verbatim.
+    expect((textOf(0) as string).length).toBeLessThan(12000); // r1 text trimmed
+    expect(textOf(1)).toBe("S".repeat(12000)); // r2 (newest) exempt
+  });
+
+  it("ADR-0012 §Hard window wall: keeps retained TEXT verbatim when within inputBudget (wall-gated, not soft-target)", async () => {
+    // Below the hard wall, recent stays full-fidelity even over the soft target —
+    // the text-prune only fires at the wall, so continuity isn't lost needlessly.
+    const msgs = [
+      uiText("p1", "user", "P".repeat(4000)),
+      uiText("p2", "assistant", "Q".repeat(4000)),
+      uiText("r1", "assistant", "R".repeat(12000)),
+      uiText("r2", "user", "done"),
+    ];
+    const res = await compactUIMessages(msgs, {
+      ...baseOpts,
+      summarize: noopSummarize,
+      targetTokens: 300,
+      minRecentPrunableChars: 5000,
+      inputBudget: 100000, // wall far above the kept view → no recent trim
+    });
+    expect(res.usedModelCall).toBe(true);
+    // keptMessages = recent set [r1, r2]; r1 at index 0.
+    const r1Text = (
+      res.keptMessages[0].parts?.find(
+        (p) => (p as { type: string }).type === "text",
+      ) as { text?: string } | undefined
+    )?.text;
+    expect(r1Text).toBe("R".repeat(12000)); // untouched below the wall
+  });
 });
 
 describe("compactModelMessages (Tier 2 / recovery)", () => {
