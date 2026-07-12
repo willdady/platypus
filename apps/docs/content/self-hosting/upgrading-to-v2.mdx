@@ -1,0 +1,103 @@
+---
+title: Upgrading to 2.0
+description: What changes for operators upgrading a self-hosted deployment from 1.x to 2.0, and the exact env-var migration.
+---
+
+import { Callout } from "nextra/components";
+
+# Upgrading to 2.0
+
+Platypus 2.0 introduces the [plugin system](/extending#the-plugin-model): the
+web-fetch tool set and the Docker Sandbox backend are no longer configured by
+their own dedicated environment variables — they are **plugins**, enabled via
+`PLATYPUS_PLUGINS` and configured via `PLATYPUS_PLUGIN_CONFIG`
+([ADR-0013](https://github.com/willdady/platypus/blob/main/docs/adr/0013-plugin-system-manifest-driven-in-process-extension-points.md)).
+
+The changes are **deployment configuration only** — three environment variables
+are removed and their behaviour moves onto the plugin surface. There is **no
+database migration** and no application-data change; this is an edit to your
+`.env` (or wherever you inject env), then a backend restart.
+
+<Callout type="warning">
+  **The most common upgrade mistake: losing the web-fetch tool.** An unset or
+  empty `PLATYPUS_PLUGINS` loads **only** the always-on core tool sets — there is
+  no built-in default. If your 1.x `.env` predates the plugin system (no
+  `PLATYPUS_PLUGINS` line), upgrading silently drops the web-fetch tool set from
+  every Agent. To keep it, you **must** add `@platypus/web-fetch` to
+  `PLATYPUS_PLUGINS`.
+</Callout>
+
+## What changed
+
+| Removed in 2.0                          | Replaced by                                                                                               |
+| --------------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| `PLATYPUS_SANDBOX_DOCKER_ENABLED`       | Listing `@platypus/docker` in `PLATYPUS_PLUGINS` (list membership _is_ the enable switch).                |
+| `PLATYPUS_SANDBOX_DOCKER_ALLOWED_NETWORKS` | `config.allowedNetworks` on `@platypus/docker` in `PLATYPUS_PLUGIN_CONFIG`.                             |
+| `FETCH_TOOL_IGNORE_ROBOTS_TXT`          | `config.ignoreRobotsTxt` on `@platypus/web-fetch` in `PLATYPUS_PLUGIN_CONFIG`.                            |
+
+In addition, the **web-fetch tool set is now a gate-able plugin**
+(`@platypus/web-fetch`) rather than always-on, so it must be listed in
+`PLATYPUS_PLUGINS` to load (see the warning above). Boot is **fail-loud**: a
+listed plugin that can't be resolved, or a `PLATYPUS_PLUGIN_CONFIG` entry that is
+malformed or keyed to a plugin that isn't loaded, aborts startup with a
+plugin-named error rather than silently degrading.
+
+## Migration checklist
+
+1. **Keep web-fetch.** Add `@platypus/web-fetch` to `PLATYPUS_PLUGINS` (it's in
+   the shipped [`.env.example`](https://github.com/willdady/platypus/blob/main/apps/backend/.env.example)
+   default, but not in a pre-2.0 `.env`).
+2. **If you ran the Docker sandbox** (`PLATYPUS_SANDBOX_DOCKER_ENABLED=true`): add
+   `@platypus/docker` to `PLATYPUS_PLUGINS`. The `compose.sandbox.yaml` overlay
+   requirement is unchanged.
+3. **If you set `PLATYPUS_SANDBOX_DOCKER_ALLOWED_NETWORKS`:** move the value into
+   `config.allowedNetworks` on `@platypus/docker` in `PLATYPUS_PLUGIN_CONFIG` (a
+   JSON array — the old comma-separated list becomes JSON strings).
+4. **If you set `FETCH_TOOL_IGNORE_ROBOTS_TXT=true`:** move it to
+   `config.ignoreRobotsTxt` on `@platypus/web-fetch` in `PLATYPUS_PLUGIN_CONFIG`.
+5. **Delete the three removed variables** from your env — they are inert in 2.0.
+6. **Restart the backend.** Plugin loading is a deploy-time boundary; changes take
+   effect on restart. Confirm the result in **Organization settings → Plugins**,
+   which lists everything loaded at boot.
+
+<Callout type="info">
+  `PLATYPUS_PLUGIN_CONFIG` is a **single** JSON object keyed by plugin name. If
+  you're migrating more than one setting, merge them into one object — don't set
+  the variable twice.
+</Callout>
+
+## Before / after
+
+A 1.x deployment that enabled the Docker sandbox with a network allowlist and
+skipped `robots.txt`:
+
+```bash
+# 1.x
+PLATYPUS_SANDBOX_DOCKER_ENABLED=true
+PLATYPUS_SANDBOX_DOCKER_ALLOWED_NETWORKS=shared-services,public-tools
+FETCH_TOOL_IGNORE_ROBOTS_TXT=true
+```
+
+becomes, in 2.0:
+
+```bash
+# 2.0
+PLATYPUS_PLUGINS=@platypus/web-fetch,@platypus/docker
+PLATYPUS_PLUGIN_CONFIG={"@platypus/docker":{"config":{"allowedNetworks":["shared-services","public-tools"]}},"@platypus/web-fetch":{"config":{"ignoreRobotsTxt":true}}}
+```
+
+Treat `PLATYPUS_PLUGIN_CONFIG` like any secret-bearing variable (it can carry a
+plugin's `credentials` block): inject it from your secret manager, never commit
+it.
+
+## Related
+
+- [Configuration & environment → Plugins](/self-hosting/configuration#plugins) —
+  the full narrative on the plugin model, list semantics, and plugin config.
+- [Backend configuration](/reference/backend-configuration#plugins) — the flat
+  variable reference.
+- [Sandbox infrastructure](/self-hosting/sandbox) — the Docker and SSH backends
+  in depth. The **SSH** backend (`@platypus/ssh`) is new in 2.0 — the one Sandbox
+  option viable in horizontally-scaled deployments.
+- [Extending](/extending) — writing your own plugins against
+  [`@platypuschat/plugin-sdk`](https://www.npmjs.com/package/@platypuschat/plugin-sdk).
