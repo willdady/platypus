@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   organizationSchema,
+  organizationUpdateSchema,
   workspaceSchema,
   workspaceCreateSchema,
   agentSchema,
@@ -314,6 +315,61 @@ describe("Provider Create Schema", () => {
     if (result.success) {
       expect(result.data.nativeSearchEnabled).toBe(false);
     }
+  });
+
+  it("accepts securityGuardrails when omitted or null", () => {
+    expect(providerCreateSchema.safeParse(baseProvider).success).toBe(true);
+    expect(
+      providerCreateSchema.safeParse({
+        ...baseProvider,
+        securityGuardrails: null,
+      }).success,
+    ).toBe(true);
+  });
+
+  it("accepts securityGuardrails up to 8000 chars and rejects beyond", () => {
+    expect(
+      providerCreateSchema.safeParse({
+        ...baseProvider,
+        securityGuardrails: "a".repeat(8000),
+      }).success,
+    ).toBe(true);
+    expect(
+      providerCreateSchema.safeParse({
+        ...baseProvider,
+        securityGuardrails: "a".repeat(8001),
+      }).success,
+    ).toBe(false);
+  });
+});
+
+describe("Organization identityContext", () => {
+  it("accepts an organization when identityContext is omitted or null", () => {
+    const base = {
+      id: "org-1",
+      name: "Acme Org",
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+    expect(organizationSchema.safeParse(base).success).toBe(true);
+    expect(
+      organizationSchema.safeParse({ ...base, identityContext: null }).success,
+    ).toBe(true);
+  });
+
+  it("rejects identityContext beyond 4000 chars on the update schema", () => {
+    expect(
+      organizationUpdateSchema.safeParse({
+        name: "Acme Org",
+        identityContext: "a".repeat(4000),
+      }).success,
+    ).toBe(true);
+    expect(
+      organizationUpdateSchema.safeParse({
+        name: "Acme Org",
+        identityContext: "a".repeat(4001),
+      }).success,
+    ).toBe(false);
   });
 });
 

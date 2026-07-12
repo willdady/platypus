@@ -1,5 +1,56 @@
 # Changelog
 
+## [2.1.0](https://github.com/willdady/platypus/compare/v2.0.0...v2.1.0) (2026-07-12)
+
+
+### Features
+
+* **provider:** free-text security guardrails and org identity context ([#306](https://github.com/willdady/platypus/issues/306)) ([bfb0ddd](https://github.com/willdady/platypus/commit/bfb0ddd129c466a7af84a3a8f9d082e6f2b2c9bf))
+
+
+### Bug Fixes
+
+* **frontend:** show agent indicator on org-scoped skill cards ([#320](https://github.com/willdady/platypus/issues/320)) ([173bf37](https://github.com/willdady/platypus/commit/173bf37846ad1c8b6c852e6bd733585eed6bf248))
+
+## [2.0.0](https://github.com/willdady/platypus/compare/v1.101.0...v2.0.0) (2026-07-12)
+
+
+### ⚠ BREAKING CHANGES
+
+* self-hosted operators must migrate their deployment config:
+    - Enable @platypus/docker via PLATYPUS_PLUGINS list membership; the
+      PLATYPUS_SANDBOX_DOCKER_ENABLED gate is removed.
+    - FETCH_TOOL_IGNORE_ROBOTS_TXT is removed; set config.ignoreRobotsTxt on
+      @platypus/web-fetch via PLATYPUS_PLUGIN_CONFIG.
+    - PLATYPUS_SANDBOX_DOCKER_ALLOWED_NETWORKS is removed; set config.allowedNetworks
+      on @platypus/docker via PLATYPUS_PLUGIN_CONFIG.
+
+### Features
+
+* **backend:** always-on core plugin set + plugin-system hardening ([#307](https://github.com/willdady/platypus/issues/307)) ([0d4190e](https://github.com/willdady/platypus/commit/0d4190e1dad879bf37cee221fac2183a3e99b5ea))
+* **backend:** deploy-time plugin config & shared credentials ([#300](https://github.com/willdady/platypus/issues/300)) ([62de646](https://github.com/willdady/platypus/commit/62de6465553a3d71a06b457ada54ba37fa323a8c))
+* **backend:** enforce plugin apiVersion compatibility gate (N and N-1) ([#299](https://github.com/willdady/platypus/issues/299)) ([8108f25](https://github.com/willdady/platypus/commit/8108f253c973d343e7eef912a867033afbf8274c))
+* **backend:** manifest-driven plugin loader + @platypuschat/plugin-sdk + first core Tool set plugin ([#297](https://github.com/willdady/platypus/issues/297)) ([327bab8](https://github.com/willdady/platypus/commit/327bab8639951c3eb41b7a6855526532dee0b6ca))
+* **backend:** move Docker sandbox network allowlist to plugin config ([#314](https://github.com/willdady/platypus/issues/314)) ([5dc306d](https://github.com/willdady/platypus/commit/5dc306d81247800e4c82eafc64063b6a432295e7))
+* **backend:** plugin observability — boot log, GET /plugins, catalog annotations ([#303](https://github.com/willdady/platypus/issues/303)) ([577660f](https://github.com/willdady/platypus/commit/577660f6f986f8b3fc1707af84ac7be171fb9c78))
+* **backend:** reframe web-fetch & platform tool sets as core plugins ([#290](https://github.com/willdady/platypus/issues/290)) ([#302](https://github.com/willdady/platypus/issues/302)) ([a9e9266](https://github.com/willdady/platypus/commit/a9e9266ad69b1ae752157443fb2ec20b537fbc71))
+* **backend:** sandbox-backend extension point; reframe Docker as @platypus/docker ([#298](https://github.com/willdady/platypus/issues/298)) ([4b1af6d](https://github.com/willdady/platypus/commit/4b1af6d80488a067e13f25b41d928c0c790cee7f))
+* **backend:** SSH sandbox backend — shell.exec end-to-end (BYO host) ([#308](https://github.com/willdady/platypus/issues/308)) ([7e6afc5](https://github.com/willdady/platypus/commit/7e6afc59b139b58649a189d38bc467826d6b5c9f))
+* **backend:** SSH sandbox fs.list via exec find ([#285](https://github.com/willdady/platypus/issues/285)) ([#310](https://github.com/willdady/platypus/issues/310)) ([7c6be37](https://github.com/willdady/platypus/commit/7c6be378de8c4a64ff6c6a67645cf0c8339be138))
+* **backend:** SSH sandbox fs.read/write/edit over SFTP ([#284](https://github.com/willdady/platypus/issues/284)) ([#309](https://github.com/willdady/platypus/issues/309)) ([3dd4b52](https://github.com/willdady/platypus/commit/3dd4b524a574353745416ee113b145c04c509363))
+* **backend:** SSH sandbox optional host-key pin verification ([#286](https://github.com/willdady/platypus/issues/286)) ([#311](https://github.com/willdady/platypus/issues/311)) ([b620b97](https://github.com/willdady/platypus/commit/b620b978dfec7fd28cbf3709a5ed5cbd3cecfb84))
+* **backend:** third-party plugin loading with contribution-id namespacing ([#301](https://github.com/willdady/platypus/issues/301)) ([cf0c1e1](https://github.com/willdady/platypus/commit/cf0c1e1d20c224e33ad2f5f3625c9fa8d2d854a6))
+* **frontend:** read-only Installed Plugins Org-Admin view ([#295](https://github.com/willdady/platypus/issues/295)) ([#305](https://github.com/willdady/platypus/issues/305)) ([6b29c5c](https://github.com/willdady/platypus/commit/6b29c5c125523c1c17b994fcf425c28f4bbb25bb))
+* require PLATYPUS_PLUGINS + PLATYPUS_PLUGIN_CONFIG for operator plugin config ([627cb1e](https://github.com/willdady/platypus/commit/627cb1e38111efe40fe31af6526d8f541e1b3255))
+
+
+### Bug Fixes
+
+* **ci:** make publish-sdk workflow work with OIDC trusted publishing ([#318](https://github.com/willdady/platypus/issues/318)) ([536e197](https://github.com/willdady/platypus/commit/536e197998bc9e432c7f3e803687fbffac4ac113))
+* **docs:** restore og:image on doc pages ([#280](https://github.com/willdady/platypus/issues/280)) ([62fd5fd](https://github.com/willdady/platypus/commit/62fd5fdd7131f4e9e7667ffe23e3d9f7d58fe2dc))
+* **frontend:** hoist @tailwindcss/postcss so Turbopack can resolve it ([#315](https://github.com/willdady/platypus/issues/315)) ([674a11e](https://github.com/willdady/platypus/commit/674a11e011267d1aeb3de87195e414f39ac189aa))
+* improve SEO and meta tags for website and docs ([#282](https://github.com/willdady/platypus/issues/282)) ([3add55a](https://github.com/willdady/platypus/commit/3add55a85ce4b5d1df6abdf46faaa918ccef2160))
+
 ## [1.101.0](https://github.com/willdady/platypus/compare/v1.100.0...v1.101.0) (2026-07-01)
 
 

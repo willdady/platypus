@@ -50,6 +50,9 @@ export const organization = pgTable("organization", (t) => ({
    * own ceiling beyond what the deployer allows.
    */
   agentRunSettings: t.jsonb("agent_run_settings").$type<AgentRunSettings>(),
+  // Free-text org identity / context, rendered early in the system prompt as
+  // framing (not a security control). Nullable — existing orgs are unchanged.
+  identityContext: t.text("identity_context"),
   createdAt: t.timestamp("created_at").notNull().defaultNow(),
   updatedAt: t.timestamp("updated_at").notNull().defaultNow(),
 }));
@@ -80,6 +83,10 @@ export const provider = pgTable(
       .boolean("native_search_enabled")
       .notNull()
       .default(true),
+    // Free-text security directives appended last in the system prompt for
+    // every run on this provider (and sub-agent runs resolved to it). Nullable
+    // — existing providers are unchanged.
+    securityGuardrails: t.text("security_guardrails"),
     modelIds: t.jsonb().$type<string[]>().notNull(),
     taskModelId: t.text("task_model_id").notNull(),
     memoryExtractionModelId: t.text("memory_extraction_model_id").notNull(),

@@ -21,6 +21,11 @@ export const organizationSchema = z.object({
   id: z.string(),
   name: z.string().min(3).max(30),
   agentRunSettings: agentRunSettingsSchema.nullable().optional(),
+  // Free-text organization identity / context, rendered EARLY in the system
+  // prompt beside the workspace context as framing — NOT a security control
+  // (see the provider `securityGuardrails` field for that). Length-bounded
+  // against abuse; nullable so existing orgs are unchanged.
+  identityContext: z.string().max(4000).nullable().optional(),
   createdAt: z.date(),
   updatedAt: z.date(),
 });
@@ -32,6 +37,7 @@ export const organizationCreateSchema = organizationSchema.pick({ name: true });
 export const organizationUpdateSchema = organizationSchema.pick({
   name: true,
   agentRunSettings: true,
+  identityContext: true,
 });
 
 // Workspace
@@ -598,6 +604,14 @@ const providerBaseSchema = z.object({
   // their built-in search. See issue #167 — provides a path to disable native
   // search for OpenAI-compatible endpoints (e.g. vLLM) that can't honor it.
   nativeSearchEnabled: z.boolean().default(true),
+  // Free-text system-prompt security directives appended LAST (recency) to
+  // every run on this provider — including sub-agent runs resolved to this
+  // provider. Provider-scoped because guard strength is a property of the model
+  // endpoint: weaker self-hosted models warrant more guarding than frontier
+  // ones. Append-only and non-suppressible — the escape hatch is to point the
+  // agent at a different provider. A prompt-level FLOOR, not a guarantee.
+  // Length-bounded against abuse; nullable so existing providers are unchanged.
+  securityGuardrails: z.string().max(8000).nullable().optional(),
   modelIds: z.array(z.string()).min(1),
   taskModelId: z.string(),
   memoryExtractionModelId: z.string(),
@@ -655,6 +669,7 @@ export const providerCreateSchema = providerBaseSchema.pick({
   project: true,
   apiMode: true,
   nativeSearchEnabled: true,
+  securityGuardrails: true,
   modelIds: true,
   taskModelId: true,
   memoryExtractionModelId: true,
@@ -790,6 +805,7 @@ export const providerUpdateSchema = providerBaseSchema.pick({
   project: true,
   apiMode: true,
   nativeSearchEnabled: true,
+  securityGuardrails: true,
   modelIds: true,
   taskModelId: true,
   memoryExtractionModelId: true,

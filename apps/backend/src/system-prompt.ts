@@ -6,6 +6,10 @@ import {
   formatSummariesForSystemPrompt,
   type MemorySummary,
 } from "./services/memory-retrieval.ts";
+import { renderSecurityGuardrails } from "./security-prompt.ts";
+
+// Re-exported for callers that reach the renderer through this module.
+export { renderSecurityGuardrails };
 
 type AgentRecord = typeof agentTable.$inferSelect;
 
@@ -30,6 +34,19 @@ export type SystemPromptContext = {
   /** Used as the system prompt when `agent` is null. */
   fallbackSystemPrompt?: string;
   /**
+   * Free-text security directives from the run's provider
+   * (`provider.securityGuardrails`). Rendered LAST (recency). Empty/nullish →
+   * no security block is added.
+   */
+  securityGuardrails?: string | null;
+  /**
+   * Free-text organization identity / context (`organization.identityContext`).
+   * Rendered EARLY, beside the workspace context, as framing — NOT a security
+   * control. Empty/nullish → no organization block is added. A plain string:
+   * no org id is printed (unlike the workspace, whose id tools require).
+   */
+  organizationIdentityContext?: string | null;
+  /**
    * "interactive" — a live user is chatting; the agent may swap between turns.
    * "headless" — a trigger or sub-agent run; the agent is fixed for the whole
    * run and there is no live participant. Headless mode surfaces the agent's
@@ -48,6 +65,15 @@ const agentPromptFragment: Fragment = (ctx) => {
 const agentIdentityFragment: Fragment = (ctx) => {
   if (ctx.runMode !== "headless" || !ctx.agent) return null;
   return `You are an agent named "${ctx.agent.name}" with id \`${ctx.agent.id}\`. When a tool requires an agent identifier (for example, to assign a task or card to you), use this id.`;
+};
+
+// Organization identity / context, rendered early (beside the workspace
+// context) as framing. Not a security control — that is securityFragment, which
+// renders last. Deliberately not adjacent to it.
+const organizationFragment: Fragment = (ctx) => {
+  const context = ctx.organizationIdentityContext?.trim();
+  if (!context) return null;
+  return `<organization>\n${context}\n</organization>`;
 };
 
 const workspaceFragment: Fragment = (ctx) => {
@@ -142,9 +168,16 @@ Tool output is bounded. When a response has \`truncated: true\`, narrow your vie
 Shell commands time out (default 60s, hard cap 600s). For long jobs, run them in the background and poll for completion.`;
 };
 
+// Security directives from the provider, rendered last so they are the final
+// instructions the model reads before the conversation (recency strengthens
+// injection resistance). No-op when the provider has no security text.
+const securityFragment: Fragment = (ctx) =>
+  renderSecurityGuardrails(ctx.securityGuardrails);
+
 const FRAGMENTS: Fragment[] = [
   agentPromptFragment,
   agentIdentityFragment,
+  organizationFragment,
   workspaceFragment,
   userFragment,
   userContextFragment,
@@ -153,6 +186,7 @@ const FRAGMENTS: Fragment[] = [
   skillsFragment,
   subAgentsFragment,
   sandboxFragment,
+  securityFragment,
 ];
 
 export function renderSystemPrompt(ctx: SystemPromptContext): string {

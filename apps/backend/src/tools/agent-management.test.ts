@@ -14,7 +14,7 @@ vi.mock("../storage/index.ts", () => ({
 import { createAgentManagementTools } from "./agent-management.ts";
 import { validateSubAgentAssignment } from "../services/sub-agent-validation.ts";
 
-const ctx = { toolCallId: "test", messages: [] };
+const ctx = { toolCallId: "test", messages: [], context: {} };
 const workspaceId = "ws-1";
 const orgId = "org-1";
 const frontendUrl = "http://localhost:3000";
