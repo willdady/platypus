@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { getCurrentTime, convertTimezone } from "./time.ts";
 import { callTool } from "../test-utils.ts";
 
-const ctx = { toolCallId: "test", messages: [] };
+const ctx = { toolCallId: "test", messages: [], context: {} };
 
 describe("getCurrentTime", () => {
   it("returns timezone, timestamp, and formatted fields", async () => {
@@ -45,7 +45,7 @@ describe("convertTimezone", () => {
 
   it("throws for invalid date string", () => {
     expect(() =>
-      convertTimezone.execute!(
+      convertTimezone.execute(
         {
           dateTime: "not-a-date",
           fromTimezone: "UTC",
