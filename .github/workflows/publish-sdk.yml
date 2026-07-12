@@ -42,12 +42,16 @@ jobs:
       - name: Install pnpm
         uses: pnpm/action-setup@v6
 
+      # NOTE: deliberately NO `registry-url` here. setup-node's registry-url
+      # writes an .npmrc with `_authToken=${NODE_AUTH_TOKEN}` + `always-auth=true`
+      # and injects a placeholder NODE_AUTH_TOKEN; npm then sends that bogus token
+      # and never attempts the OIDC handshake (registry replies 404 on PUT). With
+      # no auth configured, npm uses OIDC against the default registry.
       - name: Set up Node.js
         uses: actions/setup-node@v6
         with:
           node-version-file: .nvmrc
           cache: pnpm
-          registry-url: https://registry.npmjs.org
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -85,4 +89,5 @@ jobs:
           npm install -g npm@latest
           hash -r
           echo "Publishing with npm $(npm --version) on node $(node --version)"
+          echo "OIDC token endpoint present: ${ACTIONS_ID_TOKEN_REQUEST_URL:+yes}"
           npm publish
