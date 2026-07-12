@@ -6,6 +6,7 @@ import {
   type LanguageModel,
   type PrepareStepFunction,
   type Tool,
+  type ToolSet,
 } from "ai";
 import { z } from "zod";
 import { logger } from "../logger.ts";
@@ -64,7 +65,7 @@ interface SubAgentToolOptions {
   /** Called on each activity update from the sub-agent. Used to reset the parent run's per-step timeout. */
   onProgress?: () => void;
   /** Tier 2 in-turn compaction callback (ADR-0012 §Tier 2 / §Sub-agents). Null when compaction disabled. */
-  prepareStep?: PrepareStepFunction;
+  prepareStep?: PrepareStepFunction<ToolSet>;
   /**
    * Context-overflow recovery (ADR-0012 §Recovery) for the sub-agent's own model calls.
    * Sub-agents run a ToolLoopAgent OUTSIDE the parent run's recovery-wrapped
@@ -247,7 +248,7 @@ export const createSubAgentTools = async (
     toolSetIds: string[],
   ) => Promise<Record<string, Tool>>,
   onProgress?: () => void,
-  prepareStepFn?: (id: string) => PrepareStepFunction | undefined,
+  prepareStepFn?: (id: string) => PrepareStepFunction<ToolSet> | undefined,
   recoveryFn?: (id: string) => RecoveryContext | undefined,
 ): Promise<Record<string, Tool>> => {
   const tools: Record<string, Tool> = {};

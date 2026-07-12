@@ -32,7 +32,6 @@ import {
   type ModelMessage,
   type Tool,
   type ToolResultPart,
-  type DataContent,
 } from "ai";
 import type { PlatypusUIMessage } from "../types.ts";
 
@@ -332,13 +331,27 @@ function bytesFromUrl(url: string): Uint8Array | undefined {
 }
 
 /** Normalizes the various ModelMessage byte containers into a Uint8Array. */
-function bytesFromDataContent(data: DataContent | URL): Uint8Array | undefined {
+// Param is `unknown`: the AI SDK v7 file/image `data` union widened to include
+// provider references (SharedV4ProviderReference) and FileData, which carry no
+// local bytes. The defensive narrowing below returns undefined for anything that
+// isn't inline bytes/URL, so the estimator falls back to a default cost.
+function bytesFromDataContent(data: unknown): Uint8Array | undefined {
   if (typeof data === "string") return bytesFromUrl(data);
   if (data instanceof URL) return undefined;
   if (data instanceof Uint8Array) return data;
   if (data instanceof ArrayBuffer) return new Uint8Array(data);
   if (typeof Buffer !== "undefined" && Buffer.isBuffer(data)) {
     return new Uint8Array(data);
+  }
+  // AI SDK v7 `convertToModelMessages` wraps file data as `{ type: "url", url }`,
+  // where `url` is a `URL` instance (not a string) holding the original
+  // `data:…;base64,…` URL for inline uploads. Unwrap it so image dimensions are
+  // still parsed — without this the model-shape estimate loses the image's size
+  // and diverges from the UI-shape estimate.
+  if (typeof data === "object" && data !== null && "url" in data) {
+    const url = (data as { url: unknown }).url;
+    if (typeof url === "string") return bytesFromUrl(url);
+    if (url instanceof URL) return bytesFromUrl(url.href);
   }
   return undefined;
 }

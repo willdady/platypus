@@ -1032,7 +1032,9 @@ describe("buildTier2PrepareStep", () => {
   });
 
   // Invoke a PrepareStepFunction supplying only the field under test; the
-  // callback ignores steps/stepNumber/model/experimental_context.
+  // callback ignores every other option. The synthetic options object is cast
+  // to the parameter type because AI SDK v7 requires many more fields
+  // (instructions, runtimeContext, toolsContext, …) that this test never reads.
   const callStep = (
     fn: ReturnType<typeof buildTier2PrepareStep>,
     messages: import("ai").ModelMessage[],
@@ -1042,8 +1044,7 @@ describe("buildTier2PrepareStep", () => {
       steps: [],
       stepNumber: 0,
       model: {} as never,
-      experimental_context: undefined,
-    });
+    } as unknown as Parameters<typeof fn>[0]);
 
   const shortMessages: import("ai").ModelMessage[] = [
     { role: "user", content: [{ type: "text", text: "hi" }] },

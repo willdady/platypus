@@ -15,7 +15,7 @@
  */
 
 import { and, eq } from "drizzle-orm";
-import type { ModelMessage, PrepareStepFunction } from "ai";
+import type { ModelMessage, PrepareStepFunction, ToolSet } from "ai";
 import { db } from "../index.ts";
 import { chat as chatTable } from "../db/schema.ts";
 import { logger } from "../logger.ts";
@@ -1558,7 +1558,9 @@ export type Tier2Context = {
  * trimmed messages. Returns `undefined` when below the threshold so the SDK
  * proceeds unchanged (ADR-0012 §Sub-agents / §Tier 2: no per-step overhead when the loop is small).
  */
-export function buildTier2PrepareStep(ctx: Tier2Context): PrepareStepFunction {
+export function buildTier2PrepareStep(
+  ctx: Tier2Context,
+): PrepareStepFunction<ToolSet> {
   return async ({ messages }) => {
     const estimate = estimateTokens(
       modelMessagesToCountUnits(messages, ctx.imageProvider),

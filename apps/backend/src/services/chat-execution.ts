@@ -1579,7 +1579,7 @@ const loadSubAgents = async (
   // gets a prepareStep calibrated to its own model's context window.
   const subAgentPrepareSteps = new Map<
     string,
-    import("ai").PrepareStepFunction
+    import("ai").PrepareStepFunction<import("ai").ToolSet>
   >();
   // Per-sub-agent overflow recovery (ADR-0012 §Sub-agents). Built ALWAYS — recovery (ADR-0012 §Recovery is the net) is
   // the net even when the ADR-0012 §Config & kill switch disables proactive compaction, exactly
