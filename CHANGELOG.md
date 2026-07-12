@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.1.2](https://github.com/willdady/platypus/compare/v2.1.1...v2.1.2) (2026-07-12)
+
+
+### Bug Fixes
+
+* **backend:** relay sub-agent text across all steps ([#324](https://github.com/willdady/platypus/issues/324)) ([#325](https://github.com/willdady/platypus/issues/325)) ([8a1711d](https://github.com/willdady/platypus/commit/8a1711d3e09c1c97032e79afd87a11d66a1172d8))
+
 ## [2.1.1](https://github.com/willdady/platypus/compare/v2.1.0...v2.1.1) (2026-07-12)
 
 
