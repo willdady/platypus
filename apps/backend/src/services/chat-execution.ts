@@ -9,6 +9,7 @@ import {
   agent as agentTable,
   context as contextTable,
   mcp as mcpTable,
+  organization as organizationTable,
   provider as providerTable,
   sandbox as sandboxTable,
   skill as skillTable,
@@ -105,6 +106,7 @@ export class NotFoundError extends Error {
 
 type AgentRow = typeof agentTable.$inferSelect;
 type WorkspaceRow = typeof workspaceTable.$inferSelect;
+type OrganizationRow = typeof organizationTable.$inferSelect;
 type McpRow = typeof mcpTable.$inferSelect;
 
 type ChatContext = {
@@ -280,6 +282,7 @@ export type ToolActivityEvent = {
  */
 export type ChatTurnQueries = {
   getWorkspace(id: string): Promise<WorkspaceRow | null>;
+  getOrganization(id: string): Promise<OrganizationRow | null>;
   getAgent(
     id: string,
     orgId: string,
@@ -345,6 +348,15 @@ export const drizzleChatTurnQueries: ChatTurnQueries = {
       .select()
       .from(workspaceTable)
       .where(eq(workspaceTable.id, id))
+      .limit(1);
+    return rows[0] ?? null;
+  },
+
+  async getOrganization(id) {
+    const rows = await db
+      .select()
+      .from(organizationTable)
+      .where(eq(organizationTable.id, id))
       .limit(1);
     return rows[0] ?? null;
   },
@@ -984,6 +996,10 @@ export const prepareChatTurn = async (
     throw new NotFoundError(`Workspace '${workspaceId}' not found`);
   }
 
+  // Org identity is framing, not a hard dependency — a missing org row must not
+  // fail the turn, so this is a soft lookup rather than a NotFoundError.
+  const organization = await queries.getOrganization(orgId);
+
   const context = await resolveChatContext(
     queries,
     request,
@@ -1042,6 +1058,8 @@ export const prepareChatTurn = async (
     sandboxEnvKeys,
     fallbackSystemPrompt: request.systemPrompt,
     runMode,
+    securityGuardrails: provider.securityGuardrails,
+    organizationIdentityContext: organization?.identityContext,
   };
 
   const generation = resolveGenerationConfig(request, agent, promptCtx);
@@ -1642,7 +1660,14 @@ const loadSubAgents = async (
       if (!resolved) {
         throw new Error(`Provider '${providerId}' not found for sub-agent`);
       }
-      return resolved.opened.languageModel(modelId);
+      // Each sub-agent gets its OWN resolved provider's security text appended
+      // to its instructions (not the parent's, not the org identity) — the one
+      // path sub-agents have to the guardrails, since they never call
+      // renderSystemPrompt.
+      return {
+        model: resolved.opened.languageModel(modelId),
+        securityGuardrails: resolved.provider.securityGuardrails ?? null,
+      };
     },
     async (subAgentId: string, toolSetIds: string[]) => {
       const subAgentRecord = subAgentRecords.find((sa) => sa.id === subAgentId);

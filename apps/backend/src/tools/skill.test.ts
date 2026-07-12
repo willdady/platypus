@@ -3,7 +3,7 @@ import { mockDb, resetMockDb } from "../test-utils.ts";
 
 import { createLoadSkillTool } from "./skill.ts";
 
-const ctx = { toolCallId: "test", messages: [] };
+const ctx = { toolCallId: "test", messages: [], context: {} };
 
 describe("createLoadSkillTool", () => {
   const orgId = "org-1";
@@ -25,7 +25,7 @@ describe("createLoadSkillTool", () => {
     // First query (workspace-scoped) resolves with the skill.
     mockDb.limit.mockResolvedValueOnce([skillData]);
 
-    expect(await loadSkill.execute!({ name: "my-skill" }, ctx)).toEqual({
+    expect(await loadSkill.execute({ name: "my-skill" }, ctx)).toEqual({
       name: "my-skill",
       body: "Skill instructions here",
     });
@@ -36,7 +36,7 @@ describe("createLoadSkillTool", () => {
     // Workspace query empty, then the attached org-scoped query resolves.
     mockDb.limit.mockResolvedValueOnce([]).mockResolvedValueOnce([orgSkill]);
 
-    expect(await loadSkill.execute!({ name: "shared-skill" }, ctx)).toEqual(
+    expect(await loadSkill.execute({ name: "shared-skill" }, ctx)).toEqual(
       orgSkill,
     );
   });
@@ -44,7 +44,7 @@ describe("createLoadSkillTool", () => {
   it("returns error when skill not found at either scope", async () => {
     mockDb.limit.mockResolvedValue([]);
 
-    expect(await loadSkill.execute!({ name: "nonexistent" }, ctx)).toEqual({
+    expect(await loadSkill.execute({ name: "nonexistent" }, ctx)).toEqual({
       error: "Skill 'nonexistent' not found",
     });
   });

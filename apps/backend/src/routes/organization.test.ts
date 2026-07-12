@@ -110,4 +110,36 @@ describe("Organization Routes", () => {
       expect(await res.json()).toEqual(mockOrg);
     });
   });
+
+  describe("PUT /organizations/:orgId", () => {
+    it("should accept and persist identityContext for an admin", async () => {
+      mockSession({ id: "admin-1", role: "user" });
+      const updated = {
+        id: "org-1",
+        name: "Org 1",
+        identityContext: "We are Acme.",
+      };
+
+      // requireOrgAccess(["admin"]): db.select().from().where().limit(1)
+      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]);
+      // update: db.update().set().where().returning()
+      mockDb.returning.mockResolvedValueOnce([updated]);
+
+      const res = await app.request("/organizations/org-1", {
+        method: "PUT",
+        body: JSON.stringify({
+          name: "Org 1",
+          identityContext: "We are Acme.",
+        }),
+        headers: { "Content-Type": "application/json" },
+      });
+
+      expect(res.status).toBe(200);
+      // Handler returns the raw returning() array.
+      expect(await res.json()).toEqual([updated]);
+      expect(mockDb.set).toHaveBeenCalledWith(
+        expect.objectContaining({ identityContext: "We are Acme." }),
+      );
+    });
+  });
 });

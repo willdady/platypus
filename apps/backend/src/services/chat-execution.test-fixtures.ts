@@ -2,6 +2,7 @@ import type { ChatTurnQueries } from "./chat-execution.ts";
 import type {
   agent as agentTable,
   mcp as mcpTable,
+  organization as organizationTable,
   workspace as workspaceTable,
 } from "../db/schema.ts";
 import type { Provider } from "@platypus/schemas";
@@ -9,10 +10,12 @@ import type { MemorySummary } from "./memory-retrieval.ts";
 
 type AgentRow = typeof agentTable.$inferSelect;
 type WorkspaceRow = typeof workspaceTable.$inferSelect;
+type OrganizationRow = typeof organizationTable.$inferSelect;
 type McpRow = typeof mcpTable.$inferSelect;
 
 export type ChatTurnQueriesFixtures = {
   workspaces?: WorkspaceRow[];
+  organizations?: OrganizationRow[];
   agents?: AgentRow[];
   providers?: Provider[];
   skills?: Array<{
@@ -61,6 +64,12 @@ export const createInMemoryChatTurnQueries = (
   return {
     getWorkspace(id) {
       return Promise.resolve(fx.workspaces?.find((w) => w.id === id) ?? null);
+    },
+
+    getOrganization(id) {
+      return Promise.resolve(
+        fx.organizations?.find((o) => o.id === id) ?? null,
+      );
     },
 
     getAgent(id, orgId, workspaceId) {
