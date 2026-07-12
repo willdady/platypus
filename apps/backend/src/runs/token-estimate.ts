@@ -349,7 +349,7 @@ function bytesFromDataContent(data: unknown): Uint8Array | undefined {
   // still parsed — without this the model-shape estimate loses the image's size
   // and diverges from the UI-shape estimate.
   if (typeof data === "object" && data !== null && "url" in data) {
-    const url = (data as { url: unknown }).url;
+    const url = data.url;
     if (typeof url === "string") return bytesFromUrl(url);
     if (url instanceof URL) return bytesFromUrl(url.href);
   }

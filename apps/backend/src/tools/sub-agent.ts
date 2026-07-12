@@ -107,12 +107,11 @@ export const createSubAgentTool = (options: SubAgentToolOptions) => {
   // INSTANCE, and `LanguageModel` permits a bare string id. The factory returns
   // an instance today, but a string would otherwise throw here and the catch in
   // `createSubAgentTools` would silently drop the whole sub-agent — so degrade to
-  // the unwrapped model instead. The remaining cast only reconciles the
-  // V2/V3 instance union (wrapLanguageModel accepts both at runtime).
+  // the unwrapped model instead.
   const recoveredModel: LanguageModel =
     recovery && typeof model !== "string"
       ? wrapLanguageModel({
-          model: model as Parameters<typeof wrapLanguageModel>[0]["model"],
+          model,
           middleware: contextOverflowRecoveryMiddleware(recovery),
         })
       : model;
