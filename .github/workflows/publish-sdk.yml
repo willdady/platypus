@@ -1,0 +1,84 @@
+name: Publish Plugin SDK
+
+# Publishes @platypuschat/plugin-sdk to npm — the surface third-party plugin
+# authors depend on (see docs/extending). release-please versions only the root
+# `platypus` component, NOT this package, so the SDK is versioned by hand in its
+# own package.json. This workflow therefore fires on every release publish but
+# only actually publishes when the SDK's version is not already on npm; bump
+# packages/plugin-sdk/package.json when you want a new SDK release to go out.
+#
+# Auth is npm Trusted Publishing (OIDC) — no NPM_TOKEN secret. The trust is
+# configured on npmjs.com against this repo + workflow filename; `id-token: write`
+# lets the runner mint the OIDC token npm exchanges for short-lived credentials,
+# and provenance attestations are generated automatically (no --provenance flag).
+#
+# ONE-TIME SETUP (npm requires a package to exist before a trusted publisher can
+# be registered): publish 0.1.0 once manually (`cd packages/plugin-sdk && npm
+# publish`), then on npmjs.com add a GitHub Actions trusted publisher for
+# willdady/platypus with workflow file `publish-sdk.yml`. Every release after
+# that publishes tokenlessly here. Uses `npm publish` (not `pnpm publish`) for
+# the publish step: pnpm 10 supports OIDC but pnpm 11 has an open 404 regression
+# (pnpm/pnpm#11513), so npm — the reference OIDC implementation — is the safe bet.
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write # npm Trusted Publishing (OIDC)
+
+concurrency:
+  group: publish-sdk
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+          registry-url: https://registry.npmjs.org
+
+      # Trusted publishing needs npm CLI >= 11.5.1; the runner's bundled npm can
+      # be older, which fails with a misleading E404. Pin to a compatible npm.
+      - name: Upgrade npm for OIDC support
+        run: npm install -g npm@^11.5.1
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build SDK
+        run: pnpm --filter @platypuschat/plugin-sdk build
+
+      # Idempotency guard: this workflow runs on every release, but the SDK is
+      # versioned independently of the root release. Publish only when the local
+      # version isn't already on npm (a fresh version returns nothing → publish).
+      - name: Check whether this version needs publishing
+        id: check
+        run: |
+          LOCAL=$(node -p "require('./packages/plugin-sdk/package.json').version")
+          REMOTE=$(npm view @platypuschat/plugin-sdk@"$LOCAL" version 2>/dev/null || true)
+          echo "local=$LOCAL remote=${REMOTE:-<none>}"
+          if [ -n "$REMOTE" ]; then
+            echo "@platypuschat/plugin-sdk@$LOCAL is already published — skipping."
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "publish=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      # No token: npm detects the OIDC environment and authenticates via the
+      # trusted-publisher trust, then attaches provenance automatically.
+      - name: Publish to npm
+        if: steps.check.outputs.publish == 'true'
+        working-directory: packages/plugin-sdk
+        run: npm publish

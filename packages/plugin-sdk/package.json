@@ -1,9 +1,14 @@
 {
   "name": "@platypuschat/plugin-sdk",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Plugin SDK for Platypus — the manifest type and extension-point surface third-party plugins depend on.",
   "license": "MIT",
   "author": "Will Dady",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/willdady/platypus.git",
+    "directory": "packages/plugin-sdk"
+  },
   "type": "module",
   "main": "index.ts",
   "types": "index.ts",
@@ -14,6 +19,7 @@
     "test": "vitest run"
   },
   "publishConfig": {
+    "access": "public",
     "main": "dist/index.js",
     "types": "dist/index.d.ts",
     "exports": {
