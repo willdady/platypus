@@ -709,9 +709,11 @@ describe("chat-execution", () => {
     };
 
     it("normalizes a Date-containing result on the promise-resolved path", async () => {
-      const execute = wrapSingle(async () => ({
-        createdAt: new Date("2026-07-13T10:20:30.000Z"),
-      }));
+      const execute = wrapSingle(() =>
+        Promise.resolve({
+          createdAt: new Date("2026-07-13T10:20:30.000Z"),
+        }),
+      );
       const result = (await execute({}, {})) as { createdAt: string };
       expect(result.createdAt).toBe("2026-07-13T10:20:30.000Z");
     });
@@ -727,6 +729,7 @@ describe("chat-execution", () => {
     it("leaves the async-iterable path intact (yields pass through untouched)", async () => {
       const date = new Date("2026-07-13T10:20:30.000Z");
       const execute = wrapSingle(async function* () {
+        await Promise.resolve();
         yield { part: 1, date };
         yield { part: 2 };
       });
@@ -747,7 +750,7 @@ describe("chat-execution", () => {
       const wrapped = wrapToolsWithBump(
         {
           t: {
-            execute: async () => ({ createdAt: new Date() }),
+            execute: () => Promise.resolve({ createdAt: new Date() }),
           } as unknown as Parameters<typeof wrapToolsWithBump>[0]["t"],
         },
         noop,
