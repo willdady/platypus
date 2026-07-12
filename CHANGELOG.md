@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.1.1](https://github.com/willdady/platypus/compare/v2.1.0...v2.1.1) (2026-07-12)
+
+
+### Bug Fixes
+
+* **backend:** normalize tool results to JSON at the wrapper choke point ([#322](https://github.com/willdady/platypus/issues/322)) ([32cd152](https://github.com/willdady/platypus/commit/32cd15244ca821bc66d881833b87c2911012fee0))
+
 ## [2.1.0](https://github.com/willdady/platypus/compare/v2.0.0...v2.1.0) (2026-07-12)
 
 
