@@ -37,6 +37,26 @@ export type SubAgentActivity = {
   text?: string;
 };
 
+/** The subset of a streamed tool-result part used to synthesize a fallback answer. */
+type ToolResultSummary = { toolName?: string; output: unknown };
+
+/**
+ * Builds a fallback answer from the sub-agent's final tool result for the case
+ * where the sub-agent produced no assistant text at all (e.g. its loop ended on
+ * the tool call). Keeps the delegation result meaningful to the parent rather
+ * than silently empty. Returns "" when there is no tool result to summarize —
+ * `toModelOutput` then supplies its own generic fallback.
+ */
+const summarizeToolResult = (
+  toolResult: ToolResultSummary | undefined,
+): string => {
+  if (!toolResult) return "";
+  const { toolName, output } = toolResult;
+  const rendered = typeof output === "string" ? output : JSON.stringify(output);
+  const label = toolName ? `${toolName} result` : "Tool result";
+  return `${label}: ${rendered}`;
+};
+
 /**
  * Options for creating a sub-agent tool.
  */
@@ -117,6 +137,16 @@ export const createSubAgentTool = (options: SubAgentToolOptions) => {
         const result = await agent.stream({ prompt: task, abortSignal });
         const entries: SubAgentActivityEntry[] = [];
 
+        // Accumulate the sub-agent's assistant text off the stream, keyed by
+        // text-block id. In AI SDK v7 `result.text` carries ONLY the final
+        // step's text, so a sub-agent whose answer landed in an earlier step —
+        // or whose final step is a tool call — comes back empty (#324). Reading
+        // text-deltas from the fullStream captures every step's output in order.
+        const textBlocks = new Map<string, string>();
+        // Last tool result, used to synthesize a meaningful fallback when the
+        // sub-agent produced no assistant text at all.
+        let lastToolResult: ToolResultSummary | undefined;
+
         const completeLastRunning = (type: SubAgentActivityEntry["type"]) => {
           const entry = entries.findLast(
             (e) => e.type === type && e.status === "running",
@@ -137,6 +167,10 @@ export const createSubAgentTool = (options: SubAgentToolOptions) => {
               break;
             case "tool-result":
               completeLastRunning("tool-call");
+              lastToolResult = {
+                toolName: part.toolName,
+                output: part.output,
+              };
               break;
             case "tool-error": {
               const entry = entries.findLast(
@@ -155,7 +189,17 @@ export const createSubAgentTool = (options: SubAgentToolOptions) => {
               completeLastRunning("thinking");
               break;
             case "text-start":
+              textBlocks.set(part.id, "");
               entries.push({ type: "generating", status: "running" });
+              break;
+            case "text-delta":
+              textBlocks.set(
+                part.id,
+                (textBlocks.get(part.id) ?? "") + part.text,
+              );
+              // Deltas grow the answer but don't change the activity log, so
+              // they must not trigger a yield (would spam the SSE stream).
+              changed = false;
               break;
             case "text-end":
               completeLastRunning("generating");
@@ -170,9 +214,15 @@ export const createSubAgentTool = (options: SubAgentToolOptions) => {
           }
         }
 
+        const aggregatedText = Array.from(textBlocks.values())
+          .map((t) => t.trim())
+          .filter(Boolean)
+          .join("\n\n");
+        const text = aggregatedText || summarizeToolResult(lastToolResult);
+
         // Yield (not return) the final value with text — the SDK's executeTool
         // uses for-await-of which discards generator return values.
-        yield { entries, text: await result.text } satisfies SubAgentActivity;
+        yield { entries, text } satisfies SubAgentActivity;
       },
       toModelOutput: ({ output }) => ({
         type: "text" as const,
