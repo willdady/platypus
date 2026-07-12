@@ -6,8 +6,10 @@ import {
   FieldGroup,
   FieldSet,
   FieldError,
+  FieldDescription,
 } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import { ExpandableTextarea } from "@/components/expandable-textarea";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -45,6 +47,7 @@ const OrganizationForm = ({ classNames, orgId }: OrganizationFormProps) => {
 
   const [formData, setFormData] = useState({
     name: "",
+    identityContext: "",
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [validationErrors, setValidationErrors] = useState<
@@ -57,11 +60,18 @@ const OrganizationForm = ({ classNames, orgId }: OrganizationFormProps) => {
 
   useResetOnChange(organization, () => {
     if (organization) {
-      setFormData({ name: organization.name });
+      setFormData({
+        name: organization.name,
+        identityContext: organization.identityContext ?? "",
+      });
     }
   });
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleChange = (
+    e:
+      | React.ChangeEvent<HTMLInputElement>
+      | React.ChangeEvent<HTMLTextAreaElement>,
+  ) => {
     const { id, value } = e.target;
 
     // Clear validation error for this field
@@ -89,7 +99,13 @@ const OrganizationForm = ({ classNames, orgId }: OrganizationFormProps) => {
 
       const method = orgId ? "PUT" : "POST";
 
-      const payload = { name: formData.name };
+      // identityContext is update-only (the create schema accepts name only).
+      const payload = orgId
+        ? {
+            name: formData.name,
+            identityContext: formData.identityContext || null,
+          }
+        : { name: formData.name };
 
       const response = await fetch(url, {
         method,
@@ -170,6 +186,31 @@ const OrganizationForm = ({ classNames, orgId }: OrganizationFormProps) => {
               <FieldError>{validationErrors.name}</FieldError>
             )}
           </Field>
+
+          {orgId && (
+            <Field data-invalid={!!validationErrors.identityContext}>
+              <ExpandableTextarea
+                id="identityContext"
+                label="Organization identity / context"
+                placeholder="Optional identity or context for this organization, shared across all workspaces"
+                value={formData.identityContext}
+                onChange={handleChange}
+                disabled={isSubmitting}
+                aria-invalid={!!validationErrors.identityContext}
+                className="!font-mono"
+                maxLength={4000}
+              />
+              <FieldDescription>
+                Framing added early in the system prompt for every chat across
+                the organization — who you are, what you do. This is context,
+                not a security control (set provider security guardrails for
+                that).
+              </FieldDescription>
+              {validationErrors.identityContext && (
+                <FieldError>{validationErrors.identityContext}</FieldError>
+              )}
+            </Field>
+          )}
         </FieldGroup>
       </FieldSet>
 
