@@ -1,3 +1,7 @@
+---
+status: accepted
+---
+
 # Sandbox host reachability is an admin-curated, default-deny capability bounded by an operator allowlist
 
 > **Update — see [ADR-0013](0013-plugin-system-manifest-driven-in-process-extension-points.md):**

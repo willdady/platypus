@@ -1,3 +1,7 @@
+---
+status: accepted
+---
+
 # Sandbox is a persistent, Workspace-keyed execution environment parallel to Provider
 
 A Sandbox is a configured, isolated execution environment registered on a Workspace, exposing a fixed set of shell and filesystem tools to Agents. We model it as a sibling of Provider — a `sandbox` row per Workspace with a `backend` discriminator and a JSON `config`, resolved by an in-tree adapter registry at Chat-turn time — rather than as a Provider variant, an MCP server, or a generic plugin system. State (filesystem, environment) is keyed on `(orgId, workspaceId)` and is expected to persist across Chat turns; this is what makes Hermes/Claude-Code-style workflows possible. Scope is Workspace-only in v1.

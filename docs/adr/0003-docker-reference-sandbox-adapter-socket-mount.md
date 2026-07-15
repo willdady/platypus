@@ -1,3 +1,7 @@
+---
+status: accepted
+---
+
 # Docker reference Sandbox adapter mounts the host Docker socket
 
 > **Update — superseded in part by [ADR-0013](0013-plugin-system-manifest-driven-in-process-extension-points.md):**

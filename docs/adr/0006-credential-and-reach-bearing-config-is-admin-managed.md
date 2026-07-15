@@ -1,3 +1,7 @@
+---
+status: accepted
+---
+
 # Credential- and reach-bearing configuration is admin-managed; composition is owner-managed
 
 Resources that introduce credentials, external reach, or code execution — **Providers, Sandboxes, and MCPs** — are configured by an Org Admin by default. Resources that merely compose already-sanctioned capabilities — **Agents, Skills, Chats** — remain editable by the Workspace Owner. Because Workspaces are single-user, the Owner is exactly the actor (e.g. a contractor) the default is meant to constrain, so leaving credential-bearing config owner-editable would defeat the control.

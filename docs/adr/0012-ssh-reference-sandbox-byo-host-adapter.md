@@ -1,5 +1,5 @@
 ---
-Status: proposed
+status: accepted
 ---
 
 # SSH reference Sandbox adapter attaches to a pre-existing, operator-owned host

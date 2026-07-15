@@ -1,3 +1,7 @@
+---
+status: accepted
+---
+
 # Sandbox workspace-default env vars are Platypus-merged at exec time, opaque to the model
 
 A Sandbox carries a workspace-default `env: Record<string, string>` (top-level column on the `sandbox` row). On every `shell.exec`, the Sandbox route merges the workspace env on top of the model-provided `input.env` (workspace wins on key collision) and calls the adapter with the merged map. Values never appear in the system prompt, tool-call transcripts, or logs; the orientation block lists keys only. The motivating use case is API keys (`OPENAI_API_KEY`, `GITHUB_TOKEN`, …) so agent-written code can call third-party services without those values transiting the LLM.
