@@ -43,7 +43,7 @@ A distributable bundle — one package, one version, one config namespace, one e
 _Avoid_: extension (reserve for Extension point), add-on, module.
 
 **Extension point**:
-A typed slot, defined and owned by core, that a Plugin fills. The set is fixed — Plugins cannot define new ones. The initial Extension points are Sandbox backends and Tool sets; a messaging-gateway adapter is planned as a third.
+A typed slot, defined and owned by core, that a Plugin fills. The set is fixed — Plugins cannot define new ones, though core may add points (each is a purely additive, minor API bump). The initial Extension points are Sandbox backends and Tool sets; a messaging-gateway adapter and a Web-search backend (ADR-0014) are planned additions.
 _Avoid_: hook, slot.
 
 **Contribution**:
