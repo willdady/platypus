@@ -1,3 +1,7 @@
+---
+status: accepted
+---
+
 # Sandbox interface is a fixed five-tool core with stateless shell semantics
 
 The `SandboxBackend` interface defines exactly five tools — `shell.exec`, `fs.read`, `fs.write`, `fs.edit`, `fs.list` — with Platypus-defined parameter shapes, return shapes, and output bounds. Adapters cannot add tools, rename tools, or change signatures. `shell.exec` is stateless: each call gets a fresh shell with an explicit `cwd`, no session state survives between calls, and a mandatory timeout applies. The system prompt receives a fixed adapter-agnostic orientation block whenever the `"sandbox"` tool set is granted.

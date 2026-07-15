@@ -1,5 +1,5 @@
 ---
-Status: proposed
+status: accepted
 ---
 
 # Plugins are manifest-driven, in-process bundles that fill core-owned extension points
