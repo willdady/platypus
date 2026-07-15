@@ -10,6 +10,7 @@ import {
   workspace as workspaceTable,
 } from "../db/schema.ts";
 import { NotFoundError, ValidationError } from "../services/chat-execution.ts";
+import { resolveRunTimeouts } from "../services/agent-run-settings.ts";
 import { openProvider } from "../services/provider.ts";
 import {
   chatGenerateMetadataSchema,
@@ -154,6 +155,8 @@ chat.post(
       workspaceId: scope.workspaceId,
     });
 
+    const timeouts = await resolveRunTimeouts(scope.orgId, "chat");
+
     try {
       return await agentRunner.stream({
         scope,
@@ -165,6 +168,7 @@ chat.post(
           // The client cancels via POST /chat/:chatId/cancel.
           origin: getOrigin(c),
           frontendUrl: process.env.FRONTEND_URL,
+          timeouts,
         },
       });
     } catch (error) {
