@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.1.3](https://github.com/willdady/platypus/compare/v2.1.2...v2.1.3) (2026-07-16)
+
+
+### Bug Fixes
+
+* **frontend:** populate edit forms from SWR warm cache ([#337](https://github.com/willdady/platypus/issues/337)) ([afd6c1a](https://github.com/willdady/platypus/commit/afd6c1a62ae826c5fe2609f97ddb780f64c0b22e))
+* **frontend:** surface agent form validation errors ([#331](https://github.com/willdady/platypus/issues/331)) ([#338](https://github.com/willdady/platypus/issues/338)) ([94233a4](https://github.com/willdady/platypus/commit/94233a4b1159cadc1554462516533134f65b588b))
+
 ## [2.1.2](https://github.com/willdady/platypus/compare/v2.1.1...v2.1.2) (2026-07-12)
 
 
