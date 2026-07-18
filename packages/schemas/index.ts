@@ -575,6 +575,13 @@ export type ProviderApiMode = z.infer<typeof providerApiModeSchema>;
 // legacy rows fall back to a provider-type default at resolve time on the
 // backend. This object is also the intended home for future per-model metadata
 // (e.g. max input/output tokens) — out of scope here.
+//
+// The universal wildcard (`*/*` or `*`) is an advanced escape hatch: it sends
+// EVERY attached file to the model raw. Values are deliberately NOT validated
+// as MIME patterns, so declaring a type the endpoint can't actually ingest is
+// the operator's responsibility — e.g. `*/*` on an OpenAI chat-completions
+// provider will forward a PDF raw and the endpoint will reject the turn. Use it
+// only on endpoints that genuinely accept those types natively.
 export const modelConfigSchema = z.object({
   id: z.string().min(1),
   passthroughFileTypes: z.array(z.string()).default([]),

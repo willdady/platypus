@@ -105,6 +105,26 @@ const annotateInlinedText = (
 };
 
 /**
+ * A short text stand-in for a file that can't be sent. `unavailable` means we
+ * couldn't load its bytes (a storage miss, or a headless turn that skipped
+ * inlining); `unsupported` means a binary the model can't ingest slipped past
+ * the gate. Either way the part is announced, never forwarded raw.
+ */
+const omittedFilePlaceholder = (
+  filename: string | undefined,
+  reason: "unavailable" | "unsupported",
+) => {
+  const label = filename || "attachment";
+  return {
+    type: "text" as const,
+    text:
+      reason === "unavailable"
+        ? `[file unavailable: ${label}]`
+        : `[unsupported file omitted: ${label}]`,
+  };
+};
+
+/**
  * Rewrite non-native file parts into content the model can read. Runs at send
  * time, after file URLs are inlined (so `data:` bytes are available):
  *
@@ -114,8 +134,12 @@ const annotateInlinedText = (
  *   pre-persist gate should already have blocked it; never throws here, so a
  *   slipped-through part can't hard-fail conversion and re-brick the chat).
  *
- * A part whose bytes aren't available (e.g. a storage miss left it non-`data:`)
- * is left unchanged.
+ * A `storage://` URL (or a missing one) that reaches here never got inlined —
+ * a storage miss, or a headless turn with no origin to inline against. The
+ * model can't fetch it, so forwarding it raw would hard-fail conversion and
+ * re-brick the chat on every history replay (issue #328); it is announced as
+ * unavailable instead. External `http(s)` URLs are left alone — a model may
+ * still fetch those.
  */
 export const normalizeFileParts = (
   messages: PlatypusUIMessage[],
@@ -129,12 +153,20 @@ export const normalizeFileParts = (
       const url = typeof part.url === "string" ? part.url : "";
       const decoded = url.startsWith("data:") ? decodeDataUrl(url) : null;
       const bytes = decoded?.bytes;
+      // An internal storage URL that survived inlining is unreachable by the
+      // model; a missing URL likewise has nothing to send.
+      const unfetchable = url === "" || url.startsWith("storage://");
 
       const outcome = classifyFilePart(part, passthroughFileTypes, bytes);
-      if (outcome === "passthrough") return part;
+
+      if (outcome === "passthrough") {
+        return unfetchable
+          ? omittedFilePlaceholder(part.filename, "unavailable")
+          : part;
+      }
 
       if (outcome === "text") {
-        if (!bytes) return part;
+        if (!bytes) return omittedFilePlaceholder(part.filename, "unavailable");
         const content = new TextDecoder().decode(bytes);
         return {
           type: "text" as const,
@@ -142,10 +174,7 @@ export const normalizeFileParts = (
         };
       }
 
-      return {
-        type: "text" as const,
-        text: `[unsupported file omitted: ${part.filename || "attachment"}]`,
-      };
+      return omittedFilePlaceholder(part.filename, "unsupported");
     });
     return { ...message, parts };
   });

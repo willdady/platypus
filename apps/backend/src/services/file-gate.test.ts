@@ -154,4 +154,59 @@ describe("normalizeFileParts", () => {
     expect(part.type).toBe("text");
     expect(part.text).toContain("report.pdf");
   });
+
+  it("announces a text-like file that never got inlined (storage:// survivor) as unavailable", () => {
+    const out = normalizeFileParts(
+      [
+        msg([
+          {
+            type: "file",
+            mediaType: "application/octet-stream",
+            filename: "notes.md",
+            url: "storage://abc123",
+          },
+        ]),
+      ],
+      chatPassthrough,
+    );
+    const part = out[0].parts[0] as { type: string; text: string };
+    expect(part.type).toBe("text");
+    expect(part.text).toContain("notes.md");
+    expect(part.text).toContain("unavailable");
+  });
+
+  it("announces a native file with an un-inlined storage:// URL as unavailable instead of forwarding it raw", () => {
+    const out = normalizeFileParts(
+      [
+        msg([
+          {
+            type: "file",
+            mediaType: "image/png",
+            filename: "a.png",
+            url: "storage://abc123",
+          },
+        ]),
+      ],
+      chatPassthrough,
+    );
+    const part = out[0].parts[0] as { type: string; text: string };
+    expect(part.type).toBe("text");
+    expect(part.text).toContain("a.png");
+    expect(part.text).toContain("unavailable");
+  });
+
+  it("leaves a native file with an external http(s) URL untouched (the model may fetch it)", () => {
+    const input = [
+      msg([
+        {
+          type: "file",
+          mediaType: "image/png",
+          filename: "a.png",
+          url: "https://example.com/a.png",
+        },
+      ]),
+    ];
+    const out = normalizeFileParts(input, chatPassthrough);
+    expect(out[0].parts[0]).toEqual(input[0].parts[0]);
+  });
 });
