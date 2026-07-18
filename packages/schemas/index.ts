@@ -621,7 +621,15 @@ const NATIVE_FILE_PROVIDER_TYPES: ReadonlySet<string> = new Set([
 /**
  * The passthrough set a model inherits when it declares none. Native-file
  * providers, and OpenAI on the Responses API, take images and PDFs; OpenAI
- * chat-completions endpoints and everything else get the images-only floor.
+ * chat-completions endpoints get the images-only floor.
+ *
+ * OpenRouter (and any future aggregator / unknown type) fronts heterogeneous
+ * models whose capabilities vary per model — many are text-only — so a single
+ * provider-type floor can't be right. It defaults to accepting nothing
+ * natively: an undeclared model then rejects binaries at the gate (a clean 400
+ * before persist, never a raw image forwarded to a text model that would fail
+ * and brick the chat on replay). Operators opt each vision model in with an
+ * explicit `image/*`; text-like files are still inlined regardless. See #328.
  */
 export const defaultPassthroughFileTypes = (provider: {
   providerType: string;
@@ -630,10 +638,12 @@ export const defaultPassthroughFileTypes = (provider: {
   if (NATIVE_FILE_PROVIDER_TYPES.has(provider.providerType)) {
     return ["image/*", "application/pdf"];
   }
-  if (provider.providerType === "OpenAI" && provider.apiMode !== "chat") {
-    return ["image/*", "application/pdf"];
+  if (provider.providerType === "OpenAI") {
+    return provider.apiMode !== "chat"
+      ? ["image/*", "application/pdf"]
+      : ["image/*"];
   }
-  return ["image/*"];
+  return [];
 };
 
 /**

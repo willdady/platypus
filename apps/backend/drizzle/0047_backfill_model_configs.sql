@@ -2,7 +2,8 @@
 -- (issue #328). Each string id becomes { "id": <id>, "passthroughFileTypes": [...] }
 -- with the passthrough set defaulted by provider type:
 --   Anthropic / Google / Bedrock, and OpenAI on the Responses API → images + PDF
---   OpenAI chat-completions and everything else                   → images only
+--   OpenAI chat-completions                                       → images only
+--   OpenRouter (heterogeneous aggregator; many models text-only)  → none
 --
 -- Only rows still holding string elements are rewritten, so this is idempotent
 -- and a no-op once every row is object-shaped. The backend also normalizes
@@ -18,6 +19,8 @@ SET "modelIds" = (
           THEN '["image/*","application/pdf"]'::jsonb
         WHEN p."provider_type" = 'OpenAI' AND p."api_mode" <> 'chat'
           THEN '["image/*","application/pdf"]'::jsonb
+        WHEN p."provider_type" = 'OpenRouter'
+          THEN '[]'::jsonb
         ELSE '["image/*"]'::jsonb
       END
     )

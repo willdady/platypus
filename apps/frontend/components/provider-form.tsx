@@ -264,19 +264,11 @@ const ProviderForm = ({
     }
     setFormData((prev) => ({
       ...prev,
-      // New models default to the provider-type passthrough set; the operator
-      // can widen or narrow it. This is a capability router, not a security
-      // allow-list — see the field description.
-      modelIds: [
-        ...prev.modelIds,
-        {
-          id: "",
-          passthroughFileTypes: defaultPassthroughFileTypes({
-            providerType: formData.providerType,
-            apiMode: formData.apiMode,
-          }),
-        },
-      ],
+      // Leave file types empty: an empty set inherits the provider-type default
+      // at resolve time on the backend. The operator can widen or narrow it.
+      // This is a capability router, not a security allow-list — see the field
+      // description.
+      modelIds: [...prev.modelIds, { id: "", passthroughFileTypes: [] }],
     }));
   };
 
@@ -293,6 +285,14 @@ const ProviderForm = ({
       .split(",")
       .map((t) => t.trim())
       .filter((t) => t.length > 0);
+
+  // Placeholder for the native-file-types input: the provider-type default an
+  // empty field falls back to at resolve time (e.g. images-only for an OpenAI
+  // chat-completions provider, images + PDF for Anthropic/Google/Bedrock).
+  const defaultFileTypesPlaceholder = defaultPassthroughFileTypes({
+    providerType: formData.providerType,
+    apiMode: formData.apiMode,
+  }).join(", ");
 
   const hasEmbeddingConfigChanged = (): boolean => {
     if (!providerId) return false; // New provider, no existing embeddings
@@ -582,9 +582,9 @@ const ProviderForm = ({
               {formData.modelIds.map((model, index) => (
                 <div
                   key={index}
-                  className="flex flex-col gap-2 rounded-md border p-3"
+                  className="flex items-start gap-2 rounded-md border p-3"
                 >
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-1 flex-col gap-2">
                     <Input
                       aria-label={`Model ID ${index + 1}`}
                       placeholder="Model ID (e.g. gpt-4o)"
@@ -594,31 +594,39 @@ const ProviderForm = ({
                       }
                       disabled={isSubmitting || isReadOnly}
                     />
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      className="shrink-0"
-                      aria-label={`Remove model ${index + 1}`}
-                      onClick={() => removeModel(index)}
-                      disabled={isSubmitting || isReadOnly}
-                    >
-                      <Trash2 />
-                    </Button>
+                    <div className="flex flex-col gap-1">
+                      <FieldLabel
+                        htmlFor={`passthrough-${index}`}
+                        className="text-xs text-muted-foreground"
+                      >
+                        Native file types
+                      </FieldLabel>
+                      <Input
+                        id={`passthrough-${index}`}
+                        placeholder={defaultFileTypesPlaceholder}
+                        value={model.passthroughFileTypes.join(", ")}
+                        onChange={(e) =>
+                          updateModel(index, {
+                            passthroughFileTypes: parsePassthroughTypes(
+                              e.target.value,
+                            ),
+                          })
+                        }
+                        disabled={isSubmitting || isReadOnly}
+                      />
+                    </div>
                   </div>
-                  <Input
-                    aria-label={`Native file types for model ${index + 1}`}
-                    placeholder="image/*, application/pdf"
-                    value={model.passthroughFileTypes.join(", ")}
-                    onChange={(e) =>
-                      updateModel(index, {
-                        passthroughFileTypes: parsePassthroughTypes(
-                          e.target.value,
-                        ),
-                      })
-                    }
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="shrink-0"
+                    aria-label={`Remove model ${index + 1}`}
+                    onClick={() => removeModel(index)}
                     disabled={isSubmitting || isReadOnly}
-                  />
+                  >
+                    <Trash2 />
+                  </Button>
                 </div>
               ))}
             </div>
