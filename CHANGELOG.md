@@ -1,5 +1,15 @@
 # Changelog
 
+## [2.1.4](https://github.com/willdady/platypus/compare/v2.1.3...v2.1.4) (2026-07-18)
+
+
+### Bug Fixes
+
+* **backend:** harden file-attachment normalizer and modelIds resolution ([#344](https://github.com/willdady/platypus/issues/344)) ([76f8890](https://github.com/willdady/platypus/commit/76f88901386714ab7cb21780b53f6e576ee5586c))
+* **backend:** make chat titling authoritative on the server ([#340](https://github.com/willdady/platypus/issues/340)) ([d675479](https://github.com/willdady/platypus/commit/d6754790d248204da09056ec6cdfb7f034d978b7))
+* gate unsupported file attachments per-model ([#328](https://github.com/willdady/platypus/issues/328)) ([#343](https://github.com/willdady/platypus/issues/343)) ([ffb229f](https://github.com/willdady/platypus/commit/ffb229f58fc72b911be30faaaa773cd1a7c4cd83))
+* OpenRouter default file types + provider-form model UX ([#345](https://github.com/willdady/platypus/issues/345)) ([1b2723d](https://github.com/willdady/platypus/commit/1b2723dfa0bb513a15dbc2c99f2f61083f57d9e4))
+
 ## [2.1.3](https://github.com/willdady/platypus/compare/v2.1.2...v2.1.3) (2026-07-16)
 
 
