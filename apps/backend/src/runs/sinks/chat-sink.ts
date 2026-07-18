@@ -2,6 +2,7 @@ import { and, eq } from "drizzle-orm";
 import { db } from "../../index.ts";
 import { chat as chatTable } from "../../db/schema.ts";
 import { logger } from "../../logger.ts";
+import { generateChatMetadata } from "../../services/chat-metadata.ts";
 import { extractFiles } from "../../storage/utils.ts";
 import type { PlatypusUIMessage } from "../../types.ts";
 import { FlushScheduler } from "../flush-scheduler.ts";
@@ -154,6 +155,38 @@ export class ChatSink implements RunSink {
 
     this.latestMessages = ctx.messages;
     await this.writeRow({ status: ctx.status, messages: ctx.messages });
+
+    // Fire-and-forget authoritative titling. Runs for every terminal status
+    // (succeeded / failed / cancelled) so a chat is titled even when the first
+    // run errored, was cancelled, or the client tab closed before the old
+    // client-side path could fire. Deliberately not awaited: it must never
+    // block or delay run completion, and any failure is caught and logged.
+    this.generateMetadata();
+  }
+
+  /**
+   * Kicks off title/tag generation for the just-finished run without awaiting
+   * it. Resolves the titling provider from the run plan — for agent runs the
+   * chat row's provider column is null, so the resolved plan's `providerId`
+   * (the agent's own provider) is the authoritative source. Skips silently
+   * when no plan resolved (nothing to title with).
+   */
+  private generateMetadata(): void {
+    const providerId = this.plan?.resolved.providerId;
+    if (!providerId) return;
+
+    const { orgId, workspaceId } = this.params;
+    void generateChatMetadata({
+      chatId: this.runId,
+      workspaceId,
+      orgId,
+      providerId,
+    }).catch((error) => {
+      logger.error(
+        { error, chatId: this.runId, workspaceId },
+        "Error generating chat metadata",
+      );
+    });
   }
 
   /**

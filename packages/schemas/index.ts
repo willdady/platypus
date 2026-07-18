@@ -88,6 +88,14 @@ export const chatStatusSchema = z.enum([
 
 export type ChatStatus = z.infer<typeof chatStatusSchema>;
 
+/**
+ * Placeholder title a chat is created with until it is titled. Load-bearing on
+ * both sides: the backend only ever generates a title while the row still holds
+ * this value (idempotent, first-wins), and the client only polls for a
+ * generated title while it sees this value. Keep it here so both trees agree.
+ */
+export const UNTITLED_CHAT_TITLE = "Untitled";
+
 export const chatSchema = z.object({
   id: z.string(),
   workspaceId: z.string(),
@@ -156,10 +164,6 @@ export const chatUpdateSchema = chatSchema.pick({
 export type ChatUpdateData = z.infer<typeof chatUpdateSchema>;
 
 export type ChatSubmitData = z.infer<typeof chatSubmitSchema>;
-
-export const chatGenerateMetadataSchema = z.object({
-  providerId: z.string(),
-});
 
 export const chatListItemSchema = chatSchema.pick({
   id: true,

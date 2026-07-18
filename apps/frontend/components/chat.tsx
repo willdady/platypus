@@ -40,7 +40,7 @@ import { useResetOnChange } from "@/hooks/use-reset-on-change";
 import { useChatSettings } from "@/hooks/use-chat-settings";
 import { useModelSelection } from "@/hooks/use-model-selection";
 import { useMessageEditing } from "@/hooks/use-message-editing";
-import { useChatMetadata } from "@/hooks/use-chat-metadata";
+import { useChatTitlePoll } from "@/hooks/use-chat-title-poll";
 import { useChatUI } from "@/hooks/use-chat-ui";
 import { Dialog, DialogTrigger } from "./ui/dialog";
 import { useBackendUrl } from "@/app/client-context";
@@ -329,18 +329,21 @@ export const Chat = ({
     }
   }, [chatData, setMessages]);
 
-  // Use chat metadata hook
-  useChatMetadata(
-    messages,
-    status,
+  // Poll for a backend-generated title while the chat is still "Untitled".
+  // Titling is now owned entirely by the backend run lifecycle; the client only
+  // discovers the result (see hooks/use-chat-title-poll.ts).
+  const hasUserMessage = useMemo(
+    () => messages.some((m) => m.role === "user"),
+    [messages],
+  );
+  useChatTitlePoll({
     chatId,
     orgId,
     workspaceId,
-    providerId,
-    agentId,
-    agents,
+    title: chatData?.title,
+    hasUserMessage,
     backendUrl,
-  );
+  });
 
   // Set initial agent if provided and no existing chat agent
   useEffect(() => {

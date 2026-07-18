@@ -1,22 +1,10 @@
 import { Hono } from "hono";
 import { sValidator } from "@hono/standard-validator";
 import { z } from "zod";
-import { generateText, Output } from "ai";
 import { db } from "../index.ts";
-import { dedupeArray, toKebabCase } from "../utils.ts";
-import {
-  chat as chatTable,
-  provider as providerTable,
-  workspace as workspaceTable,
-} from "../db/schema.ts";
+import { chat as chatTable } from "../db/schema.ts";
 import { NotFoundError, ValidationError } from "../services/chat-execution.ts";
-import { openProvider } from "../services/provider.ts";
-import {
-  chatGenerateMetadataSchema,
-  chatSubmitSchema,
-  chatUpdateSchema,
-  type Provider,
-} from "@platypus/schemas";
+import { chatSubmitSchema, chatUpdateSchema } from "@platypus/schemas";
 import { and, count, desc, eq, or, sql } from "drizzle-orm";
 import { requireAuth } from "../middleware/authentication.ts";
 import {
@@ -276,144 +264,6 @@ chat.put(
     }
 
     return c.json(result[0]);
-  },
-);
-
-chat.post(
-  "/:chatId/generate-metadata",
-  requireAuth,
-  requireOrgAccess(),
-  requireWorkspaceAccess,
-  sValidator("json", chatGenerateMetadataSchema),
-  async (c) => {
-    const orgId = c.req.param("orgId")!;
-    const chatId = c.req.param("chatId");
-    const workspaceId = c.req.param("workspaceId")!;
-    const { providerId } = c.req.valid("json");
-
-    // Fetch chat record
-    const chatRecord = await db
-      .select()
-      .from(chatTable)
-      .where(
-        and(eq(chatTable.id, chatId), eq(chatTable.workspaceId, workspaceId)),
-      )
-      .limit(1);
-    if (chatRecord.length === 0) {
-      return c.json({ error: "Chat not found" }, 404);
-    }
-    const chat = chatRecord[0];
-
-    // Fetch workspace to check for task model provider override
-    const workspaceRecord = await db
-      .select()
-      .from(workspaceTable)
-      .where(eq(workspaceTable.id, workspaceId))
-      .limit(1);
-
-    if (workspaceRecord.length === 0) {
-      return c.json({ error: "Workspace not found" }, 404);
-    }
-    const workspace = workspaceRecord[0];
-
-    // Use workspace task model provider if set, otherwise use request providerId
-    const effectiveProviderId = workspace.taskModelProviderId || providerId;
-
-    // Fetch provider record
-    const providerRecord = await db
-      .select()
-      .from(providerTable)
-      .where(
-        and(
-          eq(providerTable.id, effectiveProviderId),
-          or(
-            eq(providerTable.workspaceId, workspaceId),
-            eq(providerTable.organizationId, orgId),
-          ),
-        ),
-      )
-      .limit(1);
-
-    if (providerRecord.length === 0) {
-      return c.json({ error: "Provider not found" }, 404);
-    }
-    const provider = providerRecord[0] as Provider;
-
-    // Fetch existing tags from all chats in the workspace
-    const existingTagsResult = await db.execute(sql`
-      SELECT DISTINCT value as tag
-      FROM ${chatTable}, jsonb_array_elements_text(${chatTable.tags})
-      WHERE ${chatTable.workspaceId} = ${workspaceId}
-    `);
-    const existingTags = existingTagsResult.rows.map(
-      (row) => row.tag as string,
-    );
-
-    // Instantiate model
-    const model = openProvider(provider).languageModel(provider.taskModelId);
-
-    // Generate title
-    const messages = (chat.messages as PlatypusUIMessage[]) || [];
-    const conversationText = messages
-      .map((m) => {
-        const message = m.parts.map((p) => {
-          if (p.type === "text") return p.text;
-          return "";
-        });
-        return `${m.role}:\n${message.join("")}`;
-      })
-      .join("\n");
-
-    const promptParts = [
-      `Generate a short, descriptive title for this chat conversation. You MAY use at most one emoji. The complete title MUST NOT exceed 30 characters.`,
-      `Also generate between 1 and 5 kebab-case tags relevant to the chat.`,
-      `Each tag should ideally be a single word but no more than two words.`,
-      `IMPORTANT: Avoid ambiguous words that lack context when viewed alone. For example, prefer "web-browser" over "chrome", "metal-finish" over "chrome", "programming-language" over "python", or "file-format" over "pdf". Tags should be descriptive enough to be understood without seeing the conversation.`,
-    ];
-
-    // Add existing tags context if available
-    if (existingTags.length > 0) {
-      promptParts.push(
-        `Existing tags in this workspace: ${existingTags.join(", ")}`,
-      );
-      promptParts.push(
-        `Prefer using tags from the existing list when they accurately describe the conversation. Only create new tags if none of the existing tags are applicable.`,
-      );
-    }
-
-    promptParts.push(`Conversation:\n${conversationText}`);
-
-    const { output } = await generateText({
-      model,
-      output: Output.object({
-        schema: z.object({
-          title: z.string(),
-          tags: z.array(z.string()),
-        }),
-      }),
-      prompt: promptParts.join("\n"),
-    });
-
-    let newTitle = output.title;
-    // Truncate the title if it exceeds 30 characters. This is needed as some
-    // models don't respect the limit mentioned in the above prompt :\
-    if (newTitle.length > 30) {
-      newTitle = newTitle.slice(0, 29) + "…";
-    }
-
-    // Enforce kebab-case tags and dedupe
-    const newTags = dedupeArray(output.tags.map(toKebabCase));
-
-    // Update chat title and tags
-    const updateResult = await db
-      .update(chatTable)
-      .set({ title: newTitle, tags: newTags, updatedAt: new Date() })
-      .where(
-        and(eq(chatTable.id, chatId), eq(chatTable.workspaceId, workspaceId)),
-      )
-      .returning();
-
-    return c.json(updateResult[0]);
   },
 );
 
