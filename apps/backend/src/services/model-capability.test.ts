@@ -47,10 +47,13 @@ describe("defaultPassthroughFileTypes", () => {
     ).toEqual(["image/*"]);
   });
 
-  it("gives unknown/OpenRouter providers the images-only floor", () => {
+  it("gives OpenRouter (heterogeneous aggregator) no native floor", () => {
+    // Per-model capability varies too much for a single floor; an undeclared
+    // model rejects binaries at the gate rather than forwarding an image a
+    // text-only model can't read (#328).
     expect(
       defaultPassthroughFileTypes(provider({ providerType: "OpenRouter" })),
-    ).toEqual(["image/*"]);
+    ).toEqual([]);
   });
 });
 
@@ -86,6 +89,16 @@ describe("resolveProviderModels", () => {
     expect(resolveProviderModels(p)[0].passthroughFileTypes).toEqual([
       "image/*",
     ]);
+  });
+
+  it("leaves an undeclared OpenRouter model accepting nothing natively", () => {
+    const p = provider({
+      providerType: "OpenRouter",
+      modelIds: [{ id: "llama-text", passthroughFileTypes: [] }],
+    });
+    // Empty inherits the OpenRouter floor, which is now empty — so a binary is
+    // rejected at the gate until the operator declares the model vision-capable.
+    expect(resolveProviderModels(p)[0].passthroughFileTypes).toEqual([]);
   });
 });
 
