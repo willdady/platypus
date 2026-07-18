@@ -6,7 +6,7 @@ import { provider as providerTable } from "../db/schema.ts";
 import { providerCreateSchema, providerUpdateSchema } from "@platypus/schemas";
 import { eq, and } from "drizzle-orm";
 import { handleEmbeddingConfigChange } from "../services/embedding-invalidation.ts";
-import { dedupeArray } from "../utils.ts";
+import { dedupeModelConfigs } from "../services/model-capability.ts";
 import { requireAuth } from "../middleware/authentication.ts";
 import {
   requireOrgAccess,
@@ -37,7 +37,7 @@ provider.post(
   async (c) => {
     const data = c.req.valid("json");
     if (data.modelIds) {
-      data.modelIds = dedupeArray(data.modelIds).sort();
+      data.modelIds = dedupeModelConfigs(data.modelIds);
     }
     // A duplicate name surfaces as a Postgres unique violation, mapped to 409
     // by the central onError (ADR-0010).
@@ -104,7 +104,7 @@ provider.put(
     const providerId = c.req.param("providerId");
     const data = c.req.valid("json");
     if (data.modelIds) {
-      data.modelIds = dedupeArray(data.modelIds).sort();
+      data.modelIds = dedupeModelConfigs(data.modelIds);
     }
 
     // A Shared Provider is a single source of truth edited only on the

@@ -49,6 +49,7 @@ import {
 } from "@platypus/schemas";
 import useSWR, { useSWRConfig } from "swr";
 import { fetcher, parseValidationErrors, joinUrl } from "@/lib/utils";
+import { getModelIds } from "@/lib/model-config";
 import { toast } from "sonner";
 import { useBackendUrl } from "@/app/client-context";
 import { useAuth } from "@/components/auth-provider";
@@ -176,7 +177,7 @@ const AgentForm = ({
       ) {
         setFormData((prevData) => ({
           ...prevData,
-          modelId: providers[0].modelIds[0],
+          modelId: getModelIds(providers[0])[0],
           providerId: providers[0].id,
         }));
       }
@@ -634,7 +635,7 @@ const AgentForm = ({
                     {providers.map((provider) => (
                       <SelectGroup key={provider.id}>
                         <SelectLabel>{provider.name}</SelectLabel>
-                        {provider.modelIds.map((modelId) => (
+                        {getModelIds(provider).map((modelId) => (
                           <SelectItem
                             key={`provider:${provider.id}:${modelId}`}
                             value={`provider:${provider.id}:${modelId}`}

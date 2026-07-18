@@ -11,6 +11,7 @@ import {
 } from "./ai-elements/model-selector";
 import { AgentAvatar } from "./agent-avatar";
 import { Button } from "./ui/button";
+import { getModelIds } from "@/lib/model-config";
 
 const filterByKeywords = (
   _value: string,
@@ -88,7 +89,7 @@ export const ModelSelectorDialog = ({
           {/* Providers Group */}
           {providers.map((provider) => (
             <ModelSelectorGroup key={provider.id} heading={provider.name}>
-              {provider.modelIds.map((model) => (
+              {getModelIds(provider).map((model) => (
                 <ModelSelectorItem
                   key={`provider:${provider.id}:${model}`}
                   className="cursor-pointer"

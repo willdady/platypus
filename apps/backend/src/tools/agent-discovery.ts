@@ -85,7 +85,14 @@ export function createAgentDiscoveryTools(
             eq(providerTable.organizationId, orgId),
           ),
         );
-      return providers;
+      // Advertise plain model-id strings regardless of whether the row stores
+      // the new per-model objects or a legacy `string[]` (issue #328).
+      return providers.map((p) => ({
+        ...p,
+        modelIds: (p.modelIds as Array<string | { id: string }>).map((m) =>
+          typeof m === "string" ? m : m.id,
+        ),
+      }));
     },
   });
 
