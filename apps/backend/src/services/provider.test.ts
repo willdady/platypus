@@ -75,7 +75,7 @@ const baseProvider: Provider = {
   organizationId: "org-1",
   workspaceId: "ws-1",
   providerType: "OpenAI",
-  modelIds: ["gpt-4"],
+  modelIds: [{ id: "gpt-4", passthroughFileTypes: [] }],
   apiKey: "sk-test",
   apiMode: "chat",
   nativeSearchEnabled: true,

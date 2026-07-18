@@ -67,6 +67,7 @@ vi.mock("@ai-sdk/mcp", () => ({
 
 import {
   prepareChatTurn,
+  validateTurnAttachments,
   NotFoundError,
   ValidationError,
   createToolHeartbeat,
@@ -74,7 +75,9 @@ import {
   wrapToolsWithBump,
   normalizeToolResult,
 } from "./chat-execution.ts";
+import { FileValidationError } from "./file-gate.ts";
 import { createInMemoryChatTurnQueries } from "./chat-execution.test-fixtures.ts";
+import type { PlatypusUIMessage } from "../types.ts";
 
 const baseProvider = {
   id: "p1",
@@ -82,7 +85,7 @@ const baseProvider = {
   organizationId: "org-1",
   workspaceId: "ws-1",
   providerType: "OpenAI" as const,
-  modelIds: ["gpt-4"],
+  modelIds: [{ id: "gpt-4", passthroughFileTypes: [] }],
   apiKey: "sk-test",
   apiMode: "chat" as const,
   nativeSearchEnabled: true,
@@ -405,7 +408,12 @@ describe("chat-execution", () => {
     it("throws ValidationError when the model id is not enabled on the Provider", async () => {
       const queries = createInMemoryChatTurnQueries({
         workspaces: [baseWorkspace],
-        providers: [{ ...baseProvider, modelIds: ["gpt-3.5"] }],
+        providers: [
+          {
+            ...baseProvider,
+            modelIds: [{ id: "gpt-3.5", passthroughFileTypes: [] }],
+          },
+        ],
       });
 
       await expect(
@@ -763,5 +771,74 @@ describe("chat-execution", () => {
       expect(onStart).toHaveBeenCalledTimes(1);
       expect(onEnd).toHaveBeenCalledTimes(1);
     });
+  });
+});
+
+describe("validateTurnAttachments", () => {
+  // baseProvider is OpenAI apiMode:"chat" → resolves to images-only passthrough.
+  const queries = () =>
+    createInMemoryChatTurnQueries({
+      workspaces: [baseWorkspace],
+      providers: [baseProvider],
+    });
+
+  const fileMessage = (mediaType: string, filename: string) =>
+    ({
+      id: "m1",
+      role: "user",
+      parts: [{ type: "file", mediaType, filename, url: "data:," }],
+    }) as unknown as PlatypusUIMessage;
+
+  const request = { providerId: "p1", modelId: "gpt-4" };
+
+  it("rejects a PDF the chat-completions model can't ingest natively", async () => {
+    await expect(
+      validateTurnAttachments(
+        {
+          request,
+          messages: [fileMessage("application/pdf", "report.pdf")],
+          orgId: "org-1",
+          workspaceId: "ws-1",
+        },
+        queries(),
+      ),
+    ).rejects.toBeInstanceOf(FileValidationError);
+  });
+
+  it("allows a text-like file (inlined later) and a native image", async () => {
+    await expect(
+      validateTurnAttachments(
+        {
+          request,
+          messages: [
+            fileMessage("application/octet-stream", "notes.md"),
+            fileMessage("image/png", "a.png"),
+          ],
+          orgId: "org-1",
+          workspaceId: "ws-1",
+        },
+        queries(),
+      ),
+    ).resolves.toBeUndefined();
+  });
+
+  it("is a no-op when the turn carries no file parts", async () => {
+    await expect(
+      validateTurnAttachments(
+        {
+          request,
+          messages: [
+            {
+              id: "m1",
+              role: "user",
+              parts: [{ type: "text", text: "hi" }],
+            } as unknown as PlatypusUIMessage,
+          ],
+          orgId: "org-1",
+          workspaceId: "ws-1",
+        },
+        queries(),
+      ),
+    ).resolves.toBeUndefined();
   });
 });

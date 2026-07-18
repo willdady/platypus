@@ -25,6 +25,7 @@ vi.mock("../services/chat-execution.ts", () => {
   }
   return {
     prepareChatTurn: mockPrepareChatTurn,
+    validateTurnAttachments: vi.fn(),
     ValidationError,
     NotFoundError,
     drizzleChatTurnQueries: {},

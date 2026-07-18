@@ -29,8 +29,8 @@ const mutate = vi.fn();
 const provider: Provider = {
   id: "p1",
   name: "OpenAI",
-  modelIds: ["gpt-4o"],
-} as Provider;
+  modelIds: [{ id: "gpt-4o", passthroughFileTypes: [] }],
+} as unknown as Provider;
 
 // Stable references so re-renders don't churn identity (which would retrigger
 // useResetOnChange and loop).

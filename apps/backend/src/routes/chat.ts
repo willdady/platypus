@@ -4,6 +4,7 @@ import { z } from "zod";
 import { db } from "../index.ts";
 import { chat as chatTable } from "../db/schema.ts";
 import { NotFoundError, ValidationError } from "../services/chat-execution.ts";
+import { FileValidationError } from "../services/file-gate.ts";
 import { chatSubmitSchema, chatUpdateSchema } from "@platypus/schemas";
 import { and, count, desc, eq, or, sql } from "drizzle-orm";
 import { requireAuth } from "../middleware/authentication.ts";
@@ -156,6 +157,11 @@ chat.post(
         },
       });
     } catch (error) {
+      // A rejected attachment (issue #328) fails before the sink persists, so
+      // the chat is never bricked; surface it as a 400 naming the file(s).
+      if (error instanceof FileValidationError) {
+        return c.json({ message: error.message, files: error.files }, 400);
+      }
       if (error instanceof ValidationError) {
         return c.json({ message: error.message }, 400);
       }

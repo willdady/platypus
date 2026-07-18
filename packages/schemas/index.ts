@@ -565,6 +565,183 @@ export const providerApiModeSchema = z.enum(["chat", "responses"]);
 
 export type ProviderApiMode = z.infer<typeof providerApiModeSchema>;
 
+// Per-model configuration attached to a provider. Replaces the old free-form
+// `modelIds: string[]`; each enabled model now carries its own metadata.
+//
+// `passthroughFileTypes` lists the media types (wildcards like `image/*`
+// allowed) the model ingests NATIVELY. It is a capability ROUTER, not a
+// security allow-list: an attached file whose type is absent is converted to
+// text where possible (Phase 2) — it is never blocked for safety. Absent /
+// legacy rows fall back to a provider-type default at resolve time on the
+// backend. This object is also the intended home for future per-model metadata
+// (e.g. max input/output tokens) — out of scope here.
+export const modelConfigSchema = z.object({
+  id: z.string().min(1),
+  passthroughFileTypes: z.array(z.string()).default([]),
+});
+
+export type ModelConfig = z.infer<typeof modelConfigSchema>;
+
+// Provider `modelIds` payload schema. Accepts the new per-model objects and,
+// for backward compatibility with clients/rows predating per-model config, a
+// bare `string[]`; bare strings coerce to objects with an empty
+// `passthroughFileTypes` (defaults are applied on the backend at resolve time).
+export const modelIdsSchema = z
+  .array(z.union([z.string().min(1), modelConfigSchema]))
+  .min(1, "At least one model is required")
+  .transform((items) =>
+    items.map((item) =>
+      typeof item === "string"
+        ? { id: item, passthroughFileTypes: [] as string[] }
+        : item,
+    ),
+  );
+
+// --- Model file-capability helpers (issue #328) ---
+//
+// Framework-agnostic and dependency-free, so both the backend gate and the
+// frontend warning import the SAME logic instead of maintaining mirrored
+// copies. Provider-type strings are accepted loosely (`string`) so callers on
+// either side can pass their own provider shape.
+
+// Provider types that ingest documents (images + PDF) natively.
+const NATIVE_FILE_PROVIDER_TYPES: ReadonlySet<string> = new Set([
+  "Anthropic",
+  "Google",
+  "Bedrock",
+]);
+
+/**
+ * The passthrough set a model inherits when it declares none. Native-file
+ * providers, and OpenAI on the Responses API, take images and PDFs; OpenAI
+ * chat-completions endpoints and everything else get the images-only floor.
+ */
+export const defaultPassthroughFileTypes = (provider: {
+  providerType: string;
+  apiMode?: string;
+}): string[] => {
+  if (NATIVE_FILE_PROVIDER_TYPES.has(provider.providerType)) {
+    return ["image/*", "application/pdf"];
+  }
+  if (provider.providerType === "OpenAI" && provider.apiMode !== "chat") {
+    return ["image/*", "application/pdf"];
+  }
+  return ["image/*"];
+};
+
+/**
+ * Extensions whose bytes are plain text (source, config, data, markup). Used
+ * to decide the text-vs-binary split by the file's real nature rather than the
+ * unreliable browser-supplied media type. Binary document formats
+ * (pdf/docx/xlsx/pptx) are deliberately absent — those need extraction (Phase
+ * 2), not inlining.
+ */
+export const TEXT_LIKE_EXTENSIONS: ReadonlySet<string> = new Set([
+  "txt",
+  "text",
+  "md",
+  "markdown",
+  "mdx",
+  "rst",
+  "log",
+  "csv",
+  "tsv",
+  "json",
+  "jsonl",
+  "ndjson",
+  "yaml",
+  "yml",
+  "toml",
+  "ini",
+  "cfg",
+  "conf",
+  "env",
+  "properties",
+  "xml",
+  "html",
+  "htm",
+  "svg",
+  "css",
+  "scss",
+  "sass",
+  "less",
+  "js",
+  "mjs",
+  "cjs",
+  "jsx",
+  "ts",
+  "tsx",
+  "py",
+  "rb",
+  "go",
+  "rs",
+  "java",
+  "kt",
+  "kts",
+  "scala",
+  "c",
+  "h",
+  "cc",
+  "cpp",
+  "cxx",
+  "hpp",
+  "cs",
+  "php",
+  "swift",
+  "sh",
+  "bash",
+  "zsh",
+  "fish",
+  "ps1",
+  "bat",
+  "sql",
+  "graphql",
+  "gql",
+  "proto",
+  "dockerfile",
+  "makefile",
+  "gitignore",
+  "editorconfig",
+  "lua",
+  "pl",
+  "pm",
+  "r",
+  "jl",
+  "dart",
+  "vue",
+  "svelte",
+  "tf",
+  "hcl",
+]);
+
+/** Whether a filename's extension is a known plain-text/code/config format. */
+export const isTextLikeExtension = (filename: string | undefined): boolean => {
+  if (!filename) return false;
+  const base = filename.split(/[\\/]/).pop() ?? "";
+  const dot = base.lastIndexOf(".");
+  if (dot <= 0) return false;
+  return TEXT_LIKE_EXTENSIONS.has(base.slice(dot + 1).toLowerCase());
+};
+
+/**
+ * Whether `mediaType` matches any pattern. A pattern may be exact
+ * (`application/pdf`), a subtype wildcard ("image slash star"), or the
+ * universal wildcard. Case-insensitive; media-type parameters are ignored.
+ */
+export const mediaTypeMatches = (
+  mediaType: string | undefined,
+  patterns: string[],
+): boolean => {
+  if (!mediaType || patterns.length === 0) return false;
+  const type = mediaType.split(";")[0].trim().toLowerCase();
+  return patterns.some((pattern) => {
+    const p = pattern.trim().toLowerCase();
+    if (p === "*/*" || p === "*") return true;
+    if (p.endsWith("/*")) return type.startsWith(p.slice(0, -1));
+    return type === p;
+  });
+};
+
 const providerBaseSchema = z.object({
   id: z.string(),
   organizationId: z.string().optional(),
@@ -601,7 +778,7 @@ const providerBaseSchema = z.object({
   // agent at a different provider. A prompt-level FLOOR, not a guarantee.
   // Length-bounded against abuse; nullable so existing providers are unchanged.
   securityGuardrails: z.string().max(8000).nullable().optional(),
-  modelIds: z.array(z.string()).min(1),
+  modelIds: modelIdsSchema,
   taskModelId: z.string(),
   memoryExtractionModelId: z.string(),
   embeddingModelId: z.string().nullable().optional(),

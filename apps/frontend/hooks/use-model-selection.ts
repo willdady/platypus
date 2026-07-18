@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { Provider, Agent, Chat } from "@platypus/schemas";
 import { setWithExpiry, getWithExpiry } from "@/lib/local-storage";
+import { getModelIds } from "@/lib/model-config";
 
 export interface ModelSelection {
   agentId: string;
@@ -74,7 +75,8 @@ export const useModelSelection = (
         const provider = providers.find((p) => p.id === persistedProviderId);
         if (provider) {
           // Check if the persisted model is still available for this provider
-          if (provider.modelIds.includes(persistedModelId)) {
+          const providerModelIds = getModelIds(provider);
+          if (providerModelIds.includes(persistedModelId)) {
             // Both provider and model are valid, restore them
             setProviderId(persistedProviderId);
             setModelId(persistedModelId);
@@ -85,7 +87,7 @@ export const useModelSelection = (
               `Model '${persistedModelId}' no longer available for provider '${persistedProviderId}', falling back to first model`,
             );
             setProviderId(persistedProviderId);
-            setModelId(provider.modelIds[0]);
+            setModelId(providerModelIds[0]);
             return;
           }
         } else {
@@ -124,7 +126,10 @@ export const useModelSelection = (
           const provider = providers.find(
             (p) => p.id === lastSelection.providerId,
           );
-          if (provider?.modelIds.includes(lastSelection.modelId)) {
+          if (
+            provider &&
+            getModelIds(provider).includes(lastSelection.modelId)
+          ) {
             setProviderId(lastSelection.providerId);
             setModelId(lastSelection.modelId);
             return;
@@ -135,7 +140,7 @@ export const useModelSelection = (
     }
 
     // PRIORITY 3: Fall back to first provider's first model (for new chats, invalid persisted data, or missing chatData)
-    setModelId(providers[0].modelIds[0]);
+    setModelId(getModelIds(providers[0])[0]);
     setProviderId(providers[0].id);
     /* eslint-enable react-hooks/set-state-in-effect */
   }, [

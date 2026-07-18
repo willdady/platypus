@@ -17,7 +17,7 @@ const baseProvider: Provider = {
   organizationId: "org-1",
   workspaceId: "ws-1",
   providerType: "OpenAI",
-  modelIds: ["text-embedding-3-small"],
+  modelIds: [{ id: "text-embedding-3-small", passthroughFileTypes: [] }],
   apiKey: "sk-test",
   apiMode: "chat",
   nativeSearchEnabled: true,

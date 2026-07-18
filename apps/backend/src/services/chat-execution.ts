@@ -32,6 +32,15 @@ import type { LanguageModel, Tool } from "ai";
 import { logger } from "../logger.ts";
 import { buildMcpTransportConfig } from "./mcp-oauth-provider.ts";
 import { inlineFileUrls } from "../storage/utils.ts";
+import {
+  passthroughFileTypesForModel,
+  providerHasModel,
+} from "./model-capability.ts";
+import {
+  assertFilePartsSupported,
+  messagesHaveFileParts,
+  normalizeFileParts,
+} from "./file-gate.ts";
 import type { PlatypusUIMessage } from "../types.ts";
 
 /**
@@ -563,8 +572,20 @@ export const prepareChatTurn = async (
       )
     : tools;
 
+  // Inline file URLs to `data:` bytes, then normalize any file part the target
+  // model can't ingest natively (issue #328): text-like files become annotated
+  // text; a native part is left untouched. The pre-persist gate
+  // (`validateTurnAttachments`) has already rejected unsupported binaries, so
+  // the normalizer here never throws.
+  const passthroughFileTypes = passthroughFileTypesForModel(
+    provider,
+    resolvedModelId,
+  );
   const inlinedMessages = origin
-    ? await inlineFileUrls(messages, origin)
+    ? normalizeFileParts(
+        await inlineFileUrls(messages, origin),
+        passthroughFileTypes,
+      )
     : messages;
 
   let disposed = false;
@@ -613,6 +634,49 @@ export const prepareChatTurn = async (
     },
     dispose,
   };
+};
+
+/**
+ * Pre-persist file gate (issue #328). Resolves the target model's declared
+ * `passthroughFileTypes` and rejects the turn — before anything is persisted —
+ * if any attached file (fresh upload or history) is neither natively accepted
+ * nor text-like. Throws `FileValidationError`, which the chat route maps to a
+ * 400 naming the offending file(s).
+ *
+ * A no-op when the turn carries no file parts (the common case, including all
+ * headless runs), so it adds no lookups there. If model resolution itself fails
+ * (unknown agent/provider/model), it silently returns and lets the normal
+ * `prepareChatTurn` path surface that error unchanged — this gate only adds the
+ * file-rejection behavior, it never preempts existing error handling.
+ */
+export const validateTurnAttachments = async (
+  args: {
+    request: ChatTurnRequest;
+    messages: PlatypusUIMessage[];
+    orgId: string;
+    workspaceId: string;
+  },
+  queries: ChatTurnQueries = drizzleChatTurnQueries,
+): Promise<void> => {
+  if (!messagesHaveFileParts(args.messages)) return;
+
+  let passthroughFileTypes: string[];
+  try {
+    const context = await resolveChatContext(
+      queries,
+      args.request,
+      args.orgId,
+      args.workspaceId,
+    );
+    passthroughFileTypes = passthroughFileTypesForModel(
+      context.provider,
+      context.resolvedModelId,
+    );
+  } catch {
+    return;
+  }
+
+  assertFilePartsSupported(args.messages, passthroughFileTypes);
 };
 
 // --- Private helpers ---
@@ -830,7 +894,7 @@ const resolveChatContext = async (
     );
   }
 
-  if (!provider.modelIds.includes(resolvedModelId)) {
+  if (!providerHasModel(provider, resolvedModelId)) {
     throw new ValidationError(
       `Model id '${resolvedModelId}' not enabled for provider '${resolvedProviderId}'`,
     );

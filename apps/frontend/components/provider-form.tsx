@@ -29,6 +29,7 @@ import {
   Eye,
   EyeOff,
   OctagonX,
+  Plus,
   Trash2,
 } from "lucide-react";
 import {
@@ -47,6 +48,11 @@ import { useRouter } from "next/navigation";
 import { type Provider } from "@platypus/schemas";
 import useSWR from "swr";
 import { fetcher, parseValidationErrors, joinUrl } from "@/lib/utils";
+import {
+  getModelConfigs,
+  defaultPassthroughFileTypes,
+  type ModelConfigView,
+} from "@/lib/model-config";
 import { toast } from "sonner";
 import { useBackendUrl } from "@/app/client-context";
 import { useAuth } from "@/components/auth-provider";
@@ -117,7 +123,6 @@ const ProviderForm = ({
   const [headersString, setHeadersString] = useState("{}");
   const [extraBodyError, setExtraBodyError] = useState<string | null>(null);
   const [extraBodyString, setExtraBodyString] = useState("{}");
-  const [modelIdsString, setModelIdsString] = useState("");
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isOpen, setIsOpen] = useState(false);
@@ -158,7 +163,7 @@ const ProviderForm = ({
         apiMode: provider.apiMode ?? "responses",
         nativeSearchEnabled: provider.nativeSearchEnabled ?? true,
         securityGuardrails: provider.securityGuardrails ?? "",
-        modelIds: provider.modelIds || [],
+        modelIds: provider.modelIds ? getModelConfigs(provider) : [],
         taskModelId: provider.taskModelId,
         memoryExtractionModelId: provider.memoryExtractionModelId,
         embeddingModelId: provider.embeddingModelId || "",
@@ -166,7 +171,6 @@ const ProviderForm = ({
       });
       setHeadersString(JSON.stringify(provider.headers || {}, null, 2));
       setExtraBodyString(JSON.stringify(provider.extraBody || {}, null, 2));
-      setModelIdsString((provider.modelIds || []).join("\n"));
       setSavedEmbeddingModelId(provider.embeddingModelId || null);
       setSavedEmbeddingDimensions(
         provider.embeddingDimensions?.toString() || null,
@@ -214,16 +218,6 @@ const ProviderForm = ({
       } catch {
         setExtraBodyError("Invalid JSON");
       }
-    } else if (id === "modelIds") {
-      setModelIdsString(value);
-      const parsed = value
-        .split("\n")
-        .map((line) => line.trim())
-        .filter((line) => line.length > 0);
-      setFormData((prevData) => ({
-        ...prevData,
-        modelIds: parsed,
-      }));
     } else {
       setFormData((prevData) => ({
         ...prevData,
@@ -248,6 +242,57 @@ const ProviderForm = ({
       return newData;
     });
   };
+
+  // --- Per-model config editing (issue #328) ---
+
+  const updateModel = (index: number, patch: Partial<ModelConfigView>) => {
+    setFormData((prev) => ({
+      ...prev,
+      modelIds: prev.modelIds.map((m, i) =>
+        i === index ? { ...m, ...patch } : m,
+      ),
+    }));
+  };
+
+  const addModel = () => {
+    if (validationErrors.modelIds) {
+      setValidationErrors((prev) => {
+        const next = { ...prev };
+        delete next.modelIds;
+        return next;
+      });
+    }
+    setFormData((prev) => ({
+      ...prev,
+      // New models default to the provider-type passthrough set; the operator
+      // can widen or narrow it. This is a capability router, not a security
+      // allow-list — see the field description.
+      modelIds: [
+        ...prev.modelIds,
+        {
+          id: "",
+          passthroughFileTypes: defaultPassthroughFileTypes({
+            providerType: formData.providerType,
+            apiMode: formData.apiMode,
+          }),
+        },
+      ],
+    }));
+  };
+
+  const removeModel = (index: number) => {
+    setFormData((prev) => ({
+      ...prev,
+      modelIds: prev.modelIds.filter((_, i) => i !== index),
+    }));
+  };
+
+  // Passthrough types are edited as a comma-separated string of media types.
+  const parsePassthroughTypes = (value: string): string[] =>
+    value
+      .split(",")
+      .map((t) => t.trim())
+      .filter((t) => t.length > 0);
 
   const hasEmbeddingConfigChanged = (): boolean => {
     if (!providerId) return false; // New provider, no existing embeddings
@@ -527,17 +572,75 @@ const ProviderForm = ({
           </Field>
 
           <Field data-invalid={!!validationErrors.modelIds}>
-            <FieldLabel htmlFor="modelIds">Model IDs</FieldLabel>
-            <Textarea
-              id="modelIds"
-              placeholder={["gpt-4", "gpt-3.5-turbo"].join("\n")}
-              value={modelIdsString}
-              onChange={handleChange}
-              disabled={isSubmitting || isReadOnly}
-              aria-invalid={!!validationErrors.modelIds}
-            />
+            <FieldLabel htmlFor="modelIds">Models</FieldLabel>
+            <div className="flex flex-col gap-3">
+              {formData.modelIds.length === 0 && (
+                <p className="text-sm text-muted-foreground">
+                  No models added yet.
+                </p>
+              )}
+              {formData.modelIds.map((model, index) => (
+                <div
+                  key={index}
+                  className="flex flex-col gap-2 rounded-md border p-3"
+                >
+                  <div className="flex items-center gap-2">
+                    <Input
+                      aria-label={`Model ID ${index + 1}`}
+                      placeholder="Model ID (e.g. gpt-4o)"
+                      value={model.id}
+                      onChange={(e) =>
+                        updateModel(index, { id: e.target.value })
+                      }
+                      disabled={isSubmitting || isReadOnly}
+                    />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="shrink-0"
+                      aria-label={`Remove model ${index + 1}`}
+                      onClick={() => removeModel(index)}
+                      disabled={isSubmitting || isReadOnly}
+                    >
+                      <Trash2 />
+                    </Button>
+                  </div>
+                  <Input
+                    aria-label={`Native file types for model ${index + 1}`}
+                    placeholder="image/*, application/pdf"
+                    value={model.passthroughFileTypes.join(", ")}
+                    onChange={(e) =>
+                      updateModel(index, {
+                        passthroughFileTypes: parsePassthroughTypes(
+                          e.target.value,
+                        ),
+                      })
+                    }
+                    disabled={isSubmitting || isReadOnly}
+                  />
+                </div>
+              ))}
+            </div>
+            {!isReadOnly && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="mt-2 w-fit"
+                onClick={addModel}
+                disabled={isSubmitting}
+              >
+                <Plus /> Add model
+              </Button>
+            )}
             <FieldDescription>
-              Model IDs to allow for this provider. One per line.
+              Models this provider exposes. For each model, list the file media
+              types it can ingest <strong>natively</strong> (comma-separated,
+              wildcards like <code>image/*</code> allowed). Files of other types
+              are converted to text where possible — this is a capability
+              setting, <strong>not a security filter</strong>. Leave the types
+              empty to use the provider-type default.
             </FieldDescription>
             {validationErrors.modelIds && (
               <FieldError>{validationErrors.modelIds}</FieldError>

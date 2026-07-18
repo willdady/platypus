@@ -343,6 +343,54 @@ describe("Provider Create Schema", () => {
   });
 });
 
+describe("Provider modelIds (per-model config)", () => {
+  const base = {
+    organizationId: "org-123",
+    name: "Test Provider",
+    providerType: "OpenAI" as const,
+    apiKey: "sk-test",
+    taskModelId: "gpt-4",
+    memoryExtractionModelId: "gpt-4",
+  };
+
+  it("coerces a legacy string[] to per-model objects with empty passthrough", () => {
+    const result = providerCreateSchema.safeParse({
+      ...base,
+      modelIds: ["gpt-4", "gpt-4o"],
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.modelIds).toEqual([
+        { id: "gpt-4", passthroughFileTypes: [] },
+        { id: "gpt-4o", passthroughFileTypes: [] },
+      ]);
+    }
+  });
+
+  it("accepts per-model objects and defaults passthroughFileTypes to []", () => {
+    const result = providerCreateSchema.safeParse({
+      ...base,
+      modelIds: [
+        { id: "gpt-4o" },
+        { id: "qwen-vl", passthroughFileTypes: ["image/*"] },
+      ],
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.modelIds).toEqual([
+        { id: "gpt-4o", passthroughFileTypes: [] },
+        { id: "qwen-vl", passthroughFileTypes: ["image/*"] },
+      ]);
+    }
+  });
+
+  it("requires at least one model", () => {
+    expect(
+      providerCreateSchema.safeParse({ ...base, modelIds: [] }).success,
+    ).toBe(false);
+  });
+});
+
 describe("Organization identityContext", () => {
   it("accepts an organization when identityContext is omitted or null", () => {
     const base = {

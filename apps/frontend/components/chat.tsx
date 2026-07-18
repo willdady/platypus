@@ -39,6 +39,8 @@ import { fetcher, joinUrl } from "@/lib/utils";
 import { useResetOnChange } from "@/hooks/use-reset-on-change";
 import { useChatSettings } from "@/hooks/use-chat-settings";
 import { useModelSelection } from "@/hooks/use-model-selection";
+import { getPassthroughFileTypes } from "@/lib/model-config";
+import { FileCompatibilityWarning } from "./file-compatibility-warning";
 import { useMessageEditing } from "@/hooks/use-message-editing";
 import { useChatTitlePoll } from "@/hooks/use-chat-title-poll";
 import { useChatUI } from "@/hooks/use-chat-ui";
@@ -411,6 +413,14 @@ export const Chat = ({
     resolvedProvider.providerType !== "Bedrock" &&
     resolvedProvider.nativeSearchEnabled !== false;
 
+  // The media types the currently-selected model ingests natively (issue #328),
+  // used to warn about incompatible attachments. Empty when nothing resolves yet.
+  const resolvedModelId = agentId ? selectedAgent?.modelId : modelId;
+  const passthroughFileTypes =
+    resolvedProvider && resolvedModelId
+      ? getPassthroughFileTypes(resolvedProvider, resolvedModelId)
+      : [];
+
   // Treat a server-side run-in-progress as if we were locally streaming,
   // so a tab that reconnects mid-run (or an unrelated tab opened on the
   // same chat) can't kick off a second concurrent run. The submit button
@@ -530,6 +540,9 @@ export const Chat = ({
                 <PromptInputAttachments className="w-full">
                   {(attachment) => <PromptInputAttachment data={attachment} />}
                 </PromptInputAttachments>
+                <FileCompatibilityWarning
+                  passthroughFileTypes={passthroughFileTypes}
+                />
                 <PromptInputBody>
                   <PromptInputTextarea
                     ref={textareaRef}
