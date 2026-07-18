@@ -572,21 +572,22 @@ export const prepareChatTurn = async (
       )
     : tools;
 
-  // Inline file URLs to `data:` bytes, then normalize any file part the target
-  // model can't ingest natively (issue #328): text-like files become annotated
-  // text; a native part is left untouched. The pre-persist gate
-  // (`validateTurnAttachments`) has already rejected unsupported binaries, so
-  // the normalizer here never throws.
+  // Inline file URLs to `data:` bytes when we have an origin, then ALWAYS
+  // normalize (issue #328): text-like files become annotated text, native
+  // files pass through untouched, and any part that couldn't be inlined — a
+  // storage miss, or a headless turn with no origin — is announced as
+  // unavailable rather than forwarded raw. Normalizing even without an origin
+  // keeps a stray file part on a headless turn from hard-failing conversion.
+  // The pre-persist gate (`validateTurnAttachments`) has already rejected
+  // unsupported binaries, so the normalizer here never throws.
   const passthroughFileTypes = passthroughFileTypesForModel(
     provider,
     resolvedModelId,
   );
-  const inlinedMessages = origin
-    ? normalizeFileParts(
-        await inlineFileUrls(messages, origin),
-        passthroughFileTypes,
-      )
-    : messages;
+  const inlinedMessages = normalizeFileParts(
+    origin ? await inlineFileUrls(messages, origin) : messages,
+    passthroughFileTypes,
+  );
 
   let disposed = false;
   const dispose = async () => {

@@ -38,6 +38,23 @@ describe("createAgentDiscoveryTools", () => {
         providers,
       );
     });
+
+    it("flattens per-model object modelIds to plain id strings", async () => {
+      mockDb.where.mockResolvedValue([
+        {
+          id: "p1",
+          name: "Provider 1",
+          modelIds: [
+            { id: "model-a", passthroughFileTypes: ["image/*"] },
+            { id: "model-b", passthroughFileTypes: [] },
+          ],
+        },
+      ]);
+
+      expect(await tools.listModelProviders.execute!({}, ctx)).toEqual([
+        { id: "p1", name: "Provider 1", modelIds: ["model-a", "model-b"] },
+      ]);
+    });
   });
 
   describe("listAgents", () => {
