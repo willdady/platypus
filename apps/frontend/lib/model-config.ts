@@ -1,7 +1,6 @@
 import {
+  classifyFile,
   defaultPassthroughFileTypes,
-  isTextLikeExtension,
-  mediaTypeMatches,
   type Provider,
 } from "@platypus/schemas";
 
@@ -62,10 +61,4 @@ export const getPassthroughFileTypes = (
 export const classifyAttachment = (
   file: { mediaType?: string; filename?: string },
   passthroughFileTypes: string[],
-): "passthrough" | "text" | "reject" => {
-  if (mediaTypeMatches(file.mediaType, passthroughFileTypes)) {
-    return "passthrough";
-  }
-  if (isTextLikeExtension(file.filename)) return "text";
-  return "reject";
-};
+) => classifyFile(file, passthroughFileTypes);

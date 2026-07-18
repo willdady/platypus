@@ -759,6 +759,27 @@ export const mediaTypeMatches = (
   });
 };
 
+export type FileClassification = "passthrough" | "text" | "reject";
+
+/**
+ * Classify a file from metadata shared by the frontend and backend. The
+ * backend can additionally provide its byte-sniff result when content is
+ * available.
+ */
+export const classifyFile = (
+  file: { mediaType?: string; filename?: string },
+  passthroughFileTypes: string[],
+  contentLooksBinary = false,
+): FileClassification => {
+  if (mediaTypeMatches(file.mediaType, passthroughFileTypes)) {
+    return "passthrough";
+  }
+  if (isTextLikeExtension(file.filename) && !contentLooksBinary) {
+    return "text";
+  }
+  return "reject";
+};
+
 const providerBaseSchema = z.object({
   id: z.string(),
   organizationId: z.string().optional(),
