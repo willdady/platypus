@@ -15,14 +15,19 @@
  * browser-supplied media type, which is an unreliable, OS-specific lottery
  * (`.py` → `text/x-python` but `.md` → `application/octet-stream`).
  */
-import { isTextLikeExtension, mediaTypeMatches } from "@platypus/schemas";
+import {
+  classifyFile,
+  isTextLikeExtension,
+  mediaTypeMatches,
+  type FileClassification,
+} from "@platypus/schemas";
 
 // The media-type matcher and the text-extension test live in @platypus/schemas
 // so the backend gate and the frontend warning share one copy. Re-exported so
 // this module remains the single classification import surface (incl. tests).
 export { isTextLikeExtension, mediaTypeMatches };
 
-export type FilePartClass = "passthrough" | "text" | "reject";
+export type FilePartClass = FileClassification;
 
 /** How many leading bytes to sniff for the NUL-byte binary heuristic. */
 const SNIFF_BYTES = 8_000;
@@ -46,11 +51,9 @@ export const classifyFilePart = (
   passthroughFileTypes: string[],
   bytes?: Uint8Array,
 ): FilePartClass => {
-  if (mediaTypeMatches(part.mediaType, passthroughFileTypes)) {
-    return "passthrough";
-  }
-  if (isTextLikeExtension(part.filename) && !(bytes && looksBinary(bytes))) {
-    return "text";
-  }
-  return "reject";
+  return classifyFile(
+    part,
+    passthroughFileTypes,
+    bytes ? looksBinary(bytes) : false,
+  );
 };

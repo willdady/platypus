@@ -1,14 +1,13 @@
 import {
+  classifyFile,
   defaultPassthroughFileTypes,
-  isTextLikeExtension,
-  mediaTypeMatches,
   type Provider,
 } from "@platypus/schemas";
 
 /**
  * Client-side per-model file capability helpers (issue #328). The pure logic
- * (`defaultPassthroughFileTypes`, `mediaTypeMatches`, `isTextLikeExtension`) is
- * shared with the backend via @platypus/schemas so the two never drift; this
+ * (`defaultPassthroughFileTypes`, `classifyFile`) is shared with the backend
+ * via @platypus/schemas so the two never drift; this
  * module adds the frontend-only view helpers over a provider's `modelIds`,
  * which may be the new per-model objects or a legacy `string[]`.
  */
@@ -62,10 +61,4 @@ export const getPassthroughFileTypes = (
 export const classifyAttachment = (
   file: { mediaType?: string; filename?: string },
   passthroughFileTypes: string[],
-): "passthrough" | "text" | "reject" => {
-  if (mediaTypeMatches(file.mediaType, passthroughFileTypes)) {
-    return "passthrough";
-  }
-  if (isTextLikeExtension(file.filename)) return "text";
-  return "reject";
-};
+) => classifyFile(file, passthroughFileTypes);

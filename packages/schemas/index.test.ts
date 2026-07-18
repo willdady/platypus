@@ -15,6 +15,7 @@ import {
   SANDBOX_ENV_MAX_ENTRIES,
   SANDBOX_ENV_MAX_VALUE_BYTES,
   providerCreateSchema,
+  classifyFile,
 } from "./index";
 
 describe("Organization Schema", () => {
@@ -462,5 +463,47 @@ describe("sandboxEnvSchema", () => {
     const tooMany: Record<string, string> = {};
     for (let i = 0; i <= SANDBOX_ENV_MAX_ENTRIES; i++) tooMany[`K${i}`] = "v";
     expect(sandboxEnvSchema.safeParse(tooMany).success).toBe(false);
+  });
+});
+
+describe("classifyFile", () => {
+  const passthroughFileTypes = ["image/*"];
+
+  it("prioritizes native passthrough media types", () => {
+    expect(
+      classifyFile(
+        { mediaType: "image/png", filename: "image.png" },
+        passthroughFileTypes,
+        true,
+      ),
+    ).toBe("passthrough");
+  });
+
+  it("classifies text-like files when content is not binary", () => {
+    expect(
+      classifyFile(
+        { mediaType: "application/octet-stream", filename: "notes.md" },
+        passthroughFileTypes,
+      ),
+    ).toBe("text");
+  });
+
+  it("rejects binary content even when the extension is text-like", () => {
+    expect(
+      classifyFile(
+        { mediaType: "application/octet-stream", filename: "notes.md" },
+        passthroughFileTypes,
+        true,
+      ),
+    ).toBe("reject");
+  });
+
+  it("rejects unsupported binary file types", () => {
+    expect(
+      classifyFile(
+        { mediaType: "application/pdf", filename: "report.pdf" },
+        passthroughFileTypes,
+      ),
+    ).toBe("reject");
   });
 });
