@@ -87,6 +87,8 @@ lands well.
 
 Contributions are welcome! Please read our [Contributing Guide](CONTRIBUTING.md) for details on local development, branch naming, commit conventions, and how to submit a pull request.
 
+**New here?** Browse our [good first issues](https://github.com/willdady/platypus/contribute) — scoped, newcomer-friendly tasks that are a great way to make your first contribution.
+
 ---
 
 Platypus logo by [Thiings.co](https://www.thiings.co/things)

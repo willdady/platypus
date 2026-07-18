@@ -8,6 +8,8 @@ Please be respectful and constructive in all interactions. We are committed to p
 
 ## Getting Started
 
+Looking for something to work on? Browse our [good first issues](https://github.com/willdady/platypus/contribute) — scoped, newcomer-friendly tasks that are a great starting point.
+
 1. **Fork the repository** and clone your fork locally.
 2. **Set up your development environment** by following [Local Development](#local-development) below.
 3. **Create a branch** from `main` for your changes (see [Branch Naming](#branch-naming) below).
