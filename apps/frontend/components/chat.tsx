@@ -526,8 +526,8 @@ export const Chat = ({
         <ConversationScrollButton />
       </Conversation>
       <div className="grid shrink-0 gap-4 p-4">
-        <div className="flex justify-center">
-          <div className="w-full xl:w-4/5 max-w-4xl">
+        <div className="flex justify-center min-w-0">
+          <div className="w-full xl:w-4/5 max-w-4xl min-w-0">
             {isWorkspaceOwner ? (
               <PromptInput
                 onSubmit={(message) => {
