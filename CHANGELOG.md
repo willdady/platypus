@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.1.5](https://github.com/willdady/platypus/compare/v2.1.4...v2.1.5) (2026-07-19)
+
+
+### Bug Fixes
+
+* centralize file classification ([#349](https://github.com/willdady/platypus/issues/349)) ([cf1b300](https://github.com/willdady/platypus/commit/cf1b300b5046a64e02a746798aa638088305c24b))
+* **frontend:** prevent chat input horizontal overflow on mobile ([#352](https://github.com/willdady/platypus/issues/352)) ([0ed863b](https://github.com/willdady/platypus/commit/0ed863be97fa2bb70334e3cc7ca4b1bed4563739))
+
 ## [2.1.4](https://github.com/willdady/platypus/compare/v2.1.3...v2.1.4) (2026-07-18)
 
 
