@@ -79,7 +79,8 @@ Daytona plugin could ship both a Sandbox backend and a management Tool set, shar
 credential block.
 
 - Initial extension points: **Sandbox backends** and **Tool sets**. The messaging
-  gateway (below) becomes a third when it lands.
+  gateway (below) is **not** one of these — its channel adapters live in the separate
+  gateway app behind their own seam, not the backend plugin system (see ADR-0015).
 - Plugins are **installed by the Operator at deploy time** and run **in-process**
   (no isolation) — so the trust boundary is the deployment, not an in-app install button.
 - Inspired by the VS Code `contributes` manifest model: borrow the manifest and the
@@ -115,23 +116,32 @@ it: the dispatcher pattern stays for open-ended work; the DAG is for known pipel
 
 ### Messaging gateway
 
-A **decoupled service** (deployed alongside the frontend and backend) that exposes
+A **decoupled, stateful app** (deployed alongside the frontend and backend) that exposes
 Platypus to **bring-your-own chat surfaces** — Telegram, Slack, Discord, and others.
-It is **bidirectional**: agents notify you on your phone _and_ you can reply, chat, and
-approve from the channel. This subsumes external notifications and human-in-the-loop
-**approvals** into a single capability.
+It is **bidirectional**: an agent can message you on your phone _and_ you can reply and
+chat from the surface. It holds the long-lived per-surface connections so the backend
+stays messaging-agnostic. The design is settled in ADR-0015.
 
-- Each channel is a **gateway adapter** — a plugin extension point, the same pattern as
-  Sandbox backends.
-- **Outbound** rides the existing webhook event bus; **inbound** messages drive Chat turns
-  via the API.
-- **Platypus owns identity.** A channel account is _linked_ to a Platypus account in a few
-  clicks; the gateway relays and Platypus authorizes. The gateway is never an auth
-  authority — which is what keeps multi-tenancy intact.
+- Each surface is a **gateway adapter** behind the gateway's **own adapter seam** —
+  first-party and in-repo. This is _not_ a contribution point of the backend plugin system
+  (a Tool set plugin can't run in the gateway, and vice-versa); third-party adapters are a
+  later addition.
+- **Inbound** messages drive Chat turns via the API and the reply streams back on that call.
+  **Outbound** agent-initiated messages are **chat messages appended to the bound chat**,
+  delivered over the webhook bus transport — _not_ the in-app notification surface, which
+  stays in-app and never routes to a channel.
+- **Platypus owns identity.** A channel account is _linked_ to a Platypus account via a
+  short-lived, single-use code minted in the Platypus UI; the gateway relays and Platypus
+  authorizes. The gateway is never an auth authority — which is what keeps multi-tenancy
+  intact.
 - A third-party gateway _may_ integrate by speaking the contract, but the default is a
   thin first-party reference gateway. Platypus will not become a messaging platform.
 
-> Sequenced after the extension/plugin system, since channels are plugins.
+> **Human-in-the-loop approvals are deferred** — they need pause/resume in the run
+> lifecycle, a larger change than the gateway itself; the contract is shaped to add them
+> later without a breaking change. Sequenced after the extension/plugin system, whose
+> manifest/SDK _patterns_ the adapter seam borrows — though adapters are a separate seam,
+> not backend plugins.
 
 ## Non-goals
 
