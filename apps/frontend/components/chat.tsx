@@ -32,6 +32,7 @@ import {
   Agent,
   ToolSet,
   Skill,
+  type MessageStats,
 } from "@platypus/schemas";
 import { type PlatypusUIMessage } from "@platypus/backend/src/types";
 import useSWR from "swr";
@@ -57,8 +58,35 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { ChatMessage } from "./chat-message";
+import { ContextUsageRing } from "./context-usage-ring";
 import { ModelSelectorDialog } from "./model-selector-dialog";
 import { toast } from "sonner";
+
+// Reads the post-compaction estimate (`tokensAfter`) off a persisted
+// `compact_context` trace message so the ring can recover it on reload. The part
+// shape is set by the backend trace builder (ADR-0012 §Compaction trace in the
+// timeline: `type: "tool-compact_context"`, `output.tokensAfter`). Kept as a
+// string literal rather than an import so backend runtime isn't pulled into the
+// frontend bundle.
+function compactionTraceTokensAfter(
+  msg: PlatypusUIMessage,
+): number | undefined {
+  const parts = (
+    msg as {
+      parts?: Array<{ type?: string; output?: { tokensAfter?: number } }>;
+    }
+  ).parts;
+  if (!parts) return undefined;
+  for (const part of parts) {
+    if (
+      part?.type === "tool-compact_context" &&
+      typeof part.output?.tokensAfter === "number"
+    ) {
+      return part.output.tokensAfter;
+    }
+  }
+  return undefined;
+}
 
 export const Chat = ({
   orgId,
@@ -383,19 +411,62 @@ export const Chat = ({
     [messages, setMessages],
   );
 
-  // TODO: Ideally show a loading indicator here
-  if (isLoading || !providersData) return null;
+  // Resolve the effective provider+model for the ring (ADR-0012 §Context-usage ring: use selected
+  // model's window, not last message's window). When an agent is selected we
+  // look up its provider/model; otherwise use the directly selected values.
+  const effectiveRingProviderId = agentId
+    ? (agents.find((a) => a.id === agentId)?.providerId ?? "")
+    : providerId;
+  const effectiveRingModelId = agentId
+    ? (agents.find((a) => a.id === agentId)?.modelId ?? "")
+    : modelId;
 
-  // Show alert if no providers are configured
-  if (providers.length === 0) {
-    return (
-      <div className="flex items-center justify-center h-full p-8">
-        <div className="w-full xl:w-4/5 max-w-4xl">
-          <NoProvidersEmptyState orgId={orgId} workspaceId={workspaceId} />
-        </div>
-      </div>
-    );
-  }
+  // Fetch resolved context window for the currently-selected model (cached on
+  // the backend). Returns null contextWindow when source = "default" so the ring
+  // renders neutral (ADR-0012 §Context-usage ring). Re-fetches automatically on model/agent change.
+  const { data: contextWindowData } = useSWR<{
+    contextWindow: number | null;
+    source: string;
+    keepRecentMessages?: number;
+  }>(
+    backendUrl && user && effectiveRingProviderId && effectiveRingModelId
+      ? joinUrl(
+          backendUrl,
+          `/organizations/${orgId}/workspaces/${workspaceId}/providers/${effectiveRingProviderId}/context-window?modelId=${encodeURIComponent(effectiveRingModelId)}`,
+        )
+      : null,
+    fetcher,
+  );
+
+  // Ring numerator recovered from the persisted timeline so it survives a reload
+  // (the post-compact `compacted` React state is wiped on refresh, which would
+  // otherwise make the ring revert to the pre-compaction value). Scanning
+  // newest-first, whichever is newer wins: a real provider count
+  // (metadata.stats.contextTokens), or a compaction trace's estimated
+  // `output.tokensAfter` (flagged `estimated` for the tooltip). This does not
+  // alter the backend `findLastInputTokens` projection, which still skips the trace.
+  // Plain computation (not useMemo): the React Compiler can't preserve manual
+  // memoization for this loop-with-early-return shape and errors on it. Left
+  // uncompiled it auto-memoizes on `messages`, so behavior is unchanged.
+  const ringUsedTokens = ((): {
+    tokens: number;
+    estimated: boolean;
+  } | null => {
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const msg = messages[i];
+      if (msg.role !== "assistant") continue;
+      const ct = (msg.metadata as { stats?: MessageStats } | undefined)?.stats
+        ?.contextTokens;
+      if (typeof ct === "number" && ct > 0) {
+        return { tokens: ct, estimated: false };
+      }
+      const tokensAfter = compactionTraceTokensAfter(msg);
+      if (typeof tokensAfter === "number") {
+        return { tokens: tokensAfter, estimated: true };
+      }
+    }
+    return null;
+  })();
 
   const selectedAgent = agentId ? agents.find((a) => a.id === agentId) : null;
   // Resolve the provider backing the current selection, whether that's a raw
@@ -428,6 +499,194 @@ export const Chat = ({
   const isReconnectedToRunningRun =
     chatData?.status === "running" && status === "ready";
   const effectiveStatus = isReconnectedToRunningRun ? "streaming" : status;
+
+  // ADR-0012 §Force-compact on demand — state for pending (deferred while streaming),
+  // in-flight compaction spinner, and the post-compact token estimate that
+  // refreshes the ring immediately (before the next completed message).
+  const [compactPending, setCompactPending] = useState(false);
+  const [isCompacting, setIsCompacting] = useState(false);
+  // Stable count of assistant messages — unaffected by optimistic user-message
+  // pushes (ADR-0012 §Context-usage ring). Used to tag post-compact estimates so the ring doesn't
+  // snap back to the old value when the user hits Send.
+  const assistantMessageCount = useMemo(
+    () => messages.filter((m) => m.role === "assistant").length,
+    [messages],
+  );
+
+  // Post-compact estimate, tagged with the assistant message count at
+  // compaction time so it auto-expires once a new assistant message arrives
+  // (the next provider count is authoritative). Using assistantMessageCount
+  // instead of messages.length fixes the ring-jump bug (ADR-0012 §Context-usage ring): an optimistic user
+  // message increments messages.length but not assistantMessageCount, so the
+  // compacted estimate stays valid until the real response lands.
+  const [compacted, setCompacted] = useState<{
+    atAssistantMessageCount: number;
+    tokens: number;
+  } | null>(null);
+
+  const runCompact = useCallback(async () => {
+    if (!backendUrl) return;
+    setIsCompacting(true);
+    // ADR-0012 §Compaction trace in the timeline: optimistically append an
+    // in-progress `compact_context` part so the timeline shows "Running"
+    // immediately (alongside the ring spinner). Swapped for the persisted Done
+    // trace on success, removed on error. No real before-stats at POST time, so
+    // the Input is left empty — the after-stats arrive with the Done trace.
+    const tempId = `cc-optimistic-${chatId}`;
+    const optimistic = {
+      id: tempId,
+      role: "assistant",
+      parts: [
+        {
+          type: "tool-compact_context",
+          toolCallId: `${tempId}-call`,
+          state: "input-available",
+          input: {},
+        },
+      ],
+    } as unknown as PlatypusUIMessage;
+    setMessages((prev) => [...prev, optimistic]);
+    const dropOptimistic = () =>
+      setMessages((prev) => prev.filter((m) => m.id !== tempId));
+    try {
+      // A deferred compact fires the instant local streaming flips to idle, but
+      // the backend unregisters the run only after it disposes/persists — so the
+      // first POST can race and 409 ("run in progress"). Retry a few times with
+      // backoff before surfacing an error, so the queued action isn't lost (m12).
+      const compactUrl = joinUrl(
+        backendUrl,
+        `/organizations/${orgId}/workspaces/${workspaceId}/chat/${chatId}/compact`,
+      );
+      const maxAttempts = 4;
+      let res: Response | undefined;
+      for (let attempt = 0; attempt < maxAttempts; attempt++) {
+        res = await fetch(compactUrl, {
+          method: "POST",
+          credentials: "include",
+        });
+        if (res.status !== 409 || attempt === maxAttempts - 1) break;
+        // 300ms, 600ms, 1200ms — bounded, generous enough for run teardown.
+        await new Promise((r) => setTimeout(r, 300 * 2 ** attempt));
+      }
+      if (!res || !res.ok) {
+        dropOptimistic();
+        const body = res ? await res.json().catch(() => ({})) : {};
+        toast.error((body as { error?: string }).error ?? "Compact failed");
+        return;
+      }
+      // Refresh the ring immediately from the post-compact estimate (ADR-0012 §Force-compact on demand). This
+      // is a message-only char/4 estimate (no per-turn system/tool overhead),
+      // so it reads slightly low until the next real response replaces it with
+      // the provider's authoritative count.
+      const body = (await res.json().catch(() => ({}))) as {
+        inputTokens?: number;
+        traceMessage?: PlatypusUIMessage;
+      };
+      // The trace message is `role: "assistant"` and is appended below, which
+      // bumps assistantMessageCount by 1 on the next render. Tag the estimate
+      // with that post-append count so the ring guard still matches and the ring
+      // refreshes — otherwise it self-defeats and snaps back to the pre-compact
+      // value exactly on the model-summary path that did the most work (M4).
+      const willAppendTrace =
+        !!body.traceMessage &&
+        body.traceMessage.role === "assistant" &&
+        !messages.some((m) => m.id === body.traceMessage!.id);
+      if (typeof body.inputTokens === "number") {
+        setCompacted({
+          atAssistantMessageCount:
+            assistantMessageCount + (willAppendTrace ? 1 : 0),
+          tokens: body.inputTokens,
+        });
+      }
+      // ADR-0012 §Compaction trace in the timeline: swap the optimistic Running
+      // part for the persisted Done trace message so it flips to "Completed" with
+      // the after-stats Output. The trace carries the id the backend persisted,
+      // so a later SWR revalidation reconciles rather than duplicating it. When no
+      // summary was produced (traceMessage undefined) the optimistic part is just
+      // removed, matching today's "nothing changed" UX.
+      setMessages((prev) => {
+        const withoutTemp = prev.filter((m) => m.id !== tempId);
+        const traceMessage = body.traceMessage;
+        if (!traceMessage) return withoutTemp;
+        return withoutTemp.some((m) => m.id === traceMessage.id)
+          ? withoutTemp
+          : [...withoutTemp, traceMessage];
+      });
+      toast.success("Context compacted");
+    } catch {
+      dropOptimistic();
+      toast.error("Compact request failed");
+    } finally {
+      setIsCompacting(false);
+    }
+  }, [
+    backendUrl,
+    orgId,
+    workspaceId,
+    chatId,
+    assistantMessageCount,
+    messages,
+    setMessages,
+  ]);
+
+  const handleCompact = useCallback(() => {
+    // ADR-0012 §Force-compact on demand: confirm ONLY when the drop is significant;
+    // below that, run immediately. The summarized prefix is everything before the
+    // keep-recent boundary, so messagesDropped ≈ messages.length − keepRecent, and
+    // the ADR's "messagesDropped > keepRecentMessages" criterion reduces to the
+    // pre-run-computable "messages.length > 2 × keepRecent". (The >30%-reduction
+    // criterion needs the post-run summary size; we don't gate on it here — the op
+    // is non-destructive either way per ADR-0012 §View, not delete.)
+    // Confirm at click time (not after the deferred run fires) so the prompt never
+    // surprises the user mid-stream.
+    const keepRecent = contextWindowData?.keepRecentMessages ?? 5;
+    const significant = messages.length > keepRecent * 2;
+    if (
+      significant &&
+      !window.confirm(
+        "This will summarize older messages to reduce context usage. The full conversation history is preserved. Continue?",
+      )
+    ) {
+      return;
+    }
+    if (effectiveStatus === "streaming" || effectiveStatus === "submitted") {
+      setCompactPending(true);
+    } else {
+      void runCompact();
+    }
+  }, [contextWindowData, messages.length, effectiveStatus, runCompact]);
+
+  // Fire deferred compact once streaming finishes (ADR-0012 §Force-compact on demand). Already confirmed
+  // at click time, so this just runs.
+  useEffect(() => {
+    if (
+      compactPending &&
+      effectiveStatus !== "streaming" &&
+      effectiveStatus !== "submitted"
+    ) {
+      // Reacting to a streaming→idle transition to fire a queued action is the
+      // intended use of an effect here; clearing the flag prevents a re-fire.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setCompactPending(false);
+      void runCompact();
+    }
+  }, [compactPending, effectiveStatus, runCompact]);
+
+  // Early returns live below ALL hooks so hook order stays unconditional
+  // (react-hooks/rules-of-hooks). The ADR-0012 §Context-usage ring / §Force-compact ring hooks above must always run.
+  // TODO: Ideally show a loading indicator here
+  if (isLoading || !providersData) return null;
+
+  // Show alert if no providers are configured
+  if (providers.length === 0) {
+    return (
+      <div className="flex items-center justify-center h-full p-8">
+        <div className="w-full xl:w-4/5 max-w-4xl">
+          <NoProvidersEmptyState orgId={orgId} workspaceId={workspaceId} />
+        </div>
+      </div>
+    );
+  }
 
   const handleSubmit = async (message: PromptInputMessage) => {
     // Stop the stream if currently streaming or submitted
@@ -592,6 +851,28 @@ export const Chat = ({
                         <TooltipContent>Search</TooltipContent>
                       </Tooltip>
                     )}
+                    <ContextUsageRing
+                      usedTokens={
+                        compacted?.atAssistantMessageCount ===
+                        assistantMessageCount
+                          ? compacted.tokens
+                          : ringUsedTokens?.tokens
+                      }
+                      estimated={
+                        compacted?.atAssistantMessageCount ===
+                        assistantMessageCount
+                          ? true
+                          : ringUsedTokens?.estimated
+                      }
+                      contextWindow={contextWindowData?.contextWindow}
+                      onClick={chatId ? handleCompact : undefined}
+                      isStreaming={
+                        effectiveStatus === "streaming" ||
+                        effectiveStatus === "submitted"
+                      }
+                      isPending={compactPending}
+                      isCompacting={isCompacting}
+                    />
                     <ModelSelectorDialog
                       agents={agents}
                       providers={providers}
@@ -611,11 +892,18 @@ export const Chat = ({
                         open={isAgentInfoDialogOpen}
                         onOpenChange={setIsAgentInfoDialogOpen}
                       >
-                        <DialogTrigger asChild>
-                          <PromptInputButton>
-                            <Info />
-                          </PromptInputButton>
-                        </DialogTrigger>
+                        <Tooltip delayDuration={500}>
+                          <TooltipTrigger asChild>
+                            <DialogTrigger asChild>
+                              <PromptInputButton aria-label="Agent info">
+                                <Info />
+                              </PromptInputButton>
+                            </DialogTrigger>
+                          </TooltipTrigger>
+                          <TooltipContent side="top">
+                            {selectedAgent.description?.trim() || "Agent info"}
+                          </TooltipContent>
+                        </Tooltip>
                         <AgentInfoDialog
                           agent={selectedAgent}
                           agents={agents}

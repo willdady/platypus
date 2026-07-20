@@ -43,21 +43,29 @@ function createMockFullStream(
   };
 }
 
-const { mockStream, MockToolLoopAgent, agentConstructorSpy } = vi.hoisted(
-  () => {
+const { mockStream, MockToolLoopAgent, capturedSettings, agentConstructorSpy } =
+  vi.hoisted(() => {
     const mockStream = vi.fn();
+    const capturedSettings: Record<string, unknown>[] = [];
     const agentConstructorSpy = vi.fn();
     class MockToolLoopAgent {
       instructions: string | undefined;
-      constructor(opts: { instructions?: string }) {
-        agentConstructorSpy(opts);
-        this.instructions = opts?.instructions;
+      constructor(
+        settings: Record<string, unknown> & { instructions?: string },
+      ) {
+        capturedSettings.push(settings);
+        agentConstructorSpy(settings);
+        this.instructions = settings?.instructions;
       }
       stream = mockStream;
     }
-    return { mockStream, MockToolLoopAgent, agentConstructorSpy };
-  },
-);
+    return {
+      mockStream,
+      MockToolLoopAgent,
+      capturedSettings,
+      agentConstructorSpy,
+    };
+  });
 
 vi.mock("ai", async () => {
   const actual = await vi.importActual("ai");
@@ -80,6 +88,25 @@ describe("createSubAgentTool", () => {
     model: "mock-model",
     tools: {},
   };
+
+  beforeEach(() => {
+    capturedSettings.length = 0;
+  });
+
+  describe("Tier 2 prepareStep (ADR-0012 §Sub-agents)", () => {
+    it("passes prepareStep to ToolLoopAgent when provided", () => {
+      const mockPrepareStep = vi.fn();
+      createSubAgentTool({ ...baseOptions, prepareStep: mockPrepareStep });
+      expect(capturedSettings[0]).toMatchObject({
+        prepareStep: mockPrepareStep,
+      });
+    });
+
+    it("passes undefined prepareStep when not provided", () => {
+      createSubAgentTool(baseOptions);
+      expect(capturedSettings[0].prepareStep).toBeUndefined();
+    });
+  });
 
   describe("toolName generation", () => {
     it("generates PascalCase delegateTo prefix", () => {
@@ -564,6 +591,36 @@ describe("createSubAgentTools", () => {
     );
 
     expect(Object.keys(result)).toHaveLength(1);
+  });
+
+  it("threads prepareStepFn to ToolLoopAgent for each sub-agent (ADR-0012 §Sub-agents)", async () => {
+    capturedSettings.length = 0;
+    const subAgents = [
+      { id: "sa-1", name: "Alpha", providerId: "p1", modelId: "m1" },
+      { id: "sa-2", name: "Beta", providerId: "p1", modelId: "m1" },
+    ];
+    const mockStep1 = vi.fn();
+    const mockStep2 = vi.fn();
+    const prepareStepFn = vi
+      .fn()
+      .mockImplementation((id: string) =>
+        id === "sa-1" ? mockStep1 : mockStep2,
+      );
+
+    const createModelFn = vi.fn().mockResolvedValue({});
+    const loadToolsFn = vi.fn().mockResolvedValue({});
+
+    await createSubAgentTools(
+      subAgents,
+      createModelFn,
+      loadToolsFn,
+      undefined,
+      prepareStepFn,
+    );
+
+    expect(capturedSettings).toHaveLength(2);
+    expect(capturedSettings[0].prepareStep).toBe(mockStep1);
+    expect(capturedSettings[1].prepareStep).toBe(mockStep2);
   });
 
   it("passes each sub-agent's own provider security text into its instructions", async () => {

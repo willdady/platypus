@@ -44,6 +44,9 @@ import { CodeBlock } from "./code-block";
 export function humanizeToolType(type: string): string {
   // Strip the "tool-" prefix
   const name = type.startsWith("tool-") ? type.slice(5) : type;
+  // Synthetic compaction trace (§K/11c) — render a human label instead of the
+  // raw, underscore-laden function name.
+  if (name === "compact_context") return "Context compaction";
   // Split on camelCase boundaries
   const words = name.replace(/([a-z])([A-Z])/g, "$1 $2").split(" ");
   // Capitalise the first word, lowercase the rest

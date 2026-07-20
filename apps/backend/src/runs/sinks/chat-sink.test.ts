@@ -34,6 +34,8 @@ const planWithAgent: ResolvedRunPlan = {
     seed: undefined,
     presencePenalty: undefined,
     frequencyPenalty: undefined,
+    contextWindow: 128000,
+    contextWindowIsDefault: false,
   },
 };
 
@@ -49,6 +51,8 @@ const planAdhoc: ResolvedRunPlan = {
     seed: 42,
     presencePenalty: 0.1,
     frequencyPenalty: 0.2,
+    contextWindow: 128000,
+    contextWindowIsDefault: false,
   },
 };
 

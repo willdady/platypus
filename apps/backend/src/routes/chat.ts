@@ -3,7 +3,11 @@ import { sValidator } from "@hono/standard-validator";
 import { z } from "zod";
 import { db } from "../index.ts";
 import { chat as chatTable } from "../db/schema.ts";
-import { NotFoundError, ValidationError } from "../services/chat-execution.ts";
+import {
+  forceCompactChat,
+  NotFoundError,
+  ValidationError,
+} from "../services/chat-execution.ts";
 import { FileValidationError } from "../services/file-gate.ts";
 import { chatSubmitSchema, chatUpdateSchema } from "@platypus/schemas";
 import { and, count, desc, eq, or, sql } from "drizzle-orm";
@@ -18,6 +22,7 @@ import { type PlatypusUIMessage } from "../types.ts";
 import { rewriteStorageUrls, deleteFiles } from "../storage/utils.ts";
 import { getOrigin } from "../utils/get-origin.ts";
 import { agentRunner } from "../runs/agent-runner.ts";
+import { runRegistry } from "../runs/run-registry.ts";
 import { ChatSink } from "../runs/sinks/chat-sink.ts";
 import type { RunInput } from "../runs/types.ts";
 
@@ -131,6 +136,23 @@ chat.post(
   async (c) => {
     const scope = c.get("workspaceScope")!;
     const data = c.req.valid("json");
+
+    // ADR-0012 §Consequences (cross-tenant safety): verify the submitted chat id (if any) belongs to this workspace.
+    // Without this check a workspace-A user could supply a workspace-B chat id
+    // and corrupt B's compaction state via the unscoped store writes.
+    if (data.id) {
+      const existing = await db
+        .select({ workspaceId: chatTable.workspaceId })
+        .from(chatTable)
+        .where(eq(chatTable.id, data.id))
+        .limit(1);
+      if (
+        existing.length > 0 &&
+        existing[0].workspaceId !== scope.workspaceId
+      ) {
+        return c.json({ error: "Chat not found" }, 404);
+      }
+    }
 
     const input: RunInput = {
       runId: data.id,
@@ -270,6 +292,73 @@ chat.put(
     }
 
     return c.json(result[0]);
+  },
+);
+
+chat.post(
+  "/:chatId/compact",
+  requireAuth,
+  requireOrgAccess(),
+  requireWorkspaceAccess,
+  requireWorkspaceOwner,
+  async (c) => {
+    const orgId = c.req.param("orgId")!;
+    const chatId = c.req.param("chatId");
+    const workspaceId = c.req.param("workspaceId")!;
+
+    // Verify the chat belongs to this workspace BEFORE the runRegistry probe.
+    // Otherwise the 409-vs-404 outcome below leaks whether a run is in flight for
+    // an arbitrary (cross-workspace) chat id to any authenticated user (m4).
+    const owned = await db
+      .select({ id: chatTable.id })
+      .from(chatTable)
+      .where(
+        and(eq(chatTable.id, chatId), eq(chatTable.workspaceId, workspaceId)),
+      )
+      .limit(1);
+    if (owned.length === 0) {
+      return c.json({ error: "Chat not found" }, 404);
+    }
+
+    // Reject if a run is currently in flight — the frontend defers the click
+    // until streaming finishes (ADR-0012 §Force-compact on demand), but guard here as a belt-and-suspenders
+    // check to avoid CAS races with an in-progress writer.
+    if (runRegistry.has(chatId)) {
+      return c.json(
+        { error: "Run in progress; retry after the response finishes" },
+        409,
+      );
+    }
+
+    try {
+      const result = await forceCompactChat(
+        chatId,
+        workspaceId,
+        orgId,
+        c.req.raw.signal,
+      );
+      return c.json({
+        inputTokens: result.estimatedTokens,
+        // ADR-0012 §Force-compact on demand: the client confirms only when the drop
+        // is significant (messagesDropped > keepRecentMessages OR reduction > 30%).
+        tokensBefore: result.tokensBefore,
+        messagesDropped: result.messagesDropped,
+        keepRecentMessages: result.keepRecentMessages,
+        contextWindow: result.contextWindow,
+        contextWindowIsDefault: result.contextWindowIsDefault,
+        // ADR-0012 §Compaction trace in the timeline: the persisted synthetic trace message (when a summary ran), so
+        // the frontend can append it to the timeline without a full refetch.
+        traceMessage: result.traceMessage,
+      });
+    } catch (error) {
+      if (error instanceof NotFoundError) {
+        return c.json({ error: error.message }, 404);
+      }
+      if (error instanceof ValidationError) {
+        return c.json({ error: error.message }, 400);
+      }
+      throw error;
+    }
   },
 );
 

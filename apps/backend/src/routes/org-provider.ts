@@ -6,6 +6,7 @@ import { provider as providerTable } from "../db/schema.ts";
 import { providerCreateSchema, providerUpdateSchema } from "@platypus/schemas";
 import { eq, and } from "drizzle-orm";
 import { handleEmbeddingConfigChange } from "../services/embedding-invalidation.ts";
+import { contextWindowResolver } from "../runs/context-window.ts";
 import { dedupeModelConfigs } from "../services/model-capability.ts";
 import { requireAuth } from "../middleware/authentication.ts";
 import { requireOrgAccess } from "../middleware/authorization.ts";
@@ -116,6 +117,10 @@ orgProvider.put(
     if (record.length === 0) {
       throw new NotFoundError("Provider not found");
     }
+
+    // Bust the cached context window so a modelMeta override takes effect
+    // immediately rather than waiting out the 1-hour TTL.
+    contextWindowResolver.evict(providerId);
 
     return c.json(record[0], 200);
   },

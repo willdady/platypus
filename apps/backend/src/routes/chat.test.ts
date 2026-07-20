@@ -6,8 +6,9 @@ import {
   resetMockDb,
 } from "../test-utils.ts";
 
-const { mockPrepareChatTurn } = vi.hoisted(() => ({
+const { mockPrepareChatTurn, mockForceCompactChat } = vi.hoisted(() => ({
   mockPrepareChatTurn: vi.fn(),
+  mockForceCompactChat: vi.fn(),
 }));
 
 vi.mock("../services/chat-execution.ts", () => {
@@ -25,12 +26,20 @@ vi.mock("../services/chat-execution.ts", () => {
   }
   return {
     prepareChatTurn: mockPrepareChatTurn,
+    forceCompactChat: mockForceCompactChat,
+    // loadChatMessages is called by agent-runner before onStart (ADR-0012 §Summary invalidation baseline).
+    loadChatMessages: vi.fn().mockResolvedValue([]),
     validateTurnAttachments: vi.fn(),
     ValidationError,
     NotFoundError,
     drizzleChatTurnQueries: {},
   };
 });
+
+import { runRegistry } from "../runs/run-registry.ts";
+// Mocked above — resolves to the mock's NotFoundError class, the same one the
+// route checks with `instanceof`.
+import { NotFoundError } from "../services/chat-execution.ts";
 
 import app from "../server.ts";
 
@@ -89,6 +98,10 @@ describe("Chat Routes", () => {
   beforeEach(() => {
     resetMockDb();
     vi.clearAllMocks();
+    // The `POST /` test starts a (mocked) run that registers chat-1 and never
+    // finalizes, leaving it in the process-wide registry. Clear it so the
+    // compact route's in-progress guard sees a clean slate.
+    runRegistry.unregister("chat-1");
     mockDb.where.mockReturnValue(mockDb);
     mockDb.orderBy.mockReturnValue(mockDb);
     mockDb.limit.mockReturnValue(mockDb);
@@ -240,6 +253,7 @@ describe("Chat Routes", () => {
       mockDb.limit.mockResolvedValueOnce([
         { ownerId: "user-1", organizationId: "org-1" },
       ]); // requireWorkspaceAccess
+      mockDb.limit.mockResolvedValueOnce([{ workspaceId: "ws-1" }]); // ADR-0012 §Consequences (cross-tenant safety) chat workspace check
 
       // ChatSink.onStart upserts the chat row with status=running before
       // prepareChatTurn runs. Returning a non-empty array skips the insert
@@ -279,6 +293,36 @@ describe("Chat Routes", () => {
 
       expect(res.status).toBe(200);
       expect(await res.text()).toBe("stream");
+    });
+
+    it("returns 404 when the submitted chat id belongs to another workspace (ADR-0012 §Consequences cross-tenant safety)", async () => {
+      mockSession({
+        id: "user-1",
+        name: "Test User",
+        email: "test@example.com",
+      });
+      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-1", organizationId: "org-1" },
+      ]); // requireWorkspaceAccess
+      // Cross-tenant check: the chat exists but in a DIFFERENT workspace.
+      mockDb.limit.mockResolvedValueOnce([{ workspaceId: "ws-other" }]);
+
+      const res = await app.request(baseUrl, {
+        method: "POST",
+        body: JSON.stringify({
+          id: "chat-1",
+          workspaceId,
+          providerId: "p1",
+          modelId: "m1",
+          messages: [{ role: "user", content: "hello" }],
+        }),
+        headers: { "Content-Type": "application/json" },
+      });
+
+      expect(res.status).toBe(404);
+      // The run must never start — no compaction-store mutation on another tenant's chat.
+      expect(mockPrepareChatTurn).not.toHaveBeenCalled();
     });
   });
 
@@ -382,6 +426,118 @@ describe("Chat Routes", () => {
       });
       expect(res.status).toBe(200);
       expect(await res.json()).toEqual(mockChat);
+    });
+  });
+
+  describe("POST /:chatId/compact", () => {
+    const ownerAccess = () => {
+      mockSession();
+      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-1", organizationId: "org-1" },
+      ]); // requireWorkspaceAccess + owner
+    };
+
+    it("force-compacts and returns the refreshed usage", async () => {
+      ownerAccess();
+      mockForceCompactChat.mockResolvedValueOnce({
+        estimatedTokens: 1234,
+        contextWindow: 8192,
+        contextWindowIsDefault: false,
+      });
+
+      const res = await app.request(`${baseUrl}/chat-1/compact`, {
+        method: "POST",
+      });
+
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({
+        inputTokens: 1234,
+        contextWindow: 8192,
+        contextWindowIsDefault: false,
+      });
+      expect(mockForceCompactChat).toHaveBeenCalledWith(
+        "chat-1",
+        workspaceId,
+        orgId,
+        expect.any(AbortSignal),
+      );
+    });
+
+    it("passes the persisted trace message (with before/after stats) through to the client", async () => {
+      ownerAccess();
+      const traceMessage = {
+        id: "msg-trace",
+        role: "assistant",
+        parts: [
+          {
+            type: "tool-compact_context",
+            toolCallId: "msg-trace-call",
+            state: "output-available",
+            input: { tokensBefore: 1000, messagesBefore: 12 },
+            output: {
+              tokensAfter: 400,
+              tokensSaved: 600,
+              reductionPct: 60,
+              messagesDropped: 5,
+              summaryExcerpt: "did things",
+            },
+          },
+        ],
+      };
+      mockForceCompactChat.mockResolvedValueOnce({
+        estimatedTokens: 400,
+        tokensBefore: 1000,
+        messagesDropped: 5,
+        keepRecentMessages: 10,
+        contextWindow: 8192,
+        contextWindowIsDefault: false,
+        traceMessage,
+      });
+
+      const res = await app.request(`${baseUrl}/chat-1/compact`, {
+        method: "POST",
+      });
+
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as { traceMessage?: typeof traceMessage };
+      expect(body.traceMessage).toEqual(traceMessage);
+    });
+
+    it("returns 409 when a run is in progress (does not compact)", async () => {
+      ownerAccess();
+      // runRegistry is keyed by runId, which equals the chatId for top-level
+      // chat runs — so an in-flight run on this chat blocks the compact.
+      runRegistry.register("chat-1");
+      try {
+        const res = await app.request(`${baseUrl}/chat-1/compact`, {
+          method: "POST",
+        });
+        expect(res.status).toBe(409);
+        expect(mockForceCompactChat).not.toHaveBeenCalled();
+      } finally {
+        runRegistry.unregister("chat-1");
+      }
+    });
+
+    it("returns 404 when the chat is not found / not in the workspace", async () => {
+      ownerAccess();
+      mockForceCompactChat.mockRejectedValueOnce(
+        new NotFoundError("Chat not found"),
+      );
+
+      const res = await app.request(`${baseUrl}/chat-other/compact`, {
+        method: "POST",
+      });
+      expect(res.status).toBe(404);
+    });
+
+    it("returns 401 without a session", async () => {
+      mockNoSession();
+      const res = await app.request(`${baseUrl}/chat-1/compact`, {
+        method: "POST",
+      });
+      expect(res.status).toBe(401);
     });
   });
 });

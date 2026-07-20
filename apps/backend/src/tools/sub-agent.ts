@@ -2,11 +2,18 @@ import {
   stepCountIs,
   tool,
   ToolLoopAgent,
+  wrapLanguageModel,
   type LanguageModel,
+  type PrepareStepFunction,
   type Tool,
+  type ToolSet,
 } from "ai";
 import { z } from "zod";
 import { logger } from "../logger.ts";
+import {
+  contextOverflowRecoveryMiddleware,
+  type RecoveryContext,
+} from "../runs/recovery.ts";
 import { renderSecurityGuardrails } from "../security-prompt.ts";
 
 /**
@@ -77,6 +84,17 @@ interface SubAgentToolOptions {
   securityGuardrails?: string | null;
   /** Called on each activity update from the sub-agent. Used to reset the parent run's per-step timeout. */
   onProgress?: () => void;
+  /** Tier 2 in-turn compaction callback (ADR-0012 §Tier 2 / §Sub-agents). Null when compaction disabled. */
+  prepareStep?: PrepareStepFunction<ToolSet>;
+  /**
+   * Context-overflow recovery (ADR-0012 §Recovery) for the sub-agent's own model calls.
+   * Sub-agents run a ToolLoopAgent OUTSIDE the parent run's recovery-wrapped
+   * model, so without this their only overflow protection is Tier 2 — which
+   * fires late (its trigger omits the sub-agent's tool/prompt overhead) and has
+   * no net behind it. Wrapping here gives every sub-agent step one trim+retry,
+   * matching the main path (ADR-0012 §Sub-agents). `markDirty` is omitted (no chat row).
+   */
+  recovery?: RecoveryContext;
 }
 
 /**
@@ -97,9 +115,26 @@ export const createSubAgentTool = (options: SubAgentToolOptions) => {
     maxSteps = 50,
     securityGuardrails,
     onProgress,
+    prepareStep,
+    recovery,
   } = options;
 
   const toolName = subAgentToolName({ name });
+
+  // Wrap the sub-agent model with the overflow-recovery middleware (ADR-0012 §Sub-agents) so
+  // a step that overflows gets one trim+retry instead of hard-failing the task.
+  // Guard on `typeof model !== "string"`: `wrapLanguageModel` needs a model
+  // INSTANCE, and `LanguageModel` permits a bare string id. The factory returns
+  // an instance today, but a string would otherwise throw here and the catch in
+  // `createSubAgentTools` would silently drop the whole sub-agent — so degrade to
+  // the unwrapped model instead.
+  const recoveredModel: LanguageModel =
+    recovery && typeof model !== "string"
+      ? wrapLanguageModel({
+          model,
+          middleware: contextOverflowRecoveryMiddleware(recovery),
+        })
+      : model;
 
   // Append the provider's security directives to the base instructions —
   // whether those come from the sub-agent's own systemPrompt OR the canned
@@ -114,10 +149,11 @@ export const createSubAgentTool = (options: SubAgentToolOptions) => {
     : baseInstructions;
 
   const agent = new ToolLoopAgent({
-    model,
+    model: recoveredModel,
     instructions,
     tools,
     stopWhen: [stepCountIs(maxSteps)],
+    prepareStep,
   });
 
   return {
@@ -261,6 +297,8 @@ export const createSubAgentTools = async (
     toolSetIds: string[],
   ) => Promise<Record<string, Tool>>,
   onProgress?: () => void,
+  prepareStepFn?: (id: string) => PrepareStepFunction<ToolSet> | undefined,
+  recoveryFn?: (id: string) => RecoveryContext | undefined,
 ): Promise<Record<string, Tool>> => {
   const tools: Record<string, Tool> = {};
 
@@ -289,6 +327,8 @@ export const createSubAgentTools = async (
         maxSteps: subAgent.maxSteps || 50,
         securityGuardrails,
         onProgress,
+        prepareStep: prepareStepFn?.(subAgent.id),
+        recovery: recoveryFn?.(subAgent.id),
       });
 
       tools[toolName] = tool;
