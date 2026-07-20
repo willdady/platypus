@@ -6,8 +6,8 @@ import { provider as providerTable } from "../db/schema.ts";
 import { providerCreateSchema, providerUpdateSchema } from "@platypus/schemas";
 import { eq, and } from "drizzle-orm";
 import { handleEmbeddingConfigChange } from "../services/embedding-invalidation.ts";
-import { dedupeArray } from "../utils.ts";
 import { contextWindowResolver } from "../runs/context-window.ts";
+import { dedupeModelConfigs } from "../services/model-capability.ts";
 import { requireAuth } from "../middleware/authentication.ts";
 import { requireOrgAccess } from "../middleware/authorization.ts";
 import { requireSharedDeletable } from "../services/scoped-resource.ts";
@@ -27,7 +27,7 @@ orgProvider.post(
     const data = c.req.valid("json");
 
     if (data.modelIds) {
-      data.modelIds = dedupeArray(data.modelIds).sort();
+      data.modelIds = dedupeModelConfigs(data.modelIds);
     }
 
     // A duplicate name surfaces as a Postgres unique violation, mapped to 409
@@ -92,7 +92,7 @@ orgProvider.put(
     const data = c.req.valid("json");
 
     if (data.modelIds) {
-      data.modelIds = dedupeArray(data.modelIds).sort();
+      data.modelIds = dedupeModelConfigs(data.modelIds);
     }
 
     // Detect and handle embedding config changes before the update

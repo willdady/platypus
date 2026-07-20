@@ -228,9 +228,11 @@ describe("createSubAgentTool", () => {
           { type: "reasoning-start", id: "r1" },
           { type: "reasoning-end", id: "r1" },
           { type: "text-start", id: "t1" },
+          { type: "text-delta", id: "t1", text: "Sub-agent result" },
           { type: "text-end", id: "t1" },
         ]),
-        text: Promise.resolve("Sub-agent result"),
+        // v7: final-step-only text property is intentionally NOT relied upon.
+        text: Promise.resolve(""),
       });
 
       const { tool } = createSubAgentTool(baseOptions);
@@ -241,7 +243,9 @@ describe("createSubAgentTool", () => {
 
       const { yielded } = await consumeGenerator(gen);
 
-      // Should have yielded 6 activity updates + 1 final with text
+      // Should have yielded 6 activity updates + 1 final with text. The
+      // text-delta between text-start and text-end carries content but does not
+      // change the activity log, so it produces no extra yield.
       expect(yielded).toHaveLength(7);
 
       // First yield: tool-call running
@@ -278,6 +282,101 @@ describe("createSubAgentTool", () => {
       // Final yield has text (yielded, not returned, since SDK discards return values)
       expect(yielded[6].text).toBe("Sub-agent result");
       expect(yielded[6].entries).toHaveLength(3);
+    });
+
+    // Regression for #324: AI SDK v6→v7 redefined `result.text` as the FINAL
+    // step's text only. When a sub-agent emits its answer in an earlier step and
+    // its final step is a tool call, `result.text` is empty and the parent gets
+    // nothing. The fix aggregates text-deltas off the fullStream across ALL
+    // steps, so this reproduces that shape with realistic v7 stream events and
+    // an empty final-step `text` promise.
+    it("aggregates assistant text across steps from the stream, not the final-step text property", async () => {
+      mockStream.mockResolvedValue({
+        fullStream: createMockFullStream([
+          // Step 1: the model emits its answer, then decides to call a tool.
+          { type: "start-step" },
+          { type: "text-start", id: "t1" },
+          { type: "text-delta", id: "t1", text: "Here are " },
+          { type: "text-delta", id: "t1", text: "the boards." },
+          { type: "text-end", id: "t1" },
+          { type: "tool-input-start", toolName: "listBoards", id: "tc1" },
+          // Step 2: the tool result is the FINAL step — no trailing text.
+          { type: "start-step" },
+          {
+            type: "tool-result",
+            toolCallId: "tc1",
+            toolName: "listBoards",
+            output: [{ id: "b1" }],
+          },
+        ]),
+        // v7 semantics: final-step-only text is empty because the last step is
+        // the tool result. The old code returned this verbatim.
+        text: Promise.resolve(""),
+      });
+
+      const { tool } = createSubAgentTool(baseOptions);
+      const gen = tool.execute(
+        { task: "list all boards" },
+        {} as ToolExecutionOptions<Record<string, unknown>>,
+      ) as AsyncGenerator<SubAgentActivity>;
+
+      const { yielded } = await consumeGenerator(gen);
+      const final = yielded.at(-1)!;
+
+      expect(final.text).toBe("Here are the boards.");
+    });
+
+    it("joins multiple distinct text blocks with blank lines", async () => {
+      mockStream.mockResolvedValue({
+        fullStream: createMockFullStream([
+          { type: "text-start", id: "t1" },
+          { type: "text-delta", id: "t1", text: "First block." },
+          { type: "text-end", id: "t1" },
+          { type: "text-start", id: "t2" },
+          { type: "text-delta", id: "t2", text: "Second block." },
+          { type: "text-end", id: "t2" },
+        ]),
+        text: Promise.resolve(""),
+      });
+
+      const { tool } = createSubAgentTool(baseOptions);
+      const gen = tool.execute(
+        { task: "Do something" },
+        {} as ToolExecutionOptions<Record<string, unknown>>,
+      ) as AsyncGenerator<SubAgentActivity>;
+
+      const { yielded } = await consumeGenerator(gen);
+
+      expect(yielded.at(-1)!.text).toBe("First block.\n\nSecond block.");
+    });
+
+    it("falls back to a summary of the final tool result when the sub-agent produced no assistant text", async () => {
+      mockStream.mockResolvedValue({
+        fullStream: createMockFullStream([
+          { type: "tool-input-start", toolName: "listBoards", id: "tc1" },
+          {
+            type: "tool-result",
+            toolCallId: "tc1",
+            toolName: "listBoards",
+            output: [{ id: "b1", name: "Board One" }],
+          },
+        ]),
+        text: Promise.resolve(""),
+      });
+
+      const { tool } = createSubAgentTool(baseOptions);
+      const gen = tool.execute(
+        { task: "list all boards" },
+        {} as ToolExecutionOptions<Record<string, unknown>>,
+      ) as AsyncGenerator<SubAgentActivity>;
+
+      const { yielded } = await consumeGenerator(gen);
+      const final = yielded.at(-1)!;
+
+      // Not silently empty — carries the tool name and the result payload so the
+      // parent can still relay something meaningful.
+      expect(final.text).toContain("listBoards");
+      expect(final.text).toContain("Board One");
     });
 
     it("marks tool-call entry as error on tool-error event", async () => {

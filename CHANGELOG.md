@@ -1,5 +1,37 @@
 # Changelog
 
+## [2.1.4](https://github.com/willdady/platypus/compare/v2.1.3...v2.1.4) (2026-07-18)
+
+
+### Bug Fixes
+
+* **backend:** harden file-attachment normalizer and modelIds resolution ([#344](https://github.com/willdady/platypus/issues/344)) ([76f8890](https://github.com/willdady/platypus/commit/76f88901386714ab7cb21780b53f6e576ee5586c))
+* **backend:** make chat titling authoritative on the server ([#340](https://github.com/willdady/platypus/issues/340)) ([d675479](https://github.com/willdady/platypus/commit/d6754790d248204da09056ec6cdfb7f034d978b7))
+* gate unsupported file attachments per-model ([#328](https://github.com/willdady/platypus/issues/328)) ([#343](https://github.com/willdady/platypus/issues/343)) ([ffb229f](https://github.com/willdady/platypus/commit/ffb229f58fc72b911be30faaaa773cd1a7c4cd83))
+* OpenRouter default file types + provider-form model UX ([#345](https://github.com/willdady/platypus/issues/345)) ([1b2723d](https://github.com/willdady/platypus/commit/1b2723dfa0bb513a15dbc2c99f2f61083f57d9e4))
+
+## [2.1.3](https://github.com/willdady/platypus/compare/v2.1.2...v2.1.3) (2026-07-16)
+
+
+### Bug Fixes
+
+* **frontend:** populate edit forms from SWR warm cache ([#337](https://github.com/willdady/platypus/issues/337)) ([afd6c1a](https://github.com/willdady/platypus/commit/afd6c1a62ae826c5fe2609f97ddb780f64c0b22e))
+* **frontend:** surface agent form validation errors ([#331](https://github.com/willdady/platypus/issues/331)) ([#338](https://github.com/willdady/platypus/issues/338)) ([94233a4](https://github.com/willdady/platypus/commit/94233a4b1159cadc1554462516533134f65b588b))
+
+## [2.1.2](https://github.com/willdady/platypus/compare/v2.1.1...v2.1.2) (2026-07-12)
+
+
+### Bug Fixes
+
+* **backend:** relay sub-agent text across all steps ([#324](https://github.com/willdady/platypus/issues/324)) ([#325](https://github.com/willdady/platypus/issues/325)) ([8a1711d](https://github.com/willdady/platypus/commit/8a1711d3e09c1c97032e79afd87a11d66a1172d8))
+
+## [2.1.1](https://github.com/willdady/platypus/compare/v2.1.0...v2.1.1) (2026-07-12)
+
+
+### Bug Fixes
+
+* **backend:** normalize tool results to JSON at the wrapper choke point ([#322](https://github.com/willdady/platypus/issues/322)) ([32cd152](https://github.com/willdady/platypus/commit/32cd15244ca821bc66d881833b87c2911012fee0))
+
 ## [2.1.0](https://github.com/willdady/platypus/compare/v2.0.0...v2.1.0) (2026-07-12)
 
 

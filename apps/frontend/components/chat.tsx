@@ -40,8 +40,10 @@ import { fetcher, joinUrl } from "@/lib/utils";
 import { useResetOnChange } from "@/hooks/use-reset-on-change";
 import { useChatSettings } from "@/hooks/use-chat-settings";
 import { useModelSelection } from "@/hooks/use-model-selection";
+import { getPassthroughFileTypes } from "@/lib/model-config";
+import { FileCompatibilityWarning } from "./file-compatibility-warning";
 import { useMessageEditing } from "@/hooks/use-message-editing";
-import { useChatMetadata } from "@/hooks/use-chat-metadata";
+import { useChatTitlePoll } from "@/hooks/use-chat-title-poll";
 import { useChatUI } from "@/hooks/use-chat-ui";
 import { Dialog, DialogTrigger } from "./ui/dialog";
 import { useBackendUrl } from "@/app/client-context";
@@ -357,18 +359,21 @@ export const Chat = ({
     }
   }, [chatData, setMessages]);
 
-  // Use chat metadata hook
-  useChatMetadata(
-    messages,
-    status,
+  // Poll for a backend-generated title while the chat is still "Untitled".
+  // Titling is now owned entirely by the backend run lifecycle; the client only
+  // discovers the result (see hooks/use-chat-title-poll.ts).
+  const hasUserMessage = useMemo(
+    () => messages.some((m) => m.role === "user"),
+    [messages],
+  );
+  useChatTitlePoll({
     chatId,
     orgId,
     workspaceId,
-    providerId,
-    agentId,
-    agents,
+    title: chatData?.title,
+    hasUserMessage,
     backendUrl,
-  );
+  });
 
   // Set initial agent if provided and no existing chat agent
   useEffect(() => {
@@ -478,6 +483,14 @@ export const Chat = ({
     !!resolvedProvider &&
     resolvedProvider.providerType !== "Bedrock" &&
     resolvedProvider.nativeSearchEnabled !== false;
+
+  // The media types the currently-selected model ingests natively (issue #328),
+  // used to warn about incompatible attachments. Empty when nothing resolves yet.
+  const resolvedModelId = agentId ? selectedAgent?.modelId : modelId;
+  const passthroughFileTypes =
+    resolvedProvider && resolvedModelId
+      ? getPassthroughFileTypes(resolvedProvider, resolvedModelId)
+      : [];
 
   // Treat a server-side run-in-progress as if we were locally streaming,
   // so a tab that reconnects mid-run (or an unrelated tab opened on the
@@ -772,8 +785,8 @@ export const Chat = ({
         <ConversationScrollButton />
       </Conversation>
       <div className="grid shrink-0 gap-4 p-4">
-        <div className="flex justify-center">
-          <div className="w-full xl:w-4/5 max-w-4xl">
+        <div className="flex justify-center min-w-0">
+          <div className="w-full xl:w-4/5 max-w-4xl min-w-0">
             {isWorkspaceOwner ? (
               <PromptInput
                 onSubmit={(message) => {
@@ -786,6 +799,9 @@ export const Chat = ({
                 <PromptInputAttachments className="w-full">
                   {(attachment) => <PromptInputAttachment data={attachment} />}
                 </PromptInputAttachments>
+                <FileCompatibilityWarning
+                  passthroughFileTypes={passthroughFileTypes}
+                />
                 <PromptInputBody>
                   <PromptInputTextarea
                     ref={textareaRef}

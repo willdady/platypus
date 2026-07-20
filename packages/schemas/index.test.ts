@@ -18,6 +18,7 @@ import {
   providerUpdateSchema,
   providerCreateSchema,
   chatSchema,
+  classifyFile,
 } from "./index";
 
 describe("Organization Schema", () => {
@@ -446,6 +447,54 @@ describe("Provider Create Schema", () => {
   });
 });
 
+describe("Provider modelIds (per-model config)", () => {
+  const base = {
+    organizationId: "org-123",
+    name: "Test Provider",
+    providerType: "OpenAI" as const,
+    apiKey: "sk-test",
+    taskModelId: "gpt-4",
+    memoryExtractionModelId: "gpt-4",
+  };
+
+  it("coerces a legacy string[] to per-model objects with empty passthrough", () => {
+    const result = providerCreateSchema.safeParse({
+      ...base,
+      modelIds: ["gpt-4", "gpt-4o"],
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.modelIds).toEqual([
+        { id: "gpt-4", passthroughFileTypes: [] },
+        { id: "gpt-4o", passthroughFileTypes: [] },
+      ]);
+    }
+  });
+
+  it("accepts per-model objects and defaults passthroughFileTypes to []", () => {
+    const result = providerCreateSchema.safeParse({
+      ...base,
+      modelIds: [
+        { id: "gpt-4o" },
+        { id: "qwen-vl", passthroughFileTypes: ["image/*"] },
+      ],
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.modelIds).toEqual([
+        { id: "gpt-4o", passthroughFileTypes: [] },
+        { id: "qwen-vl", passthroughFileTypes: ["image/*"] },
+      ]);
+    }
+  });
+
+  it("requires at least one model", () => {
+    expect(
+      providerCreateSchema.safeParse({ ...base, modelIds: [] }).success,
+    ).toBe(false);
+  });
+});
+
 describe("Organization identityContext", () => {
   it("accepts an organization when identityContext is omitted or null", () => {
     const base = {
@@ -517,5 +566,47 @@ describe("sandboxEnvSchema", () => {
     const tooMany: Record<string, string> = {};
     for (let i = 0; i <= SANDBOX_ENV_MAX_ENTRIES; i++) tooMany[`K${i}`] = "v";
     expect(sandboxEnvSchema.safeParse(tooMany).success).toBe(false);
+  });
+});
+
+describe("classifyFile", () => {
+  const passthroughFileTypes = ["image/*"];
+
+  it("prioritizes native passthrough media types", () => {
+    expect(
+      classifyFile(
+        { mediaType: "image/png", filename: "image.png" },
+        passthroughFileTypes,
+        true,
+      ),
+    ).toBe("passthrough");
+  });
+
+  it("classifies text-like files when content is not binary", () => {
+    expect(
+      classifyFile(
+        { mediaType: "application/octet-stream", filename: "notes.md" },
+        passthroughFileTypes,
+      ),
+    ).toBe("text");
+  });
+
+  it("rejects binary content even when the extension is text-like", () => {
+    expect(
+      classifyFile(
+        { mediaType: "application/octet-stream", filename: "notes.md" },
+        passthroughFileTypes,
+        true,
+      ),
+    ).toBe("reject");
+  });
+
+  it("rejects unsupported binary file types", () => {
+    expect(
+      classifyFile(
+        { mediaType: "application/pdf", filename: "report.pdf" },
+        passthroughFileTypes,
+      ),
+    ).toBe("reject");
   });
 });

@@ -26,6 +26,7 @@ import {
 import {
   loadChatMessages,
   prepareChatTurn,
+  validateTurnAttachments,
   type ChatTurn,
   type ToolActivityEvent,
 } from "../services/chat-execution.ts";
@@ -365,6 +366,17 @@ export class AgentRunner {
     unattended?: boolean;
   }) {
     const { scope, input, sink } = params;
+
+    // File gate (issue #328): reject a turn carrying a file the target model
+    // can't handle BEFORE the sink persists anything, so a bad attachment can
+    // never brick the chat. Runs only when the turn has file parts; throws
+    // `FileValidationError`, which propagates to the route as a 400.
+    await validateTurnAttachments({
+      request: input.request,
+      messages: input.messages,
+      orgId: scope.orgId,
+      workspaceId: scope.workspaceId,
+    });
 
     // ADR-0012 §Summary invalidation: snapshot the DB state BEFORE onStart overwrites it so
     // applyTier1IfNeeded has the correct ADR-0012 §Summary invalidation baseline. Only interactive chats

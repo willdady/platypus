@@ -7,6 +7,16 @@ vi.mock("../../storage/utils.ts", () => ({
   extractFiles: vi.fn((messages: unknown) => Promise.resolve(messages)),
 }));
 
+// Titling is exercised by chat-metadata tests; stub it here so onFinish's
+// fire-and-forget call doesn't touch the model or add stray db calls, and so
+// we can assert when (and with what provider) the sink triggers it.
+const { mockGenerateChatMetadata } = vi.hoisted(() => ({
+  mockGenerateChatMetadata: vi.fn(),
+}));
+vi.mock("../../services/chat-metadata.ts", () => ({
+  generateChatMetadata: mockGenerateChatMetadata,
+}));
+
 import { ChatSink } from "./chat-sink.ts";
 import type { ResolvedRunPlan } from "../types.ts";
 import type { PlatypusUIMessage } from "../../types.ts";
@@ -49,6 +59,8 @@ const planAdhoc: ResolvedRunPlan = {
 describe("ChatSink", () => {
   beforeEach(() => {
     resetMockDb();
+    mockGenerateChatMetadata.mockReset();
+    mockGenerateChatMetadata.mockResolvedValue(null);
   });
 
   describe("onStart", () => {
@@ -276,6 +288,72 @@ describe("ChatSink", () => {
       expect(finishSet.status).toBe("failed");
       expect(finishSet.messages).toBeUndefined();
       expect(mockDb.insert).not.toHaveBeenCalled();
+    });
+
+    it("does not attempt titling when no plan resolved", async () => {
+      mockDb.returning.mockResolvedValueOnce([{ id: "chat-x" }]); // onStart
+
+      const sink = new ChatSink({ orgId: "org-1", workspaceId: "ws-1" });
+      await sink.onStart({ runId: "chat-x", messages: [] });
+      await sink.onFinish({
+        runId: "chat-x",
+        status: "failed",
+        messages: [],
+        stats: {},
+      });
+
+      expect(mockGenerateChatMetadata).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("onFinish — titling", () => {
+    it.each(["succeeded", "failed", "cancelled"] as const)(
+      "fires fire-and-forget titling with the plan provider for status=%s",
+      async (status) => {
+        mockDb.returning.mockResolvedValueOnce([{ id: "chat-t" }]); // onStart
+        mockDb.returning.mockResolvedValueOnce([{ id: "chat-t" }]); // onFinish
+
+        const sink = new ChatSink({ orgId: "org-1", workspaceId: "ws-1" });
+        await sink.onStart({ runId: "chat-t", messages: [] });
+        await sink.onResolved({ runId: "chat-t", plan: planWithAgent });
+        await sink.onFinish({
+          runId: "chat-t",
+          status,
+          messages: [{ id: "m-1", role: "user", parts: [] }],
+          stats: {},
+        });
+
+        expect(mockGenerateChatMetadata).toHaveBeenCalledTimes(1);
+        expect(mockGenerateChatMetadata).toHaveBeenCalledWith({
+          chatId: "chat-t",
+          workspaceId: "ws-1",
+          orgId: "org-1",
+          // Agent runs null the row's provider column, so titling must resolve
+          // the provider from the plan (the agent's own provider).
+          providerId: "p1",
+        });
+      },
+    );
+
+    it("does not block or fail run completion when titling rejects", async () => {
+      mockDb.returning.mockResolvedValueOnce([{ id: "chat-e" }]); // onStart
+      mockDb.returning.mockResolvedValueOnce([{ id: "chat-e" }]); // onFinish
+      mockGenerateChatMetadata.mockRejectedValueOnce(new Error("boom"));
+
+      const sink = new ChatSink({ orgId: "org-1", workspaceId: "ws-1" });
+      await sink.onStart({ runId: "chat-e", messages: [] });
+      await sink.onResolved({ runId: "chat-e", plan: planWithAgent });
+
+      // onFinish resolves cleanly even though titling throws asynchronously.
+      await expect(
+        sink.onFinish({
+          runId: "chat-e",
+          status: "succeeded",
+          messages: [],
+          stats: {},
+        }),
+      ).resolves.toBeUndefined();
+      expect(mockGenerateChatMetadata).toHaveBeenCalledTimes(1);
     });
   });
 });

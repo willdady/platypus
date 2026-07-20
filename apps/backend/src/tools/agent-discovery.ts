@@ -9,6 +9,8 @@ import {
 } from "../db/schema.ts";
 import { getToolSets } from "../tools/index.ts";
 import { buildResourceUrl } from "../utils/resource-url.ts";
+import { providerModelIds } from "../services/model-capability.ts";
+import type { Provider } from "@platypus/schemas";
 
 /**
  * Standalone factory for the listAgents tool so it can be shared across
@@ -85,7 +87,15 @@ export function createAgentDiscoveryTools(
             eq(providerTable.organizationId, orgId),
           ),
         );
-      return providers;
+      // Advertise plain model-id strings regardless of whether the row stores
+      // the new per-model objects or a legacy `string[]` (issue #328). Reuse the
+      // canonical resolver so this can't drift from the capability logic. Only
+      // `modelIds` is read for id extraction; the partial row is cast to satisfy
+      // its signature.
+      return providers.map((p) => ({
+        ...p,
+        modelIds: providerModelIds(p as unknown as Provider),
+      }));
     },
   });
 

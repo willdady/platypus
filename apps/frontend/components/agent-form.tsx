@@ -49,6 +49,7 @@ import {
 } from "@platypus/schemas";
 import useSWR, { useSWRConfig } from "swr";
 import { fetcher, parseValidationErrors, joinUrl } from "@/lib/utils";
+import { getModelIds } from "@/lib/model-config";
 import { toast } from "sonner";
 import { useBackendUrl } from "@/app/client-context";
 import { useAuth } from "@/components/auth-provider";
@@ -176,7 +177,7 @@ const AgentForm = ({
       ) {
         setFormData((prevData) => ({
           ...prevData,
-          modelId: providers[0].modelIds[0],
+          modelId: getModelIds(providers[0])[0],
           providerId: providers[0].id,
         }));
       }
@@ -211,19 +212,25 @@ const AgentForm = ({
     }
   });
 
+  // Drop the stored server validation error for the given field(s) so a
+  // corrected field stops rendering its error and re-enables the Save button.
+  const clearValidationErrors = useCallback((...ids: string[]) => {
+    setValidationErrors((prev) => {
+      if (!ids.some((id) => id in prev)) return prev;
+      const newErrors = { ...prev };
+      for (const id of ids) {
+        delete newErrors[id];
+      }
+      return newErrors;
+    });
+  }, []);
+
   const handleChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>,
   ) => {
     const { id, value } = e.target;
 
-    // Clear validation error for this field
-    if (validationErrors[id]) {
-      setValidationErrors((prev) => {
-        const newErrors = { ...prev };
-        delete newErrors[id];
-        return newErrors;
-      });
-    }
+    clearValidationErrors(id);
 
     setFormData((prevData) => ({
       ...prevData,
@@ -232,6 +239,7 @@ const AgentForm = ({
   };
 
   const handleNumberChange = (id: string, value: string) => {
+    clearValidationErrors(id);
     setFormData((prevData) => ({
       ...prevData,
       [id]: value === "" ? undefined : parseInt(value),
@@ -239,6 +247,7 @@ const AgentForm = ({
   };
 
   const handleFloatChange = (id: string, value: string) => {
+    clearValidationErrors(id);
     setFormData((prevData) => ({
       ...prevData,
       [id]: value === "" ? undefined : parseFloat(value),
@@ -296,6 +305,7 @@ const AgentForm = ({
       // Provider/model selected
       const [, newProviderId, ...modelIdParts] = value.split(":");
       const newModelId = modelIdParts.join(":");
+      clearValidationErrors("providerId", "modelId");
       setFormData((prevData) => ({
         ...prevData,
         providerId: newProviderId,
@@ -377,7 +387,15 @@ const AgentForm = ({
       } else {
         // Parse standardschema.dev validation errors
         const errorData = await response.json();
-        setValidationErrors(parseValidationErrors(errorData));
+        const errors = parseValidationErrors(errorData);
+        setValidationErrors(errors);
+        // Surface a user-visible signal even when the failure maps to a field
+        // without an inline error, so a rejected save is never silent (#331).
+        toast.error(
+          Object.keys(errors).length > 0
+            ? "Please fix the highlighted fields and try again"
+            : "Failed to save agent",
+        );
         console.error("Failed to save agent");
       }
     } catch (error) {
@@ -580,7 +598,7 @@ const AgentForm = ({
               <FieldError>{validationErrors.inputPlaceholder}</FieldError>
             )}
           </Field>
-          <Field>
+          <Field data-invalid={!!validationErrors.systemPrompt}>
             <ExpandableTextarea
               id="systemPrompt"
               label="System prompt"
@@ -589,36 +607,51 @@ const AgentForm = ({
               onChange={handleChange}
               disabled={isSubmitting || readOnly}
               className="!font-mono"
+              aria-invalid={!!validationErrors.systemPrompt}
+              error={validationErrors.systemPrompt}
             />
           </Field>
-          <Field>
-            <FieldLabel>Model</FieldLabel>
-            <Select
-              value={`provider:${formData.providerId}:${formData.modelId}`}
-              onValueChange={handleModelChange}
-              disabled={isSubmitting || readOnly}
-            >
-              <SelectTrigger disabled={isSubmitting || readOnly}>
-                <SelectValue placeholder="Select a model" />
-              </SelectTrigger>
-              <SelectContent>
-                {providers.map((provider) => (
-                  <SelectGroup key={provider.id}>
-                    <SelectLabel>{provider.name}</SelectLabel>
-                    {provider.modelIds.map((modelId) => (
-                      <SelectItem
-                        key={`provider:${provider.id}:${modelId}`}
-                        value={`provider:${provider.id}:${modelId}`}
-                      >
-                        {modelId}
-                      </SelectItem>
+          {/* Provider and model are chosen from one control, so surface either
+              field's server error on the single Model field. */}
+          {(() => {
+            const modelError =
+              validationErrors.modelId || validationErrors.providerId;
+            return (
+              <Field data-invalid={!!modelError}>
+                <FieldLabel htmlFor="modelId">Model</FieldLabel>
+                <Select
+                  value={`provider:${formData.providerId}:${formData.modelId}`}
+                  onValueChange={handleModelChange}
+                  disabled={isSubmitting || readOnly}
+                >
+                  <SelectTrigger
+                    id="modelId"
+                    disabled={isSubmitting || readOnly}
+                    aria-invalid={!!modelError}
+                  >
+                    <SelectValue placeholder="Select a model" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {providers.map((provider) => (
+                      <SelectGroup key={provider.id}>
+                        <SelectLabel>{provider.name}</SelectLabel>
+                        {getModelIds(provider).map((modelId) => (
+                          <SelectItem
+                            key={`provider:${provider.id}:${modelId}`}
+                            value={`provider:${provider.id}:${modelId}`}
+                          >
+                            {modelId}
+                          </SelectItem>
+                        ))}
+                      </SelectGroup>
                     ))}
-                  </SelectGroup>
-                ))}
-              </SelectContent>
-            </Select>
-          </Field>
-          <Field className="w-1/2">
+                  </SelectContent>
+                </Select>
+                {modelError && <FieldError>{modelError}</FieldError>}
+              </Field>
+            );
+          })()}
+          <Field className="w-1/2" data-invalid={!!validationErrors.maxSteps}>
             <FieldLabel htmlFor="maxSteps">Max steps</FieldLabel>
             <Input
               id="maxSteps"
@@ -627,11 +660,15 @@ const AgentForm = ({
               value={formData.maxSteps}
               onChange={(e) => handleNumberChange("maxSteps", e.target.value)}
               disabled={isSubmitting || readOnly}
+              aria-invalid={!!validationErrors.maxSteps}
             />
             <FieldDescription>
               Controls when a tool-calling loop should stop based on the number
               of steps executed
             </FieldDescription>
+            {validationErrors.maxSteps && (
+              <FieldError>{validationErrors.maxSteps}</FieldError>
+            )}
           </Field>
         </FieldGroup>
 
@@ -816,7 +853,7 @@ const AgentForm = ({
           </CollapsibleTrigger>
           <CollapsibleContent className="mb-6">
             <FieldGroup className="grid grid-cols-2">
-              <Field>
+              <Field data-invalid={!!validationErrors.temperature}>
                 <FieldLabel htmlFor="temperature">Temperature</FieldLabel>
                 <Input
                   id="temperature"
@@ -828,9 +865,13 @@ const AgentForm = ({
                     handleFloatChange("temperature", e.target.value)
                   }
                   disabled={isSubmitting || readOnly}
+                  aria-invalid={!!validationErrors.temperature}
                 />
+                {validationErrors.temperature && (
+                  <FieldError>{validationErrors.temperature}</FieldError>
+                )}
               </Field>
-              <Field>
+              <Field data-invalid={!!validationErrors.seed}>
                 <FieldLabel htmlFor="seed">Seed</FieldLabel>
                 <Input
                   id="seed"
@@ -838,9 +879,13 @@ const AgentForm = ({
                   value={formData.seed ?? ""}
                   onChange={(e) => handleNumberChange("seed", e.target.value)}
                   disabled={isSubmitting || readOnly}
+                  aria-invalid={!!validationErrors.seed}
                 />
+                {validationErrors.seed && (
+                  <FieldError>{validationErrors.seed}</FieldError>
+                )}
               </Field>
-              <Field>
+              <Field data-invalid={!!validationErrors.topP}>
                 <FieldLabel htmlFor="topP">Top-p</FieldLabel>
                 <Input
                   id="topP"
@@ -851,9 +896,13 @@ const AgentForm = ({
                   value={formData.topP ?? ""}
                   onChange={(e) => handleFloatChange("topP", e.target.value)}
                   disabled={isSubmitting || readOnly}
+                  aria-invalid={!!validationErrors.topP}
                 />
+                {validationErrors.topP && (
+                  <FieldError>{validationErrors.topP}</FieldError>
+                )}
               </Field>
-              <Field>
+              <Field data-invalid={!!validationErrors.topK}>
                 <FieldLabel htmlFor="topK">Top-k</FieldLabel>
                 <Input
                   id="topK"
@@ -862,9 +911,13 @@ const AgentForm = ({
                   value={formData.topK ?? ""}
                   onChange={(e) => handleNumberChange("topK", e.target.value)}
                   disabled={isSubmitting || readOnly}
+                  aria-invalid={!!validationErrors.topK}
                 />
+                {validationErrors.topK && (
+                  <FieldError>{validationErrors.topK}</FieldError>
+                )}
               </Field>
-              <Field>
+              <Field data-invalid={!!validationErrors.presencePenalty}>
                 <FieldLabel htmlFor="presencePenalty">
                   Presence Penalty
                 </FieldLabel>
@@ -879,9 +932,13 @@ const AgentForm = ({
                     handleFloatChange("presencePenalty", e.target.value)
                   }
                   disabled={isSubmitting || readOnly}
+                  aria-invalid={!!validationErrors.presencePenalty}
                 />
+                {validationErrors.presencePenalty && (
+                  <FieldError>{validationErrors.presencePenalty}</FieldError>
+                )}
               </Field>
-              <Field>
+              <Field data-invalid={!!validationErrors.frequencyPenalty}>
                 <FieldLabel htmlFor="frequencyPenalty">
                   Frequency Penalty
                 </FieldLabel>
@@ -896,7 +953,11 @@ const AgentForm = ({
                     handleFloatChange("frequencyPenalty", e.target.value)
                   }
                   disabled={isSubmitting || readOnly}
+                  aria-invalid={!!validationErrors.frequencyPenalty}
                 />
+                {validationErrors.frequencyPenalty && (
+                  <FieldError>{validationErrors.frequencyPenalty}</FieldError>
+                )}
               </Field>
             </FieldGroup>
           </CollapsibleContent>

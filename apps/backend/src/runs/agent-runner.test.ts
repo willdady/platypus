@@ -1,63 +1,69 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 
-const { mockPrepareChatTurn, mockGenerateText, mockStreamText, streamHarness } =
-  vi.hoisted(() => {
-    // A minimal, manually-driven async iterable standing in for the server-side
-    // snapshot branch of the UI message stream. The test pushes partial
-    // messages and ends it explicitly so timing is deterministic.
-    class AsyncQueue {
-      items: unknown[] = [];
-      resolvers: ((r: { value: unknown; done: boolean }) => void)[] = [];
-      ended = false;
-      push(item: unknown) {
-        const r = this.resolvers.shift();
-        if (r) r({ value: item, done: false });
-        else this.items.push(item);
-      }
-      end() {
-        this.ended = true;
-        let r;
-        while ((r = this.resolvers.shift()))
-          r({ value: undefined, done: true });
-      }
-      [Symbol.asyncIterator]() {
-        return {
-          next: () => {
-            if (this.items.length)
-              return Promise.resolve({
-                value: this.items.shift(),
-                done: false,
-              });
-            if (this.ended)
-              return Promise.resolve({ value: undefined, done: true });
-            return new Promise((res) => this.resolvers.push(res));
-          },
-        };
-      }
+const {
+  mockPrepareChatTurn,
+  mockValidateTurnAttachments,
+  mockGenerateText,
+  mockStreamText,
+  streamHarness,
+} = vi.hoisted(() => {
+  // A minimal, manually-driven async iterable standing in for the server-side
+  // snapshot branch of the UI message stream. The test pushes partial
+  // messages and ends it explicitly so timing is deterministic.
+  class AsyncQueue {
+    items: unknown[] = [];
+    resolvers: ((r: { value: unknown; done: boolean }) => void)[] = [];
+    ended = false;
+    push(item: unknown) {
+      const r = this.resolvers.shift();
+      if (r) r({ value: item, done: false });
+      else this.items.push(item);
     }
-    return {
-      mockPrepareChatTurn: vi.fn(),
-      mockGenerateText: vi.fn(),
-      mockStreamText: vi.fn(),
-      streamHarness: {
-        AsyncQueue,
-        queue: null as InstanceType<typeof AsyncQueue> | null,
-        // The AI SDK callbacks the runner registers; captured so the test can
-        // drive step-completion and stream-completion by hand.
-        onStepFinish: undefined as ((step: unknown) => void) | undefined,
-        onFinish: undefined as
-          ((ctx: { messages: unknown[] }) => Promise<void> | void) | undefined,
-        responseSentinel: { __isResponse: true },
-        // The response-branch stream handed to createUIMessageStreamResponse.
-        // Captured so a test can read the raw chunks the writer emitted (e.g. the
-        // live compact_context in-progress/done pair).
-        responseStream: null as ReadableStream<unknown> | null,
-      },
-    };
-  });
+    end() {
+      this.ended = true;
+      let r;
+      while ((r = this.resolvers.shift())) r({ value: undefined, done: true });
+    }
+    [Symbol.asyncIterator]() {
+      return {
+        next: () => {
+          if (this.items.length)
+            return Promise.resolve({
+              value: this.items.shift(),
+              done: false,
+            });
+          if (this.ended)
+            return Promise.resolve({ value: undefined, done: true });
+          return new Promise((res) => this.resolvers.push(res));
+        },
+      };
+    }
+  }
+  return {
+    mockPrepareChatTurn: vi.fn(),
+    mockValidateTurnAttachments: vi.fn(),
+    mockGenerateText: vi.fn(),
+    mockStreamText: vi.fn(),
+    streamHarness: {
+      AsyncQueue,
+      queue: null as InstanceType<typeof AsyncQueue> | null,
+      // The AI SDK callbacks the runner registers; captured so the test can
+      // drive step-completion and stream-completion by hand.
+      onStepFinish: undefined as ((step: unknown) => void) | undefined,
+      onFinish: undefined as
+        ((ctx: { messages: unknown[] }) => Promise<void> | void) | undefined,
+      responseSentinel: { __isResponse: true },
+      // The response-branch stream handed to createUIMessageStreamResponse.
+      // Captured so a test can read the raw chunks the writer emitted (e.g. the
+      // live compact_context in-progress/done pair).
+      responseStream: null as ReadableStream<unknown> | null,
+    },
+  };
+});
 
 vi.mock("../services/chat-execution.ts", () => ({
   prepareChatTurn: mockPrepareChatTurn,
+  validateTurnAttachments: mockValidateTurnAttachments,
 }));
 
 vi.mock("ai", async () => {

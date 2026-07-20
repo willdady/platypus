@@ -69,7 +69,13 @@ export const provider = pgTable(
     // every run on this provider (and sub-agent runs resolved to it). Nullable
     // — existing providers are unchanged.
     securityGuardrails: t.text("security_guardrails"),
-    modelIds: t.jsonb().$type<string[]>().notNull(),
+    // Per-model config (see `modelConfigSchema` in @platypus/schemas). Legacy
+    // rows may still hold a bare `string[]`; the backend normalizes both shapes
+    // via `resolveProviderModels`, and migration 0047 backfills stored rows.
+    modelIds: t
+      .jsonb()
+      .$type<Array<{ id: string; passthroughFileTypes: string[] }> | string[]>()
+      .notNull(),
     taskModelId: t.text("task_model_id").notNull(),
     memoryExtractionModelId: t.text("memory_extraction_model_id").notNull(),
     embeddingModelId: t.text("embedding_model_id"),

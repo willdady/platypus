@@ -37,6 +37,15 @@ import {
 import { logger } from "../logger.ts";
 import { buildMcpTransportConfig } from "./mcp-oauth-provider.ts";
 import { inlineFileUrls } from "../storage/utils.ts";
+import {
+  passthroughFileTypesForModel,
+  providerHasModel,
+} from "./model-capability.ts";
+import {
+  assertFilePartsSupported,
+  messagesHaveFileParts,
+  normalizeFileParts,
+} from "./file-gate.ts";
 import type { PlatypusUIMessage } from "../types.ts";
 import { chat as chatTable } from "../db/schema.ts";
 import {
@@ -1079,9 +1088,22 @@ export const prepareChatTurn = async (
       )
     : tools;
 
-  const inlinedMessages = origin
-    ? await inlineFileUrls(messages, origin)
-    : messages;
+  // Inline file URLs to `data:` bytes when we have an origin, then ALWAYS
+  // normalize (issue #328): text-like files become annotated text, native
+  // files pass through untouched, and any part that couldn't be inlined — a
+  // storage miss, or a headless turn with no origin — is announced as
+  // unavailable rather than forwarded raw. Normalizing even without an origin
+  // keeps a stray file part on a headless turn from hard-failing conversion.
+  // The pre-persist gate (`validateTurnAttachments`) has already rejected
+  // unsupported binaries, so the normalizer here never throws.
+  const passthroughFileTypes = passthroughFileTypesForModel(
+    provider,
+    resolvedModelId,
+  );
+  const inlinedMessages = normalizeFileParts(
+    origin ? await inlineFileUrls(messages, origin) : messages,
+    passthroughFileTypes,
+  );
 
   let disposed = false;
   const dispose = async () => {
@@ -1231,6 +1253,49 @@ export const prepareChatTurn = async (
   };
 };
 
+/**
+ * Pre-persist file gate (issue #328). Resolves the target model's declared
+ * `passthroughFileTypes` and rejects the turn — before anything is persisted —
+ * if any attached file (fresh upload or history) is neither natively accepted
+ * nor text-like. Throws `FileValidationError`, which the chat route maps to a
+ * 400 naming the offending file(s).
+ *
+ * A no-op when the turn carries no file parts (the common case, including all
+ * headless runs), so it adds no lookups there. If model resolution itself fails
+ * (unknown agent/provider/model), it silently returns and lets the normal
+ * `prepareChatTurn` path surface that error unchanged — this gate only adds the
+ * file-rejection behavior, it never preempts existing error handling.
+ */
+export const validateTurnAttachments = async (
+  args: {
+    request: ChatTurnRequest;
+    messages: PlatypusUIMessage[];
+    orgId: string;
+    workspaceId: string;
+  },
+  queries: ChatTurnQueries = drizzleChatTurnQueries,
+): Promise<void> => {
+  if (!messagesHaveFileParts(args.messages)) return;
+
+  let passthroughFileTypes: string[];
+  try {
+    const context = await resolveChatContext(
+      queries,
+      args.request,
+      args.orgId,
+      args.workspaceId,
+    );
+    passthroughFileTypes = passthroughFileTypesForModel(
+      context.provider,
+      context.resolvedModelId,
+    );
+  } catch {
+    return;
+  }
+
+  assertFilePartsSupported(args.messages, passthroughFileTypes);
+};
+
 // --- Private helpers ---
 
 /**
@@ -1307,7 +1372,31 @@ export const createToolHeartbeat = (
  * yields continue to bump the timer via `onProgress` for visibility, but
  * correctness no longer depends on those yields being frequent enough.
  */
-const wrapToolsWithBump = (
+/**
+ * Normalize a tool's final result into a JSON-serializable value.
+ *
+ * AI SDK v7 feeds each tool result into the next model step, where
+ * `standardizePrompt()` validates tool-result parts against a strict JSON-value
+ * schema. Non-JSON values — most commonly a raw `Date` from a Drizzle/`pg` query
+ * row (a `createdAt`/`updatedAt` timestamp) — fail that validation and crash the
+ * turn with `InvalidPromptError`. A JSON round-trip converts `Date` → ISO string
+ * and drops `undefined`. Applied at the wrapper's result paths (promise-resolved
+ * and synchronous return), it covers every current and future value-returning
+ * tool at once. The async-iterable path (sub-agent tools) is intentionally
+ * exempt — its yields are streamed UI parts, not the result fed to the model.
+ *
+ * Deliberate trade-off: a plain round-trip throws on `BigInt`. Tools are not
+ * expected to return `BigInt`, so we accept that rather than complicate the
+ * normalizer. A top-level `undefined`/function return (whose `JSON.stringify` is
+ * `undefined`) is passed through unchanged instead of crashing `JSON.parse`.
+ */
+export const normalizeToolResult = (value: unknown): unknown => {
+  const json = JSON.stringify(value);
+  if (json === undefined) return value;
+  return JSON.parse(json);
+};
+
+export const wrapToolsWithBump = (
   tools: Record<string, Tool>,
   onActivity: (event?: ToolActivityEvent) => void,
   onToolStart: () => void,
@@ -1346,7 +1435,9 @@ const wrapToolsWithBump = (
           result != null &&
           typeof (result as { then?: unknown }).then === "function"
         ) {
-          return (result as Promise<unknown>).finally(finish);
+          return (result as Promise<unknown>)
+            .then(normalizeToolResult)
+            .finally(finish);
         }
         // Async iterable / generator path (sub-agent tools). Wrap it so the
         // counter decrements once the consumer drains the iterator.
@@ -1366,8 +1457,11 @@ const wrapToolsWithBump = (
             }
           })();
         }
+        // Normalize before finish() so the sync path mirrors the promise path:
+        // a throw (e.g. a BigInt in the result) happens before the "end" event.
+        const normalized = normalizeToolResult(result);
         finish();
-        return result;
+        return normalized;
       },
     };
   }
@@ -1417,7 +1511,7 @@ const resolveChatContext = async (
     );
   }
 
-  if (!provider.modelIds.includes(resolvedModelId)) {
+  if (!providerHasModel(provider, resolvedModelId)) {
     throw new ValidationError(
       `Model id '${resolvedModelId}' not enabled for provider '${resolvedProviderId}'`,
     );
