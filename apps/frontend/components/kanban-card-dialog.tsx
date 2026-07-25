@@ -55,6 +55,7 @@ import {
   User,
   Pencil,
   Copy,
+  Link2,
 } from "lucide-react";
 import { cn, fetcher, joinUrl } from "@/lib/utils";
 import { useBackendUrl } from "@/app/client-context";
@@ -311,6 +312,13 @@ export function KanbanCardDialog({
     toast.success("Copied to clipboard");
   };
 
+  const handleCopyLink = () => {
+    const url = new URL(window.location.href);
+    url.searchParams.set("cardId", card.id);
+    navigator.clipboard.writeText(url.toString());
+    toast.success("Link copied to clipboard");
+  };
+
   const toggleLabel = (labelId: string) => {
     setSelectedLabelIds((prev) =>
       prev.includes(labelId)
@@ -415,6 +423,16 @@ export function KanbanCardDialog({
                         {title}
                       </h1>
                       <div className="flex items-center gap-0.5">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7"
+                          aria-label="Copy link to card"
+                          title="Copy link to card"
+                          onClick={handleCopyLink}
+                        >
+                          <Link2 className="h-3.5 w-3.5" />
+                        </Button>
                         <Button
                           variant="ghost"
                           size="icon"
@@ -758,6 +776,16 @@ export function KanbanCardDialog({
                       {title}
                     </h1>
                     <div className="flex items-center gap-0.5">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7"
+                        aria-label="Copy link to card"
+                        title="Copy link to card"
+                        onClick={handleCopyLink}
+                      >
+                        <Link2 className="h-3.5 w-3.5" />
+                      </Button>
                       <Button
                         variant="ghost"
                         size="icon"
