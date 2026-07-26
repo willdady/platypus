@@ -1,5 +1,19 @@
 # Changelog
 
+## [2.2.0](https://github.com/willdady/platypus/compare/v2.1.5...v2.2.0) (2026-07-26)
+
+
+### Features
+
+* **backend:** extract PDF/DOCX to text for non-native models ([#363](https://github.com/willdady/platypus/issues/363)) ([3a62299](https://github.com/willdady/platypus/commit/3a622993494f6adaede2278c98081e34619ceaf1))
+* **frontend:** add copy link action to kanban cards ([#360](https://github.com/willdady/platypus/issues/360)) ([87fc8de](https://github.com/willdady/platypus/commit/87fc8de41d7e54f081beb52d77df72ae225d13c4))
+* rename the Agent and Chat prompt field to Instructions ([#374](https://github.com/willdady/platypus/issues/374)) ([8fa64b2](https://github.com/willdady/platypus/commit/8fa64b240c39dc5696780b9509d77b9a54994ff1))
+
+
+### Bug Fixes
+
+* **backend:** persist the user's own prompt on agentless chats ([#373](https://github.com/willdady/platypus/issues/373)) ([9ba4403](https://github.com/willdady/platypus/commit/9ba44031b84b4341b3cd2132a534306a93346fdf))
+
 ## [2.1.5](https://github.com/willdady/platypus/compare/v2.1.4...v2.1.5) (2026-07-25)
 
 
