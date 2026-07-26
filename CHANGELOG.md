@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.2.1](https://github.com/willdady/platypus/compare/v2.2.0...v2.2.1) (2026-07-26)
+
+
+### Bug Fixes
+
+* **backend:** make the first-boot seed atomic and fail loudly ([#381](https://github.com/willdady/platypus/issues/381)) ([8ba5cd7](https://github.com/willdady/platypus/commit/8ba5cd772a7258b749986bb5212e4da0ccad3bf7))
+
 ## [2.2.0](https://github.com/willdady/platypus/compare/v2.1.5...v2.2.0) (2026-07-26)
 
 
