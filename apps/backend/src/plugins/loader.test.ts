@@ -737,6 +737,51 @@ describe("loadPlugins — web-search backends", () => {
     ).rejects.toThrow(/@platypus\/searx.*"searx".*createExecutors/s);
   });
 
+  it("aborts (fail-loud) on a contribution with no backend id, before namespacing it", async () => {
+    const { register } = makeRegister();
+    // Namespacing an absent id first would mint `"@platypus/searx.undefined"`
+    // and register it, turning a missing field into a mystery catalog entry.
+    const nameless = {
+      name: "SearXNG",
+      createExecutors: () => ({
+        web_search: () => ({ query: "", results: [] }),
+      }),
+    } as unknown as ReturnType<typeof webBackend>;
+
+    await expect(
+      loadPlugins({
+        pluginNames: ["@platypus/searx"],
+        builtinPlugins: {
+          "@platypus/searx": () =>
+            Promise.resolve({
+              plugin: webManifest("@platypus/searx", [nameless]),
+            }),
+        },
+        register,
+        registerWeb: () => {},
+      }),
+    ).rejects.toThrow(/@platypus\/searx.*non-empty "backend" id/s);
+  });
+
+  it("aborts (fail-loud) on a contribution with a blank display name", async () => {
+    const { register } = makeRegister();
+    await expect(
+      loadPlugins({
+        pluginNames: ["@platypus/searx"],
+        builtinPlugins: {
+          "@platypus/searx": () =>
+            Promise.resolve({
+              plugin: webManifest("@platypus/searx", [
+                { ...webBackend("searx"), name: "   " },
+              ]),
+            }),
+        },
+        register,
+        registerWeb: () => {},
+      }),
+    ).rejects.toThrow(/@platypus\/searx.*"searx".*non-empty "name"/s);
+  });
+
   it("refuses an over-ceiling timeoutMs at boot rather than clamping it", async () => {
     const { register } = makeRegister();
     await expect(

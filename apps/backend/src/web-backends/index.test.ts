@@ -11,8 +11,10 @@ import {
   isPresentableUrl,
   MAX_ANSWER_CHARS,
   MAX_READ_URL_CONTENT_CHARS,
+  MAX_SEARCH_RESULT_SCAN,
   MAX_SEARCH_RESULTS,
   MAX_SNIPPET_CHARS,
+  readUrlInputSchema,
   MAX_TITLE_CHARS,
   registerWebBackend,
   type ReadUrlToolResult,
@@ -261,12 +263,64 @@ describe("web_search — core-owned caps", () => {
     );
   });
 
+  it("stops scanning past MAX_SEARCH_RESULT_SCAN even when nothing is usable", async () => {
+    // Every entry is unpresentable, so the result cap never trips and only the
+    // scan bound stops the loop — otherwise core parses the whole array.
+    const { web_search } = await buildTools({
+      web_search: () => ({
+        query: "q",
+        results: Array.from(
+          { length: MAX_SEARCH_RESULT_SCAN + 25 },
+          (_v, i) => ({ title: `x${i}`, url: "javascript:alert(1)" }),
+        ),
+      }),
+    });
+
+    const result = await search(web_search, "q");
+    expect(result.results).toEqual([]);
+    expect(mockLogger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({ dropped: MAX_SEARCH_RESULT_SCAN }),
+      expect.stringContaining("not http(s)"),
+    );
+    expect(mockLogger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        returned: MAX_SEARCH_RESULT_SCAN + 25,
+        scanned: MAX_SEARCH_RESULT_SCAN,
+      }),
+      expect.stringContaining("more results than core will scan"),
+    );
+  });
+
   it("tolerates a malformed executor payload rather than throwing", async () => {
     const { web_search } = await buildTools({
       web_search: () => ({}) as never,
     });
 
     expect(await search(web_search, "q")).toEqual({ query: "q", results: [] });
+  });
+
+  it("keeps a usable entry whose sibling fields are the wrong type", async () => {
+    // The URL is the only field an entry is dropped over; a non-string title or
+    // snippet is narrowed away rather than coerced, so no `[object Object]` or
+    // stringified number reaches the model.
+    const { web_search } = await buildTools({
+      web_search: () =>
+        ({
+          query: "q",
+          results: [
+            {
+              title: { nested: true },
+              url: "https://example.com/a",
+              snippet: 42,
+            },
+          ],
+        }) as never,
+    });
+
+    const result = await search(web_search, "q");
+    expect(result.results).toEqual([
+      { title: "", url: "https://example.com/a" },
+    ]);
   });
 
   it("returns an error result (not a rejection) when the executor throws", async () => {
@@ -418,8 +472,14 @@ describe("read_url — egress guard, capping, slicing", () => {
     });
 
     // The slice covers the whole capped string, so there is nothing to continue
-    // to — but the cap did cut, so `truncated` still says so.
-    expect(result.content).toHaveLength(MAX_READ_URL_CONTENT_CHARS);
+    // to — but the cap did cut, so `truncated` says so and the content spells
+    // out why there is no continuation index to follow.
+    expect(
+      result.content.startsWith("x".repeat(MAX_READ_URL_CONTENT_CHARS)),
+    ).toBe(true);
+    expect(result.content).toContain(
+      `exceeded the ${MAX_READ_URL_CONTENT_CHARS}-character limit`,
+    );
     expect(result.truncated).toBe(true);
     expect(result).not.toHaveProperty("next_start_index");
     expect(mockLogger.warn).toHaveBeenCalledWith(
@@ -471,6 +531,85 @@ describe("read_url — egress guard, capping, slicing", () => {
     const result = await read(read_url, { url: "https://example.com/page" });
     expect(result.error).toBe(
       "The web backend could not complete this read_url request.",
+    );
+  });
+});
+
+describe("readUrlInputSchema — the fetchUrl-mirroring defaults", () => {
+  // `callTool` invokes `execute` directly, so the tests above never exercise the
+  // schema. ADR-0014 requires this input to mirror `fetchUrl` byte-for-byte, and
+  // the defaults are the half of that contract nothing else covers.
+  it("defaults max_length to 5000 and start_index to 0", () => {
+    expect(readUrlInputSchema.parse({ url: "https://example.com/" })).toEqual({
+      url: "https://example.com/",
+      max_length: 5_000,
+      start_index: 0,
+    });
+  });
+
+  it("rejects a non-URL, a zero max_length, and a negative start_index", () => {
+    expect(readUrlInputSchema.safeParse({ url: "not a url" }).success).toBe(
+      false,
+    );
+    expect(
+      readUrlInputSchema.safeParse({
+        url: "https://example.com/",
+        max_length: 0,
+      }).success,
+    ).toBe(false);
+    expect(
+      readUrlInputSchema.safeParse({
+        url: "https://example.com/",
+        start_index: -1,
+      }).success,
+    ).toBe(false);
+  });
+});
+
+describe("composeWebBackend — the contribution is not copied", () => {
+  it("calls createExecutors on the author's own object, so `this` survives", async () => {
+    // A class-instance contribution: `createExecutors` is a prototype method and
+    // reaches sibling state through `this`. Spreading the contribution into a
+    // copy would drop both.
+    class AcmeBackend {
+      backend = "searx";
+      name = "SearXNG";
+      hits = [{ title: "From this", url: "https://example.com/1" }];
+
+      createExecutors(): WebBackendExecutors {
+        return {
+          web_search: () => ({ query: "q", results: this.hits }),
+        };
+      }
+    }
+
+    const registration = composeWebBackend({
+      contribution: new AcmeBackend(),
+      // The loader's namespaced id rides alongside, not over, the contribution.
+      backend: "acme.searx",
+      pluginName: "@acme/searx",
+    });
+
+    expect(registration.backend).toBe("acme.searx");
+
+    const { web_search } = await registration.buildTurnTools(CTX);
+    const result = await search(web_search, "q");
+    expect(result.results).toEqual([
+      { title: "From this", url: "https://example.com/1" },
+    ]);
+  });
+
+  it("binds web_search to the executor object so a method executor keeps `this`", async () => {
+    const executors = {
+      answer: "from the executor object",
+      web_search(this: { answer: string }) {
+        return { query: "q", results: [], answer: this.answer };
+      },
+    };
+
+    const { web_search } = await buildTools(executors);
+    expect((await search(web_search, "q")).answer).toBe(
+      "from the executor object",
     );
   });
 });

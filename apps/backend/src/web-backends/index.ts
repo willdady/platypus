@@ -22,6 +22,12 @@ import {
 export const MAX_SEARCH_RESULTS = 10;
 export const MAX_SNIPPET_CHARS = 500;
 export const MAX_TITLE_CHARS = 200;
+// How many raw entries core will look at to fill those 10 slots. The cap alone
+// does not bound the work: entries with an unusable URL are dropped and skipped
+// over, so an executor returning a million `javascript:` hits would otherwise
+// have core parse a million URLs. Ten times the yield is ample slack for a
+// backend whose upstream mixes in results core cannot present.
+export const MAX_SEARCH_RESULT_SCAN = MAX_SEARCH_RESULTS * 10;
 // `answer` is free text from an upstream answer box (Brave, Tavily), so it is
 // capped like every other string a backend supplies. 10 results × 500 chars plus
 // a 4k answer is ~9k characters worst case — comparable to native search output.
@@ -79,6 +85,15 @@ export const clearWebBackends = (): void => {
 // model can tell a truncated snippet from a naturally short one.
 const truncate = (value: string, max: number): string =>
   value.length > max ? `${value.slice(0, max)}…` : value;
+
+// Everything an executor resolves is read through this, so the wrapper treats a
+// backend's payload as `unknown` and narrows field by field. The SDK types say
+// what a well-behaved backend returns; a third-party JS plugin is under no
+// obligation to honour them, and core must not fall over on the difference.
+const asRecord = (value: unknown): Record<string, unknown> =>
+  typeof value === "object" && value !== null
+    ? (value as Record<string, unknown>)
+    : {};
 
 /**
  * Whether a URL may be presented to the model (and, in the frontend, rendered as
@@ -145,8 +160,20 @@ const failureMessage = (toolName: string): string =>
   `The web backend could not complete this ${toolName} request.`;
 
 export interface ComposeWebBackendOptions {
-  /** The contribution, with its id already namespaced by the loader. */
+  /**
+   * The contribution exactly as its author wrote it. Passed through untouched —
+   * never spread into a copy — so `createExecutors` is invoked with the author's
+   * own object as its receiver and a class-instance contribution keeps both its
+   * prototype methods and its `this`. The namespaced id rides {@link backend}
+   * instead, which is why this stays the original reference.
+   */
   contribution: WebBackendContribution;
+  /**
+   * The loader's namespaced discriminator, overriding `contribution.backend`.
+   * Omitted outside the loader (tests, core registrations), where the
+   * contribution's own bare id is already the effective one.
+   */
+  backend?: string;
   /** The plugin's boot-resolved deploy-time config/credentials (ADR-0013). */
   plugin?: PluginConfigContext;
   /** Owning plugin's manifest name, for attribution in every log line. */
@@ -172,13 +199,16 @@ export const composeWebBackend = (
   options: ComposeWebBackendOptions,
 ): WebBackendRegistration => {
   const { contribution, plugin, pluginName, resolveHostname } = options;
-  const backend = contribution.backend;
+  const backend = options.backend ?? contribution.backend;
   const timeoutMs = contribution.timeoutMs ?? DEFAULT_WEB_TIMEOUT_MS;
 
   // One line per executor call (ADR-0014 observability). `debug` when it worked,
   // `warn` when it did not, cause attached on failure. Queries and URLs are user
-  // content and can carry sensitive terms, so they never reach this line — they
-  // are logged separately at `debug`.
+  // content and can carry sensitive terms, so they never reach *this* line; the
+  // model's query appears only on the `debug` line below. A model-supplied URL
+  // does reach `warn` on the two paths that cannot be diagnosed without it — an
+  // egress block and a content-cap hit — which is what D3 and the egress-guard
+  // contract call for.
   const logCall = (
     toolName: string,
     outcome: "ok" | "timeout" | "blocked" | "error",
@@ -199,7 +229,9 @@ export const composeWebBackend = (
     }
   };
 
-  const buildSearchTool = (executors: WebBackendExecutors): Tool =>
+  const buildSearchTool = (
+    webSearch: WebBackendExecutors["web_search"],
+  ): Tool =>
     tool({
       description: WEB_SEARCH_DESCRIPTION,
       inputSchema: webSearchInputSchema,
@@ -212,12 +244,9 @@ export const composeWebBackend = (
           "web_search query",
         );
 
-        let raw;
+        let raw: unknown;
         try {
-          raw = await withTimeout(
-            () => executors.web_search({ query }),
-            timeoutMs,
-          );
+          raw = await withTimeout(() => webSearch({ query }), timeoutMs);
         } catch (cause) {
           const timedOut = cause instanceof WebBackendTimeoutError;
           logCall(
@@ -233,16 +262,29 @@ export const composeWebBackend = (
           };
         }
 
+        const payload = asRecord(raw);
+        const entries: readonly unknown[] = Array.isArray(payload.results)
+          ? payload.results
+          : [];
+
         const results: WebSearchToolResult["results"] = [];
         let dropped = 0;
-        for (const entry of Array.isArray(raw?.results) ? raw.results : []) {
+        // Bounded on both ends: `MAX_SEARCH_RESULTS` on what is kept, and
+        // `MAX_SEARCH_RESULT_SCAN` on what is even looked at, so a pathological
+        // result array cannot spend core's CPU parsing URLs it will discard.
+        const scanned = entries.slice(0, MAX_SEARCH_RESULT_SCAN);
+        for (const candidate of scanned) {
           if (results.length >= MAX_SEARCH_RESULTS) break;
-          if (!isPresentableUrl(entry?.url)) {
+          const entry = asRecord(candidate);
+          if (!isPresentableUrl(entry.url)) {
             dropped += 1;
             continue;
           }
           const hit: WebSearchToolResult["results"][number] = {
-            title: truncate(String(entry.title ?? ""), MAX_TITLE_CHARS),
+            title: truncate(
+              typeof entry.title === "string" ? entry.title : "",
+              MAX_TITLE_CHARS,
+            ),
             url: entry.url,
           };
           if (typeof entry.snippet === "string") {
@@ -256,12 +298,23 @@ export const composeWebBackend = (
             "Dropped web_search results whose URL was not http(s)",
           );
         }
+        if (entries.length > scanned.length) {
+          logger.warn(
+            {
+              backend,
+              plugin: pluginName,
+              returned: entries.length,
+              scanned: scanned.length,
+            },
+            "Web backend returned more results than core will scan; the tail was ignored",
+          );
+        }
 
         // `query` is echoed from the model's own input, never from the executor:
         // core owns this shape, so a backend cannot substitute text here.
         const result: WebSearchToolResult = { query, results };
-        if (typeof raw?.answer === "string") {
-          result.answer = truncate(raw.answer, MAX_ANSWER_CHARS);
+        if (typeof payload.answer === "string") {
+          result.answer = truncate(payload.answer, MAX_ANSWER_CHARS);
         }
 
         logCall("web_search", "ok", startedAt);
@@ -295,7 +348,7 @@ export const composeWebBackend = (
           return { error: EGRESS_BLOCKED_MESSAGE };
         }
 
-        let raw;
+        let raw: unknown;
         try {
           raw = await withTimeout(() => readUrl({ url }), timeoutMs);
         } catch (cause) {
@@ -310,7 +363,8 @@ export const composeWebBackend = (
 
         // Cap first, then slice within the capped string: the cap bounds what core
         // ever holds, the slice serves this page of it.
-        const full = typeof raw?.content === "string" ? raw.content : "";
+        const payload = asRecord(raw);
+        const full = typeof payload.content === "string" ? payload.content : "";
         const capped = full.length > MAX_READ_URL_CONTENT_CHARS;
         if (capped) {
           logger.warn(
@@ -326,15 +380,23 @@ export const composeWebBackend = (
         const hasMore = start_index + max_length < content.length;
         const next_start_index = start_index + max_length;
 
+        // Same hint text as `fetchUrl`, so a continuation read reads identically
+        // whichever page-reader the model reached for. At the tail of a capped
+        // page there is nothing to continue *to*, and `truncated: true` with no
+        // `next_start_index` would read as an unexplained dead end — so the cut
+        // is spelled out instead of left for the model to infer.
+        let body = slice;
+        if (hasMore) {
+          body += `\n\n[Content truncated. Pass start_index=${next_start_index} to continue reading.]`;
+        } else if (capped) {
+          body += `\n\n[Content truncated: the page exceeded the ${MAX_READ_URL_CONTENT_CHARS}-character limit and the remainder cannot be read.]`;
+        }
+
         const result: ReadUrlToolResult = {
-          // Same hint text as `fetchUrl`, so a continuation read reads identically
-          // whichever page-reader the model reached for.
-          content: hasMore
-            ? `${slice}\n\n[Content truncated. Pass start_index=${next_start_index} to continue reading.]`
-            : slice,
-          url: isPresentableUrl(raw?.url) ? raw.url : url,
+          content: body,
+          url: isPresentableUrl(payload.url) ? payload.url : url,
           content_type:
-            typeof raw?.contentType === "string" ? raw.contentType : "",
+            typeof payload.contentType === "string" ? payload.contentType : "",
           // True when *anything* was cut — the core cap or this slice.
           truncated: hasMore || capped,
         };
@@ -365,8 +427,10 @@ export const composeWebBackend = (
         return {};
       }
 
+      // Both executors are bound to the object that supplied them, so a backend
+      // may write them as methods reaching sibling state through `this`.
       const tools: Record<string, Tool> = {
-        web_search: buildSearchTool(executors),
+        web_search: buildSearchTool(executors.web_search.bind(executors)),
       };
       if (typeof executors.read_url === "function") {
         tools.read_url = buildReadUrlTool(executors.read_url.bind(executors));

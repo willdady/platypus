@@ -479,6 +479,27 @@ export async function loadPlugins(
     const webBackendIds: string[] = [];
 
     for (const contribution of manifest.contributes.webBackends ?? []) {
+      // Identity is checked before it is namespaced: `contributionId(undefined)`
+      // would otherwise mint a plausible-looking `"acme.undefined"` and register
+      // it, so a JS plugin's missing field would surface as a mystery id in the
+      // catalog rather than a boot error naming the plugin.
+      if (
+        typeof contribution.backend !== "string" ||
+        contribution.backend.trim() === ""
+      ) {
+        throw new Error(
+          `Plugin "${manifest.name}": every web backend must declare a non-empty "backend" id.`,
+        );
+      }
+      if (
+        typeof contribution.name !== "string" ||
+        contribution.name.trim() === ""
+      ) {
+        throw new Error(
+          `Plugin "${manifest.name}": web backend "${contribution.backend}" must declare a non-empty "name".`,
+        );
+      }
+
       const effectiveBackend = contributionId(contribution.backend);
 
       const existingOwner = webOwners.get(effectiveBackend);
@@ -520,8 +541,15 @@ export async function loadPlugins(
       // Core wraps the executors here, binding the same shared plugin config that
       // every other contribution factory receives. What lands in the registry is
       // the finished, guarded builder — per-turn callers never see the executors.
+      //
+      // The contribution goes in by reference, with the namespaced id alongside
+      // it rather than spread over it: `createExecutors` must be called on the
+      // author's own object, or a class-instance contribution loses its
+      // prototype and its `this`. (The sandbox loop achieves the same by
+      // re-wrapping `create` around the original.)
       const registration = composeWebBackend({
-        contribution: { ...contribution, backend: effectiveBackend },
+        contribution,
+        backend: effectiveBackend,
         plugin: pluginCtx,
         pluginName: manifest.name,
       });

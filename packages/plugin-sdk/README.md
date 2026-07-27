@@ -7,11 +7,11 @@ The plugin SDK for [Platypus](https://github.com/willdady/platypus) — the
 compile-time contract third-party plugins are built against.
 
 Platypus loads its extensions — **Tool sets**, **Sandbox backends**, and
-**Web-search backends** — as plugins. This package is the typed surface they depend on: the `PlatypusPlugin`
-manifest type, the contribution types, and the `PLUGIN_API_VERSION` constant. A
-plugin is an npm package that exports a manifest built against these types; an
-Operator installs it by adding the package to the `PLATYPUS_PLUGINS` list at
-deploy time.
+**Web-search backends** — as plugins. This package is the typed surface they
+depend on: the `PlatypusPlugin` manifest type, the contribution types, and the
+`PLUGIN_API_VERSION` constant. A plugin is an npm package that exports a
+manifest built against these types; an Operator installs it by adding the
+package to the `PLATYPUS_PLUGINS` list at deploy time.
 
 ## Install
 
