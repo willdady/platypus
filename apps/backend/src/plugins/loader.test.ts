@@ -8,7 +8,12 @@ import {
   type SandboxBackend,
   type SandboxBackendContribution,
   type ToolSetContribution,
+  type WebBackendContribution,
 } from "@platypuschat/plugin-sdk";
+import {
+  MAX_WEB_TIMEOUT_MS,
+  type WebBackendRegistration,
+} from "../web-backends/index.ts";
 import { loadPlugins, parsePluginConfig, parsePluginList } from "./loader.ts";
 import { plugin as examplePlugin } from "./example/index.ts";
 import { registerToolSet, getToolSet } from "../tools/index.ts";
@@ -57,6 +62,34 @@ const toolSet = (id: string): ToolSetContribution => ({
   name: id,
   category: "Test",
   tools: {},
+});
+
+// A capturing `registerWeb` for the Web-search-backend extension point. It takes
+// core's composed registration, not the raw contribution.
+const makeWebRegister = () => {
+  const calls: WebBackendRegistration[] = [];
+  const registerWeb = (registration: WebBackendRegistration) => {
+    calls.push(registration);
+  };
+  return { registerWeb, calls };
+};
+
+const webManifest = (
+  name: string,
+  webBackends: WebBackendContribution[],
+): PlatypusPlugin => ({
+  name,
+  version: "0.1.0",
+  apiVersion: 1,
+  contributes: { webBackends },
+});
+
+const webBackend = (backend: string): WebBackendContribution => ({
+  backend,
+  name: backend,
+  createExecutors: () => ({
+    web_search: () => ({ query: "", results: [] }),
+  }),
 });
 
 const sandboxBackend = (backend: string): SandboxBackendContribution => ({
@@ -194,6 +227,7 @@ describe("loadPlugins", () => {
         origin: "core",
         toolSetIds: ["math-conversions", "time"],
         sandboxBackendIds: [],
+        webBackendIds: [],
       },
     ]);
   });
@@ -411,6 +445,7 @@ describe("loadPlugins — sandbox backends", () => {
         origin: "core",
         toolSetIds: [],
         sandboxBackendIds: ["docker"],
+        webBackendIds: [],
       },
     ]);
   });
@@ -563,6 +598,231 @@ describe("loadPlugins — sandbox backends", () => {
 
     // A plain schema passes through by identity — append-only compatibility.
     expect(calls[0].configSchema).toBe(plain);
+  });
+});
+
+describe("loadPlugins — web-search backends", () => {
+  it("registers a web-backend contribution and reports its id", async () => {
+    const { register } = makeRegister();
+    const { registerWeb, calls } = makeWebRegister();
+    const loaded = await loadPlugins({
+      pluginNames: ["@platypus/searx"],
+      builtinPlugins: {
+        "@platypus/searx": () =>
+          Promise.resolve({
+            plugin: webManifest("@platypus/searx", [webBackend("searx")]),
+          }),
+      },
+      register,
+      registerWeb,
+    });
+
+    expect(calls.map((c) => c.backend)).toEqual(["searx"]);
+    // What lands in the registry is core's composed builder, not the raw
+    // contribution: the model-facing surface is core-owned (ADR-0014).
+    expect(typeof calls[0].buildTurnTools).toBe("function");
+    expect(loaded[0]).toMatchObject({
+      name: "@platypus/searx",
+      origin: "core",
+      webBackendIds: ["searx"],
+    });
+  });
+
+  it("prefixes a third-party web-backend id with the manifest name", async () => {
+    const { register } = makeRegister();
+    const { registerWeb, calls } = makeWebRegister();
+    const loaded = await loadPlugins({
+      pluginNames: ["@acme/platypus-search"],
+      builtinPlugins: {},
+      importPlugin: () =>
+        Promise.resolve({
+          plugin: webManifest("acme", [webBackend("web")]),
+        }),
+      register,
+      registerWeb,
+    });
+
+    expect(calls.map((c) => c.backend)).toEqual(["acme.web"]);
+    expect(loaded[0].webBackendIds).toEqual(["acme.web"]);
+  });
+
+  it("aborts (fail-loud) on a duplicate web backend id, naming both plugins", async () => {
+    const { register } = makeRegister();
+    const { registerWeb } = makeWebRegister();
+    // Two core plugins keep bare backend ids, so a shared `searx` collides.
+    const builtinPlugins = {
+      "@a/plugin": () =>
+        Promise.resolve({
+          plugin: webManifest("@a/plugin", [webBackend("searx")]),
+        }),
+      "@b/plugin": () =>
+        Promise.resolve({
+          plugin: webManifest("@b/plugin", [webBackend("searx")]),
+        }),
+    };
+
+    await expect(
+      loadPlugins({
+        pluginNames: ["@a/plugin", "@b/plugin"],
+        builtinPlugins,
+        register,
+        registerWeb,
+      }),
+    ).rejects.toThrow(/"searx".*"@a\/plugin".*"@b\/plugin"/s);
+  });
+
+  it("re-throws a registry collision with plugin attribution", async () => {
+    const { register } = makeRegister();
+    const registerWeb = () => {
+      throw new Error("Web backend 'searx' has already been registered.");
+    };
+
+    await expect(
+      loadPlugins({
+        pluginNames: ["@platypus/collides"],
+        builtinPlugins: {
+          "@platypus/collides": () =>
+            Promise.resolve({
+              plugin: webManifest("@platypus/collides", [webBackend("searx")]),
+            }),
+        },
+        register,
+        registerWeb,
+      }),
+    ).rejects.toThrow(/@platypus\/collides.*"searx".*already been registered/s);
+  });
+
+  it("aborts (fail-loud) when webBackends is not an array", async () => {
+    const { register } = makeRegister();
+    await expect(
+      loadPlugins({
+        pluginNames: ["@bad/plugin"],
+        builtinPlugins: {},
+        importPlugin: () =>
+          Promise.resolve({
+            plugin: {
+              name: "bad",
+              version: "0.1.0",
+              apiVersion: 1,
+              contributes: { webBackends: {} },
+            },
+          }),
+        register,
+        registerWeb: () => {},
+      }),
+    ).rejects.toThrow(/@bad\/plugin.*webBackends.*array/s);
+  });
+
+  it("aborts (fail-loud) when a contribution has no createExecutors function", async () => {
+    const { register } = makeRegister();
+    // The TS type requires it; a third-party JS plugin can still omit it, and
+    // boot — not a live turn — is where that is caught.
+    const broken = {
+      backend: "searx",
+      name: "SearXNG",
+    } as unknown as ReturnType<typeof webBackend>;
+
+    await expect(
+      loadPlugins({
+        pluginNames: ["@platypus/searx"],
+        builtinPlugins: {
+          "@platypus/searx": () =>
+            Promise.resolve({
+              plugin: webManifest("@platypus/searx", [broken]),
+            }),
+        },
+        register,
+        registerWeb: () => {},
+      }),
+    ).rejects.toThrow(/@platypus\/searx.*"searx".*createExecutors/s);
+  });
+
+  it("refuses an over-ceiling timeoutMs at boot rather than clamping it", async () => {
+    const { register } = makeRegister();
+    await expect(
+      loadPlugins({
+        pluginNames: ["@platypus/searx"],
+        builtinPlugins: {
+          "@platypus/searx": () =>
+            Promise.resolve({
+              plugin: webManifest("@platypus/searx", [
+                { ...webBackend("searx"), timeoutMs: MAX_WEB_TIMEOUT_MS + 1 },
+              ]),
+            }),
+        },
+        register,
+        registerWeb: () => {},
+      }),
+    ).rejects.toThrow(
+      new RegExp(
+        `@platypus/searx.*"searx".*timeoutMs.*${MAX_WEB_TIMEOUT_MS}`,
+        "s",
+      ),
+    );
+  });
+
+  it("accepts a timeoutMs at the ceiling", async () => {
+    const { register } = makeRegister();
+    const { registerWeb, calls } = makeWebRegister();
+    await loadPlugins({
+      pluginNames: ["@platypus/searx"],
+      builtinPlugins: {
+        "@platypus/searx": () =>
+          Promise.resolve({
+            plugin: webManifest("@platypus/searx", [
+              { ...webBackend("searx"), timeoutMs: MAX_WEB_TIMEOUT_MS },
+            ]),
+          }),
+      },
+      register,
+      registerWeb,
+    });
+
+    expect(calls).toHaveLength(1);
+  });
+
+  it("injects the shared plugin config block into createExecutors", async () => {
+    const { register } = makeRegister();
+    const { registerWeb, calls } = makeWebRegister();
+    const createExecutors = vi.fn(() => ({
+      web_search: () => ({ query: "q", results: [] }),
+    }));
+
+    await loadPlugins({
+      pluginNames: ["acme"],
+      builtinPlugins: {},
+      importPlugin: () =>
+        Promise.resolve({
+          plugin: {
+            name: "acme",
+            version: "0.1.0",
+            apiVersion: 1,
+            configSchema: z.object({ endpoint: z.string() }),
+            credentialsSchema: z.object({ apiKey: z.string() }),
+            contributes: {
+              webBackends: [
+                { backend: "web", name: "Acme Search", createExecutors },
+              ],
+            },
+          } satisfies PlatypusPlugin,
+        }),
+      register,
+      registerWeb,
+      pluginConfig: {
+        acme: {
+          config: { endpoint: "https://searx.internal" },
+          credentials: { apiKey: "sk-test" },
+        },
+      },
+    });
+
+    const ctx = { orgId: "org-1", workspaceId: "ws-1", userId: "user-1" };
+    await calls[0].buildTurnTools(ctx);
+
+    expect(createExecutors).toHaveBeenCalledWith(ctx, {
+      config: { endpoint: "https://searx.internal" },
+      credentials: { apiKey: "sk-test" },
+    });
   });
 });
 

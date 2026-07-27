@@ -1,0 +1,492 @@
+import { describe, it, expect, vi, beforeEach } from "vitest";
+import type { Tool } from "ai";
+import { callTool } from "../test-utils.ts";
+import { EGRESS_BLOCKED_MESSAGE } from "../utils/egress-guard.ts";
+import { logger } from "../logger.ts";
+import {
+  clearWebBackends,
+  composeWebBackend,
+  getWebBackend,
+  getWebBackends,
+  isPresentableUrl,
+  MAX_ANSWER_CHARS,
+  MAX_READ_URL_CONTENT_CHARS,
+  MAX_SEARCH_RESULTS,
+  MAX_SNIPPET_CHARS,
+  MAX_TITLE_CHARS,
+  registerWebBackend,
+  type ReadUrlToolResult,
+  type WebBackendContribution,
+  type WebBackendExecutors,
+  type WebSearchToolResult,
+  type WebToolError,
+} from "./index.ts";
+
+vi.mock("../logger.ts", () => ({
+  logger: {
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+  },
+}));
+
+const mockLogger = vi.mocked(logger);
+
+const CTX = { orgId: "org-1", workspaceId: "ws-1", userId: "user-1" };
+
+// A public address for the injected resolver, so the real egress guard stays in
+// the path (these tests assert core's guarding, not DNS).
+const resolvePublic = () => Promise.resolve(["93.184.216.34"]);
+
+const contribution = (
+  executors: Partial<WebBackendExecutors>,
+  overrides: Partial<WebBackendContribution> = {},
+): WebBackendContribution => ({
+  backend: "searx",
+  name: "SearXNG",
+  createExecutors: () => executors as WebBackendExecutors,
+  ...overrides,
+});
+
+const buildTools = (
+  executors: Partial<WebBackendExecutors>,
+  overrides: Partial<WebBackendContribution> = {},
+): Promise<Record<string, Tool>> =>
+  composeWebBackend({
+    contribution: contribution(executors, overrides),
+    pluginName: "@acme/searx",
+    resolveHostname: resolvePublic,
+  }).buildTurnTools(CTX);
+
+const search = (tool: Tool, query: string) =>
+  callTool(tool, { query }) as Promise<WebSearchToolResult & WebToolError>;
+
+const read = (
+  tool: Tool,
+  input: { url: string; max_length?: number; start_index?: number },
+) =>
+  callTool(tool, {
+    max_length: 5_000,
+    start_index: 0,
+    ...input,
+  }) as Promise<ReadUrlToolResult & WebToolError>;
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  clearWebBackends();
+});
+
+describe("web-backend registry", () => {
+  const registration = (backend: string) =>
+    composeWebBackend({
+      contribution: contribution(
+        { web_search: () => ({ query: "", results: [] }) },
+        { backend },
+      ),
+      pluginName: "@acme/searx",
+    });
+
+  it("registers a backend and serves it by its discriminator", () => {
+    registerWebBackend(registration("searx"));
+
+    const found = getWebBackend("searx");
+    expect(found?.backend).toBe("searx");
+    expect(found?.name).toBe("SearXNG");
+    expect(typeof found?.buildTurnTools).toBe("function");
+  });
+
+  it("lists every registered backend", () => {
+    registerWebBackend(registration("searx"));
+    registerWebBackend(registration("brave"));
+
+    expect(getWebBackends().map((r) => r.backend)).toEqual(["searx", "brave"]);
+  });
+
+  it("returns undefined for an unregistered discriminator", () => {
+    expect(getWebBackend("nope")).toBeUndefined();
+  });
+
+  it("throws on a duplicate registration", () => {
+    registerWebBackend(registration("searx"));
+    expect(() => registerWebBackend(registration("searx"))).toThrow(
+      /'searx' has already been registered/,
+    );
+  });
+});
+
+describe("composeWebBackend — tool construction", () => {
+  it("builds only web_search when the backend supplies no read_url", async () => {
+    const tools = await buildTools({
+      web_search: () => ({ query: "q", results: [] }),
+    });
+
+    expect(Object.keys(tools)).toEqual(["web_search"]);
+  });
+
+  it("builds both tools when the backend supplies read_url", async () => {
+    const tools = await buildTools({
+      web_search: () => ({ query: "q", results: [] }),
+      read_url: () => ({ content: "", url: "https://example.com/" }),
+    });
+
+    expect(Object.keys(tools).sort()).toEqual(["read_url", "web_search"]);
+  });
+
+  it("passes the turn context and the plugin config block into createExecutors", async () => {
+    const createExecutors = vi.fn(() => ({
+      web_search: () => ({ query: "q", results: [] }),
+    }));
+    const plugin = { config: { region: "eu" }, credentials: { apiKey: "k" } };
+
+    await composeWebBackend({
+      contribution: contribution({}, { createExecutors }),
+      plugin,
+      pluginName: "@acme/searx",
+    }).buildTurnTools(CTX);
+
+    expect(createExecutors).toHaveBeenCalledWith(CTX, plugin);
+  });
+
+  it("serves no tools (and warns) when the executor object has no web_search", async () => {
+    // The TS type forbids this, but a third-party JS plugin can still return it:
+    // boot is fail-loud, turn-time resolution degrades gracefully.
+    const tools = await buildTools({});
+
+    expect(tools).toEqual({});
+    expect(mockLogger.warn).toHaveBeenCalledWith(
+      { plugin: "@acme/searx", backend: "searx" },
+      expect.stringContaining("no web_search executor"),
+    );
+  });
+});
+
+describe("web_search — core-owned caps", () => {
+  const hit = (n: number) => ({
+    title: `Result ${n}`,
+    url: `https://example.com/${n}`,
+    snippet: `Snippet ${n}`,
+  });
+
+  it("echoes the model's query and passes results through", async () => {
+    const { web_search } = await buildTools({
+      web_search: () => ({ query: "backend rewrote this", results: [hit(1)] }),
+    });
+
+    const result = await search(web_search, "original query");
+    expect(result.query).toBe("original query");
+    expect(result.results).toEqual([
+      {
+        title: "Result 1",
+        url: "https://example.com/1",
+        snippet: "Snippet 1",
+      },
+    ]);
+  });
+
+  it("slices results to MAX_SEARCH_RESULTS", async () => {
+    const { web_search } = await buildTools({
+      web_search: () => ({
+        query: "q",
+        results: Array.from({ length: MAX_SEARCH_RESULTS + 5 }, (_v, i) =>
+          hit(i),
+        ),
+      }),
+    });
+
+    const result = await search(web_search, "q");
+    expect(result.results).toHaveLength(MAX_SEARCH_RESULTS);
+  });
+
+  it("truncates title and snippet", async () => {
+    const { web_search } = await buildTools({
+      web_search: () => ({
+        query: "q",
+        results: [
+          {
+            title: "t".repeat(MAX_TITLE_CHARS + 50),
+            url: "https://example.com/",
+            snippet: "s".repeat(MAX_SNIPPET_CHARS + 50),
+          },
+        ],
+      }),
+    });
+
+    const [only] = (await search(web_search, "q")).results;
+    expect(only.title).toBe(`${"t".repeat(MAX_TITLE_CHARS)}…`);
+    expect(only.snippet).toBe(`${"s".repeat(MAX_SNIPPET_CHARS)}…`);
+  });
+
+  it("truncates the answer box — free upstream text is not passed through unbounded", async () => {
+    const { web_search } = await buildTools({
+      web_search: () => ({
+        query: "q",
+        results: [],
+        answer: "a".repeat(MAX_ANSWER_CHARS + 500),
+      }),
+    });
+
+    const result = await search(web_search, "q");
+    expect(result.answer).toBe(`${"a".repeat(MAX_ANSWER_CHARS)}…`);
+  });
+
+  it("omits answer entirely when the backend supplies none", async () => {
+    const { web_search } = await buildTools({
+      web_search: () => ({ query: "q", results: [] }),
+    });
+
+    expect(await search(web_search, "q")).not.toHaveProperty("answer");
+  });
+
+  it("drops results whose URL is not http(s) and warns once", async () => {
+    const { web_search } = await buildTools({
+      web_search: () => ({
+        query: "q",
+        results: [
+          { title: "XSS", url: "javascript:alert(1)" },
+          { title: "Data", url: "data:text/html,<script>" },
+          { title: "Junk", url: "not a url" },
+          { title: "Good", url: "https://example.com/ok" },
+        ],
+      }),
+    });
+
+    const result = await search(web_search, "q");
+    expect(result.results).toEqual([
+      { title: "Good", url: "https://example.com/ok" },
+    ]);
+    expect(mockLogger.warn).toHaveBeenCalledWith(
+      { backend: "searx", plugin: "@acme/searx", dropped: 3 },
+      expect.stringContaining("not http(s)"),
+    );
+  });
+
+  it("tolerates a malformed executor payload rather than throwing", async () => {
+    const { web_search } = await buildTools({
+      web_search: () => ({}) as never,
+    });
+
+    expect(await search(web_search, "q")).toEqual({ query: "q", results: [] });
+  });
+
+  it("returns an error result (not a rejection) when the executor throws", async () => {
+    const { web_search } = await buildTools({
+      web_search: () => {
+        throw new Error("upstream 500 for https://api.example.com/?key=secret");
+      },
+    });
+
+    const result = await search(web_search, "q");
+    // The cause is logged, never handed to the model: a backend's error text
+    // routinely embeds a credentialed upstream URL.
+    expect(result.error).toBe(
+      "The web backend could not complete this web_search request.",
+    );
+    expect(result.error).not.toContain("secret");
+    expect(mockLogger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        backend: "searx",
+        plugin: "@acme/searx",
+        tool: "web_search",
+        outcome: "error",
+      }),
+      expect.any(String),
+    );
+  });
+
+  it("times out a hanging executor and reports the timeout", async () => {
+    const { web_search } = await buildTools(
+      {
+        web_search: () =>
+          new Promise(() => {
+            /* never settles */
+          }),
+      },
+      { timeoutMs: 20 },
+    );
+
+    const result = await search(web_search, "q");
+    expect(result.error).toBe(
+      "The web backend did not respond within 20ms (web_search).",
+    );
+    expect(mockLogger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({ tool: "web_search", outcome: "timeout" }),
+      expect.any(String),
+    );
+  });
+
+  it("logs one debug line per successful call, without the query", async () => {
+    const { web_search } = await buildTools({
+      web_search: () => ({ query: "q", results: [] }),
+    });
+
+    await search(web_search, "secret internal term");
+
+    expect(mockLogger.debug).toHaveBeenCalledWith(
+      expect.objectContaining({
+        backend: "searx",
+        plugin: "@acme/searx",
+        tool: "web_search",
+        outcome: "ok",
+        durationMs: expect.any(Number) as unknown,
+      }),
+      "Web backend executor call",
+    );
+    // The query itself is user content: debug only, never on the outcome line.
+    expect(mockLogger.warn).not.toHaveBeenCalled();
+  });
+});
+
+describe("read_url — egress guard, capping, slicing", () => {
+  const page = (content: string, url = "https://example.com/page") => ({
+    web_search: () => ({ query: "q", results: [] }),
+    read_url: () => ({ content, url, contentType: "text/markdown" }),
+  });
+
+  it("blocks a model-supplied URL that resolves into a denied range", async () => {
+    const read_url_executor = vi.fn(() => ({
+      content: "internal",
+      url: "http://169.254.169.254/latest/meta-data",
+    }));
+    const { read_url } = await buildTools({
+      web_search: () => ({ query: "q", results: [] }),
+      read_url: read_url_executor,
+    });
+
+    const result = await read(read_url, {
+      url: "http://169.254.169.254/latest/meta-data",
+    });
+
+    expect(result.error).toBe(EGRESS_BLOCKED_MESSAGE);
+    expect(read_url_executor).not.toHaveBeenCalled();
+    expect(mockLogger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({ tool: "read_url", outcome: "blocked" }),
+      expect.any(String),
+    );
+  });
+
+  it("returns the post-redirect URL and content type on an allowed read", async () => {
+    const { read_url } = await buildTools(
+      page("Hello", "https://example.com/final"),
+    );
+
+    const result = await read(read_url, { url: "https://example.com/start" });
+    expect(result.content).toBe("Hello");
+    expect(result.url).toBe("https://example.com/final");
+    expect(result.content_type).toBe("text/markdown");
+    expect(result.truncated).toBe(false);
+    expect(result).not.toHaveProperty("next_start_index");
+  });
+
+  it("slices by max_length and emits the fetchUrl continuation hint", async () => {
+    const { read_url } = await buildTools(page("abcdefghij"));
+
+    const result = await read(read_url, {
+      url: "https://example.com/page",
+      max_length: 4,
+      start_index: 0,
+    });
+
+    expect(result.content).toBe(
+      "abcd\n\n[Content truncated. Pass start_index=4 to continue reading.]",
+    );
+    expect(result.truncated).toBe(true);
+    expect(result.next_start_index).toBe(4);
+  });
+
+  it("serves a continuation read from start_index", async () => {
+    const { read_url } = await buildTools(page("abcdefghij"));
+
+    const result = await read(read_url, {
+      url: "https://example.com/page",
+      max_length: 6,
+      start_index: 4,
+    });
+
+    expect(result.content).toBe("efghij");
+    expect(result.truncated).toBe(false);
+  });
+
+  it("caps content at MAX_READ_URL_CONTENT_CHARS before slicing, and warns", async () => {
+    const oversized = "x".repeat(MAX_READ_URL_CONTENT_CHARS + 100);
+    const { read_url } = await buildTools(page(oversized));
+
+    const result = await read(read_url, {
+      url: "https://example.com/page",
+      max_length: MAX_READ_URL_CONTENT_CHARS,
+      start_index: 0,
+    });
+
+    // The slice covers the whole capped string, so there is nothing to continue
+    // to — but the cap did cut, so `truncated` still says so.
+    expect(result.content).toHaveLength(MAX_READ_URL_CONTENT_CHARS);
+    expect(result.truncated).toBe(true);
+    expect(result).not.toHaveProperty("next_start_index");
+    expect(mockLogger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        backend: "searx",
+        url: "https://example.com/page",
+        length: oversized.length,
+      }),
+      expect.stringContaining("exceeded the core cap"),
+    );
+  });
+
+  it("falls back to the requested URL when the backend returns an unusable one", async () => {
+    const { read_url } = await buildTools({
+      web_search: () => ({ query: "q", results: [] }),
+      read_url: () => ({ content: "hi", url: "javascript:alert(1)" }),
+    });
+
+    const result = await read(read_url, { url: "https://example.com/page" });
+    expect(result.url).toBe("https://example.com/page");
+  });
+
+  it("honours timeoutMs", async () => {
+    const { read_url } = await buildTools(
+      {
+        web_search: () => ({ query: "q", results: [] }),
+        read_url: () =>
+          new Promise(() => {
+            /* never settles */
+          }),
+      },
+      { timeoutMs: 20 },
+    );
+
+    const result = await read(read_url, { url: "https://example.com/page" });
+    expect(result.error).toBe(
+      "The web backend did not respond within 20ms (read_url).",
+    );
+  });
+
+  it("returns an error result (not a rejection) when the executor throws", async () => {
+    const { read_url } = await buildTools({
+      web_search: () => ({ query: "q", results: [] }),
+      read_url: () => {
+        throw new Error("browser service crashed");
+      },
+    });
+
+    const result = await read(read_url, { url: "https://example.com/page" });
+    expect(result.error).toBe(
+      "The web backend could not complete this read_url request.",
+    );
+  });
+});
+
+describe("isPresentableUrl", () => {
+  it("accepts http and https only", () => {
+    expect(isPresentableUrl("http://example.com/")).toBe(true);
+    expect(isPresentableUrl("https://example.com/")).toBe(true);
+  });
+
+  it("rejects other schemes, non-URLs, and non-strings", () => {
+    expect(isPresentableUrl("javascript:alert(1)")).toBe(false);
+    expect(isPresentableUrl("data:text/html,<script>")).toBe(false);
+    expect(isPresentableUrl("file:///etc/passwd")).toBe(false);
+    expect(isPresentableUrl("not a url")).toBe(false);
+    expect(isPresentableUrl(undefined)).toBe(false);
+    expect(isPresentableUrl(42)).toBe(false);
+  });
+});

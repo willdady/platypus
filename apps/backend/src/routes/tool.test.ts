@@ -39,6 +39,7 @@ describe("Tool Routes", () => {
         origin: "core",
         toolSetIds: ["math"],
         sandboxBackendIds: [],
+        webBackendIds: [],
       },
     ]);
   });

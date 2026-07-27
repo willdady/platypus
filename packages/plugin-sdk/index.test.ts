@@ -8,6 +8,7 @@ import {
   type PluginConfigContext,
   type SandboxBackendContribution,
   type ToolSetContribution,
+  type WebBackendContribution,
 } from "./index.ts";
 
 describe("@platypuschat/plugin-sdk", () => {
@@ -119,5 +120,62 @@ describe("@platypuschat/plugin-sdk", () => {
       },
     };
     backend.create({}, {}, shared);
+  });
+
+  it("accepts a web-backend contribution supplying executors only", async () => {
+    const contribution: WebBackendContribution = {
+      backend: "searx",
+      name: "SearXNG",
+      timeoutMs: 5_000,
+      createExecutors: (ctx, plugin) => {
+        expect(ctx.workspaceId).toBe("w");
+        expect(plugin?.credentials).toEqual({ apiKey: "k" });
+        return {
+          web_search: ({ query }) => ({
+            query,
+            results: [{ title: "Hit", url: "https://example.com/" }],
+            answer: "42",
+          }),
+          read_url: ({ url }) => ({
+            content: "page",
+            url,
+            contentType: "text/markdown",
+          }),
+        };
+      },
+    };
+
+    const plugin: PlatypusPlugin = {
+      name: "acme",
+      version: "0.1.0",
+      apiVersion: PLUGIN_API_VERSION,
+      contributes: { webBackends: [contribution] },
+    };
+    expect(plugin.contributes.webBackends).toHaveLength(1);
+
+    // The executors are plain functions, not AI SDK Tools: core owns the schemas,
+    // the caps, the slicing, the timeout, and the egress guard (ADR-0014).
+    const executors = await contribution.createExecutors(
+      { orgId: "o", workspaceId: "w", userId: "u" },
+      { config: {}, credentials: { apiKey: "k" } },
+    );
+    expect((await executors.web_search({ query: "q" })).results).toHaveLength(
+      1,
+    );
+    expect(typeof executors.read_url).toBe("function");
+  });
+
+  it("accepts a search-only web backend (read_url is optional)", () => {
+    const contribution: WebBackendContribution = {
+      backend: "searx",
+      name: "SearXNG",
+      // No read_url: a search-only Operator (no browser service) omits it and the
+      // model simply gets search that turn.
+      createExecutors: () => ({
+        web_search: () => ({ query: "q", results: [] }),
+      }),
+    };
+
+    expect(contribution.timeoutMs).toBeUndefined();
   });
 });

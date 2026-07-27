@@ -257,6 +257,117 @@ export interface SandboxBackendContribution<
 }
 
 /**
+ * Runtime scope handed to a Web-search backend's executor factory at Chat-turn
+ * time. Mirrors {@link SandboxContext} deliberately: `userId` is the Workspace
+ * owner, carried for audit/attribution, not isolation. No `userEmail` and no
+ * signed identity token — a backend that wants to attribute to its *own*
+ * upstream does so as its own implementation detail, using its own Plugin
+ * credentials (ADR-0014).
+ */
+export interface WebBackendContext {
+  orgId: string;
+  workspaceId: string;
+  userId: string;
+}
+
+/** One search hit. Core caps the count and truncates the strings (ADR-0014). */
+export interface WebSearchResult {
+  title: string;
+  url: string;
+  snippet?: string;
+}
+
+/**
+ * What a `web_search` executor resolves. Structured rather than rendered text so
+ * core can cap result counts and the frontend can lift `url` into the Sources
+ * row; `answer` is the escape hatch for upstreams with an answer box (Brave,
+ * Tavily) so that content is not simply discarded.
+ *
+ * `query` is part of the shape for symmetry with the model-facing return, but
+ * **core echoes the model's own query** in the Tool result — a backend cannot
+ * substitute text there.
+ */
+export interface WebSearchResults {
+  query: string;
+  results: WebSearchResult[];
+  answer?: string;
+}
+
+/**
+ * What a `read_url` executor resolves. `content` is the page's **full** content:
+ * backends never paginate or truncate, because core owns `max_length` /
+ * `start_index` slicing and the continuation hint (ADR-0014). `url` is the
+ * post-redirect final URL, so the model cites where it actually landed.
+ *
+ * Casing seam, deliberate: SDK types follow repo camelCase (`contentType`), while
+ * the model-facing Tool return is snake_case (`content_type`, `next_start_index`)
+ * to mirror `fetchUrl` byte-for-byte — the tool *names* `web_search` / `read_url`
+ * are already a documented snake_case exception.
+ */
+export interface ReadUrlResult {
+  content: string;
+  url: string;
+  contentType?: string;
+}
+
+/**
+ * The executors a Web-search backend supplies — plain functions, **not** `Tool`s.
+ * Core builds the `Tool` objects around these: it owns the input schemas, the
+ * model-facing descriptions, result caps, slicing, the per-call timeout, the
+ * error contract, and the egress guard on the model-supplied `read_url` URL. A
+ * backend that owned the `Tool` would put the model-supplied URL out of core's
+ * reach, leaving nowhere to enforce any of that (ADR-0014).
+ *
+ * `web_search` is mandatory — a Web-search backend that cannot search is
+ * meaningless. `read_url` is optional: a search-only Operator (SearXNG, no
+ * browser service) omits it and the model simply gets search that turn.
+ */
+export interface WebBackendExecutors {
+  web_search: (input: {
+    query: string;
+  }) => Promise<WebSearchResults> | WebSearchResults;
+  read_url?: (input: { url: string }) => Promise<ReadUrlResult> | ReadUrlResult;
+}
+
+/**
+ * A single Web-search-backend contribution — the fourth Extension point, filling
+ * core's request-gated web-search toggle slot (ADR-0014). `backend` is the
+ * discriminator stored in the `provider.webBackend` column (auto-namespaced for
+ * third parties, flat for core, per ADR-0013); `name` is the display label shown
+ * in the catalog and the Provider selector.
+ *
+ * There is deliberately **no** per-contribution `configSchema` /
+ * `credentialsSchema`: those exist on a Sandbox backend to validate real
+ * per-Workspace jsonb columns, and a web backend has no such row — the schema
+ * lives where the row lives. A backend's API key and endpoint ride the
+ * **plugin-level** schemas via `PLATYPUS_PLUGIN_CONFIG`, boot-validated and
+ * injected here as `plugin.credentials`.
+ */
+export interface WebBackendContribution {
+  backend: string;
+  name: string;
+  /**
+   * Per-call timeout for this backend's executors. Its author knows their
+   * upstream — a LAN metasearch should answer in ~2s where a headless-browser
+   * render legitimately needs 60 — which is why this is a contribution field and
+   * not one global env var. Core defaults to 30000 when absent and **refuses at
+   * boot** anything above its hard ceiling, so a backend cannot pin a turn open.
+   */
+  timeoutMs?: number;
+  /**
+   * Build this backend's executors for one Chat turn. `plugin` is the deploy-time
+   * {@link PluginConfigContext} shared across every one of the plugin's
+   * contributions (ADR-0013) — where a backend's endpoint and API key live. It is
+   * appended and optional so a single-argument factory keeps working unchanged
+   * (append-only compatibility); core always supplies it.
+   */
+  createExecutors(
+    ctx: WebBackendContext,
+    plugin?: PluginConfigContext,
+  ): WebBackendExecutors | Promise<WebBackendExecutors>;
+}
+
+/**
  * The `contributes` block: keyed by Extension-point type (core-owned, fixed).
  * Adding an Extension point (e.g. a messaging gateway) is a purely additive,
  * minor API bump — a new optional key here.
@@ -264,6 +375,7 @@ export interface SandboxBackendContribution<
 export interface PluginContributions {
   toolSets?: ToolSetContribution[];
   sandboxBackends?: SandboxBackendContribution[];
+  webBackends?: WebBackendContribution[];
 }
 
 /**

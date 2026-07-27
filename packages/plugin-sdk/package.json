@@ -1,6 +1,6 @@
 {
   "name": "@platypuschat/plugin-sdk",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "description": "Plugin SDK for Platypus — the manifest type and extension-point surface third-party plugins depend on.",
   "license": "MIT",
   "author": "Will Dady",

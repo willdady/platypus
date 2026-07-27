@@ -67,8 +67,9 @@ const main = async () => {
         origin: p.origin,
         toolSets: p.toolSetIds,
         sandboxBackends: p.sandboxBackendIds,
+        webBackends: p.webBackendIds,
       },
-      `Loaded plugin ${p.name}@${p.version} (${p.origin}): ${p.toolSetIds.length} tool set(s), ${p.sandboxBackendIds.length} sandbox backend(s)`,
+      `Loaded plugin ${p.name}@${p.version} (${p.origin}): ${p.toolSetIds.length} tool set(s), ${p.sandboxBackendIds.length} sandbox backend(s), ${p.webBackendIds.length} web backend(s)`,
     );
   }
   setLoadedPlugins(loadedPlugins);

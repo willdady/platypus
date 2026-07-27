@@ -6,8 +6,8 @@
 The plugin SDK for [Platypus](https://github.com/willdady/platypus) — the
 compile-time contract third-party plugins are built against.
 
-Platypus loads its extensions — **Tool sets** and **Sandbox backends** — as
-plugins. This package is the typed surface they depend on: the `PlatypusPlugin`
+Platypus loads its extensions — **Tool sets**, **Sandbox backends**, and
+**Web-search backends** — as plugins. This package is the typed surface they depend on: the `PlatypusPlugin`
 manifest type, the contribution types, and the `PLUGIN_API_VERSION` constant. A
 plugin is an npm package that exports a manifest built against these types; an
 Operator installs it by adding the package to the `PLATYPUS_PLUGINS` list at
@@ -82,9 +82,69 @@ plugin-named error.
 - **Sandbox backends** (`contributes.sandboxBackends`) — shell/filesystem
   execution backends for the Platypus Sandbox (e.g. the built-in Docker and SSH
   backends).
+- **Web-search backends** (`contributes.webBackends`) — see below.
 
 Plugins may also declare deploy-time, Operator-owned `configSchema` /
 `credentialsSchema`, supplied via `PLATYPUS_PLUGIN_CONFIG` and validated at boot.
+
+## Web-search backends
+
+A Web-search backend fills the chat **web-search toggle** for Providers without
+working native search (self-hosted OpenAI-compatible servers: vLLM, LiteLLM,
+SGLang…). An Operator selects one **per Provider**; its tools are injected only
+while the toggle is on, and gone when it is off.
+
+Your backend supplies **executors** — plain functions — not tools. Core builds the
+`web_search` / `read_url` tools around them and owns the input schemas, the
+model-facing descriptions, result caps and snippet truncation, `max_length` /
+`start_index` slicing with a continuation hint, the per-call timeout, the
+throw→error contract, and an egress guard on the model-supplied URL. That keeps
+one fixed model-facing signature across every backend, and it is the only place
+those limits can actually be enforced.
+
+```ts
+import type { PlatypusPlugin } from "@platypuschat/plugin-sdk";
+import { PLUGIN_API_VERSION } from "@platypuschat/plugin-sdk";
+
+export const plugin: PlatypusPlugin = {
+  name: "acme-search",
+  version: "0.1.0",
+  apiVersion: PLUGIN_API_VERSION,
+  // A backend's endpoint and API key are deploy-time plugin config, not
+  // per-Provider settings — declare them with the plugin-level schemas.
+  contributes: {
+    webBackends: [
+      {
+        backend: "searx", // registers as `acme-search.searx`
+        name: "SearXNG",
+        timeoutMs: 5_000, // optional; core defaults to 30_000 and caps at 120_000
+        createExecutors: (ctx, plugin) => ({
+          // Mandatory. Return results; never truncate or paginate — core does.
+          web_search: async ({ query }) => ({
+            query,
+            results: [{ title: "…", url: "https://…", snippet: "…" }],
+            // Optional: an upstream answer box (Brave, Tavily) survives here.
+            answer: undefined,
+          }),
+          // Optional. Omit it and the model just gets search that turn.
+          read_url: async ({ url }) => ({
+            content: "the page's FULL text — core slices it",
+            url, // the post-redirect final URL, so the model cites where it landed
+            contentType: "text/markdown",
+          }),
+        }),
+      },
+    ],
+  },
+};
+```
+
+Note the casing: SDK types are camelCase (`contentType`), while the tool names and
+the model-facing return fields are snake_case (`web_search`, `read_url`,
+`content_type`, `next_start_index`) to match provider-native search and Platypus's
+own `fetchUrl`. There are deliberately no per-contribution config schemas — a web
+backend has no per-Provider row to validate, so its credentials ride the
+plugin-level `credentialsSchema` and arrive as `plugin.credentials`.
 
 ## Documentation
 

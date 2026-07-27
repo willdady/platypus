@@ -12,6 +12,12 @@ import {
   registerSandboxBackend,
   type SandboxBackendRegistration,
 } from "../sandbox/index.ts";
+import {
+  composeWebBackend,
+  MAX_WEB_TIMEOUT_MS,
+  registerWebBackend,
+  type WebBackendRegistration,
+} from "../web-backends/index.ts";
 
 // Summary of one loaded plugin, for the boot log line and observability.
 export interface LoadedPlugin {
@@ -20,6 +26,7 @@ export interface LoadedPlugin {
   origin: "core" | "third-party";
   toolSetIds: string[];
   sandboxBackendIds: string[];
+  webBackendIds: string[];
   /**
    * The plugin's boot-resolved, Operator-owned deploy-time **config** (never
    * credentials), or `undefined` when the manifest declares no `configSchema`.
@@ -65,6 +72,13 @@ export interface LoadPluginsOptions {
   register?: (id: string, def: Omit<ToolSetContribution, "id">) => void;
   /** Registers one Sandbox-backend contribution. Defaults to core `registerSandboxBackend`. */
   registerSandbox?: (contribution: SandboxBackendContribution) => void;
+  /**
+   * Registers one Web-search backend. Takes the *composed* registration — core
+   * has already wrapped the contribution's executors in its own Tools — rather
+   * than the raw contribution, since a backend's model-facing surface is
+   * core-owned (ADR-0014). Defaults to core `registerWebBackend`.
+   */
+  registerWeb?: (registration: WebBackendRegistration) => void;
   /**
    * Deploy-time plugin config/credentials keyed by plugin name. Defaults to
    * parsing `PLATYPUS_PLUGIN_CONFIG` (see {@link parsePluginConfig}).
@@ -223,6 +237,14 @@ const validateManifest = (name: string, mod: PluginModule): PlatypusPlugin => {
       `Plugin "${name}": "contributes.sandboxBackends" must be an array.`,
     );
   }
+  if (
+    contributes.webBackends !== undefined &&
+    !Array.isArray(contributes.webBackends)
+  ) {
+    throw new Error(
+      `Plugin "${name}": "contributes.webBackends" must be an array.`,
+    );
+  }
   return p as PlatypusPlugin;
 };
 
@@ -291,14 +313,17 @@ export async function loadPlugins(
     ((name: string) => import(name) as Promise<PluginModule>);
   const register = opts.register ?? registerToolSet;
   const registerSandbox = opts.registerSandbox ?? registerSandboxBackend;
+  const registerWeb = opts.registerWeb ?? registerWebBackend;
   const pluginConfig =
     opts.pluginConfig ?? parsePluginConfig(process.env.PLATYPUS_PLUGIN_CONFIG);
 
   // Tracks contribution id -> owning plugin name for owner-attributed collisions.
-  // Tool sets and Sandbox backends live in separate registries, so each keeps
-  // its own owner map (a Tool set and a backend may share a bare id).
+  // Tool sets, Sandbox backends, and Web-search backends live in separate
+  // registries, so each keeps its own owner map (a Tool set and a backend may
+  // share a bare id).
   const owners = new Map<string, string>();
   const sandboxOwners = new Map<string, string>();
+  const webOwners = new Map<string, string>();
   const loaded: LoadedPlugin[] = [];
 
   for (const name of names) {
@@ -451,12 +476,80 @@ export async function loadPlugins(
       sandboxBackendIds.push(effectiveBackend);
     }
 
+    const webBackendIds: string[] = [];
+
+    for (const contribution of manifest.contributes.webBackends ?? []) {
+      const effectiveBackend = contributionId(contribution.backend);
+
+      const existingOwner = webOwners.get(effectiveBackend);
+      if (existingOwner) {
+        throw new Error(
+          `Web backend id "${effectiveBackend}" is contributed by both "${existingOwner}" and "${manifest.name}".`,
+        );
+      }
+
+      // A web backend supplies executors only — core builds the Tools — so a
+      // missing factory means the contribution can never serve a turn. The TS
+      // type says so; a third-party JS plugin can still ship it, and boot is
+      // where that is caught (ADR-0014's fail-loud boot posture).
+      if (typeof contribution.createExecutors !== "function") {
+        throw new Error(
+          `Plugin "${manifest.name}": web backend "${effectiveBackend}" must provide a "createExecutors" function.`,
+        );
+      }
+
+      // `timeoutMs` is static on the contribution, so an over-ceiling value is
+      // knowable now — refused with attribution rather than silently clamped at
+      // turn time, where an Operator would never see it.
+      if (contribution.timeoutMs !== undefined) {
+        const { timeoutMs } = contribution;
+        if (
+          typeof timeoutMs !== "number" ||
+          !Number.isFinite(timeoutMs) ||
+          timeoutMs <= 0 ||
+          timeoutMs > MAX_WEB_TIMEOUT_MS
+        ) {
+          throw new Error(
+            `Plugin "${manifest.name}": web backend "${effectiveBackend}" declares timeoutMs ${String(
+              timeoutMs,
+            )}, which must be a positive number no greater than ${MAX_WEB_TIMEOUT_MS}.`,
+          );
+        }
+      }
+
+      // Core wraps the executors here, binding the same shared plugin config that
+      // every other contribution factory receives. What lands in the registry is
+      // the finished, guarded builder — per-turn callers never see the executors.
+      const registration = composeWebBackend({
+        contribution: { ...contribution, backend: effectiveBackend },
+        plugin: pluginCtx,
+        pluginName: manifest.name,
+      });
+
+      try {
+        registerWeb(registration);
+      } catch (cause) {
+        // A collision with a backend registered outside the loader surfaces
+        // here — re-throw with plugin attribution.
+        throw new Error(
+          `Plugin "${manifest.name}": failed to register web backend "${effectiveBackend}" (${
+            cause instanceof Error ? cause.message : String(cause)
+          }).`,
+          { cause },
+        );
+      }
+
+      webOwners.set(effectiveBackend, manifest.name);
+      webBackendIds.push(effectiveBackend);
+    }
+
     loaded.push({
       name: manifest.name,
       version: manifest.version,
       origin,
       toolSetIds,
       sandboxBackendIds,
+      webBackendIds,
       // Carry the resolved deploy-time config (config only, never credentials)
       // so request handlers can read it via the registry (ADR-0013).
       config: pluginCtx.config,

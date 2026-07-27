@@ -66,6 +66,7 @@ describe("Sandbox Routes", () => {
           origin: "core",
           toolSetIds: [],
           sandboxBackendIds: [ANNOTATED_BACKEND],
+          webBackendIds: [],
         },
       ]);
 
