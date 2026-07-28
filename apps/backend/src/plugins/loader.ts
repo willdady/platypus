@@ -479,6 +479,16 @@ export async function loadPlugins(
     const webBackendIds: string[] = [];
 
     for (const contribution of manifest.contributes.webBackends ?? []) {
+      // A third-party JS plugin can put anything in this array — including
+      // `null` — and every other malformed case in this loop gets a
+      // plugin-named boot error, so this one does too rather than throwing an
+      // unattributed `Cannot read properties of null`.
+      if (typeof contribution !== "object" || contribution === null) {
+        throw new Error(
+          `Plugin "${manifest.name}": every web backend contribution must be an object.`,
+        );
+      }
+
       // Identity is checked before it is namespaced: `contributionId(undefined)`
       // would otherwise mint a plausible-looking `"acme.undefined"` and register
       // it, so a JS plugin's missing field would surface as a mystery id in the

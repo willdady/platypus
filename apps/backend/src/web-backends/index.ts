@@ -32,6 +32,13 @@ export const MAX_SEARCH_RESULT_SCAN = MAX_SEARCH_RESULTS * 10;
 // capped like every other string a backend supplies. 10 results × 500 chars plus
 // a 4k answer is ~9k characters worst case — comparable to native search output.
 export const MAX_ANSWER_CHARS = 4_000;
+// A result/read URL is capped like every other backend-supplied string. Unlike
+// title/snippet/content_type, an over-length URL is *dropped* rather than
+// truncated: a cut URL is a broken link, worse than no link at all. 2048 is
+// generous relative to common browser/server URL-length limits.
+export const MAX_URL_CHARS = 2_048;
+// `content_type` is metadata, not a link, so truncation (not dropping) is fine.
+export const MAX_CONTENT_TYPE_CHARS = 200;
 // Mirrors sandbox MAX_READ_BYTES. Accepted limit, stated rather than implied: the
 // executor hands core an already-materialised string, so this bounds *context and
 // CPU*, not backend memory — a backend that buffers a 500 MB response does so
@@ -53,8 +60,15 @@ const READ_URL_DESCRIPTION =
   "Read the contents of a web page as text. Supports pagination for large pages via start_index.";
 
 // The registry, mirroring `sandbox/index.ts`: a flat map keyed by the
-// discriminator stored in `provider.webBackend`.
-const WEB_BACKEND_REGISTRY: Record<string, WebBackendRegistration> = {};
+// discriminator stored in `provider.webBackend`. `Object.create(null)` — not
+// `{}` — so a discriminator that collides with an `Object.prototype` member
+// (`"toString"`, `"constructor"`…) cannot false-hit `in` or shadow a real
+// registration; PR2 feeds this from a nullable DB column, so an unguarded
+// object would let a stale value throw mid-turn instead of degrading cleanly.
+const WEB_BACKEND_REGISTRY = Object.create(null) as Record<
+  string,
+  WebBackendRegistration
+>;
 
 export const registerWebBackend = (
   registration: WebBackendRegistration,
@@ -74,7 +88,14 @@ export const getWebBackend = (
 export const getWebBackends = (): ReadonlyArray<WebBackendRegistration> =>
   Object.values(WEB_BACKEND_REGISTRY);
 
-/** Test-only reset. Boot registers once; nothing in production unregisters. */
+/**
+ * Test-only reset. Boot registers once; nothing in production unregisters.
+ * `sandbox/index.test.ts` has no equivalent — it sidesteps the same
+ * module-level-state problem by giving every test a unique backend id instead.
+ * This module resets explicitly so most tests can reuse the same discriminator
+ * (`"searx"`), which reads closer to a real registration than a fresh id per
+ * `it()` would.
+ */
 export const clearWebBackends = (): void => {
   for (const key of Object.keys(WEB_BACKEND_REGISTRY)) {
     delete WEB_BACKEND_REGISTRY[key];
@@ -276,7 +297,13 @@ export const composeWebBackend = (
         for (const candidate of scanned) {
           if (results.length >= MAX_SEARCH_RESULTS) break;
           const entry = asRecord(candidate);
-          if (!isPresentableUrl(entry.url)) {
+          // A URL that fails the scheme check, or one so long it would blow the
+          // context/DOM budget the other caps exist to hold, is unusable either
+          // way — dropped, not truncated, since a cut URL is a broken link.
+          if (
+            !isPresentableUrl(entry.url) ||
+            entry.url.length > MAX_URL_CHARS
+          ) {
             dropped += 1;
             continue;
           }
@@ -295,10 +322,18 @@ export const composeWebBackend = (
         if (dropped > 0) {
           logger.warn(
             { backend, plugin: pluginName, dropped },
-            "Dropped web_search results whose URL was not http(s)",
+            "Dropped web_search results whose URL was not http(s) or exceeded MAX_URL_CHARS",
           );
         }
-        if (entries.length > scanned.length) {
+        // Only the *scan* bound warrants this warning: if the result cap already
+        // filled every slot (the `break` above), the unscanned tail was never
+        // needed and nothing was lost to `MAX_SEARCH_RESULT_SCAN`. Warn only when
+        // a slot was still open and there was more the scan bound kept us from
+        // looking at.
+        if (
+          results.length < MAX_SEARCH_RESULTS &&
+          entries.length > scanned.length
+        ) {
           logger.warn(
             {
               backend,
@@ -364,6 +399,15 @@ export const composeWebBackend = (
         // Cap first, then slice within the capped string: the cap bounds what core
         // ever holds, the slice serves this page of it.
         const payload = asRecord(raw);
+        if (typeof payload.content !== "string") {
+          // Every other narrowing path here warns; this one didn't, so a
+          // malformed payload previously read as a silent, successful empty
+          // page — indistinguishable from a page that is genuinely empty.
+          logger.warn(
+            { backend, plugin: pluginName, url },
+            "Web backend read_url returned no content",
+          );
+        }
         const full = typeof payload.content === "string" ? payload.content : "";
         const capped = full.length > MAX_READ_URL_CONTENT_CHARS;
         if (capped) {
@@ -392,11 +436,21 @@ export const composeWebBackend = (
           body += `\n\n[Content truncated: the page exceeded the ${MAX_READ_URL_CONTENT_CHARS}-character limit and the remainder cannot be read.]`;
         }
 
+        // Same drop-not-truncate treatment as a search result URL (D5): an
+        // over-length resolved URL falls back to the model-supplied one rather
+        // than being cut into a broken link.
+        const resolvedUrl =
+          isPresentableUrl(payload.url) && payload.url.length <= MAX_URL_CHARS
+            ? payload.url
+            : url;
+
         const result: ReadUrlToolResult = {
           content: body,
-          url: isPresentableUrl(payload.url) ? payload.url : url,
+          url: resolvedUrl,
           content_type:
-            typeof payload.contentType === "string" ? payload.contentType : "",
+            typeof payload.contentType === "string"
+              ? truncate(payload.contentType, MAX_CONTENT_TYPE_CHARS)
+              : "",
           // True when *anything* was cut — the core cap or this slice.
           truncated: hasMore || capped,
         };
@@ -413,7 +467,27 @@ export const composeWebBackend = (
     backend,
     name: contribution.name,
     buildTurnTools: async (ctx: WebBackendContext) => {
-      const executors = await contribution.createExecutors(ctx, plugin);
+      // A factory that throws or hangs must degrade exactly like the
+      // missing-`web_search` case below, not reject/pin the turn: ADR-0014's
+      // "runtime resolution graceful" and the timeout's "a backend cannot pin a
+      // turn open" both apply to the factory call, not just the executors it
+      // returns.
+      let executors: WebBackendExecutors | undefined;
+      try {
+        executors = await withTimeout(
+          () => contribution.createExecutors(ctx, plugin),
+          timeoutMs,
+        );
+      } catch (cause) {
+        const timedOut = cause instanceof WebBackendTimeoutError;
+        logger.warn(
+          { plugin: pluginName, backend, cause },
+          timedOut
+            ? "Web backend's createExecutors timed out; serving no tools this turn"
+            : "Web backend's createExecutors threw; serving no tools this turn",
+        );
+        return {};
+      }
 
       // The TS type makes `web_search` required, but a third-party JS plugin can
       // return anything. Boot stays fail-loud (the loader rejects a missing

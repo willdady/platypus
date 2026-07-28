@@ -35,6 +35,9 @@ export const readUrlInputSchema = z.object({
     .number()
     .int()
     .min(1)
+    // Mirrors `MAX_READ_URL_CONTENT_CHARS` in `index.ts`, which can't be
+    // imported here without a circular dependency (`index.ts` imports this
+    // module). Keep the two numbers in sync by hand.
     .max(1_000_000)
     .default(5_000)
     .describe("Maximum number of characters to return"),

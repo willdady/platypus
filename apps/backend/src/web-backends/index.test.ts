@@ -10,10 +10,12 @@ import {
   getWebBackends,
   isPresentableUrl,
   MAX_ANSWER_CHARS,
+  MAX_CONTENT_TYPE_CHARS,
   MAX_READ_URL_CONTENT_CHARS,
   MAX_SEARCH_RESULT_SCAN,
   MAX_SEARCH_RESULTS,
   MAX_SNIPPET_CHARS,
+  MAX_URL_CHARS,
   readUrlInputSchema,
   MAX_TITLE_CHARS,
   registerWebBackend,
@@ -109,6 +111,15 @@ describe("web-backend registry", () => {
     expect(getWebBackend("nope")).toBeUndefined();
   });
 
+  it("does not resolve Object.prototype members as registered backends", () => {
+    // A plain-object registry would return `Object.prototype.toString` here —
+    // truthy, but with no `buildTurnTools`. PR2 feeds this lookup from a
+    // nullable DB column, so this must stay undefined rather than throw later.
+    expect(getWebBackend("toString")).toBeUndefined();
+    expect(getWebBackend("constructor")).toBeUndefined();
+    expect(getWebBackend("__proto__")).toBeUndefined();
+  });
+
   it("throws on a duplicate registration", () => {
     registerWebBackend(registration("searx"));
     expect(() => registerWebBackend(registration("searx"))).toThrow(
@@ -159,6 +170,48 @@ describe("composeWebBackend — tool construction", () => {
     expect(mockLogger.warn).toHaveBeenCalledWith(
       { plugin: "@acme/searx", backend: "searx" },
       expect.stringContaining("no web_search executor"),
+    );
+  });
+
+  it("serves no tools (and warns, not rejects) when createExecutors throws", async () => {
+    const tools = await composeWebBackend({
+      contribution: contribution(
+        {},
+        {
+          createExecutors: () => {
+            throw new Error("could not construct client");
+          },
+        },
+      ),
+      pluginName: "@acme/searx",
+    }).buildTurnTools(CTX);
+
+    expect(tools).toEqual({});
+    expect(mockLogger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({ plugin: "@acme/searx", backend: "searx" }),
+      expect.stringContaining("createExecutors threw"),
+    );
+  });
+
+  it("serves no tools (and warns, not hangs) when createExecutors outruns timeoutMs", async () => {
+    const tools = await composeWebBackend({
+      contribution: contribution(
+        {},
+        {
+          createExecutors: () =>
+            new Promise(() => {
+              /* never settles */
+            }),
+          timeoutMs: 20,
+        },
+      ),
+      pluginName: "@acme/searx",
+    }).buildTurnTools(CTX);
+
+    expect(tools).toEqual({});
+    expect(mockLogger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({ plugin: "@acme/searx", backend: "searx" }),
+      expect.stringContaining("createExecutors timed out"),
     );
   });
 });
@@ -260,6 +313,50 @@ describe("web_search — core-owned caps", () => {
     expect(mockLogger.warn).toHaveBeenCalledWith(
       { backend: "searx", plugin: "@acme/searx", dropped: 3 },
       expect.stringContaining("not http(s)"),
+    );
+  });
+
+  it("drops a result URL that exceeds MAX_URL_CHARS", async () => {
+    const overlong = `https://example.com/${"x".repeat(MAX_URL_CHARS)}`;
+    const { web_search } = await buildTools({
+      web_search: () => ({
+        query: "q",
+        results: [
+          { title: "Too long", url: overlong },
+          { title: "Good", url: "https://example.com/ok" },
+        ],
+      }),
+    });
+
+    const result = await search(web_search, "q");
+    expect(result.results).toEqual([
+      { title: "Good", url: "https://example.com/ok" },
+    ]);
+    expect(mockLogger.warn).toHaveBeenCalledWith(
+      { backend: "searx", plugin: "@acme/searx", dropped: 1 },
+      expect.stringContaining("not http(s)"),
+    );
+  });
+
+  it("does not warn about the scan bound when the result cap is what stopped the loop", async () => {
+    // 500 usable results, well past MAX_SEARCH_RESULT_SCAN — but the first 10
+    // are all usable, so the result cap (not the scan cap) ends the loop and
+    // nothing was actually lost to MAX_SEARCH_RESULT_SCAN.
+    const { web_search } = await buildTools({
+      web_search: () => ({
+        query: "q",
+        results: Array.from({ length: 500 }, (_v, i) => ({
+          title: `Result ${i}`,
+          url: `https://example.com/${i}`,
+        })),
+      }),
+    });
+
+    const result = await search(web_search, "q");
+    expect(result.results).toHaveLength(MAX_SEARCH_RESULTS);
+    expect(mockLogger.warn).not.toHaveBeenCalledWith(
+      expect.anything(),
+      expect.stringContaining("more results than core will scan"),
     );
   });
 
@@ -500,6 +597,49 @@ describe("read_url — egress guard, capping, slicing", () => {
 
     const result = await read(read_url, { url: "https://example.com/page" });
     expect(result.url).toBe("https://example.com/page");
+  });
+
+  it("falls back to the requested URL when the resolved URL exceeds MAX_URL_CHARS", async () => {
+    const overlong = `https://example.com/${"x".repeat(MAX_URL_CHARS)}`;
+    const { read_url } = await buildTools({
+      web_search: () => ({ query: "q", results: [] }),
+      read_url: () => ({ content: "hi", url: overlong }),
+    });
+
+    const result = await read(read_url, { url: "https://example.com/page" });
+    expect(result.url).toBe("https://example.com/page");
+  });
+
+  it("truncates an oversized content_type", async () => {
+    const { read_url } = await buildTools({
+      web_search: () => ({ query: "q", results: [] }),
+      read_url: () => ({
+        content: "hi",
+        url: "https://example.com/page",
+        contentType: "x".repeat(MAX_CONTENT_TYPE_CHARS + 100),
+      }),
+    });
+
+    const result = await read(read_url, { url: "https://example.com/page" });
+    expect(result.content_type).toBe(`${"x".repeat(MAX_CONTENT_TYPE_CHARS)}…`);
+  });
+
+  it("warns when the backend's content is missing or the wrong type", async () => {
+    const { read_url } = await buildTools({
+      web_search: () => ({ query: "q", results: [] }),
+      read_url: () => ({ url: "https://example.com/page" }) as never,
+    });
+
+    const result = await read(read_url, { url: "https://example.com/page" });
+    expect(result.content).toBe("");
+    expect(mockLogger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        backend: "searx",
+        plugin: "@acme/searx",
+        url: "https://example.com/page",
+      }),
+      expect.stringContaining("returned no content"),
+    );
   });
 
   it("honours timeoutMs", async () => {

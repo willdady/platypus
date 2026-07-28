@@ -713,6 +713,33 @@ describe("loadPlugins — web-search backends", () => {
     ).rejects.toThrow(/@bad\/plugin.*webBackends.*array/s);
   });
 
+  it("aborts (fail-loud, plugin-named) on a non-object web backend entry", async () => {
+    // `webBackends` being an array is checked; a third-party JS plugin can
+    // still put `null` inside it, which would otherwise throw an unattributed
+    // "Cannot read properties of null" reading `.backend` next.
+    const { register } = makeRegister();
+    await expect(
+      loadPlugins({
+        pluginNames: ["@platypus/searx"],
+        builtinPlugins: {
+          "@platypus/searx": () =>
+            Promise.resolve({
+              plugin: {
+                name: "@platypus/searx",
+                version: "0.1.0",
+                apiVersion: 1,
+                contributes: { webBackends: [null] },
+              },
+            }),
+        },
+        register,
+        registerWeb: () => {},
+      }),
+    ).rejects.toThrow(
+      /@platypus\/searx.*web backend contribution must be an object/s,
+    );
+  });
+
   it("aborts (fail-loud) when a contribution has no createExecutors function", async () => {
     const { register } = makeRegister();
     // The TS type requires it; a third-party JS plugin can still omit it, and
