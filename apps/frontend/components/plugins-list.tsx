@@ -1,7 +1,7 @@
 "use client";
 
 import useSWR from "swr";
-import { Blocks, Container, Wrench } from "lucide-react";
+import { Blocks, Container, Globe, Wrench } from "lucide-react";
 import { useAuth } from "@/components/auth-provider";
 import { useBackendUrl } from "@/app/client-context";
 import { cn, fetcher, joinUrl } from "@/lib/utils";
@@ -23,8 +23,8 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 
 // Mirrors the read-only `GET /organizations/:orgId/plugins` payload (ADR-0013).
-// Contributions are the ids the plugin registered — tool sets and sandbox
-// backends tie back to their originating plugin here.
+// Contributions are the ids the plugin registered — tool sets, sandbox
+// backends, and web backends all tie back to their originating plugin here.
 interface InstalledPlugin {
   name: string;
   version: string;
@@ -32,6 +32,7 @@ interface InstalledPlugin {
   contributions: {
     toolSets: string[];
     sandboxBackends: string[];
+    webBackends: string[];
   };
 }
 
@@ -109,6 +110,7 @@ const PluginsList = ({
       {plugins.map((plugin) => {
         const toolSets = plugin.contributions.toolSets ?? [];
         const sandboxBackends = plugin.contributions.sandboxBackends ?? [];
+        const webBackends = plugin.contributions.webBackends ?? [];
 
         return (
           <li key={plugin.name} className="mb-2">
@@ -126,7 +128,9 @@ const PluginsList = ({
                     {plugin.origin === "core" ? "Core" : "Third-party"}
                   </Badge>
                 </ItemTitle>
-                {toolSets.length === 0 && sandboxBackends.length === 0 ? (
+                {toolSets.length === 0 &&
+                sandboxBackends.length === 0 &&
+                webBackends.length === 0 ? (
                   <ItemDescription>No contributions.</ItemDescription>
                 ) : (
                   <div className="flex flex-col gap-2 mt-1">
@@ -152,6 +156,22 @@ const PluginsList = ({
                           <Container className="size-3" /> Sandbox backends
                         </span>
                         {sandboxBackends.map((id) => (
+                          <Badge
+                            key={id}
+                            variant="outline"
+                            className="font-mono font-normal"
+                          >
+                            {id}
+                          </Badge>
+                        ))}
+                      </div>
+                    )}
+                    {webBackends.length > 0 && (
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <span className="inline-flex items-center gap-1 text-xs text-muted-foreground mr-1">
+                          <Globe className="size-3" /> Web backends
+                        </span>
+                        {webBackends.map((id) => (
                           <Badge
                             key={id}
                             variant="outline"
