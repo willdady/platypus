@@ -97,8 +97,10 @@ while the toggle is on, and gone when it is off.
 Your backend supplies **executors** — plain functions — not tools. Core builds the
 `web_search` / `read_url` tools around them and owns the input schemas, the
 model-facing descriptions, result caps and snippet truncation, `max_length` /
-`start_index` slicing with a continuation hint, the per-call timeout, the
-throw→error contract, and an egress guard on the model-supplied URL. That keeps
+`start_index` slicing with a continuation hint, the timeout on both your factory
+and every executor call, the throw→error contract, and an egress guard on the
+model-supplied URL. Core also _drops_ any result whose `url` is not `http(s)` or
+is longer than 2048 characters, since neither can be presented as a link. That keeps
 one fixed model-facing signature across every backend, and it is the only place
 those limits can actually be enforced.
 
@@ -117,7 +119,11 @@ export const plugin: PlatypusPlugin = {
       {
         backend: "searx", // registers as `acme-search.searx`
         name: "SearXNG",
-        timeoutMs: 5_000, // optional; core defaults to 30_000 and caps at 120_000
+        // Optional; core defaults to 30_000 and caps at 120_000. It bounds
+        // `createExecutors` as well as each executor call, so budget for any lazy
+        // work the factory does — a factory that outruns it, or throws, serves no
+        // web tools that turn (warn-logged, never fatal).
+        timeoutMs: 5_000,
         createExecutors: (ctx, plugin) => ({
           // Mandatory. Return results; never truncate or paginate — core does.
           web_search: async ({ query }) => ({

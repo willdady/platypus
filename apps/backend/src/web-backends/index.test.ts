@@ -293,7 +293,7 @@ describe("web_search — core-owned caps", () => {
     expect(await search(web_search, "q")).not.toHaveProperty("answer");
   });
 
-  it("drops results whose URL is not http(s) and warns once", async () => {
+  it("drops results whose URL is not http(s) and logs the count once", async () => {
     const { web_search } = await buildTools({
       web_search: () => ({
         query: "q",
@@ -310,19 +310,27 @@ describe("web_search — core-owned caps", () => {
     expect(result.results).toEqual([
       { title: "Good", url: "https://example.com/ok" },
     ]);
-    expect(mockLogger.warn).toHaveBeenCalledWith(
-      { backend: "searx", plugin: "@acme/searx", dropped: 3 },
-      expect.stringContaining("not http(s)"),
+    // `debug`, not `warn`: expected steady state for an upstream that mixes in
+    // unusable results, and the line is per-call and model-triggerable.
+    expect(mockLogger.debug).toHaveBeenCalledWith(
+      {
+        backend: "searx",
+        plugin: "@acme/searx",
+        droppedScheme: 3,
+        droppedLength: 0,
+      },
+      expect.stringContaining("unusable URL"),
     );
   });
 
-  it("drops a result URL that exceeds MAX_URL_CHARS", async () => {
+  it("drops a result URL that exceeds MAX_URL_CHARS, counted apart from a bad scheme", async () => {
     const overlong = `https://example.com/${"x".repeat(MAX_URL_CHARS)}`;
     const { web_search } = await buildTools({
       web_search: () => ({
         query: "q",
         results: [
           { title: "Too long", url: overlong },
+          { title: "XSS", url: "javascript:alert(1)" },
           { title: "Good", url: "https://example.com/ok" },
         ],
       }),
@@ -332,9 +340,16 @@ describe("web_search — core-owned caps", () => {
     expect(result.results).toEqual([
       { title: "Good", url: "https://example.com/ok" },
     ]);
-    expect(mockLogger.warn).toHaveBeenCalledWith(
-      { backend: "searx", plugin: "@acme/searx", dropped: 1 },
-      expect.stringContaining("not http(s)"),
+    // The two reasons are separately attributed: an unusable scheme is a backend
+    // bug, an over-length URL is routine noise from some upstreams.
+    expect(mockLogger.debug).toHaveBeenCalledWith(
+      {
+        backend: "searx",
+        plugin: "@acme/searx",
+        droppedScheme: 1,
+        droppedLength: 1,
+      },
+      expect.stringContaining("unusable URL"),
     );
   });
 
@@ -375,9 +390,9 @@ describe("web_search — core-owned caps", () => {
 
     const result = await search(web_search, "q");
     expect(result.results).toEqual([]);
-    expect(mockLogger.warn).toHaveBeenCalledWith(
-      expect.objectContaining({ dropped: MAX_SEARCH_RESULT_SCAN }),
-      expect.stringContaining("not http(s)"),
+    expect(mockLogger.debug).toHaveBeenCalledWith(
+      expect.objectContaining({ droppedScheme: MAX_SEARCH_RESULT_SCAN }),
+      expect.stringContaining("unusable URL"),
     );
     expect(mockLogger.warn).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -610,7 +625,7 @@ describe("read_url — egress guard, capping, slicing", () => {
     expect(result.url).toBe("https://example.com/page");
   });
 
-  it("truncates an oversized content_type", async () => {
+  it("shortens an oversized content_type without a truncation marker", async () => {
     const { read_url } = await buildTools({
       web_search: () => ({ query: "q", results: [] }),
       read_url: () => ({
@@ -621,7 +636,10 @@ describe("read_url — egress guard, capping, slicing", () => {
     });
 
     const result = await read(read_url, { url: "https://example.com/page" });
-    expect(result.content_type).toBe(`${"x".repeat(MAX_CONTENT_TYPE_CHARS)}…`);
+    // Sliced bare: `truncate`'s `…` marker would leave an invalid MIME type in a
+    // machine-readable field, unlike a snippet a model reads.
+    expect(result.content_type).toBe("x".repeat(MAX_CONTENT_TYPE_CHARS));
+    expect(result.content_type).not.toContain("…");
   });
 
   it("warns when the backend's content is missing or the wrong type", async () => {
@@ -701,6 +719,34 @@ describe("readUrlInputSchema — the fetchUrl-mirroring defaults", () => {
       readUrlInputSchema.safeParse({
         url: "https://example.com/",
         start_index: -1,
+      }).success,
+    ).toBe(false);
+  });
+
+  it("caps url at MAX_URL_CHARS, so the read_url fallback cannot exceed the cap", () => {
+    // `result.url` falls back to this input when the backend's resolved URL is
+    // over-length, so capping it here is what makes MAX_URL_CHARS an invariant on
+    // that field rather than a bound on one of its two sources.
+    const overlong = `https://example.com/${"x".repeat(MAX_URL_CHARS)}`;
+    expect(readUrlInputSchema.safeParse({ url: overlong }).success).toBe(false);
+    expect(
+      readUrlInputSchema.safeParse({ url: "https://example.com/ok" }).success,
+    ).toBe(true);
+  });
+
+  it("caps max_length at MAX_READ_URL_CONTENT_CHARS", () => {
+    // The schema references the constant directly now, so this asserts the bound
+    // rather than a hand-copied number that could drift from it.
+    expect(
+      readUrlInputSchema.safeParse({
+        url: "https://example.com/",
+        max_length: MAX_READ_URL_CONTENT_CHARS,
+      }).success,
+    ).toBe(true);
+    expect(
+      readUrlInputSchema.safeParse({
+        url: "https://example.com/",
+        max_length: MAX_READ_URL_CONTENT_CHARS + 1,
       }).success,
     ).toBe(false);
   });

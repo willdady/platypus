@@ -347,11 +347,18 @@ export interface WebBackendContribution {
   backend: string;
   name: string;
   /**
-   * Per-call timeout for this backend's executors. Its author knows their
-   * upstream — a LAN metasearch should answer in ~2s where a headless-browser
-   * render legitimately needs 60 — which is why this is a contribution field and
-   * not one global env var. Core defaults to 30000 when absent and **refuses at
-   * boot** anything above its hard ceiling, so a backend cannot pin a turn open.
+   * Timeout applied to {@link createExecutors} **and** to each executor call it
+   * returns. Its author knows their upstream — a LAN metasearch should answer in
+   * ~2s where a headless-browser render legitimately needs 60 — which is why this
+   * is a contribution field and not one global env var. Core defaults to 30000
+   * when absent and **refuses at boot** anything above its hard ceiling, so a
+   * backend cannot pin a turn open.
+   *
+   * Budget for the factory, not just the calls: if `createExecutors` does lazy
+   * work — a token fetch, a health probe, a browser-pool warm-up — a value tuned
+   * only to the search call will time the *factory* out, and the turn then gets no
+   * web tools at all (warn-logged; see below). The windows are additive, so the
+   * worst case a turn spends inside a backend is `(1 + calls) × timeoutMs`.
    */
   timeoutMs?: number;
   /**
@@ -360,6 +367,12 @@ export interface WebBackendContribution {
    * contributions (ADR-0013) — where a backend's endpoint and API key live. It is
    * appended and optional so a single-argument factory keeps working unchanged
    * (append-only compatibility); core always supplies it.
+   *
+   * Boot is fail-loud, runtime is graceful: a contribution that omits this
+   * function is rejected at load by plugin name, but a factory that *throws* or
+   * outruns {@link timeoutMs} at turn time only costs that turn its web tools —
+   * warn-logged, never surfaced to the model, never fatal to the turn. A backend
+   * whose tools silently stop appearing is that warn line, not an error.
    */
   createExecutors(
     ctx: WebBackendContext,

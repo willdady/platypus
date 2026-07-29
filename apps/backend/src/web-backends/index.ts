@@ -3,6 +3,8 @@ import type { PluginConfigContext } from "@platypuschat/plugin-sdk";
 import { logger } from "../logger.ts";
 import { checkEgress, EGRESS_BLOCKED_MESSAGE } from "../utils/egress-guard.ts";
 import {
+  MAX_READ_URL_CONTENT_CHARS,
+  MAX_URL_CHARS,
   readUrlInputSchema,
   webSearchInputSchema,
   type ReadUrlToolResult,
@@ -32,18 +34,14 @@ export const MAX_SEARCH_RESULT_SCAN = MAX_SEARCH_RESULTS * 10;
 // capped like every other string a backend supplies. 10 results × 500 chars plus
 // a 4k answer is ~9k characters worst case — comparable to native search output.
 export const MAX_ANSWER_CHARS = 4_000;
-// A result/read URL is capped like every other backend-supplied string. Unlike
-// title/snippet/content_type, an over-length URL is *dropped* rather than
-// truncated: a cut URL is a broken link, worse than no link at all. 2048 is
-// generous relative to common browser/server URL-length limits.
-export const MAX_URL_CHARS = 2_048;
-// `content_type` is metadata, not a link, so truncation (not dropping) is fine.
+// `content_type` is metadata, not a link, so it is shortened rather than dropped —
+// but sliced bare, without `truncate`'s `…` marker: the marker suits prose a model
+// reads, where a machine-readable MIME type carrying one is invalid rather than
+// honestly-shortened.
 export const MAX_CONTENT_TYPE_CHARS = 200;
-// Mirrors sandbox MAX_READ_BYTES. Accepted limit, stated rather than implied: the
-// executor hands core an already-materialised string, so this bounds *context and
-// CPU*, not backend memory — a backend that buffers a 500 MB response does so
-// before core sees it, and the per-call timeout is the only lever there.
-export const MAX_READ_URL_CONTENT_CHARS = 1_000_000;
+// `MAX_URL_CHARS` and `MAX_READ_URL_CONTENT_CHARS` live in `./types.ts` — the input
+// schemas there reference them — and are re-exported from this module by the
+// `export *` at the bottom, so they read as part of this MAX_* set either way.
 
 // Per-call executor timeouts. The default applies when a contribution omits
 // `timeoutMs`; the ceiling is refused at boot by the plugin loader (fail-loud,
@@ -289,7 +287,11 @@ export const composeWebBackend = (
           : [];
 
         const results: WebSearchToolResult["results"] = [];
-        let dropped = 0;
+        // Counted apart, not as one `dropped` total: an unusable *scheme* is a bug
+        // (or worse) in the backend, an over-length URL is routine noise from some
+        // upstreams, and an Operator reading the line needs to tell them apart.
+        let droppedLength = 0;
+        let droppedScheme = 0;
         // Bounded on both ends: `MAX_SEARCH_RESULTS` on what is kept, and
         // `MAX_SEARCH_RESULT_SCAN` on what is even looked at, so a pathological
         // result array cannot spend core's CPU parsing URLs it will discard.
@@ -297,14 +299,21 @@ export const composeWebBackend = (
         for (const candidate of scanned) {
           if (results.length >= MAX_SEARCH_RESULTS) break;
           const entry = asRecord(candidate);
-          // A URL that fails the scheme check, or one so long it would blow the
-          // context/DOM budget the other caps exist to hold, is unusable either
-          // way — dropped, not truncated, since a cut URL is a broken link.
+          // Length before scheme, deliberately: `isPresentableUrl` parses the whole
+          // string with `new URL()`, and the CPU argument behind
+          // `MAX_SEARCH_RESULT_SCAN` applies just as much to a URL core is about to
+          // discard — otherwise a scan's worth of multi-megabyte hrefs gets fully
+          // parsed on the way to being dropped. Both cases drop rather than
+          // truncate: a cut URL is a broken link, worse than no link.
           if (
-            !isPresentableUrl(entry.url) ||
+            typeof entry.url !== "string" ||
             entry.url.length > MAX_URL_CHARS
           ) {
-            dropped += 1;
+            droppedLength += 1;
+            continue;
+          }
+          if (!isPresentableUrl(entry.url)) {
+            droppedScheme += 1;
             continue;
           }
           const hit: WebSearchToolResult["results"][number] = {
@@ -319,10 +328,15 @@ export const composeWebBackend = (
           }
           results.push(hit);
         }
-        if (dropped > 0) {
-          logger.warn(
-            { backend, plugin: pluginName, dropped },
-            "Dropped web_search results whose URL was not http(s) or exceeded MAX_URL_CHARS",
+        // `debug`, not `warn`: this is per-call and model-triggerable, and for some
+        // upstreams (Brave and Tavily both mix in results core cannot present) it is
+        // expected steady state rather than a fault — at `warn` a healthy backend
+        // would log on every search a user runs. The two lines below stay at `warn`
+        // because both mean the *backend* is misbehaving, not merely noisy.
+        if (droppedLength > 0 || droppedScheme > 0) {
+          logger.debug(
+            { backend, plugin: pluginName, droppedLength, droppedScheme },
+            "Dropped web_search results with an unusable URL",
           );
         }
         // Only the *scan* bound warrants this warning: if the result cap already
@@ -438,18 +452,26 @@ export const composeWebBackend = (
 
         // Same drop-not-truncate treatment as a search result URL (D5): an
         // over-length resolved URL falls back to the model-supplied one rather
-        // than being cut into a broken link.
+        // than being cut into a broken link. Length before scheme for the same
+        // reason as the search loop — `isPresentableUrl` parses the whole string.
+        // The fallback is bounded too: `readUrlInputSchema` caps `url` at
+        // `MAX_URL_CHARS`, so this field cannot exceed the cap by either route.
         const resolvedUrl =
-          isPresentableUrl(payload.url) && payload.url.length <= MAX_URL_CHARS
+          typeof payload.url === "string" &&
+          payload.url.length <= MAX_URL_CHARS &&
+          isPresentableUrl(payload.url)
             ? payload.url
             : url;
 
         const result: ReadUrlToolResult = {
           content: body,
           url: resolvedUrl,
+          // Sliced bare rather than through `truncate`: a `…` marker is right for
+          // prose a model reads, but `content_type` is machine-readable and a
+          // marked cut yields an invalid MIME type instead of a shortened one.
           content_type:
             typeof payload.contentType === "string"
-              ? truncate(payload.contentType, MAX_CONTENT_TYPE_CHARS)
+              ? payload.contentType.slice(0, MAX_CONTENT_TYPE_CHARS)
               : "",
           // True when *anything* was cut — the core cap or this slice.
           truncated: hasMore || capped,
@@ -472,6 +494,12 @@ export const composeWebBackend = (
       // "runtime resolution graceful" and the timeout's "a backend cannot pin a
       // turn open" both apply to the factory call, not just the executors it
       // returns.
+      //
+      // This window is *additive* to the executors': `buildTurnTools` runs once
+      // per turn and each tool call gets its own `timeoutMs`, so the worst case a
+      // turn can spend inside a backend is `(1 + calls) × timeoutMs` — 240s for a
+      // single search at the 120s boot ceiling. Still bounded, which is the
+      // property the ceiling exists to protect, but no longer one window.
       let executors: WebBackendExecutors | undefined;
       try {
         executors = await withTimeout(
