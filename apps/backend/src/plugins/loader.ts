@@ -423,6 +423,40 @@ export async function loadPlugins(
     const sandboxBackendIds: string[] = [];
 
     for (const contribution of manifest.contributes.sandboxBackends ?? []) {
+      // Everything below is guaranteed by `SandboxBackendContribution`, and none
+      // of it is guaranteed by a third-party *JS* plugin — which is this loop's
+      // whole justification. Each malformed shape used to surface far from its
+      // cause: `null` as an unattributed `Cannot read properties of null`, a
+      // missing `backend` as a plausible-looking `"acme.undefined"` in the
+      // catalog, a missing `create` or schema as a TypeError at chat-turn or
+      // save time. Boot is where they are caught, named by plugin (ADR-0013).
+      if (typeof contribution !== "object" || contribution === null) {
+        throw new Error(
+          `Plugin "${manifest.name}": every sandbox backend contribution must be an object.`,
+        );
+      }
+      if (
+        typeof contribution.backend !== "string" ||
+        contribution.backend.trim() === ""
+      ) {
+        throw new Error(
+          `Plugin "${manifest.name}": every sandbox backend must declare a non-empty "backend" id.`,
+        );
+      }
+      if (
+        typeof contribution.name !== "string" ||
+        contribution.name.trim() === ""
+      ) {
+        throw new Error(
+          `Plugin "${manifest.name}": sandbox backend "${contribution.backend}" must declare a non-empty "name".`,
+        );
+      }
+      if (typeof contribution.create !== "function") {
+        throw new Error(
+          `Plugin "${manifest.name}": sandbox backend "${contribution.backend}" must provide a "create" function.`,
+        );
+      }
+
       const effectiveBackend = contributionId(contribution.backend);
 
       const existingOwner = sandboxOwners.get(effectiveBackend);
@@ -441,6 +475,26 @@ export async function loadPlugins(
         typeof contribution.configSchema === "function"
           ? contribution.configSchema(pluginCtx.config)
           : contribution.configSchema;
+
+      // Checked after the factory form is resolved away, and duck-typed on
+      // `safeParse` rather than `instanceof z.ZodType`, because that is exactly
+      // what the three static consumers call. Without this, a contribution
+      // missing either schema registers fine and fails at *save* time — a 500 on
+      // an Operator's sandbox form, attributed to nothing.
+      for (const [field, schema] of [
+        ["configSchema", resolvedConfigSchema],
+        ["credentialsSchema", contribution.credentialsSchema],
+      ] as const) {
+        if (
+          typeof schema !== "object" ||
+          schema === null ||
+          typeof (schema as { safeParse?: unknown }).safeParse !== "function"
+        ) {
+          throw new Error(
+            `Plugin "${manifest.name}": sandbox backend "${effectiveBackend}" must provide a Zod "${field}".`,
+          );
+        }
+      }
 
       // Bind the same shared plugin config into create() so core's per-turn
       // callers (chat resolution, teardown) keep calling create(config,

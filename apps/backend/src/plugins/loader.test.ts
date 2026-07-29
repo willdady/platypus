@@ -522,6 +522,97 @@ describe("loadPlugins — sandbox backends", () => {
     ).rejects.toThrow(/@bad\/plugin.*sandboxBackends.*array/s);
   });
 
+  // `sandboxBackends` being an array is checked above; a third-party JS plugin can
+  // still put anything *inside* it. Each of these previously surfaced far from its
+  // cause — an unattributed TypeError at boot, a mystery `"acme.undefined"` in the
+  // catalog, or a 500 on an Operator's sandbox form.
+  it.each([
+    [
+      "a non-object entry",
+      null,
+      /@platypus\/bad.*sandbox backend contribution must be an object/s,
+    ],
+    [
+      "a missing backend id",
+      {
+        name: "x",
+        configSchema: z.object({}),
+        credentialsSchema: z.object({}),
+        create: () => ({}),
+      },
+      /non-empty "backend" id/s,
+    ],
+    [
+      "a missing name",
+      {
+        backend: "b",
+        configSchema: z.object({}),
+        credentialsSchema: z.object({}),
+        create: () => ({}),
+      },
+      /must declare a non-empty "name"/s,
+    ],
+    [
+      "a missing create",
+      {
+        backend: "b",
+        name: "x",
+        configSchema: z.object({}),
+        credentialsSchema: z.object({}),
+      },
+      /must provide a "create" function/s,
+    ],
+    [
+      "a missing configSchema",
+      {
+        backend: "b",
+        name: "x",
+        credentialsSchema: z.object({}),
+        create: () => ({}),
+      },
+      /must provide a Zod "configSchema"/s,
+    ],
+    [
+      "a missing credentialsSchema",
+      {
+        backend: "b",
+        name: "x",
+        configSchema: z.object({}),
+        create: () => ({}),
+      },
+      /must provide a Zod "credentialsSchema"/s,
+    ],
+  ])(
+    "aborts (fail-loud, plugin-named) on %s",
+    async (_label, contribution, expected) => {
+      const { register } = makeRegister();
+      // A core plugin name: a third-party one is slug-checked before the loop
+      // these cases exercise, which would mask the error under test.
+      await expect(
+        loadPlugins({
+          pluginNames: ["@platypus/bad"],
+          builtinPlugins: {
+            "@platypus/bad": () =>
+              Promise.resolve({
+                plugin: {
+                  name: "@platypus/bad",
+                  version: "0.1.0",
+                  apiVersion: 1,
+                  contributes: {
+                    sandboxBackends: [
+                      contribution,
+                    ] as unknown as SandboxBackendContribution[],
+                  },
+                },
+              }),
+          },
+          register,
+          registerSandbox: () => {},
+        }),
+      ).rejects.toThrow(expected);
+    },
+  );
+
   it("resolves a factory-form configSchema against the plugin config at load", async () => {
     const { register } = makeRegister();
     const { registerSandbox, calls } = makeSandboxRegister();

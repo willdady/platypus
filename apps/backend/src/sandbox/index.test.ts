@@ -49,6 +49,18 @@ describe("sandbox backend registry", () => {
     expect(getSandboxBackend("does-not-exist")).toBeUndefined();
   });
 
+  it("does not resolve Object.prototype members as registered backends", () => {
+    // `backend` reaches this lookup from a request body and from the
+    // `sandbox.backend` column, so a plain-object registry handed back
+    // `Object.prototype.toString` — truthy, no `configSchema` — and the save
+    // route's `registration.configSchema.safeParse(...)` threw a 500 instead of
+    // treating the id as unregistered.
+    expect(getSandboxBackend("toString")).toBeUndefined();
+    expect(getSandboxBackend("constructor")).toBeUndefined();
+    expect(getSandboxBackend("__proto__")).toBeUndefined();
+    expect(getSandboxBackend("hasOwnProperty")).toBeUndefined();
+  });
+
   it("rejects duplicate registration of the same backend id", () => {
     registerSandboxBackend(makeRegistration("test-duplicate"));
     expect(() =>

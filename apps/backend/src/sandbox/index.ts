@@ -19,7 +19,18 @@ export const SANDBOX_WORKSPACE_ROOT = "/workspace";
 
 // Stored at the erased (default `unknown`) parameterisation: the registry is
 // heterogeneous and lookups hand back this same erased shape.
-const SANDBOX_BACKEND_REGISTRY: Record<string, SandboxBackendRegistration> = {};
+//
+// `Object.create(null)`, not `{}`: `backend` reaches this lookup from request
+// bodies (`backend: z.string().min(1)`) and from the `sandbox.backend` column, so
+// a plain object let `getSandboxBackend("toString")` hand back
+// `Object.prototype.toString` — truthy, with no `configSchema` — and the save
+// route's `registration.configSchema.safeParse(...)` then threw a TypeError
+// instead of treating the id as unregistered. A null prototype has nothing to
+// inherit, so an unknown id is `undefined` whatever it is called.
+const SANDBOX_BACKEND_REGISTRY = Object.create(null) as Record<
+  string,
+  SandboxBackendRegistration
+>;
 
 export const registerSandboxBackend = <TConfig, TCredentials>(
   registration: SandboxBackendRegistration<TConfig, TCredentials>,
