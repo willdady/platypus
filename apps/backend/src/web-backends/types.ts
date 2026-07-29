@@ -23,10 +23,15 @@ export type {
 // A URL is capped like every other string core hands the model. Unlike
 // title/snippet/content_type, an over-length URL is *dropped* rather than
 // truncated: a cut URL is a broken link, worse than no link at all. 2048 is
-// generous relative to common browser/server URL-length limits. Capping the
-// `read_url` input at the same number is what makes the bound an invariant —
-// the tool's own `url` field is the fallback when a backend's resolved URL is
-// rejected, so an uncapped input would let that fallback exceed the cap.
+// generous relative to common browser/server URL-length limits.
+//
+// This bounds *output* only. The `read_url` input below is deliberately
+// uncapped: presigned S3 URLs, Azure SAS links and some SharePoint/OAuth URLs
+// legitimately run past 2048 chars, and rejecting them at the schema would fail
+// as an AI-SDK input-validation error rather than through the graceful
+// `{ error }` contract the rest of this module keeps. The returned `url` field
+// stays inside the cap regardless, because `composeWebBackend` bounds every
+// branch of its fallback chain — including the one that echoes the request.
 export const MAX_URL_CHARS = 2_048;
 // Mirrors sandbox MAX_READ_BYTES. Accepted limit, stated rather than implied: the
 // executor hands core an already-materialised string, so this bounds *context and
@@ -51,9 +56,11 @@ export type WebSearchInput = z.infer<typeof webSearchInputSchema>;
 // Mirrors `fetchUrl`'s pagination inputs byte-for-byte (max_length default 5000,
 // start_index default 0) so a continuation read reads identically on both tools.
 export const readUrlInputSchema = z.object({
-  // Capped so the model cannot hand core a URL longer than the one core would
-  // accept back from a backend — see MAX_URL_CHARS above.
-  url: z.string().url().max(MAX_URL_CHARS).describe("URL to read"),
+  // Uncapped on purpose — the one thing `MAX_URL_CHARS` deliberately does not
+  // bound. See the note on that constant above: a length cap here would reject
+  // legitimately long presigned URLs, and it is the only place `read_url` would
+  // diverge from `fetchUrl`'s input.
+  url: z.string().url().describe("URL to read"),
   max_length: z
     .number()
     .int()

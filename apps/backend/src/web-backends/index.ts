@@ -132,6 +132,43 @@ export const isPresentableUrl = (value: unknown): value is string => {
   }
 };
 
+/**
+ * The `url` a `read_url` result reports, bounded by `MAX_URL_CHARS` on every
+ * branch. The backend's resolved (post-redirect) URL is preferred — it is what a
+ * citation should point at — and falls back to the URL the model asked for.
+ *
+ * Three branches rather than two because `readUrlInputSchema.url` is uncapped,
+ * so the request is not itself a bounded fallback: a presigned S3 or Azure SAS
+ * link can legitimately run past `MAX_URL_CHARS`, and core reads it instead of
+ * failing schema validation. When neither URL fits, the request's origin is the
+ * longest prefix that is still a working link — a citation to the host beats a
+ * URL cut mid-query-string, which is a broken link (the same drop-not-truncate
+ * reasoning as a search result URL, D5).
+ *
+ * Length is checked before scheme for the search loop's reason: `isPresentableUrl`
+ * parses the whole string, and a URL about to be rejected for length should not
+ * be parsed first.
+ */
+const presentableReadUrl = (resolved: unknown, requested: string): string => {
+  if (
+    typeof resolved === "string" &&
+    resolved.length <= MAX_URL_CHARS &&
+    isPresentableUrl(resolved)
+  ) {
+    return resolved;
+  }
+  if (requested.length <= MAX_URL_CHARS) return requested;
+  // Unreachable in practice: `requested` cleared `z.string().url()` and the
+  // egress guard, so it parses and is http(s). Guarded anyway — this runs on the
+  // success path of a tool whose whole contract is to return `{ error }` rather
+  // than throw.
+  try {
+    return new URL(requested).origin;
+  } catch {
+    return "";
+  }
+};
+
 /** Raised when an executor outruns its per-call timeout. */
 class WebBackendTimeoutError extends Error {}
 
@@ -450,22 +487,11 @@ export const composeWebBackend = (
           body += `\n\n[Content truncated: the page exceeded the ${MAX_READ_URL_CONTENT_CHARS}-character limit and the remainder cannot be read.]`;
         }
 
-        // Same drop-not-truncate treatment as a search result URL (D5): an
-        // over-length resolved URL falls back to the model-supplied one rather
-        // than being cut into a broken link. Length before scheme for the same
-        // reason as the search loop — `isPresentableUrl` parses the whole string.
-        // The fallback is bounded too: `readUrlInputSchema` caps `url` at
-        // `MAX_URL_CHARS`, so this field cannot exceed the cap by either route.
-        const resolvedUrl =
-          typeof payload.url === "string" &&
-          payload.url.length <= MAX_URL_CHARS &&
-          isPresentableUrl(payload.url)
-            ? payload.url
-            : url;
-
         const result: ReadUrlToolResult = {
           content: body,
-          url: resolvedUrl,
+          // Bounded by `MAX_URL_CHARS` down every branch — see
+          // `presentableReadUrl`.
+          url: presentableReadUrl(payload.url, url),
           // Sliced bare rather than through `truncate`: a `…` marker is right for
           // prose a model reads, but `content_type` is machine-readable and a
           // marked cut yields an invalid MIME type instead of a shortened one.

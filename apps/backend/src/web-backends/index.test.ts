@@ -625,6 +625,37 @@ describe("read_url — egress guard, capping, slicing", () => {
     expect(result.url).toBe("https://example.com/page");
   });
 
+  it("reads an over-length requested URL and reports its origin", async () => {
+    // The input schema does not cap `url` (presigned S3 / Azure SAS links run
+    // long), so the request is not itself a bounded fallback. When the backend
+    // also has no usable resolved URL, the origin keeps `result.url` inside
+    // MAX_URL_CHARS while still being a link that works.
+    const overlong = `https://example.com/?sig=${"x".repeat(MAX_URL_CHARS)}`;
+    const read_url_executor = vi.fn(() => ({ content: "hi", url: "" }));
+    const { read_url } = await buildTools({
+      web_search: () => ({ query: "q", results: [] }),
+      read_url: read_url_executor,
+    });
+
+    const result = await read(read_url, { url: overlong });
+    // No AI-SDK input-validation error: the request reached the executor whole.
+    expect(read_url_executor).toHaveBeenCalledWith({ url: overlong });
+    expect(result.content).toBe("hi");
+    expect(result.url).toBe("https://example.com");
+    expect(result.url.length).toBeLessThanOrEqual(MAX_URL_CHARS);
+  });
+
+  it("prefers an over-length request's resolved URL when that one fits the cap", async () => {
+    const overlong = `https://example.com/?sig=${"x".repeat(MAX_URL_CHARS)}`;
+    const { read_url } = await buildTools({
+      web_search: () => ({ query: "q", results: [] }),
+      read_url: () => ({ content: "hi", url: "https://example.com/final" }),
+    });
+
+    const result = await read(read_url, { url: overlong });
+    expect(result.url).toBe("https://example.com/final");
+  });
+
   it("shortens an oversized content_type without a truncation marker", async () => {
     const { read_url } = await buildTools({
       web_search: () => ({ query: "q", results: [] }),
@@ -723,12 +754,14 @@ describe("readUrlInputSchema — the fetchUrl-mirroring defaults", () => {
     ).toBe(false);
   });
 
-  it("caps url at MAX_URL_CHARS, so the read_url fallback cannot exceed the cap", () => {
-    // `result.url` falls back to this input when the backend's resolved URL is
-    // over-length, so capping it here is what makes MAX_URL_CHARS an invariant on
-    // that field rather than a bound on one of its two sources.
+  it("does not cap url — MAX_URL_CHARS bounds the output, not the input", () => {
+    // Deliberately uncapped: presigned S3, Azure SAS and some SharePoint/OAuth
+    // URLs legitimately exceed MAX_URL_CHARS, and a schema rejection would
+    // surface as an AI-SDK input-validation error rather than through this
+    // module's graceful `{ error }` contract. `result.url` stays inside the cap
+    // via `presentableReadUrl`'s origin fallback instead.
     const overlong = `https://example.com/${"x".repeat(MAX_URL_CHARS)}`;
-    expect(readUrlInputSchema.safeParse({ url: overlong }).success).toBe(false);
+    expect(readUrlInputSchema.safeParse({ url: overlong }).success).toBe(true);
     expect(
       readUrlInputSchema.safeParse({ url: "https://example.com/ok" }).success,
     ).toBe(true);
