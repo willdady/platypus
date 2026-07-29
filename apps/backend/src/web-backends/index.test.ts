@@ -12,6 +12,7 @@ import {
   MAX_ANSWER_CHARS,
   MAX_CONTENT_TYPE_CHARS,
   MAX_READ_URL_CONTENT_CHARS,
+  MAX_READ_URL_SLICE_CHARS,
   MAX_SEARCH_RESULT_SCAN,
   MAX_SEARCH_RESULTS,
   MAX_SNIPPET_CHARS,
@@ -316,7 +317,39 @@ describe("web_search — core-owned caps", () => {
       {
         backend: "searx",
         plugin: "@acme/searx",
+        droppedMissing: 0,
         droppedScheme: 3,
+        droppedLength: 0,
+      },
+      expect.stringContaining("unusable URL"),
+    );
+  });
+
+  it("counts an entry with no URL string apart from an over-length one", async () => {
+    const { web_search } = await buildTools({
+      web_search: () => ({
+        query: "q",
+        results: [
+          { title: "No url at all" },
+          { title: "Null url", url: null },
+          { title: "Good", url: "https://example.com/ok" },
+        ],
+      }),
+    });
+
+    const result = await search(web_search, "q");
+    expect(result.results).toEqual([
+      { title: "Good", url: "https://example.com/ok" },
+    ]);
+    // A missing `url` is a malformed payload, not the routine over-length noise
+    // some upstreams produce — counting them together made a broken backend
+    // indistinguishable from a noisy one.
+    expect(mockLogger.debug).toHaveBeenCalledWith(
+      {
+        backend: "searx",
+        plugin: "@acme/searx",
+        droppedMissing: 2,
+        droppedScheme: 0,
         droppedLength: 0,
       },
       expect.stringContaining("unusable URL"),
@@ -346,6 +379,7 @@ describe("web_search — core-owned caps", () => {
       {
         backend: "searx",
         plugin: "@acme/searx",
+        droppedMissing: 0,
         droppedScheme: 1,
         droppedLength: 1,
       },
@@ -525,8 +559,16 @@ describe("read_url — egress guard, capping, slicing", () => {
 
     expect(result.error).toBe(EGRESS_BLOCKED_MESSAGE);
     expect(read_url_executor).not.toHaveBeenCalled();
+    // One record, not two: the refused URL and the policy reason ride the
+    // outcome line rather than a second, differently-shaped warn.
+    expect(mockLogger.warn).toHaveBeenCalledTimes(1);
     expect(mockLogger.warn).toHaveBeenCalledWith(
-      expect.objectContaining({ tool: "read_url", outcome: "blocked" }),
+      expect.objectContaining({
+        tool: "read_url",
+        outcome: "blocked",
+        url: "http://169.254.169.254/latest/meta-data",
+        reason: expect.any(String) as unknown,
+      }),
       expect.any(String),
     );
   });
@@ -767,19 +809,27 @@ describe("readUrlInputSchema — the fetchUrl-mirroring defaults", () => {
     ).toBe(true);
   });
 
-  it("caps max_length at MAX_READ_URL_CONTENT_CHARS", () => {
-    // The schema references the constant directly now, so this asserts the bound
-    // rather than a hand-copied number that could drift from it.
+  it("caps max_length at MAX_READ_URL_SLICE_CHARS, below the content cap", () => {
+    // The two are separate levers: the content cap bounds what core holds across
+    // a paginated read, this bounds any one page of it.
+    expect(MAX_READ_URL_SLICE_CHARS).toBeLessThan(MAX_READ_URL_CONTENT_CHARS);
     expect(
       readUrlInputSchema.safeParse({
         url: "https://example.com/",
-        max_length: MAX_READ_URL_CONTENT_CHARS,
+        max_length: MAX_READ_URL_SLICE_CHARS,
       }).success,
     ).toBe(true);
     expect(
       readUrlInputSchema.safeParse({
         url: "https://example.com/",
-        max_length: MAX_READ_URL_CONTENT_CHARS + 1,
+        max_length: MAX_READ_URL_SLICE_CHARS + 1,
+      }).success,
+    ).toBe(false);
+    // The old shared bound is now explicitly out of range for one call.
+    expect(
+      readUrlInputSchema.safeParse({
+        url: "https://example.com/",
+        max_length: MAX_READ_URL_CONTENT_CHARS,
       }).success,
     ).toBe(false);
   });

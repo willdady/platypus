@@ -265,11 +265,17 @@ export const composeWebBackend = (
   // does reach `warn` on the two paths that cannot be diagnosed without it — an
   // egress block and a content-cap hit — which is what D3 and the egress-guard
   // contract call for.
+  //
+  // `details` carries whatever the outcome cannot be diagnosed without — the
+  // throw for a failure, the URL and policy `reason` for a block. A blocked
+  // egress used to emit this line *and* a second, `fetchUrl`-shaped one carrying
+  // the same reason; one structured record per call is easier to consume, and
+  // `outcome: "blocked"` is the discriminator that line's message used to be.
   const logCall = (
     toolName: string,
     outcome: "ok" | "timeout" | "blocked" | "error",
     startedAt: number,
-    cause?: unknown,
+    details?: Record<string, unknown>,
   ): void => {
     const line = {
       backend,
@@ -281,7 +287,7 @@ export const composeWebBackend = (
     if (outcome === "ok") {
       logger.debug(line, "Web backend executor call");
     } else {
-      logger.warn({ ...line, cause }, "Web backend executor call failed");
+      logger.warn({ ...line, ...details }, "Web backend executor call failed");
     }
   };
 
@@ -305,12 +311,9 @@ export const composeWebBackend = (
           raw = await withTimeout(() => webSearch({ query }), timeoutMs);
         } catch (cause) {
           const timedOut = cause instanceof WebBackendTimeoutError;
-          logCall(
-            "web_search",
-            timedOut ? "timeout" : "error",
-            startedAt,
+          logCall("web_search", timedOut ? "timeout" : "error", startedAt, {
             cause,
-          );
+          });
           return {
             error: timedOut
               ? timeoutMessage("web_search", timeoutMs)
@@ -327,6 +330,10 @@ export const composeWebBackend = (
         // Counted apart, not as one `dropped` total: an unusable *scheme* is a bug
         // (or worse) in the backend, an over-length URL is routine noise from some
         // upstreams, and an Operator reading the line needs to tell them apart.
+        // `droppedMissing` is the third case for the same reason — an entry with
+        // no `url` string at all is a malformed payload, and folding it into
+        // `droppedLength` made a broken backend read as routine noise.
+        let droppedMissing = 0;
         let droppedLength = 0;
         let droppedScheme = 0;
         // Bounded on both ends: `MAX_SEARCH_RESULTS` on what is kept, and
@@ -340,12 +347,13 @@ export const composeWebBackend = (
           // string with `new URL()`, and the CPU argument behind
           // `MAX_SEARCH_RESULT_SCAN` applies just as much to a URL core is about to
           // discard — otherwise a scan's worth of multi-megabyte hrefs gets fully
-          // parsed on the way to being dropped. Both cases drop rather than
-          // truncate: a cut URL is a broken link, worse than no link.
-          if (
-            typeof entry.url !== "string" ||
-            entry.url.length > MAX_URL_CHARS
-          ) {
+          // parsed on the way to being dropped. Every case drops rather than
+          // truncates: a cut URL is a broken link, worse than no link.
+          if (typeof entry.url !== "string") {
+            droppedMissing += 1;
+            continue;
+          }
+          if (entry.url.length > MAX_URL_CHARS) {
             droppedLength += 1;
             continue;
           }
@@ -368,11 +376,17 @@ export const composeWebBackend = (
         // `debug`, not `warn`: this is per-call and model-triggerable, and for some
         // upstreams (Brave and Tavily both mix in results core cannot present) it is
         // expected steady state rather than a fault — at `warn` a healthy backend
-        // would log on every search a user runs. The two lines below stay at `warn`
-        // because both mean the *backend* is misbehaving, not merely noisy.
-        if (droppedLength > 0 || droppedScheme > 0) {
+        // would log on every search a user runs. The line below stays at `warn`
+        // because it means the *backend* is misbehaving, not merely noisy.
+        if (droppedMissing > 0 || droppedLength > 0 || droppedScheme > 0) {
           logger.debug(
-            { backend, plugin: pluginName, droppedLength, droppedScheme },
+            {
+              backend,
+              plugin: pluginName,
+              droppedMissing,
+              droppedLength,
+              droppedScheme,
+            },
             "Dropped web_search results with an unusable URL",
           );
         }
@@ -426,11 +440,13 @@ export const composeWebBackend = (
         // the network — the whole reason core, not the backend, owns this Tool.
         const egress = await checkEgress(url, { resolve: resolveHostname });
         if (!egress.allowed) {
-          logger.warn(
-            { tool: "read_url", backend, url, reason: egress.reason },
-            "Blocked a model-supplied URL by network policy",
-          );
-          logCall("read_url", "blocked", startedAt);
+          // One line, not two: `url` and `reason` ride the outcome record. The
+          // URL is user content and normally debug-only (D9), but a block cannot
+          // be diagnosed without the address that was refused.
+          logCall("read_url", "blocked", startedAt, {
+            url,
+            reason: egress.reason,
+          });
           return { error: EGRESS_BLOCKED_MESSAGE };
         }
 
@@ -439,7 +455,9 @@ export const composeWebBackend = (
           raw = await withTimeout(() => readUrl({ url }), timeoutMs);
         } catch (cause) {
           const timedOut = cause instanceof WebBackendTimeoutError;
-          logCall("read_url", timedOut ? "timeout" : "error", startedAt, cause);
+          logCall("read_url", timedOut ? "timeout" : "error", startedAt, {
+            cause,
+          });
           return {
             error: timedOut
               ? timeoutMessage("read_url", timeoutMs)

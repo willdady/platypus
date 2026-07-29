@@ -38,6 +38,23 @@ export const MAX_URL_CHARS = 2_048;
 // CPU*, not backend memory — a backend that buffers a 500 MB response does so
 // before core sees it, and the per-call timeout is the only lever there.
 export const MAX_READ_URL_CONTENT_CHARS = 1_000_000;
+// What one `read_url` call may return — a separate lever from the cap above, and
+// deliberately a smaller number.
+//
+// The two used to share `MAX_READ_URL_CONTENT_CHARS`, inherited from `fetchUrl`,
+// which made the "bounds context" claim on that constant only half true: core
+// held at most 1M chars, and a single `max_length: 1_000_000` still put all of
+// them (~250k tokens) into the window in one call. Core owns this schema
+// outright, so the levers need not share a number: the cap bounds what core
+// holds *across* a paginated read, this bounds any *one* page of it. 100k chars
+// is ~25k tokens — a large read that a context can still absorb — and 20× the
+// 5000-char default, with `start_index` there for anything longer.
+//
+// This is the one place `read_url`'s input intentionally differs from
+// `fetchUrl`'s (which allows 1_000_000). The pagination *semantics* — defaults,
+// `next_start_index`, the hint text — stay byte-identical, so a continuation
+// read still reads the same on both tools.
+export const MAX_READ_URL_SLICE_CHARS = 100_000;
 
 // Core-owned, fixed input schemas (ADR-0014). A backend supplies executors only,
 // so every Web-search backend presents the *same* model-facing signature and an
@@ -53,8 +70,11 @@ export const webSearchInputSchema = z.object({
 });
 export type WebSearchInput = z.infer<typeof webSearchInputSchema>;
 
-// Mirrors `fetchUrl`'s pagination inputs byte-for-byte (max_length default 5000,
-// start_index default 0) so a continuation read reads identically on both tools.
+// Mirrors `fetchUrl`'s pagination inputs (max_length default 5000, start_index
+// default 0) so a continuation read reads identically on both tools. Two
+// deliberate divergences, each documented at its constant above: `url` is
+// uncapped, and `max_length` tops out at MAX_READ_URL_SLICE_CHARS rather than
+// `fetchUrl`'s 1_000_000.
 export const readUrlInputSchema = z.object({
   // Uncapped on purpose — the one thing `MAX_URL_CHARS` deliberately does not
   // bound. See the note on that constant above: a length cap here would reject
@@ -65,7 +85,7 @@ export const readUrlInputSchema = z.object({
     .number()
     .int()
     .min(1)
-    .max(MAX_READ_URL_CONTENT_CHARS)
+    .max(MAX_READ_URL_SLICE_CHARS)
     .default(5_000)
     .describe("Maximum number of characters to return"),
   start_index: z
