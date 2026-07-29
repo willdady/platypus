@@ -65,6 +65,12 @@ export const provider = pgTable(
       .boolean("native_search_enabled")
       .notNull()
       .default(true),
+    // The Web-search backend this provider serves search with (ADR-0014), or
+    // null for none. Free text, not an enum or FK: the valid set is whichever
+    // plugins the deployment loaded, which the database cannot know. A value
+    // whose plugin is later removed degrades to no search tools plus a
+    // warn-log, so no backfill or constraint is needed.
+    webBackend: t.text("web_backend"),
     // Free-text security directives appended last in the system prompt for
     // every run on this provider (and sub-agent runs resolved to it). Nullable
     // — existing providers are unchanged.

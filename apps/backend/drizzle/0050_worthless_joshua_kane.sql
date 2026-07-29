@@ -1,0 +1,1 @@
+ALTER TABLE "provider" ADD COLUMN "web_backend" text;

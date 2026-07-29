@@ -15,6 +15,9 @@ import {
   SANDBOX_ENV_MAX_ENTRIES,
   SANDBOX_ENV_MAX_VALUE_BYTES,
   providerCreateSchema,
+  providerUpdateSchema,
+  providerHasNativeSearch,
+  type Provider,
   classifyFile,
   extractableDocumentFormat,
   resolveExtractedTextCap,
@@ -343,6 +346,69 @@ describe("Provider Create Schema", () => {
         ...baseProvider,
         securityGuardrails: "a".repeat(8001),
       }).success,
+    ).toBe(false);
+  });
+
+  it("round-trips webBackend through create and update", () => {
+    // Free text, deliberately unvalidated against the plugin registry — the
+    // valid set is whichever plugins the deployment loaded (ADR-0014).
+    const created = providerCreateSchema.safeParse({
+      ...baseProvider,
+      webBackend: "acme.searx",
+    });
+    expect(created.success).toBe(true);
+    if (created.success) {
+      expect(created.data.webBackend).toBe("acme.searx");
+    }
+
+    const cleared = providerUpdateSchema.safeParse({
+      ...baseProvider,
+      webBackend: null,
+    });
+    expect(cleared.success).toBe(true);
+    if (cleared.success) {
+      expect(cleared.data.webBackend).toBeNull();
+    }
+
+    // Absent is the pre-existing-row case: no default, no coercion to null.
+    const omitted = providerCreateSchema.safeParse(baseProvider);
+    expect(omitted.success).toBe(true);
+    if (omitted.success) {
+      expect(omitted.data.webBackend).toBeUndefined();
+    }
+  });
+});
+
+describe("providerHasNativeSearch", () => {
+  // The whole capability table, both API modes, because the backend's injection
+  // gate and the frontend's toggle visibility both hang off this one function.
+  const cases: Array<
+    [Provider["providerType"], "chat" | "responses", boolean]
+  > = [
+    ["Anthropic", "chat", true],
+    ["Anthropic", "responses", true],
+    ["Google", "chat", true],
+    ["Google", "responses", true],
+    ["OpenRouter", "chat", true],
+    ["OpenRouter", "responses", true],
+    // OpenAI's native search lives on the Responses API only, so an
+    // OpenAI-compatible chat endpoint (vLLM, llama.cpp) has none.
+    ["OpenAI", "chat", false],
+    ["OpenAI", "responses", true],
+    ["Bedrock", "chat", false],
+    ["Bedrock", "responses", false],
+  ];
+
+  it.each(cases)("%s on the %s API → %s", (providerType, apiMode, expected) => {
+    expect(providerHasNativeSearch({ providerType, apiMode })).toBe(expected);
+  });
+
+  it("treats an unknown provider type as having no native search", () => {
+    expect(
+      providerHasNativeSearch({
+        providerType: "Fictional" as Provider["providerType"],
+        apiMode: "responses",
+      }),
     ).toBe(false);
   });
 });

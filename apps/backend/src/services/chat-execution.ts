@@ -27,7 +27,9 @@ import {
   retrieveRecentSummaries,
   type MemorySummary,
 } from "./memory-retrieval.ts";
+import { providerHasNativeSearch } from "@platypus/schemas";
 import type { Provider, Skill } from "@platypus/schemas";
+import { getWebBackend } from "../web-backends/index.ts";
 import type { LanguageModel, Tool } from "ai";
 import { logger } from "../logger.ts";
 import { buildMcpTransportConfig } from "./mcp-oauth-provider.ts";
@@ -449,19 +451,36 @@ export const drizzleChatTurnQueries: ChatTurnQueries = {
 };
 
 /**
- * Whether the provider's native web_search tool should be injected for this
- * turn. True only when the request opted into search AND the provider hasn't
- * disabled native search. This is the authority over the chat search toggle:
+ * Whether search tools of *any* kind should be served for this turn — native or
+ * from a Web-search backend. This is the authority over the chat search toggle:
  * it covers both the raw-model and agent paths and ignores a stale client that
- * still sends `search: true` for a provider whose native search was turned off
- * (#167). `nativeSearchEnabled` is undefined for legacy provider rows, which is
- * treated as enabled.
+ * still sends `search: true` for a provider that cannot serve it (#167).
+ *
+ * Three conditions, in order: the request opted in; the Operator has not
+ * switched search off on this provider (`nativeSearchEnabled` is undefined for
+ * legacy rows, treated as enabled); and *something* can actually serve it — a
+ * native tool for this provider type, or a configured Web-search backend.
+ *
+ * That last clause adds backend-side capability gating that did not exist
+ * before: the gate used to be the toggle alone, with the provider-capability
+ * check living only in the frontend. It is the stale-client case ADR-0014 calls
+ * out, not a regression — a client asking Bedrock for search got an empty tool
+ * set anyway.
+ *
+ * `nativeSearchEnabled: false` with a `webBackend` set returns false: the switch
+ * currently means "no search on this provider at all", and re-cutting those
+ * semantics is deferred (ADR-0014).
  */
-export const shouldInjectNativeSearch = (
+export const shouldServeSearch = (
   requestedSearch: boolean | undefined,
-  provider: Pick<Provider, "nativeSearchEnabled">,
+  provider: Pick<
+    Provider,
+    "providerType" | "apiMode" | "nativeSearchEnabled" | "webBackend"
+  >,
 ): boolean =>
-  Boolean(requestedSearch) && provider.nativeSearchEnabled !== false;
+  Boolean(requestedSearch) &&
+  provider.nativeSearchEnabled !== false &&
+  (providerHasNativeSearch(provider) || Boolean(provider.webBackend));
 
 // --- Public Module: prepare a Chat turn ---
 
@@ -531,8 +550,35 @@ export const prepareChatTurn = async (
 
   const allMcpClients = [...mcpClients, ...subAgentMcpClients];
 
-  if (shouldInjectNativeSearch(request.search, provider)) {
-    Object.assign(tools, opened.searchTools?.() ?? {});
+  // Explicit-plugin-first: a configured Web-search backend wins over native
+  // search (ADR-0014). Position is deliberate — before `subAgentTools` and after
+  // `loadTools`, so search wins over an agent/MCP tool that happens to share a
+  // name, exactly as native search already did.
+  if (shouldServeSearch(request.search, provider)) {
+    if (provider.webBackend) {
+      const registration = getWebBackend(provider.webBackend);
+      if (registration) {
+        Object.assign(
+          tools,
+          await registration.buildTurnTools({
+            orgId,
+            workspaceId,
+            userId: user.id,
+          }),
+        );
+      } else {
+        // The column holds free text and the plugin that contributed this id may
+        // since have been removed from PLATYPUS_PLUGINS. Degrade to no search
+        // tools rather than falling back to native, which would silently serve a
+        // different search than the Operator selected.
+        logger.warn(
+          { workspaceId, webBackend: provider.webBackend },
+          "provider.webBackend references an unregistered web backend; serving no search tools this turn",
+        );
+      }
+    } else if (providerHasNativeSearch(provider)) {
+      Object.assign(tools, opened.searchTools?.() ?? {});
+    }
   }
 
   Object.assign(tools, subAgentTools);
