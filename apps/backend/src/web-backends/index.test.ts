@@ -327,14 +327,17 @@ describe("web_search — core-owned caps", () => {
 
   it("counts an entry with no usable URL string apart from an over-length one", async () => {
     const { web_search } = await buildTools({
-      web_search: () => ({
+      // Cast because the payload is deliberately malformed: the SDK type says a
+      // result carries a `url` string, and the point of this test is that a
+      // third-party JS plugin is under no obligation to honour it.
+      web_search: (() => ({
         query: "q",
         results: [
           { title: "No url at all" },
           { title: "Null url", url: null },
           { title: "Good", url: "https://example.com/ok" },
         ],
-      }),
+      })) as unknown as WebBackendExecutors["web_search"],
     });
 
     const result = await search(web_search, "q");

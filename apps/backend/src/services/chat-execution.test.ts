@@ -103,6 +103,7 @@ import { FileValidationError } from "./file-gate.ts";
 import { resetExtractedTextCache } from "./file-extraction.ts";
 import { buildTestPdf } from "./file-extraction.test-fixtures.ts";
 import { createInMemoryChatTurnQueries } from "./chat-execution.test-fixtures.ts";
+import type { Provider } from "@platypus/schemas";
 import type { PlatypusUIMessage } from "../types.ts";
 
 const baseProvider = {
@@ -521,8 +522,11 @@ describe("chat-execution", () => {
           }),
         );
 
+      // Typed as `Provider`, not `typeof googleProvider`: the fixtures omit
+      // `webBackend`, so a `typeof` parameter would reject `{ ...provider,
+      // webBackend }` as an excess property and force a cast at every call.
       const turnFor = (
-        provider: typeof googleProvider,
+        provider: Provider,
         search: boolean | undefined = true,
         runMode: "interactive" | "headless" = "interactive",
       ) =>
@@ -608,10 +612,7 @@ describe("chat-execution", () => {
         // vLLM and friends: `openProvider` exposes `searchTools()` for every
         // OpenAI provider, but the Responses-API search tool is dead weight on a
         // chat-completions endpoint. `baseProvider` is exactly this shape.
-        const turn = await turnFor({
-          ...baseProvider,
-          webBackend: "searx",
-        } as typeof googleProvider);
+        const turn = await turnFor({ ...baseProvider, webBackend: "searx" });
 
         expect(turn.stream.tools).toHaveProperty("web_search");
         expect(

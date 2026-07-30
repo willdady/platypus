@@ -908,12 +908,18 @@ const providerBaseSchema = z.object({
   // representation of "no backend" — a form select's "None" option yields the
   // empty string, and rejecting it with `.min(1)` would turn "none" into a 400
   // instead of storing what the Operator meant.
+  //
+  // `.optional()` sits *outside* `.transform()` deliberately: a transform wraps
+  // the field in `ZodEffects`, which hides the optionality `z.infer` reads, so
+  // `.optional().transform(...)` would make `webBackend` a **required** key on
+  // `Provider` whose type merely includes `undefined` — every existing Provider
+  // literal that omits the field stops compiling.
   webBackend: z
     .string()
     .max(200)
     .nullable()
-    .optional()
-    .transform((value) => (value === "" ? null : value)),
+    .transform((value) => (value === "" ? null : value))
+    .optional(),
   // Free-text system-prompt security directives appended LAST (recency) to
   // every run on this provider — including sub-agent runs resolved to this
   // provider. Provider-scoped because guard strength is a property of the model
