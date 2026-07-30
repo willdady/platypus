@@ -317,7 +317,7 @@ describe("web_search — core-owned caps", () => {
       {
         backend: "searx",
         plugin: "@acme/searx",
-        droppedMissing: 0,
+        droppedNoUrl: 0,
         droppedScheme: 3,
         droppedLength: 0,
       },
@@ -325,7 +325,7 @@ describe("web_search — core-owned caps", () => {
     );
   });
 
-  it("counts an entry with no URL string apart from an over-length one", async () => {
+  it("counts an entry with no usable URL string apart from an over-length one", async () => {
     const { web_search } = await buildTools({
       web_search: () => ({
         query: "q",
@@ -341,14 +341,14 @@ describe("web_search — core-owned caps", () => {
     expect(result.results).toEqual([
       { title: "Good", url: "https://example.com/ok" },
     ]);
-    // A missing `url` is a malformed payload, not the routine over-length noise
-    // some upstreams produce — counting them together made a broken backend
-    // indistinguishable from a noisy one.
+    // A non-string `url` is a malformed payload, not the routine over-length
+    // noise some upstreams produce — counting them together made a broken
+    // backend indistinguishable from a noisy one.
     expect(mockLogger.debug).toHaveBeenCalledWith(
       {
         backend: "searx",
         plugin: "@acme/searx",
-        droppedMissing: 2,
+        droppedNoUrl: 2,
         droppedScheme: 0,
         droppedLength: 0,
       },
@@ -379,7 +379,7 @@ describe("web_search — core-owned caps", () => {
       {
         backend: "searx",
         plugin: "@acme/searx",
-        droppedMissing: 0,
+        droppedNoUrl: 0,
         droppedScheme: 1,
         droppedLength: 1,
       },
@@ -560,17 +560,39 @@ describe("read_url — egress guard, capping, slicing", () => {
     expect(result.error).toBe(EGRESS_BLOCKED_MESSAGE);
     expect(read_url_executor).not.toHaveBeenCalled();
     // One record, not two: the refused URL and the policy reason ride the
-    // outcome line rather than a second, differently-shaped warn.
+    // outcome line rather than a second, differently-shaped warn. The *message*
+    // still names the event, and is byte-identical to `fetchUrl`'s for the same
+    // policy decision, so one log query covers both tools.
     expect(mockLogger.warn).toHaveBeenCalledTimes(1);
     expect(mockLogger.warn).toHaveBeenCalledWith(
       expect.objectContaining({
+        backend: "searx",
+        plugin: "@acme/searx",
         tool: "read_url",
         outcome: "blocked",
         url: "http://169.254.169.254/latest/meta-data",
         reason: expect.any(String) as unknown,
       }),
-      expect.any(String),
+      "Blocked a model-supplied URL by network policy",
     );
+  });
+
+  it("blocks a non-http(s) requested URL, and never echoes it back", async () => {
+    // `readUrlInputSchema.url` is `z.string().url()`, which accepts
+    // `javascript:` — `new URL()` parses it. The egress guard's scheme check is
+    // the only thing keeping such a URL out of `result.url`, which PR3 renders as
+    // a clickable pill, so the coupling is pinned here rather than left implicit.
+    const read_url_executor = vi.fn(() => ({ content: "x", url: "" }));
+    const { read_url } = await buildTools({
+      web_search: () => ({ query: "q", results: [] }),
+      read_url: read_url_executor,
+    });
+
+    const result = await read(read_url, { url: "javascript:alert(1)" });
+
+    expect(result.error).toBe(EGRESS_BLOCKED_MESSAGE);
+    expect(result).not.toHaveProperty("url");
+    expect(read_url_executor).not.toHaveBeenCalled();
   });
 
   it("returns the post-redirect URL and content type on an allowed read", async () => {
@@ -625,25 +647,70 @@ describe("read_url — egress guard, capping, slicing", () => {
       start_index: 0,
     });
 
-    // The slice covers the whole capped string, so there is nothing to continue
-    // to — but the cap did cut, so `truncated` says so and the content spells
-    // out why there is no continuation index to follow.
+    // Two bounds, both applied: the content cap cut the page core holds, and the
+    // per-call clamp served one `MAX_READ_URL_SLICE_CHARS` page of it. There is
+    // more of the capped string left, so this is an ordinary continuation.
     expect(
-      result.content.startsWith("x".repeat(MAX_READ_URL_CONTENT_CHARS)),
+      result.content.startsWith("x".repeat(MAX_READ_URL_SLICE_CHARS)),
     ).toBe(true);
-    expect(result.content).toContain(
-      `exceeded the ${MAX_READ_URL_CONTENT_CHARS}-character limit`,
-    );
+    expect(result.next_start_index).toBe(MAX_READ_URL_SLICE_CHARS);
     expect(result.truncated).toBe(true);
-    expect(result).not.toHaveProperty("next_start_index");
     expect(mockLogger.warn).toHaveBeenCalledWith(
       expect.objectContaining({
         backend: "searx",
+        // Every other line in this module carries plugin attribution; this one
+        // used to be the exception.
+        plugin: "@acme/searx",
         url: "https://example.com/page",
         length: oversized.length,
       }),
       expect.stringContaining("exceeded the core cap"),
     );
+  });
+
+  it("spells out the cut at the tail of a capped page, with no continuation index", async () => {
+    const oversized = "x".repeat(MAX_READ_URL_CONTENT_CHARS + 100);
+    const { read_url } = await buildTools(page(oversized));
+
+    // Read the last 10 chars core holds: the slice reaches the end of the capped
+    // string, so there is nothing to continue *to* — but the cap did cut, and
+    // `truncated: true` with no `next_start_index` would be an unexplained dead
+    // end without this line.
+    const result = await read(read_url, {
+      url: "https://example.com/page",
+      max_length: 5_000,
+      start_index: MAX_READ_URL_CONTENT_CHARS - 10,
+    });
+
+    expect(result.content).toContain(
+      `exceeded the ${MAX_READ_URL_CONTENT_CHARS}-character limit`,
+    );
+    expect(result.truncated).toBe(true);
+    expect(result).not.toHaveProperty("next_start_index");
+  });
+
+  it("clamps a fetchUrl-sized max_length to one page instead of rejecting it", async () => {
+    // A model that learned `fetchUrl`'s 1_000_000 ceiling gets a shorter page and
+    // a continuation index — not an AI-SDK input-validation error, which is the
+    // failure mode capping `url` was reverted for.
+    const long = "y".repeat(MAX_READ_URL_SLICE_CHARS * 2);
+    const { read_url } = await buildTools(page(long));
+
+    const result = await read(read_url, {
+      url: "https://example.com/page",
+      max_length: MAX_READ_URL_CONTENT_CHARS,
+      start_index: 0,
+    });
+
+    expect(result).not.toHaveProperty("error");
+    expect(
+      result.content.startsWith("y".repeat(MAX_READ_URL_SLICE_CHARS)),
+    ).toBe(true);
+    expect(result.content).toContain(
+      `Pass start_index=${MAX_READ_URL_SLICE_CHARS} to continue reading.`,
+    );
+    expect(result.next_start_index).toBe(MAX_READ_URL_SLICE_CHARS);
+    expect(result.truncated).toBe(true);
   });
 
   it("falls back to the requested URL when the backend returns an unusable one", async () => {
@@ -809,27 +876,30 @@ describe("readUrlInputSchema — the fetchUrl-mirroring defaults", () => {
     ).toBe(true);
   });
 
-  it("caps max_length at MAX_READ_URL_SLICE_CHARS, below the content cap", () => {
-    // The two are separate levers: the content cap bounds what core holds across
-    // a paginated read, this bounds any one page of it.
+  it("mirrors fetchUrl's max_length bound; the page bound is enforced in execute", () => {
+    // The per-call page bound is real but *not* a schema rejection: a lower bound
+    // here would fail a `fetchUrl`-shaped request as an AI-SDK input-validation
+    // error, outside this module's `{ error }` contract. `execute` clamps instead
+    // (asserted in the read_url block above).
     expect(MAX_READ_URL_SLICE_CHARS).toBeLessThan(MAX_READ_URL_CONTENT_CHARS);
-    expect(
-      readUrlInputSchema.safeParse({
-        url: "https://example.com/",
-        max_length: MAX_READ_URL_SLICE_CHARS,
-      }).success,
-    ).toBe(true);
     expect(
       readUrlInputSchema.safeParse({
         url: "https://example.com/",
         max_length: MAX_READ_URL_SLICE_CHARS + 1,
       }).success,
-    ).toBe(false);
-    // The old shared bound is now explicitly out of range for one call.
+    ).toBe(true);
+    // `fetchUrl`'s own ceiling, accepted verbatim…
     expect(
       readUrlInputSchema.safeParse({
         url: "https://example.com/",
         max_length: MAX_READ_URL_CONTENT_CHARS,
+      }).success,
+    ).toBe(true);
+    // …and one past it, refused by both tools alike.
+    expect(
+      readUrlInputSchema.safeParse({
+        url: "https://example.com/",
+        max_length: MAX_READ_URL_CONTENT_CHARS + 1,
       }).success,
     ).toBe(false);
   });

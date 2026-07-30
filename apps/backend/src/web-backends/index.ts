@@ -4,6 +4,7 @@ import { logger } from "../logger.ts";
 import { checkEgress, EGRESS_BLOCKED_MESSAGE } from "../utils/egress-guard.ts";
 import {
   MAX_READ_URL_CONTENT_CHARS,
+  MAX_READ_URL_SLICE_CHARS,
   MAX_URL_CHARS,
   readUrlInputSchema,
   webSearchInputSchema,
@@ -269,8 +270,18 @@ export const composeWebBackend = (
   // `details` carries whatever the outcome cannot be diagnosed without — the
   // throw for a failure, the URL and policy `reason` for a block. A blocked
   // egress used to emit this line *and* a second, `fetchUrl`-shaped one carrying
-  // the same reason; one structured record per call is easier to consume, and
-  // `outcome: "blocked"` is the discriminator that line's message used to be.
+  // the same reason; one structured record per call is easier to consume.
+  //
+  // The message is outcome-derived rather than fixed. Folding the two lines into
+  // one must not cost the *event* its name: a block is not an executor failure —
+  // the executor was never called — and `fetchUrl` logs this exact policy event
+  // under this exact message ([tools/fetch.ts]), so an Operator alerting on
+  // blocked egress keys on one string across both tools that fetch a
+  // model-supplied URL.
+  //
+  // `durationMs` therefore means "time spent in this call so far", not "time in
+  // the executor": on the `blocked` path it measures the egress guard's DNS
+  // resolution, since that is all that ran.
   const logCall = (
     toolName: string,
     outcome: "ok" | "timeout" | "blocked" | "error",
@@ -286,9 +297,14 @@ export const composeWebBackend = (
     };
     if (outcome === "ok") {
       logger.debug(line, "Web backend executor call");
-    } else {
-      logger.warn({ ...line, ...details }, "Web backend executor call failed");
+      return;
     }
+    logger.warn(
+      { ...line, ...details },
+      outcome === "blocked"
+        ? "Blocked a model-supplied URL by network policy"
+        : "Web backend executor call failed",
+    );
   };
 
   const buildSearchTool = (
@@ -330,10 +346,11 @@ export const composeWebBackend = (
         // Counted apart, not as one `dropped` total: an unusable *scheme* is a bug
         // (or worse) in the backend, an over-length URL is routine noise from some
         // upstreams, and an Operator reading the line needs to tell them apart.
-        // `droppedMissing` is the third case for the same reason — an entry with
-        // no `url` string at all is a malformed payload, and folding it into
-        // `droppedLength` made a broken backend read as routine noise.
-        let droppedMissing = 0;
+        // `droppedNoUrl` is the third case for the same reason — an entry whose
+        // `url` is not a string at all (absent, null, a number, an object) is a
+        // malformed payload, and folding it into `droppedLength` made a broken
+        // backend read as routine noise.
+        let droppedNoUrl = 0;
         let droppedLength = 0;
         let droppedScheme = 0;
         // Bounded on both ends: `MAX_SEARCH_RESULTS` on what is kept, and
@@ -350,7 +367,7 @@ export const composeWebBackend = (
           // parsed on the way to being dropped. Every case drops rather than
           // truncates: a cut URL is a broken link, worse than no link.
           if (typeof entry.url !== "string") {
-            droppedMissing += 1;
+            droppedNoUrl += 1;
             continue;
           }
           if (entry.url.length > MAX_URL_CHARS) {
@@ -378,12 +395,12 @@ export const composeWebBackend = (
         // expected steady state rather than a fault — at `warn` a healthy backend
         // would log on every search a user runs. The line below stays at `warn`
         // because it means the *backend* is misbehaving, not merely noisy.
-        if (droppedMissing > 0 || droppedLength > 0 || droppedScheme > 0) {
+        if (droppedNoUrl > 0 || droppedLength > 0 || droppedScheme > 0) {
           logger.debug(
             {
               backend,
               plugin: pluginName,
-              droppedMissing,
+              droppedNoUrl,
               droppedLength,
               droppedScheme,
             },
@@ -481,7 +498,7 @@ export const composeWebBackend = (
         const capped = full.length > MAX_READ_URL_CONTENT_CHARS;
         if (capped) {
           logger.warn(
-            { backend, url, length: full.length },
+            { backend, plugin: pluginName, url, length: full.length },
             "Web backend read_url content exceeded the core cap and was truncated",
           );
         }
@@ -489,9 +506,14 @@ export const composeWebBackend = (
           ? full.slice(0, MAX_READ_URL_CONTENT_CHARS)
           : full;
 
-        const slice = content.slice(start_index, start_index + max_length);
-        const hasMore = start_index + max_length < content.length;
-        const next_start_index = start_index + max_length;
+        // Clamped, not schema-rejected: `max_length` mirrors `fetchUrl`'s bound so
+        // the two tools accept the same requests, and core narrows the page here.
+        // Silent by design — `next_start_index` below already tells the model the
+        // read continues, which is the only thing it needs to act on.
+        const pageLength = Math.min(max_length, MAX_READ_URL_SLICE_CHARS);
+        const slice = content.slice(start_index, start_index + pageLength);
+        const hasMore = start_index + pageLength < content.length;
+        const next_start_index = start_index + pageLength;
 
         // Same hint text as `fetchUrl`, so a continuation read reads identically
         // whichever page-reader the model reached for. At the tail of a capped

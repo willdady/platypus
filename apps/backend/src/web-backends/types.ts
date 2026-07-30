@@ -44,16 +44,22 @@ export const MAX_READ_URL_CONTENT_CHARS = 1_000_000;
 // The two used to share `MAX_READ_URL_CONTENT_CHARS`, inherited from `fetchUrl`,
 // which made the "bounds context" claim on that constant only half true: core
 // held at most 1M chars, and a single `max_length: 1_000_000` still put all of
-// them (~250k tokens) into the window in one call. Core owns this schema
-// outright, so the levers need not share a number: the cap bounds what core
-// holds *across* a paginated read, this bounds any *one* page of it. 100k chars
-// is ~25k tokens — a large read that a context can still absorb — and 20× the
-// 5000-char default, with `start_index` there for anything longer.
+// them (~250k tokens) into the window in one call. Core owns this Tool outright,
+// so the levers need not share a number: the cap bounds what core holds *across*
+// a paginated read, this bounds any *one* page of it. 100k chars is ~25k tokens —
+// a large read that a context can still absorb — and 20× the 5000-char default,
+// with `start_index` there for anything longer.
 //
-// This is the one place `read_url`'s input intentionally differs from
-// `fetchUrl`'s (which allows 1_000_000). The pagination *semantics* — defaults,
-// `next_start_index`, the hint text — stay byte-identical, so a continuation
-// read still reads the same on both tools.
+// Enforced by **clamping inside `execute`, not by the input schema**, which still
+// mirrors `fetchUrl`'s `max(1_000_000)`. A lower schema bound would reject a
+// model that learned `fetchUrl`'s ceiling as an AI-SDK input-validation error —
+// the same failure mode that capping `url` here was reverted for. Clamping needs
+// no error path: the page comes back shorter and `next_start_index` already says
+// there is more, which is exactly what a paginating model does next.
+//
+// Consequence worth stating: a 1M-char page is one `fetchUrl` call and ten
+// `read_url` calls. The pagination *contract* — defaults, `next_start_index`, the
+// hint text — stays byte-identical; only the page size differs.
 export const MAX_READ_URL_SLICE_CHARS = 100_000;
 
 // Core-owned, fixed input schemas (ADR-0014). A backend supplies executors only,
@@ -70,11 +76,13 @@ export const webSearchInputSchema = z.object({
 });
 export type WebSearchInput = z.infer<typeof webSearchInputSchema>;
 
-// Mirrors `fetchUrl`'s pagination inputs (max_length default 5000, start_index
-// default 0) so a continuation read reads identically on both tools. Two
-// deliberate divergences, each documented at its constant above: `url` is
-// uncapped, and `max_length` tops out at MAX_READ_URL_SLICE_CHARS rather than
-// `fetchUrl`'s 1_000_000.
+// Mirrors `fetchUrl`'s pagination inputs byte-for-byte — `max_length` default
+// 5000 and max 1_000_000, `start_index` default 0 — so a model cannot phrase a
+// request that one tool accepts and the other rejects. Both core-owned bounds the
+// ADR adds (`MAX_URL_CHARS` on the returned URL, `MAX_READ_URL_SLICE_CHARS` on the
+// page) are enforced in `execute` rather than here, for the reason documented at
+// each constant: this schema's rejections surface as AI-SDK input-validation
+// errors, outside the graceful `{ error }` contract the rest of the module keeps.
 export const readUrlInputSchema = z.object({
   // Uncapped on purpose — the one thing `MAX_URL_CHARS` deliberately does not
   // bound. See the note on that constant above: a length cap here would reject
@@ -85,7 +93,7 @@ export const readUrlInputSchema = z.object({
     .number()
     .int()
     .min(1)
-    .max(MAX_READ_URL_SLICE_CHARS)
+    .max(MAX_READ_URL_CONTENT_CHARS)
     .default(5_000)
     .describe("Maximum number of characters to return"),
   start_index: z
