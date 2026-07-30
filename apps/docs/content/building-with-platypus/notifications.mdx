@@ -1,0 +1,65 @@
+---
+title: Notifications
+description: How an Agent tells you something happened while you weren't watching, and where you read it.
+---
+
+import { Callout } from "nextra/components";
+
+# Notifications
+
+A **Notification** is a short message an Agent posts to your Workspace. It is how
+an Agent that ran while you weren't watching tells you what happened.
+
+**Why you'd want them:** a Trigger fires at 6am, the Agent works through
+something, and there is no Chat you were watching for it to reply into. A
+Notification is the reply.
+
+## Reading them
+
+The bell in the header carries a count. Click it for the list. Each entry shows
+the Agent that posted it — by name and avatar — the message, and how long ago.
+
+- Clicking a Notification marks it read and expands it; **Show more** and **Show
+  less** toggle the full text.
+- The close button in an entry's top-right corner dismisses it for good.
+- **Mark all as read** clears the count without dismissing anything.
+
+Messages support light Markdown — bold, italic, inline code, and links, which
+open in a new tab. That is deliberately narrow: a Notification is a line or two,
+not a report.
+
+<Callout type="info">
+  The same bell also carries **Organization Invitation** entries, which are not
+  Agent Notifications — they take you to your invitations page to accept or
+  decline. See [Users & access](/self-hosting/users-and-access).
+</Callout>
+
+## Getting an Agent to post one
+
+Grant the Agent the **Notifications** Tool set on its **Tools** card, then say so
+in its Instructions. An Agent with the Tool set will not use it unprompted:
+
+```text
+When you finish a scheduled run, post a notification summarising what you did
+and anything that needs a human. Keep it to two sentences.
+```
+
+An Agent can also list, edit and dismiss the Notifications **it** posted — so a
+long-running Agent can update its own status line rather than posting five times.
+It cannot touch another Agent's.
+
+<Callout type="warning">
+  Notifications are in-app only. Nothing is emailed, and nothing is pushed to a
+  phone or a chat channel. An Agent that posts one and expects you to be paged is
+  wrong — you find out next time you look at the bell. For an outbound
+  integration, use a [Webhook](/building-with-platypus/webhooks) and subscribe to
+  the `notification.created` event.
+</Callout>
+
+## Where to next
+
+- **[Triggers](/building-with-platypus/triggers)** — the unattended runs that
+  make Notifications worth having.
+- **[Webhooks](/building-with-platypus/webhooks)** — get the same events out of
+  Platypus and into something that can page you.
+- **[Tool sets](/building-with-platypus/tool-sets)** — the rest of the catalogue.

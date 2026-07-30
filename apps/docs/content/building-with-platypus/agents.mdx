@@ -56,6 +56,16 @@ available Provider has it enabled — that's an Org Admin setting (see
   the Agent already carries those choices.
 </Callout>
 
+<Callout type="warning">
+  **An Agent's settings are the Agent's, and a Chat cannot override them.** The
+  **Chat Settings** dialog — with its own Instructions and sampling parameters —
+  only exists on a Chat where you picked a Provider and model directly. Select an
+  Agent and the button is gone, because everything it would edit lives on the
+  Agent. To try a different temperature or a different prompt for one
+  conversation, either use a direct Provider and model, or copy the Agent and edit
+  the copy. See [Chat](/building-with-platypus/chat#per-chat-settings-and-when-they-exist).
+</Callout>
+
 ## Tune generation
 
 Two levels of control over how the model generates:

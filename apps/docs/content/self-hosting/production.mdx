@@ -1,0 +1,154 @@
+---
+title: Running in production
+description: TLS, a reverse proxy, the domain constraint that makes sign-in work, and backing the database up before you upgrade.
+---
+
+import { Callout, Steps } from "nextra/components";
+
+# Running in production
+
+The quick start gets you a stack on `localhost`. This page is what has to be true
+before other people use it.
+
+Four things, in order of how badly each bites: put it behind TLS, choose hostnames
+that let sign-in work, back the database up before every upgrade, and decide where
+uploaded files live.
+
+## Put it behind a reverse proxy with TLS
+
+Neither service terminates TLS. Both speak plain HTTP on the ports Compose
+publishes, and Platypus ships no certificate handling of any kind. A reverse proxy
+in front — nginx, Caddy, Traefik, a cloud load balancer — is not an optimisation;
+it is the missing half of the deployment.
+
+The proxy has two jobs: terminate TLS, and route to the two services. Sign-in
+depends on the second one more than you'd expect, so read the next section before
+you pick hostnames.
+
+<Callout type="warning">
+  Serving Platypus over plain HTTP sends session cookies and every API key you
+  paste into a Provider form across the network in the clear. There is also no
+  redirect from HTTP to HTTPS built in — if your proxy doesn't add one, a user who
+  types the bare hostname gets the insecure version and nothing warns them.
+</Callout>
+
+Nothing about the reverse proxy restricts _who_ may reach the app. Because
+[self-serve sign-up is open and cannot be disabled](/self-hosting/users-and-access),
+the proxy is also where you put an IP allowlist, a VPN requirement, or SSO-aware
+auth if the set of people who may hold an account is narrower than "anyone who can
+route to it".
+
+## Choose hostnames that let the cookie work
+
+This is the failure that costs people an afternoon.
+
+The browser talks to **both** services directly: it loads the frontend from one
+origin and calls the backend's API and `/auth/*` endpoints on another, with
+credentials attached. The session cookie is set by the **backend** and has to be
+sent back to the backend on requests initiated by a page served from the
+**frontend**.
+
+With the default cookie settings, browsers only do that when the two are
+**same-site** — same registrable domain. So one of these:
+
+| Layout                                                          | Works | Why                                                     |
+| --------------------------------------------------------------- | ----- | ------------------------------------------------------- |
+| `app.example.com` + `api.example.com`                            | Yes   | Same registrable domain, so the request is same-site     |
+| `example.com` + `example.com/api` behind one proxy               | Yes   | One origin — nothing is cross-site at all               |
+| `platypus.example.com` + `api.example.net`                       | No    | Different registrable domains: the cookie is not sent    |
+| `app.vercel-ish-host.app` + `api.other-host.app`                 | No    | Same shape as above, on shared-suffix hosting            |
+
+<Callout type="warning">
+  Get this wrong and **sign-in appears to succeed and then silently fails**. The
+  credentials are accepted, the cookie is issued, and the very next request
+  arrives unauthenticated, so you land back on the sign-in page with no error
+  message anywhere. It reads exactly like a wrong password. If sign-in "works but
+  doesn't stick", check the two hostnames before you check anything else.
+</Callout>
+
+Whichever layout you pick, the URL variables have to agree with it —
+`BACKEND_URL`, `FRONTEND_URL`, `ALLOWED_ORIGINS` and the `BETTER_AUTH_URL` derived
+from `BACKEND_URL` are one set that changes together. See
+[Service URLs](/self-hosting/configuration#service-urls).
+
+## Back the database up, on a schedule and before every upgrade
+
+The backend runs pending database migrations when the container starts. That
+happens automatically, before the HTTP server comes up, and it is not something
+you opt into — which means **every** `docker compose pull && docker compose up -d`
+can change your schema.
+
+Migrations do not run backwards. Rolling an image tag back leaves the newer schema
+in place under an older backend that was never tested against it.
+
+<Steps>
+
+### Take a dump before you upgrade
+
+```bash
+docker compose exec -T database \
+  pg_dump -U postgres -Fc postgres > platypus-$(date +%F).dump
+```
+
+`-Fc` is the custom format, which `pg_restore` can read selectively. Copy the file
+off the host — a backup on the disk you are about to change is not a backup.
+
+### Then upgrade
+
+```bash
+docker compose pull
+docker compose up -d
+```
+
+### Restoring, if you need to
+
+```bash
+docker compose exec -T database \
+  pg_restore -U postgres -d postgres --clean --if-exists < platypus-2026-07-30.dump
+```
+
+</Steps>
+
+<Callout type="warning">
+  Uploaded files are **not** in that dump. With the default disk backend they live
+  in the `./data` bind mount; on S3 they live in your bucket. A database restore
+  without the matching files gives you Chats whose File parts 404. Back both up,
+  from the same moment.
+</Callout>
+
+Schedule the same `pg_dump` on a cron independent of upgrades. The `postgres_data`
+volume is a single point of failure and `docker compose down -v` destroys it
+without asking twice.
+
+## Decide where files go
+
+The default storage backend writes uploaded files to local disk inside the backend
+container, persisted through the `./data` bind mount. That is fine for one host and
+wrong for two: a second backend replica cannot read the first one's disk, so a file
+uploaded through one is missing through the other.
+
+Point `STORAGE_BACKEND` at `s3` — AWS S3, or anything S3-compatible like MinIO,
+R2 or Spaces — before you run more than one backend. The variables are in
+[Storage](/reference/backend-configuration#storage).
+
+## A short checklist
+
+- TLS terminated at a proxy, with an HTTP → HTTPS redirect.
+- Frontend and backend hostnames same-site, or both behind one origin.
+- `ALLOWED_ORIGINS`, `BACKEND_URL` and `FRONTEND_URL` matching those hostnames.
+- `BETTER_AUTH_SECRET` a real random value, not the placeholder.
+- `ADMIN_PASSWORD` changed from whatever seeded the first admin.
+- `pg_dump` on a schedule, and once more immediately before any upgrade.
+- Image tags pinned in a `compose.override.yaml`, not `:latest`.
+- `STORAGE_BACKEND=s3` if more than one backend replica.
+- Network access restricted to the people who should be able to register.
+- `EGRESS_ALLOW_PRIVATE_NETWORKS=false` if Agents have no business reading
+  internal hosts.
+
+## Where to next
+
+- **[Upgrading](/self-hosting/upgrading)** — what each version hop needs.
+- **[Configuration & environment](/self-hosting/configuration)** — every
+  configuration area, in narrative form.
+- **[Users & access](/self-hosting/users-and-access)** — who can get an account,
+  and how.

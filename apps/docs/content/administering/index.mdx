@@ -1,0 +1,86 @@
+---
+title: Administering
+description: The Org Admin's screens — connecting a model, handing resources to Workspaces, and tuning each Workspace.
+---
+
+import { Callout } from "nextra/components";
+
+# Administering
+
+This section is for the **Org Admin** — the person who holds the credentials and
+decides what each Workspace can see. You reach all of it from **Organization
+settings**.
+
+A Workspace Owner composes things: Agents, Skills, Chats. You control what they
+have to compose with. Anything carrying a credential, external reach, or code
+execution — **Providers**, **MCP** servers, **Sandboxes** — is yours by default,
+and you can hand some of it back per Workspace.
+
+## Providers come first
+
+A new installation can sign in and do nothing else. It has no **Provider**, so no
+Workspace can reach a model, and every **Model** dropdown in the product is empty.
+
+Go to **Organization settings → Providers → Add provider**. A Provider created
+here is available to every Workspace it's attached to; one created inside a
+Workspace is private to it.
+
+There are exactly five Provider types — OpenAI, OpenRouter, Bedrock, Google,
+Anthropic. Ollama, vLLM, Azure OpenAI and anything else speaking the OpenAI API
+go through the **OpenAI** type with **Base URL** pointed at them.
+
+The form's fields, what each model needs declared about the file types it accepts,
+and the guardrails field are all covered once in
+[Providers & authentication](/self-hosting/providers-and-auth) — that page is the
+Provider reference, and this section doesn't repeat it.
+
+<Callout type="warning">
+  A Provider is not visible to a Workspace merely because you created it at
+  Organization scope. It has to be **attached** — see
+  [Shared resources](/administering/shared-resources). A Workspace Owner
+  reporting an empty **Model** dropdown after you "already set up the Provider"
+  is usually a missing attachment.
+</Callout>
+
+## The screens
+
+**Organization settings** holds:
+
+| Screen           | For                                                                                             |
+| ---------------- | ----------------------------------------------------------------------------------------------- |
+| **General**      | The Organization's name and its identity / context text, folded into every Chat in the Org       |
+| **Members**      | Who is in the Organization, and their **Org Role**                                              |
+| **Invitations**  | Inviting people in — see [Users & access](/self-hosting/users-and-access)                        |
+| **Providers**    | The credential-bearing model connections                                                        |
+| **MCP**          | Organization-scoped MCP servers                                                                 |
+| **Skills**       | Shared Skills, and where a promoted one is edited                                               |
+| **Agents**       | Shared Agents, same                                                                             |
+| **Blueprints**   | Named bundles of Shared resources you apply to a Workspace in one step                           |
+| **Plugins**      | Read-only: what the deployment actually loaded at boot                                          |
+
+### Members and roles
+
+**Members** lists everyone in the Organization with their **Org Role**. A row's
+menu offers **Edit org role** and **Remove from Org**.
+
+A member with the `admin` role is an Org Admin — they can do everything on this
+page, including to you. A **Super Admin** row is the platform-level account and
+has no actions available here at all; it is managed at the deployment level, not
+by an Org Admin.
+
+<Callout type="info">
+  **Plugins** is deliberately read-only — there is no install or enable button.
+  Which plugins run is a deploy-time decision belonging to the Operator, so it
+  changes only when they edit configuration and restart. Use the screen to confirm
+  what loaded, and to trace a Tool set or Sandbox backend back to the plugin that
+  provided it.
+</Callout>
+
+## Where to next
+
+- **[Shared resources](/administering/shared-resources)** — Promote, attach, and
+  Blueprints, with the buttons named.
+- **[Workspace settings](/administering/workspaces)** — per-Workspace Providers,
+  memory retention, and the two switches that delegate work to an owner.
+- **[Users & access](/self-hosting/users-and-access)** — how people get accounts
+  in the first place.

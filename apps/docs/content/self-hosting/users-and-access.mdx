@@ -1,0 +1,145 @@
+---
+title: Users & access
+description: How people get accounts, what sign-up does and doesn't give them, how invitations actually work, and the platform user-management screen.
+---
+
+import { Callout, Steps } from "nextra/components";
+
+# Users & access
+
+Sign-in is **email and password**. That is the whole list: there is no SSO, no
+OIDC, no SAML, no social login, and no configuration that adds any of them. If an
+identity-provider requirement is a condition of adopting Platypus, it is not met
+today.
+
+Sessions are cookies, signed with `BETTER_AUTH_SECRET` and valid for **7 days**.
+Rotating that secret signs everybody out.
+
+## Anyone who can reach the frontend can create an account
+
+Self-serve sign-up is **open**. The sign-in page links to **Sign up**, the form
+takes a name, an email and a password, and the account exists immediately —
+**email verification is off**, so no address is ever confirmed.
+
+Nothing Platypus exposes turns this off. There is no environment variable and no
+toggle in the app; the underlying auth library has a switch for it, but Platypus
+doesn't surface it, so closing sign-up means patching and rebuilding the backend.
+
+<Callout type="warning">
+  Put Platypus on the public internet and strangers will be able to register
+  accounts. Treat network reachability as the access control, because in this
+  release it is the only one: keep the frontend behind a VPN, an SSO-aware
+  reverse proxy, or an IP allowlist if the set of people who may hold an account
+  is not "anyone who can route to it".
+</Callout>
+
+The mitigating half, worth knowing before you panic:
+
+A self-registered account has **no Organization and no Workspace**. Signing in
+gets them an empty shell — nothing to read, nothing to run, no model, no Chats.
+Only a **Super Admin** can create an Organization, and only an **Org Admin** can
+invite someone into one. So open sign-up leaks the ability to hold an account, not
+the ability to reach anything in your deployment.
+
+Registered accounts still accumulate rows in your database, and a registered
+address is enough to accept an invitation later, so the exposure is worth closing
+at the network layer rather than shrugging at.
+
+## Inviting someone in
+
+<Steps>
+
+### Send the invitation
+
+**Organization settings → Invitations**. Fill in:
+
+- **Email** — the address of the person joining. It must match the address on
+  their account exactly.
+- **Workspace name** _(optional)_ — a Workspace provisioned for them on
+  acceptance. Left blank, it is named after them.
+- **Blueprints** _(optional)_ — one or more
+  [Blueprints](/administering/shared-resources) to apply to that Workspace, in the
+  order you arrange them.
+
+Click **Send invitation**.
+
+### Tell them yourself
+
+Nothing is emailed. See the warning below.
+
+### They accept
+
+The invitee signs in and finds the invitation under **Settings → Invitations**, or
+via the bell in the header, which shows an **Organization Invitation** entry.
+Accepting joins them to the Organization and provisions the Workspace with any
+Blueprints applied.
+
+</Steps>
+
+<Callout type="warning">
+  **Platypus sends no email. Ever.** There is no SMTP configuration, no mail
+  transport, and no delivery to wait for. "Send invitation" writes a row; it does
+  not notify anybody. Tell the person yourself, over whatever channel you already
+  use, that an invitation is waiting and they should sign in to accept it.
+  Watching an inbox for a Platypus invitation is watching an inbox nothing will
+  arrive in.
+</Callout>
+
+<Callout type="info">
+  The invitee needs an account **with that exact email address** before they can
+  see the invitation — invitations are matched by address, not by a link. If they
+  don't have one yet, they sign up first. This is the one place the open sign-up
+  above is doing useful work.
+</Callout>
+
+### Expiry
+
+An invitation is valid for `INVITATION_EXPIRY_DAYS` days, **7** by default. The
+Invitations table shows each one's **Status** and **Expires** date, and an expired
+invitation cannot be accepted — send a new one.
+
+## Roles
+
+Three levels of authority, each bounded by the one above:
+
+| Role                | Is                                                              | Gets it by                                                     |
+| ------------------- | --------------------------------------------------------------- | -------------------------------------------------------------- |
+| **Super Admin**     | The platform account. Bypasses all in-app authorization         | Seeded on first boot from `ADMIN_EMAIL` / `ADMIN_PASSWORD`      |
+| **Org Admin**       | Holds the Organization's credentials and Shared resources        | An existing Org Admin sets their **Org Role** to `admin`        |
+| **Workspace Owner** | Owns one Workspace and everything composed inside it            | Assigned when the Workspace is created                         |
+
+An Org Admin changes roles from **Organization settings → Members**, using a
+row's **Edit org role**, and can remove somebody with **Remove from Org**. A
+**Super Admin** row shows no actions there — the platform account is not an Org
+Admin's to manage.
+
+## The platform user-management screen
+
+A Super Admin gets one extra screen: **Settings → Users**, titled **User
+Management**. It lists every account on the deployment with its role
+(**Super Admin** or **User**), its status (**Verified**, **Unverified** or
+**Banned**), and when it was created.
+
+Expect almost everyone to read **Unverified**. Only the admin seeded on first boot
+is marked verified; because email verification is off there is no flow that ever
+verifies anybody else. It is not a problem to fix — nothing is gated on it.
+
+Two actions per row: **Change password** and **Delete**.
+
+This is the screen to use when somebody has locked themselves out, or when a
+self-registered account should not exist. It is also the recovery path referred to
+elsewhere as "the in-app user management".
+
+<Callout type="info">
+  Neither action is offered on your own row, or on another **Super Admin**'s. You
+  cannot delete yourself by accident, and you cannot demote or lock out the other
+  platform admin from here — that needs database access.
+</Callout>
+
+## Where to next
+
+- **[Running in production](/self-hosting/production)** — the reverse proxy that
+  is currently your access control.
+- **[Administering](/administering)** — what an Org Admin does once people are in.
+- **[Providers & authentication](/self-hosting/providers-and-auth)** — the role
+  ladder in more depth, and what each tier may configure.

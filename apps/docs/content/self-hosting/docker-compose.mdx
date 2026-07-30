@@ -230,6 +230,9 @@ docker compose up -d     # recreate containers with the new images
 The backend applies any pending schema changes on startup. Your data persists in
 the `postgres_data` volume across upgrades.
 
+What a given version hop needs on top of that — and the `pg_dump` you should take
+first — is on [Upgrading](/self-hosting/upgrading).
+
 ### Rolling back
 
 Rollback is a **tag change**, not a git operation. Checking out an older git tag

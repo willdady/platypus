@@ -14,6 +14,17 @@ The fastest path is the Docker quick start below, then a five-step loop:
 **create a Workspace → configure a Provider → create an Agent → start a Chat →
 send a message**.
 
+## Before you start
+
+- **Docker Engine with the Compose v2 plugin.** Every command here is
+  `docker compose` (a space, not a hyphen). If `docker compose version` prints
+  nothing, you have the old standalone `docker-compose` binary and the overlay
+  files below won't merge the way this guide describes.
+- **Ports `3000` and `4000` free on the host.** The frontend publishes `3000`
+  and the backend `4000`. Postgres stays on the private network and publishes
+  nothing.
+- **`git`**, to clone the repository the compose file lives in.
+
 ## Quick start (Docker)
 
 The quickest way to a running instance is Docker Compose.
@@ -61,8 +72,33 @@ Open [http://localhost:3000](http://localhost:3000) and sign in with the
   especially on any network-reachable deployment.
 </Callout>
 
-For a production-grade deployment — TLS, persistent storage, S3-backed file
-storage, and configuration hardening — see [Self-Hosting](/self-hosting).
+Sign-in is **email and password**. There is no SSO, no OIDC and no SAML, and no
+configuration that adds them — see
+[Users & access](/self-hosting/users-and-access) if that is a go/no-go question
+for you.
+
+For a production-grade deployment — TLS, a reverse proxy, persistent storage,
+and configuration hardening — see
+[Running in production](/self-hosting/production).
+
+## When the stack doesn't come up
+
+The three failures that account for almost all of them, and what each looks
+like:
+
+| Symptom                                                   | Cause                                                                  | Fix                                                                                                                                        |
+| --------------------------------------------------------- | ---------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| `docker compose ps` shows `backend` as **exited**         | A required variable is unset, or first-boot seeding failed             | `docker compose logs backend` — the last line names the variable or the seeding problem. Fix `.env` and `docker compose up -d` again.       |
+| The backend sits in `starting` or goes **unhealthy**      | It cannot reach Postgres                                               | Check `docker compose logs database`, then that `DATABASE_URL` points at the `database` service rather than `localhost`.                    |
+| Port already allocated on `3000` or `4000`                | Something else on the host holds the port                              | Stop the other process, or remap the host side in a `compose.override.yaml` and update `BACKEND_URL` / `ALLOWED_ORIGINS` to match.          |
+
+You sign in successfully and are immediately signed out again? That is the URL
+variables disagreeing, not a password problem — see
+[Service URLs](/self-hosting/configuration#service-urls).
+
+Deeper diagnosis, including recovering from a first boot that never completed,
+is in
+[Deploy with Docker Compose](/self-hosting/docker-compose#recovering-from-a-failed-first-boot).
 
 ## First run & the default admin
 
@@ -158,7 +194,9 @@ That's the full loop. 🎉
 
 ## Where to next
 
-- **[Concepts](/concepts)** — the domain model: Organizations, Workspaces,
-  Agents, Skills, MCP, Sandbox, and Memory.
-- **[Self-Hosting](/self-hosting)** — deploy Platypus properly: configuration,
-  providers, storage, and the sandbox infrastructure.
+- **[Concepts](/concepts)** — what an Agent, a Skill, a Tool set and a Sandbox
+  actually are. Read this next; it is the shortest route to using the rest.
+- **[Chat](/building-with-platypus/chat)** — the screen you used a moment ago, and the
+  parts of it that aren't obvious.
+- **[Self-Hosting](/self-hosting)** — when you're ready to run this somewhere
+  other than a laptop.

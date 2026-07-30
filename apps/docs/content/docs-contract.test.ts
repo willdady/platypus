@@ -42,6 +42,7 @@ import {
   skillSchema,
   triggerSchema,
   webhookEventSchema,
+  workspaceSchema,
 } from "@platypus/schemas";
 
 const CONTENT_DIR = dirname(fileURLToPath(import.meta.url));
@@ -204,14 +205,15 @@ const ENV_EXAMPLE_FILES: Record<string, string[]> = {
 const ENV_EXAMPLE_NAMES = Object.keys(ENV_EXAMPLE_FILES);
 
 /**
- * Variables the docs deliberately still name after they stopped existing,
- * because a reader upgrading needs to be told where the setting went. Removing
- * the migration note is what should retire the entry here.
+ * Variables a reference page deliberately still names after they stopped
+ * existing. Empty on purpose: "Reference describes the present tense" is now a
+ * stated section rule (`reference/index.mdx`), so where a removed setting went
+ * is told on the upgrade page instead, which no check here reads.
+ *
+ * An entry earns its place back only if a reference table itself needs to name a
+ * variable that no `.env.example` ships any more.
  */
-const REMOVED_VARS = new Set([
-  "FETCH_TOOL_IGNORE_ROBOTS_TXT",
-  "PLATYPUS_SANDBOX_DOCKER_ALLOWED_NETWORKS",
-]);
+const REMOVED_VARS = new Set<string>([]);
 
 /**
  * Real variables that no `.env.example` ships, so the reference page is their
@@ -703,6 +705,18 @@ const LIMIT_CLAIMS: LimitClaim[] = [
     anchor: "**Instruction** — the message sent to the Agent",
     source: "packages/schemas/index.ts (triggerSchema.instruction)",
     expected: { max: stringField(triggerSchema, "instruction").max },
+  },
+  {
+    doc: "administering/workspaces.mdx",
+    anchor: "**Name** — what to call it",
+    source: "packages/schemas/index.ts (workspaceSchema.name)",
+    expected: stringField(workspaceSchema, "name"),
+  },
+  {
+    doc: "administering/workspaces.mdx",
+    anchor: "**Context** is text about the **Workspace**",
+    source: "packages/schemas/index.ts (workspaceSchema.context)",
+    expected: { max: stringField(workspaceSchema, "context").max },
   },
   {
     doc: "self-hosting/providers-and-auth.mdx",

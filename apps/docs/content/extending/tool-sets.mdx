@@ -1,0 +1,130 @@
+---
+title: Tool sets
+description: Contribute a named group of tools that Agents can be granted, as a static map or a per-turn factory.
+---
+
+import { Callout } from "nextra/components";
+
+# Tool sets
+
+A **Tool set** is a named, categorised group of tools a Workspace Owner can
+grant to an Agent with one switch. Contributing one puts it on the Agent form
+for every Workspace on the deployment.
+
+You add entries to `contributes.toolSets` in your manifest. Core reads the
+manifest and drives registration itself — there is no `register*()` function for
+you to call.
+
+## The contribution
+
+Each entry is a `ToolSetContribution` from
+[`@platypuschat/plugin-sdk`](https://www.npmjs.com/package/@platypuschat/plugin-sdk).
+It carries an `id`, a display `name`, a `category` that groups it on the Agent
+form, an optional `description`, and `tools`. The exact signatures live in the
+package; the rules below are what those types don't encode.
+
+An individual tool is a Vercel AI SDK tool — `tool()` from the `ai` package,
+with a Zod `inputSchema` and an `execute` function.
+
+Pick `id`, `name` and `category` deliberately: the `id` is what gets persisted on
+every Agent that is granted the set, and `name` and `category` are the only two
+strings a Workspace Owner ever sees.
+
+<Callout type="warning">
+  Changing an `id` after release orphans every Agent granted the old one. The
+  grant is stored by id, and a turn that can't resolve the id degrades to no
+  tools rather than erroring — so the symptom is an Agent that quietly stopped
+  being able to do its job. Treat a shipped `id` as permanent.
+</Callout>
+
+## Static map or factory
+
+`tools` is either a map of tools, or a function core calls at Chat-turn time.
+
+A **static map** is right when the tools need nothing from the turn:
+
+```ts
+{
+  id: "math-conversions",
+  name: "Math Conversions",
+  category: "Math",
+  description: "Temperature and unit conversions",
+  tools: { convertTemperature, convertDistance, convertWeight, convertVolume },
+}
+```
+
+A **factory** is right when they need to know where they are running. It receives
+a `ToolSetContext` carrying the Organization, Workspace, Agent and User ids for
+this turn, plus the frontend URL if one is configured:
+
+```ts
+{
+  id: "kanban",
+  name: "Kanban",
+  category: "Productivity",
+  description: "Manage kanban boards in this workspace",
+  tools: ({ workspaceId, agentId, orgId, frontendUrl }) =>
+    createKanbanTools(workspaceId, agentId, orgId, frontendUrl),
+}
+```
+
+The factory runs **once per turn**, not once at boot, so it may be `async` and
+may read the database. Use `frontendUrl` to put a clickable link to a resource in
+a tool's output — it is `undefined` when the deployment hasn't set one, so treat
+the link as optional.
+
+A factory also receives the plugin's deploy-time config as an appended second
+argument — see
+[Plugin API & config](/extending/plugin-api-and-config#deploy-time-config-and-credentials).
+
+## Ids and namespacing
+
+Write **bare** ids. Core prefixes a third-party plugin's ids with its manifest
+`name` at load, so `greeting` in a plugin named `example` registers as
+`example.greeting`. Core plugins keep their ids flat (`kanban`, `time`,
+`web-fetch`).
+
+That split is what stops a third-party id colliding with a core one a later
+release introduces. It also means the namespaced id is the real id: an Agent
+granted the set above stores `example.greeting`, and that is what a turn
+resolves.
+
+Membership of the built-in map in the backend — not the package scope — decides
+what counts as core, so publishing under an `@platypus/*` name you don't own
+gains nothing. It is still prefixed as third-party.
+
+## Degrading gracefully
+
+A Tool set whose dependencies aren't there at turn time should resolve to **no
+tools**, not throw. The core `sandbox` set is the model: in a Workspace with no
+Sandbox configured it returns an empty map and the turn proceeds without shell
+tools. Boot is strict; runtime is forgiving.
+
+## Adding one to a core plugin
+
+If you are working in the repository rather than shipping your own package, a
+new core Tool set is a `ToolSetContribution` added to an existing core plugin's
+manifest:
+
+- a Platypus-domain set belongs in `@platypus/tools-platform`;
+- a pure utility belongs in `@platypus/tools-basic`;
+- a capability an Operator would plausibly want to **deny on its own** — network
+  egress, infrastructure reach — gets its own plugin, so it can be left out of
+  `PLATYPUS_PLUGINS`. `@platypus/web-fetch` is the pattern.
+
+The first two are always-on and need nothing further. A new plugin has to be
+named in the deployment's `PLATYPUS_PLUGINS` before it loads at all.
+
+<Callout type="info">
+  Icons and custom in-chat rendering for a tool are a frontend concern and live
+  outside the manifest. A tool with no custom UI falls back to a generic
+  input/output renderer, which is usually fine.
+</Callout>
+
+## Where to next
+
+- **[Your first plugin](/extending/your-first-plugin)** — load one end to end.
+- **[Plugin API & config](/extending/plugin-api-and-config)** — the deploy-time
+  config a factory can read.
+- **[Tool sets](/building-with-platypus/tool-sets)** — what the built-in sets do,
+  from the Workspace Owner's side.

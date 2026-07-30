@@ -1,0 +1,77 @@
+---
+title: Tool sets
+description: What each built-in Tool set lets an Agent do, which ones an Operator has to enable, and which ones let an Agent change your Workspace.
+---
+
+import { Callout } from "nextra/components";
+
+# Tool sets
+
+A **Tool set** is a bundle of tools you grant to an Agent with one switch, on the
+Agent form's **Tools** card. This page is the catalogue: what each one actually
+lets an Agent do, so you can pick without guessing from its name.
+
+The card groups Tool sets by **category**, and only lists what your deployment
+has loaded. If something below isn't there, your Operator hasn't enabled it — the
+**Availability** column says which ones that applies to.
+
+## The catalogue
+
+| Tool set                | Category      | What it lets an Agent do                                                                                            | Availability                     |
+| ----------------------- | ------------- | ------------------------------------------------------------------------------------------------------------------- | -------------------------------- |
+| **Math Conversions**    | Math          | Convert temperature, distance, weight and volume between units.                                                     | Always                           |
+| **Time**                | Utilities     | Read the current time and convert between timezones.                                                                | Always                           |
+| **Kanban**              | Productivity  | Read a Board's full state, and create, move, copy, bulk-edit and delete cards and their comments.                   | Always                           |
+| **Dashboards**          | Productivity  | List Dashboards and their widgets, and write new data into a widget.                                                | Always                           |
+| **Triggers**            | Automation    | List and read Triggers, and **create, edit and delete** them — including scheduling new unattended runs.             | Always                           |
+| **Agent Discovery**     | Productivity  | Read-only: list the Agents, Tool sets and Providers in the Workspace, and read one Agent's configuration.           | Always                           |
+| **Agent Management**    | Productivity  | **Create, update and delete Agents** in the Workspace.                                                              | Always                           |
+| **Skill Management**    | Productivity  | List and read Skills, and **create, update and delete** them.                                                       | Always                           |
+| **Notifications**       | Communication | Post a [Notification](/building-with-platypus/notifications) to the Workspace, then list, edit or dismiss its own.   | Always                           |
+| **Memory**              | Memory        | Search and fetch stored memories beyond the summaries already in every prompt.                                      | Always                           |
+| **Web Fetch**           | Web           | Fetch the contents of a URL the model chose.                                                                        | Operator must enable it          |
+| **Sandbox**             | Sandbox       | Run shell commands and read, write, edit and list files inside the Workspace's Sandbox.                              | Needs a Sandbox on the Workspace |
+
+## Three of these change your Workspace
+
+<Callout type="warning">
+  **Agent Management**, **Skill Management** and **Triggers** are write access to
+  your own configuration. An Agent granted them can create Agents you didn't ask
+  for, rewrite the Instructions of ones you did, delete a Skill, and schedule
+  unattended runs — all from a model's decision inside a Chat turn, with no
+  confirmation step.
+
+  Grant them to an Agent whose job is genuinely to build things. Don't grant them
+  to a general-purpose assistant because they looked harmless in a list.
+</Callout>
+
+**Agent Discovery** is the safe half of the same idea: it reads the same
+information and changes nothing. If an Agent needs to answer "what Agents exist
+here?", that is the one to grant.
+
+## Two need something switched on elsewhere
+
+**Web Fetch** ships as a separate plugin so network egress can be denied on its
+own. If the switch isn't on the Agent form, your Operator hasn't listed it — see
+[Configuration → Plugins](/self-hosting/configuration#plugins).
+
+**Sandbox** is different again: the switch is there, but in a Workspace with no
+Sandbox configured it resolves to **no tools** at all. The Agent has no
+shell that turn — it doesn't error, and nothing tells you why. Sandbox setup is
+an Org Admin task; see
+[Sandbox infrastructure](/self-hosting/sandbox).
+
+## MCP servers appear here too
+
+Any [MCP server](/building-with-platypus/mcp) you have registered shows up on the
+same card under an **MCP** category. Granting one works identically. MCP is the
+right answer whenever you want an Agent to reach a service that isn't in the list
+above — it needs no code change and no Operator involvement.
+
+## Where to next
+
+- **[Agents & sub-agents](/building-with-platypus/agents)** — the **Tools** card
+  these appear on.
+- **[Build a standup bot](/building-with-platypus/standup-bot)** — a worked
+  example that grants **Kanban** and puts it to work on a schedule.
+- **[Extending → Tool sets](/extending/tool-sets)** — contribute one of your own.

@@ -1,0 +1,117 @@
+---
+title: Sandbox backends
+description: Run an Agent's shell and filesystem tools on a new execution environment by implementing the Sandbox contract.
+---
+
+import { Callout } from "nextra/components";
+
+# Sandbox backends
+
+A **Sandbox** is a persistent, per-Workspace execution environment. It exposes a
+fixed set of shell and filesystem tools to Agents, and a **backend** is the
+adapter that decides where those tools actually run — a local container, a remote
+host, a hosted sandbox service.
+
+Two reference backends ship: `@platypus/docker` and `@platypus/ssh`. Contributing
+a third is one of the better-scoped things you can build against Platypus.
+
+## The contract is closed
+
+Your adapter implements `SandboxBackend` from
+[`@platypuschat/plugin-sdk`](https://www.npmjs.com/package/@platypuschat/plugin-sdk):
+five tools plus a teardown. You **cannot** add, rename or re-sign a tool. Read the
+exact signatures off the package you have installed — this page states the rules
+those types don't encode.
+
+| Method      | Does                                              |
+| ----------- | ------------------------------------------------- |
+| `shellExec` | Runs a command and returns stdout, stderr, exit code |
+| `fsRead`    | Reads a file, optionally a line range             |
+| `fsWrite`   | Creates or overwrites a file                      |
+| `fsEdit`    | Replaces one exact string with another            |
+| `fsList`    | Lists a directory, optionally recursive or globbed |
+| `destroy`   | Tears the environment down                        |
+
+That closure is the point: an Agent's Instructions must not depend on which
+backend it runs on, which is what lets an Operator swap Docker for a hosted
+service without re-prompting anything. A backend that can do more than these five
+things exposes the extra through a
+[Tool set](/extending/tool-sets), not by widening this interface.
+
+## Rules your adapter must honour
+
+- **Paths are relative to the workspace root.** The root is conventionally
+  `/workspace`. Reject absolute paths.
+- **`shellExec` is stateless.** A fresh shell per call with an explicit working
+  directory — no session state carried between calls. The default timeout is 60
+  seconds and the hard cap is 600.
+- **`fsWrite` takes an explicit mode**, `create` or `overwrite`. Never silently
+  create-or-overwrite.
+- **`fsEdit` replaces an exact old string with a new one.** It is not a patch or
+  diff format.
+- **Three of the five tool responses carry a `truncated` flag** —
+  `shellExec`, `fsRead` and `fsList`. Set it when you apply Platypus's byte and
+  entry caps, and truncate yourself if your environment can't honour a cap
+  natively. `fsWrite` and `fsEdit` have no such flag; there is nothing to cut.
+- **`destroy` must be idempotent.** It fires on row delete, on a backend change,
+  and best-effort when a Workspace is deleted. It need not destroy anything: the
+  SSH adapter's `destroy` only disconnects, because the host belongs to the
+  Operator, not to Platypus.
+- **State persists across Chat turns**, keyed on the Organization and Workspace.
+  That persistence is the whole value — long-running build-and-test workflows
+  depend on it.
+
+<Callout type="warning">
+  **Tool calls are not serialised.** Platypus forwards them concurrently — there
+  is no per-Sandbox lock and no queue — and a model that emits parallel tool
+  calls does this routinely. Two `shellExec` calls, or a `shellExec` and an
+  `fsWrite`, can be in flight against the same environment at once. The contract
+  is "a Sandbox is a Linux box": racing commands are the caller's problem, but
+  any connection or container handle your adapter caches must be safe for
+  concurrent use, or you will corrupt state under a model you didn't write.
+</Callout>
+
+## Contributing one
+
+Add an entry to `contributes.sandboxBackends`. A
+`SandboxBackendContribution` declares:
+
+- **`backend`** — the discriminator string persisted on the Sandbox row.
+- **`name`** — the label an Org Admin picks from.
+- **`configSchema`** — a Zod schema for the non-secret per-Workspace settings
+  (region, image, host). It may also be a **factory** taking the plugin's
+  deploy-time config, when the allowed shape depends on what the Operator
+  configured.
+- **`credentialsSchema`** — a Zod schema for the secret per-Workspace material
+  (API tokens, private keys).
+- **`create`** — returns your adapter, given the validated per-Workspace config
+  and credentials, plus the plugin's shared deploy-time block.
+
+Then list your plugin in `PLATYPUS_PLUGINS`. List membership **is** the enable
+switch — there is no separate per-backend flag. Leave the plugin out and the
+backend type is never registered, so nobody can create a Sandbox row that can't
+run.
+
+<Callout type="warning">
+  If your backend gives a Sandbox reach into host networks or internal services,
+  make that reach **default-deny and admin-curated**: the Operator declares the
+  eligible set at deploy time, an Org Admin picks a subset per Sandbox, and a
+  Workspace Owner cannot widen it. Skip this and a Workspace Owner can point an
+  Agent at your internal network by editing a form. The Docker adapter's network
+  allowlist is the worked example — see
+  [Sandbox infrastructure](/self-hosting/sandbox).
+</Callout>
+
+<Callout type="info">
+  The reference Docker adapter mounts the host Docker socket, which grants its
+  container effective root on the host. It is scoped to development and
+  single-node self-hosting, explicitly not to multi-tenant or hostile-tenant
+  environments. Don't copy that trade-off into a backend meant for either.
+</Callout>
+
+## Where to next
+
+- **[Plugin API & config](/extending/plugin-api-and-config)** — the shared
+  credential block a backend and its management Tool set can both read.
+- **[Sandbox infrastructure](/self-hosting/sandbox)** — how an Operator and Org
+  Admin configure the two backends that ship.

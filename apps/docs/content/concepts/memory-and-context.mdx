@@ -52,16 +52,33 @@ withholding it does not hide the summaries.
 ## Context
 
 **Context** is free-text notes _you_ write and attach for the assistant to read.
-You can set Context at two levels:
+You'll find them under **Settings → Contexts**, at two levels:
 
-- **global** — notes that apply everywhere you work, or
-- **per-Workspace** — notes specific to one Workspace.
+- **Global Context** — notes that apply everywhere you work, and
+- **Workspace Contexts** — notes specific to one Workspace.
 
 Whatever you put there is rendered into the [system
 prompt](/concepts/system-prompt), so it's a direct way to tell the assistant
 standing facts: who you are, how you like answers formatted, what a project is
 about. It reaches every Agent you use, so there's no need to repeat it in any
 Agent's Instructions.
+
+### Two different things are called Context
+
+<Callout type="warning">
+  Your Workspace Context and the Workspace's **Context** field are not the same
+  thing, and mixing them up is easy because both end up in the prompt.
+
+  Your Workspace Context is **yours**, written under **Settings → Contexts**, and
+  nobody else's chats see it. The **Context** field on the Workspace settings form
+  belongs to the **Workspace**, is written by whoever administers it, and reaches
+  every Chat anyone runs there.
+
+  So: put "I prefer terse answers with no preamble" in your own Context. Put "this
+  Workspace supports the payments team; the service is called Ledger" in the
+  Workspace's field. Writing the first one into the second inflicts your
+  preferences on everyone.
+</Callout>
 
 **Memory vs. Context:** Memory is built up automatically from your activity;
 Context is written deliberately by you. They work together — Memory remembers,

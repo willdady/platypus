@@ -163,8 +163,8 @@ empty list unless it says otherwise, and silently runs without web-fetch.
   Plugins**.
 </Callout>
 
-See [Extending → the plugin model](/extending#the-plugin-model) for how a
-manifest's `contributes` block fills extension points.
+See [Extending → the plugin model](/extending/plugin-api-and-config#the-plugin-model)
+for how a manifest's `contributes` block fills Extension points.
 
 ### Inspecting installed plugins
 
@@ -234,10 +234,18 @@ plugin in `PLATYPUS_PLUGINS`. Without the plugin listed, that backend type isn't
 registered and its sandbox configuration is inert:
 
 - **Docker** — `@platypus/docker`. One container per Workspace on the local
-  daemon; development / single-node only. Its Operator allowlist —
+  daemon; development / single-node only. It needs the opt-in
+  `compose.sandbox.yaml` overlay, which mounts the Docker socket and so grants the
+  backend container effective root on the host. Its Operator allowlist —
   `config.allowedNetworks` in the plugin's `PLATYPUS_PLUGIN_CONFIG` entry — bounds
-  which Docker networks an Org Admin may attach a sandbox to (default-deny), and
-  it needs the opt-in `compose.sandbox.yaml` overlay.
+  which Docker networks an Org Admin may attach a sandbox to. Unset or empty means
+  **none are attachable**, and an Org Admin then picks a per-Sandbox subset of
+  whatever you listed:
+
+  ```
+  PLATYPUS_PLUGIN_CONFIG={"@platypus/docker":{"config":{"allowedNetworks":["shared-services","public-tools"]}}}
+  ```
+
 - **SSH** — `@platypus/ssh`. Attaches to a pre-existing, operator-owned host over
   SSH. It takes **no deployment env vars** — the connection target (host, user,
   key, optional host-key pin) is per-Workspace Sandbox config set in-app. It is the
@@ -247,6 +255,44 @@ registered and its sandbox configuration is inert:
 See [Sandbox infrastructure](/self-hosting/sandbox) for the full security model,
 the SSH connection fields, host-key pinning, and the opt-in `compose.sandbox.yaml`
 overlay.
+
+## Tool egress
+
+Some tools fetch a URL the **model** chose rather than one a person typed — the
+`fetchUrl` tool is the one that ships. That is a different risk from an outbound
+call your code makes, because a prompt-injected model can pick the target.
+
+### The egress guard
+
+Every such fetch goes through a guard first. It resolves the hostname and refuses
+the fetch if **any** resolved address is blocked, so a name with one public and one
+internal record is refused rather than raced. Non-`http(s)` schemes are refused,
+and a hostname that fails to resolve fails closed.
+
+Some ranges are blocked whatever you configure, because no legitimate page read
+targets them:
+
+| Range                                | Why                                                        |
+| ------------------------------------ | ---------------------------------------------------------- |
+| `127.0.0.0/8`, `::1`                 | Loopback — the backend's own process                       |
+| `0.0.0.0/8`                          | Reaches localhost on Linux                                 |
+| `169.254.0.0/16`, `fe80::/10`         | Link-local, where AWS, Azure and GCP serve instance metadata |
+| `100.64.0.0/10`                      | Home to Alibaba Cloud's metadata service                   |
+
+Private networks — `10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`, `fc00::/7` —
+are **allowed by default**, which is the opposite of a textbook default-deny.
+That is deliberate: reading an internal wiki or intranet page is a first-class use
+case for a self-hosted deployment. Set `EGRESS_ALLOW_PRIVATE_NETWORKS=false` on an
+internet-facing deployment whose Agents have no reason to read internal hosts.
+
+<Callout type="warning">
+  The guard is a **pre-flight check on the URL**, so it removes the easy path
+  rather than every path. Redirects are followed by the HTTP client after the
+  check, and the fetch resolves the hostname again independently — so a host that
+  passes and then redirects inward, or whose DNS records change in between, is not
+  caught. Treat it as defence against a prompt-injected model, not as an SSRF
+  boundary. If you need a boundary, put one in the network.
+</Callout>
 
 ## Other operational areas
 

@@ -1,0 +1,152 @@
+---
+title: Upgrading
+description: What every upgrade requires, and what each version hop needs on top of that.
+---
+
+import { Callout } from "nextra/components";
+
+# Upgrading
+
+An upgrade is a pull and a recreate:
+
+```bash
+docker compose pull
+docker compose up -d
+```
+
+Everything else on this page is what to do around those two commands. Read the
+section for the version you are **coming from** — the requirements accumulate, so
+a 1.x deployment moving to the current release needs every section below it.
+
+## What every upgrade does
+
+**Pending database migrations run when the backend container starts**, before the
+HTTP server comes up. You don't opt in and there is no flag to skip it, so treat
+every upgrade as one that can change your schema.
+
+**Migrations do not run backwards.** Putting an older image tag back leaves the
+newer schema in place under a backend that was never tested against it.
+
+<Callout type="warning">
+  **Take a database backup first.** It is the only rollback path that works, and
+  the `pg_dump` command is in
+  [Running in production](/self-hosting/production#back-the-database-up-on-a-schedule-and-before-every-upgrade).
+  Uploaded files are not in that dump — back those up from the same moment, or a
+  restore gives you Chats whose File parts have vanished.
+</Callout>
+
+Two more things worth doing every time:
+
+- **Pin your image tags** in a `compose.override.yaml`, so you know what you're
+  running and what you'd be going back to. Rollback is a tag change, not a git
+  checkout — see [Rolling back](/self-hosting/docker-compose#rolling-back).
+- **Bump both images together.** The backend and frontend are released as a pair
+  and are only tested against each other.
+
+## Coming from 2.x
+
+Nothing beyond the section above. Configuration is stable across 2.x, and the
+migrations that run at container start need no action from you.
+
+<Callout type="info">
+  New **gate-able** core plugins introduced in a later release are **not**
+  auto-enabled. If a release adds one you want, add its name to
+  `PLATYPUS_PLUGINS` yourself — a pinned list never grows on its own. Check
+  **Organization settings → Plugins** after the restart to see what actually
+  loaded.
+</Callout>
+
+## Coming from 1.x
+
+Platypus 2.0 introduced the
+[plugin system](/extending/plugin-api-and-config#the-plugin-model). The web-fetch
+tool set and the Docker Sandbox backend stopped having their own environment
+variables and became **plugins**, enabled through `PLATYPUS_PLUGINS` and
+configured through `PLATYPUS_PLUGIN_CONFIG`.
+
+For that hop specifically the changes are **deployment configuration only** —
+three variables removed, their behaviour moved onto the plugin surface, no
+application-data change. It is an edit to your `.env` and a restart. Later 2.x
+releases do bring migrations, which is why the section above still applies.
+
+<Callout type="warning">
+  **The most common upgrade mistake: losing the web-fetch tool.** An unset or
+  empty `PLATYPUS_PLUGINS` loads **only** the always-on core tool sets — there is
+  no built-in default. A 1.x `.env` predates the plugin system and has no
+  `PLATYPUS_PLUGINS` line at all, so upgrading silently strips web-fetch from
+  every Agent. Nothing errors; the tool is gone. To keep it you **must**
+  add `@platypus/web-fetch` to `PLATYPUS_PLUGINS`.
+</Callout>
+
+### The three removed variables
+
+| Removed in 2.0                             | Replaced by                                                                                |
+| ------------------------------------------ | ------------------------------------------------------------------------------------------ |
+| `PLATYPUS_SANDBOX_DOCKER_ENABLED`          | Listing `@platypus/docker` in `PLATYPUS_PLUGINS` (list membership _is_ the enable switch).  |
+| `PLATYPUS_SANDBOX_DOCKER_ALLOWED_NETWORKS` | `config.allowedNetworks` on `@platypus/docker` in `PLATYPUS_PLUGIN_CONFIG`.                |
+| `FETCH_TOOL_IGNORE_ROBOTS_TXT`             | `config.ignoreRobotsTxt` on `@platypus/web-fetch` in `PLATYPUS_PLUGIN_CONFIG`.             |
+
+All three are inert in 2.x. Delete them from your environment.
+
+### Migration checklist
+
+1. **Keep web-fetch.** Add `@platypus/web-fetch` to `PLATYPUS_PLUGINS`.
+2. **If you ran the Docker sandbox** (`PLATYPUS_SANDBOX_DOCKER_ENABLED=true`): add
+   `@platypus/docker` to `PLATYPUS_PLUGINS`. The `compose.sandbox.yaml` overlay
+   requirement is unchanged.
+3. **If you set `PLATYPUS_SANDBOX_DOCKER_ALLOWED_NETWORKS`:** move the value into
+   `config.allowedNetworks` on `@platypus/docker` in `PLATYPUS_PLUGIN_CONFIG`. The
+   old comma-separated list becomes a JSON array of strings.
+4. **If you set `FETCH_TOOL_IGNORE_ROBOTS_TXT=true`:** move it to
+   `config.ignoreRobotsTxt` on `@platypus/web-fetch` in `PLATYPUS_PLUGIN_CONFIG`.
+5. **Delete the three removed variables.**
+6. **Restart the backend**, then confirm the result in **Organization settings →
+   Plugins**, which lists everything loaded at boot.
+
+Boot is **fail-loud**: a listed plugin that can't be resolved, or a
+`PLATYPUS_PLUGIN_CONFIG` entry that is malformed or keyed to a plugin that isn't
+loaded, aborts startup with a plugin-named error rather than degrading quietly.
+
+<Callout type="info">
+  `PLATYPUS_PLUGIN_CONFIG` is a **single** JSON object keyed by plugin name. If
+  you're migrating more than one setting, merge them into one object — don't set
+  the variable twice.
+</Callout>
+
+### Before and after
+
+A 1.x deployment that enabled the Docker sandbox with a network allowlist and
+skipped `robots.txt`:
+
+```bash
+# 1.x
+PLATYPUS_SANDBOX_DOCKER_ENABLED=true
+PLATYPUS_SANDBOX_DOCKER_ALLOWED_NETWORKS=shared-services,public-tools
+FETCH_TOOL_IGNORE_ROBOTS_TXT=true
+```
+
+becomes:
+
+```bash
+# 2.x
+PLATYPUS_PLUGINS=@platypus/web-fetch,@platypus/docker
+PLATYPUS_PLUGIN_CONFIG={"@platypus/docker":{"config":{"allowedNetworks":["shared-services","public-tools"]}},"@platypus/web-fetch":{"config":{"ignoreRobotsTxt":true}}}
+```
+
+Treat `PLATYPUS_PLUGIN_CONFIG` like any secret-bearing variable — it can carry a
+plugin's `credentials` block. Inject it from your secret manager; never commit it.
+
+### Also new in 2.0
+
+The **SSH** Sandbox backend, `@platypus/ssh` — the one Sandbox option viable in
+horizontally-scaled deployments, where Docker cannot run. See
+[Sandbox infrastructure](/self-hosting/sandbox).
+
+## Where to next
+
+- **[Running in production](/self-hosting/production)** — the backup command, and
+  everything else that should be true before an upgrade matters.
+- **[Configuration → Plugins](/self-hosting/configuration#plugins)** — the plugin
+  list and config semantics in full.
+- **[Backend configuration](/reference/backend-configuration#plugins)** — the flat
+  variable reference.

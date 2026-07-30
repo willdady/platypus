@@ -1,0 +1,194 @@
+---
+title: Build a standup bot
+description: One worked example that threads a Board, a Tool set, a Skill and a cron Trigger together — with the actual instructions you'd type.
+---
+
+import { Callout, Steps } from "nextra/components";
+
+# Build a standup bot
+
+Every other page in this section covers one screen. This one builds something
+end to end, so you can see how the pieces fit before you design your own.
+
+**What you'll end up with:** at 9am each weekday, an Agent reads your team's
+Board, posts a standup summary as a card in a **Standups** column, and flags
+anything that hasn't moved in three days.
+
+It needs four things: a Board, an Agent with the **Kanban** Tool set, a Skill
+that holds the summary format, and a cron Trigger. Roughly twenty minutes.
+
+<Callout type="info">
+  You need a Provider with at least one model before any of this works. If the
+  **Model** dropdown on the Agent form is empty, that is why — see
+  [Providers](/administering#providers-come-first).
+</Callout>
+
+## 1. The Board
+
+<Steps>
+
+### Create it
+
+**Boards → Create board**. Name it `Team work`. Add two labels: `blocked` and
+`needs-review`.
+
+### Give it columns
+
+**Add column** four times: `Backlog`, `In progress`, `Review`, `Done`. Then one
+more, `Standups`, where the bot will file its summaries.
+
+</Steps>
+
+Put a few real cards in `In progress` and `Review` — the bot has nothing to
+summarise on an empty board, and you want something to check its output against.
+
+## 2. The Skill
+
+The summary format is know-how, not personality, so it belongs in a Skill rather
+than in the Agent's Instructions. That keeps the Agent's prompt short and lets you
+change the format without touching the Agent.
+
+**Skills → Create skill**:
+
+- **Name**: `write-standup-summary`
+- **Description**: `Format a daily standup summary from a Kanban board's state, including a stalled-work section. Use when asked to write or post a standup.`
+- **Body**:
+
+```text
+Write the standup as Markdown with exactly these three sections, in this order.
+Omit a section's bullets and write "Nothing." if it would be empty — never omit
+the heading itself.
+
+## Moved yesterday
+One bullet per card that changed column since the previous standup. Format each
+as: **card title** — from `Old column` to `New column`.
+
+## In flight
+One bullet per card currently in `In progress` or `Review`, with its assignee.
+Format each as: **card title** — assignee, in `Column` since <date>.
+
+## Stalled
+One bullet per card in `In progress` or `Review` whose last update is more than
+three days old, oldest first. Format each as: **card title** — no movement since
+<date>, assigned to <assignee>. Say plainly that it is stalled; do not soften it
+with "may need attention".
+
+Rules:
+- Never invent a card, an assignee or a date. If the board data doesn't say,
+  write "unassigned" or "unknown".
+- Keep every bullet to one line.
+- Do not add a preamble, a sign-off, or a summary of the summary.
+```
+
+## 3. The Agent
+
+**Agents → Create agent**:
+
+- **Name**: `Standup bot`
+- **Description**: `Reads the Team work board and posts a daily standup summary.`
+- **Model**: any capable model on your Provider.
+- **Instructions**:
+
+```text
+You write the daily standup for the "Team work" board and file it on that board.
+
+Every run:
+1. Read the current state of the "Team work" board.
+2. Load the write-standup-summary skill and follow its format exactly.
+3. Create one card in the "Standups" column. Title it "Standup <today's date>"
+   using ISO format, e.g. "Standup 2026-07-30". Put the summary in the card
+   description.
+4. If the Stalled section has any entries, apply the "blocked" label to each
+   stalled card you named. Do not remove labels you did not add.
+
+Report what you did in one sentence, naming the card you created.
+
+Never move a card between columns, never delete a card, and never edit a card
+description other than the standup card you created in this run. If the board has no
+cards at all, create no card and say so instead.
+```
+
+Then, before saving:
+
+- In the **Tools** card, under _Productivity_, switch on **Kanban**.
+- In the **Skills** card, switch on **write-standup-summary**.
+
+Click **Save**.
+
+<Callout type="warning">
+  The last paragraph of those Instructions is the load-bearing one. An Agent with
+  the **Kanban** Tool set can move, relabel and delete cards, and a model asked
+  for "a standup" will sometimes decide tidying the board is helpful. Bound what
+  it may change, in writing, or you will find out which cards it thought were
+  done.
+</Callout>
+
+## 4. Try it in a Chat first
+
+Open a Chat, select **Standup bot**, and type `Write today's standup.`
+
+You should see it call a Kanban tool to read the board, call `loadSkill` to fetch
+the format, then create a card. Expand the tool calls in the transcript to check
+each step. Then open the Board and read the card it filed.
+
+Getting this right before you schedule it matters — a Trigger run has nobody
+watching it, so a formatting mistake quietly accumulates one card a day.
+
+If the summary is wrong, fix the **Skill body**. If it did the wrong _thing_ —
+moved a card, skipped the label step — fix the Agent's **Instructions**.
+
+## 5. The Trigger
+
+**Triggers → Create trigger**:
+
+- **Trigger Type**: **Cron**
+- **Name**: `Daily standup`
+- **Agent**: `Standup bot`
+- **Instruction**: `Write today's standup and file it on the Team work board.`
+- **Schedule Mode**: **Advanced**
+- **Cron Expression**: `0 9 * * 1-5`
+- **Timezone**: your team's zone
+
+Leave **Enabled** on and save. The **Next Run Preview** tells you whether you got
+the expression right before you wait a day to find out.
+
+<Callout type="warning">
+  Set the **Timezone** on the Trigger. The deployment-wide timezone setting does
+  **not** affect Trigger schedules — it only changes what the time tools report.
+  Leave the field on a zone you didn't mean and your 9am standup lands at 9am
+  somewhere else.
+</Callout>
+
+## 6. Confirm it fired
+
+The morning after, from the **Triggers** list, open the Trigger's three-dot menu
+and choose **View runs**. A green run and a new card in `Standups` is the whole
+acceptance test.
+
+A run that failed shows its error there. The most common ones:
+
+| What the run says                     | Usually means                                                        |
+| ------------------------------------- | -------------------------------------------------------------------- |
+| Failed, naming a repeated tool call    | The Agent looped — it couldn't find the board, or the column name in the Instructions doesn't match the Board exactly |
+| Succeeded, but no card appeared        | The Agent decided not to; check its one-sentence report in the run    |
+| Failed with a Provider error           | Credentials or a model id — the same failure a Chat would show        |
+
+## What to take from this
+
+- **Instructions say what to do and what not to touch.** A Skill says how to
+  format. Splitting them means you can change the format without re-testing the
+  behaviour.
+- **A Board is a two-way surface.** The Agent writes to the same board your team
+  drags cards around on, which is why the summary is worth reading.
+- **Try it in a Chat, then schedule it.** The Chat is where you can see the tool
+  calls.
+- **A granted Tool set is real write access.** Bound it in the prompt.
+
+## Where to next
+
+- **[Notifications](/building-with-platypus/notifications)** — have it tell you
+  when something is stalled, instead of you checking the board.
+- **[Dashboards](/building-with-platypus/dashboards)** — put the stalled count on
+  a widget.
+- **[Triggers](/building-with-platypus/triggers)** — event Triggers, so a card
+  moving fires an Agent rather than a clock.

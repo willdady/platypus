@@ -1,0 +1,131 @@
+---
+title: Plugin API & config
+description: How a plugin is loaded, which core versions it keeps working on, and how an Operator supplies its deploy-time config and credentials.
+---
+
+import { Callout } from "nextra/components";
+
+# Plugin API & config
+
+Read this once. It covers what a plugin is, how core decides whether to load
+yours, and where its deploy-time settings come from.
+
+## The plugin model
+
+A **plugin** is a distributable bundle — one package, one version, one config
+namespace, one enable/disable switch. An Operator installs it at deploy time and
+core loads it **in-process, with no isolation**. The trust boundary is the
+deployment, not an install step: there is no marketplace, no hot reload, and no
+in-app install button.
+
+A plugin exports a `plugin` manifest from its package entry point. The manifest
+declares its identity, the API major it needs, optional deploy-time schemas, and
+a `contributes` block naming what it fills.
+
+### Two names, two jobs
+
+| This                             | Is                                                                 | Example                       |
+| -------------------------------- | ------------------------------------------------------------------ | ----------------------------- |
+| The **npm package specifier**    | What you publish, what an Operator installs and lists              | `@acme/platypus-widgets`      |
+| The manifest **`name`**          | The config namespace, and the prefix on every contribution id      | `widgets`                     |
+
+A third-party manifest `name` must be a url-safe slug — lowercase letters, digits
+and hyphens. It is validated at boot.
+
+<Callout type="warning">
+  A scoped, npm-style manifest `name` such as `@acme/platypus-widgets` is
+  **rejected and aborts startup**, because it becomes the prefix on every
+  contribution id. The Operator's backend won't come up until you ship a slug.
+  Core plugins are exempt: their `@platypus/*` names are logical ids resolved
+  from a built-in map, not published packages.
+</Callout>
+
+## Boot is fail-loud and all-or-nothing
+
+Before the HTTP server starts, core loads the always-on core plugins, then reads
+`PLATYPUS_PLUGINS`, resolves each name, validates its manifest, and registers its
+contributions.
+
+Any of these aborts startup with an error naming your plugin:
+
+- it can't be resolved,
+- its manifest is invalid,
+- its deploy-time config or credentials fail their own schema,
+- a contribution is missing a required field,
+- its contribution ids collide with another plugin's.
+
+A contribution is shape-checked too, so an incomplete one is refused up front
+rather than failing later inside somebody's Chat. TypeScript already requires the
+fields; this check is what catches a plugin shipped as plain JavaScript, and what
+turns a missing field into an error with your plugin's name on it.
+
+Runtime is the opposite posture. A Workspace pointing at a Tool set that has
+since been removed degrades to no tools for that turn. **Strict at boot,
+forgiving at runtime.**
+
+## Which core versions your plugin runs on
+
+Set `apiVersion` from the SDK's `PLUGIN_API_VERSION` constant. It declares the
+**minimum** core API major you need — not an exact match.
+
+Core supports the current major and one previous, **N and N−1**, at the same
+time. Anything inside that window loads. Core rejects your plugin only when its
+`apiVersion` is newer than core supports — the Operator fixes that by upgrading
+core, which they control — or below core's oldest supported major, meaning you're
+targeting a dropped one. The boot error names your plugin and both versions.
+
+### Contracts grow by optional members only
+
+Within a major, every Extension-point contract grows only by **optional**
+members. A new capability arrives as an optional method or field, never a new
+required one. That is what lets a plugin built against an older minor keep
+working after a core upgrade: it never uses what it doesn't know about.
+Adding a whole Extension point is likewise additive.
+
+Removing or re-signing a required member is a **windowed major bump** — the major
+increments and core runs both N and N−1 for a release, so you have time to
+migrate.
+
+The practical consequence for you: a two-argument `create` keeps working after
+core started passing a third argument, and a single-argument factory keeps working
+after core started passing a second. Consume the new argument when you want it.
+
+## Deploy-time config and credentials
+
+Some plugins need settings that belong to the **Operator**, not to an end user: a
+region, an API token. Declare them as `configSchema` (non-secret) and
+`credentialsSchema` (secret) on the manifest itself.
+
+The Operator supplies the values through
+[`PLATYPUS_PLUGIN_CONFIG`](/self-hosting/configuration#plugin-config--credentials),
+a single JSON object keyed by manifest `name`. Core validates them at boot and
+injects the resolved block into **every one** of your contributions:
+
+- a **Tool set** factory receives it as an appended second argument;
+- a **Sandbox backend** `create` receives it as a third argument, alongside the
+  per-Workspace config and credentials.
+
+Both are optional to consume.
+
+**One block is shared** across all of a plugin's contributions and all tenants.
+That is deliberate, and it is the mechanism that lets a plugin's Sandbox backend
+and its management Tool set authenticate with the same credential — one vendor
+token driving both.
+
+<Callout type="warning">
+  Because it is one block for the whole deployment, this is **not** a per-user or
+  per-Workspace secret. Don't reach for it to hold a tenant's credential; every
+  Workspace on the deployment would be using the same one. Genuinely
+  tenant-specific values belong on the per-Workspace Sandbox row, which is a
+  separate layer above this one — the two layer, they do not merge.
+</Callout>
+
+The repository ships a two-contribution plugin under the backend's `plugins`
+directory that demonstrates one credential block reaching both a Sandbox backend
+and a Tool set.
+
+## Where to next
+
+- **[Your first plugin](/extending/your-first-plugin)** — the runnable path.
+- **[Configuration → Plugins](/self-hosting/configuration#plugins)** — what your
+  Operator has to do at their end.

@@ -1,0 +1,125 @@
+---
+title: Shared resources
+description: The screens behind Promote, attachments and Blueprints — which button to press, and where each one lives.
+---
+
+import { Callout, Steps } from "nextra/components";
+
+# Shared resources
+
+[Sharing across workspaces](/concepts/sharing) explains what a Shared resource,
+an Attachment and a Blueprint _are_. This page is where the buttons are.
+
+Four resource types can be shared: **Agents**, **Skills**, **MCP** servers and
+**Providers**.
+
+## Getting a resource to Organization scope
+
+There are two routes up, and which one you have depends on the type.
+
+**Agents and Skills** are promoted. In the Workspace that has the resource, open
+its three-dot menu and choose **Promote to organization**. It re-scopes to the
+Organization, attaches itself back to the Workspace it came from, and from then on
+is editable only from **Organization settings**.
+
+**MCP servers and Providers** have no Promote action. Create them at Organization
+scope in the first place: **Organization settings → MCP → Add MCP**, or
+**Organization settings → Providers → Add provider**.
+
+<Callout type="warning">
+  A Workspace-scoped MCP or Provider stays Workspace-scoped for life. There is no
+  action that lifts one, so if you want to share it you recreate it at
+  Organization scope and delete the original. Hunting the Workspace list for a
+  Promote button on a Provider is time you won't get back.
+</Callout>
+
+<Callout type="info">
+  **Promote to organization** is refused if the resource points at something that
+  is still Workspace-scoped — an Agent using a Workspace Skill, for instance.
+  Promote the Skill first. Platypus won't pull it up for you, which is what stops
+  a resource becoming Organization-readable that you never named.
+</Callout>
+
+## Making it appear in a Workspace
+
+Promoting doesn't put a resource in front of anyone except the Workspace it came
+from. An **Attachment** is what makes a Shared resource visible in a particular
+Workspace, and there are two places to create one.
+
+**From the Organization surface**, for handing one resource to several Workspaces:
+open the resource's three-dot menu and choose **Manage attachments**. The dialog
+is titled **Share** followed by the resource's name, and lists the Workspaces you
+can tick.
+
+**From inside a Workspace**, for fitting out one Workspace: use the button beneath
+the list — **Attach shared agent**, **Attach shared skill**, **Attach shared MCP**
+or **Attach shared provider**. Each opens an **Attach a shared** dialog listing
+the Organization's available resources of that type.
+
+To undo either, use **Detach**. On the Organization surface, each card also shows
+**Shared with N workspaces**, which is the quickest read on whether you've
+actually handed something out.
+
+## What a Workspace Owner sees
+
+An attached Shared resource appears in the Workspace list badged
+**Organization**. Owners can use it — grant a Shared Skill to their Agent, select
+a Shared Provider's model — but the edit form is read-only for them; clicking
+through takes them to a view, not an editor.
+
+That is the point: one definition, changed once by you, live everywhere at once.
+
+<Callout type="warning">
+  A Shared Agent or Skill **cannot be deleted while it is still attached**
+  anywhere. The delete confirmation tells you to detach it from every Workspace
+  first. Detach from each, then delete — and expect the Workspace Owners who were
+  using it to notice.
+</Callout>
+
+## Blueprints: fitting out a Workspace in one step
+
+A **Blueprint** is a named set of Shared resources plus a Workspace's defaults.
+Applying one attaches everything in it at once.
+
+<Steps>
+
+### Define it
+
+**Organization settings → Blueprints**. Give it a name and tick the Shared
+resources it should attach, along with the task and memory Provider defaults and a
+default Context.
+
+### Apply it
+
+From the Blueprints list, open a Blueprint's menu and choose **Apply to
+workspace**. Applying is additive — it attaches what's missing and leaves the rest
+alone, so running it twice is safe.
+
+### Or apply it automatically
+
+On an invitation you can name one or more Blueprints, in order. The Workspace
+provisioned when that person accepts is fitted out before they first sign in — see
+[Users & access](/self-hosting/users-and-access).
+
+</Steps>
+
+<Callout type="warning">
+  A Blueprint is a **snapshot taken at the moment it is applied**, not a live
+  link. Editing a Blueprint changes nothing about the Workspaces already
+  provisioned from it — only ones provisioned afterwards. Rolling out a new Shared
+  Skill to your existing Workspaces means attaching it to each, or using **Manage
+  attachments** on the Skill itself. Editing the Blueprint and waiting achieves
+  nothing.
+</Callout>
+
+<Callout type="info">
+  A Blueprint referenced by a pending invitation can't be deleted — delete those
+  invitations first. The error says which.
+</Callout>
+
+## Where to next
+
+- **[Sharing across workspaces](/concepts/sharing)** — the model these screens
+  implement.
+- **[Workspace settings](/administering/workspaces)** — the defaults a Blueprint
+  sets, and where to change them afterwards.

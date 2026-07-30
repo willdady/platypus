@@ -1,11 +1,13 @@
-// Top-level information architecture follows the audience/journey order from
-// ADR-0011. Each entry maps to a folder under content/.
+// Top-level information architecture, ordered by depth of commitment: look at
+// it, run it, understand it, build in it, administer it, operate it, extend it,
+// look things up. Each entry maps to a folder under content/.
 const meta = {
   index: "Introduction",
   "getting-started": "Getting Started",
-  "self-hosting": "Self-Hosting",
   concepts: "Concepts",
   "building-with-platypus": "Building with Platypus",
+  administering: "Administering",
+  "self-hosting": "Self-Hosting",
   extending: "Extending",
   reference: "Reference",
 };

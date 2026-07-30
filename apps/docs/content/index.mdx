@@ -1,49 +1,56 @@
 ---
 title: Introduction
-description: Platypus is a full-stack platform for building and managing AI agents with tool support and multi-provider capabilities.
+description: Platypus is a self-hosted platform for building AI Agents that use tools, run on a schedule, and connect to your own models and data.
 ---
 
+import Image from "next/image";
 import { Cards } from "nextra/components";
 
 # Platypus
 
-Platypus is a full-stack platform for building and managing AI agents — agents
-that reason, use tools, and connect to your data through the Model Context
-Protocol. It's multi-tenant, multi-provider, and self-hosted: you bring the
-models, Platypus gives you everything around them.
+Platypus is a self-hosted platform for building AI Agents. You bring the
+models — hosted, proxied, or running on your own hardware — and Platypus gives
+you the Agents, the tools they call, the schedules they run on, and the
+multi-tenant boundaries that keep one team's work out of another's.
 
-These docs are the source of truth for narrative content — setup, the domain
-model, build guides, and extension points. Pick a starting point below, or use
-the navigation to find your way around.
+<Image
+  src="/screenshot-chat.png"
+  alt="A Platypus Chat, with the Agent's tool calls expanded beneath its reply"
+  width={3024}
+  height={1650}
+  className="mt-8 rounded-lg border"
+  priority
+/>
 
-## Where to start
+## What you can do with it
+
+- **Build an Agent once and reuse it.** An Agent pins a model, its
+  instructions, its tools, and its Skills. Select it on a Chat instead of
+  configuring a model every time.
+- **Give an Agent real capabilities.** Twelve built-in Tool sets let an Agent
+  move Kanban cards, update Dashboard widgets, post Notifications, read the
+  web, and run shell commands in a Sandbox. Anything else connects over MCP.
+- **Run Agents when you aren't watching.** A Trigger fires an Agent on a cron
+  schedule or on an event, and a Chat turn keeps running server-side after you
+  close the tab.
+- **Point it at your own models.** OpenAI, Anthropic, Google, Bedrock and
+  OpenRouter directly; Ollama, vLLM, Azure OpenAI and any other
+  OpenAI-compatible endpoint through a base-URL override.
+- **Keep it yours.** One `docker compose up`, your Postgres, your
+  infrastructure. No data leaves the deployment except the calls you configure.
 
 <Cards>
   <Cards.Card title="Getting Started" href="/getting-started" />
   <Cards.Card title="Concepts" href="/concepts" />
   <Cards.Card title="Building with Platypus" href="/building-with-platypus" />
+  <Cards.Card title="Administering" href="/administering" />
   <Cards.Card title="Self-Hosting" href="/self-hosting" />
   <Cards.Card title="Extending" href="/extending" />
   <Cards.Card title="Reference" href="/reference" />
 </Cards>
 
-## Find your path
+## Elsewhere
 
-The docs are organised around what you're trying to do:
-
-- **Just want to see it run?** [Getting Started](/getting-started) takes you from
-  nothing to your first streamed reply with Docker Compose and a five-step loop.
-- **Want to understand the model?** [Concepts](/concepts) explains the domain in
-  plain language — Organizations, Workspaces, Chats, Agents, Skills, MCP,
-  Sandboxes, and Memory — and why things are arranged the way they are.
-- **Building agents?** [Building with Platypus](/building-with-platypus) is the
-  task-oriented guide for Workspace Owners: configure an Agent, give it Skills
-  and MCP tools, and put it to work with Triggers, Boards, and Dashboards.
-- **Running the platform?** [Self-Hosting](/self-hosting) is for Operators —
-  deployment, configuration, providers and authentication, and the sandbox
-  infrastructure.
-- **Working in the codebase?** [Extending](/extending) maps the in-tree
-  extension points (sandbox backends and tool sets) and the decisions behind
-  them.
-- **Need an exact value?** [Reference](/reference) enumerates every
-  configuration option as flat, lookup-oriented tables.
+- **[github.com/willdady/platypus](https://github.com/willdady/platypus)** —
+  the source, the issue tracker, and the roadmap. MIT licensed.
+- **[platypus.chat](https://platypus.chat)** — the project website.

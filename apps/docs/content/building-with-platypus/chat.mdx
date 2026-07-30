@@ -1,0 +1,202 @@
+---
+title: Chat
+description: The screen you use every day — attaching files, web search, voice input, editing messages, organising a long history, and what happens when you close the tab mid-run.
+---
+
+import { Callout } from "nextra/components";
+
+# Chat
+
+A **Chat** is a saved conversation. You type, the assistant replies, and each
+round is a **Chat turn** running against either an **Agent** or a Provider and
+model you pick directly.
+
+Most of the screen explains itself. This page covers the parts that don't.
+
+## Choosing what answers you
+
+Click the model selector in the prompt input. Under **Agents** are the Agents in
+your Workspace; under each **Provider** are its enabled models. Picking an Agent
+replaces picking a Provider and model — the Agent already carries both, plus its
+Instructions, tools and Skills.
+
+With an Agent selected, an info button opens **Agent Information**, which shows
+what that Agent is actually bringing to the conversation: its model, its Tool
+sets, its Skills and its Sub-Agents.
+
+## Attaching files
+
+Open the action menu beside the input and choose **Add photos or files**, or drop
+files anywhere on the page. You can attach several at once.
+
+Each file you attach is a **File part**, carried alongside your message rather
+than pasted into it. Attach the PDF; don't paste its contents into the prompt.
+
+What the model receives depends on what it can read. A type it ingests natively
+goes through byte-for-byte. A text or code file is inlined and labelled with its
+filename. A PDF or DOCX the model can't take natively has its text extracted and
+sent in the file's place. Anything else is refused before the turn runs.
+
+<Callout type="warning">
+  A warning appears above the input when the model you have selected can't read
+  an attached type natively. It is telling you the model will read a text
+  rendering of the document rather than the document — tables, layout and images
+  won't survive. If fidelity matters, switch to a model that reads the format
+  natively rather than ignoring the warning.
+</Callout>
+
+The full routing table, and how an Org Admin declares what each model accepts,
+is in
+[File handling](/self-hosting/providers-and-auth#file-handling-what-each-model-accepts).
+
+## Web search
+
+A globe button — its tooltip reads **Search** — toggles the vendor's own web
+search for the messages you send while it is on.
+
+It is only there when the resolved Provider supports it. It is **absent** when:
+
+- the Provider is **Bedrock**, which has no native search;
+- an Org Admin has switched native search off on that Provider;
+- nothing has resolved yet, because no Agent or model is selected.
+
+<Callout type="warning">
+  The toggle resets itself when you pick a different Provider or model directly —
+  the new endpoint may not support search, so it starts off. It does **not** reset
+  when you switch from one Agent to another, even though that changes Provider
+  too. So search you turned on for one Agent silently stays on for the next one;
+  turn it off yourself if you don't want it.
+</Callout>
+
+This is the vendor's search, not a tool you grant. An Agent that should read
+specific pages instead wants the **Web Fetch** Tool set — see
+[Tool sets](/building-with-platypus/tool-sets).
+
+## Voice input
+
+A microphone button next to it transcribes speech into the input box. The text
+lands in the box rather than sending, so you can edit before pressing **Enter**.
+
+## Fixing a conversation instead of restarting it
+
+Hover a message for its actions:
+
+| Action         | On                      | Does                                                                       |
+| -------------- | ----------------------- | -------------------------------------------------------------------------- |
+| **Edit**       | Your own messages       | Rewrites the message and re-runs from there — see the warning below         |
+| **Copy**       | Any message             | Copies the message text to the clipboard                                   |
+| **Delete**     | Any message             | Removes it from the view                                                   |
+| **Regenerate** | The last assistant reply | Runs the turn again, same message, fresh response                          |
+
+The actions are hidden while the last reply is still streaming.
+
+<Callout type="warning">
+  **Edit discards everything after the message you edited.** Submitting the edit
+  drops that message and every message below it, then sends your new text as a
+  fresh turn. That is usually what you want — you're correcting a wrong turn and
+  re-running from there — but there is no undo, so an edit near the top of a long
+  conversation throws away the rest of it.
+</Callout>
+
+<Callout type="warning">
+  **Delete removes the message from the view, and the next thing you send makes
+  that permanent.** Nothing is written when you click it, so reloading before you
+  send anything brings the message back. Send a message afterwards and the
+  shortened conversation is what gets stored — the deletion you thought was
+  cosmetic is now the history. Reload first if you want it back.
+</Callout>
+
+## Organising a long history
+
+The sidebar lists your Chats. **New chat** starts one.
+
+The **Search chats...** box filters by title **and** tags, so tagging is a real
+filing system rather than decoration.
+
+Beneath it, Chats are grouped by when they were **created**: **Pinned** first,
+then **Last 7 days**, then **Other**. Nothing created in the last week and the
+whole list sits under **Chats** instead. Note that grouping is by creation date,
+not last activity — a Chat you added to this morning stays under **Other** if you
+started it a fortnight ago.
+
+Each Chat's menu offers:
+
+- **Pin** / **Unpin** — moves it into or out of the **Pinned** group.
+- **Edit** — opens **Edit Chat**, where you set the **Title** and the **Tags**.
+  Its current tags are also listed at the bottom of the menu.
+- **Delete** — permanent, and it says so before doing it.
+
+<Callout type="info">
+  A new Chat is called **Untitled** until the first reply comes back, then the
+  backend names it from the conversation. You don't have to wait — rename it
+  whenever you like and the automatic titling leaves your name alone.
+</Callout>
+
+## Getting around without the mouse
+
+Press **⌘K** (**Ctrl+K** on Windows and Linux) anywhere in a Workspace to open
+the command palette. Type to filter.
+
+It offers **Actions** — home, switch org, new chat, new agent, new skill, new
+board, new dashboard, new trigger, add webhook, and the settings screens — and
+then your **Agents**, **Boards** and **Triggers** by name. Selecting an Agent
+opens a new Chat already set to it.
+
+## Closing the tab mid-run
+
+A Chat turn runs on the server, not in your browser. Closing the tab, losing your
+connection, or navigating away does not stop it. The Agent keeps working, and its
+messages are persisted as they complete.
+
+Come back to the Chat and it picks up where things got to: while the run is still
+going, the page polls and the finished parts of the reply appear. The sidebar
+shows a spinner beside any Chat with a run in progress.
+
+While a run you didn't start in this tab is still going, the input is disabled
+and reads **Run in progress…**, and the send button becomes a stop button. That
+is deliberate — it stops a second tab kicking off a concurrent run on the same
+Chat.
+
+<Callout type="info">
+  Pressing stop **cancels the run on the server**, not only your connection to
+  it. The Agent stops working, the tokens stop being spent, and the partial reply
+  is kept. Closing the tab does none of that — the run carries on and finishes.
+</Callout>
+
+## Per-Chat settings, and when they exist
+
+When you have picked a Provider and model directly, a gear button — tooltip
+**Settings** — opens **Chat Settings**: an **Instructions** box, and under
+**Advanced settings** the sampling parameters — **Temperature**, **Seed**,
+**Top-p**, **Top-k**, **Presence Penalty** and **Frequency Penalty**. They are
+saved on this Chat and apply to every turn in it.
+
+Think of it as the Agent form for a conversation you didn't build an Agent for.
+Platypus still composes the full system prompt around your Instructions, adding
+Workspace and user context, Memories and your Provider's guardrails, exactly as
+it does for an Agent.
+
+<Callout type="warning">
+  **With an Agent selected there is no settings button.** A Chat does not
+  override an Agent's Instructions or sampling parameters for one conversation —
+  the Agent's own settings win, and the info button shows you what they are. If
+  you want different behaviour, edit the Agent, or copy it and edit the copy.
+  Looking for the gear on an Agent-backed Chat and concluding it's a bug is the
+  usual confusion here.
+</Callout>
+
+## Sharing a Chat
+
+Chats belong to the Workspace Owner. Anyone else who can reach the Chat sees it
+read-only: the input is replaced with a note saying only the Workspace Owner can
+send messages. They can read the whole conversation, including tool calls; they
+cannot continue it.
+
+## Where to next
+
+- **[Tool sets](/building-with-platypus/tool-sets)** — what the built-in tool
+  sets let an Agent do while you watch.
+- **[Agents & sub-agents](/building-with-platypus/agents)** — turn a Chat's
+  settings into a reusable Agent.
+- **[Memory & context](/concepts/memory-and-context)** — why the assistant knows
+  things you didn't say in this Chat.

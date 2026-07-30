@@ -1,0 +1,116 @@
+---
+title: Workspace settings
+description: The per-Workspace form — its Context, the task and memory Providers, memory retention, and the two switches that hand work to the owner.
+---
+
+import { Callout } from "nextra/components";
+
+# Workspace settings
+
+Most of what makes a Workspace behave the way it does is one form:
+**Workspace settings**, reachable from the Workspace itself. It is shorter than it
+looks — a name, some text, three Provider dropdowns, a number, and two switches.
+
+## Creating a Workspace
+
+**Add workspace**, from the Workspace switcher in the sidebar. Only an Org Admin
+can create one.
+
+- **Name** — what to call it (3–30 characters).
+- **Owner** — the member who will own it. Defaults to you.
+- **Context** — optional text about the Workspace.
+
+<Callout type="warning">
+  **Choose the Owner carefully: there is no owner field on the settings form
+  afterwards.** A Workspace's owner is fixed when it is created and the form
+  offers no way to reassign it. If the wrong person owns a Workspace, the
+  available moves are to recreate it under the right owner, or to work as a Super
+  Admin, who bypasses ownership checks entirely. Neither is pleasant once there
+  are Chats in it.
+</Callout>
+
+## The Context field
+
+**Context** is text about the **Workspace**, included in every Chat anyone runs
+there — up to 1,000 characters.
+
+Use it for standing facts about the work: what this Workspace is for, what the
+service is called, which team owns it, house terminology.
+
+<Callout type="warning">
+  This is not the same thing as a user's own **Workspace Context** under
+  **Settings → Contexts**, even though both land in the prompt. This field is the
+  Workspace's and reaches everyone in it; theirs is private to them. Personal
+  preferences ("answer terse, no preamble") belong in theirs — putting them here
+  imposes them on every Chat in the Workspace. See
+  [Memory & context](/concepts/memory-and-context#two-different-things-are-called-context).
+</Callout>
+
+## The three Provider dropdowns
+
+These only appear once the Workspace exists, and each lists Providers available to
+that Workspace.
+
+- **Task Model Provider** — the Provider used for the small one-shot jobs, such as
+  naming a Chat and generating its tags. Leave it as **None (use chat provider)**
+  and each Chat uses its own. Point it at something cheap and fast if your chat
+  models are expensive.
+- **Memory Extraction Provider** — **this is the switch that turns Memory on.**
+  Leave it **Disabled** and nothing is ever extracted, so Memory is off for this
+  Workspace.
+- **Memory Embedding Provider** — needed for semantic memory search. Separate
+  from extraction; you can have one without the other.
+
+<Callout type="warning">
+  The two memory dropdowns only list Providers that have the relevant model
+  configured — a memory-extraction model, or an embedding model id. An empty
+  dropdown is not a Workspace problem: go and set that model on the Provider
+  first, then come back. Granting an Agent the **Memory** Tool set does not turn
+  Memory on either; without a Memory Extraction Provider here there is nothing for
+  those tools to find, and the Agent looks broken when the setting is off.
+</Callout>
+
+## Memory Summary Retention
+
+How many daily memory summaries to keep, from **7** to **365**, defaulting to
+**90**. Lower it where conversations are sensitive and you'd rather they aged out;
+raise it where an Agent genuinely benefits from remembering last quarter.
+
+## The two delegation switches
+
+Both are visible only to an Org Admin, and both are **off** by default. Off means
+only Org Admins may configure that resource in this Workspace.
+
+- **Owner-managed providers** — lets the Workspace Owner create and edit
+  Workspace-scoped Providers. Turn it on where the owner legitimately holds their
+  own vendor key.
+- **Owner-managed MCP servers** — lets the Workspace Owner register and authorize
+  their own MCP servers. Turn it on for personal-credential integrations, where
+  requiring an admin for every connection is friction with no safety benefit.
+
+<Callout type="warning">
+  These switches hand out real reach, per Workspace. An owner with
+  **Owner-managed MCP servers** on can point an Agent at any MCP server they can
+  reach, with credentials you never see, and you will not be asked. Turn it on
+  deliberately, for Workspaces whose owner you'd trust with that, and not as a
+  blanket default to stop people filing tickets.
+</Callout>
+
+The switches only cover **Workspace-scoped** resources. An owner can never edit a
+Shared one, and never touch the Sandbox — that stays admin-only whatever these
+say.
+
+## Deleting a Workspace
+
+**Delete** asks you to type `Delete workspace` to confirm, and takes everything in
+it: Chats, Agents, Skills, Boards, Dashboards, its Sandbox. It is not recoverable
+from inside the product — only from a database backup.
+
+## Where to next
+
+- **[Shared resources](/administering/shared-resources)** — what to attach to the
+  Workspace you set up.
+- **[Memory & context](/concepts/memory-and-context)** — what the memory
+  Providers above actually do.
+- **[Sandbox infrastructure](/self-hosting/sandbox)** — the one reach-bearing
+  resource that never delegates.

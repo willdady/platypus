@@ -1,0 +1,135 @@
+---
+title: Your first plugin
+description: Load the example plugin into a deployment, confirm it registered, and grant its tool to an Agent.
+---
+
+import { Callout, Steps } from "nextra/components";
+
+# Your first plugin
+
+The repository ships a runnable third-party plugin:
+[`packages/example-plugin`](https://github.com/willdady/platypus/tree/main/packages/example-plugin),
+published as `@platypus-examples/tool-set`. It contributes one Tool set with one
+tool, and it exists so you can prove the whole path — install, list, load,
+grant, call — before you write anything of your own.
+
+Do this first. Then copy the package and replace its contents.
+
+## What the example contains
+
+```ts
+export const plugin: PlatypusPlugin = {
+  name: "example", // the namespace, not the package specifier
+  version: "0.1.0",
+  apiVersion: PLUGIN_API_VERSION,
+  contributes: {
+    toolSets: [
+      {
+        id: "greeting", // bare — core prefixes it to `example.greeting`
+        name: "Greeting",
+        category: "Examples",
+        tools: {
+          greet: tool({
+            description: "Return a friendly greeting for the given name.",
+            inputSchema: z.object({ name: z.string() }),
+            execute: ({ name }) => `Hello, ${name}!`,
+          }),
+        },
+      },
+    ],
+  },
+};
+```
+
+Two names, doing two different jobs. `@platypus-examples/tool-set` is the **npm
+package specifier** — what you install and what the Operator lists. `example` is
+the manifest **`name`** — the config namespace, and the prefix core puts on every
+contribution id. Get them the wrong way round and boot fails naming your plugin.
+
+## Load it
+
+<Steps>
+
+### Install the package into the deployment
+
+The backend resolves a third-party plugin from `node_modules`, so the package has
+to be installed alongside it:
+
+```bash
+pnpm add @platypus-examples/tool-set
+```
+
+In a checkout of the Platypus repository this is already done — the example is a
+workspace package and the backend already depends on it. Skip to the next step.
+
+### List it
+
+Add the **package specifier** to `PLATYPUS_PLUGINS`. The variable is one
+comma-separated list, and it replaces rather than appends, so keep whatever was
+already there:
+
+```bash
+PLATYPUS_PLUGINS=@platypus/web-fetch,@platypus-examples/tool-set
+```
+
+### Restart the backend
+
+```bash
+docker compose restart backend
+```
+
+Plugin loading happens once, before the HTTP server starts. There is no in-app
+install button — this is a deploy-time trust boundary.
+
+</Steps>
+
+## Checkpoint 1: it loaded
+
+Sign in as an Org Admin and open **Organization settings → Plugins**. You should
+see a row reading **example**, version `0.1.0`, badged **Third-party**, with
+`example.greeting` listed under **Tool sets**.
+
+<Callout type="warning">
+  The row is labelled with the manifest **`name`** — `example` — not the package
+  specifier you installed. Scanning the list for
+  `@platypus-examples/tool-set` and concluding the plugin didn't load is the
+  usual first confusion.
+</Callout>
+
+If the backend didn't come back up at all, that is the intended behaviour for a
+plugin that couldn't be resolved: boot is fail-loud and all-or-nothing. Read
+`docker compose logs backend` — the last line names your plugin and the reason.
+
+## Checkpoint 2: an Agent can use it
+
+Open any Agent in a Workspace and find the **Tools** card. Under an **Examples**
+heading there is a **Greeting** switch. Flip it, click **Save**, then start a
+Chat on that Agent and ask it to greet someone by name.
+
+The reply comes back through a `greet` tool call you can expand in the
+transcript. That is the loop closed: your code ran inside a Chat turn.
+
+## When it doesn't work
+
+| What you see                                                          | What it means                                                                            | Fix                                                                                                                    |
+| --------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| Backend exits at boot, log names your plugin and "failed to resolve"   | The package isn't installed where the backend can `import()` it                          | Install it into the deployment, not only the repository, and check the specifier for typos                              |
+| Backend exits, log complains about the manifest `name`                 | A third-party `name` must be a url-safe slug — lowercase letters, digits, hyphens         | Use `widgets`, not `@acme/platypus-widgets`. The package specifier stays scoped; the manifest name doesn't              |
+| Backend starts, but **Plugins** doesn't list it and nothing is logged   | It isn't in `PLATYPUS_PLUGINS` — most often a `compose.sandbox.yaml` overlay replaced the list | The overlay sets `PLATYPUS_PLUGINS` under `services.backend.environment`, which wins over `.env`. Put your full list in the overlay |
+
+<Callout type="info">
+  A Tool set that appears in **Plugins** but not on the Agent form is a
+  different problem: the **Tools** card only renders when the Workspace has at
+  least one Tool set to grant, and it lists the Tool set **name** under its
+  **category**. Look under `Examples`, not under `example.greeting`.
+</Callout>
+
+## Where to next
+
+- **[Tool sets](/extending/tool-sets)** — the contribution you loaded, in
+  full: static maps versus factories, and what runtime scope a factory gets.
+- **[Sandbox backends](/extending/sandbox-backends)** — the other Extension
+  point.
+- **[Plugin API & config](/extending/plugin-api-and-config)** — deploy-time
+  config and credentials, and which core versions your plugin will keep working
+  on.

@@ -1,35 +1,65 @@
 ---
 title: Building with Platypus
-description: The Workspace Owner's guide to building agents — configuring an Agent, giving it Skills and MCP tools, and putting it to work with Triggers, Boards, and Dashboards.
+description: The Workspace Owner's guide — use a Chat, configure an Agent, give it tools and Skills, and put it to work with Triggers, Boards and Dashboards.
 ---
+
+import { Callout } from "nextra/components";
 
 # Building with Platypus
 
 This section is for the **Workspace Owner** — the person building inside a
-Workspace. It's task-oriented: each page walks through the screens you actually
-click. If you want the _what_ and _why_ behind the nouns first, read
-[Concepts](/concepts); this section is the _how_.
+Workspace. Each page walks through the screens you actually click. If you want
+the _what_ and _why_ behind the nouns first, read [Concepts](/concepts).
 
-Everything you build lives inside your **Workspace** (your scoped environment —
-see [The big picture](/concepts)). A typical build goes in this order:
+Everything you build lives inside your **Workspace**, and is private to it unless
+an Org Admin has shared it at Organization scope.
 
-1. **[Agents & sub-agents](/building-with-platypus/agents)** — create an Agent:
-   pin a Provider and model, write its Instructions, tune generation, and grant
-   it tools. Compose specialists as sub-agents.
-2. **[Skills](/building-with-platypus/skills)** — author named, on-demand
-   know-how and attach it to an Agent.
-3. **[MCP servers](/building-with-platypus/mcp)** — connect outside tools by
-   registering an MCP server and granting it to an Agent.
-4. **[Triggers](/building-with-platypus/triggers)** — run an Agent automatically
-   on a schedule (cron) or in response to an event.
-5. **[Boards](/building-with-platypus/boards)** — Kanban boards that you and
-   your Agents share as a working surface.
-6. **[Dashboards](/building-with-platypus/dashboards)** — display structured data
-   in widgets that Agents can keep up to date.
+<Callout type="info">
+  Would rather see it all at once? **[Build a standup
+  bot](/building-with-platypus/standup-bot)** threads a Board, a tool set, a
+  Skill and a scheduled Trigger into one thing that works, with the actual
+  instructions you'd type.
+</Callout>
 
-<br />
+## Before anything else: a Provider
 
-> Throughout this section, screens live under your Workspace at
-> `/{org}/workspace/{workspace}/…`. Resources you create are **Workspace-scoped**
-> (private to one Workspace) unless an Org Admin has shared them at Organization
-> scope — see [Sharing across workspaces](/concepts/sharing).
+A Workspace cannot run an Agent until it can reach a model. That means a
+**Provider** — a configured connection to OpenAI, Anthropic, Google, Bedrock,
+OpenRouter, or any OpenAI-compatible endpoint of your own.
+
+Providers carry credentials, so by default an **Org Admin** creates them; a
+Workspace Owner can only manage their own where an Org Admin has switched that on.
+
+<Callout type="warning">
+  An empty **Model** dropdown on the Agent form is this, not a bug. No Provider
+  available to your Workspace has any model enabled. You cannot fix it from the
+  Agent form — ask an Org Admin, or see
+  [Providers](/administering#providers-come-first) if that's you.
+</Callout>
+
+## Then, in this order
+
+1. **[Chat](/building-with-platypus/chat)** — the screen you'll spend the most
+   time in. Worth reading even if it looks self-explanatory: File parts, web
+   search, voice, per-message editing, and what happens when you close the tab
+   mid-run.
+2. **[Agents & sub-agents](/building-with-platypus/agents)** — pin a Provider and
+   model, write Instructions, tune generation, grant tools. Compose specialists
+   as sub-agents.
+3. **[Skills](/building-with-platypus/skills)** — author named, on-demand know-how
+   and attach it to an Agent.
+4. **[Tool sets](/building-with-platypus/tool-sets)** — the catalogue of what the
+   built-in tool sets let an Agent do, and which of them can change your
+   Workspace.
+5. **[MCP servers](/building-with-platypus/mcp)** — connect anything the built-ins
+   don't cover, with no code and no Operator involvement.
+6. **[Triggers](/building-with-platypus/triggers)** — run an Agent on a schedule
+   or in response to an event.
+7. **[Boards](/building-with-platypus/boards)** — Kanban boards you and your
+   Agents share as a working surface.
+8. **[Dashboards](/building-with-platypus/dashboards)** — widgets your Agents keep
+   up to date.
+9. **[Notifications](/building-with-platypus/notifications)** — how an Agent tells
+   you what it did while you weren't watching.
+10. **[Webhooks](/building-with-platypus/webhooks)** — get Workspace events out to
+    something else.

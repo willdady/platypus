@@ -20,14 +20,14 @@ For a guided walkthrough of configuring a deployment, see
 
 ## Core
 
-| Variable          | Purpose                                                                               | Default                                                  | Required |
-| ----------------- | ------------------------------------------------------------------------------------- | -------------------------------------------------------- | -------- |
-| `PORT`            | Port the backend HTTP server listens on.                                              | `4001`                                                   | No       |
-| `ALLOWED_ORIGINS` | Comma-separated origins allowed by CORS and better-auth's trusted origins. **No default in code** — the backend splits it at module load, so an unset value throws before the server starts. `.env.example` ships `http://localhost:3001`. | _(none)_ | **Yes** |
-| `DATABASE_URL`    | Postgres 17 connection string (with pgvector).                                        | `postgres://postgres:mypassword@localhost:5432/postgres` | **Yes**  |
-| `LOG_LEVEL`       | Logging verbosity (`trace`, `debug`, `info`, `warn`, `error`, `fatal`).               | `info`                                                   | No       |
-| `TIMEZONE`        | IANA timezone (e.g. `America/New_York`, `Europe/London`) used by the **time Tools only** — see the note below. | `UTC`                           | No       |
-| `NODE_OPTIONS`    | Node runtime flags. Ships set to silence the experimental-feature warning.            | `--disable-warning=ExperimentalWarning`                  | No       |
+| Variable          | Purpose                                                                                                                                                                                                                                    | Default                                                  | Required |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------- | -------- |
+| `PORT`            | Port the backend HTTP server listens on.                                                                                                                                                                                                   | `4001`                                                   | No       |
+| `ALLOWED_ORIGINS` | Comma-separated origins allowed by CORS and better-auth's trusted origins. **No default in code** — the backend splits it at module load, so an unset value throws before the server starts. `.env.example` ships `http://localhost:3001`. | _(none)_                                                 | **Yes**  |
+| `DATABASE_URL`    | Postgres 17 connection string (with pgvector).                                                                                                                                                                                             | `postgres://postgres:mypassword@localhost:5432/postgres` | **Yes**  |
+| `LOG_LEVEL`       | Logging verbosity (`trace`, `debug`, `info`, `warn`, `error`, `fatal`).                                                                                                                                                                    | `info`                                                   | No       |
+| `TIMEZONE`        | IANA timezone (e.g. `America/New_York`, `Europe/London`) used by the **time Tools only** — see the note below.                                                                                                                             | `UTC`                                                    | No       |
+| `NODE_OPTIONS`    | Node runtime flags. Ships set to silence the experimental-feature warning.                                                                                                                                                                 | `--disable-warning=ExperimentalWarning`                  | No       |
 
 <Callout type="warning">
   `TIMEZONE` is read in exactly one place: the `getCurrentTime` and
@@ -40,14 +40,18 @@ For a guided walkthrough of configuring a deployment, see
 
 ## Plugins
 
-| Variable                 | Purpose                                                                                                                                                                                                                                                                                                                                                                                                                                                                           | Default               | Required |
-| ------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------- | -------- |
-| `PLATYPUS_PLUGINS`       | Comma-separated list of the **gate-able** plugins to load and enable at boot — the deny-worthy core plugins (`@platypus/web-fetch`, `@platypus/docker`, `@platypus/ssh`) plus any third-party ones. The always-on core tool sets (`@platypus/tools-basic`, `@platypus/tools-platform`) load unconditionally and must **not** be listed (listing one is fail-loud). List membership both loads _and_ enables a gate-able plugin. Fail-loud at boot.                                | _(unset ⇒ no gate-able plugins;_ `.env.example` _ships_ `@platypus/web-fetch`_)_ | No |
-| `PLATYPUS_PLUGIN_CONFIG` | Deploy-time, Operator-owned plugin config/credentials as a JSON object keyed by plugin name (the manifest `name`; a third-party name is a slug, not the npm specifier), each `{ "config": {…}, "credentials": {…} }`. Validated at boot against the plugin's manifest schemas (fail-loud); a key matching no loaded plugin is also fail-loud. One block is shared deployment-wide across all of a plugin's contributions and tenants. Distinct from per-Workspace Sandbox config. | _(unset)_             | No       |
+| Variable                 | Purpose                                                                                                                                                              | Default                                                                          | Required |
+| ------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- | -------- |
+| `PLATYPUS_PLUGINS`       | Comma-separated list of the **gate-able** plugins to load and enable at boot: `@platypus/web-fetch`, `@platypus/docker`, `@platypus/ssh`, plus any third-party ones. | _(unset ⇒ no gate-able plugins;_ `.env.example` _ships_ `@platypus/web-fetch`_)_ | No       |
+| `PLATYPUS_PLUGIN_CONFIG` | Deploy-time plugin config and credentials as one JSON object keyed by plugin name, each `{ "config": {…}, "credentials": {…} }`.                                     | _(unset)_                                                                        | No       |
 
-See [Extending → the plugin model](/extending#the-plugin-model) and
-[Configuration → Plugins](/self-hosting/configuration#plugins) (incl.
-[plugin config & credentials](/self-hosting/configuration#plugin-config--credentials)).
+Both are **fail-loud at boot**, and the always-on core plugins must not be listed
+in `PLATYPUS_PLUGINS`. The tier model, what list membership means, and how plugin
+config is namespaced and shared across a plugin's contributions are in
+[Configuration → Plugins](/self-hosting/configuration#plugins) and
+[plugin config & credentials](/self-hosting/configuration#plugin-config--credentials).
+The manifest side is in
+[Extending](/extending/plugin-api-and-config#the-plugin-model).
 
 ## Authentication
 
@@ -65,10 +69,10 @@ effect; change the password from within the app. See
 [what first boot creates](/self-hosting/docker-compose#what-first-boot-creates)
 for the seeding rule and the recovery path.
 
-| Variable         | Purpose                                   | Default   | Required           |
-| ---------------- | ----------------------------------------- | --------- | ------------------ |
-| `ADMIN_EMAIL`    | Email of the first admin (Operator) user. | _(none)_  | **On first boot**  |
-| `ADMIN_PASSWORD` | Password for that user.                   | _(none)_  | **On first boot**  |
+| Variable         | Purpose                                   | Default  | Required          |
+| ---------------- | ----------------------------------------- | -------- | ----------------- |
+| `ADMIN_EMAIL`    | Email of the first admin (Operator) user. | _(none)_ | **On first boot** |
+| `ADMIN_PASSWORD` | Password for that user.                   | _(none)_ | **On first boot** |
 
 <Callout type="warning">
   Neither has a default **in code**. Against an empty database with either
@@ -108,41 +112,13 @@ run sooner.
 | `FRONTEND_URL`                  | Frontend URL used to build resource links inside tool responses.                                                                          | `http://localhost:3001` | No       |
 | `EGRESS_ALLOW_PRIVATE_NETWORKS` | Whether tools that fetch a **model-chosen** URL may reach private networks (`10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`, `fc00::/7`). | `true`                  | No       |
 
-### Egress guard
+Which address ranges the guard blocks regardless of that setting, and why the
+default is permissive, are in
+[the egress guard](/self-hosting/configuration#the-egress-guard).
 
-Any tool that fetches a URL the _model_ picked — the `fetchUrl` tool today, a
-[Web-search backend](/extending)'s `read_url` next — runs the target through a
-core guard first. It resolves the hostname and refuses the fetch if **any**
-resolved address is blocked, so a name with one public and one internal record is
-refused. Non-`http(s)` schemes are refused, and a hostname that fails to resolve
-fails closed.
-
-Blocked whatever `EGRESS_ALLOW_PRIVATE_NETWORKS` says, because no legitimate page
-read targets them: loopback (`127.0.0.0/8`, `::1`), `0.0.0.0/8` (which reaches
-localhost on Linux), link-local (`169.254.0.0/16`, `fe80::/10`) where AWS, Azure
-and GCP serve instance metadata, and `100.64.0.0/10`, home to Alibaba Cloud's
-metadata service at `100.100.100.200`.
-
-Private networks are **allowed by default** — the opposite of a textbook
-default-deny — because reading an internal wiki or intranet page is a first-class
-use case for self-hosted deployments. Set
-`EGRESS_ALLOW_PRIVATE_NETWORKS=false` on an internet-facing deployment where
-Agents have no reason to read internal hosts.
-
-<Callout type="warning">
-  The guard is a pre-flight check on the URL, so it removes the easy path rather
-  than every path. Redirects are followed by the HTTP client after the check,
-  and `fetch()` resolves the hostname again independently — so a host that
-  passes and then redirects inward, or whose DNS records change in between, is
-  not caught. Treat it as defence against a prompt-injected model, not as an
-  SSRF boundary.
-</Callout>
-
-`robots.txt` handling for the fetch tool moved to plugin config: set
+`robots.txt` handling for the fetch tool is plugin config, not a variable: set
 `config.ignoreRobotsTxt` on `@platypus/web-fetch` via `PLATYPUS_PLUGIN_CONFIG`
-(see [Plugins](#plugins)) — e.g.
-`PLATYPUS_PLUGIN_CONFIG={"@platypus/web-fetch":{"config":{"ignoreRobotsTxt":true}}}`.
-The former `FETCH_TOOL_IGNORE_ROBOTS_TXT` env var is removed.
+(see [Plugins](#plugins)).
 
 ## Storage
 
@@ -162,44 +138,15 @@ is the production option.
 
 ## Sandbox
 
-Platypus ships two reference Sandbox adapters, both **off by default** and each
-enabled by listing its plugin in `PLATYPUS_PLUGINS` (both ship as core plugins —
-see [Plugins](#plugins) above). Adding the name both loads _and_ registers the
-backend type; omit it and that backend can't be selected at all. See the
-[Extending](/extending#sandbox-backends) section and
-[Sandbox infrastructure](/self-hosting/sandbox).
+**Neither Sandbox backend takes any dedicated environment variable.** There is no
+table in this section because there is nothing to enumerate.
 
-- **Docker** (`@platypus/docker`) — one container per Workspace via the host's
-  Docker daemon. Scoped to development / single-node self-hosting; requires a
-  reachable Docker daemon and the `compose.sandbox.yaml` overlay, which mounts
-  the Docker socket and so grants the backend container effective root on the
-  host. See [Sandbox infrastructure](/self-hosting/sandbox#the-docker-reference-adapter).
-- **SSH** (`@platypus/ssh`) — attaches to a pre-existing, operator-owned host
-  over SSH (bring-your-own-host). The one backend viable in horizontally-scaled
-  deployments, where Docker cannot run. See
-  [Sandbox infrastructure](/self-hosting/sandbox#the-ssh-reference-adapter).
+Both are enabled by listing the plugin — `@platypus/docker` or `@platypus/ssh` —
+in [`PLATYPUS_PLUGINS`](#plugins). Everything else is configured elsewhere: the
+Docker network allowlist as `config.allowedNetworks` in `PLATYPUS_PLUGIN_CONFIG`,
+and the whole SSH connection surface as per-Workspace Sandbox settings an Org
+Admin enters in the app.
 
-### Docker
-
-The Docker backend takes **no dedicated deployment environment variables**. Its
-Operator network allowlist moved onto plugin config: set `config.allowedNetworks`
-on `@platypus/docker` via `PLATYPUS_PLUGIN_CONFIG` (see [Plugins](#plugins)) — a
-JSON array of Docker networks a Sandbox may attach to. Admins select a
-per-Sandbox subset of that list; unset/empty means none are attachable
-(default-deny). For example:
-
-```
-PLATYPUS_PLUGIN_CONFIG={"@platypus/docker":{"config":{"allowedNetworks":["shared-services","public-tools"]}}}
-```
-
-The former `PLATYPUS_SANDBOX_DOCKER_ALLOWED_NETWORKS` env var is removed.
-
-### SSH
-
-The SSH backend takes **no deployment environment variables**. Its entire
-connection surface — host, port, user, workspace root, optional host-key pin, and
-the private-key credential — is **per-Workspace** Sandbox configuration set in the
-app by an Org Admin, not env vars. See
-[Sandbox infrastructure](/self-hosting/sandbox) for the setup narrative and the
-security model (notably: no resource limits and no `networks`/`extraHosts`
-reachability model).
+See [Sandbox](/self-hosting/configuration#sandbox) for how the two fit together,
+and [Sandbox infrastructure](/self-hosting/sandbox) for the security model and the
+setup walkthrough.

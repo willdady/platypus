@@ -9,12 +9,15 @@ import { Cards } from "nextra/components";
 
 This section is for the **Operator** — the person who controls a Platypus
 deployment: its process environment, compose files, and infrastructure. It also
-covers the **Org Admin** tasks that bootstrap a usable installation, such as
-connecting AI providers and curating sandbox infrastructure.
+covers the setup that makes an installation usable at all, such as connecting an
+AI vendor and letting people in.
 
-Platypus runs as two services (a backend API and a frontend web app) backed by a
-PostgreSQL database with the `pgvector` extension. The published Docker images
-let you stand the whole stack up with a single `docker compose up`.
+Platypus runs as two services — a backend API and a frontend web app — backed by
+PostgreSQL 17 with the `pgvector` extension. The published Docker images stand the
+whole stack up with a single `docker compose up`.
+
+Neither service terminates TLS and self-serve sign-up cannot be disabled, so read
+[Running in production](/self-hosting/production) before anyone else uses it.
 
 <Cards>
   <Cards.Card
@@ -29,12 +32,15 @@ let you stand the whole stack up with a single `docker compose up`.
     title="Providers & authentication"
     href="/self-hosting/providers-and-auth"
   />
-  <Cards.Card
-    title="Sandbox infrastructure"
-    href="/self-hosting/sandbox"
-  />
+  <Cards.Card title="Users & access" href="/self-hosting/users-and-access" />
+  <Cards.Card title="Sandbox infrastructure" href="/self-hosting/sandbox" />
+  <Cards.Card title="Running in production" href="/self-hosting/production" />
+  <Cards.Card title="Upgrading" href="/self-hosting/upgrading" />
 </Cards>
 
-Once you can sign in and reach a workspace, head to
-[Building with Platypus](/building-with-platypus) to start creating agents, or
-the [Reference](/reference) for the exhaustive list of configuration variables.
+Arriving from 1.x? [Upgrading](/self-hosting/upgrading) covers the plugin-system
+change that hop needs, and what every upgrade needs regardless of version.
+
+Once you can sign in and reach a Workspace, head to
+[Administering](/administering) to hand resources out, or
+[Building with Platypus](/building-with-platypus) to start creating Agents.

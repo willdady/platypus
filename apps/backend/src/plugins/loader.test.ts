@@ -1349,6 +1349,41 @@ describe("loadPlugins — example third-party plugin", () => {
   });
 });
 
+// `apps/docs/content/extending/your-first-plugin.mdx` walks a reader through
+// listing `@platypus-examples/tool-set` in PLATYPUS_PLUGINS and then tells them
+// exactly what to look for on two screens. Every string it names is asserted
+// here, against the real package resolved by the real dynamic `import()` — so a
+// rename breaks a test rather than sending a first-time plugin author hunting a
+// row that no longer exists.
+describe("loadPlugins — the documented quickstart package", () => {
+  it("resolves @platypus-examples/tool-set and registers example.greeting", async () => {
+    const { register, calls } = makeRegister();
+
+    // No `importPlugin` override: this exercises the default dynamic import, the
+    // same path a deployment takes for any installed third-party package.
+    const loaded = await loadPlugins({
+      pluginNames: ["@platypus-examples/tool-set"],
+      builtinPlugins: {},
+      register,
+    });
+
+    // Checkpoint 1 — the row in Organization settings → Plugins is labelled with
+    // the manifest `name`, NOT the package specifier the Operator installed.
+    expect(loaded).toHaveLength(1);
+    expect(loaded[0].name).toBe("example");
+    expect(loaded[0].version).toBe("0.1.0");
+    expect(loaded[0].origin).toBe("third-party");
+    expect(loaded[0].toolSetIds).toEqual(["example.greeting"]);
+
+    // Checkpoint 2 — the Agent form's Tools card groups by `category` and labels
+    // the switch with `name`, so those are the two strings the reader hunts for.
+    expect(calls).toHaveLength(1);
+    expect(calls[0].id).toBe("example.greeting");
+    expect(calls[0].def.name).toBe("Greeting");
+    expect(calls[0].def.category).toBe("Examples");
+  });
+});
+
 describe("loadPlugins — always-on core set (ADR-0013 amendment)", () => {
   it("loads always-on plugins even when the gate-able list is empty", async () => {
     const { register, calls } = makeRegister();

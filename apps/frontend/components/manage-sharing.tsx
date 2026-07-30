@@ -181,8 +181,10 @@ export const ManageAttachmentsDialog = ({
         <DialogHeader>
           <DialogTitle>Share “{resourceName}”</DialogTitle>
           <DialogDescription>
+            {/* Keep the apostrophe literal, not `&apos;` — see
+                jsx-entity-whitespace.test.ts. */}
             Choose which workspaces this {LABEL[resourceType]} appears in. It
-            runs against each workspace&apos;s own resources.
+            runs against each workspace’s own resources.
           </DialogDescription>
         </DialogHeader>
 

@@ -32,6 +32,17 @@ at once. No drift, no copy-paste.
   explicit and per-resource — it never cascades implicitly.
 </Callout>
 
+### Nothing is shared on your behalf
+
+That rule bites when you Promote. Promoting an Agent that references a
+Workspace-scoped Skill is **refused** — promote the Skill first, then the Agent.
+Platypus does not resolve the prerequisite for you by quietly pulling the Skill
+up alongside it, because that would make something Organization-readable that no
+Org Admin ever named.
+
+The corollary is the useful half: nothing reaches Organization scope by accident.
+If a resource is Shared, somebody chose it.
+
 ### The Sandbox is the exception, and deliberately so
 
 A **Sandbox** is not a Shared resource — it belongs to exactly one Workspace and
