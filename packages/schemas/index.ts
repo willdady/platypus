@@ -901,7 +901,19 @@ const providerBaseSchema = z.object({
   // chat API) offer the toggle at all. Not validated against the registry here:
   // the registry is a backend-runtime concern, and a stale id degrades to no
   // search tools plus a warn-log rather than blocking the form.
-  webBackend: z.string().nullable().optional(),
+  //
+  // Length-bounded because the value is free text that reaches a log line on
+  // every searching turn; 200 is far above a namespaced plugin id
+  // (`@scope/name.backend`). `""` normalises to null so the column holds one
+  // representation of "no backend" — a form select's "None" option yields the
+  // empty string, and rejecting it with `.min(1)` would turn "none" into a 400
+  // instead of storing what the Operator meant.
+  webBackend: z
+    .string()
+    .max(200)
+    .nullable()
+    .optional()
+    .transform((value) => (value === "" ? null : value)),
   // Free-text system-prompt security directives appended LAST (recency) to
   // every run on this provider — including sub-agent runs resolved to this
   // provider. Provider-scoped because guard strength is a property of the model

@@ -377,6 +377,35 @@ describe("Provider Create Schema", () => {
       expect(omitted.data.webBackend).toBeUndefined();
     }
   });
+
+  it("normalises an empty webBackend to null and bounds its length", () => {
+    // A form select's "None" option yields `""`. Normalised rather than rejected,
+    // so the column holds one representation of "no backend" and choosing None is
+    // not a 400.
+    const empty = providerUpdateSchema.safeParse({
+      ...baseProvider,
+      webBackend: "",
+    });
+    expect(empty.success).toBe(true);
+    if (empty.success) {
+      expect(empty.data.webBackend).toBeNull();
+    }
+
+    // Bounded because the value is free text that reaches a log line on every
+    // searching turn; 200 is far above a namespaced plugin id.
+    expect(
+      providerCreateSchema.safeParse({
+        ...baseProvider,
+        webBackend: "x".repeat(200),
+      }).success,
+    ).toBe(true);
+    expect(
+      providerCreateSchema.safeParse({
+        ...baseProvider,
+        webBackend: "x".repeat(201),
+      }).success,
+    ).toBe(false);
+  });
 });
 
 describe("providerHasNativeSearch", () => {

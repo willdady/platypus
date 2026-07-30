@@ -89,7 +89,7 @@ import {
   NotFoundError,
   ValidationError,
   createToolHeartbeat,
-  shouldServeSearch,
+  resolveSearchMode,
   wrapToolsWithBump,
   normalizeToolResult,
 } from "./chat-execution.ts";
@@ -524,10 +524,12 @@ describe("chat-execution", () => {
       const turnFor = (
         provider: typeof googleProvider,
         search: boolean | undefined = true,
+        runMode: "interactive" | "headless" = "interactive",
       ) =>
         prepareChatTurn(
           {
             ...baseInput,
+            runMode,
             request: { providerId: provider.id, modelId: "gpt-4", search },
           },
           createInMemoryChatTurnQueries({
@@ -585,8 +587,16 @@ describe("chat-execution", () => {
         // search than the one the Operator chose.
         expect(turn.stream.tools).not.toHaveProperty("google_search");
         expect(googleSearchTool()).not.toHaveBeenCalled();
+        // `providerId` is the field the remedy needs: an org-scoped Shared
+        // Provider (ADR-0007) is one row serving many Workspaces, so
+        // `workspaceId` alone names a symptom and not the row to edit.
         expect(warn).toHaveBeenCalledWith(
-          expect.objectContaining({ workspaceId: "ws-1", webBackend: "searx" }),
+          expect.objectContaining({
+            orgId: "org-1",
+            workspaceId: "ws-1",
+            providerId: googleProvider.id,
+            webBackend: "searx",
+          }),
           expect.stringContaining("unregistered web backend"),
         );
         warn.mockRestore();
@@ -619,6 +629,23 @@ describe("chat-execution", () => {
 
         expect(turn.stream.tools).not.toHaveProperty("web_search");
         expect(turn.stream.tools).not.toHaveProperty("read_url");
+      });
+
+      it("serves a backend on a trigger-initiated run, not only an interactive one", async () => {
+        // G16: a non-user principal reaches `prepareChatTurn` through
+        // `AgentRunner` with `runMode: "headless"`, and resolution must not be
+        // gated on the mode — there is one injection site for every run path.
+        register("searx", { read_url: () => ({ content: "", url: "" }) });
+
+        const turn = await turnFor(
+          { ...googleProvider, webBackend: "searx" },
+          true,
+          "headless",
+        );
+
+        expect(turn.stream.tools).toHaveProperty("web_search");
+        expect(turn.stream.tools).toHaveProperty("read_url");
+        expect(googleSearchTool()).not.toHaveBeenCalled();
       });
     });
 
@@ -922,7 +949,7 @@ describe("chat-execution", () => {
     });
   });
 
-  describe("shouldServeSearch", () => {
+  describe("resolveSearchMode", () => {
     // A provider that can serve search natively, so the tests below isolate one
     // condition at a time.
     const native = {
@@ -932,40 +959,49 @@ describe("chat-execution", () => {
       webBackend: null,
     };
 
-    it("serves when search is requested and the provider has native search", () => {
-      expect(shouldServeSearch(true, native)).toBe(true);
+    it("resolves to native when search is requested and the provider has it", () => {
+      expect(resolveSearchMode(true, native)).toEqual({ kind: "native" });
     });
 
-    it("does not serve when the provider's search switch is off", () => {
+    it("resolves to the backend, ahead of native search, when one is set", () => {
+      // Explicit-plugin-first (ADR-0014): the id travels with the decision, so the
+      // injection site never re-derives which of the two paths applies.
       expect(
-        shouldServeSearch(true, { ...native, nativeSearchEnabled: false }),
-      ).toBe(false);
+        resolveSearchMode(true, { ...native, webBackend: "searx" }),
+      ).toEqual({ kind: "backend", backend: "searx" });
+    });
+
+    it("resolves to none when the provider's search switch is off", () => {
+      expect(
+        resolveSearchMode(true, { ...native, nativeSearchEnabled: false }),
+      ).toEqual({ kind: "none" });
       // Even with a backend configured: the switch currently means "no search on
-      // this provider at all" (ADR-0014 — the semantics rename is deferred).
+      // this provider at all". Deliberate, and the field-naming consequence is
+      // PR3's (see PLAN § PR3).
       expect(
-        shouldServeSearch(true, {
+        resolveSearchMode(true, {
           ...native,
           nativeSearchEnabled: false,
           webBackend: "searx",
         }),
-      ).toBe(false);
+      ).toEqual({ kind: "none" });
     });
 
-    it("does not serve when search is not requested, regardless of provider", () => {
-      expect(shouldServeSearch(false, native)).toBe(false);
-      expect(shouldServeSearch(undefined, native)).toBe(false);
+    it("resolves to none when search is not requested, regardless of provider", () => {
+      expect(resolveSearchMode(false, native)).toEqual({ kind: "none" });
+      expect(resolveSearchMode(undefined, native)).toEqual({ kind: "none" });
       expect(
-        shouldServeSearch(undefined, { ...native, webBackend: "searx" }),
-      ).toBe(false);
+        resolveSearchMode(undefined, { ...native, webBackend: "searx" }),
+      ).toEqual({ kind: "none" });
     });
 
     it("treats a legacy provider (nativeSearchEnabled undefined) as enabled", () => {
       expect(
-        shouldServeSearch(true, {
+        resolveSearchMode(true, {
           ...native,
           nativeSearchEnabled: undefined as unknown as boolean,
         }),
-      ).toBe(true);
+      ).toEqual({ kind: "native" });
     });
 
     it("serves a provider with no native search only when a web backend is set", () => {
@@ -974,10 +1010,10 @@ describe("chat-execution", () => {
         ...native,
         providerType: "Bedrock" as const,
       };
-      expect(shouldServeSearch(true, bedrock)).toBe(false);
-      expect(shouldServeSearch(true, { ...bedrock, webBackend: "searx" })).toBe(
-        true,
-      );
+      expect(resolveSearchMode(true, bedrock)).toEqual({ kind: "none" });
+      expect(
+        resolveSearchMode(true, { ...bedrock, webBackend: "searx" }),
+      ).toEqual({ kind: "backend", backend: "searx" });
 
       // …and neither does an OpenAI-compatible endpoint on the chat API (vLLM,
       // llama.cpp), where the SDK's search tool exists but the endpoint cannot
@@ -987,10 +1023,22 @@ describe("chat-execution", () => {
         providerType: "OpenAI" as const,
         apiMode: "chat" as const,
       };
-      expect(shouldServeSearch(true, vllm)).toBe(false);
-      expect(shouldServeSearch(true, { ...vllm, webBackend: "searx" })).toBe(
-        true,
+      expect(resolveSearchMode(true, vllm)).toEqual({ kind: "none" });
+      expect(resolveSearchMode(true, { ...vllm, webBackend: "searx" })).toEqual(
+        {
+          kind: "backend",
+          backend: "searx",
+        },
       );
+    });
+
+    it("normalises an empty webBackend to none, not to a backend lookup", () => {
+      // `providerBaseSchema` transforms `""` to null, but a row written before
+      // that (or by hand) can still hold the empty string — it must read as "no
+      // backend" rather than a registry miss and a warn on every turn.
+      expect(resolveSearchMode(true, { ...native, webBackend: "" })).toEqual({
+        kind: "native",
+      });
     });
   });
 
