@@ -1,5 +1,25 @@
 # Changelog
 
+## [2.3.0](https://github.com/willdady/platypus/compare/v2.2.1...v2.3.0) (2026-08-02)
+
+
+### Features
+
+* add Provider-scoped Model aliases ([#397](https://github.com/willdady/platypus/issues/397)) ([d8c7b4b](https://github.com/willdady/platypus/commit/d8c7b4b80a3f9ae2b3271a1bfb88bb81bcf70da7))
+* add the web-search backend Extension point ([#384](https://github.com/willdady/platypus/issues/384)) ([6c68205](https://github.com/willdady/platypus/commit/6c68205aa8811be4479d44303466b3119eaa252f))
+* **frontend:** label and declutter the Provider model rows ([#398](https://github.com/willdady/platypus/issues/398)) ([2e3df91](https://github.com/willdady/platypus/commit/2e3df913ed38ed27893c1499af9d2ee10b263375))
+* **frontend:** reveal MCP secrets with an eye toggle ([#400](https://github.com/willdady/platypus/issues/400)) ([bc4bcc4](https://github.com/willdady/platypus/commit/bc4bcc4ad1dee4e0c9a27e44f040ee0a0bc504d1))
+* serve chat search from a Web-search backend ([#393](https://github.com/willdady/platypus/issues/393)) ([720c89a](https://github.com/willdady/platypus/commit/720c89aa86fae5ae33993804ea162b92a2991ff4))
+
+
+### Bug Fixes
+
+* **backend:** attribute plugin factory throws and harden the tool-set registry ([#390](https://github.com/willdady/platypus/issues/390)) ([ad6fdaf](https://github.com/willdady/platypus/commit/ad6fdaf62524da9f80c6db9e8c3854e83c40fd53))
+* **backend:** harden the sandbox registry and contribution validation ([#388](https://github.com/willdady/platypus/issues/388)) ([6db3e8f](https://github.com/willdady/platypus/commit/6db3e8fb6fcb8cbba77f5a8ac3127531b000a968))
+* **frontend:** gate the search toggle on shared provider capability ([#395](https://github.com/willdady/platypus/issues/395)) ([43345d6](https://github.com/willdady/platypus/commit/43345d692d38b57637afdbe1b1ded6ea3f141587))
+* **frontend:** restore the missing space in the sharing dialog description ([#391](https://github.com/willdady/platypus/issues/391)) ([ae9a3d5](https://github.com/willdady/platypus/commit/ae9a3d547195ea9f74c04f7d0309ba273d6a034a))
+* **frontend:** show a rejected model row its own error ([#399](https://github.com/willdady/platypus/issues/399)) ([4a49675](https://github.com/willdady/platypus/commit/4a49675c8c03ffb75bcf67986b3d148da7dda071))
+
 ## [2.2.1](https://github.com/willdady/platypus/compare/v2.2.0...v2.2.1) (2026-07-26)
 
 
