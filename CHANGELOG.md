@@ -1,5 +1,18 @@
 # Changelog
 
+## [2.4.0](https://github.com/willdady/platypus/compare/v2.3.0...v2.4.0) (2026-08-02)
+
+
+### Features
+
+* **frontend:** show org name in settings sidebar and page title ([#410](https://github.com/willdady/platypus/issues/410)) ([38f551b](https://github.com/willdady/platypus/commit/38f551bdeb7651ac14b3eebbfb2064b42ff4c33d))
+
+
+### Bug Fixes
+
+* **backend:** advertise Model aliases from listModelProviders ([#409](https://github.com/willdady/platypus/issues/409)) ([6f014ac](https://github.com/willdady/platypus/commit/6f014aca3459748a27b0effa695caea460d652c6))
+* **backend:** align upsertSkill description bound with shared schema ([#407](https://github.com/willdady/platypus/issues/407)) ([c519854](https://github.com/willdady/platypus/commit/c5198542b9de6b8dacbb6f0f8fe52f6a46b6c7c0))
+
 ## [2.3.0](https://github.com/willdady/platypus/compare/v2.2.1...v2.3.0) (2026-08-02)
 
 
