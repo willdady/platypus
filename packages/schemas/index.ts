@@ -1171,6 +1171,36 @@ export const providerHasNativeSearch = (
   }
 };
 
+/**
+ * Whether a URL supplied by a Web-search backend may be presented — passed to the
+ * model in a `web_search` result, and rendered as a clickable Sources pill.
+ *
+ * The backend's egress guard covers **model-supplied** URLs going *into*
+ * `read_url`. This covers **backend-supplied** URLs coming *out* of `web_search`,
+ * which nothing else checks: a `javascript:` or `data:` href in a clickable pill
+ * is a live hole, and dropping the entry also keeps garbage out of the context
+ * window.
+ *
+ * Shared rather than mirrored for `providerHasNativeSearch`'s reason, with more
+ * at stake: core drops an unpresentable result before the model sees it and the
+ * frontend re-checks before it reaches the DOM, so the two are belt-and-braces on
+ * one rule. Two copies of a security predicate drift, and the frontend's is the
+ * copy that decides what becomes an `href`.
+ *
+ * Scheme only. Length is a separate, caller-owned concern — core bounds a result
+ * URL by `MAX_URL_CHARS` before this runs, because the treatment differs (a URL
+ * cut to fit is a broken link, so it is dropped, not truncated).
+ */
+export const isPresentableUrl = (value: unknown): value is string => {
+  if (typeof value !== "string") return false;
+  try {
+    const { protocol } = new URL(value);
+    return protocol === "http:" || protocol === "https:";
+  } catch {
+    return false;
+  }
+};
+
 export const providerCreateSchema = providerBaseSchema.pick({
   organizationId: true,
   workspaceId: true,

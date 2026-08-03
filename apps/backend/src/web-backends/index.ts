@@ -1,5 +1,6 @@
 import { tool, type Tool } from "ai";
 import type { PluginConfigContext } from "@platypuschat/plugin-sdk";
+import { isPresentableUrl } from "@platypus/schemas";
 import { logger } from "../logger.ts";
 import { checkEgress, EGRESS_BLOCKED_MESSAGE } from "../utils/egress-guard.ts";
 import {
@@ -116,22 +117,16 @@ const asRecord = (value: unknown): Record<string, unknown> =>
     : {};
 
 /**
- * Whether a URL may be presented to the model (and, in the frontend, rendered as
- * a clickable Sources pill). The egress guard covers **model-supplied** URLs going
- * *into* `read_url`; this covers **backend-supplied** URLs coming *out* of
- * `web_search`, which nothing else checks — a `javascript:` or `data:` href in a
- * pill is a live hole, and dropping the entry also keeps garbage out of the
- * context window.
+ * Whether a URL may be presented to the model, re-exported from `@platypus/schemas`
+ * so this module's callers and tests keep importing it from here.
+ *
+ * It moved out of this file when the frontend became its second consumer: the
+ * Sources row renders backend-supplied URLs as `href`s, and it re-checks with this
+ * exact predicate before anything reaches the DOM. One consumer did not justify the
+ * shared-package indirection; two consumers of a *security* check, one of them the
+ * one that decides what becomes a link, do. See the doc comment there.
  */
-export const isPresentableUrl = (value: unknown): value is string => {
-  if (typeof value !== "string") return false;
-  try {
-    const { protocol } = new URL(value);
-    return protocol === "http:" || protocol === "https:";
-  } catch {
-    return false;
-  }
-};
+export { isPresentableUrl };
 
 /**
  * The `url` a `read_url` result reports, bounded by `MAX_URL_CHARS` on every

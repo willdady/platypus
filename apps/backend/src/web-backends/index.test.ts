@@ -956,18 +956,14 @@ describe("composeWebBackend — the contribution is not copied", () => {
   });
 });
 
+// The predicate itself now lives in `@platypus/schemas`, where its cases are
+// covered — the frontend's Sources row is its second consumer and re-checks with
+// the same function before an `href` reaches the DOM. What is pinned here is that
+// this module still re-exports it, since every caller and the search loop below
+// import it from here.
 describe("isPresentableUrl", () => {
-  it("accepts http and https only", () => {
-    expect(isPresentableUrl("http://example.com/")).toBe(true);
+  it("is re-exported for this module's callers", () => {
     expect(isPresentableUrl("https://example.com/")).toBe(true);
-  });
-
-  it("rejects other schemes, non-URLs, and non-strings", () => {
     expect(isPresentableUrl("javascript:alert(1)")).toBe(false);
-    expect(isPresentableUrl("data:text/html,<script>")).toBe(false);
-    expect(isPresentableUrl("file:///etc/passwd")).toBe(false);
-    expect(isPresentableUrl("not a url")).toBe(false);
-    expect(isPresentableUrl(undefined)).toBe(false);
-    expect(isPresentableUrl(42)).toBe(false);
   });
 });

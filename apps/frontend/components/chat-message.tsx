@@ -48,6 +48,7 @@ import {
 import { Textarea } from "./ui/textarea";
 import { LoadSkillTool } from "./load-skill-tool";
 import { SubAgentTool } from "./sub-agent-tool";
+import { WebSearchTool, webSearchSources } from "./web-search-tool";
 
 interface ChatMessageProps {
   /** The message object to render */
@@ -126,6 +127,13 @@ export const ChatMessage = memo(function ChatMessage({
   const sourceUrlParts = message.parts?.filter(
     (part) => part.type === "source-url",
   );
+  // Citations from a Web-search backend's client-executed `web_search`, which
+  // arrive as a tool result rather than as `source-url` parts. Merged into the one
+  // Sources row below so the same Chat toggle presents its results the same way on
+  // a vLLM Provider as on Anthropic (ADR-0014).
+  const pluginSearchSources = webSearchSources(message.parts);
+  const sourceCount =
+    (sourceUrlParts?.length ?? 0) + pluginSearchSources.length;
 
   const textContent =
     message.parts
@@ -142,12 +150,19 @@ export const ChatMessage = memo(function ChatMessage({
           ))}
         </MessageAttachments>
       )}
-      {message.role === "assistant" && !!sourceUrlParts?.length && (
+      {message.role === "assistant" && sourceCount > 0 && (
         <Sources>
-          <SourcesTrigger count={sourceUrlParts.length} />
-          {sourceUrlParts.map((part, i) => (
+          <SourcesTrigger count={sourceCount} />
+          {sourceUrlParts?.map((part, i) => (
             <SourcesContent key={`${message.id}-${i}`}>
               <Source href={part.url} title={part.url} />
+            </SourcesContent>
+          ))}
+          {pluginSearchSources.map((source) => (
+            <SourcesContent key={`${message.id}-search-${source.url}`}>
+              {/* A backend supplies a real title, unlike a `source-url` part,
+              where the URL is all there is to show. */}
+              <Source href={source.url} title={source.title} />
             </SourcesContent>
           ))}
         </Sources>
@@ -223,6 +238,17 @@ export const ChatMessage = memo(function ChatMessage({
           );
         } else if (part.type === "tool-loadSkill") {
           return <LoadSkillTool key={`${message.id}-${i}`} toolPart={part} />;
+        } else if (
+          isToolUIPart(part) &&
+          part.type.startsWith("tool-web_search")
+        ) {
+          // Before the generic branch: its results are already the Sources row
+          // above, so the raw JSON body would repeat every one of them.
+          //
+          // `startsWith`, like the `delegateTo` branch below: a plugin-contributed
+          // tool is not enumerated in `CustomUITools`, so `===` against the literal
+          // has no overlap with the part's type and TypeScript rejects it.
+          return <WebSearchTool key={`${message.id}-${i}`} toolPart={part} />;
         } else if (
           isToolUIPart(part) &&
           part.type.startsWith("tool-delegateTo")

@@ -77,18 +77,21 @@ truncates.
 The tools are ephemeral. They exist for a turn the toggle was on for, and no
 other.
 
-Selection is not on the Provider form yet. In this release the only way to point
-a Provider at your backend is the Provider API's `webBackend` field, set to the
-id your manifest contributes.
+An Org Admin points a Provider at your backend from the Provider form:
+**Advanced settings → Web-search backend** lists every backend the deployment has
+installed, by the display name your manifest gives it. Selecting one takes
+precedence over the Provider's built-in search, and the Chat **Search** toggle
+appears on that Provider even when its model has no search of its own — which is
+the case this Extension point exists for. The same field is on the Provider API as
+`webBackend`.
+
+Results are cited: Platypus lifts the `url` and `title` of each result your
+`web_search` returns into the same **Sources** row native search uses, so a
+reader gets pills either way. Anything that is not an `http`/`https` URL is
+dropped rather than rendered.
 
 <Callout type="warning">
-  Two Provider settings decide whether your backend is reached, and both
-  currently work against the endpoints this Extension point exists for. The Chat
-  **Search** toggle is offered only on Providers that have native web search, so
-  on a vLLM or LiteLLM Provider it stays hidden and no Chat message reaches your
-  backend; a Trigger with **Web Search** on is the path that does. Turning
-  **Native web search** off disables your backend along with the built-in tool,
-  so leave it on. To exercise a backend from Chat today, attach it to a Provider
-  that does have native search — a configured backend takes precedence over the
-  built-in tool.
+  One Provider setting still gates your backend: turning **Native web search**
+  off disables it along with the built-in tool, so leave it on. The form says so
+  beside the selector. A future release folds the two controls into one.
 </Callout>
