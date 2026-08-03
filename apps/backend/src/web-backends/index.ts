@@ -116,17 +116,13 @@ const asRecord = (value: unknown): Record<string, unknown> =>
     ? (value as Record<string, unknown>)
     : {};
 
-/**
- * Whether a URL may be presented to the model, re-exported from `@platypus/schemas`
- * so this module's callers and tests keep importing it from here.
- *
- * It moved out of this file when the frontend became its second consumer: the
- * Sources row renders backend-supplied URLs as `href`s, and it re-checks with this
- * exact predicate before anything reaches the DOM. One consumer did not justify the
- * shared-package indirection; two consumers of a *security* check, one of them the
- * one that decides what becomes a link, do. See the doc comment there.
- */
-export { isPresentableUrl };
+// `isPresentableUrl` — the scheme filter every backend-supplied URL passes before
+// it reaches the model — lives in `@platypus/schemas` (imported above), not here.
+// It moved when the frontend became its second consumer: the Sources row renders
+// those URLs as `href`s and re-checks with this exact predicate before anything
+// reaches the DOM. One consumer did not justify the shared-package indirection;
+// two consumers of a *security* check, one of them the one that decides what
+// becomes a link, do. Its cases are covered in that package's tests.
 
 /**
  * The `url` a `read_url` result reports, bounded by `MAX_URL_CHARS` on every

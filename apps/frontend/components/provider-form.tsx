@@ -312,8 +312,12 @@ const ModelRow = ({
  * (and the API normalises `""` to it), but Radix rejects an empty `SelectItem`
  * value, so the two are mapped at the control's edge rather than storing a second
  * representation of no-backend.
+ *
+ * A backend id is an arbitrary string, so a contribution registering *this* id
+ * would read as None. Namespaced enough that it will not happen by accident, and
+ * the alternative — a non-printable sentinel — reaches the DOM.
  */
-const NO_WEB_BACKEND = "__none__";
+const NO_WEB_BACKEND = "__platypus_no_web_backend__";
 
 type ProviderFormData = Omit<
   Provider,
@@ -410,13 +414,28 @@ const ProviderForm = ({
   // The Web-search backends this deployment has installed (ADR-0014). Org-scoped
   // rather than workspace-scoped because this form serves both Provider scopes and
   // `workspaceId` is optional here; the list itself is deployment-wide either way.
-  const { data: webBackendsData } = useSWR<{
+  const {
+    data: webBackendsData,
+    error: webBackendsError,
+    isLoading: webBackendsLoading,
+  } = useSWR<{
     results: Array<{ backend: string; name: string; plugin: string | null }>;
   }>(
     user ? joinUrl(backendUrl, `/organizations/${orgId}/web-backends`) : null,
     fetcher,
   );
-  const availableWebBackends = webBackendsData?.results ?? [];
+  // Sorted by display name: the route returns registration order, which follows
+  // `PLATYPUS_PLUGINS` and so reshuffles the dropdown when an Operator edits that
+  // list. Display order is the frontend's to choose.
+  const availableWebBackends = [...(webBackendsData?.results ?? [])].sort(
+    (a, b) => a.name.localeCompare(b.name),
+  );
+  // An empty list means "this deployment installed none" only once the catalog
+  // actually arrived. While it is in flight or after it failed, the list is empty
+  // for a reason that says nothing about the deployment — so the field must not
+  // hide, and a stored id must not be accused of being uninstalled.
+  const webBackendsKnown =
+    !!webBackendsData && !webBackendsError && !webBackendsLoading;
 
   useEffect(() => {
     if (provider && !hasInitialized.current) {
@@ -1152,8 +1171,9 @@ const ProviderForm = ({
                     <FieldDescription>
                       Use this provider&apos;s built-in web_search tool. Turn
                       off for endpoints that don&apos;t implement it (e.g. vLLM,
-                      Ollama, LiteLLM). This also hides the search toggle in
-                      chat.
+                      Ollama, LiteLLM) — but not if you have selected a
+                      Web-search backend below, which this switch disables too.
+                      This also hides the search toggle in chat.
                     </FieldDescription>
                   </div>
                   <Switch
@@ -1174,8 +1194,13 @@ const ProviderForm = ({
               backend, where the control would be a dead "None" — but never
               hidden while a value is stored, even one whose plugin has since
               been removed: concealing a stored id is how a Provider ends up
-              pointing at a backend nobody can see or clear. */}
-              {(availableWebBackends.length > 0 || !!formData.webBackend) && (
+              pointing at a backend nobody can see or clear.
+              Nor hidden when the catalog request failed: an empty list then says
+              nothing about the deployment, and silently dropping the field would
+              read as "none installed". */}
+              {(availableWebBackends.length > 0 ||
+                !!formData.webBackend ||
+                !!webBackendsError) && (
                 <Field data-invalid={!!validationErrors.webBackend}>
                   <FieldLabel htmlFor="webBackend">
                     Web-search backend
@@ -1214,17 +1239,20 @@ const ProviderForm = ({
                             {b.plugin ? ` (${b.plugin})` : ""}
                           </SelectItem>
                         ))}
-                        {/* A stored id the catalog no longer lists — its plugin
-                        was dropped from `PLATYPUS_PLUGINS`, or the id was set
-                        through the API. It degrades to no search tools
-                        server-side, so it is named here rather than silently
-                        reading as "None". */}
+                        {/* A stored id the catalog does not list — its plugin was
+                        dropped from `PLATYPUS_PLUGINS`, or the id was set through
+                        the API. It degrades to no search tools server-side, so it
+                        is named here rather than silently reading as "None".
+                        The "(not installed)" verdict needs the catalog to have
+                        actually loaded; while it is in flight or failed, the id is
+                        shown without a claim about it. */}
                         {!!formData.webBackend &&
                           !availableWebBackends.some(
                             (b) => b.backend === formData.webBackend,
                           ) && (
                             <SelectItem value={formData.webBackend}>
-                              {formData.webBackend} (not installed)
+                              {formData.webBackend}
+                              {webBackendsKnown ? " (not installed)" : ""}
                             </SelectItem>
                           )}
                       </SelectGroup>
@@ -1233,8 +1261,17 @@ const ProviderForm = ({
                   <FieldDescription>
                     Route this provider&apos;s web search through a plugin
                     backend instead of the vendor&apos;s own tool. A selected
-                    backend takes precedence over built-in search.
+                    backend takes precedence over built-in search, and needs
+                    Native web search left on — that switch gates it too.
                   </FieldDescription>
+                  {/* Without this the same empty dropdown means both "none
+                  installed" and "we could not ask". */}
+                  {!!webBackendsError && (
+                    <FieldDescription className="text-destructive">
+                      Couldn&apos;t load the installed backends, so this list
+                      may be incomplete. Any stored selection is unchanged.
+                    </FieldDescription>
+                  )}
                   {/* The coupling is real and its name does not say so:
                   `nativeSearchEnabled` gates plugin search too, so switching it
                   off leaves a selected backend silently dead. The select stays

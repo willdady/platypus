@@ -239,4 +239,105 @@ describe("ChatMessage sources from a Web-search backend", () => {
     expect(screen.getByText(/2 results/)).toBeInTheDocument();
     expect(screen.queryByText("Parameters")).toBeNull();
   });
+
+  // A page the vendor already cited must not be counted twice because the plugin
+  // result names it too — reachable in a history that spans a Provider gaining a
+  // backend.
+  it("cites a page once when a native source-url and a plugin result share it", () => {
+    renderMessage(
+      searchMessage({ query: "a", results: [results[0]] }, [
+        {
+          type: "source-url",
+          sourceId: "s1",
+          url: "https://example.com/platypus",
+        },
+      ]),
+    );
+
+    expect(screen.getByText("Used 1 sources")).toBeInTheDocument();
+    openSources();
+
+    expect(
+      screen.getAllByRole("link", { name: "https://example.com/platypus" }),
+    ).toHaveLength(1);
+  });
+
+  // "0 results" is true of a search that has not answered yet, and reads as a
+  // search that found nothing.
+  it("says it is searching rather than reporting 0 results mid-call", () => {
+    renderMessage({
+      id: "m1",
+      role: "assistant",
+      parts: [
+        {
+          type: "tool-web_search",
+          toolCallId: "c1",
+          state: "input-available",
+          input: { query: "platypus habitat" },
+        },
+      ],
+    } as unknown as PlatypusUIMessage);
+
+    openToolCard();
+    expect(screen.getByText("Searching…")).toBeInTheDocument();
+    expect(screen.queryByText(/0 results/)).toBeNull();
+  });
+});
+
+// Native provider search registers under the same `web_search` name as a plugin
+// backend's (`services/provider.ts` — OpenAI, OpenRouter, Anthropic), so the tool
+// name alone cannot tell them apart. `providerExecuted` can: a native part belongs
+// on the generic renderer, which shows the vendor payload the compact card cannot
+// read, and its citations come from `source-url` parts.
+describe("ChatMessage and provider-executed web_search", () => {
+  const nativeSearchMessage = (extraParts: unknown[] = []): PlatypusUIMessage =>
+    ({
+      id: "m1",
+      role: "assistant",
+      parts: [
+        {
+          type: "tool-web_search",
+          toolCallId: "c1",
+          state: "output-available",
+          providerExecuted: true,
+          input: { query: "platypus habitat" },
+          // Vendor-shaped: not core's `{ query, results }`.
+          output: [
+            { type: "web_search_result", url: "https://vendor.example/a" },
+          ],
+        },
+        ...extraParts,
+      ],
+    }) as unknown as PlatypusUIMessage;
+
+  it("leaves a native search on the generic tool renderer", () => {
+    renderMessage(nativeSearchMessage());
+
+    // Only the generic renderer shows the input/output blocks; the compact card
+    // has neither, and would claim "0 results" on this vendor-shaped output.
+    fireEvent.click(screen.getByRole("button", { name: /Web search/ }));
+    expect(screen.getByText("Parameters")).toBeInTheDocument();
+    expect(screen.queryByText(/\d+ results?/)).toBeNull();
+    expect(screen.queryByText("Searching…")).toBeNull();
+  });
+
+  it("lifts no sources out of a native search result", () => {
+    renderMessage(nativeSearchMessage());
+
+    expect(screen.queryByText(/Used \d+ sources/)).toBeNull();
+  });
+
+  it("still renders the native citations from source-url parts", () => {
+    renderMessage(
+      nativeSearchMessage([
+        {
+          type: "source-url",
+          sourceId: "s1",
+          url: "https://vendor.example/cited",
+        },
+      ]),
+    );
+
+    expect(screen.getByText("Used 1 sources")).toBeInTheDocument();
+  });
 });

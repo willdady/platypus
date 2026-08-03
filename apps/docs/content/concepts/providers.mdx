@@ -128,7 +128,7 @@ authentication](/self-hosting/providers-and-auth).
 ## Web search
 
 Whether the Chat **Search** toggle finds anything is a property of the Provider,
-and two fields under **Advanced settings** decide it.
+and up to two fields under **Advanced settings** decide it.
 
 **Web-search backend** picks _which_ search runs. It lists the search backends
 your deployment has installed as plugins — SearXNG, a headless browser, whatever
@@ -142,8 +142,9 @@ you're getting.
 **Native web search** decides whether _any_ search is allowed on this Provider.
 Switching it off currently disables a selected backend too, not only the built-in
 tool — so a backend you selected will not run until it is back on. The form warns
-you where you make the selection. A future release replaces both fields with one
-control.
+you where you make the selection. On **Bedrock** the switch is not shown, because
+Bedrock has no built-in search to turn off; search there is on whenever a backend
+is selected. A future release replaces both fields with one control.
 
 Results are cited the same way whichever search ran: the pages used appear as
 **Sources** under the reply. Adding a backend to a deployment is an Operator task

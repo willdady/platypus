@@ -40,12 +40,20 @@ import { CodeBlock } from "./code-block";
  * Converts a camelCase tool name (extracted from a `tool-*` type string)
  * into a human-friendly label.
  * e.g. "tool-getBoardState" → "Get board state"
+ *
+ * Underscores count as word boundaries too: snake_case reaches here from
+ * provider-native search (`web_search`), the Web-search backend tools (ADR-0014),
+ * and most MCP servers, all of which read as "Web_search" otherwise.
  */
 export function humanizeToolType(type: string): string {
   // Strip the "tool-" prefix
   const name = type.startsWith("tool-") ? type.slice(5) : type;
-  // Split on camelCase boundaries
-  const words = name.replace(/([a-z])([A-Z])/g, "$1 $2").split(" ");
+  // Split on camelCase boundaries and underscores
+  const words = name
+    .replace(/([a-z])([A-Z])/g, "$1 $2")
+    .replace(/_+/g, " ")
+    .split(" ")
+    .filter(Boolean);
   // Capitalise the first word, lowercase the rest
   return words
     .map((w, i) =>

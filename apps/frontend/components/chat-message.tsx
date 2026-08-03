@@ -48,7 +48,11 @@ import {
 import { Textarea } from "./ui/textarea";
 import { LoadSkillTool } from "./load-skill-tool";
 import { SubAgentTool } from "./sub-agent-tool";
-import { WebSearchTool, webSearchSources } from "./web-search-tool";
+import {
+  WebSearchTool,
+  isPluginWebSearchPart,
+  webSearchSources,
+} from "./web-search-tool";
 
 interface ChatMessageProps {
   /** The message object to render */
@@ -131,7 +135,13 @@ export const ChatMessage = memo(function ChatMessage({
   // arrive as a tool result rather than as `source-url` parts. Merged into the one
   // Sources row below so the same Chat toggle presents its results the same way on
   // a vLLM Provider as on Anthropic (ADR-0014).
-  const pluginSearchSources = webSearchSources(message.parts);
+  //
+  // The native URLs are passed in so a page cited both ways — possible in a
+  // history that spans a Provider gaining a backend — is one pill, not two.
+  const pluginSearchSources = webSearchSources(
+    message.parts,
+    sourceUrlParts?.map((part) => part.url),
+  );
   const sourceCount =
     (sourceUrlParts?.length ?? 0) + pluginSearchSources.length;
 
@@ -238,16 +248,14 @@ export const ChatMessage = memo(function ChatMessage({
           );
         } else if (part.type === "tool-loadSkill") {
           return <LoadSkillTool key={`${message.id}-${i}`} toolPart={part} />;
-        } else if (
-          isToolUIPart(part) &&
-          part.type.startsWith("tool-web_search")
-        ) {
+        } else if (isToolUIPart(part) && isPluginWebSearchPart(part)) {
           // Before the generic branch: its results are already the Sources row
           // above, so the raw JSON body would repeat every one of them.
           //
-          // `startsWith`, like the `delegateTo` branch below: a plugin-contributed
-          // tool is not enumerated in `CustomUITools`, so `===` against the literal
-          // has no overlap with the part's type and TypeScript rejects it.
+          // The predicate is shared with the Sources lifting and excludes
+          // provider-executed calls: native search registers under the same
+          // `web_search` name, and its parts belong on the generic renderer, which
+          // shows the vendor payload this card cannot read.
           return <WebSearchTool key={`${message.id}-${i}`} toolPart={part} />;
         } else if (
           isToolUIPart(part) &&

@@ -32,18 +32,28 @@ let webBackendCatalog: Array<{
   plugin: string | null;
 }> = [];
 
+// Set to make the catalog request fail instead of resolving, so the "we could not
+// ask" state is distinguishable from "nothing installed".
+let webBackendCatalogError: Error | undefined;
+
 // Keyed on the request URL: the form now makes two calls, and returning the
 // loaded Provider for the catalog one would hand the selector a `results`-less
 // object.
 vi.mock("swr", () => ({
   __esModule: true,
-  default: (key: string | null) => ({
-    data: key?.includes("/web-backends")
-      ? { results: webBackendCatalog }
-      : loadedProvider,
-    isLoading: false,
-    mutate: vi.fn(),
-  }),
+  default: (key: string | null) => {
+    if (key?.includes("/web-backends")) {
+      return {
+        data: webBackendCatalogError
+          ? undefined
+          : { results: webBackendCatalog },
+        error: webBackendCatalogError,
+        isLoading: false,
+        mutate: vi.fn(),
+      };
+    }
+    return { data: loadedProvider, isLoading: false, mutate: vi.fn() };
+  },
 }));
 
 import { ProviderForm } from "./provider-form";
@@ -294,6 +304,7 @@ describe("ProviderForm Web-search backend selector", () => {
   afterEach(() => {
     loadedProvider = undefined;
     webBackendCatalog = [];
+    webBackendCatalogError = undefined;
     vi.restoreAllMocks();
   });
 
@@ -362,6 +373,29 @@ describe("ProviderForm Web-search backend selector", () => {
     renderWithAdvancedOpen({ webBackend: "gone.searx" } as Partial<Provider>);
 
     expect(webBackendSelect()).toHaveTextContent("gone.searx (not installed)");
+  });
+
+  // An empty list means "none installed" only when the catalog actually answered.
+  it("keeps the field and says so when the catalog could not be loaded", () => {
+    webBackendCatalogError = new Error("500");
+    renderWithAdvancedOpen({});
+
+    expect(webBackendSelect()).not.toBeNull();
+    expect(
+      screen.getByText(/Couldn't load the installed backends/),
+    ).toBeInTheDocument();
+  });
+
+  // Calling an installed backend "not installed" because the request failed sends
+  // an Operator hunting a plugin that is fine.
+  it("does not call a stored backend uninstalled when the catalog failed", () => {
+    webBackendCatalogError = new Error("500");
+    renderWithAdvancedOpen({
+      webBackend: "acme-search.searx",
+    } as Partial<Provider>);
+
+    expect(webBackendSelect()).toHaveTextContent("acme-search.searx");
+    expect(webBackendSelect()).not.toHaveTextContent("not installed");
   });
 
   // `nativeSearchEnabled` gates plugin search too and its name does not say so,

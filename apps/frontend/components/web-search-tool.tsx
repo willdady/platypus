@@ -20,6 +20,27 @@ const asRecord = (value: unknown): Record<string, unknown> =>
     : {};
 
 /**
+ * Whether a message part is a **plugin** `web_search` call — the client-executed
+ * kind a Web-search backend contributes (ADR-0014).
+ *
+ * The tool name alone does not identify one. Native provider search registers
+ * under the same `web_search` key on OpenAI, OpenRouter and Anthropic
+ * (`services/provider.ts`), so its parts are `tool-web_search` too — but they are
+ * executed by the provider, carry a vendor-shaped output, and cite through
+ * `source-url` parts. `providerExecuted` is what separates the two: the AI SDK
+ * sets it on a provider-executed call and leaves it unset on ours.
+ *
+ * Both the Sources lifting and the compact card gate on this one predicate, so a
+ * native search keeps the generic renderer — and its real payload — rather than a
+ * card that reports "0 results" for a search that returned ten.
+ */
+export const isPluginWebSearchPart = (part: {
+  type: string;
+  providerExecuted?: boolean;
+}): boolean =>
+  part.type === "tool-web_search" && part.providerExecuted !== true;
+
+/**
  * The citations a plugin `web_search` result contributes to the Sources row.
  *
  * Native provider search arrives as `source-url` message parts and needs none of
@@ -33,15 +54,24 @@ const asRecord = (value: unknown): Record<string, unknown> =>
  * clickable pill is a live hole, and a backend is third-party code.
  *
  * Deduplicated by URL, first occurrence winning, so two searches in one turn that
- * both surface a page cite it once.
+ * both surface a page cite it once. `alreadyCited` seeds that set with the URLs
+ * another row already renders — the native `source-url` parts — so a page cited
+ * both ways in one message is one pill and counts once.
  */
 export const webSearchSources = (
-  parts: ReadonlyArray<{ type: string; output?: unknown }> | undefined,
+  parts:
+    | ReadonlyArray<{
+        type: string;
+        output?: unknown;
+        providerExecuted?: boolean;
+      }>
+    | undefined,
+  alreadyCited?: Iterable<string>,
 ): WebSearchSource[] => {
   const sources: WebSearchSource[] = [];
-  const seen = new Set<string>();
+  const seen = new Set<string>(alreadyCited);
   for (const part of parts ?? []) {
-    if (part.type !== "tool-web_search") continue;
+    if (!isPluginWebSearchPart(part)) continue;
     const results = asRecord(part.output).results;
     if (!Array.isArray(results)) continue;
     for (const entry of results) {
@@ -92,12 +122,18 @@ export const WebSearchTool = ({ toolPart }: { toolPart: ToolUIPart }) => {
           ) : (
             <>
               {answer && <p className="text-muted-foreground">{answer}</p>}
-              <p className="text-muted-foreground text-xs">
-                {results.length === 1
-                  ? "1 result"
-                  : `${results.length} results`}
-                {results.length > 0 && " — listed above as sources"}
-              </p>
+              {/* Only once there is an output to count. Before that the same
+              line would read "0 results" for a search still in flight. */}
+              {toolPart.state === "output-available" ? (
+                <p className="text-muted-foreground text-xs">
+                  {results.length === 1
+                    ? "1 result"
+                    : `${results.length} results`}
+                  {results.length > 0 && " — listed above as sources"}
+                </p>
+              ) : (
+                <p className="text-muted-foreground text-xs">Searching…</p>
+              )}
             </>
           )}
         </div>

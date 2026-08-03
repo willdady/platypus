@@ -8,7 +8,6 @@ import {
   composeWebBackend,
   getWebBackend,
   getWebBackends,
-  isPresentableUrl,
   MAX_ANSWER_CHARS,
   MAX_CONTENT_TYPE_CHARS,
   MAX_READ_URL_CONTENT_CHARS,
@@ -956,14 +955,7 @@ describe("composeWebBackend — the contribution is not copied", () => {
   });
 });
 
-// The predicate itself now lives in `@platypus/schemas`, where its cases are
-// covered — the frontend's Sources row is its second consumer and re-checks with
-// the same function before an `href` reaches the DOM. What is pinned here is that
-// this module still re-exports it, since every caller and the search loop below
-// import it from here.
-describe("isPresentableUrl", () => {
-  it("is re-exported for this module's callers", () => {
-    expect(isPresentableUrl("https://example.com/")).toBe(true);
-    expect(isPresentableUrl("javascript:alert(1)")).toBe(false);
-  });
-});
+// `isPresentableUrl` is no longer exported from this module — it lives in
+// `@platypus/schemas`, tested there against both consumers' cases. What this file
+// still pins is the behaviour that depends on it: the search loop dropping
+// non-`http(s)` result URLs, above.
