@@ -417,6 +417,26 @@ describe("ProviderForm Web-search backend selector", () => {
     expect(webBackendSelect()).not.toBeDisabled();
   });
 
+  // The switch is not rendered on Bedrock, so the warning above would send an
+  // Operator looking for a control that is not there. Only an API write reaches this
+  // state, and only an API write leaves it.
+  it("points at the API, not the switch, where the switch is not shown", () => {
+    webBackendCatalog = CATALOG;
+    renderWithAdvancedOpen({
+      providerType: "Bedrock",
+      nativeSearchEnabled: false,
+      webBackend: "acme-search.searx",
+    } as Partial<Provider>);
+
+    expect(screen.queryByLabelText("Native web search")).toBeNull();
+    expect(
+      screen.getByText(/set back on through the Provider API/),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText(/That switch allows web search at all/),
+    ).toBeNull();
+  });
+
   it("says nothing about the coupling while native search is on", () => {
     webBackendCatalog = CATALOG;
     renderWithAdvancedOpen({

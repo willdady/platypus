@@ -1201,6 +1201,28 @@ export const isPresentableUrl = (value: unknown): value is string => {
   }
 };
 
+/**
+ * The `toolMetadata` key that marks a `web_search` / `read_url` Tool as one core
+ * built around a Web-search backend's executors (ADR-0014).
+ *
+ * The tool *name* cannot identify one: provider-native search registers under the
+ * same `web_search` key on OpenAI, OpenRouter and Anthropic, so a native call and
+ * a plugin call produce message parts of the same type. The AI SDK's
+ * `providerExecuted` separates them wherever a provider sets it — Anthropic and
+ * OpenAI do, on the first chunk — but that flag belongs to the provider package,
+ * and `@openrouter/ai-sdk-provider` never sets it, so a discriminator built on it
+ * alone is only as good as each vendor's plumbing.
+ *
+ * Core owns the Tool it builds, so it marks it: the AI SDK propagates a Tool's
+ * `metadata` onto the tool call's `toolMetadata` and from there onto UI message
+ * parts, which persist with the message. Nothing a provider executes can carry
+ * this key, on any vendor, whether or not that vendor reports itself.
+ *
+ * Shared here rather than mirrored for `isPresentableUrl`'s reason: the frontend
+ * reads what the backend writes, and two copies of the key drift.
+ */
+export const WEB_BACKEND_TOOL_MARKER = "platypusWebBackend";
+
 export const providerCreateSchema = providerBaseSchema.pick({
   organizationId: true,
   workspaceId: true,

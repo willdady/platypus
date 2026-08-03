@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
-import type { Agent } from "@platypus/schemas";
+import { WEB_BACKEND_TOOL_MARKER, type Agent } from "@platypus/schemas";
 import type { PlatypusUIMessage } from "@platypus/backend/src/types";
 
 // Streamdown pulls in shiki and a worker-ish runtime that jsdom can't host;
@@ -81,6 +81,11 @@ describe("ChatMessage agent attribution", () => {
 // as a tool result rather than as `source-url` parts. Without lifting them, the
 // same Chat toggle gives pills on Anthropic and nothing on vLLM (ADR-0014).
 describe("ChatMessage sources from a Web-search backend", () => {
+  // Core stamps this on the Tool it builds; the AI SDK carries it onto the part and
+  // into the stored message. It is what identifies a plugin call on a provider that
+  // does not report its own executions.
+  const marker = { [WEB_BACKEND_TOOL_MARKER]: true };
+
   const searchMessage = (
     output: unknown,
     extraParts: unknown[] = [],
@@ -93,6 +98,7 @@ describe("ChatMessage sources from a Web-search backend", () => {
           type: "tool-web_search",
           toolCallId: "c1",
           state: "output-available",
+          toolMetadata: marker,
           input: { query: "platypus habitat" },
           output,
         },
@@ -240,10 +246,11 @@ describe("ChatMessage sources from a Web-search backend", () => {
     expect(screen.queryByText("Parameters")).toBeNull();
   });
 
-  // A page the vendor already cited must not be counted twice because the plugin
-  // result names it too — reachable in a history that spans a Provider gaining a
-  // backend.
-  it("cites a page once when a native source-url and a plugin result share it", () => {
+  // One message can carry both rows: a vendor emits `source-url` parts for
+  // citations that are not search results, and a backend search can name the same
+  // page. The plugin entry wins the collision — it has the backend's title, where a
+  // `source-url` part has only the URL.
+  it("cites a page once, by its title, when both rows name it", () => {
     renderMessage(
       searchMessage({ query: "a", results: [results[0]] }, [
         {
@@ -257,13 +264,15 @@ describe("ChatMessage sources from a Web-search backend", () => {
     expect(screen.getByText("Used 1 sources")).toBeInTheDocument();
     openSources();
 
-    expect(
-      screen.getAllByRole("link", { name: "https://example.com/platypus" }),
-    ).toHaveLength(1);
+    const links = screen.getAllByRole("link");
+    expect(links).toHaveLength(1);
+    expect(links[0]).toHaveAccessibleName("Platypus");
+    expect(links[0]).toHaveAttribute("href", "https://example.com/platypus");
   });
 
   // "0 results" is true of a search that has not answered yet, and reads as a
-  // search that found nothing.
+  // search that found nothing. The marker is what identifies the call this early:
+  // there is no output to recognise yet.
   it("says it is searching rather than reporting 0 results mid-call", () => {
     renderMessage({
       id: "m1",
@@ -273,6 +282,7 @@ describe("ChatMessage sources from a Web-search backend", () => {
           type: "tool-web_search",
           toolCallId: "c1",
           state: "input-available",
+          toolMetadata: marker,
           input: { query: "platypus habitat" },
         },
       ],
@@ -281,6 +291,48 @@ describe("ChatMessage sources from a Web-search backend", () => {
     openToolCard();
     expect(screen.getByText("Searching…")).toBeInTheDocument();
     expect(screen.queryByText(/0 results/)).toBeNull();
+  });
+
+  // A denied call is not a running one. The header reports the state; the body must
+  // not claim a search is in flight.
+  it("claims no search in flight for a call that was denied", () => {
+    renderMessage({
+      id: "m1",
+      role: "assistant",
+      parts: [
+        {
+          type: "tool-web_search",
+          toolCallId: "c1",
+          state: "output-denied",
+          toolMetadata: marker,
+          input: { query: "platypus habitat" },
+        },
+      ],
+    } as unknown as PlatypusUIMessage);
+
+    openToolCard();
+    expect(screen.queryByText("Searching…")).toBeNull();
+    expect(screen.queryByText(/0 results/)).toBeNull();
+  });
+
+  // Messages stored before the marker shipped carry none. A finished call is still
+  // recognisable by the result shape core owns, so their pills do not vanish.
+  it("still lifts sources from a stored result that carries no marker", () => {
+    renderMessage({
+      id: "m1",
+      role: "assistant",
+      parts: [
+        {
+          type: "tool-web_search",
+          toolCallId: "c1",
+          state: "output-available",
+          input: { query: "platypus habitat" },
+          output: { query: "platypus habitat", results: [results[0]] },
+        },
+      ],
+    } as unknown as PlatypusUIMessage);
+
+    expect(screen.getByText("Used 1 sources")).toBeInTheDocument();
   });
 });
 
@@ -339,5 +391,31 @@ describe("ChatMessage and provider-executed web_search", () => {
     );
 
     expect(screen.getByText("Used 1 sources")).toBeInTheDocument();
+  });
+
+  // `providerExecuted` is the provider package's to set, and
+  // `@openrouter/ai-sdk-provider` never sets it — so a native search there is a
+  // `tool-web_search` part with no flag, no marker, and no core-shaped output. It
+  // must not read as a plugin call: on the card it would sit at "Searching…" for a
+  // search that already ran.
+  it("leaves an unflagged, unmarked native search on the generic renderer", () => {
+    renderMessage({
+      id: "m1",
+      role: "assistant",
+      parts: [
+        {
+          type: "tool-web_search",
+          toolCallId: "c1",
+          state: "input-available",
+          // Vendor-shaped: OpenRouter carries its results in the call's input.
+          input: { results: [{ url: "https://vendor.example/a" }] },
+        },
+      ],
+    } as unknown as PlatypusUIMessage);
+
+    fireEvent.click(screen.getByRole("button", { name: /Web search/ }));
+    expect(screen.getByText("Parameters")).toBeInTheDocument();
+    expect(screen.queryByText("Searching…")).toBeNull();
+    expect(screen.queryByText(/Used \d+ sources/)).toBeNull();
   });
 });

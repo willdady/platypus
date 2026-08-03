@@ -1,6 +1,6 @@
 import { tool, type Tool } from "ai";
 import type { PluginConfigContext } from "@platypuschat/plugin-sdk";
-import { isPresentableUrl } from "@platypus/schemas";
+import { isPresentableUrl, WEB_BACKEND_TOOL_MARKER } from "@platypus/schemas";
 import { logger } from "../logger.ts";
 import { checkEgress, EGRESS_BLOCKED_MESSAGE } from "../utils/egress-guard.ts";
 import {
@@ -58,6 +58,13 @@ const WEB_SEARCH_DESCRIPTION =
 
 const READ_URL_DESCRIPTION =
   "Read the contents of a web page as text. Supports pagination for large pages via start_index.";
+
+// Stamped on both Tools core builds. Not sent to the model — the AI SDK carries a
+// Tool's `metadata` onto the tool call's `toolMetadata`, onto the UI message part,
+// and so into the stored message — which is how the frontend tells a plugin
+// `web_search` from a Provider's own, since the two share a tool name. See
+// `WEB_BACKEND_TOOL_MARKER`.
+const WEB_BACKEND_TOOL_METADATA = { [WEB_BACKEND_TOOL_MARKER]: true };
 
 // The registry, mirroring `sandbox/index.ts`: a flat map keyed by the
 // discriminator stored in `provider.webBackend`. `Object.create(null)` — not
@@ -303,6 +310,7 @@ export const composeWebBackend = (
   ): Tool =>
     tool({
       description: WEB_SEARCH_DESCRIPTION,
+      metadata: WEB_BACKEND_TOOL_METADATA,
       inputSchema: webSearchInputSchema,
       execute: async ({
         query,
@@ -435,6 +443,7 @@ export const composeWebBackend = (
   ): Tool =>
     tool({
       description: READ_URL_DESCRIPTION,
+      metadata: WEB_BACKEND_TOOL_METADATA,
       inputSchema: readUrlInputSchema,
       execute: async ({
         url,

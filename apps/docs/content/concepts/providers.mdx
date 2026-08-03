@@ -143,8 +143,11 @@ you're getting.
 Switching it off currently disables a selected backend too, not only the built-in
 tool — so a backend you selected will not run until it is back on. The form warns
 you where you make the selection. On **Bedrock** the switch is not shown, because
-Bedrock has no built-in search to turn off; search there is on whenever a backend
-is selected. A future release replaces both fields with one control.
+Bedrock has no built-in search to turn off — it is on there by default, so
+selecting a backend is all Bedrock needs. If it was switched off through the
+Provider API, the selection still will not run and only the API can put it back;
+the form says so where you make the selection. A future release replaces both
+fields with one control.
 
 Results are cited the same way whichever search ran: the pages used appear as
 **Sources** under the reply. Adding a backend to a deployment is an Operator task

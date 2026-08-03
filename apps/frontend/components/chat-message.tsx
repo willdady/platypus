@@ -135,15 +135,23 @@ export const ChatMessage = memo(function ChatMessage({
   // arrive as a tool result rather than as `source-url` parts. Merged into the one
   // Sources row below so the same Chat toggle presents its results the same way on
   // a vLLM Provider as on Anthropic (ADR-0014).
+  const pluginSearchSources = webSearchSources(message.parts);
+  // A page named by both rows is one pill. Not reachable through search
+  // resolution — a turn resolves to a backend or to native search, never both
+  // (ADR-0014) — but a vendor emits `source-url` parts for citations that are not
+  // search results, and those can land in the same message as a backend search.
   //
-  // The native URLs are passed in so a page cited both ways — possible in a
-  // history that spans a Provider gaining a backend — is one pill, not two.
-  const pluginSearchSources = webSearchSources(
-    message.parts,
-    sourceUrlParts?.map((part) => part.url),
+  // The plugin entry is the one kept: it carries the backend's real title, where a
+  // `source-url` part has only the URL to show. Compared as exact strings, so a
+  // vendor URL differing by a trailing slash or a tracking parameter still reads as
+  // a second page — normalising URLs is a judgement call of its own and belongs
+  // with whoever asks for it.
+  const pluginSearchUrls = new Set(pluginSearchSources.map((s) => s.url));
+  const nativeSourceParts = sourceUrlParts?.filter(
+    (part) => !pluginSearchUrls.has(part.url),
   );
   const sourceCount =
-    (sourceUrlParts?.length ?? 0) + pluginSearchSources.length;
+    (nativeSourceParts?.length ?? 0) + pluginSearchSources.length;
 
   const textContent =
     message.parts
@@ -163,7 +171,7 @@ export const ChatMessage = memo(function ChatMessage({
       {message.role === "assistant" && sourceCount > 0 && (
         <Sources>
           <SourcesTrigger count={sourceCount} />
-          {sourceUrlParts?.map((part, i) => (
+          {nativeSourceParts?.map((part, i) => (
             <SourcesContent key={`${message.id}-${i}`}>
               <Source href={part.url} title={part.url} />
             </SourcesContent>

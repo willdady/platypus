@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import type { Tool } from "ai";
+import { WEB_BACKEND_TOOL_MARKER } from "@platypus/schemas";
 import { callTool } from "../test-utils.ts";
 import { EGRESS_BLOCKED_MESSAGE } from "../utils/egress-guard.ts";
 import { logger } from "../logger.ts";
@@ -144,6 +145,25 @@ describe("composeWebBackend — tool construction", () => {
     });
 
     expect(Object.keys(tools).sort()).toEqual(["read_url", "web_search"]);
+  });
+
+  // The frontend tells a plugin `web_search` from a Provider's own by this marker:
+  // the two share a tool name, and `providerExecuted` is only set by the vendors
+  // that bother (`@openrouter/ai-sdk-provider` does not). The AI SDK carries a
+  // Tool's `metadata` onto the tool call, the UI part, and the stored message, so
+  // this is the seam the rendering depends on — not decoration.
+  it("marks both tools as core-built so the frontend can identify them", async () => {
+    const tools = await buildTools({
+      web_search: () => ({ query: "q", results: [] }),
+      read_url: () => ({ content: "", url: "https://example.com/" }),
+    });
+
+    expect(tools.web_search?.metadata).toEqual({
+      [WEB_BACKEND_TOOL_MARKER]: true,
+    });
+    expect(tools.read_url?.metadata).toEqual({
+      [WEB_BACKEND_TOOL_MARKER]: true,
+    });
   });
 
   it("passes the turn context and the plugin config block into createExecutors", async () => {

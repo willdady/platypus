@@ -434,8 +434,17 @@ const ProviderForm = ({
   // actually arrived. While it is in flight or after it failed, the list is empty
   // for a reason that says nothing about the deployment — so the field must not
   // hide, and a stored id must not be accused of being uninstalled.
+  //
+  // Errors win over data on purpose. SWR can hold both — cached results plus a
+  // failed revalidation — and in that state the list still renders, but calling a
+  // stored id "not installed" would rest on a catalog we no longer know is current.
   const webBackendsKnown =
     !!webBackendsData && !webBackendsError && !webBackendsLoading;
+  // Bedrock has no built-in search to turn off, so the Native web search switch is
+  // not rendered there. The backend selector below still has to account for the
+  // stored value, which an API caller can set `false` on a Bedrock Provider —
+  // pointing that operator at a switch they cannot see would be a dead end.
+  const nativeSearchSwitchShown = formData.providerType !== "Bedrock";
 
   useEffect(() => {
     if (provider && !hasInitialized.current) {
@@ -1159,7 +1168,7 @@ const ProviderForm = ({
                 </Field>
               )}
 
-              {formData.providerType !== "Bedrock" && (
+              {nativeSearchSwitchShown && (
                 <Field
                   orientation="horizontal"
                   className="items-center justify-between"
@@ -1276,12 +1285,26 @@ const ProviderForm = ({
                   `nativeSearchEnabled` gates plugin search too, so switching it
                   off leaves a selected backend silently dead. The select stays
                   interactive — disabling it would trap a stored value behind
-                  the switch — and says so instead. */}
+                  the switch — and says so instead.
+                  On a Provider whose switch is not rendered the same warning must
+                  not point at it: the only way into that state, and out of it, is
+                  the Provider API. */}
                   {!formData.nativeSearchEnabled && (
                     <FieldDescription className="text-destructive">
-                      Native web search is off, so this backend will not run.
-                      That switch allows web search at all; turn it on for the
-                      backend to be reached.
+                      {nativeSearchSwitchShown ? (
+                        <>
+                          Native web search is off, so this backend will not
+                          run. That switch allows web search at all; turn it on
+                          for the backend to be reached.
+                        </>
+                      ) : (
+                        <>
+                          Native web search is off on this provider, so this
+                          backend will not run. This provider type has no
+                          built-in search, so the switch is not shown here — the
+                          field has to be set back on through the Provider API.
+                        </>
+                      )}
                     </FieldDescription>
                   )}
                   {validationErrors.webBackend && (
