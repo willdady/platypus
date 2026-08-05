@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.4.1](https://github.com/willdady/platypus/compare/v2.4.0...v2.4.1) (2026-08-05)
+
+
+### Bug Fixes
+
+* **backend:** make sub-agent delegation failures visible ([#413](https://github.com/willdady/platypus/issues/413)) ([759853d](https://github.com/willdady/platypus/commit/759853d9f2027958bff1694db599d7b64a8c8a45))
+
 ## [2.4.0](https://github.com/willdady/platypus/compare/v2.3.0...v2.4.0) (2026-08-02)
 
 
