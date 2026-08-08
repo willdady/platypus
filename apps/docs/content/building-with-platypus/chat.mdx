@@ -56,16 +56,23 @@ is in
 
 ## Web search
 
-A globe button — its tooltip reads **Search** — toggles the vendor's own web
-search for the messages you send while it is on.
+A globe button — its tooltip reads **Search** — turns on web search for the
+messages you send while it is on.
 
-It is only there when the resolved Provider supports it. It is **absent** when:
+Which search runs is the Provider's setting, not yours: either the vendor's own,
+or a **Web-search backend** an Org Admin selected on that Provider, which takes
+precedence when set. Either way the pages used appear as **Sources** under the
+reply.
 
-- the Provider is **Bedrock**, which has no native search;
-- the Provider is **OpenAI** with **API Mode** set to **Chat Completions** —
-  vendor search runs on the Responses API only, so an OpenAI-compatible server
-  (vLLM, Ollama, LiteLLM) has none;
-- an Org Admin has switched native search off on that Provider;
+The toggle is only there when the resolved Provider can search. It is **absent**
+when:
+
+- the Provider has no search of its own **and** no Web-search backend selected —
+  which covers **Bedrock**, and **OpenAI** with **API Mode** set to **Chat
+  Completions**, since vendor search runs on the Responses API only (so an
+  OpenAI-compatible server — vLLM, Ollama, LiteLLM — has none);
+- an Org Admin has switched **Native web search** off on that Provider. That
+  switch currently disables a selected backend too, not only the vendor's search;
 - nothing has resolved yet, because no Agent or model is selected.
 
 <Callout type="warning">
@@ -76,9 +83,10 @@ It is only there when the resolved Provider supports it. It is **absent** when:
   turn it off yourself if you don't want it.
 </Callout>
 
-This is the vendor's search, not a tool you grant. An Agent that should read
+Search is a Provider setting, not a tool you grant. An Agent that should read
 specific pages instead wants the **Web Fetch** Tool set — see
-[Tool sets](/building-with-platypus/tool-sets).
+[Tool sets](/building-with-platypus/tool-sets). Which search a Provider uses is
+in [Providers & models](/concepts/providers#web-search).
 
 ## Voice input
 

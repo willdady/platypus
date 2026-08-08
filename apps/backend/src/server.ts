@@ -31,6 +31,7 @@ import { notification } from "./routes/notification.ts";
 import { webhook } from "./routes/webhook.ts";
 import { mcpOauthCallback } from "./routes/mcp-oauth-callback.ts";
 import { plugins } from "./routes/plugins.ts";
+import { webBackends } from "./routes/web-backends.ts";
 import { organizationMember } from "./db/schema.ts";
 import { logger } from "./logger.ts";
 import { mapError } from "./errors.ts";
@@ -182,6 +183,11 @@ app.route("/oauth/mcp/callback", mcpOauthCallback);
 // "Installed plugins" view (#295). Org-scoped for access control only — the
 // payload is identical across orgs; the handler gates it to Org Admins.
 app.route("/organizations/:orgId/plugins", plugins);
+// Read-only, deployment-wide Web-search backend catalog (ADR-0014), backing the
+// `webBackend` selector on the Provider form. Org-scoped for the same reason as
+// `plugins` above — and org-scoped rather than workspace-scoped because a
+// Provider can be org-scoped (ADR-0007) while a sandbox cannot. See the route.
+app.route("/organizations/:orgId/web-backends", webBackends);
 
 // Central error seam (ADR-0010): typed domain errors and Postgres unique
 // violations map to their HTTP status here, so routes throw instead of

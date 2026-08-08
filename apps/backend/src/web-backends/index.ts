@@ -1,5 +1,6 @@
 import { tool, type Tool } from "ai";
 import type { PluginConfigContext } from "@platypuschat/plugin-sdk";
+import { isPresentableUrl, WEB_BACKEND_TOOL_MARKER } from "@platypus/schemas";
 import { logger } from "../logger.ts";
 import { checkEgress, EGRESS_BLOCKED_MESSAGE } from "../utils/egress-guard.ts";
 import {
@@ -58,6 +59,13 @@ const WEB_SEARCH_DESCRIPTION =
 const READ_URL_DESCRIPTION =
   "Read the contents of a web page as text. Supports pagination for large pages via start_index.";
 
+// Stamped on both Tools core builds. Not sent to the model — the AI SDK carries a
+// Tool's `metadata` onto the tool call's `toolMetadata`, onto the UI message part,
+// and so into the stored message — which is how the frontend tells a plugin
+// `web_search` from a Provider's own, since the two share a tool name. See
+// `WEB_BACKEND_TOOL_MARKER`.
+const WEB_BACKEND_TOOL_METADATA = { [WEB_BACKEND_TOOL_MARKER]: true };
+
 // The registry, mirroring `sandbox/index.ts`: a flat map keyed by the
 // discriminator stored in `provider.webBackend`. `Object.create(null)` — not
 // `{}` — so a discriminator that collides with an `Object.prototype` member
@@ -115,23 +123,13 @@ const asRecord = (value: unknown): Record<string, unknown> =>
     ? (value as Record<string, unknown>)
     : {};
 
-/**
- * Whether a URL may be presented to the model (and, in the frontend, rendered as
- * a clickable Sources pill). The egress guard covers **model-supplied** URLs going
- * *into* `read_url`; this covers **backend-supplied** URLs coming *out* of
- * `web_search`, which nothing else checks — a `javascript:` or `data:` href in a
- * pill is a live hole, and dropping the entry also keeps garbage out of the
- * context window.
- */
-export const isPresentableUrl = (value: unknown): value is string => {
-  if (typeof value !== "string") return false;
-  try {
-    const { protocol } = new URL(value);
-    return protocol === "http:" || protocol === "https:";
-  } catch {
-    return false;
-  }
-};
+// `isPresentableUrl` — the scheme filter every backend-supplied URL passes before
+// it reaches the model — lives in `@platypus/schemas` (imported above), not here.
+// It moved when the frontend became its second consumer: the Sources row renders
+// those URLs as `href`s and re-checks with this exact predicate before anything
+// reaches the DOM. One consumer did not justify the shared-package indirection;
+// two consumers of a *security* check, one of them the one that decides what
+// becomes a link, do. Its cases are covered in that package's tests.
 
 /**
  * The `url` a `read_url` result reports, bounded by `MAX_URL_CHARS` on every
@@ -312,6 +310,7 @@ export const composeWebBackend = (
   ): Tool =>
     tool({
       description: WEB_SEARCH_DESCRIPTION,
+      metadata: WEB_BACKEND_TOOL_METADATA,
       inputSchema: webSearchInputSchema,
       execute: async ({
         query,
@@ -444,6 +443,7 @@ export const composeWebBackend = (
   ): Tool =>
     tool({
       description: READ_URL_DESCRIPTION,
+      metadata: WEB_BACKEND_TOOL_METADATA,
       inputSchema: readUrlInputSchema,
       execute: async ({
         url,

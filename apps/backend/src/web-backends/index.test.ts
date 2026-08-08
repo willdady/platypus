@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import type { Tool } from "ai";
+import { WEB_BACKEND_TOOL_MARKER } from "@platypus/schemas";
 import { callTool } from "../test-utils.ts";
 import { EGRESS_BLOCKED_MESSAGE } from "../utils/egress-guard.ts";
 import { logger } from "../logger.ts";
@@ -8,7 +9,6 @@ import {
   composeWebBackend,
   getWebBackend,
   getWebBackends,
-  isPresentableUrl,
   MAX_ANSWER_CHARS,
   MAX_CONTENT_TYPE_CHARS,
   MAX_READ_URL_CONTENT_CHARS,
@@ -145,6 +145,25 @@ describe("composeWebBackend — tool construction", () => {
     });
 
     expect(Object.keys(tools).sort()).toEqual(["read_url", "web_search"]);
+  });
+
+  // The frontend tells a plugin `web_search` from a Provider's own by this marker:
+  // the two share a tool name, and `providerExecuted` is only set by the vendors
+  // that bother (`@openrouter/ai-sdk-provider` does not). The AI SDK carries a
+  // Tool's `metadata` onto the tool call, the UI part, and the stored message, so
+  // this is the seam the rendering depends on — not decoration.
+  it("marks both tools as core-built so the frontend can identify them", async () => {
+    const tools = await buildTools({
+      web_search: () => ({ query: "q", results: [] }),
+      read_url: () => ({ content: "", url: "https://example.com/" }),
+    });
+
+    expect(tools.web_search?.metadata).toEqual({
+      [WEB_BACKEND_TOOL_MARKER]: true,
+    });
+    expect(tools.read_url?.metadata).toEqual({
+      [WEB_BACKEND_TOOL_MARKER]: true,
+    });
   });
 
   it("passes the turn context and the plugin config block into createExecutors", async () => {
@@ -956,18 +975,7 @@ describe("composeWebBackend — the contribution is not copied", () => {
   });
 });
 
-describe("isPresentableUrl", () => {
-  it("accepts http and https only", () => {
-    expect(isPresentableUrl("http://example.com/")).toBe(true);
-    expect(isPresentableUrl("https://example.com/")).toBe(true);
-  });
-
-  it("rejects other schemes, non-URLs, and non-strings", () => {
-    expect(isPresentableUrl("javascript:alert(1)")).toBe(false);
-    expect(isPresentableUrl("data:text/html,<script>")).toBe(false);
-    expect(isPresentableUrl("file:///etc/passwd")).toBe(false);
-    expect(isPresentableUrl("not a url")).toBe(false);
-    expect(isPresentableUrl(undefined)).toBe(false);
-    expect(isPresentableUrl(42)).toBe(false);
-  });
-});
+// `isPresentableUrl` is no longer exported from this module — it lives in
+// `@platypus/schemas`, tested there against both consumers' cases. What this file
+// still pins is the behaviour that depends on it: the search loop dropping
+// non-`http(s)` result URLs, above.

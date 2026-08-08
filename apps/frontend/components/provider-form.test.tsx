@@ -24,13 +24,36 @@ vi.mock("sonner", () => ({
 // The provider the edit form loads. Set per test before rendering.
 let loadedProvider: Provider | undefined;
 
+// The `GET /organizations/:orgId/web-backends` catalog. Empty by default, so the
+// Web-search backend selector is absent for every test that predates it.
+let webBackendCatalog: Array<{
+  backend: string;
+  name: string;
+  plugin: string | null;
+}> = [];
+
+// Set to make the catalog request fail instead of resolving, so the "we could not
+// ask" state is distinguishable from "nothing installed".
+let webBackendCatalogError: Error | undefined;
+
+// Keyed on the request URL: the form now makes two calls, and returning the
+// loaded Provider for the catalog one would hand the selector a `results`-less
+// object.
 vi.mock("swr", () => ({
   __esModule: true,
-  default: () => ({
-    data: loadedProvider,
-    isLoading: false,
-    mutate: vi.fn(),
-  }),
+  default: (key: string | null) => {
+    if (key?.includes("/web-backends")) {
+      return {
+        data: webBackendCatalogError
+          ? undefined
+          : { results: webBackendCatalog },
+        error: webBackendCatalogError,
+        isLoading: false,
+        mutate: vi.fn(),
+      };
+    }
+    return { data: loadedProvider, isLoading: false, mutate: vi.fn() };
+  },
 }));
 
 import { ProviderForm } from "./provider-form";
@@ -274,5 +297,188 @@ describe("ProviderForm validation errors on model rows", () => {
       ).toBeInTheDocument(),
     );
     expect(screen.getByText("Too small")).toBeInTheDocument();
+  });
+});
+
+describe("ProviderForm Web-search backend selector", () => {
+  afterEach(() => {
+    loadedProvider = undefined;
+    webBackendCatalog = [];
+    webBackendCatalogError = undefined;
+    vi.restoreAllMocks();
+  });
+
+  const CATALOG = [
+    { backend: "acme-search.searx", name: "SearXNG", plugin: "acme-search" },
+  ];
+
+  /** Renders the edit form and opens the Advanced settings section the field sits in. */
+  const renderWithAdvancedOpen = (overrides: Partial<Provider>) => {
+    loadedProvider = {
+      id: "p1",
+      name: "vLLM",
+      providerType: "OpenAI",
+      apiMode: "chat",
+      apiKey: "sk-test",
+      nativeSearchEnabled: true,
+      modelIds: [{ id: "qwen", passthroughFileTypes: [] }],
+      taskModelId: "qwen",
+      memoryExtractionModelId: "qwen",
+      ...overrides,
+    } as unknown as Provider;
+    const result = render(<ProviderForm orgId="org1" providerId="p1" />);
+    fireEvent.click(screen.getByRole("button", { name: "Toggle" }));
+    return result;
+  };
+
+  const webBackendSelect = () =>
+    screen.queryByRole("combobox", { name: "Web-search backend" });
+
+  it("is absent on a deployment with no Web-search backend installed", () => {
+    renderWithAdvancedOpen({});
+
+    expect(webBackendSelect()).toBeNull();
+  });
+
+  it("offers the installed backends, annotated with the plugin that contributed them", () => {
+    webBackendCatalog = CATALOG;
+    renderWithAdvancedOpen({
+      webBackend: "acme-search.searx",
+    } as Partial<Provider>);
+
+    expect(webBackendSelect()).toHaveTextContent("SearXNG (acme-search)");
+  });
+
+  // The suffix has to come from the Provider's capability: on vLLM, "None" means
+  // no web search at all, while on a native-capable Provider it selects the
+  // built-in tool.
+  it("says what None means for a Provider with no native search", () => {
+    webBackendCatalog = CATALOG;
+    renderWithAdvancedOpen({});
+
+    expect(webBackendSelect()).toHaveTextContent("None — no web search");
+  });
+
+  it("says what None means for a Provider that has native search", () => {
+    webBackendCatalog = CATALOG;
+    renderWithAdvancedOpen({ apiMode: "responses" });
+
+    expect(webBackendSelect()).toHaveTextContent(
+      "None — use the built-in search",
+    );
+  });
+
+  // Hiding the control would conceal a stored id nobody could then see or clear.
+  it("shows a stored backend the catalog no longer lists, and names it as missing", () => {
+    renderWithAdvancedOpen({ webBackend: "gone.searx" } as Partial<Provider>);
+
+    expect(webBackendSelect()).toHaveTextContent("gone.searx (not installed)");
+  });
+
+  // An empty list means "none installed" only when the catalog actually answered.
+  it("keeps the field and says so when the catalog could not be loaded", () => {
+    webBackendCatalogError = new Error("500");
+    renderWithAdvancedOpen({});
+
+    expect(webBackendSelect()).not.toBeNull();
+    expect(
+      screen.getByText(/Couldn't load the installed backends/),
+    ).toBeInTheDocument();
+  });
+
+  // Calling an installed backend "not installed" because the request failed sends
+  // an Operator hunting a plugin that is fine.
+  it("does not call a stored backend uninstalled when the catalog failed", () => {
+    webBackendCatalogError = new Error("500");
+    renderWithAdvancedOpen({
+      webBackend: "acme-search.searx",
+    } as Partial<Provider>);
+
+    expect(webBackendSelect()).toHaveTextContent("acme-search.searx");
+    expect(webBackendSelect()).not.toHaveTextContent("not installed");
+  });
+
+  // `nativeSearchEnabled` gates plugin search too and its name does not say so,
+  // so the coupling is stated where the selection is made.
+  it("warns that a selected backend will not run while native search is off", () => {
+    webBackendCatalog = CATALOG;
+    renderWithAdvancedOpen({
+      nativeSearchEnabled: false,
+      webBackend: "acme-search.searx",
+    } as Partial<Provider>);
+
+    expect(
+      screen.getByText(
+        /Native web search is off, so this backend will not run/,
+      ),
+    ).toBeInTheDocument();
+    // Interactive, not disabled: disabling it would trap the stored value behind
+    // the switch.
+    expect(webBackendSelect()).not.toBeDisabled();
+  });
+
+  // The switch is not rendered on Bedrock, so the warning above would send an
+  // Operator looking for a control that is not there. Only an API write reaches this
+  // state, and only an API write leaves it.
+  it("points at the API, not the switch, where the switch is not shown", () => {
+    webBackendCatalog = CATALOG;
+    renderWithAdvancedOpen({
+      providerType: "Bedrock",
+      nativeSearchEnabled: false,
+      webBackend: "acme-search.searx",
+    } as Partial<Provider>);
+
+    expect(screen.queryByLabelText("Native web search")).toBeNull();
+    expect(
+      screen.getByText(/set back on through the Provider API/),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText(/That switch allows web search at all/),
+    ).toBeNull();
+  });
+
+  it("says nothing about the coupling while native search is on", () => {
+    webBackendCatalog = CATALOG;
+    renderWithAdvancedOpen({
+      webBackend: "acme-search.searx",
+    } as Partial<Provider>);
+
+    expect(screen.queryByText(/Native web search is off/)).toBeNull();
+  });
+
+  it("round-trips the stored backend through a save", async () => {
+    webBackendCatalog = CATALOG;
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({}),
+    } as unknown as Response);
+    vi.stubGlobal("fetch", fetchMock);
+
+    renderWithAdvancedOpen({
+      webBackend: "acme-search.searx",
+    } as Partial<Provider>);
+    save();
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body as string);
+    expect(body.webBackend).toBe("acme-search.searx");
+  });
+
+  // `""` would be a second representation of "no backend"; the API normalises it,
+  // but the form should not send it in the first place.
+  it("sends null, not an empty string, when no backend is selected", async () => {
+    webBackendCatalog = CATALOG;
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({}),
+    } as unknown as Response);
+    vi.stubGlobal("fetch", fetchMock);
+
+    renderWithAdvancedOpen({});
+    save();
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body as string);
+    expect(body.webBackend).toBeNull();
   });
 });

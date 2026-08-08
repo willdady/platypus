@@ -406,9 +406,14 @@ export const Chat = ({
   const resolvedProvider = resolvedProviderId
     ? providers.find((p) => p.id === resolvedProviderId)
     : null;
-  // Show the search toggle only when the resolved provider supports native
-  // search and hasn't disabled it. Hidden when nothing is resolved yet — we
-  // can't search without a model. (#167)
+  // Show the search toggle only when a searching turn would actually serve
+  // tools. Hidden when nothing is resolved yet — we can't search without a
+  // model. (#167)
+  //
+  // Two ways to be capable, mirroring `resolveSearchMode`'s order: a configured
+  // Web-search backend (ADR-0014), which takes precedence, or the provider's own
+  // native search. So a vLLM or Bedrock Provider — no native search of any kind —
+  // gains the toggle as soon as a backend is selected on it.
   //
   // The capability test is `providerHasNativeSearch`, shared with the backend's
   // injection gate, rather than a local `!== "Bedrock"`: the gate is the
@@ -416,10 +421,19 @@ export const Chat = ({
   // second copy of the table here would show a toggle that resolves to no
   // tools. Bedrock is not the only case — OpenAI's search is Responses-API
   // only, so a chat-completions endpoint (vLLM, llama.cpp) has none either.
+  //
+  // `nativeSearchEnabled` gates both paths, not just the native one — its name
+  // predates web backends and it is currently the master "search allowed here"
+  // switch. The Provider form says so on the backend selector.
+  //
+  // A configured backend is trusted on the stored id alone: no catalog fetch, no
+  // liveness check. An id whose plugin has since been dropped degrades to no
+  // tools server-side with a warn line, which is the documented posture.
   const canSearch =
     !!resolvedProvider &&
-    providerHasNativeSearch(resolvedProvider) &&
-    resolvedProvider.nativeSearchEnabled !== false;
+    resolvedProvider.nativeSearchEnabled !== false &&
+    (providerHasNativeSearch(resolvedProvider) ||
+      Boolean(resolvedProvider.webBackend));
 
   // The media types the currently-selected model ingests natively (issue #328),
   // used to warn about incompatible attachments. Empty when nothing resolves yet.

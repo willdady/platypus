@@ -17,6 +17,7 @@ import {
   providerCreateSchema,
   providerUpdateSchema,
   providerHasNativeSearch,
+  isPresentableUrl,
   type Provider,
   classifyFile,
   extractableDocumentFormat,
@@ -445,6 +446,36 @@ describe("providerHasNativeSearch", () => {
         apiMode: "responses",
       }),
     ).toBe(false);
+  });
+});
+
+describe("isPresentableUrl", () => {
+  // Both consumers are downstream of this: the backend drops an unpresentable
+  // `web_search` result before the model sees it, and the frontend re-checks
+  // before the URL becomes an `href`. The rejection cases are the point.
+  it("accepts http and https only", () => {
+    expect(isPresentableUrl("http://example.com/")).toBe(true);
+    expect(isPresentableUrl("https://example.com/")).toBe(true);
+  });
+
+  it("rejects other schemes, non-URLs, and non-strings", () => {
+    expect(isPresentableUrl("javascript:alert(1)")).toBe(false);
+    expect(isPresentableUrl("data:text/html,<script>alert(1)</script>")).toBe(
+      false,
+    );
+    expect(isPresentableUrl("file:///etc/passwd")).toBe(false);
+    expect(isPresentableUrl("not a url")).toBe(false);
+    expect(isPresentableUrl("")).toBe(false);
+    expect(isPresentableUrl(undefined)).toBe(false);
+    expect(isPresentableUrl(null)).toBe(false);
+    expect(isPresentableUrl(42)).toBe(false);
+  });
+
+  // Case-insensitive by way of `new URL`, which normalises the scheme — so
+  // `JavaScript:` is not a bypass.
+  it("is not fooled by scheme casing", () => {
+    expect(isPresentableUrl("HTTPS://example.com/")).toBe(true);
+    expect(isPresentableUrl("JavaScript:alert(1)")).toBe(false);
   });
 });
 
