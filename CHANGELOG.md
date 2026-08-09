@@ -1,5 +1,27 @@
 # Changelog
 
+## [2.5.0](https://github.com/willdady/platypus/compare/v2.4.1...v2.5.0) (2026-08-09)
+
+
+### Features
+
+* **backend:** attribute OpenRouter requests to the Platypus app ([#427](https://github.com/willdady/platypus/issues/427)) ([ba09d0f](https://github.com/willdady/platypus/commit/ba09d0f97ee106e90d633f37088141316a7a78b1))
+
+
+### Bug Fixes
+
+* **backend:** apply an Agent's sampling parameters wherever it runs ([#417](https://github.com/willdady/platypus/issues/417)) ([f23acc8](https://github.com/willdady/platypus/commit/f23acc8d2310adb857dc714fdb4ebf14065804ac))
+* **backend:** log the call warnings a Provider raises ([#425](https://github.com/willdady/platypus/issues/425)) ([733b1b1](https://github.com/willdady/platypus/commit/733b1b1ee68feca6a4863c450cf4e2eb2141b046))
+* **backend:** name the failing field when a union tool input is rejected ([#431](https://github.com/willdady/platypus/issues/431)) ([34c7d9d](https://github.com/willdady/platypus/commit/34c7d9de9d8c823fc6ed9f0a87e162452885bdd9))
+* **backend:** record a trigger run that stopped at the output limit ([#433](https://github.com/willdady/platypus/issues/433)) ([47424f6](https://github.com/willdady/platypus/commit/47424f6b50a8680e8ea431f97e4466c3eefc379c))
+* **backend:** record what the model emitted for a rejected tool call ([#430](https://github.com/willdady/platypus/issues/430)) ([093d936](https://github.com/willdady/platypus/commit/093d93625cbda34086110d12f6c8aaeb9d72b1ec))
+* **backend:** record why a generation stopped and name invalid tool input ([#419](https://github.com/willdady/platypus/issues/419)) ([cf2a4c8](https://github.com/willdady/platypus/commit/cf2a4c8c826928c670052776eb8215d9f384def8))
+* **backend:** resolve a sub-agent at the invoking Workspace's scope ([#423](https://github.com/willdady/platypus/issues/423)) ([3197685](https://github.com/willdady/platypus/commit/319768518942475d0feb81aa755da5f12e09f5f1))
+* **backend:** resolve every scoped resource through one visibility authority ([#424](https://github.com/willdady/platypus/issues/424)) ([ca421ab](https://github.com/willdady/platypus/commit/ca421ab38fe51f29c8b560524bfe54949bd0e058))
+* **backend:** send one app's OpenRouter attribution instead of a mix ([#432](https://github.com/willdady/platypus/issues/432)) ([af878d5](https://github.com/willdady/platypus/commit/af878d5f282bee7e92146868889a0ae0a6fd4bc0))
+* **backend:** stop one rejected prompt from filling the log ([#422](https://github.com/willdady/platypus/issues/422)) ([7ad55e5](https://github.com/willdady/platypus/commit/7ad55e5f848a42e36f095c4cc823dfb1eb1ef9a2))
+* mark a streamed reply that stopped at the model's output limit ([#429](https://github.com/willdady/platypus/issues/429)) ([d122b42](https://github.com/willdady/platypus/commit/d122b42aaae8bdb94e2349a8323b541058312882))
+
 ## [2.4.1](https://github.com/willdady/platypus/compare/v2.4.0...v2.4.1) (2026-08-05)
 
 
