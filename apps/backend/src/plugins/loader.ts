@@ -379,6 +379,46 @@ export async function loadPlugins(
     const toolSetIds: string[] = [];
 
     for (const contribution of manifest.contributes.toolSets ?? []) {
+      // TypeScript protects in-repo plugins, but a third-party JS package can
+      // put any value inside the array. Validate identity before namespacing:
+      // `contributionId(undefined)` otherwise mints a plausible-looking
+      // `"acme.undefined"` Tool set and exposes it through the catalog.
+      if (
+        typeof contribution !== "object" ||
+        contribution === null ||
+        Array.isArray(contribution)
+      ) {
+        throw new Error(
+          `Plugin "${manifest.name}": every tool set contribution must be an object.`,
+        );
+      }
+      if (
+        typeof contribution.id !== "string" ||
+        contribution.id.trim() === ""
+      ) {
+        throw new Error(
+          `Plugin "${manifest.name}": every tool set must declare a non-empty "id".`,
+        );
+      }
+      if (
+        typeof contribution.name !== "string" ||
+        contribution.name.trim() === ""
+      ) {
+        throw new Error(
+          `Plugin "${manifest.name}": tool set "${contribution.id}" must declare a non-empty "name".`,
+        );
+      }
+      if (
+        typeof contribution.tools !== "function" &&
+        (typeof contribution.tools !== "object" ||
+          contribution.tools === null ||
+          Array.isArray(contribution.tools))
+      ) {
+        throw new Error(
+          `Plugin "${manifest.name}": tool set "${contribution.id}" must provide a "tools" object or function.`,
+        );
+      }
+
       const { id, name: tsName, category, description, tools } = contribution;
       const effectiveId = contributionId(id);
 

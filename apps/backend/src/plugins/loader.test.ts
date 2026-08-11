@@ -357,6 +357,66 @@ describe("loadPlugins", () => {
     ).rejects.toThrow(/@empty\/plugin.*manifest/s);
   });
 
+  it.each([
+    [
+      "a non-object entry",
+      null,
+      /@platypus\/bad.*tool set contribution must be an object/s,
+    ],
+    [
+      "a string entry",
+      "broken",
+      /@platypus\/bad.*tool set contribution must be an object/s,
+    ],
+    [
+      "an array entry",
+      [],
+      /@platypus\/bad.*tool set contribution must be an object/s,
+    ],
+    [
+      "a missing id",
+      { name: "Broken", category: "Test", tools: {} },
+      /@platypus\/bad.*non-empty "id"/s,
+    ],
+    [
+      "a missing name",
+      { id: "broken", category: "Test", tools: {} },
+      /@platypus\/bad.*tool set "broken".*non-empty "name"/s,
+    ],
+    [
+      "missing tools",
+      { id: "broken", name: "Broken", category: "Test" },
+      /@platypus\/bad.*tool set "broken".*"tools" object or function/s,
+    ],
+  ])(
+    "aborts (fail-loud, plugin-named) on %s",
+    async (_label, contribution, expected) => {
+      const { register, calls } = makeRegister();
+      await expect(
+        loadPlugins({
+          pluginNames: ["@platypus/bad"],
+          builtinPlugins: {
+            "@platypus/bad": () =>
+              Promise.resolve({
+                plugin: {
+                  name: "@platypus/bad",
+                  version: "0.1.0",
+                  apiVersion: 1,
+                  contributes: {
+                    toolSets: [
+                      contribution,
+                    ] as unknown as ToolSetContribution[],
+                  },
+                },
+              }),
+          },
+          register,
+        }),
+      ).rejects.toThrow(expected);
+      expect(calls).toHaveLength(0);
+    },
+  );
+
   it("aborts (fail-loud) on a duplicate id, naming both owning plugins", async () => {
     const { register } = makeRegister();
     // Two core plugins keep bare ids, so a shared `time` id collides directly.
