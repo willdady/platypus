@@ -98,6 +98,7 @@ import {
   composeWebBackend,
   registerWebBackend,
 } from "../web-backends/index.ts";
+import { registerToolSet } from "../tools/index.ts";
 import { logger } from "../logger.ts";
 import { FileValidationError } from "./file-gate.ts";
 import { resetExtractedTextCache } from "./file-extraction.ts";
@@ -1049,6 +1050,34 @@ describe("chat-execution", () => {
           /\[extracted text truncated: first 20 of \d+ characters\]/,
         );
       });
+    });
+  });
+
+  describe("Static tool-set resolution", () => {
+    it("propagates factory errors without falling back to MCP lookup", async () => {
+      const factoryError = new Error("tool-set factory failed");
+      const toolSetId = "test.throwing-factory";
+      registerToolSet(toolSetId, {
+        name: "Throwing test Tool set",
+        category: "Test",
+        tools: vi.fn().mockRejectedValue(factoryError),
+      });
+
+      const agentWithToolSet = { ...baseAgent, toolSetIds: [toolSetId] };
+      const queries = createInMemoryChatTurnQueries({
+        workspaces: [baseWorkspace],
+        agents: [agentWithToolSet],
+        providers: [baseProvider],
+      });
+      const getMcp = vi.spyOn(queries, "getMcp");
+
+      await expect(
+        prepareChatTurn(
+          { ...baseInput, request: { agentId: agentWithToolSet.id } },
+          queries,
+        ),
+      ).rejects.toBe(factoryError);
+      expect(getMcp).not.toHaveBeenCalled();
     });
   });
 

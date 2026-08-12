@@ -994,19 +994,9 @@ const loadTools = async (
   }
 
   for (const toolSetId of agent.toolSetIds) {
+    let toolSet: ReturnType<typeof getToolSet>;
     try {
-      const toolSet = getToolSet(toolSetId);
-      const resolvedTools =
-        typeof toolSet.tools === "function"
-          ? await toolSet.tools({
-              workspaceId,
-              agentId: agent.id,
-              orgId,
-              frontendUrl,
-              userId: userId || "",
-            })
-          : toolSet.tools;
-      Object.assign(tools, resolvedTools);
+      toolSet = getToolSet(toolSetId);
     } catch {
       // Static tool set not found — fall back to MCP lookup.
       const mcp = await queries.getMcp(toolSetId, orgId, workspaceId);
@@ -1035,7 +1025,20 @@ const loadTools = async (
           `Tool set with id '${toolSetId}' not found as static tool set or MCP`,
         );
       }
+      continue;
     }
+
+    const resolvedTools =
+      typeof toolSet.tools === "function"
+        ? await toolSet.tools({
+            workspaceId,
+            agentId: agent.id,
+            orgId,
+            frontendUrl,
+            userId: userId || "",
+          })
+        : toolSet.tools;
+    Object.assign(tools, resolvedTools);
   }
 
   return { tools, mcpClients };
