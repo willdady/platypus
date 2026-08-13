@@ -189,6 +189,19 @@ export type ChatList = z.infer<typeof chatListSchema>;
 
 // Agent
 
+/**
+ * Default agentic step ceiling for an agent that has no explicit `maxSteps`.
+ * Mirrors the new-agent create-form default. Keeps API-created agents sane
+ * (a single step never lets a tool-calling agent finish its work) while
+ * staying low enough to bound a model that fails to converge.
+ *
+ * Lives here rather than beside either consumer: both the Chat-turn path and
+ * the Sub-Agent delegation path resolve an unset `maxSteps` through it, and
+ * homing it in one of them makes the other import a module it has no other
+ * reason to load.
+ */
+export const DEFAULT_AGENT_MAX_STEPS = 15;
+
 // An Agent is scoped to either a Workspace or an Organization (mutually
 // exclusive), mirroring the dual-scope shape of `provider`/`mcp`/`skill`.
 // Org-scoped Agents are Shared resources managed by Org Admins (ADR-0007);

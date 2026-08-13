@@ -6,7 +6,7 @@ import {
   SUB_AGENT_TRUNCATION_NOTE,
 } from "./sub-agent.ts";
 import type { SubAgentActivity } from "./sub-agent.ts";
-import { DEFAULT_AGENT_MAX_STEPS } from "../services/chat-execution.ts";
+import { DEFAULT_AGENT_MAX_STEPS } from "@platypus/schemas";
 
 // Helper to consume an async generator and collect all yielded values.
 // Deep-copies each yield since the generator reuses mutable objects.

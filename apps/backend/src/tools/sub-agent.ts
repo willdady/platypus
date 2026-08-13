@@ -16,7 +16,7 @@ import {
   type SamplingSettings,
   type SamplingSource,
 } from "../services/sampling-settings.ts";
-import { DEFAULT_AGENT_MAX_STEPS } from "../services/chat-execution.ts";
+import { DEFAULT_AGENT_MAX_STEPS } from "@platypus/schemas";
 
 /**
  * Single source of truth for the sub-agent delegation tool name.

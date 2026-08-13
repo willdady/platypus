@@ -31,6 +31,7 @@ import {
 } from "./memory-retrieval.ts";
 import {
   aliasNameFromReference,
+  DEFAULT_AGENT_MAX_STEPS,
   providerHasNativeSearch,
 } from "@platypus/schemas";
 import type { ConcreteModelId, Provider, Skill } from "@platypus/schemas";
@@ -55,14 +56,6 @@ import {
 } from "./file-gate.ts";
 import type { PlatypusUIMessage } from "../types.ts";
 import { listScopedByIds, resolveScoped } from "./scoped-resource.ts";
-
-/**
- * Default agentic step ceiling for an agent that has no explicit `maxSteps`.
- * Mirrors the new-agent create-form default. Keeps API-created agents sane
- * (a single step never lets a tool-calling agent finish its work) while
- * staying low enough to bound a model that fails to converge.
- */
-export const DEFAULT_AGENT_MAX_STEPS = 15;
 
 // --- Errors ---
 
