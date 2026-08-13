@@ -190,10 +190,10 @@ export type ChatList = z.infer<typeof chatListSchema>;
 // Agent
 
 /**
- * Default agentic step ceiling for an agent that has no explicit `maxSteps`.
- * Mirrors the new-agent create-form default. Keeps API-created agents sane
- * (a single step never lets a tool-calling agent finish its work) while
- * staying low enough to bound a model that fails to converge.
+ * Default agentic step ceiling for an agent that has no explicit `maxSteps`,
+ * and the value the Agent form prefills. Keeps API-created agents sane (a
+ * single step never lets a tool-calling agent finish its work) while staying
+ * low enough to bound a model that fails to converge.
  *
  * Lives here rather than beside either consumer: both the Chat-turn path and
  * the Sub-Agent delegation path resolve an unset `maxSteps` through it, and
