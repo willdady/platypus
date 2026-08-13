@@ -16,6 +16,7 @@ import {
   type SamplingSettings,
   type SamplingSource,
 } from "../services/sampling-settings.ts";
+import { DEFAULT_AGENT_MAX_STEPS } from "../services/chat-execution.ts";
 
 /**
  * Single source of truth for the sub-agent delegation tool name.
@@ -147,7 +148,7 @@ export const createSubAgentTool = (options: SubAgentToolOptions) => {
     instructions,
     model,
     tools,
-    maxSteps = 50,
+    maxSteps = DEFAULT_AGENT_MAX_STEPS,
     securityGuardrails,
     sampling,
     maxOutputTokens,
@@ -482,7 +483,7 @@ export const createSubAgentTools = async (
         instructions: subAgent.instructions || undefined,
         model,
         tools: subAgentTools,
-        maxSteps: subAgent.maxSteps || 50,
+        maxSteps: subAgent.maxSteps ?? DEFAULT_AGENT_MAX_STEPS,
         securityGuardrails,
         sampling: resolveSamplingSettings(subAgent),
         maxOutputTokens,

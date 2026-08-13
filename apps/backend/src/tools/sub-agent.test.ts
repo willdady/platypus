@@ -6,6 +6,7 @@ import {
   SUB_AGENT_TRUNCATION_NOTE,
 } from "./sub-agent.ts";
 import type { SubAgentActivity } from "./sub-agent.ts";
+import { DEFAULT_AGENT_MAX_STEPS } from "../services/chat-execution.ts";
 
 // Helper to consume an async generator and collect all yielded values.
 // Deep-copies each yield since the generator reuses mutable objects.
@@ -91,6 +92,20 @@ vi.mock("../logger.ts", () => ({
 }));
 
 import { logger } from "../logger.ts";
+
+// A constructed sub-agent carries `stopWhen: [stepCountIs(n)]`, where `n` is
+// the resolved step ceiling. `stepCountIs` closes over `n` and offers no
+// introspection, so recover the ceiling by probing the condition against
+// incrementally longer (empty) step arrays until it fires.
+const stepCeilingOf = (callIndex: number): number => {
+  const { stopWhen } = agentConstructorSpy.mock.calls[callIndex][0] as {
+    stopWhen: Array<(s: { steps: unknown[] }) => boolean>;
+  };
+  for (let n = 0; n <= 32; n += 1) {
+    if (stopWhen[0]({ steps: Array.from({ length: n }) })) return n;
+  }
+  throw new Error("no step ceiling found in stopWhen");
+};
 
 describe("createSubAgentTool", () => {
   const baseOptions = {
@@ -1106,6 +1121,30 @@ describe("createSubAgentTools", () => {
     );
 
     expect(Object.keys(result.tools)).toHaveLength(1);
+    expect(stepCeilingOf(0)).toBe(DEFAULT_AGENT_MAX_STEPS);
+  });
+
+  // `||` would turn an explicit zero into the fallback, silently giving a
+  // "0 steps" Agent a full budget. `??` must honor zero as a real ceiling.
+  it("honors an explicit maxSteps of 0 instead of the fallback default", async () => {
+    const subAgents = [
+      {
+        id: "sa-1",
+        name: "Agent",
+        providerId: "p1",
+        modelId: "m1",
+        maxSteps: 0,
+      },
+    ];
+
+    const createModelFn = vi
+      .fn()
+      .mockResolvedValue({ model: {}, securityGuardrails: null });
+    const loadToolsFn = vi.fn().mockResolvedValue({});
+
+    await createSubAgentTools(subAgents, createModelFn, loadToolsFn);
+
+    expect(stepCeilingOf(0)).toBe(0);
   });
 
   it("forwards each sub-agent's stored sampling parameters, treating null as unset", async () => {
