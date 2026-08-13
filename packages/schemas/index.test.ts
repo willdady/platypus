@@ -301,6 +301,24 @@ describe("Agent Schema", () => {
     const result = agentSchema.safeParse(agentWithOptionals);
     expect(result.success).toBe(true);
   });
+
+  // A maxSteps below 1 reaches `stepCountIs(n)`, which compares `n` against a
+  // step count that is never less than 1 — so it silently removes the ceiling
+  // instead of tightening it. Reject it here rather than at the run.
+  it.each([0, -1, 2.5])("should reject a maxSteps of %s", (maxSteps) => {
+    const result = agentSchema.safeParse({
+      id: "789",
+      workspaceId: "456",
+      providerId: "provider-123",
+      name: "Test Agent",
+      description: "A test agent",
+      modelId: "gpt-4",
+      maxSteps,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+    expect(result.success).toBe(false);
+  });
 });
 
 describe("Provider Create Schema", () => {

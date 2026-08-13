@@ -1124,16 +1124,16 @@ describe("createSubAgentTools", () => {
     expect(stepCeilingOf(0)).toBe(DEFAULT_AGENT_MAX_STEPS);
   });
 
-  // `||` would turn an explicit zero into the fallback, silently giving a
-  // "0 steps" Agent a full budget. `??` must honor zero as a real ceiling.
-  it("honors an explicit maxSteps of 0 instead of the fallback default", async () => {
+  // A delegated Agent runs on its own ceiling, not the parent's and not the
+  // fallback — the whole point of reading `maxSteps` off the row.
+  it("forwards an explicit maxSteps instead of the fallback default", async () => {
     const subAgents = [
       {
         id: "sa-1",
         name: "Agent",
         providerId: "p1",
         modelId: "m1",
-        maxSteps: 0,
+        maxSteps: 3,
       },
     ];
 
@@ -1144,7 +1144,7 @@ describe("createSubAgentTools", () => {
 
     await createSubAgentTools(subAgents, createModelFn, loadToolsFn);
 
-    expect(stepCeilingOf(0)).toBe(0);
+    expect(stepCeilingOf(0)).toBe(3);
   });
 
   it("forwards each sub-agent's stored sampling parameters, treating null as unset", async () => {

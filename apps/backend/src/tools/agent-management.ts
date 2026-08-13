@@ -34,7 +34,12 @@ export function createAgentManagementTools(
       providerId: z.string().describe("Provider ID to use"),
       modelId: z.string().describe(MODEL_ID_DESCRIPTION),
       instructions: z.string().optional().describe(INSTRUCTIONS_DESCRIPTION),
-      maxSteps: z.number().optional().describe("Max agentic steps"),
+      maxSteps: z
+        .number()
+        .int()
+        .min(1)
+        .optional()
+        .describe("Max agentic steps, at least 1"),
       temperature: z.number().optional().describe("Sampling temperature"),
       topP: z.number().optional().describe("Top-p sampling"),
       topK: z.number().optional().describe("Top-k sampling"),
@@ -135,7 +140,12 @@ export function createAgentManagementTools(
       providerId: z.string().optional().describe("Provider ID to use"),
       modelId: z.string().optional().describe(MODEL_ID_DESCRIPTION),
       instructions: z.string().optional().describe(INSTRUCTIONS_DESCRIPTION),
-      maxSteps: z.number().optional().describe("Max agentic steps"),
+      maxSteps: z
+        .number()
+        .int()
+        .min(1)
+        .optional()
+        .describe("Max agentic steps, at least 1"),
       temperature: z.number().optional().describe("Sampling temperature"),
       topP: z.number().optional().describe("Top-p sampling"),
       topK: z.number().optional().describe("Top-k sampling"),
