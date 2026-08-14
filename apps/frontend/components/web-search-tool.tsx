@@ -44,10 +44,11 @@ const asRecord = (value: unknown): Record<string, unknown> =>
  * 3. Core's own result shape, for a finished call carrying no marker: a message
  *    stored before the marker shipped. Native payloads are vendor-shaped (an array
  *    on Anthropic, a status object on OpenAI), so they do not match.
- * 4. An unfinished call cannot be decided on its output, and a marker is attached
- *    only when the tool call is parsed — so `input-streaming` alone falls back to
- *    `providerExecuted`, and the state a plugin search actually sits in while its
- *    executor runs (`input-available`) is decided by the marker.
+ * 4. An unfinished call cannot be decided on its output, and by here it has no
+ *    marker either. The SDK attaches the marker on the first streaming chunk
+ *    (`ai@7`, `tool-input-start`), so one of our own calls is already marked at
+ *    `input-streaming` and matched by check 2 — the only parts reaching this point
+ *    are the unmarked native ones, which belong on the generic renderer.
  *
  * Anything left over reads as native. That is the safe default: an unrecognised
  * `web_search` keeps the generic renderer, which shows whatever it really is.
@@ -66,7 +67,7 @@ export const isPluginWebSearchPart = (part: {
     const output = asRecord(part.output);
     return Array.isArray(output.results) || typeof output.error === "string";
   }
-  return part.state === "input-streaming";
+  return false;
 };
 
 /**
@@ -137,7 +138,11 @@ export const WebSearchTool = ({ toolPart }: { toolPart: ToolUIPart }) => {
   const errorText =
     toolPart.errorText ??
     (typeof output.error === "string" ? output.error : null);
-  const results = Array.isArray(output.results) ? output.results : [];
+  // Counted through the same helper the Sources row is built from, not off the raw
+  // array: the row lists only the results that survive `isPresentableUrl`, so a
+  // backend returning three results with two `javascript:` URLs would otherwise say
+  // "3 results — listed above as sources" above a single pill.
+  const shownCount = webSearchSources([toolPart]).length;
   const answer = typeof output.answer === "string" ? output.answer : null;
 
   return (
@@ -163,10 +168,8 @@ export const WebSearchTool = ({ toolPart }: { toolPart: ToolUIPart }) => {
               header, and claiming a search is running would be false. */}
               {toolPart.state === "output-available" ? (
                 <p className="text-muted-foreground text-xs">
-                  {results.length === 1
-                    ? "1 result"
-                    : `${results.length} results`}
-                  {results.length > 0 && " — listed above as sources"}
+                  {shownCount === 1 ? "1 result" : `${shownCount} results`}
+                  {shownCount > 0 && " — listed above as sources"}
                 </p>
               ) : toolPart.state === "input-streaming" ||
                 toolPart.state === "input-available" ? (

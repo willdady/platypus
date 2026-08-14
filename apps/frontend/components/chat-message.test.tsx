@@ -169,6 +169,39 @@ describe("ChatMessage sources from a Web-search backend", () => {
     expect(screen.getByText("Used 1 sources")).toBeInTheDocument();
   });
 
+  // The card's count and the Sources row are one list: "2 results — listed above
+  // as sources" over a single pill is the same bug the row itself avoids.
+  it("counts only the presentable results on the card", () => {
+    renderMessage(
+      searchMessage({
+        query: "x",
+        results: [
+          { title: "Evil", url: "javascript:alert(1)" },
+          { title: "Fine", url: "https://example.com/fine" },
+        ],
+      }),
+    );
+    openToolCard();
+
+    expect(screen.getByText(/1 result —/)).toBeInTheDocument();
+    expect(screen.queryByText(/2 results/)).toBeNull();
+  });
+
+  // Nothing renders above, so nothing is claimed to: the alternative is a count
+  // pointing at a Sources row that is not there.
+  it("reports 0 results when no result was presentable", () => {
+    renderMessage(
+      searchMessage({
+        query: "x",
+        results: [{ title: "Evil", url: "javascript:alert(1)" }],
+      }),
+    );
+    openToolCard();
+
+    expect(screen.getByText("0 results")).toBeInTheDocument();
+    expect(screen.queryByText(/Used \d+ sources/)).toBeNull();
+  });
+
   it("falls back to the URL when a result carries no usable title", () => {
     renderMessage(
       searchMessage({
@@ -315,6 +348,28 @@ describe("ChatMessage sources from a Web-search backend", () => {
     expect(screen.queryByText(/0 results/)).toBeNull();
   });
 
+  // The marker rides the first streaming chunk (`ai@7`, `tool-input-start`), so one
+  // of our own calls is identifiable before its input finishes arriving.
+  it("shows the card for a marked call still streaming its input", () => {
+    renderMessage({
+      id: "m1",
+      role: "assistant",
+      parts: [
+        {
+          type: "tool-web_search",
+          toolCallId: "c1",
+          state: "input-streaming",
+          toolMetadata: marker,
+          input: { query: "platypus habitat" },
+        },
+      ],
+    } as unknown as PlatypusUIMessage);
+
+    openToolCard();
+    expect(screen.getByText("Searching…")).toBeInTheDocument();
+    expect(screen.queryByText("Parameters")).toBeNull();
+  });
+
   // Messages stored before the marker shipped carry none. A finished call is still
   // recognisable by the result shape core owns, so their pills do not vanish.
   it("still lifts sources from a stored result that carries no marker", () => {
@@ -379,6 +434,28 @@ describe("ChatMessage and provider-executed web_search", () => {
     expect(screen.queryByText(/Used \d+ sources/)).toBeNull();
   });
 
+  // A `source-url` part carries an optional title and Anthropic sends one. Rendering
+  // the URL as the label regardless left native Providers showing raw URLs in the
+  // row where a backend Provider shows real titles.
+  it("titles a native source pill by the title the vendor sent", () => {
+    renderMessage(
+      nativeSearchMessage([
+        {
+          type: "source-url",
+          sourceId: "s1",
+          url: "https://vendor.example/cited",
+          title: "Vendor page",
+        },
+      ]),
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /Used 1 sources/ }));
+    expect(screen.getByRole("link", { name: "Vendor page" })).toHaveAttribute(
+      "href",
+      "https://vendor.example/cited",
+    );
+  });
+
   it("still renders the native citations from source-url parts", () => {
     renderMessage(
       nativeSearchMessage([
@@ -417,6 +494,30 @@ describe("ChatMessage and provider-executed web_search", () => {
     expect(screen.getByText("Parameters")).toBeInTheDocument();
     expect(screen.queryByText("Searching…")).toBeNull();
     expect(screen.queryByText(/Used \d+ sources/)).toBeNull();
+  });
+
+  // The same part one chunk earlier. Core's marker is attached from the first
+  // streaming chunk, so an unmarked `input-streaming` part is native by
+  // elimination — treating the state itself as ours put a native OpenRouter search
+  // on the compact card mid-stream, which then swapped renderer at
+  // `input-available`.
+  it("leaves an unmarked, streaming native search on the generic renderer", () => {
+    renderMessage({
+      id: "m1",
+      role: "assistant",
+      parts: [
+        {
+          type: "tool-web_search",
+          toolCallId: "c1",
+          state: "input-streaming",
+          input: { query: "platypus habitat" },
+        },
+      ],
+    } as unknown as PlatypusUIMessage);
+
+    fireEvent.click(screen.getByRole("button", { name: /Web search/ }));
+    expect(screen.getByText("Parameters")).toBeInTheDocument();
+    expect(screen.queryByText("Searching…")).toBeNull();
   });
 });
 

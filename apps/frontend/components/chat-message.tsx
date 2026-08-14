@@ -31,6 +31,7 @@ import { DynamicToolHeader } from "./dynamic-tool-header";
 import {
   DynamicToolUIPart,
   FileUIPart,
+  SourceUrlUIPart,
   TextUIPart,
   isToolUIPart,
   type ChatStatus,
@@ -139,7 +140,7 @@ export const ChatMessage = memo(function ChatMessage({
       part.type === "file" && !part.mediaType?.startsWith("image/"),
   );
   const sourceUrlParts = message.parts?.filter(
-    (part) => part.type === "source-url",
+    (part): part is SourceUrlUIPart => part.type === "source-url",
   );
   // Citations from a Web-search backend's client-executed `web_search`, which
   // arrive as a tool result rather than as `source-url` parts. Merged into the one
@@ -183,7 +184,11 @@ export const ChatMessage = memo(function ChatMessage({
           <SourcesTrigger count={sourceCount} />
           {nativeSourceParts?.map((part, i) => (
             <SourcesContent key={`${message.id}-${i}`}>
-              <Source href={part.url} title={part.url} />
+              {/* A `source-url` part carries an optional title and Anthropic
+              sends one; the URL is the fallback for a vendor that does not, not
+              the label. Without this a native Provider shows raw URLs where a
+              backend Provider shows real titles, in the same row. */}
+              <Source href={part.url} title={part.title ?? part.url} />
             </SourcesContent>
           ))}
           {pluginSearchSources.map((source) => (

@@ -589,6 +589,31 @@ const ProviderForm = ({
   // pointing that operator at a switch they cannot see would be a dead end.
   const nativeSearchSwitchShown = formData.providerType !== "Bedrock";
 
+  // Whether the Web-search backend selector belongs on this form at all.
+  //
+  // Hidden on a deployment that has installed no backend, where the control would
+  // be a dead "None" — but never hidden while a value is stored, even one whose
+  // plugin has since been removed: concealing a stored id is how a Provider ends up
+  // pointing at a backend nobody can see or clear.
+  // Nor hidden when the catalog request failed: an empty list then says nothing
+  // about the deployment, and silently dropping the field would read as "none
+  // installed".
+  const webBackendFieldApplies =
+    availableWebBackends.length > 0 ||
+    !!formData.webBackend ||
+    !!webBackendsError;
+  // Latched on first use, because the condition above reads a value the field itself
+  // edits. Clearing a stale id on a deployment with nothing installed — choosing
+  // None to recover — empties `webBackend`, turns the condition false, and unmounts
+  // the control mid-interaction: no confirmation, and no undo short of a reload. The
+  // save is correct; the field evaporating during the recovery path is not.
+  //
+  // Set from the selector's own handler rather than derived, so the latch cannot
+  // hold the field open for a reason the reader never caused: an edit is the only
+  // thing that turns `webBackendFieldApplies` false.
+  const [webBackendEdited, setWebBackendEdited] = useState(false);
+  const showWebBackendField = webBackendFieldApplies || webBackendEdited;
+
   useEffect(() => {
     if (provider && !hasInitialized.current) {
       setFormData({
@@ -1346,29 +1371,22 @@ const ProviderForm = ({
                 </Field>
               )}
 
-              {/* Hidden on a deployment that has installed no Web-search
-              backend, where the control would be a dead "None" — but never
-              hidden while a value is stored, even one whose plugin has since
-              been removed: concealing a stored id is how a Provider ends up
-              pointing at a backend nobody can see or clear.
-              Nor hidden when the catalog request failed: an empty list then says
-              nothing about the deployment, and silently dropping the field would
-              read as "none installed". */}
-              {(availableWebBackends.length > 0 ||
-                !!formData.webBackend ||
-                !!webBackendsError) && (
+              {/* Visibility, and why it is latched once true, at
+              `showWebBackendField`. */}
+              {showWebBackendField && (
                 <Field data-invalid={!!validationErrors.webBackend}>
                   <FieldLabel htmlFor="webBackend">
                     Web-search backend
                   </FieldLabel>
                   <Select
                     value={formData.webBackend || NO_WEB_BACKEND}
-                    onValueChange={(value) =>
+                    onValueChange={(value) => {
+                      setWebBackendEdited(true);
                       handleSelectChange(
                         "webBackend",
                         value === NO_WEB_BACKEND ? "" : value,
-                      )
-                    }
+                      );
+                    }}
                     disabled={isSubmitting || isReadOnly}
                   >
                     <SelectTrigger

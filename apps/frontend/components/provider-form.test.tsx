@@ -621,6 +621,24 @@ describe("ProviderForm Web-search backend selector", () => {
   const webBackendSelect = () =>
     screen.queryByRole("combobox", { name: "Web-search backend" });
 
+  /**
+   * Opens the selector and picks None, by keyboard: Radix drives the pointer path
+   * with capture APIs jsdom does not implement, and the keyboard route reaches the
+   * same change. `scrollIntoView` is stubbed for the same reason — Radix calls it on
+   * the highlighted option as the listbox mounts, and jsdom has no layout.
+   */
+  const selectNoBackend = async () => {
+    const scrollIntoView = Element.prototype.scrollIntoView;
+    Element.prototype.scrollIntoView = vi.fn();
+    try {
+      fireEvent.keyDown(webBackendSelect()!, { key: "ArrowDown" });
+      const none = await screen.findByRole("option", { name: /^None/ });
+      fireEvent.keyDown(none, { key: "Enter" });
+    } finally {
+      Element.prototype.scrollIntoView = scrollIntoView;
+    }
+  };
+
   it("is absent on a deployment with no Web-search backend installed", () => {
     renderWithAdvancedOpen({});
 
@@ -731,6 +749,19 @@ describe("ProviderForm Web-search backend selector", () => {
     } as Partial<Provider>);
 
     expect(screen.queryByText(/Native web search is off/)).toBeNull();
+  });
+
+  // The recovery path for a stale id on a deployment where nothing is installed:
+  // choosing None empties `webBackend`, which is the same value the field's own
+  // visibility condition reads. Unlatched, the control unmounted here — mid-
+  // interaction, before the save, with no undo short of a reload.
+  it("keeps the field mounted after the stored backend is cleared", async () => {
+    renderWithAdvancedOpen({ webBackend: "gone.searx" } as Partial<Provider>);
+
+    await selectNoBackend();
+
+    expect(webBackendSelect()).not.toBeNull();
+    expect(webBackendSelect()).toHaveTextContent("None");
   });
 
   it("round-trips the stored backend through a save", async () => {
