@@ -456,6 +456,43 @@ describe("ChatMessage and provider-executed web_search", () => {
     );
   });
 
+  // `??` would have kept an empty string and rendered a pill with no label at all.
+  it("falls back to the URL when the vendor sends an empty title", () => {
+    renderMessage(
+      nativeSearchMessage([
+        {
+          type: "source-url",
+          sourceId: "s1",
+          url: "https://vendor.example/cited",
+          title: "",
+        },
+      ]),
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /Used 1 sources/ }));
+    expect(
+      screen.getByRole("link", { name: "https://vendor.example/cited" }),
+    ).toBeInTheDocument();
+  });
+
+  // Titling the pill by the vendor's title takes the URL off the screen, so a
+  // `javascript:` citation would read as an ordinary link. Same scheme check a
+  // plugin result's URL goes through.
+  it("drops a native source pill whose URL is not presentable", () => {
+    renderMessage(
+      nativeSearchMessage([
+        {
+          type: "source-url",
+          sourceId: "s1",
+          url: "javascript:alert(1)",
+          title: "Vendor page",
+        },
+      ]),
+    );
+
+    expect(screen.queryByText(/Used \d+ sources/)).toBeNull();
+  });
+
   it("still renders the native citations from source-url parts", () => {
     renderMessage(
       nativeSearchMessage([

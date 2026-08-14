@@ -142,6 +142,12 @@ export const WebSearchTool = ({ toolPart }: { toolPart: ToolUIPart }) => {
   // array: the row lists only the results that survive `isPresentableUrl`, so a
   // backend returning three results with two `javascript:` URLs would otherwise say
   // "3 results — listed above as sources" above a single pill.
+  //
+  // This call's own results, deliberately: the count belongs to the card it sits in.
+  // Two searches in one turn that both surface a page therefore total one more than
+  // the row's pill count, which deduplicates across the whole message — the
+  // alternative is a card reporting a number that has nothing to do with the search
+  // it heads.
   const shownCount = webSearchSources([toolPart]).length;
   const answer = typeof output.answer === "string" ? output.answer : null;
 

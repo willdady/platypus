@@ -36,7 +36,7 @@ import {
   isToolUIPart,
   type ChatStatus,
 } from "ai";
-import { Agent } from "@platypus/schemas";
+import { Agent, isPresentableUrl } from "@platypus/schemas";
 import {
   BotIcon,
   CheckIcon,
@@ -139,8 +139,14 @@ export const ChatMessage = memo(function ChatMessage({
     (part): part is FileUIPart =>
       part.type === "file" && !part.mediaType?.startsWith("image/"),
   );
+  // Scheme-checked with the same predicate a plugin result's URL goes through.
+  // A vendor is more trusted than a Web-search backend, but the pill is titled by
+  // the vendor's own title now, so a `javascript:` or `data:` citation would render
+  // as an ordinary-looking link with nothing on screen to give it away — the raw URL
+  // used to be the label, which was the only thing making one visible.
   const sourceUrlParts = message.parts?.filter(
-    (part): part is SourceUrlUIPart => part.type === "source-url",
+    (part): part is SourceUrlUIPart =>
+      part.type === "source-url" && isPresentableUrl(part.url),
   );
   // Citations from a Web-search backend's client-executed `web_search`, which
   // arrive as a tool result rather than as `source-url` parts. Merged into the one
@@ -152,8 +158,9 @@ export const ChatMessage = memo(function ChatMessage({
   // (ADR-0014) — but a vendor emits `source-url` parts for citations that are not
   // search results, and those can land in the same message as a backend search.
   //
-  // The plugin entry is the one kept: it carries the backend's real title, where a
-  // `source-url` part has only the URL to show. Compared as exact strings, so a
+  // The plugin entry is the one kept: both rows carry a real title, but the plugin
+  // URL has been through core's own presentability rules on the way in, so where the
+  // two disagree the vetted copy is the safer pill. Compared as exact strings, so a
   // vendor URL differing by a trailing slash or a tracking parameter still reads as
   // a second page — normalising URLs is a judgement call of its own and belongs
   // with whoever asks for it.
@@ -187,14 +194,16 @@ export const ChatMessage = memo(function ChatMessage({
               {/* A `source-url` part carries an optional title and Anthropic
               sends one; the URL is the fallback for a vendor that does not, not
               the label. Without this a native Provider shows raw URLs where a
-              backend Provider shows real titles, in the same row. */}
-              <Source href={part.url} title={part.title ?? part.url} />
+              backend Provider shows real titles, in the same row.
+              `||`, not `??`: a vendor sending an empty title would otherwise
+              render a pill with no label at all. */}
+              <Source href={part.url} title={part.title || part.url} />
             </SourcesContent>
           ))}
           {pluginSearchSources.map((source) => (
             <SourcesContent key={`${message.id}-search-${source.url}`}>
-              {/* A backend supplies a real title, unlike a `source-url` part,
-              where the URL is all there is to show. */}
+              {/* Already URL-or-title resolved by `webSearchSources`, which
+              falls back the same way the native pills above do. */}
               <Source href={source.url} title={source.title} />
             </SourcesContent>
           ))}
