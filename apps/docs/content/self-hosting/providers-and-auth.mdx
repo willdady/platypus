@@ -27,12 +27,12 @@ code — there is no "custom vendor" type.
 That is not the same as five supported endpoints. Anything speaking the OpenAI
 API is reached through the **OpenAI** type with `baseUrl` pointed at it:
 
-| You want to run… | Provider type | What you set                                                                    |
-| ---------------- | ------------- | --------------------------------------------------------------------------------- |
-| Ollama           | OpenAI        | `baseUrl` → your Ollama host's `/v1`; any non-empty API key                      |
-| vLLM             | OpenAI        | `baseUrl` → your vLLM server; usually `apiMode: "chat"`                          |
-| Azure OpenAI     | OpenAI        | `baseUrl` → your Azure deployment endpoint                                       |
-| LiteLLM / a proxy| OpenAI        | `baseUrl` → the gateway (see [Fronting a Provider with a proxy](#fronting-a-provider-with-a-proxy)) |
+| You want to run…  | Provider type | What you set                                                                                        |
+| ----------------- | ------------- | --------------------------------------------------------------------------------------------------- |
+| Ollama            | OpenAI        | `baseUrl` → your Ollama host's `/v1`; any non-empty API key                                         |
+| vLLM              | OpenAI        | `baseUrl` → your vLLM server; usually `apiMode: "chat"`                                             |
+| Azure OpenAI      | OpenAI        | `baseUrl` → your Azure deployment endpoint                                                          |
+| LiteLLM / a proxy | OpenAI        | `baseUrl` → the gateway (see [Fronting a Provider with a proxy](#fronting-a-provider-with-a-proxy)) |
 
 So "is my stack supported?" comes down to: does it speak the OpenAI API? If yes,
 it works through the OpenAI type. If it speaks only a bespoke protocol, put a
@@ -40,16 +40,17 @@ translating gateway in front of it.
 
 ### What a Provider holds
 
-| Field                | Meaning                                                                                                                                                         |
-| -------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `name`               | A human label for the connection.                                                                                                                               |
-| `providerType`       | The vendor (`OpenAI`, `OpenRouter`, `Bedrock`, `Google`, `Anthropic`).                                                                                          |
-| `apiKey`             | The vendor credential.                                                                                                                                          |
-| `baseUrl`            | Optional override for OpenAI-compatible / self-hosted endpoints.                                                                                                |
-| `region`             | Required for Bedrock (AWS region).                                                                                                                              |
-| `modelIds`           | The models this Provider exposes for selection (at least one). Each entry carries its own config: file capability — see [File handling](#file-handling-what-each-model-accepts) — and an optional [Model alias](/concepts/providers#model-aliases). |
-| `taskModelId`        | The model used for one-shot internal tasks (e.g. generating a chat title), not chat turns. Must be a real model id — a Model alias is rejected.                  |
-| `securityGuardrails` | Optional free-text security directives appended last in the system prompt for every run on this Provider.                                                       |
+| Field                | Meaning                                                                                                                                                                                                     |
+| -------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `name`               | A human label for the connection.                                                                                                                                                                           |
+| `providerType`       | The vendor (`OpenAI`, `OpenRouter`, `Bedrock`, `Google`, `Anthropic`).                                                                                                                                      |
+| `apiKey`             | The vendor credential.                                                                                                                                                                                      |
+| `baseUrl`            | Optional override for OpenAI-compatible / self-hosted endpoints.                                                                                                                                            |
+| `headers`            | Optional extra HTTP headers, as a JSON object, sent with every request to this Provider. On OpenRouter, setting any [app attribution](#openrouter-app-attribution) header here replaces all three defaults. |
+| `region`             | Required for Bedrock (AWS region).                                                                                                                                                                          |
+| `modelIds`           | The models this Provider exposes for selection (at least one). Each entry is an object carrying that model's own settings — see [What each model entry holds](#what-each-model-entry-holds).                |
+| `taskModelId`        | The model used for one-shot internal tasks (e.g. generating a chat title), not chat turns. Must be a real model id — a Model alias is rejected.                                                             |
+| `securityGuardrails` | Optional free-text security directives appended last in the system prompt for every run on this Provider.                                                                                                   |
 
 A Provider also carries the models used for **Memory** (extraction and
 embeddings), so background memory features have a model to call. Like
@@ -62,23 +63,134 @@ embeddings), so background memory features have a model to call. Like
   [Concepts](/concepts).
 </Callout>
 
+### OpenRouter app attribution
+
+OpenRouter credits each request to an app, and that credit is what puts an app on
+its public model pages and rankings. Platypus claims that credit for the project
+by default: every request from an **OpenRouter** Provider carries
+
+| Header                    | Value                                  |
+| ------------------------- | -------------------------------------- |
+| `HTTP-Referer`            | `https://github.com/willdady/platypus` |
+| `X-OpenRouter-Title`      | `Platypus`                             |
+| `X-OpenRouter-Categories` | `personal-agent,general-chat`          |
+
+So out of the box, your usage counts toward the Platypus project's public
+ranking. Nothing else changes: requests go to the same endpoint, on your own API
+key and your own OpenRouter account, at the same cost.
+
+To claim it for your own deployment instead, set the attribution headers you want
+in the Provider's **Headers** field. It is all or nothing: set any one of the
+three and every Platypus default steps aside, so the request carries exactly what
+you wrote and nothing else. Names are matched case-insensitively, so
+`http-referer` counts as setting the referer. Write the whole set:
+
+```json
+{
+  "HTTP-Referer": "https://acme.example",
+  "X-OpenRouter-Title": "Acme Assistant",
+  "X-OpenRouter-Categories": "personal-agent,general-chat"
+}
+```
+
+<Callout type="warning">
+  Setting a title and expecting the Platypus referer to carry it gets you
+  neither. `HTTP-Referer` is what OpenRouter identifies an app by, and once you
+  set any attribution header the defaults are gone — so a set that omits the
+  referer creates no app page and tracks nothing. Include `HTTP-Referer` in
+  every set you write.
+</Callout>
+
+Attribution is per Provider, not per deployment, so two OpenRouter Providers in
+the same Organization can attribute differently.
+
+<Callout type="warning">
+  Leaving **Headers** empty does not opt out — that's what gives you the
+  Platypus defaults. To send no attribution at all, set `HTTP-Referer` to an
+  empty string. That drops all three headers — including a title or categories
+  you set yourself, since OpenRouter cannot attribute those without a referer.
+  Your other custom headers are still sent.
+</Callout>
+
+### What each model entry holds
+
+A model is more than its id. What a model can read, how big its window is, and
+what an Agent selects it by are all properties of the `(Provider, model)` pair,
+and behind a proxy Platypus has no way to infer any of them — model names there
+are whatever the operator chose. So each entry in `modelIds` is an object, and
+everything on it beyond the id is **declared, not guessed**:
+
+| Per-model field         | Meaning                                                                                                                                                                                           |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `id`                    | The model id sent to the vendor.                                                                                                                                                                  |
+| `alias`                 | Optional stable name an Agent or Chat selects this model by, so repointing it upgrades them all at once. See [Model aliases](/concepts/providers#model-aliases).                                  |
+| `contextWindow`         | The vendor's published **total** token capacity for this model — the whole window, not a cap on the reply. 1,000–10,000,000 tokens. Empty means undeclared, which is normal.                      |
+| `passthroughFileTypes`  | The media types this model ingests **natively**. Comma-separated in the UI; wildcards like `image/*` allowed. Empty inherits the [provider-type default](#file-handling-what-each-model-accepts). |
+| `maxExtractedTextChars` | Cap on the text a single extracted document may add to a turn. Empty uses the default (50,000 characters).                                                                                        |
+| `maxOutputTokens`       | The most this model may produce in a single reply. Empty sends nothing and leaves the vendor's own default in place. See [Capping a single reply](#capping-a-single-reply).                       |
+
+Every field is optional except the id, and a Provider set up before any of them
+existed keeps working with none of them set.
+
+In the form, **Context window** sits on the model row itself; the last three sit
+behind **Advanced** on each row — collapsed unless that model already has one of
+them set. Every field carries an **i** you can hover or focus for the same
+explanation.
+
+#### Declaring a Context window
+
+Pick a size from the list, or choose **Custom** and type an exact number for a
+model behind a proxy whose capacity isn't one of the common ones. The listed
+sizes are decimal, so **128k** stores 128,000 — a model whose real window is
+131,072 forfeits 3k and nothing else.
+
+Declaring less than the vendor's real capacity is safe; declaring more is not,
+because the vendor rejects the turn outright. So when you aren't sure, round
+down.
+
+Declaring a window makes a **context meter** appear beside the prompt input in
+every Chat on that model, showing how full the conversation got on its last turn
+— see [How full the conversation
+is](/building-with-platypus/chat#how-full-the-conversation-is). Leave it empty
+and that meter is hidden; nothing else changes.
+
+<Callout type="warning">
+  A Context window is a **statement**, not a budget. Declaring it makes the
+  meter appear — it does not make Platypus enforce anything. Nothing warns, trims
+  a conversation to fit, or blocks a turn for approaching the window, and a turn
+  is assembled and sent exactly as it was before. Reaching the real limit still
+  fails at the vendor.
+</Callout>
+
+#### Capping a single reply
+
+**Max output tokens** is the ceiling on one reply — the answer, not the whole
+conversation. Reach it and the reply stops wherever it got to, and the Chat or
+run is marked cut short at the model's output limit.
+
+Leave it empty and Platypus sends no ceiling at all, so whatever the vendor does
+by default applies. Set it to the model's published output maximum when you want
+long answers, or lower to hold replies (and spend) down. The same ceiling
+applies when that model runs as a sub-Agent.
+
+<Callout type="warning">
+  **On Amazon Bedrock, empty is not "the model's maximum".** Bedrock applies a
+  default of its own when no ceiling is sent — AWS does not document the figure,
+  and in practice it lands around 4,000 tokens, far below what an Opus-class
+  model can write. Long agentic runs stop mid-answer for no visible reason. Set
+  **Max output tokens** on every Bedrock model to the figure the vendor
+  publishes for it. Other provider types carry sane defaults of their own and
+  only need this field when you want a different ceiling.
+</Callout>
+
+Ask for more than the model allows and the vendor rejects the turn — Platypus
+sends the number as typed and does not check it against the model.
+
 ### File handling: what each model accepts
 
 Whether a model can read an attached file is a property of the
-`(Provider, model)` pair, and behind a proxy Platypus has no way to infer it —
-model names there are whatever the operator chose. So capability is **declared,
-not guessed**: each entry in `modelIds` is a per-model object.
-
-| Per-model field         | Meaning                                                                                                                                                       |
-| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `id`                    | The model id sent to the vendor.                                                                                                                              |
-| `alias`                 | Optional stable name an Agent or Chat selects this model by, so repointing it upgrades them all at once. See [Model aliases](/concepts/providers#model-aliases). |
-| `passthroughFileTypes`  | The media types this model ingests **natively**. Comma-separated in the UI; wildcards like `image/*` allowed. Empty inherits the provider-type default below. |
-| `maxExtractedTextChars` | Cap on the text a single extracted document may add to a turn. Empty uses the default (50,000 characters).                                                    |
-
-In the form, the last two sit behind **Advanced** on each model row — collapsed
-unless that model already has one of them set. Every field carries an **i** you
-can hover or focus for the same explanation.
+`(Provider, model)` pair — `passthroughFileTypes` and `maxExtractedTextChars`
+above are how you declare it.
 
 On every chat turn, each attached file takes exactly one of these routes:
 

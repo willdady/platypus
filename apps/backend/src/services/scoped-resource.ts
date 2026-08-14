@@ -1,4 +1,4 @@
-import { and, eq, or } from "drizzle-orm";
+import { and, eq, or, inArray, isNull } from "drizzle-orm";
 import {
   agent as agentTable,
   skill as skillTable,
@@ -78,6 +78,23 @@ export type ScopeContext = { orgId: string; wsId: string };
 type Database = typeof db;
 
 /**
+ * Whether a row is a **Shared resource** of this Organization: org-scoped, and at
+ * no Workspace. The two scope columns are mutually exclusive by a Zod refinement
+ * on write, not by a database constraint, so "has this organizationId" is not on
+ * its own enough — a row holding both belongs to its Workspace and must not reach
+ * another one on the strength of the org column. Absent rows are not Shared, so a
+ * dangling id fails this too.
+ *
+ * Exported because the Promotion guard (`findNonSharedReferences`) asks the same
+ * question of rows it fetched itself.
+ */
+export const isSharedRow = (
+  row:
+    { organizationId: string | null; workspaceId: string | null } | undefined,
+  orgId: string,
+): boolean => !!row && row.organizationId === orgId && !row.workspaceId;
+
+/**
  * Resolves a single resource visible inside this Workspace, or `null` when it
  * is not visible here. A Workspace-scoped row matches directly; an
  * Organization-scoped (Shared) row is visible only where an Attachment for this
@@ -107,10 +124,13 @@ export const resolveScoped = async <T extends ScopedResourceType>(
   const row = rows[0] as RowOf[T] | undefined;
   if (!row) return null;
 
-  const isOrgScoped = !!row.organizationId && !row.workspaceId;
-  if (!isOrgScoped) {
+  // Classified by which scope the row actually carries, not by elimination: a row
+  // holding both columns would otherwise fall through to "workspace" and be
+  // visible here on the strength of its organizationId alone.
+  if (row.workspaceId === ctx.wsId) {
     return { row, scope: "workspace" };
   }
+  if (!isSharedRow(row, ctx.orgId)) return null;
 
   // A Shared resource is visible here only through an Attachment (ADR-0007).
   const [attached] = await database
@@ -129,24 +149,34 @@ export const resolveScoped = async <T extends ScopedResourceType>(
 };
 
 /**
- * Lists every resource of this type visible in the Workspace: its
- * Workspace-scoped rows plus the Organization-scoped (Shared) rows attached to
- * it. Never throws.
+ * Lists the resources of this type visible in the Workspace: its Workspace-scoped
+ * rows plus the Organization-scoped (Shared) rows attached to it. `ids` narrows
+ * both to a known set of references — pass it through `listScopedByIds`, which
+ * handles the empty case. Never throws.
  */
 export const listScoped = async <T extends ScopedResourceType>(
   database: Database,
   type: T,
   ctx: ScopeContext,
+  ids?: string[],
 ): Promise<{ row: RowOf[T]; scope: Scope }[]> => {
   const { table } = REGISTRY[type];
 
   const workspaceRows = await database
     .select()
     .from(table)
-    .where(eq(table.workspaceId, ctx.wsId));
+    .where(
+      and(
+        eq(table.workspaceId, ctx.wsId),
+        ids ? inArray(table.id, ids) : undefined,
+      ),
+    );
 
   // Shared rows appear in a Workspace only where attached (ADR-0007) — gate by
-  // an inner join on the Attachment table.
+  // an inner join on the Attachment table. `isNull(workspaceId)` is what makes
+  // the row org-scoped: the scope columns are mutually exclusive on write, not by
+  // a database constraint, so a row carrying both must not reach another
+  // Workspace through that Workspace's Attachment.
   const attachedRows = await database
     .select()
     .from(table)
@@ -158,7 +188,13 @@ export const listScoped = async <T extends ScopedResourceType>(
         eq(attachmentTable.workspaceId, ctx.wsId),
       ),
     )
-    .where(eq(table.organizationId, ctx.orgId));
+    .where(
+      and(
+        eq(table.organizationId, ctx.orgId),
+        isNull(table.workspaceId),
+        ids ? inArray(table.id, ids) : undefined,
+      ),
+    );
 
   // The inner-join rows are keyed by the table's name, which matches the
   // resource type for every dual-scope table (`agent`, `skill`, `mcp`,
@@ -176,6 +212,22 @@ export const listScoped = async <T extends ScopedResourceType>(
     ...orgRows.map((row) => ({ row, scope: "organization" as const })),
   ];
 };
+
+/**
+ * The subset of `ids` visible in this Workspace, each with its scope — the
+ * single authority for "which of these references may this Workspace use?".
+ * Ids that resolve to nothing are simply absent, so a caller can compare against
+ * what it asked for (a save-time rejection) or carry on without them (a
+ * run-time drop). Never throws; no query runs for an empty `ids`, which would
+ * otherwise reach the database as `IN ()`.
+ */
+export const listScopedByIds = <T extends ScopedResourceType>(
+  database: Database,
+  type: T,
+  ids: string[],
+  ctx: ScopeContext,
+): Promise<{ row: RowOf[T]; scope: Scope }[]> =>
+  ids.length === 0 ? Promise.resolve([]) : listScoped(database, type, ctx, ids);
 
 /**
  * Like `resolveScoped` but throws `NotFoundError` when the resource is not

@@ -1,17 +1,23 @@
-![](assets/platypus_256x256.png)
+<p align="center">
+  <img src="assets/platypus_256x256.png" alt="Platypus" width="256" height="256" />
+</p>
 
-# Platypus
+<h1 align="center">Platypus</h1>
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![TypeScript](https://img.shields.io/badge/TypeScript-5.9-blue.svg)](https://www.typescriptlang.org/)
-[![Next.js](https://img.shields.io/badge/Next.js-16-black.svg)](https://nextjs.org/)
-[![Hono](https://img.shields.io/badge/Hono-API-orange.svg)](https://hono.dev/)
-[![Docker](https://img.shields.io/badge/Docker-Ready-2496ED.svg)](https://www.docker.com/)
-[![pnpm](https://img.shields.io/badge/pnpm-workspace-F69220.svg)](https://pnpm.io/)
+<p align="center">
+  <strong>Self-hosted AI Agents for your whole team — on your infrastructure, your models, around the clock.</strong>
+</p>
 
-**A modern, multi-tenant platform for building and managing AI Agents.**
+<p align="center">
+  <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT" /></a>
+  <a href="https://www.typescriptlang.org/"><img src="https://img.shields.io/badge/TypeScript-5.9-blue.svg" alt="TypeScript" /></a>
+  <a href="https://nextjs.org/"><img src="https://img.shields.io/badge/Next.js-16-black.svg" alt="Next.js" /></a>
+  <a href="https://hono.dev/"><img src="https://img.shields.io/badge/Hono-API-orange.svg" alt="Hono" /></a>
+  <a href="https://www.docker.com/"><img src="https://img.shields.io/badge/Docker-Ready-2496ED.svg" alt="Docker" /></a>
+  <a href="https://pnpm.io/"><img src="https://img.shields.io/badge/pnpm-workspace-F69220.svg" alt="pnpm" /></a>
+</p>
 
-Platypus is an open-source, full-stack application designed to help you build AI agents. Built with a focus on extensibility and modern web standards, Platypus allows you to create agents that can reason, use tools, and interact with the world.
+Platypus is an open-source, full-stack application for building AI Agents that reason, use tools, and keep working when you aren't watching. You bring the models — hosted, proxied, or running on your own hardware — and Platypus gives you the Agents, the tools they call, the schedules they run on, and the multi-tenant boundaries that keep one team's work out of another's.
 
 🌐 **Visit the website at [platypus.chat](https://platypus.chat).**
 
@@ -21,22 +27,16 @@ Platypus is an open-source, full-stack application designed to help you build AI
 
 ## ✨ Key Features
 
-- **🏢 Multi-Tenancy:** Built-in support for Organizations and Workspaces to isolate data and manage teams.
-- **🤖 Agentic Workflows:** Create sophisticated agents with custom Instructions, model configurations, and tool assignments.
-- **✨ Skills:** Create reusable instruction sets that agents can dynamically load on-demand to handle specialized tasks.
-- **🧩 Sub-Agents:** Agents can delegate specialized tasks to other agents, enabling hierarchical multi-agent workflows with isolated contexts and result streaming.
-- **📱 Responsive Design:** A fully responsive interface that works seamlessly across desktop, tablet, and mobile devices.
-- **🔌 MCP Support:** First-class support for the **Model Context Protocol** (MCP), allowing agents to securely connect to local and remote data sources.
-- **📐 Blueprints _(experimental)_:** Define a named, organization-scoped set of shared resources (Agents, Skills, MCPs, Providers) and apply it to a Workspace to attach them all in one step. Applying is additive and idempotent, and it's a snapshot — editing a Blueprint never disturbs Workspaces you've already provisioned from it.
-- **🏖️ Sandbox _(experimental)_:** Give agents shell and filesystem access inside an isolated, per-workspace execution environment. Ships with a Docker reference backend (single-node / self-hosted only — see `compose.sandbox.yaml`); the adapter interface is pluggable so other backends can be contributed.
-- **🧠 Memory:** Platypus automatically extracts facts and preferences from your conversations in the background and injects them into future chats, so agents remember things about you over time.
-- **📋 Kanban Boards:** Organize work visually with drag-and-drop Kanban boards. Agents can create, move, and update cards autonomously via built-in Kanban tools.
-- **📊 Dashboards _(experimental)_:** Build widget-based dashboards to surface agent data at a glance. Supports metric, text/markdown, image, weather, line chart, bar chart, and pie chart widgets with a drag-and-drop layout editor. Agents can update widget data autonomously via built-in dashboard tools.
-- **🔔 Webhooks:** Receive real-time HTTP callbacks for notification events, with per-event filtering, custom headers, HMAC-SHA256 signing, and automatic retries.
-- **⏰ Schedules:** Schedule agents to run automatically at specified times using cron expressions, with support for timezones and one-off executions.
-- **⚡ Modern Tech Stack:** Built on the bleeding edge with **Next.js**, **Hono.js**, **Drizzle ORM**, **pgvector**, and **Tailwind CSS**.
-- **🌐 Provider Agnostic:** Powered by the Vercel AI SDK, supporting OpenAI, Anthropic, Google, Amazon Bedrock, and OpenRouter.
-- **⚖️ MIT Licensed:** Open source and free to use.
+- **🤖 Agents, Skills & Sub-Agents:** Build an Agent once — model, instructions, and tools — then give it reusable Skills it loads on demand and sub-agents it can delegate to.
+- **🔌 MCP Support:** First-class **Model Context Protocol** support, so Agents connect securely to local and remote data sources.
+- **🏖️ Sandbox:** Shell and filesystem access inside an isolated, per-workspace execution environment, with pluggable Docker and SSH reference backends.
+- **🧠 Memory:** Facts and preferences are extracted from your conversations in the background and injected into future chats, so Agents remember you over time.
+- **📋 Boards & Dashboards:** Drag-and-drop Kanban boards and widget-based dashboards, both readable and updatable by Agents through built-in tools.
+- **⏰ Schedules & Webhooks:** Run Agents on cron schedules or one-offs, and receive HMAC-signed HTTP callbacks with per-event filtering and automatic retries.
+- **🏢 Multi-Tenancy:** Organizations and Workspaces isolate data and keep one team's work out of another's.
+- **📐 Blueprints:** Define an organization-scoped set of shared resources and apply it to a Workspace to attach them in one step — additive, idempotent, and a snapshot.
+- **🌐 Provider Agnostic:** Powered by the Vercel AI SDK — OpenAI, Anthropic, Google, Bedrock, and OpenRouter, plus Ollama, vLLM, and any OpenAI-compatible endpoint.
+- **⚖️ MIT Licensed:** Open source and free to use, on hardware you control.
 
 ![](assets/01_screenshot.png)
 

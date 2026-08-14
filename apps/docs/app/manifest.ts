@@ -5,7 +5,7 @@ const manifest = (): MetadataRoute.Manifest => ({
   name: "Platypus Docs",
   short_name: "Platypus Docs",
   description:
-    "Documentation for Platypus — build and manage AI agents with tool support and multi-provider capabilities.",
+    "Documentation for Platypus — self-hosted, always-on AI agents running on your own models and infrastructure.",
   start_url: "/",
   display: "standalone",
   background_color: "#ffffff",

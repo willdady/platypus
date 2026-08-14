@@ -6,9 +6,9 @@ import { Callout, Steps } from "nextra/components";
 
 # Getting Started
 
-Platypus is a multi-tenant platform for building and managing AI agents — agents
-that reason, use tools, and connect to your data through the Model Context
-Protocol. This guide takes you from nothing to your first streamed reply.
+Platypus is a self-hosted platform for always-on AI agents — agents that reason,
+use tools, and connect to your data through the Model Context Protocol. This
+guide takes you from nothing to your first streamed reply.
 
 The fastest path is the Docker quick start below, then a five-step loop:
 **create a Workspace → configure a Provider → create an Agent → start a Chat →
@@ -154,8 +154,9 @@ Fill in the form:
 - **API Key** — your credential from that vendor.
 - **Models** — a repeatable list, not a text box. Click **Add model** for each
   one and type its id into the **Model ID** field (e.g. `gpt-4o`,
-  `claude-sonnet-4-6`). Leave **Alias** empty and **Advanced** collapsed for
-  now.
+  `claude-sonnet-4-6`). Leave **Alias** empty, **Context window** on **Not set**,
+  and **Advanced** collapsed for now — every one of them is optional, and you can
+  come back to them.
 
 Click **Save**.
 

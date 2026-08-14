@@ -14,11 +14,11 @@ const geistMono = Geist_Mono({
 });
 
 const brand = "Platypus";
-// ~54 chars: descriptive enough for search snippets while leading with the brand.
-const title = "Platypus — Self-Hosted Platform for Building AI Agents";
-// ~152 chars: trimmed to stay within Google's ~160-char snippet limit.
+// ~52 chars: descriptive enough for search snippets while leading with the brand.
+const title = "Platypus — Self-Hosted, Always-On AI Agents for Teams";
+// ~150 chars: trimmed to stay within Google's ~160-char snippet limit.
 const description =
-  "Platypus is a self-hosted, multi-tenant platform for building AI agents that reason, use tools, and connect to your data via the Model Context Protocol.";
+  "Platypus is a self-hosted platform for always-on AI Agents that reason, use tools, and run on your own models and infrastructure — for your whole team.";
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://platypus.chat"),
@@ -51,7 +51,7 @@ export const metadata: Metadata = {
         url: "/og.png",
         width: 1200,
         height: 630,
-        alt: "Platypus — build and manage AI agents with tool support and multi-provider capabilities.",
+        alt: "Platypus — always-on AI agents on infrastructure you control.",
       },
     ],
   },

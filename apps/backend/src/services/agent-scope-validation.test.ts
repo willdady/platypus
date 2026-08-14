@@ -77,6 +77,33 @@ describe("findNonSharedReferences (no-cascade rule)", () => {
     expect(blockers).toEqual([]);
   });
 
+  it("flags a reference that carries a workspace as well as the org", async () => {
+    // The scope columns are mutually exclusive on write, not by a database
+    // constraint. A row holding both is workspace-private in every other query,
+    // so counting it as Shared here would promote an Agent that borrows it.
+    mockDb.where
+      .mockResolvedValueOnce([
+        { id: "p1", name: "P", organizationId: orgId, workspaceId: null },
+      ])
+      .mockResolvedValueOnce([
+        {
+          id: "a1",
+          name: "Dual-scope Agent",
+          organizationId: orgId,
+          workspaceId: "ws-1",
+        },
+      ]);
+
+    const blockers = await findNonSharedReferences(orgId, {
+      providerId: "p1",
+      subAgentIds: ["a1"],
+    });
+
+    expect(blockers).toEqual([
+      { type: "subAgent", id: "a1", name: "Dual-scope Agent" },
+    ]);
+  });
+
   it("flags a missing reference using its id as the name fallback", async () => {
     mockDb.where
       .mockResolvedValueOnce([{ id: "p1", name: "P", organizationId: orgId }])

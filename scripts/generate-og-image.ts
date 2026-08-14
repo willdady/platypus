@@ -30,9 +30,9 @@ const BRAND_BRIGHT = "oklch(0.72 0.18 180)";
 
 // Headline is one weight with only "AI agents" in green — exactly like the
 // website's hero <h1>.
-const HERO_PRE = "Build and manage";
+const HERO_PRE = "Always-on";
 const HERO_ACCENT = "AI agents";
-const HERO_POST = "on your own terms";
+const HERO_POST = "on infrastructure you control";
 const URL_TEXT = "platypus.chat";
 
 // Assets live in the website's public dir; we embed them as data URIs so the
@@ -89,12 +89,15 @@ const html = /* html */ `<!doctype html>
       }
 
       .headline {
-        font-size: 74px;
+        /* Sized so the longest word ("infrastructure") fits the 420px text
+           column without running under the screenshot. */
+        font-size: 60px;
         font-weight: 800;
         line-height: 1.04;
         letter-spacing: -0.02em;
       }
-      .headline .accent { color: ${BRAND_BRIGHT}; }
+      /* nowrap keeps the accent phrase on one line rather than breaking mid-phrase. */
+      .headline .accent { color: ${BRAND_BRIGHT}; white-space: nowrap; }
 
       .url {
         margin-top: 32px;

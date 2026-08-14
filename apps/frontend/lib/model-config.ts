@@ -26,6 +26,16 @@ export type ModelConfigView = {
   passthroughFileTypes: string[];
   /** Cap on injected extracted-document text; undefined uses the shared default. */
   maxExtractedTextChars?: number;
+  /**
+   * Ceiling on a single reply from this model. Undefined sends nothing and
+   * leaves the provider's own default in place (issue #454).
+   */
+  maxOutputTokens?: number;
+  /**
+   * The vendor's published total token capacity, declared by an Org Admin
+   * (ADR-0018). Undefined means undeclared, which is the normal state.
+   */
+  contextWindow?: number;
 };
 
 /** Normalize a provider's models to objects, tolerating the legacy `string[]`. */
@@ -44,6 +54,8 @@ export const getModelConfigs = (
           alias: m.alias,
           passthroughFileTypes: m.passthroughFileTypes ?? [],
           maxExtractedTextChars: m.maxExtractedTextChars,
+          maxOutputTokens: m.maxOutputTokens,
+          contextWindow: m.contextWindow,
         },
   );
 
@@ -115,6 +127,21 @@ export const getPassthroughFileTypes = (
         apiMode: provider.apiMode,
       });
 };
+
+/**
+ * The total token capacity declared for a model, or `undefined` where none was
+ * declared (ADR-0018) — which is the normal state and the reason the context
+ * meter has a hidden mode.
+ *
+ * No default to fall back to, unlike the passthrough types above: nothing can
+ * discover a context window, so an undeclared one stays unknown rather than
+ * being guessed at.
+ */
+export const getContextWindow = (
+  provider: Pick<Provider, "modelIds">,
+  modelId: ConcreteModelId,
+): number | undefined =>
+  getModelConfigs(provider).find((m) => m.id === modelId)?.contextWindow;
 
 /**
  * Classify an attachment against a model's passthrough set — the metadata-only

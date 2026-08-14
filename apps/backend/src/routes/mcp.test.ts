@@ -48,6 +48,38 @@ describe("MCP Routes", () => {
       expect(await res.json()).toEqual(mockMcp);
     });
 
+    it("takes the scope from the route, ignoring any scope in the body", async () => {
+      // A workspace-surface create is always Workspace-scoped. Spreading the body
+      // let a caller name another Workspace, or set organizationId and mint a
+      // Shared MCP here — which only an Org Admin may do (ADR-0006/0007).
+      mockSession();
+      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]); // requireOrgAccess
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-1", organizationId: "org-1" },
+      ]); // requireWorkspaceAccess
+
+      mockDb.returning.mockResolvedValueOnce([
+        { id: "mcp-1", name: "New MCP" },
+      ]);
+
+      const res = await app.request(baseUrl, {
+        method: "POST",
+        body: JSON.stringify({
+          name: "New MCP",
+          url: "http://mcp.com",
+          authType: "None",
+          workspaceId: "ws-somewhere-else",
+          organizationId: orgId,
+        }),
+        headers: { "Content-Type": "application/json" },
+      });
+
+      expect(res.status).toBe(201);
+      expect(mockDb.values).toHaveBeenCalledWith(
+        expect.objectContaining({ workspaceId, organizationId: null }),
+      );
+    });
+
     // ADR-0006: MCP config is admin-only unless the workspace's
     // mcpSelfManagement flag delegates it to the owner.
     const createBody = {
@@ -113,6 +145,8 @@ describe("MCP Routes", () => {
         .mockReturnValueOnce(mockDb) // requireWorkspaceAccess
         .mockResolvedValueOnce(workspaceMcps) // route: workspace-scoped query
         .mockResolvedValueOnce(orgMcps); // route: attached org-scoped query
+      // workspaceConfigAccess — mcpSelfManagement not delegated
+      mockDb.limit.mockResolvedValueOnce([{ flag: false }]);
 
       const res = await app.request(baseUrl);
       expect(res.status).toBe(200);
@@ -127,6 +161,61 @@ describe("MCP Routes", () => {
   });
 
   describe("GET /:mcpId", () => {
+    it("redacts bearerToken when the owner has no mcpSelfManagement", async () => {
+      // ADR-0006: an MCP stays listable and grantable without the delegation,
+      // but its stored request credentials must not be returned.
+      mockSession();
+      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-1", organizationId: "org-1" },
+      ]); // requireWorkspaceAccess
+      mockDb.limit.mockResolvedValueOnce([
+        {
+          id: "mcp-1",
+          name: "WS MCP",
+          workspaceId,
+          organizationId: null,
+          authType: "Bearer",
+          bearerToken: "tok-secret",
+          headers: { "X-Api-Key": "hdr-secret" },
+        },
+      ]);
+      mockDb.limit.mockResolvedValueOnce([{ flag: false }]); // not delegated
+
+      const res = await app.request(`${baseUrl}/mcp-1`);
+      expect(res.status).toBe(200);
+      const body = await res.text();
+      expect(body).not.toContain("tok-secret");
+      expect(body).not.toContain("hdr-secret");
+      const parsed = JSON.parse(body) as Record<string, unknown>;
+      expect(parsed).not.toHaveProperty("bearerToken");
+      expect(parsed.bearerTokenSet).toEqual({ configured: true });
+    });
+
+    it("reveals bearerToken to an org admin", async () => {
+      mockSession();
+      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]); // requireOrgAccess
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-1", organizationId: "org-1" },
+      ]); // requireWorkspaceAccess
+      mockDb.limit.mockResolvedValueOnce([
+        {
+          id: "mcp-1",
+          name: "WS MCP",
+          workspaceId,
+          organizationId: null,
+          authType: "Bearer",
+          bearerToken: "tok-secret",
+        },
+      ]);
+      // No delegation lookup: an org admin short-circuits workspaceConfigAccess.
+
+      const res = await app.request(`${baseUrl}/mcp-1`);
+      expect(res.status).toBe(200);
+      const parsed = (await res.json()) as Record<string, unknown>;
+      expect(parsed.bearerToken).toBe("tok-secret");
+    });
+
     it("returns a workspace-scoped MCP tagged scope workspace", async () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
@@ -137,6 +226,8 @@ describe("MCP Routes", () => {
       mockDb.limit.mockResolvedValueOnce([
         { id: "mcp-1", name: "WS MCP", workspaceId, organizationId: null },
       ]);
+      // workspaceConfigAccess — mcpSelfManagement not delegated
+      mockDb.limit.mockResolvedValueOnce([{ flag: false }]);
 
       const res = await app.request(`${baseUrl}/mcp-1`);
       expect(res.status).toBe(200);
@@ -162,6 +253,8 @@ describe("MCP Routes", () => {
       ]);
       // attachment check → attached here, so visible
       mockDb.limit.mockResolvedValueOnce([{ id: "att-1" }]);
+      // workspaceConfigAccess — mcpSelfManagement not delegated
+      mockDb.limit.mockResolvedValueOnce([{ flag: false }]);
 
       const res = await app.request(`${baseUrl}/mcp-org`);
       expect(res.status).toBe(200);

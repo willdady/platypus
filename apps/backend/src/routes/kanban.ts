@@ -36,10 +36,17 @@ import {
 } from "../middleware/authorization.ts";
 import type { Variables } from "../server.ts";
 import { calculateCardPosition } from "../utils/kanban-positioning.ts";
+import {
+  filterKnownLabelIds,
+  pruneCardLabelIds,
+} from "../utils/kanban-labels.ts";
+import { listScopedByIds } from "../services/scoped-resource.ts";
 
 /**
- * Validates that all assignees reference valid org members (users) or
- * workspace agents. Returns an error message string if invalid, or null if OK.
+ * Validates that all assignees reference valid org members (users) or Agents
+ * visible in this Workspace — its own, plus the Shared Agents attached to it
+ * (ADR-0007), which is the set the assignee picker offers and the set that can
+ * actually run here. Returns an error message string if invalid, or null if OK.
  */
 async function validateAssignees(
   assignees: { type: string; id: string }[],
@@ -67,17 +74,10 @@ async function validateAssignees(
           .from(user)
           .where(and(eq(user.role, "admin"), inArray(user.id, userIds)))
       : Promise.resolve([]),
-    agentIds.length > 0
-      ? db
-          .select({ id: agentTable.id })
-          .from(agentTable)
-          .where(
-            and(
-              eq(agentTable.workspaceId, workspaceId),
-              inArray(agentTable.id, agentIds),
-            ),
-          )
-      : Promise.resolve([]),
+    listScopedByIds(db, "agent", agentIds, {
+      orgId,
+      wsId: workspaceId,
+    }),
   ]);
 
   // Combine org members and super admins (who may not have an org membership record)
@@ -88,6 +88,57 @@ async function validateAssignees(
   if (validUserIds.size < userIds.length) return "Invalid user assignee";
   if (agentRecords.length !== agentIds.length) return "Invalid agent assignee";
   return null;
+}
+
+// Any query executor — the top-level `db` or a transaction handle.
+type Executor = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
+/**
+ * Removes label IDs the board no longer has from every card on that board.
+ * Board labels are an array on the board record and cards reference them by ID,
+ * so deleting a label would otherwise leave cards holding an ID that resolves
+ * to nothing. Only removes IDs — a card never gains a label here.
+ */
+async function pruneCardLabelsForBoard(
+  tx: Executor,
+  boardId: string,
+  labels: { id: string }[],
+): Promise<void> {
+  const cards = await tx
+    .select({ id: kanbanCardTable.id, labelIds: kanbanCardTable.labelIds })
+    .from(kanbanCardTable)
+    .where(
+      inArray(
+        kanbanCardTable.columnId,
+        tx
+          .select({ id: kanbanColumnTable.id })
+          .from(kanbanColumnTable)
+          .where(eq(kanbanColumnTable.boardId, boardId)),
+      ),
+    );
+
+  const stale = pruneCardLabelIds(
+    cards,
+    labels.map((l) => l.id),
+  );
+
+  for (const card of stale) {
+    await tx
+      .update(kanbanCardTable)
+      .set({ labelIds: card.labelIds, updatedAt: new Date() })
+      .where(eq(kanbanCardTable.id, card.id));
+  }
+}
+
+/** The board's label IDs, or an empty list if the board has none. */
+async function getBoardLabelIds(boardId: string): Promise<string[]> {
+  const boardRecord = await db
+    .select({ labels: kanbanBoardTable.labels })
+    .from(kanbanBoardTable)
+    .where(eq(kanbanBoardTable.id, boardId))
+    .limit(1);
+
+  return (boardRecord[0]?.labels ?? []).map((l: { id: string }) => l.id);
 }
 
 const kanban = new Hono<{ Variables: Variables }>();
@@ -211,16 +262,26 @@ kanban.put(
     const workspaceId = c.req.param("workspaceId")!;
     const data = c.req.valid("json");
 
-    const record = await db
-      .update(kanbanBoardTable)
-      .set({ ...data, updatedAt: new Date() })
-      .where(
-        and(
-          eq(kanbanBoardTable.id, boardId),
-          eq(kanbanBoardTable.workspaceId, workspaceId),
-        ),
-      )
-      .returning();
+    // Labels the update drops are gone from the board, so the cards using them
+    // lose them in the same transaction — otherwise a card is left holding an
+    // ID that resolves to nothing.
+    const record = await db.transaction(async (tx) => {
+      const updated = await tx
+        .update(kanbanBoardTable)
+        .set({ ...data, updatedAt: new Date() })
+        .where(
+          and(
+            eq(kanbanBoardTable.id, boardId),
+            eq(kanbanBoardTable.workspaceId, workspaceId),
+          ),
+        )
+        .returning();
+
+      if (updated.length > 0 && data.labels !== undefined) {
+        await pruneCardLabelsForBoard(tx, boardId, data.labels);
+      }
+      return updated;
+    });
 
     if (record.length === 0) {
       return c.json({ error: "Board not found" }, 404);
@@ -693,15 +754,7 @@ kanban.post(
 
     // Validate labelIds if provided
     if (data.labelIds && data.labelIds.length > 0) {
-      const boardRecord = await db
-        .select({ labels: kanbanBoardTable.labels })
-        .from(kanbanBoardTable)
-        .where(eq(kanbanBoardTable.id, boardId))
-        .limit(1);
-
-      const boardLabelIds = new Set(
-        (boardRecord[0]?.labels ?? []).map((l: { id: string }) => l.id),
-      );
+      const boardLabelIds = new Set(await getBoardLabelIds(boardId));
       const allValid = data.labelIds.every((id: string) =>
         boardLabelIds.has(id),
       );
@@ -773,23 +826,13 @@ kanban.put(
     const data = c.req.valid("json");
     const user = c.get("user")!;
 
-    // Validate labelIds if provided
-    if (data.labelIds && data.labelIds.length > 0) {
-      const boardRecord = await db
-        .select({ labels: kanbanBoardTable.labels })
-        .from(kanbanBoardTable)
-        .where(eq(kanbanBoardTable.id, boardId))
-        .limit(1);
-
-      const boardLabelIds = new Set(
-        (boardRecord[0]?.labels ?? []).map((l: { id: string }) => l.id),
-      );
-      const allValid = data.labelIds.every((id: string) =>
-        boardLabelIds.has(id),
-      );
-      if (!allValid) {
-        return c.json({ error: "Invalid label ID" }, 400);
-      }
+    // Drop label IDs the board doesn't have rather than rejecting the update.
+    // A card can be left holding a deleted label's ID, and the dialog gives the
+    // user no way to see or deselect it — so rejecting would wedge the card.
+    // Saving it self-heals the card.
+    let labelIds = data.labelIds;
+    if (labelIds && labelIds.length > 0) {
+      labelIds = filterKnownLabelIds(labelIds, await getBoardLabelIds(boardId));
     }
 
     // Validate assignees if provided
@@ -809,6 +852,7 @@ kanban.put(
       .update(kanbanCardTable)
       .set({
         ...restData,
+        ...(labelIds !== undefined && { labelIds }),
         ...(dueDateStr !== undefined && {
           dueDate: dueDateStr ? new Date(dueDateStr) : null,
         }),

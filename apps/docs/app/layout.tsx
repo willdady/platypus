@@ -8,7 +8,7 @@ import "./globals.css";
 
 const title = "Platypus Docs";
 const description =
-  "Documentation for Platypus — build and manage AI agents with tool support and multi-provider capabilities.";
+  "Documentation for Platypus — self-hosted, always-on AI agents running on your own models and infrastructure.";
 
 // Shared OG/Twitter bases. Exported so per-page `generateMetadata`
 // (app/[[...mdxPath]]/page.tsx) can spread them when mirroring the page title:
@@ -30,7 +30,7 @@ export const openGraph: Metadata["openGraph"] = {
       url: "/og.png",
       width: 1200,
       height: 630,
-      alt: "Platypus — build and manage AI agents with tool support and multi-provider capabilities.",
+      alt: "Platypus — always-on AI agents on infrastructure you control.",
     },
   ],
 };

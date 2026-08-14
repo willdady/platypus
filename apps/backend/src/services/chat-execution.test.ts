@@ -98,6 +98,7 @@ import {
   composeWebBackend,
   registerWebBackend,
 } from "../web-backends/index.ts";
+import { registerToolSet } from "../tools/index.ts";
 import { logger } from "../logger.ts";
 import { FileValidationError } from "./file-gate.ts";
 import { resetExtractedTextCache } from "./file-extraction.ts";
@@ -337,6 +338,94 @@ describe("chat-execution", () => {
       ).rejects.toBeInstanceOf(NotFoundError);
     });
 
+    it("resolves a sub-agent at the invoking Workspace's scope, or org-scoped where attached", async () => {
+      const workspaceSubAgent = {
+        ...baseAgent,
+        id: "sub-ws",
+        name: "Research Agent",
+        description: "Looks things up.",
+      };
+      const orgSubAgent = {
+        ...baseAgent,
+        id: "sub-org",
+        name: "Shared Agent",
+        description: "Shared specialist.",
+        organizationId: "org-1",
+        workspaceId: null,
+      };
+      const parent = {
+        ...baseAgent,
+        subAgentIds: ["sub-ws", "sub-org"],
+      };
+
+      const queries = createInMemoryChatTurnQueries({
+        workspaces: [baseWorkspace],
+        agents: [parent, workspaceSubAgent, orgSubAgent],
+        providers: [baseProvider],
+        attachments: [
+          { workspaceId: "ws-1", resourceType: "agent", resourceId: "sub-org" },
+        ],
+      });
+
+      const turn = await prepareChatTurn(
+        { ...baseInput, request: { agentId: parent.id } },
+        queries,
+      );
+
+      expect(turn.stream.tools).toHaveProperty("delegateToResearchAgent");
+      expect(turn.stream.tools).toHaveProperty("delegateToSharedAgent");
+      expect(turn.stream.system).toContain("Research Agent");
+      expect(turn.stream.system).toContain("Shared Agent");
+      expect(turn.stream.system).not.toContain("## Unavailable Sub-Agents");
+    });
+
+    it("does not resolve a sub-agent that is not visible in the invoking Workspace, and reports it by id", async () => {
+      const foreignSubAgent = {
+        ...baseAgent,
+        id: "sub-foreign",
+        name: "Foreign Agent",
+        description: "Belongs to another workspace.",
+        workspaceId: "ws-other",
+      };
+      const detachedSharedSubAgent = {
+        ...baseAgent,
+        id: "sub-detached",
+        name: "Detached Agent",
+        description: "Shared but not attached here.",
+        organizationId: "org-1",
+        workspaceId: null,
+      };
+      const parent = {
+        ...baseAgent,
+        subAgentIds: ["sub-foreign", "sub-detached"],
+      };
+
+      const queries = createInMemoryChatTurnQueries({
+        workspaces: [baseWorkspace],
+        agents: [parent, foreignSubAgent, detachedSharedSubAgent],
+        providers: [baseProvider],
+      });
+
+      const turn = await prepareChatTurn(
+        { ...baseInput, request: { agentId: parent.id } },
+        queries,
+      );
+
+      // No delegate tool, and nothing read off the unresolvable rows reaches the
+      // prompt — the ids the parent's own configuration holds identify them.
+      expect(turn.stream.tools).not.toHaveProperty("delegateToForeignAgent");
+      expect(turn.stream.tools).not.toHaveProperty("delegateToDetachedAgent");
+      expect(turn.stream.system).not.toContain("Foreign Agent");
+      expect(turn.stream.system).not.toContain("Belongs to another workspace.");
+      expect(turn.stream.system).not.toContain("Detached Agent");
+      expect(turn.stream.system).not.toContain("Shared but not attached here.");
+
+      expect(turn.stream.system).toContain("## Unavailable Sub-Agents");
+      expect(turn.stream.system).toContain("`sub-foreign`");
+      expect(turn.stream.system).toContain("`sub-detached`");
+      expect(turn.stream.system).toContain("not available in this workspace");
+    });
+
     it("Direct Provider+Model selection persists the user's own prompt text, not the composed prompt", async () => {
       const queries = createInMemoryChatTurnQueries({
         workspaces: [{ ...baseWorkspace, context: "Ships on Fridays." }],
@@ -381,6 +470,115 @@ describe("chat-execution", () => {
       expect(turn.stream.temperature).toBe(0.7);
       // Direct turns default maxSteps to 1
       expect(turn.stream.maxSteps).toBe(1);
+    });
+
+    // `seed` used to be read straight off the request while the other five came
+    // from `agent || data`, so an Agent's stored Seed never reached the model.
+    it("sends the Agent's own seed, not the request's, on an Agent turn", async () => {
+      const seededAgent = { ...baseAgent, seed: 1234, temperature: 0.4 };
+      const queries = createInMemoryChatTurnQueries({
+        workspaces: [baseWorkspace],
+        agents: [seededAgent],
+        providers: [baseProvider],
+      });
+
+      const turn = await prepareChatTurn(
+        { ...baseInput, request: { agentId: seededAgent.id } },
+        queries,
+      );
+
+      expect(turn.stream.seed).toBe(1234);
+      expect(turn.stream.temperature).toBe(0.4);
+      // Agent-driven turns still don't persist generation params on the row.
+      expect(turn.resolved.seed).toBeUndefined();
+    });
+
+    it("still takes seed from the request on a Direct turn", async () => {
+      const queries = createInMemoryChatTurnQueries({
+        workspaces: [baseWorkspace],
+        providers: [baseProvider],
+      });
+
+      const turn = await prepareChatTurn(
+        {
+          ...baseInput,
+          request: { providerId: baseProvider.id, modelId: "gpt-4", seed: 99 },
+        },
+        queries,
+      );
+
+      expect(turn.stream.seed).toBe(99);
+      expect(turn.resolved.seed).toBe(99);
+    });
+
+    // The output ceiling comes off the PROVIDER's model entry, not the Agent or
+    // the request — it is a property of the (Provider, model) pair (issue #454).
+    it("streams the model's declared maxOutputTokens", async () => {
+      const cappedProvider = {
+        ...baseProvider,
+        modelIds: [
+          { id: "gpt-4", passthroughFileTypes: [], maxOutputTokens: 64000 },
+        ],
+      };
+      const queries = createInMemoryChatTurnQueries({
+        workspaces: [baseWorkspace],
+        agents: [baseAgent],
+        providers: [cappedProvider],
+      });
+
+      const turn = await prepareChatTurn(
+        { ...baseInput, request: { agentId: baseAgent.id } },
+        queries,
+      );
+
+      expect(turn.stream.maxOutputTokens).toBe(64000);
+    });
+
+    // Undeclared must stay undefined all the way to the SDK: any default of
+    // ours would change generation for every existing Provider.
+    it("leaves maxOutputTokens undefined when the model declares none", async () => {
+      const queries = createInMemoryChatTurnQueries({
+        workspaces: [baseWorkspace],
+        providers: [baseProvider],
+      });
+
+      const turn = await prepareChatTurn(
+        {
+          ...baseInput,
+          request: { providerId: baseProvider.id, modelId: "gpt-4" },
+        },
+        queries,
+      );
+
+      expect(turn.stream.maxOutputTokens).toBeUndefined();
+    });
+
+    // An alias reference resolves to the entry, so the ceiling follows a
+    // repoint rather than being looked up by the stored string.
+    it("takes maxOutputTokens from the entry an alias reference resolves to", async () => {
+      const aliasProvider = {
+        ...baseProvider,
+        modelIds: [
+          {
+            id: "gpt-4",
+            alias: "flagship",
+            passthroughFileTypes: [],
+            maxOutputTokens: 32000,
+          },
+        ],
+      };
+      const queries = createInMemoryChatTurnQueries({
+        workspaces: [baseWorkspace],
+        agents: [{ ...baseAgent, modelId: "alias:flagship" }],
+        providers: [aliasProvider],
+      });
+
+      const turn = await prepareChatTurn(
+        { ...baseInput, request: { agentId: baseAgent.id } },
+        queries,
+      );
+
+      expect(turn.stream.maxOutputTokens).toBe(32000);
     });
 
     it("Agent without an explicit maxSteps falls back to the default (15), not 1", async () => {
@@ -922,6 +1120,34 @@ describe("chat-execution", () => {
           /\[extracted text truncated: first 20 of \d+ characters\]/,
         );
       });
+    });
+  });
+
+  describe("Static tool-set resolution", () => {
+    it("propagates factory errors without falling back to MCP lookup", async () => {
+      const factoryError = new Error("tool-set factory failed");
+      const toolSetId = "test.throwing-factory";
+      registerToolSet(toolSetId, {
+        name: "Throwing test Tool set",
+        category: "Test",
+        tools: vi.fn().mockRejectedValue(factoryError),
+      });
+
+      const agentWithToolSet = { ...baseAgent, toolSetIds: [toolSetId] };
+      const queries = createInMemoryChatTurnQueries({
+        workspaces: [baseWorkspace],
+        agents: [agentWithToolSet],
+        providers: [baseProvider],
+      });
+      const getMcp = vi.spyOn(queries, "getMcp");
+
+      await expect(
+        prepareChatTurn(
+          { ...baseInput, request: { agentId: agentWithToolSet.id } },
+          queries,
+        ),
+      ).rejects.toBe(factoryError);
+      expect(getMcp).not.toHaveBeenCalled();
     });
   });
 

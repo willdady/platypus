@@ -13,10 +13,13 @@ import {
   XCircleIcon,
 } from "lucide-react";
 import type { ReactNode } from "react";
+import { ToolDuration } from "./tool-duration";
 
 export type DynamicToolHeaderProps = {
   title: string;
   state: DynamicToolUIPart["state"];
+  /** Recorded execution time, once the run has been persisted. */
+  durationMs?: number;
   className?: string;
 };
 
@@ -53,6 +56,7 @@ export const DynamicToolHeader = ({
   className,
   title,
   state,
+  durationMs,
   ...props
 }: DynamicToolHeaderProps) => (
   <CollapsibleTrigger
@@ -65,6 +69,7 @@ export const DynamicToolHeader = ({
     <div className="flex items-center gap-2">
       <WrenchIcon className="size-4 text-muted-foreground" />
       <span className="font-medium text-sm">{title}</span>
+      <ToolDuration durationMs={durationMs} />
       {getStatusBadge(state)}
     </div>
     <ChevronDownIcon className="size-4 text-muted-foreground transition-transform group-data-[state=open]:rotate-180" />

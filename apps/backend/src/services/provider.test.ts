@@ -156,6 +156,133 @@ describe("openProvider", () => {
     expect(mockCreateOpenRouter.creator).toHaveBeenCalled();
   });
 
+  describe("OpenRouter app attribution", () => {
+    const openRouter = (headers?: Record<string, string>) => {
+      openProvider({
+        ...baseProvider,
+        providerType: "OpenRouter" as const,
+        headers,
+      }).languageModel(concrete("openai/gpt-4"));
+      // The shared mock creator is typed as taking no args, so reach for the
+      // recorded config through `unknown`.
+      const [config] = mockCreateOpenRouter.creator.mock
+        .calls[0] as unknown as [{ headers: Record<string, string> }];
+      return config;
+    };
+
+    it("sends the Platypus attribution headers by default", () => {
+      expect(openRouter().headers).toEqual({
+        "HTTP-Referer": "https://github.com/willdady/platypus",
+        "X-OpenRouter-Title": "Platypus",
+        "X-OpenRouter-Categories": "personal-agent,general-chat",
+      });
+    });
+
+    it("drops every default once a provider sets any attribution header", () => {
+      // The three headers name one app. Keeping the Platypus title next to an
+      // operator's referer would title the operator's app page "Platypus".
+      expect(
+        openRouter({
+          "X-OpenRouter-Title": "Acme Corp",
+          "HTTP-Referer": "https://acme.example",
+        }).headers,
+      ).toEqual({
+        "X-OpenRouter-Title": "Acme Corp",
+        "HTTP-Referer": "https://acme.example",
+      });
+    });
+
+    it("sends no Platypus referer when a provider sets only a title", () => {
+      // A title alone attributes nothing on OpenRouter, but pairing it with the
+      // Platypus referer would put the operator's name on the project's page.
+      expect(openRouter({ "X-OpenRouter-Title": "Acme Corp" }).headers).toEqual(
+        {
+          "X-OpenRouter-Title": "Acme Corp",
+        },
+      );
+    });
+
+    it("matches overrides case-insensitively, leaving one entry per header", () => {
+      // HTTP header names are case-insensitive, so a differently-cased key must
+      // stand the defaults down rather than sit alongside one as a duplicate.
+      const headers = openRouter({
+        "http-referer": "https://acme.example",
+      }).headers;
+      expect(headers).toEqual({ "http-referer": "https://acme.example" });
+      expect(
+        Object.keys(headers).filter((k) => k.toLowerCase() === "http-referer"),
+      ).toHaveLength(1);
+    });
+
+    it("sends unrelated provider headers alongside the defaults", () => {
+      expect(openRouter({ "X-Acme-Trace": "abc123" }).headers).toEqual({
+        "HTTP-Referer": "https://github.com/willdady/platypus",
+        "X-OpenRouter-Title": "Platypus",
+        "X-OpenRouter-Categories": "personal-agent,general-chat",
+        "X-Acme-Trace": "abc123",
+      });
+    });
+
+    it("treats an empty HTTP-Referer as opting out of attribution entirely", () => {
+      // Title and categories are inert without a referer, so all three go.
+      expect(
+        openRouter({
+          "HTTP-Referer": "",
+          "X-OpenRouter-Title": "Ignored",
+          "X-Acme-Trace": "abc123",
+        }).headers,
+      ).toEqual({ "X-Acme-Trace": "abc123" });
+    });
+
+    it("opts out on a differently-cased empty referer", () => {
+      expect(openRouter({ "http-referer": "" }).headers).toEqual({});
+    });
+
+    it("treats a whitespace-only referer as blank", () => {
+      // A blank referer is unattributable, so it opts out rather than shipping.
+      expect(openRouter({ "HTTP-Referer": "   " }).headers).toEqual({});
+    });
+
+    it("opts out when any casing of the referer is blank", () => {
+      // An operator can write both casings. Resolving to a single key would let
+      // the non-empty one hide the blank and silently keep attribution on.
+      expect(
+        openRouter({
+          "http-referer": "",
+          "HTTP-Referer": "https://acme.example",
+        }).headers,
+      ).toEqual({});
+    });
+
+    it("passes a non-string header value through without crashing", () => {
+      // `headers` is cast, not parsed, on read from jsonb, so a malformed row
+      // must not take down every model call for the Provider.
+      const headers = { "HTTP-Referer": null } as unknown as Record<
+        string,
+        string
+      >;
+      // Not an opt-out — only a blank string is — so the row still counts as
+      // setting a referer and no Platypus default joins it.
+      expect(openRouter(headers).headers).toEqual({ "HTTP-Referer": null });
+    });
+  });
+
+  it.each([
+    ["OpenAI", () => mockCreateOpenAI.creator],
+    ["Bedrock", () => mockCreateAmazonBedrock.creator],
+    ["Google", () => mockCreateGoogleGenerativeAI.creator],
+    ["Anthropic", () => mockCreateAnthropic.creator],
+  ])("does not add attribution headers for %s", (providerType, creator) => {
+    openProvider({
+      ...baseProvider,
+      providerType: providerType as Provider["providerType"],
+      apiMode: "responses",
+    }).languageModel(concrete("some-model"));
+    expect(creator()).toHaveBeenCalledWith(
+      expect.objectContaining({ headers: undefined }),
+    );
+  });
+
   it("dispatches Bedrock to the Amazon Bedrock SDK", () => {
     openProvider({
       ...baseProvider,

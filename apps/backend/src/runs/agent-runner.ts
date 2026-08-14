@@ -1,6 +1,4 @@
 import {
-  APICallError,
-  LoadAPIKeyError,
   convertToModelMessages,
   createIdGenerator,
   createUIMessageStreamResponse,
@@ -9,6 +7,9 @@ import {
   stepCountIs,
   streamText,
 } from "ai";
+import { formatStreamError, isTruncatedByTokenLimit } from "./stream-error.ts";
+import { createMessageMetadata } from "./message-metadata.ts";
+import { applyToolDurations } from "./tool-durations.ts";
 import {
   prepareChatTurn,
   validateTurnAttachments,
@@ -16,6 +17,7 @@ import {
   type ToolActivityEvent,
 } from "../services/chat-execution.ts";
 import { logger } from "../logger.ts";
+import { rejectedToolInputs } from "../rejected-tool-input.ts";
 import { actorUserId, type WorkspaceScope } from "../scope.ts";
 import type { PlatypusUIMessage } from "../types.ts";
 import {
@@ -60,6 +62,15 @@ export type GenerateResult = {
 };
 
 /**
+ * One step's Context occupancy: the input tokens the vendor reported for it,
+ * which is the whole conversation as that call sent it (ADR-0018). `undefined`
+ * where the step reported none — nothing is estimated, and 0 would read as a
+ * measurement of an empty context.
+ */
+const stepOccupancy = (usage?: { inputTokens?: number }): number | undefined =>
+  typeof usage?.inputTokens === "number" ? usage.inputTokens : undefined;
+
+/**
  * Folds a single step's tool calls and usage into a running `RunStats`
  * accumulator. Mutates `stats` in place. Used by `onStepFinish` so the
  * sink can observe partial progress without waiting for the final result.
@@ -85,6 +96,13 @@ const accumulateStepStats = (
     stats.outputTokens =
       (stats.outputTokens ?? 0) + (step.usage.outputTokens ?? 0);
   }
+  // REPLACED, not summed, and outside the guard above: the whole conversation
+  // is in every step's input count, so the latest step is the current context
+  // size while the running totals are sums of context sizes (ADR-0018). A step
+  // that reports nothing — no count, or no usage object at all — clears the
+  // figure rather than leaving an earlier, smaller step's standing as if it
+  // were current, which is what a mid-run stats flush would otherwise publish.
+  stats.contextOccupancy = stepOccupancy(step.usage);
 };
 
 /**
@@ -92,7 +110,10 @@ const accumulateStepStats = (
  * `totalUsage`. Works for both stream and generate paths.
  */
 const computeStats = (result: {
-  steps: Array<{ toolCalls: Array<{ toolName: string }> }>;
+  steps: Array<{
+    toolCalls: Array<{ toolName: string }>;
+    usage?: { inputTokens?: number };
+  }>;
   totalUsage: { inputTokens?: number; outputTokens?: number };
 }): RunStats => {
   const toolCallCounts = new Map<string, number>();
@@ -104,11 +125,19 @@ const computeStats = (result: {
       );
     }
   }
+  // The FINAL step only. Scanning back for the most recent step that did report
+  // a count would answer with a smaller, earlier context as though it were the
+  // one the run ended on.
+  const contextOccupancy = stepOccupancy(result.steps.at(-1)?.usage);
   return {
     steps: result.steps.length,
     toolCalls: Array.from(toolCallCounts, ([name, count]) => ({ name, count })),
     inputTokens: result.totalUsage.inputTokens ?? 0,
     outputTokens: result.totalUsage.outputTokens ?? 0,
+    // Spread so a run whose Provider reported no usage stores no key at all,
+    // matching the schema's optional field: absent means unknown, and 0 would
+    // read as a measurement of an empty context.
+    ...(contextOccupancy === undefined ? {} : { contextOccupancy }),
   };
 };
 
@@ -318,6 +347,19 @@ export class AgentRunner {
     const onStep = (step: {
       toolCalls?: Array<{ toolName: string }>;
       usage?: { inputTokens?: number; outputTokens?: number };
+      // Both, deliberately. The unified union collapses any reason the
+      // provider adapter doesn't recognise into `other` — which is how
+      // Bedrock's `malformed_tool_use` becomes indistinguishable from a
+      // dozen other endings. The raw value is the only record of what the
+      // provider actually said (issue #406).
+      finishReason?: string;
+      rawFinishReason?: string;
+      /**
+       * The step's parts, read only for the tool calls that failed. Both the
+       * streaming and the unattended path record a `tool-error` here, so one
+       * callback covers both — `onChunk` would cover only streaming.
+       */
+      content?: unknown;
     }): void => {
       handle.bumpStep();
       accumulateStepStats(state.stats, step);
@@ -326,10 +368,32 @@ export class AgentRunner {
           runId: input.runId,
           step: state.stats.steps,
           toolCalls: step.toolCalls?.map((tc) => tc.toolName) ?? [],
+          finishReason: step.finishReason,
+          rawFinishReason: step.rawFinishReason,
           stats: state.stats,
         },
         "Step finished",
       );
+      if (isTruncatedByTokenLimit(step.finishReason)) {
+        logger.warn(
+          {
+            runId: input.runId,
+            step: state.stats.steps,
+            rawFinishReason: step.rawFinishReason,
+          },
+          "Step truncated at the output token limit",
+        );
+      }
+      // What the model actually emitted for a tool call that failed. At `debug`
+      // because tool arguments are model and user data: at the default
+      // `LOG_LEVEL=info` nothing is written, and an Operator diagnosing a
+      // recurrence raises the level (issue #421).
+      for (const rejected of rejectedToolInputs(step.content)) {
+        logger.debug(
+          { runId: input.runId, step: state.stats.steps, ...rejected },
+          "Tool call failed",
+        );
+      }
       // Sink decides write cadence (FlushScheduler in ChatSink).
       void sink
         .onProgress({
@@ -363,6 +427,11 @@ export class AgentRunner {
         ? [stepCountIs(state.turn.stream.maxSteps), noProgress.stopCondition]
         : [stepCountIs(state.turn.stream.maxSteps)],
       abortSignal: handle.signal,
+      // The Provider's declared ceiling for this model, or undefined when it
+      // declares none — which is what Bedrock needs, since its Converse request
+      // carries no `inferenceConfig.maxTokens` at all unless one is passed
+      // (issue #454).
+      maxOutputTokens: state.turn.stream.maxOutputTokens,
       temperature: state.turn.stream.temperature,
       topP: state.turn.stream.topP,
       topK: state.turn.stream.topK,
@@ -392,9 +461,27 @@ export class AgentRunner {
 
     logger.debug({ systemPrompt: modelArgs.system }, "System prompt for chat");
 
+    // How long each locally-executed tool took, keyed by `toolCallId`. The SDK
+    // has already measured it; we only hold onto it long enough to stamp it onto
+    // the outgoing chunks and onto the finished messages (see
+    // `injectToolDurations` and `applyToolDurations`). Provider-executed tools
+    // never reach this callback and so carry no duration.
+    const toolDurations = new Map<string, number>();
+
+    // Whether `onFinish` has handed over the finished messages. The two branches
+    // of the tee below race: the source can finish while the snapshot branch
+    // still has chunks buffered, and disposing the turn is real I/O that gives
+    // that branch time to drain. A snapshot arriving after the handover is
+    // strictly worse than what it would overwrite — same content, minus the
+    // tool durations — so the snapshot stops writing once this is set.
+    let finalMessagesReceived = false;
+
     const result = streamText({
       ...modelArgs,
       onStepFinish: (step) => onStep(step),
+      onToolExecutionEnd: ({ toolCall, toolExecutionMs }) => {
+        toolDurations.set(toolCall.toolCallId, toolExecutionMs);
+      },
     });
 
     // Build the UI message stream and tee it. The response body consumes
@@ -406,13 +493,18 @@ export class AgentRunner {
     const uiStream = result.toUIMessageStream<PlatypusUIMessage>({
       originalMessages: input.messages,
       generateMessageId: createIdGenerator({ prefix: "msg", size: 16 }),
-      messageMetadata: () =>
-        state.turn?.resolved.agentId
-          ? { agentId: state.turn.resolved.agentId }
-          : undefined,
+      messageMetadata: createMessageMetadata(
+        state.turn?.resolved.agentId,
+        toolDurations,
+      ),
       onError: (error) => formatStreamError(error),
       onFinish: async ({ messages: finalMessages }) => {
-        state.messages = finalMessages;
+        // Stamped onto the parts here as well as travelling out as metadata:
+        // this is the per-part form the persisted messages use, and the one a
+        // reload reads. Setting the flag first closes the snapshot branch's
+        // window to overwrite this, so the sink's terminal write observes it.
+        finalMessagesReceived = true;
+        state.messages = applyToolDurations(finalMessages, toolDurations);
         let status: RunStatus = "succeeded";
         let err: Error | undefined;
         if (handle.signal.aborted) {
@@ -445,6 +537,9 @@ export class AgentRunner {
               "Snapshot stream parse error",
             ),
         })) {
+          // Keep draining after the handover — the branch is still teed to a
+          // live source — but stop writing; `onFinish` has the better copy.
+          if (finalMessagesReceived) continue;
           state.messages = [...input.messages, message];
         }
       } catch (err) {
@@ -490,6 +585,13 @@ export class AgentRunner {
       });
 
       const stats = computeStats(result as Parameters<typeof computeStats>[0]);
+      // The terminal finish only, as on the streamed path: a step inside a tool
+      // loop can end at the ceiling and the run still recover. Set before
+      // `finalize`, which is what carries `state.stats` to `sink.onFinish` —
+      // the sink's record is the only channel an unattended run has.
+      if (isTruncatedByTokenLimit(result.finishReason)) {
+        stats.truncatedByTokenLimit = true;
+      }
       state.stats = stats;
 
       // The no-progress stop condition halts the loop cleanly (the SDK
@@ -504,6 +606,10 @@ export class AgentRunner {
             toolName: trip.toolName,
             count: trip.count,
             duration: Date.now() - startTime,
+            // Carried here too: this path returns before the completion log
+            // below, so without it a no-progress run records neither reason.
+            finishReason: result.finishReason,
+            rawFinishReason: result.rawFinishReason,
             stats,
           },
           "Run aborted: no progress",
@@ -512,11 +618,15 @@ export class AgentRunner {
         return { text: result.text, stats };
       }
 
+      // Nobody is watching an unattended run, so this log is the only record
+      // of how it ended. Carry both reasons for the same reason `onStep` does.
       logger.info(
         {
           runId: input.runId,
           duration: Date.now() - startTime,
           responseLength: result.text.length,
+          finishReason: result.finishReason,
+          rawFinishReason: result.rawFinishReason,
           stats,
         },
         "Run generate completed",
@@ -546,33 +656,6 @@ export class AgentRunner {
     }
   }
 }
-
-/**
- * Converts AI SDK errors into user-facing strings for the UI message stream.
- * Behaviour-preserving copy of the previous inline `onError` handler.
- */
-const formatStreamError = (error: unknown): string => {
-  logger.error({ error }, "Chat stream error");
-  if (LoadAPIKeyError.isInstance(error)) {
-    return "AI provider API key is missing or not configured.";
-  }
-  if (APICallError.isInstance(error)) {
-    if (error.statusCode === 401 || error.statusCode === 403) {
-      return "AI provider authentication failed. Your API key may be invalid or expired.";
-    }
-    if (error.statusCode === 429) {
-      return "AI provider rate limit exceeded. Please try again later.";
-    }
-    if (error.statusCode != null && error.statusCode >= 500) {
-      return "AI provider is currently unavailable. Please try again later.";
-    }
-    return `AI provider error: ${error.message}`;
-  }
-  if (error instanceof Error) {
-    return error.message;
-  }
-  return "An unexpected error occurred.";
-};
 
 /** Singleton runner — services and routes share one instance. */
 export const agentRunner = new AgentRunner();

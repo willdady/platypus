@@ -3,10 +3,10 @@ import type { MetadataRoute } from "next";
 // Served at /manifest.webmanifest and auto-linked by Next via <link rel="manifest">.
 // Enables "Add to Home Screen" and defines the app's name, icons, and theme.
 const manifest = (): MetadataRoute.Manifest => ({
-  name: "Platypus — Self-Hosted Platform for Building AI Agents",
+  name: "Platypus — Self-Hosted, Always-On AI Agents for Teams",
   short_name: "Platypus",
   description:
-    "Platypus is a self-hosted, multi-tenant platform for building AI agents that reason, use tools, and connect to your data via the Model Context Protocol.",
+    "Platypus is a self-hosted platform for always-on AI Agents that reason, use tools, and run on your own models and infrastructure — for your whole team.",
   start_url: "/",
   display: "standalone",
   background_color: "#ffffff",

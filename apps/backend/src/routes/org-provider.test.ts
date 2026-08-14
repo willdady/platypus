@@ -115,7 +115,51 @@ describe("Organization Provider Routes", () => {
 
       const res = await app.request(baseUrl);
       expect(res.status).toBe(200);
-      expect(await res.json()).toEqual({ results: mockProviders });
+      // A plain member may list Shared Providers — it is how one is selected —
+      // but credentials are Org-Admin-only (ADR-0006), so the row comes back
+      // with the secret fields replaced by presence flags.
+      expect(await res.json()).toEqual({
+        results: [
+          {
+            id: "p1",
+            name: "Org OpenAI",
+            apiKeySet: { configured: false },
+            headersSet: { configured: false },
+          },
+        ],
+      });
+    });
+
+    it("redacts apiKey for a non-admin member", async () => {
+      mockSession();
+      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
+
+      mockDb.where
+        .mockReturnValueOnce(mockDb)
+        .mockResolvedValueOnce([
+          { id: "p1", name: "Org OpenAI", apiKey: "sk-secret" },
+        ]);
+
+      const res = await app.request(baseUrl);
+      expect(res.status).toBe(200);
+      const body = await res.text();
+      expect(body).not.toContain("sk-secret");
+    });
+
+    it("reveals apiKey to an org admin", async () => {
+      mockSession();
+      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]); // requireOrgAccess
+
+      mockDb.where
+        .mockReturnValueOnce(mockDb)
+        .mockResolvedValueOnce([
+          { id: "p1", name: "Org OpenAI", apiKey: "sk-secret" },
+        ]);
+
+      const res = await app.request(baseUrl);
+      expect(res.status).toBe(200);
+      const data = (await res.json()) as { results: Record<string, unknown>[] };
+      expect(data.results[0].apiKey).toBe("sk-secret");
     });
   });
 
@@ -132,7 +176,12 @@ describe("Organization Provider Routes", () => {
 
       const res = await app.request(`${baseUrl}/p1`);
       expect(res.status).toBe(200);
-      expect(await res.json()).toEqual(mockProvider);
+      // Credentials are Org-Admin-only (ADR-0006); see the list route.
+      expect(await res.json()).toEqual({
+        ...mockProvider,
+        apiKeySet: { configured: false },
+        headersSet: { configured: false },
+      });
     });
   });
 

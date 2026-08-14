@@ -61,6 +61,20 @@ export const createInMemoryChatTurnQueries = (
         a.workspaceId === workspaceId,
     );
 
+  /**
+   * The Agent visibility rule both Agent lookups apply: Workspace-scoped in the
+   * invoking workspace, or org-scoped (Shared) and attached here (ADR-0007).
+   */
+  const isAgentVisible = (
+    a: AgentRow,
+    orgId: string,
+    workspaceId: string,
+  ): boolean =>
+    a.workspaceId === workspaceId ||
+    (a.organizationId === orgId &&
+      !a.workspaceId &&
+      isAttached("agent", a.id, workspaceId));
+
   return {
     getWorkspace(id) {
       return Promise.resolve(fx.workspaces?.find((w) => w.id === id) ?? null);
@@ -75,17 +89,7 @@ export const createInMemoryChatTurnQueries = (
     getAgent(id, orgId, workspaceId) {
       const a = fx.agents?.find((a) => a.id === id) ?? null;
       if (!a) return Promise.resolve(null);
-      // Workspace-scoped Agent in this workspace.
-      if (a.workspaceId === workspaceId) return Promise.resolve(a);
-      // Org-scoped (Shared) Agent resolves only where attached (ADR-0007).
-      if (
-        a.organizationId === orgId &&
-        !a.workspaceId &&
-        isAttached("agent", id, workspaceId)
-      ) {
-        return Promise.resolve(a);
-      }
-      return Promise.resolve(null);
+      return Promise.resolve(isAgentVisible(a, orgId, workspaceId) ? a : null);
     },
 
     getProvider(id, orgId, workspaceId) {
@@ -143,10 +147,18 @@ export const createInMemoryChatTurnQueries = (
       return Promise.resolve(m);
     },
 
-    getSubAgentsByIds(ids) {
+    getSubAgentsByIds(ids, orgId, workspaceId) {
       if (ids.length === 0) return Promise.resolve([]);
+      // Same rule as getAgent — a sub-agent resolves in the invoking workspace,
+      // or at org scope where attached (ADR-0007). Enforced here rather than
+      // filtering by id alone, so tests exercise the boundary, not a hole in it.
+      const visible = (fx.agents ?? []).filter((a) =>
+        isAgentVisible(a, orgId, workspaceId),
+      );
       return Promise.resolve(
-        (fx.agents ?? []).filter((a) => ids.includes(a.id)),
+        ids
+          .map((id) => visible.find((a) => a.id === id))
+          .filter((a): a is AgentRow => a !== undefined),
       );
     },
 

@@ -35,6 +35,7 @@ import {
 import type { ComponentProps, ReactNode } from "react";
 import { createElement, isValidElement } from "react";
 import { CodeBlock } from "./code-block";
+import { ToolDuration } from "../tool-duration";
 
 /**
  * Converts a camelCase tool name (extracted from a `tool-*` type string)
@@ -185,6 +186,8 @@ export type ToolHeaderProps = {
   label?: string;
   type: ToolUIPart["type"];
   state: ToolUIPart["state"];
+  /** Recorded execution time, once the run has been persisted. */
+  durationMs?: number;
   className?: string;
 };
 
@@ -223,6 +226,7 @@ export const ToolHeader = ({
   label,
   type,
   state,
+  durationMs,
   ...props
 }: ToolHeaderProps) => {
   // getToolIcon returns a stable module-level Lucide icon; render via
@@ -249,6 +253,7 @@ export const ToolHeader = ({
             </span>
           )}
         </span>
+        <ToolDuration durationMs={durationMs} />
         {getStatusBadge(state)}
       </div>
       <ChevronDownIcon className="size-4 shrink-0 text-muted-foreground transition-transform group-data-[state=open]:rotate-180" />

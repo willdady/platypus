@@ -33,6 +33,28 @@ const AboutPage = () => {
           willdady/platypus <ExternalLink className="size-4" />
         </Link>
       </div>
+      <div className="mb-4">
+        <p className="text-sm text-muted-foreground mb-2">Website</p>
+        <Link
+          href="https://platypus.chat"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="hover:underline inline-flex items-center gap-1"
+        >
+          platypus.chat <ExternalLink className="size-4" />
+        </Link>
+      </div>
+      <div className="mb-4">
+        <p className="text-sm text-muted-foreground mb-2">Documentation</p>
+        <Link
+          href="https://docs.platypus.chat"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="hover:underline inline-flex items-center gap-1"
+        >
+          docs.platypus.chat <ExternalLink className="size-4" />
+        </Link>
+      </div>
     </div>
   );
 };

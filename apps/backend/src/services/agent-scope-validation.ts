@@ -7,6 +7,7 @@ import {
 } from "../db/schema.ts";
 import { eq, inArray } from "drizzle-orm";
 import { getToolSets } from "../tools/index.ts";
+import { isSharedRow } from "./scoped-resource.ts";
 
 /**
  * A reference that blocks Promotion because it is not itself Organization-scoped
@@ -55,11 +56,12 @@ export const findNonSharedReferences = async (
       id: providerTable.id,
       name: providerTable.name,
       organizationId: providerTable.organizationId,
+      workspaceId: providerTable.workspaceId,
     })
     .from(providerTable)
     .where(eq(providerTable.id, refs.providerId));
   const prov = providerRows[0];
-  if (!prov || prov.organizationId !== orgId) {
+  if (!isSharedRow(prov, orgId)) {
     blockers.push({
       type: "provider",
       id: refs.providerId,
@@ -75,13 +77,14 @@ export const findNonSharedReferences = async (
         id: skillTable.id,
         name: skillTable.name,
         organizationId: skillTable.organizationId,
+        workspaceId: skillTable.workspaceId,
       })
       .from(skillTable)
       .where(inArray(skillTable.id, skillIds));
     const byId = new Map(rows.map((r) => [r.id, r]));
     for (const id of skillIds) {
       const row = byId.get(id);
-      if (!row || row.organizationId !== orgId) {
+      if (!isSharedRow(row, orgId)) {
         blockers.push({ type: "skill", id, name: row?.name ?? id });
       }
     }
@@ -95,13 +98,14 @@ export const findNonSharedReferences = async (
         id: agentTable.id,
         name: agentTable.name,
         organizationId: agentTable.organizationId,
+        workspaceId: agentTable.workspaceId,
       })
       .from(agentTable)
       .where(inArray(agentTable.id, subAgentIds));
     const byId = new Map(rows.map((r) => [r.id, r]));
     for (const id of subAgentIds) {
       const row = byId.get(id);
-      if (!row || row.organizationId !== orgId) {
+      if (!isSharedRow(row, orgId)) {
         blockers.push({ type: "subAgent", id, name: row?.name ?? id });
       }
     }
@@ -119,13 +123,14 @@ export const findNonSharedReferences = async (
         id: mcpTable.id,
         name: mcpTable.name,
         organizationId: mcpTable.organizationId,
+        workspaceId: mcpTable.workspaceId,
       })
       .from(mcpTable)
       .where(inArray(mcpTable.id, mcpIds));
     const byId = new Map(rows.map((r) => [r.id, r]));
     for (const id of mcpIds) {
       const row = byId.get(id);
-      if (!row || row.organizationId !== orgId) {
+      if (!isSharedRow(row, orgId)) {
         blockers.push({ type: "mcp", id, name: row?.name ?? id });
       }
     }

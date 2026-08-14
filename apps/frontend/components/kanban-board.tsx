@@ -526,7 +526,7 @@ export function KanbanBoard({
       });
 
       try {
-        await fetch(joinUrl(baseUrl, `/cards/${active.id}/move`), {
+        const res = await fetch(joinUrl(baseUrl, `/cards/${active.id}/move`), {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -535,6 +535,7 @@ export function KanbanBoard({
           }),
           credentials: "include",
         });
+        if (!res.ok) throw new Error("Failed to move card");
         await mutate();
       } catch {
         toast.error("Failed to move card/column");
@@ -576,15 +577,19 @@ export function KanbanBoard({
   const confirmAddCard = useCallback(async () => {
     if (!newCardTitle.trim() || !addCardColumnId) return;
     try {
-      await fetch(joinUrl(baseUrl, `/columns/${addCardColumnId}/cards`), {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          title: newCardTitle.trim(),
-          ...(newCardLabelIds.length > 0 && { labelIds: newCardLabelIds }),
-        }),
-        credentials: "include",
-      });
+      const res = await fetch(
+        joinUrl(baseUrl, `/columns/${addCardColumnId}/cards`),
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            title: newCardTitle.trim(),
+            ...(newCardLabelIds.length > 0 && { labelIds: newCardLabelIds }),
+          }),
+          credentials: "include",
+        },
+      );
+      if (!res.ok) throw new Error("Failed to create card");
       setAddCardDialogOpen(false);
       setNewCardTitle("");
       setNewCardLabelIds([]);
@@ -695,22 +700,27 @@ export function KanbanBoard({
       if (!column) return;
       const { columnId: targetColumnId, ...updateData } = cardData;
       try {
-        await fetch(joinUrl(baseUrl, `/cards/${cardId}`), {
+        const res = await fetch(joinUrl(baseUrl, `/cards/${cardId}`), {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(updateData),
           credentials: "include",
         });
+        if (!res.ok) throw new Error("Failed to update card");
         if (targetColumnId && targetColumnId !== column.id) {
-          await fetch(joinUrl(baseUrl, `/cards/${cardId}/move`), {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              columnId: targetColumnId,
-              afterCardId: null,
-            }),
-            credentials: "include",
-          });
+          const moveRes = await fetch(
+            joinUrl(baseUrl, `/cards/${cardId}/move`),
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                columnId: targetColumnId,
+                afterCardId: null,
+              }),
+              credentials: "include",
+            },
+          );
+          if (!moveRes.ok) throw new Error("Failed to move card");
         }
         setDialogOpen(false);
         setSelectedCard(null);
@@ -730,10 +740,11 @@ export function KanbanBoard({
       );
       if (!column) return;
       try {
-        await fetch(joinUrl(baseUrl, `/cards/${cardId}`), {
+        const res = await fetch(joinUrl(baseUrl, `/cards/${cardId}`), {
           method: "DELETE",
           credentials: "include",
         });
+        if (!res.ok) throw new Error("Failed to delete card");
         setDialogOpen(false);
         setSelectedCard(null);
         updateCardIdParam(null);

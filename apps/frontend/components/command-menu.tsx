@@ -17,6 +17,7 @@ import {
   Zap,
   Radio,
   LayoutDashboard,
+  BookOpen,
 } from "lucide-react";
 
 import {
@@ -251,6 +252,21 @@ export function CommandMenu({ orgId, workspaceId }: CommandMenuProps) {
           >
             <Wrench />
             <span>MCP</span>
+          </CommandItem>
+          <CommandItem
+            className="cursor-pointer"
+            onSelect={() => {
+              runCommand(() =>
+                window.open(
+                  "https://docs.platypus.chat",
+                  "_blank",
+                  "noopener,noreferrer",
+                ),
+              );
+            }}
+          >
+            <BookOpen />
+            <span>Docs</span>
           </CommandItem>
           <CommandItem
             className="cursor-pointer"

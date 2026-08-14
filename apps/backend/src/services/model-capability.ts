@@ -116,6 +116,17 @@ export const pointerSettingModelId = (value: string): ConcreteModelId =>
   value as ConcreteModelId;
 
 /**
+ * The resolved entry for a model, or undefined when this Provider has no such
+ * model. Every per-model accessor below goes through it, so "what does this
+ * Provider say about this model?" is asked in exactly one place.
+ */
+const modelEntry = (
+  provider: Provider,
+  modelId: ConcreteModelId,
+): ModelConfig | undefined =>
+  resolveProviderModels(provider).find((m) => m.id === modelId);
+
+/**
  * The media types the given model ingests natively. Falls back to the
  * provider-type default when the model isn't found (defensive — callers should
  * validate the model id first).
@@ -124,7 +135,7 @@ export const passthroughFileTypesForModel = (
   provider: Provider,
   modelId: ConcreteModelId,
 ): string[] => {
-  const model = resolveProviderModels(provider).find((m) => m.id === modelId);
+  const model = modelEntry(provider, modelId);
   return model
     ? model.passthroughFileTypes
     : defaultPassthroughFileTypes(provider);
@@ -139,7 +150,35 @@ export const maxExtractedTextCharsForModel = (
   provider: Provider,
   modelId: ConcreteModelId,
 ): number =>
-  resolveExtractedTextCap(
-    resolveProviderModels(provider).find((m) => m.id === modelId)
-      ?.maxExtractedTextChars,
-  );
+  resolveExtractedTextCap(modelEntry(provider, modelId)?.maxExtractedTextChars);
+
+/**
+ * The output-token ceiling declared for this model, or `undefined` when the
+ * Provider declares none (issue #454).
+ *
+ * No default of its own, deliberately — unlike the extracted-text cap. An
+ * undeclared model must reach the SDK with no ceiling at all, exactly as it did
+ * before the field existed, because the sane value differs per provider and per
+ * model and only the vendor knows it. Declaring one is what rescues Amazon
+ * Bedrock, whose Converse API silently applies a low default when the field is
+ * absent.
+ */
+export const maxOutputTokensForModel = (
+  provider: Provider,
+  modelId: ConcreteModelId,
+): number | undefined => modelEntry(provider, modelId)?.maxOutputTokens;
+
+/**
+ * The total token capacity an Org Admin declared for this model, or `undefined`
+ * where none was declared (ADR-0018).
+ *
+ * No default either, for a different reason from the ceiling above: nothing can
+ * discover a context window, so an undeclared one stays unknown and every reader
+ * hides rather than guesses. Keyed on `(provider, model)` because the same model
+ * reached directly and through a proxy can honestly differ, and because the
+ * declaration lives on the model entry a Model alias carries its window with it.
+ */
+export const contextWindowForModel = (
+  provider: Provider,
+  modelId: ConcreteModelId,
+): number | undefined => modelEntry(provider, modelId)?.contextWindow;

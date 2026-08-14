@@ -76,11 +76,11 @@ the Agent later without you editing it.
 Two levels of control over how the model generates:
 
 - **Max steps** — how many steps a tool-calling loop may run before it stops.
-  This lives in the main form (default `15`). Raise it for Agents that chain many
-  tool calls; lower it to cap runaway loops. Unattended runs (triggers and
-  scheduled Agents) also stop early if the model makes no progress — repeating
-  the same tool call for the same result — so a stuck run won't burn its whole
-  step budget.
+  This lives in the main form (default `15`, and never below `1`). Raise it for
+  Agents that chain many tool calls; lower it to cap runaway loops. Unattended
+  runs (triggers and scheduled Agents) also stop early if the model makes no
+  progress — repeating the same tool call for the same result — so a stuck run
+  won't burn its whole step budget.
 - **Advanced settings** — expand this section for the optional sampling
   parameters. Leave any blank to use the Provider's default.
 
@@ -93,9 +93,14 @@ Two levels of control over how the model generates:
 | **Presence penalty**  | `-2`–`2` | Discourages repeating topics already present  |
 | **Frequency penalty** | `-2`–`2` | Discourages repeating the same tokens         |
 
-<Callout type="info">
-  Not every Provider or model honours every parameter — unsupported values are
-  ignored by the vendor.
+<Callout type="warning">
+  Not every Provider or model honours every parameter. Setting **Temperature**
+  and assuming the model used it is the trap: some Providers drop a parameter
+  they don't support, and some clamp it into a narrower range, and the run
+  succeeds either way with no sign in the UI. The backend log records each one at
+  `warn` level, naming the parameter, the Provider and the model. Ask your
+  Operator to search the log for the parameter — `temperature`, `seed` — after a
+  run to find out whether it reached the model.
 </Callout>
 
 ## Grant tools and Skills
@@ -133,9 +138,14 @@ Agent stay focused while specialists do the detailed work.
 ### What a sub-agent run does and doesn't get
 
 A sub-agent run is not a Chat turn, and it gets far less than the same Agent
-would get if you selected it on a Chat. It receives exactly four things: its own
-**model**, its own **Instructions** verbatim, its granted **Tool sets**, and its
-Provider's **security guardrails**. Plus the `task` string the parent wrote.
+would get if you selected it on a Chat. What it does get is everything that
+belongs to the Agent itself: its own **model**, its own **Instructions**
+verbatim, its granted **Tool sets**, its **Max steps** and **sampling
+parameters**, and its Provider's **security guardrails**. Plus the `task` string
+the parent wrote.
+
+An Agent generates the same way wherever it runs. Set Temperature on an Agent
+and a delegated run uses it, exactly as a Chat turn would.
 
 Everything else is absent:
 
@@ -158,6 +168,54 @@ Everything else is absent:
   Delegation is **one level deep**. An Agent running _as_ a sub-agent cannot
   delegate further — its own sub-agents are not wired up in that context. Design
   for a coordinator plus a flat set of specialists, not deep chains.
+</Callout>
+
+### When a sub-agent can't run
+
+Selecting a sub-agent in the form is not a guarantee it will be there at run
+time. Each one is resolved and built fresh on every turn, and three things stop
+it:
+
+- The sub-agent is **not available in this Workspace** — it was deleted, or it
+  is a Shared Agent that was detached from this Workspace or never attached to
+  it. A Shared Agent is only ever visible where it is attached, so a parent
+  attached to a second Workspace loses a sub-agent attached only to the first.
+- Its **Provider** no longer resolves in this Workspace — a Shared Provider that
+  was detached, say.
+- Its pinned **model** is gone from the Provider's model list.
+
+Any of these means **no delegate tool for that turn**. The parent Agent is told
+which ones are unavailable and why, so ask it and it will tell you. The switch
+stays flipped in the form either way: the assignment is still saved, it just
+can't be honoured right now. Re-attach the Agent, or fix its Provider or model,
+and the tool comes back on the next turn.
+
+<Callout type="warning">
+  "The Agent says it can't reach its sub-agent, but I can see the switch is on"
+  is the trap. The **Sub-Agents** card shows what you assigned, not what loaded.
+  Check the sub-agent is still attached to this Workspace, then open it and check
+  its Provider and model still resolve.
+</Callout>
+
+If the sub-agent builds but its run then fails part-way, the delegate tool
+reports an **error** rather than a short answer. Anything the sub-agent had
+written before the failure comes back with it, so the parent can say what was
+done and what wasn't instead of passing a half-finished reply off as the result.
+
+### When a sub-agent answer stops early
+
+A sub-agent writes against its own model's output ceiling, the same one that cuts
+a Chat reply short. Hit it and the delegated answer breaks off wherever it got
+to. That is not treated as a failure: the fragment comes back as the delegate's
+result, the parent Agent is told in the same breath that the answer is partial,
+and expanding the sub-agent's card in the Chat shows a muted line under the
+response reading **Sub-agent response cut short at the model's output limit.**
+
+<Callout type="warning">
+  The ceiling that applies is the sub-agent's own model's, not the parent's — a
+  parent on a large model can delegate to a small one and get a fragment back.
+  Split the work into narrower tasks, or pin the sub-agent to a model whose
+  output limit fits the answer you want.
 </Callout>
 
 Click **Save** to create the Agent. You can edit every field later from the same

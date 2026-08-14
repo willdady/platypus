@@ -3,22 +3,24 @@ import {
   type MCPClient,
 } from "@ai-sdk/mcp";
 import { openProvider, type OpenedProvider } from "./provider.ts";
-import { and, eq, or, inArray } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { db } from "../index.ts";
 import {
   agent as agentTable,
   context as contextTable,
   mcp as mcpTable,
   organization as organizationTable,
-  provider as providerTable,
   sandbox as sandboxTable,
-  skill as skillTable,
   workspace as workspaceTable,
-  attachment as attachmentTable,
 } from "../db/schema.ts";
 import { getToolSet } from "../tools/index.ts";
 import { createLoadSkillTool } from "../tools/skill.ts";
-import { createSubAgentTools } from "../tools/sub-agent.ts";
+import {
+  createSubAgentTools,
+  type SubAgentFailure,
+} from "../tools/sub-agent.ts";
+import { normalizeToolResult } from "./tool-result.ts";
+import { resolveSamplingSettings } from "./sampling-settings.ts";
 import {
   renderSystemPrompt,
   type SystemPromptContext,
@@ -29,6 +31,7 @@ import {
 } from "./memory-retrieval.ts";
 import {
   aliasNameFromReference,
+  DEFAULT_AGENT_MAX_STEPS,
   providerHasNativeSearch,
 } from "@platypus/schemas";
 import type { ConcreteModelId, Provider, Skill } from "@platypus/schemas";
@@ -42,6 +45,7 @@ import { buildMcpTransportConfig } from "./mcp-oauth-provider.ts";
 import { inlineFileUrls } from "../storage/utils.ts";
 import {
   maxExtractedTextCharsForModel,
+  maxOutputTokensForModel,
   passthroughFileTypesForModel,
   resolveModelId,
 } from "./model-capability.ts";
@@ -51,14 +55,7 @@ import {
   normalizeFileParts,
 } from "./file-gate.ts";
 import type { PlatypusUIMessage } from "../types.ts";
-
-/**
- * Default agentic step ceiling for an agent that has no explicit `maxSteps`.
- * Mirrors the new-agent create-form default. Keeps API-created agents sane
- * (a single step never lets a tool-calling agent finish its work) while
- * staying low enough to bound a model that fails to converge.
- */
-export const DEFAULT_AGENT_MAX_STEPS = 15;
+import { listScopedByIds, resolveScoped } from "./scoped-resource.ts";
 
 // --- Errors ---
 
@@ -146,6 +143,14 @@ export type ChatTurn = {
     system: string;
     messages: PlatypusUIMessage[];
     maxSteps: number;
+    /**
+     * The Provider's declared output ceiling for the model in use, or undefined
+     * when it declares none (issue #454). A property of the (Provider, model)
+     * pair rather than of the Agent or the request, unlike the sampling params
+     * below — which is why it is never mirrored into `resolved` and never
+     * persisted onto the Chat row.
+     */
+    maxOutputTokens?: number;
     temperature?: number;
     topP?: number;
     topK?: number;
@@ -239,7 +244,16 @@ export type ChatTurnQueries = {
     orgId: string,
     workspaceId: string,
   ): Promise<McpRow | null>;
-  getSubAgentsByIds(ids: string[]): Promise<AgentRow[]>;
+  /**
+   * The sub-Agents among `ids` that are visible in the invoking Workspace, in
+   * the order they were assigned. Ids that do not resolve are simply absent —
+   * the caller reports them as unavailable.
+   */
+  getSubAgentsByIds(
+    ids: string[],
+    orgId: string,
+    workspaceId: string,
+  ): Promise<AgentRow[]>;
   getUserContexts(
     userId: string,
     workspaceId: string,
@@ -256,28 +270,14 @@ export type ChatTurnQueries = {
 };
 
 /**
- * Whether an org-scoped Shared resource is attached to the given workspace
- * (ADR-0007). Org-scoped resources resolve at Chat-turn time only where attached.
+ * Every resource a Chat turn resolves goes through the Scoped-resource read
+ * module: Workspace-scoped rows, plus the Organization-scoped (Shared) rows
+ * attached to the invoking Workspace (ADR-0007). Each lookup below used to carry
+ * its own copy of that rule, and the copies drifted — the sub-Agent one had no
+ * scope filter at all, and each treated "has an organizationId, has no
+ * workspaceId" as the definition of Shared, which lets a row carrying both
+ * columns resolve in a Workspace that neither owns nor attached it.
  */
-const isAttached = async (
-  resourceType: "mcp" | "provider" | "skill" | "agent",
-  resourceId: string,
-  workspaceId: string,
-): Promise<boolean> => {
-  const rows = await db
-    .select()
-    .from(attachmentTable)
-    .where(
-      and(
-        eq(attachmentTable.workspaceId, workspaceId),
-        eq(attachmentTable.resourceType, resourceType),
-        eq(attachmentTable.resourceId, resourceId),
-      ),
-    )
-    .limit(1);
-  return rows.length > 0;
-};
-
 export const drizzleChatTurnQueries: ChatTurnQueries = {
   async getWorkspace(id) {
     const rows = await db
@@ -298,132 +298,68 @@ export const drizzleChatTurnQueries: ChatTurnQueries = {
   },
 
   async getAgent(id, orgId, workspaceId) {
-    // Resolve an Agent at either scope: the invoking workspace, or the
-    // organization (a Shared Agent — ADR-0007).
-    const rows = await db
-      .select()
-      .from(agentTable)
-      .where(
-        and(
-          eq(agentTable.id, id),
-          or(
-            eq(agentTable.workspaceId, workspaceId),
-            eq(agentTable.organizationId, orgId),
-          ),
-        ),
-      )
-      .limit(1);
-    const row = rows[0];
-    if (!row) return null;
     // A Shared Agent runs only in a Workspace it is attached to (ADR-0007); its
     // Sandbox/MCP tools still rebind to that invoking Workspace via loadTools.
-    if (
-      row.organizationId &&
-      !row.workspaceId &&
-      !(await isAttached("agent", id, workspaceId))
-    ) {
-      return null;
-    }
-    return row;
+    const found = await resolveScoped(db, "agent", id, {
+      orgId,
+      wsId: workspaceId,
+    });
+    return found?.row ?? null;
   },
 
   async getProvider(id, orgId, workspaceId) {
-    const rows = await db
-      .select()
-      .from(providerTable)
-      .where(
-        and(
-          eq(providerTable.id, id),
-          or(
-            eq(providerTable.workspaceId, workspaceId),
-            eq(providerTable.organizationId, orgId),
-          ),
-        ),
-      )
-      .limit(1);
-    const row = rows[0];
-    if (!row) return null;
-    // An org-scoped (Shared) Provider resolves only where attached (ADR-0007).
-    if (
-      row.organizationId &&
-      !row.workspaceId &&
-      !(await isAttached("provider", id, workspaceId))
-    ) {
-      return null;
-    }
-    return row as Provider;
+    const found = await resolveScoped(db, "provider", id, {
+      orgId,
+      wsId: workspaceId,
+    });
+    return (found?.row as Provider | undefined) ?? null;
   },
 
   async getSkillsByIds(ids, orgId, workspaceId) {
-    if (ids.length === 0) return [];
-    // Workspace-scoped Skills referenced by the Agent.
-    const workspaceSkills = await db
-      .select({ name: skillTable.name, description: skillTable.description })
-      .from(skillTable)
-      .where(
-        and(
-          eq(skillTable.workspaceId, workspaceId),
-          inArray(skillTable.id, ids),
-        ),
-      );
-
-    // Org-scoped (Shared) Skills resolve only where attached (ADR-0007) — gate
-    // by an inner join on the Attachment table for the invoking workspace.
-    const orgSkills = await db
-      .select({ name: skillTable.name, description: skillTable.description })
-      .from(skillTable)
-      .innerJoin(
-        attachmentTable,
-        and(
-          eq(attachmentTable.resourceId, skillTable.id),
-          eq(attachmentTable.resourceType, "skill"),
-          eq(attachmentTable.workspaceId, workspaceId),
-        ),
-      )
-      .where(
-        and(eq(skillTable.organizationId, orgId), inArray(skillTable.id, ids)),
-      );
+    const visible = await listScopedByIds(db, "skill", ids, {
+      orgId,
+      wsId: workspaceId,
+    });
 
     // A workspace-scoped Skill wins a name collision with an attached org-scoped
     // one, matching loadSkill's workspace-first resolution — so the advertised
     // list and the tool agree on which body the model loads, with no duplicate
     // entry in the system prompt.
-    const seen = new Set(workspaceSkills.map((s) => s.name));
-    return [...workspaceSkills, ...orgSkills.filter((s) => !seen.has(s.name))];
+    const workspaceSkills = visible.filter((s) => s.scope === "workspace");
+    const seen = new Set(workspaceSkills.map(({ row }) => row.name));
+    return [
+      ...workspaceSkills,
+      ...visible.filter(
+        (s) => s.scope === "organization" && !seen.has(s.row.name),
+      ),
+    ].map(({ row }) => ({ name: row.name, description: row.description }));
   },
 
   async getMcp(id, orgId, workspaceId) {
-    // Resolve an MCP referenced by an Agent's tool sets at either scope: the
-    // invoking workspace, or the organization (a Shared MCP — ADR-0007).
-    const rows = await db
-      .select()
-      .from(mcpTable)
-      .where(
-        and(
-          eq(mcpTable.id, id),
-          or(
-            eq(mcpTable.workspaceId, workspaceId),
-            eq(mcpTable.organizationId, orgId),
-          ),
-        ),
-      )
-      .limit(1);
-    const row = rows[0];
-    if (!row) return null;
-    // An org-scoped (Shared) MCP resolves only where attached (ADR-0007).
-    if (
-      row.organizationId &&
-      !row.workspaceId &&
-      !(await isAttached("mcp", id, workspaceId))
-    ) {
-      return null;
-    }
-    return row;
+    const found = await resolveScoped(db, "mcp", id, {
+      orgId,
+      wsId: workspaceId,
+    });
+    return found?.row ?? null;
   },
 
-  async getSubAgentsByIds(ids) {
-    if (ids.length === 0) return [];
-    return db.select().from(agentTable).where(inArray(agentTable.id, ids));
+  async getSubAgentsByIds(ids, orgId, workspaceId) {
+    // A sub-Agent resolves at the parent's Workspace scope, or at Organization
+    // scope where attached (ADR-0007) — the same rule `getAgent` applies, and the
+    // same authority the save-time check uses. Looked up by id alone, an Agent
+    // from another Workspace resolved here: its name and description reached this
+    // prompt, and its Provider then failed to resolve.
+    const visible = await listScopedByIds(db, "agent", ids, {
+      orgId,
+      wsId: workspaceId,
+    });
+
+    // Returned in assignment order so the prompt lists sub-agents the way the
+    // Operator configured them, not in whichever order the scope queries ran.
+    const byId = new Map(visible.map(({ row }) => [row.id, row]));
+    return ids
+      .map((id) => byId.get(id))
+      .filter((row): row is AgentRow => row !== undefined);
   },
 
   async getUserContexts(userId, workspaceId) {
@@ -613,7 +549,7 @@ export const prepareChatTurn = async (
   const [
     { tools, mcpClients },
     skills,
-    { subAgents, subAgentTools, subAgentMcpClients },
+    { subAgents, unavailableSubAgents, subAgentTools, subAgentMcpClients },
     userContexts,
     memories,
     sandboxEnvKeys,
@@ -654,6 +590,7 @@ export const prepareChatTurn = async (
     memories,
     skills,
     subAgents,
+    unavailableSubAgents,
     sandboxEnvKeys,
     fallbackInstructions: request.instructions,
     runMode,
@@ -725,12 +662,13 @@ export const prepareChatTurn = async (
       system: systemPrompt,
       messages: inlinedMessages,
       maxSteps: resolvedMaxSteps,
+      maxOutputTokens: maxOutputTokensForModel(provider, resolvedModelId),
       temperature: generation.temperature,
       topP: generation.topP,
       topK: generation.topK,
       frequencyPenalty: generation.frequencyPenalty,
       presencePenalty: generation.presencePenalty,
-      seed: request.seed,
+      seed: generation.seed,
     },
     resolved: {
       agentId: context.resolvedAgentId,
@@ -753,7 +691,7 @@ export const prepareChatTurn = async (
       topK: agent ? undefined : generation.topK,
       frequencyPenalty: agent ? undefined : generation.frequencyPenalty,
       presencePenalty: agent ? undefined : generation.presencePenalty,
-      seed: agent ? undefined : request.seed,
+      seed: agent ? undefined : generation.seed,
     },
     dispose,
   };
@@ -881,28 +819,16 @@ export const createToolHeartbeat = (
  * correctness no longer depends on those yields being frequent enough.
  */
 /**
- * Normalize a tool's final result into a JSON-serializable value.
+ * Re-exported so callers and tests that reach the normalizer through this
+ * module keep working. It lives in `tool-result.ts` because the sub-agent tool
+ * builder needs it too, and this module already imports that one.
  *
- * AI SDK v7 feeds each tool result into the next model step, where
- * `standardizePrompt()` validates tool-result parts against a strict JSON-value
- * schema. Non-JSON values — most commonly a raw `Date` from a Drizzle/`pg` query
- * row (a `createdAt`/`updatedAt` timestamp) — fail that validation and crash the
- * turn with `InvalidPromptError`. A JSON round-trip converts `Date` → ISO string
- * and drops `undefined`. Applied at the wrapper's result paths (promise-resolved
- * and synchronous return), it covers every current and future value-returning
- * tool at once. The async-iterable path (sub-agent tools) is intentionally
- * exempt — its yields are streamed UI parts, not the result fed to the model.
- *
- * Deliberate trade-off: a plain round-trip throws on `BigInt`. Tools are not
- * expected to return `BigInt`, so we accept that rather than complicate the
- * normalizer. A top-level `undefined`/function return (whose `JSON.stringify` is
- * `undefined`) is passed through unchanged instead of crashing `JSON.parse`.
+ * `wrapToolsWithBump` applies it at the promise-resolved and synchronous return
+ * paths, covering every value-returning tool on the parent turn at once. The
+ * async-iterable path (sub-agent delegate tools) is intentionally exempt — its
+ * yields are streamed UI parts, not the result fed to the model.
  */
-export const normalizeToolResult = (value: unknown): unknown => {
-  const json = JSON.stringify(value);
-  if (json === undefined) return value;
-  return JSON.parse(json);
-};
+export { normalizeToolResult };
 
 export const wrapToolsWithBump = (
   tools: Record<string, Tool>,
@@ -1071,19 +997,9 @@ const loadTools = async (
   }
 
   for (const toolSetId of agent.toolSetIds) {
+    let toolSet: ReturnType<typeof getToolSet>;
     try {
-      const toolSet = getToolSet(toolSetId);
-      const resolvedTools =
-        typeof toolSet.tools === "function"
-          ? await toolSet.tools({
-              workspaceId,
-              agentId: agent.id,
-              orgId,
-              frontendUrl,
-              userId: userId || "",
-            })
-          : toolSet.tools;
-      Object.assign(tools, resolvedTools);
+      toolSet = getToolSet(toolSetId);
     } catch {
       // Static tool set not found — fall back to MCP lookup.
       const mcp = await queries.getMcp(toolSetId, orgId, workspaceId);
@@ -1112,7 +1028,20 @@ const loadTools = async (
           `Tool set with id '${toolSetId}' not found as static tool set or MCP`,
         );
       }
+      continue;
     }
+
+    const resolvedTools =
+      typeof toolSet.tools === "function"
+        ? await toolSet.tools({
+            workspaceId,
+            agentId: agent.id,
+            orgId,
+            frontendUrl,
+            userId: userId || "",
+          })
+        : toolSet.tools;
+    Object.assign(tools, resolvedTools);
   }
 
   return { tools, mcpClients };
@@ -1123,21 +1052,10 @@ const resolveGenerationConfig = (
   agent: AgentRow | undefined,
   promptCtx: SystemPromptContext,
 ): GenerationConfig => {
-  const config: GenerationConfig = {};
-  const source = agent || data;
-
-  Object.assign(
-    config,
-    source.temperature != null && { temperature: source.temperature },
-    source.topP != null && { topP: source.topP },
-    source.topK != null && { topK: source.topK },
-    source.frequencyPenalty != null && {
-      frequencyPenalty: source.frequencyPenalty,
-    },
-    source.presencePenalty != null && {
-      presencePenalty: source.presencePenalty,
-    },
-  );
+  // `seed` is resolved from the same source as the other five. It used to be
+  // read straight off the request instead, so an Agent's stored Seed was
+  // silently ignored on every Agent-driven turn.
+  const config: GenerationConfig = resolveSamplingSettings(agent || data);
 
   config.systemPrompt = renderSystemPrompt(promptCtx);
   return config;
@@ -1153,6 +1071,14 @@ const loadSkills = async (
   return queries.getSkillsByIds(agent.skillIds, orgId, workspaceId);
 };
 
+/**
+ * Reason reported for an assigned sub-agent id that does not resolve in the
+ * invoking Workspace — deleted, or a Shared Agent detached from (or never
+ * attached to) this Workspace. Deliberately says nothing about the row itself.
+ */
+const UNRESOLVED_SUB_AGENT_REASON =
+  "not available in this workspace — it may have been deleted, or it is a shared agent that is not attached here";
+
 const loadSubAgents = async (
   queries: ChatTurnQueries,
   agent: AgentRow | undefined,
@@ -1162,24 +1088,37 @@ const loadSubAgents = async (
   onProgress?: () => void,
 ): Promise<{
   subAgents: Array<{ id: string; name: string; description?: string | null }>;
+  unavailableSubAgents: SubAgentFailure[];
   subAgentTools: Record<string, Tool>;
   subAgentMcpClients: MCPClient[];
 }> => {
   if (!agent?.subAgentIds || agent.subAgentIds.length === 0) {
-    return { subAgents: [], subAgentTools: {}, subAgentMcpClients: [] };
+    return {
+      subAgents: [],
+      unavailableSubAgents: [],
+      subAgentTools: {},
+      subAgentMcpClients: [],
+    };
   }
 
-  const subAgentRecords = await queries.getSubAgentsByIds(agent.subAgentIds);
+  const assignedIds = [...new Set(agent.subAgentIds)];
+  const subAgentRecords = await queries.getSubAgentsByIds(
+    assignedIds,
+    orgId,
+    workspaceId,
+  );
 
-  const subAgents = subAgentRecords.map((sa) => ({
-    id: sa.id,
-    name: sa.name,
-    description: sa.description,
-  }));
+  // An assigned id that does not resolve in this Workspace is reported by id
+  // alone: it is either gone, or a Shared Agent that is not attached here, and
+  // reading a name off the row is exactly the boundary crossing being avoided.
+  const resolvedIds = new Set(subAgentRecords.map((sa) => sa.id));
+  const unresolved: SubAgentFailure[] = assignedIds
+    .filter((id) => !resolvedIds.has(id))
+    .map((id) => ({ id, reason: UNRESOLVED_SUB_AGENT_REASON }));
 
   const subAgentMcpClients: MCPClient[] = [];
 
-  const subAgentTools = await createSubAgentTools(
+  const { tools: subAgentTools, failures } = await createSubAgentTools(
     subAgentRecords,
     async (providerId: string, modelId: string) => {
       const subProvider = await queries.getProvider(
@@ -1206,6 +1145,9 @@ const loadSubAgents = async (
       return {
         model: openProvider(subProvider).languageModel(subModelId),
         securityGuardrails: subProvider.securityGuardrails ?? null,
+        // Read off the sub-agent's OWN Provider, not the parent's: a delegated
+        // run is a run on that model and truncates at its ceiling (issue #454).
+        maxOutputTokens: maxOutputTokensForModel(subProvider, subModelId),
       };
     },
     async (subAgentId: string, toolSetIds: string[]) => {
@@ -1223,5 +1165,22 @@ const loadSubAgents = async (
     onProgress,
   );
 
-  return { subAgents, subAgentTools, subAgentMcpClients };
+  // The system prompt must describe only sub-agents that produced a callable
+  // tool. Listing one that dropped out tells the model to call a tool that was
+  // never registered, and the turn dies on AI_NoSuchToolError.
+  const failedIds = new Set(failures.map((f) => f.id));
+  const subAgents = subAgentRecords
+    .filter((sa) => !failedIds.has(sa.id))
+    .map((sa) => ({
+      id: sa.id,
+      name: sa.name,
+      description: sa.description,
+    }));
+
+  return {
+    subAgents,
+    unavailableSubAgents: [...unresolved, ...failures],
+    subAgentTools,
+    subAgentMcpClients,
+  };
 };

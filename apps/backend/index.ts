@@ -13,6 +13,7 @@ import { startMemoryScheduler } from "./src/jobs/memory-scheduler.ts";
 import { startTriggerScheduler } from "./src/jobs/trigger-scheduler.ts";
 import { loadPlugins } from "./src/plugins/loader.ts";
 import { setLoadedPlugins } from "./src/plugins/registry.ts";
+import { installProviderWarningLogger } from "./src/provider-warnings.ts";
 
 const PORT = process.env.PORT || "4001";
 
@@ -27,6 +28,11 @@ const signUpAdmin: AdminSignUp = async (input) => {
 
 const main = async () => {
   logger.info(`Serving on port: ${PORT}`);
+
+  // Before anything can generate: the AI SDK's warning hook is a process
+  // global, so this one call is what puts "the Provider ignored a setting you
+  // gave it" in the log for every generation path there is (#411).
+  installProviderWarningLogger();
 
   // A seed that cannot complete must not reach `serve()`: an HTTP server nobody
   // can authenticate against reports healthy while being unusable (#369). Retry

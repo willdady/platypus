@@ -47,6 +47,7 @@ agent.post(
   sValidator("json", agentCreateSchema),
   async (c) => {
     const data = c.req.valid("json");
+    const orgId = c.req.param("orgId")!;
     const workspaceId = c.req.param("workspaceId")!;
 
     // Deduplicate arrays
@@ -63,7 +64,7 @@ agent.post(
     // Validate sub-agent assignments
     if (data.subAgentIds && data.subAgentIds.length > 0) {
       const validation = await validateSubAgentAssignment(
-        workspaceId,
+        { orgId, wsId: workspaceId },
         "", // No ID yet for new agent
         data.subAgentIds,
       );
@@ -169,7 +170,7 @@ agent.put(
     // Workspace-scoped update.
     if (data.subAgentIds) {
       const validation = await validateSubAgentAssignment(
-        workspaceId,
+        { orgId, wsId: workspaceId },
         agentId,
         data.subAgentIds,
       );

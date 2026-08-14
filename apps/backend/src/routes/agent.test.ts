@@ -18,6 +18,30 @@ describe("Agent Routes", () => {
   const workspaceId = "ws-1";
   const baseUrl = `/organizations/${orgId}/workspaces/${workspaceId}/agents`;
 
+  /**
+   * Stubs the two terminal `where`s of the sub-agent visibility lookup: the
+   * workspace-scoped agents, then the org-scoped ones inner-joined to this
+   * workspace's attachments. `precedingWheres` covers the chainable `where`s the
+   * route makes first — org membership and workspace access on a POST, plus the
+   * agent lookup on a PUT.
+   */
+  const stubSubAgentVisibility = ({
+    precedingWheres,
+    workspaceRows = [],
+    attachedOrgRows = [],
+  }: {
+    precedingWheres: number;
+    workspaceRows?: unknown[];
+    attachedOrgRows?: unknown[];
+  }) => {
+    for (let i = 0; i < precedingWheres; i++) {
+      mockDb.where.mockReturnValueOnce(mockDb);
+    }
+    mockDb.where
+      .mockResolvedValueOnce(workspaceRows)
+      .mockResolvedValueOnce(attachedOrgRows);
+  };
+
   describe("POST /", () => {
     it("should return 401 if not authenticated", async () => {
       mockNoSession();
@@ -80,6 +104,51 @@ describe("Agent Routes", () => {
 
       expect(res.status).toBe(201);
       expect(await res.json()).toEqual(mockAgent);
+      expect(mockDb.insert).toHaveBeenCalled();
+    });
+
+    it("creates an agent that references an attached Shared agent as a sub-agent", async () => {
+      mockSession();
+      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-1", organizationId: "org-1" },
+      ]);
+
+      stubSubAgentVisibility({
+        precedingWheres: 2,
+        attachedOrgRows: [
+          {
+            agent: {
+              id: "shared-sub",
+              organizationId: orgId,
+              workspaceId: null,
+            },
+            attachment: { id: "att-1" },
+          },
+        ],
+      });
+
+      const mockAgent = {
+        id: "agent-1",
+        name: "Parent",
+        workspaceId,
+        subAgentIds: ["shared-sub"],
+      };
+      mockDb.returning.mockResolvedValueOnce([mockAgent]);
+
+      const res = await app.request(baseUrl, {
+        method: "POST",
+        body: JSON.stringify({
+          name: "Parent",
+          description: "A parent agent",
+          providerId: "p1",
+          modelId: "m1",
+          subAgentIds: ["shared-sub"],
+        }),
+        headers: { "Content-Type": "application/json" },
+      });
+
+      expect(res.status).toBe(201);
       expect(mockDb.insert).toHaveBeenCalled();
     });
 
@@ -284,6 +353,80 @@ describe("Agent Routes", () => {
       );
     });
 
+    it("accepts an attached Shared agent as a sub-agent, so a Promoted sub-Agent keeps its parent savable", async () => {
+      mockSession();
+      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-1", organizationId: "org-1" },
+      ]);
+      // findVisibleAgent → workspace-scoped agent
+      mockDb.limit.mockResolvedValueOnce([{ id: "agent-1", workspaceId }]);
+
+      stubSubAgentVisibility({
+        precedingWheres: 3,
+        attachedOrgRows: [
+          {
+            agent: {
+              id: "shared-sub",
+              organizationId: orgId,
+              workspaceId: null,
+            },
+            attachment: { id: "att-1" },
+          },
+        ],
+      });
+
+      mockDb.returning.mockResolvedValueOnce([
+        { id: "agent-1", name: "Parent", subAgentIds: ["shared-sub"] },
+      ]);
+
+      const res = await app.request(`${baseUrl}/agent-1`, {
+        method: "PUT",
+        body: JSON.stringify({
+          name: "Parent",
+          description: "A parent agent",
+          providerId: "p1",
+          modelId: "m1",
+          subAgentIds: ["shared-sub"],
+        }),
+        headers: { "Content-Type": "application/json" },
+      });
+
+      expect(res.status).toBe(200);
+      expect(mockDb.update).toHaveBeenCalled();
+    });
+
+    it("rejects a sub-agent that is not visible in this workspace at either scope", async () => {
+      mockSession();
+      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-1", organizationId: "org-1" },
+      ]);
+      // findVisibleAgent → workspace-scoped agent
+      mockDb.limit.mockResolvedValueOnce([{ id: "agent-1", workspaceId }]);
+
+      // Neither scope yields the referenced agent.
+      stubSubAgentVisibility({ precedingWheres: 3 });
+
+      const res = await app.request(`${baseUrl}/agent-1`, {
+        method: "PUT",
+        body: JSON.stringify({
+          name: "Parent",
+          description: "A parent agent",
+          providerId: "p1",
+          modelId: "m1",
+          subAgentIds: ["someone-elses-agent"],
+        }),
+        headers: { "Content-Type": "application/json" },
+      });
+
+      expect(res.status).toBe(400);
+      expect(await res.json()).toEqual({
+        error: "One or more sub-agents are not available in this workspace",
+      });
+      expect(mockDb.update).not.toHaveBeenCalled();
+    });
+
     it("should lock a shared agent for a workspace owner (non-admin)", async () => {
       mockSession();
       // requireOrgAccess → member
@@ -350,7 +493,7 @@ describe("Agent Routes", () => {
         { ownerId: "user-1", organizationId: "org-1" },
       ]);
       // Avatar lookup (agent has no avatar) — also confirms workspace row exists
-      mockDb.limit.mockResolvedValueOnce([{ avatarKey: null }]);
+      mockDb.limit.mockResolvedValueOnce([{ avatarKey: null, workspaceId }]);
 
       const res = await app.request(`${baseUrl}/agent-1`, {
         method: "DELETE",

@@ -159,13 +159,12 @@ export default function HomePage() {
         {/* Hero */}
         <Section className="flex flex-col items-center pt-24 text-center sm:pt-32">
           <h1 className="max-w-3xl text-balance text-4xl font-extrabold tracking-tight sm:text-6xl">
-            Build and manage{" "}
-            <span className="text-primary-bright">AI agents</span> on your own
-            terms
+            Always-on <span className="text-primary-bright">AI agents</span> on
+            infrastructure you control
           </h1>
           <p className="mt-6 max-w-2xl text-pretty text-lg text-muted-foreground sm:text-xl">
             Platypus is an open-source, MIT-licensed platform for agents that
-            reason, use tools, and connect to your data. Self-hosted and
+            reason, use tools, and run on a schedule. Self-hosted and
             multi-tenant — you bring the models, Platypus gives you everything
             around them.
           </p>

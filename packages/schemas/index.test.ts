@@ -23,12 +23,15 @@ import {
   extractableDocumentFormat,
   resolveExtractedTextCap,
   DEFAULT_MAX_EXTRACTED_TEXT_CHARS,
+  CONTEXT_WINDOW_MIN,
+  CONTEXT_WINDOW_MAX,
   MODEL_ALIAS_PREFIX,
   isAliasReference,
   aliasNameFromReference,
   modelReferenceFor,
   modelLabelFor,
   findModelEntry,
+  triggerRunStatsSchema,
 } from "./index";
 
 describe("Organization Schema", () => {
@@ -299,6 +302,24 @@ describe("Agent Schema", () => {
     const result = agentSchema.safeParse(agentWithOptionals);
     expect(result.success).toBe(true);
   });
+
+  // A maxSteps below 1 reaches `stepCountIs(n)`, which compares `n` against a
+  // step count that is never less than 1 — so it silently removes the ceiling
+  // instead of tightening it. Reject it here rather than at the run.
+  it.each([0, -1, 2.5])("should reject a maxSteps of %s", (maxSteps) => {
+    const result = agentSchema.safeParse({
+      id: "789",
+      workspaceId: "456",
+      providerId: "provider-123",
+      name: "Test Agent",
+      description: "A test agent",
+      modelId: "gpt-4",
+      maxSteps,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+    expect(result.success).toBe(false);
+  });
 });
 
 describe("Provider Create Schema", () => {
@@ -557,6 +578,150 @@ describe("Provider modelIds (per-model config)", () => {
         }).success,
       ).toBe(false);
     }
+  });
+
+  it("accepts a per-model maxOutputTokens override", () => {
+    const result = providerCreateSchema.safeParse({
+      ...base,
+      modelIds: [{ id: "qwen", maxOutputTokens: 64000 }],
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.modelIds[0].maxOutputTokens).toBe(64000);
+    }
+  });
+
+  // Optional on BOTH paths for the same reason the window is: a Provider saved
+  // untouched through the update schema must not become a 400.
+  it.each([
+    ["create", providerCreateSchema],
+    ["update", providerUpdateSchema],
+  ])(
+    "leaves maxOutputTokens undefined on %s when not declared",
+    (_, schema) => {
+      const result = schema.safeParse({ ...base, modelIds: [{ id: "qwen" }] });
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data.modelIds).toHaveLength(1);
+        expect(result.data.modelIds![0].maxOutputTokens).toBeUndefined();
+      }
+    },
+  );
+
+  it("rejects a non-positive or fractional maxOutputTokens", () => {
+    for (const value of [0, -1, 1.5]) {
+      expect(
+        providerCreateSchema.safeParse({
+          ...base,
+          modelIds: [{ id: "qwen", maxOutputTokens: value }],
+        }).success,
+        `maxOutputTokens ${value} should be rejected`,
+      ).toBe(false);
+    }
+  });
+
+  // No upper bound, unlike the Context window: the ceiling that matters is the
+  // model's own, Platypus cannot know it, and a value above it is the vendor's
+  // to reject.
+  it("accepts a maxOutputTokens far above any published ceiling", () => {
+    expect(
+      providerCreateSchema.safeParse({
+        ...base,
+        modelIds: [{ id: "qwen", maxOutputTokens: 10_000_000 }],
+      }).success,
+    ).toBe(true);
+  });
+
+  it("survives the legacy string[] coercion as undefined", () => {
+    const result = providerCreateSchema.safeParse({
+      ...base,
+      modelIds: ["gpt-4"],
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.modelIds[0].maxOutputTokens).toBeUndefined();
+    }
+  });
+
+  it("accepts a declared contextWindow", () => {
+    const result = providerCreateSchema.safeParse({
+      ...base,
+      modelIds: [{ id: "qwen", contextWindow: 128000 }],
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.modelIds[0].contextWindow).toBe(128000);
+    }
+  });
+
+  // Optional on BOTH paths, and deliberately so: a Provider configured before
+  // the field existed is edited through the update schema, and a
+  // create-vs-update divergence would make saving it untouched a 400.
+  it.each([
+    ["create", providerCreateSchema],
+    ["update", providerUpdateSchema],
+  ])("leaves contextWindow undefined on %s when not declared", (_, schema) => {
+    const result = schema.safeParse({ ...base, modelIds: [{ id: "qwen" }] });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      // Asserted, not optional-chained: a schema that dropped `modelIds`
+      // entirely would satisfy an `undefined` expectation vacuously.
+      expect(result.data.modelIds).toHaveLength(1);
+      expect(result.data.modelIds![0].contextWindow).toBeUndefined();
+    }
+  });
+
+  it("rejects a contextWindow that is zero, negative, fractional or out of bounds", () => {
+    // 128 is the case the floor exists for: an Org Admin typing the number of
+    // thousands. Silently accepting it would cripple every reading taken
+    // against it rather than fail where the mistake was made.
+    for (const value of [0, -1, 1.5, 128, 999, 10_000_001]) {
+      expect(
+        providerCreateSchema.safeParse({
+          ...base,
+          modelIds: [{ id: "qwen", contextWindow: value }],
+        }).success,
+        `contextWindow ${value} should be rejected`,
+      ).toBe(false);
+    }
+  });
+
+  it("accepts the exact bounds", () => {
+    for (const value of [CONTEXT_WINDOW_MIN, CONTEXT_WINDOW_MAX]) {
+      expect(
+        providerCreateSchema.safeParse({
+          ...base,
+          modelIds: [{ id: "qwen", contextWindow: value }],
+        }).success,
+        `contextWindow ${value} should be accepted`,
+      ).toBe(true);
+    }
+  });
+
+  it("keeps the alias namespace rule unaffected by a declared contextWindow", () => {
+    // The window rides on the same entry as the alias (ADR-0017), so a repoint
+    // moves it — but it is not part of what makes two entries clash.
+    const aliased = providerCreateSchema.safeParse({
+      ...base,
+      modelIds: [{ id: "qwen", alias: "flagship", contextWindow: 200000 }],
+    });
+    expect(aliased.success).toBe(true);
+    if (aliased.success) {
+      expect(aliased.data.modelIds[0]).toMatchObject({
+        alias: "flagship",
+        contextWindow: 200000,
+      });
+    }
+
+    expect(
+      providerCreateSchema.safeParse({
+        ...base,
+        modelIds: [
+          { id: "qwen", alias: "flagship", contextWindow: 200000 },
+          { id: "qwen-2", alias: "FLAGSHIP", contextWindow: 8000 },
+        ],
+      }).success,
+    ).toBe(false);
   });
 });
 
@@ -951,5 +1116,52 @@ describe("Model reference helpers", () => {
 
   it("never resolves an alias reference to a like-named concrete id", () => {
     expect(findModelEntry(models, "alias:gpt-4")).toBeUndefined();
+  });
+});
+
+describe("triggerRunStatsSchema", () => {
+  const base = {
+    steps: 3,
+    toolCalls: [{ name: "search", count: 2 }],
+    inputTokens: 900,
+    outputTokens: 120,
+  };
+
+  it("accepts a run that recorded Context occupancy", () => {
+    const result = triggerRunStatsSchema.safeParse({
+      ...base,
+      contextOccupancy: 42_000,
+    });
+    expect(result.success).toBe(true);
+    if (result.success) expect(result.data.contextOccupancy).toBe(42_000);
+  });
+
+  it("leaves occupancy undefined for a Provider that reported no usage", () => {
+    const result = triggerRunStatsSchema.safeParse(base);
+    expect(result.success).toBe(true);
+    if (result.success) expect(result.data.contextOccupancy).toBeUndefined();
+  });
+
+  it("keeps the cross-step token sums meaning what they meant", () => {
+    // Occupancy is a separate field precisely so these two keep their billing
+    // meaning — a reader of the trigger runs page must not find the same name
+    // holding a different quantity (ADR-0018).
+    const result = triggerRunStatsSchema.safeParse({
+      ...base,
+      contextOccupancy: 42_000,
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.inputTokens).toBe(900);
+      expect(result.data.outputTokens).toBe(120);
+    }
+  });
+
+  it("rejects a negative or fractional occupancy", () => {
+    for (const contextOccupancy of [-1, 1.5]) {
+      expect(
+        triggerRunStatsSchema.safeParse({ ...base, contextOccupancy }).success,
+      ).toBe(false);
+    }
   });
 });

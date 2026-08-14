@@ -8,6 +8,7 @@ import { dedupeArray } from "../utils.ts";
 import { requireAuth } from "../middleware/authentication.ts";
 import { requireOrgAccess } from "../middleware/authorization.ts";
 import { findNonSharedReferences } from "../services/agent-scope-validation.ts";
+import { SUB_AGENT_SELF_ASSIGNMENT_ERROR } from "../services/sub-agent-validation.ts";
 import { scrubDeletedAgentReference } from "../services/agent-references.ts";
 import { requireSharedDeletable } from "../services/scoped-resource.ts";
 import { storeAvatar, deleteAvatar } from "../services/avatar.ts";
@@ -79,10 +80,7 @@ orgAgent.put(
     if (data.subAgentIds) data.subAgentIds = dedupeArray(data.subAgentIds);
 
     if (data.subAgentIds?.includes(agentId)) {
-      return c.json(
-        { error: "An agent cannot assign itself as a sub-agent" },
-        400,
-      );
+      return c.json({ error: SUB_AGENT_SELF_ASSIGNMENT_ERROR }, 400);
     }
 
     // A Shared Agent may reference only other Shared resources (ADR-0007).

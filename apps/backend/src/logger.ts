@@ -1,4 +1,5 @@
 import pino from "pino";
+import { errorSerializers } from "./log-serializers.ts";
 
 const isProduction = process.env.NODE_ENV === "production";
 
@@ -21,6 +22,7 @@ const transport = pino.transport({
 export const logger = pino(
   {
     level: process.env.LOG_LEVEL || "info",
+    serializers: errorSerializers,
   },
   transport,
 );

@@ -40,7 +40,12 @@ import { fetcher, joinUrl } from "@/lib/utils";
 import { useResetOnChange } from "@/hooks/use-reset-on-change";
 import { useChatSettings } from "@/hooks/use-chat-settings";
 import { useModelSelection } from "@/hooks/use-model-selection";
-import { getPassthroughFileTypes, resolveModelId } from "@/lib/model-config";
+import {
+  getContextWindow,
+  getPassthroughFileTypes,
+  resolveModelId,
+} from "@/lib/model-config";
+import { ContextMeter } from "./context-meter";
 import { FileCompatibilityWarning } from "./file-compatibility-warning";
 import { useMessageEditing } from "@/hooks/use-message-editing";
 import { useChatTitlePoll } from "@/hooks/use-chat-title-poll";
@@ -452,6 +457,30 @@ export const Chat = ({
       ? getPassthroughFileTypes(resolvedProvider, concreteModelId)
       : [];
 
+  // Context occupancy (ADR-0018): the capacity comes from the Org Admin's
+  // declaration on the resolved model, the reading from the latest assistant
+  // message that CARRIES one. It rides in the message metadata, so it survives a
+  // reload rather than staying blank until the next send, and a cancelled turn
+  // keeps whatever the run reported.
+  //
+  // Latest-that-carries-one rather than simply the latest: a turn in flight has
+  // no reading until its first step finishes, and blanking the meter over that
+  // gap would hide it exactly while the reader is watching. A run that reported
+  // a count and then stopped reporting writes a concrete `null`, which IS
+  // carried and hides the meter — that erasure is deliberate, so the key's
+  // presence is the test rather than its value.
+  //
+  // Either number missing hides the meter; `ContextMeter` owns that decision.
+  const contextWindow =
+    resolvedProvider && concreteModelId
+      ? getContextWindow(resolvedProvider, concreteModelId)
+      : undefined;
+  const contextOccupancy = messages
+    .filter(
+      (m) => m.role === "assistant" && "contextOccupancy" in (m.metadata ?? {}),
+    )
+    .at(-1)?.metadata?.contextOccupancy;
+
   // Treat a server-side run-in-progress as if we were locally streaming,
   // so a tab that reconnects mid-run (or an unrelated tab opened on the
   // same chat) can't kick off a second concurrent run. The submit button
@@ -693,6 +722,10 @@ export const Chat = ({
                       </Dialog>
                     )}
                   </PromptInputTools>
+                  <ContextMeter
+                    occupancy={contextOccupancy?.inputTokens}
+                    contextWindow={contextWindow}
+                  />
                   <PromptInputSubmit status={effectiveStatus} />
                 </PromptInputFooter>
               </PromptInput>
