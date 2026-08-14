@@ -81,7 +81,7 @@ const baseProvider: Provider = {
   modelIds: [{ id: "gpt-4", passthroughFileTypes: [] }],
   apiKey: "sk-test",
   apiMode: "chat",
-  nativeSearchEnabled: true,
+  searchSource: "native",
   taskModelId: "gpt-4",
   memoryExtractionModelId: "gpt-4",
   createdAt: new Date(),

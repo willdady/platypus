@@ -61,16 +61,23 @@ export const provider = pgTable(
     organization: t.text("organization"),
     project: t.text("project"),
     apiMode: t.text("api_mode").notNull().default("responses"),
+    // Deprecated (ADR-0014) — superseded by `searchSource`. Kept, unread by
+    // the app, for one release: dropping a column a same-migration backfill
+    // still reads leaves no rollback path. Drop both in a later chore once
+    // `searchSource` has shipped a release.
     nativeSearchEnabled: t
       .boolean("native_search_enabled")
       .notNull()
       .default(true),
-    // The Web-search backend this provider serves search with (ADR-0014), or
-    // null for none. Free text, not an enum or FK: the valid set is whichever
-    // plugins the deployment loaded, which the database cannot know. A value
-    // whose plugin is later removed degrades to no search tools plus a
-    // warn-log, so no backfill or constraint is needed.
     webBackend: t.text("web_backend"),
+    // Which of "no search" / this provider's own tool / a plugin Web-search
+    // backend serves the chat search toggle (ADR-0014). Free text, not an
+    // enum or FK, for the same reason `webBackend` was: the valid backend-id
+    // set is whichever plugins the deployment loaded, which the database
+    // cannot know. A value whose plugin is later removed degrades to no
+    // search tools plus a warn-log, so no backfill or constraint is needed
+    // for that case.
+    searchSource: t.text("search_source").notNull().default("native"),
     // Free-text security directives appended last in the system prompt for
     // every run on this provider (and sub-agent runs resolved to it). Nullable
     // — existing providers are unchanged.

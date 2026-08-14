@@ -1090,6 +1090,17 @@ export const classifyFile = (
   return "reject";
 };
 
+/**
+ * The three-valued `searchSource` a Provider row stores (ADR-0014) —
+ * replaces the `nativeSearchEnabled` switch + `webBackend` select, which
+ * fought over the same slot ("this provider's own tool, a plugin backend, or
+ * neither" was two fields answering one question). `"none"` and `"native"`
+ * are the two reserved literals; anything else is a Web-search backend
+ * Contribution's `backend` discriminator.
+ */
+export const SEARCH_SOURCE_NONE = "none";
+export const SEARCH_SOURCE_NATIVE = "native";
+
 const providerBaseSchema = z.object({
   id: z.string(),
   organizationId: z.string().optional(),
@@ -1113,37 +1124,29 @@ const providerBaseSchema = z.object({
   organization: z.string().optional(),
   project: z.string().optional(),
   apiMode: providerApiModeSchema.default("responses"),
-  // When false, the provider's native web_search tool is never injected and the
-  // chat search toggle is hidden. Defaults to true so existing providers keep
-  // their built-in search. See issue #167 — provides a path to disable native
-  // search for OpenAI-compatible endpoints (e.g. vLLM) that can't honor it.
-  nativeSearchEnabled: z.boolean().default(true),
-  // The discriminator of the Web-search backend this provider serves search
-  // with, or null/absent for none (ADR-0014). A plugin-contributed backend fills
-  // the slot native search occupies, and takes precedence over it when set —
-  // which is what lets a provider with no native search (Bedrock, vLLM on the
-  // chat API) offer the toggle at all. Not validated against the registry here:
-  // the registry is a backend-runtime concern, and a stale id degrades to no
-  // search tools plus a warn-log rather than blocking the form.
+  // Which of "no search" / this provider's own tool / a plugin Web-search
+  // backend serves the chat search toggle (ADR-0014). Replaces the old
+  // `nativeSearchEnabled` + `webBackend` pair — a switch and
+  // a select cannot both gate the same slot without one of them being
+  // unreachable-false from the other. `SEARCH_SOURCE_NATIVE` is offered only
+  // when `providerHasNativeSearch`; any other non-reserved value is a backend
+  // discriminator, not validated against the registry here — the registry is
+  // a backend-runtime concern, and a stale id degrades to no search tools
+  // plus a warn-log rather than blocking the form.
+  //
+  // Defaults to `SEARCH_SOURCE_NATIVE` — the old defaults (`nativeSearchEnabled:
+  // true`, no `webBackend`) resolved to native whenever the provider was
+  // capable, so a brand-new Provider keeps that behaviour.
   //
   // Length-bounded because the value is free text that reaches a log line on
   // every searching turn; 200 is far above a namespaced plugin id
-  // (`@scope/name.backend`). `""` normalises to null so the column holds one
-  // representation of "no backend" — a form select's "None" option yields the
-  // empty string, and rejecting it with `.min(1)` would turn "none" into a 400
-  // instead of storing what the Operator meant.
-  //
-  // `.optional()` sits *outside* `.transform()` deliberately: a transform wraps
-  // the field in `ZodEffects`, which hides the optionality `z.infer` reads, so
-  // `.optional().transform(...)` would make `webBackend` a **required** key on
-  // `Provider` whose type merely includes `undefined` — every existing Provider
-  // literal that omits the field stops compiling.
-  webBackend: z
+  // (`@scope/name.backend`). `""` normalises to `SEARCH_SOURCE_NONE` so the
+  // column holds one representation of "no search", not two.
+  searchSource: z
     .string()
     .max(200)
-    .nullable()
-    .transform((value) => (value === "" ? null : value))
-    .optional(),
+    .default(SEARCH_SOURCE_NATIVE)
+    .transform((value) => (value === "" ? SEARCH_SOURCE_NONE : value)),
   // Free-text system-prompt security directives appended LAST (recency) to
   // every run on this provider — including sub-agent runs resolved to this
   // provider. Provider-scoped because guard strength is a property of the model
@@ -1282,28 +1285,59 @@ export const isPresentableUrl = (value: unknown): value is string => {
  */
 export const WEB_BACKEND_TOOL_MARKER = "platypusWebBackend";
 
-export const providerCreateSchema = providerBaseSchema.pick({
-  organizationId: true,
-  workspaceId: true,
-  name: true,
-  providerType: true,
-  apiKey: true,
-  region: true,
-  baseUrl: true,
-  headers: true,
-  extraBody: true,
-  organization: true,
-  project: true,
-  apiMode: true,
-  nativeSearchEnabled: true,
-  webBackend: true,
-  securityGuardrails: true,
-  modelIds: true,
-  taskModelId: true,
-  memoryExtractionModelId: true,
-  embeddingModelId: true,
-  embeddingDimensions: true,
-});
+/**
+ * Maps a legacy `nativeSearchEnabled` + `webBackend` payload onto
+ * `searchSource` (ADR-0014) — a one-release back-compat window for an API
+ * caller still `PUT`/`POST`ing the pre-collapse shape. Applied only when the
+ * payload omits `searchSource` outright; a caller sending both is assumed to
+ * know what it's doing, and `searchSource` wins untouched.
+ *
+ * Mirrors the exact precedence `resolveSearchMode` used to encode inline
+ * (`nativeSearchEnabled: false` beat a set `webBackend`), so a legacy payload
+ * resolves to the same search behaviour it did before the collapse.
+ */
+const withLegacySearchFields = (input: unknown): unknown => {
+  if (typeof input !== "object" || input === null) return input;
+  const data = input as Record<string, unknown>;
+  if (
+    "searchSource" in data ||
+    (!("nativeSearchEnabled" in data) && !("webBackend" in data))
+  ) {
+    return data;
+  }
+  const searchSource =
+    data.nativeSearchEnabled === false
+      ? SEARCH_SOURCE_NONE
+      : typeof data.webBackend === "string" && data.webBackend !== ""
+        ? data.webBackend
+        : SEARCH_SOURCE_NATIVE;
+  return { ...data, searchSource };
+};
+
+export const providerCreateSchema = z.preprocess(
+  withLegacySearchFields,
+  providerBaseSchema.pick({
+    organizationId: true,
+    workspaceId: true,
+    name: true,
+    providerType: true,
+    apiKey: true,
+    region: true,
+    baseUrl: true,
+    headers: true,
+    extraBody: true,
+    organization: true,
+    project: true,
+    apiMode: true,
+    searchSource: true,
+    securityGuardrails: true,
+    modelIds: true,
+    taskModelId: true,
+    memoryExtractionModelId: true,
+    embeddingModelId: true,
+    embeddingDimensions: true,
+  }),
+);
 
 // Sandbox
 
@@ -1421,26 +1455,28 @@ export const invitationListItemSchema = invitationSchema.extend({
 
 export type InvitationListItem = z.infer<typeof invitationListItemSchema>;
 
-export const providerUpdateSchema = providerBaseSchema.pick({
-  name: true,
-  providerType: true,
-  apiKey: true,
-  region: true,
-  baseUrl: true,
-  headers: true,
-  extraBody: true,
-  organization: true,
-  project: true,
-  apiMode: true,
-  nativeSearchEnabled: true,
-  webBackend: true,
-  securityGuardrails: true,
-  modelIds: true,
-  taskModelId: true,
-  memoryExtractionModelId: true,
-  embeddingModelId: true,
-  embeddingDimensions: true,
-});
+export const providerUpdateSchema = z.preprocess(
+  withLegacySearchFields,
+  providerBaseSchema.pick({
+    name: true,
+    providerType: true,
+    apiKey: true,
+    region: true,
+    baseUrl: true,
+    headers: true,
+    extraBody: true,
+    organization: true,
+    project: true,
+    apiMode: true,
+    searchSource: true,
+    securityGuardrails: true,
+    modelIds: true,
+    taskModelId: true,
+    memoryExtractionModelId: true,
+    embeddingModelId: true,
+    embeddingDimensions: true,
+  }),
+);
 
 export type ProviderUpdateData = z.infer<typeof providerUpdateSchema>;
 

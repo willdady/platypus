@@ -67,12 +67,11 @@ reply.
 The toggle is only there when the resolved Provider can search. It is **absent**
 when:
 
-- the Provider has no search of its own **and** no Web-search backend selected —
-  which covers **Bedrock**, and **OpenAI** with **API Mode** set to **Chat
+- the Provider's **Web search** field is set to **None**;
+- it is set to the vendor's built-in search, but the Provider has none — which
+  covers **Bedrock**, and **OpenAI** with **API Mode** set to **Chat
   Completions**, since vendor search runs on the Responses API only (so an
   OpenAI-compatible server — vLLM, Ollama, LiteLLM — has none);
-- an Org Admin has switched **Native web search** off on that Provider. That
-  switch currently disables a selected backend too, not only the vendor's search;
 - nothing has resolved yet, because no Agent or model is selected.
 
 <Callout type="warning">

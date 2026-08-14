@@ -17,7 +17,7 @@ const provider = (modelIds: unknown, over: Partial<Provider> = {}) =>
     providerType: "OpenAI",
     apiKey: "sk",
     apiMode: "chat",
-    nativeSearchEnabled: true,
+    searchSource: "native",
     modelIds,
     taskModelId: "gpt-4",
     memoryExtractionModelId: "gpt-4",

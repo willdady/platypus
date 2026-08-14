@@ -22,7 +22,7 @@ const baseProvider: Provider = {
   modelIds: [{ id: "text-embedding-3-small", passthroughFileTypes: [] }],
   apiKey: "sk-test",
   apiMode: "chat",
-  nativeSearchEnabled: true,
+  searchSource: "native",
   taskModelId: "text-embedding-3-small",
   memoryExtractionModelId: "text-embedding-3-small",
   createdAt: new Date(),

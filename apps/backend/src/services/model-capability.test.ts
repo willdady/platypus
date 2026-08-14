@@ -27,7 +27,7 @@ const provider = (over: Partial<Provider>): Provider => ({
   providerType: "OpenAI",
   apiKey: "sk",
   apiMode: "chat",
-  nativeSearchEnabled: true,
+  searchSource: "native",
   modelIds: [{ id: "m", passthroughFileTypes: [] }],
   taskModelId: "m",
   memoryExtractionModelId: "m",

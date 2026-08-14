@@ -131,8 +131,9 @@ const toolToToolSet: Record<string, string> = {
 // tools without an entry fall back to their toolset icon.
 const toolIcons: Record<string, LucideIcon> = {
   // Web-search backend tools (ADR-0014). Not a toolset — they are contributed
-  // per Provider through `webBackend` — so they are named here rather than in
-  // `toolToToolSet`, and they share `web-fetch`'s globe: same job to a reader.
+  // per Provider through `searchSource` — so they are named here rather than
+  // in `toolToToolSet`, and they share `web-fetch`'s globe: same job to a
+  // reader.
   web_search: GlobeIcon,
   read_url: GlobeIcon,
   shellExec: TerminalIcon,

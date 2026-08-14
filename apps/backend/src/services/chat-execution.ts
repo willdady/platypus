@@ -33,6 +33,8 @@ import {
   aliasNameFromReference,
   DEFAULT_AGENT_MAX_STEPS,
   providerHasNativeSearch,
+  SEARCH_SOURCE_NATIVE,
+  SEARCH_SOURCE_NONE,
 } from "@platypus/schemas";
 import type { ConcreteModelId, Provider, Skill } from "@platypus/schemas";
 import {
@@ -406,7 +408,7 @@ export const drizzleChatTurnQueries: ChatTurnQueries = {
  * Three-valued rather than a boolean because the decision and the *reason* for it
  * are one thing (ADR-0014's explicit-plugin-first resolution). A boolean gate plus
  * a re-derived branch at the injection site meant a reader had to prove that a
- * passing gate with no `webBackend` implied native capability; carrying the
+ * passing gate with no backend selected implied native capability; carrying the
  * backend id in the result removes that step and the unreachable branch with it.
  *
  * This is the single authority over the chat search toggle: it covers the
@@ -415,40 +417,43 @@ export const drizzleChatTurnQueries: ChatTurnQueries = {
  *
  * Precedence, in order:
  * 1. the request did not opt in → `none`;
- * 2. the Operator switched search off on this provider → `none`
- *    (`nativeSearchEnabled` is undefined for legacy rows, treated as enabled);
- * 3. a Web-search backend is selected → `backend`, *ahead of* native search —
- *    explicit Operator selection beats implicit provider capability, and a
- *    native-first `??` would never reach the backend on exactly the providers
- *    this feature targets;
- * 4. the provider has a native tool → `native`;
- * 5. otherwise `none`.
+ * 2. `provider.searchSource` is `"none"` (or a legacy row with no value at
+ *    all) → `none`;
+ * 3. `provider.searchSource` names a Web-search backend → `backend`, *ahead
+ *    of* native search — explicit Operator selection beats implicit provider
+ *    capability, and a native-first `??` would never reach the backend on
+ *    exactly the providers this feature targets;
+ * 4. `provider.searchSource` is `"native"` and the provider has a native tool
+ *    → `native`;
+ * 5. otherwise `none` — covers `"native"` on a provider with no native tool
+ *    (a stale value, e.g. a Bedrock row backfilled from the pre-collapse
+ *    columns) so a stored value that can no longer resolve degrades exactly
+ *    like an unregistered backend id does, rather than being trusted blind.
  *
- * Step 4 adds backend-side capability gating that did not exist before: the gate
- * used to be the toggle alone, with the provider-capability check living only in
- * the frontend. It is the stale-client case ADR-0014 calls out, not a regression —
- * a client asking Bedrock for search got an empty tool set anyway.
+ * Step 4's capability check is backend-side gating that did not exist before
+ * ADR-0014: the gate used to be the toggle alone, with the provider-capability
+ * check living only in the frontend. It is the stale-client case the ADR calls
+ * out, not a regression — a client asking Bedrock for search got an empty tool
+ * set anyway.
  *
- * `nativeSearchEnabled: false` wins over a configured `webBackend` (step 2 before
- * step 3): the switch currently means "no search on this provider at all". That
- * makes an Operator who disabled a *native* tool that never worked also silently
- * disable a plugin backend they later select — a field-naming problem PR3 carries
- * (see PLAN § PR3), not a resolution-order one.
+ * `searchSource` collapses what used to be two fields fighting over one slot
+ * (`nativeSearchEnabled` + `webBackend`, ADR-0014): a switch that gated
+ * *both* paths under a name that only mentioned one, and a select that
+ * fought it for the same decision. One field, one precedence list, no
+ * unreachable branch.
  */
 export type SearchResolution =
   { kind: "none" } | { kind: "native" } | { kind: "backend"; backend: string };
 
 export const resolveSearchMode = (
   requestedSearch: boolean | undefined,
-  provider: Pick<
-    Provider,
-    "providerType" | "apiMode" | "nativeSearchEnabled" | "webBackend"
-  >,
+  provider: Pick<Provider, "providerType" | "apiMode" | "searchSource">,
 ): SearchResolution => {
   if (!requestedSearch) return { kind: "none" };
-  if (provider.nativeSearchEnabled === false) return { kind: "none" };
-  if (provider.webBackend) {
-    return { kind: "backend", backend: provider.webBackend };
+  const source = provider.searchSource;
+  if (!source || source === SEARCH_SOURCE_NONE) return { kind: "none" };
+  if (source !== SEARCH_SOURCE_NATIVE) {
+    return { kind: "backend", backend: source };
   }
   if (providerHasNativeSearch(provider)) return { kind: "native" };
   return { kind: "none" };
@@ -487,9 +492,9 @@ const resolveSearchTools = async (
         orgId: ctx.orgId,
         workspaceId: ctx.workspaceId,
         providerId: provider.id,
-        webBackend: resolution.backend,
+        searchSource: resolution.backend,
       },
-      "provider.webBackend references an unregistered web backend; serving no search tools this turn",
+      "provider.searchSource references an unregistered web backend; serving no search tools this turn",
     );
     return {};
   }

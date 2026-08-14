@@ -24,8 +24,9 @@ vi.mock("sonner", () => ({
 // The provider the edit form loads. Set per test before rendering.
 let loadedProvider: Provider | undefined;
 
-// The `GET /organizations/:orgId/web-backends` catalog. Empty by default, so the
-// Web-search backend selector is absent for every test that predates it.
+// The `GET /organizations/:orgId/web-backends` catalog. Empty by default —
+// the Web search selector offers only None (and the built-in search option,
+// where the provider has one) for every test that predates it.
 let webBackendCatalog: Array<{
   backend: string;
   name: string;
@@ -587,7 +588,7 @@ describe("ProviderForm validation errors on model rows", () => {
   });
 });
 
-describe("ProviderForm Web-search backend selector", () => {
+describe("ProviderForm Web search selector", () => {
   afterEach(() => {
     loadedProvider = undefined;
     webBackendCatalog = [];
@@ -607,7 +608,7 @@ describe("ProviderForm Web-search backend selector", () => {
       providerType: "OpenAI",
       apiMode: "chat",
       apiKey: "sk-test",
-      nativeSearchEnabled: true,
+      searchSource: "native",
       modelIds: [{ id: "qwen", passthroughFileTypes: [] }],
       taskModelId: "qwen",
       memoryExtractionModelId: "qwen",
@@ -618,66 +619,43 @@ describe("ProviderForm Web-search backend selector", () => {
     return result;
   };
 
-  const webBackendSelect = () =>
-    screen.queryByRole("combobox", { name: "Web-search backend" });
+  const searchSelect = () =>
+    screen.queryByRole("combobox", { name: "Web search" });
 
-  /**
-   * Opens the selector and picks None, by keyboard: Radix drives the pointer path
-   * with capture APIs jsdom does not implement, and the keyboard route reaches the
-   * same change. `scrollIntoView` is stubbed for the same reason — Radix calls it on
-   * the highlighted option as the listbox mounts, and jsdom has no layout.
-   */
-  const selectNoBackend = async () => {
-    const scrollIntoView = Element.prototype.scrollIntoView;
-    Element.prototype.scrollIntoView = vi.fn();
-    try {
-      fireEvent.keyDown(webBackendSelect()!, { key: "ArrowDown" });
-      const none = await screen.findByRole("option", { name: /^None/ });
-      fireEvent.keyDown(none, { key: "Enter" });
-    } finally {
-      Element.prototype.scrollIntoView = scrollIntoView;
-    }
-  };
-
-  it("is absent on a deployment with no Web-search backend installed", () => {
+  it("is always present, even on a deployment with no backend installed", () => {
     renderWithAdvancedOpen({});
 
-    expect(webBackendSelect()).toBeNull();
+    expect(searchSelect()).not.toBeNull();
   });
 
   it("offers the installed backends, annotated with the plugin that contributed them", () => {
     webBackendCatalog = CATALOG;
     renderWithAdvancedOpen({
-      webBackend: "acme-search.searx",
+      searchSource: "acme-search.searx",
     } as Partial<Provider>);
 
-    expect(webBackendSelect()).toHaveTextContent("SearXNG (acme-search)");
+    expect(searchSelect()).toHaveTextContent("SearXNG (acme-search)");
   });
 
-  // The suffix has to come from the Provider's capability: on vLLM, "None" means
-  // no web search at all, while on a native-capable Provider it selects the
-  // built-in tool.
-  it("says what None means for a Provider with no native search", () => {
-    webBackendCatalog = CATALOG;
+  // vLLM (apiMode: "chat") has no native search, so the fixture default must
+  // not offer a "built-in search" option that resolves to nothing.
+  it("omits the built-in search option for a Provider with no native search", () => {
     renderWithAdvancedOpen({});
 
-    expect(webBackendSelect()).toHaveTextContent("None — no web search");
+    expect(searchSelect()).not.toHaveTextContent("built-in search");
   });
 
-  it("says what None means for a Provider that has native search", () => {
-    webBackendCatalog = CATALOG;
+  it("offers the built-in search option for a Provider that has native search", () => {
     renderWithAdvancedOpen({ apiMode: "responses" });
 
-    expect(webBackendSelect()).toHaveTextContent(
-      "None — use the built-in search",
-    );
+    expect(searchSelect()).toHaveTextContent("The provider's built-in search");
   });
 
   // Hiding the control would conceal a stored id nobody could then see or clear.
   it("shows a stored backend the catalog no longer lists, and names it as missing", () => {
-    renderWithAdvancedOpen({ webBackend: "gone.searx" } as Partial<Provider>);
+    renderWithAdvancedOpen({ searchSource: "gone.searx" } as Partial<Provider>);
 
-    expect(webBackendSelect()).toHaveTextContent("gone.searx (not installed)");
+    expect(searchSelect()).toHaveTextContent("gone.searx (not installed)");
   });
 
   // An empty list means "none installed" only when the catalog actually answered.
@@ -685,7 +663,7 @@ describe("ProviderForm Web-search backend selector", () => {
     webBackendCatalogError = new Error("500");
     renderWithAdvancedOpen({});
 
-    expect(webBackendSelect()).not.toBeNull();
+    expect(searchSelect()).not.toBeNull();
     expect(
       screen.getByText(/Couldn't load the installed backends/),
     ).toBeInTheDocument();
@@ -696,72 +674,11 @@ describe("ProviderForm Web-search backend selector", () => {
   it("does not call a stored backend uninstalled when the catalog failed", () => {
     webBackendCatalogError = new Error("500");
     renderWithAdvancedOpen({
-      webBackend: "acme-search.searx",
+      searchSource: "acme-search.searx",
     } as Partial<Provider>);
 
-    expect(webBackendSelect()).toHaveTextContent("acme-search.searx");
-    expect(webBackendSelect()).not.toHaveTextContent("not installed");
-  });
-
-  // `nativeSearchEnabled` gates plugin search too and its name does not say so,
-  // so the coupling is stated where the selection is made.
-  it("warns that a selected backend will not run while native search is off", () => {
-    webBackendCatalog = CATALOG;
-    renderWithAdvancedOpen({
-      nativeSearchEnabled: false,
-      webBackend: "acme-search.searx",
-    } as Partial<Provider>);
-
-    expect(
-      screen.getByText(
-        /Native web search is off, so this backend will not run/,
-      ),
-    ).toBeInTheDocument();
-    // Interactive, not disabled: disabling it would trap the stored value behind
-    // the switch.
-    expect(webBackendSelect()).not.toBeDisabled();
-  });
-
-  // The switch is not rendered on Bedrock, so the warning above would send an
-  // Operator looking for a control that is not there. Only an API write reaches this
-  // state, and only an API write leaves it.
-  it("points at the API, not the switch, where the switch is not shown", () => {
-    webBackendCatalog = CATALOG;
-    renderWithAdvancedOpen({
-      providerType: "Bedrock",
-      nativeSearchEnabled: false,
-      webBackend: "acme-search.searx",
-    } as Partial<Provider>);
-
-    expect(screen.queryByLabelText("Native web search")).toBeNull();
-    expect(
-      screen.getByText(/set back on through the Provider API/),
-    ).toBeInTheDocument();
-    expect(
-      screen.queryByText(/That switch allows web search at all/),
-    ).toBeNull();
-  });
-
-  it("says nothing about the coupling while native search is on", () => {
-    webBackendCatalog = CATALOG;
-    renderWithAdvancedOpen({
-      webBackend: "acme-search.searx",
-    } as Partial<Provider>);
-
-    expect(screen.queryByText(/Native web search is off/)).toBeNull();
-  });
-
-  // The recovery path for a stale id on a deployment where nothing is installed:
-  // choosing None empties `webBackend`, which is the same value the field's own
-  // visibility condition reads. Unlatched, the control unmounted here — mid-
-  // interaction, before the save, with no undo short of a reload.
-  it("keeps the field mounted after the stored backend is cleared", async () => {
-    renderWithAdvancedOpen({ webBackend: "gone.searx" } as Partial<Provider>);
-
-    await selectNoBackend();
-
-    expect(webBackendSelect()).not.toBeNull();
-    expect(webBackendSelect()).toHaveTextContent("None");
+    expect(searchSelect()).toHaveTextContent("acme-search.searx");
+    expect(searchSelect()).not.toHaveTextContent("not installed");
   });
 
   it("round-trips the stored backend through a save", async () => {
@@ -773,18 +690,16 @@ describe("ProviderForm Web-search backend selector", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     renderWithAdvancedOpen({
-      webBackend: "acme-search.searx",
+      searchSource: "acme-search.searx",
     } as Partial<Provider>);
     save();
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalled());
     const body = JSON.parse(fetchMock.mock.calls[0][1].body as string);
-    expect(body.webBackend).toBe("acme-search.searx");
+    expect(body.searchSource).toBe("acme-search.searx");
   });
 
-  // `""` would be a second representation of "no backend"; the API normalises it,
-  // but the form should not send it in the first place.
-  it("sends null, not an empty string, when no backend is selected", async () => {
+  it("round-trips none through a save", async () => {
     webBackendCatalog = CATALOG;
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
@@ -792,11 +707,11 @@ describe("ProviderForm Web-search backend selector", () => {
     } as unknown as Response);
     vi.stubGlobal("fetch", fetchMock);
 
-    renderWithAdvancedOpen({});
+    renderWithAdvancedOpen({ searchSource: "none" } as Partial<Provider>);
     save();
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalled());
     const body = JSON.parse(fetchMock.mock.calls[0][1].body as string);
-    expect(body.webBackend).toBeNull();
+    expect(body.searchSource).toBe("none");
   });
 });

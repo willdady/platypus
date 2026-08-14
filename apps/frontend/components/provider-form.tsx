@@ -48,7 +48,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Switch } from "@/components/ui/switch";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
@@ -57,6 +56,8 @@ import {
   CONTEXT_WINDOW_MIN,
   DEFAULT_MAX_EXTRACTED_TEXT_CHARS,
   providerHasNativeSearch,
+  SEARCH_SOURCE_NATIVE,
+  SEARCH_SOURCE_NONE,
   type AliasRepoint,
   type Provider,
 } from "@platypus/schemas";
@@ -450,18 +451,6 @@ const ModelRow = ({
   );
 };
 
-/**
- * Sentinel for "no Web-search backend" in the select. The stored value is `null`
- * (and the API normalises `""` to it), but Radix rejects an empty `SelectItem`
- * value, so the two are mapped at the control's edge rather than storing a second
- * representation of no-backend.
- *
- * A backend id is an arbitrary string, so a contribution registering *this* id
- * would read as None. Namespaced enough that it will not happen by accident, and
- * the alternative — a non-printable sentinel — reaches the DOM.
- */
-const NO_WEB_BACKEND = "__platypus_no_web_backend__";
-
 type ProviderFormData = Omit<
   Provider,
   "id" | "createdAt" | "updatedAt" | "workspaceId" | "embeddingDimensions"
@@ -507,8 +496,7 @@ const ProviderForm = ({
     organization: "",
     project: "",
     apiMode: "responses",
-    nativeSearchEnabled: true,
-    webBackend: null,
+    searchSource: SEARCH_SOURCE_NATIVE,
     securityGuardrails: "",
     modelIds: [],
     taskModelId: "",
@@ -583,36 +571,6 @@ const ProviderForm = ({
   // stored id "not installed" would rest on a catalog we no longer know is current.
   const webBackendsKnown =
     !!webBackendsData && !webBackendsError && !webBackendsLoading;
-  // Bedrock has no built-in search to turn off, so the Native web search switch is
-  // not rendered there. The backend selector below still has to account for the
-  // stored value, which an API caller can set `false` on a Bedrock Provider —
-  // pointing that operator at a switch they cannot see would be a dead end.
-  const nativeSearchSwitchShown = formData.providerType !== "Bedrock";
-
-  // Whether the Web-search backend selector belongs on this form at all.
-  //
-  // Hidden on a deployment that has installed no backend, where the control would
-  // be a dead "None" — but never hidden while a value is stored, even one whose
-  // plugin has since been removed: concealing a stored id is how a Provider ends up
-  // pointing at a backend nobody can see or clear.
-  // Nor hidden when the catalog request failed: an empty list then says nothing
-  // about the deployment, and silently dropping the field would read as "none
-  // installed".
-  const webBackendFieldApplies =
-    availableWebBackends.length > 0 ||
-    !!formData.webBackend ||
-    !!webBackendsError;
-  // Latched on first use, because the condition above reads a value the field itself
-  // edits. Clearing a stale id on a deployment with nothing installed — choosing
-  // None to recover — empties `webBackend`, turns the condition false, and unmounts
-  // the control mid-interaction: no confirmation, and no undo short of a reload. The
-  // save is correct; the field evaporating during the recovery path is not.
-  //
-  // Set from the selector's own handler rather than derived, so the latch cannot
-  // hold the field open for a reason the reader never caused: an edit is the only
-  // thing that turns `webBackendFieldApplies` false.
-  const [webBackendEdited, setWebBackendEdited] = useState(false);
-  const showWebBackendField = webBackendFieldApplies || webBackendEdited;
 
   useEffect(() => {
     if (provider && !hasInitialized.current) {
@@ -631,8 +589,16 @@ const ProviderForm = ({
         organization: provider.organization || "",
         project: provider.project || "",
         apiMode: provider.apiMode ?? "responses",
-        nativeSearchEnabled: provider.nativeSearchEnabled ?? true,
-        webBackend: provider.webBackend ?? null,
+        // A row backfilled to "native" (ADR-0014) on a Provider with no
+        // native tool at all — Bedrock, or vLLM on the chat API — is coerced
+        // to "none" here on load only: it would otherwise render the built-in
+        // search option selected on a Provider that doesn't offer it, and
+        // nothing here saves the coercion back.
+        searchSource:
+          provider.searchSource === SEARCH_SOURCE_NATIVE &&
+          !providerHasNativeSearch(provider)
+            ? SEARCH_SOURCE_NONE
+            : (provider.searchSource ?? SEARCH_SOURCE_NATIVE),
         securityGuardrails: provider.securityGuardrails ?? "",
         modelIds: provider.modelIds ? getModelConfigs(provider) : [],
         taskModelId: provider.taskModelId,
@@ -828,8 +794,7 @@ const ProviderForm = ({
         organization: formData.organization || undefined,
         project: formData.project || undefined,
         apiMode: formData.apiMode,
-        nativeSearchEnabled: formData.nativeSearchEnabled,
-        webBackend: formData.webBackend || null,
+        searchSource: formData.searchSource,
         securityGuardrails: formData.securityGuardrails || null,
         modelIds: formData.modelIds,
         taskModelId: formData.taskModelId,
@@ -1289,7 +1254,6 @@ const ProviderForm = ({
                   </Field>
                 </>
               )}
-
               <Field
                 data-invalid={!!headersError || !!validationErrors.headers}
               >
@@ -1311,7 +1275,6 @@ const ProviderForm = ({
                   </FieldError>
                 )}
               </Field>
-
               {formData.providerType === "OpenRouter" && (
                 <Field
                   data-invalid={
@@ -1339,144 +1302,72 @@ const ProviderForm = ({
                   )}
                 </Field>
               )}
-
-              {nativeSearchSwitchShown && (
-                <Field
-                  orientation="horizontal"
-                  className="items-center justify-between"
+              <Field data-invalid={!!validationErrors.searchSource}>
+                <FieldLabel htmlFor="searchSource">Web search</FieldLabel>
+                <Select
+                  value={formData.searchSource}
+                  onValueChange={(value) =>
+                    handleSelectChange("searchSource", value)
+                  }
+                  disabled={isSubmitting || isReadOnly}
                 >
-                  <div>
-                    <FieldLabel htmlFor="nativeSearchEnabled">
-                      Native web search
-                    </FieldLabel>
-                    <FieldDescription>
-                      Use this provider&apos;s built-in web_search tool. Turn
-                      off for endpoints that don&apos;t implement it (e.g. vLLM,
-                      Ollama, LiteLLM) — but not if you have selected a
-                      Web-search backend below, which this switch disables too.
-                      This also hides the search toggle in chat.
-                    </FieldDescription>
-                  </div>
-                  <Switch
-                    id="nativeSearchEnabled"
-                    checked={formData.nativeSearchEnabled}
-                    disabled={isSubmitting || isReadOnly}
-                    onCheckedChange={(checked) =>
-                      setFormData((prev) => ({
-                        ...prev,
-                        nativeSearchEnabled: checked,
-                      }))
-                    }
-                  />
-                </Field>
-              )}
-
-              {/* Visibility, and why it is latched once true, at
-              `showWebBackendField`. */}
-              {showWebBackendField && (
-                <Field data-invalid={!!validationErrors.webBackend}>
-                  <FieldLabel htmlFor="webBackend">
-                    Web-search backend
-                  </FieldLabel>
-                  <Select
-                    value={formData.webBackend || NO_WEB_BACKEND}
-                    onValueChange={(value) => {
-                      setWebBackendEdited(true);
-                      handleSelectChange(
-                        "webBackend",
-                        value === NO_WEB_BACKEND ? "" : value,
-                      );
-                    }}
+                  <SelectTrigger
+                    id="searchSource"
                     disabled={isSubmitting || isReadOnly}
                   >
-                    <SelectTrigger
-                      id="webBackend"
-                      disabled={isSubmitting || isReadOnly}
-                    >
-                      <SelectValue placeholder="None" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectGroup>
-                        <SelectLabel>Web-search backend</SelectLabel>
-                        <SelectItem value={NO_WEB_BACKEND}>
-                          {/* "None" means different things by capability: on a
-                          provider with its own search it selects the built-in
-                          tool, and on one without it means no web search at
-                          all. */}
-                          {providerHasNativeSearch(formData)
-                            ? "None — use the built-in search"
-                            : "None — no web search"}
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectGroup>
+                      <SelectLabel>Web search</SelectLabel>
+                      <SelectItem value={SEARCH_SOURCE_NONE}>None</SelectItem>
+                      {providerHasNativeSearch(formData) && (
+                        <SelectItem value={SEARCH_SOURCE_NATIVE}>
+                          The provider&apos;s built-in search
                         </SelectItem>
-                        {availableWebBackends.map((b) => (
-                          <SelectItem key={b.backend} value={b.backend}>
-                            {b.name}
-                            {b.plugin ? ` (${b.plugin})` : ""}
-                          </SelectItem>
-                        ))}
-                        {/* A stored id the catalog does not list — its plugin was
-                        dropped from `PLATYPUS_PLUGINS`, or the id was set through
-                        the API. It degrades to no search tools server-side, so it
-                        is named here rather than silently reading as "None".
-                        The "(not installed)" verdict needs the catalog to have
-                        actually loaded; while it is in flight or failed, the id is
-                        shown without a claim about it. */}
-                        {!!formData.webBackend &&
-                          !availableWebBackends.some(
-                            (b) => b.backend === formData.webBackend,
-                          ) && (
-                            <SelectItem value={formData.webBackend}>
-                              {formData.webBackend}
-                              {webBackendsKnown ? " (not installed)" : ""}
-                            </SelectItem>
-                          )}
-                      </SelectGroup>
-                    </SelectContent>
-                  </Select>
-                  <FieldDescription>
-                    Route this provider&apos;s web search through a plugin
-                    backend instead of the vendor&apos;s own tool. A selected
-                    backend takes precedence over built-in search, and needs
-                    Native web search left on — that switch gates it too.
-                  </FieldDescription>
-                  {/* Without this the same empty dropdown means both "none
-                  installed" and "we could not ask". */}
-                  {!!webBackendsError && (
-                    <FieldDescription className="text-destructive">
-                      Couldn&apos;t load the installed backends, so this list
-                      may be incomplete. Any stored selection is unchanged.
-                    </FieldDescription>
-                  )}
-                  {/* The coupling is real and its name does not say so:
-                  `nativeSearchEnabled` gates plugin search too, so switching it
-                  off leaves a selected backend silently dead. The select stays
-                  interactive — disabling it would trap a stored value behind
-                  the switch — and says so instead.
-                  On a Provider whose switch is not rendered the same warning must
-                  not point at it: the only way into that state, and out of it, is
-                  the Provider API. */}
-                  {!formData.nativeSearchEnabled && (
-                    <FieldDescription className="text-destructive">
-                      {nativeSearchSwitchShown ? (
-                        <>
-                          Native web search is off, so this backend will not
-                          run. That switch allows web search at all; turn it on
-                          for the backend to be reached.
-                        </>
-                      ) : (
-                        <>
-                          Native web search is off on this provider, so this
-                          backend will not run. This provider type has no
-                          built-in search, so the switch is not shown here — the
-                          field has to be set back on through the Provider API.
-                        </>
                       )}
-                    </FieldDescription>
-                  )}
-                  {validationErrors.webBackend && (
-                    <FieldError>{validationErrors.webBackend}</FieldError>
-                  )}
-                </Field>
-              )}
+                      {availableWebBackends.map((b) => (
+                        <SelectItem key={b.backend} value={b.backend}>
+                          {b.name}
+                          {b.plugin ? ` (${b.plugin})` : ""}
+                        </SelectItem>
+                      ))}
+                      {/* A stored id the catalog does not list — its plugin was
+                      dropped from `PLATYPUS_PLUGINS`, or the id was set through
+                      the API. It degrades to no search tools server-side, so it
+                      is named here rather than silently reading as "None".
+                      The "(not installed)" verdict needs the catalog to have
+                      actually loaded; while it is in flight or failed, the id is
+                      shown without a claim about it. */}
+                      {formData.searchSource !== SEARCH_SOURCE_NONE &&
+                        formData.searchSource !== SEARCH_SOURCE_NATIVE &&
+                        !availableWebBackends.some(
+                          (b) => b.backend === formData.searchSource,
+                        ) && (
+                          <SelectItem value={formData.searchSource}>
+                            {formData.searchSource}
+                            {webBackendsKnown ? " (not installed)" : ""}
+                          </SelectItem>
+                        )}
+                    </SelectGroup>
+                  </SelectContent>
+                </Select>
+                <FieldDescription>
+                  Which search this provider&apos;s chat turns use: none, the
+                  vendor&apos;s own tool, or a plugin Web-search backend.
+                </FieldDescription>
+                {/* Without this the same empty dropdown means both "none
+                installed" and "we could not ask". */}
+                {!!webBackendsError && (
+                  <FieldDescription className="text-destructive">
+                    Couldn&apos;t load the installed backends, so this list may
+                    be incomplete. Any stored selection is unchanged.
+                  </FieldDescription>
+                )}
+                {validationErrors.searchSource && (
+                  <FieldError>{validationErrors.searchSource}</FieldError>
+                )}
+              </Field>
 
               <Field data-invalid={!!validationErrors.securityGuardrails}>
                 <ExpandableTextarea
