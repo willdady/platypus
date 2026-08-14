@@ -651,6 +651,49 @@ describe("ProviderForm Web search selector", () => {
     expect(searchSelect()).toHaveTextContent("The provider's built-in search");
   });
 
+  // A row backfilled to "native" (ADR-0014) with no native search of its own
+  // — the default fixture here is exactly that shape, vLLM (chat mode) — must
+  // not leave the select showing a value nothing in the list matches.
+  it("coerces a stale native selection to None on load, for a Provider with no native search", () => {
+    renderWithAdvancedOpen({});
+
+    expect(searchSelect()).toHaveTextContent("None");
+  });
+
+  it("coerces a stale native selection to None on load, for Bedrock too", () => {
+    renderWithAdvancedOpen({ providerType: "Bedrock" });
+
+    expect(searchSelect()).toHaveTextContent("None");
+  });
+
+  // Switching Provider Type away from native search after "The provider's
+  // built-in search" was selected removes that SelectItem from the list —
+  // without this, the control would keep pointing at a value nothing
+  // matches until the page reloads.
+  it("clears a selected built-in search when Provider Type loses native search", async () => {
+    renderWithAdvancedOpen({ apiMode: "responses", searchSource: "native" });
+    expect(searchSelect()).toHaveTextContent("The provider's built-in search");
+
+    // Provider Type's SelectTrigger has no accessible name (a pre-existing
+    // gap), so it is found by its current value instead.
+    const providerTypeSelect = screen
+      .getAllByRole("combobox")
+      .find((el) => el.textContent === "OpenAI")!;
+
+    const scrollIntoView = Element.prototype.scrollIntoView;
+    Element.prototype.scrollIntoView = vi.fn();
+    try {
+      fireEvent.keyDown(providerTypeSelect, { key: "ArrowDown" });
+      const bedrock = await screen.findByRole("option", { name: "Bedrock" });
+      fireEvent.keyDown(bedrock, { key: "Enter" });
+    } finally {
+      Element.prototype.scrollIntoView = scrollIntoView;
+    }
+
+    expect(searchSelect()).toHaveTextContent("None");
+    expect(searchSelect()).not.toHaveTextContent("built-in search");
+  });
+
   // Hiding the control would conceal a stored id nobody could then see or clear.
   it("shows a stored backend the catalog no longer lists, and names it as missing", () => {
     renderWithAdvancedOpen({ searchSource: "gone.searx" } as Partial<Provider>);

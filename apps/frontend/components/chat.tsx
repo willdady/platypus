@@ -33,6 +33,8 @@ import {
   ToolSet,
   Skill,
   providerHasNativeSearch,
+  SEARCH_SOURCE_NATIVE,
+  SEARCH_SOURCE_NONE,
 } from "@platypus/schemas";
 import { type PlatypusUIMessage } from "@platypus/backend/src/types";
 import useSWR from "swr";
@@ -429,8 +431,8 @@ export const Chat = ({
   // tools server-side with a warn line, which is the documented posture.
   const canSearch =
     !!resolvedProvider &&
-    resolvedProvider.searchSource !== "none" &&
-    (resolvedProvider.searchSource === "native"
+    resolvedProvider.searchSource !== SEARCH_SOURCE_NONE &&
+    (resolvedProvider.searchSource === SEARCH_SOURCE_NATIVE
       ? providerHasNativeSearch(resolvedProvider)
       : Boolean(resolvedProvider.searchSource));
 

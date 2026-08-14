@@ -664,6 +664,20 @@ const ProviderForm = ({
 
     setFormData((prevData) => {
       const newData = { ...prevData, [id]: value };
+      // Provider Type and API Mode both feed providerHasNativeSearch. A
+      // Provider Type/API Mode change can turn a selected
+      // SEARCH_SOURCE_NATIVE into a value with no matching SelectItem in
+      // the Web search select (that item only renders while
+      // providerHasNativeSearch is true) — coerce it to None rather than
+      // leave the control showing a value nothing in the list matches,
+      // mirroring the coercion already done for a stale stored value on load.
+      if (
+        (id === "providerType" || id === "apiMode") &&
+        newData.searchSource === SEARCH_SOURCE_NATIVE &&
+        !providerHasNativeSearch(newData)
+      ) {
+        newData.searchSource = SEARCH_SOURCE_NONE;
+      }
       return newData;
     });
   };
