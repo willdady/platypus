@@ -137,12 +137,21 @@ and up to two fields under **Advanced settings** decide it.
 
 **Web-search backend** picks _which_ search runs. It lists the search backends
 your deployment has installed as plugins — SearXNG, a headless browser, whatever
-the Operator added — and it appears only once at least one is installed.
-Selecting one takes precedence over the model's own search, and it gives the
-Search toggle to Providers that never had it: a self-hosted vLLM or LiteLLM
-endpoint, or Bedrock. **None** means the built-in search on a Provider that has
-one, and no web search at all on a Provider that doesn't; the option says which
-you're getting.
+the Operator added. Selecting one takes precedence over the model's own search,
+and it gives the Search toggle to Providers that never had it: a self-hosted
+vLLM or LiteLLM endpoint, or Bedrock. **None** means the built-in search on a
+Provider that has one, and no web search at all on a Provider that doesn't; the
+option says which you're getting.
+
+The field is on the form when any one of these holds:
+
+- **A backend is installed** on your deployment — the ordinary case.
+- **This Provider already has one selected** — it stays visible even when the
+  installed list doesn't have it, so you can clear a selection that no longer
+  runs instead of leaving the Provider pointed at it. Once Platypus has the
+  installed list to check against, such a selection reads **(not installed)**.
+- **Platypus couldn't load the installed backends** — the field tells you so,
+  and leaves your stored selection alone.
 
 **Native web search** decides whether _any_ search is allowed on this Provider.
 Switching it off currently disables a selected backend too, not only the built-in
