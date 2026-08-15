@@ -17,6 +17,12 @@ import {
 
 type McpRow = typeof mcpTable.$inferSelect;
 
+const MCP_TOOL_PREFIX = "mcp__";
+const MCP_TOOL_SEPARATOR = "__";
+
+const namespaceMcpToolName = (toolSetId: string, toolName: string): string =>
+  `${MCP_TOOL_PREFIX}${toolSetId}${MCP_TOOL_SEPARATOR}${toolName}`;
+
 /**
  * Where the turn is running: the Workspace, the Organization, and the human it
  * is running for. Everything a delegate shares with the parent that spawned it,
@@ -169,8 +175,14 @@ export const openToolSession = async (
 
     const owner: ToolOwner = { toolSetId, plugin: null };
     const normalized = normalizeToolResults(mcpTools);
-    reportToolNameCollisions(normalized, owners, owner);
-    claim(normalized, owner);
+    const namespaced = Object.fromEntries(
+      Object.entries(normalized).map(([name, tool]) => [
+        namespaceMcpToolName(toolSetId, name),
+        tool,
+      ]),
+    );
+    reportToolNameCollisions(namespaced, owners, owner);
+    claim(namespaced, owner);
   };
 
   if (agent) {

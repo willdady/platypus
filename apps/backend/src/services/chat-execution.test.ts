@@ -1269,7 +1269,7 @@ describe("chat-execution", () => {
         queries,
       );
 
-      expect(turn.stream.tools).toHaveProperty("mcpTool");
+      expect(turn.stream.tools).toHaveProperty("mcp__mcp-1__mcpTool");
       await turn.dispose();
     });
 
@@ -1294,7 +1294,7 @@ describe("chat-execution", () => {
         queries,
       );
 
-      expect(turn.stream.tools).not.toHaveProperty("mcpTool");
+      expect(turn.stream.tools).not.toHaveProperty("mcp__mcp-1__mcpTool");
       await turn.dispose();
     });
 
@@ -1324,7 +1324,7 @@ describe("chat-execution", () => {
         queries,
       );
 
-      expect(turn.stream.tools).not.toHaveProperty("mcpTool");
+      expect(turn.stream.tools).not.toHaveProperty("mcp__mcp-1__mcpTool");
       await turn.dispose();
     });
   });

@@ -187,7 +187,7 @@ describe("openToolSession", () => {
       return close;
     };
 
-    it("serves an MCP server's tools for an id no Tool set claims, and closes it on dispose", async () => {
+    it("serves namespaced MCP tools for an id no Tool set claims, and closes it on dispose", async () => {
       const close = connected({ mcpTool: toolNamed("mcpTool") });
 
       const session = await openToolSession(
@@ -196,7 +196,7 @@ describe("openToolSession", () => {
         queriesFor([mcpRow()]),
       );
 
-      expect(session.tools).toHaveProperty("mcpTool");
+      expect(session.tools).toHaveProperty("mcp__mcp-1__mcpTool");
       expect(close).not.toHaveBeenCalled();
 
       await session.dispose();
@@ -221,7 +221,7 @@ describe("openToolSession", () => {
         queriesFor([mcpRow()]),
       );
       const execute = (
-        session.tools.listItems as unknown as {
+        session.tools["mcp__mcp-1__listItems"] as unknown as {
           execute: (a: unknown, o: unknown) => Promise<unknown>;
         }
       ).execute;
@@ -296,26 +296,20 @@ describe("openToolSession", () => {
       );
     });
 
-    it("reports a tool name an MCP server takes from a Tool set", async () => {
+    it("namespaces MCP tools so they cannot shadow a Tool set", async () => {
       register("set.shadowed", { search: toolNamed("first") }, "first-plugin");
       connected({ search: toolNamed("mcp") });
 
-      await openToolSession(
+      const session = await openToolSession(
         scope,
         grantedAgent("set.shadowed", "mcp-1"),
         queriesFor([mcpRow()]),
       );
 
-      expect(logger.warn).toHaveBeenCalledWith(
-        expect.objectContaining({
-          tool: "search",
-          toolSet: "mcp-1",
-          // An MCP server belongs to no plugin, and says so rather than
-          // reading as an unanswered question.
-          plugin: null,
-          shadowedToolSet: "set.shadowed",
-          shadowedPlugin: "first-plugin",
-        }),
+      expect(session.tools.search).toEqual(toolNamed("first"));
+      expect(session.tools["mcp__mcp-1__search"]).toEqual(toolNamed("mcp"));
+      expect(logger.warn).not.toHaveBeenCalledWith(
+        expect.objectContaining({ tool: "search" }),
         expect.stringContaining("same tool name"),
       );
     });
@@ -367,8 +361,8 @@ describe("openToolSession", () => {
 
       // The delegate's tools are its own — a parent must not be able to call
       // them directly.
-      expect(child.tools).toHaveProperty("delegateTool");
-      expect(parent.tools).not.toHaveProperty("delegateTool");
+      expect(child.tools).toHaveProperty("mcp__mcp-1__delegateTool");
+      expect(parent.tools).not.toHaveProperty("mcp__mcp-1__delegateTool");
 
       // One dispose, at the seam that opened everything.
       await parent.dispose();
