@@ -17,6 +17,7 @@ import { requireAuth } from "../middleware/authentication.ts";
 import {
   requireOrgAccess,
   requireWorkspaceAccess,
+  workspaceScopeOf,
 } from "../middleware/authorization.ts";
 import type { Variables } from "../server.ts";
 
@@ -30,7 +31,7 @@ dashboard.get(
   requireOrgAccess(),
   requireWorkspaceAccess,
   async (c) => {
-    const workspaceId = c.req.param("workspaceId")!;
+    const { workspaceId } = workspaceScopeOf(c);
     const results = await db
       .select()
       .from(dashboardTable)
@@ -48,7 +49,7 @@ dashboard.post(
   sValidator("json", dashboardCreateSchema),
   async (c) => {
     const data = c.req.valid("json");
-    const workspaceId = c.req.param("workspaceId")!;
+    const { workspaceId } = workspaceScopeOf(c);
     const conflict = await db
       .select({ id: dashboardTable.id })
       .from(dashboardTable)
@@ -92,7 +93,7 @@ dashboard.get(
   requireWorkspaceAccess,
   async (c) => {
     const dashboardId = c.req.param("dashboardId");
-    const workspaceId = c.req.param("workspaceId")!;
+    const { workspaceId } = workspaceScopeOf(c);
     const record = await db
       .select()
       .from(dashboardTable)
@@ -114,7 +115,7 @@ dashboard.put(
   async (c) => {
     const data = c.req.valid("json");
     const dashboardId = c.req.param("dashboardId");
-    const workspaceId = c.req.param("workspaceId")!;
+    const { workspaceId } = workspaceScopeOf(c);
     const existing = await db
       .select({
         id: dashboardTable.id,
@@ -164,7 +165,7 @@ dashboard.delete(
   requireWorkspaceAccess,
   async (c) => {
     const dashboardId = c.req.param("dashboardId");
-    const workspaceId = c.req.param("workspaceId")!;
+    const { workspaceId } = workspaceScopeOf(c);
     const existing = await db
       .select({
         id: dashboardTable.id,
@@ -190,7 +191,7 @@ dashboard.get(
   requireWorkspaceAccess,
   async (c) => {
     const dashboardId = c.req.param("dashboardId");
-    const workspaceId = c.req.param("workspaceId")!;
+    const { workspaceId } = workspaceScopeOf(c);
     const dash = await db
       .select({
         id: dashboardTable.id,
@@ -220,7 +221,7 @@ dashboard.post(
   async (c) => {
     const data = c.req.valid("json");
     const dashboardId = c.req.param("dashboardId");
-    const workspaceId = c.req.param("workspaceId")!;
+    const { workspaceId } = workspaceScopeOf(c);
     const dash = await db
       .select({
         id: dashboardTable.id,
@@ -275,7 +276,7 @@ dashboard.put(
     const body = c.req.valid("json");
     const dashboardId = c.req.param("dashboardId");
     const widgetId = c.req.param("widgetId");
-    const workspaceId = c.req.param("workspaceId")!;
+    const { workspaceId } = workspaceScopeOf(c);
     const dash = await db
       .select({
         id: dashboardTable.id,
@@ -344,7 +345,7 @@ dashboard.delete(
   async (c) => {
     const dashboardId = c.req.param("dashboardId");
     const widgetId = c.req.param("widgetId");
-    const workspaceId = c.req.param("workspaceId")!;
+    const { workspaceId } = workspaceScopeOf(c);
     const dash = await db
       .select({
         id: dashboardTable.id,

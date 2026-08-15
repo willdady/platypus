@@ -5,10 +5,7 @@ import { db } from "../index.ts";
 import {
   blueprint as blueprintTable,
   blueprintItem as blueprintItemTable,
-  agent as agentTable,
-  mcp as mcpTable,
   provider as providerTable,
-  skill as skillTable,
   workspace as workspaceTable,
 } from "../db/schema.ts";
 import {
@@ -19,10 +16,15 @@ import {
 } from "@platypus/schemas";
 import { and, eq, inArray } from "drizzle-orm";
 import { requireAuth } from "../middleware/authentication.ts";
-import { requireOrgAccess } from "../middleware/authorization.ts";
+import { orgScopeOf, requireOrgAccess } from "../middleware/authorization.ts";
 import type { Variables } from "../server.ts";
 import { applyBlueprintsToWorkspace } from "../services/blueprint-apply.ts";
 import { isBlueprintReferencedByLiveInvitation } from "../services/blueprint-guard.ts";
+import {
+  listOrgScopedIds,
+  orgScopedWhereIn,
+  type ScopedResourceType,
+} from "../services/scoped-resource.ts";
 import { isUniqueViolation } from "../errors.ts";
 
 // Blueprint — a named, Organization-scoped macro that, applied to a Workspace,
@@ -32,15 +34,6 @@ import { isUniqueViolation } from "../errors.ts";
 // Workspaces. A Blueprint may only list org-scoped (Shared) resources, and all
 // management — and applying — is Org-Admin-only.
 const orgBlueprint = new Hono<{ Variables: Variables }>();
-
-const RESOURCE_TABLES = {
-  mcp: mcpTable,
-  provider: providerTable,
-  skill: skillTable,
-  agent: agentTable,
-} as const;
-
-type ResourceType = keyof typeof RESOURCE_TABLES;
 
 const NAME_CONFLICT = {
   error: "A blueprint with this name already exists in this organization",
@@ -69,7 +62,7 @@ const findNonSharedItems = async (
   items: BlueprintItem[],
   orgId: string,
 ): Promise<BlueprintItem[]> => {
-  const byType = new Map<ResourceType, string[]>();
+  const byType = new Map<ScopedResourceType, string[]>();
   for (const item of items) {
     const ids = byType.get(item.resourceType) ?? [];
     ids.push(item.resourceId);
@@ -78,12 +71,7 @@ const findNonSharedItems = async (
 
   const invalid: BlueprintItem[] = [];
   for (const [resourceType, ids] of byType) {
-    const table = RESOURCE_TABLES[resourceType];
-    const rows = await db
-      .select({ id: table.id })
-      .from(table)
-      .where(and(eq(table.organizationId, orgId), inArray(table.id, ids)));
-    const found = new Set(rows.map((r) => r.id));
+    const found = await listOrgScopedIds(db, resourceType, ids, orgId);
     for (const id of ids) {
       if (!found.has(id)) invalid.push({ resourceType, resourceId: id });
     }
@@ -172,12 +160,10 @@ const findInvalidMemoryProviders = async (
     })
     .from(providerTable)
     .where(
-      and(
-        eq(providerTable.organizationId, orgId),
-        inArray(
-          providerTable.id,
-          checks.map((c) => c.providerId),
-        ),
+      orgScopedWhereIn(
+        "provider",
+        checks.map((c) => c.providerId),
+        orgId,
       ),
     );
   const byId = new Map(rows.map((r) => [r.id, r]));
@@ -225,7 +211,7 @@ orgBlueprint.post(
   requireOrgAccess(["admin"]),
   sValidator("json", blueprintCreateSchema),
   async (c) => {
-    const orgId = c.req.param("orgId")!;
+    const { orgId } = orgScopeOf(c);
     const {
       name,
       description,
@@ -323,7 +309,7 @@ orgBlueprint.post(
 
 /** List Blueprints, each with its items (admin only) */
 orgBlueprint.get("/", requireAuth, requireOrgAccess(["admin"]), async (c) => {
-  const orgId = c.req.param("orgId")!;
+  const { orgId } = orgScopeOf(c);
   const blueprints = await db
     .select()
     .from(blueprintTable)
@@ -345,7 +331,7 @@ orgBlueprint.get(
   requireAuth,
   requireOrgAccess(["admin"]),
   async (c) => {
-    const orgId = c.req.param("orgId")!;
+    const { orgId } = orgScopeOf(c);
     const blueprintId = c.req.param("blueprintId");
     const [record] = await db
       .select()
@@ -375,7 +361,7 @@ orgBlueprint.put(
   requireOrgAccess(["admin"]),
   sValidator("json", blueprintUpdateSchema),
   async (c) => {
-    const orgId = c.req.param("orgId")!;
+    const { orgId } = orgScopeOf(c);
     const blueprintId = c.req.param("blueprintId");
     const {
       name,
@@ -494,7 +480,7 @@ orgBlueprint.delete(
   requireAuth,
   requireOrgAccess(["admin"]),
   async (c) => {
-    const orgId = c.req.param("orgId")!;
+    const { orgId } = orgScopeOf(c);
     const blueprintId = c.req.param("blueprintId");
 
     // A Blueprint cannot be deleted while a live pending invitation references
@@ -540,7 +526,7 @@ orgBlueprint.post(
   requireOrgAccess(["admin"]),
   sValidator("json", blueprintApplySchema),
   async (c) => {
-    const orgId = c.req.param("orgId")!;
+    const { orgId } = orgScopeOf(c);
     const blueprintId = c.req.param("blueprintId");
     const { workspaceId } = c.req.valid("json");
 

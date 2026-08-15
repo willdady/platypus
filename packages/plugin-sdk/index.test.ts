@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { z } from "zod";
 import { tool } from "ai";
 import {
@@ -6,6 +6,7 @@ import {
   PLUGIN_API_VERSION,
   type PlatypusPlugin,
   type PluginConfigContext,
+  type PluginLogger,
   type SandboxBackendContribution,
   type ToolSetContribution,
   type WebBackendContribution,
@@ -120,6 +121,95 @@ describe("@platypuschat/plugin-sdk", () => {
       },
     };
     backend.create({}, {}, shared);
+  });
+
+  it("carries an optional logger on the shared block, callable both ways", () => {
+    const calls: unknown[][] = [];
+    const record =
+      () =>
+      (...args: unknown[]) => {
+        calls.push(args);
+      };
+    const logger: PluginLogger = {
+      debug: record(),
+      info: record(),
+      warn: record(),
+      error: record(),
+    };
+    const shared: PluginConfigContext = {
+      config: {},
+      credentials: {},
+      logger,
+    };
+
+    const toolSet: ToolSetContribution = {
+      id: "scoped",
+      name: "Scoped",
+      category: "Productivity",
+      // The shape an author writes: optional chaining all the way, because the
+      // field is appended and a plugin may run on a core that predates it.
+      tools: (ctx, plugin) => {
+        plugin?.logger?.info({ workspaceId: ctx.workspaceId }, "Resolving");
+        plugin?.logger?.warn("Bare message, no fields");
+        return {};
+      },
+    };
+    (toolSet.tools as (ctx: unknown, plugin: PluginConfigContext) => unknown)(
+      {
+        workspaceId: "w",
+        agentId: "a",
+        orgId: "o",
+        frontendUrl: undefined,
+        userId: "u",
+      },
+      shared,
+    );
+
+    expect(calls).toEqual([
+      [{ workspaceId: "w" }, "Resolving"],
+      ["Bare message, no fields"],
+    ]);
+  });
+
+  it("leaves a logger-less block usable (the field is optional)", () => {
+    // A plugin compiled against this SDK must still work where `logger` is
+    // absent — that is the whole point of appending it as optional.
+    const shared: PluginConfigContext = { config: {}, credentials: {} };
+    const backend: SandboxBackendContribution = {
+      backend: "cloud",
+      name: "Cloud",
+      configSchema: z.object({}),
+      credentialsSchema: z.object({}),
+      create: (_config, _credentials, plugin) => {
+        plugin?.logger?.debug("never written");
+        return {} as never;
+      },
+    };
+    expect(() => backend.create({}, {}, shared)).not.toThrow();
+  });
+
+  it("satisfies PluginLogger with a pino-shaped logger (no adapter)", () => {
+    // Core passes its own logger straight through, so the interface has to be
+    // structurally compatible with the `(obj, msg?)` / `(msg)` pair pino exposes
+    // — including the trailing interpolation args pino accepts and this SDK's
+    // narrower contract does not mention.
+    const pinoish = {
+      debug: vi.fn(),
+      info: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn(),
+      trace: vi.fn(),
+      fatal: vi.fn(),
+      child: vi.fn(),
+    } as unknown as {
+      debug: (obj: unknown, msg?: string, ...args: unknown[]) => void;
+      info: (obj: unknown, msg?: string, ...args: unknown[]) => void;
+      warn: (obj: unknown, msg?: string, ...args: unknown[]) => void;
+      error: (obj: unknown, msg?: string, ...args: unknown[]) => void;
+    };
+    const asPluginLogger: PluginLogger = pinoish;
+    asPluginLogger.info({ a: 1 }, "hello");
+    expect(pinoish.info).toHaveBeenCalledWith({ a: 1 }, "hello");
   });
 
   it("accepts a web-backend contribution supplying executors only", async () => {

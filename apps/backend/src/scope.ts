@@ -42,10 +42,25 @@ export type OrgScope = UserScope & {
   orgId: string;
 };
 
-export type WorkspaceScope = OrgScope & {
+/**
+ * Which Workspace a lookup is placed in, with no actor attached — the half of a
+ * {@link WorkspaceScope} that a data-access module actually reads.
+ *
+ * Kept separate from `WorkspaceScope` because not every caller has a
+ * `Principal` to offer: the Agent-facing Tools are built from the SDK's
+ * `ToolSetContext`, which carries ids across the plugin boundary and cannot
+ * name a backend-internal principal type. A `WorkspaceScope` satisfies this
+ * structurally, so a handler passes the middleware's value straight through.
+ */
+export type ScopeContext = {
+  orgId: string;
   workspaceId: string;
-  isWorkspaceOwner: boolean;
 };
+
+export type WorkspaceScope = OrgScope &
+  ScopeContext & {
+    isWorkspaceOwner: boolean;
+  };
 
 // === Factories ===
 

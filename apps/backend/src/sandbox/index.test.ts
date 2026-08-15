@@ -1,6 +1,7 @@
-import { describe, it, expect } from "vitest";
+import { beforeEach, describe, it, expect } from "vitest";
 import { z } from "zod";
 import {
+  clearSandboxBackends,
   registerSandboxBackend,
   getSandboxBackend,
   getSandboxBackends,
@@ -34,45 +35,27 @@ const makeRegistration = (
   create: () => stubBackend,
 });
 
-// The registry is module-level state; we reset by re-importing via vi.resetModules
-// isn't trivial here, so each test uses a unique backend id.
-
+// The store's own contract — miss semantics, duplicate rejection, prototype-key
+// safety, listing, reset — is covered once in
+// `registry/contribution-registry.test.ts`. What is left here is what this
+// instance adds: keying on the registration's own `backend` discriminator.
 describe("sandbox backend registry", () => {
-  it("registers and looks up a backend by id", () => {
+  beforeEach(() => {
+    clearSandboxBackends();
+  });
+
+  it("keys a registration on its own backend id", () => {
     registerSandboxBackend(makeRegistration("test-lookup"));
     const found = getSandboxBackend("test-lookup");
     expect(found?.backend).toBe("test-lookup");
     expect(found?.name).toBe("Test test-lookup");
+    expect(getSandboxBackends().map((r) => r.backend)).toEqual(["test-lookup"]);
   });
 
-  it("returns undefined for an unknown backend", () => {
-    expect(getSandboxBackend("does-not-exist")).toBeUndefined();
-  });
-
-  it("does not resolve Object.prototype members as registered backends", () => {
-    // `backend` reaches this lookup from a request body and from the
-    // `sandbox.backend` column, so a plain-object registry handed back
-    // `Object.prototype.toString` — truthy, no `configSchema` — and the save
-    // route's `registration.configSchema.safeParse(...)` threw a 500 instead of
-    // treating the id as unregistered.
-    expect(getSandboxBackend("toString")).toBeUndefined();
-    expect(getSandboxBackend("constructor")).toBeUndefined();
-    expect(getSandboxBackend("__proto__")).toBeUndefined();
-    expect(getSandboxBackend("hasOwnProperty")).toBeUndefined();
-  });
-
-  it("rejects duplicate registration of the same backend id", () => {
+  it("refuses a second registration under the same backend id", () => {
     registerSandboxBackend(makeRegistration("test-duplicate"));
     expect(() =>
       registerSandboxBackend(makeRegistration("test-duplicate")),
-    ).toThrow(/already been registered/);
-  });
-
-  it("lists all registered backends", () => {
-    registerSandboxBackend(makeRegistration("test-list-a"));
-    registerSandboxBackend(makeRegistration("test-list-b"));
-    const ids = getSandboxBackends().map((r) => r.backend);
-    expect(ids).toContain("test-list-a");
-    expect(ids).toContain("test-list-b");
+    ).toThrow("Sandbox backend 'test-duplicate' has already been registered.");
   });
 });

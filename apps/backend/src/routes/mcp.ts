@@ -18,9 +18,13 @@ import {
   requireOrgAccess,
   requireWorkspaceAccess,
   requireWorkspaceConfigAccess,
-  workspaceConfigAccess,
+  workspaceCredentialsVisible,
+  workspaceScopeOf,
 } from "../middleware/authorization.ts";
-import { redactMcpSecrets } from "../services/credential-redaction.ts";
+import {
+  mcpReadModel,
+  sanitizeMcpResponse,
+} from "../services/credential-redaction.ts";
 import {
   listScoped,
   requireScoped,
@@ -39,7 +43,6 @@ import {
   oauthFetchFn,
   buildOAuthCallbackUrl,
   buildMcpTransportConfig,
-  type McpRecord,
 } from "../services/mcp-oauth-provider.ts";
 
 /** Fields to null-out when clearing OAuth tokens. */
@@ -52,23 +55,6 @@ export const OAUTH_TOKEN_CLEAR_FIELDS = {
 
 const mcp = new Hono<{ Variables: Variables }>();
 
-/** Strips sensitive OAuth fields and adds computed oauthAuthorized flag */
-export const sanitizeMcpResponse = (record: McpRecord) => {
-  const {
-    oauthAccessToken,
-    oauthRefreshToken,
-    oauthClientSecret,
-    oauthTokenExpiresAt,
-    oauthScope,
-    ...rest
-  } = record;
-  return {
-    ...rest,
-    oauthAuthorized:
-      record.authType === "OAuth" ? !!oauthAccessToken : undefined,
-  };
-};
-
 /** Create a new MCP (org-admin, or owner when delegated — ADR-0006) */
 mcp.post(
   "/",
@@ -79,6 +65,7 @@ mcp.post(
   sValidator("json", mcpCreateSchema),
   async (c) => {
     const data = c.req.valid("json");
+    const { workspaceId } = workspaceScopeOf(c);
     const record = await db
       .insert(mcpTable)
       .values({
@@ -88,7 +75,7 @@ mcp.post(
         // and Skills. Spreading the body let a caller name another Workspace, or
         // set `organizationId` and mint a Shared MCP from the Workspace surface,
         // which only an Org Admin may do (ADR-0006, ADR-0007).
-        workspaceId: c.req.param("workspaceId")!,
+        workspaceId,
         organizationId: null,
       })
       .returning();
@@ -103,20 +90,16 @@ mcp.get(
   requireOrgAccess(),
   requireWorkspaceAccess,
   async (c) => {
-    const orgId = c.req.param("orgId")!;
-    const workspaceId = c.req.param("workspaceId")!;
-
     // Workspace-scoped MCPs plus the Shared (org-scoped) MCPs attached here
     // (ADR-0007), each tagged with its scope for the frontend.
-    const scoped = await listScoped(db, "mcp", { orgId, wsId: workspaceId });
+    const scoped = await listScoped(db, "mcp", workspaceScopeOf(c));
     // Request credentials are revealed only to a caller who may manage this MCP
     // (ADR-0006) — the same rule the write routes reject on. The rows still list,
     // because granting an MCP to an Agent does not require self-management.
-    const { allowed } = await workspaceConfigAccess(c, "mcpSelfManagement");
-    const results = scoped.map(({ row, scope }) => ({
-      ...redactMcpSecrets(sanitizeMcpResponse(row), { reveal: allowed }),
-      scope,
-    }));
+    const reveal = await workspaceCredentialsVisible(c, "mcp");
+    const results = scoped.map(({ row, scope }) =>
+      mcpReadModel(row, { reveal, scope }),
+    );
 
     return c.json({ results });
   },
@@ -130,18 +113,10 @@ mcp.get(
   requireWorkspaceAccess,
   async (c) => {
     const mcpId = c.req.param("mcpId");
-    const orgId = c.req.param("orgId")!;
-    const workspaceId = c.req.param("workspaceId")!;
-    const { row, scope } = await requireScoped(db, "mcp", mcpId, {
-      orgId,
-      wsId: workspaceId,
-    });
+    const found = await requireScoped(db, "mcp", mcpId, workspaceScopeOf(c));
     // See the list route: redacted unless this caller may manage the MCP.
-    const { allowed } = await workspaceConfigAccess(c, "mcpSelfManagement");
-    return c.json({
-      ...redactMcpSecrets(sanitizeMcpResponse(row), { reveal: allowed }),
-      scope,
-    });
+    const reveal = await workspaceCredentialsVisible(c, "mcp");
+    return c.json(mcpReadModel(found.row, { reveal, scope: found.scope }));
   },
 );
 
@@ -155,18 +130,14 @@ mcp.put(
   sValidator("json", mcpUpdateSchema),
   async (c) => {
     const mcpId = c.req.param("mcpId");
-    const orgId = c.req.param("orgId")!;
-    const workspaceId = c.req.param("workspaceId")!;
+    const scope = workspaceScopeOf(c);
     const data = c.req.valid("json");
 
     // A Shared MCP is a single source of truth edited only on the Organization
     // surface (ADR-0007); requireWorkspaceMutable throws NotFound (→404) when the
     // MCP is not visible here, then Locked (→403) when it is org-scoped. On
     // success the row is guaranteed Workspace-scoped.
-    const { row } = await requireWorkspaceMutable(db, "mcp", mcpId, {
-      orgId,
-      wsId: workspaceId,
-    });
+    const { row } = await requireWorkspaceMutable(db, "mcp", mcpId, scope);
 
     // If the URL is changing, clear stored OAuth tokens (they're server-specific)
     const urlChanged = row.url !== data.url;
@@ -182,7 +153,12 @@ mcp.put(
         }),
         updatedAt: new Date(),
       })
-      .where(and(eq(mcpTable.id, mcpId), eq(mcpTable.workspaceId, workspaceId)))
+      .where(
+        and(
+          eq(mcpTable.id, mcpId),
+          eq(mcpTable.workspaceId, scope.workspaceId),
+        ),
+      )
       .returning();
     return c.json(sanitizeMcpResponse(record[0]), 200);
   },
@@ -197,20 +173,21 @@ mcp.delete(
   requireMcpConfigAccess,
   async (c) => {
     const mcpId = c.req.param("mcpId");
-    const orgId = c.req.param("orgId")!;
-    const workspaceId = c.req.param("workspaceId")!;
+    const scope = workspaceScopeOf(c);
 
     // A Shared MCP is deleted only from the Organization surface (ADR-0007):
     // requireWorkspaceMutable throws NotFound (→404) when the MCP is not visible
     // here, then Locked (→403) when it is org-scoped.
-    await requireWorkspaceMutable(db, "mcp", mcpId, {
-      orgId,
-      wsId: workspaceId,
-    });
+    await requireWorkspaceMutable(db, "mcp", mcpId, scope);
 
     await db
       .delete(mcpTable)
-      .where(and(eq(mcpTable.id, mcpId), eq(mcpTable.workspaceId, workspaceId)))
+      .where(
+        and(
+          eq(mcpTable.id, mcpId),
+          eq(mcpTable.workspaceId, scope.workspaceId),
+        ),
+      )
       .returning();
     return c.json({ message: "MCP deleted" });
   },
@@ -228,10 +205,13 @@ mcp.post(
     const data = c.req.valid("json");
 
     let mcpClient;
+    // Read outside the try: the catch below turns anything thrown into a 400
+    // "connection failed", which is the wrong answer for a misconfigured route.
+    const { workspaceId } = workspaceScopeOf(c);
+
     try {
       // For OAuth, use authProvider with stored tokens
       if (data.authType === "OAuth" && data.mcpId) {
-        const workspaceId = c.req.param("workspaceId")!;
         const mcpRecord = await db
           .select()
           .from(mcpTable)
@@ -334,7 +314,7 @@ mcp.post(
   requireMcpConfigAccess,
   async (c) => {
     const mcpId = c.req.param("mcpId");
-    const workspaceId = c.req.param("workspaceId")!;
+    const { workspaceId } = workspaceScopeOf(c);
 
     const mcpRecord = await db
       .select()
@@ -427,7 +407,7 @@ mcp.post(
   requireMcpConfigAccess,
   async (c) => {
     const mcpId = c.req.param("mcpId");
-    const workspaceId = c.req.param("workspaceId")!;
+    const { workspaceId } = workspaceScopeOf(c);
 
     const record = await db
       .update(mcpTable)

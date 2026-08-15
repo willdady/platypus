@@ -1,5 +1,6 @@
 import { db } from "../index.ts";
-import { listScopedByIds, type ScopeContext } from "./scoped-resource.ts";
+import { listScopedByIds } from "./scoped-resource.ts";
+import type { ScopeContext } from "../scope.ts";
 
 /**
  * Rejection message for an Agent listed among its own sub-agents. Shared with

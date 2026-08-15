@@ -1,10 +1,7 @@
 "use client";
 
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+import { formatTokens } from "@/lib/context-window";
+import { cn } from "@/lib/utils";
 
 /**
  * How full the model's context was on the last completed turn (ADR-0018).
@@ -22,6 +19,7 @@ import {
 export const ContextMeter = ({
   occupancy,
   contextWindow,
+  className,
 }: {
   /**
    * Input tokens the vendor reported for the last model call of the turn.
@@ -30,6 +28,8 @@ export const ContextMeter = ({
   occupancy?: number | null;
   /** The window an Org Admin declared for this model, if any. */
   contextWindow?: number;
+  /** Where the meter sits — the composing component's decision, not this one's. */
+  className?: string;
 }) => {
   if (occupancy == null || contextWindow == null) return null;
 
@@ -38,36 +38,40 @@ export const ContextMeter = ({
   // deliberate choice, not a fault, and must not render as 117% or a bar
   // overflowing its track. The figures below stay true.
   const percent = Math.min(100, Math.round((occupancy / contextWindow) * 100));
-  const used = occupancy.toLocaleString();
-  const total = contextWindow.toLocaleString();
+  const used = formatTokens(occupancy);
+  const total = formatTokens(contextWindow);
 
   return (
-    <Tooltip delayDuration={300}>
-      <TooltipTrigger asChild>
-        <div className="flex shrink-0 items-center gap-1.5 text-xs text-muted-foreground">
-          <div
-            role="progressbar"
-            aria-valuenow={percent}
-            aria-valuemin={0}
-            aria-valuemax={100}
-            aria-label="Context used"
-            className="h-1 w-10 overflow-hidden rounded-full bg-muted"
-          >
-            <div
-              className="h-full rounded-full bg-muted-foreground/60"
-              style={{ width: `${percent}%` }}
-            />
-          </div>
-          <span className="tabular-nums whitespace-nowrap">
-            {percent}% · {used}/{total}
-          </span>
-        </div>
-      </TooltipTrigger>
-      <TooltipContent>
-        {/* One turn stale, and said so: nothing can count the tokens of a draft
-            locally, so the reading describes the last turn that was sent. */}
-        {used} of {total} tokens after the last turn.
-      </TooltipContent>
-    </Tooltip>
+    <div
+      className={cn(
+        "flex shrink-0 items-center gap-1.5 text-xs text-muted-foreground",
+        className,
+      )}
+    >
+      <div
+        role="progressbar"
+        aria-valuenow={percent}
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-label="Context used"
+        // Tinted from the foreground rather than `bg-muted`, whose dark value
+        // sits close enough to the composer's own surface that the empty part
+        // of the track disappears and the bar loses the length it is read
+        // against.
+        //
+        // Longer on a narrow screen, where the meter has a row to itself and
+        // the width no longer competes with the tools beside it — and a longer
+        // track is a finer reading, since every pixel is a percent and a bit.
+        className="h-1 w-16 overflow-hidden rounded-full bg-muted-foreground/25 sm:w-10"
+      >
+        <div
+          className="h-full rounded-full bg-muted-foreground/70"
+          style={{ width: `${percent}%` }}
+        />
+      </div>
+      <span className="tabular-nums whitespace-nowrap">
+        {percent}% · {used}/{total}
+      </span>
+    </div>
   );
 };

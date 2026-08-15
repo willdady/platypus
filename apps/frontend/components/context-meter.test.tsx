@@ -26,8 +26,8 @@ describe("ContextMeter", () => {
 
     // Both numbers, not only a bar: 33% of 128k and 33% of 8k are different
     // situations and a bar alone cannot tell them apart.
-    expect(screen.getByText(/42,000/)).toBeInTheDocument();
-    expect(screen.getByText(/128,000/)).toBeInTheDocument();
+    expect(screen.getByText(/42K/)).toBeInTheDocument();
+    expect(screen.getByText(/128K/)).toBeInTheDocument();
     expect(screen.getByText(/33%/)).toBeInTheDocument();
     expect(screen.getByRole("progressbar")).toHaveAttribute(
       "aria-valuenow",
@@ -46,8 +46,18 @@ describe("ContextMeter", () => {
     );
     expect(screen.getByText(/100%/)).toBeInTheDocument();
     expect(screen.queryByText(/117%/)).not.toBeInTheDocument();
-    expect(screen.getByText(/150,000/)).toBeInTheDocument();
-    expect(screen.getByText(/128,000/)).toBeInTheDocument();
+    expect(screen.getByText(/150K/)).toBeInTheDocument();
+    expect(screen.getByText(/128K/)).toBeInTheDocument();
+  });
+
+  // Which unit a given figure takes is `formatTokens`' business and tested
+  // there; what matters here is that the meter defers to it rather than
+  // printing a six- or seven-digit number into a strip of the composer.
+  it("writes both figures in units", () => {
+    render(<ContextMeter occupancy={1_100} contextWindow={2_000_000} />);
+
+    expect(screen.getByText(/1\.1K\/2M/)).toBeInTheDocument();
+    expect(screen.queryByText(/1,100/)).not.toBeInTheDocument();
   });
 
   it("rounds a nearly-empty window to a percentage rather than hiding", () => {

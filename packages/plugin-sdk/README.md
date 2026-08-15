@@ -87,6 +87,27 @@ plugin-named error.
 Plugins may also declare deploy-time, Operator-owned `configSchema` /
 `credentialsSchema`, supplied via `PLATYPUS_PLUGIN_CONFIG` and validated at boot.
 
+## Logging
+
+Don't reach for `console.*` or bundle a logger. Core puts a `PluginLogger` on the
+deploy-time block every contribution factory receives, already bound to your
+manifest `name`, so your lines join core's own structured stream at the verbosity
+the Operator set with `LOG_LEVEL`:
+
+```ts
+tools: (ctx, plugin) => {
+  // `debug` / `info` / `warn` / `error`, each taking a fields object with an
+  // optional message, or a message on its own.
+  plugin?.logger?.info({ workspaceId: ctx.workspaceId }, "Resolving tool set");
+  return {/* … */};
+};
+```
+
+Prefer the object form — those fields stay queryable where an interpolated string
+does not. Don't put your plugin's name in them; core binds it for you. And keep
+the optional chaining: `logger` is an appended optional member, so
+`plugin?.logger?.` is what lets the same code run on a core that predates it.
+
 ## Web-search backends
 
 A Web-search backend fills the chat **web-search toggle** for Providers without

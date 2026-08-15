@@ -1,4 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
+import pino from "pino";
 import { z } from "zod";
 import {
   OLDEST_SUPPORTED_API_VERSION,
@@ -14,15 +15,24 @@ import {
   MAX_WEB_TIMEOUT_MS,
   type WebBackendRegistration,
 } from "../web-backends/index.ts";
-import { loadPlugins, parsePluginConfig, parsePluginList } from "./loader.ts";
+import {
+  loadPlugins,
+  parsePluginConfig,
+  parsePluginList,
+  type PluginLoggerParent,
+} from "./loader.ts";
 import { plugin as examplePlugin } from "./example/index.ts";
-import { registerToolSet, getToolSet } from "../tools/index.ts";
+import {
+  registerToolSet,
+  getToolSet,
+  type ToolSetRegistration,
+} from "../tools/index.ts";
 
 // A capturing `register` and the builtin/import module shapes the loader expects.
 const makeRegister = () => {
-  const calls: Array<{ id: string; def: Omit<ToolSetContribution, "id"> }> = [];
-  const register = (id: string, def: Omit<ToolSetContribution, "id">) => {
-    calls.push({ id, def });
+  const calls: Array<{ id: string; registration: ToolSetRegistration }> = [];
+  const register = (id: string, registration: ToolSetRegistration) => {
+    calls.push({ id, registration });
   };
   return { register, calls };
 };
@@ -63,6 +73,29 @@ const toolSet = (id: string): ToolSetContribution => ({
   category: "Test",
   tools: {},
 });
+
+// Every deploy-time block the loader builds now carries a plugin-bound logger.
+// The assertions below still spell the block out in full — `expect.anything()`
+// widened once here, because it is typed `any` and would be an unsafe
+// assignment at each site. What the logger IS is asserted on its own, further
+// down.
+const A_LOGGER_MATCHER = expect.anything() as unknown;
+
+// Core's own logger, at whatever level an Operator's LOG_LEVEL would have set,
+// writing its parsed JSON into `lines` instead of stdout. Same library and same
+// `child()` seam the loader uses by default, only with somewhere to read the
+// output back from — so what these tests assert is what an Operator would see.
+const captureLogger = (level: string) => {
+  const lines: Array<Record<string, unknown>> = [];
+  const logger = pino(
+    { level },
+    {
+      write: (chunk: string) =>
+        lines.push(JSON.parse(chunk) as Record<string, unknown>),
+    },
+  );
+  return { logger, lines };
+};
 
 // A capturing `registerWeb` for the Web-search-backend extension point. It takes
 // core's composed registration, not the raw contribution.
@@ -116,7 +149,7 @@ describe("parsePluginList", () => {
 describe("loadPlugins — apiVersion compatibility window (N and N−1)", () => {
   it("accepts a plugin declaring exactly core's apiVersion", async () => {
     const { register, calls } = makeRegister();
-    const loaded = await loadPlugins({
+    const { plugins: loaded } = await loadPlugins({
       pluginNames: ["@exact/plugin"],
       builtinPlugins: {},
       importPlugin: () =>
@@ -133,7 +166,7 @@ describe("loadPlugins — apiVersion compatibility window (N and N−1)", () => 
 
   it("accepts a plugin on the previous major (N−1)", async () => {
     const { register, calls } = makeRegister();
-    const loaded = await loadPlugins({
+    const { plugins: loaded } = await loadPlugins({
       pluginNames: ["@nminus1/plugin"],
       builtinPlugins: {},
       importPlugin: () =>
@@ -213,7 +246,7 @@ describe("loadPlugins", () => {
         }),
     };
 
-    const loaded = await loadPlugins({
+    const { plugins: loaded } = await loadPlugins({
       pluginNames: ["@platypus/tools-basic"],
       builtinPlugins,
       register,
@@ -234,13 +267,52 @@ describe("loadPlugins", () => {
 
   it("registers nothing for an empty list and does not crash", async () => {
     const { register, calls } = makeRegister();
-    const loaded = await loadPlugins({
+    const { plugins: loaded, owners } = await loadPlugins({
       pluginNames: [],
       builtinPlugins: {},
       register,
     });
     expect(loaded).toEqual([]);
     expect(calls).toHaveLength(0);
+    expect(owners.toolSets.size).toBe(0);
+    expect(owners.sandboxBackends.size).toBe(0);
+    expect(owners.webBackends.size).toBe(0);
+  });
+
+  it("returns the id → plugin owner map it built while registering", async () => {
+    // The registry serves catalog annotations from these maps rather than
+    // re-deriving them from each plugin's id arrays (ADR-0013 observability).
+    // One map per Extension point: a Tool set and a backend may share a bare id.
+    const { register } = makeRegister();
+    const { registerSandbox } = makeSandboxRegister();
+    const { registerWeb } = makeWebRegister();
+
+    const { owners } = await loadPlugins({
+      pluginNames: ["@platypus/tools-basic", "@acme/search"],
+      builtinPlugins: {
+        "@platypus/tools-basic": () =>
+          Promise.resolve({
+            plugin: {
+              ...manifest("@platypus/tools-basic", [toolSet("time")]),
+              contributes: {
+                toolSets: [toolSet("time")],
+                sandboxBackends: [sandboxBackend("docker")],
+              },
+            },
+          }),
+      },
+      importPlugin: () =>
+        Promise.resolve({ plugin: webManifest("acme", [webBackend("searx")]) }),
+      register,
+      registerSandbox,
+      registerWeb,
+    });
+
+    expect([...owners.toolSets]).toEqual([["time", "@platypus/tools-basic"]]);
+    expect([...owners.sandboxBackends]).toEqual([
+      ["docker", "@platypus/tools-basic"],
+    ]);
+    expect([...owners.webBackends]).toEqual([["acme.searx", "acme"]]);
   });
 
   it("resolves a third-party plugin via dynamic import", async () => {
@@ -251,7 +323,7 @@ describe("loadPlugins", () => {
       }),
     );
 
-    const loaded = await loadPlugins({
+    const { plugins: loaded } = await loadPlugins({
       pluginNames: ["@third/party"],
       builtinPlugins: {},
       importPlugin,
@@ -280,7 +352,7 @@ describe("loadPlugins", () => {
       }),
     );
 
-    const loaded = await loadPlugins({
+    const { plugins: loaded } = await loadPlugins({
       pluginNames: ["@platypus/tools-basic", "@third/party"],
       builtinPlugins,
       importPlugin,
@@ -357,6 +429,59 @@ describe("loadPlugins", () => {
     ).rejects.toThrow(/@empty\/plugin.*manifest/s);
   });
 
+  // Contribution shape, id, and name are the shared pipeline's checks, covered
+  // once in `contribution-pipeline.test.ts`. What is left here is what the
+  // Tool-set point itself demands of a contribution.
+  it.each([
+    [
+      "a missing category",
+      { id: "broken", name: "Broken", tools: {} },
+      /@platypus\/bad.*tool set "broken".*non-empty "category"/s,
+    ],
+    [
+      "a whitespace-only category",
+      { id: "broken", name: "Broken", category: "   ", tools: {} },
+      /@platypus\/bad.*tool set "broken".*non-empty "category"/s,
+    ],
+    [
+      "missing tools",
+      { id: "broken", name: "Broken", category: "Test" },
+      /@platypus\/bad.*tool set "broken".*"tools" object or function/s,
+    ],
+    [
+      "an array tools",
+      { id: "broken", name: "Broken", category: "Test", tools: [] },
+      /@platypus\/bad.*tool set "broken".*"tools" object or function/s,
+    ],
+  ])(
+    "aborts (fail-loud, plugin-named) on %s",
+    async (_label, contribution, expected) => {
+      const { register, calls } = makeRegister();
+      await expect(
+        loadPlugins({
+          pluginNames: ["@platypus/bad"],
+          builtinPlugins: {
+            "@platypus/bad": () =>
+              Promise.resolve({
+                plugin: {
+                  name: "@platypus/bad",
+                  version: "0.1.0",
+                  apiVersion: 1,
+                  contributes: {
+                    toolSets: [
+                      contribution,
+                    ] as unknown as ToolSetContribution[],
+                  },
+                },
+              }),
+          },
+          register,
+        }),
+      ).rejects.toThrow(expected);
+      expect(calls).toHaveLength(0);
+    },
+  );
+
   it("aborts (fail-loud) on a duplicate id, naming both owning plugins", async () => {
     const { register } = makeRegister();
     // Two core plugins keep bare ids, so a shared `time` id collides directly.
@@ -423,7 +548,7 @@ describe("loadPlugins — sandbox backends", () => {
   it("registers a sandbox-backend contribution and reports its id", async () => {
     const { register } = makeRegister();
     const { registerSandbox, calls } = makeSandboxRegister();
-    const loaded = await loadPlugins({
+    const { plugins: loaded } = await loadPlugins({
       pluginNames: ["@platypus/docker"],
       builtinPlugins: {
         "@platypus/docker": () =>
@@ -450,57 +575,6 @@ describe("loadPlugins — sandbox backends", () => {
     ]);
   });
 
-  it("aborts (fail-loud) on a duplicate sandbox backend id, naming both plugins", async () => {
-    const { register } = makeRegister();
-    const { registerSandbox } = makeSandboxRegister();
-    // Two core plugins keep bare backend ids, so a shared `docker` collides.
-    const builtinPlugins = {
-      "@a/plugin": () =>
-        Promise.resolve({
-          plugin: sandboxManifest("@a/plugin", [sandboxBackend("docker")]),
-        }),
-      "@b/plugin": () =>
-        Promise.resolve({
-          plugin: sandboxManifest("@b/plugin", [sandboxBackend("docker")]),
-        }),
-    };
-
-    await expect(
-      loadPlugins({
-        pluginNames: ["@a/plugin", "@b/plugin"],
-        builtinPlugins,
-        register,
-        registerSandbox,
-      }),
-    ).rejects.toThrow(/"docker".*"@a\/plugin".*"@b\/plugin"/s);
-  });
-
-  it("re-throws a registry collision with plugin attribution", async () => {
-    const { register } = makeRegister();
-    const registerSandbox = () => {
-      throw new Error("Sandbox backend 'docker' has already been registered.");
-    };
-    // A core plugin keeps its bare `docker` backend id, colliding with a legacy
-    // static registration.
-    await expect(
-      loadPlugins({
-        pluginNames: ["@platypus/collides"],
-        builtinPlugins: {
-          "@platypus/collides": () =>
-            Promise.resolve({
-              plugin: sandboxManifest("@platypus/collides", [
-                sandboxBackend("docker"),
-              ]),
-            }),
-        },
-        register,
-        registerSandbox,
-      }),
-    ).rejects.toThrow(
-      /@platypus\/collides.*"docker".*already been registered/s,
-    );
-  });
-
   it("aborts (fail-loud) when sandboxBackends is not an array", async () => {
     const { register } = makeRegister();
     await expect(
@@ -522,36 +596,13 @@ describe("loadPlugins — sandbox backends", () => {
     ).rejects.toThrow(/@bad\/plugin.*sandboxBackends.*array/s);
   });
 
-  // `sandboxBackends` being an array is checked above; a third-party JS plugin can
-  // still put anything *inside* it. Each of these previously surfaced far from its
-  // cause — an unattributed TypeError at boot, a mystery `"acme.undefined"` in the
-  // catalog, or a 500 on an Operator's sandbox form.
+  // `sandboxBackends` being an array is checked above, and contribution shape,
+  // id, and name are the shared pipeline's checks (covered once in
+  // `contribution-pipeline.test.ts`). What is left here is what the
+  // Sandbox-backend point itself demands — each case previously surfaced far
+  // from its cause: an unattributed TypeError at boot, or a 500 on an Operator's
+  // sandbox form.
   it.each([
-    [
-      "a non-object entry",
-      null,
-      /@platypus\/bad.*sandbox backend contribution must be an object/s,
-    ],
-    [
-      "a missing backend id",
-      {
-        name: "x",
-        configSchema: z.object({}),
-        credentialsSchema: z.object({}),
-        create: () => ({}),
-      },
-      /@platypus\/bad.*non-empty "backend" id/s,
-    ],
-    [
-      "a missing name",
-      {
-        backend: "b",
-        configSchema: z.object({}),
-        credentialsSchema: z.object({}),
-        create: () => ({}),
-      },
-      /@platypus\/bad.*must declare a non-empty "name"/s,
-    ],
     [
       "a missing create",
       {
@@ -714,7 +765,7 @@ describe("loadPlugins — web-search backends", () => {
   it("registers a web-backend contribution and reports its id", async () => {
     const { register } = makeRegister();
     const { registerWeb, calls } = makeWebRegister();
-    const loaded = await loadPlugins({
+    const { plugins: loaded } = await loadPlugins({
       pluginNames: ["@platypus/searx"],
       builtinPlugins: {
         "@platypus/searx": () =>
@@ -740,7 +791,7 @@ describe("loadPlugins — web-search backends", () => {
   it("prefixes a third-party web-backend id with the manifest name", async () => {
     const { register } = makeRegister();
     const { registerWeb, calls } = makeWebRegister();
-    const loaded = await loadPlugins({
+    const { plugins: loaded } = await loadPlugins({
       pluginNames: ["@acme/platypus-search"],
       builtinPlugins: {},
       importPlugin: () =>
@@ -753,52 +804,6 @@ describe("loadPlugins — web-search backends", () => {
 
     expect(calls.map((c) => c.backend)).toEqual(["acme.web"]);
     expect(loaded[0].webBackendIds).toEqual(["acme.web"]);
-  });
-
-  it("aborts (fail-loud) on a duplicate web backend id, naming both plugins", async () => {
-    const { register } = makeRegister();
-    const { registerWeb } = makeWebRegister();
-    // Two core plugins keep bare backend ids, so a shared `searx` collides.
-    const builtinPlugins = {
-      "@a/plugin": () =>
-        Promise.resolve({
-          plugin: webManifest("@a/plugin", [webBackend("searx")]),
-        }),
-      "@b/plugin": () =>
-        Promise.resolve({
-          plugin: webManifest("@b/plugin", [webBackend("searx")]),
-        }),
-    };
-
-    await expect(
-      loadPlugins({
-        pluginNames: ["@a/plugin", "@b/plugin"],
-        builtinPlugins,
-        register,
-        registerWeb,
-      }),
-    ).rejects.toThrow(/"searx".*"@a\/plugin".*"@b\/plugin"/s);
-  });
-
-  it("re-throws a registry collision with plugin attribution", async () => {
-    const { register } = makeRegister();
-    const registerWeb = () => {
-      throw new Error("Web backend 'searx' has already been registered.");
-    };
-
-    await expect(
-      loadPlugins({
-        pluginNames: ["@platypus/collides"],
-        builtinPlugins: {
-          "@platypus/collides": () =>
-            Promise.resolve({
-              plugin: webManifest("@platypus/collides", [webBackend("searx")]),
-            }),
-        },
-        register,
-        registerWeb,
-      }),
-    ).rejects.toThrow(/@platypus\/collides.*"searx".*already been registered/s);
   });
 
   it("aborts (fail-loud) when webBackends is not an array", async () => {
@@ -822,33 +827,9 @@ describe("loadPlugins — web-search backends", () => {
     ).rejects.toThrow(/@bad\/plugin.*webBackends.*array/s);
   });
 
-  it("aborts (fail-loud, plugin-named) on a non-object web backend entry", async () => {
-    // `webBackends` being an array is checked; a third-party JS plugin can
-    // still put `null` inside it, which would otherwise throw an unattributed
-    // "Cannot read properties of null" reading `.backend` next.
-    const { register } = makeRegister();
-    await expect(
-      loadPlugins({
-        pluginNames: ["@platypus/searx"],
-        builtinPlugins: {
-          "@platypus/searx": () =>
-            Promise.resolve({
-              plugin: {
-                name: "@platypus/searx",
-                version: "0.1.0",
-                apiVersion: 1,
-                contributes: { webBackends: [null] },
-              },
-            }),
-        },
-        register,
-        registerWeb: () => {},
-      }),
-    ).rejects.toThrow(
-      /@platypus\/searx.*web backend contribution must be an object/s,
-    );
-  });
-
+  // Contribution shape, id, and name are the shared pipeline's checks, covered
+  // once in `contribution-pipeline.test.ts`. What is left here is what the
+  // Web-backend point itself demands of a contribution.
   it("aborts (fail-loud) when a contribution has no createExecutors function", async () => {
     const { register } = makeRegister();
     // The TS type requires it; a third-party JS plugin can still omit it, and
@@ -871,51 +852,6 @@ describe("loadPlugins — web-search backends", () => {
         registerWeb: () => {},
       }),
     ).rejects.toThrow(/@platypus\/searx.*"searx".*createExecutors/s);
-  });
-
-  it("aborts (fail-loud) on a contribution with no backend id, before namespacing it", async () => {
-    const { register } = makeRegister();
-    // Namespacing an absent id first would mint `"@platypus/searx.undefined"`
-    // and register it, turning a missing field into a mystery catalog entry.
-    const nameless = {
-      name: "SearXNG",
-      createExecutors: () => ({
-        web_search: () => ({ query: "", results: [] }),
-      }),
-    } as unknown as ReturnType<typeof webBackend>;
-
-    await expect(
-      loadPlugins({
-        pluginNames: ["@platypus/searx"],
-        builtinPlugins: {
-          "@platypus/searx": () =>
-            Promise.resolve({
-              plugin: webManifest("@platypus/searx", [nameless]),
-            }),
-        },
-        register,
-        registerWeb: () => {},
-      }),
-    ).rejects.toThrow(/@platypus\/searx.*non-empty "backend" id/s);
-  });
-
-  it("aborts (fail-loud) on a contribution with a blank display name", async () => {
-    const { register } = makeRegister();
-    await expect(
-      loadPlugins({
-        pluginNames: ["@platypus/searx"],
-        builtinPlugins: {
-          "@platypus/searx": () =>
-            Promise.resolve({
-              plugin: webManifest("@platypus/searx", [
-                { ...webBackend("searx"), name: "   " },
-              ]),
-            }),
-        },
-        register,
-        registerWeb: () => {},
-      }),
-    ).rejects.toThrow(/@platypus\/searx.*"searx".*non-empty "name"/s);
   });
 
   it("refuses an over-ceiling timeoutMs at boot rather than clamping it", async () => {
@@ -1003,6 +939,7 @@ describe("loadPlugins — web-search backends", () => {
     expect(createExecutors).toHaveBeenCalledWith(ctx, {
       config: { endpoint: "https://searx.internal" },
       credentials: { apiKey: "sk-test" },
+      logger: A_LOGGER_MATCHER,
     });
   });
 });
@@ -1102,9 +1039,9 @@ describe("loadPlugins — deploy-time plugin config injection", () => {
       toolSet?: PluginConfigContext;
       sandbox?: PluginConfigContext;
     } = {};
-    const registered: Record<string, Omit<ToolSetContribution, "id">> = {};
-    const register = (id: string, def: Omit<ToolSetContribution, "id">) => {
-      registered[id] = def;
+    const registered: Record<string, ToolSetRegistration> = {};
+    const register = (id: string, registration: ToolSetRegistration) => {
+      registered[id] = registration;
     };
     const sandboxCalls: SandboxBackendContribution[] = [];
     const registerSandbox = (c: SandboxBackendContribution) => {
@@ -1128,9 +1065,7 @@ describe("loadPlugins — deploy-time plugin config injection", () => {
 
     // Tool-set factory: invoked as core would at Chat-turn time, with ctx only.
     // Third-party ids are namespaced, so the registry key is prefixed.
-    const toolsFactory = registered["acmecloud.managed"].tools;
-    expect(typeof toolsFactory).toBe("function");
-    await (toolsFactory as (ctx: unknown) => unknown)({
+    await registered["acmecloud.managed"].buildTurnTools({
       workspaceId: "w",
       agentId: "a",
       orgId: "o",
@@ -1144,10 +1079,12 @@ describe("loadPlugins — deploy-time plugin config injection", () => {
     expect(seen.toolSet).toEqual({
       config: { region: "eu" },
       credentials: { apiToken: "tok_123" },
+      logger: A_LOGGER_MATCHER,
     });
     expect(seen.sandbox).toEqual({
       config: { region: "eu" },
       credentials: { apiToken: "tok_123" },
+      logger: A_LOGGER_MATCHER,
     });
   });
 
@@ -1156,9 +1093,9 @@ describe("loadPlugins — deploy-time plugin config injection", () => {
       toolSet?: PluginConfigContext;
       sandbox?: PluginConfigContext;
     } = {};
-    const registered: Record<string, Omit<ToolSetContribution, "id">> = {};
-    const register = (id: string, def: Omit<ToolSetContribution, "id">) => {
-      registered[id] = def;
+    const registered: Record<string, ToolSetRegistration> = {};
+    const register = (id: string, registration: ToolSetRegistration) => {
+      registered[id] = registration;
     };
     const sandboxCalls: SandboxBackendContribution[] = [];
 
@@ -1177,7 +1114,7 @@ describe("loadPlugins — deploy-time plugin config injection", () => {
       },
     });
 
-    await (registered["acmecloud.managed"].tools as (ctx: unknown) => unknown)({
+    await registered["acmecloud.managed"].buildTurnTools({
       workspaceId: "w",
       agentId: "a",
       orgId: "o",
@@ -1233,7 +1170,7 @@ describe("loadPlugins — deploy-time plugin config injection", () => {
 
   it("passes undefined config/credentials to plugins declaring no schemas", async () => {
     let seenPlugin: PluginConfigContext | undefined;
-    const registered: Record<string, Omit<ToolSetContribution, "id">> = {};
+    const registered: Record<string, ToolSetRegistration> = {};
 
     await loadPlugins({
       pluginNames: ["noschema"],
@@ -1259,12 +1196,12 @@ describe("loadPlugins — deploy-time plugin config injection", () => {
             },
           } satisfies PlatypusPlugin,
         }),
-      register: (id, def) => {
-        registered[id] = def;
+      register: (id, registration) => {
+        registered[id] = registration;
       },
     });
 
-    await (registered["noschema.plain"].tools as (ctx: unknown) => unknown)({
+    await registered["noschema.plain"].buildTurnTools({
       workspaceId: "w",
       agentId: "a",
       orgId: "o",
@@ -1272,7 +1209,162 @@ describe("loadPlugins — deploy-time plugin config injection", () => {
       userId: "u",
     });
 
-    expect(seenPlugin).toEqual({ config: undefined, credentials: undefined });
+    expect(seenPlugin).toEqual({
+      config: undefined,
+      credentials: undefined,
+      logger: A_LOGGER_MATCHER,
+    });
+  });
+});
+
+describe("loadPlugins — plugin logger injection", () => {
+  // A plugin contributing to all three Extension points, each factory recording
+  // the block it was handed and writing one line through it.
+  const loggingManifest = (
+    name: string,
+    seen: Record<string, PluginConfigContext | undefined>,
+  ): PlatypusPlugin => ({
+    name,
+    version: "0.1.0",
+    apiVersion: 1,
+    contributes: {
+      toolSets: [
+        {
+          id: "tools",
+          name: "Tools",
+          category: "Test",
+          tools: (_ctx, plugin) => {
+            seen.toolSet = plugin;
+            plugin?.logger?.info({ point: "toolSet" }, "resolving tools");
+            return {};
+          },
+        },
+      ],
+      sandboxBackends: [
+        {
+          backend: "sandbox",
+          name: "Sandbox",
+          configSchema: z.object({}),
+          credentialsSchema: z.object({}),
+          create: (_config, _credentials, plugin) => {
+            seen.sandbox = plugin;
+            plugin?.logger?.info({ point: "sandbox" }, "creating adapter");
+            return {} as unknown as SandboxBackend;
+          },
+        },
+      ],
+      webBackends: [
+        {
+          backend: "web",
+          name: "Web",
+          createExecutors: (_ctx, plugin) => {
+            seen.web = plugin;
+            plugin?.logger?.info({ point: "web" }, "building executors");
+            return { web_search: () => ({ query: "q", results: [] }) };
+          },
+        },
+      ],
+    },
+  });
+
+  // Drive every factory the way core does at turn time, so what is asserted is
+  // what a plugin author's own code would actually receive.
+  const invokeAllFactories = async (opts: {
+    pluginName: string;
+    baseLogger: PluginLoggerParent;
+    seen: Record<string, PluginConfigContext | undefined>;
+  }) => {
+    const registered: Record<string, ToolSetRegistration> = {};
+    const sandboxCalls: SandboxBackendContribution[] = [];
+    const { registerWeb, calls: webCalls } = makeWebRegister();
+
+    await loadPlugins({
+      pluginNames: [opts.pluginName],
+      builtinPlugins: {},
+      importPlugin: () =>
+        Promise.resolve({
+          plugin: loggingManifest(opts.pluginName, opts.seen),
+        }),
+      register: (id, registration) => {
+        registered[id] = registration;
+      },
+      registerSandbox: (c) => sandboxCalls.push(c),
+      registerWeb,
+      baseLogger: opts.baseLogger,
+    });
+
+    await registered[`${opts.pluginName}.tools`].buildTurnTools({
+      workspaceId: "w",
+      agentId: "a",
+      orgId: "o",
+      frontendUrl: undefined,
+      userId: "u",
+    });
+    sandboxCalls[0].create({}, {});
+    await webCalls[0].buildTurnTools({
+      orgId: "o",
+      workspaceId: "w",
+      userId: "u",
+    });
+  };
+
+  it("reaches all three Extension points as one logger bound to the manifest name", async () => {
+    const { logger, lines } = captureLogger("info");
+    const seen: Record<string, PluginConfigContext | undefined> = {};
+
+    await invokeAllFactories({
+      pluginName: "acme",
+      baseLogger: logger,
+      seen,
+    });
+
+    // One child per plugin, shared by object identity with the rest of the
+    // deploy-time block — no per-Extension-point plumbing.
+    expect(seen.toolSet?.logger).toBeDefined();
+    expect(seen.sandbox?.logger).toBe(seen.toolSet?.logger);
+    expect(seen.web?.logger).toBe(seen.toolSet?.logger);
+
+    // Every line landed in core's stream, attributed to the manifest name.
+    expect(lines).toHaveLength(3);
+    expect(lines.map((l) => l.point)).toEqual(["toolSet", "sandbox", "web"]);
+    for (const line of lines) {
+      expect(line.plugin).toBe("acme");
+      expect(line.msg).toEqual(expect.any(String));
+    }
+  });
+
+  it("suppresses a plugin line the Operator's LOG_LEVEL excludes", async () => {
+    // The plugin logs at `info`; the deployment is set to `warn`. Nothing is
+    // written — the plugin's lines obey LOG_LEVEL like core's own.
+    const { logger, lines } = captureLogger("warn");
+
+    await invokeAllFactories({
+      pluginName: "acme",
+      baseLogger: logger,
+      seen: {},
+    });
+
+    expect(lines).toEqual([]);
+  });
+
+  it("binds each plugin to its own name", async () => {
+    const { logger, lines } = captureLogger("info");
+
+    await invokeAllFactories({
+      pluginName: "acme",
+      baseLogger: logger,
+      seen: {},
+    });
+    await invokeAllFactories({
+      pluginName: "widgets",
+      baseLogger: logger,
+      seen: {},
+    });
+
+    expect([...new Set(lines.map((l) => l.plugin))]).toEqual([
+      "acme",
+      "widgets",
+    ]);
   });
 });
 
@@ -1280,15 +1372,15 @@ describe("loadPlugins — example third-party plugin", () => {
   // Proves the documented example plugin wires one shared credential block into
   // BOTH its Sandbox backend and its management Tool set (ADR-0013).
   it("shares one credential block across its two contributions", async () => {
-    const registered: Record<string, Omit<ToolSetContribution, "id">> = {};
+    const registered: Record<string, ToolSetRegistration> = {};
     const sandboxCalls: SandboxBackendContribution[] = [];
 
-    const loaded = await loadPlugins({
+    const { plugins: loaded } = await loadPlugins({
       pluginNames: ["example-cloud-sandbox"],
       builtinPlugins: {},
       importPlugin: () => Promise.resolve({ plugin: examplePlugin }),
-      register: (id, def) => {
-        registered[id] = def;
+      register: (id, registration) => {
+        registered[id] = registration;
       },
       registerSandbox: (c) => sandboxCalls.push(c),
       pluginConfig: {
@@ -1317,17 +1409,18 @@ describe("loadPlugins — example third-party plugin", () => {
     expect(backend.region).toBe("ap");
 
     // Management tool set: its tool description reflects the SAME token/region.
-    const toolsFactory = registered["example-cloud-sandbox.management"]
-      .tools as unknown as (
-      ctx: unknown,
-    ) => Promise<Record<string, { execute: (i: unknown) => Promise<string> }>>;
-    const tools = await toolsFactory({
+    const tools = (await registered[
+      "example-cloud-sandbox.management"
+    ].buildTurnTools({
       workspaceId: "w",
       agentId: "a",
       orgId: "o",
       frontendUrl: undefined,
       userId: "u",
-    });
+    })) as unknown as Record<
+      string,
+      { execute: (i: unknown) => Promise<string> }
+    >;
     const msg = await tools.listSandboxes.execute({});
     expect(msg).toContain("ap");
     expect(msg).toContain("dtn");
@@ -1361,7 +1454,7 @@ describe("loadPlugins — the documented quickstart package", () => {
 
     // No `importPlugin` override: this exercises the default dynamic import, the
     // same path a deployment takes for any installed third-party package.
-    const loaded = await loadPlugins({
+    const { plugins: loaded } = await loadPlugins({
       pluginNames: ["@platypus-examples/tool-set"],
       builtinPlugins: {},
       register,
@@ -1379,8 +1472,8 @@ describe("loadPlugins — the documented quickstart package", () => {
     // the switch with `name`, so those are the two strings the reader hunts for.
     expect(calls).toHaveLength(1);
     expect(calls[0].id).toBe("example.greeting");
-    expect(calls[0].def.name).toBe("Greeting");
-    expect(calls[0].def.category).toBe("Examples");
+    expect(calls[0].registration.name).toBe("Greeting");
+    expect(calls[0].registration.category).toBe("Examples");
   });
 });
 
@@ -1398,7 +1491,7 @@ describe("loadPlugins — always-on core set (ADR-0013 amendment)", () => {
         }),
     };
 
-    const loaded = await loadPlugins({
+    const { plugins: loaded } = await loadPlugins({
       pluginNames: [],
       alwaysOnPlugins: ["@platypus/tools-basic", "@platypus/tools-platform"],
       builtinPlugins,
@@ -1561,7 +1654,7 @@ describe("loadPlugins — third-party name slug validation (ADR-0013)", () => {
 
   it("accepts a clean slug name and prefixes contribution ids with it", async () => {
     const { register, calls } = makeRegister();
-    const loaded = await loadPlugins({
+    const { plugins: loaded } = await loadPlugins({
       pluginNames: ["@acme/platypus-widgets"],
       builtinPlugins: {},
       importPlugin: () =>
@@ -1587,7 +1680,7 @@ describe("loadPlugins — third-party namespacing (ADR-0013)", () => {
       Promise.resolve({ plugin: manifest("example", [toolSet("greeting")]) }),
     );
 
-    const loaded = await loadPlugins({
+    const { plugins: loaded } = await loadPlugins({
       pluginNames: ["@platypus/tools-basic", "@example-org/pkg"],
       builtinPlugins,
       importPlugin,
@@ -1604,7 +1697,7 @@ describe("loadPlugins — third-party namespacing (ADR-0013)", () => {
     const { register } = makeRegister();
     const { registerSandbox, calls } = makeSandboxRegister();
 
-    const loaded = await loadPlugins({
+    const { plugins: loaded } = await loadPlugins({
       pluginNames: ["@third/infra"],
       builtinPlugins: {},
       importPlugin: () =>
@@ -1631,7 +1724,7 @@ describe("loadPlugins — third-party namespacing (ADR-0013)", () => {
       }),
     );
 
-    const loaded = await loadPlugins({
+    const { plugins: loaded } = await loadPlugins({
       pluginNames: ["@platypus/impostor"],
       builtinPlugins: {},
       importPlugin,
@@ -1655,7 +1748,7 @@ describe("loadPlugins — example third-party npm package (end to end)", () => {
   it("loads the installed package via dynamic import and namespaces its id", async () => {
     const { register, calls } = makeRegister();
 
-    const loaded = await loadPlugins({
+    const { plugins: loaded } = await loadPlugins({
       pluginNames: ["@platypus-examples/tool-set"],
       builtinPlugins: {},
       register,
@@ -1669,25 +1762,68 @@ describe("loadPlugins — example third-party npm package (end to end)", () => {
   });
 
   it("registers into the real registry so a Chat turn resolves it by the prefixed id", async () => {
+    // The package logs at `debug`, so the stream is set to admit it — the same
+    // thing an Operator does with LOG_LEVEL when they want a plugin's detail.
+    const { logger: baseLogger, lines } = captureLogger("debug");
+
     await loadPlugins({
       pluginNames: ["@platypus-examples/tool-set"],
       builtinPlugins: {},
       register: registerToolSet,
+      baseLogger,
     });
 
     // Chat-turn resolution walks the tool-set registry by id (ADR-0013): the
     // example plugin is reachable only under its namespaced id.
-    const set = getToolSet("example.greeting");
+    const set = getToolSet("example.greeting")!;
     expect(set.category).toBe("Examples");
-    expect(() => getToolSet("greeting")).toThrow(/has not been registered/);
+    expect(getToolSet("greeting")).toBeUndefined();
 
-    if (typeof set.tools === "function") {
-      throw new Error("expected a static tool map");
-    }
-    const result = (await set.tools.greet.execute!(
+    const tools = await set.buildTurnTools({
+      workspaceId: "ws-1",
+      agentId: "agent-1",
+      orgId: "org-1",
+      frontendUrl: undefined,
+      userId: "user-1",
+    });
+    const result = (await tools.greet.execute!(
       { name: "Ada" },
       { toolCallId: "t1", messages: [], context: {} },
     )) as string;
     expect(result).toContain("Ada");
+
+    // The whole third-party logging path, through the real published package:
+    // the line the plugin wrote is in core's stream, attributed to its manifest
+    // name, with the fields it supplied intact.
+    expect(lines).toContainEqual(
+      expect.objectContaining({
+        plugin: "example",
+        workspaceId: "ws-1",
+        agentId: "agent-1",
+        level: 20, // debug
+      }),
+    );
+  });
+
+  it("writes nothing when the Operator's LOG_LEVEL excludes the plugin's level", async () => {
+    const { logger: baseLogger, lines } = captureLogger("info");
+    const { register, calls } = makeRegister();
+
+    await loadPlugins({
+      pluginNames: ["@platypus-examples/tool-set"],
+      builtinPlugins: {},
+      register,
+      baseLogger,
+    });
+
+    await calls[0].registration.buildTurnTools({
+      workspaceId: "ws-1",
+      agentId: "agent-1",
+      orgId: "org-1",
+      frontendUrl: undefined,
+      userId: "user-1",
+    });
+
+    expect(lines).toEqual([]);
   });
 });

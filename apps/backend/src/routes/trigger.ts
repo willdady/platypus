@@ -7,7 +7,6 @@ import { db } from "../index.ts";
 import {
   trigger as triggerTable,
   triggerRun as triggerRunTable,
-  agent as agentTable,
 } from "../db/schema.ts";
 import { triggerCreateSchema, triggerUpdateSchema } from "@platypus/schemas";
 import { requireAuth } from "../middleware/authentication.ts";
@@ -15,7 +14,9 @@ import {
   requireOrgAccess,
   requireWorkspaceAccess,
   requireWorkspaceOwner,
+  workspaceScopeOf,
 } from "../middleware/authorization.ts";
+import { resolveScoped } from "../services/scoped-resource.ts";
 import type { Variables } from "../server.ts";
 import { logger } from "../logger.ts";
 import { validateCronExpression } from "../utils/cron.ts";
@@ -29,7 +30,7 @@ trigger.get(
   requireOrgAccess(),
   requireWorkspaceAccess,
   async (c) => {
-    const workspaceId = c.req.param("workspaceId")!;
+    const { workspaceId } = workspaceScopeOf(c);
     const results = await db
       .select()
       .from(triggerTable)
@@ -47,7 +48,7 @@ trigger.get(
   requireWorkspaceAccess,
   async (c) => {
     const triggerId = c.req.param("triggerId");
-    const workspaceId = c.req.param("workspaceId")!;
+    const { workspaceId } = workspaceScopeOf(c);
 
     const record = await db
       .select()
@@ -78,21 +79,15 @@ trigger.post(
   sValidator("json", triggerCreateSchema),
   async (c) => {
     const data = c.req.valid("json");
-    const workspaceId = c.req.param("workspaceId")!;
+    const scope = workspaceScopeOf(c);
+    const { workspaceId } = scope;
 
-    // Verify agent exists in workspace
-    const agentRecord = await db
-      .select()
-      .from(agentTable)
-      .where(
-        and(
-          eq(agentTable.id, data.agentId),
-          eq(agentTable.workspaceId, workspaceId),
-        ),
-      )
-      .limit(1);
+    // The Agent must be usable here: workspace-scoped, or a Shared one attached
+    // to this Workspace (ADR-0007) — the same set the run resolves when the
+    // trigger fires.
+    const agentRecord = await resolveScoped(db, "agent", data.agentId, scope);
 
-    if (agentRecord.length === 0) {
+    if (!agentRecord) {
       return c.json({ error: "Agent not found in this workspace" }, 400);
     }
 
@@ -151,7 +146,8 @@ trigger.put(
   sValidator("json", triggerUpdateSchema),
   async (c) => {
     const triggerId = c.req.param("triggerId");
-    const workspaceId = c.req.param("workspaceId")!;
+    const scope = workspaceScopeOf(c);
+    const { workspaceId } = scope;
     const data = c.req.valid("json");
 
     // Verify trigger exists in workspace
@@ -172,18 +168,10 @@ trigger.put(
 
     // If agentId is being changed, verify new agent exists
     if (data.agentId && data.agentId !== existing[0].agentId) {
-      const agentRecord = await db
-        .select()
-        .from(agentTable)
-        .where(
-          and(
-            eq(agentTable.id, data.agentId),
-            eq(agentTable.workspaceId, workspaceId),
-          ),
-        )
-        .limit(1);
+      // See the create route: workspace-scoped, or Shared and attached here.
+      const agentRecord = await resolveScoped(db, "agent", data.agentId, scope);
 
-      if (agentRecord.length === 0) {
+      if (!agentRecord) {
         return c.json({ error: "Agent not found in this workspace" }, 400);
       }
     }
@@ -248,7 +236,7 @@ trigger.delete(
   requireWorkspaceOwner,
   async (c) => {
     const triggerId = c.req.param("triggerId");
-    const workspaceId = c.req.param("workspaceId")!;
+    const { workspaceId } = workspaceScopeOf(c);
 
     const result = await db
       .delete(triggerTable)
@@ -285,7 +273,7 @@ trigger.get(
   ),
   async (c) => {
     const triggerId = c.req.param("triggerId");
-    const workspaceId = c.req.param("workspaceId")!;
+    const { workspaceId } = workspaceScopeOf(c);
     const { limit: limitStr, offset: offsetStr } = c.req.valid("query");
 
     const limit = Math.min(parseInt(limitStr ?? "100") || 100, 100);

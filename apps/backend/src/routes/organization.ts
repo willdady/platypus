@@ -13,6 +13,7 @@ import {
 import { eq, inArray } from "drizzle-orm";
 import { requireAuth } from "../middleware/authentication.ts";
 import {
+  orgScopeOf,
   requireOrgAccess,
   requireSuperAdmin,
   isSuperAdmin,
@@ -72,7 +73,7 @@ organization.get("/", requireAuth, async (c) => {
 
 /** Get a organization by ID */
 organization.get("/:orgId", requireAuth, requireOrgAccess(), async (c) => {
-  const orgId = c.req.param("orgId");
+  const { orgId } = orgScopeOf(c);
   const record = await db
     .select()
     .from(organizationTable)
@@ -91,7 +92,7 @@ organization.put(
   requireOrgAccess(["admin"]),
   sValidator("json", organizationUpdateSchema),
   async (c) => {
-    const orgId = c.req.param("orgId");
+    const { orgId } = orgScopeOf(c);
     const data = c.req.valid("json");
     const record = await db
       .update(organizationTable)
@@ -111,7 +112,7 @@ organization.delete(
   requireAuth,
   requireOrgAccess(["admin"]),
   async (c) => {
-    const orgId = c.req.param("orgId");
+    const { orgId } = orgScopeOf(c);
     await db.delete(organizationTable).where(eq(organizationTable.id, orgId));
     return c.json({ message: "Organization deleted" });
   },

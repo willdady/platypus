@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import {
+  loadedPluginsFixture,
   mockDb,
   mockNoSession,
   mockSession,
@@ -33,7 +34,7 @@ describe("Plugins Routes", () => {
     resetMockDb();
     vi.clearAllMocks();
     mockDb.where.mockReturnValue(mockDb);
-    setLoadedPlugins(LOADED);
+    setLoadedPlugins(loadedPluginsFixture(LOADED));
   });
 
   const baseUrl = "/organizations/org-1/plugins";

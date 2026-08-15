@@ -30,6 +30,21 @@ export class LockedError extends Error {
   }
 }
 
+/**
+ * The request is well-formed but asks for something the domain rejects — a
+ * label the board does not have, an assignee who cannot work in this
+ * Workspace. Raised by domain modules whose rules serve more than one surface
+ * (the Kanban module serves both the HTTP routes and the Agent Tool set), so
+ * the rule and its message live in one place instead of once per caller.
+ * Surface-specific validation still answers inline. → 400
+ */
+export class ValidationError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "ValidationError";
+  }
+}
+
 /** The operation conflicts with existing state (e.g. a duplicate name). → 409 */
 export class ConflictError extends Error {
   constructor(message = "This operation conflicts with an existing resource") {
@@ -76,6 +91,8 @@ export const mapError = (
     return { status: 403, message: error.message };
   if (error instanceof ConflictError)
     return { status: 409, message: error.message };
+  if (error instanceof ValidationError)
+    return { status: 400, message: error.message };
   if (isUniqueViolation(error))
     return { status: 409, message: "A resource with that name already exists" };
   return null;

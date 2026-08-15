@@ -15,8 +15,9 @@ import type { Tool } from "ai";
  * normalizer. A top-level `undefined`/function return (whose `JSON.stringify` is
  * `undefined`) is passed through unchanged instead of crashing `JSON.parse`.
  *
- * Lives in its own module because both the parent turn's tool wrapper and the
- * sub-agent tool builder need it, and those two import each other.
+ * Lives in its own module because the loader seam that applies it is shared
+ * between a parent turn and a delegated sub-agent run, and this module must stay
+ * free of both.
  */
 export const normalizeToolResult = (value: unknown): unknown => {
   const json = JSON.stringify(value);
@@ -25,32 +26,37 @@ export const normalizeToolResult = (value: unknown): unknown => {
 };
 
 /**
- * Apply {@link normalizeToolResult} to every tool in a map.
+ * Wrap every tool in a map so its result is normalized on the way back to the
+ * model.
  *
- * The parent turn gets this via `wrapToolsWithBump`, which also does heartbeat
- * bookkeeping. A sub-agent's own tools never pass through that wrapper — they go
- * from `loadTools` straight into its `ToolLoopAgent` — so without this they
- * reach the sub-agent's next step raw, and a Drizzle `Date` fails the same
- * validation one level down. The symptom is unrecognisable as #321 from the
- * outside: the sub-agent dies mid-stream and the parent sees a truncated answer.
+ * Applied at the loader seam — `composeToolSet` for a Tool set, the MCP branch of
+ * a Tool session — so that every tool a plugin or an MCP server contributes is
+ * covered whether or not the turn happens to be observed. It used to ride on
+ * `wrapToolsWithActivity`, which meant a correctness guarantee only held when an
+ * optional `onActivity` callback was supplied.
  *
- * The async-iterable path is left alone, matching the parent wrapper: those
- * yields are streamed UI parts, not the value fed to the model.
+ * The tools core builds itself (search, `loadSkill`, the sub-agent delegates)
+ * return core-owned JSON shapes and are deliberately not wrapped here.
+ *
+ * The async-iterable path is exempt for the same reason it always was: its yields
+ * are streamed UI parts, not the value fed to the model.
  */
-export const withNormalizedResults = (
+export const normalizeToolResults = (
   tools: Record<string, Tool>,
 ): Record<string, Tool> => {
-  const wrapped: Record<string, Tool> = {};
+  const normalized: Record<string, Tool> = {};
   for (const [name, t] of Object.entries(tools)) {
     const execute = (t as { execute?: unknown }).execute;
     if (typeof execute !== "function") {
-      wrapped[name] = t;
+      normalized[name] = t;
       continue;
     }
     const runExecute = execute as (args: unknown, options: unknown) => unknown;
-    wrapped[name] = {
+    normalized[name] = {
       ...t,
       execute: (args: unknown, options: unknown) => {
+        // Called on the tool it came from, so a tool set may write `execute` as
+        // a method reaching sibling state through `this`.
         const result = runExecute.call(t, args, options);
         if (
           result != null &&
@@ -69,5 +75,5 @@ export const withNormalizedResults = (
       },
     };
   }
-  return wrapped;
+  return normalized;
 };

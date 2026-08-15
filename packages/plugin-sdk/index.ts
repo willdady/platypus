@@ -60,6 +60,33 @@ export interface ToolSetContext {
 }
 
 /**
+ * The logging surface core hands a plugin on {@link PluginConfigContext}. A
+ * plugin writes to core's own stream — structured, tagged with the plugin's
+ * manifest name, and governed by the Operator's `LOG_LEVEL` — instead of
+ * `console.*` or a logging library of its own.
+ *
+ * Each level takes either a message alone or a fields object with an optional
+ * message, mirroring the call shape of the library core logs through. The object
+ * form is the one to prefer: its fields stay queryable in the Operator's log
+ * pipeline where an interpolated string does not.
+ *
+ * Deliberately four levels and no `child`. This is the SDK's own hand-written
+ * contract, not a re-export of core's logger, so the backing library can change
+ * without breaking plugins built against it. More members can arrive later as
+ * optional ones under the append-only policy (see {@link PLUGIN_API_VERSION}).
+ */
+export interface PluginLogger {
+  debug(obj: object, msg?: string): void;
+  debug(msg: string): void;
+  info(obj: object, msg?: string): void;
+  info(msg: string): void;
+  warn(obj: object, msg?: string): void;
+  warn(msg: string): void;
+  error(obj: object, msg?: string): void;
+  error(msg: string): void;
+}
+
+/**
  * Deploy-time, Operator-owned config for one plugin, resolved at boot and
  * injected into **every** one of that plugin's contribution factories (ADR-0013).
  * Keyed by plugin name — the "one config namespace" — and validated at boot
@@ -79,6 +106,16 @@ export interface PluginConfigContext<
 > {
   config: TConfig;
   credentials: TCredentials;
+  /**
+   * A {@link PluginLogger} core binds to this plugin's manifest name, so every
+   * line the plugin writes lands in core's stream already attributed and at the
+   * verbosity the Operator asked for. Reach for it instead of `console.*`.
+   *
+   * Optional, and appended (append-only compatibility, ADR-0013) — write
+   * `plugin?.logger?.info(...)`. Core always supplies it; the optionality is
+   * what keeps a plugin built against an earlier SDK compiling unchanged.
+   */
+  logger?: PluginLogger;
 }
 
 /**
@@ -332,7 +369,7 @@ export interface WebBackendExecutors {
 /**
  * A single Web-search-backend contribution — the fourth Extension point, filling
  * core's request-gated web-search toggle slot (ADR-0014). `backend` is the
- * discriminator stored in the `provider.webBackend` column (auto-namespaced for
+ * discriminator stored in the `provider.searchSource` column (auto-namespaced for
  * third parties, flat for core, per ADR-0013); `name` is the display label shown
  * in the catalog and the Provider selector.
  *

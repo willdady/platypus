@@ -10,6 +10,7 @@ import {
   requireOrgAccess,
   requireWorkspaceAccess,
   requireWorkspaceConfigAccess,
+  workspaceScopeOf,
 } from "../middleware/authorization.ts";
 import type { Variables } from "../server.ts";
 import { destroySandboxRow } from "../sandbox/teardown.ts";
@@ -136,7 +137,7 @@ sandbox.get(
   requireOrgAccess(),
   requireWorkspaceAccess,
   async (c) => {
-    const workspaceId = c.req.param("workspaceId")!;
+    const { workspaceId } = workspaceScopeOf(c);
     const record = await db
       .select()
       .from(sandboxTable)
@@ -159,7 +160,7 @@ sandbox.post(
   requireSandboxAdmin,
   sValidator("json", sandboxCreateSchema),
   async (c) => {
-    const workspaceId = c.req.param("workspaceId")!;
+    const { workspaceId } = workspaceScopeOf(c);
     const data = c.req.valid("json");
 
     const configError = validateSandboxConfig(data.backend, data.config);
@@ -240,7 +241,7 @@ sandbox.put(
   requireWorkspaceAccess,
   sValidator("json", sandboxUpdateSchema),
   async (c) => {
-    const workspaceId = c.req.param("workspaceId")!;
+    const { workspaceId } = workspaceScopeOf(c);
     const data = c.req.valid("json");
     const force = c.req.query("force") === "true";
     const isAdmin = c.get("orgMembership")?.role === "admin";
@@ -319,7 +320,13 @@ sandbox.put(
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         logger.warn(
-          { workspaceId, sandboxId: current.id, err },
+          {
+            workspaceId,
+            sandboxId: current.id,
+            backend: current.backend,
+            plugin: getSandboxBackendPlugin(current.backend) ?? null,
+            err,
+          },
           "Sandbox backend change blocked: previous adapter's destroy() failed",
         );
         return c.json(
@@ -334,8 +341,15 @@ sandbox.put(
         {
           workspaceId,
           sandboxId: current.id,
-          oldBackend: current.backend,
-          newBackend: data.backend,
+          // `backend`/`plugin` co-refer on every line here, and on this one they
+          // name the adapter that was skipped — the one whose external resources
+          // may now be leaked, and so the one an Operator filtering by plugin is
+          // looking for. The incoming backend has leaked nothing, which is why it
+          // is `replacedBy` rather than the `newBackend` half of an old/new pair:
+          // a symmetric pair invites `plugin` to be read as spanning both.
+          backend: current.backend,
+          plugin: getSandboxBackendPlugin(current.backend) ?? null,
+          replacedBy: data.backend,
         },
         "Sandbox backend force-changed; previous adapter's destroy() was skipped — external resources may leak",
       );
@@ -365,7 +379,7 @@ sandbox.delete(
   requireWorkspaceAccess,
   requireSandboxAdmin,
   async (c) => {
-    const workspaceId = c.req.param("workspaceId")!;
+    const { workspaceId } = workspaceScopeOf(c);
     const force = c.req.query("force") === "true";
 
     const existing = await db
@@ -383,7 +397,13 @@ sandbox.delete(
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         logger.warn(
-          { workspaceId, sandboxId: existing[0].id, err },
+          {
+            workspaceId,
+            sandboxId: existing[0].id,
+            backend: existing[0].backend,
+            plugin: getSandboxBackendPlugin(existing[0].backend) ?? null,
+            err,
+          },
           "Sandbox destroy() failed; row preserved so the user can retry",
         );
         return c.json(
@@ -399,6 +419,7 @@ sandbox.delete(
           workspaceId,
           sandboxId: existing[0].id,
           backend: existing[0].backend,
+          plugin: getSandboxBackendPlugin(existing[0].backend) ?? null,
         },
         "Sandbox row force-deleted; adapter destroy() was skipped — external resources may leak",
       );

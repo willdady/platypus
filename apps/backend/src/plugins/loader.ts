@@ -3,21 +3,26 @@ import {
   PLUGIN_API_VERSION,
   type PlatypusPlugin,
   type PluginConfigContext,
+  type PluginLogger,
   type SandboxBackendContribution,
-  type ToolSetContribution,
 } from "@platypuschat/plugin-sdk";
+import { logger } from "../logger.ts";
 import { ALWAYS_ON_PLUGINS, BUILTIN_PLUGINS } from "./builtin.ts";
-import { registerToolSet } from "../tools/index.ts";
+import { registerToolSet, type ToolSetRegistration } from "../tools/index.ts";
+import { registerSandboxBackend } from "../sandbox/index.ts";
 import {
-  registerSandboxBackend,
-  type SandboxBackendRegistration,
-} from "../sandbox/index.ts";
-import {
-  composeWebBackend,
-  MAX_WEB_TIMEOUT_MS,
   registerWebBackend,
   type WebBackendRegistration,
 } from "../web-backends/index.ts";
+import {
+  registerContributions,
+  type ExtensionPoint,
+} from "./contribution-pipeline.ts";
+import {
+  sandboxBackendPoint,
+  toolSetPoint,
+  webBackendPoint,
+} from "./extension-points.ts";
 
 // Summary of one loaded plugin, for the boot log line and observability.
 export interface LoadedPlugin {
@@ -38,8 +43,39 @@ export interface LoadedPlugin {
   config?: unknown;
 }
 
+/**
+ * Which plugin contributed each registered id, one map per Extension point.
+ * Built while registering — the loader needs it to attribute a collision to both
+ * plugins — and returned so the plugin registry can annotate catalogs without
+ * re-deriving the same maps from the id arrays on {@link LoadedPlugin}.
+ *
+ * One map per point because the registries are separate: a Tool set and a
+ * Sandbox backend may share a bare id.
+ */
+export interface ContributionOwners {
+  toolSets: ReadonlyMap<string, string>;
+  sandboxBackends: ReadonlyMap<string, string>;
+  webBackends: ReadonlyMap<string, string>;
+}
+
+/** Everything one successful load produced, for the boot log and the registry. */
+export interface LoadPluginsResult {
+  plugins: LoadedPlugin[];
+  owners: ContributionOwners;
+}
+
 // A module that exports a plugin manifest. Values are `unknown` until validated.
 type PluginModule = { plugin?: unknown };
+
+// One row of the loader's Extension-point table: where a point's contributions
+// live on a manifest, which `LoadedPlugin` field reports the ids it registered,
+// the point itself, and the owner map it accumulates across plugins.
+interface LoaderExtensionPoint {
+  contributions: (manifest: PlatypusPlugin) => readonly unknown[] | undefined;
+  reportAs: "toolSetIds" | "sandboxBackendIds" | "webBackendIds";
+  point: ExtensionPoint;
+  owners: Map<string, string>;
+}
 
 // Deploy-time config/credentials the Operator supplies for one plugin. Both
 // halves are optional and opaque until validated against the manifest's
@@ -52,6 +88,17 @@ export interface RawPluginConfig {
 // The full Operator-supplied config map, keyed by plugin name (`manifest.name`).
 // Parsed from `PLATYPUS_PLUGIN_CONFIG` (see {@link parsePluginConfig}).
 export type PluginConfigMap = Record<string, RawPluginConfig>;
+
+/**
+ * What the loader derives each plugin's logger from — core's own logger, whose
+ * level the Operator sets with `LOG_LEVEL`. Declared structurally, one method
+ * wide, so the seam a test replaces is "make me a child" rather than the whole
+ * logging library, and so nothing here leaks pino's types into the SDK contract
+ * the child is handed to plugins as.
+ */
+export interface PluginLoggerParent {
+  child(bindings: Record<string, unknown>): PluginLogger;
+}
 
 export interface LoadPluginsOptions {
   /** Plugin names to load. Defaults to parsing `PLATYPUS_PLUGINS`. */
@@ -68,8 +115,13 @@ export interface LoadPluginsOptions {
   builtinPlugins?: Record<string, () => Promise<PluginModule>>;
   /** Resolves a third-party plugin. Defaults to dynamic `import()`. */
   importPlugin?: (name: string) => Promise<PluginModule>;
-  /** Registers one Tool set contribution. Defaults to the core `registerToolSet`. */
-  register?: (id: string, def: Omit<ToolSetContribution, "id">) => void;
+  /**
+   * Registers one Tool set. Takes the *composed* registration — core has already
+   * wrapped the contribution's factory in its own guard — rather than the raw
+   * contribution, for the same reason `registerWeb` does (ADR-0013/0014).
+   * Defaults to the core `registerToolSet`.
+   */
+  register?: (id: string, registration: ToolSetRegistration) => void;
   /** Registers one Sandbox-backend contribution. Defaults to core `registerSandboxBackend`. */
   registerSandbox?: (contribution: SandboxBackendContribution) => void;
   /**
@@ -84,6 +136,11 @@ export interface LoadPluginsOptions {
    * parsing `PLATYPUS_PLUGIN_CONFIG` (see {@link parsePluginConfig}).
    */
   pluginConfig?: PluginConfigMap;
+  /**
+   * Parent of the per-plugin child loggers. Defaults to core's own logger, so a
+   * plugin's lines share core's stream, format and `LOG_LEVEL`.
+   */
+  baseLogger?: PluginLoggerParent;
 }
 
 /**
@@ -145,10 +202,16 @@ export const parsePluginConfig = (raw: string | undefined): PluginConfigMap => {
  * validated against the manifest's plugin-level schema when declared (fail-loud,
  * plugin-named); when no schema is declared the raw Operator value passes
  * through untouched (`undefined` when absent — nothing to validate against).
+ *
+ * The plugin's logger joins the same block: a child of core's logger bound to
+ * the manifest name, so a line a plugin writes is attributable to it without the
+ * author having to remember to say so, and is filtered by the Operator's
+ * `LOG_LEVEL` like every other line core emits.
  */
 const resolvePluginConfig = (
   manifest: PlatypusPlugin,
   raw: RawPluginConfig,
+  baseLogger: PluginLoggerParent,
 ): PluginConfigContext => {
   const resolveOne = (
     kind: "config" | "credentials",
@@ -173,6 +236,9 @@ const resolvePluginConfig = (
       manifest.credentialsSchema,
       raw.credentials,
     ),
+    // Same `plugin` binding key core's own boot lines use, so an Operator
+    // filtering on one plugin gets core's lines about it and the plugin's own.
+    logger: baseLogger.child({ plugin: manifest.name }),
   };
 };
 
@@ -280,7 +346,7 @@ const validateManifest = (name: string, mod: PluginModule): PlatypusPlugin => {
  */
 export async function loadPlugins(
   opts: LoadPluginsOptions = {},
-): Promise<LoadedPlugin[]> {
+): Promise<LoadPluginsResult> {
   const listedNames =
     opts.pluginNames ?? parsePluginList(process.env.PLATYPUS_PLUGINS);
   // The always-on core set is injected on the env-default path (production,
@@ -316,14 +382,40 @@ export async function loadPlugins(
   const registerWeb = opts.registerWeb ?? registerWebBackend;
   const pluginConfig =
     opts.pluginConfig ?? parsePluginConfig(process.env.PLATYPUS_PLUGIN_CONFIG);
+  const baseLogger = opts.baseLogger ?? logger;
 
-  // Tracks contribution id -> owning plugin name for owner-attributed collisions.
-  // Tool sets, Sandbox backends, and Web-search backends live in separate
-  // registries, so each keeps its own owner map (a Tool set and a backend may
-  // share a bare id).
-  const owners = new Map<string, string>();
+  // Tracks contribution id -> owning plugin name for owner-attributed
+  // collisions, and is handed to the registry afterwards for catalog annotation.
+  const toolSetOwners = new Map<string, string>();
   const sandboxOwners = new Map<string, string>();
   const webOwners = new Map<string, string>();
+
+  // The Extension-point table. Every point runs the same registration sequence
+  // (`contribution-pipeline.ts`) over its slice of a manifest and differs only
+  // in what it declares here plus its entry in `extension-points.ts`. A fourth
+  // point (ADR-0013 anticipates them) is one more row, not a fourth copy of the
+  // loop.
+  const points: readonly LoaderExtensionPoint[] = [
+    {
+      contributions: (m) => m.contributes.toolSets,
+      reportAs: "toolSetIds",
+      point: toolSetPoint(register),
+      owners: toolSetOwners,
+    },
+    {
+      contributions: (m) => m.contributes.sandboxBackends,
+      reportAs: "sandboxBackendIds",
+      point: sandboxBackendPoint(registerSandbox),
+      owners: sandboxOwners,
+    },
+    {
+      contributions: (m) => m.contributes.webBackends,
+      reportAs: "webBackendIds",
+      point: webBackendPoint(registerWeb),
+      owners: webOwners,
+    },
+  ];
+
   const loaded: LoadedPlugin[] = [];
 
   for (const name of names) {
@@ -362,10 +454,13 @@ export async function loadPlugins(
 
     // Resolve the plugin's deploy-time config/credentials once (fail-loud) and
     // share the single block across every contribution factory below — this
-    // object identity IS the "one credential block per plugin" of ADR-0013.
+    // object identity IS the "one credential block per plugin" of ADR-0013. The
+    // plugin's name-bound logger rides along in the same block, which is why one
+    // addition reaches all three Extension points with no per-point plumbing.
     const pluginCtx = resolvePluginConfig(
       manifest,
       pluginConfig[manifest.name] ?? {},
+      baseLogger,
     );
 
     // Core Contributions keep their flat, bare ids (no data migration — every
@@ -376,289 +471,29 @@ export async function loadPlugins(
     const contributionId = (id: string): string =>
       isCore ? id : `${manifest.name}.${id}`;
 
-    const toolSetIds: string[] = [];
-
-    for (const contribution of manifest.contributes.toolSets ?? []) {
-      const { id, name: tsName, category, description, tools } = contribution;
-      const effectiveId = contributionId(id);
-
-      const existingOwner = owners.get(effectiveId);
-      if (existingOwner) {
-        throw new Error(
-          `Tool set id "${effectiveId}" is contributed by both "${existingOwner}" and "${manifest.name}".`,
-        );
-      }
-
-      // Bind the shared plugin config into the factory so core's registry and
-      // its Chat-turn callers stay ignorant of it: they invoke the stored
-      // factory with only the ToolSetContext, as before. A static-map tool set
-      // has no factory to inject into and is registered untouched.
-      const boundTools =
-        typeof tools === "function"
-          ? (ctx: Parameters<typeof tools>[0]) => tools(ctx, pluginCtx)
-          : tools;
-
-      try {
-        register(effectiveId, {
-          name: tsName,
-          category,
-          description,
-          tools: boundTools,
-        });
-      } catch (cause) {
-        // A collision with a Tool set registered outside the loader (a legacy
-        // static registration) surfaces here — re-throw with plugin attribution.
-        throw new Error(
-          `Plugin "${manifest.name}": failed to register tool set "${effectiveId}" (${
-            cause instanceof Error ? cause.message : String(cause)
-          }).`,
-          { cause },
-        );
-      }
-
-      owners.set(effectiveId, manifest.name);
-      toolSetIds.push(effectiveId);
-    }
-
-    const sandboxBackendIds: string[] = [];
-
-    for (const contribution of manifest.contributes.sandboxBackends ?? []) {
-      // Everything below is guaranteed by `SandboxBackendContribution`, and none
-      // of it is guaranteed by a third-party *JS* plugin — which is this loop's
-      // whole justification. Each malformed shape used to surface far from its
-      // cause: `null` as an unattributed `Cannot read properties of null`, a
-      // missing `backend` as a plausible-looking `"acme.undefined"` in the
-      // catalog, a missing `create` or schema as a TypeError at chat-turn or
-      // save time. Boot is where they are caught, named by plugin (ADR-0013).
-      if (typeof contribution !== "object" || contribution === null) {
-        throw new Error(
-          `Plugin "${manifest.name}": every sandbox backend contribution must be an object.`,
-        );
-      }
-      if (
-        typeof contribution.backend !== "string" ||
-        contribution.backend.trim() === ""
-      ) {
-        throw new Error(
-          `Plugin "${manifest.name}": every sandbox backend must declare a non-empty "backend" id.`,
-        );
-      }
-      if (
-        typeof contribution.name !== "string" ||
-        contribution.name.trim() === ""
-      ) {
-        throw new Error(
-          `Plugin "${manifest.name}": sandbox backend "${contribution.backend}" must declare a non-empty "name".`,
-        );
-      }
-      if (typeof contribution.create !== "function") {
-        throw new Error(
-          `Plugin "${manifest.name}": sandbox backend "${contribution.backend}" must provide a "create" function.`,
-        );
-      }
-
-      const effectiveBackend = contributionId(contribution.backend);
-
-      const existingOwner = sandboxOwners.get(effectiveBackend);
-      if (existingOwner) {
-        throw new Error(
-          `Sandbox backend id "${effectiveBackend}" is contributed by both "${existingOwner}" and "${manifest.name}".`,
-        );
-      }
-
-      // Resolve a factory-form configSchema against the boot-resolved plugin
-      // config so the three static `configSchema.safeParse` consumers (save
-      // route, teardown, tool resolver) always receive a concrete schema — they
-      // never see plugin config. A plain schema passes through untouched
-      // (append-only: plugin-config-agnostic backends are unaffected).
-      //
-      // The factory is third-party code reading a config block it narrows
-      // itself, so it can throw — a plugin that assumes an Operator supplied
-      // `config.region` raises a bare `Cannot read properties of undefined`
-      // naming nothing. Attributed here for the same reason the shape checks
-      // above exist: the schema check below only catches a factory that
-      // *returns* a non-schema, not one that throws on the way there.
-      let resolvedConfigSchema: SandboxBackendRegistration["configSchema"];
-      try {
-        resolvedConfigSchema =
-          typeof contribution.configSchema === "function"
-            ? contribution.configSchema(pluginCtx.config)
-            : contribution.configSchema;
-      } catch (cause) {
-        throw new Error(
-          `Plugin "${manifest.name}": sandbox backend "${effectiveBackend}" configSchema factory threw (${
-            cause instanceof Error ? cause.message : String(cause)
-          }).`,
-          { cause },
-        );
-      }
-
-      // Checked after the factory form is resolved away, and duck-typed on
-      // `safeParse` rather than `instanceof z.ZodType`, because that is exactly
-      // what the three static consumers call. Without this, a contribution
-      // missing either schema registers fine and fails at *save* time — a 500 on
-      // an Operator's sandbox form, attributed to nothing.
-      for (const [field, schema] of [
-        ["configSchema", resolvedConfigSchema],
-        ["credentialsSchema", contribution.credentialsSchema],
-      ] as const) {
-        if (
-          typeof schema !== "object" ||
-          schema === null ||
-          typeof (schema as { safeParse?: unknown }).safeParse !== "function"
-        ) {
-          throw new Error(
-            `Plugin "${manifest.name}": sandbox backend "${effectiveBackend}" must provide a Zod "${field}".`,
-          );
-        }
-      }
-
-      // Bind the same shared plugin config into create() so core's per-turn
-      // callers (chat resolution, teardown) keep calling create(config,
-      // credentials) with the per-Workspace values only. Third-party backends
-      // also register under the namespaced discriminator, so the
-      // `sandbox.backend` column resolves to the prefixed id (mirroring tool sets).
-      //
-      // Typed as the core registration (concrete configSchema): the factory form
-      // has been resolved away above, so what we register — and what the static
-      // safeParse consumers receive — is always a plain schema.
-      const boundContribution: SandboxBackendRegistration = {
-        ...contribution,
-        backend: effectiveBackend,
-        configSchema: resolvedConfigSchema,
-        create: (config, credentials) =>
-          contribution.create(config, credentials, pluginCtx),
-      };
-
-      try {
-        registerSandbox(boundContribution);
-      } catch (cause) {
-        // A collision with a backend registered outside the loader surfaces
-        // here — re-throw with plugin attribution.
-        throw new Error(
-          `Plugin "${manifest.name}": failed to register sandbox backend "${effectiveBackend}" (${
-            cause instanceof Error ? cause.message : String(cause)
-          }).`,
-          { cause },
-        );
-      }
-
-      sandboxOwners.set(effectiveBackend, manifest.name);
-      sandboxBackendIds.push(effectiveBackend);
-    }
-
-    const webBackendIds: string[] = [];
-
-    for (const contribution of manifest.contributes.webBackends ?? []) {
-      // A third-party JS plugin can put anything in this array — including
-      // `null` — and every other malformed case in this loop gets a
-      // plugin-named boot error, so this one does too rather than throwing an
-      // unattributed `Cannot read properties of null`.
-      if (typeof contribution !== "object" || contribution === null) {
-        throw new Error(
-          `Plugin "${manifest.name}": every web backend contribution must be an object.`,
-        );
-      }
-
-      // Identity is checked before it is namespaced: `contributionId(undefined)`
-      // would otherwise mint a plausible-looking `"acme.undefined"` and register
-      // it, so a JS plugin's missing field would surface as a mystery id in the
-      // catalog rather than a boot error naming the plugin.
-      if (
-        typeof contribution.backend !== "string" ||
-        contribution.backend.trim() === ""
-      ) {
-        throw new Error(
-          `Plugin "${manifest.name}": every web backend must declare a non-empty "backend" id.`,
-        );
-      }
-      if (
-        typeof contribution.name !== "string" ||
-        contribution.name.trim() === ""
-      ) {
-        throw new Error(
-          `Plugin "${manifest.name}": web backend "${contribution.backend}" must declare a non-empty "name".`,
-        );
-      }
-
-      const effectiveBackend = contributionId(contribution.backend);
-
-      const existingOwner = webOwners.get(effectiveBackend);
-      if (existingOwner) {
-        throw new Error(
-          `Web backend id "${effectiveBackend}" is contributed by both "${existingOwner}" and "${manifest.name}".`,
-        );
-      }
-
-      // A web backend supplies executors only — core builds the Tools — so a
-      // missing factory means the contribution can never serve a turn. The TS
-      // type says so; a third-party JS plugin can still ship it, and boot is
-      // where that is caught (ADR-0014's fail-loud boot posture).
-      if (typeof contribution.createExecutors !== "function") {
-        throw new Error(
-          `Plugin "${manifest.name}": web backend "${effectiveBackend}" must provide a "createExecutors" function.`,
-        );
-      }
-
-      // `timeoutMs` is static on the contribution, so an over-ceiling value is
-      // knowable now — refused with attribution rather than silently clamped at
-      // turn time, where an Operator would never see it.
-      if (contribution.timeoutMs !== undefined) {
-        const { timeoutMs } = contribution;
-        if (
-          typeof timeoutMs !== "number" ||
-          !Number.isFinite(timeoutMs) ||
-          timeoutMs <= 0 ||
-          timeoutMs > MAX_WEB_TIMEOUT_MS
-        ) {
-          throw new Error(
-            `Plugin "${manifest.name}": web backend "${effectiveBackend}" declares timeoutMs ${String(
-              timeoutMs,
-            )}, which must be a positive number no greater than ${MAX_WEB_TIMEOUT_MS}.`,
-          );
-        }
-      }
-
-      // Core wraps the executors here, binding the same shared plugin config that
-      // every other contribution factory receives. What lands in the registry is
-      // the finished, guarded builder — per-turn callers never see the executors.
-      //
-      // The contribution goes in by reference, with the namespaced id alongside
-      // it rather than spread over it: `createExecutors` must be called on the
-      // author's own object, or a class-instance contribution loses its
-      // prototype and its `this`. (The sandbox loop achieves the same by
-      // re-wrapping `create` around the original.)
-      const registration = composeWebBackend({
-        contribution,
-        backend: effectiveBackend,
-        plugin: pluginCtx,
+    // Register this plugin's contributions to every Extension point, in table
+    // order, collecting the ids each point took for the boot log.
+    const registeredIds: Record<LoaderExtensionPoint["reportAs"], string[]> = {
+      toolSetIds: [],
+      sandboxBackendIds: [],
+      webBackendIds: [],
+    };
+    for (const entry of points) {
+      registeredIds[entry.reportAs] = registerContributions({
+        point: entry.point,
+        contributions: entry.contributions(manifest) ?? [],
         pluginName: manifest.name,
+        plugin: pluginCtx,
+        contributionId,
+        owners: entry.owners,
       });
-
-      try {
-        registerWeb(registration);
-      } catch (cause) {
-        // A collision with a backend registered outside the loader surfaces
-        // here — re-throw with plugin attribution.
-        throw new Error(
-          `Plugin "${manifest.name}": failed to register web backend "${effectiveBackend}" (${
-            cause instanceof Error ? cause.message : String(cause)
-          }).`,
-          { cause },
-        );
-      }
-
-      webOwners.set(effectiveBackend, manifest.name);
-      webBackendIds.push(effectiveBackend);
     }
 
     loaded.push({
       name: manifest.name,
       version: manifest.version,
       origin,
-      toolSetIds,
-      sandboxBackendIds,
-      webBackendIds,
+      ...registeredIds,
       // Carry the resolved deploy-time config (config only, never credentials)
       // so request handlers can read it via the registry (ADR-0013).
       config: pluginCtx.config,
@@ -679,5 +514,12 @@ export async function loadPlugins(
     }
   }
 
-  return loaded;
+  return {
+    plugins: loaded,
+    owners: {
+      toolSets: toolSetOwners,
+      sandboxBackends: sandboxOwners,
+      webBackends: webOwners,
+    },
+  };
 }

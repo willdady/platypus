@@ -16,7 +16,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "next": "16.2.9",
+    "next": "16.3.1",
     "nextra": "^4.6.1",
     "nextra-theme-docs": "^4.6.1",
     "react": "19.2.7",
@@ -30,12 +30,13 @@
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.4",
     "eslint": "^10.8.0",
-    "eslint-config-next": "16.2.9",
+    "eslint-config-next": "16.3.1",
     "github-slugger": "^2.0.0",
     "pagefind": "^1.5.2",
     "tailwindcss": "^4.3.3",
     "typescript": "^6.0.3",
+    "vite": "^7.3.6",
     "vitest": "^4.1.10",
-    "wrangler": "^4.118.0"
+    "wrangler": "^4.123.0"
   }
 }

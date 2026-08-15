@@ -124,6 +124,53 @@ The repository ships a two-contribution plugin under the backend's `plugins`
 directory that demonstrates one credential block reaching both a Sandbox backend
 and a Tool set.
 
+## Logging
+
+The same block carries a `logger`, so your plugin writes into the Operator's own
+log stream rather than shouting into `stdout` on its own terms. Four levels —
+`debug`, `info`, `warn`, `error` — each taking a fields object with an optional
+message, or a message on its own:
+
+```ts
+tools: (ctx, plugin) => {
+  plugin?.logger?.info({ workspaceId: ctx.workspaceId }, "Resolving tool set");
+  return {
+    /* … */
+  };
+},
+```
+
+Three things core does for you, and one thing to get right yourself:
+
+- **Your plugin's name is already on every line.** Core binds the manifest
+  `name` to the logger before handing it over, so an Operator can filter their
+  log pipeline down to your plugin. Don't put the name in your own fields.
+- **[`LOG_LEVEL`](/reference/backend-configuration#core) governs your lines like
+  core's.** A `debug` line writes nothing on a deployment left at the default
+  `info`, and appears the moment the Operator raises the level. Put the detail
+  that only matters while diagnosing at `debug`; keep `warn` and `error` for
+  what an Operator should act on.
+- **The format matches core's.** Structured JSON in production, pretty-printed
+  in development — you get both without configuring either.
+- **Prefer the fields object to an interpolated string.** `{ workspaceId }`
+  stays queryable in the Operator's pipeline; `` `for ${workspaceId}` `` does
+  not.
+
+<Callout type="warning">
+  Reaching for `console.log` instead is the trap. Its output bypasses
+  `LOG_LEVEL`, so it cannot be turned down on a busy deployment; it carries no
+  plugin name, so nobody can tell it is yours; and it is unstructured, so it
+  lands in the Operator's pipeline as an unparseable line between two JSON ones.
+</Callout>
+
+Write `plugin?.logger?.` — both are optional members, which is what lets one
+build of your plugin run on a core new enough to supply the logger and one that
+predates it. Core always supplies it.
+
+Deploy-time scope is all a logger line carries. Workspace, Agent and run ids are
+not bound for you; include the ones you have from your own context, as the
+example above does with `workspaceId`.
+
 ## Where to next
 
 - **[Your first plugin](/extending/your-first-plugin)** — the runnable path.

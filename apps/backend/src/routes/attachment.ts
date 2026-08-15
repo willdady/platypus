@@ -2,21 +2,17 @@ import { Hono } from "hono";
 import { sValidator } from "@hono/standard-validator";
 import { nanoid } from "nanoid";
 import { db } from "../index.ts";
-import {
-  attachment as attachmentTable,
-  agent as agentTable,
-  mcp as mcpTable,
-  provider as providerTable,
-  skill as skillTable,
-} from "../db/schema.ts";
+import { attachment as attachmentTable } from "../db/schema.ts";
 import { attachmentCreateSchema } from "@platypus/schemas";
 import { eq, and } from "drizzle-orm";
 import { requireAuth } from "../middleware/authentication.ts";
 import {
   requireOrgAccess,
   requireWorkspaceAccess,
+  workspaceScopeOf,
 } from "../middleware/authorization.ts";
 import { isUniqueViolation } from "../errors.ts";
+import { resolveOrgScoped } from "../services/scoped-resource.ts";
 import type { Variables } from "../server.ts";
 
 // Attachment is the explicit reference that surfaces an org-scoped Shared
@@ -32,7 +28,7 @@ attachment.get(
   requireOrgAccess(["admin"]),
   requireWorkspaceAccess,
   async (c) => {
-    const workspaceId = c.req.param("workspaceId")!;
+    const { workspaceId } = workspaceScopeOf(c);
     const results = await db
       .select()
       .from(attachmentTable)
@@ -49,26 +45,18 @@ attachment.post(
   requireWorkspaceAccess,
   sValidator("json", attachmentCreateSchema),
   async (c) => {
-    const orgId = c.req.param("orgId")!;
-    const workspaceId = c.req.param("workspaceId")!;
+    const { orgId, workspaceId } = workspaceScopeOf(c);
     const { resourceType, resourceId } = c.req.valid("json");
 
     // The resource must be org-scoped and belong to this organization — you can
     // only attach a Shared resource, never a workspace-scoped one.
-    const table =
-      resourceType === "mcp"
-        ? mcpTable
-        : resourceType === "skill"
-          ? skillTable
-          : resourceType === "agent"
-            ? agentTable
-            : providerTable;
-    const resource = await db
-      .select({ id: table.id })
-      .from(table)
-      .where(and(eq(table.id, resourceId), eq(table.organizationId, orgId)))
-      .limit(1);
-    if (resource.length === 0) {
+    const resource = await resolveOrgScoped(
+      db,
+      resourceType,
+      resourceId,
+      orgId,
+    );
+    if (!resource) {
       return c.json(
         { error: "Org-scoped resource not found in this organization" },
         404,
@@ -100,7 +88,7 @@ attachment.delete(
   requireOrgAccess(["admin"]),
   requireWorkspaceAccess,
   async (c) => {
-    const workspaceId = c.req.param("workspaceId")!;
+    const { workspaceId } = workspaceScopeOf(c);
     const resourceType = c.req.param("resourceType");
     const resourceId = c.req.param("resourceId");
 

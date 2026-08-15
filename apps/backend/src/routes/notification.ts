@@ -11,6 +11,7 @@ import { requireAuth } from "../middleware/authentication.ts";
 import {
   requireOrgAccess,
   requireWorkspaceAccess,
+  workspaceScopeOf,
 } from "../middleware/authorization.ts";
 import type { Variables } from "../server.ts";
 import { dispatchEvent } from "../services/event-dispatch.ts";
@@ -26,7 +27,7 @@ notification.get(
   requireOrgAccess(),
   requireWorkspaceAccess,
   async (c) => {
-    const workspaceId = c.req.param("workspaceId")!;
+    const { workspaceId } = workspaceScopeOf(c);
     const user = c.get("user")!;
     const limit = Math.min(
       Math.max(parseInt(c.req.query("limit") || "50", 10) || 50, 1),
@@ -86,7 +87,7 @@ notification.get(
   requireOrgAccess(),
   requireWorkspaceAccess,
   async (c) => {
-    const workspaceId = c.req.param("workspaceId")!;
+    const { workspaceId } = workspaceScopeOf(c);
     const user = c.get("user")!;
 
     const result = await db
@@ -121,7 +122,7 @@ notification.post(
   async (c) => {
     const notificationId = c.req.param("notificationId");
     const user = c.get("user")!;
-    const workspaceId = c.req.param("workspaceId")!;
+    const { orgId, workspaceId } = workspaceScopeOf(c);
 
     // Verify notification exists in this workspace
     const existing = await db
@@ -148,7 +149,7 @@ notification.post(
       })
       .onConflictDoNothing();
 
-    dispatchEvent(c.req.param("orgId")!, workspaceId, "notification.read", {
+    dispatchEvent(orgId, workspaceId, "notification.read", {
       notificationId,
       userId: user.id,
     });
@@ -164,7 +165,7 @@ notification.post(
   requireOrgAccess(),
   requireWorkspaceAccess,
   async (c) => {
-    const workspaceId = c.req.param("workspaceId")!;
+    const { orgId, workspaceId } = workspaceScopeOf(c);
     const user = c.get("user")!;
 
     // Get all unread notification IDs
@@ -194,7 +195,7 @@ notification.post(
         })),
       );
 
-      dispatchEvent(c.req.param("orgId")!, workspaceId, "notification.read", {
+      dispatchEvent(orgId, workspaceId, "notification.read", {
         notificationIds: unread.map((n) => n.id),
         userId: user.id,
         bulk: true,
@@ -213,7 +214,7 @@ notification.delete(
   requireWorkspaceAccess,
   async (c) => {
     const notificationId = c.req.param("notificationId");
-    const workspaceId = c.req.param("workspaceId")!;
+    const { orgId, workspaceId } = workspaceScopeOf(c);
 
     const result = await db
       .delete(notificationTable)
@@ -229,14 +230,9 @@ notification.delete(
       return c.json({ error: "Notification not found" }, 404);
     }
 
-    dispatchEvent(
-      c.req.param("orgId")!,
-      workspaceId,
-      "notification.dismissed",
-      {
-        notificationId,
-      },
-    );
+    dispatchEvent(orgId, workspaceId, "notification.dismissed", {
+      notificationId,
+    });
 
     return c.json({ message: "Notification deleted" });
   },

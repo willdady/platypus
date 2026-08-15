@@ -1,5 +1,9 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
+// test-utils installs the drizzle-orm mock; `isNull` is a spy only through it,
+// so that import must come first.
 import { mockDb, mockSession, resetMockDb } from "../test-utils.ts";
+import { isNull } from "drizzle-orm";
+import { agent as agentTable } from "../db/schema.ts";
 import app from "../server.ts";
 import { deleteAvatar } from "../services/avatar.ts";
 
@@ -88,6 +92,10 @@ describe("Organization Agent Routes", () => {
 
       expect(res.status).toBe(200);
       expect(await res.json()).toEqual(updated);
+      // The write matches the Shared predicate, not `organizationId` alone: a
+      // row carrying both scope columns belongs to its Workspace and must not
+      // be editable from the Organization surface (ADR-0007).
+      expect(isNull).toHaveBeenCalledWith(agentTable.workspaceId);
     });
 
     it("blocks an update that references a workspace-private resource", async () => {

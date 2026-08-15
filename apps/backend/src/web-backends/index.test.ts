@@ -92,39 +92,25 @@ describe("web-backend registry", () => {
       pluginName: "@acme/searx",
     });
 
-  it("registers a backend and serves it by its discriminator", () => {
+  // The store's own contract — miss semantics, duplicate rejection,
+  // prototype-key safety, listing, reset — is covered once in
+  // `registry/contribution-registry.test.ts`. What is left here is what this
+  // instance adds: keying on the composed registration's own discriminator.
+  it("keys a composed registration on its own discriminator", () => {
     registerWebBackend(registration("searx"));
+    registerWebBackend(registration("brave"));
 
     const found = getWebBackend("searx");
     expect(found?.backend).toBe("searx");
     expect(found?.name).toBe("SearXNG");
     expect(typeof found?.buildTurnTools).toBe("function");
-  });
-
-  it("lists every registered backend", () => {
-    registerWebBackend(registration("searx"));
-    registerWebBackend(registration("brave"));
-
     expect(getWebBackends().map((r) => r.backend)).toEqual(["searx", "brave"]);
   });
 
-  it("returns undefined for an unregistered discriminator", () => {
-    expect(getWebBackend("nope")).toBeUndefined();
-  });
-
-  it("does not resolve Object.prototype members as registered backends", () => {
-    // A plain-object registry would return `Object.prototype.toString` here —
-    // truthy, but with no `buildTurnTools`. PR2 feeds this lookup from a
-    // nullable DB column, so this must stay undefined rather than throw later.
-    expect(getWebBackend("toString")).toBeUndefined();
-    expect(getWebBackend("constructor")).toBeUndefined();
-    expect(getWebBackend("__proto__")).toBeUndefined();
-  });
-
-  it("throws on a duplicate registration", () => {
+  it("refuses a second registration under the same discriminator", () => {
     registerWebBackend(registration("searx"));
     expect(() => registerWebBackend(registration("searx"))).toThrow(
-      /'searx' has already been registered/,
+      "Web backend 'searx' has already been registered.",
     );
   });
 });

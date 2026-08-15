@@ -34,11 +34,32 @@ export type RegisterOptions = {
   onTimeout?: (error: TimeoutError) => void;
 };
 
+/**
+ * The two bounds a caller may set per run. Named because four call sites
+ * across three modules pass exactly this pair.
+ */
+export type RunTimeouts = Pick<
+  RegisterOptions,
+  "perStepTimeoutMs" | "perRunTimeoutMs"
+>;
+
 export type RunHandle = {
   runId: RunId;
   signal: AbortSignal;
   /** Reset the per-step timer (e.g. when a step makes progress). */
   bumpStep(): void;
+  /**
+   * Suspend the per-step stall timer for the duration of a tool call.
+   *
+   * The per-step timeout answers "has the model stopped making progress
+   * between steps?", and a tool that is still executing is not that. Holds
+   * nest, so parallel tool calls are counted; the timer re-arms when the last
+   * one releases. The per-RUN timeout is deliberately untouched, so a tool that
+   * never returns is still bounded.
+   */
+  holdStep(): void;
+  /** Release a hold taken by {@link RunHandle.holdStep}. */
+  releaseStep(): void;
 };
 
 export const DEFAULT_PER_STEP_TIMEOUT_MS = 2 * 60 * 1000;
@@ -51,6 +72,8 @@ type Entry = {
   runTimer?: ReturnType<typeof setTimeout>;
   onTimeout?: (error: TimeoutError) => void;
   finished: boolean;
+  /** Tool calls currently in flight; the step timer is off while this is > 0. */
+  holds: number;
 };
 
 export class RunRegistry {
@@ -73,6 +96,7 @@ export class RunRegistry {
       perStepTimeoutMs,
       onTimeout: options.onTimeout,
       finished: false,
+      holds: 0,
     };
 
     const fireTimeout = (kind: "step" | "run") => {
@@ -95,14 +119,35 @@ export class RunRegistry {
 
     this.entries.set(runId, entry);
 
+    // Re-arm the per-step timer, unless a tool call is holding it down. Every
+    // path that restarts the timer goes through here, so a hold cannot be
+    // undone by a concurrent bump.
+    const armStep = (e: Entry) => {
+      if (e.stepTimer) clearTimeout(e.stepTimer);
+      e.stepTimer = undefined;
+      if (e.holds > 0) return;
+      e.stepTimer = setTimeout(() => fireTimeout("step"), e.perStepTimeoutMs);
+    };
+
     return {
       runId,
       signal: controller.signal,
       bumpStep: () => {
         const e = this.entries.get(runId);
         if (!e || e.finished) return;
-        if (e.stepTimer) clearTimeout(e.stepTimer);
-        e.stepTimer = setTimeout(() => fireTimeout("step"), e.perStepTimeoutMs);
+        armStep(e);
+      },
+      holdStep: () => {
+        const e = this.entries.get(runId);
+        if (!e || e.finished) return;
+        e.holds += 1;
+        armStep(e);
+      },
+      releaseStep: () => {
+        const e = this.entries.get(runId);
+        if (!e || e.finished || e.holds === 0) return;
+        e.holds -= 1;
+        armStep(e);
       },
     };
   }

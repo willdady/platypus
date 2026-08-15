@@ -1,4 +1,10 @@
 import { vi, type Mock } from "vitest";
+import type { PluginLogger } from "@platypuschat/plugin-sdk";
+import type {
+  ContributionOwners,
+  LoadedPlugin,
+  LoadPluginsResult,
+} from "./plugins/loader.ts";
 import type {
   InferToolInput,
   InferToolOutput,
@@ -251,3 +257,49 @@ export const mockSession = (
 export const mockNoSession = () => {
   mockAuth.api.getSession.mockResolvedValue(null);
 };
+
+/**
+ * A {@link setLoadedPlugins} argument for tests. The loader hands the registry
+ * both the loaded plugins and the id → plugin-name maps it built while
+ * registering; a test states only the owner maps for the point it exercises and
+ * gets empty ones for the rest.
+ */
+export const loadedPluginsFixture = (
+  plugins: LoadedPlugin[] = [],
+  owners: Partial<ContributionOwners> = {},
+): LoadPluginsResult => ({
+  plugins,
+  owners: {
+    toolSets: new Map(),
+    sandboxBackends: new Map(),
+    webBackends: new Map(),
+    ...owners,
+  },
+});
+
+/**
+ * One level of a spy-backed {@link PluginLogger}. Typed to accept either call
+ * shape the contract declares — `(fields, msg)` and `(msg)` — because a spy
+ * typed to only the first is not assignable to the overloaded member and every
+ * call site would need a cast.
+ */
+type PluginLoggerSpy = Mock<(objOrMsg: object | string, msg?: string) => void>;
+
+/**
+ * A spy-backed {@link PluginLogger}: the seam core injects on a plugin's
+ * deploy-time block (ADR-0013). Tests for a built-in plugin assert on this
+ * rather than on core's logger, which the plugin no longer writes to.
+ */
+export interface FakePluginLogger extends PluginLogger {
+  debug: PluginLoggerSpy;
+  info: PluginLoggerSpy;
+  warn: PluginLoggerSpy;
+  error: PluginLoggerSpy;
+}
+
+export const makeFakePluginLogger = (): FakePluginLogger => ({
+  debug: vi.fn(),
+  info: vi.fn(),
+  warn: vi.fn(),
+  error: vi.fn(),
+});

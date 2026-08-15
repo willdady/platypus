@@ -5,8 +5,8 @@ import { z } from "zod";
 
 // A minimal, runnable example of a THIRD-PARTY Platypus plugin — the kind an
 // Operator installs as an npm package and lists in `PLATYPUS_PLUGINS`. It exists
-// to prove the third-party path end to end: dynamic `import()` resolution and
-// contribution-id namespacing (ADR-0013).
+// to prove the third-party path end to end: dynamic `import()` resolution,
+// contribution-id namespacing (ADR-0013), and logging through core.
 //
 // The manifest `name` ("example") is the namespace: because this package is NOT
 // in core's built-in allowlist, the loader auto-prefixes every contribution id
@@ -24,14 +24,24 @@ export const plugin: PlatypusPlugin = {
         category: "Examples",
         description:
           "A tiny example tool set contributed by a third-party plugin",
-        tools: {
-          greet: tool({
-            description: "Return a friendly greeting for the given name.",
-            inputSchema: z.object({
-              name: z.string().describe("Who to greet"),
+        // A factory rather than a static map, because only a factory is handed
+        // the deploy-time block — and with it the logger core has already bound
+        // to this manifest's name. Optional-chained the whole way so the same
+        // code runs on a core that predates the field.
+        tools: (ctx, plugin) => {
+          plugin?.logger?.debug(
+            { workspaceId: ctx.workspaceId, agentId: ctx.agentId },
+            "Resolving the greeting tool set for a turn",
+          );
+          return {
+            greet: tool({
+              description: "Return a friendly greeting for the given name.",
+              inputSchema: z.object({
+                name: z.string().describe("Who to greet"),
+              }),
+              execute: ({ name }) => `Hello, ${name}! 👋`,
             }),
-            execute: ({ name }) => `Hello, ${name}! 👋`,
-          }),
+          };
         },
       },
     ],

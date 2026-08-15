@@ -132,7 +132,7 @@ export type WebToolError = { error: string };
 
 /**
  * One registered Web-search backend. The discriminator string lives in the
- * `provider.webBackend` column.
+ * `provider.searchSource` column.
  *
  * `buildTurnTools` is the finished, guarded builder produced by
  * {@link composeWebBackend}: it resolves the backend's executors for this turn

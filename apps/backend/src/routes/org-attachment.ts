@@ -3,16 +3,16 @@ import { nanoid } from "nanoid";
 import { db } from "../index.ts";
 import {
   attachment as attachmentTable,
-  agent as agentTable,
-  mcp as mcpTable,
-  provider as providerTable,
-  skill as skillTable,
   workspace as workspaceTable,
 } from "../db/schema.ts";
 import { and, eq } from "drizzle-orm";
 import { requireAuth } from "../middleware/authentication.ts";
-import { requireOrgAccess } from "../middleware/authorization.ts";
+import { orgScopeOf, requireOrgAccess } from "../middleware/authorization.ts";
 import { isUniqueViolation } from "../errors.ts";
+import {
+  isScopedResourceType,
+  resolveOrgScoped,
+} from "../services/scoped-resource.ts";
 import type { Variables } from "../server.ts";
 
 // Org-surface management of where a Shared resource is attached (ADR-0007).
@@ -22,47 +22,17 @@ import type { Variables } from "../server.ts";
 // place to manage sharing across many workspaces. All routes are admin-only.
 const orgAttachment = new Hono<{ Variables: Variables }>();
 
-const RESOURCE_TABLES = {
-  mcp: mcpTable,
-  provider: providerTable,
-  skill: skillTable,
-  agent: agentTable,
-} as const;
-
-type ResourceType = keyof typeof RESOURCE_TABLES;
-
-const isResourceType = (v: string | undefined): v is ResourceType =>
-  v === "mcp" || v === "provider" || v === "skill" || v === "agent";
-
-/**
- * Confirms a resource is org-scoped and belongs to this organization — you can
- * only manage sharing for a Shared resource, never a workspace-private one.
- */
-const orgResourceExists = async (
-  resourceType: ResourceType,
-  resourceId: string,
-  orgId: string,
-): Promise<boolean> => {
-  const table = RESOURCE_TABLES[resourceType];
-  const rows = await db
-    .select({ id: table.id })
-    .from(table)
-    .where(and(eq(table.id, resourceId), eq(table.organizationId, orgId)))
-    .limit(1);
-  return rows.length > 0;
-};
-
 /**
  * List the workspaces a Shared resource is attached to (admin only).
  * Requires `resourceType` and `resourceId` query params; returns each
  * attachment with its workspace name so the org surface can show "Shared with".
  */
 orgAttachment.get("/", requireAuth, requireOrgAccess(["admin"]), async (c) => {
-  const orgId = c.req.param("orgId")!;
+  const { orgId } = orgScopeOf(c);
   const resourceType = c.req.query("resourceType");
   const resourceId = c.req.query("resourceId");
 
-  if (!isResourceType(resourceType) || !resourceId) {
+  if (!isScopedResourceType(resourceType) || !resourceId) {
     return c.json(
       { error: "resourceType and resourceId query params are required" },
       400,
@@ -95,7 +65,7 @@ orgAttachment.get("/", requireAuth, requireOrgAccess(["admin"]), async (c) => {
 
 /** Attach an org-scoped Shared resource to a workspace (admin only) */
 orgAttachment.post("/", requireAuth, requireOrgAccess(["admin"]), async (c) => {
-  const orgId = c.req.param("orgId")!;
+  const { orgId } = orgScopeOf(c);
   const body = (await c.req.json().catch(() => ({}))) as {
     resourceType?: string;
     resourceId?: string;
@@ -103,7 +73,7 @@ orgAttachment.post("/", requireAuth, requireOrgAccess(["admin"]), async (c) => {
   };
   const { resourceType, resourceId, workspaceId } = body;
 
-  if (!isResourceType(resourceType)) {
+  if (!isScopedResourceType(resourceType)) {
     return c.json({ error: "Invalid resourceType" }, 400);
   }
   if (!resourceId || !workspaceId) {
@@ -125,7 +95,10 @@ orgAttachment.post("/", requireAuth, requireOrgAccess(["admin"]), async (c) => {
     return c.json({ error: "Workspace not found in this organization" }, 404);
   }
 
-  if (!(await orgResourceExists(resourceType, resourceId, orgId))) {
+  // You can only manage sharing for a Shared resource, never a
+  // Workspace-private one (ADR-0007) — the same check the Workspace-surface
+  // attach route makes.
+  if (!(await resolveOrgScoped(db, resourceType, resourceId, orgId))) {
     return c.json(
       { error: "Org-scoped resource not found in this organization" },
       404,
@@ -155,12 +128,12 @@ orgAttachment.delete(
   requireAuth,
   requireOrgAccess(["admin"]),
   async (c) => {
-    const orgId = c.req.param("orgId")!;
+    const { orgId } = orgScopeOf(c);
     const resourceType = c.req.param("resourceType");
     const resourceId = c.req.param("resourceId");
     const workspaceId = c.req.param("workspaceId");
 
-    if (!isResourceType(resourceType)) {
+    if (!isScopedResourceType(resourceType)) {
       return c.json({ error: "Invalid resourceType" }, 400);
     }
 

@@ -10,7 +10,7 @@ import {
 import { invitationCreateSchema } from "@platypus/schemas";
 import { eq, and, inArray, asc } from "drizzle-orm";
 import { requireAuth } from "../middleware/authentication.ts";
-import { requireOrgAccess } from "../middleware/authorization.ts";
+import { orgScopeOf, requireOrgAccess } from "../middleware/authorization.ts";
 import type { Variables } from "../server.ts";
 import { logger } from "../logger.ts";
 
@@ -27,7 +27,7 @@ invitation.post(
   requireOrgAccess(["admin"]),
   sValidator("json", invitationCreateSchema),
   async (c) => {
-    const orgId = c.req.param("orgId")!;
+    const { orgId } = orgScopeOf(c);
     const data = c.req.valid("json");
     const user = c.get("user")!;
 
@@ -127,7 +127,7 @@ invitation.post(
 
 /** List all invitations for an organization (org admin only) */
 invitation.get("/", requireAuth, requireOrgAccess(["admin"]), async (c) => {
-  const orgId = c.req.param("orgId")!;
+  const { orgId } = orgScopeOf(c);
 
   const results = await db
     .select()
@@ -169,7 +169,7 @@ invitation.delete(
   requireOrgAccess(["admin"]),
   async (c) => {
     const invitationId = c.req.param("invitationId");
-    const orgId = c.req.param("orgId")!;
+    const { orgId } = orgScopeOf(c);
 
     const result = await db
       .delete(invitationTable)

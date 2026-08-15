@@ -293,7 +293,13 @@ export const ChatMessage = memo(function ChatMessage({
           // provider-executed calls: native search registers under the same
           // `web_search` name, and its parts belong on the generic renderer, which
           // shows the vendor payload this card cannot read.
-          return <WebSearchTool key={`${message.id}-${i}`} toolPart={part} />;
+          return (
+            <WebSearchTool
+              key={`${message.id}-${i}`}
+              toolPart={part}
+              messageMetadata={message.metadata}
+            />
+          );
         } else if (
           isToolUIPart(part) &&
           part.type.startsWith("tool-delegateTo")

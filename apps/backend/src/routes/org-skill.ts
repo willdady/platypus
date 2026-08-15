@@ -4,11 +4,15 @@ import { nanoid } from "nanoid";
 import { db } from "../index.ts";
 import { skill as skillTable } from "../db/schema.ts";
 import { skillCreateSchema, skillUpdateSchema } from "@platypus/schemas";
-import { eq, and } from "drizzle-orm";
 import { requireAuth } from "../middleware/authentication.ts";
-import { requireOrgAccess } from "../middleware/authorization.ts";
+import { orgScopeOf, requireOrgAccess } from "../middleware/authorization.ts";
 import { scrubDeletedAgentReference } from "../services/agent-references.ts";
-import { requireSharedDeletable } from "../services/scoped-resource.ts";
+import {
+  listOrgScoped,
+  orgScopedWhere,
+  requireOrgScoped,
+  requireSharedDeletable,
+} from "../services/scoped-resource.ts";
 import { NotFoundError } from "../errors.ts";
 import type { Variables } from "../server.ts";
 
@@ -25,7 +29,7 @@ orgSkill.post(
   requireOrgAccess(["admin"]),
   sValidator("json", skillCreateSchema),
   async (c) => {
-    const orgId = c.req.param("orgId")!;
+    const { orgId } = orgScopeOf(c);
     // Agent associations are a workspace concern; org-scoped Skills carry none.
     const { agentIds: _agentIds, ...data } = c.req.valid("json");
 
@@ -48,29 +52,17 @@ orgSkill.post(
 
 /** List org-scoped Skills */
 orgSkill.get("/", requireAuth, requireOrgAccess(), async (c) => {
-  const orgId = c.req.param("orgId")!;
-  const results = await db
-    .select()
-    .from(skillTable)
-    .where(eq(skillTable.organizationId, orgId));
+  const { orgId } = orgScopeOf(c);
+  const results = await listOrgScoped(db, "skill", orgId);
   return c.json({ results });
 });
 
 /** Get an org-scoped Skill by ID */
 orgSkill.get("/:skillId", requireAuth, requireOrgAccess(), async (c) => {
-  const orgId = c.req.param("orgId")!;
+  const { orgId } = orgScopeOf(c);
   const skillId = c.req.param("skillId");
-  const record = await db
-    .select()
-    .from(skillTable)
-    .where(
-      and(eq(skillTable.id, skillId), eq(skillTable.organizationId, orgId)),
-    )
-    .limit(1);
-  if (record.length === 0) {
-    throw new NotFoundError("Skill not found");
-  }
-  return c.json(record[0]);
+  const record = await requireOrgScoped(db, "skill", skillId, orgId);
+  return c.json(record);
 });
 
 /** Update an org-scoped Skill by ID (admin only) */
@@ -80,7 +72,7 @@ orgSkill.put(
   requireOrgAccess(["admin"]),
   sValidator("json", skillUpdateSchema),
   async (c) => {
-    const orgId = c.req.param("orgId")!;
+    const { orgId } = orgScopeOf(c);
     const skillId = c.req.param("skillId");
     const { agentIds: _agentIds, ...data } = c.req.valid("json");
 
@@ -94,9 +86,7 @@ orgSkill.put(
         body: data.body,
         updatedAt: new Date(),
       })
-      .where(
-        and(eq(skillTable.id, skillId), eq(skillTable.organizationId, orgId)),
-      )
+      .where(orgScopedWhere("skill", skillId, orgId))
       .returning();
     if (record.length === 0) {
       throw new NotFoundError("Skill not found");
@@ -111,7 +101,7 @@ orgSkill.delete(
   requireAuth,
   requireOrgAccess(["admin"]),
   async (c) => {
-    const orgId = c.req.param("orgId")!;
+    const { orgId } = orgScopeOf(c);
     const skillId = c.req.param("skillId");
 
     // A Shared resource cannot be deleted while anything still points at it —
@@ -124,9 +114,7 @@ orgSkill.delete(
     const result = await db.transaction(async (tx) => {
       const rows = await tx
         .delete(skillTable)
-        .where(
-          and(eq(skillTable.id, skillId), eq(skillTable.organizationId, orgId)),
-        )
+        .where(orgScopedWhere("skill", skillId, orgId))
         .returning();
       if (rows.length > 0) {
         await scrubDeletedAgentReference(tx, "skillIds", skillId);

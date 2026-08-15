@@ -1,1 +1,5 @@
 CHANGELOG.md
+
+# Agent skill definitions are authored for agents to read, not Prettier to
+# reflow — its list spacing and code-fence rewrites fight the intended layout.
+.agents/skills/

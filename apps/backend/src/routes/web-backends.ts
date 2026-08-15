@@ -8,7 +8,7 @@ import type { Variables } from "../server.ts";
 const webBackends = new Hono<{ Variables: Variables }>();
 
 // Read-only catalog of the Web-search backends registered in this process
-// (ADR-0014), for the `webBackend` selector on the Provider form. Metadata only:
+// (ADR-0014), for the `searchSource` selector on the Provider form. Metadata only:
 // the discriminator to store, a display name, and the `plugin` that contributed
 // it (`null` when the id belongs to no loaded plugin) — the same annotation
 // `GET /backends` carries for sandboxes.

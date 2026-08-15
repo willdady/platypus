@@ -4,7 +4,7 @@ import type {
 } from "@platypuschat/plugin-sdk";
 import { PLUGIN_API_VERSION } from "@platypuschat/plugin-sdk";
 import {
-  DockerSandboxBackend,
+  createDockerSandboxBackend,
   dockerPluginConfigSchema,
   dockerSandboxConfigSchema,
   dockerSandboxCredentialsSchema,
@@ -29,8 +29,12 @@ const dockerBackend: SandboxBackendContribution<
   // deploy-time config (below) at load time.
   configSchema: dockerSandboxConfigSchema,
   credentialsSchema: dockerSandboxCredentialsSchema,
-  create: (config, credentials) =>
-    new DockerSandboxBackend(config, credentials),
+  // The third argument is the plugin's deploy-time block, and it is forwarded
+  // for the logger core bound to this manifest's name: the adapter writes its
+  // image-pull and teardown lines through the same contract a third-party
+  // plugin gets, not through a relative import of core's logger.
+  create: (config, credentials, plugin) =>
+    createDockerSandboxBackend(config, credentials, plugin),
 };
 
 export const plugin: PlatypusPlugin = {

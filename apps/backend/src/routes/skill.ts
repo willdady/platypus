@@ -13,6 +13,7 @@ import { requireAuth } from "../middleware/authentication.ts";
 import {
   requireOrgAccess,
   requireWorkspaceAccess,
+  workspaceScopeOf,
 } from "../middleware/authorization.ts";
 import {
   listScoped,
@@ -31,12 +32,9 @@ skill.get(
   requireOrgAccess(),
   requireWorkspaceAccess,
   async (c) => {
-    const orgId = c.req.param("orgId")!;
-    const workspaceId = c.req.param("workspaceId")!;
-
     // Workspace-scoped Skills plus the attached org-scoped (Shared) ones, each
     // tagged with its scope for the frontend (locked cards for org).
-    const scoped = await listScoped(db, "skill", { orgId, wsId: workspaceId });
+    const scoped = await listScoped(db, "skill", workspaceScopeOf(c));
     const results = scoped.map(({ row, scope }) => ({ ...row, scope }));
 
     return c.json({ results });
@@ -50,16 +48,12 @@ skill.get(
   requireOrgAccess(),
   requireWorkspaceAccess,
   async (c) => {
-    const orgId = c.req.param("orgId")!;
-    const workspaceId = c.req.param("workspaceId")!;
+    const scope = workspaceScopeOf(c);
     const skillId = c.req.param("skillId");
 
     // Resolve the Skill visible here — Workspace-scoped, or an attached
     // org-scoped (Shared) one (ADR-0007); not visible → 404 via onError.
-    const found = await requireScoped(db, "skill", skillId, {
-      orgId,
-      wsId: workspaceId,
-    });
+    const found = await requireScoped(db, "skill", skillId, scope);
 
     // Find workspace agents that have this skill assigned
     const agentsWithSkill = await db
@@ -67,7 +61,7 @@ skill.get(
       .from(agentTable)
       .where(
         and(
-          eq(agentTable.workspaceId, workspaceId),
+          eq(agentTable.workspaceId, scope.workspaceId),
           sql`${agentTable.skillIds} @> ${JSON.stringify([skillId])}::jsonb`,
         ),
       );
@@ -88,7 +82,7 @@ skill.post(
   requireWorkspaceAccess,
   sValidator("json", skillCreateSchema),
   async (c) => {
-    const workspaceId = c.req.param("workspaceId")!;
+    const { workspaceId } = workspaceScopeOf(c);
     const { agentIds, ...data } = c.req.valid("json");
 
     const newId = nanoid();
@@ -138,18 +132,14 @@ skill.put(
   requireWorkspaceAccess,
   sValidator("json", skillUpdateSchema),
   async (c) => {
-    const orgId = c.req.param("orgId")!;
-    const workspaceId = c.req.param("workspaceId")!;
+    const scope = workspaceScopeOf(c);
     const skillId = c.req.param("skillId");
     const { agentIds, ...data } = c.req.valid("json");
 
     // A Shared Skill is a single source of truth edited only on the Organization
     // surface (ADR-0007); requireWorkspaceMutable throws NotFound (→404) when the
     // Skill is not visible here, then Locked (→403) when it is org-scoped.
-    await requireWorkspaceMutable(db, "skill", skillId, {
-      orgId,
-      wsId: workspaceId,
-    });
+    await requireWorkspaceMutable(db, "skill", skillId, scope);
 
     // A duplicate name surfaces as a Postgres unique violation, mapped to 409
     // by the central onError (ADR-0010).
@@ -162,7 +152,7 @@ skill.put(
       .where(
         and(
           eq(skillTable.id, skillId),
-          eq(skillTable.workspaceId, workspaceId),
+          eq(skillTable.workspaceId, scope.workspaceId),
         ),
       )
       .returning();
@@ -174,7 +164,7 @@ skill.put(
 
       // Remove skill from agents not in the new list
       const removeWhere = [
-        eq(agentTable.workspaceId, workspaceId),
+        eq(agentTable.workspaceId, scope.workspaceId),
         sql`${agentTable.skillIds} @> ${skillIdJson}::jsonb`,
       ];
       if (agentIds.length > 0) {
@@ -198,7 +188,7 @@ skill.put(
           })
           .where(
             and(
-              eq(agentTable.workspaceId, workspaceId),
+              eq(agentTable.workspaceId, scope.workspaceId),
               inArray(agentTable.id, agentIds),
               sql`NOT ${agentTable.skillIds} @> ${skillIdJson}::jsonb`,
             ),
@@ -217,17 +207,13 @@ skill.delete(
   requireOrgAccess(),
   requireWorkspaceAccess,
   async (c) => {
-    const orgId = c.req.param("orgId")!;
-    const workspaceId = c.req.param("workspaceId")!;
+    const scope = workspaceScopeOf(c);
     const skillId = c.req.param("skillId");
 
     // A Shared Skill is deleted only from the Organization surface (ADR-0007):
     // requireWorkspaceMutable throws NotFound (→404) when the Skill is not
     // visible here, then Locked (→403) when it is org-scoped.
-    await requireWorkspaceMutable(db, "skill", skillId, {
-      orgId,
-      wsId: workspaceId,
-    });
+    await requireWorkspaceMutable(db, "skill", skillId, scope);
 
     // Check if skill is referenced by any agent
     const referencingAgents = await db
@@ -235,7 +221,7 @@ skill.delete(
       .from(agentTable)
       .where(
         and(
-          eq(agentTable.workspaceId, workspaceId),
+          eq(agentTable.workspaceId, scope.workspaceId),
           sql`${agentTable.skillIds} @> ${JSON.stringify([skillId])}::jsonb`,
         ),
       )
@@ -256,7 +242,7 @@ skill.delete(
       .where(
         and(
           eq(skillTable.id, skillId),
-          eq(skillTable.workspaceId, workspaceId),
+          eq(skillTable.workspaceId, scope.workspaceId),
         ),
       );
 
@@ -281,8 +267,7 @@ skill.post(
   requireOrgAccess(["admin"]),
   requireWorkspaceAccess,
   async (c) => {
-    const orgId = c.req.param("orgId")!;
-    const workspaceId = c.req.param("workspaceId")!;
+    const { orgId, workspaceId } = workspaceScopeOf(c);
     const skillId = c.req.param("skillId");
 
     // Only a workspace-scoped Skill in this workspace can be promoted.

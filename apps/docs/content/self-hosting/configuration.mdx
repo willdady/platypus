@@ -144,11 +144,27 @@ empty list unless it says otherwise, and silently runs without web-fetch.
   remove it.
 - **An empty list yields the always-on core tool sets only** — never zero tools.
   The gate-able plugins (web-fetch, docker, third-party) are simply absent.
-- **Boot is fail-loud.** A listed plugin that can't be resolved or exports an
-  invalid manifest, or two plugins whose tool-set ids collide, aborts startup
-  with a plugin-named error — a misconfigured plugin never silently drops tools.
+- **Boot is fail-loud.** A listed plugin that can't be resolved, exports an
+  invalid manifest, or declares a malformed Contribution aborts startup with a
+  plugin-named error. This includes a Tool set with no usable `id`, `name`,
+  `category`, or `tools`; a misconfigured plugin never silently drops or invents
+  tools. Two plugins whose Tool set ids collide also abort startup.
 - **New gate-able core plugins in a later release are not auto-enabled** — add
   them to your pinned list to opt in.
+- **After boot, a failing plugin is a warning, not an outage.** A Tool set whose
+  factory throws during a Chat turn, or an MCP server that is unreachable,
+  contributes no tools to that turn and logs a `warn` naming the plugin and the
+  tool set. The chat still runs — with fewer tools, which reads to a user as an
+  Agent that suddenly can't do something. That warning is the only signal, so it
+  is worth alerting on.
+- **A plugin logs into your stream, under your `LOG_LEVEL`.** Lines a plugin
+  writes carry `"plugin":"<name>"` and are formatted and filtered exactly like
+  core's own, so raising `LOG_LEVEL` to `debug` while diagnosing one plugin
+  raises everything else with it. The bundled Docker and SSH backends are tagged
+  the same way as any third-party plugin, and Platypus's own lines about a
+  Sandbox backend — an adapter that failed to tear down, a backend that is no
+  longer registered — carry the same tag. Filtering on one plugin gets you both
+  sides: what the plugin reported, and what Platypus reported about it.
 
 <Callout type="warning">
   **`compose.sandbox.yaml` replaces `PLATYPUS_PLUGINS` — it does not merge.**

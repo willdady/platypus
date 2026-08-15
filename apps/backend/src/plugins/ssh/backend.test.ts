@@ -282,16 +282,19 @@ vi.mock("../../logger.ts", () => ({
 
 // Import AFTER vi.mock so the adapter binds to the mocked ssh2 + logger.
 import {
-  SshSandboxBackend,
+  createSshSandboxBackend,
   sshSandboxConfigSchema,
   sshSandboxCredentialsSchema,
 } from "./backend.ts";
 import { logger } from "../../logger.ts";
+import { plugin } from "./index.ts";
+import { loadPlugins } from "../loader.ts";
+import type { SandboxBackendContribution } from "@platypuschat/plugin-sdk";
 import {
-  MAX_LIST_ENTRIES,
-  MAX_READ_BYTES,
-  MAX_SHELL_OUTPUT_BYTES,
-} from "../../sandbox/index.ts";
+  makeFakePluginLogger,
+  type FakePluginLogger,
+} from "../../test-utils.ts";
+import { MAX_READ_BYTES, MAX_SHELL_OUTPUT_BYTES } from "../../sandbox/index.ts";
 import type { SandboxContext } from "../../sandbox/types.ts";
 
 const ctx: SandboxContext = {
@@ -339,9 +342,21 @@ function queueExec(cfg: ExecConfig = {}) {
   mockState.execQueue.push(cfg);
 }
 
+// The `PluginLogger` seam core injects on the plugin's deploy-time block. The
+// adapter logs through this rather than core's logger, so any suite asserting on
+// a log line injects one and watches it — watching core's would pass vacuously.
+let pluginLogger: FakePluginLogger;
+
+const withPluginLogger = () => ({
+  config: {},
+  credentials: {},
+  logger: pluginLogger,
+});
+
 beforeEach(() => {
   resetMockState();
   vi.clearAllMocks();
+  pluginLogger = makeFakePluginLogger();
 });
 
 describe("sshSandboxConfigSchema / credentialsSchema", () => {
@@ -378,10 +393,10 @@ describe("sshSandboxConfigSchema / credentialsSchema", () => {
   });
 });
 
-describe("SshSandboxBackend — connect", () => {
+describe("SshSandboxTransport — connect", () => {
   it("connects with public-key auth and creates the default workspace root", async () => {
     queueExec({ stdout: "hi", exitCode: 0 });
-    const backend = new SshSandboxBackend(CONFIG, CREDENTIALS);
+    const backend = createSshSandboxBackend(CONFIG, CREDENTIALS);
     await backend.shellExec(ctx, { command: "echo hi" });
 
     expect(mockState.connectConfigs).toHaveLength(1);
@@ -401,7 +416,7 @@ describe("SshSandboxBackend — connect", () => {
 
   it("passes the passphrase through when provided", async () => {
     queueExec({ exitCode: 0 });
-    const backend = new SshSandboxBackend(CONFIG, {
+    const backend = createSshSandboxBackend(CONFIG, {
       privateKey: "K",
       passphrase: "secret",
     });
@@ -411,9 +426,13 @@ describe("SshSandboxBackend — connect", () => {
 
   it("warns loudly about MITM when no hostKey is pinned", async () => {
     queueExec({ exitCode: 0 });
-    const backend = new SshSandboxBackend(CONFIG, CREDENTIALS);
+    const backend = createSshSandboxBackend(
+      CONFIG,
+      CREDENTIALS,
+      withPluginLogger(),
+    );
     await backend.shellExec(ctx, { command: "true" });
-    expect(logger.warn).toHaveBeenCalledWith(
+    expect(pluginLogger.warn).toHaveBeenCalledWith(
       expect.objectContaining({ host: "ssh.example.com" }),
       expect.stringContaining("WITHOUT host-key verification"),
     );
@@ -421,7 +440,7 @@ describe("SshSandboxBackend — connect", () => {
 
   it("uses a custom rootDir when configured", async () => {
     queueExec({ exitCode: 0 });
-    const backend = new SshSandboxBackend(
+    const backend = createSshSandboxBackend(
       { ...CONFIG, rootDir: "/srv/agent" },
       CREDENTIALS,
     );
@@ -431,7 +450,7 @@ describe("SshSandboxBackend — connect", () => {
 
   it("rejects when the SSH connection errors", async () => {
     mockState.connectShouldFail = new Error("auth failed");
-    const backend = new SshSandboxBackend(CONFIG, CREDENTIALS);
+    const backend = createSshSandboxBackend(CONFIG, CREDENTIALS);
     await expect(backend.shellExec(ctx, { command: "true" })).rejects.toThrow(
       /auth failed/,
     );
@@ -439,21 +458,22 @@ describe("SshSandboxBackend — connect", () => {
 
   it("throws when the workspace root cannot be created", async () => {
     mockState.rootCreateFails = true;
-    const backend = new SshSandboxBackend(CONFIG, CREDENTIALS);
+    const backend = createSshSandboxBackend(CONFIG, CREDENTIALS);
     await expect(backend.shellExec(ctx, { command: "true" })).rejects.toThrow(
       /failed to create workspace root/,
     );
   });
 });
 
-describe("SshSandboxBackend — host-key verification", () => {
+describe("SshSandboxTransport — host-key verification", () => {
   it("connects when the pinned hostKey matches the presented host key", async () => {
     queueExec({ exitCode: 0 });
     mockState.presentedHostKey = Buffer.from(HOST_KEY_B64, "base64");
-    const backend = new SshSandboxBackend(
+    const backend = createSshSandboxBackend(
       // A full `ssh-keyscan`-style line: the parser picks the base64 blob token.
       { ...CONFIG, hostKey: `ssh-ed25519 ${HOST_KEY_B64}` },
       CREDENTIALS,
+      withPluginLogger(),
     );
     await backend.shellExec(ctx, { command: "true" });
 
@@ -462,13 +482,13 @@ describe("SshSandboxBackend — host-key verification", () => {
     // The root-resolution exec ran → the connection is live.
     expect(mockState.execCommands.length).toBeGreaterThan(0);
     // No MITM warning is emitted when a pin is enforced.
-    expect(logger.warn).not.toHaveBeenCalled();
+    expect(pluginLogger.warn).not.toHaveBeenCalled();
   });
 
   it("rejects the connection with a clear error when the pin mismatches", async () => {
     // A bare base64 blob (single token) is also accepted as a pin.
     mockState.presentedHostKey = Buffer.from(HOST_KEY_B64, "base64");
-    const backend = new SshSandboxBackend(
+    const backend = createSshSandboxBackend(
       { ...CONFIG, hostKey: WRONG_HOST_KEY_B64 },
       CREDENTIALS,
     );
@@ -481,19 +501,23 @@ describe("SshSandboxBackend — host-key verification", () => {
 
   it("connects without a hostVerifier and warns exactly once when no hostKey is pinned", async () => {
     queueExec({ exitCode: 0 });
-    const backend = new SshSandboxBackend(CONFIG, CREDENTIALS);
+    const backend = createSshSandboxBackend(
+      CONFIG,
+      CREDENTIALS,
+      withPluginLogger(),
+    );
     await backend.shellExec(ctx, { command: "true" });
 
     expect(mockState.connectConfigs[0].hostVerifier).toBeUndefined();
-    expect(logger.warn).toHaveBeenCalledTimes(1);
-    expect(logger.warn).toHaveBeenCalledWith(
+    expect(pluginLogger.warn).toHaveBeenCalledTimes(1);
+    expect(pluginLogger.warn).toHaveBeenCalledWith(
       expect.objectContaining({ host: "ssh.example.com" }),
       expect.stringContaining("WITHOUT host-key verification"),
     );
   });
 
   it("throws a clear error when the pinned hostKey cannot be parsed", async () => {
-    const backend = new SshSandboxBackend(
+    const backend = createSshSandboxBackend(
       { ...CONFIG, hostKey: "# not a key" },
       CREDENTIALS,
     );
@@ -505,14 +529,18 @@ describe("SshSandboxBackend — host-key verification", () => {
   });
 });
 
-describe("SshSandboxBackend — shellExec", () => {
+describe("SshSandboxTransport — shellExec", () => {
   it("prefixes cd <rootDir> and returns stdout/stderr/exitCode/durationMs", async () => {
     queueExec({ stdout: "out", stderr: "err", exitCode: 3 });
-    const backend = new SshSandboxBackend(CONFIG, CREDENTIALS);
+    const backend = createSshSandboxBackend(CONFIG, CREDENTIALS);
     const res = await backend.shellExec(ctx, { command: "run" });
 
+    // Core hands the transport an argv (`/bin/sh -c <command>`); a login shell
+    // sits in between, so every element is single-quoted before being joined.
     const cmd = mockState.execCommands[1];
-    expect(cmd).toBe("cd '/home/platypus/platypus-workspace' && run");
+    expect(cmd).toBe(
+      "cd '/home/platypus/platypus-workspace' && '/bin/sh' '-c' 'run'",
+    );
     expect(res.stdout).toBe("out");
     expect(res.stderr).toBe("err");
     expect(res.exitCode).toBe(3);
@@ -522,16 +550,16 @@ describe("SshSandboxBackend — shellExec", () => {
 
   it("resolves cwd relative to the rootDir", async () => {
     queueExec({ exitCode: 0 });
-    const backend = new SshSandboxBackend(CONFIG, CREDENTIALS);
+    const backend = createSshSandboxBackend(CONFIG, CREDENTIALS);
     await backend.shellExec(ctx, { command: "ls", cwd: "sub/dir" });
     expect(mockState.execCommands[1]).toBe(
-      "cd '/home/platypus/platypus-workspace/sub/dir' && ls",
+      "cd '/home/platypus/platypus-workspace/sub/dir' && '/bin/sh' '-c' 'ls'",
     );
   });
 
   it("applies env via export statements (not the ssh2 env option)", async () => {
     queueExec({ exitCode: 0 });
-    const backend = new SshSandboxBackend(CONFIG, CREDENTIALS);
+    const backend = createSshSandboxBackend(CONFIG, CREDENTIALS);
     await backend.shellExec(ctx, {
       command: "printenv",
       env: { FOO: "bar", TOKEN: "a b'c" },
@@ -546,7 +574,7 @@ describe("SshSandboxBackend — shellExec", () => {
 
   it("drops env keys that are not valid POSIX identifiers", async () => {
     queueExec({ exitCode: 0 });
-    const backend = new SshSandboxBackend(CONFIG, CREDENTIALS);
+    const backend = createSshSandboxBackend(CONFIG, CREDENTIALS);
     await backend.shellExec(ctx, {
       command: "run",
       // A malformed key (model-supplied env is not schema-key-validated) must
@@ -558,10 +586,12 @@ describe("SshSandboxBackend — shellExec", () => {
     expect(cmd).not.toContain("rm -rf");
   });
 
-  it("caps stdout at MAX_SHELL_OUTPUT_BYTES and flags truncated", async () => {
+  it("stops buffering the ssh2 stream once the caller's stdout cap is reached", async () => {
+    // The cap is enforced while the channel is streaming, not afterwards: the
+    // fake emits more than the cap in one chunk and only the cap is retained.
     const huge = "a".repeat(MAX_SHELL_OUTPUT_BYTES + 5_000);
     queueExec({ stdout: huge, exitCode: 0 });
-    const backend = new SshSandboxBackend(CONFIG, CREDENTIALS);
+    const backend = createSshSandboxBackend(CONFIG, CREDENTIALS);
     const res = await backend.shellExec(ctx, { command: "yes" });
     expect(res.stdout.length).toBe(MAX_SHELL_OUTPUT_BYTES);
     expect(res.truncated).toBe(true);
@@ -570,7 +600,7 @@ describe("SshSandboxBackend — shellExec", () => {
   it("returns exit code 124 when a command exceeds its timeout", async () => {
     // Channel closes after 200ms; timeout is 20ms, so the adapter closes first.
     queueExec({ closeDelayMs: 200, exitCode: 0 });
-    const backend = new SshSandboxBackend(CONFIG, CREDENTIALS);
+    const backend = createSshSandboxBackend(CONFIG, CREDENTIALS);
     const res = await backend.shellExec(ctx, {
       command: "sleep 5",
       timeoutMs: 20,
@@ -579,11 +609,11 @@ describe("SshSandboxBackend — shellExec", () => {
   });
 });
 
-describe("SshSandboxBackend — connection lifecycle", () => {
+describe("SshSandboxTransport — connection lifecycle", () => {
   it("reuses a single connection across tool calls within a turn", async () => {
     queueExec({ exitCode: 0 });
     queueExec({ exitCode: 0 });
-    const backend = new SshSandboxBackend(CONFIG, CREDENTIALS);
+    const backend = createSshSandboxBackend(CONFIG, CREDENTIALS);
     await backend.shellExec(ctx, { command: "a" });
     await backend.shellExec(ctx, { command: "b" });
 
@@ -595,7 +625,7 @@ describe("SshSandboxBackend — connection lifecycle", () => {
   it("concurrent first-callers share one connect (inflight promise)", async () => {
     queueExec({ exitCode: 0 });
     queueExec({ exitCode: 0 });
-    const backend = new SshSandboxBackend(CONFIG, CREDENTIALS);
+    const backend = createSshSandboxBackend(CONFIG, CREDENTIALS);
     await Promise.all([
       backend.shellExec(ctx, { command: "a" }),
       backend.shellExec(ctx, { command: "b" }),
@@ -607,7 +637,7 @@ describe("SshSandboxBackend — connection lifecycle", () => {
     vi.useFakeTimers();
     try {
       queueExec({ exitCode: 0 });
-      const backend = new SshSandboxBackend(CONFIG, CREDENTIALS);
+      const backend = createSshSandboxBackend(CONFIG, CREDENTIALS);
       await backend.shellExec(ctx, { command: "true" });
       expect(mockState.ended).toBe(0);
 
@@ -625,10 +655,10 @@ describe("SshSandboxBackend — connection lifecycle", () => {
   });
 });
 
-describe("SshSandboxBackend — destroy() is a no-op", () => {
+describe("SshSandboxTransport — destroy() is a no-op", () => {
   it("disconnects without running any remote mutation command", async () => {
     queueExec({ exitCode: 0 });
-    const backend = new SshSandboxBackend(CONFIG, CREDENTIALS);
+    const backend = createSshSandboxBackend(CONFIG, CREDENTIALS);
     await backend.shellExec(ctx, { command: "true" });
     const execCountBefore = mockState.execCommands.length;
 
@@ -640,7 +670,7 @@ describe("SshSandboxBackend — destroy() is a no-op", () => {
   });
 
   it("is safe to call when never connected", async () => {
-    const backend = new SshSandboxBackend(CONFIG, CREDENTIALS);
+    const backend = createSshSandboxBackend(CONFIG, CREDENTIALS);
     await expect(backend.destroy(ctx)).resolves.toBeUndefined();
     expect(mockState.connectConfigs).toHaveLength(0);
     expect(mockState.ended).toBe(0);
@@ -660,23 +690,10 @@ function seedFile(rel: string, content: string | Buffer) {
   );
 }
 
-describe("SshSandboxBackend — fs.write (SFTP)", () => {
-  it("create mode writes a new file and returns bytesWritten", async () => {
-    const backend = new SshSandboxBackend(CONFIG, CREDENTIALS);
-    const res = await backend.fsWrite(ctx, {
-      path: "notes.txt",
-      content: "hello",
-      mode: "create",
-    });
-    expect(res.bytesWritten).toBe(5);
-    expect(mockState.files.get(abs("notes.txt"))?.toString("utf8")).toBe(
-      "hello",
-    );
-  });
-
+describe("SshSandboxTransport — fs.write (SFTP)", () => {
   it("create mode fails cleanly when the target already exists", async () => {
     seedFile("exists.txt", "old");
-    const backend = new SshSandboxBackend(CONFIG, CREDENTIALS);
+    const backend = createSshSandboxBackend(CONFIG, CREDENTIALS);
     await expect(
       backend.fsWrite(ctx, {
         path: "exists.txt",
@@ -690,20 +707,8 @@ describe("SshSandboxBackend — fs.write (SFTP)", () => {
     );
   });
 
-  it("overwrite mode replaces an existing file", async () => {
-    seedFile("f.txt", "original content here");
-    const backend = new SshSandboxBackend(CONFIG, CREDENTIALS);
-    const res = await backend.fsWrite(ctx, {
-      path: "f.txt",
-      content: "new",
-      mode: "overwrite",
-    });
-    expect(res.bytesWritten).toBe(3);
-    expect(mockState.files.get(abs("f.txt"))?.toString("utf8")).toBe("new");
-  });
-
   it("auto-creates parent directories (mkdir -p) before writing", async () => {
-    const backend = new SshSandboxBackend(CONFIG, CREDENTIALS);
+    const backend = createSshSandboxBackend(CONFIG, CREDENTIALS);
     await backend.fsWrite(ctx, {
       path: "a/b/c/deep.txt",
       content: "x",
@@ -718,7 +723,7 @@ describe("SshSandboxBackend — fs.write (SFTP)", () => {
   });
 
   it("writes paths literally over SFTP (no shell quoting/injection)", async () => {
-    const backend = new SshSandboxBackend(CONFIG, CREDENTIALS);
+    const backend = createSshSandboxBackend(CONFIG, CREDENTIALS);
     const weird = `foo";rm -rf /.txt`;
     await backend.fsWrite(ctx, {
       path: weird,
@@ -731,127 +736,32 @@ describe("SshSandboxBackend — fs.write (SFTP)", () => {
       true,
     );
   });
-
-  it("writes zero-length content", async () => {
-    const backend = new SshSandboxBackend(CONFIG, CREDENTIALS);
-    const res = await backend.fsWrite(ctx, {
-      path: "empty.txt",
-      content: "",
-      mode: "create",
-    });
-    expect(res.bytesWritten).toBe(0);
-    expect(mockState.files.get(abs("empty.txt"))?.length).toBe(0);
-  });
 });
 
-describe("SshSandboxBackend — fs.read (SFTP)", () => {
-  it("reads content with correct lineCount and truncated=false", async () => {
-    seedFile("f.txt", "line1\nline2\nline3\n");
-    const backend = new SshSandboxBackend(CONFIG, CREDENTIALS);
-    const res = await backend.fsRead(ctx, { path: "f.txt" });
-    expect(res.content).toBe("line1\nline2\nline3\n");
-    expect(res.lineCount).toBe(3);
-    expect(res.truncated).toBe(false);
-  });
-
-  it("counts a trailing partial line", async () => {
-    seedFile("f.txt", "a\nb\nc");
-    const backend = new SshSandboxBackend(CONFIG, CREDENTIALS);
-    const res = await backend.fsRead(ctx, { path: "f.txt" });
-    expect(res.lineCount).toBe(3);
-  });
-
-  it("an empty file reads as zero lines", async () => {
-    seedFile("empty.txt", "");
-    const backend = new SshSandboxBackend(CONFIG, CREDENTIALS);
-    const res = await backend.fsRead(ctx, { path: "empty.txt" });
-    expect(res.content).toBe("");
-    expect(res.lineCount).toBe(0);
-    expect(res.truncated).toBe(false);
-  });
-
-  it("caps at MAX_READ_BYTES and flags truncated", async () => {
+describe("SshSandboxTransport — fs.read (SFTP)", () => {
+  it("reads no more than the cap however large the file is", async () => {
+    // The transport fstat()s first and asks for min(size, cap), so an oversized
+    // file costs the cap and no more. What that means for `truncated` is core's
+    // call, not this adapter's — see sandbox/posix.test.ts.
     seedFile("big.txt", "a".repeat(MAX_READ_BYTES + 5_000));
-    const backend = new SshSandboxBackend(CONFIG, CREDENTIALS);
+    const backend = createSshSandboxBackend(CONFIG, CREDENTIALS);
     const res = await backend.fsRead(ctx, { path: "big.txt" });
     expect(res.content.length).toBe(MAX_READ_BYTES);
-    expect(res.truncated).toBe(true);
   });
 
-  it("rejects a non-UTF-8 file with a clear error", async () => {
-    // 0xff is never valid in UTF-8.
-    seedFile("bin.dat", Buffer.from([0x66, 0x6f, 0xff, 0x6f]));
-    const backend = new SshSandboxBackend(CONFIG, CREDENTIALS);
-    await expect(backend.fsRead(ctx, { path: "bin.dat" })).rejects.toThrow(
-      /not valid UTF-8/,
-    );
-  });
-
-  it("honours lineRange, slicing the requested window", async () => {
-    seedFile("f.txt", "one\ntwo\nthree\nfour\nfive\n");
-    const backend = new SshSandboxBackend(CONFIG, CREDENTIALS);
-    const res = await backend.fsRead(ctx, {
-      path: "f.txt",
-      lineRange: [2, 4],
-    });
-    expect(res.content).toBe("two\nthree\nfour\n");
-    expect(res.lineCount).toBe(3);
+  it("reads a file smaller than the cap whole", async () => {
+    // min(size, cap) must not over-request either: asking for `cap` bytes of a
+    // short file is what a naive read would do, and SFTP would pad the buffer.
+    seedFile("small.txt", "abc");
+    const backend = createSshSandboxBackend(CONFIG, CREDENTIALS);
+    const res = await backend.fsRead(ctx, { path: "small.txt" });
+    expect(res.content).toBe("abc");
   });
 });
 
-describe("SshSandboxBackend — fs.edit (SFTP)", () => {
-  it("replaces exactly one occurrence and writes it back", async () => {
-    seedFile("f.txt", "the quick brown fox");
-    const backend = new SshSandboxBackend(CONFIG, CREDENTIALS);
-    const res = await backend.fsEdit(ctx, {
-      path: "f.txt",
-      oldString: "quick",
-      newString: "slow",
-    });
-    expect(res).toEqual({ replacements: 1 });
-    expect(mockState.files.get(abs("f.txt"))?.toString("utf8")).toBe(
-      "the slow brown fox",
-    );
-  });
-
-  it("throws when oldString is absent", async () => {
-    seedFile("f.txt", "nothing to see here");
-    const backend = new SshSandboxBackend(CONFIG, CREDENTIALS);
-    await expect(
-      backend.fsEdit(ctx, {
-        path: "f.txt",
-        oldString: "missing",
-        newString: "x",
-      }),
-    ).rejects.toThrow(/oldString not found/);
-  });
-
-  it("throws when oldString is not unique", async () => {
-    seedFile("f.txt", "abc abc");
-    const backend = new SshSandboxBackend(CONFIG, CREDENTIALS);
-    await expect(
-      backend.fsEdit(ctx, {
-        path: "f.txt",
-        oldString: "abc",
-        newString: "x",
-      }),
-    ).rejects.toThrow(/not unique/);
-    // Unchanged on failure.
-    expect(mockState.files.get(abs("f.txt"))?.toString("utf8")).toBe("abc abc");
-  });
-
-  it("rejects a non-UTF-8 file", async () => {
-    seedFile("bin.dat", Buffer.from([0xff, 0xfe]));
-    const backend = new SshSandboxBackend(CONFIG, CREDENTIALS);
-    await expect(
-      backend.fsEdit(ctx, { path: "bin.dat", oldString: "a", newString: "b" }),
-    ).rejects.toThrow(/not valid UTF-8/);
-  });
-});
-
-describe("SshSandboxBackend — SFTP session lifecycle", () => {
+describe("SshSandboxTransport — SFTP session lifecycle", () => {
   it("opens the SFTP subsystem once and reuses it across fs calls in a turn", async () => {
-    const backend = new SshSandboxBackend(CONFIG, CREDENTIALS);
+    const backend = createSshSandboxBackend(CONFIG, CREDENTIALS);
     await backend.fsWrite(ctx, { path: "a.txt", content: "1", mode: "create" });
     await backend.fsRead(ctx, { path: "a.txt" });
     await backend.fsEdit(ctx, {
@@ -866,187 +776,153 @@ describe("SshSandboxBackend — SFTP session lifecycle", () => {
 
   it("propagates an SFTP subsystem open failure", async () => {
     mockState.sftpShouldFail = new Error("sftp channel refused");
-    const backend = new SshSandboxBackend(CONFIG, CREDENTIALS);
+    const backend = createSshSandboxBackend(CONFIG, CREDENTIALS);
     await expect(backend.fsRead(ctx, { path: "a.txt" })).rejects.toThrow(
       /sftp channel refused/,
     );
   });
 });
 
-// Build a `find -printf '%y\t%s\t%P\n'` line for the mocked exec output.
-function findLine(type: "f" | "d" | "l", size: number, path: string): string {
-  return `${type}\t${size}\t${path}`;
-}
-
-// The find command is the second exec (execCommands[0] is the connect-time root
+// The find command is the last exec (execCommands[0] is the connect-time root
 // resolution). Grab it for command-shape assertions.
 const lastFindCommand = () =>
   mockState.execCommands[mockState.execCommands.length - 1];
 
-describe("SshSandboxBackend — fs.list (exec find)", () => {
-  it("lists a flat directory non-recursively with type and size", async () => {
-    queueExec({
-      stdout:
-        [
-          findLine("f", 12, "a.txt"),
-          findLine("d", 4096, "sub"),
-          findLine("f", 0, "empty.txt"),
-        ].join("\n") + "\n",
-      exitCode: 0,
-    });
-    const backend = new SshSandboxBackend(CONFIG, CREDENTIALS);
-    const res = await backend.fsList(ctx, {});
+// find(1)'s own `\t`/`\n` escapes, as they appear inside the single-quoted
+// -printf argument on the wire (the shell must pass them through untouched).
+const PRINTF_ARG = String.raw`'-printf' '%y\t%s\t%P\n'`;
 
-    expect(res.truncated).toBe(false);
-    expect(res.entries).toEqual([
-      { path: "a.txt", type: "file", size: 12 },
-      { path: "sub", type: "dir", size: 4096 },
-      { path: "empty.txt", type: "file", size: 0 },
-    ]);
-
-    // Non-recursive → -maxdepth 1; roots at the resolved workspace root.
-    const cmd = lastFindCommand();
-    expect(cmd).toBe(
-      `find '${ROOT}' -maxdepth 1 -mindepth 1 -printf '%y\\t%s\\t%P\\n'`,
-    );
-  });
-
-  it("lists recursively (no -maxdepth) under a subpath", async () => {
-    queueExec({
-      stdout:
-        [findLine("f", 3, "x"), findLine("f", 3, "d/y")].join("\n") + "\n",
-      exitCode: 0,
-    });
-    const backend = new SshSandboxBackend(CONFIG, CREDENTIALS);
-    const res = await backend.fsList(ctx, { path: "src", recursive: true });
-
-    expect(res.entries.map((e) => e.path)).toEqual(["x", "d/y"]);
-    const cmd = lastFindCommand();
-    expect(cmd).toBe(
-      `find '${ROOT}/src' -mindepth 1 -printf '%y\\t%s\\t%P\\n'`,
-    );
-    expect(cmd).not.toContain("-maxdepth");
-  });
-
-  it("ignores symlinks / sockets / devices (only file and dir)", async () => {
-    queueExec({
-      stdout:
-        [
-          findLine("f", 1, "real.txt"),
-          findLine("l", 7, "link"),
-          "s\t0\tsock",
-        ].join("\n") + "\n",
-      exitCode: 0,
-    });
-    const backend = new SshSandboxBackend(CONFIG, CREDENTIALS);
-    const res = await backend.fsList(ctx, {});
-    expect(res.entries).toEqual([{ path: "real.txt", type: "file", size: 1 }]);
-  });
-
-  it("translates a bare glob to -name (single-quoted, no shell expansion)", async () => {
-    queueExec({ stdout: findLine("f", 5, "a.ts") + "\n", exitCode: 0 });
-    const backend = new SshSandboxBackend(CONFIG, CREDENTIALS);
-    await backend.fsList(ctx, { glob: "*.ts" });
-    const cmd = lastFindCommand();
-    expect(cmd).toContain("-name '*.ts'");
-    expect(cmd).not.toContain("-path");
-  });
-
-  it("translates a slashed glob to -path", async () => {
-    queueExec({ stdout: findLine("f", 5, "src/a.ts") + "\n", exitCode: 0 });
-    const backend = new SshSandboxBackend(CONFIG, CREDENTIALS);
-    await backend.fsList(ctx, { glob: "src/*.ts", recursive: true });
-    expect(lastFindCommand()).toContain("-path '*/src/*.ts'");
-  });
-
-  it("collapses ** to * for -path (documented lossy translation)", async () => {
+describe("SshSandboxTransport — fs.list (exec find)", () => {
+  it("quotes every element of the find argv core handed it", async () => {
     queueExec({ stdout: "", exitCode: 0 });
-    const backend = new SshSandboxBackend(CONFIG, CREDENTIALS);
-    await backend.fsList(ctx, { glob: "**/*.ts", recursive: true });
-    expect(lastFindCommand()).toContain("-path '*/*/*.ts'");
-  });
-
-  it("truncates to MAX_LIST_ENTRIES and flags truncated", async () => {
-    const lines: string[] = [];
-    for (let i = 0; i < MAX_LIST_ENTRIES + 1; i++) {
-      lines.push(findLine("f", 1, `f${i}.txt`));
-    }
-    queueExec({ stdout: lines.join("\n") + "\n", exitCode: 0 });
-    const backend = new SshSandboxBackend(CONFIG, CREDENTIALS);
-    const res = await backend.fsList(ctx, { recursive: true });
-    expect(res.entries).toHaveLength(MAX_LIST_ENTRIES);
-    expect(res.truncated).toBe(true);
-  });
-
-  it("does not flag truncated at exactly MAX_LIST_ENTRIES entries", async () => {
-    const lines: string[] = [];
-    for (let i = 0; i < MAX_LIST_ENTRIES; i++) {
-      lines.push(findLine("f", 1, `f${i}.txt`));
-    }
-    queueExec({ stdout: lines.join("\n") + "\n", exitCode: 0 });
-    const backend = new SshSandboxBackend(CONFIG, CREDENTIALS);
-    const res = await backend.fsList(ctx, { recursive: true });
-    expect(res.entries).toHaveLength(MAX_LIST_ENTRIES);
-    expect(res.truncated).toBe(false);
+    const backend = createSshSandboxBackend(CONFIG, CREDENTIALS);
+    await backend.fsList(ctx, {});
+    // Core passes cwd=rootDir, so the `cd` prefix precedes find as well; the
+    // argv itself (find, its target, its flags) is core's — this only asserts
+    // that none of it reaches the login shell unquoted.
+    expect(lastFindCommand()).toBe(
+      `cd '${ROOT}' && 'find' '${ROOT}' '-maxdepth' '1' '-mindepth' '1' ${PRINTF_ARG}`,
+    );
   });
 
   it("single-quotes the list path so shell metacharacters cannot break out", async () => {
     queueExec({ stdout: "", exitCode: 0 });
-    const backend = new SshSandboxBackend(CONFIG, CREDENTIALS);
+    const backend = createSshSandboxBackend(CONFIG, CREDENTIALS);
     // A metachar-laden path (schema rejects absolute/`..`, but quote defensively).
     await backend.fsList(ctx, { path: `foo; rm -rf ~` });
-    const cmd = lastFindCommand();
     // The whole path is inside one single-quoted argument.
-    expect(cmd).toBe(
-      `find '${ROOT}/foo; rm -rf ~' -maxdepth 1 -mindepth 1 -printf '%y\\t%s\\t%P\\n'`,
+    expect(lastFindCommand()).toBe(
+      `cd '${ROOT}' && 'find' '${ROOT}/foo; rm -rf ~' '-maxdepth' '1' '-mindepth' '1' ${PRINTF_ARG}`,
     );
   });
 
   it("escapes an embedded single quote in the path", async () => {
     queueExec({ stdout: "", exitCode: 0 });
-    const backend = new SshSandboxBackend(CONFIG, CREDENTIALS);
+    const backend = createSshSandboxBackend(CONFIG, CREDENTIALS);
     await backend.fsList(ctx, { path: `it's` });
     // classic '\'' escape idiom, matching shQuote.
-    expect(lastFindCommand()).toContain(`find '${ROOT}/it'\\''s'`);
+    expect(lastFindCommand()).toContain(`'find' '${ROOT}/it'\\''s'`);
+  });
+});
+
+describe("SshSandboxTransport — plugin-injected logger", () => {
+  // ADR-0012's security-relevant line. Its level and exact wording are pinned
+  // here as well as in the host-key suite above: this is a routing change, and a
+  // warning an Operator relies on must survive it byte for byte.
+  it("writes the unpinned-host-key warning to the injected logger, not core's", async () => {
+    queueExec({ exitCode: 0 });
+
+    const backend = createSshSandboxBackend(
+      CONFIG,
+      CREDENTIALS,
+      withPluginLogger(),
+    );
+    await backend.shellExec(ctx, { command: "true" });
+
+    expect(pluginLogger.warn).toHaveBeenCalledTimes(1);
+    expect(pluginLogger.warn).toHaveBeenCalledWith(
+      { host: "ssh.example.com", port: 22 },
+      "SSH sandbox connecting WITHOUT host-key verification — session and injected env are exposed to a MITM. Set `hostKey` to pin the host.",
+    );
+    // The whole point: core's logger is no longer the adapter's channel.
+    expect(logger.warn).not.toHaveBeenCalled();
   });
 
-  it("returns an empty list for an empty directory", async () => {
-    queueExec({ stdout: "", exitCode: 0 });
-    const backend = new SshSandboxBackend(CONFIG, CREDENTIALS);
-    const res = await backend.fsList(ctx, {});
-    expect(res.entries).toEqual([]);
-    expect(res.truncated).toBe(false);
+  it("degrades to silence when core injects no logger", async () => {
+    // `PluginConfigContext.logger` is optional under the SDK's append-only
+    // policy. Core always supplies it; a directly-constructed adapter does not,
+    // and the connection must still be made rather than throwing.
+    queueExec({ exitCode: 0 });
+
+    const backend = createSshSandboxBackend(CONFIG, CREDENTIALS);
+    await expect(
+      backend.shellExec(ctx, { command: "true" }),
+    ).resolves.toBeDefined();
+    expect(logger.warn).not.toHaveBeenCalled();
   });
 
-  it("emits partial results when find exits non-zero but printed rows", async () => {
-    queueExec({
-      stdout: findLine("f", 1, "readable.txt") + "\n",
-      stderr: "find: 'sub': Permission denied",
-      exitCode: 1,
-    });
-    const backend = new SshSandboxBackend(CONFIG, CREDENTIALS);
-    const res = await backend.fsList(ctx, { recursive: true });
-    expect(res.entries).toEqual([
-      { path: "readable.txt", type: "file", size: 1 },
-    ]);
-  });
+  it("reaches the adapter through the manifest's create()", async () => {
+    // The full contribution path core uses: the loader calls `create` with the
+    // plugin block as its third argument, and the manifest must forward it.
+    queueExec({ exitCode: 0 });
 
-  it("throws when find fails with no output", async () => {
-    queueExec({
-      stdout: "",
-      stderr: "find: '/nope': No such file or directory",
-      exitCode: 1,
-    });
-    const backend = new SshSandboxBackend(CONFIG, CREDENTIALS);
-    await expect(backend.fsList(ctx, { path: "nope" })).rejects.toThrow(
-      /No such file or directory/,
+    const contribution = plugin.contributes.sandboxBackends![0];
+    const backend = contribution.create(
+      CONFIG,
+      CREDENTIALS,
+      withPluginLogger(),
+    );
+    await backend.shellExec(ctx, { command: "true" });
+
+    expect(pluginLogger.warn).toHaveBeenCalledWith(
+      { host: "ssh.example.com", port: 22 },
+      expect.stringContaining("WITHOUT host-key verification"),
     );
   });
 
-  it("omits size for a file with an unparseable size field", async () => {
-    queueExec({ stdout: "f\t?\tweird.txt\n", exitCode: 0 });
-    const backend = new SshSandboxBackend(CONFIG, CREDENTIALS);
-    const res = await backend.fsList(ctx, {});
-    expect(res.entries).toEqual([{ path: "weird.txt", type: "file" }]);
+  it("carries the manifest name on the MITM warning when loaded by the real loader", async () => {
+    // End to end through the path production takes — loader → deploy-time block
+    // → `create` → transport. Every other test here supplies its own logger and
+    // would pass even if the loader bound the wrong name, or none. This warning
+    // is the one an Operator is most likely to alert on (ADR-0012), so what it
+    // is tagged with is worth pinning against the real loader.
+    queueExec({ exitCode: 0 });
+
+    // Stands in for core's logger: records the bindings each child is made with
+    // and merges them into every line that child writes, exactly as pino does.
+    const lines: Array<{ bindings: object; fields: object; msg?: string }> = [];
+    const baseLogger = {
+      child: (bindings: Record<string, unknown>) => {
+        const write =
+          (level: string) => (objOrMsg: object | string, msg?: string) =>
+            lines.push({
+              bindings: { ...bindings, level },
+              fields: typeof objOrMsg === "string" ? {} : objOrMsg,
+              msg: typeof objOrMsg === "string" ? objOrMsg : msg,
+            });
+        return {
+          debug: write("debug"),
+          info: write("info"),
+          warn: write("warn"),
+          error: write("error"),
+        };
+      },
+    };
+
+    const captured: SandboxBackendContribution[] = [];
+    await loadPlugins({
+      pluginNames: ["@platypus/ssh"],
+      registerSandbox: (c) => captured.push(c),
+      baseLogger,
+    });
+
+    const backend = captured[0].create(CONFIG, CREDENTIALS);
+    await backend.shellExec(ctx, { command: "true" });
+
+    expect(lines).toContainEqual({
+      bindings: { plugin: "@platypus/ssh", level: "warn" },
+      fields: { host: "ssh.example.com", port: 22 },
+      msg: "SSH sandbox connecting WITHOUT host-key verification — session and injected env are exposed to a MITM. Set `hostKey` to pin the host.",
+    });
   });
 });

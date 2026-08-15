@@ -184,7 +184,7 @@ app.route("/oauth/mcp/callback", mcpOauthCallback);
 // payload is identical across orgs; the handler gates it to Org Admins.
 app.route("/organizations/:orgId/plugins", plugins);
 // Read-only, deployment-wide Web-search backend catalog (ADR-0014), backing the
-// `webBackend` selector on the Provider form. Org-scoped for the same reason as
+// `searchSource` selector on the Provider form. Org-scoped for the same reason as
 // `plugins` above — and org-scoped rather than workspace-scoped because a
 // Provider can be org-scoped (ADR-0007) while a sandbox cannot. See the route.
 app.route("/organizations/:orgId/web-backends", webBackends);

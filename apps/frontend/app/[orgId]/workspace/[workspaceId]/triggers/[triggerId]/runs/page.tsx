@@ -9,6 +9,7 @@ import {
 } from "@platypus/schemas";
 import useSWR from "swr";
 import { fetcher, joinUrl } from "@/lib/utils";
+import { formatTokens } from "@/lib/context-window";
 import { useBackendUrl } from "@/app/client-context";
 import { useAuth } from "@/components/auth-provider";
 import { format, formatDistanceToNow } from "date-fns";
@@ -198,8 +199,8 @@ const TriggerRunsPage = ({
                               )}
                               <span className="flex items-center gap-1">
                                 <MessageSquare className="h-3 w-3" />
-                                {stats.inputTokens} in / {stats.outputTokens}{" "}
-                                out
+                                {formatTokens(stats.inputTokens)} in /{" "}
+                                {formatTokens(stats.outputTokens)} out
                               </span>
                               {/* How full the context got on the run's LAST
                                   step, which is a different quantity from the
@@ -211,7 +212,9 @@ const TriggerRunsPage = ({
                                   <TooltipTrigger asChild>
                                     <span className="flex items-center gap-1 cursor-default">
                                       <Gauge className="h-3 w-3" />
-                                      {stats.contextOccupancy.toLocaleString()}{" "}
+                                      {formatTokens(
+                                        stats.contextOccupancy,
+                                      )}{" "}
                                       context
                                     </span>
                                   </TooltipTrigger>

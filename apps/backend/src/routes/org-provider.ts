@@ -4,7 +4,6 @@ import { nanoid } from "nanoid";
 import { db } from "../index.ts";
 import { provider as providerTable } from "../db/schema.ts";
 import { providerCreateSchema, providerUpdateSchema } from "@platypus/schemas";
-import { eq, and } from "drizzle-orm";
 import { handleEmbeddingConfigChange } from "../services/embedding-invalidation.ts";
 import { dedupeModelConfigs } from "../services/model-capability.ts";
 import {
@@ -12,9 +11,18 @@ import {
   deMigrateOrphanedAliases,
 } from "../services/model-alias-migration.ts";
 import { requireAuth } from "../middleware/authentication.ts";
-import { requireOrgAccess } from "../middleware/authorization.ts";
-import { requireSharedDeletable } from "../services/scoped-resource.ts";
-import { redactProviderSecrets } from "../services/credential-redaction.ts";
+import {
+  orgCredentialsVisible,
+  orgScopeOf,
+  requireOrgAccess,
+} from "../middleware/authorization.ts";
+import {
+  listOrgScoped,
+  orgScopedWhere,
+  requireOrgScoped,
+  requireSharedDeletable,
+} from "../services/scoped-resource.ts";
+import { providerReadModel } from "../services/credential-redaction.ts";
 import { NotFoundError } from "../errors.ts";
 import type { Variables } from "../server.ts";
 
@@ -27,7 +35,7 @@ orgProvider.post(
   requireOrgAccess(["admin"]),
   sValidator("json", providerCreateSchema),
   async (c) => {
-    const orgId = c.req.param("orgId")!;
+    const { orgId } = orgScopeOf(c);
     const data = c.req.valid("json");
 
     if (data.modelIds) {
@@ -52,45 +60,27 @@ orgProvider.post(
 
 /** List all organization providers */
 orgProvider.get("/", requireAuth, requireOrgAccess(), async (c) => {
-  const orgId = c.req.param("orgId")!;
-  const rows = await db
-    .select()
-    .from(providerTable)
-    .where(eq(providerTable.organizationId, orgId));
+  const { orgId } = orgScopeOf(c);
+  const rows = await listOrgScoped(db, "provider", orgId);
 
   // This route admits any Organization member — a Shared Provider has to be
   // listable to be selected. Only an Org Admin sees its credentials (ADR-0006).
-  const isAdmin = c.get("orgMembership")?.role === "admin";
-  const results = rows.map((row) =>
-    redactProviderSecrets(row, { reveal: isAdmin }),
-  );
+  const reveal = orgCredentialsVisible(c);
+  const results = rows.map((row) => providerReadModel(row, { reveal }));
 
   return c.json({ results });
 });
 
 /** Get an organization provider by ID */
 orgProvider.get("/:providerId", requireAuth, requireOrgAccess(), async (c) => {
-  const orgId = c.req.param("orgId")!;
+  const { orgId } = orgScopeOf(c);
   const providerId = c.req.param("providerId");
 
-  const record = await db
-    .select()
-    .from(providerTable)
-    .where(
-      and(
-        eq(providerTable.id, providerId),
-        eq(providerTable.organizationId, orgId),
-      ),
-    )
-    .limit(1);
-
-  if (record.length === 0) {
-    throw new NotFoundError("Provider not found");
-  }
+  const record = await requireOrgScoped(db, "provider", providerId, orgId);
 
   // See the list route: credentials are Org-Admin-only (ADR-0006).
-  const isAdmin = c.get("orgMembership")?.role === "admin";
-  return c.json(redactProviderSecrets(record[0], { reveal: isAdmin }));
+  const reveal = orgCredentialsVisible(c);
+  return c.json(providerReadModel(record, { reveal }));
 });
 
 /** Update an organization provider by ID (admin only) */
@@ -100,7 +90,7 @@ orgProvider.put(
   requireOrgAccess(["admin"]),
   sValidator("json", providerUpdateSchema),
   async (c) => {
-    const orgId = c.req.param("orgId")!;
+    const { orgId } = orgScopeOf(c);
     const providerId = c.req.param("providerId");
     const data = c.req.valid("json");
 
@@ -125,12 +115,7 @@ orgProvider.put(
         ...data,
         updatedAt: new Date(),
       })
-      .where(
-        and(
-          eq(providerTable.id, providerId),
-          eq(providerTable.organizationId, orgId),
-        ),
-      )
+      .where(orgScopedWhere("provider", providerId, orgId))
       .returning();
 
     if (record.length === 0) {
@@ -158,7 +143,7 @@ orgProvider.delete(
   requireAuth,
   requireOrgAccess(["admin"]),
   async (c) => {
-    const orgId = c.req.param("orgId")!;
+    const { orgId } = orgScopeOf(c);
     const providerId = c.req.param("providerId");
 
     // A Shared resource cannot be deleted while anything still points at it —
@@ -168,12 +153,7 @@ orgProvider.delete(
 
     const result = await db
       .delete(providerTable)
-      .where(
-        and(
-          eq(providerTable.id, providerId),
-          eq(providerTable.organizationId, orgId),
-        ),
-      )
+      .where(orgScopedWhere("provider", providerId, orgId))
       .returning();
 
     if (result.length === 0) {

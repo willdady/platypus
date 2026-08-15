@@ -29,7 +29,9 @@ describe("@platypus/ssh plugin manifest", () => {
     // loader → registerSandboxBackend → getSandboxBackend.
     expect(getSandboxBackend("ssh")).toBeUndefined();
 
-    const loaded = await loadPlugins({ pluginNames: ["@platypus/ssh"] });
+    const { plugins: loaded } = await loadPlugins({
+      pluginNames: ["@platypus/ssh"],
+    });
 
     expect(loaded).toHaveLength(1);
     expect(loaded[0]).toMatchObject({

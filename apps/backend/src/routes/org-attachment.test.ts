@@ -1,5 +1,9 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
+// test-utils installs the drizzle-orm mock; `isNull` is a spy only through it,
+// so that import must come first.
 import { mockDb, mockSession, resetMockDb } from "../test-utils.ts";
+import { isNull } from "drizzle-orm";
+import { agent as agentTable } from "../db/schema.ts";
 import app from "../server.ts";
 
 describe("Organization Attachment (central sharing) Routes", () => {
@@ -80,6 +84,10 @@ describe("Organization Attachment (central sharing) Routes", () => {
       });
       expect(res.status).toBe(201);
       expect(await res.json()).toEqual(att);
+      // Sharing is managed only for a genuinely Shared resource: the lookup
+      // requires no Workspace, so a row carrying both scope columns cannot be
+      // attached elsewhere on the strength of its org column (ADR-0007).
+      expect(isNull).toHaveBeenCalledWith(agentTable.workspaceId);
     });
 
     it("404s when the workspace is not in this org", async () => {

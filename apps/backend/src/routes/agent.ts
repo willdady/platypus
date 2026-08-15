@@ -13,6 +13,7 @@ import { requireAuth } from "../middleware/authentication.ts";
 import {
   requireOrgAccess,
   requireWorkspaceAccess,
+  workspaceScopeOf,
 } from "../middleware/authorization.ts";
 import type { Variables } from "../server.ts";
 import { validateSubAgentAssignment } from "../services/sub-agent-validation.ts";
@@ -47,8 +48,7 @@ agent.post(
   sValidator("json", agentCreateSchema),
   async (c) => {
     const data = c.req.valid("json");
-    const orgId = c.req.param("orgId")!;
-    const workspaceId = c.req.param("workspaceId")!;
+    const scope = workspaceScopeOf(c);
 
     // Deduplicate arrays
     if (data.toolSetIds) {
@@ -64,7 +64,7 @@ agent.post(
     // Validate sub-agent assignments
     if (data.subAgentIds && data.subAgentIds.length > 0) {
       const validation = await validateSubAgentAssignment(
-        { orgId, wsId: workspaceId },
+        scope,
         "", // No ID yet for new agent
         data.subAgentIds,
       );
@@ -82,7 +82,7 @@ agent.post(
       .values({
         id: nanoid(),
         ...data,
-        workspaceId,
+        workspaceId: scope.workspaceId,
         organizationId: null,
       })
       .returning();
@@ -97,11 +97,9 @@ agent.get(
   requireOrgAccess(),
   requireWorkspaceAccess,
   async (c) => {
-    const orgId = c.req.param("orgId")!;
-    const workspaceId = c.req.param("workspaceId")!;
     const baseUrl = getOrigin(c);
 
-    const scoped = await listScoped(db, "agent", { orgId, wsId: workspaceId });
+    const scoped = await listScoped(db, "agent", workspaceScopeOf(c));
     const results = scoped.map(({ row, scope }) => ({
       ...agentWithAvatarUrl(row, baseUrl),
       scope,
@@ -118,14 +116,14 @@ agent.get(
   requireWorkspaceAccess,
   async (c) => {
     const agentId = c.req.param("agentId");
-    const orgId = c.req.param("orgId")!;
-    const workspaceId = c.req.param("workspaceId")!;
     const baseUrl = getOrigin(c);
 
-    const found = await requireScoped(db, "agent", agentId, {
-      orgId,
-      wsId: workspaceId,
-    });
+    const found = await requireScoped(
+      db,
+      "agent",
+      agentId,
+      workspaceScopeOf(c),
+    );
     return c.json({
       ...agentWithAvatarUrl(found.row, baseUrl),
       scope: found.scope,
@@ -143,8 +141,7 @@ agent.put(
   async (c) => {
     const agentId = c.req.param("agentId");
     const data = c.req.valid("json");
-    const orgId = c.req.param("orgId")!;
-    const workspaceId = c.req.param("workspaceId")!;
+    const scope = workspaceScopeOf(c);
 
     // Deduplicate arrays
     if (data.toolSetIds) {
@@ -160,17 +157,14 @@ agent.put(
     // A Shared Agent is a single source of truth edited only on the Organization
     // surface (ADR-0007); requireWorkspaceMutable throws NotFound (→404) when the
     // Agent is not visible here, then Locked (→403) when it is org-scoped.
-    await requireWorkspaceMutable(db, "agent", agentId, {
-      orgId,
-      wsId: workspaceId,
-    });
+    await requireWorkspaceMutable(db, "agent", agentId, scope);
 
     const baseUrl = getOrigin(c);
 
     // Workspace-scoped update.
     if (data.subAgentIds) {
       const validation = await validateSubAgentAssignment(
-        { orgId, wsId: workspaceId },
+        scope,
         agentId,
         data.subAgentIds,
       );
@@ -188,7 +182,7 @@ agent.put(
       .where(
         and(
           eq(agentTable.id, agentId),
-          eq(agentTable.workspaceId, workspaceId),
+          eq(agentTable.workspaceId, scope.workspaceId),
         ),
       )
       .returning();
@@ -204,15 +198,11 @@ agent.post(
   requireWorkspaceAccess,
   async (c) => {
     const agentId = c.req.param("agentId");
-    const workspaceId = c.req.param("workspaceId")!;
-    const orgId = c.req.param("orgId")!;
+    const scope = workspaceScopeOf(c);
     const baseUrl = getOrigin(c);
 
     // Shared agents are managed only on the Organization surface (ADR-0007).
-    const found = await requireWorkspaceMutable(db, "agent", agentId, {
-      orgId,
-      wsId: workspaceId,
-    });
+    const found = await requireWorkspaceMutable(db, "agent", agentId, scope);
 
     const body = await c.req.parseBody();
     const result = await storeAvatar(
@@ -230,7 +220,7 @@ agent.post(
       .where(
         and(
           eq(agentTable.id, agentId),
-          eq(agentTable.workspaceId, workspaceId),
+          eq(agentTable.workspaceId, scope.workspaceId),
         ),
       )
       .returning();
@@ -247,15 +237,11 @@ agent.delete(
   requireWorkspaceAccess,
   async (c) => {
     const agentId = c.req.param("agentId");
-    const orgId = c.req.param("orgId")!;
-    const workspaceId = c.req.param("workspaceId")!;
+    const scope = workspaceScopeOf(c);
     const baseUrl = getOrigin(c);
 
     // Shared agents are managed only on the Organization surface (ADR-0007).
-    const found = await requireWorkspaceMutable(db, "agent", agentId, {
-      orgId,
-      wsId: workspaceId,
-    });
+    const found = await requireWorkspaceMutable(db, "agent", agentId, scope);
 
     await deleteAvatar(found.row.avatarKey);
 
@@ -265,7 +251,7 @@ agent.delete(
       .where(
         and(
           eq(agentTable.id, agentId),
-          eq(agentTable.workspaceId, workspaceId),
+          eq(agentTable.workspaceId, scope.workspaceId),
         ),
       )
       .returning();
@@ -282,16 +268,12 @@ agent.delete(
   requireWorkspaceAccess,
   async (c) => {
     const agentId = c.req.param("agentId");
-    const orgId = c.req.param("orgId")!;
-    const workspaceId = c.req.param("workspaceId")!;
+    const scope = workspaceScopeOf(c);
 
     // A Shared Agent is deleted only from the Organization surface (ADR-0007):
     // requireWorkspaceMutable throws NotFound (→404) when the Agent is not
     // visible here, then Locked (→403) when it is org-scoped.
-    const found = await requireWorkspaceMutable(db, "agent", agentId, {
-      orgId,
-      wsId: workspaceId,
-    });
+    const found = await requireWorkspaceMutable(db, "agent", agentId, scope);
 
     await deleteAvatar(found.row.avatarKey);
 
@@ -300,7 +282,7 @@ agent.delete(
       .where(
         and(
           eq(agentTable.id, agentId),
-          eq(agentTable.workspaceId, workspaceId),
+          eq(agentTable.workspaceId, scope.workspaceId),
         ),
       );
     return c.json({ message: "Agent deleted" });
@@ -324,8 +306,7 @@ agent.post(
   requireOrgAccess(["admin"]),
   requireWorkspaceAccess,
   async (c) => {
-    const orgId = c.req.param("orgId")!;
-    const workspaceId = c.req.param("workspaceId")!;
+    const { orgId, workspaceId } = workspaceScopeOf(c);
     const agentId = c.req.param("agentId");
     const baseUrl = getOrigin(c);
 

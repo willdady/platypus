@@ -72,6 +72,29 @@ export const contextWindowForOption = (
   return Number.isFinite(parsed) ? parsed : undefined;
 };
 
+/** A tenth of a unit, with a trailing `.0` dropped: 1.05 → `1.1`, 42.0 → `42`. */
+const toTenth = (value: number): number => Number(value.toFixed(1));
+
+/**
+ * A token figure as it is READ — abbreviated from a thousand up, because past
+ * three digits these stop being read as numbers and start being counted.
+ * `1,100` becomes `1.1K` and `1,048,576` becomes `1M`; what that rounding drops
+ * is far below what any of these readings is accurate to.
+ *
+ * Shared, because the same quantity surfaces in two places — the Chat meter and
+ * a Trigger run's stats — and a figure that reads `1M` in one and `1,000,000`
+ * in the other looks like two different measurements.
+ */
+export const formatTokens = (tokens: number): string => {
+  if (tokens < 1_000) return tokens.toLocaleString();
+  // Rounded at the unit first, then promoted if that rounding carried, so
+  // 999,999 reads `1M` rather than the `1000K` a straight threshold gives.
+  const thousands = toTenth(tokens / 1_000);
+  return thousands >= 1_000
+    ? `${toTenth(thousands / 1_000)}M`
+    : `${thousands}K`;
+};
+
 /**
  * What a typed Custom value means. An empty or unreadable field is "no window
  * declared"; anything numeric is passed through EXACTLY as typed, bounds

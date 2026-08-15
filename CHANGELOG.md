@@ -1,5 +1,58 @@
 # Changelog
 
+## [2.7.1](https://github.com/willdady/platypus/compare/v2.7.0...v2.7.1) (2026-08-15)
+
+
+### Bug Fixes
+
+* **frontend:** trace the @swc/helpers ESM files into the standalone image ([#509](https://github.com/willdady/platypus/issues/509)) ([87da498](https://github.com/willdady/platypus/commit/87da498dfe8b56d9aa27b60fdc12844bcd130c3b))
+
+## [2.7.0](https://github.com/willdady/platypus/compare/v2.6.0...v2.7.0) (2026-08-15)
+
+
+### Features
+
+* **backend:** give plugins a logger on PluginConfigContext ([#502](https://github.com/willdady/platypus/issues/502)) ([3c92e2b](https://github.com/willdady/platypus/commit/3c92e2b23fd8481dcdabfe41c0c730a23baeee18))
+* **backend:** route Sub-Agent runs through the run lifecycle ([#487](https://github.com/willdady/platypus/issues/487)) ([c61f7e0](https://github.com/willdady/platypus/commit/c61f7e019a76559e7740506e465db83221b50ad5))
+* select a Web-search backend on the Provider form ([#412](https://github.com/willdady/platypus/issues/412)) ([eeed0cf](https://github.com/willdady/platypus/commit/eeed0cf9b2d7e0571d3ebdc7c2cb337c28884ded))
+
+
+### Bug Fixes
+
+* **backend:** put the Kanban routes and Tool set behind one module ([#486](https://github.com/willdady/platypus/issues/486)) ([2214c68](https://github.com/willdady/platypus/commit/2214c680d30a3ed04c188fa66c40efba201da05c))
+* **backend:** say why chat titling was skipped ([#488](https://github.com/willdady/platypus/issues/488)) ([20c1332](https://github.com/willdady/platypus/commit/20c1332354ca96ac76ab1f8b84102cfa737e8754))
+* **backend:** scope workspace memory-provider pointers to the workspace ([#483](https://github.com/willdady/platypus/issues/483)) ([b588c78](https://github.com/willdady/platypus/commit/b588c785677f9ab789ad7cbac7e1f35318c6066f))
+* **backend:** validate tool set contributions ([#451](https://github.com/willdady/platypus/issues/451)) ([3cd022c](https://github.com/willdady/platypus/commit/3cd022c96e4a7a270ac10b2e1478beb24dba196b))
+* **backend:** widen the Scoped-resource authority and migrate the remaining hand-rolled lookups ([#484](https://github.com/willdady/platypus/issues/484)) ([385f543](https://github.com/willdady/platypus/commit/385f54387c2ccc3c5d54cb1f62eb68201933dde2))
+* **chat:** show elapsed time on the plugin Web search card ([#473](https://github.com/willdady/platypus/issues/473)) ([74b1900](https://github.com/willdady/platypus/commit/74b1900553f9810c7d8b2dff4841b0163fe27254))
+* **docs:** state all three Web-search backend visibility cases ([#477](https://github.com/willdady/platypus/issues/477)) ([e41fa24](https://github.com/willdady/platypus/commit/e41fa24e03eabd58cd88a8a6e4c1894c52102166))
+* **frontend:** gate the dead-backend warning on a selected backend ([#472](https://github.com/willdady/platypus/issues/472)) ([39609dc](https://github.com/willdady/platypus/commit/39609dc483a487d8695a8f75596cf19683f34e2e))
+* **frontend:** reset the Web-search backend latch between Providers ([#474](https://github.com/willdady/platypus/issues/474)) ([e9d01ca](https://github.com/willdady/platypus/commit/e9d01ca7cc7f6e06459d433911906d7145a8a940))
+* **frontend:** stop pointing at a Web-search backend field that is not there ([#507](https://github.com/willdady/platypus/issues/507)) ([da1c50e](https://github.com/willdady/platypus/commit/da1c50e8907906622844da470644ee26a74eef1c))
+
+## [2.6.0](https://github.com/willdady/platypus/compare/v2.5.0...v2.6.0) (2026-08-15)
+
+
+### Features
+
+* **chat:** measure Context occupancy on a Chat turn ([#453](https://github.com/willdady/platypus/issues/453)) ([5099cfc](https://github.com/willdady/platypus/commit/5099cfc7cad0c87ceaf3eff0a34cba327b472130))
+* **chat:** show Context occupancy in the composer and on Trigger runs ([#457](https://github.com/willdady/platypus/issues/457)) ([63aa8a7](https://github.com/willdady/platypus/commit/63aa8a7c4796a268cc82873ccd08ea9ccd47bf91))
+* **chat:** show how long each tool call took ([#435](https://github.com/willdady/platypus/issues/435)) ([c308ff1](https://github.com/willdady/platypus/commit/c308ff16084b0ef3baa46e872d75d43874ad84be))
+* **frontend:** link the website and docs site from About and ⌘K ([#437](https://github.com/willdady/platypus/issues/437)) ([17b3a7c](https://github.com/willdady/platypus/commit/17b3a7cc576851645c895e3c8d2f8f5188a3b1e7))
+* **provider:** cap a model's output tokens per model ([#456](https://github.com/willdady/platypus/issues/456)) ([539e1f4](https://github.com/willdady/platypus/commit/539e1f4aa6e43d98081267433992416018992da5))
+* **provider:** declare a Context window per model ([#452](https://github.com/willdady/platypus/issues/452)) ([110e538](https://github.com/willdady/platypus/commit/110e53813a515d038267399a9d2d96813b4f68ba))
+
+
+### Bug Fixes
+
+* **backend:** clean up kanban card labels when a board label is deleted ([#445](https://github.com/willdady/platypus/issues/445)) ([6267011](https://github.com/willdady/platypus/commit/62670114d979dca1067e46027c42852e73b17062))
+* **backend:** propagate tool set factory errors ([#455](https://github.com/willdady/platypus/issues/455)) ([72749ff](https://github.com/willdady/platypus/commit/72749ffd35bea7b88c49ea9d24dbe29370426644))
+* **backend:** redact Provider and MCP credentials on read ([#460](https://github.com/willdady/platypus/issues/460)) ([eaf2223](https://github.com/willdady/platypus/commit/eaf2223abc53e0b41999f0b7c599ae831dac97cd))
+* **backend:** resolve sub-agent maxSteps to the shared default ([#459](https://github.com/willdady/platypus/issues/459)) ([41f69b5](https://github.com/willdady/platypus/commit/41f69b5c392bae087f1bb02a584c0a95e91358f3))
+* **chat:** deliver tool durations on the turn that measured them ([#461](https://github.com/willdady/platypus/issues/461)) ([84eb590](https://github.com/willdady/platypus/commit/84eb590c3d56398ff874aecd7315dbe8e0bff1a5))
+* **chat:** fit the context meter to narrow viewports ([#465](https://github.com/willdady/platypus/issues/465)) ([62d4de3](https://github.com/willdady/platypus/commit/62d4de34ab84a40f61214cf80f282118b7d49704))
+* **chat:** flag a Sub-Agent answer cut short at the output limit ([#458](https://github.com/willdady/platypus/issues/458)) ([5f0869f](https://github.com/willdady/platypus/commit/5f0869ffdb4518394038304f48b9a772490a4ef1))
+
 ## [2.5.0](https://github.com/willdady/platypus/compare/v2.4.1...v2.5.0) (2026-08-09)
 
 

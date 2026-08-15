@@ -1,24 +1,155 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import type { ToolExecutionOptions } from "ai";
+import type { LanguageModelV3StreamPart } from "@ai-sdk/provider";
+import { MockLanguageModelV3, simulateReadableStream } from "ai/test";
+import type { Tool, ToolExecutionOptions } from "ai";
+import { z } from "zod";
 import {
   createSubAgentTool,
   createSubAgentTools,
   SUB_AGENT_TRUNCATION_NOTE,
 } from "./sub-agent.ts";
 import type { SubAgentActivity } from "./sub-agent.ts";
+import { runRegistry } from "../runs/run-registry.ts";
+import { orgScope, workspaceScope, type WorkspaceScope } from "../scope.ts";
 import { DEFAULT_AGENT_MAX_STEPS } from "@platypus/schemas";
 
-// Helper to consume an async generator and collect all yielded values.
-// Deep-copies each yield since the generator reuses mutable objects.
-async function consumeGenerator<T>(
-  gen: AsyncGenerator<T>,
-): Promise<{ yielded: T[] }> {
-  const yielded: T[] = [];
-  for await (const value of gen) {
-    yielded.push(structuredClone(value));
+// A delegated run now goes through the same pipeline a Chat turn does —
+// `streamText` → `toUIMessageStream` → `readUIMessageStream` — so these tests
+// drive a mock *model* and leave that pipeline real. The spy records what
+// reached `streamText` without replacing it.
+const { streamTextSpy } = vi.hoisted(() => ({ streamTextSpy: vi.fn() }));
+
+vi.mock("ai", async () => {
+  const actual = await vi.importActual<typeof import("ai")>("ai");
+  return {
+    ...actual,
+    streamText: (options: Parameters<typeof actual.streamText>[0]) => {
+      streamTextSpy(options);
+      return actual.streamText(options);
+    },
+  };
+});
+
+vi.mock("../logger.ts", () => ({
+  logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
+}));
+
+import { logger } from "../logger.ts";
+
+// --- Model harness -----------------------------------------------------------
+
+const USAGE = {
+  inputTokens: {
+    total: 10,
+    noCache: 10,
+    cacheRead: undefined,
+    cacheWrite: undefined,
+  },
+  outputTokens: { total: 4, text: 4, reasoning: undefined },
+};
+
+type StepParts = LanguageModelV3StreamPart[];
+
+/** Wraps a step's parts in the stream-start / finish envelope every step needs. */
+const step = (
+  parts: StepParts,
+  finish: { unified: "stop" | "length" | "tool-calls"; raw?: string } = {
+    unified: "stop",
+    raw: "stop",
+  },
+): StepParts => [
+  { type: "stream-start", warnings: [] },
+  ...parts,
+  {
+    type: "finish",
+    finishReason: { ...finish, raw: finish.raw },
+    usage: USAGE,
+  },
+];
+
+/** A model that replays one step's parts per `doStream` call, in order. */
+const modelOf = (...steps: StepParts[]) => {
+  let index = 0;
+  return new MockLanguageModelV3({
+    doStream: () => {
+      const parts = steps[Math.min(index, steps.length - 1)];
+      index += 1;
+      return Promise.resolve({
+        stream: simulateReadableStream({ chunks: parts }),
+      });
+    },
+  });
+};
+
+const text = (id: string, ...deltas: string[]): StepParts => [
+  { type: "text-start", id },
+  ...deltas.map((delta) => ({ type: "text-delta" as const, id, delta })),
+  { type: "text-end", id },
+];
+
+const toolCall = (id: string, toolName: string, input: string): StepParts => [
+  { type: "tool-input-start", id, toolName },
+  { type: "tool-input-end", id },
+  { type: "tool-call", toolCallId: id, toolName, input },
+];
+
+/** The scope a parent Chat turn would be running under. */
+const parentScope: WorkspaceScope = workspaceScope(
+  orgScope({ principal: { kind: "user", userId: "u1", name: "Ada" } }, "org-1"),
+  "ws-1",
+  true,
+);
+
+/**
+ * A delegate's tools as the lazy loader it now takes: they are opened on first
+ * invocation, so the option is a thunk rather than a resolved map.
+ */
+const toolsOf =
+  (tools: Record<string, Tool>) => (): Promise<Record<string, Tool>> =>
+    Promise.resolve(tools);
+
+const baseOptions = {
+  id: "agent-1",
+  name: "Research Agent",
+  model: modelOf(step([])),
+  loadTools: toolsOf({}),
+};
+
+/** Build the delegate tool, run one delegation, collect every yield. */
+const delegate = async (
+  options: Partial<Parameters<typeof createSubAgentTool>[0]> = {},
+  execOptions: Partial<ToolExecutionOptions<Record<string, unknown>>> = {},
+) => {
+  const { tool } = createSubAgentTool({ ...baseOptions, ...options });
+  const gen = tool.execute({ task: "Do something" }, {
+    ...execOptions,
+  } as ToolExecutionOptions<
+    Record<string, unknown>
+  >) as AsyncGenerator<SubAgentActivity>;
+  const yielded: SubAgentActivity[] = [];
+  for await (const value of gen) yielded.push(structuredClone(value));
+  return { tool, yielded };
+};
+
+/** The arguments the delegated run handed to `streamText`. */
+const streamArgs = (call = 0) =>
+  streamTextSpy.mock.calls[call][0] as {
+    system: string;
+    tools: Record<string, { execute: (a: unknown, o: unknown) => unknown }>;
+    stopWhen: Array<(s: { steps: unknown[] }) => boolean>;
+    abortSignal: AbortSignal;
+  } & Record<string, unknown>;
+
+// The step ceiling arrives as `stopWhen: [stepCountIs(n)]`. `stepCountIs` closes
+// over `n` and offers no introspection, so recover it by probing the condition
+// against incrementally longer (empty) step arrays until it fires.
+const stepCeilingOf = (call = 0): number => {
+  const { stopWhen } = streamArgs(call);
+  for (let n = 0; n <= 64; n += 1) {
+    if (stopWhen[0]({ steps: Array.from({ length: n }) })) return n;
   }
-  return { yielded };
-}
+  throw new Error("no step ceiling found in stopWhen");
+};
 
 // The text the parent model actually reads for a completed delegation.
 // `toModelOutput` is declared as returning any tool-result shape, so the text
@@ -35,87 +166,10 @@ const modelText = (
     }) as { value: string }
   ).value;
 
-// Mock stream events helper — returns a sync iterable; AsyncGenerator consumers
-// accept any iterable, so no async generator is needed here.
-function createMockFullStream(
-  events: Array<{ type: string } & Record<string, unknown>>,
-) {
-  return {
-    [Symbol.asyncIterator](): AsyncIterator<
-      { type: string } & Record<string, unknown>
-    > {
-      let i = 0;
-      return {
-        next() {
-          if (i < events.length) {
-            return Promise.resolve({ value: events[i++], done: false });
-          }
-          return Promise.resolve({
-            value: undefined as unknown as { type: string } & Record<
-              string,
-              unknown
-            >,
-            done: true,
-          });
-        },
-      };
-    },
-  };
-}
-
-const { mockStream, MockToolLoopAgent, agentConstructorSpy } = vi.hoisted(
-  () => {
-    const mockStream = vi.fn();
-    const agentConstructorSpy = vi.fn();
-    class MockToolLoopAgent {
-      instructions: string | undefined;
-      constructor(opts: { instructions?: string }) {
-        agentConstructorSpy(opts);
-        this.instructions = opts?.instructions;
-      }
-      stream = mockStream;
-    }
-    return { mockStream, MockToolLoopAgent, agentConstructorSpy };
-  },
-);
-
-vi.mock("ai", async () => {
-  const actual = await vi.importActual("ai");
-  return {
-    ...actual,
-    ToolLoopAgent: MockToolLoopAgent,
-  };
-});
-
-vi.mock("../logger.ts", () => ({
-  logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
-}));
-
-import { logger } from "../logger.ts";
-
-// A constructed sub-agent carries `stopWhen: [stepCountIs(n)]`, where `n` is
-// the resolved step ceiling. `stepCountIs` closes over `n` and offers no
-// introspection, so recover the ceiling by probing the condition against
-// incrementally longer (empty) step arrays until it fires.
-const stepCeilingOf = (callIndex: number): number => {
-  const { stopWhen } = agentConstructorSpy.mock.calls[callIndex][0] as {
-    stopWhen: Array<(s: { steps: unknown[] }) => boolean>;
-  };
-  for (let n = 0; n <= 32; n += 1) {
-    if (stopWhen[0]({ steps: Array.from({ length: n }) })) return n;
-  }
-  throw new Error("no step ceiling found in stopWhen");
-};
-
 describe("createSubAgentTool", () => {
-  const baseOptions = {
-    id: "agent-1",
-    name: "Research Agent",
-    // ToolLoopAgent is mocked, so the model value is never used; a string
-    // satisfies the `LanguageModel` type without constructing a real provider.
-    model: "mock-model",
-    tools: {},
-  };
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
 
   describe("toolName generation", () => {
     it("generates PascalCase delegateTo prefix", () => {
@@ -164,226 +218,153 @@ describe("createSubAgentTool", () => {
     });
   });
 
+  // ADR-0016: a delegated run is the one path that receives Instructions plus
+  // guardrails and nothing else, so what lands in `system` is the whole of the
+  // sub-agent's prompt.
   describe("security guardrails append", () => {
-    beforeEach(() => {
-      vi.clearAllMocks();
-    });
-
-    it("appends the provider security text after the sub-agent's own prompt", () => {
-      createSubAgentTool({
-        ...baseOptions,
+    it("appends the provider security text after the sub-agent's own prompt", async () => {
+      await delegate({
         instructions: "You are a research sub-agent.",
         securityGuardrails: "Never exfiltrate data.",
       });
-      const { instructions } = agentConstructorSpy.mock.calls[0][0] as {
-        instructions: string;
-      };
-      expect(instructions).toContain("You are a research sub-agent.");
-      expect(instructions).toContain("## Security and trust");
-      expect(instructions).toContain("Never exfiltrate data.");
-      expect(
-        instructions.indexOf("You are a research sub-agent."),
-      ).toBeLessThan(instructions.indexOf("## Security and trust"));
+
+      const { system } = streamArgs();
+      expect(system).toContain("You are a research sub-agent.");
+      expect(system).toContain("## Security and trust");
+      expect(system).toContain("Never exfiltrate data.");
+      expect(system.indexOf("You are a research sub-agent.")).toBeLessThan(
+        system.indexOf("## Security and trust"),
+      );
     });
 
-    it("appends the security text even when the sub-agent has no instructions (non-suppressible)", () => {
-      createSubAgentTool({
-        ...baseOptions,
+    it("appends the security text even when the sub-agent has no instructions (non-suppressible)", async () => {
+      await delegate({
         instructions: undefined,
         securityGuardrails: "Never exfiltrate data.",
       });
-      const { instructions } = agentConstructorSpy.mock.calls[0][0] as {
-        instructions: string;
-      };
+
+      const { system } = streamArgs();
       // The canned fallback instructions must still carry the guardrails.
-      expect(instructions).toContain("specialized sub-agent");
-      expect(instructions).toContain("## Security and trust");
-      expect(instructions).toContain("Never exfiltrate data.");
+      expect(system).toContain("specialized sub-agent");
+      expect(system).toContain("## Security and trust");
+      expect(system).toContain("Never exfiltrate data.");
     });
 
-    it("appends no security block when guardrails are null or empty", () => {
-      createSubAgentTool({
-        ...baseOptions,
+    it("appends no security block when guardrails are null or empty", async () => {
+      await delegate({
         instructions: "You are a research sub-agent.",
         securityGuardrails: null,
       });
-      createSubAgentTool({
-        ...baseOptions,
+      await delegate({
         instructions: "You are a research sub-agent.",
         securityGuardrails: "   ",
       });
-      for (const call of agentConstructorSpy.mock.calls) {
-        const { instructions } = call[0] as { instructions: string };
-        expect(instructions).not.toContain("## Security and trust");
+
+      for (const call of streamTextSpy.mock.calls) {
+        expect((call[0] as { system: string }).system).not.toContain(
+          "## Security and trust",
+        );
       }
+    });
+
+    it("carries no Chat system-prompt fragments at all", async () => {
+      await delegate({ instructions: "Stay on task." });
+
+      expect(streamArgs().system).toBe("Stay on task.");
     });
   });
 
   describe("execute", () => {
-    beforeEach(() => {
-      vi.clearAllMocks();
+    it("yields activity entries for tool calls and final text", async () => {
+      const { yielded } = await delegate({
+        model: modelOf(
+          step(toolCall("tc1", "webFetch", "{}"), { unified: "tool-calls" }),
+          step([
+            { type: "reasoning-start", id: "r1" },
+            { type: "reasoning-delta", id: "r1", delta: "hmm" },
+            { type: "reasoning-end", id: "r1" },
+            ...text("t1", "Sub-agent result"),
+          ]),
+        ),
+        loadTools: toolsOf({
+          webFetch: {
+            inputSchema: z.object({}),
+            execute: () => Promise.resolve("result"),
+          },
+        }),
+      });
+
+      const final = yielded.at(-1)!;
+      expect(final.entries).toEqual([
+        { type: "tool-call", toolName: "webFetch", status: "completed" },
+        { type: "thinking", status: "completed" },
+        { type: "generating", status: "completed" },
+      ]);
+      expect(final.text).toBe("Sub-agent result");
+
+      // The log the user watches shows the tool call running before its result.
+      expect(yielded[0].entries).toEqual([
+        { type: "tool-call", toolName: "webFetch", status: "running" },
+      ]);
     });
 
-    it("yields activity entries for tool calls and final text", async () => {
-      mockStream.mockResolvedValue({
-        fullStream: createMockFullStream([
-          { type: "tool-input-start", toolName: "web-fetch", id: "tc1" },
-          {
-            type: "tool-result",
-            toolCallId: "tc1",
-            toolName: "web-fetch",
-            output: "result",
-          },
-          { type: "reasoning-start", id: "r1" },
-          { type: "reasoning-end", id: "r1" },
-          { type: "text-start", id: "t1" },
-          { type: "text-delta", id: "t1", text: "Sub-agent result" },
-          { type: "text-end", id: "t1" },
-        ]),
-        // v7: final-step-only text property is intentionally NOT relied upon.
-        text: Promise.resolve(""),
+    // Text deltas grow the answer but leave the activity log alone, so they must
+    // not produce a yield — that would spam the parent's SSE stream.
+    it("does not yield again for a delta that changes no activity entry", async () => {
+      const { yielded } = await delegate({
+        model: modelOf(step(text("t1", "one ", "two ", "three"))),
       });
 
-      const { tool } = createSubAgentTool(baseOptions);
-      const gen = tool.execute(
-        { task: "Do something" },
-        {} as ToolExecutionOptions<Record<string, unknown>>,
-      ) as AsyncGenerator<SubAgentActivity>;
-
-      const { yielded } = await consumeGenerator(gen);
-
-      // Should have yielded 6 activity updates + 1 final with text. The
-      // text-delta between text-start and text-end carries content but does not
-      // change the activity log, so it produces no extra yield.
-      expect(yielded).toHaveLength(7);
-
-      // First yield: tool-call running
-      expect(yielded[0].entries).toHaveLength(1);
-      expect(yielded[0].entries[0]).toEqual({
-        type: "tool-call",
-        toolName: "web-fetch",
-        status: "running",
-      });
-
-      // Second yield: tool-call completed
-      expect(yielded[1].entries[0].status).toBe("completed");
-
-      // Third yield: thinking running
-      expect(yielded[2].entries).toHaveLength(2);
-      expect(yielded[2].entries[1]).toEqual({
-        type: "thinking",
-        status: "running",
-      });
-
-      // Fourth yield: thinking completed
-      expect(yielded[3].entries[1].status).toBe("completed");
-
-      // Fifth yield: generating running
-      expect(yielded[4].entries).toHaveLength(3);
-      expect(yielded[4].entries[2]).toEqual({
-        type: "generating",
-        status: "running",
-      });
-
-      // Sixth yield: generating completed
-      expect(yielded[5].entries[2].status).toBe("completed");
-
-      // Final yield has text (yielded, not returned, since SDK discards return values)
-      expect(yielded[6].text).toBe("Sub-agent result");
-      expect(yielded[6].entries).toHaveLength(3);
+      // text-start (running) → text-end (completed) → the final value.
+      expect(yielded).toHaveLength(3);
+      expect(yielded.at(-1)!.text).toBe("one two three");
     });
 
     // Regression for #324: AI SDK v6→v7 redefined `result.text` as the FINAL
     // step's text only. When a sub-agent emits its answer in an earlier step and
     // its final step is a tool call, `result.text` is empty and the parent gets
-    // nothing. The fix aggregates text-deltas off the fullStream across ALL
-    // steps, so this reproduces that shape with realistic v7 stream events and
-    // an empty final-step `text` promise.
-    it("aggregates assistant text across steps from the stream, not the final-step text property", async () => {
-      mockStream.mockResolvedValue({
-        fullStream: createMockFullStream([
-          // Step 1: the model emits its answer, then decides to call a tool.
-          { type: "start-step" },
-          { type: "text-start", id: "t1" },
-          { type: "text-delta", id: "t1", text: "Here are " },
-          { type: "text-delta", id: "t1", text: "the boards." },
-          { type: "text-end", id: "t1" },
-          { type: "tool-input-start", toolName: "listBoards", id: "tc1" },
-          // Step 2: the tool result is the FINAL step — no trailing text.
-          { type: "start-step" },
-          {
-            type: "tool-result",
-            toolCallId: "tc1",
-            toolName: "listBoards",
-            output: [{ id: "b1" }],
-          },
-        ]),
-        // v7 semantics: final-step-only text is empty because the last step is
-        // the tool result. The old code returned this verbatim.
-        text: Promise.resolve(""),
+    // nothing.
+    it("aggregates assistant text across steps, not just the final step's", async () => {
+      const { yielded } = await delegate({
+        model: modelOf(
+          step([...text("t1", "Here are ", "the boards.")], {
+            unified: "tool-calls",
+          }),
+          // Nothing but the tool call in step 1; the final step carries no text.
+          step([]),
+        ),
       });
 
-      const { tool } = createSubAgentTool(baseOptions);
-      const gen = tool.execute(
-        { task: "list all boards" },
-        {} as ToolExecutionOptions<Record<string, unknown>>,
-      ) as AsyncGenerator<SubAgentActivity>;
-
-      const { yielded } = await consumeGenerator(gen);
-      const final = yielded.at(-1)!;
-
-      expect(final.text).toBe("Here are the boards.");
+      expect(yielded.at(-1)!.text).toBe("Here are the boards.");
     });
 
     it("joins multiple distinct text blocks with blank lines", async () => {
-      mockStream.mockResolvedValue({
-        fullStream: createMockFullStream([
-          { type: "text-start", id: "t1" },
-          { type: "text-delta", id: "t1", text: "First block." },
-          { type: "text-end", id: "t1" },
-          { type: "text-start", id: "t2" },
-          { type: "text-delta", id: "t2", text: "Second block." },
-          { type: "text-end", id: "t2" },
-        ]),
-        text: Promise.resolve(""),
+      const { yielded } = await delegate({
+        model: modelOf(
+          step([...text("t1", "First block."), ...text("t2", "Second block.")]),
+        ),
       });
-
-      const { tool } = createSubAgentTool(baseOptions);
-      const gen = tool.execute(
-        { task: "Do something" },
-        {} as ToolExecutionOptions<Record<string, unknown>>,
-      ) as AsyncGenerator<SubAgentActivity>;
-
-      const { yielded } = await consumeGenerator(gen);
 
       expect(yielded.at(-1)!.text).toBe("First block.\n\nSecond block.");
     });
 
     it("falls back to a summary of the final tool result when the sub-agent produced no assistant text", async () => {
-      mockStream.mockResolvedValue({
-        fullStream: createMockFullStream([
-          { type: "tool-input-start", toolName: "listBoards", id: "tc1" },
-          {
-            type: "tool-result",
-            toolCallId: "tc1",
-            toolName: "listBoards",
-            output: [{ id: "b1", name: "Board One" }],
+      const { yielded } = await delegate({
+        model: modelOf(
+          step(toolCall("tc1", "listBoards", "{}"), { unified: "tool-calls" }),
+          step([]),
+        ),
+        loadTools: toolsOf({
+          listBoards: {
+            inputSchema: z.object({}),
+            execute: () => Promise.resolve([{ id: "b1", name: "Board One" }]),
           },
-        ]),
-        text: Promise.resolve(""),
+        }),
       });
-
-      const { tool } = createSubAgentTool(baseOptions);
-      const gen = tool.execute(
-        { task: "list all boards" },
-        {} as ToolExecutionOptions<Record<string, unknown>>,
-      ) as AsyncGenerator<SubAgentActivity>;
-
-      const { yielded } = await consumeGenerator(gen);
-      const final = yielded.at(-1)!;
 
       // Not silently empty — carries the tool name and the result payload so the
       // parent can still relay something meaningful.
+      const final = yielded.at(-1)!;
       expect(final.text).toContain("listBoards");
       expect(final.text).toContain("Board One");
     });
@@ -392,72 +373,51 @@ describe("createSubAgentTool", () => {
     // generator returned whatever text had accumulated — usually the model's
     // opening preamble — and the parent read the crash as the answer.
     it("throws when the sub-agent stream reports an error", async () => {
-      mockStream.mockResolvedValue({
-        fullStream: createMockFullStream([
-          { type: "text-start", id: "t1" },
-          {
-            type: "text-delta",
-            id: "t1",
-            text: "I'll start by inspecting the agent.",
-          },
-          {
-            type: "error",
-            error: new Error(
-              "Model tried to call unavailable tool 'delegateToDashboardAgent'.",
-            ),
-          },
-        ]),
-        text: Promise.resolve(""),
-      });
-
-      const { tool } = createSubAgentTool(baseOptions);
-      const gen = tool.execute(
-        { task: "Check the dashboard" },
-        {} as ToolExecutionOptions<Record<string, unknown>>,
-      ) as AsyncGenerator<SubAgentActivity>;
-
-      await expect(consumeGenerator(gen)).rejects.toThrow(
+      await expect(
+        delegate({
+          model: modelOf(
+            step([
+              ...text("t1", "I'll start by inspecting the agent."),
+              {
+                type: "error",
+                error: new Error(
+                  "Model tried to call unavailable tool 'delegateToDashboardAgent'.",
+                ),
+              },
+            ]),
+          ),
+        }),
+      ).rejects.toThrow(
         /Sub-agent "Research Agent" did not complete: Model tried to call unavailable tool/,
       );
     });
 
     it("includes any partial text in the failure so the work is not lost", async () => {
-      mockStream.mockResolvedValue({
-        fullStream: createMockFullStream([
-          { type: "text-start", id: "t1" },
-          { type: "text-delta", id: "t1", text: "Found 3 stale cards." },
-          { type: "text-end", id: "t1" },
-          { type: "error", error: "upstream connection reset" },
-        ]),
-        text: Promise.resolve(""),
-      });
-
-      const { tool } = createSubAgentTool(baseOptions);
-      const gen = tool.execute(
-        { task: "Audit the board" },
-        {} as ToolExecutionOptions<Record<string, unknown>>,
-      ) as AsyncGenerator<SubAgentActivity>;
-
-      await expect(consumeGenerator(gen)).rejects.toThrow(
+      await expect(
+        delegate({
+          model: modelOf(
+            step([
+              ...text("t1", "Found 3 stale cards."),
+              { type: "error", error: new Error("upstream connection reset") },
+            ]),
+          ),
+        }),
+      ).rejects.toThrow(
         /Partial output before the failure:\nFound 3 stale cards\./,
       );
     });
 
     it("records the failure in the activity log before throwing", async () => {
-      mockStream.mockResolvedValue({
-        fullStream: createMockFullStream([
-          { type: "error", error: new Error("boom") },
-        ]),
-        text: Promise.resolve(""),
+      const yielded: SubAgentActivity[] = [];
+      const { tool } = createSubAgentTool({
+        ...baseOptions,
+        model: modelOf(step([{ type: "error", error: new Error("boom") }])),
       });
-
-      const { tool } = createSubAgentTool(baseOptions);
       const gen = tool.execute(
         { task: "Do something" },
         {} as ToolExecutionOptions<Record<string, unknown>>,
       ) as AsyncGenerator<SubAgentActivity>;
 
-      const yielded: SubAgentActivity[] = [];
       await expect(
         (async () => {
           for await (const value of gen) yielded.push(structuredClone(value));
@@ -471,243 +431,23 @@ describe("createSubAgentTool", () => {
       });
     });
 
-    it("throws when the sub-agent stream aborts", async () => {
-      mockStream.mockResolvedValue({
-        fullStream: createMockFullStream([
-          { type: "abort", reason: "step limit" },
-        ]),
-        text: Promise.resolve(""),
-      });
-
-      const { tool } = createSubAgentTool(baseOptions);
-      const gen = tool.execute(
-        { task: "Do something" },
-        {} as ToolExecutionOptions<Record<string, unknown>>,
-      ) as AsyncGenerator<SubAgentActivity>;
-
-      await expect(consumeGenerator(gen)).rejects.toThrow(
-        /Stopped before finishing: step limit/,
-      );
-    });
-
-    // Issue #442. A token-limit stop is neither an `error` nor an `abort`: the
-    // stream ends normally and the partial answer was returned as if it were
-    // the whole finding. The parent has to be told it is looking at a fragment.
-    describe("truncated at the output token limit", () => {
-      const truncatedStream = () =>
-        createMockFullStream([
-          { type: "text-start", id: "t1" },
-          { type: "text-delta", id: "t1", text: "The three stale cards are" },
-          {
-            type: "finish",
-            finishReason: "length",
-            rawFinishReason: "max_tokens",
+    it("marks tool-call entry as error when the sub-agent's tool fails", async () => {
+      const { yielded } = await delegate({
+        model: modelOf(
+          step(toolCall("tc1", "webFetch", "{}"), { unified: "tool-calls" }),
+          step([]),
+        ),
+        loadTools: toolsOf({
+          webFetch: {
+            inputSchema: z.object({}),
+            execute: () => Promise.reject(new Error("Connection refused")),
           },
-        ]);
-
-      it("flags the delegation result as truncated", async () => {
-        mockStream.mockResolvedValue({
-          fullStream: truncatedStream(),
-          text: Promise.resolve(""),
-        });
-
-        const { tool } = createSubAgentTool(baseOptions);
-        const { yielded } = await consumeGenerator(
-          tool.execute(
-            { task: "Audit the board" },
-            {} as ToolExecutionOptions<Record<string, unknown>>,
-          ) as AsyncGenerator<SubAgentActivity>,
-        );
-        const final = yielded.at(-1)!;
-
-        expect(final.truncatedByTokenLimit).toBe(true);
-        // Not a failure: the partial answer is real work and still comes back.
-        expect(final.text).toBe("The three stale cards are");
+        }),
       });
 
-      it("tells the parent model the answer is partial", async () => {
-        mockStream.mockResolvedValue({
-          fullStream: truncatedStream(),
-          text: Promise.resolve(""),
-        });
-
-        const { tool } = createSubAgentTool(baseOptions);
-        const { yielded } = await consumeGenerator(
-          tool.execute(
-            { task: "Audit the board" },
-            {} as ToolExecutionOptions<Record<string, unknown>>,
-          ) as AsyncGenerator<SubAgentActivity>,
-        );
-
-        const value = modelText(tool, yielded.at(-1)!);
-
-        expect(value).toContain("The three stale cards are");
-        expect(value).toContain(SUB_AGENT_TRUNCATION_NOTE);
-      });
-
-      it("says only that the answer was cut off when there is no text at all", () => {
-        const { tool } = createSubAgentTool(baseOptions);
-
-        expect(
-          modelText(tool, {
-            entries: [],
-            text: "",
-            truncatedByTokenLimit: true,
-          }),
-        ).toBe(SUB_AGENT_TRUNCATION_NOTE);
-      });
-
-      it("records the cutoff in the log", async () => {
-        mockStream.mockResolvedValue({
-          fullStream: truncatedStream(),
-          text: Promise.resolve(""),
-        });
-
-        const { tool } = createSubAgentTool(baseOptions);
-        await consumeGenerator(
-          tool.execute(
-            { task: "Audit the board" },
-            {} as ToolExecutionOptions<Record<string, unknown>>,
-          ) as AsyncGenerator<SubAgentActivity>,
-        );
-
-        expect(vi.mocked(logger.warn).mock.calls[0]?.[0]).toMatchObject({
-          subAgentId: "agent-1",
-          subAgentName: "Research Agent",
-          // The provider's own word for the stop, which the unified reason
-          // would otherwise be the only record of.
-          rawFinishReason: "max_tokens",
-        });
-      });
-
-      it("leaves a cleanly finished delegation unflagged", async () => {
-        mockStream.mockResolvedValue({
-          fullStream: createMockFullStream([
-            { type: "text-start", id: "t1" },
-            { type: "text-delta", id: "t1", text: "All done." },
-            { type: "text-end", id: "t1" },
-            { type: "finish", finishReason: "stop" },
-          ]),
-          text: Promise.resolve(""),
-        });
-
-        const { tool } = createSubAgentTool(baseOptions);
-        const { yielded } = await consumeGenerator(
-          tool.execute(
-            { task: "Audit the board" },
-            {} as ToolExecutionOptions<Record<string, unknown>>,
-          ) as AsyncGenerator<SubAgentActivity>,
-        );
-        const final = yielded.at(-1)!;
-
-        expect(final).not.toHaveProperty("truncatedByTokenLimit");
-        expect(modelText(tool, final)).toBe("All done.");
-      });
-
-      // The same rule the run path applies: a step inside the tool loop can end
-      // at the ceiling and the sub-agent still recover and answer in full.
-      it("ignores a step that ended at the limit mid tool-loop", async () => {
-        mockStream.mockResolvedValue({
-          fullStream: createMockFullStream([
-            { type: "tool-input-start", toolName: "listCards", id: "tc1" },
-            { type: "finish-step", finishReason: "length" },
-            {
-              type: "tool-result",
-              toolCallId: "tc1",
-              toolName: "listCards",
-              output: [{ id: "c1" }],
-            },
-            { type: "text-start", id: "t1" },
-            { type: "text-delta", id: "t1", text: "One card." },
-            { type: "text-end", id: "t1" },
-            { type: "finish", finishReason: "stop" },
-          ]),
-          text: Promise.resolve(""),
-        });
-
-        const { tool } = createSubAgentTool(baseOptions);
-        const { yielded } = await consumeGenerator(
-          tool.execute(
-            { task: "Audit the board" },
-            {} as ToolExecutionOptions<Record<string, unknown>>,
-          ) as AsyncGenerator<SubAgentActivity>,
-        );
-
-        expect(yielded.at(-1)!).not.toHaveProperty("truncatedByTokenLimit");
-      });
-
-      // A cutoff is a fact about the answer, not an activity step, so the log
-      // the user watches must not gain a spurious row (or a spurious yield).
-      it("adds no activity entry and no extra yield for the terminal finish", async () => {
-        mockStream.mockResolvedValue({
-          fullStream: truncatedStream(),
-          text: Promise.resolve(""),
-        });
-
-        const { tool } = createSubAgentTool(baseOptions);
-        const { yielded } = await consumeGenerator(
-          tool.execute(
-            { task: "Audit the board" },
-            {} as ToolExecutionOptions<Record<string, unknown>>,
-          ) as AsyncGenerator<SubAgentActivity>,
-        );
-
-        // text-start yields once; the delta and the finish yield nothing; then
-        // the final value.
-        expect(yielded).toHaveLength(2);
-        expect(yielded.at(-1)!.entries).toHaveLength(1);
-      });
-
-      // A stream that fails after hitting the ceiling is still a failure: the
-      // parent must get a tool error, not a flagged partial answer.
-      it("still throws when the stream also reported a failure", async () => {
-        mockStream.mockResolvedValue({
-          fullStream: createMockFullStream([
-            { type: "finish", finishReason: "length" },
-            { type: "error", error: new Error("upstream reset") },
-          ]),
-          text: Promise.resolve(""),
-        });
-
-        const { tool } = createSubAgentTool(baseOptions);
-
-        await expect(
-          consumeGenerator(
-            tool.execute(
-              { task: "Audit the board" },
-              {} as ToolExecutionOptions<Record<string, unknown>>,
-            ) as AsyncGenerator<SubAgentActivity>,
-          ),
-        ).rejects.toThrow(/upstream reset/);
-      });
-    });
-
-    it("marks tool-call entry as error on tool-error event", async () => {
-      mockStream.mockResolvedValue({
-        fullStream: createMockFullStream([
-          { type: "tool-input-start", toolName: "web-fetch", id: "tc1" },
-          {
-            type: "tool-error",
-            toolCallId: "tc1",
-            toolName: "web-fetch",
-            error: "Connection refused",
-          },
-        ]),
-        text: Promise.resolve(""),
-      });
-
-      const { tool } = createSubAgentTool(baseOptions);
-      const gen = tool.execute(
-        { task: "Do something" },
-        {} as ToolExecutionOptions<Record<string, unknown>>,
-      ) as AsyncGenerator<SubAgentActivity>;
-
-      const { yielded } = await consumeGenerator(gen);
-
-      // Second yield: tool-call with error status
-      expect(yielded[1].entries[0]).toEqual({
+      expect(yielded.at(-1)!.entries).toContainEqual({
         type: "tool-call",
-        toolName: "web-fetch",
+        toolName: "webFetch",
         status: "error",
         error: "Connection refused",
       });
@@ -715,30 +455,22 @@ describe("createSubAgentTool", () => {
 
     // Issue #421: the activity entry keeps only the error text, so a sub-agent
     // run — the least observable surface there is — recorded nothing about the
-    // arguments the model actually emitted.
+    // arguments the model actually emitted. It now goes through the same
+    // instrumentation the Chat path uses, tagged with the sub-agent.
     it("logs what the model emitted for a rejected tool call", async () => {
       const raw = '{"url":"https://example.com/a-page","selecto';
-      mockStream.mockResolvedValue({
-        fullStream: createMockFullStream([
-          { type: "tool-input-start", toolName: "web-fetch", id: "tc1" },
-          {
-            type: "tool-error",
-            toolCallId: "tc1",
-            toolName: "web-fetch",
-            input: raw,
-            error: "AI_InvalidToolInputError: Invalid input for tool web-fetch",
+      await delegate({
+        model: modelOf(
+          step(toolCall("tc1", "webFetch", raw), { unified: "tool-calls" }),
+          step([]),
+        ),
+        loadTools: toolsOf({
+          webFetch: {
+            inputSchema: z.object({ url: z.string() }),
+            execute: () => Promise.resolve("ok"),
           },
-        ]),
-        text: Promise.resolve(""),
+        }),
       });
-
-      const { tool } = createSubAgentTool(baseOptions);
-      await consumeGenerator(
-        tool.execute(
-          { task: "Do something" },
-          {} as ToolExecutionOptions<Record<string, unknown>>,
-        ) as AsyncGenerator<SubAgentActivity>,
-      );
 
       // The same message the run driver logs, so an Operator greps once and
       // the sub-agent fields say which run it came from.
@@ -749,7 +481,7 @@ describe("createSubAgentTool", () => {
         subAgentId: "agent-1",
         subAgentName: "Research Agent",
         toolCallId: "tc1",
-        toolName: "web-fetch",
+        toolName: "webFetch",
         inputType: "string",
         inputKind: "unparseable",
         inputLength: raw.length,
@@ -758,112 +490,298 @@ describe("createSubAgentTool", () => {
     });
 
     it("says nothing about a sub-agent tool call that succeeded", async () => {
-      mockStream.mockResolvedValue({
-        fullStream: createMockFullStream([
-          { type: "tool-input-start", toolName: "web-fetch", id: "tc1" },
-          {
-            type: "tool-result",
-            toolCallId: "tc1",
-            toolName: "web-fetch",
-            input: { url: "https://example.com" },
-            output: "page text",
+      await delegate({
+        model: modelOf(
+          step(toolCall("tc1", "webFetch", '{"url":"https://example.com"}'), {
+            unified: "tool-calls",
+          }),
+          step([]),
+        ),
+        loadTools: toolsOf({
+          webFetch: {
+            inputSchema: z.object({ url: z.string() }),
+            execute: () => Promise.resolve("page text"),
           },
-        ]),
-        text: Promise.resolve(""),
-      });
-
-      const { tool } = createSubAgentTool(baseOptions);
-      await consumeGenerator(
-        tool.execute(
-          { task: "Do something" },
-          {} as ToolExecutionOptions<Record<string, unknown>>,
-        ) as AsyncGenerator<SubAgentActivity>,
-      );
-
-      expect(vi.mocked(logger.debug)).not.toHaveBeenCalled();
-    });
-
-    it("passes abortSignal to agent.stream", async () => {
-      mockStream.mockResolvedValue({
-        fullStream: createMockFullStream([]),
-        text: Promise.resolve("done"),
-      });
-
-      const { tool } = createSubAgentTool(baseOptions);
-      const abortController = new AbortController();
-      const gen = tool.execute({ task: "Do something" }, {
-        abortSignal: abortController.signal,
-      } as ToolExecutionOptions<
-        Record<string, unknown>
-      >) as AsyncGenerator<SubAgentActivity>;
-
-      await consumeGenerator(gen);
-
-      expect(mockStream).toHaveBeenCalledWith(
-        expect.objectContaining({
-          prompt: "Do something",
-          abortSignal: abortController.signal,
         }),
-      );
+      });
+
+      expect(
+        vi
+          .mocked(logger.debug)
+          .mock.calls.filter((call) => call[1] === "Tool call failed"),
+      ).toHaveLength(0);
     });
 
     it("accumulates entries across multiple events", async () => {
-      mockStream.mockResolvedValue({
-        fullStream: createMockFullStream([
-          { type: "tool-input-start", toolName: "search", id: "tc1" },
-          { type: "tool-input-start", toolName: "fetch", id: "tc2" },
-        ]),
-        text: Promise.resolve("done"),
+      const { yielded } = await delegate({
+        model: modelOf(
+          step(
+            [
+              ...toolCall("tc1", "search", "{}"),
+              ...toolCall("tc2", "fetch", "{}"),
+            ],
+            { unified: "tool-calls" },
+          ),
+          step([]),
+        ),
+        loadTools: toolsOf({
+          search: {
+            inputSchema: z.object({}),
+            execute: () => Promise.resolve("a"),
+          },
+          fetch: {
+            inputSchema: z.object({}),
+            execute: () => Promise.resolve("b"),
+          },
+        }),
       });
 
-      const { tool } = createSubAgentTool(baseOptions);
-      const gen = tool.execute(
-        { task: "Do something" },
-        {} as ToolExecutionOptions<Record<string, unknown>>,
-      ) as AsyncGenerator<SubAgentActivity>;
-
-      const { yielded } = await consumeGenerator(gen);
-
-      // First yield should have 1 entry, second should have 2
       expect(yielded[0].entries).toHaveLength(1);
       expect(yielded[1].entries).toHaveLength(2);
     });
   });
 
-  // Regression for #321 recurring one level down. The parent turn normalizes
-  // tool results in `wrapToolsWithBump`, but a sub-agent's own tools go from
-  // `loadTools` straight into its ToolLoopAgent. A raw Drizzle `Date` then
-  // fails the sub-agent's next-step prompt validation and kills its stream.
-  // An Agent must generate with the parameters assigned to it wherever it
-  // runs. Before this, a delegated run passed only model/instructions/tools/
-  // stopWhen, so an Agent's Temperature was inert the moment it was used as a
-  // sub-agent — on every Provider, including ones that honour it.
-  describe("sampling parameters", () => {
-    beforeEach(() => {
-      vi.clearAllMocks();
+  // The delegated run is a run in its own right: it holds its own registry
+  // entry, its own timers, and its own abort signal — and the parent's
+  // cancellation reaches it through the registry.
+  describe("run lifecycle", () => {
+    it("generates with its own abort signal rather than the parent's", async () => {
+      const parent = new AbortController();
+      await delegate({}, { abortSignal: parent.signal });
+
+      const { abortSignal } = streamArgs();
+      expect(abortSignal).toBeInstanceOf(AbortSignal);
+      expect(abortSignal).not.toBe(parent.signal);
     });
 
-    const settingsPassedToAgent = () =>
-      agentConstructorSpy.mock.calls[0][0] as Record<string, unknown>;
-
-    it("passes the sub-agent's own sampling parameters to its agent", () => {
-      createSubAgentTool({
-        ...baseOptions,
-        sampling: { temperature: 0.2, topP: 0.9, seed: 42 },
+    // A Trigger run is started under bounds an Operator configured; work it
+    // delegates has to run under the same ones, not the process defaults.
+    it("registers under the bounds the parent run was started with", async () => {
+      const register = vi.spyOn(runRegistry, "register");
+      await delegate({
+        parentRun: {
+          runId: "parent-1",
+          scope: parentScope,
+          timeouts: { perStepTimeoutMs: 600_000, perRunTimeoutMs: 3_600_000 },
+        },
       });
 
-      expect(settingsPassedToAgent()).toMatchObject({
+      expect(register.mock.calls.at(-1)?.[1]).toMatchObject({
+        perStepTimeoutMs: 600_000,
+        perRunTimeoutMs: 3_600_000,
+      });
+      register.mockRestore();
+    });
+
+    // The generator body doesn't start until the consumer pulls, so a parent
+    // cancelled between dispatch and the first tick would never fire the abort
+    // listener and the delegation would run on regardless.
+    it("does not start work for a parent that was already cancelled", async () => {
+      const parent = new AbortController();
+      parent.abort(new Error("Chat run cancelled"));
+
+      await expect(
+        delegate(
+          { model: modelOf(step(text("t1", "should never be produced"))) },
+          { abortSignal: parent.signal },
+        ),
+      ).rejects.toThrow(/Stopped before finishing/);
+    });
+
+    it("stops the delegated run when the parent run is cancelled", async () => {
+      const parent = new AbortController();
+      const { tool } = createSubAgentTool({
+        ...baseOptions,
+        model: modelOf(step(text("t1", "half an answ"))),
+      });
+      const gen = tool.execute({ task: "Do something" }, {
+        abortSignal: parent.signal,
+      } as ToolExecutionOptions<
+        Record<string, unknown>
+      >) as AsyncGenerator<SubAgentActivity>;
+
+      await expect(
+        (async () => {
+          for await (const _ of gen) {
+            void _;
+            parent.abort(new Error("Chat run cancelled"));
+          }
+        })(),
+      ).rejects.toThrow(/Stopped before finishing/);
+    });
+
+    it("records the delegated run's step count and token usage", async () => {
+      await delegate({
+        model: modelOf(
+          step(toolCall("tc1", "noop", "{}"), { unified: "tool-calls" }),
+          step(text("t1", "done")),
+        ),
+        loadTools: toolsOf({
+          noop: {
+            inputSchema: z.object({}),
+            execute: () => Promise.resolve("ok"),
+          },
+        }),
+      });
+
+      const finished = vi
+        .mocked(logger.info)
+        .mock.calls.find((call) => call[1] === "Sub-agent run finished");
+      expect(finished?.[0]).toMatchObject({
+        subAgentId: "agent-1",
+        status: "succeeded",
+        stats: {
+          steps: 2,
+          inputTokens: 20,
+          outputTokens: 8,
+          contextOccupancy: 10,
+        },
+      });
+    });
+  });
+
+  // Issue #442. A token-limit stop is neither an error nor an abort: the stream
+  // ends normally and the partial answer was returned as if it were the whole
+  // finding. The parent has to be told it is looking at a fragment.
+  describe("truncated at the output token limit", () => {
+    const truncated = () =>
+      modelOf(
+        step(text("t1", "The three stale cards are"), {
+          unified: "length",
+          raw: "max_tokens",
+        }),
+      );
+
+    it("flags the delegation result as truncated", async () => {
+      const { yielded } = await delegate({ model: truncated() });
+      const final = yielded.at(-1)!;
+
+      expect(final.truncatedByTokenLimit).toBe(true);
+      // Not a failure: the partial answer is real work and still comes back.
+      expect(final.text).toBe("The three stale cards are");
+    });
+
+    it("tells the parent model the answer is partial", async () => {
+      const { tool, yielded } = await delegate({ model: truncated() });
+
+      const value = modelText(tool, yielded.at(-1)!);
+      expect(value).toContain("The three stale cards are");
+      expect(value).toContain(SUB_AGENT_TRUNCATION_NOTE);
+    });
+
+    it("says only that the answer was cut off when there is no text at all", () => {
+      const { tool } = createSubAgentTool(baseOptions);
+
+      expect(
+        modelText(tool, {
+          entries: [],
+          text: "",
+          truncatedByTokenLimit: true,
+        }),
+      ).toBe(SUB_AGENT_TRUNCATION_NOTE);
+    });
+
+    it("records the cutoff in the log", async () => {
+      await delegate({ model: truncated() });
+
+      const warned = vi
+        .mocked(logger.warn)
+        .mock.calls.find((call) =>
+          String(call[1]).includes(
+            "answer truncated at the output token limit",
+          ),
+        );
+      expect(warned?.[0]).toMatchObject({
+        subAgentId: "agent-1",
+        subAgentName: "Research Agent",
+        // The provider's own word for the stop, which the unified reason
+        // would otherwise be the only record of.
+        rawFinishReason: "max_tokens",
+      });
+    });
+
+    it("leaves a cleanly finished delegation unflagged", async () => {
+      const { tool, yielded } = await delegate({
+        model: modelOf(step(text("t1", "All done."))),
+      });
+      const final = yielded.at(-1)!;
+
+      expect(final).not.toHaveProperty("truncatedByTokenLimit");
+      expect(modelText(tool, final)).toBe("All done.");
+    });
+
+    // The same rule the run path applies: a step inside the tool loop can end at
+    // the ceiling and the sub-agent still recover and answer in full.
+    it("ignores a step that ended at the limit mid tool-loop", async () => {
+      const { yielded } = await delegate({
+        model: modelOf(
+          step(toolCall("tc1", "listCards", "{}"), {
+            unified: "length",
+            raw: "max_tokens",
+          }),
+          step(text("t1", "One card.")),
+        ),
+        loadTools: toolsOf({
+          listCards: {
+            inputSchema: z.object({}),
+            execute: () => Promise.resolve([{ id: "c1" }]),
+          },
+        }),
+      });
+
+      expect(yielded.at(-1)!).not.toHaveProperty("truncatedByTokenLimit");
+      expect(yielded.at(-1)!.text).toBe("One card.");
+    });
+
+    // A cutoff is a fact about the answer, not an activity step, so the log the
+    // user watches must not gain a spurious row (or a spurious yield).
+    it("adds no activity entry and no extra yield for the terminal finish", async () => {
+      const { yielded } = await delegate({ model: truncated() });
+
+      // text-start yields once; the delta and the finish yield nothing; then
+      // the final value.
+      expect(yielded).toHaveLength(3);
+      expect(yielded.at(-1)!.entries).toHaveLength(1);
+    });
+
+    // A stream that fails after hitting the ceiling is still a failure: the
+    // parent must get a tool error, not a flagged partial answer.
+    it("still throws when the stream also reported a failure", async () => {
+      await expect(
+        delegate({
+          model: modelOf(
+            step(
+              [
+                ...text("t1", "partial"),
+                { type: "error", error: new Error("upstream reset") },
+              ],
+              { unified: "length", raw: "max_tokens" },
+            ),
+          ),
+        }),
+      ).rejects.toThrow(/upstream reset/);
+    });
+  });
+
+  // An Agent must generate with the parameters assigned to it wherever it runs.
+  // Before this, a delegated run passed only model/instructions/tools/stopWhen,
+  // so an Agent's Temperature was inert the moment it was used as a sub-agent.
+  describe("sampling parameters", () => {
+    it("passes the sub-agent's own sampling parameters to its run", async () => {
+      await delegate({ sampling: { temperature: 0.2, topP: 0.9, seed: 42 } });
+
+      expect(streamArgs()).toMatchObject({
         temperature: 0.2,
         topP: 0.9,
         seed: 42,
       });
     });
 
-    it("omits parameters that were never set rather than sending undefined", () => {
-      createSubAgentTool({ ...baseOptions, sampling: { temperature: 0.2 } });
+    it("omits parameters that were never set rather than sending undefined", async () => {
+      await delegate({ sampling: { temperature: 0.2 } });
 
-      const settings = settingsPassedToAgent();
-      expect(settings).toMatchObject({ temperature: 0.2 });
+      const settings = streamArgs();
+      expect(settings.temperature).toBe(0.2);
       for (const key of [
         "topP",
         "topK",
@@ -879,85 +797,60 @@ describe("createSubAgentTool", () => {
     // OWN Provider model entry, not its Agent row (issue #454). Without it a
     // delegated run truncates one level down, on Bedrock especially, with the
     // Org Admin's declared ceiling applying only to the parent turn.
-    it("passes the sub-agent model's output ceiling to its agent", () => {
-      createSubAgentTool({ ...baseOptions, maxOutputTokens: 64000 });
+    it("passes the sub-agent model's output ceiling to its run", async () => {
+      await delegate({ maxOutputTokens: 64000 });
 
-      expect(settingsPassedToAgent()).toMatchObject({
-        maxOutputTokens: 64000,
-      });
+      expect(streamArgs()).toMatchObject({ maxOutputTokens: 64000 });
     });
 
-    it("sends no ceiling when the sub-agent's model declares none", () => {
-      createSubAgentTool({ ...baseOptions });
+    it("sends no ceiling when the sub-agent's model declares none", async () => {
+      await delegate({});
 
-      expect(settingsPassedToAgent()).not.toHaveProperty("maxOutputTokens");
+      expect(streamArgs()).not.toHaveProperty("maxOutputTokens");
     });
 
-    it("cannot have sampling override the model, instructions or tools", () => {
-      createSubAgentTool({
-        ...baseOptions,
+    it("cannot have sampling override the model, instructions or tools", async () => {
+      await delegate({
         instructions: "Stay on task.",
         sampling: { temperature: 0.2 },
       });
 
-      const settings = settingsPassedToAgent();
-      expect(settings.model).toBe("mock-model");
-      expect(settings.instructions).toContain("Stay on task.");
+      expect(streamArgs().system).toContain("Stay on task.");
     });
   });
 
-  describe("sub-agent tool results", () => {
-    beforeEach(() => {
-      vi.clearAllMocks();
+  // A delegate's tools are opened when it is invoked, not when it is built, so
+  // a parent that never delegates opens none of their MCP connections. Results
+  // arrive already normalized — the Tool session that loads them owns that
+  // (#321 one level down), which is why this wrapper no longer touches them.
+  describe("sub-agent tools", () => {
+    it("opens its tools on invocation, not when the delegate is built", async () => {
+      const loadTools = vi.fn().mockResolvedValue({});
+      const { tool } = createSubAgentTool({ ...baseOptions, loadTools });
+      expect(loadTools).not.toHaveBeenCalled();
+
+      const gen = tool.execute(
+        { task: "Do something" },
+        {} as ToolExecutionOptions<Record<string, unknown>>,
+      ) as AsyncGenerator<SubAgentActivity>;
+      for await (const _ of gen) void _;
+
+      expect(loadTools).toHaveBeenCalledTimes(1);
     });
 
-    type ExecutableTool = {
-      execute: (args: unknown, opts: unknown) => unknown;
-    };
-
-    const toolPassedToAgent = (name: string) => {
-      const { tools } = agentConstructorSpy.mock.calls[0][0] as {
-        tools: Record<string, ExecutableTool>;
-      };
-      return tools[name];
-    };
-
-    it("normalizes Date values out of an async tool result", async () => {
-      const createdAt = new Date("2026-08-06T00:00:00.000Z");
-      createSubAgentTool({
-        ...baseOptions,
-        tools: {
-          listBoards: {
-            execute: () => Promise.resolve([{ id: "b1", createdAt }]),
-          } as never,
-        },
-      });
-
-      const result = await toolPassedToAgent("listBoards").execute({}, {});
-      expect(result).toEqual([
-        { id: "b1", createdAt: createdAt.toISOString() },
-      ]);
+    it("reports a failure to open them to the parent as a tool error", async () => {
+      await expect(
+        delegate({
+          loadTools: () => Promise.reject(new Error("MCP handshake failed")),
+        }),
+      ).rejects.toThrow(/MCP handshake failed/);
     });
 
-    it("normalizes a synchronous tool result too", () => {
-      createSubAgentTool({
-        ...baseOptions,
-        tools: {
-          now: {
-            execute: () => ({ at: new Date("2026-08-06T00:00:00.000Z") }),
-          } as never,
-        },
-      });
+    it("hands the delegated run the tools it opened", async () => {
+      const bare = { description: "no execute" } as unknown as Tool;
+      await delegate({ loadTools: toolsOf({ bare }) });
 
-      expect(toolPassedToAgent("now").execute({}, {})).toEqual({
-        at: "2026-08-06T00:00:00.000Z",
-      });
-    });
-
-    it("leaves a tool without an execute function alone", () => {
-      const bare = { description: "no execute" } as never;
-      createSubAgentTool({ ...baseOptions, tools: { bare } });
-      expect(toolPassedToAgent("bare")).toBe(bare);
+      expect(streamArgs().tools.bare).toBe(bare);
     });
   });
 
@@ -999,6 +892,22 @@ describe("createSubAgentTools", () => {
     vi.clearAllMocks();
   });
 
+  /** Run the delegate a builder produced, so its run arguments can be read. */
+  const runTool = async (tool: Tool) => {
+    const gen = (
+      tool as unknown as {
+        execute: (a: unknown, o: unknown) => AsyncGenerator<SubAgentActivity>;
+      }
+    ).execute({ task: "Do something" }, {});
+    for await (const _ of gen) void _;
+  };
+
+  const workingModel = () =>
+    vi.fn().mockResolvedValue({
+      model: modelOf(step([])),
+      securityGuardrails: null,
+    });
+
   it("returns empty object when given no sub-agents", async () => {
     const result = await createSubAgentTools([], vi.fn(), vi.fn());
     expect(result).toEqual({ tools: {}, failures: [] });
@@ -1022,9 +931,7 @@ describe("createSubAgentTools", () => {
       },
     ];
 
-    const createModelFn = vi
-      .fn()
-      .mockResolvedValue({ model: {}, securityGuardrails: null });
+    const createModelFn = workingModel();
     const loadToolsFn = vi.fn().mockResolvedValue({});
 
     const result = await createSubAgentTools(
@@ -1038,49 +945,51 @@ describe("createSubAgentTools", () => {
     expect(result.tools).toHaveProperty("delegateToCoder");
     expect(result.failures).toEqual([]);
     expect(createModelFn).toHaveBeenCalledTimes(2);
-    expect(loadToolsFn).toHaveBeenCalledTimes(2);
+    // Building the delegates opens nothing: each sub-agent's tools are loaded
+    // if and when the parent actually delegates to it.
+    expect(loadToolsFn).not.toHaveBeenCalled();
+
+    await runTool(result.tools.delegateToResearch);
+    expect(loadToolsFn).toHaveBeenCalledExactlyOnceWith("sa-1", ["ts1"]);
+
+    // Memoized per delegate: a second delegation in the same turn reuses the
+    // tools — and the connections — the first one opened.
+    await runTool(result.tools.delegateToResearch);
+    expect(loadToolsFn).toHaveBeenCalledTimes(1);
   });
 
   // The ceiling belongs to the sub-agent's own (Provider, model) pair, which
   // only the resolver has, so it rides back with the model it applies to.
-  it("forwards the resolved model's output ceiling to the sub-agent's agent", async () => {
+  it("forwards the resolved model's output ceiling to the sub-agent's run", async () => {
     const createModelFn = vi.fn().mockResolvedValue({
-      model: {},
+      model: modelOf(step([])),
       securityGuardrails: null,
       maxOutputTokens: 32000,
     });
 
-    await createSubAgentTools(
+    const { tools } = await createSubAgentTools(
       [{ id: "sa-1", name: "Research", providerId: "p1", modelId: "m1" }],
       createModelFn,
       vi.fn().mockResolvedValue({}),
     );
+    await runTool(tools.delegateToResearch);
 
-    expect(agentConstructorSpy.mock.calls[0][0]).toMatchObject({
-      maxOutputTokens: 32000,
-    });
+    expect(streamArgs()).toMatchObject({ maxOutputTokens: 32000 });
   });
 
   it("continues when a sub-agent fails to initialize, and reports it as a failure", async () => {
     const subAgents = [
-      {
-        id: "sa-1",
-        name: "Failing",
-        providerId: "p1",
-        modelId: "m1",
-      },
-      {
-        id: "sa-2",
-        name: "Working",
-        providerId: "p1",
-        modelId: "m1",
-      },
+      { id: "sa-1", name: "Failing", providerId: "p1", modelId: "m1" },
+      { id: "sa-2", name: "Working", providerId: "p1", modelId: "m1" },
     ];
 
     const createModelFn = vi
       .fn()
       .mockRejectedValueOnce(new Error("Model not found"))
-      .mockResolvedValueOnce({ model: {}, securityGuardrails: null });
+      .mockResolvedValueOnce({
+        model: modelOf(step([])),
+        securityGuardrails: null,
+      });
     const loadToolsFn = vi.fn().mockResolvedValue({});
 
     const result = await createSubAgentTools(
@@ -1099,108 +1008,93 @@ describe("createSubAgentTools", () => {
   });
 
   it("uses default maxSteps when not provided", async () => {
-    const subAgents = [
-      {
-        id: "sa-1",
-        name: "Agent",
-        providerId: "p1",
-        modelId: "m1",
-        maxSteps: null,
-      },
-    ];
-
-    const createModelFn = vi
-      .fn()
-      .mockResolvedValue({ model: {}, securityGuardrails: null });
-    const loadToolsFn = vi.fn().mockResolvedValue({});
-
-    const result = await createSubAgentTools(
-      subAgents,
-      createModelFn,
-      loadToolsFn,
+    const { tools } = await createSubAgentTools(
+      [
+        {
+          id: "sa-1",
+          name: "Agent",
+          providerId: "p1",
+          modelId: "m1",
+          maxSteps: null,
+        },
+      ],
+      workingModel(),
+      vi.fn().mockResolvedValue({}),
     );
+    await runTool(tools.delegateToAgent);
 
-    expect(Object.keys(result.tools)).toHaveLength(1);
-    expect(stepCeilingOf(0)).toBe(DEFAULT_AGENT_MAX_STEPS);
+    expect(stepCeilingOf()).toBe(DEFAULT_AGENT_MAX_STEPS);
   });
 
   // A delegated Agent runs on its own ceiling, not the parent's and not the
   // fallback — the whole point of reading `maxSteps` off the row.
   it("forwards an explicit maxSteps instead of the fallback default", async () => {
-    const subAgents = [
-      {
-        id: "sa-1",
-        name: "Agent",
-        providerId: "p1",
-        modelId: "m1",
-        maxSteps: 3,
-      },
-    ];
+    const { tools } = await createSubAgentTools(
+      [
+        {
+          id: "sa-1",
+          name: "Agent",
+          providerId: "p1",
+          modelId: "m1",
+          maxSteps: 3,
+        },
+      ],
+      workingModel(),
+      vi.fn().mockResolvedValue({}),
+    );
+    await runTool(tools.delegateToAgent);
 
-    const createModelFn = vi
-      .fn()
-      .mockResolvedValue({ model: {}, securityGuardrails: null });
-    const loadToolsFn = vi.fn().mockResolvedValue({});
-
-    await createSubAgentTools(subAgents, createModelFn, loadToolsFn);
-
-    expect(stepCeilingOf(0)).toBe(3);
+    expect(stepCeilingOf()).toBe(3);
   });
 
   it("forwards each sub-agent's stored sampling parameters, treating null as unset", async () => {
-    const subAgents = [
-      {
-        id: "sa-1",
-        name: "Tuned",
-        providerId: "p1",
-        modelId: "m1",
-        temperature: 0.3,
-        seed: 7,
-        // Cleared in the UI writes null, which must mean "use the Provider
-        // default" rather than being sent as an explicit value (#263).
-        topP: null,
-      },
-    ];
+    const { tools } = await createSubAgentTools(
+      [
+        {
+          id: "sa-1",
+          name: "Tuned",
+          providerId: "p1",
+          modelId: "m1",
+          temperature: 0.3,
+          seed: 7,
+          // Cleared in the UI writes null, which must mean "use the Provider
+          // default" rather than being sent as an explicit value (#263).
+          topP: null,
+        },
+      ],
+      workingModel(),
+      vi.fn().mockResolvedValue({}),
+    );
+    await runTool(tools.delegateToTuned);
 
-    const createModelFn = vi
-      .fn()
-      .mockResolvedValue({ model: {}, securityGuardrails: null });
-    const loadToolsFn = vi.fn().mockResolvedValue({});
-
-    await createSubAgentTools(subAgents, createModelFn, loadToolsFn);
-
-    const settings = agentConstructorSpy.mock.calls[0][0] as Record<
-      string,
-      unknown
-    >;
-    expect(settings).toMatchObject({ temperature: 0.3, seed: 7 });
-    expect(settings).not.toHaveProperty("topP");
+    expect(streamArgs()).toMatchObject({ temperature: 0.3, seed: 7 });
+    expect(streamArgs()).not.toHaveProperty("topP");
   });
 
   it("passes each sub-agent's own provider security text into its instructions", async () => {
-    const subAgents = [
-      {
-        id: "sa-1",
-        name: "Guarded",
-        providerId: "p1",
-        modelId: "m1",
-        instructions: "You are guarded.",
-      },
-    ];
-
     const createModelFn = vi.fn().mockResolvedValue({
-      model: {},
+      model: modelOf(step([])),
       securityGuardrails: "Provider-specific rule.",
     });
-    const loadToolsFn = vi.fn().mockResolvedValue({});
 
-    await createSubAgentTools(subAgents, createModelFn, loadToolsFn);
+    const { tools } = await createSubAgentTools(
+      [
+        {
+          id: "sa-1",
+          name: "Guarded",
+          providerId: "p1",
+          modelId: "m1",
+          instructions: "You are guarded.",
+        },
+      ],
+      createModelFn,
+      vi.fn().mockResolvedValue({}),
+    );
+    await runTool(tools.delegateToGuarded);
 
-    const { instructions } = agentConstructorSpy.mock.calls[0][0] as {
-      instructions: string;
-    };
-    expect(instructions).toContain("You are guarded.");
-    expect(instructions).toContain("## Security and trust");
-    expect(instructions).toContain("Provider-specific rule.");
+    const { system } = streamArgs();
+    expect(system).toContain("You are guarded.");
+    expect(system).toContain("## Security and trust");
+    expect(system).toContain("Provider-specific rule.");
   });
 });

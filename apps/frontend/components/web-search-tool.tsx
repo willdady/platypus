@@ -2,6 +2,7 @@
 
 import type { ToolUIPart } from "ai";
 import { isPresentableUrl, WEB_BACKEND_TOOL_MARKER } from "@platypus/schemas";
+import { toolCallDurationMs } from "@/lib/tool-duration";
 import { Tool, ToolContent, ToolHeader } from "./ai-elements/tool";
 
 /**
@@ -130,7 +131,19 @@ export const webSearchSources = (
  * what the pills cannot say — that a search ran, what was searched for, and when
  * it failed.
  */
-export const WebSearchTool = ({ toolPart }: { toolPart: ToolUIPart }) => {
+export const WebSearchTool = ({
+  toolPart,
+  messageMetadata,
+}: {
+  toolPart: ToolUIPart;
+  /**
+   * The metadata of the message this invocation sits on, which is where a
+   * duration arrives from mid-turn. Passed in rather than read here, the same
+   * way `SubAgentTool` takes it: resolving a duration needs both carriers, and
+   * the composing message already holds them.
+   */
+  messageMetadata?: unknown;
+}) => {
   const query = asRecord(toolPart.input).query;
   const output = asRecord(toolPart.output);
   // The tool's contract is a returned `{ error }`, not a rejection, so a failed
@@ -158,6 +171,11 @@ export const WebSearchTool = ({ toolPart }: { toolPart: ToolUIPart }) => {
         label={typeof query === "string" ? query : undefined}
         type="tool-web_search"
         state={errorText ? "output-error" : toolPart.state}
+        durationMs={toolCallDurationMs(
+          toolPart.toolMetadata,
+          messageMetadata,
+          toolPart.toolCallId,
+        )}
       />
       <ToolContent>
         <div className="space-y-2 p-4 text-sm">

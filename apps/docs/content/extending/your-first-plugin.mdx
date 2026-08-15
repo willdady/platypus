@@ -11,7 +11,7 @@ The repository ships a runnable third-party plugin:
 [`packages/example-plugin`](https://github.com/willdady/platypus/tree/main/packages/example-plugin),
 published as `@platypus-examples/tool-set`. It contributes one Tool set with one
 tool, and it exists so you can prove the whole path — install, list, load,
-grant, call — before you write anything of your own.
+grant, call, log — before you write anything of your own.
 
 Do this first. Then copy the package and replace its contents.
 
@@ -28,12 +28,16 @@ export const plugin: PlatypusPlugin = {
         id: "greeting", // bare — core prefixes it to `example.greeting`
         name: "Greeting",
         category: "Examples",
-        tools: {
-          greet: tool({
-            description: "Return a friendly greeting for the given name.",
-            inputSchema: z.object({ name: z.string() }),
-            execute: ({ name }) => `Hello, ${name}!`,
-          }),
+        tools: (ctx, plugin) => {
+          // Core's logger, already tagged with `example`
+          plugin?.logger?.debug({ workspaceId: ctx.workspaceId }, "Resolving");
+          return {
+            greet: tool({
+              description: "Return a friendly greeting for the given name.",
+              inputSchema: z.object({ name: z.string() }),
+              execute: ({ name }) => `Hello, ${name}!`,
+            }),
+          };
         },
       },
     ],
@@ -108,6 +112,22 @@ Chat on that Agent and ask it to greet someone by name.
 
 The reply comes back through a `greet` tool call you can expand in the
 transcript. That is the loop closed: your code ran inside a Chat turn.
+
+## Checkpoint 3: it can log
+
+The factory writes one line every time it resolves, at `debug`. The default
+`LOG_LEVEL` is `info`, so you saw nothing during Checkpoint 2. Raise it, restart,
+and send another message:
+
+```bash
+LOG_LEVEL=debug
+docker compose restart backend
+```
+
+`docker compose logs backend` now carries a `Resolving` line tagged
+`"plugin":"example"` — core's own stream, core's format, and the name bound for
+you without your code passing it. Put `LOG_LEVEL` back when you're done; `debug`
+is loud on a busy deployment.
 
 ## When it doesn't work
 

@@ -12,6 +12,7 @@ import {
   requireOrgAccess,
   requireWorkspaceAccess,
   requireWorkspaceOwner,
+  workspaceScopeOf,
 } from "../middleware/authorization.ts";
 import type { Variables } from "../server.ts";
 import { type PlatypusUIMessage } from "../types.ts";
@@ -39,7 +40,7 @@ chat.get(
     }),
   ),
   async (c) => {
-    const workspaceId = c.req.param("workspaceId")!;
+    const { workspaceId } = workspaceScopeOf(c);
     const { limit: limitStr, offset: offsetStr, search } = c.req.valid("query");
 
     const limit = Math.min(parseInt(limitStr ?? "100") || 100, 100);
@@ -94,7 +95,7 @@ chat.get(
   requireWorkspaceAccess,
   async (c) => {
     const chatId = c.req.param("chatId");
-    const workspaceId = c.req.param("workspaceId")!;
+    const { workspaceId } = workspaceScopeOf(c);
 
     const record = await db
       .select()
@@ -129,7 +130,7 @@ chat.post(
   requireWorkspaceOwner,
   sValidator("json", chatSubmitSchema),
   async (c) => {
-    const scope = c.get("workspaceScope")!;
+    const scope = workspaceScopeOf(c);
     const data = c.req.valid("json");
 
     const input: RunInput = {
@@ -181,7 +182,7 @@ chat.post(
   requireWorkspaceOwner,
   async (c) => {
     const chatId = c.req.param("chatId");
-    const workspaceId = c.req.param("workspaceId")!;
+    const { workspaceId } = workspaceScopeOf(c);
 
     // Verify the chat belongs to this workspace before signalling cancel.
     // This is what makes a cross-workspace cancel return 404 rather than
@@ -214,7 +215,7 @@ chat.delete(
   requireWorkspaceOwner,
   async (c) => {
     const chatId = c.req.param("chatId");
-    const workspaceId = c.req.param("workspaceId")!;
+    const { workspaceId } = workspaceScopeOf(c);
 
     // First fetch the chat to get its messages for file cleanup
     const chatRecord = await db
@@ -254,7 +255,7 @@ chat.put(
   sValidator("json", chatUpdateSchema),
   async (c) => {
     const chatId = c.req.param("chatId");
-    const workspaceId = c.req.param("workspaceId")!;
+    const { workspaceId } = workspaceScopeOf(c);
     const { title, isPinned, tags } = c.req.valid("json");
 
     const result = await db

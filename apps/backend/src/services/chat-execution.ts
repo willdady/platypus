@@ -1,7 +1,3 @@
-import {
-  experimental_createMCPClient as createMCPClient,
-  type MCPClient,
-} from "@ai-sdk/mcp";
 import { openProvider, type OpenedProvider } from "./provider.ts";
 import { eq } from "drizzle-orm";
 import { db } from "../index.ts";
@@ -13,7 +9,11 @@ import {
   sandbox as sandboxTable,
   workspace as workspaceTable,
 } from "../db/schema.ts";
-import { getToolSet } from "../tools/index.ts";
+import {
+  openToolSession,
+  type ToolSession,
+  type ToolSessionScope,
+} from "../tools/tool-session.ts";
 import { createLoadSkillTool } from "../tools/skill.ts";
 import {
   createSubAgentTools,
@@ -43,7 +43,6 @@ import {
 } from "../web-backends/index.ts";
 import type { LanguageModel, Tool } from "ai";
 import { logger } from "../logger.ts";
-import { buildMcpTransportConfig } from "./mcp-oauth-provider.ts";
 import { inlineFileUrls } from "../storage/utils.ts";
 import {
   maxExtractedTextCharsForModel,
@@ -58,6 +57,11 @@ import {
 } from "./file-gate.ts";
 import type { PlatypusUIMessage } from "../types.ts";
 import { listScopedByIds, resolveScoped } from "./scoped-resource.ts";
+import {
+  wrapToolsWithActivity,
+  type ToolActivityEvent,
+} from "./tool-activity.ts";
+import type { ParentRunContext } from "../runs/types.ts";
 
 // --- Errors ---
 
@@ -195,24 +199,19 @@ export type PrepareChatTurnInput = {
    */
   runMode?: "interactive" | "headless";
   /**
-   * Called whenever a tool call begins, completes, or yields activity.
-   * The agent runner uses this to reset the per-step timeout so long-running
-   * tool calls (e.g. MCP web search, sub-agent delegation) don't trip the
-   * stall detector while work is actively in progress. The optional `event`
-   * carries tool-call boundary metadata that the runner logs; sub-agent
-   * yield bumps invoke with no event (timer-only).
+   * Called when a tool call begins and again when it settles. The run
+   * lifecycle logs both and holds its per-step stall timer down in between, so
+   * a long tool call (MCP web search, a delegated sub-agent run) is never read
+   * as a stalled step.
    */
-  onActivity?: (event?: ToolActivityEvent) => void;
-};
-
-/**
- * Per-tool-call lifecycle event surfaced to the agent runner so it can log
- * tool start/end with duration. `durationMs` is only set on `"end"` events.
- */
-export type ToolActivityEvent = {
-  phase: "start" | "end";
-  toolName: string;
-  durationMs?: number;
+  onActivity?: (event: ToolActivityEvent) => void;
+  /**
+   * The run this turn belongs to. Sub-agent delegate tools built here register
+   * their own runs as children of it, so a delegated run is cancellable and
+   * subject to the same timeouts in its own right. Absent for callers that
+   * prepare a turn outside the run lifecycle (tests, the pre-persist file gate).
+   */
+  run?: ParentRunContext;
 };
 
 // --- Queries seam ---
@@ -304,7 +303,7 @@ export const drizzleChatTurnQueries: ChatTurnQueries = {
     // Sandbox/MCP tools still rebind to that invoking Workspace via loadTools.
     const found = await resolveScoped(db, "agent", id, {
       orgId,
-      wsId: workspaceId,
+      workspaceId,
     });
     return found?.row ?? null;
   },
@@ -312,7 +311,7 @@ export const drizzleChatTurnQueries: ChatTurnQueries = {
   async getProvider(id, orgId, workspaceId) {
     const found = await resolveScoped(db, "provider", id, {
       orgId,
-      wsId: workspaceId,
+      workspaceId,
     });
     return (found?.row as Provider | undefined) ?? null;
   },
@@ -320,7 +319,7 @@ export const drizzleChatTurnQueries: ChatTurnQueries = {
   async getSkillsByIds(ids, orgId, workspaceId) {
     const visible = await listScopedByIds(db, "skill", ids, {
       orgId,
-      wsId: workspaceId,
+      workspaceId,
     });
 
     // A workspace-scoped Skill wins a name collision with an attached org-scoped
@@ -340,7 +339,7 @@ export const drizzleChatTurnQueries: ChatTurnQueries = {
   async getMcp(id, orgId, workspaceId) {
     const found = await resolveScoped(db, "mcp", id, {
       orgId,
-      wsId: workspaceId,
+      workspaceId,
     });
     return found?.row ?? null;
   },
@@ -353,7 +352,7 @@ export const drizzleChatTurnQueries: ChatTurnQueries = {
     // prompt, and its Provider then failed to resolve.
     const visible = await listScopedByIds(db, "agent", ids, {
       orgId,
-      wsId: workspaceId,
+      workspaceId,
     });
 
     // Returned in assignment order so the prompt lists sub-agents the way the
@@ -529,6 +528,7 @@ export const prepareChatTurn = async (
     frontendUrl,
     runMode = "interactive",
     onActivity,
+    run,
   } = input;
 
   const workspace = await queries.getWorkspace(workspaceId);
@@ -551,18 +551,30 @@ export const prepareChatTurn = async (
   const opened = openProvider(provider);
   const model = opened.languageModel(resolvedModelId);
 
+  // Where this turn runs, shared by the Agent and every delegate it may reach.
+  const scope: ToolSessionScope = {
+    orgId,
+    workspaceId,
+    userId: user.id,
+    frontendUrl,
+  };
+  // Started before the `Promise.all` rather than inside it because the delegates
+  // built alongside it nest their own sessions into this one — they take the
+  // promise, not the session, and await it only if they are ever invoked.
+  const sessionPromise = openToolSession(scope, agent, queries);
+
   const [
-    { tools, mcpClients },
+    session,
     skills,
-    { subAgents, unavailableSubAgents, subAgentTools, subAgentMcpClients },
+    { subAgents, unavailableSubAgents, subAgentTools },
     userContexts,
     memories,
     sandboxEnvKeys,
     searchTools,
   ] = await Promise.all([
-    loadTools(queries, agent, workspaceId, orgId, frontendUrl, user.id),
+    sessionPromise,
     loadSkills(queries, agent, orgId, workspaceId),
-    loadSubAgents(queries, agent, orgId, workspaceId, frontendUrl, onActivity),
+    loadSubAgents(queries, agent, scope, sessionPromise, run),
     queries.getUserContexts(user.id, workspaceId),
     queries.getRecentMemories(user.id, workspaceId),
     queries.getSandboxEnvKeys(workspaceId),
@@ -574,12 +586,11 @@ export const prepareChatTurn = async (
     ),
   ]);
 
-  const allMcpClients = [...mcpClients, ...subAgentMcpClients];
-
   // Assignment order is the precedence order, and it is deliberate: search lands
-  // after `loadTools` so it wins over an agent/MCP tool that happens to share a
-  // name (exactly as native search already did), and before `subAgentTools` so a
-  // sub-agent's tools still win over search.
+  // after the session's tools so it wins over an agent/MCP tool that happens to
+  // share a name (exactly as native search already did), and before
+  // `subAgentTools` so a sub-agent's tools still win over search.
+  const tools: Record<string, Tool> = { ...session.tools };
   Object.assign(tools, searchTools);
   Object.assign(tools, subAgentTools);
 
@@ -609,15 +620,12 @@ export const prepareChatTurn = async (
     tools.loadSkill = createLoadSkillTool(orgId, workspaceId);
   }
 
-  const heartbeat = onActivity ? createToolHeartbeat(onActivity) : null;
-
-  const wrappedTools = heartbeat
-    ? wrapToolsWithBump(
-        tools,
-        onActivity!,
-        heartbeat.onToolStart,
-        heartbeat.onToolEnd,
-      )
+  // Activity events only. Result normalization (#321) is no longer bolted on
+  // here: it happens for every tool the Tool session loads, whether or not this
+  // turn is being observed. The tools core adds itself above — search, the
+  // sub-agent delegates, `loadSkill` — return core-owned JSON shapes.
+  const wrappedTools = onActivity
+    ? wrapToolsWithActivity(tools, onActivity)
     : tools;
 
   // Inline file URLs to `data:` bytes when we have an origin, then ALWAYS
@@ -643,20 +651,6 @@ export const prepareChatTurn = async (
       ),
     },
   );
-
-  let disposed = false;
-  const dispose = async () => {
-    if (disposed) return;
-    disposed = true;
-    heartbeat?.stop();
-    for (const client of allMcpClients) {
-      try {
-        await client.close();
-      } catch (e) {
-        logger.error({ error: e }, "Error closing MCP client");
-      }
-    }
-  };
 
   const systemPrompt = generation.systemPrompt!;
 
@@ -698,7 +692,9 @@ export const prepareChatTurn = async (
       presencePenalty: agent ? undefined : generation.presencePenalty,
       seed: agent ? undefined : generation.seed,
     },
-    dispose,
+    // The session closes what it opened, delegates' nested sessions included —
+    // the caller no longer reconciles two lists of clients to get there.
+    dispose: session.dispose,
   };
 };
 
@@ -750,162 +746,12 @@ export const validateTurnAttachments = async (
 // --- Private helpers ---
 
 /**
- * Default cadence between heartbeat bumps while any tool is in flight. Must
- * be comfortably below the smallest configured per-step timeout (2 min for
- * chat by default) so a slow tool can't outlive the timer between heartbeats.
- */
-export const DEFAULT_TOOL_HEARTBEAT_INTERVAL_MS = 30 * 1000;
-
-/**
- * Tracks how many tool calls are currently executing and fires `bump()` at a
- * fixed cadence while that count is positive. Used by `prepareChatTurn` to
- * keep the run's per-step stall timer alive across a long tool call or a
- * sub-agent whose own tool calls yield no parts for an extended period.
- *
- * Exported for direct testing — production callers should always go through
- * `prepareChatTurn`.
- */
-export const createToolHeartbeat = (
-  bump: () => void,
-  intervalMs: number = DEFAULT_TOOL_HEARTBEAT_INTERVAL_MS,
-): {
-  onToolStart: () => void;
-  onToolEnd: () => void;
-  stop: () => void;
-  /** Visible for tests. Number of tool calls currently being tracked. */
-  inflight: () => number;
-} => {
-  let inflight = 0;
-  let stopped = false;
-  let timer: ReturnType<typeof setInterval> | undefined;
-
-  return {
-    onToolStart: () => {
-      // Defensive: if a tool callback somehow fires after stop() (e.g. an
-      // MCP transport that ignores AbortSignal), don't start a fresh timer
-      // that nothing will clean up.
-      if (stopped) return;
-      inflight += 1;
-      if (inflight === 1) {
-        timer = setInterval(bump, intervalMs);
-      }
-    },
-    onToolEnd: () => {
-      inflight = Math.max(0, inflight - 1);
-      if (inflight === 0 && timer) {
-        clearInterval(timer);
-        timer = undefined;
-      }
-    },
-    stop: () => {
-      stopped = true;
-      if (timer) {
-        clearInterval(timer);
-        timer = undefined;
-      }
-    },
-    inflight: () => inflight,
-  };
-};
-
-/**
- * Wraps each tool's `execute` to:
- * 1. Emit `start` / `end` activity events for structured logging and the
- *    initial per-step timer bump (`runId`, `toolName`, `durationMs`).
- * 2. Call `onToolStart` / `onToolEnd` so the surrounding turn can maintain
- *    an inflight counter and run a heartbeat — the only thing that keeps
- *    the per-step timer alive across a tool call (or sub-agent) that takes
- *    longer than the stall threshold to settle.
- *
- * Sub-agent tools whose `execute` is an async generator are returned by
- * reference; the inflight bookkeeping still happens because they expose
- * an `execute` function and we wrap it the same way. Their inner part
- * yields continue to bump the timer via `onProgress` for visibility, but
- * correctness no longer depends on those yields being frequent enough.
- */
-/**
- * Re-exported so callers and tests that reach the normalizer through this
- * module keep working. It lives in `tool-result.ts` because the sub-agent tool
- * builder needs it too, and this module already imports that one.
- *
- * `wrapToolsWithBump` applies it at the promise-resolved and synchronous return
- * paths, covering every value-returning tool on the parent turn at once. The
- * async-iterable path (sub-agent delegate tools) is intentionally exempt — its
- * yields are streamed UI parts, not the result fed to the model.
+ * Re-exported so callers and tests that reach these through this module keep
+ * working. They live in their own modules because the sub-agent tool builder
+ * needs them too, and this module imports that one.
  */
 export { normalizeToolResult };
-
-export const wrapToolsWithBump = (
-  tools: Record<string, Tool>,
-  onActivity: (event?: ToolActivityEvent) => void,
-  onToolStart: () => void,
-  onToolEnd: () => void,
-): Record<string, Tool> => {
-  const wrapped: Record<string, Tool> = {};
-  for (const [name, t] of Object.entries(tools)) {
-    const execute = (t as { execute?: unknown }).execute;
-    if (typeof execute !== "function") {
-      wrapped[name] = t;
-      continue;
-    }
-    const runExecute = execute as (args: unknown, options: unknown) => unknown;
-    wrapped[name] = {
-      ...t,
-      execute: (args: unknown, options: unknown) => {
-        const startedAt = Date.now();
-        onToolStart();
-        onActivity({ phase: "start", toolName: name });
-        const finish = () => {
-          onToolEnd();
-          onActivity({
-            phase: "end",
-            toolName: name,
-            durationMs: Date.now() - startedAt,
-          });
-        };
-        let result: unknown;
-        try {
-          result = runExecute.call(t, args, options);
-        } catch (err) {
-          finish();
-          throw err;
-        }
-        if (
-          result != null &&
-          typeof (result as { then?: unknown }).then === "function"
-        ) {
-          return (result as Promise<unknown>)
-            .then(normalizeToolResult)
-            .finally(finish);
-        }
-        // Async iterable / generator path (sub-agent tools). Wrap it so the
-        // counter decrements once the consumer drains the iterator.
-        if (
-          result != null &&
-          typeof (result as Record<symbol, unknown>)[Symbol.asyncIterator] ===
-            "function"
-        ) {
-          const inner = result as AsyncIterable<unknown>;
-          return (async function* () {
-            try {
-              for await (const part of inner) {
-                yield part;
-              }
-            } finally {
-              finish();
-            }
-          })();
-        }
-        // Normalize before finish() so the sync path mirrors the promise path:
-        // a throw (e.g. a BigInt in the result) happens before the "end" event.
-        const normalized = normalizeToolResult(result);
-        finish();
-        return normalized;
-      },
-    };
-  }
-  return wrapped;
-};
+export { wrapToolsWithActivity, type ToolActivityEvent };
 
 /**
  * Why a model reference resolved to nothing, said in the caller's terms: a
@@ -986,72 +832,6 @@ const resolveChatContext = async (
   };
 };
 
-const loadTools = async (
-  queries: ChatTurnQueries,
-  agent: Pick<AgentRow, "id" | "toolSetIds"> | undefined,
-  workspaceId: string,
-  orgId: string,
-  frontendUrl: string | undefined,
-  userId?: string,
-): Promise<{ tools: Record<string, Tool>; mcpClients: MCPClient[] }> => {
-  const tools: Record<string, Tool> = {};
-  const mcpClients: MCPClient[] = [];
-
-  if (!agent || !agent.toolSetIds || agent.toolSetIds.length === 0) {
-    return { tools, mcpClients };
-  }
-
-  for (const toolSetId of agent.toolSetIds) {
-    let toolSet: ReturnType<typeof getToolSet>;
-    try {
-      toolSet = getToolSet(toolSetId);
-    } catch {
-      // Static tool set not found — fall back to MCP lookup.
-      const mcp = await queries.getMcp(toolSetId, orgId, workspaceId);
-      if (mcp && mcp.url) {
-        // An unreachable MCP must fail soft: log a warning and contribute no
-        // tools, rather than throwing and killing the whole Chat turn. A Shared
-        // (org-scoped) MCP has org-wide blast radius, so a single down server
-        // must not break every attached Workspace's chats at once (ADR-0007).
-        try {
-          const mcpClient = await createMCPClient({
-            transport: buildMcpTransportConfig(mcp),
-          });
-          const mcpTools = await mcpClient.tools();
-          Object.assign(tools, mcpTools);
-          mcpClients.push(mcpClient);
-        } catch (error) {
-          logger.warn(
-            { error, mcpId: mcp.id, scope: mcp.organizationId ? "org" : "ws" },
-            `MCP '${toolSetId}' is unreachable; skipping its tools`,
-          );
-        }
-      } else if (mcp) {
-        logger.warn(`MCP '${toolSetId}' has no URL configured`);
-      } else {
-        logger.warn(
-          `Tool set with id '${toolSetId}' not found as static tool set or MCP`,
-        );
-      }
-      continue;
-    }
-
-    const resolvedTools =
-      typeof toolSet.tools === "function"
-        ? await toolSet.tools({
-            workspaceId,
-            agentId: agent.id,
-            orgId,
-            frontendUrl,
-            userId: userId || "",
-          })
-        : toolSet.tools;
-    Object.assign(tools, resolvedTools);
-  }
-
-  return { tools, mcpClients };
-};
-
 const resolveGenerationConfig = (
   data: ChatTurnRequest,
   agent: AgentRow | undefined,
@@ -1087,25 +867,23 @@ const UNRESOLVED_SUB_AGENT_REASON =
 const loadSubAgents = async (
   queries: ChatTurnQueries,
   agent: AgentRow | undefined,
-  orgId: string,
-  workspaceId: string,
-  frontendUrl: string | undefined,
-  onProgress?: () => void,
+  scope: ToolSessionScope,
+  session: Promise<ToolSession>,
+  run: ParentRunContext | undefined,
 ): Promise<{
   subAgents: Array<{ id: string; name: string; description?: string | null }>;
   unavailableSubAgents: SubAgentFailure[];
   subAgentTools: Record<string, Tool>;
-  subAgentMcpClients: MCPClient[];
 }> => {
   if (!agent?.subAgentIds || agent.subAgentIds.length === 0) {
     return {
       subAgents: [],
       unavailableSubAgents: [],
       subAgentTools: {},
-      subAgentMcpClients: [],
     };
   }
 
+  const { orgId, workspaceId } = scope;
   const assignedIds = [...new Set(agent.subAgentIds)];
   const subAgentRecords = await queries.getSubAgentsByIds(
     assignedIds,
@@ -1120,8 +898,6 @@ const loadSubAgents = async (
   const unresolved: SubAgentFailure[] = assignedIds
     .filter((id) => !resolvedIds.has(id))
     .map((id) => ({ id, reason: UNRESOLVED_SUB_AGENT_REASON }));
-
-  const subAgentMcpClients: MCPClient[] = [];
 
   const { tools: subAgentTools, failures } = await createSubAgentTools(
     subAgentRecords,
@@ -1155,19 +931,22 @@ const loadSubAgents = async (
         maxOutputTokens: maxOutputTokensForModel(subProvider, subModelId),
       };
     },
+    // Called on a delegate's FIRST invocation, not now: a parent with three
+    // MCP-backed delegates used to open — and warn about — every one of their
+    // servers on every Chat turn, whether or not it delegated. The nested
+    // session closes with the parent's, so a delegate never hands its
+    // connections back to be remembered.
+    //
+    // The delegate runs under its parent's Workspace and user (its scope is
+    // chained from theirs, and `actorUserId` walks back up to the same human), so
+    // its Tool sets resolve against the same identity. They used to be handed an
+    // empty `userId`, which silently blanked the user a delegate's tools ran as.
     async (subAgentId: string, toolSetIds: string[]) => {
-      const subAgentRecord = subAgentRecords.find((sa) => sa.id === subAgentId);
-      const { tools: subTools, mcpClients } = await loadTools(
-        queries,
-        subAgentRecord ?? { id: subAgentId, toolSetIds },
-        workspaceId,
-        orgId,
-        frontendUrl,
-      );
-      subAgentMcpClients.push(...mcpClients);
-      return subTools;
+      const parent = await session;
+      const nested = await parent.nest({ id: subAgentId, toolSetIds });
+      return nested.tools;
     },
-    onProgress,
+    run,
   );
 
   // The system prompt must describe only sub-agents that produced a callable
@@ -1186,6 +965,5 @@ const loadSubAgents = async (
     subAgents,
     unavailableSubAgents: [...unresolved, ...failures],
     subAgentTools,
-    subAgentMcpClients,
   };
 };

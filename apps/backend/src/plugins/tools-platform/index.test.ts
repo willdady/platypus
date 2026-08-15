@@ -7,9 +7,25 @@ import { PLUGIN_API_VERSION } from "@platypuschat/plugin-sdk";
 // Postgres. Factories return AI SDK tool maps without touching the db until a
 // tool's `execute` runs, so these stubs are enough.
 vi.mock("../../index.ts", () => ({ db: {} }));
-vi.mock("../../logger.ts", () => ({
-  logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
-}));
+// `child` is part of the mock because the plugin loader derives each plugin's
+// own logger from this one.
+vi.mock("../../logger.ts", () => {
+  const child = {
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+  };
+  return {
+    logger: {
+      debug: vi.fn(),
+      info: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn(),
+      child: vi.fn(() => child),
+    },
+  };
+});
 vi.mock("../../services/event-dispatch.ts", () => ({ dispatchEvent: vi.fn() }));
 vi.mock("../../services/sub-agent-validation.ts", () => ({
   validateSubAgentAssignment: vi.fn(),
@@ -62,11 +78,12 @@ describe("@platypus/tools-platform — loaded into the core registry", () => {
   it("registers all eight domain tool sets with bare ids", async () => {
     // Module-global registry; vitest isolates modules per file so this doesn't
     // leak. Exercise the real path: loader → registerToolSet → getToolSet.
+    const registeredIds = () => getToolSets().map((s) => s.id);
     for (const id of EXPECTED_IDS) {
-      expect(getToolSets()).not.toHaveProperty(id);
+      expect(registeredIds()).not.toContain(id);
     }
 
-    const loaded = await loadPlugins({
+    const { plugins: loaded } = await loadPlugins({
       pluginNames: ["@platypus/tools-platform"],
     });
 
@@ -78,35 +95,26 @@ describe("@platypus/tools-platform — loaded into the core registry", () => {
     });
 
     for (const id of EXPECTED_IDS) {
-      expect(getToolSets()).toHaveProperty(id);
+      expect(registeredIds()).toContain(id);
     }
   });
 
-  it("resolves each tool set's factory to a non-empty tool map at chat-turn time", () => {
+  it("resolves each tool set to a non-empty tool map at chat-turn time", async () => {
     for (const id of EXPECTED_IDS) {
-      const set = getToolSet(id);
-      expect(typeof set.tools).toBe("function");
-      const tools =
-        typeof set.tools === "function" ? set.tools(ctx) : set.tools;
+      const tools = await getToolSet(id)!.buildTurnTools(ctx);
       expect(Object.keys(tools).length).toBeGreaterThan(0);
     }
   });
 
-  it("resolves the read/write agent-management split tools as before", () => {
-    const discovery = getToolSet("agent-discovery");
+  it("resolves the read/write agent-management split tools as before", async () => {
     const discoveryTools =
-      typeof discovery.tools === "function"
-        ? discovery.tools(ctx)
-        : discovery.tools;
+      await getToolSet("agent-discovery")!.buildTurnTools(ctx);
     expect(Object.keys(discoveryTools).sort()).toEqual(
       ["getAgent", "listAgents", "listModelProviders", "listToolSets"].sort(),
     );
 
-    const management = getToolSet("agent-management");
     const managementTools =
-      typeof management.tools === "function"
-        ? management.tools(ctx)
-        : management.tools;
+      await getToolSet("agent-management")!.buildTurnTools(ctx);
     expect(Object.keys(managementTools).sort()).toEqual(
       ["createAgent", "deleteAgent", "updateAgent"].sort(),
     );

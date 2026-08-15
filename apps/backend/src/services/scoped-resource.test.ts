@@ -1,21 +1,31 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 // test-utils installs the drizzle-orm mock, so it must be imported before the
-// operators this file asserts on — `inArray` is a spy only through that mock.
+// operators this file asserts on — `eq`/`inArray`/`isNull` are spies only
+// through that mock.
 import { mockDb, resetMockDb, asDb } from "../test-utils.ts";
-import { inArray } from "drizzle-orm";
+import { eq, inArray, isNull } from "drizzle-orm";
+import { agent as agentTable, mcp as mcpTable } from "../db/schema.ts";
 import {
   resolveScoped,
+  resolveScopedByName,
   listScoped,
   listScopedByIds,
   requireScoped,
   requireWorkspaceMutable,
   requireSharedDeletable,
+  resolveOrgScoped,
+  requireOrgScoped,
+  listOrgScoped,
+  listOrgScopedIds,
+  orgScopedWhere,
+  orgScopedWhereIn,
+  isScopedResourceType,
 } from "./scoped-resource.ts";
 import { NotFoundError, LockedError, ConflictError } from "../errors.ts";
 
-const ctx = { orgId: "org-1", wsId: "ws-1" };
+const ctx = { orgId: "org-1", workspaceId: "ws-1" };
 
-describe("ScopedResource read module", () => {
+describe("ScopedResource module", () => {
   beforeEach(() => {
     resetMockDb();
     vi.clearAllMocks();
@@ -79,6 +89,207 @@ describe("ScopedResource read module", () => {
 
       const found = await resolveScoped(asDb(mockDb), "agent", "a1", ctx);
       expect(found).toBeNull();
+    });
+  });
+
+  describe("resolveScopedByName", () => {
+    it("prefers the workspace-scoped row of that name", async () => {
+      const row = { id: "s1", name: "triage", workspaceId: "ws-1" };
+      mockDb.limit.mockResolvedValueOnce([row]);
+
+      const found = await resolveScopedByName(
+        asDb(mockDb),
+        "skill",
+        "triage",
+        ctx,
+      );
+      expect(found).toEqual({ row, scope: "workspace" });
+      // The Shared branch never ran — a Workspace row of the same name wins
+      // outright rather than racing an unordered `LIMIT 1` against it.
+      expect(mockDb.innerJoin).not.toHaveBeenCalled();
+    });
+
+    it("falls back to an attached org-scoped row of that name", async () => {
+      const row = {
+        id: "s2",
+        name: "triage",
+        organizationId: "org-1",
+        workspaceId: null,
+      };
+      mockDb.limit
+        .mockResolvedValueOnce([]) // no workspace-scoped row of this name
+        .mockResolvedValueOnce([row]) // the Shared row
+        .mockResolvedValueOnce([{ id: "att-1" }]); // attached here
+
+      const found = await resolveScopedByName(
+        asDb(mockDb),
+        "skill",
+        "triage",
+        ctx,
+      );
+      expect(found).toEqual({ row, scope: "organization" });
+    });
+
+    it("returns null for an org-scoped row not attached here", async () => {
+      mockDb.limit
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([
+          {
+            id: "s2",
+            name: "triage",
+            organizationId: "org-1",
+            workspaceId: null,
+          },
+        ])
+        .mockResolvedValueOnce([]); // attachment check → not attached
+
+      const found = await resolveScopedByName(
+        asDb(mockDb),
+        "skill",
+        "triage",
+        ctx,
+      );
+      expect(found).toBeNull();
+    });
+
+    it("returns null when no row of that name is visible", async () => {
+      mockDb.limit.mockResolvedValueOnce([]).mockResolvedValueOnce([]);
+
+      const found = await resolveScopedByName(
+        asDb(mockDb),
+        "skill",
+        "triage",
+        ctx,
+      );
+      expect(found).toBeNull();
+    });
+  });
+
+  describe("resolveOrgScoped", () => {
+    it("returns the Shared row of this organization", async () => {
+      const row = { id: "a1", organizationId: "org-1", workspaceId: null };
+      mockDb.limit.mockResolvedValueOnce([row]);
+
+      const found = await resolveOrgScoped(
+        asDb(mockDb),
+        "agent",
+        "a1",
+        "org-1",
+      );
+      expect(found).toEqual(row);
+      // Only genuinely Shared rows answer on the Organization surface: a row
+      // carrying both scope columns belongs to its Workspace (ADR-0007).
+      expect(isNull).toHaveBeenCalledWith(agentTable.workspaceId);
+    });
+
+    it("returns null when the resource is not Shared in this organization", async () => {
+      mockDb.limit.mockResolvedValueOnce([]);
+
+      const found = await resolveOrgScoped(
+        asDb(mockDb),
+        "agent",
+        "a1",
+        "org-1",
+      );
+      expect(found).toBeNull();
+    });
+  });
+
+  describe("orgScopedWhere", () => {
+    it("matches on id, organization, and no workspace", () => {
+      orgScopedWhere("agent", "a1", "org-1");
+
+      expect(eq).toHaveBeenCalledWith(agentTable.id, "a1");
+      expect(eq).toHaveBeenCalledWith(agentTable.organizationId, "org-1");
+      // The part a hand-rolled `eq(organizationId)` write predicate leaves out:
+      // a row carrying both scope columns belongs to its Workspace and must not
+      // be written from the Organization surface (ADR-0007).
+      expect(isNull).toHaveBeenCalledWith(agentTable.workspaceId);
+    });
+
+    it("resolves the columns of the type it is given", () => {
+      orgScopedWhere("mcp", "m1", "org-1");
+
+      expect(eq).toHaveBeenCalledWith(mcpTable.id, "m1");
+      expect(isNull).toHaveBeenCalledWith(mcpTable.workspaceId);
+    });
+  });
+
+  describe("orgScopedWhereIn", () => {
+    it("matches on a set of ids, the organization, and no workspace", () => {
+      const ids = ["a1", "a2"];
+      orgScopedWhereIn("agent", ids, "org-1");
+
+      expect(inArray).toHaveBeenCalledWith(agentTable.id, ids);
+      expect(eq).toHaveBeenCalledWith(agentTable.organizationId, "org-1");
+      expect(isNull).toHaveBeenCalledWith(agentTable.workspaceId);
+    });
+  });
+
+  describe("listOrgScopedIds", () => {
+    it("returns the subset of ids that are Shared here", async () => {
+      const ids = ["a1", "a2", "gone"];
+      mockDb.where.mockResolvedValueOnce([{ id: "a1" }, { id: "a2" }]);
+
+      const found = await listOrgScopedIds(asDb(mockDb), "agent", ids, "org-1");
+      expect(found).toEqual(new Set(["a1", "a2"]));
+      expect(inArray).toHaveBeenCalledWith(agentTable.id, ids);
+      expect(isNull).toHaveBeenCalledWith(agentTable.workspaceId);
+    });
+
+    it("returns an empty set without querying when given no ids", async () => {
+      const found = await listOrgScopedIds(asDb(mockDb), "agent", [], "org-1");
+      expect(found).toEqual(new Set());
+      expect(mockDb.select).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("isScopedResourceType", () => {
+    it("admits every registered resource type", () => {
+      for (const type of ["agent", "skill", "mcp", "provider"]) {
+        expect(isScopedResourceType(type)).toBe(true);
+      }
+    });
+
+    it("rejects a missing or unregistered type", () => {
+      expect(isScopedResourceType(undefined)).toBe(false);
+      expect(isScopedResourceType("blueprint")).toBe(false);
+      expect(isScopedResourceType("")).toBe(false);
+    });
+
+    it("rejects an inherited Object property name", () => {
+      // The value reaches this guard straight from a query param or request
+      // body, so membership is a real lookup rather than an `in` that would
+      // walk the prototype chain and admit "constructor" as a resource type.
+      expect(isScopedResourceType("constructor")).toBe(false);
+    });
+  });
+
+  describe("requireOrgScoped", () => {
+    it("throws NotFoundError when the resource is not Shared here", async () => {
+      mockDb.limit.mockResolvedValueOnce([]);
+      await expect(
+        requireOrgScoped(asDb(mockDb), "agent", "a1", "org-1"),
+      ).rejects.toBeInstanceOf(NotFoundError);
+    });
+
+    it("returns the row when it is Shared here", async () => {
+      const row = { id: "a1", organizationId: "org-1", workspaceId: null };
+      mockDb.limit.mockResolvedValueOnce([row]);
+      await expect(
+        requireOrgScoped(asDb(mockDb), "agent", "a1", "org-1"),
+      ).resolves.toEqual(row);
+    });
+  });
+
+  describe("listOrgScoped", () => {
+    it("lists this organization's Shared rows", async () => {
+      const rows = [{ id: "a1", organizationId: "org-1", workspaceId: null }];
+      mockDb.where.mockResolvedValueOnce(rows);
+
+      const results = await listOrgScoped(asDb(mockDb), "agent", "org-1");
+      expect(results).toEqual(rows);
+      expect(isNull).toHaveBeenCalledWith(agentTable.workspaceId);
     });
   });
 

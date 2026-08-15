@@ -88,17 +88,17 @@ import {
   validateTurnAttachments,
   NotFoundError,
   ValidationError,
-  createToolHeartbeat,
   resolveSearchMode,
-  wrapToolsWithBump,
+  wrapToolsWithActivity,
   normalizeToolResult,
+  type ToolActivityEvent,
 } from "./chat-execution.ts";
 import {
   clearWebBackends,
   composeWebBackend,
   registerWebBackend,
 } from "../web-backends/index.ts";
-import { registerToolSet } from "../tools/index.ts";
+import { composeToolSet, registerToolSet } from "../tools/index.ts";
 import { logger } from "../logger.ts";
 import { FileValidationError } from "./file-gate.ts";
 import { resetExtractedTextCache } from "./file-extraction.ts";
@@ -377,6 +377,44 @@ describe("chat-execution", () => {
       expect(turn.stream.system).toContain("Research Agent");
       expect(turn.stream.system).toContain("Shared Agent");
       expect(turn.stream.system).not.toContain("## Unavailable Sub-Agents");
+    });
+
+    // A parent with MCP-backed delegates used to connect to — and warn about —
+    // every one of their servers on every turn, delegation or not. The delegate
+    // now opens its own session when it is first invoked.
+    it("opens no connections for a delegate the turn never invokes", async () => {
+      const subAgent = {
+        ...baseAgent,
+        id: "sub-mcp",
+        name: "Research Agent",
+        toolSetIds: ["mcp-1"],
+      };
+      const parent = { ...baseAgent, subAgentIds: ["sub-mcp"] };
+
+      const queries = createInMemoryChatTurnQueries({
+        workspaces: [baseWorkspace],
+        agents: [parent, subAgent],
+        providers: [baseProvider],
+        mcps: [
+          {
+            id: "mcp-1",
+            workspaceId: "ws-1",
+            url: "https://mcp.example.com",
+            authType: "None",
+          } as never,
+        ],
+      });
+      const getMcp = vi.spyOn(queries, "getMcp");
+
+      const turn = await prepareChatTurn(
+        { ...baseInput, request: { agentId: parent.id } },
+        queries,
+      );
+
+      expect(turn.stream.tools).toHaveProperty("delegateToResearchAgent");
+      expect(mockCreateMCPClient).not.toHaveBeenCalled();
+      expect(getMcp).not.toHaveBeenCalled();
+      await turn.dispose();
     });
 
     it("does not resolve a sub-agent that is not visible in the invoking Workspace, and reports it by id", async () => {
@@ -1134,29 +1172,57 @@ describe("chat-execution", () => {
   });
 
   describe("Static tool-set resolution", () => {
-    it("propagates factory errors without falling back to MCP lookup", async () => {
-      const factoryError = new Error("tool-set factory failed");
+    it("costs a throwing tool set its own tools, not the turn, and never falls back to MCP", async () => {
       const toolSetId = "test.throwing-factory";
-      registerToolSet(toolSetId, {
-        name: "Throwing test Tool set",
-        category: "Test",
-        tools: vi.fn().mockRejectedValue(factoryError),
-      });
+      registerToolSet(
+        toolSetId,
+        composeToolSet({
+          id: toolSetId,
+          pluginName: "test-plugin",
+          contribution: {
+            name: "Throwing test Tool set",
+            category: "Test",
+            tools: vi
+              .fn()
+              .mockRejectedValue(new Error("tool-set factory failed")),
+          },
+        }),
+      );
 
-      const agentWithToolSet = { ...baseAgent, toolSetIds: [toolSetId] };
+      const workingId = "test.working-set";
+      registerToolSet(
+        workingId,
+        composeToolSet({
+          id: workingId,
+          pluginName: "test-plugin",
+          contribution: {
+            name: "Working test Tool set",
+            category: "Test",
+            tools: { stillHere: { description: "x" } as never },
+          },
+        }),
+      );
+
+      const agentWithToolSets = {
+        ...baseAgent,
+        toolSetIds: [toolSetId, workingId],
+      };
       const queries = createInMemoryChatTurnQueries({
         workspaces: [baseWorkspace],
-        agents: [agentWithToolSet],
+        agents: [agentWithToolSets],
         providers: [baseProvider],
       });
       const getMcp = vi.spyOn(queries, "getMcp");
 
-      await expect(
-        prepareChatTurn(
-          { ...baseInput, request: { agentId: agentWithToolSet.id } },
-          queries,
-        ),
-      ).rejects.toBe(factoryError);
+      const turn = await prepareChatTurn(
+        { ...baseInput, request: { agentId: agentWithToolSets.id } },
+        queries,
+      );
+
+      // The turn runs, without the broken plugin's tools and with everything
+      // else the Agent was granted.
+      expect(turn.stream.tools).toHaveProperty("stillHere");
+      // A registered id is never re-read as an MCP, however its factory ended.
       expect(getMcp).not.toHaveBeenCalled();
     });
   });
@@ -1270,92 +1336,6 @@ describe("chat-execution", () => {
 
       expect(turn.stream.tools).not.toHaveProperty("mcpTool");
       await turn.dispose();
-    });
-  });
-
-  describe("createToolHeartbeat", () => {
-    beforeEach(() => {
-      vi.useFakeTimers();
-    });
-
-    afterEach(() => {
-      vi.useRealTimers();
-    });
-
-    it("fires bump at the configured cadence while a tool is in flight", () => {
-      const bump = vi.fn();
-      const hb = createToolHeartbeat(bump, 1000);
-
-      hb.onToolStart();
-      // No bump yet — the heartbeat fires on each interval tick, not at start.
-      expect(bump).not.toHaveBeenCalled();
-
-      vi.advanceTimersByTime(1000);
-      expect(bump).toHaveBeenCalledTimes(1);
-
-      vi.advanceTimersByTime(2000);
-      expect(bump).toHaveBeenCalledTimes(3);
-
-      hb.onToolEnd();
-      vi.advanceTimersByTime(5000);
-      // No further bumps after the last tool ends.
-      expect(bump).toHaveBeenCalledTimes(3);
-    });
-
-    it("keeps a single heartbeat running across parallel tool calls", () => {
-      const bump = vi.fn();
-      const hb = createToolHeartbeat(bump, 1000);
-
-      hb.onToolStart();
-      hb.onToolStart();
-      hb.onToolStart();
-      expect(hb.inflight()).toBe(3);
-
-      vi.advanceTimersByTime(3000);
-      // Three ticks — proves only one interval is running, not three.
-      expect(bump).toHaveBeenCalledTimes(3);
-
-      hb.onToolEnd();
-      hb.onToolEnd();
-      // Still one tool in flight, heartbeat continues.
-      vi.advanceTimersByTime(1000);
-      expect(bump).toHaveBeenCalledTimes(4);
-
-      hb.onToolEnd();
-      expect(hb.inflight()).toBe(0);
-      vi.advanceTimersByTime(5000);
-      expect(bump).toHaveBeenCalledTimes(4);
-    });
-
-    it("stop() halts the heartbeat and prevents future onToolStart from restarting it", () => {
-      const bump = vi.fn();
-      const hb = createToolHeartbeat(bump, 1000);
-
-      hb.onToolStart();
-      vi.advanceTimersByTime(1000);
-      expect(bump).toHaveBeenCalledTimes(1);
-
-      hb.stop();
-      vi.advanceTimersByTime(5000);
-      expect(bump).toHaveBeenCalledTimes(1);
-
-      // Defensive: a tool callback firing after dispose must not resurrect
-      // a heartbeat that nothing will clean up.
-      hb.onToolStart();
-      vi.advanceTimersByTime(5000);
-      expect(bump).toHaveBeenCalledTimes(1);
-    });
-
-    it("onToolEnd is safe to over-call (inflight clamped at zero)", () => {
-      const bump = vi.fn();
-      const hb = createToolHeartbeat(bump, 1000);
-
-      hb.onToolEnd();
-      hb.onToolEnd();
-      expect(hb.inflight()).toBe(0);
-
-      vi.advanceTimersByTime(5000);
-      expect(bump).not.toHaveBeenCalled();
     });
   });
 
@@ -1478,40 +1458,38 @@ describe("chat-execution", () => {
     });
   });
 
-  describe("wrapToolsWithBump", () => {
+  describe("wrapToolsWithActivity", () => {
     const noop = () => {};
 
     const wrapSingle = (execute: unknown) => {
-      const wrapped = wrapToolsWithBump(
+      const wrapped = wrapToolsWithActivity(
         {
           t: { execute } as unknown as Parameters<
-            typeof wrapToolsWithBump
+            typeof wrapToolsWithActivity
           >[0]["t"],
         },
-        noop,
-        noop,
         noop,
       );
       return (wrapped.t as { execute: (a: unknown, o: unknown) => unknown })
         .execute;
     };
 
-    it("normalizes a Date-containing result on the promise-resolved path", async () => {
-      const execute = wrapSingle(() =>
-        Promise.resolve({
-          createdAt: new Date("2026-07-13T10:20:30.000Z"),
-        }),
-      );
-      const result = (await execute({}, {})) as { createdAt: string };
-      expect(result.createdAt).toBe("2026-07-13T10:20:30.000Z");
+    // Activity events and nothing else: normalizing results is the loader
+    // seam's job now (`normalizeToolResults`), so it holds whether or not a turn
+    // supplies an `onActivity` callback. This wrapper hands the value back
+    // exactly as the tool returned it.
+    it("passes a resolved result through untouched", async () => {
+      const createdAt = new Date("2026-07-13T10:20:30.000Z");
+      const execute = wrapSingle(() => Promise.resolve({ createdAt }));
+      const result = (await execute({}, {})) as { createdAt: Date };
+      expect(result.createdAt).toBe(createdAt);
     });
 
-    it("normalizes a Date-containing result on the synchronous path", () => {
-      const execute = wrapSingle(() => ({
-        createdAt: new Date("2026-07-13T10:20:30.000Z"),
-      }));
-      const result = execute({}, {}) as { createdAt: string };
-      expect(result.createdAt).toBe("2026-07-13T10:20:30.000Z");
+    it("passes a synchronous result through untouched", () => {
+      const createdAt = new Date("2026-07-13T10:20:30.000Z");
+      const execute = wrapSingle(() => ({ createdAt }));
+      const result = execute({}, {}) as { createdAt: Date };
+      expect(result.createdAt).toBe(createdAt);
     });
 
     it("leaves the async-iterable path intact (yields pass through untouched)", async () => {
@@ -1532,24 +1510,53 @@ describe("chat-execution", () => {
       expect(parts[0].date).toBeInstanceOf(Date);
     });
 
-    it("runs the tool lifecycle callbacks around a normalized result", async () => {
-      const onStart = vi.fn();
-      const onEnd = vi.fn();
-      const wrapped = wrapToolsWithBump(
+    it("brackets a resolved result with start and end activity events", async () => {
+      const onActivity = vi.fn<(event: ToolActivityEvent) => void>();
+      const wrapped = wrapToolsWithActivity(
         {
           t: {
             execute: () => Promise.resolve({ createdAt: new Date() }),
-          } as unknown as Parameters<typeof wrapToolsWithBump>[0]["t"],
+          } as unknown as Parameters<typeof wrapToolsWithActivity>[0]["t"],
         },
-        noop,
-        onStart,
-        onEnd,
+        onActivity,
       );
       await (
         wrapped.t as { execute: (a: unknown, o: unknown) => Promise<unknown> }
       ).execute({}, {});
-      expect(onStart).toHaveBeenCalledTimes(1);
-      expect(onEnd).toHaveBeenCalledTimes(1);
+      expect(onActivity.mock.calls.map(([e]) => e.phase)).toEqual([
+        "start",
+        "end",
+      ]);
+      expect(onActivity.mock.calls[1][0].toolName).toBe("t");
+    });
+
+    // The end event is what releases the run's per-step hold, so a generator the
+    // consumer drains has to produce one — otherwise the stall timer stays off
+    // for the rest of the run.
+    it("emits the end event once an async-iterable tool is drained", async () => {
+      const onActivity = vi.fn<(event: ToolActivityEvent) => void>();
+      const wrapped = wrapToolsWithActivity(
+        {
+          t: {
+            execute: async function* () {
+              await Promise.resolve();
+              yield { part: 1 };
+            },
+          } as unknown as Parameters<typeof wrapToolsWithActivity>[0]["t"],
+        },
+        onActivity,
+      );
+      const iterable = (
+        wrapped.t as {
+          execute: (a: unknown, o: unknown) => AsyncIterable<unknown>;
+        }
+      ).execute({}, {});
+      expect(onActivity.mock.calls.map(([e]) => e.phase)).toEqual(["start"]);
+      for await (const _ of iterable) void _;
+      expect(onActivity.mock.calls.map(([e]) => e.phase)).toEqual([
+        "start",
+        "end",
+      ]);
     });
   });
 });

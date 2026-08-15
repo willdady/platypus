@@ -2,6 +2,20 @@ import { describe, it, expect, beforeEach, vi } from "vitest";
 import { PassThrough } from "node:stream";
 
 // ---------------------------------------------------------------------------
+// This suite covers the Docker *transport* only: container/volume lifecycle,
+// the tar builder, idempotent teardown, and that dockerode is driven with the
+// argv it was handed. The five-tool contract those primitives sit under —
+// line counting, truncation flags, the timeout clamp, the unique-`oldString`
+// rule, the find(1) argv and its output parser — belongs to
+// `createPosixSandbox` and is tested once in `src/sandbox/posix.test.ts`.
+// Duplicating any of it here would just give the same rule two homes.
+//
+// The tests still drive the composed backend (`createDockerSandboxBackend`)
+// rather than the transport in isolation, because what reaches dockerode is
+// only interesting once core has resolved the path and built the argv.
+// ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
 // Mock dockerode. The default export is a class; calling `new Docker()` must
 // return our fake docker handle. We pull state out of `mockState` so tests can
 // configure per-call behaviour.
@@ -256,15 +270,24 @@ vi.mock("../../logger.ts", () => ({
 
 // Import AFTER vi.mock so the adapter binds to our mocked dockerode.
 import {
-  DockerSandboxBackend,
+  createDockerSandboxBackend,
   buildSingleFileTar,
   dockerSandboxConfigSchema,
 } from "./backend.ts";
 import { logger } from "../../logger.ts";
+import { plugin } from "./index.ts";
+import { loadPlugins } from "../loader.ts";
+import type { SandboxBackendContribution } from "@platypuschat/plugin-sdk";
 import {
+  makeFakePluginLogger,
+  type FakePluginLogger,
+} from "../../test-utils.ts";
+import {
+  MAX_READ_BYTES,
   MAX_SHELL_OUTPUT_BYTES,
   SANDBOX_WORKSPACE_ROOT,
 } from "../../sandbox/index.ts";
+import { buildFindArgs } from "../../sandbox/posix.ts";
 import type { SandboxContext } from "../../sandbox/types.ts";
 
 const ctx: SandboxContext = {
@@ -337,18 +360,30 @@ function setupFreshProvision() {
   queueExec({ exitCode: 0 });
 }
 
+// The `PluginLogger` seam core injects on the plugin's deploy-time block. The
+// adapter logs through this rather than core's logger, so any suite asserting on
+// a log line injects one and watches it — watching core's would pass vacuously.
+let pluginLogger: FakePluginLogger;
+
+const withPluginLogger = () => ({
+  config: { allowedNetworks: [] },
+  credentials: {},
+  logger: pluginLogger,
+});
+
 beforeEach(() => {
   resetMockState();
   vi.clearAllMocks();
+  pluginLogger = makeFakePluginLogger();
 });
 
-describe("DockerSandboxBackend — provisioning", () => {
+describe("DockerSandboxTransport — provisioning", () => {
   it("provisions a new container when none exists", async () => {
     setupFreshProvision();
     // Plus an exec for the actual tool call.
     queueExec({ stdout: "hi", exitCode: 0 });
 
-    const backend = new DockerSandboxBackend({}, {});
+    const backend = createDockerSandboxBackend({}, {});
     await backend.shellExec(ctx, { command: "echo hi" });
 
     expect(mockState.pullCalls).toEqual(["debian:stable-slim"]);
@@ -366,7 +401,7 @@ describe("DockerSandboxBackend — provisioning", () => {
     setupFreshProvision();
     queueExec({ exitCode: 0 });
 
-    const backend = new DockerSandboxBackend({}, {});
+    const backend = createDockerSandboxBackend({}, {});
     await backend.shellExec(ctx, { command: "true" });
 
     const opts = mockState.createContainerCalls[0];
@@ -398,7 +433,7 @@ describe("DockerSandboxBackend — provisioning", () => {
     );
     queueExec({ stdout: "ok", exitCode: 0 });
 
-    const backend = new DockerSandboxBackend({}, {});
+    const backend = createDockerSandboxBackend({}, {});
     await backend.shellExec(ctx, { command: "true" });
 
     expect(mockState.createContainerCalls).toHaveLength(0);
@@ -414,7 +449,7 @@ describe("DockerSandboxBackend — provisioning", () => {
     );
     queueExec({ exitCode: 0 });
 
-    const backend = new DockerSandboxBackend({}, {});
+    const backend = createDockerSandboxBackend({}, {});
     await backend.shellExec(ctx, { command: "true" });
 
     expect(mockState.existingContainer.start).toHaveBeenCalledTimes(1);
@@ -427,7 +462,7 @@ describe("DockerSandboxBackend — provisioning", () => {
     queueExec({ exitCode: 0 });
     queueExec({ exitCode: 0 });
 
-    const backend = new DockerSandboxBackend({}, {});
+    const backend = createDockerSandboxBackend({}, {});
     await Promise.all([
       backend.shellExec(ctx, { command: "a" }),
       backend.shellExec(ctx, { command: "b" }),
@@ -437,12 +472,12 @@ describe("DockerSandboxBackend — provisioning", () => {
   });
 });
 
-describe("DockerSandboxBackend — argv safety", () => {
+describe("DockerSandboxTransport — argv safety", () => {
   it("fsRead passes shell-metachar path as literal argv", async () => {
     setupFreshProvision();
     queueExec({ stdout: "data", exitCode: 0 });
 
-    const backend = new DockerSandboxBackend({}, {});
+    const backend = createDockerSandboxBackend({}, {});
     const malicious = `foo";rm -rf /`;
     await backend.fsRead(ctx, { path: malicious });
 
@@ -451,43 +486,38 @@ describe("DockerSandboxBackend — argv safety", () => {
     expect(last.Cmd).toEqual(["cat", "--", `/workspace/${malicious}`]);
   });
 
-  it("fsList simple glob uses -name", async () => {
+  it("fsRead bounds the cat output at the cap core asked for", async () => {
+    // `cat` will happily emit a gigabyte; the stdout cap is what keeps a huge
+    // file from being buffered whole. Whether a filled buffer counts as
+    // truncated is core's rule, tested in sandbox/posix.test.ts.
     setupFreshProvision();
-    queueExec({ stdout: "", exitCode: 0 });
+    queueExec({ stdout: "a".repeat(MAX_READ_BYTES + 5_000), exitCode: 0 });
 
-    const backend = new DockerSandboxBackend({}, {});
-    await backend.fsList(ctx, { glob: "*.ts" });
+    const backend = createDockerSandboxBackend({}, {});
+    const res = await backend.fsRead(ctx, { path: "big.txt" });
 
-    const last = mockState.execCalls.at(-1) as { Cmd: string[] };
-    const idx = last.Cmd.indexOf("-name");
-    expect(idx).toBeGreaterThan(-1);
-    expect(last.Cmd[idx + 1]).toBe("*.ts");
+    expect(res.content).toHaveLength(MAX_READ_BYTES);
   });
 
-  it("fsList glob with slash uses -path */<glob>", async () => {
-    setupFreshProvision();
+  it("fsList hands core's find argv to dockerode unmodified", async () => {
+    // Pre-warm with a running container so the find exec is the only one and
+    // execCalls[0] is unambiguous.
+    mockState.existingContainer = makeFakeContainer();
+    mockState.containerInspects.push(() =>
+      Promise.resolve({ State: { Running: true } }),
+    );
     queueExec({ stdout: "", exitCode: 0 });
 
-    const backend = new DockerSandboxBackend({}, {});
-    await backend.fsList(ctx, { glob: "src/*.ts" });
-
-    const last = mockState.execCalls.at(-1) as { Cmd: string[] };
-    const idx = last.Cmd.indexOf("-path");
-    expect(idx).toBeGreaterThan(-1);
-    expect(last.Cmd[idx + 1]).toBe("*/src/*.ts");
-  });
-
-  it("fsList glob with ** collapses ** to * for find", async () => {
-    setupFreshProvision();
-    queueExec({ stdout: "", exitCode: 0 });
-
-    const backend = new DockerSandboxBackend({}, {});
+    const backend = createDockerSandboxBackend({}, {});
     await backend.fsList(ctx, { glob: "**/*.ts" });
 
-    const last = mockState.execCalls.at(-1) as { Cmd: string[] };
-    const idx = last.Cmd.indexOf("-path");
-    expect(idx).toBeGreaterThan(-1);
-    expect(last.Cmd[idx + 1]).toBe("*/*/*.ts");
+    // What the glob rules *are* is core's business (posix.test.ts). What this
+    // asserts is that the transport adds no shell and re-quotes nothing: the
+    // argv core built arrives at the daemon element for element.
+    const call = mockState.execCalls[0] as { Cmd: string[] };
+    expect(call.Cmd).toEqual(
+      buildFindArgs(SANDBOX_WORKSPACE_ROOT, { glob: "**/*.ts" }),
+    );
   });
 
   it("fsWrite create-mode probes with [test, -e, <path>] and throws if exists", async () => {
@@ -495,7 +525,7 @@ describe("DockerSandboxBackend — argv safety", () => {
     // probe — file exists (exit 0).
     queueExec({ exitCode: 0 });
 
-    const backend = new DockerSandboxBackend({}, {});
+    const backend = createDockerSandboxBackend({}, {});
     await expect(
       backend.fsWrite(ctx, {
         path: "foo",
@@ -516,7 +546,7 @@ describe("DockerSandboxBackend — argv safety", () => {
       Promise.resolve({ State: { Running: true } }),
     );
 
-    const backend = new DockerSandboxBackend({}, {});
+    const backend = createDockerSandboxBackend({}, {});
     await backend.fsWrite(ctx, {
       path: "foo.txt",
       content: "hello",
@@ -529,7 +559,7 @@ describe("DockerSandboxBackend — argv safety", () => {
   });
 });
 
-describe("DockerSandboxBackend — tar builder", () => {
+describe("DockerSandboxTransport — tar builder", () => {
   it("buildSingleFileTar produces a parseable ustar archive", () => {
     const content = Buffer.from("hello world", "utf8");
     const tar = buildSingleFileTar("a/b.txt", content);
@@ -559,15 +589,15 @@ describe("DockerSandboxBackend — tar builder", () => {
   });
 });
 
-describe("DockerSandboxBackend — destroy() idempotence", () => {
+describe("DockerSandboxTransport — destroy() idempotence", () => {
   it("swallows 404 on stop and proceeds to remove + volume remove", async () => {
     mockState.existingContainer = makeFakeContainer();
     mockState.containerStop = () =>
       Promise.reject(makeStatusError("no such container", 404));
 
-    const backend = new DockerSandboxBackend({}, {});
+    const backend = createDockerSandboxBackend({}, {}, withPluginLogger());
     await expect(backend.destroy(ctx)).resolves.toBeUndefined();
-    expect(logger.warn).not.toHaveBeenCalled();
+    expect(pluginLogger.warn).not.toHaveBeenCalled();
   });
 
   it("swallows 304 (already stopped) on stop", async () => {
@@ -575,9 +605,9 @@ describe("DockerSandboxBackend — destroy() idempotence", () => {
     mockState.containerStop = () =>
       Promise.reject(makeStatusError("already stopped", 304));
 
-    const backend = new DockerSandboxBackend({}, {});
+    const backend = createDockerSandboxBackend({}, {}, withPluginLogger());
     await expect(backend.destroy(ctx)).resolves.toBeUndefined();
-    expect(logger.warn).not.toHaveBeenCalled();
+    expect(pluginLogger.warn).not.toHaveBeenCalled();
   });
 
   it("swallows 404 on container remove and on volume remove", async () => {
@@ -587,9 +617,9 @@ describe("DockerSandboxBackend — destroy() idempotence", () => {
     mockState.volumeRemove = () =>
       Promise.reject(makeStatusError("not found", 404));
 
-    const backend = new DockerSandboxBackend({}, {});
+    const backend = createDockerSandboxBackend({}, {}, withPluginLogger());
     await expect(backend.destroy(ctx)).resolves.toBeUndefined();
-    expect(logger.warn).not.toHaveBeenCalled();
+    expect(pluginLogger.warn).not.toHaveBeenCalled();
   });
 
   it("logs but proceeds when stop returns 500", async () => {
@@ -607,22 +637,22 @@ describe("DockerSandboxBackend — destroy() idempotence", () => {
       return Promise.resolve(undefined);
     };
 
-    const backend = new DockerSandboxBackend({}, {});
+    const backend = createDockerSandboxBackend({}, {}, withPluginLogger());
     await backend.destroy(ctx);
 
-    expect(logger.warn).toHaveBeenCalledTimes(1);
+    expect(pluginLogger.warn).toHaveBeenCalledTimes(1);
     expect(removeCalled).toBe(true);
     expect(volRemoveCalled).toBe(true);
   });
 });
 
-describe("DockerSandboxBackend — shellExec output handling", () => {
+describe("DockerSandboxTransport — shellExec output handling", () => {
   it("times out: returns exitCode 124 and destroys the stream", async () => {
     setupFreshProvision();
     // Long-running exec — close after 200ms; timeout will be 20ms.
     queueExec({ closeDelayMs: 200, exitCode: 0 });
 
-    const backend = new DockerSandboxBackend({}, {});
+    const backend = createDockerSandboxBackend({}, {});
     const res = await backend.shellExec(ctx, {
       command: "sleep 5",
       timeoutMs: 20,
@@ -636,7 +666,7 @@ describe("DockerSandboxBackend — shellExec output handling", () => {
     const huge = "a".repeat(MAX_SHELL_OUTPUT_BYTES + 5_000);
     queueExec({ stdout: huge, exitCode: 0 });
 
-    const backend = new DockerSandboxBackend({}, {});
+    const backend = createDockerSandboxBackend({}, {});
     const res = await backend.shellExec(ctx, { command: "yes" });
 
     expect(res.stdout.length).toBe(MAX_SHELL_OUTPUT_BYTES);
@@ -644,42 +674,12 @@ describe("DockerSandboxBackend — shellExec output handling", () => {
   });
 });
 
-describe("DockerSandboxBackend — fsEdit error cases", () => {
-  it("throws when oldString is missing from file", async () => {
-    setupFreshProvision();
-    queueExec({ stdout: "the original content here", exitCode: 0 });
-
-    const backend = new DockerSandboxBackend({}, {});
-    await expect(
-      backend.fsEdit(ctx, {
-        path: "file.txt",
-        oldString: "does-not-appear",
-        newString: "x",
-      }),
-    ).rejects.toThrow(/oldString not found/);
-  });
-
-  it("throws when oldString is not unique", async () => {
-    setupFreshProvision();
-    queueExec({ stdout: "abc abc", exitCode: 0 });
-
-    const backend = new DockerSandboxBackend({}, {});
-    await expect(
-      backend.fsEdit(ctx, {
-        path: "file.txt",
-        oldString: "abc",
-        newString: "x",
-      }),
-    ).rejects.toThrow(/not unique/);
-  });
-});
-
-describe("DockerSandboxBackend — host reachability (ADR-0005)", () => {
+describe("DockerSandboxTransport — host reachability (ADR-0005)", () => {
   it("applies configured extraHosts to HostConfig.ExtraHosts", async () => {
     setupFreshProvision();
     queueExec({ exitCode: 0 });
 
-    const backend = new DockerSandboxBackend(
+    const backend = createDockerSandboxBackend(
       { extraHosts: ["host.docker.internal:host-gateway"] },
       {},
     );
@@ -694,7 +694,7 @@ describe("DockerSandboxBackend — host reachability (ADR-0005)", () => {
     setupFreshProvision();
     queueExec({ exitCode: 0 });
 
-    const backend = new DockerSandboxBackend(
+    const backend = createDockerSandboxBackend(
       { networks: ["primary", "secondary", "tertiary"] },
       {},
     );
@@ -717,7 +717,7 @@ describe("DockerSandboxBackend — host reachability (ADR-0005)", () => {
     setupFreshProvision();
     queueExec({ exitCode: 0 });
 
-    const backend = new DockerSandboxBackend({ networks: ["only"] }, {});
+    const backend = createDockerSandboxBackend({ networks: ["only"] }, {});
     await backend.shellExec(ctx, { command: "true" });
 
     expect(mockState.createContainerCalls[0].HostConfig?.NetworkMode).toBe(
@@ -775,6 +775,142 @@ describe("DockerSandboxBackend — host reachability (ADR-0005)", () => {
         allowedNetworks: [],
       }).safeParse({ extraHosts: ["not a valid entry"] });
       expect(result.success).toBe(false);
+    });
+  });
+});
+
+describe("DockerSandboxTransport — plugin-injected logger", () => {
+  // Core binds the injected logger to the manifest name before handing it over,
+  // so a line written through it is already attributed — which is why these
+  // assertions check the *fields the call site supplies* and never a `plugin`
+  // key of their own.
+
+  it("writes the image-pull line to the injected logger, not core's", async () => {
+    setupFreshProvision();
+    queueExec({ stdout: "hi", exitCode: 0 });
+    const backend = createDockerSandboxBackend({}, {}, withPluginLogger());
+    await backend.shellExec(ctx, { command: "echo hi" });
+
+    expect(mockState.pullCalls).toEqual(["debian:stable-slim"]);
+    // Same fields and message as before the routing change.
+    expect(pluginLogger.info).toHaveBeenCalledWith(
+      { image: "debian:stable-slim" },
+      "Pulling sandbox image",
+    );
+    // The whole point: core's logger is no longer the adapter's channel.
+    expect(logger.info).not.toHaveBeenCalled();
+  });
+
+  it("writes the destroy() warnings to the injected logger, not core's", async () => {
+    mockState.existingContainer = makeFakeContainer();
+    mockState.containerStop = () =>
+      Promise.reject(makeStatusError("internal", 500));
+    const backend = createDockerSandboxBackend({}, {}, withPluginLogger());
+    await backend.destroy(ctx);
+
+    expect(pluginLogger.warn).toHaveBeenCalledTimes(1);
+    expect(pluginLogger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({ workspaceId: "ws-abc" }),
+      "sandbox destroy: stop failed (continuing)",
+    );
+    expect(logger.warn).not.toHaveBeenCalled();
+  });
+
+  it("names each teardown step it could not complete", async () => {
+    mockState.existingContainer = makeFakeContainer();
+    mockState.containerStop = () =>
+      Promise.reject(makeStatusError("internal", 500));
+    mockState.containerRemove = () =>
+      Promise.reject(makeStatusError("internal", 500));
+    mockState.volumeRemove = () =>
+      Promise.reject(makeStatusError("internal", 500));
+    const backend = createDockerSandboxBackend({}, {}, withPluginLogger());
+    await backend.destroy(ctx);
+
+    // All three still fire, at warn, with their original wording — teardown is
+    // best-effort and each step reports independently.
+    expect(pluginLogger.warn.mock.calls.map((c) => c[1])).toEqual([
+      "sandbox destroy: stop failed (continuing)",
+      "sandbox destroy: container remove failed (continuing)",
+      "sandbox destroy: volume remove failed",
+    ]);
+  });
+
+  it("degrades to silence when core injects no logger", async () => {
+    // `PluginConfigContext.logger` is optional under the SDK's append-only
+    // policy, so the adapter must not assume it. Core always supplies it; a
+    // directly-constructed adapter does not, and that must not throw.
+    mockState.existingContainer = makeFakeContainer();
+    mockState.containerStop = () =>
+      Promise.reject(makeStatusError("internal", 500));
+
+    const backend = createDockerSandboxBackend({}, {});
+    await expect(backend.destroy(ctx)).resolves.toBeUndefined();
+    expect(logger.warn).not.toHaveBeenCalled();
+  });
+
+  it("reaches the adapter through the manifest's create()", async () => {
+    // The full contribution path core uses: the loader calls `create` with the
+    // plugin block as its third argument, and the manifest must forward it.
+    setupFreshProvision();
+    queueExec({ stdout: "hi", exitCode: 0 });
+    const contribution = plugin.contributes.sandboxBackends![0];
+    const backend = contribution.create({}, {}, withPluginLogger());
+    await backend.shellExec(ctx, { command: "echo hi" });
+
+    expect(pluginLogger.info).toHaveBeenCalledWith(
+      { image: "debian:stable-slim" },
+      "Pulling sandbox image",
+    );
+  });
+
+  it("carries the manifest name on its lines when loaded by the real loader", async () => {
+    // End to end through the path production takes — loader → deploy-time block
+    // → `create` → transport — because that is the only thing that proves the
+    // *attribution*. Every other test in this suite supplies its own logger and
+    // so would pass even if the loader bound the wrong name, or none. What an
+    // Operator greps for is `"plugin":"@platypus/docker"`, and this is the test
+    // that fails if that stops being what they get.
+    setupFreshProvision();
+    queueExec({ stdout: "hi", exitCode: 0 });
+
+    // Stands in for core's logger: records the bindings each child is made with
+    // and merges them into every line that child writes, exactly as pino does.
+    const lines: Array<{ bindings: object; fields: object; msg?: string }> = [];
+    const baseLogger = {
+      child: (bindings: Record<string, unknown>) => {
+        const write =
+          (level: string) => (objOrMsg: object | string, msg?: string) =>
+            lines.push({
+              bindings: { ...bindings, level },
+              fields: typeof objOrMsg === "string" ? {} : objOrMsg,
+              msg: typeof objOrMsg === "string" ? objOrMsg : msg,
+            });
+        return {
+          debug: write("debug"),
+          info: write("info"),
+          warn: write("warn"),
+          error: write("error"),
+        };
+      },
+    };
+
+    // A capturing registrar so this load does not collide with the
+    // module-global sandbox registry other suites in this file seed.
+    const captured: SandboxBackendContribution[] = [];
+    await loadPlugins({
+      pluginNames: ["@platypus/docker"],
+      registerSandbox: (c) => captured.push(c),
+      baseLogger,
+    });
+
+    const backend = captured[0].create({}, {});
+    await backend.shellExec(ctx, { command: "echo hi" });
+
+    expect(lines).toContainEqual({
+      bindings: { plugin: "@platypus/docker", level: "info" },
+      fields: { image: "debian:stable-slim" },
+      msg: "Pulling sandbox image",
     });
   });
 });

@@ -42,13 +42,35 @@ describe("createTriggerTools", () => {
   });
 
   describe("listAgents", () => {
-    it("returns agents in workspace", async () => {
-      const agents = [{ id: "a1", name: "Agent 1", description: "desc" }];
-      mockDb.orderBy.mockResolvedValue(agents);
+    it("returns workspace agents and the Shared agents attached here", async () => {
+      mockDb.where
+        .mockResolvedValueOnce([
+          {
+            id: "a1",
+            name: "Agent 1",
+            description: "desc",
+            createdAt: new Date("2024-01-01"),
+          },
+        ])
+        // attached Shared agents arrive from an inner join, keyed by table name.
+        .mockResolvedValueOnce([
+          {
+            agent: {
+              id: "a2",
+              name: "Shared Agent",
+              description: "shared",
+              createdAt: new Date("2024-02-01"),
+            },
+          },
+        ]);
 
       expect(await tools.listAgents.execute!({}, ctx)).toEqual({
-        agents,
-        count: 1,
+        // Newest first, across both scopes.
+        agents: [
+          { id: "a2", name: "Shared Agent", description: "shared" },
+          { id: "a1", name: "Agent 1", description: "desc" },
+        ],
+        count: 2,
       });
     });
   });
@@ -109,7 +131,7 @@ describe("createTriggerTools", () => {
         config: { cronExpression: "0 9 * * *", timezone: "UTC" },
       };
       // Agent exists check
-      mockDb.limit.mockResolvedValue([{ id: "a1" }]);
+      mockDb.limit.mockResolvedValue([{ id: "a1", workspaceId }]);
       // Insert returning
       mockDb.returning.mockResolvedValue([trigger]);
 
@@ -131,7 +153,7 @@ describe("createTriggerTools", () => {
     });
 
     it("returns error for invalid cron expression", async () => {
-      mockDb.limit.mockResolvedValue([{ id: "a1" }]);
+      mockDb.limit.mockResolvedValue([{ id: "a1", workspaceId }]);
 
       const result = (await tools.upsertTrigger.execute!(
         {
@@ -156,7 +178,7 @@ describe("createTriggerTools", () => {
         type: "event",
         config: { events: ["card.created"] },
       };
-      mockDb.limit.mockResolvedValue([{ id: "a1" }]);
+      mockDb.limit.mockResolvedValue([{ id: "a1", workspaceId }]);
       mockDb.returning.mockResolvedValue([trigger]);
 
       const result = (await tools.upsertTrigger.execute!(
@@ -175,7 +197,7 @@ describe("createTriggerTools", () => {
     });
 
     it("returns error for event trigger without events", async () => {
-      mockDb.limit.mockResolvedValue([{ id: "a1" }]);
+      mockDb.limit.mockResolvedValue([{ id: "a1", workspaceId }]);
 
       const result = (await tools.upsertTrigger.execute!(
         {
@@ -212,8 +234,32 @@ describe("createTriggerTools", () => {
       expect(result.error).toContain("Agent not found");
     });
 
+    it("accepts a Shared agent attached to this workspace", async () => {
+      const trigger = { id: "t3", name: "Shared", type: "cron" };
+      mockDb.limit
+        .mockResolvedValueOnce([
+          { id: "a2", organizationId: orgId, workspaceId: null },
+        ])
+        .mockResolvedValueOnce([{ id: "att-1" }]); // attached → usable here
+      mockDb.returning.mockResolvedValue([trigger]);
+
+      const result = (await tools.upsertTrigger.execute!(
+        {
+          label: "Shared",
+          name: "Shared",
+          agentId: "a2",
+          instruction: "Run daily",
+          type: "cron",
+          config: { cronExpression: "0 9 * * *" },
+        },
+        ctx,
+      )) as TriggerResult;
+
+      expect(result.success).toBe(true);
+    });
+
     it("returns error for invalid trigger type", async () => {
-      mockDb.limit.mockResolvedValue([{ id: "a1" }]);
+      mockDb.limit.mockResolvedValue([{ id: "a1", workspaceId }]);
 
       const result = (await tools.upsertTrigger.execute!(
         {

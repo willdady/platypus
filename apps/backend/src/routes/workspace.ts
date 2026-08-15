@@ -4,7 +4,6 @@ import { nanoid } from "nanoid";
 import { db } from "../index.ts";
 import {
   workspace as workspaceTable,
-  provider as providerTable,
   organizationMember,
 } from "../db/schema.ts";
 import {
@@ -14,9 +13,12 @@ import {
 import { eq, and } from "drizzle-orm";
 import { requireAuth } from "../middleware/authentication.ts";
 import {
+  orgScopeOf,
   requireOrgAccess,
   requireWorkspaceAccess,
+  workspaceScopeOf,
 } from "../middleware/authorization.ts";
+import { resolveScoped } from "../services/scoped-resource.ts";
 import type { Variables } from "../server.ts";
 import { destroyWorkspaceSandboxes } from "../sandbox/teardown.ts";
 
@@ -30,7 +32,7 @@ workspace.post(
   sValidator("json", workspaceCreateSchema),
   async (c) => {
     const user = c.get("user")!;
-    const orgId = c.req.param("orgId")!;
+    const { orgId } = orgScopeOf(c);
     const data = c.req.valid("json");
 
     // ownerId is admin-assignable (ADR-0008); default to the calling admin
@@ -72,7 +74,7 @@ workspace.post(
 
 /** List all workspaces */
 workspace.get("/", requireAuth, requireOrgAccess(), async (c) => {
-  const orgId = c.req.param("orgId")!;
+  const { orgId } = orgScopeOf(c);
   const orgMembership = c.get("orgMembership")!;
   const user = c.get("user")!;
 
@@ -105,7 +107,7 @@ workspace.get(
   requireOrgAccess(),
   requireWorkspaceAccess,
   async (c) => {
-    const workspaceId = c.req.param("workspaceId");
+    const { workspaceId } = workspaceScopeOf(c);
     const record = await db
       .select()
       .from(workspaceTable)
@@ -126,7 +128,8 @@ workspace.put(
   requireWorkspaceAccess,
   sValidator("json", workspaceUpdateSchema),
   async (c) => {
-    const workspaceId = c.req.param("workspaceId");
+    const scope = workspaceScopeOf(c);
+    const { workspaceId } = scope;
     const data = c.req.valid("json");
 
     // Delegation flags (ADR-0006) are admin-only. A non-admin owner may edit
@@ -139,19 +142,25 @@ workspace.put(
       delete data.mcpSelfManagement;
     }
 
-    // Validate memoryExtractionProviderId if set
+    // Resolve memory pointer-settings through the Scoped resource authority
+    // (ADR-0007): a Provider is settable only if it is visible in this
+    // Workspace — its own, or an Organization-scoped one Attached to it. A bare
+    // id lookup would let an owner stamp any Organization's Provider onto their
+    // Workspace, which the memory-extraction job and memorySearch then use with
+    // that Provider's credentials.
     if (data.memoryExtractionProviderId) {
-      const provider = await db
-        .select()
-        .from(providerTable)
-        .where(eq(providerTable.id, data.memoryExtractionProviderId))
-        .limit(1);
+      const resolved = await resolveScoped(
+        db,
+        "provider",
+        data.memoryExtractionProviderId,
+        scope,
+      );
 
-      if (provider.length === 0) {
+      if (!resolved) {
         return c.json({ error: "Memory extraction provider not found" }, 404);
       }
 
-      if (!provider[0].memoryExtractionModelId) {
+      if (!resolved.row.memoryExtractionModelId) {
         return c.json(
           {
             error:
@@ -162,19 +171,19 @@ workspace.put(
       }
     }
 
-    // Validate memoryEmbeddingProviderId if set
     if (data.memoryEmbeddingProviderId) {
-      const provider = await db
-        .select()
-        .from(providerTable)
-        .where(eq(providerTable.id, data.memoryEmbeddingProviderId))
-        .limit(1);
+      const resolved = await resolveScoped(
+        db,
+        "provider",
+        data.memoryEmbeddingProviderId,
+        scope,
+      );
 
-      if (provider.length === 0) {
+      if (!resolved) {
         return c.json({ error: "Memory embedding provider not found" }, 404);
       }
 
-      if (!provider[0].embeddingModelId) {
+      if (!resolved.row.embeddingModelId) {
         return c.json(
           {
             error:
@@ -209,7 +218,7 @@ workspace.delete(
   requireOrgAccess(),
   requireWorkspaceAccess,
   async (c) => {
-    const workspaceId = c.req.param("workspaceId");
+    const { workspaceId } = workspaceScopeOf(c);
     // Best-effort sandbox teardown before the DB cascade fires. Never throws;
     // failures are recorded in sandbox_teardown_failure (ADR-0001).
     await destroyWorkspaceSandboxes(workspaceId);

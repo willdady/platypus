@@ -417,14 +417,18 @@ export const Chat = ({
   // tools. Hidden when nothing is resolved yet — we can't search without a
   // model. (#167)
   //
-  // Mirrors `resolveSearchMode`'s own precedence: no search when
-  // `searchSource` is "none", a configured Web-search backend when it names
-  // one (ADR-0014), otherwise the provider's own native search if it has one.
-  // `providerHasNativeSearch` is shared with the backend's injection gate
-  // rather than a local `!== "Bedrock"` check, so a second copy of the
-  // capability table here can't show a toggle that resolves to no tools —
-  // Bedrock is not the only case, since OpenAI's search is Responses-API
-  // only and a chat-completions endpoint (vLLM, llama.cpp) has none either.
+  // Mirrors `resolveSearchMode`'s own precedence: `searchSource` of "none"
+  // serves nothing, a value naming a Web-search backend (ADR-0014) serves that
+  // backend, and "native" serves the provider's own search if it has one. So a
+  // vLLM or Bedrock Provider — no native search of any kind — gains the toggle
+  // as soon as a backend is selected on it.
+  //
+  // The capability test is `providerHasNativeSearch`, shared with the backend's
+  // injection gate, rather than a local `!== "Bedrock"`: the gate is the
+  // authority over what a turn actually serves (see `resolveSearchMode`), so a
+  // second copy of the table here would show a toggle that resolves to no
+  // tools. Bedrock is not the only case — OpenAI's search is Responses-API
+  // only, so a chat-completions endpoint (vLLM, llama.cpp) has none either.
   //
   // A configured backend is trusted on the stored id alone: no catalog fetch, no
   // liveness check. An id whose plugin has since been dropped degrades to no
@@ -616,7 +620,7 @@ export const Chat = ({
                     disabled={isReconnectedToRunningRun}
                   />
                 </PromptInputBody>
-                <PromptInputFooter>
+                <PromptInputFooter className="flex-wrap">
                   <PromptInputTools>
                     <PromptInputActionMenu>
                       <PromptInputActionMenuTrigger className="cursor-pointer" />
@@ -718,7 +722,21 @@ export const Chat = ({
                       </Dialog>
                     )}
                   </PromptInputTools>
+                  {/*
+                    Two placements from one element, because the footer wraps.
+                    Narrow: ordered last onto a row of its own, so the tools and
+                    Send keep the first row to themselves and Send is never
+                    pushed off the edge. The row bleeds back over the footer's
+                    own padding — hence the negative margins and the width that
+                    adds them back — so the tint reaches the composer's edges and
+                    reads as a band rather than a chip floating in the middle.
+                    Wide: back in source order with `mr-auto` eating the free
+                    space, which reads as the last item of the tool row rather
+                    than drifting into the middle the way `justify-between`
+                    alone would leave it.
+                  */}
                   <ContextMeter
+                    className="order-last -mx-3 -mb-3 mt-1.5 w-[calc(100%+1.5rem)] justify-center rounded-b-md bg-foreground/5 px-3 py-1.5 sm:order-none sm:mx-0 sm:mt-0 sm:mb-0 sm:w-auto sm:justify-start sm:rounded-none sm:bg-transparent sm:p-0 sm:mr-auto"
                     occupancy={contextOccupancy?.inputTokens}
                     contextWindow={contextWindow}
                   />

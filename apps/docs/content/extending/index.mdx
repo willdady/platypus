@@ -39,7 +39,7 @@ the deployment rather than be configured in it.
 ## Start here
 
 **[Your first plugin](/extending/your-first-plugin)** is a runnable quickstart
-off the example package in the repository. It ends with two checkpoints, so you
+off the example package in the repository. It ends with three checkpoints, so you
 find out whether it worked rather than guessing.
 
 Then the page for the Extension point you're filling —
@@ -57,6 +57,34 @@ These pages state the rules those types don't encode — what must be idempotent
 what the caps are, what happens at boot. For the exact shape of an interface,
 read it from the package you have installed. A signature pasted onto a docs page
 drifts silently; the one in your `node_modules` cannot.
+
+Every Contribution is validated before it is registered. A Tool set with a
+blank `id`, `name`, or `category`, or with `tools` that is neither a map nor a
+factory, aborts startup with an error naming the Plugin and the entry that
+failed. The package types catch these mistakes in TypeScript; the same checks
+protect deployments that load JavaScript or a malformed package.
+
+Strict at boot, forgiving at runtime: once loaded, a Contribution that fails
+during a Chat turn — a Tool set factory that throws, a Web-search backend that
+times out — costs that turn its own tools and is logged against your Plugin. It
+never fails the turn, so one broken Plugin cannot take a deployment's chats down
+with it.
+
+Contribution ids are trimmed before they are namespaced, so surrounding
+whitespace never reaches a stored id.
+
+## Logging
+
+A Plugin does not bring its own logger. Core puts one on the deploy-time block it
+hands every contribution factory, already tagged with your Plugin's name, and the
+Operator's `LOG_LEVEL` decides which of your lines are written — the same control
+they have over core's. [Plugin API &
+config](/extending/plugin-api-and-config#logging) has the shape and the levels.
+
+The bundled Docker and SSH Sandbox backends write through this same logger, so
+what you are given is what the two most involved Plugins in the box get. If it
+turns out not to be enough for something you are building, that is a gap worth
+reporting rather than a reason to reach for `console`.
 
 ## Web-search backends
 

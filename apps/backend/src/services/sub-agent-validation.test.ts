@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach } from "vitest";
 import { mockDb, resetMockDb } from "../test-utils.ts";
 import { validateSubAgentAssignment } from "./sub-agent-validation.ts";
 
-const ctx = { orgId: "org-1", wsId: "workspace-1" };
+const ctx = { orgId: "org-1", workspaceId: "workspace-1" };
 
 /**
  * Stubs the two queries `listScoped` runs: the Workspace-scoped rows, then the

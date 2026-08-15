@@ -1,4 +1,8 @@
-import type { LoadedPlugin } from "./loader.ts";
+import type {
+  ContributionOwners,
+  LoadedPlugin,
+  LoadPluginsResult,
+} from "./loader.ts";
 
 // Read-only observability store for the plugins loaded at boot (ADR-0013).
 //
@@ -19,27 +23,30 @@ import type { LoadedPlugin } from "./loader.ts";
  */
 export const CORE_BUILTIN_OWNER = "core (built-in)";
 
+const NO_OWNERS: ContributionOwners = {
+  toolSets: new Map(),
+  sandboxBackends: new Map(),
+  webBackends: new Map(),
+};
+
 let loadedPlugins: readonly LoadedPlugin[] = [];
-let toolSetOwners = new Map<string, string>();
-let sandboxBackendOwners = new Map<string, string>();
-let webBackendOwners = new Map<string, string>();
+let owners: ContributionOwners = NO_OWNERS;
 let pluginConfigs = new Map<string, unknown>();
 
 /**
- * Record the plugins loaded at boot. Called once from the boot sequence after
- * {@link loadPlugins} succeeds; also used by tests to seed the catalog. Rebuilds
- * the id → plugin-name lookups used to annotate existing catalogs.
+ * Record what the boot load produced. Called once from the boot sequence after
+ * {@link loadPlugins} succeeds; also used by tests to seed the catalog.
+ *
+ * The id → plugin-name lookups come straight from the loader, which built them
+ * while registering (it needs them to attribute a collision to both plugins).
+ * Re-deriving them from each plugin's id arrays would be a second, drifting
+ * answer to a question the loader has already answered.
  */
-export const setLoadedPlugins = (plugins: readonly LoadedPlugin[]): void => {
-  loadedPlugins = plugins;
-  toolSetOwners = new Map();
-  sandboxBackendOwners = new Map();
-  webBackendOwners = new Map();
+export const setLoadedPlugins = (result: LoadPluginsResult): void => {
+  loadedPlugins = result.plugins;
+  owners = result.owners;
   pluginConfigs = new Map();
-  for (const p of plugins) {
-    for (const id of p.toolSetIds) toolSetOwners.set(id, p.name);
-    for (const id of p.sandboxBackendIds) sandboxBackendOwners.set(id, p.name);
-    for (const id of p.webBackendIds) webBackendOwners.set(id, p.name);
+  for (const p of result.plugins) {
     if (p.config !== undefined) pluginConfigs.set(p.name, p.config);
   }
 };
@@ -53,15 +60,15 @@ export const getLoadedPlugins = (): readonly LoadedPlugin[] => loadedPlugins;
  * registration rather than a plugin contribution — see `tools/index.ts`).
  */
 export const getToolSetPlugin = (toolSetId: string): string | undefined =>
-  toolSetOwners.get(toolSetId);
+  owners.toolSets.get(toolSetId);
 
 /** The plugin that contributed a Sandbox backend, or `undefined` if none. */
 export const getSandboxBackendPlugin = (backend: string): string | undefined =>
-  sandboxBackendOwners.get(backend);
+  owners.sandboxBackends.get(backend);
 
 /** The plugin that contributed a Web-search backend, or `undefined` if none. */
 export const getWebBackendPlugin = (backend: string): string | undefined =>
-  webBackendOwners.get(backend);
+  owners.webBackends.get(backend);
 
 /**
  * A plugin's boot-resolved, Operator-owned deploy-time **config** (never

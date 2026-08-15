@@ -32,7 +32,7 @@ _Avoid_: parsed text, converted file, OCR (Platypus does not OCR).
 A configurable preset that pins a Provider, model, Instructions, generation parameters, Tools, Skills, and sub-Agents. Selecting an Agent on a Chat turn replaces direct Provider/model selection.
 
 **Sub-Agent**:
-An Agent referenced by a parent Agent and exposed to it as a delegate Tool.
+An Agent referenced by a parent Agent and exposed to it as a delegate Tool. Invoking it starts a run in its own right — bounded by the same per-step and per-run timeouts the parent turn was started under, and cancelled when the parent is — but never a Chat: nothing about a delegated run is persisted.
 
 **Instructions**:
 The free-text behaviour brief a User writes on an Agent — or on a Chat with no Agent. One input to the System prompt rather than the whole of it: it renders as the first fragment and cannot suppress the Platypus-owned fragments that follow.
@@ -63,6 +63,10 @@ _Avoid_: max tokens, token limit, context window (that names the total capacity)
 
 **Tool set**:
 A named bundle of Tools an Agent can be granted. Either contributed by a Plugin (registered in code) or backed by an MCP server.
+
+**Tool session**:
+One Agent's Tool sets, resolved for one Chat turn, together with the connections opened to serve them. Sessions nest: a Sub-Agent's session is opened on its first delegation and closes with the parent's, so a turn has exactly one thing to dispose however many tool sources it reached. A Tool set that cannot serve the turn — a factory that throws, an unreachable MCP — costs its own Tools and no more.
+_Avoid_: tool context (that is the scope handed to a Tool set factory), tool loader.
 
 **MCP**:
 A Model Context Protocol server registered at Workspace scope, or — as a Shared resource — at Organization scope. Resolves to a Tool set at Chat-turn time.

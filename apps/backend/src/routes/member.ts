@@ -5,14 +5,18 @@ import { organizationMember, user as userTable } from "../db/schema.ts";
 import { organizationMemberUpdateSchema } from "@platypus/schemas";
 import { eq, and, count } from "drizzle-orm";
 import { requireAuth } from "../middleware/authentication.ts";
-import { requireOrgAccess, isSuperAdmin } from "../middleware/authorization.ts";
+import {
+  isSuperAdmin,
+  orgScopeOf,
+  requireOrgAccess,
+} from "../middleware/authorization.ts";
 import type { Variables } from "../server.ts";
 
 const member = new Hono<{ Variables: Variables }>();
 
 /** List all organization members */
 member.get("/", requireAuth, requireOrgAccess(["admin"]), async (c) => {
-  const orgId = c.req.param("orgId")!;
+  const { orgId } = orgScopeOf(c);
 
   const members = await db
     .select({
@@ -48,7 +52,7 @@ member.get(
   requireAuth,
   requireOrgAccess(["admin"]),
   async (c) => {
-    const orgId = c.req.param("orgId")!;
+    const { orgId } = orgScopeOf(c);
     const memberId = c.req.param("memberId");
 
     const [m] = await db
@@ -95,7 +99,7 @@ member.patch(
   requireOrgAccess(["admin"]),
   sValidator("json", organizationMemberUpdateSchema),
   async (c) => {
-    const orgId = c.req.param("orgId")!;
+    const { orgId } = orgScopeOf(c);
     const memberId = c.req.param("memberId");
     const { role: newRole } = c.req.valid("json");
     const currentUser = c.get("user")!;
@@ -156,7 +160,7 @@ member.delete(
   requireAuth,
   requireOrgAccess(["admin"]),
   async (c) => {
-    const orgId = c.req.param("orgId")!;
+    const { orgId } = orgScopeOf(c);
     const memberId = c.req.param("memberId");
     const currentUser = c.get("user")!;
 

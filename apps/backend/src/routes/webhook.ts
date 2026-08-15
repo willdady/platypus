@@ -10,6 +10,7 @@ import { requireAuth } from "../middleware/authentication.ts";
 import {
   requireOrgAccess,
   requireWorkspaceAccess,
+  workspaceScopeOf,
 } from "../middleware/authorization.ts";
 import type { Variables } from "../server.ts";
 
@@ -26,7 +27,7 @@ webhook.get(
   requireOrgAccess(),
   requireWorkspaceAccess,
   async (c) => {
-    const workspaceId = c.req.param("workspaceId")!;
+    const { workspaceId } = workspaceScopeOf(c);
 
     const results = await db
       .select()
@@ -45,7 +46,7 @@ webhook.post(
   requireWorkspaceAccess,
   sValidator("json", webhookCreateSchema),
   async (c) => {
-    const workspaceId = c.req.param("workspaceId")!;
+    const { workspaceId } = workspaceScopeOf(c);
     const body = c.req.valid("json" as never) as {
       name: string;
       url: string;
@@ -90,7 +91,7 @@ webhook.get(
   requireOrgAccess(),
   requireWorkspaceAccess,
   async (c) => {
-    const workspaceId = c.req.param("workspaceId")!;
+    const { workspaceId } = workspaceScopeOf(c);
     const webhookId = c.req.param("webhookId");
 
     const results = await db
@@ -120,7 +121,7 @@ webhook.put(
   requireWorkspaceAccess,
   sValidator("json", webhookUpdateSchema),
   async (c) => {
-    const workspaceId = c.req.param("workspaceId")!;
+    const { workspaceId } = workspaceScopeOf(c);
     const webhookId = c.req.param("webhookId");
     const body = c.req.valid("json" as never) as {
       name?: string;
@@ -165,7 +166,7 @@ webhook.delete(
   requireOrgAccess(),
   requireWorkspaceAccess,
   async (c) => {
-    const workspaceId = c.req.param("workspaceId")!;
+    const { workspaceId } = workspaceScopeOf(c);
     const webhookId = c.req.param("webhookId");
 
     const result = await db
@@ -193,7 +194,7 @@ webhook.post(
   requireOrgAccess(),
   requireWorkspaceAccess,
   async (c) => {
-    const workspaceId = c.req.param("workspaceId")!;
+    const { workspaceId } = workspaceScopeOf(c);
     const webhookId = c.req.param("webhookId");
 
     const result = await db

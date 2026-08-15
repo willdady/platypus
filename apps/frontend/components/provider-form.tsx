@@ -85,6 +85,7 @@ import {
 import { toast } from "sonner";
 import { useBackendUrl } from "@/app/client-context";
 import { useAuth } from "@/components/auth-provider";
+import { useResetOnChange } from "@/hooks/use-reset-on-change";
 
 /**
  * Per-field help for a model row. The fields each need a paragraph of
@@ -279,12 +280,10 @@ const ModelRow = ({
           label="Context window"
           hint={
             <>
-              The vendor&apos;s published <strong>total</strong> token capacity
-              for this model — the whole window, not a cap on the reply. Sizes
-              in the list are decimal, so <code>128k</code> is 128,000.
-              Optional, and leaving it unset breaks nothing: without it, the
-              context meter in a Chat is hidden for this model, because Platypus
-              has no way to look the capacity up.
+              The model&apos;s <strong>total</strong> token capacity, not a cap
+              on the reply. Listed sizes are decimal, so <code>128k</code> is
+              128,000. Optional; without it a Chat on this model shows no
+              context meter.
             </>
           }
           error={errors.fields.contextWindow}
@@ -480,11 +479,6 @@ const ProviderForm = ({
 
   const formScope = workspaceId ? "workspace" : "organization";
 
-  // Reset initialization when providerId changes
-  useEffect(() => {
-    hasInitialized.current = false;
-  }, [providerId]);
-
   const [formData, setFormData] = useState<ProviderFormData>({
     providerType: "OpenAI",
     name: "",
@@ -571,6 +565,20 @@ const ProviderForm = ({
   // stored id "not installed" would rest on a catalog we no longer know is current.
   const webBackendsKnown =
     !!webBackendsData && !webBackendsError && !webBackendsLoading;
+
+  // Start the form over when the reader switches Provider within one mount, so
+  // the initialisation flag the effect below reads belongs to the Provider on
+  // screen. `useResetOnChange` rather than an effect: it adjusts state during
+  // render, so the flag is already false when the effect runs (#474).
+  //
+  // The Web-search backend selector's visibility rule and its `webBackendEdited`
+  // latch used to be reset here too. Both are gone with the collapse: `searchSource`
+  // is always rendered — "None" and, where the Provider is capable, its built-in
+  // search are real choices on every deployment — so there is no longer a condition
+  // that reads the value the field itself edits.
+  useResetOnChange(providerId, () => {
+    hasInitialized.current = false;
+  });
 
   useEffect(() => {
     if (provider && !hasInitialized.current) {

@@ -2,30 +2,23 @@ import Docker from "dockerode";
 import type { Container, Exec } from "dockerode";
 import { PassThrough } from "node:stream";
 import { z } from "zod";
-import { logger } from "../../logger.ts";
+import type {
+  PluginConfigContext,
+  PluginLogger,
+} from "@platypuschat/plugin-sdk";
 import {
-  DEFAULT_SHELL_TIMEOUT_MS,
-  MAX_LIST_ENTRIES,
-  MAX_READ_BYTES,
   MAX_SHELL_OUTPUT_BYTES,
-  MAX_SHELL_TIMEOUT_MS,
   SANDBOX_WORKSPACE_ROOT,
 } from "../../sandbox/index.ts";
-import type {
-  FsEditInput,
-  FsEditOutput,
-  FsListEntry,
-  FsListInput,
-  FsListOutput,
-  FsReadInput,
-  FsReadOutput,
-  FsWriteInput,
-  FsWriteOutput,
-  SandboxBackend,
-  SandboxContext,
-  ShellExecInput,
-  ShellExecOutput,
-} from "../../sandbox/types.ts";
+import { createPosixSandbox } from "../../sandbox/posix.ts";
+import {
+  createCappedSink,
+  SandboxPathExistsError,
+  type SandboxExecOptions,
+  type SandboxExecResult,
+  type SandboxTransport,
+} from "../../sandbox/transport.ts";
+import type { SandboxBackend, SandboxContext } from "../../sandbox/types.ts";
 
 const IMAGE = "debian:stable-slim";
 const LABEL_SANDBOX = "platypus.sandbox";
@@ -193,38 +186,18 @@ export function buildSingleFileTar(name: string, content: Buffer): Buffer {
   return Buffer.concat([header, contentBlock, trailer]);
 }
 
-// Resolve a workspace-relative path to an absolute path inside the container.
-// The schema already enforces the path is relative.
-function absPath(relative: string | undefined): string {
-  if (!relative) return SANDBOX_WORKSPACE_ROOT;
-  return `${SANDBOX_WORKSPACE_ROOT}/${relative}`;
-}
-
-// Split the result of a tar `putArchive` target / `fsWrite` path into the
-// parent directory (passed as `path` to putArchive) and the file name (used
-// as the tar entry).
-function splitParent(relative: string): { parent: string; name: string } {
-  const cleaned = relative.replace(/^\/+/, "");
-  const idx = cleaned.lastIndexOf("/");
-  if (idx === -1) {
-    return { parent: SANDBOX_WORKSPACE_ROOT, name: cleaned };
-  }
+// Split an absolute in-container path into the directory `putArchive` extracts
+// into and the file name that becomes the tar entry.
+function splitParent(absPath: string): { parent: string; name: string } {
+  const idx = absPath.lastIndexOf("/");
   return {
-    parent: `${SANDBOX_WORKSPACE_ROOT}/${cleaned.slice(0, idx)}`,
-    name: cleaned.slice(idx + 1),
+    parent: idx <= 0 ? "/" : absPath.slice(0, idx),
+    name: absPath.slice(idx + 1),
   };
 }
 
-type ExecResult = {
-  stdout: Buffer;
-  stderr: Buffer;
-  exitCode: number;
-  durationMs: number;
-  timedOut: boolean;
-};
-
-// Run a single command inside the container, demuxing stdout/stderr. Optional
-// stdout byte cap; on cap-hit we stop accumulating but continue draining.
+// Run a single command inside the container, demuxing stdout/stderr into
+// byte-capped sinks that keep draining once full (see createCappedSink).
 async function runExec(
   container: Container,
   cmd: string[],
@@ -235,7 +208,7 @@ async function runExec(
     stdoutCap?: number;
     stderrCap?: number;
   } = {},
-): Promise<ExecResult> {
+): Promise<SandboxExecResult> {
   const started = Date.now();
   const exec: Exec = await container.exec({
     Cmd: cmd,
@@ -249,31 +222,17 @@ async function runExec(
 
   const stream = await exec.start({ hijack: true, stdin: false });
 
-  const stdoutCap = opts.stdoutCap ?? Number.POSITIVE_INFINITY;
-  const stderrCap = opts.stderrCap ?? Number.POSITIVE_INFINITY;
-  const stdoutChunks: Buffer[] = [];
-  const stderrChunks: Buffer[] = [];
-  let stdoutBytes = 0;
-  let stderrBytes = 0;
+  const stdoutSink = createCappedSink(
+    opts.stdoutCap ?? Number.POSITIVE_INFINITY,
+  );
+  const stderrSink = createCappedSink(
+    opts.stderrCap ?? Number.POSITIVE_INFINITY,
+  );
 
   const stdoutPass = new PassThrough();
   const stderrPass = new PassThrough();
-  stdoutPass.on("data", (c: Buffer) => {
-    if (stdoutBytes < stdoutCap) {
-      const room = stdoutCap - stdoutBytes;
-      const take = c.length <= room ? c : c.subarray(0, room);
-      stdoutChunks.push(take);
-      stdoutBytes += take.length;
-    }
-  });
-  stderrPass.on("data", (c: Buffer) => {
-    if (stderrBytes < stderrCap) {
-      const room = stderrCap - stderrBytes;
-      const take = c.length <= room ? c : c.subarray(0, room);
-      stderrChunks.push(take);
-      stderrBytes += take.length;
-    }
-  });
+  stdoutPass.on("data", (c: Buffer) => stdoutSink.push(c));
+  stderrPass.on("data", (c: Buffer) => stderrSink.push(c));
 
   // dockerode-attached demuxer
   (
@@ -326,23 +285,37 @@ async function runExec(
   }
 
   return {
-    stdout: Buffer.concat(stdoutChunks),
-    stderr: Buffer.concat(stderrChunks),
+    stdout: stdoutSink.collect(),
+    stderr: stderrSink.collect(),
     exitCode,
     durationMs: Date.now() - started,
-    timedOut,
   };
 }
 
-export class DockerSandboxBackend implements SandboxBackend {
+/**
+ * The Docker half of the Sandbox: dockerode `exec` for commands, `putArchive`
+ * for writes, and container/volume lifecycle (ADR-0003). The five model-facing
+ * tools are built on top of this by {@link createPosixSandbox} — nothing here
+ * parses find(1), counts lines, or decides what `truncated` means.
+ */
+export class DockerSandboxTransport implements SandboxTransport {
   private docker: Docker;
   private inflight: Map<string, Promise<Container>>;
   private networks: string[];
   private extraHosts: string[];
+  /**
+   * The logger core bound to `@platypus/docker` and injected on the plugin's
+   * deploy-time block (ADR-0013) — the same contract a third-party plugin gets,
+   * rather than the relative import of core's logger only an in-tree plugin ever
+   * had. Optional because {@link PluginConfigContext.logger} is, so every call
+   * site below is written `this.logger?.…`.
+   */
+  private logger?: PluginLogger;
 
   constructor(
     config: Partial<DockerSandboxConfig>,
     _credentials: DockerSandboxCredentials,
+    logger?: PluginLogger,
   ) {
     this.docker = new Docker();
     this.inflight = new Map();
@@ -350,6 +323,7 @@ export class DockerSandboxBackend implements SandboxBackend {
     // present), but tolerate a bare object too.
     this.networks = config?.networks ?? [];
     this.extraHosts = config?.extraHosts ?? [];
+    this.logger = logger;
   }
 
   // Idempotent, concurrency-safe provisioning. Concurrent callers for the
@@ -441,7 +415,7 @@ export class DockerSandboxBackend implements SandboxBackend {
     } catch (err) {
       if (!is404(err)) throw err;
     }
-    logger.info({ image: IMAGE }, "Pulling sandbox image");
+    this.logger?.info({ image: IMAGE }, "Pulling sandbox image");
     const stream = await this.docker.pull(IMAGE);
     await new Promise<void>((resolve, reject) => {
       this.docker.modem.followProgress(stream, (err: Error | null) =>
@@ -450,235 +424,90 @@ export class DockerSandboxBackend implements SandboxBackend {
     });
   }
 
-  async shellExec(
-    ctx: SandboxContext,
-    input: ShellExecInput,
-  ): Promise<ShellExecOutput> {
-    const container = await this.ensureContainer(ctx);
-    const timeoutMs = Math.min(
-      input.timeoutMs ?? DEFAULT_SHELL_TIMEOUT_MS,
-      MAX_SHELL_TIMEOUT_MS,
-    );
-    const workingDir = input.cwd
-      ? `${SANDBOX_WORKSPACE_ROOT}/${input.cwd}`
-      : SANDBOX_WORKSPACE_ROOT;
-
-    const res = await runExec(container, ["/bin/sh", "-c", input.command], {
-      workingDir,
-      env: input.env,
-      timeoutMs,
-      stdoutCap: MAX_SHELL_OUTPUT_BYTES,
-      stderrCap: MAX_SHELL_OUTPUT_BYTES,
-    });
-
-    const stdout = res.stdout.toString("utf8");
-    const stderr = res.stderr.toString("utf8");
-    // truncated if we hit the cap on either stream (we cannot distinguish
-    // "exactly at cap" from "exceeded cap" here, but the buffer length being
-    // === cap is a strong signal and consistent with the contract).
-    const truncated =
-      res.stdout.length >= MAX_SHELL_OUTPUT_BYTES ||
-      res.stderr.length >= MAX_SHELL_OUTPUT_BYTES;
-
-    return {
-      stdout,
-      stderr,
-      exitCode: res.exitCode,
-      truncated,
-      durationMs: res.durationMs,
-    };
+  // The workspace root is a fixed mount point inside a container we control, so
+  // this is a constant — but it is still the call that guarantees the container
+  // is up, which is why core makes it first in every tool.
+  async rootDir(ctx: SandboxContext): Promise<string> {
+    await this.ensureContainer(ctx);
+    return SANDBOX_WORKSPACE_ROOT;
   }
 
-  async fsRead(ctx: SandboxContext, input: FsReadInput): Promise<FsReadOutput> {
+  // argv goes straight to the daemon: there is no shell between us and the
+  // process, so nothing needs quoting and no model-supplied value can be
+  // reinterpreted as syntax on the way.
+  async exec(
+    ctx: SandboxContext,
+    argv: string[],
+    opts: SandboxExecOptions,
+  ): Promise<SandboxExecResult> {
     const container = await this.ensureContainer(ctx);
-    const target = absPath(input.path);
+    return runExec(container, argv, {
+      workingDir: opts.cwd,
+      env: opts.env,
+      timeoutMs: opts.timeoutMs,
+      stdoutCap: opts.stdoutCap,
+      stderrCap: opts.stderrCap,
+    });
+  }
 
-    // Use argv form (no shell) so paths can't be interpreted as shell syntax.
-    const cmd = input.lineRange
-      ? [
-          "sed",
-          "-n",
-          `${input.lineRange[0]},${input.lineRange[1]}p`,
-          "--",
-          target,
-        ]
-      : ["cat", "--", target];
-
-    const res = await runExec(container, cmd, {
+  // `cat` in argv form. Docker has no file-read API, and the alternative —
+  // `getArchive` — would mean unpacking a tar to read one file. The cap is
+  // applied to the stream as it arrives, so a huge file costs no more than it.
+  async readFile(
+    ctx: SandboxContext,
+    absPath: string,
+    cap: number,
+  ): Promise<Buffer> {
+    const container = await this.ensureContainer(ctx);
+    const res = await runExec(container, ["cat", "--", absPath], {
       workingDir: SANDBOX_WORKSPACE_ROOT,
-      stdoutCap: MAX_READ_BYTES,
+      stdoutCap: cap,
       stderrCap: MAX_SHELL_OUTPUT_BYTES,
     });
 
     if (res.exitCode !== 0) {
-      const msg = res.stderr.toString("utf8").trim() || "fs.read failed";
-      throw new Error(`fs.read: ${msg}`);
+      // The reason only: core names the tool that asked.
+      throw new Error(res.stderr.toString("utf8").trim() || "read failed");
     }
 
-    // Reject non-UTF-8 by decoding with the strict TextDecoder.
-    let content: string;
-    try {
-      content = new TextDecoder("utf-8", { fatal: true }).decode(res.stdout);
-    } catch {
-      throw new Error(`fs.read: file is not valid UTF-8 (${input.path})`);
-    }
-
-    const truncated = res.stdout.length >= MAX_READ_BYTES;
-    // lineCount: count newlines + 1 if there's any trailing content without a
-    // newline. Empty content → 0 lines.
-    let lineCount = 0;
-    if (content.length > 0) {
-      lineCount = content.split("\n").length;
-      if (content.endsWith("\n")) lineCount -= 1;
-    }
-
-    return { content, lineCount, truncated };
+    return res.stdout;
   }
 
-  async fsWrite(
+  // Writes go in as a single-entry tar through `putArchive`, which takes the
+  // path literally — there is no shell to quote against and no `sh -c echo >`
+  // redirection to get wrong.
+  async writeFile(
     ctx: SandboxContext,
-    input: FsWriteInput,
-  ): Promise<FsWriteOutput> {
+    absPath: string,
+    bytes: Buffer,
+    mode: "create" | "overwrite",
+  ): Promise<void> {
     const container = await this.ensureContainer(ctx);
-    const target = absPath(input.path);
 
-    if (input.mode === "create") {
-      // argv form — path can't escape into shell syntax.
-      const probe = await runExec(container, ["test", "-e", target], {
+    // `putArchive` overwrites unconditionally, so create-mode needs its own
+    // probe. Not atomic — a file appearing between the probe and the extract
+    // wins — but Docker offers nothing better, and a Sandbox is single-user.
+    if (mode === "create") {
+      const probe = await runExec(container, ["test", "-e", absPath], {
         workingDir: SANDBOX_WORKSPACE_ROOT,
       });
       if (probe.exitCode === 0) {
-        throw new Error(
-          `fs.write: path already exists (mode=create): ${input.path}`,
-        );
+        throw new SandboxPathExistsError(absPath);
       }
     }
 
-    // Ensure the parent directory exists before extracting the tar.
-    const { parent, name } = splitParent(input.path);
+    const { parent, name } = splitParent(absPath);
+    // The root is the volume mount and always exists; anything deeper may not.
     if (parent !== SANDBOX_WORKSPACE_ROOT) {
       const mk = await runExec(container, ["mkdir", "-p", parent]);
       if (mk.exitCode !== 0) {
-        throw new Error(
-          `fs.write: failed to create parent directory: ${parent}`,
-        );
+        throw new Error(`failed to create parent directory: ${parent}`);
       }
     }
 
-    const contentBuf = Buffer.from(input.content, "utf8");
-    const tar = buildSingleFileTar(name, contentBuf);
-    await container.putArchive(tar, { path: parent });
-
-    return { bytesWritten: contentBuf.length };
-  }
-
-  async fsEdit(ctx: SandboxContext, input: FsEditInput): Promise<FsEditOutput> {
-    const container = await this.ensureContainer(ctx);
-    const target = absPath(input.path);
-
-    // argv form — path is never shell-interpreted.
-    const readRes = await runExec(container, ["cat", "--", target], {
-      workingDir: SANDBOX_WORKSPACE_ROOT,
-      stdoutCap: MAX_READ_BYTES,
+    await container.putArchive(buildSingleFileTar(name, bytes), {
+      path: parent,
     });
-    if (readRes.exitCode !== 0) {
-      const msg = readRes.stderr.toString("utf8").trim() || "fs.edit failed";
-      throw new Error(`fs.edit: ${msg}`);
-    }
-
-    let original: string;
-    try {
-      original = new TextDecoder("utf-8", { fatal: true }).decode(
-        readRes.stdout,
-      );
-    } catch {
-      throw new Error(`fs.edit: file is not valid UTF-8 (${input.path})`);
-    }
-
-    const first = original.indexOf(input.oldString);
-    if (first === -1) {
-      throw new Error(`fs.edit: oldString not found in ${input.path}`);
-    }
-    const second = original.indexOf(input.oldString, first + 1);
-    if (second !== -1) {
-      throw new Error(`fs.edit: oldString is not unique in ${input.path}`);
-    }
-
-    const updated =
-      original.slice(0, first) +
-      input.newString +
-      original.slice(first + input.oldString.length);
-
-    const { parent, name } = splitParent(input.path);
-    const tar = buildSingleFileTar(name, Buffer.from(updated, "utf8"));
-    await container.putArchive(tar, { path: parent });
-
-    return { replacements: 1 };
-  }
-
-  async fsList(ctx: SandboxContext, input: FsListInput): Promise<FsListOutput> {
-    const container = await this.ensureContainer(ctx);
-    const target = absPath(input.path);
-    // Argv form throughout — no shell, no path/glob interpolation.
-    // Truncation is done in Node instead of `| head`.
-    const args: string[] = ["find", target];
-    if (!input.recursive) args.push("-maxdepth", "1");
-    args.push("-mindepth", "1");
-    if (input.glob) {
-      // -name handles a simple file-name glob; -path handles patterns that
-      // include slashes or **. `**` collapses to `*` for find(1) — a lossy
-      // but pragmatic translation; document the limitation in tool description.
-      if (input.glob.includes("/") || input.glob.includes("**")) {
-        args.push("-path", `*/${input.glob.replace(/\*\*/g, "*")}`);
-      } else {
-        args.push("-name", input.glob);
-      }
-    }
-    args.push("-printf", "%y\\t%s\\t%P\\n");
-
-    const res = await runExec(container, args, {
-      workingDir: SANDBOX_WORKSPACE_ROOT,
-      stdoutCap: 4 * 1024 * 1024,
-      stderrCap: MAX_SHELL_OUTPUT_BYTES,
-    });
-
-    if (res.exitCode !== 0 && res.stdout.length === 0) {
-      const msg = res.stderr.toString("utf8").trim() || "fs.list failed";
-      throw new Error(`fs.list: ${msg}`);
-    }
-
-    const lines = res.stdout
-      .toString("utf8")
-      .split("\n")
-      .filter((l) => l.length > 0);
-
-    const entries: FsListEntry[] = [];
-    let truncated = false;
-    for (const line of lines) {
-      const tab1 = line.indexOf("\t");
-      const tab2 = line.indexOf("\t", tab1 + 1);
-      if (tab1 === -1 || tab2 === -1) continue;
-      const typeChar = line.slice(0, tab1);
-      const sizeStr = line.slice(tab1 + 1, tab2);
-      const path = line.slice(tab2 + 1);
-      let type: "file" | "dir";
-      if (typeChar === "f") type = "file";
-      else if (typeChar === "d") type = "dir";
-      else continue; // ignore symlinks / sockets / devices in v1
-      const size = Number.parseInt(sizeStr, 10);
-      entries.push({
-        path,
-        type,
-        ...(Number.isFinite(size) ? { size } : {}),
-      });
-      if (entries.length >= MAX_LIST_ENTRIES) {
-        // If find emitted more entries beyond what we kept, mark truncated.
-        truncated = entries.length < lines.length;
-        break;
-      }
-    }
-
-    return { entries, truncated };
   }
 
   async destroy(ctx: SandboxContext): Promise<void> {
@@ -693,7 +522,7 @@ export class DockerSandboxBackend implements SandboxBackend {
         // Already stopped is 304 — swallow that too.
         const e = err as { statusCode?: number };
         if (e.statusCode !== 304) {
-          logger.warn(
+          this.logger?.warn(
             { workspaceId: ctx.workspaceId, err },
             "sandbox destroy: stop failed (continuing)",
           );
@@ -706,7 +535,7 @@ export class DockerSandboxBackend implements SandboxBackend {
       await this.docker.getContainer(name).remove({ force: true, v: false });
     } catch (err) {
       if (!is404(err)) {
-        logger.warn(
+        this.logger?.warn(
           { workspaceId: ctx.workspaceId, err },
           "sandbox destroy: container remove failed (continuing)",
         );
@@ -718,7 +547,7 @@ export class DockerSandboxBackend implements SandboxBackend {
       await this.docker.getVolume(vol).remove();
     } catch (err) {
       if (!is404(err)) {
-        logger.warn(
+        this.logger?.warn(
           { workspaceId: ctx.workspaceId, err },
           "sandbox destroy: volume remove failed",
         );
@@ -726,3 +555,17 @@ export class DockerSandboxBackend implements SandboxBackend {
     }
   }
 }
+
+/**
+ * The Docker Sandbox backend: this plugin's transport under core's fixed
+ * five-tool core. What the model sees comes from {@link createPosixSandbox}, so
+ * this adapter cannot drift from the SSH one on anything but the transport.
+ */
+export const createDockerSandboxBackend = (
+  config: Partial<DockerSandboxConfig>,
+  credentials: DockerSandboxCredentials,
+  plugin?: PluginConfigContext,
+): SandboxBackend =>
+  createPosixSandbox(
+    new DockerSandboxTransport(config, credentials, plugin?.logger),
+  );

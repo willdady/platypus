@@ -159,6 +159,30 @@ describe("Trigger Routes", () => {
       });
     });
 
+    it("accepts a Shared agent attached to this workspace", async () => {
+      // A Shared Agent runs here where an Attachment makes it visible
+      // (ADR-0007), so a trigger may point at one — the run resolves the Agent
+      // through the same authority.
+      stubAuthLookups();
+      mockDb.limit
+        .mockResolvedValueOnce([
+          { id: "agent-1", organizationId: orgId, workspaceId: null },
+        ])
+        .mockResolvedValueOnce([{ id: "att-1" }]); // attached here
+      const nextRun = new Date("2026-02-01T09:00:00Z");
+      mockValidateCronExpression.mockReturnValueOnce(nextRun);
+      mockDb.returning.mockResolvedValueOnce([
+        { ...cronTrigger, id: "trig-shared", nextRunAt: nextRun },
+      ]);
+
+      const res = await app.request(baseUrl, {
+        method: "POST",
+        body: JSON.stringify(createBody),
+        headers: { "Content-Type": "application/json" },
+      });
+      expect(res.status).toBe(201);
+    });
+
     it("rejects creation when the agent is not in the workspace", async () => {
       stubAuthLookups();
       mockDb.limit.mockResolvedValueOnce([]); // agent verify: not found
