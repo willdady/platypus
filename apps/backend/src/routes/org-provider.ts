@@ -21,7 +21,7 @@ import {
   requireOrgScoped,
   requireSharedDeletable,
 } from "../services/scoped-resource.ts";
-import { redactProviderSecrets } from "../services/credential-redaction.ts";
+import { providerReadModel } from "../services/credential-redaction.ts";
 import { NotFoundError } from "../errors.ts";
 import type { Variables } from "../server.ts";
 
@@ -65,7 +65,7 @@ orgProvider.get("/", requireAuth, requireOrgAccess(), async (c) => {
   // This route admits any Organization member — a Shared Provider has to be
   // listable to be selected. Only an Org Admin sees its credentials (ADR-0006).
   const reveal = orgCredentialsVisible(c);
-  const results = rows.map((row) => redactProviderSecrets(row, { reveal }));
+  const results = rows.map((row) => providerReadModel(row, { reveal }));
 
   return c.json({ results });
 });
@@ -79,7 +79,7 @@ orgProvider.get("/:providerId", requireAuth, requireOrgAccess(), async (c) => {
 
   // See the list route: credentials are Org-Admin-only (ADR-0006).
   const reveal = orgCredentialsVisible(c);
-  return c.json(redactProviderSecrets(record, { reveal }));
+  return c.json(providerReadModel(record, { reveal }));
 });
 
 /** Update an organization provider by ID (admin only) */

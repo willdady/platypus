@@ -20,6 +20,10 @@
  * argument comes from.
  */
 
+import type { Scope } from "./scoped-resource.ts";
+import type { McpRecord } from "./mcp-oauth-provider.ts";
+import type { provider as providerTable } from "../db/schema.ts";
+
 /** Replaces a redacted secret so a caller can tell "unset" from "not shown". */
 export type SecretPresence = {
   /** True when a value is stored, whatever it is. Never the value itself. */
@@ -94,3 +98,60 @@ export const redactMcpSecrets = <T extends McpSecretFields>(
     headersSet: presence(headers),
   };
 };
+
+/**
+ * Strips the OAuth secrets Platypus mints for an MCP and reports only whether
+ * the server is authorized. Unconditional — unlike {@link redactMcpSecrets},
+ * these are never Operator-entered and belong in no response, so every route
+ * returning an MCP row runs it, writes included.
+ */
+export const sanitizeMcpResponse = (record: McpRecord) => {
+  const {
+    oauthAccessToken,
+    oauthRefreshToken,
+    oauthClientSecret,
+    oauthTokenExpiresAt,
+    oauthScope,
+    ...rest
+  } = record;
+  return {
+    ...rest,
+    oauthAuthorized:
+      record.authType === "OAuth" ? !!oauthAccessToken : undefined,
+  };
+};
+
+/** What a read route adds to a row: who may see secrets, and the resolved scope. */
+type ReadModelOptions = {
+  /** Decided per surface by `workspaceCredentialsVisible`/`orgCredentialsVisible`. */
+  reveal?: boolean;
+  /**
+   * The scope the Scoped-resource module resolved the row at, which the frontend
+   * uses to mark a Shared row read-only. Omitted on the Organization surface,
+   * where every row is Organization-scoped by construction.
+   */
+  scope?: Scope;
+};
+
+const withScope = <T extends object>(model: T, scope?: Scope) =>
+  scope ? { ...model, scope } : model;
+
+/**
+ * The read shape of an MCP, for every route that returns one to a reader.
+ *
+ * The pairing is the point: the OAuth strip is unconditional and the credential
+ * redaction is not, and assembling them per route meant each site had to
+ * remember both. A route that reached for `redactMcpSecrets` alone would answer
+ * with the OAuth tokens still on the row.
+ */
+export const mcpReadModel = (row: McpRecord, opts: ReadModelOptions = {}) =>
+  withScope(
+    redactMcpSecrets(sanitizeMcpResponse(row), { reveal: opts.reveal }),
+    opts.scope,
+  );
+
+/** The read shape of a Provider, for every route that returns one to a reader. */
+export const providerReadModel = (
+  row: typeof providerTable.$inferSelect,
+  opts: ReadModelOptions = {},
+) => withScope(redactProviderSecrets(row, { reveal: opts.reveal }), opts.scope);

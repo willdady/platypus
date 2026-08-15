@@ -18,30 +18,15 @@ import {
   requireWorkspaceConfigAccess,
   workspaceCredentialsVisible,
 } from "../middleware/authorization.ts";
-import { redactProviderSecrets } from "../services/credential-redaction.ts";
+import { providerReadModel } from "../services/credential-redaction.ts";
 import {
   listScoped,
   requireScoped,
   requireWorkspaceMutable,
-  type Scope,
 } from "../services/scoped-resource.ts";
 import type { Variables } from "../server.ts";
 
 const provider = new Hono<{ Variables: Variables }>();
-
-/**
- * The read shape of a Provider on the Workspace surface, assembled once for both
- * read routes: stored credentials only for a caller who may manage this Provider
- * (ADR-0006), and the scope the Scoped-resource module resolved it at, which the
- * frontend uses to mark a Shared row read-only.
- */
-const providerReadModel = (
-  { row, scope }: { row: typeof providerTable.$inferSelect; scope: Scope },
-  reveal: boolean,
-) => ({
-  ...redactProviderSecrets(row, { reveal }),
-  scope,
-});
 
 /**
  * Create a workspace-scoped provider. Org-admin by default; a workspace owner
@@ -98,7 +83,9 @@ provider.get(
     // still list, because selecting a Provider on an Agent or Chat does not
     // require self-management.
     const reveal = await workspaceCredentialsVisible(c, "provider");
-    const results = scoped.map((found) => providerReadModel(found, reveal));
+    const results = scoped.map(({ row, scope }) =>
+      providerReadModel(row, { reveal, scope }),
+    );
     return c.json({ results });
   },
 );
@@ -120,7 +107,7 @@ provider.get(
     });
     // See the list route: redacted unless this caller may manage the Provider.
     const reveal = await workspaceCredentialsVisible(c, "provider");
-    return c.json(providerReadModel(found, reveal));
+    return c.json(providerReadModel(found.row, { reveal, scope: found.scope }));
   },
 );
 

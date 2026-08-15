@@ -2,7 +2,10 @@ import { describe, it, expect } from "vitest";
 import {
   redactMcpSecrets,
   redactProviderSecrets,
+  mcpReadModel,
+  providerReadModel,
 } from "./credential-redaction.ts";
+import type { McpRecord } from "./mcp-oauth-provider.ts";
 
 describe("redactProviderSecrets", () => {
   const row = {
@@ -94,5 +97,63 @@ describe("redactMcpSecrets", () => {
       {},
     );
     expect(out).toMatchObject({ bearerTokenSet: { configured: false } });
+  });
+});
+
+describe("read models", () => {
+  // The OAuth strip is unconditional and the credential redaction is not.
+  // Pairing them here is the point of the read model: a route that reached for
+  // redactMcpSecrets alone would answer with the minted tokens still attached.
+  const mcp = {
+    id: "mcp-1",
+    name: "Rovo",
+    authType: "OAuth",
+    bearerToken: "tok-secret",
+    headers: { Authorization: "hdr-secret" },
+    oauthAccessToken: "oauth-access",
+    oauthRefreshToken: "oauth-refresh",
+    oauthClientSecret: "oauth-client",
+    oauthScope: "read",
+    oauthTokenExpiresAt: new Date(0),
+  } as unknown as McpRecord;
+
+  it("strips minted OAuth secrets even when credentials are revealed", () => {
+    const out = mcpReadModel(mcp, { reveal: true });
+    const json = JSON.stringify(out);
+    expect(json).not.toContain("oauth-access");
+    expect(json).not.toContain("oauth-refresh");
+    expect(json).not.toContain("oauth-client");
+    // Operator-entered config still reads back for a caller who may manage it.
+    expect(json).toContain("tok-secret");
+    expect(out).toMatchObject({ oauthAuthorized: true });
+  });
+
+  it("strips both secret classes when credentials are not revealed", () => {
+    const json = JSON.stringify(mcpReadModel(mcp, { reveal: false }));
+    expect(json).not.toContain("oauth-access");
+    expect(json).not.toContain("tok-secret");
+    expect(json).not.toContain("hdr-secret");
+  });
+
+  it("fails closed when reveal is not passed", () => {
+    const json = JSON.stringify(mcpReadModel(mcp));
+    expect(json).not.toContain("tok-secret");
+    expect(
+      JSON.stringify(
+        providerReadModel({ id: "p", apiKey: "sk-secret" } as never),
+      ),
+    ).not.toContain("sk-secret");
+  });
+
+  it("carries the resolved scope only when one is given", () => {
+    expect(mcpReadModel(mcp, { scope: "organization" })).toMatchObject({
+      scope: "organization",
+    });
+    expect(mcpReadModel(mcp)).not.toHaveProperty("scope");
+    expect(
+      providerReadModel({ id: "p", apiKey: "k" } as never, {
+        scope: "workspace",
+      }),
+    ).toMatchObject({ scope: "workspace" });
   });
 });

@@ -33,8 +33,11 @@ import {
   buildOAuthCallbackUrl,
   buildMcpTransportConfig,
 } from "../services/mcp-oauth-provider.ts";
-import { OAUTH_TOKEN_CLEAR_FIELDS, sanitizeMcpResponse } from "./mcp.ts";
-import { redactMcpSecrets } from "../services/credential-redaction.ts";
+import { OAUTH_TOKEN_CLEAR_FIELDS } from "./mcp.ts";
+import {
+  mcpReadModel,
+  sanitizeMcpResponse,
+} from "../services/credential-redaction.ts";
 import { NotFoundError } from "../errors.ts";
 
 // Org-scoped MCPs are Shared resources (ADR-0007). They introduce credentials
@@ -75,9 +78,7 @@ orgMcp.get("/", requireAuth, requireOrgAccess(), async (c) => {
   // to be granted. Only an Org Admin sees its request credentials (ADR-0006).
   const reveal = orgCredentialsVisible(c);
   return c.json({
-    results: results.map((row) =>
-      redactMcpSecrets(sanitizeMcpResponse(row), { reveal }),
-    ),
+    results: results.map((row) => mcpReadModel(row, { reveal })),
   });
 });
 
@@ -88,7 +89,7 @@ orgMcp.get("/:mcpId", requireAuth, requireOrgAccess(), async (c) => {
   const record = await requireOrgScoped(db, "mcp", mcpId, orgId);
   // See the list route: request credentials are Org-Admin-only (ADR-0006).
   const reveal = orgCredentialsVisible(c);
-  return c.json(redactMcpSecrets(sanitizeMcpResponse(record), { reveal }));
+  return c.json(mcpReadModel(record, { reveal }));
 });
 
 /** Update an org-scoped MCP by ID (admin only) */
