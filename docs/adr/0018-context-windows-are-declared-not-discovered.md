@@ -87,9 +87,15 @@ reports no usage, occupancy is unknown and Platypus computes nothing.
   emitted on an aborted run, and cancelling a long turn is exactly when the
   context got large — so emitting once on `finish` would lose the reading that
   matters most. The cost is that `mergeObjects` skips `undefined` overrides, so a
-  later step reporting no usage would leave an earlier value looking current;
-  guarded by only returning when the count is a number and always writing every
-  key as a concrete value.
+  later step reporting no usage would leave an earlier value looking current.
+  Returning nothing in that case is what _causes_ the stale reading rather than
+  preventing it — an earlier draft of this ADR named the failure and then
+  prescribed it. The guard is the opposite: a step with no input count returns a
+  concrete `contextOccupancy: null`, which the merge does apply, and a reported
+  input count with no output count writes `outputTokens: null` rather than
+  omitting the key. Only where no step of the turn has reported a count is
+  nothing returned, so a Provider that reports no usage at all still records no
+  occupancy — the key is absent, and absent and `null` both read as unknown.
 - **Optional means auto-compaction will silently not engage.** When compaction
   lands, a model with no declared window simply will not compact. The provider
   form's hint on the field is the only guardrail against that being a mystery,

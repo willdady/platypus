@@ -1,7 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import type { ToolExecutionOptions } from "ai";
-import { createSubAgentTool, createSubAgentTools } from "./sub-agent.ts";
+import {
+  createSubAgentTool,
+  createSubAgentTools,
+  SUB_AGENT_TRUNCATION_NOTE,
+} from "./sub-agent.ts";
 import type { SubAgentActivity } from "./sub-agent.ts";
+import { DEFAULT_AGENT_MAX_STEPS } from "@platypus/schemas";
 
 // Helper to consume an async generator and collect all yielded values.
 // Deep-copies each yield since the generator reuses mutable objects.
@@ -14,6 +19,21 @@ async function consumeGenerator<T>(
   }
   return { yielded };
 }
+
+// The text the parent model actually reads for a completed delegation.
+// `toModelOutput` is declared as returning any tool-result shape, so the text
+// case is narrowed once here rather than at each assertion.
+const modelText = (
+  tool: ReturnType<typeof createSubAgentTool>["tool"],
+  output: SubAgentActivity,
+): string =>
+  (
+    tool.toModelOutput!({
+      toolCallId: "tc1",
+      input: { task: "Audit the board" },
+      output,
+    }) as { value: string }
+  ).value;
 
 // Mock stream events helper — returns a sync iterable; AsyncGenerator consumers
 // accept any iterable, so no async generator is needed here.
@@ -72,6 +92,20 @@ vi.mock("../logger.ts", () => ({
 }));
 
 import { logger } from "../logger.ts";
+
+// A constructed sub-agent carries `stopWhen: [stepCountIs(n)]`, where `n` is
+// the resolved step ceiling. `stepCountIs` closes over `n` and offers no
+// introspection, so recover the ceiling by probing the condition against
+// incrementally longer (empty) step arrays until it fires.
+const stepCeilingOf = (callIndex: number): number => {
+  const { stopWhen } = agentConstructorSpy.mock.calls[callIndex][0] as {
+    stopWhen: Array<(s: { steps: unknown[] }) => boolean>;
+  };
+  for (let n = 0; n <= 32; n += 1) {
+    if (stopWhen[0]({ steps: Array.from({ length: n }) })) return n;
+  }
+  throw new Error("no step ceiling found in stopWhen");
+};
 
 describe("createSubAgentTool", () => {
   const baseOptions = {
@@ -456,6 +490,198 @@ describe("createSubAgentTool", () => {
       );
     });
 
+    // Issue #442. A token-limit stop is neither an `error` nor an `abort`: the
+    // stream ends normally and the partial answer was returned as if it were
+    // the whole finding. The parent has to be told it is looking at a fragment.
+    describe("truncated at the output token limit", () => {
+      const truncatedStream = () =>
+        createMockFullStream([
+          { type: "text-start", id: "t1" },
+          { type: "text-delta", id: "t1", text: "The three stale cards are" },
+          {
+            type: "finish",
+            finishReason: "length",
+            rawFinishReason: "max_tokens",
+          },
+        ]);
+
+      it("flags the delegation result as truncated", async () => {
+        mockStream.mockResolvedValue({
+          fullStream: truncatedStream(),
+          text: Promise.resolve(""),
+        });
+
+        const { tool } = createSubAgentTool(baseOptions);
+        const { yielded } = await consumeGenerator(
+          tool.execute(
+            { task: "Audit the board" },
+            {} as ToolExecutionOptions<Record<string, unknown>>,
+          ) as AsyncGenerator<SubAgentActivity>,
+        );
+        const final = yielded.at(-1)!;
+
+        expect(final.truncatedByTokenLimit).toBe(true);
+        // Not a failure: the partial answer is real work and still comes back.
+        expect(final.text).toBe("The three stale cards are");
+      });
+
+      it("tells the parent model the answer is partial", async () => {
+        mockStream.mockResolvedValue({
+          fullStream: truncatedStream(),
+          text: Promise.resolve(""),
+        });
+
+        const { tool } = createSubAgentTool(baseOptions);
+        const { yielded } = await consumeGenerator(
+          tool.execute(
+            { task: "Audit the board" },
+            {} as ToolExecutionOptions<Record<string, unknown>>,
+          ) as AsyncGenerator<SubAgentActivity>,
+        );
+
+        const value = modelText(tool, yielded.at(-1)!);
+
+        expect(value).toContain("The three stale cards are");
+        expect(value).toContain(SUB_AGENT_TRUNCATION_NOTE);
+      });
+
+      it("says only that the answer was cut off when there is no text at all", () => {
+        const { tool } = createSubAgentTool(baseOptions);
+
+        expect(
+          modelText(tool, {
+            entries: [],
+            text: "",
+            truncatedByTokenLimit: true,
+          }),
+        ).toBe(SUB_AGENT_TRUNCATION_NOTE);
+      });
+
+      it("records the cutoff in the log", async () => {
+        mockStream.mockResolvedValue({
+          fullStream: truncatedStream(),
+          text: Promise.resolve(""),
+        });
+
+        const { tool } = createSubAgentTool(baseOptions);
+        await consumeGenerator(
+          tool.execute(
+            { task: "Audit the board" },
+            {} as ToolExecutionOptions<Record<string, unknown>>,
+          ) as AsyncGenerator<SubAgentActivity>,
+        );
+
+        expect(vi.mocked(logger.warn).mock.calls[0]?.[0]).toMatchObject({
+          subAgentId: "agent-1",
+          subAgentName: "Research Agent",
+          // The provider's own word for the stop, which the unified reason
+          // would otherwise be the only record of.
+          rawFinishReason: "max_tokens",
+        });
+      });
+
+      it("leaves a cleanly finished delegation unflagged", async () => {
+        mockStream.mockResolvedValue({
+          fullStream: createMockFullStream([
+            { type: "text-start", id: "t1" },
+            { type: "text-delta", id: "t1", text: "All done." },
+            { type: "text-end", id: "t1" },
+            { type: "finish", finishReason: "stop" },
+          ]),
+          text: Promise.resolve(""),
+        });
+
+        const { tool } = createSubAgentTool(baseOptions);
+        const { yielded } = await consumeGenerator(
+          tool.execute(
+            { task: "Audit the board" },
+            {} as ToolExecutionOptions<Record<string, unknown>>,
+          ) as AsyncGenerator<SubAgentActivity>,
+        );
+        const final = yielded.at(-1)!;
+
+        expect(final).not.toHaveProperty("truncatedByTokenLimit");
+        expect(modelText(tool, final)).toBe("All done.");
+      });
+
+      // The same rule the run path applies: a step inside the tool loop can end
+      // at the ceiling and the sub-agent still recover and answer in full.
+      it("ignores a step that ended at the limit mid tool-loop", async () => {
+        mockStream.mockResolvedValue({
+          fullStream: createMockFullStream([
+            { type: "tool-input-start", toolName: "listCards", id: "tc1" },
+            { type: "finish-step", finishReason: "length" },
+            {
+              type: "tool-result",
+              toolCallId: "tc1",
+              toolName: "listCards",
+              output: [{ id: "c1" }],
+            },
+            { type: "text-start", id: "t1" },
+            { type: "text-delta", id: "t1", text: "One card." },
+            { type: "text-end", id: "t1" },
+            { type: "finish", finishReason: "stop" },
+          ]),
+          text: Promise.resolve(""),
+        });
+
+        const { tool } = createSubAgentTool(baseOptions);
+        const { yielded } = await consumeGenerator(
+          tool.execute(
+            { task: "Audit the board" },
+            {} as ToolExecutionOptions<Record<string, unknown>>,
+          ) as AsyncGenerator<SubAgentActivity>,
+        );
+
+        expect(yielded.at(-1)!).not.toHaveProperty("truncatedByTokenLimit");
+      });
+
+      // A cutoff is a fact about the answer, not an activity step, so the log
+      // the user watches must not gain a spurious row (or a spurious yield).
+      it("adds no activity entry and no extra yield for the terminal finish", async () => {
+        mockStream.mockResolvedValue({
+          fullStream: truncatedStream(),
+          text: Promise.resolve(""),
+        });
+
+        const { tool } = createSubAgentTool(baseOptions);
+        const { yielded } = await consumeGenerator(
+          tool.execute(
+            { task: "Audit the board" },
+            {} as ToolExecutionOptions<Record<string, unknown>>,
+          ) as AsyncGenerator<SubAgentActivity>,
+        );
+
+        // text-start yields once; the delta and the finish yield nothing; then
+        // the final value.
+        expect(yielded).toHaveLength(2);
+        expect(yielded.at(-1)!.entries).toHaveLength(1);
+      });
+
+      // A stream that fails after hitting the ceiling is still a failure: the
+      // parent must get a tool error, not a flagged partial answer.
+      it("still throws when the stream also reported a failure", async () => {
+        mockStream.mockResolvedValue({
+          fullStream: createMockFullStream([
+            { type: "finish", finishReason: "length" },
+            { type: "error", error: new Error("upstream reset") },
+          ]),
+          text: Promise.resolve(""),
+        });
+
+        const { tool } = createSubAgentTool(baseOptions);
+
+        await expect(
+          consumeGenerator(
+            tool.execute(
+              { task: "Audit the board" },
+              {} as ToolExecutionOptions<Record<string, unknown>>,
+            ) as AsyncGenerator<SubAgentActivity>,
+          ),
+        ).rejects.toThrow(/upstream reset/);
+      });
+    });
+
     it("marks tool-call entry as error on tool-error event", async () => {
       mockStream.mockResolvedValue({
         fullStream: createMockFullStream([
@@ -649,6 +875,24 @@ describe("createSubAgentTool", () => {
       }
     });
 
+    // The ceiling is not a sampling parameter — it comes off the sub-agent's
+    // OWN Provider model entry, not its Agent row (issue #454). Without it a
+    // delegated run truncates one level down, on Bedrock especially, with the
+    // Org Admin's declared ceiling applying only to the parent turn.
+    it("passes the sub-agent model's output ceiling to its agent", () => {
+      createSubAgentTool({ ...baseOptions, maxOutputTokens: 64000 });
+
+      expect(settingsPassedToAgent()).toMatchObject({
+        maxOutputTokens: 64000,
+      });
+    });
+
+    it("sends no ceiling when the sub-agent's model declares none", () => {
+      createSubAgentTool({ ...baseOptions });
+
+      expect(settingsPassedToAgent()).not.toHaveProperty("maxOutputTokens");
+    });
+
     it("cannot have sampling override the model, instructions or tools", () => {
       createSubAgentTool({
         ...baseOptions,
@@ -797,6 +1041,26 @@ describe("createSubAgentTools", () => {
     expect(loadToolsFn).toHaveBeenCalledTimes(2);
   });
 
+  // The ceiling belongs to the sub-agent's own (Provider, model) pair, which
+  // only the resolver has, so it rides back with the model it applies to.
+  it("forwards the resolved model's output ceiling to the sub-agent's agent", async () => {
+    const createModelFn = vi.fn().mockResolvedValue({
+      model: {},
+      securityGuardrails: null,
+      maxOutputTokens: 32000,
+    });
+
+    await createSubAgentTools(
+      [{ id: "sa-1", name: "Research", providerId: "p1", modelId: "m1" }],
+      createModelFn,
+      vi.fn().mockResolvedValue({}),
+    );
+
+    expect(agentConstructorSpy.mock.calls[0][0]).toMatchObject({
+      maxOutputTokens: 32000,
+    });
+  });
+
   it("continues when a sub-agent fails to initialize, and reports it as a failure", async () => {
     const subAgents = [
       {
@@ -857,6 +1121,30 @@ describe("createSubAgentTools", () => {
     );
 
     expect(Object.keys(result.tools)).toHaveLength(1);
+    expect(stepCeilingOf(0)).toBe(DEFAULT_AGENT_MAX_STEPS);
+  });
+
+  // A delegated Agent runs on its own ceiling, not the parent's and not the
+  // fallback — the whole point of reading `maxSteps` off the row.
+  it("forwards an explicit maxSteps instead of the fallback default", async () => {
+    const subAgents = [
+      {
+        id: "sa-1",
+        name: "Agent",
+        providerId: "p1",
+        modelId: "m1",
+        maxSteps: 3,
+      },
+    ];
+
+    const createModelFn = vi
+      .fn()
+      .mockResolvedValue({ model: {}, securityGuardrails: null });
+    const loadToolsFn = vi.fn().mockResolvedValue({});
+
+    await createSubAgentTools(subAgents, createModelFn, loadToolsFn);
+
+    expect(stepCeilingOf(0)).toBe(3);
   });
 
   it("forwards each sub-agent's stored sampling parameters, treating null as unset", async () => {

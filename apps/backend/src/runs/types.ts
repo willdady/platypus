@@ -8,8 +8,19 @@ export type RunStatus = "running" | "succeeded" | "failed" | "cancelled";
 export type RunStats = {
   steps?: number;
   toolCalls?: Array<{ name: string; count: number }>;
+  /** Cross-step SUMS of every step's usage — billing figures, not occupancy. */
   inputTokens?: number;
   outputTokens?: number;
+  /**
+   * How full the model's context got: the input tokens reported for the LAST
+   * step, which is the whole conversation as last sent (ADR-0018). A last
+   * value, never a sum — `inputTokens` above folds every step together and on a
+   * long tool-using turn reads roughly an order of magnitude high.
+   *
+   * Absent where the Provider reported no usage. Nothing is estimated, and 0 is
+   * never substituted: it would read as a measurement of an empty context.
+   */
+  contextOccupancy?: number;
   /**
    * Set only when the run stopped at the model's output ceiling. Absent rather
    * than `false`, mirroring the Chat message metadata marker.

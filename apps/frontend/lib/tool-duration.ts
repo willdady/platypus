@@ -15,6 +15,13 @@ export function formatToolDuration(ms: number): string {
   return `${Math.floor(totalSeconds / 60)}m ${String(seconds).padStart(2, "0")}s`;
 }
 
+/** Reads a numeric property off a value that may be anything at all. */
+const numberAt = (source: unknown, key: string): number | undefined => {
+  if (typeof source !== "object" || source === null) return undefined;
+  const value = (source as Record<string, unknown>)[key];
+  return typeof value === "number" ? value : undefined;
+};
+
 /**
  * Pulls the run pipeline's recorded duration out of a tool invocation's
  * `toolMetadata`. The field is a free-form JSON object a provider may also
@@ -22,7 +29,34 @@ export function formatToolDuration(ms: number): string {
  * number reads as "no duration", which renders as nothing at all.
  */
 export function toolDurationMs(metadata: unknown): number | undefined {
-  if (typeof metadata !== "object" || metadata === null) return undefined;
-  const value = (metadata as Record<string, unknown>).durationMs;
-  return typeof value === "number" ? value : undefined;
+  return numberAt(metadata, "durationMs");
+}
+
+/**
+ * How long a tool call took, from whichever of the two carriers has it.
+ *
+ * The part's own `toolMetadata` is the record and is preferred; the message's
+ * `toolDurations` map is how the figure arrives mid-turn, because the AI SDK's
+ * tool reducer rebuilds each tool part from its stored invocation and discards
+ * metadata the output chunk carried. So during the turn that produced it only
+ * the map has it, and after a reload the part does — the same number either way,
+ * which is why there is no visible change when one takes over from the other.
+ *
+ * Messages written before both carriers existed have neither and render no time,
+ * which is the documented behaviour for older Chats.
+ */
+export function toolCallDurationMs(
+  toolMetadata: unknown,
+  messageMetadata: unknown,
+  toolCallId: string,
+): number | undefined {
+  const fromPart = toolDurationMs(toolMetadata);
+  if (fromPart !== undefined) return fromPart;
+  if (typeof messageMetadata !== "object" || messageMetadata === null) {
+    return undefined;
+  }
+  return numberAt(
+    (messageMetadata as Record<string, unknown>).toolDurations,
+    toolCallId,
+  );
 }

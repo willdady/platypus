@@ -35,6 +35,12 @@ const toTriggerRunStats = (stats: RunStats): TriggerRunStats | null => {
     toolCalls: stats.toolCalls ?? [],
     inputTokens: stats.inputTokens ?? 0,
     outputTokens: stats.outputTokens ?? 0,
+    // Spread rather than defaulted to 0: unlike the sums above, an absent
+    // occupancy means the Provider reported no usage, and writing 0 there would
+    // record an empty context as a measurement (ADR-0018).
+    ...(stats.contextOccupancy === undefined
+      ? {}
+      : { contextOccupancy: stats.contextOccupancy }),
     // Spread so an untruncated run stores no key at all, matching the schema's
     // `z.literal(true).optional()`.
     ...(stats.truncatedByTokenLimit

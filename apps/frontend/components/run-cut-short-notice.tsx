@@ -1,6 +1,6 @@
 "use client";
 
-import { TriangleAlertIcon } from "lucide-react";
+import { CutShortNotice } from "./cut-short-notice";
 
 /**
  * What the person reading run history is told when a run stopped at the
@@ -19,8 +19,5 @@ export const RUN_CUT_SHORT_NOTICE =
  * export the fields Next recognises, and the wording has to be importable.
  */
 export const RunCutShortNotice = () => (
-  <div className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground">
-    <TriangleAlertIcon className="size-3.5 shrink-0" />
-    <span>{RUN_CUT_SHORT_NOTICE}</span>
-  </div>
+  <CutShortNotice className="mt-1">{RUN_CUT_SHORT_NOTICE}</CutShortNotice>
 );

@@ -1,5 +1,28 @@
 # Changelog
 
+## [2.6.0](https://github.com/willdady/platypus/compare/v2.5.0...v2.6.0) (2026-08-15)
+
+
+### Features
+
+* **chat:** measure Context occupancy on a Chat turn ([#453](https://github.com/willdady/platypus/issues/453)) ([5099cfc](https://github.com/willdady/platypus/commit/5099cfc7cad0c87ceaf3eff0a34cba327b472130))
+* **chat:** show Context occupancy in the composer and on Trigger runs ([#457](https://github.com/willdady/platypus/issues/457)) ([63aa8a7](https://github.com/willdady/platypus/commit/63aa8a7c4796a268cc82873ccd08ea9ccd47bf91))
+* **chat:** show how long each tool call took ([#435](https://github.com/willdady/platypus/issues/435)) ([c308ff1](https://github.com/willdady/platypus/commit/c308ff16084b0ef3baa46e872d75d43874ad84be))
+* **frontend:** link the website and docs site from About and ⌘K ([#437](https://github.com/willdady/platypus/issues/437)) ([17b3a7c](https://github.com/willdady/platypus/commit/17b3a7cc576851645c895e3c8d2f8f5188a3b1e7))
+* **provider:** cap a model's output tokens per model ([#456](https://github.com/willdady/platypus/issues/456)) ([539e1f4](https://github.com/willdady/platypus/commit/539e1f4aa6e43d98081267433992416018992da5))
+* **provider:** declare a Context window per model ([#452](https://github.com/willdady/platypus/issues/452)) ([110e538](https://github.com/willdady/platypus/commit/110e53813a515d038267399a9d2d96813b4f68ba))
+
+
+### Bug Fixes
+
+* **backend:** clean up kanban card labels when a board label is deleted ([#445](https://github.com/willdady/platypus/issues/445)) ([6267011](https://github.com/willdady/platypus/commit/62670114d979dca1067e46027c42852e73b17062))
+* **backend:** propagate tool set factory errors ([#455](https://github.com/willdady/platypus/issues/455)) ([72749ff](https://github.com/willdady/platypus/commit/72749ffd35bea7b88c49ea9d24dbe29370426644))
+* **backend:** redact Provider and MCP credentials on read ([#460](https://github.com/willdady/platypus/issues/460)) ([eaf2223](https://github.com/willdady/platypus/commit/eaf2223abc53e0b41999f0b7c599ae831dac97cd))
+* **backend:** resolve sub-agent maxSteps to the shared default ([#459](https://github.com/willdady/platypus/issues/459)) ([41f69b5](https://github.com/willdady/platypus/commit/41f69b5c392bae087f1bb02a584c0a95e91358f3))
+* **chat:** deliver tool durations on the turn that measured them ([#461](https://github.com/willdady/platypus/issues/461)) ([84eb590](https://github.com/willdady/platypus/commit/84eb590c3d56398ff874aecd7315dbe8e0bff1a5))
+* **chat:** fit the context meter to narrow viewports ([#465](https://github.com/willdady/platypus/issues/465)) ([62d4de3](https://github.com/willdady/platypus/commit/62d4de34ab84a40f61214cf80f282118b7d49704))
+* **chat:** flag a Sub-Agent answer cut short at the output limit ([#458](https://github.com/willdady/platypus/issues/458)) ([5f0869f](https://github.com/willdady/platypus/commit/5f0869ffdb4518394038304f48b9a772490a4ef1))
+
 ## [2.5.0](https://github.com/willdady/platypus/compare/v2.4.1...v2.5.0) (2026-08-09)
 
 

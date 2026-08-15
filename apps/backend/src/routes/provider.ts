@@ -16,7 +16,9 @@ import {
   requireOrgAccess,
   requireWorkspaceAccess,
   requireWorkspaceConfigAccess,
+  workspaceConfigAccess,
 } from "../middleware/authorization.ts";
+import { redactProviderSecrets } from "../services/credential-redaction.ts";
 import {
   listScoped,
   requireScoped,
@@ -76,7 +78,18 @@ provider.get(
       orgId,
       wsId: workspaceId,
     });
-    const results = scoped.map(({ row, scope }) => ({ ...row, scope }));
+    // Credentials are revealed only to a caller who may manage this Provider
+    // (ADR-0006) — the same rule the write routes reject on. The rows themselves
+    // still list, because selecting a Provider on an Agent or Chat does not
+    // require self-management.
+    const { allowed } = await workspaceConfigAccess(
+      c,
+      "providerSelfManagement",
+    );
+    const results = scoped.map(({ row, scope }) => ({
+      ...redactProviderSecrets(row, { reveal: allowed }),
+      scope,
+    }));
     return c.json({ results });
   },
 );
@@ -96,7 +109,15 @@ provider.get(
       orgId,
       wsId: workspaceId,
     });
-    return c.json({ ...found.row, scope: found.scope });
+    // See the list route: redacted unless this caller may manage the Provider.
+    const { allowed } = await workspaceConfigAccess(
+      c,
+      "providerSelfManagement",
+    );
+    return c.json({
+      ...redactProviderSecrets(found.row, { reveal: allowed }),
+      scope: found.scope,
+    });
   },
 );
 

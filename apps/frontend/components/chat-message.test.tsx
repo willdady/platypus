@@ -156,4 +156,32 @@ describe("ChatMessage tool duration", () => {
     expect(screen.getByText("Completed")).toBeInTheDocument();
     expect(screen.queryByText(/\d+ms|\d+\.\d+s/)).toBeNull();
   });
+
+  // The live case, and the one that was broken: mid-turn the SDK hands back a
+  // tool part stripped of its metadata, so the figure has to come off the
+  // message. Without this the duration was blank until the chat was re-fetched
+  // — and the next turn then overwrote it out of the database.
+  it.each([
+    ["a static tool", staticToolPart()],
+    ["a dynamic tool", dynamicToolPart()],
+  ])("renders the duration delivered on the message for %s", (_, part) => {
+    const message = withToolPart(part);
+    message.metadata = { toolDurations: { "call-1": 1234 } };
+
+    renderMessage(message);
+
+    expect(screen.getByText(/1\.2s/)).toBeInTheDocument();
+  });
+
+  it("shows the same figure whichever carrier holds it", () => {
+    const fromMessage = withToolPart(staticToolPart());
+    fromMessage.metadata = { toolDurations: { "call-1": 1234 } };
+    const { unmount } = renderMessage(fromMessage);
+    const live = screen.getByText(/1\.2s/).textContent;
+    unmount();
+
+    renderMessage(withToolPart(staticToolPart({ durationMs: 1234 })));
+
+    expect(screen.getByText(/1\.2s/).textContent).toBe(live);
+  });
 });

@@ -42,6 +42,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
+  DEFAULT_AGENT_MAX_STEPS,
   type ToolSet,
   type Agent,
   type Provider,
@@ -148,7 +149,7 @@ const AgentForm = ({
     instructions: "",
     providerId: "",
     modelId: "",
-    maxSteps: 15,
+    maxSteps: DEFAULT_AGENT_MAX_STEPS,
     temperature: undefined as number | undefined,
     toolSetIds: [] as string[],
     skillIds: [] as string[],
@@ -199,7 +200,7 @@ const AgentForm = ({
         instructions: agent.instructions || "",
         providerId: agent.providerId,
         modelId: agent.modelId,
-        maxSteps: agent.maxSteps || 15,
+        maxSteps: agent.maxSteps || DEFAULT_AGENT_MAX_STEPS,
         temperature: agent.temperature ?? undefined,
         topP: agent.topP ?? undefined,
         topK: agent.topK ?? undefined,

@@ -26,6 +26,7 @@ import {
   buildMcpTransportConfig,
 } from "../services/mcp-oauth-provider.ts";
 import { OAUTH_TOKEN_CLEAR_FIELDS, sanitizeMcpResponse } from "./mcp.ts";
+import { redactMcpSecrets } from "../services/credential-redaction.ts";
 import { NotFoundError } from "../errors.ts";
 
 // Org-scoped MCPs are Shared resources (ADR-0007). They introduce credentials
@@ -65,7 +66,14 @@ orgMcp.get("/", requireAuth, requireOrgAccess(), async (c) => {
     .select()
     .from(mcpTable)
     .where(eq(mcpTable.organizationId, orgId));
-  return c.json({ results: results.map(sanitizeMcpResponse) });
+  // This route admits any Organization member — a Shared MCP has to be listable
+  // to be granted. Only an Org Admin sees its request credentials (ADR-0006).
+  const isAdmin = c.get("orgMembership")?.role === "admin";
+  return c.json({
+    results: results.map((row) =>
+      redactMcpSecrets(sanitizeMcpResponse(row), { reveal: isAdmin }),
+    ),
+  });
 });
 
 /** Get an org-scoped MCP by ID */
@@ -80,7 +88,11 @@ orgMcp.get("/:mcpId", requireAuth, requireOrgAccess(), async (c) => {
   if (record.length === 0) {
     throw new NotFoundError("MCP not found");
   }
-  return c.json(sanitizeMcpResponse(record[0]));
+  // See the list route: request credentials are Org-Admin-only (ADR-0006).
+  const isAdmin = c.get("orgMembership")?.role === "admin";
+  return c.json(
+    redactMcpSecrets(sanitizeMcpResponse(record[0]), { reveal: isAdmin }),
+  );
 });
 
 /** Update an org-scoped MCP by ID (admin only) */

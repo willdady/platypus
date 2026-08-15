@@ -76,11 +76,11 @@ the Agent later without you editing it.
 Two levels of control over how the model generates:
 
 - **Max steps** — how many steps a tool-calling loop may run before it stops.
-  This lives in the main form (default `15`). Raise it for Agents that chain many
-  tool calls; lower it to cap runaway loops. Unattended runs (triggers and
-  scheduled Agents) also stop early if the model makes no progress — repeating
-  the same tool call for the same result — so a stuck run won't burn its whole
-  step budget.
+  This lives in the main form (default `15`, and never below `1`). Raise it for
+  Agents that chain many tool calls; lower it to cap runaway loops. Unattended
+  runs (triggers and scheduled Agents) also stop early if the model makes no
+  progress — repeating the same tool call for the same result — so a stuck run
+  won't burn its whole step budget.
 - **Advanced settings** — expand this section for the optional sampling
   parameters. Leave any blank to use the Provider's default.
 
@@ -201,6 +201,22 @@ If the sub-agent builds but its run then fails part-way, the delegate tool
 reports an **error** rather than a short answer. Anything the sub-agent had
 written before the failure comes back with it, so the parent can say what was
 done and what wasn't instead of passing a half-finished reply off as the result.
+
+### When a sub-agent answer stops early
+
+A sub-agent writes against its own model's output ceiling, the same one that cuts
+a Chat reply short. Hit it and the delegated answer breaks off wherever it got
+to. That is not treated as a failure: the fragment comes back as the delegate's
+result, the parent Agent is told in the same breath that the answer is partial,
+and expanding the sub-agent's card in the Chat shows a muted line under the
+response reading **Sub-agent response cut short at the model's output limit.**
+
+<Callout type="warning">
+  The ceiling that applies is the sub-agent's own model's, not the parent's — a
+  parent on a large model can delegate to a small one and get a fragment back.
+  Split the work into narrower tasks, or pin the sub-agent to a model whose
+  output limit fits the answer you want.
+</Callout>
 
 Click **Save** to create the Agent. You can edit every field later from the same
 form.

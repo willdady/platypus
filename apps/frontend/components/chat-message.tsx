@@ -43,11 +43,11 @@ import {
   CopyIcon,
   TrashIcon,
   RefreshCwIcon,
-  TriangleAlertIcon,
   XIcon,
 } from "lucide-react";
 import { Textarea } from "./ui/textarea";
-import { toolDurationMs } from "@/lib/tool-duration";
+import { toolCallDurationMs } from "@/lib/tool-duration";
+import { CutShortNotice } from "./cut-short-notice";
 import { LoadSkillTool } from "./load-skill-tool";
 import { SubAgentTool } from "./sub-agent-tool";
 
@@ -221,7 +221,11 @@ export const ChatMessage = memo(function ChatMessage({
               <DynamicToolHeader
                 state={toolPart.state}
                 title={toolPart.toolName}
-                durationMs={toolDurationMs(toolPart.toolMetadata)}
+                durationMs={toolCallDurationMs(
+                  toolPart.toolMetadata,
+                  message.metadata,
+                  toolPart.toolCallId,
+                )}
               />
               <ToolContent>
                 <ToolInput input={toolPart.input} />
@@ -239,7 +243,13 @@ export const ChatMessage = memo(function ChatMessage({
           part.type.startsWith("tool-delegateTo")
         ) {
           // Sub-agent tools get custom UI with robot icon and nested chat
-          return <SubAgentTool key={`${message.id}-${i}`} toolPart={part} />;
+          return (
+            <SubAgentTool
+              key={`${message.id}-${i}`}
+              toolPart={part}
+              messageMetadata={message.metadata}
+            />
+          );
         } else if (isToolUIPart(part)) {
           // Plugin- and MCP-contributed tools aren't enumerated in the part
           // union (see `CustomUITools`), so they land on the generic renderer.
@@ -252,7 +262,11 @@ export const ChatMessage = memo(function ChatMessage({
                 state={part.state}
                 type={part.type}
                 label={toolLabel}
-                durationMs={toolDurationMs(part.toolMetadata)}
+                durationMs={toolCallDurationMs(
+                  part.toolMetadata,
+                  message.metadata,
+                  part.toolCallId,
+                )}
               />
               <ToolContent>
                 <ToolInput input={part.input} />
@@ -289,10 +303,7 @@ export const ChatMessage = memo(function ChatMessage({
       })}
       {message.role === "assistant" &&
         message.metadata?.truncatedByTokenLimit && (
-          <div className="flex items-center gap-1.5 pl-8 text-xs text-muted-foreground">
-            <TriangleAlertIcon className="size-3.5 shrink-0" />
-            <span>{CUT_SHORT_NOTICE}</span>
-          </div>
+          <CutShortNotice className="pl-8">{CUT_SHORT_NOTICE}</CutShortNotice>
         )}
       {!(isLastMessage && status === "streaming") &&
         (isEditing ? (

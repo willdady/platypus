@@ -63,7 +63,7 @@ standing facts: who you are, how you like answers formatted, what a project is
 about. It reaches every Agent you use, so there's no need to repeat it in any
 Agent's Instructions.
 
-### Two different things are called Context
+### Three different things are called Context
 
 <Callout type="warning">
   Your Workspace Context and the Workspace's **Context** field are not the same
@@ -79,6 +79,15 @@ Agent's Instructions.
   Workspace's field. Writing the first one into the second inflicts your
   preferences on everyone.
 </Callout>
+
+The third is the model's own **Context window**: how many tokens a model can be
+sent at once, which an Org Admin declares on the Provider's model entry because
+no vendor publishes it in a form Platypus can read. It has nothing to do with
+either of the two above — it is a capacity, not something you write. Where one is
+declared, a Chat shows how much of it the last turn used; see [How full the
+conversation is](/building-with-platypus/chat#how-full-the-conversation-is) and
+[What each model entry
+holds](/self-hosting/providers-and-auth#what-each-model-entry-holds).
 
 **Memory vs. Context:** Memory is built up automatically from your activity;
 Context is written deliberately by you. They work together — Memory remembers,

@@ -31,6 +31,7 @@ import {
 } from "./memory-retrieval.ts";
 import {
   aliasNameFromReference,
+  DEFAULT_AGENT_MAX_STEPS,
   providerHasNativeSearch,
 } from "@platypus/schemas";
 import type { ConcreteModelId, Provider, Skill } from "@platypus/schemas";
@@ -44,6 +45,7 @@ import { buildMcpTransportConfig } from "./mcp-oauth-provider.ts";
 import { inlineFileUrls } from "../storage/utils.ts";
 import {
   maxExtractedTextCharsForModel,
+  maxOutputTokensForModel,
   passthroughFileTypesForModel,
   resolveModelId,
 } from "./model-capability.ts";
@@ -54,14 +56,6 @@ import {
 } from "./file-gate.ts";
 import type { PlatypusUIMessage } from "../types.ts";
 import { listScopedByIds, resolveScoped } from "./scoped-resource.ts";
-
-/**
- * Default agentic step ceiling for an agent that has no explicit `maxSteps`.
- * Mirrors the new-agent create-form default. Keeps API-created agents sane
- * (a single step never lets a tool-calling agent finish its work) while
- * staying low enough to bound a model that fails to converge.
- */
-export const DEFAULT_AGENT_MAX_STEPS = 15;
 
 // --- Errors ---
 
@@ -149,6 +143,14 @@ export type ChatTurn = {
     system: string;
     messages: PlatypusUIMessage[];
     maxSteps: number;
+    /**
+     * The Provider's declared output ceiling for the model in use, or undefined
+     * when it declares none (issue #454). A property of the (Provider, model)
+     * pair rather than of the Agent or the request, unlike the sampling params
+     * below — which is why it is never mirrored into `resolved` and never
+     * persisted onto the Chat row.
+     */
+    maxOutputTokens?: number;
     temperature?: number;
     topP?: number;
     topK?: number;
@@ -660,6 +662,7 @@ export const prepareChatTurn = async (
       system: systemPrompt,
       messages: inlinedMessages,
       maxSteps: resolvedMaxSteps,
+      maxOutputTokens: maxOutputTokensForModel(provider, resolvedModelId),
       temperature: generation.temperature,
       topP: generation.topP,
       topK: generation.topK,
@@ -994,19 +997,9 @@ const loadTools = async (
   }
 
   for (const toolSetId of agent.toolSetIds) {
+    let toolSet: ReturnType<typeof getToolSet>;
     try {
-      const toolSet = getToolSet(toolSetId);
-      const resolvedTools =
-        typeof toolSet.tools === "function"
-          ? await toolSet.tools({
-              workspaceId,
-              agentId: agent.id,
-              orgId,
-              frontendUrl,
-              userId: userId || "",
-            })
-          : toolSet.tools;
-      Object.assign(tools, resolvedTools);
+      toolSet = getToolSet(toolSetId);
     } catch {
       // Static tool set not found — fall back to MCP lookup.
       const mcp = await queries.getMcp(toolSetId, orgId, workspaceId);
@@ -1035,7 +1028,20 @@ const loadTools = async (
           `Tool set with id '${toolSetId}' not found as static tool set or MCP`,
         );
       }
+      continue;
     }
+
+    const resolvedTools =
+      typeof toolSet.tools === "function"
+        ? await toolSet.tools({
+            workspaceId,
+            agentId: agent.id,
+            orgId,
+            frontendUrl,
+            userId: userId || "",
+          })
+        : toolSet.tools;
+    Object.assign(tools, resolvedTools);
   }
 
   return { tools, mcpClients };
@@ -1139,6 +1145,9 @@ const loadSubAgents = async (
       return {
         model: openProvider(subProvider).languageModel(subModelId),
         securityGuardrails: subProvider.securityGuardrails ?? null,
+        // Read off the sub-agent's OWN Provider, not the parent's: a delegated
+        // run is a run on that model and truncates at its ceiling (issue #454).
+        maxOutputTokens: maxOutputTokensForModel(subProvider, subModelId),
       };
     },
     async (subAgentId: string, toolSetIds: string[]) => {

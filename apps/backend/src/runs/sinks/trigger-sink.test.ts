@@ -162,6 +162,49 @@ describe("TriggerSink", () => {
       expect(setArg.completedAt).toBeInstanceOf(Date);
     });
 
+    // Issue #446 / ADR-0018: an Operator reading the runs page can see a
+    // scheduled Agent heading for the limit only if the figure is recorded.
+    it("persists Context occupancy alongside the unchanged token sums", async () => {
+      const sink = new TriggerSink({ triggerId: "trigger-1" });
+
+      await sink.onFinish({
+        runId: "run-1",
+        status: "succeeded",
+        messages: [],
+        stats: {
+          steps: 4,
+          toolCalls: [{ name: "tool1", count: 3 }],
+          inputTokens: 100,
+          outputTokens: 50,
+          contextOccupancy: 42,
+        },
+      });
+
+      const setArg = mockDb.set.mock.calls[0][0] as Record<string, unknown>;
+      expect(setArg.stats).toEqual({
+        steps: 4,
+        toolCalls: [{ name: "tool1", count: 3 }],
+        inputTokens: 100,
+        outputTokens: 50,
+        contextOccupancy: 42,
+      });
+    });
+
+    it("omits occupancy for a Provider that reported no usage", async () => {
+      const sink = new TriggerSink({ triggerId: "trigger-1" });
+
+      await sink.onFinish({
+        runId: "run-1",
+        status: "succeeded",
+        messages: [],
+        stats: { steps: 1, toolCalls: [], inputTokens: 0, outputTokens: 0 },
+      });
+
+      const setArg = mockDb.set.mock.calls[0][0] as Record<string, unknown>;
+      // Absent, not 0: a zero would read as a measurement of an empty context.
+      expect(setArg.stats).not.toHaveProperty("contextOccupancy");
+    });
+
     it("maps a failed run to status 'failed' with the error message", async () => {
       const sink = new TriggerSink({ triggerId: "trigger-1" });
 

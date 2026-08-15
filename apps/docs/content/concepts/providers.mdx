@@ -45,6 +45,11 @@ A Provider lives at one of two levels:
   authentication](/self-hosting/providers-and-auth) for setup.
 </Callout>
 
+Stored credentials — the API key and any custom headers — are readable only by
+someone who can manage the Provider. Everyone else still sees the Provider and
+can select its models; the credential fields come back empty, flagged only as
+set or unset.
+
 **Why this matters to you:** the models you can pick on a Chat or an Agent come
 from the Providers available in your Workspace. If a model you expect isn't
 there, it's because no available Provider has it enabled — an Org Admin controls

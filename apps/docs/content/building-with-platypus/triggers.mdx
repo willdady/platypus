@@ -76,7 +76,7 @@ Set **Max Runs to Keep** (how many run records to retain), optionally enable
 When a Trigger fires, Platypus runs its Agent against the **instruction** as a
 background job — there's no live Chat window. The run is captured as a
 **trigger run** record: it starts as _running_, accrues stats (steps, tool calls,
-token counts), and ends _success_ or _failed_.
+token counts, how full the Context window got), and ends _success_ or _failed_.
 
 A few details worth knowing:
 
@@ -103,6 +103,12 @@ when it ran and how long it took, the event type for Event triggers, per-run
 stats, and any error message. It's the place to confirm a schedule is actually
 firing and to debug a Trigger that's failing.
 
+Among the per-run stats, **in / out** are the run's total token counts across
+every step — what the run cost — while **context** is a different quantity: how
+much of the model's Context window the conversation filled on the run's final
+step. Watch that one to see a Trigger heading for its model's limit before it
+starts failing there. It is absent for a Provider that reports no token usage.
+
 <Callout type="info">
   Anything an Agent does in a run uses that Agent's own tools — so a Trigger
   can, for example, update a [Board](/building-with-platypus/boards) or a
@@ -124,6 +130,11 @@ model's output limit.**
   keeps hitting it, ask for less in the **Instruction** — a summary rather than
   a full transcript, one Board rather than every Board.
 </Callout>
+
+The ceiling itself is **Max output tokens** on the Provider's model, which an
+Org Admin sets — see
+[Capping a single reply](/self-hosting/providers-and-auth#capping-a-single-reply).
+Worth checking before rewriting the Instruction.
 
 ## Where to next
 

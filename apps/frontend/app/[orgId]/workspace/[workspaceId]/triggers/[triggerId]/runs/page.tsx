@@ -9,6 +9,7 @@ import {
 } from "@platypus/schemas";
 import useSWR from "swr";
 import { fetcher, joinUrl } from "@/lib/utils";
+import { formatTokens } from "@/lib/context-window";
 import { useBackendUrl } from "@/app/client-context";
 import { useAuth } from "@/components/auth-provider";
 import { format, formatDistanceToNow } from "date-fns";
@@ -18,7 +19,13 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Footprints, Wrench, MessageSquare } from "lucide-react";
+import {
+  Loader2,
+  Footprints,
+  Wrench,
+  MessageSquare,
+  Gauge,
+} from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { RunCutShortNotice } from "@/components/run-cut-short-notice";
 
@@ -192,9 +199,31 @@ const TriggerRunsPage = ({
                               )}
                               <span className="flex items-center gap-1">
                                 <MessageSquare className="h-3 w-3" />
-                                {stats.inputTokens} in / {stats.outputTokens}{" "}
-                                out
+                                {formatTokens(stats.inputTokens)} in /{" "}
+                                {formatTokens(stats.outputTokens)} out
                               </span>
+                              {/* How full the context got on the run's LAST
+                                  step, which is a different quantity from the
+                                  cross-step sums above (ADR-0018). Absent where
+                                  the Provider reported no usage — occupancy is
+                                  then unknown and nothing is estimated. */}
+                              {stats.contextOccupancy !== undefined && (
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <span className="flex items-center gap-1 cursor-default">
+                                      <Gauge className="h-3 w-3" />
+                                      {formatTokens(
+                                        stats.contextOccupancy,
+                                      )}{" "}
+                                      context
+                                    </span>
+                                  </TooltipTrigger>
+                                  <TooltipContent>
+                                    Tokens the conversation filled on the final
+                                    step
+                                  </TooltipContent>
+                                </Tooltip>
+                              )}
                             </div>
                           )}
                           {stats?.truncatedByTokenLimit && (

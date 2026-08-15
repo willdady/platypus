@@ -1,3 +1,4 @@
+import type { Context } from "hono";
 import { createMiddleware } from "hono/factory";
 import { eq, and } from "drizzle-orm";
 import {
@@ -263,51 +264,95 @@ export const requireWorkspaceAccess = createMiddleware<Env>(async (c, next) => {
  * mcp.post("/", requireAuth, requireOrgAccess(), requireWorkspaceAccess, requireWorkspaceConfigAccess("mcpSelfManagement"), handler);
  * ```
  */
-export const requireWorkspaceConfigAccess = (
-  delegationFlag?: "providerSelfManagement" | "mcpSelfManagement",
-) =>
+export const requireWorkspaceConfigAccess = (delegationFlag?: DelegationFlag) =>
   createMiddleware<Env>(async (c, next) => {
-    const user = c.get("user");
-    const orgMembership = c.get("orgMembership");
+    const access = await workspaceConfigAccess(c, delegationFlag);
 
-    // Super admins and org admins always manage credential-bearing config.
-    if (isSuperAdmin(user) || orgMembership?.role === "admin") {
-      await next();
-      return;
-    }
-
-    // Past requireWorkspaceAccess, a non-admin can only be the workspace owner.
-    if (!c.get("isWorkspaceOwner")) {
-      return c.json({ error: "Admin access required" }, 403);
-    }
-
-    if (!delegationFlag) {
-      return c.json(
-        { error: "Only an organization admin can configure this resource" },
-        403,
-      );
-    }
-
-    const db = c.get("db");
-    const workspaceId = c.req.param("workspaceId");
-    const [ws] = await db
-      .select({ flag: workspaceTable[delegationFlag] })
-      .from(workspaceTable)
-      .where(eq(workspaceTable.id, workspaceId!))
-      .limit(1);
-
-    if (!ws?.flag) {
-      return c.json(
-        {
-          error:
-            "Self-management of this resource is not enabled for this workspace",
-        },
-        403,
-      );
+    if (!access.allowed) {
+      return c.json({ error: CONFIG_ACCESS_DENIED[access.reason] }, 403);
     }
 
     await next();
   });
+
+/** The workspace columns that let an Org Admin delegate a resource to its Owner. */
+export type DelegationFlag = "providerSelfManagement" | "mcpSelfManagement";
+
+/**
+ * Why a caller may not configure a credential- and reach-bearing resource.
+ * Carried rather than thrown so read paths can redact on the same rule the
+ * write paths reject on.
+ */
+export type ConfigAccessDenial =
+  /** Not an admin, and not even the Workspace Owner. */
+  | "not-owner"
+  /** Owner, but the resource is admin-only and never delegatable. */
+  | "not-delegatable"
+  /** Owner of a workspace where this resource's delegation flag is off. */
+  | "not-delegated";
+
+export type WorkspaceConfigAccess =
+  { allowed: true } | { allowed: false; reason: ConfigAccessDenial };
+
+const CONFIG_ACCESS_DENIED: Record<ConfigAccessDenial, string> = {
+  "not-owner": "Admin access required",
+  "not-delegatable": "Only an organization admin can configure this resource",
+  "not-delegated":
+    "Self-management of this resource is not enabled for this workspace",
+};
+
+/**
+ * The single authority on ADR-0006's question: may this caller configure a
+ * credential- and reach-bearing resource in this Workspace?
+ *
+ * Two callers, two shapes of the same rule — which is why the decision is
+ * returned rather than enforced here:
+ * - {@link requireWorkspaceConfigAccess} maps a denial to a 403 on write routes.
+ * - the Provider and MCP read routes map it to *redaction*, revealing stored
+ *   credentials only to a caller who is allowed to manage them. Gating the reads
+ *   outright is not an option: a Workspace Owner has to see which Providers and
+ *   MCPs exist in order to select one on an Agent or Chat, delegated or not.
+ *
+ * **Prerequisites:** must run after `requireOrgAccess` and
+ * `requireWorkspaceAccess` (reads `orgMembership` and `isWorkspaceOwner`).
+ *
+ * @param delegationFlag - Omit for admin-only resources that are never delegatable.
+ */
+export const workspaceConfigAccess = async (
+  c: Context<Env>,
+  delegationFlag?: DelegationFlag,
+): Promise<WorkspaceConfigAccess> => {
+  const user = c.get("user");
+  const orgMembership = c.get("orgMembership");
+
+  // Super admins and org admins always manage credential-bearing config.
+  if (isSuperAdmin(user) || orgMembership?.role === "admin") {
+    return { allowed: true };
+  }
+
+  // Past requireWorkspaceAccess, a non-admin can only be the workspace owner.
+  if (!c.get("isWorkspaceOwner")) {
+    return { allowed: false, reason: "not-owner" };
+  }
+
+  if (!delegationFlag) {
+    return { allowed: false, reason: "not-delegatable" };
+  }
+
+  const db = c.get("db");
+  const workspaceId = c.req.param("workspaceId");
+  const [ws] = await db
+    .select({ flag: workspaceTable[delegationFlag] })
+    .from(workspaceTable)
+    .where(eq(workspaceTable.id, workspaceId!))
+    .limit(1);
+
+  if (!ws?.flag) {
+    return { allowed: false, reason: "not-delegated" };
+  }
+
+  return { allowed: true };
+};
 
 /**
  * Middleware that restricts access to super admins only.

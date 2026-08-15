@@ -6,6 +6,8 @@ import {
   providerModelReferences,
   passthroughFileTypesForModel,
   maxExtractedTextCharsForModel,
+  maxOutputTokensForModel,
+  contextWindowForModel,
   dedupeModelConfigs,
   resolveModelId,
 } from "./model-capability.ts";
@@ -192,6 +194,78 @@ describe("maxExtractedTextCharsForModel", () => {
     expect(maxExtractedTextCharsForModel(p, concrete("legacy"))).toBe(
       DEFAULT_MAX_EXTRACTED_TEXT_CHARS,
     );
+  });
+});
+
+describe("maxOutputTokensForModel", () => {
+  it("returns the model's declared ceiling", () => {
+    const p = provider({
+      modelIds: [
+        { id: "qwen", passthroughFileTypes: [], maxOutputTokens: 64000 },
+      ],
+    });
+    expect(maxOutputTokensForModel(p, concrete("qwen"))).toBe(64000);
+  });
+
+  // Undefined rather than a default of our own: the whole point is that an
+  // undeclared model behaves exactly as it did before the field existed, with
+  // the provider SDK's own default left in place.
+  it("returns undefined when undeclared or unknown", () => {
+    const p = provider({
+      modelIds: [{ id: "qwen", passthroughFileTypes: [] }],
+    });
+    expect(maxOutputTokensForModel(p, concrete("qwen"))).toBeUndefined();
+    expect(maxOutputTokensForModel(p, concrete("ghost"))).toBeUndefined();
+  });
+
+  it("survives a legacy string[] model list", () => {
+    const p = provider({
+      modelIds: ["legacy"] as unknown as Provider["modelIds"],
+    });
+    expect(maxOutputTokensForModel(p, concrete("legacy"))).toBeUndefined();
+  });
+});
+
+describe("contextWindowForModel", () => {
+  it("returns the model's declared window", () => {
+    const p = provider({
+      modelIds: [
+        { id: "qwen", passthroughFileTypes: [], contextWindow: 32_000 },
+      ],
+    });
+    expect(contextWindowForModel(p, concrete("qwen"))).toBe(32_000);
+  });
+
+  it("returns undefined when undeclared or unknown", () => {
+    const p = provider({
+      modelIds: [{ id: "qwen", passthroughFileTypes: [] }],
+    });
+    // No default to fall back to: unlike the extracted-text cap, an undeclared
+    // window has no safe substitute — inventing one is what ADR-0018 forbids.
+    expect(contextWindowForModel(p, concrete("qwen"))).toBeUndefined();
+    expect(contextWindowForModel(p, concrete("ghost"))).toBeUndefined();
+  });
+
+  it("survives a legacy string[] model list", () => {
+    const p = provider({
+      modelIds: ["legacy"] as unknown as Provider["modelIds"],
+    });
+    expect(contextWindowForModel(p, concrete("legacy"))).toBeUndefined();
+  });
+
+  it("reads each Provider's own declaration for the same model id", () => {
+    const direct = provider({
+      modelIds: [
+        { id: "claude", passthroughFileTypes: [], contextWindow: 200_000 },
+      ],
+    });
+    const proxied = provider({
+      modelIds: [
+        { id: "claude", passthroughFileTypes: [], contextWindow: 32_000 },
+      ],
+    });
+    expect(contextWindowForModel(direct, concrete("claude"))).toBe(200_000);
+    expect(contextWindowForModel(proxied, concrete("claude"))).toBe(32_000);
   });
 });
 

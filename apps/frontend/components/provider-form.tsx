@@ -53,6 +53,8 @@ import { ConfirmDialog } from "@/components/confirm-dialog";
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import {
+  CONTEXT_WINDOW_MAX,
+  CONTEXT_WINDOW_MIN,
   DEFAULT_MAX_EXTRACTED_TEXT_CHARS,
   type AliasRepoint,
   type Provider,
@@ -70,12 +72,20 @@ import {
   defaultPassthroughFileTypes,
   type ModelConfigView,
 } from "@/lib/model-config";
+import {
+  CONTEXT_WINDOW_CUSTOM,
+  CONTEXT_WINDOW_PRESETS,
+  CONTEXT_WINDOW_UNSET,
+  contextWindowForOption,
+  optionForContextWindow,
+  parseContextWindowInput,
+} from "@/lib/context-window";
 import { toast } from "sonner";
 import { useBackendUrl } from "@/app/client-context";
 import { useAuth } from "@/components/auth-provider";
 
 /**
- * Per-field help for a model row. The four fields each need a paragraph of
+ * Per-field help for a model row. The fields each need a paragraph of
  * explanation, which as one block under the list was a wall nobody read and
  * left the reader matching sentences to fields by hand.
  */
@@ -154,14 +164,37 @@ const ModelRow = ({
 }) => {
   const [showAdvanced, setShowAdvanced] = useState(
     model.passthroughFileTypes.length > 0 ||
-      model.maxExtractedTextChars !== undefined,
+      model.maxExtractedTextChars !== undefined ||
+      model.maxOutputTokens !== undefined,
   );
+
+  // Whether the Context window is being typed rather than picked. State as well
+  // as derivation, because neither alone is enough: Custom chosen on a row with
+  // no window declared leaves the value undefined, so a purely derived control
+  // would snap back to "Not set" and the input the reader just asked for would
+  // vanish the moment they cleared it.
+  const [customContextWindow, setCustomContextWindow] = useState(
+    optionForContextWindow(model.contextWindow) === CONTEXT_WINDOW_CUSTOM,
+  );
+
+  // The trigger and the number input read one value, so they cannot disagree.
+  // Model rows are keyed by index, so removing a row shifts the state above
+  // onto its neighbour; folding the stored value back in means a shifted row
+  // holding an unlisted size still renders the input holding it, rather than a
+  // "Custom" trigger beside no input at all — which would leave a declared
+  // window invisible and uneditable until reload.
+  const storedContextWindowOption = optionForContextWindow(model.contextWindow);
+  const contextWindowOption =
+    customContextWindow || storedContextWindowOption === CONTEXT_WINDOW_CUSTOM
+      ? CONTEXT_WINDOW_CUSTOM
+      : storedContextWindowOption;
 
   // A rejected row is no use collapsed: the reader has to see the field the
   // server is complaining about.
   const hasAdvancedError =
     !!errors.fields.passthroughFileTypes ||
-    !!errors.fields.maxExtractedTextChars;
+    !!errors.fields.maxExtractedTextChars ||
+    !!errors.fields.maxOutputTokens;
   const advancedOpen = showAdvanced || hasAdvancedError;
 
   // Passthrough types are edited as a comma-separated string of media types.
@@ -171,10 +204,22 @@ const ModelRow = ({
       .map((t) => t.trim())
       .filter((t) => t.length > 0);
 
-  // An empty (or nonsense) cap means "use the shared default" rather than 0 —
-  // sending 0 would truncate every extracted document to nothing (issue #342).
-  const parseExtractedTextCap = (value: string): number | undefined => {
-    const parsed = Number.parseInt(value, 10);
+  // Shared by the two numeric Advanced fields. An empty (or nonsense) value
+  // means "unset, use the default" rather than 0 — sending 0 would truncate
+  // every extracted document to nothing (issue #342), and would cap every reply
+  // at nothing (issue #454). Undefined is also what clears a value already
+  // stored: the whole `modelIds` array is replaced on save, so the key simply
+  // stops being sent.
+  //
+  // `Number`, never `Number.parseInt`: parseInt truncates at the first
+  // character it cannot read, so `1e5` and `1.9` both became 1 — a value the
+  // schema accepts, which then capped every reply on the model at one token
+  // with nothing on screen pointing at the field. Anything numeric is passed
+  // through EXACTLY as typed and a non-integer is left for the schema to reject
+  // with a message, matching `parseContextWindowInput`. Silently coercing input
+  // into something storable is the one outcome neither field can afford.
+  const parsePositiveNumber = (value: string): number | undefined => {
+    const parsed = Number(value);
     return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined;
   };
 
@@ -220,6 +265,75 @@ const ModelRow = ({
             }
             disabled={disabled}
           />
+        </ModelField>
+
+        {/*
+          Above Advanced, unlike the other optional per-model fields: this one
+          is the only thing that can tell Platypus a capacity it has no way to
+          discover, so a reader adding a model has to see that it exists.
+        */}
+        <ModelField
+          htmlFor={`context-window-${index}`}
+          label="Context window"
+          hint={
+            <>
+              The model&apos;s <strong>total</strong> token capacity, not a cap
+              on the reply. Listed sizes are decimal, so <code>128k</code> is
+              128,000. Optional; without it a Chat on this model shows no
+              context meter.
+            </>
+          }
+          error={errors.fields.contextWindow}
+        >
+          <div className="flex items-center gap-2">
+            <Select
+              value={contextWindowOption}
+              onValueChange={(value) => {
+                setCustomContextWindow(value === CONTEXT_WINDOW_CUSTOM);
+                onChange({
+                  contextWindow: contextWindowForOption(
+                    value,
+                    model.contextWindow,
+                  ),
+                });
+              }}
+              disabled={disabled}
+            >
+              <SelectTrigger
+                id={`context-window-${index}`}
+                aria-invalid={!!errors.fields.contextWindow}
+              >
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={CONTEXT_WINDOW_UNSET}>Not set</SelectItem>
+                {CONTEXT_WINDOW_PRESETS.map((preset) => (
+                  <SelectItem key={preset.tokens} value={String(preset.tokens)}>
+                    {preset.label}
+                  </SelectItem>
+                ))}
+                <SelectItem value={CONTEXT_WINDOW_CUSTOM}>Custom</SelectItem>
+              </SelectContent>
+            </Select>
+            {contextWindowOption === CONTEXT_WINDOW_CUSTOM && (
+              <Input
+                aria-label="Context window in tokens"
+                type="number"
+                min={CONTEXT_WINDOW_MIN}
+                max={CONTEXT_WINDOW_MAX}
+                placeholder="e.g. 131072"
+                className="flex-1"
+                value={model.contextWindow ?? ""}
+                aria-invalid={!!errors.fields.contextWindow}
+                onChange={(e) =>
+                  onChange({
+                    contextWindow: parseContextWindowInput(e.target.value),
+                  })
+                }
+                disabled={disabled}
+              />
+            )}
+          </div>
         </ModelField>
 
         <Collapsible open={advancedOpen} onOpenChange={setShowAdvanced}>
@@ -280,9 +394,36 @@ const ModelRow = ({
                 value={model.maxExtractedTextChars ?? ""}
                 onChange={(e) =>
                   onChange({
-                    maxExtractedTextChars: parseExtractedTextCap(
-                      e.target.value,
-                    ),
+                    maxExtractedTextChars: parsePositiveNumber(e.target.value),
+                  })
+                }
+                disabled={disabled}
+              />
+            </ModelField>
+
+            <ModelField
+              htmlFor={`max-output-tokens-${index}`}
+              label="Max output tokens"
+              hint={
+                <>
+                  The most this model may produce in a{" "}
+                  <strong>single reply</strong> — a cap on the answer, not the
+                  window. Leave empty to use the vendor’s own default, which may
+                  be well below what the model can actually write.
+                </>
+              }
+              error={errors.fields.maxOutputTokens}
+            >
+              <Input
+                id={`max-output-tokens-${index}`}
+                type="number"
+                min={1}
+                placeholder="Provider default"
+                value={model.maxOutputTokens ?? ""}
+                aria-invalid={!!errors.fields.maxOutputTokens}
+                onChange={(e) =>
+                  onChange({
+                    maxOutputTokens: parsePositiveNumber(e.target.value),
                   })
                 }
                 disabled={disabled}
@@ -402,7 +543,11 @@ const ProviderForm = ({
       setFormData({
         providerType: provider.providerType,
         name: provider.name,
-        apiKey: provider.apiKey,
+        // The API is free to withhold the stored key: it is returned only to a
+        // caller who may manage this Provider (ADR-0006). Anyone else lands here
+        // read-only, so an empty field is the honest rendering — and keeps the
+        // input controlled either way.
+        apiKey: provider.apiKey ?? "",
         region: provider.region || "",
         baseUrl: provider.baseUrl || "",
         headers: provider.headers || {},

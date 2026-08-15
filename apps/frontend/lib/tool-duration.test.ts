@@ -1,5 +1,9 @@
 import { describe, it, expect } from "vitest";
-import { formatToolDuration, toolDurationMs } from "./tool-duration";
+import {
+  formatToolDuration,
+  toolCallDurationMs,
+  toolDurationMs,
+} from "./tool-duration";
 
 describe("formatToolDuration", () => {
   it("renders sub-second durations in milliseconds", () => {
@@ -43,5 +47,78 @@ describe("toolDurationMs", () => {
     expect(toolDurationMs({})).toBeUndefined();
     expect(toolDurationMs({ durationMs: "1234" })).toBeUndefined();
     expect(toolDurationMs({ durationMs: null })).toBeUndefined();
+  });
+});
+
+describe("toolCallDurationMs", () => {
+  it("prefers the part's own recorded duration", () => {
+    expect(
+      toolCallDurationMs(
+        { durationMs: 500 },
+        { toolDurations: { "call-1": 999 } },
+        "call-1",
+      ),
+    ).toBe(500);
+  });
+
+  // The live case: during the turn that produced it, the SDK hands back a tool
+  // part with no metadata, so the message's map is the only carrier.
+  it("falls back to the message's map when the part carries nothing", () => {
+    expect(
+      toolCallDurationMs(
+        undefined,
+        { toolDurations: { "call-1": 842 } },
+        "call-1",
+      ),
+    ).toBe(842);
+  });
+
+  it("reads the entry for the right tool call", () => {
+    const metadata = { toolDurations: { "call-1": 10, "call-2": 20 } };
+
+    expect(toolCallDurationMs(undefined, metadata, "call-2")).toBe(20);
+  });
+
+  it("has no duration for a call absent from the map", () => {
+    expect(
+      toolCallDurationMs(
+        undefined,
+        { toolDurations: { "call-1": 10 } },
+        "call-9",
+      ),
+    ).toBeUndefined();
+  });
+
+  // Messages written before either carrier existed, which the docs promise
+  // render no time rather than a zero.
+  it("has no duration when neither carrier has one", () => {
+    expect(toolCallDurationMs(undefined, undefined, "call-1")).toBeUndefined();
+    expect(toolCallDurationMs({}, {}, "call-1")).toBeUndefined();
+    expect(
+      toolCallDurationMs(undefined, { agentId: "agent-1" }, "call-1"),
+    ).toBeUndefined();
+  });
+
+  it("ignores a non-numeric value in either carrier", () => {
+    expect(
+      toolCallDurationMs({ durationMs: "500" }, undefined, "call-1"),
+    ).toBeUndefined();
+    expect(
+      toolCallDurationMs(
+        undefined,
+        { toolDurations: { "call-1": "842" } },
+        "call-1",
+      ),
+    ).toBeUndefined();
+  });
+
+  it("keeps a zero from the map rather than reading it as absent", () => {
+    expect(
+      toolCallDurationMs(
+        undefined,
+        { toolDurations: { "call-1": 0 } },
+        "call-1",
+      ),
+    ).toBe(0);
   });
 });

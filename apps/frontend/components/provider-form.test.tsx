@@ -60,6 +60,21 @@ function mockRejectedSave(issues: Array<{ path: unknown[]; message: string }>) {
   } as unknown as Response);
 }
 
+/** An accepted save, so the payload the form sent can be read back. */
+function mockAcceptedSave() {
+  return vi.fn().mockResolvedValue({
+    ok: true,
+    status: 200,
+    json: async () => ({ id: "p1", aliasRepoints: [] }),
+  } as unknown as Response);
+}
+
+/** The `modelIds` the form put on the wire for the last save. */
+function savedModelIds(fetchMock: ReturnType<typeof vi.fn>) {
+  const [, init] = fetchMock.mock.calls.at(-1) as [string, RequestInit];
+  return JSON.parse(String(init.body)).modelIds;
+}
+
 const save = () =>
   fireEvent.click(screen.getByRole("button", { name: "Update" }));
 
@@ -83,8 +98,10 @@ describe("ProviderForm model rows", () => {
     for (const label of [
       "Model ID",
       "Alias",
+      "Context window",
       "Native file types",
       "Max extracted text characters",
+      "Max output tokens",
     ]) {
       expect(
         screen.getByRole("button", { name: `About ${label}` }),
@@ -97,6 +114,7 @@ describe("ProviderForm model rows", () => {
 
     expect(screen.queryByLabelText("Native file types")).toBeNull();
     expect(screen.queryByLabelText("Max extracted text characters")).toBeNull();
+    expect(screen.queryByLabelText("Max output tokens")).toBeNull();
 
     fireEvent.click(screen.getByRole("button", { name: "Advanced" }));
 
@@ -104,6 +122,115 @@ describe("ProviderForm model rows", () => {
     expect(
       screen.getByLabelText("Max extracted text characters"),
     ).toBeInTheDocument();
+    expect(screen.getByLabelText("Max output tokens")).toBeInTheDocument();
+  });
+
+  // Unlike the file-handling pair, this one is visible on a collapsed row: an
+  // Org Admin who never opens Advanced still has to find out the field exists,
+  // because nothing else can tell Platypus a model's capacity.
+  it("shows the Context window control without expanding Advanced", () => {
+    renderEditForm([{ id: "gpt-4o", passthroughFileTypes: [] }]);
+
+    expect(screen.getByLabelText("Context window")).toBeInTheDocument();
+    expect(screen.getByLabelText("Context window")).toHaveTextContent(
+      "Not set",
+    );
+  });
+
+  it("shows a stored listed size on the closed control", () => {
+    renderEditForm([
+      { id: "gpt-4o", passthroughFileTypes: [], contextWindow: 128000 },
+    ]);
+
+    expect(screen.getByLabelText("Context window")).toHaveTextContent("128k");
+    expect(screen.queryByLabelText("Context window in tokens")).toBeNull();
+  });
+
+  // A proxied model with an unusual capacity comes back in the number input
+  // rather than snapping to whichever preset happens to be nearest.
+  it("shows a stored unlisted size as a Custom value in the number input", () => {
+    renderEditForm([
+      { id: "qwen", passthroughFileTypes: [], contextWindow: 131072 },
+    ]);
+
+    expect(screen.getByLabelText("Context window")).toHaveTextContent("Custom");
+    expect(screen.getByLabelText("Context window in tokens")).toHaveValue(
+      131072,
+    );
+  });
+
+  // Rows are keyed by index, so removing one shifts the row above's local state
+  // onto its neighbour. The control has to survive that: a trigger reading
+  // "Custom" beside no input would leave a declared window invisible and
+  // uneditable until the page was reloaded.
+  it("keeps a Custom value editable after the row above it is removed", () => {
+    renderEditForm([
+      { id: "gpt-4o", passthroughFileTypes: [] },
+      { id: "qwen", passthroughFileTypes: [], contextWindow: 131072 },
+    ]);
+
+    fireEvent.click(screen.getByLabelText("Remove model 1"));
+
+    expect(screen.getByLabelText("Model ID")).toHaveValue("qwen");
+    expect(screen.getByLabelText("Context window")).toHaveTextContent("Custom");
+    expect(screen.getByLabelText("Context window in tokens")).toHaveValue(
+      131072,
+    );
+  });
+
+  it("leaves a legacy string model row loadable with no window declared", () => {
+    renderEditForm(["gpt-4o"] as unknown as Provider["modelIds"]);
+
+    expect(screen.getByLabelText("Model ID")).toHaveValue("gpt-4o");
+    expect(screen.getByLabelText("Context window")).toHaveTextContent(
+      "Not set",
+    );
+  });
+
+  it("sends a declared window back unchanged, so it survives a save", async () => {
+    const fetchMock = mockAcceptedSave();
+    vi.stubGlobal("fetch", fetchMock);
+
+    renderEditForm([
+      { id: "gpt-4o", passthroughFileTypes: [], contextWindow: 200000 },
+    ]);
+    save();
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    expect(savedModelIds(fetchMock)).toEqual([
+      { id: "gpt-4o", passthroughFileTypes: [], contextWindow: 200000 },
+    ]);
+  });
+
+  // The field is optional on both create and update: a row that never touches
+  // it must not start sending a number the Org Admin did not declare.
+  it("declares no window for a row that was left alone", async () => {
+    const fetchMock = mockAcceptedSave();
+    vi.stubGlobal("fetch", fetchMock);
+
+    renderEditForm([{ id: "gpt-4o", passthroughFileTypes: [] }]);
+    save();
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    expect(savedModelIds(fetchMock)[0].contextWindow).toBeUndefined();
+  });
+
+  // Editing a Custom value types straight through, bounds included, so a `128`
+  // meant as 128k is rejected by the server rather than silently swallowed.
+  it("sends a typed Custom value exactly as typed", async () => {
+    const fetchMock = mockAcceptedSave();
+    vi.stubGlobal("fetch", fetchMock);
+
+    renderEditForm([
+      { id: "qwen", passthroughFileTypes: [], contextWindow: 131072 },
+    ]);
+    fireEvent.change(screen.getByLabelText("Context window in tokens"), {
+      target: { value: "128" },
+    });
+    save();
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    expect(savedModelIds(fetchMock)[0].contextWindow).toBe(128);
   });
 
   it("opens a row already carrying file-handling config, so nothing set is hidden", () => {
@@ -121,6 +248,115 @@ describe("ProviderForm model rows", () => {
     expect(screen.getByLabelText("Max extracted text characters")).toHaveValue(
       1000,
     );
+  });
+
+  // Same rule as the file-handling pair: a ceiling someone declared must not be
+  // hidden behind a collapsed section where the next reader won't find it.
+  it("opens a row whose only Advanced setting is a declared output ceiling", () => {
+    renderEditForm([
+      { id: "gpt-4o", passthroughFileTypes: [], maxOutputTokens: 64000 },
+    ]);
+
+    expect(screen.getByLabelText("Max output tokens")).toHaveValue(64000);
+  });
+
+  it("sends a declared output ceiling back unchanged, so it survives a save", async () => {
+    const fetchMock = mockAcceptedSave();
+    vi.stubGlobal("fetch", fetchMock);
+
+    renderEditForm([
+      { id: "gpt-4o", passthroughFileTypes: [], maxOutputTokens: 64000 },
+    ]);
+    save();
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    expect(savedModelIds(fetchMock)[0].maxOutputTokens).toBe(64000);
+  });
+
+  // Emptying the input has to actually clear the stored value. The whole
+  // `modelIds` array is replaced on save, so an absent key is a real removal —
+  // but only if the form stops sending the old number.
+  it("clears a declared output ceiling when the input is emptied", async () => {
+    const fetchMock = mockAcceptedSave();
+    vi.stubGlobal("fetch", fetchMock);
+
+    renderEditForm([
+      { id: "gpt-4o", passthroughFileTypes: [], maxOutputTokens: 64000 },
+    ]);
+    fireEvent.change(screen.getByLabelText("Max output tokens"), {
+      target: { value: "" },
+    });
+    save();
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    expect(savedModelIds(fetchMock)[0]).not.toHaveProperty("maxOutputTokens");
+  });
+
+  // `Number.parseInt` truncated at the first unreadable character, so `1e5` and
+  // `1.9` both saved as 1 — accepted by the schema, and every reply on the model
+  // then stopped after one token. A ceiling must reach the server as typed or
+  // not at all.
+  it("reads an exponent in the output ceiling as the number it denotes", async () => {
+    const fetchMock = mockAcceptedSave();
+    vi.stubGlobal("fetch", fetchMock);
+
+    renderEditForm([
+      { id: "gpt-4o", passthroughFileTypes: [], maxOutputTokens: 64000 },
+    ]);
+    fireEvent.change(screen.getByLabelText("Max output tokens"), {
+      target: { value: "1e5" },
+    });
+    save();
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    expect(savedModelIds(fetchMock)[0].maxOutputTokens).toBe(100_000);
+  });
+
+  // Passed through as typed rather than floored to 1: the schema's `.int()`
+  // rejects it with a message the reader can act on, which is the whole point of
+  // not coercing here.
+  it("sends a fractional output ceiling as typed, for the schema to reject", async () => {
+    const fetchMock = mockAcceptedSave();
+    vi.stubGlobal("fetch", fetchMock);
+
+    renderEditForm([
+      { id: "gpt-4o", passthroughFileTypes: [], maxOutputTokens: 64000 },
+    ]);
+    fireEvent.change(screen.getByLabelText("Max output tokens"), {
+      target: { value: "1.9" },
+    });
+    save();
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    expect(savedModelIds(fetchMock)[0].maxOutputTokens).toBe(1.9);
+  });
+
+  // The extracted-text cap shares the parser, so it shares the fix.
+  it("reads an exponent in the extracted-text cap as the number it denotes", async () => {
+    const fetchMock = mockAcceptedSave();
+    vi.stubGlobal("fetch", fetchMock);
+
+    renderEditForm([
+      { id: "gpt-4o", passthroughFileTypes: [], maxExtractedTextChars: 1000 },
+    ]);
+    fireEvent.change(screen.getByLabelText("Max extracted text characters"), {
+      target: { value: "2e4" },
+    });
+    save();
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    expect(savedModelIds(fetchMock)[0].maxExtractedTextChars).toBe(20_000);
+  });
+
+  it("declares no output ceiling for a row that was left alone", async () => {
+    const fetchMock = mockAcceptedSave();
+    vi.stubGlobal("fetch", fetchMock);
+
+    renderEditForm([{ id: "gpt-4o", passthroughFileTypes: [] }]);
+    save();
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    expect(savedModelIds(fetchMock)[0].maxOutputTokens).toBeUndefined();
   });
 
   it("expands only the row that has config, leaving its neighbours collapsed", () => {
@@ -274,5 +510,56 @@ describe("ProviderForm validation errors on model rows", () => {
       ).toBeInTheDocument(),
     );
     expect(screen.getByText("Too small")).toBeInTheDocument();
+  });
+
+  it("opens a collapsed row when the server rejects its output ceiling", async () => {
+    vi.stubGlobal(
+      "fetch",
+      mockRejectedSave([
+        {
+          path: ["modelIds", 0, "maxOutputTokens"],
+          message: "Too small: expected number to be >0",
+        },
+      ]),
+    );
+
+    renderEditForm([{ id: "a", passthroughFileTypes: [] }]);
+    expect(screen.queryByLabelText("Max output tokens")).toBeNull();
+
+    save();
+
+    await waitFor(() =>
+      expect(screen.getByLabelText("Max output tokens")).toBeInTheDocument(),
+    );
+    expect(
+      screen.getByText("Too small: expected number to be >0"),
+    ).toBeInTheDocument();
+  });
+
+  // The window sits outside Advanced, so its rejection needs no disclosure
+  // opened — it lands on a control the reader is already looking at.
+  it("shows a rejected Context window against the control itself", async () => {
+    vi.stubGlobal(
+      "fetch",
+      mockRejectedSave([
+        {
+          path: ["modelIds", 0, "contextWindow"],
+          message: "Too small: expected number to be >=1000",
+        },
+      ]),
+    );
+
+    renderEditForm([{ id: "a", passthroughFileTypes: [], contextWindow: 128 }]);
+    save();
+
+    await waitFor(() =>
+      expect(
+        screen.getByText("Too small: expected number to be >=1000"),
+      ).toBeInTheDocument(),
+    );
+    expect(screen.getByLabelText("Context window")).toHaveAttribute(
+      "aria-invalid",
+      "true",
+    );
   });
 });

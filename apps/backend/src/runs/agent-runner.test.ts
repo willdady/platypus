@@ -1,5 +1,16 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 
+/**
+ * As much of a stream part as the metadata extractor reads. The SDK hands it
+ * the full `TextStreamPart` union; these tests hand it the fields the part
+ * they are standing in for would carry.
+ */
+type MetadataPart = {
+  type: string;
+  finishReason?: string;
+  usage?: { inputTokens?: number; outputTokens?: number };
+};
+
 const {
   mockPrepareChatTurn,
   mockValidateTurnAttachments,
@@ -63,8 +74,7 @@ const {
       // `toUIMessageStream`'s metadata extractor. The SDK calls it per stream
       // part; the tests call it by hand with the part they care about.
       messageMetadata: undefined as
-        | ((opts: { part: { type: string; finishReason?: string } }) => unknown)
-        | undefined,
+        ((opts: { part: MetadataPart }) => unknown) | undefined,
       responseSentinel: { __isResponse: true },
     },
   };
@@ -452,7 +462,7 @@ describe("rejected tool input instrumentation", () => {
       (opts: { onStepFinish: (step: unknown) => void }) => {
         streamHarness.onStepFinish = opts.onStepFinish;
         return {
-          toUIMessageStream: () => ({ tee: () => [{}, {}] }),
+          toUIMessageStream: () => emptyUIStream(),
         };
       },
     );
@@ -526,6 +536,85 @@ describe("AgentRunner.generate", () => {
     expect(finish.error).toBeUndefined();
     expect(result.text).toBe("ok");
     expect(dispose).toHaveBeenCalledTimes(1);
+  });
+
+  // ADR-0018: an unattended run's only record of how full the context got is
+  // the stats it hands the sink, and the two plausible-looking figures beside
+  // occupancy — `totalUsage.inputTokens` and the accumulated `stats.inputTokens`
+  // — are both cross-step sums.
+  it("records Context occupancy from the final step, not the sum across steps", async () => {
+    mockPrepareChatTurn.mockResolvedValueOnce(fakeTurn());
+    mockGenerateText.mockResolvedValueOnce({
+      text: "ok",
+      steps: [
+        { toolCalls: [], usage: { inputTokens: 1_000, outputTokens: 40 } },
+        { toolCalls: [], usage: { inputTokens: 3_500, outputTokens: 60 } },
+      ],
+      totalUsage: { inputTokens: 4_500, outputTokens: 100 },
+    });
+
+    const sink = new RecordingSink();
+    const result = await runner.generate({ scope, input: baseInput, sink });
+
+    expect(result.stats.contextOccupancy).toBe(3_500);
+    const finish = sink.events.at(-1) as Extract<
+      LifecycleEvent,
+      { name: "onFinish" }
+    >;
+    expect(finish.stats?.contextOccupancy).toBe(3_500);
+    // The billing sums keep their existing meaning.
+    expect(finish.stats?.inputTokens).toBe(4_500);
+    expect(finish.stats?.outputTokens).toBe(100);
+  });
+
+  // The interim stats a long run flushes mid-flight are what the Operator reads
+  // while it is still going, so a step that reports nothing must not leave an
+  // earlier, smaller step's figure looking current.
+  it("clears the interim occupancy when a step reports no usage", async () => {
+    mockPrepareChatTurn.mockResolvedValueOnce(fakeTurn());
+    const progressed: Array<number | undefined> = [];
+    mockGenerateText.mockImplementationOnce(
+      async ({
+        onStepFinish,
+      }: {
+        onStepFinish: (s: unknown) => void | Promise<void>;
+      }) => {
+        await onStepFinish({
+          toolCalls: [],
+          usage: { inputTokens: 1_000, outputTokens: 40 },
+        });
+        await onStepFinish({ toolCalls: [] });
+        return { text: "ok", steps: [{ toolCalls: [] }], totalUsage: {} };
+      },
+    );
+
+    const sink = new RecordingSink();
+    const recorded = sink.onProgress.bind(sink);
+    // Read at call time: the runner passes one mutated stats object every time,
+    // so the figure has to be copied out as each flush happens.
+    sink.onProgress = (ctx: { runId: string; stats?: RunStats }) => {
+      progressed.push(ctx.stats?.contextOccupancy);
+      return recorded(ctx);
+    };
+    await runner.generate({ scope, input: baseInput, sink });
+
+    expect(progressed).toEqual([1_000, undefined]);
+  });
+
+  it("records no occupancy when the Provider reports no usage", async () => {
+    mockPrepareChatTurn.mockResolvedValueOnce(fakeTurn());
+    mockGenerateText.mockResolvedValueOnce({
+      text: "ok",
+      steps: [{ toolCalls: [] }],
+      totalUsage: {},
+    });
+
+    const sink = new RecordingSink();
+    const result = await runner.generate({ scope, input: baseInput, sink });
+
+    // Unknown stays unknown: nothing is estimated, and 0 would read as a
+    // measurement of an empty context.
+    expect(result.stats.contextOccupancy).toBeUndefined();
   });
 
   it("invariant: reaches onFinish even when prepareChatTurn throws", async () => {
@@ -808,6 +897,20 @@ const resetStreamHarness = (): void => {
   streamHarness.messageMetadata = undefined;
 };
 
+/**
+ * A stand-in for what `toUIMessageStream` returns.
+ *
+ * A real (empty) `ReadableStream` rather than a `{ tee }` literal, because the
+ * runner pipes it through the tool-duration transform before teeing — a literal
+ * with only the methods used today silently becomes a lie the moment the
+ * pipeline changes. Nothing reads the branches: `readUIMessageStream` is mocked
+ * to the harness queue and the response is a sentinel.
+ */
+const emptyUIStream = () =>
+  new ReadableStream({
+    start: (controller) => controller.close(),
+  });
+
 // Make streamText return a fake result whose UI-stream callbacks the test can
 // drive by hand: `onStepFinish` (per step), `onFinish` (completion), and
 // `messageMetadata` (per stream part).
@@ -825,13 +928,11 @@ const primeStreamText = () => {
       return {
         toUIMessageStream: (uiOpts: {
           onFinish: (ctx: { messages: unknown[] }) => Promise<void> | void;
-          messageMetadata: (opts: {
-            part: { type: string; finishReason?: string };
-          }) => unknown;
+          messageMetadata: (opts: { part: MetadataPart }) => unknown;
         }) => {
           streamHarness.onFinish = uiOpts.onFinish;
           streamHarness.messageMetadata = uiOpts.messageMetadata;
-          return { tee: () => [{}, {}] };
+          return emptyUIStream();
         },
       };
     },
@@ -1029,7 +1130,7 @@ describe("AgentRunner.stream — success & interruption", () => {
             onFinish: (ctx: { messages: unknown[] }) => Promise<void> | void;
           }) => {
             streamHarness.onFinish = uiOpts.onFinish;
-            return { tee: () => [{}, {}] };
+            return emptyUIStream();
           },
         };
       },
@@ -1128,10 +1229,10 @@ describe("AgentRunner.stream — success & interruption", () => {
   });
 });
 
-// Issue #420: the operator sees a truncated stream in the log, the reader saw
-// nothing. The metadata callback is the only seam for saying so on a stream
-// that has already been flushed to the client.
-describe("AgentRunner.stream — truncation metadata", () => {
+// The metadata callback is the only seam for saying anything about a stream
+// that has already been flushed to the client — issue #420's truncation flag
+// and issue #448's Context occupancy both ride on it.
+describe("AgentRunner.stream — message metadata", () => {
   let runner: AgentRunner;
   beforeEach(() => {
     runner = new AgentRunner();
@@ -1153,7 +1254,7 @@ describe("AgentRunner.stream — truncation metadata", () => {
     });
 
     return {
-      metadataFor: (part: { type: string; finishReason?: string }) =>
+      metadataFor: (part: MetadataPart) =>
         streamHarness.messageMetadata!({ part }),
       end: async () => {
         await streamHarness.onFinish!({ messages: [] });
@@ -1231,10 +1332,200 @@ describe("AgentRunner.stream — truncation metadata", () => {
     const stream = await startStream(fakeTurn());
 
     expect(
-      stream.metadataFor({ type: "finish-step", finishReason: "length" }),
+      stream.metadataFor({
+        type: "finish-step",
+        finishReason: "length",
+        usage: { inputTokens: 100, outputTokens: 20 },
+      }),
+    ).not.toHaveProperty("truncatedByTokenLimit");
+
+    await stream.end();
+  });
+
+  // Issue #448. Occupancy rides on the step-finish part, not the terminal
+  // finish: a cancelled turn never gets a terminal finish, and cancelling a
+  // long turn is exactly when the context had grown most.
+  it("records the model call's token counts on a finished step", async () => {
+    const stream = await startStream(fakeTurn());
+
+    expect(
+      stream.metadataFor({
+        type: "finish-step",
+        finishReason: "stop",
+        usage: { inputTokens: 12_400, outputTokens: 180 },
+      }),
+    ).toEqual({ contextOccupancy: { inputTokens: 12_400, outputTokens: 180 } });
+
+    await stream.end();
+  });
+
+  // The reading each step returns is that step's own context size. The merge
+  // leaves the last one standing, so a tool-using turn reports its real size
+  // rather than a multiple of it.
+  it("reports each step's own size rather than a running total", async () => {
+    const stream = await startStream(fakeTurn());
+
+    const first = stream.metadataFor({
+      type: "finish-step",
+      finishReason: "tool-calls",
+      usage: { inputTokens: 1_000, outputTokens: 30 },
+    });
+    const second = stream.metadataFor({
+      type: "finish-step",
+      finishReason: "stop",
+      usage: { inputTokens: 4_000, outputTokens: 60 },
+    });
+
+    expect(first).toEqual({
+      contextOccupancy: { inputTokens: 1_000, outputTokens: 30 },
+    });
+    expect(second).toEqual({
+      contextOccupancy: { inputTokens: 4_000, outputTokens: 60 },
+    });
+
+    await stream.end();
+  });
+
+  it("records nothing when the Provider reports no token usage", async () => {
+    const stream = await startStream(fakeTurn());
+
+    expect(
+      stream.metadataFor({
+        type: "finish-step",
+        finishReason: "stop",
+        usage: { inputTokens: undefined, outputTokens: undefined },
+      }),
     ).toBeUndefined();
 
     await stream.end();
+  });
+
+  // The merge skips `undefined` overrides, so returning nothing here would
+  // leave the first step's figures on the message, read as this turn's size.
+  it("erases an earlier reading when a later step reports no usage", async () => {
+    const stream = await startStream(fakeTurn());
+
+    stream.metadataFor({
+      type: "finish-step",
+      finishReason: "tool-calls",
+      usage: { inputTokens: 1_000, outputTokens: 30 },
+    });
+
+    expect(
+      stream.metadataFor({
+        type: "finish-step",
+        finishReason: "stop",
+        usage: { inputTokens: undefined, outputTokens: undefined },
+      }),
+    ).toEqual({ contextOccupancy: null });
+
+    await stream.end();
+  });
+
+  // The merge skips `undefined` overrides, so an omitted output count would
+  // pair this step's input count with an earlier step's output count.
+  it("writes an absent output count as a concrete null", async () => {
+    const stream = await startStream(fakeTurn());
+
+    expect(
+      stream.metadataFor({
+        type: "finish-step",
+        finishReason: "stop",
+        usage: { inputTokens: 4_000, outputTokens: undefined },
+      }),
+    ).toEqual({ contextOccupancy: { inputTokens: 4_000, outputTokens: null } });
+
+    await stream.end();
+  });
+
+  // Each part still contributes only the key it owns, so a truncated agent
+  // turn ends up carrying all three.
+  it("keeps the agent attribution and the truncation flag alongside occupancy", async () => {
+    const stream = await startStream(fakeTurn());
+
+    const occupancy = stream.metadataFor({
+      type: "finish-step",
+      finishReason: "length",
+      usage: { inputTokens: 4_000, outputTokens: 60 },
+    });
+    expect(occupancy).not.toHaveProperty("agentId");
+    expect(stream.metadataFor({ type: "start" })).toEqual({
+      agentId: "agent-1",
+    });
+    expect(
+      stream.metadataFor({ type: "finish", finishReason: "length" }),
+    ).toEqual({ truncatedByTokenLimit: true });
+
+    await stream.end();
+  });
+});
+
+// Issue #454: the ceiling the Provider declares for the model has to reach the
+// generation call itself. Amazon Bedrock omits `inferenceConfig.maxTokens`
+// entirely when the SDK is passed nothing, so a value stopping short of the
+// call is a value that changes nothing.
+describe("model output ceiling", () => {
+  let runner: AgentRunner;
+  beforeEach(() => {
+    runner = new AgentRunner();
+    vi.clearAllMocks();
+    resetStreamHarness();
+  });
+
+  const turnWithCeiling = (maxOutputTokens?: number) => {
+    const turn = fakeTurn();
+    return { ...turn, stream: { ...turn.stream, maxOutputTokens } };
+  };
+
+  it("passes the declared ceiling to the unattended generation call", async () => {
+    mockPrepareChatTurn.mockResolvedValueOnce(turnWithCeiling(64000));
+    mockGenerateText.mockResolvedValueOnce(fakeGenerateResult);
+
+    await runner.generate({
+      scope,
+      input: baseInput,
+      sink: new RecordingSink(),
+    });
+
+    expect(mockGenerateText).toHaveBeenCalledWith(
+      expect.objectContaining({ maxOutputTokens: 64000 }),
+    );
+  });
+
+  it("passes the declared ceiling to the streaming call", async () => {
+    mockPrepareChatTurn.mockResolvedValueOnce(turnWithCeiling(32000));
+    streamHarness.queue = new streamHarness.AsyncQueue();
+    primeStreamText();
+
+    await runner.stream({
+      scope,
+      input: { ...baseInput, runId: "s-ceiling" },
+      sink: new RecordingSink(),
+      options: { origin: "http://test" },
+    });
+
+    expect(mockStreamText).toHaveBeenCalledWith(
+      expect.objectContaining({ maxOutputTokens: 32000 }),
+    );
+  });
+
+  // Undeclared has to stay undeclared: the SDK reads an absent key and an
+  // `undefined` value the same way, and anything else would move the ceiling
+  // for every Provider that has never set one.
+  it("sends no ceiling when the model declares none", async () => {
+    mockPrepareChatTurn.mockResolvedValueOnce(turnWithCeiling(undefined));
+    mockGenerateText.mockResolvedValueOnce(fakeGenerateResult);
+
+    await runner.generate({
+      scope,
+      input: baseInput,
+      sink: new RecordingSink(),
+    });
+
+    const args = mockGenerateText.mock.calls[0][0] as {
+      maxOutputTokens?: number;
+    };
+    expect(args.maxOutputTokens).toBeUndefined();
   });
 });
 

@@ -14,6 +14,7 @@ import {
 import { requireAuth } from "../middleware/authentication.ts";
 import { requireOrgAccess } from "../middleware/authorization.ts";
 import { requireSharedDeletable } from "../services/scoped-resource.ts";
+import { redactProviderSecrets } from "../services/credential-redaction.ts";
 import { NotFoundError } from "../errors.ts";
 import type { Variables } from "../server.ts";
 
@@ -52,10 +53,17 @@ orgProvider.post(
 /** List all organization providers */
 orgProvider.get("/", requireAuth, requireOrgAccess(), async (c) => {
   const orgId = c.req.param("orgId")!;
-  const results = await db
+  const rows = await db
     .select()
     .from(providerTable)
     .where(eq(providerTable.organizationId, orgId));
+
+  // This route admits any Organization member — a Shared Provider has to be
+  // listable to be selected. Only an Org Admin sees its credentials (ADR-0006).
+  const isAdmin = c.get("orgMembership")?.role === "admin";
+  const results = rows.map((row) =>
+    redactProviderSecrets(row, { reveal: isAdmin }),
+  );
 
   return c.json({ results });
 });
@@ -80,7 +88,9 @@ orgProvider.get("/:providerId", requireAuth, requireOrgAccess(), async (c) => {
     throw new NotFoundError("Provider not found");
   }
 
-  return c.json(record[0]);
+  // See the list route: credentials are Org-Admin-only (ADR-0006).
+  const isAdmin = c.get("orgMembership")?.role === "admin";
+  return c.json(redactProviderSecrets(record[0], { reveal: isAdmin }));
 });
 
 /** Update an organization provider by ID (admin only) */

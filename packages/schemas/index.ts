@@ -189,6 +189,19 @@ export type ChatList = z.infer<typeof chatListSchema>;
 
 // Agent
 
+/**
+ * Default agentic step ceiling for an agent that has no explicit `maxSteps`,
+ * and the value the Agent form prefills. Keeps API-created agents sane (a
+ * single step never lets a tool-calling agent finish its work) while staying
+ * low enough to bound a model that fails to converge.
+ *
+ * Lives here rather than beside either consumer: both the Chat-turn path and
+ * the Sub-Agent delegation path resolve an unset `maxSteps` through it, and
+ * homing it in one of them makes the other import a module it has no other
+ * reason to load.
+ */
+export const DEFAULT_AGENT_MAX_STEPS = 15;
+
 // An Agent is scoped to either a Workspace or an Organization (mutually
 // exclusive), mirroring the dual-scope shape of `provider`/`mcp`/`skill`.
 // Org-scoped Agents are Shared resources managed by Org Admins (ADR-0007);
@@ -203,7 +216,13 @@ const agentBaseSchema = z.object({
   description: z.string().min(1).max(128),
   instructions: z.string().optional(),
   modelId: z.string(),
-  maxSteps: z.number().optional(),
+  // Bounded because the value reaches `stepCountIs(n)`, whose predicate is
+  // `steps.length === n`, evaluated only after a step has completed. A `0` (or
+  // any negative, or a fraction the integer column would never match) is
+  // therefore never equal to a real step count, so the loop runs unbounded —
+  // the opposite of the ceiling the operator asked for. `min(1)` matches the
+  // `min="1"` the Agent form already puts on the input.
+  maxSteps: z.number().int().min(1).optional(),
   // Sampling params are nullable so the UI can clear them back to "unset"
   // (null) — without null, JSON.stringify drops the cleared `undefined` key
   // and the column keeps its previous value (#263). null is treated as "unset"
@@ -573,13 +592,32 @@ export type ProviderApiMode = z.infer<typeof providerApiModeSchema>;
 // security allow-list: an attached file whose type is absent is converted to
 // text where possible (extracted for PDF/DOCX, see issue #342) — it is never
 // blocked for safety. Absent / legacy rows fall back to a provider-type default
-// at resolve time on the backend. This object is also the intended home for
-// future per-model metadata (e.g. max input/output tokens) — out of scope here.
+// at resolve time on the backend. This object is the home for per-model
+// metadata generally, which is why `contextWindow` lands here too.
 //
 // `maxExtractedTextChars` caps how much text a converted document may inject,
 // protecting small local contexts; omitted means the shared
-// `DEFAULT_MAX_EXTRACTED_TEXT_CHARS` default. A char budget rather than tokens
-// for v1 — it becomes derivable once per-model `maxInputTokens` lands.
+// `DEFAULT_MAX_EXTRACTED_TEXT_CHARS` default. It stays a character budget and
+// is deliberately NOT derived from `contextWindow`: the derivation needs a
+// chars-per-token ratio, which is exactly the estimate ADR-0018 rejects, and it
+// would silently change file handling for every Provider that declares a
+// window.
+//
+// `contextWindow` is the vendor's published TOTAL token capacity for this
+// model, declared by an Org Admin because nothing can discover it — see
+// ADR-0018. Optional always: where it is absent, the Chat's context meter is
+// hidden and nothing else changes.
+//
+// `maxOutputTokens` caps a SINGLE reply, and unlike `contextWindow` it is
+// enforced: it becomes the generation call's output ceiling for every turn on
+// this model. Omitted means Platypus sends nothing and the provider's own
+// default applies — which is fine for the direct Anthropic provider (it carries
+// a per-model fallback table) and silently truncating on Amazon Bedrock, whose
+// Converse API omits `inferenceConfig.maxTokens` entirely when nothing is
+// passed and falls back to a default far below the model's real ceiling (issue
+// #454). Deliberately unbounded above: the only meaningful ceiling is the
+// model's own, Platypus cannot know it behind a proxy, and a value the model
+// won't take is the vendor's to reject.
 //
 // The universal wildcard (`*/*` or `*`) is an advanced escape hatch: it sends
 // EVERY attached file to the model raw. Values are deliberately NOT validated
@@ -710,6 +748,20 @@ const pointerModelIdSchema = z
     message: "Must be a concrete model id, not a Model alias",
   });
 
+/**
+ * Bounds on a declared Context window (ADR-0018). The floor rejects the number
+ * of *thousands* — a `128` meaning 128k — because an under-declaration by three
+ * orders of magnitude is indistinguishable from a deliberate one at read time
+ * and would cripple every reading taken against it. The ceiling sits well above
+ * today's largest published window without leaving the field unbounded.
+ *
+ * Exported because the documentation contract test pins the numbers the
+ * Operator-facing docs quote to these, and the provider form's preset list has
+ * to stay inside them.
+ */
+export const CONTEXT_WINDOW_MIN = 1_000;
+export const CONTEXT_WINDOW_MAX = 10_000_000;
+
 export const modelConfigSchema = z.object({
   id: z.string().min(1),
   // The bare alias name. Absent means the model is referenced by its id.
@@ -725,6 +777,13 @@ export const modelConfigSchema = z.object({
     .optional(),
   passthroughFileTypes: z.array(z.string()).default([]),
   maxExtractedTextChars: z.number().int().positive().optional(),
+  maxOutputTokens: z.number().int().positive().optional(),
+  contextWindow: z
+    .number()
+    .int()
+    .min(CONTEXT_WINDOW_MIN)
+    .max(CONTEXT_WINDOW_MAX)
+    .optional(),
 });
 
 export type ModelConfig = z.infer<typeof modelConfigSchema>;
@@ -1518,8 +1577,19 @@ export type TriggerRunStatus = z.infer<typeof triggerRunStatusSchema>;
 export const triggerRunStatsSchema = z.object({
   steps: z.number(),
   toolCalls: z.array(z.object({ name: z.string(), count: z.number() })),
+  // Cross-step SUMS, and billing figures: every step's usage folded together.
+  // They are rendered on the trigger runs page and deliberately keep that
+  // meaning — occupancy gets its own field below rather than reinterpreting a
+  // number an Operator already reads (ADR-0018).
   inputTokens: z.number(),
   outputTokens: z.number(),
+  /**
+   * How full the model's context got: the input tokens reported for the FINAL
+   * step of the run, which is the whole conversation as last sent. A last
+   * value, never a sum. Absent where the Provider reported no usage — occupancy
+   * is then unknown and nothing is estimated.
+   */
+  contextOccupancy: z.number().int().nonnegative().optional(),
   /**
    * Set only when the run stopped because it hit the model's output ceiling.
    * Absent rather than `false` so an untruncated run stores nothing, matching

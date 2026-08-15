@@ -18,7 +18,9 @@ import {
   requireOrgAccess,
   requireWorkspaceAccess,
   requireWorkspaceConfigAccess,
+  workspaceConfigAccess,
 } from "../middleware/authorization.ts";
+import { redactMcpSecrets } from "../services/credential-redaction.ts";
 import {
   listScoped,
   requireScoped,
@@ -107,8 +109,12 @@ mcp.get(
     // Workspace-scoped MCPs plus the Shared (org-scoped) MCPs attached here
     // (ADR-0007), each tagged with its scope for the frontend.
     const scoped = await listScoped(db, "mcp", { orgId, wsId: workspaceId });
+    // Request credentials are revealed only to a caller who may manage this MCP
+    // (ADR-0006) — the same rule the write routes reject on. The rows still list,
+    // because granting an MCP to an Agent does not require self-management.
+    const { allowed } = await workspaceConfigAccess(c, "mcpSelfManagement");
     const results = scoped.map(({ row, scope }) => ({
-      ...sanitizeMcpResponse(row),
+      ...redactMcpSecrets(sanitizeMcpResponse(row), { reveal: allowed }),
       scope,
     }));
 
@@ -130,7 +136,12 @@ mcp.get(
       orgId,
       wsId: workspaceId,
     });
-    return c.json({ ...sanitizeMcpResponse(row), scope });
+    // See the list route: redacted unless this caller may manage the MCP.
+    const { allowed } = await workspaceConfigAccess(c, "mcpSelfManagement");
+    return c.json({
+      ...redactMcpSecrets(sanitizeMcpResponse(row), { reveal: allowed }),
+      scope,
+    });
   },
 );
 

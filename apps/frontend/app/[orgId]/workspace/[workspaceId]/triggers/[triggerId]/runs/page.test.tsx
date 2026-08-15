@@ -81,3 +81,38 @@ describe("Trigger runs truncation marker", () => {
     expect(screen.queryByText(RUN_CUT_SHORT_NOTICE)).toBeNull();
   });
 });
+
+// Without this an Operator can only see a scheduled Agent's context filling up
+// after it starts failing at the vendor (ADR-0018).
+describe("Trigger runs Context occupancy", () => {
+  it("shows how full the context got on the run's last step", async () => {
+    await renderRuns([run(stats({ contextOccupancy: 42000 }))]);
+
+    expect(screen.getByText(/42K context/)).toBeInTheDocument();
+  });
+
+  it("shows nothing where the Provider reported no usage", async () => {
+    await renderRuns([run(stats())]);
+
+    expect(screen.queryByText(/context/)).toBeNull();
+  });
+
+  it("keeps the token sums as their own figure beside occupancy", async () => {
+    // These are cross-step billing sums an Operator has been reading; occupancy
+    // is a separate figure and must not be mistaken for either of them.
+    await renderRuns([run(stats({ contextOccupancy: 42000 }))]);
+
+    expect(screen.getByText(/100 in \/ 4\.1K out/)).toBeInTheDocument();
+  });
+
+  // The same quantity the Chat meter shows, so it is written the same way —
+  // `1M` in one place and `1,000,000` in the other reads as two measurements.
+  it("abbreviates a figure of a million tokens or more", async () => {
+    await renderRuns([
+      run(stats({ contextOccupancy: 1_048_576, inputTokens: 2_500_000 })),
+    ]);
+
+    expect(screen.getByText(/1M context/)).toBeInTheDocument();
+    expect(screen.getByText(/2\.5M in/)).toBeInTheDocument();
+  });
+});

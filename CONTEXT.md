@@ -57,6 +57,10 @@ _Avoid_: context size, token limit, max tokens (that names an output cap).
 How full a model's **Context window** was on the most recent Chat turn — the input-token count the vendor reported for the last model call of that turn, inclusive of cached tokens. A last value, not a running total: the conversation is re-sent in full on every Chat turn, so occupancy replaces rather than accumulates. Unknown where the Provider reports no token usage, in which case Platypus estimates nothing. Distinct from token **usage**, which is the count of tokens billed across a turn or run and legitimately is a sum.
 _Avoid_: context size, context usage, tokens used, running total.
 
+**Output ceiling**:
+The most a `(Provider, model)` pair may produce in a single reply, declared by an Org Admin on the Provider's model entry and surfaced as **Max output tokens**. Unlike the **Context window** it is enforced: it is sent as the output limit on every **Chat turn** and delegated **Sub-Agent** run against that model. The Provider's own one-shot executions — Chat metadata and memory extraction, which run against its pointer-settings — do not carry it. Optional; a model without one is sent no limit at all, leaving the vendor's own default in force, which on Bedrock is far below the model's real capability. Bounds a reply, never the conversation.
+_Avoid_: max tokens, token limit, context window (that names the total capacity), output budget.
+
 **Tool set**:
 A named bundle of Tools an Agent can be granted. Either contributed by a Plugin (registered in code) or backed by an MCP server.
 
@@ -156,6 +160,7 @@ The record binding a Conversation locus to a Chat (which carries the Workspace +
 - An **Agent** references one **Provider**, zero-or-more **Tool sets** (static or **MCP**-backed), zero-or-more **Skills**, and zero-or-more **Sub-Agents**.
 - A **Provider** belongs to either an **Organization** (shared) or a **Workspace** (private).
 - Each model a **Provider** exposes may declare a **Context window**. A **Chat turn** against that model yields a **Context occupancy**, measured from the tokens the vendor reports and meaningful only where a **Context window** was declared.
+- Each model a **Provider** exposes may also declare an **Output ceiling**, which a **Chat turn** — or a **Sub-Agent** run — against that model is generated under. Independent of the **Context window**: one bounds the reply and is enforced, the other describes the whole capacity and is not.
 - An **Agent**, **Skill**, **MCP**, or **Provider** is a **Scoped resource**: its row carries either an `organizationId` or a `workspaceId`, never both. Resolved relative to a **Workspace**, an Organization-scoped one is a **Shared resource**, visible only through an **Attachment**; a Sandbox-backed **Tool set** instead rebinds to the invoking **Workspace**'s **Sandbox** at Chat-turn time.
 - A **Blueprint** names a set of **Shared resources** and, applied to a **Workspace**, creates their **Attachments** in one step.
 - **Workspaces** are created only by **Org Admins** — directly, or auto-provisioned for a member when they accept an invitation. An invitation carries an ordered set of zero-or-more **Blueprints**; on accept they are applied to the new Workspace in order (Attachments union; later Blueprints win on any single-valued pointer-setting). Members do not create their own Workspaces.

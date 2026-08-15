@@ -39,6 +39,7 @@ import {
   DEFAULT_MAX_EXTRACTED_TEXT_CHARS,
   kanbanBoardSchema,
   mcpSchema,
+  modelConfigSchema,
   skillSchema,
   triggerSchema,
   webhookEventSchema,
@@ -583,30 +584,38 @@ describe("core plugins", () => {
 
 // --- field limits ------------------------------------------------------------
 
+type ZodBounds = {
+  minLength?: number | null;
+  maxLength?: number | null;
+  minValue?: number | null;
+  maxValue?: number | null;
+};
+
 /**
- * Unwrap `.optional()` / `.nullable()` so the string checks underneath are
+ * Unwrap `.optional()` / `.nullable()` so the bound accessors underneath are
  * reachable.
  */
-const unwrap = (
-  schema: unknown,
-): { minLength?: number; maxLength?: number } => {
+const unwrap = (schema: unknown): ZodBounds => {
   let current = schema as { unwrap?: () => unknown };
   while (typeof current?.unwrap === "function") {
     current = current.unwrap() as { unwrap?: () => unknown };
   }
-  return current as { minLength?: number; maxLength?: number };
+  return current as ZodBounds;
 };
 
 /**
- * The `min`/`max` a Zod string field enforces, whatever it is wrapped in.
+ * The bounds a Zod field enforces, read off whichever pair of accessors its
+ * type uses — `minLength`/`maxLength` for a string, `minValue`/`maxValue` for a
+ * number.
  *
  * Throws rather than returning empty bounds. If Zod moves these accessors, an
  * expectation of `{}` would satisfy every claim below and the whole section
  * would go quietly green — the exact failure this file exists to prevent.
  */
-const stringField = (
+const boundedField = (
   schema: { shape: Record<string, unknown> },
   field: string,
+  accessors: { min: keyof ZodBounds; max: keyof ZodBounds },
 ): { min?: number; max?: number } => {
   if (schema.shape[field] === undefined) {
     throw new Error(
@@ -615,16 +624,35 @@ const stringField = (
     );
   }
   const bounds = unwrap(schema.shape[field]);
-  const min = bounds.minLength ?? undefined;
-  const max = bounds.maxLength ?? undefined;
+  const min = bounds[accessors.min] ?? undefined;
+  const max = bounds[accessors.max] ?? undefined;
   if (min === undefined && max === undefined) {
     throw new Error(
       `Read no min or max off the Zod field \`${field}\`. Either the schema stopped ` +
-        `bounding it, or Zod moved minLength/maxLength — fix this helper before trusting the suite.`,
+        `bounding it, or Zod moved ${accessors.min}/${accessors.max} — fix this helper before trusting the suite.`,
     );
   }
   return { min, max };
 };
+
+/** The `min`/`max` a Zod string field enforces, whatever it is wrapped in. */
+const stringField = (
+  schema: { shape: Record<string, unknown> },
+  field: string,
+): { min?: number; max?: number } =>
+  boundedField(schema, field, { min: "minLength", max: "maxLength" });
+
+/**
+ * The `min`/`max` a Zod number field enforces. A number's bounds live on
+ * different accessors from a string's, and reading a number through
+ * `stringField` throws rather than quietly reporting no bounds — which is why
+ * this sibling exists rather than one helper guessing.
+ */
+const numberField = (
+  schema: { shape: Record<string, unknown> },
+  field: string,
+): { min?: number; max?: number } =>
+  boundedField(schema, field, { min: "minValue", max: "maxValue" });
 
 type LimitClaim = {
   doc: string;
@@ -724,6 +752,12 @@ const LIMIT_CLAIMS: LimitClaim[] = [
     source: "packages/schemas/index.ts (DEFAULT_MAX_EXTRACTED_TEXT_CHARS)",
     expected: { max: DEFAULT_MAX_EXTRACTED_TEXT_CHARS },
   },
+  {
+    doc: "self-hosting/providers-and-auth.mdx",
+    anchor: "`contextWindow`",
+    source: "packages/schemas/index.ts (modelConfigSchema.contextWindow)",
+    expected: numberField(modelConfigSchema, "contextWindow"),
+  },
 ];
 
 // A claim with no bound to compare is a test that always passes. Catch it here,
@@ -769,13 +803,24 @@ const normaliseNumbers = (text: string): string =>
     // following separator needs, or `1,234,567` strips to `1234,567`.
     .replace(/(\d),(?=\d)/g, "$1");
 
+/**
+ * The units a limit can be stated in. A character count and a token count are
+ * both bounds a reader is rejected by, and neither page would thank us for
+ * restating its number in the other's unit.
+ */
+const LIMIT_UNIT = "(?:characters|tokens)";
+
 const readClaimedLimits = (
   text: string,
 ): { min?: number; max?: number } | undefined => {
   const normalised = normaliseNumbers(text);
-  const range = normalised.match(/(\d+)\s*-\s*(\d+)\s*characters/);
+  const range = normalised.match(
+    new RegExp(`(\\d+)\\s*-\\s*(\\d+)\\s*${LIMIT_UNIT}`),
+  );
   if (range) return { min: Number(range[1]), max: Number(range[2]) };
-  const upTo = normalised.match(/(?:up to|default)[^.]*?(\d+)\s*characters/);
+  const upTo = normalised.match(
+    new RegExp(`(?:up to|default)[^.]*?(\\d+)\\s*${LIMIT_UNIT}`),
+  );
   if (upTo) return { max: Number(upTo[1]) };
   return undefined;
 };

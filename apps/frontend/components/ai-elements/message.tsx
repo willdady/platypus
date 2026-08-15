@@ -47,7 +47,9 @@ export const Message = ({
 }: MessageProps) => (
   <div
     className={cn(
-      "group flex w-full max-w-[80%] gap-2",
+      // Wider on a phone, where 80% of a narrow column costs more than the
+      // gutter it buys back.
+      "group flex w-full max-w-[85%] gap-2 sm:max-w-[80%]",
       from === "user" ? "is-user ml-auto justify-end" : "is-assistant",
       className,
     )}

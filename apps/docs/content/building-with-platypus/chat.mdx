@@ -69,11 +69,11 @@ It is only there when the resolved Provider supports it. It is **absent** when:
 - nothing has resolved yet, because no Agent or model is selected.
 
 <Callout type="warning">
-  The toggle resets itself when you pick a different Provider or model directly —
-  the new endpoint may not support search, so it starts off. It does **not** reset
-  when you switch from one Agent to another, even though that changes Provider
-  too. So search you turned on for one Agent silently stays on for the next one;
-  turn it off yourself if you don't want it.
+  The toggle resets itself when you pick a different Provider or model directly
+  — the new endpoint may not support search, so it starts off. It does **not**
+  reset when you switch from one Agent to another, even though that changes
+  Provider too. So search you turned on for one Agent silently stays on for the
+  next one; turn it off yourself if you don't want it.
 </Callout>
 
 This is the vendor's search, not a tool you grant. An Agent that should read
@@ -92,10 +92,10 @@ card. Its header shows the Tool's name, a status — **Pending**, **Running**,
 **Completed**, **Error** — and how long the Tool took: `<1ms`, `842ms`, `1.2s`,
 or `1m 03s` past a minute.
 
-The time is the Tool's own work, measured on the server, so it appears a moment
-after the reply finishes rather than while the Tool is running. It is stored
-with the message and does not change afterwards. A Tool that failed still shows
-the time it spent before failing.
+The time is the Tool's own work, measured on the server, so it appears the
+moment the Tool finishes rather than counting up while it runs. It is stored
+with the message and does not change afterwards — the number you first see is
+final. A Tool that failed still shows the time it spent before failing.
 
 Read it against the reply as a whole: most Tools land in single milliseconds, so
 a turn that felt slow and shows nothing above `1.2s` spent its time in the
@@ -124,6 +124,11 @@ output limit.**
 Everything above the marker is a real answer; there is no more of it. The marker
 is stored with the message, so it is still there when you reload the Chat.
 
+The ceiling itself is **Max output tokens** on the Provider's model, which an
+Org Admin sets — see
+[Capping a single reply](/self-hosting/providers-and-auth#capping-a-single-reply)
+if replies keep stopping short of what the model can write.
+
 <Callout type="warning">
   **Nothing resumes a cut-short reply.** **Regenerate** re-runs the whole turn
   from the beginning against the same ceiling; it does not carry on from where
@@ -131,16 +136,54 @@ is stored with the message, so it is still there when you reload the Chat.
   the work in smaller pieces to begin with.
 </Callout>
 
+## How full the conversation is
+
+A second limit sits alongside the one above, and it is not the same one: as well
+as a ceiling on what a model can **write**, there is a ceiling on what it can be
+**sent**. A Chat sends the whole conversation every turn, so a Chat that has been
+going a while is spending more of that room on each reply. A small meter beside
+the prompt input tells you how much of it the last turn used: a short bar, the
+percentage, and both token figures, as in `33% · 42K/128K`.
+
+The numbers matter as much as the bar. 33% of a 128,000-token model and 33% of
+an 8,000-token one are the same fraction and very different situations, so the
+meter always shows what it is a third _of_.
+
+It reads the **last completed turn**, which makes it one message behind: it
+cannot include what you are typing, because counting tokens is something only the
+model's vendor can do. Read it as "this is where the conversation stood", not "if
+I send this it will be that".
+
+When the meter is filling up, you have three options: prune the Chat by hand
+(see [editing and deleting
+messages](#fixing-a-conversation-instead-of-restarting-it)), start a new Chat, or
+switch to a model with a bigger window. Nothing happens automatically.
+
+<Callout type="warning">
+  **The meter appears; nothing enforces it.** Platypus does not trim, summarise,
+  warn, or block a turn for approaching the window — reaching it fails at the
+  vendor exactly as it did before, and the meter is the only thing that changed.
+  Treat a full meter as your cue to act, not as a guard rail that will catch you.
+</Callout>
+
+**No meter at all** means one of two things, and both are normal: nobody has
+declared a **Context window** for this model, or the Provider does not report
+token usage. Either way the capacity or the reading is unknown, and Platypus
+would rather show nothing than a number you cannot interpret. An Org Admin
+declares the window on the Provider's model entry — see [Declaring a Context
+window](/self-hosting/providers-and-auth#declaring-a-context-window). Switching
+model switches the meter with it, since the window belongs to the model.
+
 ## Fixing a conversation instead of restarting it
 
 Hover a message for its actions:
 
-| Action         | On                      | Does                                                                       |
-| -------------- | ----------------------- | -------------------------------------------------------------------------- |
-| **Edit**       | Your own messages       | Rewrites the message and re-runs from there — see the warning below         |
-| **Copy**       | Any message             | Copies the message text to the clipboard                                   |
-| **Delete**     | Any message             | Removes it from the view                                                   |
-| **Regenerate** | The last assistant reply | Runs the turn again, same message, fresh response                          |
+| Action         | On                       | Does                                                                |
+| -------------- | ------------------------ | ------------------------------------------------------------------- |
+| **Edit**       | Your own messages        | Rewrites the message and re-runs from there — see the warning below |
+| **Copy**       | Any message              | Copies the message text to the clipboard                            |
+| **Delete**     | Any message              | Removes it from the view                                            |
+| **Regenerate** | The last assistant reply | Runs the turn again, same message, fresh response                   |
 
 The actions are hidden while the last reply is still streaming.
 
@@ -148,14 +191,14 @@ The actions are hidden while the last reply is still streaming.
   **Edit discards everything after the message you edited.** Submitting the edit
   drops that message and every message below it, then sends your new text as a
   fresh turn. That is usually what you want — you're correcting a wrong turn and
-  re-running from there — but there is no undo, so an edit near the top of a long
-  conversation throws away the rest of it.
+  re-running from there — but there is no undo, so an edit near the top of a
+  long conversation throws away the rest of it.
 </Callout>
 
 <Callout type="warning">
   **Delete removes the message from the view, and the next thing you send makes
-  that permanent.** Nothing is written when you click it, so reloading before you
-  send anything brings the message back. Send a message afterwards and the
+  that permanent.** Nothing is written when you click it, so reloading before
+  you send anything brings the message back. Send a message afterwards and the
   shortened conversation is what gets stored — the deletion you thought was
   cosmetic is now the history. Reload first if you want it back.
 </Callout>
@@ -214,8 +257,9 @@ Chat.
 
 <Callout type="info">
   Pressing stop **cancels the run on the server**, not only your connection to
-  it. The Agent stops working, the tokens stop being spent, and the partial reply
-  is kept. Closing the tab does none of that — the run carries on and finishes.
+  it. The Agent stops working, the tokens stop being spent, and the partial
+  reply is kept. Closing the tab does none of that — the run carries on and
+  finishes.
 </Callout>
 
 ## Per-Chat settings, and when they exist
