@@ -28,7 +28,12 @@ const sshBackend: SandboxBackendContribution<
   name: "SSH (Remote Host)",
   configSchema: sshSandboxConfigSchema,
   credentialsSchema: sshSandboxCredentialsSchema,
-  create: (config, credentials) => createSshSandboxBackend(config, credentials),
+  // The third argument is the plugin's deploy-time block, and it is forwarded
+  // for the logger core bound to this manifest's name: the adapter's
+  // unpinned-host-key warning (ADR-0012) goes out through the same contract a
+  // third-party plugin gets, not through a relative import of core's logger.
+  create: (config, credentials, plugin) =>
+    createSshSandboxBackend(config, credentials, plugin),
 };
 
 export const plugin: PlatypusPlugin = {

@@ -3,6 +3,7 @@ import { eq } from "drizzle-orm";
 import { db } from "../index.ts";
 import { sandbox as sandboxTable } from "../db/schema.ts";
 import { getSandboxBackend } from "../sandbox/index.ts";
+import { getSandboxBackendPlugin } from "../plugins/registry.ts";
 import { createContributionRegistry } from "../registry/contribution-registry.ts";
 import { createSandboxTools } from "../sandbox/tools.ts";
 import { logger } from "../logger.ts";
@@ -81,10 +82,17 @@ registerToolSet(SANDBOX_TOOLSET_ID, {
     if (rows.length === 0) return {};
 
     const row = rows[0];
+    // Every line below is core's, but the subject of all three is a *plugin's*
+    // adapter, so each binds the owning plugin under the same `plugin` key the
+    // plugin's own lines carry. Otherwise an Operator filtering on one plugin
+    // gets the adapter's own lines and none of core's about it. `null` rather
+    // than absent when the backend belongs to no loaded plugin — the first case
+    // below is exactly that, and "no owner" is the answer, not "unasked".
+    const plugin = getSandboxBackendPlugin(row.backend) ?? null;
     const registration = getSandboxBackend(row.backend);
     if (!registration) {
       logger.warn(
-        { backend: row.backend, sandboxId: row.id },
+        { backend: row.backend, plugin, sandboxId: row.id },
         "Sandbox backend not registered; skipping sandbox tools for this turn",
       );
       return {};
@@ -93,7 +101,12 @@ registerToolSet(SANDBOX_TOOLSET_ID, {
     const configResult = registration.configSchema.safeParse(row.config ?? {});
     if (!configResult.success) {
       logger.warn(
-        { sandboxId: row.id, issues: configResult.error.issues },
+        {
+          backend: row.backend,
+          plugin,
+          sandboxId: row.id,
+          issues: configResult.error.issues,
+        },
         "Sandbox config failed adapter validation; skipping sandbox tools",
       );
       return {};
@@ -104,7 +117,12 @@ registerToolSet(SANDBOX_TOOLSET_ID, {
     );
     if (!credentialsResult.success) {
       logger.warn(
-        { sandboxId: row.id, issues: credentialsResult.error.issues },
+        {
+          backend: row.backend,
+          plugin,
+          sandboxId: row.id,
+          issues: credentialsResult.error.issues,
+        },
         "Sandbox credentials failed adapter validation; skipping sandbox tools",
       );
       return {};

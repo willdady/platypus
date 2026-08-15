@@ -75,6 +75,11 @@ Operator's `LOG_LEVEL` decides which of your lines are written — the same cont
 they have over core's. [Plugin API &
 config](/extending/plugin-api-and-config#logging) has the shape and the levels.
 
+The bundled Docker and SSH Sandbox backends write through this same logger, so
+what you are given is what the two most involved Plugins in the box get. If it
+turns out not to be enough for something you are building, that is a gap worth
+reporting rather than a reason to reach for `console`.
+
 ## Web-search backends
 
 A **Web-search backend** fills the **Search** toggle in Chat for Providers whose

@@ -275,6 +275,13 @@ import {
   dockerSandboxConfigSchema,
 } from "./backend.ts";
 import { logger } from "../../logger.ts";
+import { plugin } from "./index.ts";
+import { loadPlugins } from "../loader.ts";
+import type { SandboxBackendContribution } from "@platypuschat/plugin-sdk";
+import {
+  makeFakePluginLogger,
+  type FakePluginLogger,
+} from "../../test-utils.ts";
 import {
   MAX_READ_BYTES,
   MAX_SHELL_OUTPUT_BYTES,
@@ -353,9 +360,21 @@ function setupFreshProvision() {
   queueExec({ exitCode: 0 });
 }
 
+// The `PluginLogger` seam core injects on the plugin's deploy-time block. The
+// adapter logs through this rather than core's logger, so any suite asserting on
+// a log line injects one and watches it — watching core's would pass vacuously.
+let pluginLogger: FakePluginLogger;
+
+const withPluginLogger = () => ({
+  config: { allowedNetworks: [] },
+  credentials: {},
+  logger: pluginLogger,
+});
+
 beforeEach(() => {
   resetMockState();
   vi.clearAllMocks();
+  pluginLogger = makeFakePluginLogger();
 });
 
 describe("DockerSandboxTransport — provisioning", () => {
@@ -576,9 +595,9 @@ describe("DockerSandboxTransport — destroy() idempotence", () => {
     mockState.containerStop = () =>
       Promise.reject(makeStatusError("no such container", 404));
 
-    const backend = createDockerSandboxBackend({}, {});
+    const backend = createDockerSandboxBackend({}, {}, withPluginLogger());
     await expect(backend.destroy(ctx)).resolves.toBeUndefined();
-    expect(logger.warn).not.toHaveBeenCalled();
+    expect(pluginLogger.warn).not.toHaveBeenCalled();
   });
 
   it("swallows 304 (already stopped) on stop", async () => {
@@ -586,9 +605,9 @@ describe("DockerSandboxTransport — destroy() idempotence", () => {
     mockState.containerStop = () =>
       Promise.reject(makeStatusError("already stopped", 304));
 
-    const backend = createDockerSandboxBackend({}, {});
+    const backend = createDockerSandboxBackend({}, {}, withPluginLogger());
     await expect(backend.destroy(ctx)).resolves.toBeUndefined();
-    expect(logger.warn).not.toHaveBeenCalled();
+    expect(pluginLogger.warn).not.toHaveBeenCalled();
   });
 
   it("swallows 404 on container remove and on volume remove", async () => {
@@ -598,9 +617,9 @@ describe("DockerSandboxTransport — destroy() idempotence", () => {
     mockState.volumeRemove = () =>
       Promise.reject(makeStatusError("not found", 404));
 
-    const backend = createDockerSandboxBackend({}, {});
+    const backend = createDockerSandboxBackend({}, {}, withPluginLogger());
     await expect(backend.destroy(ctx)).resolves.toBeUndefined();
-    expect(logger.warn).not.toHaveBeenCalled();
+    expect(pluginLogger.warn).not.toHaveBeenCalled();
   });
 
   it("logs but proceeds when stop returns 500", async () => {
@@ -618,10 +637,10 @@ describe("DockerSandboxTransport — destroy() idempotence", () => {
       return Promise.resolve(undefined);
     };
 
-    const backend = createDockerSandboxBackend({}, {});
+    const backend = createDockerSandboxBackend({}, {}, withPluginLogger());
     await backend.destroy(ctx);
 
-    expect(logger.warn).toHaveBeenCalledTimes(1);
+    expect(pluginLogger.warn).toHaveBeenCalledTimes(1);
     expect(removeCalled).toBe(true);
     expect(volRemoveCalled).toBe(true);
   });
@@ -756,6 +775,142 @@ describe("DockerSandboxTransport — host reachability (ADR-0005)", () => {
         allowedNetworks: [],
       }).safeParse({ extraHosts: ["not a valid entry"] });
       expect(result.success).toBe(false);
+    });
+  });
+});
+
+describe("DockerSandboxTransport — plugin-injected logger", () => {
+  // Core binds the injected logger to the manifest name before handing it over,
+  // so a line written through it is already attributed — which is why these
+  // assertions check the *fields the call site supplies* and never a `plugin`
+  // key of their own.
+
+  it("writes the image-pull line to the injected logger, not core's", async () => {
+    setupFreshProvision();
+    queueExec({ stdout: "hi", exitCode: 0 });
+    const backend = createDockerSandboxBackend({}, {}, withPluginLogger());
+    await backend.shellExec(ctx, { command: "echo hi" });
+
+    expect(mockState.pullCalls).toEqual(["debian:stable-slim"]);
+    // Same fields and message as before the routing change.
+    expect(pluginLogger.info).toHaveBeenCalledWith(
+      { image: "debian:stable-slim" },
+      "Pulling sandbox image",
+    );
+    // The whole point: core's logger is no longer the adapter's channel.
+    expect(logger.info).not.toHaveBeenCalled();
+  });
+
+  it("writes the destroy() warnings to the injected logger, not core's", async () => {
+    mockState.existingContainer = makeFakeContainer();
+    mockState.containerStop = () =>
+      Promise.reject(makeStatusError("internal", 500));
+    const backend = createDockerSandboxBackend({}, {}, withPluginLogger());
+    await backend.destroy(ctx);
+
+    expect(pluginLogger.warn).toHaveBeenCalledTimes(1);
+    expect(pluginLogger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({ workspaceId: "ws-abc" }),
+      "sandbox destroy: stop failed (continuing)",
+    );
+    expect(logger.warn).not.toHaveBeenCalled();
+  });
+
+  it("names each teardown step it could not complete", async () => {
+    mockState.existingContainer = makeFakeContainer();
+    mockState.containerStop = () =>
+      Promise.reject(makeStatusError("internal", 500));
+    mockState.containerRemove = () =>
+      Promise.reject(makeStatusError("internal", 500));
+    mockState.volumeRemove = () =>
+      Promise.reject(makeStatusError("internal", 500));
+    const backend = createDockerSandboxBackend({}, {}, withPluginLogger());
+    await backend.destroy(ctx);
+
+    // All three still fire, at warn, with their original wording — teardown is
+    // best-effort and each step reports independently.
+    expect(pluginLogger.warn.mock.calls.map((c) => c[1])).toEqual([
+      "sandbox destroy: stop failed (continuing)",
+      "sandbox destroy: container remove failed (continuing)",
+      "sandbox destroy: volume remove failed",
+    ]);
+  });
+
+  it("degrades to silence when core injects no logger", async () => {
+    // `PluginConfigContext.logger` is optional under the SDK's append-only
+    // policy, so the adapter must not assume it. Core always supplies it; a
+    // directly-constructed adapter does not, and that must not throw.
+    mockState.existingContainer = makeFakeContainer();
+    mockState.containerStop = () =>
+      Promise.reject(makeStatusError("internal", 500));
+
+    const backend = createDockerSandboxBackend({}, {});
+    await expect(backend.destroy(ctx)).resolves.toBeUndefined();
+    expect(logger.warn).not.toHaveBeenCalled();
+  });
+
+  it("reaches the adapter through the manifest's create()", async () => {
+    // The full contribution path core uses: the loader calls `create` with the
+    // plugin block as its third argument, and the manifest must forward it.
+    setupFreshProvision();
+    queueExec({ stdout: "hi", exitCode: 0 });
+    const contribution = plugin.contributes.sandboxBackends![0];
+    const backend = contribution.create({}, {}, withPluginLogger());
+    await backend.shellExec(ctx, { command: "echo hi" });
+
+    expect(pluginLogger.info).toHaveBeenCalledWith(
+      { image: "debian:stable-slim" },
+      "Pulling sandbox image",
+    );
+  });
+
+  it("carries the manifest name on its lines when loaded by the real loader", async () => {
+    // End to end through the path production takes — loader → deploy-time block
+    // → `create` → transport — because that is the only thing that proves the
+    // *attribution*. Every other test in this suite supplies its own logger and
+    // so would pass even if the loader bound the wrong name, or none. What an
+    // Operator greps for is `"plugin":"@platypus/docker"`, and this is the test
+    // that fails if that stops being what they get.
+    setupFreshProvision();
+    queueExec({ stdout: "hi", exitCode: 0 });
+
+    // Stands in for core's logger: records the bindings each child is made with
+    // and merges them into every line that child writes, exactly as pino does.
+    const lines: Array<{ bindings: object; fields: object; msg?: string }> = [];
+    const baseLogger = {
+      child: (bindings: Record<string, unknown>) => {
+        const write =
+          (level: string) => (objOrMsg: object | string, msg?: string) =>
+            lines.push({
+              bindings: { ...bindings, level },
+              fields: typeof objOrMsg === "string" ? {} : objOrMsg,
+              msg: typeof objOrMsg === "string" ? objOrMsg : msg,
+            });
+        return {
+          debug: write("debug"),
+          info: write("info"),
+          warn: write("warn"),
+          error: write("error"),
+        };
+      },
+    };
+
+    // A capturing registrar so this load does not collide with the
+    // module-global sandbox registry other suites in this file seed.
+    const captured: SandboxBackendContribution[] = [];
+    await loadPlugins({
+      pluginNames: ["@platypus/docker"],
+      registerSandbox: (c) => captured.push(c),
+      baseLogger,
+    });
+
+    const backend = captured[0].create({}, {});
+    await backend.shellExec(ctx, { command: "echo hi" });
+
+    expect(lines).toContainEqual({
+      bindings: { plugin: "@platypus/docker", level: "info" },
+      fields: { image: "debian:stable-slim" },
+      msg: "Pulling sandbox image",
     });
   });
 });

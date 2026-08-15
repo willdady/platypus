@@ -2,7 +2,10 @@ import Docker from "dockerode";
 import type { Container, Exec } from "dockerode";
 import { PassThrough } from "node:stream";
 import { z } from "zod";
-import { logger } from "../../logger.ts";
+import type {
+  PluginConfigContext,
+  PluginLogger,
+} from "@platypuschat/plugin-sdk";
 import {
   MAX_SHELL_OUTPUT_BYTES,
   SANDBOX_WORKSPACE_ROOT,
@@ -300,10 +303,19 @@ export class DockerSandboxTransport implements SandboxTransport {
   private inflight: Map<string, Promise<Container>>;
   private networks: string[];
   private extraHosts: string[];
+  /**
+   * The logger core bound to `@platypus/docker` and injected on the plugin's
+   * deploy-time block (ADR-0013) — the same contract a third-party plugin gets,
+   * rather than the relative import of core's logger only an in-tree plugin ever
+   * had. Optional because {@link PluginConfigContext.logger} is, so every call
+   * site below is written `this.logger?.…`.
+   */
+  private logger?: PluginLogger;
 
   constructor(
     config: Partial<DockerSandboxConfig>,
     _credentials: DockerSandboxCredentials,
+    logger?: PluginLogger,
   ) {
     this.docker = new Docker();
     this.inflight = new Map();
@@ -311,6 +323,7 @@ export class DockerSandboxTransport implements SandboxTransport {
     // present), but tolerate a bare object too.
     this.networks = config?.networks ?? [];
     this.extraHosts = config?.extraHosts ?? [];
+    this.logger = logger;
   }
 
   // Idempotent, concurrency-safe provisioning. Concurrent callers for the
@@ -402,7 +415,7 @@ export class DockerSandboxTransport implements SandboxTransport {
     } catch (err) {
       if (!is404(err)) throw err;
     }
-    logger.info({ image: IMAGE }, "Pulling sandbox image");
+    this.logger?.info({ image: IMAGE }, "Pulling sandbox image");
     const stream = await this.docker.pull(IMAGE);
     await new Promise<void>((resolve, reject) => {
       this.docker.modem.followProgress(stream, (err: Error | null) =>
@@ -509,7 +522,7 @@ export class DockerSandboxTransport implements SandboxTransport {
         // Already stopped is 304 — swallow that too.
         const e = err as { statusCode?: number };
         if (e.statusCode !== 304) {
-          logger.warn(
+          this.logger?.warn(
             { workspaceId: ctx.workspaceId, err },
             "sandbox destroy: stop failed (continuing)",
           );
@@ -522,7 +535,7 @@ export class DockerSandboxTransport implements SandboxTransport {
       await this.docker.getContainer(name).remove({ force: true, v: false });
     } catch (err) {
       if (!is404(err)) {
-        logger.warn(
+        this.logger?.warn(
           { workspaceId: ctx.workspaceId, err },
           "sandbox destroy: container remove failed (continuing)",
         );
@@ -534,7 +547,7 @@ export class DockerSandboxTransport implements SandboxTransport {
       await this.docker.getVolume(vol).remove();
     } catch (err) {
       if (!is404(err)) {
-        logger.warn(
+        this.logger?.warn(
           { workspaceId: ctx.workspaceId, err },
           "sandbox destroy: volume remove failed",
         );
@@ -551,5 +564,8 @@ export class DockerSandboxTransport implements SandboxTransport {
 export const createDockerSandboxBackend = (
   config: Partial<DockerSandboxConfig>,
   credentials: DockerSandboxCredentials,
+  plugin?: PluginConfigContext,
 ): SandboxBackend =>
-  createPosixSandbox(new DockerSandboxTransport(config, credentials));
+  createPosixSandbox(
+    new DockerSandboxTransport(config, credentials, plugin?.logger),
+  );

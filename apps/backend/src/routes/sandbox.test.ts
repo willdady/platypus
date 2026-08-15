@@ -9,6 +9,7 @@ import {
 import app from "../server.ts";
 import { registerSandboxBackend } from "../sandbox/index.ts";
 import { setLoadedPlugins } from "../plugins/registry.ts";
+import { logger } from "../logger.ts";
 
 // Register a backend directly (bypassing the loader) so the /backends catalog
 // has a stable entry to assert against, and record its owning plugin in the
@@ -339,6 +340,71 @@ describe("Sandbox Routes", () => {
       expect(res.status).toBe(200);
     });
 
+    it("attributes the force-change leak warning to the outgoing backend's plugin", async () => {
+      // The adapter that was skipped is the one that may have leaked, so it is
+      // the one `backend`/`plugin` name — the incoming backend rides along as
+      // `replacedBy` so neither key can be read as spanning both.
+      mockSession();
+      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]);
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-1", organizationId: "org-1" },
+      ]);
+      mockDb.limit.mockResolvedValueOnce([
+        {
+          id: "sbx-1",
+          workspaceId,
+          backend: ANNOTATED_BACKEND,
+          config: {},
+          credentials: {},
+        },
+      ]);
+      mockDb.returning.mockResolvedValueOnce([
+        {
+          id: "sbx-1",
+          workspaceId,
+          name: "Switched",
+          backend: CREDS_BACKEND,
+          config: {},
+          credentials: {},
+        },
+      ]);
+      setLoadedPlugins(
+        loadedPluginsFixture([], {
+          sandboxBackends: new Map([
+            [ANNOTATED_BACKEND, "@platypus/outgoing"],
+            [CREDS_BACKEND, "@platypus/incoming"],
+          ]),
+        }),
+      );
+      const warn = vi.spyOn(logger, "warn").mockImplementation(() => {});
+
+      await app.request(`${baseUrl}?force=true`, {
+        method: "PUT",
+        body: JSON.stringify({
+          name: "Switched",
+          backend: CREDS_BACKEND,
+          config: {},
+          credentials: { privateKey: "k" },
+        }),
+        headers: { "Content-Type": "application/json" },
+      });
+
+      expect(warn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          backend: ANNOTATED_BACKEND,
+          plugin: "@platypus/outgoing",
+          replacedBy: CREDS_BACKEND,
+        }),
+        expect.stringContaining("external resources may leak"),
+      );
+      // The plugin taking over has leaked nothing and must not be named here.
+      expect(warn).not.toHaveBeenCalledWith(
+        expect.objectContaining({ plugin: "@platypus/incoming" }),
+        expect.anything(),
+      );
+      warn.mockRestore();
+    });
+
     it("returns 404 when no sandbox is configured", async () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]);
@@ -386,6 +452,81 @@ describe("Sandbox Routes", () => {
       });
       expect(res.status).toBe(200);
       expect(await res.json()).toEqual({ message: "Sandbox deleted" });
+    });
+
+    it("names the owning plugin on the force-delete leak warning", async () => {
+      // Core's own line about a plugin's adapter carries the plugin under the
+      // same `plugin` key the adapter's own lines do, so an Operator filtering
+      // by plugin sees core's half of the story too.
+      mockSession();
+      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]);
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-1", organizationId: "org-1" },
+      ]);
+      mockDb.limit.mockResolvedValueOnce([
+        {
+          id: "sbx-1",
+          workspaceId,
+          backend: ANNOTATED_BACKEND,
+          config: {},
+          credentials: {},
+        },
+      ]);
+      setLoadedPlugins(
+        loadedPluginsFixture([], {
+          sandboxBackends: new Map([[ANNOTATED_BACKEND, "@platypus/test"]]),
+        }),
+      );
+      const warn = vi.spyOn(logger, "warn").mockImplementation(() => {});
+
+      const res = await app.request(`${baseUrl}?force=true`, {
+        method: "DELETE",
+      });
+
+      expect(res.status).toBe(200);
+      expect(warn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          backend: ANNOTATED_BACKEND,
+          plugin: "@platypus/test",
+          sandboxId: "sbx-1",
+        }),
+        expect.stringContaining("external resources may leak"),
+      );
+      warn.mockRestore();
+    });
+
+    it("reports no owner rather than omitting the key for an unowned backend", async () => {
+      // A backend belonging to no loaded plugin is a real state (the plugin was
+      // dropped from PLATYPUS_PLUGINS). `null` says "no owner"; an absent key
+      // would read as "not asked", and the line would drop out of a filter that
+      // is looking for exactly this case.
+      mockSession();
+      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]);
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-1", organizationId: "org-1" },
+      ]);
+      mockDb.limit.mockResolvedValueOnce([
+        {
+          id: "sbx-1",
+          workspaceId,
+          backend: "no-such-backend",
+          config: {},
+          credentials: {},
+        },
+      ]);
+      setLoadedPlugins(loadedPluginsFixture());
+      const warn = vi.spyOn(logger, "warn").mockImplementation(() => {});
+
+      await app.request(`${baseUrl}?force=true`, { method: "DELETE" });
+
+      expect(warn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          backend: "no-such-backend",
+          plugin: null,
+        }),
+        expect.stringContaining("external resources may leak"),
+      );
+      warn.mockRestore();
     });
 
     it("returns 500 when destroy() fails and preserves the row", async () => {

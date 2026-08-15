@@ -154,7 +154,11 @@ empty list unless it says otherwise, and silently runs without web-fetch.
 - **A plugin logs into your stream, under your `LOG_LEVEL`.** Lines a plugin
   writes carry `"plugin":"<name>"` and are formatted and filtered exactly like
   core's own, so raising `LOG_LEVEL` to `debug` while diagnosing one plugin
-  raises everything else with it.
+  raises everything else with it. The bundled Docker and SSH backends are tagged
+  the same way as any third-party plugin, and Platypus's own lines about a
+  Sandbox backend — an adapter that failed to tear down, a backend that is no
+  longer registered — carry the same tag. Filtering on one plugin gets you both
+  sides: what the plugin reported, and what Platypus reported about it.
 
 <Callout type="warning">
   **`compose.sandbox.yaml` replaces `PLATYPUS_PLUGINS` — it does not merge.**

@@ -6,6 +6,7 @@ import {
   sandboxTeardownFailure as sandboxTeardownFailureTable,
 } from "../db/schema.ts";
 import { logger } from "../logger.ts";
+import { getSandboxBackendPlugin } from "../plugins/registry.ts";
 import { getSandboxBackend } from "./index.ts";
 
 type SandboxRow = typeof sandboxTable.$inferSelect;
@@ -68,8 +69,14 @@ export const destroyWorkspaceSandboxes = async (
         await destroySandboxRow(row);
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
+        // Core's line about a plugin's adapter, so it binds the owning plugin
+        // under the same `plugin` key the adapter's own lines carry — an
+        // Operator filtering on one plugin should get both halves of the story.
+        // `null` when the backend belongs to no loaded plugin, which is one way
+        // a cascade teardown fails in the first place.
+        const plugin = getSandboxBackendPlugin(row.backend) ?? null;
         logger.warn(
-          { workspaceId, sandboxId: row.id, backend: row.backend, err },
+          { workspaceId, sandboxId: row.id, backend: row.backend, plugin, err },
           "Sandbox destroy() failed during workspace cascade; recording ledger entry",
         );
         try {
@@ -81,8 +88,17 @@ export const destroyWorkspaceSandboxes = async (
             error: message,
           });
         } catch (ledgerErr) {
+          // The ledger row is what an Operator reconciles a leaked resource
+          // from, so when the insert itself fails this line is all they get —
+          // it carries the backend and plugin the lost row would have named.
           logger.error(
-            { workspaceId, sandboxId: row.id, err: ledgerErr },
+            {
+              workspaceId,
+              sandboxId: row.id,
+              backend: row.backend,
+              plugin,
+              err: ledgerErr,
+            },
             "Failed to record sandbox teardown failure",
           );
         }

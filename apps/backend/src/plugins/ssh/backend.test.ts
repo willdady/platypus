@@ -287,6 +287,13 @@ import {
   sshSandboxCredentialsSchema,
 } from "./backend.ts";
 import { logger } from "../../logger.ts";
+import { plugin } from "./index.ts";
+import { loadPlugins } from "../loader.ts";
+import type { SandboxBackendContribution } from "@platypuschat/plugin-sdk";
+import {
+  makeFakePluginLogger,
+  type FakePluginLogger,
+} from "../../test-utils.ts";
 import { MAX_READ_BYTES, MAX_SHELL_OUTPUT_BYTES } from "../../sandbox/index.ts";
 import type { SandboxContext } from "../../sandbox/types.ts";
 
@@ -335,9 +342,21 @@ function queueExec(cfg: ExecConfig = {}) {
   mockState.execQueue.push(cfg);
 }
 
+// The `PluginLogger` seam core injects on the plugin's deploy-time block. The
+// adapter logs through this rather than core's logger, so any suite asserting on
+// a log line injects one and watches it — watching core's would pass vacuously.
+let pluginLogger: FakePluginLogger;
+
+const withPluginLogger = () => ({
+  config: {},
+  credentials: {},
+  logger: pluginLogger,
+});
+
 beforeEach(() => {
   resetMockState();
   vi.clearAllMocks();
+  pluginLogger = makeFakePluginLogger();
 });
 
 describe("sshSandboxConfigSchema / credentialsSchema", () => {
@@ -407,9 +426,13 @@ describe("SshSandboxTransport — connect", () => {
 
   it("warns loudly about MITM when no hostKey is pinned", async () => {
     queueExec({ exitCode: 0 });
-    const backend = createSshSandboxBackend(CONFIG, CREDENTIALS);
+    const backend = createSshSandboxBackend(
+      CONFIG,
+      CREDENTIALS,
+      withPluginLogger(),
+    );
     await backend.shellExec(ctx, { command: "true" });
-    expect(logger.warn).toHaveBeenCalledWith(
+    expect(pluginLogger.warn).toHaveBeenCalledWith(
       expect.objectContaining({ host: "ssh.example.com" }),
       expect.stringContaining("WITHOUT host-key verification"),
     );
@@ -450,6 +473,7 @@ describe("SshSandboxTransport — host-key verification", () => {
       // A full `ssh-keyscan`-style line: the parser picks the base64 blob token.
       { ...CONFIG, hostKey: `ssh-ed25519 ${HOST_KEY_B64}` },
       CREDENTIALS,
+      withPluginLogger(),
     );
     await backend.shellExec(ctx, { command: "true" });
 
@@ -458,7 +482,7 @@ describe("SshSandboxTransport — host-key verification", () => {
     // The root-resolution exec ran → the connection is live.
     expect(mockState.execCommands.length).toBeGreaterThan(0);
     // No MITM warning is emitted when a pin is enforced.
-    expect(logger.warn).not.toHaveBeenCalled();
+    expect(pluginLogger.warn).not.toHaveBeenCalled();
   });
 
   it("rejects the connection with a clear error when the pin mismatches", async () => {
@@ -477,12 +501,16 @@ describe("SshSandboxTransport — host-key verification", () => {
 
   it("connects without a hostVerifier and warns exactly once when no hostKey is pinned", async () => {
     queueExec({ exitCode: 0 });
-    const backend = createSshSandboxBackend(CONFIG, CREDENTIALS);
+    const backend = createSshSandboxBackend(
+      CONFIG,
+      CREDENTIALS,
+      withPluginLogger(),
+    );
     await backend.shellExec(ctx, { command: "true" });
 
     expect(mockState.connectConfigs[0].hostVerifier).toBeUndefined();
-    expect(logger.warn).toHaveBeenCalledTimes(1);
-    expect(logger.warn).toHaveBeenCalledWith(
+    expect(pluginLogger.warn).toHaveBeenCalledTimes(1);
+    expect(pluginLogger.warn).toHaveBeenCalledWith(
       expect.objectContaining({ host: "ssh.example.com" }),
       expect.stringContaining("WITHOUT host-key verification"),
     );
@@ -794,5 +822,107 @@ describe("SshSandboxTransport — fs.list (exec find)", () => {
     await backend.fsList(ctx, { path: `it's` });
     // classic '\'' escape idiom, matching shQuote.
     expect(lastFindCommand()).toContain(`'find' '${ROOT}/it'\\''s'`);
+  });
+});
+
+describe("SshSandboxTransport — plugin-injected logger", () => {
+  // ADR-0012's security-relevant line. Its level and exact wording are pinned
+  // here as well as in the host-key suite above: this is a routing change, and a
+  // warning an Operator relies on must survive it byte for byte.
+  it("writes the unpinned-host-key warning to the injected logger, not core's", async () => {
+    queueExec({ exitCode: 0 });
+
+    const backend = createSshSandboxBackend(
+      CONFIG,
+      CREDENTIALS,
+      withPluginLogger(),
+    );
+    await backend.shellExec(ctx, { command: "true" });
+
+    expect(pluginLogger.warn).toHaveBeenCalledTimes(1);
+    expect(pluginLogger.warn).toHaveBeenCalledWith(
+      { host: "ssh.example.com", port: 22 },
+      "SSH sandbox connecting WITHOUT host-key verification — session and injected env are exposed to a MITM. Set `hostKey` to pin the host.",
+    );
+    // The whole point: core's logger is no longer the adapter's channel.
+    expect(logger.warn).not.toHaveBeenCalled();
+  });
+
+  it("degrades to silence when core injects no logger", async () => {
+    // `PluginConfigContext.logger` is optional under the SDK's append-only
+    // policy. Core always supplies it; a directly-constructed adapter does not,
+    // and the connection must still be made rather than throwing.
+    queueExec({ exitCode: 0 });
+
+    const backend = createSshSandboxBackend(CONFIG, CREDENTIALS);
+    await expect(
+      backend.shellExec(ctx, { command: "true" }),
+    ).resolves.toBeDefined();
+    expect(logger.warn).not.toHaveBeenCalled();
+  });
+
+  it("reaches the adapter through the manifest's create()", async () => {
+    // The full contribution path core uses: the loader calls `create` with the
+    // plugin block as its third argument, and the manifest must forward it.
+    queueExec({ exitCode: 0 });
+
+    const contribution = plugin.contributes.sandboxBackends![0];
+    const backend = contribution.create(
+      CONFIG,
+      CREDENTIALS,
+      withPluginLogger(),
+    );
+    await backend.shellExec(ctx, { command: "true" });
+
+    expect(pluginLogger.warn).toHaveBeenCalledWith(
+      { host: "ssh.example.com", port: 22 },
+      expect.stringContaining("WITHOUT host-key verification"),
+    );
+  });
+
+  it("carries the manifest name on the MITM warning when loaded by the real loader", async () => {
+    // End to end through the path production takes — loader → deploy-time block
+    // → `create` → transport. Every other test here supplies its own logger and
+    // would pass even if the loader bound the wrong name, or none. This warning
+    // is the one an Operator is most likely to alert on (ADR-0012), so what it
+    // is tagged with is worth pinning against the real loader.
+    queueExec({ exitCode: 0 });
+
+    // Stands in for core's logger: records the bindings each child is made with
+    // and merges them into every line that child writes, exactly as pino does.
+    const lines: Array<{ bindings: object; fields: object; msg?: string }> = [];
+    const baseLogger = {
+      child: (bindings: Record<string, unknown>) => {
+        const write =
+          (level: string) => (objOrMsg: object | string, msg?: string) =>
+            lines.push({
+              bindings: { ...bindings, level },
+              fields: typeof objOrMsg === "string" ? {} : objOrMsg,
+              msg: typeof objOrMsg === "string" ? objOrMsg : msg,
+            });
+        return {
+          debug: write("debug"),
+          info: write("info"),
+          warn: write("warn"),
+          error: write("error"),
+        };
+      },
+    };
+
+    const captured: SandboxBackendContribution[] = [];
+    await loadPlugins({
+      pluginNames: ["@platypus/ssh"],
+      registerSandbox: (c) => captured.push(c),
+      baseLogger,
+    });
+
+    const backend = captured[0].create(CONFIG, CREDENTIALS);
+    await backend.shellExec(ctx, { command: "true" });
+
+    expect(lines).toContainEqual({
+      bindings: { plugin: "@platypus/ssh", level: "warn" },
+      fields: { host: "ssh.example.com", port: 22 },
+      msg: "SSH sandbox connecting WITHOUT host-key verification — session and injected env are exposed to a MITM. Set `hostKey` to pin the host.",
+    });
   });
 });

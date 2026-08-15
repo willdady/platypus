@@ -6,7 +6,10 @@ import {
   type SFTPWrapper,
 } from "ssh2";
 import { z } from "zod";
-import { logger } from "../../logger.ts";
+import type {
+  PluginConfigContext,
+  PluginLogger,
+} from "@platypuschat/plugin-sdk";
 import {
   DEFAULT_SHELL_TIMEOUT_MS,
   MAX_SHELL_OUTPUT_BYTES,
@@ -249,13 +252,27 @@ export class SshSandboxTransport implements SandboxTransport {
   private connection: Connection | null;
   private inflight: Promise<Connection> | null;
   private idleTimer: NodeJS.Timeout | null;
+  /**
+   * The logger core bound to `@platypus/ssh` and injected on the plugin's
+   * deploy-time block (ADR-0013) — see the Docker transport for why an in-tree
+   * plugin consumes the third-party contract rather than importing core's
+   * logger. Optional because {@link PluginConfigContext.logger} is, so the one
+   * call site below is written `this.logger?.…`; the connection is still made
+   * when it is absent, silently.
+   */
+  private logger?: PluginLogger;
 
-  constructor(config: SshSandboxConfig, credentials: SshSandboxCredentials) {
+  constructor(
+    config: SshSandboxConfig,
+    credentials: SshSandboxCredentials,
+    logger?: PluginLogger,
+  ) {
     this.config = config;
     this.credentials = credentials;
     this.connection = null;
     this.inflight = null;
     this.idleTimer = null;
+    this.logger = logger;
   }
 
   // Lazy-connect on first use; reuse the single connection across all tool calls
@@ -297,7 +314,7 @@ export class SshSandboxTransport implements SandboxTransport {
       // Public-key auth still prevents credential theft by an impostor host; the
       // residual risk is session/output exposure to a MITM. Pin `hostKey` on
       // internet-facing hosts.
-      logger.warn(
+      this.logger?.warn(
         { host, port },
         "SSH sandbox connecting WITHOUT host-key verification — session and injected env are exposed to a MITM. Set `hostKey` to pin the host.",
       );
@@ -623,5 +640,8 @@ export class SshSandboxTransport implements SandboxTransport {
 export const createSshSandboxBackend = (
   config: SshSandboxConfig,
   credentials: SshSandboxCredentials,
+  plugin?: PluginConfigContext,
 ): SandboxBackend =>
-  createPosixSandbox(new SshSandboxTransport(config, credentials));
+  createPosixSandbox(
+    new SshSandboxTransport(config, credentials, plugin?.logger),
+  );
