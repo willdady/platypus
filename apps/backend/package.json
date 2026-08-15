@@ -55,6 +55,7 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@ai-sdk/provider": "^4.0.4",
     "@eslint/js": "^10.0.1",
     "@platypus-examples/tool-set": "workspace:*",
     "@types/dockerode": "^4.0.1",

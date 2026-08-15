@@ -56,6 +56,12 @@ import {
 } from "./file-gate.ts";
 import type { PlatypusUIMessage } from "../types.ts";
 import { listScopedByIds, resolveScoped } from "./scoped-resource.ts";
+import {
+  wrapToolsWithActivity,
+  type ToolActivityEvent,
+} from "./tool-activity.ts";
+import type { WorkspaceScope } from "../scope.ts";
+import type { RunId } from "../runs/types.ts";
 
 // --- Errors ---
 
@@ -193,24 +199,19 @@ export type PrepareChatTurnInput = {
    */
   runMode?: "interactive" | "headless";
   /**
-   * Called whenever a tool call begins, completes, or yields activity.
-   * The agent runner uses this to reset the per-step timeout so long-running
-   * tool calls (e.g. MCP web search, sub-agent delegation) don't trip the
-   * stall detector while work is actively in progress. The optional `event`
-   * carries tool-call boundary metadata that the runner logs; sub-agent
-   * yield bumps invoke with no event (timer-only).
+   * Called when a tool call begins and again when it settles. The run
+   * lifecycle logs both and holds its per-step stall timer down in between, so
+   * a long tool call (MCP web search, a delegated sub-agent run) is never read
+   * as a stalled step.
    */
-  onActivity?: (event?: ToolActivityEvent) => void;
-};
-
-/**
- * Per-tool-call lifecycle event surfaced to the agent runner so it can log
- * tool start/end with duration. `durationMs` is only set on `"end"` events.
- */
-export type ToolActivityEvent = {
-  phase: "start" | "end";
-  toolName: string;
-  durationMs?: number;
+  onActivity?: (event: ToolActivityEvent) => void;
+  /**
+   * The run this turn belongs to. Sub-agent delegate tools built here register
+   * their own runs as children of it, so a delegated run is cancellable and
+   * subject to timeouts in its own right. Absent for callers that prepare a
+   * turn outside the run lifecycle (tests, the pre-persist file gate).
+   */
+  run?: { runId: RunId; scope: WorkspaceScope };
 };
 
 // --- Queries seam ---
@@ -524,6 +525,7 @@ export const prepareChatTurn = async (
     frontendUrl,
     runMode = "interactive",
     onActivity,
+    run,
   } = input;
 
   const workspace = await queries.getWorkspace(workspaceId);
@@ -557,7 +559,7 @@ export const prepareChatTurn = async (
   ] = await Promise.all([
     loadTools(queries, agent, workspaceId, orgId, frontendUrl, user.id),
     loadSkills(queries, agent, orgId, workspaceId),
-    loadSubAgents(queries, agent, orgId, workspaceId, frontendUrl, onActivity),
+    loadSubAgents(queries, agent, orgId, workspaceId, frontendUrl, run),
     queries.getUserContexts(user.id, workspaceId),
     queries.getRecentMemories(user.id, workspaceId),
     queries.getSandboxEnvKeys(workspaceId),
@@ -604,15 +606,8 @@ export const prepareChatTurn = async (
     tools.loadSkill = createLoadSkillTool(orgId, workspaceId);
   }
 
-  const heartbeat = onActivity ? createToolHeartbeat(onActivity) : null;
-
-  const wrappedTools = heartbeat
-    ? wrapToolsWithBump(
-        tools,
-        onActivity!,
-        heartbeat.onToolStart,
-        heartbeat.onToolEnd,
-      )
+  const wrappedTools = onActivity
+    ? wrapToolsWithActivity(tools, onActivity)
     : tools;
 
   // Inline file URLs to `data:` bytes when we have an origin, then ALWAYS
@@ -643,7 +638,6 @@ export const prepareChatTurn = async (
   const dispose = async () => {
     if (disposed) return;
     disposed = true;
-    heartbeat?.stop();
     for (const client of allMcpClients) {
       try {
         await client.close();
@@ -745,162 +739,12 @@ export const validateTurnAttachments = async (
 // --- Private helpers ---
 
 /**
- * Default cadence between heartbeat bumps while any tool is in flight. Must
- * be comfortably below the smallest configured per-step timeout (2 min for
- * chat by default) so a slow tool can't outlive the timer between heartbeats.
- */
-export const DEFAULT_TOOL_HEARTBEAT_INTERVAL_MS = 30 * 1000;
-
-/**
- * Tracks how many tool calls are currently executing and fires `bump()` at a
- * fixed cadence while that count is positive. Used by `prepareChatTurn` to
- * keep the run's per-step stall timer alive across a long tool call or a
- * sub-agent whose own tool calls yield no parts for an extended period.
- *
- * Exported for direct testing — production callers should always go through
- * `prepareChatTurn`.
- */
-export const createToolHeartbeat = (
-  bump: () => void,
-  intervalMs: number = DEFAULT_TOOL_HEARTBEAT_INTERVAL_MS,
-): {
-  onToolStart: () => void;
-  onToolEnd: () => void;
-  stop: () => void;
-  /** Visible for tests. Number of tool calls currently being tracked. */
-  inflight: () => number;
-} => {
-  let inflight = 0;
-  let stopped = false;
-  let timer: ReturnType<typeof setInterval> | undefined;
-
-  return {
-    onToolStart: () => {
-      // Defensive: if a tool callback somehow fires after stop() (e.g. an
-      // MCP transport that ignores AbortSignal), don't start a fresh timer
-      // that nothing will clean up.
-      if (stopped) return;
-      inflight += 1;
-      if (inflight === 1) {
-        timer = setInterval(bump, intervalMs);
-      }
-    },
-    onToolEnd: () => {
-      inflight = Math.max(0, inflight - 1);
-      if (inflight === 0 && timer) {
-        clearInterval(timer);
-        timer = undefined;
-      }
-    },
-    stop: () => {
-      stopped = true;
-      if (timer) {
-        clearInterval(timer);
-        timer = undefined;
-      }
-    },
-    inflight: () => inflight,
-  };
-};
-
-/**
- * Wraps each tool's `execute` to:
- * 1. Emit `start` / `end` activity events for structured logging and the
- *    initial per-step timer bump (`runId`, `toolName`, `durationMs`).
- * 2. Call `onToolStart` / `onToolEnd` so the surrounding turn can maintain
- *    an inflight counter and run a heartbeat — the only thing that keeps
- *    the per-step timer alive across a tool call (or sub-agent) that takes
- *    longer than the stall threshold to settle.
- *
- * Sub-agent tools whose `execute` is an async generator are returned by
- * reference; the inflight bookkeeping still happens because they expose
- * an `execute` function and we wrap it the same way. Their inner part
- * yields continue to bump the timer via `onProgress` for visibility, but
- * correctness no longer depends on those yields being frequent enough.
- */
-/**
- * Re-exported so callers and tests that reach the normalizer through this
- * module keep working. It lives in `tool-result.ts` because the sub-agent tool
- * builder needs it too, and this module already imports that one.
- *
- * `wrapToolsWithBump` applies it at the promise-resolved and synchronous return
- * paths, covering every value-returning tool on the parent turn at once. The
- * async-iterable path (sub-agent delegate tools) is intentionally exempt — its
- * yields are streamed UI parts, not the result fed to the model.
+ * Re-exported so callers and tests that reach these through this module keep
+ * working. They live in their own modules because the sub-agent tool builder
+ * needs them too, and this module imports that one.
  */
 export { normalizeToolResult };
-
-export const wrapToolsWithBump = (
-  tools: Record<string, Tool>,
-  onActivity: (event?: ToolActivityEvent) => void,
-  onToolStart: () => void,
-  onToolEnd: () => void,
-): Record<string, Tool> => {
-  const wrapped: Record<string, Tool> = {};
-  for (const [name, t] of Object.entries(tools)) {
-    const execute = (t as { execute?: unknown }).execute;
-    if (typeof execute !== "function") {
-      wrapped[name] = t;
-      continue;
-    }
-    const runExecute = execute as (args: unknown, options: unknown) => unknown;
-    wrapped[name] = {
-      ...t,
-      execute: (args: unknown, options: unknown) => {
-        const startedAt = Date.now();
-        onToolStart();
-        onActivity({ phase: "start", toolName: name });
-        const finish = () => {
-          onToolEnd();
-          onActivity({
-            phase: "end",
-            toolName: name,
-            durationMs: Date.now() - startedAt,
-          });
-        };
-        let result: unknown;
-        try {
-          result = runExecute.call(t, args, options);
-        } catch (err) {
-          finish();
-          throw err;
-        }
-        if (
-          result != null &&
-          typeof (result as { then?: unknown }).then === "function"
-        ) {
-          return (result as Promise<unknown>)
-            .then(normalizeToolResult)
-            .finally(finish);
-        }
-        // Async iterable / generator path (sub-agent tools). Wrap it so the
-        // counter decrements once the consumer drains the iterator.
-        if (
-          result != null &&
-          typeof (result as Record<symbol, unknown>)[Symbol.asyncIterator] ===
-            "function"
-        ) {
-          const inner = result as AsyncIterable<unknown>;
-          return (async function* () {
-            try {
-              for await (const part of inner) {
-                yield part;
-              }
-            } finally {
-              finish();
-            }
-          })();
-        }
-        // Normalize before finish() so the sync path mirrors the promise path:
-        // a throw (e.g. a BigInt in the result) happens before the "end" event.
-        const normalized = normalizeToolResult(result);
-        finish();
-        return normalized;
-      },
-    };
-  }
-  return wrapped;
-};
+export { wrapToolsWithActivity, type ToolActivityEvent };
 
 /**
  * Why a model reference resolved to nothing, said in the caller's terms: a
@@ -1083,7 +927,7 @@ const loadSubAgents = async (
   orgId: string,
   workspaceId: string,
   frontendUrl: string | undefined,
-  onProgress?: () => void,
+  run: { runId: RunId; scope: WorkspaceScope } | undefined,
 ): Promise<{
   subAgents: Array<{ id: string; name: string; description?: string | null }>;
   unavailableSubAgents: SubAgentFailure[];
@@ -1160,7 +1004,7 @@ const loadSubAgents = async (
       subAgentMcpClients.push(...mcpClients);
       return subTools;
     },
-    onProgress,
+    run,
   );
 
   // The system prompt must describe only sub-agents that produced a callable

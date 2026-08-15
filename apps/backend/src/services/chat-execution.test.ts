@@ -88,10 +88,10 @@ import {
   validateTurnAttachments,
   NotFoundError,
   ValidationError,
-  createToolHeartbeat,
   resolveSearchMode,
-  wrapToolsWithBump,
+  wrapToolsWithActivity,
   normalizeToolResult,
+  type ToolActivityEvent,
 } from "./chat-execution.ts";
 import {
   clearWebBackends,
@@ -1263,92 +1263,6 @@ describe("chat-execution", () => {
     });
   });
 
-  describe("createToolHeartbeat", () => {
-    beforeEach(() => {
-      vi.useFakeTimers();
-    });
-
-    afterEach(() => {
-      vi.useRealTimers();
-    });
-
-    it("fires bump at the configured cadence while a tool is in flight", () => {
-      const bump = vi.fn();
-      const hb = createToolHeartbeat(bump, 1000);
-
-      hb.onToolStart();
-      // No bump yet — the heartbeat fires on each interval tick, not at start.
-      expect(bump).not.toHaveBeenCalled();
-
-      vi.advanceTimersByTime(1000);
-      expect(bump).toHaveBeenCalledTimes(1);
-
-      vi.advanceTimersByTime(2000);
-      expect(bump).toHaveBeenCalledTimes(3);
-
-      hb.onToolEnd();
-      vi.advanceTimersByTime(5000);
-      // No further bumps after the last tool ends.
-      expect(bump).toHaveBeenCalledTimes(3);
-    });
-
-    it("keeps a single heartbeat running across parallel tool calls", () => {
-      const bump = vi.fn();
-      const hb = createToolHeartbeat(bump, 1000);
-
-      hb.onToolStart();
-      hb.onToolStart();
-      hb.onToolStart();
-      expect(hb.inflight()).toBe(3);
-
-      vi.advanceTimersByTime(3000);
-      // Three ticks — proves only one interval is running, not three.
-      expect(bump).toHaveBeenCalledTimes(3);
-
-      hb.onToolEnd();
-      hb.onToolEnd();
-      // Still one tool in flight, heartbeat continues.
-      vi.advanceTimersByTime(1000);
-      expect(bump).toHaveBeenCalledTimes(4);
-
-      hb.onToolEnd();
-      expect(hb.inflight()).toBe(0);
-      vi.advanceTimersByTime(5000);
-      expect(bump).toHaveBeenCalledTimes(4);
-    });
-
-    it("stop() halts the heartbeat and prevents future onToolStart from restarting it", () => {
-      const bump = vi.fn();
-      const hb = createToolHeartbeat(bump, 1000);
-
-      hb.onToolStart();
-      vi.advanceTimersByTime(1000);
-      expect(bump).toHaveBeenCalledTimes(1);
-
-      hb.stop();
-      vi.advanceTimersByTime(5000);
-      expect(bump).toHaveBeenCalledTimes(1);
-
-      // Defensive: a tool callback firing after dispose must not resurrect
-      // a heartbeat that nothing will clean up.
-      hb.onToolStart();
-      vi.advanceTimersByTime(5000);
-      expect(bump).toHaveBeenCalledTimes(1);
-    });
-
-    it("onToolEnd is safe to over-call (inflight clamped at zero)", () => {
-      const bump = vi.fn();
-      const hb = createToolHeartbeat(bump, 1000);
-
-      hb.onToolEnd();
-      hb.onToolEnd();
-      expect(hb.inflight()).toBe(0);
-
-      vi.advanceTimersByTime(5000);
-      expect(bump).not.toHaveBeenCalled();
-    });
-  });
-
   describe("resolveSearchMode", () => {
     // A provider that can serve search natively, so the tests below isolate one
     // condition at a time.
@@ -1463,18 +1377,16 @@ describe("chat-execution", () => {
     });
   });
 
-  describe("wrapToolsWithBump", () => {
+  describe("wrapToolsWithActivity", () => {
     const noop = () => {};
 
     const wrapSingle = (execute: unknown) => {
-      const wrapped = wrapToolsWithBump(
+      const wrapped = wrapToolsWithActivity(
         {
           t: { execute } as unknown as Parameters<
-            typeof wrapToolsWithBump
+            typeof wrapToolsWithActivity
           >[0]["t"],
         },
-        noop,
-        noop,
         noop,
       );
       return (wrapped.t as { execute: (a: unknown, o: unknown) => unknown })
@@ -1517,24 +1429,53 @@ describe("chat-execution", () => {
       expect(parts[0].date).toBeInstanceOf(Date);
     });
 
-    it("runs the tool lifecycle callbacks around a normalized result", async () => {
-      const onStart = vi.fn();
-      const onEnd = vi.fn();
-      const wrapped = wrapToolsWithBump(
+    it("brackets a normalized result with start and end activity events", async () => {
+      const onActivity = vi.fn<(event: ToolActivityEvent) => void>();
+      const wrapped = wrapToolsWithActivity(
         {
           t: {
             execute: () => Promise.resolve({ createdAt: new Date() }),
-          } as unknown as Parameters<typeof wrapToolsWithBump>[0]["t"],
+          } as unknown as Parameters<typeof wrapToolsWithActivity>[0]["t"],
         },
-        noop,
-        onStart,
-        onEnd,
+        onActivity,
       );
       await (
         wrapped.t as { execute: (a: unknown, o: unknown) => Promise<unknown> }
       ).execute({}, {});
-      expect(onStart).toHaveBeenCalledTimes(1);
-      expect(onEnd).toHaveBeenCalledTimes(1);
+      expect(onActivity.mock.calls.map(([e]) => e.phase)).toEqual([
+        "start",
+        "end",
+      ]);
+      expect(onActivity.mock.calls[1][0].toolName).toBe("t");
+    });
+
+    // The end event is what releases the run's per-step hold, so a generator the
+    // consumer drains has to produce one — otherwise the stall timer stays off
+    // for the rest of the run.
+    it("emits the end event once an async-iterable tool is drained", async () => {
+      const onActivity = vi.fn<(event: ToolActivityEvent) => void>();
+      const wrapped = wrapToolsWithActivity(
+        {
+          t: {
+            execute: async function* () {
+              await Promise.resolve();
+              yield { part: 1 };
+            },
+          } as unknown as Parameters<typeof wrapToolsWithActivity>[0]["t"],
+        },
+        onActivity,
+      );
+      const iterable = (
+        wrapped.t as {
+          execute: (a: unknown, o: unknown) => AsyncIterable<unknown>;
+        }
+      ).execute({}, {});
+      expect(onActivity.mock.calls.map(([e]) => e.phase)).toEqual(["start"]);
+      for await (const _ of iterable) void _;
+      expect(onActivity.mock.calls.map(([e]) => e.phase)).toEqual([
+        "start",
+        "end",
+      ]);
     });
   });
 });

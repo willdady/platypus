@@ -80,10 +80,12 @@ const describeStringifiedToolInputError = (
  *
  * The text produced here reaches both the user and, on a failed step, the
  * model — so it has to be short enough to read and specific enough to act on.
+ *
+ * Pure, and separate from {@link formatStreamError}, so a caller that is not
+ * rendering a stream failure — naming the reason a sub-agent could not be built,
+ * say — gets the same wording without a spurious "Chat stream error" log line.
  */
-export const formatStreamError = (error: unknown): string => {
-  logger.error({ error }, "Chat stream error");
-
+export const describeStreamError = (error: unknown): string => {
   if (LoadAPIKeyError.isInstance(error)) {
     return "AI provider API key is missing or not configured.";
   }
@@ -131,6 +133,15 @@ export const formatStreamError = (error: unknown): string => {
   // The reported failure landed here and the runtime type was never captured,
   // which is why nobody could tell what had actually been thrown.
   return `An unexpected error occurred (received ${describeNonError(error)}).`;
+};
+
+/**
+ * {@link describeStreamError}, plus the log line every stream failure earns.
+ * This is what `toUIMessageStream`'s `onError` is wired to on every run.
+ */
+export const formatStreamError = (error: unknown): string => {
+  logger.error({ error }, "Chat stream error");
+  return describeStreamError(error);
 };
 
 /**
