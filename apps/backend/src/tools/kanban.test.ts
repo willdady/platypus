@@ -106,12 +106,13 @@ describe("createKanbanTools", () => {
 
   describe("upsertCard (update) — bodyDiff", () => {
     function setupCardUpdate(existingBody: string, updatedCard: object) {
-      // verifyCard returns a record (limit call #1), body select returns body (limit call #2),
-      // update returning returns updated card, getBoardIdForCard returns boardId (limit call #3)
+      // The card guard resolves the card and its board (limit call #1), then
+      // the diff is applied to the body it holds now (limit call #2).
       mockDb.limit
-        .mockResolvedValueOnce([{ id: "card-1" }]) // verifyCard
-        .mockResolvedValueOnce([{ body: existingBody }]) // SELECT body
-        .mockResolvedValueOnce([{ boardId: "board-1" }]); // getBoardIdForCard
+        .mockResolvedValueOnce([
+          { id: "card-1", columnId: "col-1", boardId: "board-1" },
+        ]) // card guard
+        .mockResolvedValueOnce([{ body: existingBody }]); // SELECT body
       mockDb.returning.mockResolvedValueOnce([updatedCard]);
     }
 
@@ -133,7 +134,9 @@ describe("createKanbanTools", () => {
 
     it("returns error when search string not found", async () => {
       mockDb.limit
-        .mockResolvedValueOnce([{ id: "card-1" }]) // verifyCard
+        .mockResolvedValueOnce([
+          { id: "card-1", columnId: "col-1", boardId: "board-1" },
+        ]) // card guard
         .mockResolvedValueOnce([{ body: "Hello world" }]); // SELECT body
 
       expect(
@@ -223,6 +226,151 @@ describe("createKanbanTools", () => {
     });
   });
 
+  // The Tool surface enforces the same label and assignee rules as the HTTP
+  // surface: both go through the Kanban module, so an Agent cannot write a
+  // label the board does not have or an assignee who cannot work here.
+  describe("upsertCard — label and assignee rules", () => {
+    it("rejects an unknown label ID when creating", async () => {
+      mockDb.limit
+        .mockResolvedValueOnce([{ id: "col-1", boardId: "board-1" }]) // column guard
+        .mockResolvedValueOnce([{ labels: [{ id: "lbl-a" }] }]); // board labels
+
+      expect(
+        await tools.upsertCard.execute!(
+          {
+            columnId: "col-1",
+            title: "Card",
+            labelIds: ["lbl-a", "lbl-ghost"],
+            label: "test",
+          },
+          ctx,
+        ),
+      ).toEqual({ error: "Invalid label ID" });
+    });
+
+    it("rejects a user assignee who is not an org member when creating", async () => {
+      mockDb.limit.mockResolvedValueOnce([{ id: "col-1", boardId: "board-1" }]); // column guard
+      mockDb.where.mockReturnValueOnce(mockDb); // column guard chain
+      mockDb.where.mockResolvedValueOnce([]); // org member lookup — not found
+      mockDb.where.mockResolvedValueOnce([]); // super admin lookup — not found
+
+      expect(
+        await tools.upsertCard.execute!(
+          {
+            columnId: "col-1",
+            title: "Card",
+            assignees: [{ type: "user", id: "outsider" }],
+            label: "test",
+          },
+          ctx,
+        ),
+      ).toEqual({ error: "Invalid user assignee" });
+    });
+
+    it("rejects an agent that is not visible in this workspace when creating", async () => {
+      mockDb.limit.mockResolvedValueOnce([{ id: "col-1", boardId: "board-1" }]); // column guard
+      mockDb.where.mockReturnValueOnce(mockDb); // column guard chain
+      mockDb.where.mockResolvedValueOnce([]); // no workspace-scoped agent
+      mockDb.where.mockResolvedValueOnce([]); // no attached org-scoped agent
+
+      expect(
+        await tools.upsertCard.execute!(
+          {
+            columnId: "col-1",
+            title: "Card",
+            assignees: [{ type: "agent", id: "someone-elses-agent" }],
+            label: "test",
+          },
+          ctx,
+        ),
+      ).toEqual({ error: "Invalid agent assignee" });
+    });
+
+    it("drops unknown label IDs when updating", async () => {
+      mockDb.limit
+        .mockResolvedValueOnce([
+          { id: "card-1", columnId: "col-1", boardId: "board-1" },
+        ]) // card guard
+        .mockResolvedValueOnce([{ labels: [{ id: "lbl-a" }] }]); // board labels
+      mockDb.returning.mockResolvedValueOnce([{ id: "card-1" }]);
+
+      await tools.upsertCard.execute!(
+        {
+          cardId: "card-1",
+          labelIds: ["lbl-ghost", "lbl-a"],
+          label: "test",
+        },
+        ctx,
+      );
+
+      expect(mockDb.set).toHaveBeenCalledWith(
+        expect.objectContaining({ labelIds: ["lbl-a"] }),
+      );
+    });
+
+    it("rejects an invalid assignee when updating", async () => {
+      mockDb.limit.mockResolvedValueOnce([
+        { id: "card-1", columnId: "col-1", boardId: "board-1" },
+      ]); // card guard
+      mockDb.where.mockReturnValueOnce(mockDb); // card guard chain
+      mockDb.where.mockResolvedValueOnce([]); // org member lookup — not found
+      mockDb.where.mockResolvedValueOnce([]); // super admin lookup — not found
+
+      expect(
+        await tools.upsertCard.execute!(
+          {
+            cardId: "card-1",
+            assignees: [{ type: "user", id: "outsider" }],
+            label: "test",
+          },
+          ctx,
+        ),
+      ).toEqual({ error: "Invalid user assignee" });
+    });
+  });
+
+  describe("bulkEditCards — label and assignee rules", () => {
+    // A bulk edit works over cards that already exist, so it follows the
+    // update rule: an unknown label is dropped rather than failing the batch.
+    it("drops unknown label IDs", async () => {
+      mockDb.limit
+        .mockResolvedValueOnce([
+          { id: "card-1", columnId: "col-1", boardId: "board-1" },
+        ]) // card guard
+        .mockResolvedValueOnce([{ labels: [{ id: "lbl-a" }] }]); // board labels
+      mockDb.returning.mockResolvedValueOnce([{ id: "card-1" }]);
+
+      await tools.bulkEditCards.execute!(
+        {
+          cardIds: ["card-1"],
+          labelIds: ["lbl-ghost", "lbl-a"],
+          label: "test",
+        },
+        ctx,
+      );
+
+      expect(mockDb.set).toHaveBeenCalledWith(
+        expect.objectContaining({ labelIds: ["lbl-a"] }),
+      );
+    });
+
+    it("rejects an invalid assignee", async () => {
+      mockDb.where.mockResolvedValueOnce([]); // org member lookup — not found
+      mockDb.where.mockResolvedValueOnce([]); // super admin lookup — not found
+
+      expect(
+        await tools.bulkEditCards.execute!(
+          {
+            cardIds: ["card-1"],
+            assignees: [{ type: "user", id: "outsider" }],
+            label: "test",
+          },
+          ctx,
+        ),
+      ).toEqual({ error: "Invalid user assignee" });
+    });
+  });
+
   describe("moveCard", () => {
     it("returns error when card not found", async () => {
       mockDb.limit.mockResolvedValue([]);
@@ -257,13 +405,13 @@ describe("createKanbanTools", () => {
       const newCard = { ...sourceCard, id: "new-card-id", columnId: "col-2" };
 
       mockDb.limit
-        .mockResolvedValueOnce([{ id: "card-1" }]) // verifyCard
-        .mockResolvedValueOnce([{ id: "col-2" }]) // verifyColumn
-        .mockResolvedValueOnce([{ boardId: "board-1" }]) // getBoardIdForCard
-        .mockResolvedValueOnce([{ boardId: "board-1" }]) // target column boardId
+        .mockResolvedValueOnce([
+          { id: "card-1", columnId: "col-1", boardId: "board-1" },
+        ]) // card guard
+        .mockResolvedValueOnce([{ id: "col-2", boardId: "board-1" }]) // column guard
         .mockResolvedValueOnce([sourceCard]); // source card select
       // Skip non-terminal where() calls, then resolve terminal where() for max position
-      for (let i = 0; i < 5; i++) mockDb.where.mockReturnValueOnce(mockDb);
+      for (let i = 0; i < 3; i++) mockDb.where.mockReturnValueOnce(mockDb);
       mockDb.where.mockResolvedValueOnce([{ maxPos: 3 }]);
       mockDb.returning.mockResolvedValueOnce([newCard]);
 
@@ -294,13 +442,13 @@ describe("createKanbanTools", () => {
       ];
 
       mockDb.limit
-        .mockResolvedValueOnce([{ id: "card-1" }]) // verifyCard
-        .mockResolvedValueOnce([{ id: "col-1" }]) // verifyColumn
-        .mockResolvedValueOnce([{ boardId: "board-1" }]) // getBoardIdForCard
-        .mockResolvedValueOnce([{ boardId: "board-1" }]) // target column boardId
+        .mockResolvedValueOnce([
+          { id: "card-1", columnId: "col-1", boardId: "board-1" },
+        ]) // card guard
+        .mockResolvedValueOnce([{ id: "col-1", boardId: "board-1" }]) // column guard
         .mockResolvedValueOnce([sourceCard]); // source card select
       // Skip non-terminal where() calls, then resolve terminal where() for max position
-      for (let i = 0; i < 5; i++) mockDb.where.mockReturnValueOnce(mockDb);
+      for (let i = 0; i < 3; i++) mockDb.where.mockReturnValueOnce(mockDb);
       mockDb.where.mockResolvedValueOnce([{ maxPos: 1 }]);
       mockDb.returning.mockResolvedValueOnce([newCard]);
       // comments query (orderBy resolves)
@@ -334,8 +482,10 @@ describe("createKanbanTools", () => {
 
     it("returns error when target column not found", async () => {
       mockDb.limit
-        .mockResolvedValueOnce([{ id: "card-1" }]) // verifyCard passes
-        .mockResolvedValueOnce([]); // verifyColumn fails
+        .mockResolvedValueOnce([
+          { id: "card-1", columnId: "col-1", boardId: "board-1" },
+        ]) // card guard passes
+        .mockResolvedValueOnce([]); // column guard fails
 
       expect(
         await tools.copyCard.execute!(
@@ -347,10 +497,10 @@ describe("createKanbanTools", () => {
 
     it("returns error when cross-board copy is attempted", async () => {
       mockDb.limit
-        .mockResolvedValueOnce([{ id: "card-1" }]) // verifyCard
-        .mockResolvedValueOnce([{ id: "col-2" }]) // verifyColumn
-        .mockResolvedValueOnce([{ boardId: "board-1" }]) // getBoardIdForCard (source)
-        .mockResolvedValueOnce([{ boardId: "board-2" }]); // target column boardId
+        .mockResolvedValueOnce([
+          { id: "card-1", columnId: "col-1", boardId: "board-1" },
+        ]) // card guard (source)
+        .mockResolvedValueOnce([{ id: "col-2", boardId: "board-2" }]); // column guard (target)
 
       expect(
         await tools.copyCard.execute!(

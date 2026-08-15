@@ -1,7 +1,7 @@
-import { Hono } from "hono";
+import { Hono, type Context } from "hono";
 import { sValidator } from "@hono/standard-validator";
 import { nanoid } from "nanoid";
-import { and, asc, count, desc, eq, max, inArray, not } from "drizzle-orm";
+import { and, asc, count, desc, eq, inArray, not } from "drizzle-orm";
 import { db } from "../index.ts";
 import {
   kanbanBoard as kanbanBoardTable,
@@ -9,10 +9,8 @@ import {
   kanbanCard as kanbanCardTable,
   kanbanCardComment as kanbanCardCommentTable,
   agent as agentTable,
-  organizationMember as organizationMemberTable,
 } from "../db/schema.ts";
 import { user } from "../db/auth-schema.ts";
-import { dispatchEvent } from "../services/event-dispatch.ts";
 import { avatarKeyToUrl } from "../utils/avatar-url.ts";
 import { getOrigin } from "../utils/get-origin.ts";
 import {
@@ -35,113 +33,46 @@ import {
   isSuperAdmin,
 } from "../middleware/authorization.ts";
 import type { Variables } from "../server.ts";
-import { calculateCardPosition } from "../utils/kanban-positioning.ts";
+import { NotFoundError } from "../errors.ts";
 import {
-  filterKnownLabelIds,
-  pruneCardLabelIds,
-} from "../utils/kanban-labels.ts";
-import { listScopedByIds } from "../services/scoped-resource.ts";
+  createCard,
+  createComment,
+  deleteCard,
+  listComments,
+  moveCard,
+  nextColumnPosition,
+  pruneCardLabelsForBoard,
+  removeComment,
+  requireBoard,
+  requireComment,
+  resolveCommentNames,
+  updateCard,
+  updateCommentBody,
+  type KanbanContext,
+  type KanbanScope,
+} from "../services/kanban.ts";
 
 /**
- * Validates that all assignees reference valid org members (users) or Agents
- * visible in this Workspace — its own, plus the Shared Agents attached to it
- * (ADR-0007), which is the set the assignee picker offers and the set that can
- * actually run here. Returns an error message string if invalid, or null if OK.
+ * The human-facing surface over the Kanban module (`services/kanban.ts`): each
+ * handler authorizes the request, calls the module, and returns its result.
+ * The board's rules live in the module and are shared with the Agent Tool set,
+ * and its typed failures are mapped to a status by `app.onError` (ADR-0010).
  */
-async function validateAssignees(
-  assignees: { type: string; id: string }[],
-  orgId: string,
-  workspaceId: string,
-): Promise<string | null> {
-  const userIds = assignees.filter((a) => a.type === "user").map((a) => a.id);
-  const agentIds = assignees.filter((a) => a.type === "agent").map((a) => a.id);
-
-  const [members, superAdmins, agentRecords] = await Promise.all([
-    userIds.length > 0
-      ? db
-          .select({ userId: organizationMemberTable.userId })
-          .from(organizationMemberTable)
-          .where(
-            and(
-              eq(organizationMemberTable.organizationId, orgId),
-              inArray(organizationMemberTable.userId, userIds),
-            ),
-          )
-      : Promise.resolve([]),
-    userIds.length > 0
-      ? db
-          .select({ id: user.id })
-          .from(user)
-          .where(and(eq(user.role, "admin"), inArray(user.id, userIds)))
-      : Promise.resolve([]),
-    listScopedByIds(db, "agent", agentIds, {
-      orgId,
-      wsId: workspaceId,
-    }),
-  ]);
-
-  // Combine org members and super admins (who may not have an org membership record)
-  const validUserIds = new Set([
-    ...members.map((m) => m.userId),
-    ...superAdmins.map((a) => a.id),
-  ]);
-  if (validUserIds.size < userIds.length) return "Invalid user assignee";
-  if (agentRecords.length !== agentIds.length) return "Invalid agent assignee";
-  return null;
-}
-
-// Any query executor — the top-level `db` or a transaction handle.
-type Executor = Parameters<Parameters<typeof db.transaction>[0]>[0];
-
-/**
- * Removes label IDs the board no longer has from every card on that board.
- * Board labels are an array on the board record and cards reference them by ID,
- * so deleting a label would otherwise leave cards holding an ID that resolves
- * to nothing. Only removes IDs — a card never gains a label here.
- */
-async function pruneCardLabelsForBoard(
-  tx: Executor,
-  boardId: string,
-  labels: { id: string }[],
-): Promise<void> {
-  const cards = await tx
-    .select({ id: kanbanCardTable.id, labelIds: kanbanCardTable.labelIds })
-    .from(kanbanCardTable)
-    .where(
-      inArray(
-        kanbanCardTable.columnId,
-        tx
-          .select({ id: kanbanColumnTable.id })
-          .from(kanbanColumnTable)
-          .where(eq(kanbanColumnTable.boardId, boardId)),
-      ),
-    );
-
-  const stale = pruneCardLabelIds(
-    cards,
-    labels.map((l) => l.id),
-  );
-
-  for (const card of stale) {
-    await tx
-      .update(kanbanCardTable)
-      .set({ labelIds: card.labelIds, updatedAt: new Date() })
-      .where(eq(kanbanCardTable.id, card.id));
-  }
-}
-
-/** The board's label IDs, or an empty list if the board has none. */
-async function getBoardLabelIds(boardId: string): Promise<string[]> {
-  const boardRecord = await db
-    .select({ labels: kanbanBoardTable.labels })
-    .from(kanbanBoardTable)
-    .where(eq(kanbanBoardTable.id, boardId))
-    .limit(1);
-
-  return (boardRecord[0]?.labels ?? []).map((l: { id: string }) => l.id);
-}
 
 const kanban = new Hono<{ Variables: Variables }>();
+
+/** Everything the module needs to place this request: which board, in which Workspace. */
+const scopeOf = (c: Context<{ Variables: Variables }>): KanbanScope => ({
+  orgId: c.req.param("orgId")!,
+  workspaceId: c.req.param("workspaceId")!,
+  boardId: c.req.param("boardId"),
+});
+
+/** The scope plus the signed-in user, for the handlers that write. */
+const contextOf = (c: Context<{ Variables: Variables }>): KanbanContext => ({
+  ...scopeOf(c),
+  actor: { userId: c.get("user")!.id },
+});
 
 // --- Board CRUD ---
 
@@ -227,25 +158,7 @@ kanban.get(
   requireOrgAccess(),
   requireWorkspaceAccess,
   async (c) => {
-    const boardId = c.req.param("boardId");
-    const workspaceId = c.req.param("workspaceId")!;
-
-    const record = await db
-      .select()
-      .from(kanbanBoardTable)
-      .where(
-        and(
-          eq(kanbanBoardTable.id, boardId),
-          eq(kanbanBoardTable.workspaceId, workspaceId),
-        ),
-      )
-      .limit(1);
-
-    if (record.length === 0) {
-      return c.json({ error: "Board not found" }, 404);
-    }
-
-    return c.json(record[0]);
+    return c.json(await requireBoard(db, scopeOf(c), c.req.param("boardId")));
   },
 );
 
@@ -283,9 +196,7 @@ kanban.put(
       return updated;
     });
 
-    if (record.length === 0) {
-      return c.json({ error: "Board not found" }, 404);
-    }
+    if (record.length === 0) throw new NotFoundError("Board not found");
 
     return c.json(record[0]);
   },
@@ -312,9 +223,7 @@ kanban.delete(
       )
       .returning();
 
-    if (result.length === 0) {
-      return c.json({ error: "Board not found" }, 404);
-    }
+    if (result.length === 0) throw new NotFoundError("Board not found");
 
     return c.json({ message: "Board deleted" });
   },
@@ -330,22 +239,7 @@ kanban.get(
   requireWorkspaceAccess,
   async (c) => {
     const boardId = c.req.param("boardId");
-    const workspaceId = c.req.param("workspaceId")!;
-
-    const boardRecord = await db
-      .select()
-      .from(kanbanBoardTable)
-      .where(
-        and(
-          eq(kanbanBoardTable.id, boardId),
-          eq(kanbanBoardTable.workspaceId, workspaceId),
-        ),
-      )
-      .limit(1);
-
-    if (boardRecord.length === 0) {
-      return c.json({ error: "Board not found" }, 404);
-    }
+    const board = await requireBoard(db, scopeOf(c), boardId);
 
     const columns = await db
       .select()
@@ -494,7 +388,7 @@ kanban.get(
     }));
 
     return c.json({
-      board: boardRecord[0],
+      board,
       columns: columnsWithCards,
     });
   },
@@ -512,24 +406,9 @@ kanban.put(
   sValidator("json", kanbanColumnReorderSchema),
   async (c) => {
     const boardId = c.req.param("boardId");
-    const workspaceId = c.req.param("workspaceId")!;
     const { columnIds } = c.req.valid("json");
 
-    // Verify board belongs to workspace
-    const boardRecord = await db
-      .select()
-      .from(kanbanBoardTable)
-      .where(
-        and(
-          eq(kanbanBoardTable.id, boardId),
-          eq(kanbanBoardTable.workspaceId, workspaceId),
-        ),
-      )
-      .limit(1);
-
-    if (boardRecord.length === 0) {
-      return c.json({ error: "Board not found" }, 404);
-    }
+    await requireBoard(db, scopeOf(c), boardId);
 
     // Validate all columnIds belong to this board
     const boardColumns = await db
@@ -575,24 +454,9 @@ kanban.post(
   sValidator("json", kanbanColumnCreateSchema),
   async (c) => {
     const boardId = c.req.param("boardId");
-    const workspaceId = c.req.param("workspaceId")!;
     const data = c.req.valid("json");
 
-    // Verify board belongs to workspace
-    const boardRecord = await db
-      .select()
-      .from(kanbanBoardTable)
-      .where(
-        and(
-          eq(kanbanBoardTable.id, boardId),
-          eq(kanbanBoardTable.workspaceId, workspaceId),
-        ),
-      )
-      .limit(1);
-
-    if (boardRecord.length === 0) {
-      return c.json({ error: "Board not found" }, 404);
-    }
+    await requireBoard(db, scopeOf(c), boardId);
 
     // Check for duplicate column name within the board
     const existingColumn = await db
@@ -613,13 +477,7 @@ kanban.post(
       );
     }
 
-    const maxResult = await db
-      .select({ maxPos: max(kanbanColumnTable.position) })
-      .from(kanbanColumnTable)
-      .where(eq(kanbanColumnTable.boardId, boardId));
-
-    const position = (maxResult[0]?.maxPos ?? 0) + 1.0;
-
+    const position = await nextColumnPosition(db, boardId);
     const id = nanoid();
     const now = new Date();
 
@@ -683,9 +541,7 @@ kanban.put(
       )
       .returning();
 
-    if (record.length === 0) {
-      return c.json({ error: "Column not found" }, 404);
-    }
+    if (record.length === 0) throw new NotFoundError("Column not found");
 
     return c.json(record[0]);
   },
@@ -712,9 +568,7 @@ kanban.delete(
       )
       .returning();
 
-    if (result.length === 0) {
-      return c.json({ error: "Column not found" }, 404);
-    }
+    if (result.length === 0) throw new NotFoundError("Column not found");
 
     return c.json({ message: "Column deleted" });
   },
@@ -731,84 +585,12 @@ kanban.post(
   requireWorkspaceOwner,
   sValidator("json", kanbanCardCreateSchema),
   async (c) => {
-    const boardId = c.req.param("boardId");
-    const columnId = c.req.param("columnId");
-    const data = c.req.valid("json");
-    const user = c.get("user")!;
-
-    // Verify column belongs to this board
-    const columnRecord = await db
-      .select()
-      .from(kanbanColumnTable)
-      .where(
-        and(
-          eq(kanbanColumnTable.id, columnId),
-          eq(kanbanColumnTable.boardId, boardId),
-        ),
-      )
-      .limit(1);
-
-    if (columnRecord.length === 0) {
-      return c.json({ error: "Column not found" }, 404);
-    }
-
-    // Validate labelIds if provided
-    if (data.labelIds && data.labelIds.length > 0) {
-      const boardLabelIds = new Set(await getBoardLabelIds(boardId));
-      const allValid = data.labelIds.every((id: string) =>
-        boardLabelIds.has(id),
-      );
-      if (!allValid) {
-        return c.json({ error: "Invalid label ID" }, 400);
-      }
-    }
-
-    // Validate assignees if provided
-    if (data.assignees && data.assignees.length > 0) {
-      const assigneeError = await validateAssignees(
-        data.assignees,
-        c.req.param("orgId")!,
-        c.req.param("workspaceId")!,
-      );
-      if (assigneeError) {
-        return c.json({ error: assigneeError }, 400);
-      }
-    }
-
-    const maxResult = await db
-      .select({ maxPos: max(kanbanCardTable.position) })
-      .from(kanbanCardTable)
-      .where(eq(kanbanCardTable.columnId, columnId));
-
-    const position = (maxResult[0]?.maxPos ?? 0) + 1.0;
-
-    const id = nanoid();
-    const now = new Date();
-
-    const { dueDate: dueDateStr, ...restData } = data;
-    const record = await db
-      .insert(kanbanCardTable)
-      .values({
-        id,
-        ...restData,
-        ...(dueDateStr !== undefined && {
-          dueDate: dueDateStr ? new Date(dueDateStr) : null,
-        }),
-        columnId,
-        position,
-        createdByUserId: user.id,
-        createdAt: now,
-        updatedAt: now,
-      })
-      .returning();
-
-    const workspaceId = c.req.param("workspaceId")!;
-    dispatchEvent(c.req.param("orgId")!, workspaceId, "card.created", {
-      ...record[0],
-      boardId,
+    const { card } = await createCard(db, contextOf(c), {
+      ...c.req.valid("json"),
+      columnId: c.req.param("columnId"),
     });
 
-    return c.json(record[0], 201);
+    return c.json(card, 201);
   },
 );
 
@@ -821,69 +603,14 @@ kanban.put(
   requireWorkspaceOwner,
   sValidator("json", kanbanCardUpdateSchema),
   async (c) => {
-    const boardId = c.req.param("boardId");
-    const cardId = c.req.param("cardId");
-    const data = c.req.valid("json");
-    const user = c.get("user")!;
+    const { card } = await updateCard(
+      db,
+      contextOf(c),
+      c.req.param("cardId"),
+      c.req.valid("json"),
+    );
 
-    // Drop label IDs the board doesn't have rather than rejecting the update.
-    // A card can be left holding a deleted label's ID, and the dialog gives the
-    // user no way to see or deselect it — so rejecting would wedge the card.
-    // Saving it self-heals the card.
-    let labelIds = data.labelIds;
-    if (labelIds && labelIds.length > 0) {
-      labelIds = filterKnownLabelIds(labelIds, await getBoardLabelIds(boardId));
-    }
-
-    // Validate assignees if provided
-    if (data.assignees && data.assignees.length > 0) {
-      const assigneeError = await validateAssignees(
-        data.assignees,
-        c.req.param("orgId")!,
-        c.req.param("workspaceId")!,
-      );
-      if (assigneeError) {
-        return c.json({ error: assigneeError }, 400);
-      }
-    }
-
-    const { dueDate: dueDateStr, ...restData } = data;
-    const record = await db
-      .update(kanbanCardTable)
-      .set({
-        ...restData,
-        ...(labelIds !== undefined && { labelIds }),
-        ...(dueDateStr !== undefined && {
-          dueDate: dueDateStr ? new Date(dueDateStr) : null,
-        }),
-        lastEditedByUserId: user.id,
-        updatedAt: new Date(),
-      })
-      .where(
-        and(
-          eq(kanbanCardTable.id, cardId),
-          inArray(
-            kanbanCardTable.columnId,
-            db
-              .select({ id: kanbanColumnTable.id })
-              .from(kanbanColumnTable)
-              .where(eq(kanbanColumnTable.boardId, boardId)),
-          ),
-        ),
-      )
-      .returning();
-
-    if (record.length === 0) {
-      return c.json({ error: "Card not found" }, 404);
-    }
-
-    const workspaceId = c.req.param("workspaceId")!;
-    dispatchEvent(c.req.param("orgId")!, workspaceId, "card.updated", {
-      ...record[0],
-      boardId,
-    });
-
-    return c.json(record[0]);
+    return c.json(card);
   },
 );
 
@@ -896,79 +623,12 @@ kanban.post(
   requireWorkspaceOwner,
   sValidator("json", kanbanCardMoveSchema),
   async (c) => {
-    const cardId = c.req.param("cardId");
-    const { columnId, afterCardId } = c.req.valid("json");
-    const user = c.get("user")!;
-
-    // Get cards in target column sorted by position
-    const cardsInColumn = await db
-      .select()
-      .from(kanbanCardTable)
-      .where(eq(kanbanCardTable.columnId, columnId))
-      .orderBy(asc(kanbanCardTable.position));
-
-    // Filter out the card being moved (in case it's in the same column)
-    const otherCards = cardsInColumn.filter((card) => card.id !== cardId);
-
-    let result: ReturnType<typeof calculateCardPosition>;
-    try {
-      result = calculateCardPosition(otherCards, afterCardId);
-    } catch {
-      return c.json({ error: "afterCardId not found in column" }, 400);
-    }
-
-    const { position, needsRebalance, afterIndex } = result;
-
-    if (needsRebalance) {
-      await db.transaction(async (tx) => {
-        const reorderedCards: { id: string; position: number }[] = [
-          ...otherCards,
-        ];
-        reorderedCards.splice(afterIndex + 1, 0, {
-          id: cardId,
-          position: 0,
-        });
-
-        for (let i = 0; i < reorderedCards.length; i++) {
-          await tx
-            .update(kanbanCardTable)
-            .set({
-              columnId,
-              position: (i + 1) * 1.0,
-              updatedAt: new Date(),
-              ...(reorderedCards[i].id === cardId
-                ? { lastEditedByUserId: user.id }
-                : {}),
-            })
-            .where(eq(kanbanCardTable.id, reorderedCards[i].id));
-        }
-      });
-    } else {
-      await db
-        .update(kanbanCardTable)
-        .set({
-          columnId,
-          position,
-          lastEditedByUserId: user.id,
-          updatedAt: new Date(),
-        })
-        .where(eq(kanbanCardTable.id, cardId));
-    }
-
-    const updated = await db
-      .select()
-      .from(kanbanCardTable)
-      .where(eq(kanbanCardTable.id, cardId))
-      .limit(1);
-
-    const workspaceId = c.req.param("workspaceId")!;
-    const boardId = c.req.param("boardId");
-    dispatchEvent(c.req.param("orgId")!, workspaceId, "card.updated", {
-      ...updated[0],
-      boardId,
+    const { card } = await moveCard(db, contextOf(c), {
+      cardId: c.req.param("cardId"),
+      ...c.req.valid("json"),
     });
 
-    return c.json(updated[0]);
+    return c.json(card);
   },
 );
 
@@ -980,79 +640,31 @@ kanban.delete(
   requireWorkspaceAccess,
   requireWorkspaceOwner,
   async (c) => {
-    const boardId = c.req.param("boardId");
-    const cardId = c.req.param("cardId");
-
-    const result = await db
-      .delete(kanbanCardTable)
-      .where(
-        and(
-          eq(kanbanCardTable.id, cardId),
-          inArray(
-            kanbanCardTable.columnId,
-            db
-              .select({ id: kanbanColumnTable.id })
-              .from(kanbanColumnTable)
-              .where(eq(kanbanColumnTable.boardId, boardId)),
-          ),
-        ),
-      )
-      .returning();
-
-    if (result.length === 0) {
-      return c.json({ error: "Card not found" }, 404);
-    }
-
-    const workspaceId = c.req.param("workspaceId")!;
-    dispatchEvent(c.req.param("orgId")!, workspaceId, "card.deleted", {
-      cardId,
-      boardId,
-      columnId: result[0].columnId,
-    });
-
+    await deleteCard(db, contextOf(c), c.req.param("cardId"));
     return c.json({ message: "Card deleted" });
   },
 );
 
 // --- Card Comments ---
 
-async function resolveCommentNames(
-  comments: (typeof kanbanCardCommentTable.$inferSelect)[],
-) {
-  const userIds = new Set<string>();
-  const agentIds = new Set<string>();
-  for (const comment of comments) {
-    if (comment.createdByUserId) userIds.add(comment.createdByUserId);
-    if (comment.createdByAgentId) agentIds.add(comment.createdByAgentId);
+/**
+ * A comment is addressed through its card, so one that belongs to a different
+ * card is not found at this URL even when both are on this board.
+ */
+const requireCommentOnCard = async (
+  c: Context<{ Variables: Variables }>,
+  commentId: string,
+) => {
+  const comment = await requireComment(db, scopeOf(c), commentId);
+  if (comment.cardId !== c.req.param("cardId")) {
+    throw new NotFoundError("Comment not found");
   }
+  return comment;
+};
 
-  const users =
-    userIds.size > 0
-      ? await db
-          .select({ id: user.id, name: user.name })
-          .from(user)
-          .where(inArray(user.id, Array.from(userIds)))
-      : [];
-  const userMap = new Map(users.map((u) => [u.id, u.name]));
-
-  const agents =
-    agentIds.size > 0
-      ? await db
-          .select({ id: agentTable.id, name: agentTable.name })
-          .from(agentTable)
-          .where(inArray(agentTable.id, Array.from(agentIds)))
-      : [];
-  const agentMap = new Map(agents.map((a) => [a.id, a.name]));
-
-  return comments.map((comment) => ({
-    ...comment,
-    createdByName: comment.createdByUserId
-      ? (userMap.get(comment.createdByUserId) ?? null)
-      : comment.createdByAgentId
-        ? (agentMap.get(comment.createdByAgentId) ?? null)
-        : null,
-  }));
-}
+/** Whether this user may edit or delete a comment somebody else wrote. */
+const canModerate = (c: Context<{ Variables: Variables }>) =>
+  isSuperAdmin(c.get("user")) || c.get("orgMembership")?.role === "admin";
 
 /** List comments for a card */
 kanban.get(
@@ -1061,40 +673,9 @@ kanban.get(
   requireOrgAccess(),
   requireWorkspaceAccess,
   async (c) => {
-    const boardId = c.req.param("boardId");
-    const cardId = c.req.param("cardId");
-    const workspaceId = c.req.param("workspaceId")!;
+    const comments = await listComments(db, scopeOf(c), c.req.param("cardId"));
 
-    const cardRecord = await db
-      .select({ id: kanbanCardTable.id })
-      .from(kanbanCardTable)
-      .innerJoin(
-        kanbanColumnTable,
-        eq(kanbanCardTable.columnId, kanbanColumnTable.id),
-      )
-      .innerJoin(
-        kanbanBoardTable,
-        and(
-          eq(kanbanColumnTable.boardId, kanbanBoardTable.id),
-          eq(kanbanBoardTable.id, boardId),
-          eq(kanbanBoardTable.workspaceId, workspaceId),
-        ),
-      )
-      .where(eq(kanbanCardTable.id, cardId))
-      .limit(1);
-
-    if (cardRecord.length === 0) {
-      return c.json({ error: "Card not found" }, 404);
-    }
-
-    const comments = await db
-      .select()
-      .from(kanbanCardCommentTable)
-      .where(eq(kanbanCardCommentTable.cardId, cardId))
-      .orderBy(asc(kanbanCardCommentTable.createdAt));
-
-    const enriched = await resolveCommentNames(comments);
-    return c.json({ results: enriched });
+    return c.json({ results: await resolveCommentNames(db, comments) });
   },
 );
 
@@ -1106,50 +687,14 @@ kanban.post(
   requireWorkspaceAccess,
   sValidator("json", kanbanCardCommentCreateSchema),
   async (c) => {
-    const boardId = c.req.param("boardId");
-    const cardId = c.req.param("cardId");
-    const workspaceId = c.req.param("workspaceId")!;
-    const data = c.req.valid("json");
-    const currentUser = c.get("user")!;
+    const comment = await createComment(
+      db,
+      contextOf(c),
+      c.req.param("cardId"),
+      c.req.valid("json").body,
+    );
 
-    const cardRecord = await db
-      .select({ id: kanbanCardTable.id })
-      .from(kanbanCardTable)
-      .innerJoin(
-        kanbanColumnTable,
-        eq(kanbanCardTable.columnId, kanbanColumnTable.id),
-      )
-      .innerJoin(
-        kanbanBoardTable,
-        and(
-          eq(kanbanColumnTable.boardId, kanbanBoardTable.id),
-          eq(kanbanBoardTable.id, boardId),
-          eq(kanbanBoardTable.workspaceId, workspaceId),
-        ),
-      )
-      .where(eq(kanbanCardTable.id, cardId))
-      .limit(1);
-
-    if (cardRecord.length === 0) {
-      return c.json({ error: "Card not found" }, 404);
-    }
-
-    const id = nanoid();
-    const now = new Date();
-
-    const inserted = await db
-      .insert(kanbanCardCommentTable)
-      .values({
-        id,
-        cardId,
-        body: data.body,
-        createdByUserId: currentUser.id,
-        createdAt: now,
-        updatedAt: now,
-      })
-      .returning();
-
-    const [enriched] = await resolveCommentNames(inserted);
+    const [enriched] = await resolveCommentNames(db, [comment]);
     return c.json(enriched, 201);
   },
 );
@@ -1162,47 +707,20 @@ kanban.put(
   requireWorkspaceAccess,
   sValidator("json", kanbanCardCommentUpdateSchema),
   async (c) => {
-    const cardId = c.req.param("cardId");
     const commentId = c.req.param("commentId");
-    const data = c.req.valid("json");
-    const currentUser = c.get("user")!;
-    const orgMembership = c.get("orgMembership");
+    const existing = await requireCommentOnCard(c, commentId);
 
-    // Fetch the comment to check ownership
-    const [existingComment] = await db
-      .select()
-      .from(kanbanCardCommentTable)
-      .where(
-        and(
-          eq(kanbanCardCommentTable.id, commentId),
-          eq(kanbanCardCommentTable.cardId, cardId),
-        ),
-      )
-      .limit(1);
-
-    if (!existingComment) {
-      return c.json({ error: "Comment not found" }, 404);
-    }
-
-    // Check ownership: super admins, org admins can moderate; others must own the comment
-    const canModerate =
-      isSuperAdmin(currentUser) || orgMembership?.role === "admin";
-    if (!canModerate && existingComment.createdByUserId !== currentUser.id) {
+    if (!canModerate(c) && existing.createdByUserId !== c.get("user")!.id) {
       return c.json({ error: "You can only edit your own comments" }, 403);
     }
 
-    const updated = await db
-      .update(kanbanCardCommentTable)
-      .set({ ...data, updatedAt: new Date() })
-      .where(
-        and(
-          eq(kanbanCardCommentTable.id, commentId),
-          eq(kanbanCardCommentTable.cardId, cardId),
-        ),
-      )
-      .returning();
+    const updated = await updateCommentBody(
+      db,
+      existing,
+      c.req.valid("json").body ?? existing.body,
+    );
 
-    const [enriched] = await resolveCommentNames(updated);
+    const [enriched] = await resolveCommentNames(db, [updated]);
     return c.json(enriched);
   },
 );
@@ -1214,43 +732,14 @@ kanban.delete(
   requireOrgAccess(),
   requireWorkspaceAccess,
   async (c) => {
-    const cardId = c.req.param("cardId");
     const commentId = c.req.param("commentId");
-    const currentUser = c.get("user")!;
-    const orgMembership = c.get("orgMembership");
+    const existing = await requireCommentOnCard(c, commentId);
 
-    // Fetch the comment to check ownership
-    const [existingComment] = await db
-      .select()
-      .from(kanbanCardCommentTable)
-      .where(
-        and(
-          eq(kanbanCardCommentTable.id, commentId),
-          eq(kanbanCardCommentTable.cardId, cardId),
-        ),
-      )
-      .limit(1);
-
-    if (!existingComment) {
-      return c.json({ error: "Comment not found" }, 404);
-    }
-
-    // Check ownership: super admins, org admins can moderate; others must own the comment
-    const canModerate =
-      isSuperAdmin(currentUser) || orgMembership?.role === "admin";
-    if (!canModerate && existingComment.createdByUserId !== currentUser.id) {
+    if (!canModerate(c) && existing.createdByUserId !== c.get("user")!.id) {
       return c.json({ error: "You can only delete your own comments" }, 403);
     }
 
-    await db
-      .delete(kanbanCardCommentTable)
-      .where(
-        and(
-          eq(kanbanCardCommentTable.id, commentId),
-          eq(kanbanCardCommentTable.cardId, cardId),
-        ),
-      );
-
+    await removeComment(db, existing);
     return c.json({ success: true });
   },
 );

@@ -1,103 +1,89 @@
 import { tool, type Tool } from "ai";
 import { z } from "zod";
-import { and, asc, eq, inArray, max } from "drizzle-orm";
+import { asc, eq, inArray } from "drizzle-orm";
 import { db } from "../index.ts";
 import {
   kanbanBoard as kanbanBoardTable,
   kanbanColumn as kanbanColumnTable,
   kanbanCard as kanbanCardTable,
-  kanbanCardComment as kanbanCardCommentTable,
-  agent as agentTable,
 } from "../db/schema.ts";
-import { user } from "../db/auth-schema.ts";
-import { calculateCardPosition } from "../utils/kanban-positioning.ts";
+import { NotFoundError, ValidationError } from "../errors.ts";
+import {
+  bulkUpdateCards,
+  copyCard,
+  createCard,
+  createComment,
+  deleteCards,
+  listComments,
+  moveCard,
+  requireBoard,
+  requireCard,
+  removeComment,
+  requireComment,
+  resolveCommentNames,
+  updateCard,
+  updateCommentBody,
+  type KanbanContext,
+} from "../services/kanban.ts";
 import { buildResourceUrl } from "../utils/resource-url.ts";
-import { dispatchEvent } from "../services/event-dispatch.ts";
 import { createListAgentsTool } from "./agent-discovery.ts";
 
+/**
+ * The Agent-facing surface over the Kanban module (`services/kanban.ts`): each
+ * Tool parses its input, calls the module, and shapes the result. The board's
+ * rules — what a label may be, who may be assigned, where a card lands, what
+ * event fires — belong to the module and are shared with the HTTP routes, so
+ * an Agent cannot write anything a person could not write through the UI.
+ */
 export function createKanbanTools(
   workspaceId: string,
   agentId: string,
   orgId: string,
   frontendUrl: string | undefined,
 ): Record<string, Tool> {
-  /** Returns true only if the card exists AND belongs to a board in this workspace. */
-  async function verifyCard(cardId: string): Promise<boolean> {
-    const result = await db
-      .select({ id: kanbanCardTable.id })
-      .from(kanbanCardTable)
-      .innerJoin(
-        kanbanColumnTable,
-        eq(kanbanCardTable.columnId, kanbanColumnTable.id),
-      )
-      .innerJoin(
-        kanbanBoardTable,
-        and(
-          eq(kanbanColumnTable.boardId, kanbanBoardTable.id),
-          eq(kanbanBoardTable.workspaceId, workspaceId),
-        ),
-      )
-      .where(eq(kanbanCardTable.id, cardId))
-      .limit(1);
-    return result.length > 0;
+  // No board is named: an Agent works across every board in its Workspace.
+  const ctx: KanbanContext = {
+    orgId,
+    workspaceId,
+    actor: { agentId },
+  };
+
+  /**
+   * Turns the module's typed failures into the `{ error }` payload a Tool
+   * result carries — a Tool reports a problem back to the model rather than
+   * throwing it into the run.
+   */
+  async function asToolResult<T>(
+    run: () => Promise<T>,
+  ): Promise<T | ErrorResult> {
+    try {
+      return await run();
+    } catch (error) {
+      if (error instanceof NotFoundError || error instanceof ValidationError) {
+        return { error: error.message };
+      }
+      throw error;
+    }
   }
 
-  /** Returns true only if the column exists AND belongs to a board in this workspace. */
-  async function verifyColumn(columnId: string): Promise<boolean> {
-    const result = await db
-      .select({ id: kanbanColumnTable.id })
-      .from(kanbanColumnTable)
-      .innerJoin(
-        kanbanBoardTable,
-        and(
-          eq(kanbanColumnTable.boardId, kanbanBoardTable.id),
-          eq(kanbanBoardTable.workspaceId, workspaceId),
-        ),
-      )
-      .where(eq(kanbanColumnTable.id, columnId))
-      .limit(1);
-    return result.length > 0;
-  }
+  /** The board's page in the frontend, when one is configured. */
+  const boardUrl = (boardId: string): string | undefined =>
+    buildResourceUrl(frontendUrl, orgId, workspaceId, `boards/${boardId}`);
 
-  /** Returns true only if the comment exists AND belongs to a card on a board in this workspace. */
-  async function verifyComment(commentId: string): Promise<boolean> {
-    const result = await db
-      .select({ id: kanbanCardCommentTable.id })
-      .from(kanbanCardCommentTable)
-      .innerJoin(
-        kanbanCardTable,
-        eq(kanbanCardCommentTable.cardId, kanbanCardTable.id),
-      )
-      .innerJoin(
-        kanbanColumnTable,
-        eq(kanbanCardTable.columnId, kanbanColumnTable.id),
-      )
-      .innerJoin(
-        kanbanBoardTable,
-        and(
-          eq(kanbanColumnTable.boardId, kanbanBoardTable.id),
-          eq(kanbanBoardTable.workspaceId, workspaceId),
-        ),
-      )
-      .where(eq(kanbanCardCommentTable.id, commentId))
-      .limit(1);
-    return result.length > 0;
-  }
+  /** A deep link that opens the card on its board. */
+  const cardUrl = (boardId: string, cardId: string): string | undefined => {
+    const url = boardUrl(boardId);
+    return url && `${url}?cardId=${cardId}`;
+  };
 
-  async function getBoardIdForCard(
-    cardId: string,
-  ): Promise<string | undefined> {
-    const result = await db
-      .select({ boardId: kanbanColumnTable.boardId })
-      .from(kanbanCardTable)
-      .innerJoin(
-        kanbanColumnTable,
-        eq(kanbanCardTable.columnId, kanbanColumnTable.id),
-      )
-      .where(eq(kanbanCardTable.id, cardId))
-      .limit(1);
-    return result[0]?.boardId;
-  }
+  /** A written card as a Tool returns it: the row, plus a link to it. */
+  const withCardUrl = <T extends { id: string }>(result: {
+    card: T;
+    boardId: string;
+  }) => {
+    const url = cardUrl(result.boardId, result.card.id);
+    return { ...result.card, ...(url && { url }) };
+  };
 
   const listAgents = createListAgentsTool({ orgId, wsId: workspaceId });
 
@@ -126,86 +112,68 @@ export function createKanbanTools(
       boardId: z.string().describe("The ID of the board to get state for"),
       label: z.string().describe("The board name (for display purposes)"),
     }),
-    execute: async ({ boardId }) => {
-      const boardRecord = await db
-        .select()
-        .from(kanbanBoardTable)
-        .where(
-          and(
-            eq(kanbanBoardTable.id, boardId),
-            eq(kanbanBoardTable.workspaceId, workspaceId),
-          ),
-        )
-        .limit(1);
+    execute: async ({ boardId }) =>
+      asToolResult(async () => {
+        const board = await requireBoard(db, ctx, boardId);
 
-      if (boardRecord.length === 0) {
-        return { error: "Board not found" };
-      }
+        const columns = await db
+          .select()
+          .from(kanbanColumnTable)
+          .where(eq(kanbanColumnTable.boardId, boardId))
+          .orderBy(asc(kanbanColumnTable.position));
 
-      const columns = await db
-        .select()
-        .from(kanbanColumnTable)
-        .where(eq(kanbanColumnTable.boardId, boardId))
-        .orderBy(asc(kanbanColumnTable.position));
+        const columnIds = columns.map((col) => col.id);
 
-      const columnIds = columns.map((col) => col.id);
+        type CardSummary = {
+          id: string;
+          columnId: string;
+          title: string;
+          position: number;
+          labelIds: string[];
+          assignees: { type: "user" | "agent"; id: string }[];
+          dueDate: Date | null;
+          priority: string;
+        };
 
-      type CardSummary = {
-        id: string;
-        columnId: string;
-        title: string;
-        position: number;
-        labelIds: string[];
-        assignees: { type: "user" | "agent"; id: string }[];
-        dueDate: Date | null;
-        priority: string;
-      };
+        let cards: CardSummary[] = [];
+        if (columnIds.length > 0) {
+          cards = await db
+            .select({
+              id: kanbanCardTable.id,
+              columnId: kanbanCardTable.columnId,
+              title: kanbanCardTable.title,
+              position: kanbanCardTable.position,
+              labelIds: kanbanCardTable.labelIds,
+              assignees: kanbanCardTable.assignees,
+              dueDate: kanbanCardTable.dueDate,
+              priority: kanbanCardTable.priority,
+            })
+            .from(kanbanCardTable)
+            .where(inArray(kanbanCardTable.columnId, columnIds))
+            .orderBy(asc(kanbanCardTable.position));
+        }
 
-      let cards: CardSummary[] = [];
-      if (columnIds.length > 0) {
-        const fullCards = await db
-          .select({
-            id: kanbanCardTable.id,
-            columnId: kanbanCardTable.columnId,
-            title: kanbanCardTable.title,
-            position: kanbanCardTable.position,
-            labelIds: kanbanCardTable.labelIds,
-            assignees: kanbanCardTable.assignees,
-            dueDate: kanbanCardTable.dueDate,
-            priority: kanbanCardTable.priority,
-          })
-          .from(kanbanCardTable)
-          .where(inArray(kanbanCardTable.columnId, columnIds))
-          .orderBy(asc(kanbanCardTable.position));
-        cards = fullCards;
-      }
+        const cardsByColumn = new Map<string, CardSummary[]>();
+        for (const card of cards) {
+          const existing = cardsByColumn.get(card.columnId) ?? [];
+          existing.push(card);
+          cardsByColumn.set(card.columnId, existing);
+        }
 
-      const cardsByColumn = new Map<string, CardSummary[]>();
-      for (const card of cards) {
-        const existing = cardsByColumn.get(card.columnId) ?? [];
-        existing.push(card);
-        cardsByColumn.set(card.columnId, existing);
-      }
+        const columnsWithCards = columns.map((col) => ({
+          ...col,
+          cards: cardsByColumn.get(col.id) ?? [],
+        }));
 
-      const columnsWithCards = columns.map((col) => ({
-        ...col,
-        cards: cardsByColumn.get(col.id) ?? [],
-      }));
+        const url = boardUrl(boardId);
 
-      const url = buildResourceUrl(
-        frontendUrl,
-        orgId,
-        workspaceId,
-        `boards/${boardId}`,
-      );
-
-      return {
-        board: boardRecord[0],
-        columns: columnsWithCards,
-        labels: boardRecord[0].labels,
-        ...(url && { url }),
-      };
-    },
+        return {
+          board,
+          columns: columnsWithCards,
+          labels: board.labels,
+          ...(url && { url }),
+        };
+      }),
   });
 
   const getCard = tool({
@@ -214,29 +182,18 @@ export function createKanbanTools(
       cardId: z.string().describe("The ID of the card to get"),
       label: z.string().describe("The card title (for display purposes)"),
     }),
-    execute: async ({ cardId }) => {
-      if (!(await verifyCard(cardId))) {
-        return { error: "Card not found" };
-      }
+    execute: async ({ cardId }) =>
+      asToolResult(async () => {
+        const ref = await requireCard(db, ctx, cardId);
 
-      const card = await db
-        .select()
-        .from(kanbanCardTable)
-        .where(eq(kanbanCardTable.id, cardId))
-        .limit(1);
+        const cards = await db
+          .select()
+          .from(kanbanCardTable)
+          .where(eq(kanbanCardTable.id, cardId))
+          .limit(1);
 
-      const boardId = await getBoardIdForCard(cardId);
-      const url = boardId
-        ? buildResourceUrl(
-            frontendUrl,
-            orgId,
-            workspaceId,
-            `boards/${boardId}`,
-          ) + `?cardId=${cardId}`
-        : undefined;
-
-      return { ...card[0], ...(url && { url }) };
-    },
+        return withCardUrl({ card: cards[0], boardId: ref.boardId });
+      }),
   });
 
   const upsertCard = tool({
@@ -304,154 +261,27 @@ export function createKanbanTools(
       .refine((v) => !(v.body !== undefined && v.bodyDiff !== undefined), {
         message: "body and bodyDiff are mutually exclusive",
       }),
-    execute: async ({
-      cardId,
-      columnId,
-      title,
-      body,
-      bodyDiff,
-      labelIds,
-      assignees,
-      dueDate,
-      priority,
-    }) => {
-      // Update existing card
-      if (cardId) {
-        if (!(await verifyCard(cardId))) {
-          return { error: "Card not found" };
+    execute: async ({ cardId, columnId, title, label: _label, ...fields }) =>
+      asToolResult(async () => {
+        if (cardId) {
+          return withCardUrl(
+            await updateCard(db, ctx, cardId, { title, ...fields }),
+          );
         }
 
-        const updateData: Record<string, unknown> = {
-          lastEditedByAgentId: agentId,
-          updatedAt: new Date(),
-        };
-        if (title !== undefined) updateData.title = title;
-        if (body !== undefined) updateData.body = body;
-        if (bodyDiff !== undefined) {
-          const existing = await db
-            .select({ body: kanbanCardTable.body })
-            .from(kanbanCardTable)
-            .where(eq(kanbanCardTable.id, cardId))
-            .limit(1);
-          const currentBody = existing[0]?.body ?? "";
-
-          let newBody: string;
-          if (Array.isArray(bodyDiff)) {
-            newBody = currentBody;
-            for (const op of bodyDiff) {
-              if (!newBody.includes(op.search)) {
-                return {
-                  error: `bodyDiff search string not found: "${op.search}"`,
-                };
-              }
-              newBody = newBody.replace(op.search, op.replace);
-            }
-          } else {
-            newBody =
-              bodyDiff.mode === "append"
-                ? currentBody + bodyDiff.content
-                : bodyDiff.content + currentBody;
-          }
-          updateData.body = newBody;
-        }
-        if (labelIds !== undefined) updateData.labelIds = labelIds;
-        if (assignees !== undefined) updateData.assignees = assignees;
-        if (dueDate !== undefined)
-          updateData.dueDate = dueDate ? new Date(dueDate) : null;
-        if (priority !== undefined) updateData.priority = priority;
-
-        const record = await db
-          .update(kanbanCardTable)
-          .set(updateData)
-          .where(eq(kanbanCardTable.id, cardId))
-          .returning();
-
-        if (record.length === 0) {
-          return { error: "Card not found" };
+        if (!columnId || !title) {
+          return {
+            error: "columnId and title are required when creating a new card",
+          };
         }
 
-        const boardId = await getBoardIdForCard(cardId);
-        dispatchEvent(
-          orgId,
-          workspaceId,
-          "card.updated",
-          { ...record[0], boardId },
-          { actorAgentId: agentId },
+        return withCardUrl(
+          await createCard(db, ctx, { ...fields, columnId, title }),
         );
-        const url = boardId
-          ? buildResourceUrl(
-              frontendUrl,
-              orgId,
-              workspaceId,
-              `boards/${boardId}`,
-            ) + `?cardId=${cardId}`
-          : undefined;
-
-        return { ...record[0], ...(url && { url }) };
-      }
-
-      // Create new card
-      if (!columnId || !title) {
-        return {
-          error: "columnId and title are required when creating a new card",
-        };
-      }
-
-      if (!(await verifyColumn(columnId))) {
-        return { error: "Column not found" };
-      }
-
-      const { nanoid } = await import("nanoid");
-
-      const maxResult = await db
-        .select({ maxPos: max(kanbanCardTable.position) })
-        .from(kanbanCardTable)
-        .where(eq(kanbanCardTable.columnId, columnId));
-
-      const position = (maxResult[0]?.maxPos ?? 0) + 1.0;
-      const id = nanoid();
-      const now = new Date();
-
-      const record = await db
-        .insert(kanbanCardTable)
-        .values({
-          id,
-          columnId,
-          title,
-          body: body ?? null,
-          labelIds: labelIds ?? [],
-          assignees: assignees ?? [],
-          dueDate: dueDate ? new Date(dueDate) : null,
-          priority: priority ?? "none",
-          position,
-          createdByAgentId: agentId,
-          createdAt: now,
-          updatedAt: now,
-        })
-        .returning();
-
-      const boardId = await getBoardIdForCard(id);
-      dispatchEvent(
-        orgId,
-        workspaceId,
-        "card.created",
-        { ...record[0], boardId },
-        { actorAgentId: agentId },
-      );
-      const url = boardId
-        ? buildResourceUrl(
-            frontendUrl,
-            orgId,
-            workspaceId,
-            `boards/${boardId}`,
-          ) + `?cardId=${id}`
-        : undefined;
-
-      return { ...record[0], ...(url && { url }) };
-    },
+      }),
   });
 
-  const moveCard = tool({
+  const moveCardTool = tool({
     description:
       "Move a kanban card to a different position or column. Use afterCardId=null to place at the beginning.",
     inputSchema: z.object({
@@ -465,92 +295,10 @@ export function createKanbanTools(
           "Place after this card ID, or null to place at the beginning",
         ),
     }),
-    execute: async ({ cardId, columnId, afterCardId }) => {
-      if (!(await verifyCard(cardId))) {
-        return { error: "Card not found" };
-      }
-      if (!(await verifyColumn(columnId))) {
-        return { error: "Column not found" };
-      }
-
-      const cardsInColumn = await db
-        .select()
-        .from(kanbanCardTable)
-        .where(eq(kanbanCardTable.columnId, columnId))
-        .orderBy(asc(kanbanCardTable.position));
-
-      const otherCards = cardsInColumn.filter((card) => card.id !== cardId);
-
-      let result: ReturnType<typeof calculateCardPosition>;
-      try {
-        result = calculateCardPosition(otherCards, afterCardId);
-      } catch {
-        return { error: "afterCardId not found in column" };
-      }
-
-      const { position, needsRebalance, afterIndex } = result;
-
-      if (needsRebalance) {
-        await db.transaction(async (tx) => {
-          const reorderedCards: { id: string; position: number }[] = [
-            ...otherCards,
-          ];
-          reorderedCards.splice(afterIndex + 1, 0, {
-            id: cardId,
-            position: 0,
-          });
-
-          for (let i = 0; i < reorderedCards.length; i++) {
-            await tx
-              .update(kanbanCardTable)
-              .set({
-                columnId,
-                position: (i + 1) * 1.0,
-                updatedAt: new Date(),
-                ...(reorderedCards[i].id === cardId
-                  ? { lastEditedByAgentId: agentId }
-                  : {}),
-              })
-              .where(eq(kanbanCardTable.id, reorderedCards[i].id));
-          }
-        });
-      } else {
-        await db
-          .update(kanbanCardTable)
-          .set({
-            columnId,
-            position,
-            lastEditedByAgentId: agentId,
-            updatedAt: new Date(),
-          })
-          .where(eq(kanbanCardTable.id, cardId));
-      }
-
-      const updated = await db
-        .select()
-        .from(kanbanCardTable)
-        .where(eq(kanbanCardTable.id, cardId))
-        .limit(1);
-
-      const boardId = await getBoardIdForCard(cardId);
-      dispatchEvent(
-        orgId,
-        workspaceId,
-        "card.updated",
-        { ...updated[0], boardId },
-        { actorAgentId: agentId },
-      );
-      const url = boardId
-        ? buildResourceUrl(
-            frontendUrl,
-            orgId,
-            workspaceId,
-            `boards/${boardId}`,
-          ) + `?cardId=${cardId}`
-        : undefined;
-
-      return { ...updated[0], ...(url && { url }) };
-    },
+    execute: async ({ cardId, columnId, afterCardId }) =>
+      asToolResult(async () =>
+        withCardUrl(await moveCard(db, ctx, { cardId, columnId, afterCardId })),
+      ),
   });
 
   const deleteCard = tool({
@@ -562,86 +310,23 @@ export function createKanbanTools(
         .describe("One or more card IDs to delete"),
       label: z.string().describe("The card title(s) (for display purposes)"),
     }),
-    execute: async ({ cardIds }) => {
-      for (const cardId of cardIds) {
-        if (!(await verifyCard(cardId))) {
-          return { error: `Card not found: ${cardId}` };
-        }
-      }
-
-      for (const cardId of cardIds) {
-        const boardId = await getBoardIdForCard(cardId);
-        const cardRecord = await db
-          .select({ columnId: kanbanCardTable.columnId })
-          .from(kanbanCardTable)
-          .where(eq(kanbanCardTable.id, cardId))
-          .limit(1);
-        const columnId = cardRecord[0]?.columnId;
-        await db.delete(kanbanCardTable).where(eq(kanbanCardTable.id, cardId));
-        dispatchEvent(
-          orgId,
-          workspaceId,
-          "card.deleted",
-          { cardId, boardId, columnId },
-          { actorAgentId: agentId },
-        );
-      }
-
-      return { success: true };
-    },
+    execute: async ({ cardIds }) =>
+      asToolResult(async () => {
+        await deleteCards(db, ctx, cardIds);
+        return { success: true };
+      }),
   });
 
-  const listComments = tool({
+  const listCommentsTool = tool({
     description: "List all comments on a kanban card, ordered oldest first.",
     inputSchema: z.object({
       cardId: z.string().describe("The ID of the card to list comments for"),
       label: z.string().describe("The card title (for display purposes)"),
     }),
-    execute: async ({ cardId }) => {
-      if (!(await verifyCard(cardId))) {
-        return { error: "Card not found" };
-      }
-
-      const comments = await db
-        .select()
-        .from(kanbanCardCommentTable)
-        .where(eq(kanbanCardCommentTable.cardId, cardId))
-        .orderBy(asc(kanbanCardCommentTable.createdAt));
-
-      const userIds = new Set<string>();
-      const agentIds = new Set<string>();
-      for (const comment of comments) {
-        if (comment.createdByUserId) userIds.add(comment.createdByUserId);
-        if (comment.createdByAgentId) agentIds.add(comment.createdByAgentId);
-      }
-
-      const users =
-        userIds.size > 0
-          ? await db
-              .select({ id: user.id, name: user.name })
-              .from(user)
-              .where(inArray(user.id, Array.from(userIds)))
-          : [];
-      const userMap = new Map(users.map((u) => [u.id, u.name]));
-
-      const agents =
-        agentIds.size > 0
-          ? await db
-              .select({ id: agentTable.id, name: agentTable.name })
-              .from(agentTable)
-              .where(inArray(agentTable.id, Array.from(agentIds)))
-          : [];
-      const agentMap = new Map(agents.map((a) => [a.id, a.name]));
-
-      return comments.map((comment) => ({
-        ...comment,
-        createdByName: comment.createdByUserId
-          ? (userMap.get(comment.createdByUserId) ?? null)
-          : comment.createdByAgentId
-            ? (agentMap.get(comment.createdByAgentId) ?? null)
-            : null,
-      }));
-    },
+    execute: async ({ cardId }) =>
+      asToolResult(async () =>
+        resolveCommentNames(db, await listComments(db, ctx, cardId)),
+      ),
   });
 
   const upsertComment = tool({
@@ -665,49 +350,19 @@ export function createKanbanTools(
         ),
       body: z.string().min(1).describe("The comment text (supports markdown)"),
     }),
-    execute: async ({ commentId, cardId, body }) => {
-      // Update existing comment
-      if (commentId) {
-        if (!(await verifyComment(commentId))) {
-          return { error: "Comment not found" };
+    execute: async ({ commentId, cardId, body }) =>
+      asToolResult(async () => {
+        if (commentId) {
+          const comment = await requireComment(db, ctx, commentId);
+          return updateCommentBody(db, comment, body);
         }
 
-        const record = await db
-          .update(kanbanCardCommentTable)
-          .set({ body, updatedAt: new Date() })
-          .where(eq(kanbanCardCommentTable.id, commentId))
-          .returning();
+        if (!cardId) {
+          return { error: "cardId is required when creating a new comment" };
+        }
 
-        return record[0];
-      }
-
-      // Create new comment
-      if (!cardId) {
-        return { error: "cardId is required when creating a new comment" };
-      }
-
-      if (!(await verifyCard(cardId))) {
-        return { error: "Card not found" };
-      }
-
-      const { nanoid } = await import("nanoid");
-      const id = nanoid();
-      const now = new Date();
-
-      const inserted = await db
-        .insert(kanbanCardCommentTable)
-        .values({
-          id,
-          cardId,
-          body,
-          createdByAgentId: agentId,
-          createdAt: now,
-          updatedAt: now,
-        })
-        .returning();
-
-      return inserted[0];
-    },
+        return createComment(db, ctx, cardId, body);
+      }),
   });
 
   const deleteComment = tool({
@@ -718,20 +373,15 @@ export function createKanbanTools(
         .string()
         .describe("A short description of the comment (for display purposes)"),
     }),
-    execute: async ({ commentId }) => {
-      if (!(await verifyComment(commentId))) {
-        return { error: "Comment not found" };
-      }
-
-      await db
-        .delete(kanbanCardCommentTable)
-        .where(eq(kanbanCardCommentTable.id, commentId));
-
-      return { success: true };
-    },
+    execute: async ({ commentId }) =>
+      asToolResult(async () => {
+        const comment = await requireComment(db, ctx, commentId);
+        await removeComment(db, comment);
+        return { success: true };
+      }),
   });
 
-  const copyCard = tool({
+  const copyCardTool = tool({
     description:
       "Copy a kanban card to a column on the same board, optionally including comments.",
     inputSchema: z.object({
@@ -753,146 +403,17 @@ export function createKanbanTools(
         .describe("Whether to copy comments from the source card"),
       label: z.string().describe("The card title (for display purposes)"),
     }),
-    execute: async ({ cardId, columnId, afterCardId, includeComments }) => {
-      // 1. Verify the source card exists in this workspace
-      if (!(await verifyCard(cardId))) {
-        return { error: "Card not found" };
-      }
-
-      // 2. Verify the target column exists in this workspace
-      if (!(await verifyColumn(columnId))) {
-        return { error: "Column not found" };
-      }
-
-      // 3. Verify both belong to the same board
-      const sourceBoardId = await getBoardIdForCard(cardId);
-
-      const targetColumnResult = await db
-        .select({ boardId: kanbanColumnTable.boardId })
-        .from(kanbanColumnTable)
-        .where(eq(kanbanColumnTable.id, columnId))
-        .limit(1);
-      const targetBoardId = targetColumnResult[0]?.boardId;
-
-      if (sourceBoardId !== targetBoardId) {
-        return { error: "Cross-board copy is not allowed" };
-      }
-
-      // 4. Fetch source card
-      const sourceCards = await db
-        .select()
-        .from(kanbanCardTable)
-        .where(eq(kanbanCardTable.id, cardId))
-        .limit(1);
-      const sourceCard = sourceCards[0];
-
-      // 5. Calculate position
-      let position: number;
-      if (afterCardId === null || afterCardId === undefined) {
-        // Place at end
-        const maxResult = await db
-          .select({ maxPos: max(kanbanCardTable.position) })
-          .from(kanbanCardTable)
-          .where(eq(kanbanCardTable.columnId, columnId));
-        position = (maxResult[0]?.maxPos ?? 0) + 1.0;
-      } else {
-        const cardsInColumn = await db
-          .select()
-          .from(kanbanCardTable)
-          .where(eq(kanbanCardTable.columnId, columnId))
-          .orderBy(asc(kanbanCardTable.position));
-
-        let result: ReturnType<typeof calculateCardPosition>;
-        try {
-          result = calculateCardPosition(cardsInColumn, afterCardId);
-        } catch {
-          return { error: "afterCardId not found in column" };
-        }
-
-        const { position: calcPos, needsRebalance, afterIndex } = result;
-
-        if (needsRebalance) {
-          // Rebalance existing cards and place new card at the right spot.
-          // Only `.id` is read below, so a minimal {id} shape is enough.
-          const reorderedCards: Array<{ id: string }> = [...cardsInColumn];
-          reorderedCards.splice(afterIndex + 1, 0, { id: "__placeholder__" });
-          for (let i = 0; i < reorderedCards.length; i++) {
-            if (reorderedCards[i].id !== "__placeholder__") {
-              await db
-                .update(kanbanCardTable)
-                .set({ position: (i + 1) * 1.0, updatedAt: new Date() })
-                .where(eq(kanbanCardTable.id, reorderedCards[i].id));
-            }
-          }
-          position = (afterIndex + 2) * 1.0;
-        } else {
-          position = calcPos;
-        }
-      }
-
-      // 6. Insert new card
-      const { nanoid } = await import("nanoid");
-      const newId = nanoid();
-      const now = new Date();
-
-      const record = await db
-        .insert(kanbanCardTable)
-        .values({
-          id: newId,
-          columnId,
-          title: sourceCard.title,
-          body: sourceCard.body,
-          labelIds: sourceCard.labelIds,
-          assignees: sourceCard.assignees,
-          dueDate: sourceCard.dueDate,
-          priority: sourceCard.priority,
-          position,
-          createdByAgentId: agentId,
-          createdAt: now,
-          updatedAt: now,
-        })
-        .returning();
-
-      // 7. Copy comments if requested
-      if (includeComments) {
-        const comments = await db
-          .select()
-          .from(kanbanCardCommentTable)
-          .where(eq(kanbanCardCommentTable.cardId, cardId))
-          .orderBy(asc(kanbanCardCommentTable.createdAt));
-
-        for (const comment of comments) {
-          await db.insert(kanbanCardCommentTable).values({
-            id: nanoid(),
-            cardId: newId,
-            body: comment.body,
-            createdByAgentId: agentId,
-            createdAt: now,
-            updatedAt: now,
-          });
-        }
-      }
-
-      // 8. Dispatch event
-      dispatchEvent(
-        orgId,
-        workspaceId,
-        "card.created",
-        { ...record[0], boardId: sourceBoardId },
-        { actorAgentId: agentId },
-      );
-
-      const url = sourceBoardId
-        ? buildResourceUrl(
-            frontendUrl,
-            orgId,
-            workspaceId,
-            `boards/${sourceBoardId}`,
-          ) + `?cardId=${newId}`
-        : undefined;
-
-      return { ...record[0], ...(url && { url }) };
-    },
+    execute: async ({ cardId, columnId, afterCardId, includeComments }) =>
+      asToolResult(async () =>
+        withCardUrl(
+          await copyCard(db, ctx, {
+            cardId,
+            columnId,
+            afterCardId,
+            includeComments,
+          }),
+        ),
+      ),
   });
 
   const bulkEditCards = tool({
@@ -962,151 +483,20 @@ export function createKanbanTools(
             "labelIds is mutually exclusive with addLabelIds and removeLabelIds",
         },
       ),
-    execute: async ({
-      cardIds,
-      columnId,
-      labelIds,
-      addLabelIds,
-      removeLabelIds,
-      assignees,
-      priority,
-      dueDate,
-    }) => {
-      if (columnId && !(await verifyColumn(columnId))) {
-        return { error: "Column not found" };
-      }
+    execute: async ({ label: _label, ...input }) =>
+      asToolResult(async () => {
+        const results = await bulkUpdateCards(db, ctx, input);
+        const succeeded = results.filter((r) => r.success).length;
 
-      // Verify all cards (best-effort — collect per-card results)
-      const failedResults: { cardId: string; success: false; error: string }[] =
-        [];
-      const validCardIds: string[] = [];
-      for (const cardId of cardIds) {
-        if (await verifyCard(cardId)) {
-          validCardIds.push(cardId);
-        } else {
-          failedResults.push({
-            cardId,
-            success: false,
-            error: "Card not found",
-          });
-        }
-      }
-
-      if (validCardIds.length === 0) {
         return {
-          results: failedResults,
+          results,
           summary: {
-            total: cardIds.length,
-            succeeded: 0,
-            failed: failedResults.length,
+            total: results.length,
+            succeeded,
+            failed: results.length - succeeded,
           },
         };
-      }
-
-      // Fetch current labels when additive/subtractive ops are requested
-      let currentLabelsMap: Map<string, string[]> | undefined;
-      if (addLabelIds !== undefined || removeLabelIds !== undefined) {
-        const currentCards = await db
-          .select({
-            id: kanbanCardTable.id,
-            labelIds: kanbanCardTable.labelIds,
-          })
-          .from(kanbanCardTable)
-          .where(inArray(kanbanCardTable.id, validCardIds));
-        currentLabelsMap = new Map(currentCards.map((c) => [c.id, c.labelIds]));
-      }
-
-      // Determine base position for column moves
-      let basePosition = 0;
-      if (columnId) {
-        const maxResult = await db
-          .select({ maxPos: max(kanbanCardTable.position) })
-          .from(kanbanCardTable)
-          .where(eq(kanbanCardTable.columnId, columnId));
-        basePosition = maxResult[0]?.maxPos ?? 0;
-      }
-
-      // Apply all updates in a single transaction
-      await db.transaction(async (tx) => {
-        for (let i = 0; i < validCardIds.length; i++) {
-          const cardId = validCardIds[i];
-          const updateData: Record<string, unknown> = {
-            lastEditedByAgentId: agentId,
-            updatedAt: new Date(),
-          };
-
-          if (columnId !== undefined) {
-            updateData.columnId = columnId;
-            updateData.position = basePosition + (i + 1) * 1.0;
-          }
-
-          if (labelIds !== undefined) {
-            updateData.labelIds = labelIds;
-          } else if (currentLabelsMap) {
-            const current = currentLabelsMap.get(cardId) ?? [];
-            let next = [...current];
-            if (addLabelIds) {
-              next = [...new Set([...next, ...addLabelIds])];
-            }
-            if (removeLabelIds) {
-              next = next.filter((id) => !removeLabelIds.includes(id));
-            }
-            updateData.labelIds = next;
-          }
-
-          if (assignees !== undefined) updateData.assignees = assignees;
-          if (priority !== undefined) updateData.priority = priority;
-          if (dueDate !== undefined)
-            updateData.dueDate = dueDate ? new Date(dueDate) : null;
-
-          await tx
-            .update(kanbanCardTable)
-            .set(updateData)
-            .where(eq(kanbanCardTable.id, cardId));
-        }
-      });
-
-      // Dispatch events for updated cards
-      for (const cardId of validCardIds) {
-        const boardId = await getBoardIdForCard(cardId);
-        const updated = await db
-          .select()
-          .from(kanbanCardTable)
-          .where(eq(kanbanCardTable.id, cardId))
-          .limit(1);
-        dispatchEvent(
-          orgId,
-          workspaceId,
-          "card.updated",
-          { ...updated[0], boardId },
-          { actorAgentId: agentId },
-        );
-      }
-
-      const succeededResults = validCardIds.map((cardId) => ({
-        cardId,
-        success: true as const,
-      }));
-
-      // Return results in input order
-      const resultMap = new Map<
-        string,
-        { cardId: string; success: boolean; error?: string }
-      >([
-        ...succeededResults.map((r) => [r.cardId, r] as const),
-        ...failedResults.map((r) => [r.cardId, r] as const),
-      ]);
-      const results = cardIds.map((id) => resultMap.get(id)!);
-
-      return {
-        results,
-        summary: {
-          total: cardIds.length,
-          succeeded: validCardIds.length,
-          failed: failedResults.length,
-        },
-      };
-    },
+      }),
   });
 
   return {
@@ -1115,12 +505,15 @@ export function createKanbanTools(
     getBoardState,
     getCard,
     upsertCard,
-    moveCard,
-    copyCard,
+    moveCard: moveCardTool,
+    copyCard: copyCardTool,
     deleteCard,
     bulkEditCards,
-    listComments,
+    listComments: listCommentsTool,
     upsertComment,
     deleteComment,
   };
 }
+
+/** What a Tool returns when the module refuses the write. */
+type ErrorResult = { error: string };

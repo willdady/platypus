@@ -3,6 +3,7 @@ import {
   NotFoundError,
   LockedError,
   ConflictError,
+  ValidationError,
   isUniqueViolation,
   mapError,
 } from "./errors.ts";
@@ -23,6 +24,13 @@ describe("central error mapping (app.onError)", () => {
   it("maps ConflictError → 409", () => {
     const mapped = mapError(new ConflictError());
     expect(mapped?.status).toBe(409);
+  });
+
+  it("maps ValidationError → 400", () => {
+    expect(mapError(new ValidationError("Invalid label ID"))).toEqual({
+      status: 400,
+      message: "Invalid label ID",
+    });
   });
 
   it("maps a Postgres unique violation (23505) → 409", () => {

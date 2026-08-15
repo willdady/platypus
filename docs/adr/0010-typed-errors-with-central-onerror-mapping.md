@@ -49,3 +49,14 @@ level"`) and name conflicts move into `onError`, so they are defined once.
   as a normal outcome rather than a 404.
 - Authorization is unchanged: middleware still decides actor access and returns its own
   403s inline. The error seam covers resource-state failures, not authorization.
+
+## Amendment — `ValidationError` → 400 (#478)
+
+A fourth class, `ValidationError`, was added when the Kanban board's rules moved into one
+module (`services/kanban.ts`) serving both the HTTP routes and the Agent Tool set. A rule
+with two callers cannot answer with one caller's response shape, so it throws: the route
+lets `onError` map it to 400, and the Tool adapter turns it into its `{ error }` result.
+
+This narrows, but does not reverse, "validation stays inline" above. Validation that
+belongs to a single surface still answers inline; only a rule shared by more than one
+surface earns the seam.
