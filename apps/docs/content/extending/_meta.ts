@@ -7,6 +7,7 @@ const meta = {
   "your-first-plugin": "Your first plugin",
   "tool-sets": "Tool sets",
   "sandbox-backends": "Sandbox backends",
+  "web-search-backends": "Web-search backends",
   "plugin-api-and-config": "Plugin API & config",
 };
 

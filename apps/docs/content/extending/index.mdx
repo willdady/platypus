@@ -17,12 +17,12 @@ deploy time; it exports a manifest whose `contributes` block fills one or more
 
 ## Which one do you want
 
-| You want to…                                                               | Reach for                                                       | Because                                                                       |
-| -------------------------------------------------------------------------- | --------------------------------------------------------------- | ----------------------------------------------------------------------------- |
-| Let an Agent call your internal service, or a third-party API              | **MCP server**                                                  | No code in Platypus, no restart, configured per Workspace by whoever needs it |
-| Ship tools that are part of the product for everyone on the deployment     | **[Tool set](/extending/tool-sets)** contribution               | One install, one switch on the Agent form, available to every Workspace       |
-| Run an Agent's shell and filesystem tools somewhere new — Modal, E2B, a VM | **[Sandbox backend](/extending/sandbox-backends)** contribution | Core owns the five tools; you supply the environment they run in              |
-| Serve the Chat **Search** toggle from your own search service              | **[Web-search backend](#web-search-backends)** contribution     | Core owns the two tools and the toggle; you supply the calls to your upstream |
+| You want to…                                                               | Reach for                                                             | Because                                                                       |
+| -------------------------------------------------------------------------- | --------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
+| Let an Agent call your internal service, or a third-party API              | **MCP server**                                                        | No code in Platypus, no restart, configured per Workspace by whoever needs it |
+| Ship tools that are part of the product for everyone on the deployment     | **[Tool set](/extending/tool-sets)** contribution                     | One install, one switch on the Agent form, available to every Workspace       |
+| Run an Agent's shell and filesystem tools somewhere new — Modal, E2B, a VM | **[Sandbox backend](/extending/sandbox-backends)** contribution       | Core owns the five tools; you supply the environment they run in              |
+| Serve the Chat **Search** toggle from your own search service              | **[Web-search backend](/extending/web-search-backends)** contribution | Core owns the two tools and the toggle; you supply the calls to your upstream |
 
 If you are integrating an external service for your own use, you almost always
 want an MCP server. Reach for a Plugin when the capability should ship _with_
@@ -43,8 +43,9 @@ off the example package in the repository. It ends with three checkpoints, so yo
 find out whether it worked rather than guessing.
 
 Then the page for the Extension point you're filling —
-**[Tool sets](/extending/tool-sets)** or
-**[Sandbox backends](/extending/sandbox-backends)** — and
+**[Tool sets](/extending/tool-sets)**,
+**[Sandbox backends](/extending/sandbox-backends)** or
+**[Web-search backends](/extending/web-search-backends)** — and
 **[Plugin API & config](/extending/plugin-api-and-config)** for the version
 window, the append-only rule, and deploy-time config and credentials.
 
@@ -90,31 +91,11 @@ reporting rather than a reason to reach for `console`.
 
 A **Web-search backend** fills the **Search** toggle in Chat for Providers whose
 model has no web search of its own — a self-hosted OpenAI-compatible endpoint
-such as vLLM, llama.cpp or LiteLLM. Contribute one under
-`contributes.webBackends`.
+such as vLLM, llama.cpp or LiteLLM. You supply two executors, a mandatory
+`web_search` and an optional `read_url`; core owns the tools built around them.
+**[Web-search backends](/extending/web-search-backends)** has the contract, the
+caps, and the egress guard.
 
-You supply two executors: a mandatory `web_search` and an optional `read_url`.
-Core owns everything around them — the tool names and input schemas the model
-sees, the descriptions, a cap of **10** search results, page slicing for reads,
-the per-call timeout (**30 seconds** by default, and a contribution cannot
-declare more than **120**), and a guard that resolves every URL the model
-supplies and refuses loopback, link-local and non-`http(s)` addresses. Your job
-is the call to your upstream and nothing else. Return the full content; core
-truncates.
-
-The tools are ephemeral. They exist for a turn the toggle was on for, and no
-other.
-
-An Org Admin points a Provider at your backend from the Provider form:
-**Advanced settings → Web search** lists **None**, the Provider's own search
-where it has one, and every backend the deployment has installed, by the
-display name your manifest gives it. Selecting your backend takes precedence
-over the Provider's built-in search, and the Chat **Search** toggle appears on
-that Provider even when its model has no search of its own — which is the
-case this Extension point exists for. The same field is on the Provider API as
-`searchSource`.
-
-Results are cited: Platypus lifts the `url` and `title` of each result your
-`web_search` returns into the same **Sources** row native search uses, so a
-reader gets pills either way. Anything that is not an `http`/`https` URL is
-dropped rather than rendered.
+An Org Admin points a Provider at your backend from the Provider form under
+**Advanced settings → Web search**, by the display name your manifest gives it.
+The same field is on the Provider API as `searchSource`.

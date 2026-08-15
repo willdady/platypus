@@ -1,0 +1,176 @@
+---
+title: Web-search backends
+description: Serve the Chat Search toggle from your own search service by supplying two executors — core owns the tools around them.
+---
+
+import { Callout } from "nextra/components";
+
+# Web-search backends
+
+A **Web-search backend** fills the Chat **Search** toggle from a service you
+choose — SearXNG, a commercial search API, a headless browser. It exists for the
+Providers that have no web search of their own: a self-hosted OpenAI-compatible
+endpoint such as vLLM, llama.cpp or LiteLLM, or Bedrock. An Org Admin points a
+Provider at your backend, and the **Search** toggle appears in Chat on a Provider
+that never had one.
+
+No search backend ships in the box. This is the Extension point, and every
+backend is a Plugin.
+
+## You supply executors, not tools
+
+Your contribution returns two plain functions. Core builds the `Tool` objects
+around them.
+
+| Executor     | Required | Gets        | Returns                                                                    |
+| ------------ | -------- | ----------- | -------------------------------------------------------------------------- |
+| `web_search` | Yes      | `{ query }` | `{ query, results: [{ title, url, snippet? }], answer? }`                  |
+| `read_url`   | No       | `{ url }`   | the page's full content, its final URL after redirects, and a content type |
+
+Either may be async. Contribute a search-only backend by omitting `read_url` —
+the model then gets one tool that turn, and page reading is left to whatever else
+the Agent has.
+
+What core owns, and you therefore cannot change: the tool names the model sees,
+their input schemas, their descriptions, the caps below, pagination, the per-call
+timeout, the error contract, and a guard on every URL the model supplies. That
+closure is the point — an Agent's Instructions must not depend on which backend
+an Operator configured, so the model-facing signature is identical across every
+backend and identical to what a Provider's built-in search fills the same slot
+with.
+
+The tools are ephemeral. They exist for a turn the toggle was on for, and no
+other. There is no teardown hook: your executors are built per turn and dropped
+when it ends, so a connection you open lives for one turn only.
+
+## What core does to what you return
+
+Return everything you have. Core cuts it, and getting the cut wrong once is how a
+multi-hundred-kilobyte response lands in a context window.
+
+| Field               | Limit                                    | Over it                                                     |
+| ------------------- | ---------------------------------------- | ----------------------------------------------------------- |
+| `results`           | **10** entries                           | Sliced; core stops scanning after 1000 raw entries          |
+| `results[].title`   | **200** characters                       | Truncated with a trailing `…`                               |
+| `results[].snippet` | **500** characters                       | Truncated with a trailing `…`                               |
+| `results[].url`     | **2048** characters, `http`/`https` only | **The whole entry is dropped** — a cut URL is a broken link |
+| `answer`            | **4000** characters                      | Truncated with a trailing `…`                               |
+| `read_url` content  | **1 000 000** characters held            | Cut, and the reply says the remainder cannot be read        |
+| One `read_url` page | **100 000** characters                   | `max_length` is clamped, never rejected                     |
+| `content_type`      | **200** characters                       | Truncated                                                   |
+
+`read_url` paginates exactly like the `fetchUrl` tool in
+`@platypus/web-fetch`: `max_length` defaults to **5000** and accepts up to
+1 000 000, `start_index` defaults to **0**, and a cut reply carries
+`next_start_index` for the next call. A request for a million characters is not
+an error — it comes back as one 100 000-character page with a continuation
+index, so a 1M-character page is one `fetchUrl` call and ten `read_url` calls.
+
+<Callout type="warning">
+  **Do not truncate, paginate, or format anything yourself.** Core cannot tell a
+  short page from a page you already cut, so it slices what you hand back and
+  reports `next_start_index` into content that does not exist — the model asks
+  for the next page and gets the wrong text, or nothing. The same goes for
+  dropping results you think are poor: core's 10 are taken from the top of your
+  list, so pre-filtering only narrows what it can choose from.
+</Callout>
+
+## Rules your executors must honour
+
+- **Return absolute `http` or `https` URLs.** Anything else — a relative path, a
+  `javascript:` or `data:` URL, a non-string — is dropped from `results` before
+  the model or the reader sees it, so a backend emitting relative URLs yields a
+  search that looks empty for no stated reason.
+- **`read_url` returns the URL it finally landed on**, after redirects. That
+  value is what gets cited, so returning the requested URL instead misattributes
+  the page.
+- **Throwing is a supported outcome.** A throw becomes a model-facing error
+  string for that call, logged against your Plugin; it does not fail the turn.
+  Time out on your own upstream if you want a better message than core's.
+- **Nothing you return is trusted as markup.** Titles and snippets are text.
+
+## The timeout is yours to declare and core's to enforce
+
+`timeoutMs` on the contribution bounds **one executor call**, and separately the
+`createExecutors` factory itself — so warming a pool or opening a connection
+spends the same budget the search does. It defaults to **30 000** ms when you
+omit it, and **120 000** is the ceiling.
+
+<Callout type="warning">
+  A contribution declaring more than 120 000 **fails startup** with an error
+  naming your Plugin. It is not clamped down to the ceiling, because the value
+  is fixed in your manifest and therefore knowable before anything runs — a
+  deployment that would silently run at a quarter of the timeout you asked for
+  is worse than one that will not start.
+</Callout>
+
+## The egress guard
+
+Core resolves the hostname of every URL the model supplies to `read_url` and
+refuses loopback, link-local, carrier-grade NAT (`100.64.0.0/10`), non-`http(s)`
+schemes, and anything it cannot resolve. Your executor is never called for a
+blocked URL.
+
+Private networks (`10/8`, `172.16/12`, `192.168/16`) are **allowed by default**,
+which suits a backend pointed at a SearXNG instance on the Operator's own
+network. An Operator who wants them refused sets
+`EGRESS_ALLOW_PRIVATE_NETWORKS=false` — see [Backend
+configuration](/reference/backend-configuration).
+
+<Callout type="info">
+  The guard is a **pre-flight check on the URL the model supplied**. It does not
+  follow your redirects and does not re-resolve DNS. If your backend fetches
+  pages, the reach it has is the reach you give it — treat any URL you take from
+  a search result as untrusted the same way core treats one from a model.
+</Callout>
+
+## Contributing one
+
+Add an entry to `contributes.webBackends`. A `WebBackendContribution` declares:
+
+- **`backend`** — the discriminator string persisted on the Provider row.
+  Namespaced with your Plugin's name automatically. The stored value is capped at
+  200 characters, which no realistic namespaced id approaches.
+- **`name`** — the display name an Org Admin picks from in the **Web search**
+  field.
+- **`timeoutMs`** — optional, as above.
+- **`createExecutors`** — returns `{ web_search, read_url? }`, given the request
+  context (`orgId`, `workspaceId`, `userId`) and your Plugin's deploy-time
+  config block.
+
+There is no `configSchema` and no `credentialsSchema` here, unlike a Sandbox
+backend. A Sandbox has a per-Workspace row to hang settings on; a Web-search
+backend does not — a Provider stores only which backend it selected. Your API
+key and endpoint come from **deploy-time Plugin config**, so they are
+deployment-wide: one SearXNG instance, one key, every Organization. If a backend
+genuinely needs different credentials per Organization, that is a gap to report
+rather than something to work around by reading environment variables directly.
+
+Then list your plugin in `PLATYPUS_PLUGINS`. List membership **is** the enable
+switch — leave the plugin out and the backend never registers, so it vanishes
+from the Provider form.
+
+<Callout type="warning">
+  A Provider pointing at a backend you have since removed from
+  `PLATYPUS_PLUGINS` keeps its stored selection. The form shows it as **(not
+  installed)** rather than silently reading as **None**, and a searching turn on
+  that Provider runs no search and logs a warning. Removing a Plugin is not a
+  way to migrate Providers off it — change the field first.
+</Callout>
+
+## Results are cited for you
+
+Platypus lifts the `url` and `title` of each result your `web_search` returns
+into the same **Sources** row under the reply that a Provider's built-in search
+uses, so a reader gets pills either way. That is why the result shape is core's
+and not yours: the titles and URLs you return are read by the frontend, not just
+by the model.
+
+## Where to next
+
+- **[Plugin API & config](/extending/plugin-api-and-config)** — the deploy-time
+  config and credential block your `createExecutors` is handed.
+- **[Providers](/concepts/providers)** — the **Web search** field an Org Admin
+  picks your backend from.
+- **[Backend configuration](/reference/backend-configuration)** — `PLATYPUS_PLUGINS`
+  and the egress setting.
