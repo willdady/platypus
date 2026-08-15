@@ -2,13 +2,12 @@ import { Hono } from "hono";
 import { getToolSets } from "../tools/index.ts";
 import { CORE_BUILTIN_OWNER, getToolSetPlugin } from "../plugins/registry.ts";
 import { db } from "../index.ts";
-import { mcp as mcpTable } from "../db/schema.ts";
-import { eq } from "drizzle-orm";
 import { requireAuth } from "../middleware/authentication.ts";
 import {
   requireOrgAccess,
   requireWorkspaceAccess,
 } from "../middleware/authorization.ts";
+import { listScoped } from "../services/scoped-resource.ts";
 import type { Variables } from "../server.ts";
 
 const tool = new Hono<{ Variables: Variables }>();
@@ -20,6 +19,7 @@ tool.get(
   requireOrgAccess(),
   requireWorkspaceAccess,
   async (c) => {
+    const orgId = c.req.param("orgId")!;
     const workspaceId = c.req.param("workspaceId")!;
     // Get static tools. Each set is annotated with the `plugin` that
     // contributed it (ADR-0013 observability); the core-internal `sandbox` set is
@@ -40,14 +40,13 @@ tool.get(
             })),
     }));
 
-    // Get MCPs
-    const mcps = await db
-      .select()
-      .from(mcpTable)
-      .where(eq(mcpTable.workspaceId, workspaceId));
-    const mcpList = mcps.map((mcp) => ({
-      id: mcp.id,
-      name: mcp.name,
+    // The MCPs this Workspace may actually use: its own, plus the Shared
+    // (org-scoped) ones attached to it (ADR-0007) — the same set `GET /mcps`
+    // lists, resolved through the same authority.
+    const mcps = await listScoped(db, "mcp", { orgId, wsId: workspaceId });
+    const mcpList = mcps.map(({ row }) => ({
+      id: row.id,
+      name: row.name,
       category: "MCP",
     }));
 

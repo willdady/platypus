@@ -48,7 +48,24 @@ describe("createAgentManagementTools", () => {
       ).toEqual({ error: "Agent not found" });
     });
 
+    it("refuses to update a Shared agent attached to this workspace", async () => {
+      mockDb.limit
+        .mockResolvedValueOnce([
+          { id: "a1", organizationId: orgId, workspaceId: null },
+        ])
+        .mockResolvedValueOnce([{ id: "att-1" }]); // attached → visible, not writable
+
+      const result = (await tools.updateAgent.execute!(
+        { agentId: "a1", label: "test", name: "New Name" },
+        ctx,
+      )) as { error?: string };
+
+      expect(result.error).toContain("managed at the organization level");
+      expect(mockDb.update).not.toHaveBeenCalled();
+    });
+
     it("validates sub-agent assignments", async () => {
+      mockDb.limit.mockResolvedValueOnce([{ id: "a1", workspaceId }]);
       vi.mocked(validateSubAgentAssignment).mockResolvedValueOnce({
         valid: false,
         error: "Circular dependency detected",
@@ -75,8 +92,26 @@ describe("createAgentManagementTools", () => {
       ).toEqual({ error: "Agent not found" });
     });
 
+    it("refuses to delete a Shared agent attached to this workspace", async () => {
+      mockDb.limit
+        .mockResolvedValueOnce([
+          { id: "a1", organizationId: orgId, workspaceId: null },
+        ])
+        .mockResolvedValueOnce([{ id: "att-1" }]); // attached → visible, not deletable
+
+      const result = (await tools.deleteAgent.execute!(
+        { agentId: "a1", label: "Agent 1" },
+        ctx,
+      )) as { error?: string };
+
+      expect(result.error).toContain("managed at the organization level");
+      expect(mockDb.delete).not.toHaveBeenCalled();
+    });
+
     it("deletes agent and cleans up avatar", async () => {
-      mockDb.limit.mockResolvedValue([{ avatarKey: "avatars/a1.png" }]);
+      mockDb.limit.mockResolvedValue([
+        { id: "a1", workspaceId, avatarKey: "avatars/a1.png" },
+      ]);
 
       expect(
         await tools.deleteAgent.execute!(
@@ -87,7 +122,9 @@ describe("createAgentManagementTools", () => {
     });
 
     it("deletes agent without avatar", async () => {
-      mockDb.limit.mockResolvedValue([{ avatarKey: null }]);
+      mockDb.limit.mockResolvedValue([
+        { id: "a1", workspaceId, avatarKey: null },
+      ]);
 
       expect(
         await tools.deleteAgent.execute!(

@@ -7,7 +7,6 @@ import { db } from "../index.ts";
 import {
   trigger as triggerTable,
   triggerRun as triggerRunTable,
-  agent as agentTable,
 } from "../db/schema.ts";
 import { triggerCreateSchema, triggerUpdateSchema } from "@platypus/schemas";
 import { requireAuth } from "../middleware/authentication.ts";
@@ -16,6 +15,7 @@ import {
   requireWorkspaceAccess,
   requireWorkspaceOwner,
 } from "../middleware/authorization.ts";
+import { resolveScoped } from "../services/scoped-resource.ts";
 import type { Variables } from "../server.ts";
 import { logger } from "../logger.ts";
 import { validateCronExpression } from "../utils/cron.ts";
@@ -78,21 +78,18 @@ trigger.post(
   sValidator("json", triggerCreateSchema),
   async (c) => {
     const data = c.req.valid("json");
+    const orgId = c.req.param("orgId")!;
     const workspaceId = c.req.param("workspaceId")!;
 
-    // Verify agent exists in workspace
-    const agentRecord = await db
-      .select()
-      .from(agentTable)
-      .where(
-        and(
-          eq(agentTable.id, data.agentId),
-          eq(agentTable.workspaceId, workspaceId),
-        ),
-      )
-      .limit(1);
+    // The Agent must be usable here: workspace-scoped, or a Shared one attached
+    // to this Workspace (ADR-0007) — the same set the run resolves when the
+    // trigger fires.
+    const agentRecord = await resolveScoped(db, "agent", data.agentId, {
+      orgId,
+      wsId: workspaceId,
+    });
 
-    if (agentRecord.length === 0) {
+    if (!agentRecord) {
       return c.json({ error: "Agent not found in this workspace" }, 400);
     }
 
@@ -151,6 +148,7 @@ trigger.put(
   sValidator("json", triggerUpdateSchema),
   async (c) => {
     const triggerId = c.req.param("triggerId");
+    const orgId = c.req.param("orgId")!;
     const workspaceId = c.req.param("workspaceId")!;
     const data = c.req.valid("json");
 
@@ -172,18 +170,13 @@ trigger.put(
 
     // If agentId is being changed, verify new agent exists
     if (data.agentId && data.agentId !== existing[0].agentId) {
-      const agentRecord = await db
-        .select()
-        .from(agentTable)
-        .where(
-          and(
-            eq(agentTable.id, data.agentId),
-            eq(agentTable.workspaceId, workspaceId),
-          ),
-        )
-        .limit(1);
+      // See the create route: workspace-scoped, or Shared and attached here.
+      const agentRecord = await resolveScoped(db, "agent", data.agentId, {
+        orgId,
+        wsId: workspaceId,
+      });
 
-      if (agentRecord.length === 0) {
+      if (!agentRecord) {
         return c.json({ error: "Agent not found in this workspace" }, 400);
       }
     }

@@ -10,7 +10,11 @@ import { requireOrgAccess } from "../middleware/authorization.ts";
 import { findNonSharedReferences } from "../services/agent-scope-validation.ts";
 import { SUB_AGENT_SELF_ASSIGNMENT_ERROR } from "../services/sub-agent-validation.ts";
 import { scrubDeletedAgentReference } from "../services/agent-references.ts";
-import { requireSharedDeletable } from "../services/scoped-resource.ts";
+import {
+  listOrgScoped,
+  requireOrgScoped,
+  requireSharedDeletable,
+} from "../services/scoped-resource.ts";
 import { storeAvatar, deleteAvatar } from "../services/avatar.ts";
 import { avatarKeyToUrl } from "../utils/avatar-url.ts";
 import { getOrigin } from "../utils/get-origin.ts";
@@ -36,10 +40,7 @@ function agentWithAvatarUrl(
 orgAgent.get("/", requireAuth, requireOrgAccess(), async (c) => {
   const orgId = c.req.param("orgId")!;
   const baseUrl = getOrigin(c);
-  const results = await db
-    .select()
-    .from(agentTable)
-    .where(eq(agentTable.organizationId, orgId));
+  const results = await listOrgScoped(db, "agent", orgId);
   return c.json({
     results: results.map((r) => agentWithAvatarUrl(r, baseUrl)),
   });
@@ -50,17 +51,8 @@ orgAgent.get("/:agentId", requireAuth, requireOrgAccess(), async (c) => {
   const orgId = c.req.param("orgId")!;
   const agentId = c.req.param("agentId");
   const baseUrl = getOrigin(c);
-  const record = await db
-    .select()
-    .from(agentTable)
-    .where(
-      and(eq(agentTable.id, agentId), eq(agentTable.organizationId, orgId)),
-    )
-    .limit(1);
-  if (record.length === 0) {
-    throw new NotFoundError("Agent not found");
-  }
-  return c.json(agentWithAvatarUrl(record[0], baseUrl));
+  const record = await requireOrgScoped(db, "agent", agentId, orgId);
+  return c.json(agentWithAvatarUrl(record, baseUrl));
 });
 
 /** Update an org-scoped Agent by ID (admin only) */
@@ -127,16 +119,7 @@ orgAgent.post(
     const agentId = c.req.param("agentId");
     const baseUrl = getOrigin(c);
 
-    const [existing] = await db
-      .select({ avatarKey: agentTable.avatarKey })
-      .from(agentTable)
-      .where(
-        and(eq(agentTable.id, agentId), eq(agentTable.organizationId, orgId)),
-      )
-      .limit(1);
-    if (!existing) {
-      throw new NotFoundError("Agent not found");
-    }
+    const existing = await requireOrgScoped(db, "agent", agentId, orgId);
 
     const body = await c.req.parseBody();
     const result = await storeAvatar(body["file"], agentId, existing.avatarKey);
@@ -165,16 +148,7 @@ orgAgent.delete(
     const agentId = c.req.param("agentId");
     const baseUrl = getOrigin(c);
 
-    const [existing] = await db
-      .select({ avatarKey: agentTable.avatarKey })
-      .from(agentTable)
-      .where(
-        and(eq(agentTable.id, agentId), eq(agentTable.organizationId, orgId)),
-      )
-      .limit(1);
-    if (!existing) {
-      throw new NotFoundError("Agent not found");
-    }
+    const existing = await requireOrgScoped(db, "agent", agentId, orgId);
 
     await deleteAvatar(existing.avatarKey);
 

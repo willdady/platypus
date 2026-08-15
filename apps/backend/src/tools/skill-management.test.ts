@@ -30,11 +30,16 @@ describe("createSkillManagementTools", () => {
   });
 
   describe("listSkills", () => {
-    it("returns skills in workspace", async () => {
-      const skills = [{ id: "s1", name: "my-skill" }];
-      mockDb.where.mockResolvedValue(skills);
+    it("returns workspace skills and the Shared skills attached here", async () => {
+      mockDb.where
+        .mockResolvedValueOnce([{ id: "s1", name: "my-skill" }])
+        // attached Shared skills arrive from an inner join, keyed by table name.
+        .mockResolvedValueOnce([{ skill: { id: "s2", name: "shared-skill" } }]);
 
-      expect(await tools.listSkills.execute!({}, ctx)).toEqual(skills);
+      expect(await tools.listSkills.execute!({}, ctx)).toEqual([
+        expect.objectContaining({ id: "s1", scope: "workspace" }),
+        expect.objectContaining({ id: "s2", scope: "organization" }),
+      ]);
     });
   });
 
@@ -59,6 +64,19 @@ describe("createSkillManagementTools", () => {
       expect(result).toMatchObject({ name: "my-skill" });
       expect(result.url).toContain("skills/s1");
     });
+
+    it("returns a Shared skill attached to this workspace", async () => {
+      mockDb.limit
+        .mockResolvedValueOnce([]) // no workspace-scoped skill of this name
+        .mockResolvedValueOnce([
+          { id: "s2", name: "shared-skill", organizationId: orgId },
+        ])
+        .mockResolvedValueOnce([{ id: "att-1" }]); // attached here
+
+      expect(
+        await tools.getSkill.execute!({ name: "shared-skill" }, ctx),
+      ).toMatchObject({ name: "shared-skill", scope: "organization" });
+    });
   });
 
   describe("upsertSkill", () => {
@@ -76,6 +94,29 @@ describe("createSkillManagementTools", () => {
           ctx,
         ),
       ).toMatchObject({ name: "my-skill" });
+    });
+
+    it("writes a workspace-scoped row, keyed on (workspaceId, name)", async () => {
+      // The conflict target is what keeps the write Workspace-private: reusing
+      // the name of an attached Shared Skill creates this Workspace's own
+      // version rather than editing the Organization's row.
+      mockDb.returning.mockResolvedValue([{ id: "s1", name: "my-skill" }]);
+
+      await tools.upsertSkill.execute!(
+        {
+          name: "my-skill",
+          description: "A skill for testing purposes",
+          body: validBody,
+        },
+        ctx,
+      );
+
+      const values = mockDb.values.mock.calls[0][0] as Record<string, unknown>;
+      expect(values.workspaceId).toBe(workspaceId);
+      const conflict = mockDb.onConflictDoUpdate.mock.calls[0][0] as {
+        target: unknown[];
+      };
+      expect(conflict.target).toHaveLength(2);
     });
 
     describe("description length", () => {
@@ -121,6 +162,23 @@ describe("createSkillManagementTools", () => {
       )) as { error?: string };
 
       expect(result.error).toContain("referenced by one or more agents");
+    });
+
+    it("refuses to delete a Shared skill", async () => {
+      mockDb.limit
+        .mockResolvedValueOnce([]) // no workspace-scoped skill of this name
+        .mockResolvedValueOnce([
+          { id: "s2", name: "shared-skill", organizationId: orgId },
+        ])
+        .mockResolvedValueOnce([{ id: "att-1" }]); // attached here
+
+      const result = (await tools.deleteSkill.execute!(
+        { name: "shared-skill" },
+        ctx,
+      )) as { error?: string };
+
+      expect(result.error).toContain("managed at the organization level");
+      expect(mockDb.delete).not.toHaveBeenCalled();
     });
 
     it("deletes skill when no agents reference it", async () => {

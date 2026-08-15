@@ -8,7 +8,11 @@ import { eq, and } from "drizzle-orm";
 import { requireAuth } from "../middleware/authentication.ts";
 import { requireOrgAccess } from "../middleware/authorization.ts";
 import { scrubDeletedAgentReference } from "../services/agent-references.ts";
-import { requireSharedDeletable } from "../services/scoped-resource.ts";
+import {
+  listOrgScoped,
+  requireOrgScoped,
+  requireSharedDeletable,
+} from "../services/scoped-resource.ts";
 import { NotFoundError } from "../errors.ts";
 import type { Variables } from "../server.ts";
 
@@ -49,10 +53,7 @@ orgSkill.post(
 /** List org-scoped Skills */
 orgSkill.get("/", requireAuth, requireOrgAccess(), async (c) => {
   const orgId = c.req.param("orgId")!;
-  const results = await db
-    .select()
-    .from(skillTable)
-    .where(eq(skillTable.organizationId, orgId));
+  const results = await listOrgScoped(db, "skill", orgId);
   return c.json({ results });
 });
 
@@ -60,17 +61,8 @@ orgSkill.get("/", requireAuth, requireOrgAccess(), async (c) => {
 orgSkill.get("/:skillId", requireAuth, requireOrgAccess(), async (c) => {
   const orgId = c.req.param("orgId")!;
   const skillId = c.req.param("skillId");
-  const record = await db
-    .select()
-    .from(skillTable)
-    .where(
-      and(eq(skillTable.id, skillId), eq(skillTable.organizationId, orgId)),
-    )
-    .limit(1);
-  if (record.length === 0) {
-    throw new NotFoundError("Skill not found");
-  }
-  return c.json(record[0]);
+  const record = await requireOrgScoped(db, "skill", skillId, orgId);
+  return c.json(record);
 });
 
 /** Update an org-scoped Skill by ID (admin only) */

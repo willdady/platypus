@@ -18,13 +18,14 @@ import {
   requireOrgAccess,
   requireWorkspaceAccess,
   requireWorkspaceConfigAccess,
-  workspaceConfigAccess,
+  workspaceCredentialsVisible,
 } from "../middleware/authorization.ts";
 import { redactMcpSecrets } from "../services/credential-redaction.ts";
 import {
   listScoped,
   requireScoped,
   requireWorkspaceMutable,
+  type Scope,
 } from "../services/scoped-resource.ts";
 import type { Variables } from "../server.ts";
 import { logger } from "../logger.ts";
@@ -69,6 +70,21 @@ export const sanitizeMcpResponse = (record: McpRecord) => {
   };
 };
 
+/**
+ * The read shape of an MCP on the Workspace surface, assembled once for both
+ * read routes: OAuth tokens stripped unconditionally, Operator-entered request
+ * credentials only for a caller who may manage this MCP (ADR-0006), and the
+ * scope the Scoped-resource module resolved it at, which the frontend uses to
+ * mark a Shared row read-only.
+ */
+const mcpReadModel = (
+  { row, scope }: { row: McpRecord; scope: Scope },
+  reveal: boolean,
+) => ({
+  ...redactMcpSecrets(sanitizeMcpResponse(row), { reveal }),
+  scope,
+});
+
 /** Create a new MCP (org-admin, or owner when delegated — ADR-0006) */
 mcp.post(
   "/",
@@ -112,11 +128,8 @@ mcp.get(
     // Request credentials are revealed only to a caller who may manage this MCP
     // (ADR-0006) — the same rule the write routes reject on. The rows still list,
     // because granting an MCP to an Agent does not require self-management.
-    const { allowed } = await workspaceConfigAccess(c, "mcpSelfManagement");
-    const results = scoped.map(({ row, scope }) => ({
-      ...redactMcpSecrets(sanitizeMcpResponse(row), { reveal: allowed }),
-      scope,
-    }));
+    const reveal = await workspaceCredentialsVisible(c, "mcp");
+    const results = scoped.map((found) => mcpReadModel(found, reveal));
 
     return c.json({ results });
   },
@@ -132,16 +145,13 @@ mcp.get(
     const mcpId = c.req.param("mcpId");
     const orgId = c.req.param("orgId")!;
     const workspaceId = c.req.param("workspaceId")!;
-    const { row, scope } = await requireScoped(db, "mcp", mcpId, {
+    const found = await requireScoped(db, "mcp", mcpId, {
       orgId,
       wsId: workspaceId,
     });
     // See the list route: redacted unless this caller may manage the MCP.
-    const { allowed } = await workspaceConfigAccess(c, "mcpSelfManagement");
-    return c.json({
-      ...redactMcpSecrets(sanitizeMcpResponse(row), { reveal: allowed }),
-      scope,
-    });
+    const reveal = await workspaceCredentialsVisible(c, "mcp");
+    return c.json(mcpReadModel(found, reveal));
   },
 );
 

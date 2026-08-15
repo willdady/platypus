@@ -13,6 +13,11 @@
  * to them, so the rows must keep flowing with the secrets removed.
  *
  * `reveal` defaults to `false` on both helpers so a new call site fails closed.
+ *
+ * *Who* may reveal is decided once per surface, not per route:
+ * `workspaceCredentialsVisible` and `orgCredentialsVisible`
+ * (`middleware/authorization.ts`), which are where these helpers' `reveal`
+ * argument comes from.
  */
 
 /** Replaces a redacted secret so a caller can tell "unset" from "not shown". */

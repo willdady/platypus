@@ -14,9 +14,17 @@ import {
 } from "@platypus/schemas";
 import { eq, and } from "drizzle-orm";
 import { requireAuth } from "../middleware/authentication.ts";
-import { requireOrgAccess } from "../middleware/authorization.ts";
+import {
+  orgCredentialsVisible,
+  requireOrgAccess,
+} from "../middleware/authorization.ts";
 import { scrubDeletedAgentReference } from "../services/agent-references.ts";
-import { requireSharedDeletable } from "../services/scoped-resource.ts";
+import {
+  listOrgScoped,
+  requireOrgScoped,
+  resolveOrgScoped,
+  requireSharedDeletable,
+} from "../services/scoped-resource.ts";
 import type { Variables } from "../server.ts";
 import { logger } from "../logger.ts";
 import {
@@ -62,16 +70,13 @@ orgMcp.post(
 /** List org-scoped MCPs */
 orgMcp.get("/", requireAuth, requireOrgAccess(), async (c) => {
   const orgId = c.req.param("orgId")!;
-  const results = await db
-    .select()
-    .from(mcpTable)
-    .where(eq(mcpTable.organizationId, orgId));
+  const results = await listOrgScoped(db, "mcp", orgId);
   // This route admits any Organization member — a Shared MCP has to be listable
   // to be granted. Only an Org Admin sees its request credentials (ADR-0006).
-  const isAdmin = c.get("orgMembership")?.role === "admin";
+  const reveal = orgCredentialsVisible(c);
   return c.json({
     results: results.map((row) =>
-      redactMcpSecrets(sanitizeMcpResponse(row), { reveal: isAdmin }),
+      redactMcpSecrets(sanitizeMcpResponse(row), { reveal }),
     ),
   });
 });
@@ -80,19 +85,10 @@ orgMcp.get("/", requireAuth, requireOrgAccess(), async (c) => {
 orgMcp.get("/:mcpId", requireAuth, requireOrgAccess(), async (c) => {
   const orgId = c.req.param("orgId")!;
   const mcpId = c.req.param("mcpId");
-  const record = await db
-    .select()
-    .from(mcpTable)
-    .where(and(eq(mcpTable.id, mcpId), eq(mcpTable.organizationId, orgId)))
-    .limit(1);
-  if (record.length === 0) {
-    throw new NotFoundError("MCP not found");
-  }
+  const record = await requireOrgScoped(db, "mcp", mcpId, orgId);
   // See the list route: request credentials are Org-Admin-only (ADR-0006).
-  const isAdmin = c.get("orgMembership")?.role === "admin";
-  return c.json(
-    redactMcpSecrets(sanitizeMcpResponse(record[0]), { reveal: isAdmin }),
-  );
+  const reveal = orgCredentialsVisible(c);
+  return c.json(redactMcpSecrets(sanitizeMcpResponse(record), { reveal }));
 });
 
 /** Update an org-scoped MCP by ID (admin only) */
@@ -107,13 +103,9 @@ orgMcp.put(
     const data = c.req.valid("json");
 
     // If URL is changing, clear stored OAuth tokens (they're server-specific)
-    const existing = await db
-      .select()
-      .from(mcpTable)
-      .where(and(eq(mcpTable.id, mcpId), eq(mcpTable.organizationId, orgId)))
-      .limit(1);
+    const existing = await resolveOrgScoped(db, "mcp", mcpId, orgId);
 
-    const urlChanged = existing.length > 0 && existing[0].url !== data.url;
+    const urlChanged = !!existing && existing.url !== data.url;
 
     // A duplicate name surfaces as a Postgres unique violation, mapped to 409
     // by the central onError (ADR-0010).
@@ -184,22 +176,13 @@ orgMcp.post(
       // For OAuth, use authProvider with stored tokens
       if (data.authType === "OAuth" && data.mcpId) {
         const orgId = c.req.param("orgId")!;
-        const mcpRecord = await db
-          .select()
-          .from(mcpTable)
-          .where(
-            and(
-              eq(mcpTable.id, data.mcpId),
-              eq(mcpTable.organizationId, orgId),
-            ),
-          )
-          .limit(1);
+        const mcpRecord = await resolveOrgScoped(db, "mcp", data.mcpId, orgId);
 
-        if (mcpRecord.length === 0) {
+        if (!mcpRecord) {
           return c.json({ success: false, error: "MCP not found" }, 404);
         }
 
-        if (!mcpRecord[0].oauthAccessToken) {
+        if (!mcpRecord.oauthAccessToken) {
           return c.json(
             {
               success: false,
@@ -210,7 +193,7 @@ orgMcp.post(
         }
 
         mcpClient = await createMCPClient({
-          transport: buildMcpTransportConfig(mcpRecord[0]),
+          transport: buildMcpTransportConfig(mcpRecord),
         });
       } else {
         mcpClient = await createMCPClient({
@@ -264,26 +247,22 @@ orgMcp.post(
     const orgId = c.req.param("orgId")!;
     const mcpId = c.req.param("mcpId");
 
-    const mcpRecord = await db
-      .select()
-      .from(mcpTable)
-      .where(and(eq(mcpTable.id, mcpId), eq(mcpTable.organizationId, orgId)))
-      .limit(1);
+    let mcpRecord = await resolveOrgScoped(db, "mcp", mcpId, orgId);
 
-    if (mcpRecord.length === 0) {
+    if (!mcpRecord) {
       return c.json({ error: "MCP not found" }, 404);
     }
 
-    if (mcpRecord[0].authType !== "OAuth") {
+    if (mcpRecord.authType !== "OAuth") {
       return c.json({ error: "MCP auth type is not OAuth" }, 400);
     }
 
-    if (!mcpRecord[0].url) {
+    if (!mcpRecord.url) {
       return c.json({ error: "MCP URL is not configured" }, 400);
     }
-    // Capture the narrowed URL before the `force` block reassigns
-    // `mcpRecord[0]`, which widens the property back to `string | null`.
-    const serverUrl = mcpRecord[0].url;
+    // Capture the narrowed URL before the `force` block reassigns `mcpRecord`,
+    // which widens the property back to `string | null`.
+    const serverUrl = mcpRecord.url;
 
     // `force=true` clears stored tokens before the OAuth flow so mcpAuth always
     // returns REDIRECT (see mcp.ts for the full rationale). DCR/static client
@@ -294,15 +273,12 @@ orgMcp.post(
         .update(mcpTable)
         .set({ ...OAUTH_TOKEN_CLEAR_FIELDS, updatedAt: new Date() })
         .where(eq(mcpTable.id, mcpId));
-      mcpRecord[0] = { ...mcpRecord[0], ...OAUTH_TOKEN_CLEAR_FIELDS };
+      mcpRecord = { ...mcpRecord, ...OAUTH_TOKEN_CLEAR_FIELDS };
     }
 
     try {
       const callbackUrl = buildOAuthCallbackUrl();
-      const provider = new DatabaseOAuthClientProvider(
-        mcpRecord[0],
-        callbackUrl,
-      );
+      const provider = new DatabaseOAuthClientProvider(mcpRecord, callbackUrl);
 
       const result = await mcpAuth(provider, {
         serverUrl,

@@ -1,13 +1,13 @@
 import { generateText, Output } from "ai";
-import { and, eq, or, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "../index.ts";
 import {
   chat as chatTable,
-  provider as providerTable,
   workspace as workspaceTable,
 } from "../db/schema.ts";
 import { openProvider } from "./provider.ts";
+import { resolveScoped } from "./scoped-resource.ts";
 import { pointerSettingModelId } from "./model-capability.ts";
 import { dedupeArray, toKebabCase } from "../utils.ts";
 import { UNTITLED_CHAT_TITLE, type Provider } from "@platypus/schemas";
@@ -87,21 +87,15 @@ export const generateChatMetadata = async (
   // Use the workspace task-model provider if set, otherwise the supplied one.
   const effectiveProviderId = workspace.taskModelProviderId || providerId;
 
-  const providerRows = await db
-    .select()
-    .from(providerTable)
-    .where(
-      and(
-        eq(providerTable.id, effectiveProviderId),
-        or(
-          eq(providerTable.workspaceId, workspaceId),
-          eq(providerTable.organizationId, orgId),
-        ),
-      ),
-    )
-    .limit(1);
-  const provider = providerRows[0] as Provider | undefined;
-  if (!provider) return null;
+  // Resolved through the Scoped-resource authority, as every other resource a
+  // Chat turn reaches is: a Shared Provider titles here only where an Attachment
+  // makes it visible to this Workspace (ADR-0007).
+  const found = await resolveScoped(db, "provider", effectiveProviderId, {
+    orgId,
+    wsId: workspaceId,
+  });
+  if (!found) return null;
+  const provider = found.row as Provider;
 
   // Fetch existing tags from all chats in the workspace so the model can reuse
   // them rather than minting near-duplicate variants.

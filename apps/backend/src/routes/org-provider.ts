@@ -12,8 +12,15 @@ import {
   deMigrateOrphanedAliases,
 } from "../services/model-alias-migration.ts";
 import { requireAuth } from "../middleware/authentication.ts";
-import { requireOrgAccess } from "../middleware/authorization.ts";
-import { requireSharedDeletable } from "../services/scoped-resource.ts";
+import {
+  orgCredentialsVisible,
+  requireOrgAccess,
+} from "../middleware/authorization.ts";
+import {
+  listOrgScoped,
+  requireOrgScoped,
+  requireSharedDeletable,
+} from "../services/scoped-resource.ts";
 import { redactProviderSecrets } from "../services/credential-redaction.ts";
 import { NotFoundError } from "../errors.ts";
 import type { Variables } from "../server.ts";
@@ -53,17 +60,12 @@ orgProvider.post(
 /** List all organization providers */
 orgProvider.get("/", requireAuth, requireOrgAccess(), async (c) => {
   const orgId = c.req.param("orgId")!;
-  const rows = await db
-    .select()
-    .from(providerTable)
-    .where(eq(providerTable.organizationId, orgId));
+  const rows = await listOrgScoped(db, "provider", orgId);
 
   // This route admits any Organization member — a Shared Provider has to be
   // listable to be selected. Only an Org Admin sees its credentials (ADR-0006).
-  const isAdmin = c.get("orgMembership")?.role === "admin";
-  const results = rows.map((row) =>
-    redactProviderSecrets(row, { reveal: isAdmin }),
-  );
+  const reveal = orgCredentialsVisible(c);
+  const results = rows.map((row) => redactProviderSecrets(row, { reveal }));
 
   return c.json({ results });
 });
@@ -73,24 +75,11 @@ orgProvider.get("/:providerId", requireAuth, requireOrgAccess(), async (c) => {
   const orgId = c.req.param("orgId")!;
   const providerId = c.req.param("providerId");
 
-  const record = await db
-    .select()
-    .from(providerTable)
-    .where(
-      and(
-        eq(providerTable.id, providerId),
-        eq(providerTable.organizationId, orgId),
-      ),
-    )
-    .limit(1);
-
-  if (record.length === 0) {
-    throw new NotFoundError("Provider not found");
-  }
+  const record = await requireOrgScoped(db, "provider", providerId, orgId);
 
   // See the list route: credentials are Org-Admin-only (ADR-0006).
-  const isAdmin = c.get("orgMembership")?.role === "admin";
-  return c.json(redactProviderSecrets(record[0], { reveal: isAdmin }));
+  const reveal = orgCredentialsVisible(c);
+  return c.json(redactProviderSecrets(record, { reveal }));
 });
 
 /** Update an organization provider by ID (admin only) */

@@ -50,6 +50,15 @@ const provider = {
   providerType: "OpenAI",
   taskModelId: "task-model",
   modelIds: ["task-model"],
+  workspaceId: "ws-1",
+  organizationId: null,
+};
+
+/** The same Provider as a Shared (org-scoped) row. */
+const sharedProvider = {
+  ...provider,
+  workspaceId: null,
+  organizationId: "org-1",
 };
 
 describe("generateChatMetadata", () => {
@@ -175,6 +184,38 @@ describe("generateChatMetadata", () => {
 
     const result = await generateChatMetadata(params);
     expect(result).toBeNull();
+  });
+
+  it("refuses a Shared provider that is not attached to this workspace", async () => {
+    // Titling resolves its Provider through the Scoped-resource authority, so a
+    // Shared Provider reaches this Workspace only where an Attachment does
+    // (ADR-0007) — matching every other resource a Chat turn resolves.
+    stubReads({
+      chat: { id: "chat-1", title: "Untitled", messages: [userMessage] },
+      workspace: { id: "ws-1", taskModelProviderId: null },
+      provider: sharedProvider,
+    });
+    mockDb.limit.mockResolvedValueOnce([]); // attachment check → not attached
+
+    const result = await generateChatMetadata(params);
+    expect(result).toBeNull();
+    expect(mockGenerateText).not.toHaveBeenCalled();
+  });
+
+  it("titles with a Shared provider attached to this workspace", async () => {
+    stubReads({
+      chat: { id: "chat-1", title: "Untitled", messages: [userMessage] },
+      workspace: { id: "ws-1", taskModelProviderId: null },
+      provider: sharedProvider,
+    });
+    mockDb.limit.mockResolvedValueOnce([{ id: "att-1" }]); // attached here
+    mockGenerateText.mockResolvedValueOnce({
+      output: { title: "Titled", tags: ["a"] },
+    });
+    mockDb.returning.mockResolvedValueOnce([{ id: "chat-1" }]);
+
+    const result = await generateChatMetadata(params);
+    expect(result).not.toBeNull();
   });
 
   it("returns null when the provider cannot be resolved", async () => {

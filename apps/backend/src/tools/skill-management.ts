@@ -5,31 +5,46 @@ import { skillBaseSchema } from "@platypus/schemas";
 import { db } from "../index.ts";
 import { skill as skillTable, agent as agentTable } from "../db/schema.ts";
 import { buildResourceUrl } from "../utils/resource-url.ts";
+import {
+  listScoped,
+  resolveScopedByName,
+  workspaceMutationLockedMessage,
+  type ScopeContext,
+} from "../services/scoped-resource.ts";
 
 // Field constraints come from the shared schema so the agent-facing tool can
 // never drift from the bounds the HTTP routes and the web form enforce.
 const skillFields = skillBaseSchema.shape;
 
+/**
+ * Reads here resolve at the invoking Workspace's scope — its own Skills plus the
+ * Shared ones attached to it (ADR-0007) — so the model sees the same Skills the
+ * Operator does. Writes stay Workspace-private: a Shared Skill is a single
+ * source of truth edited only on the Organization surface, so `deleteSkill`
+ * refuses one, and `upsertSkill` writes this Workspace's own version instead of
+ * reaching the Organization's row.
+ */
 export function createSkillManagementTools(
   workspaceId: string,
   orgId: string,
   frontendUrl: string | undefined,
 ): Record<string, Tool> {
+  const ctx: ScopeContext = { orgId, wsId: workspaceId };
+
   const listSkills = tool({
-    description: "List all skills in the current workspace.",
+    description:
+      "List the skills available in the current workspace, including shared skills attached to it. A skill with scope 'organization' is shared and cannot be edited or deleted here.",
     inputSchema: z.object({}),
     execute: async () => {
-      const skills = await db
-        .select({
-          id: skillTable.id,
-          name: skillTable.name,
-          description: skillTable.description,
-          createdAt: skillTable.createdAt,
-          updatedAt: skillTable.updatedAt,
-        })
-        .from(skillTable)
-        .where(eq(skillTable.workspaceId, workspaceId));
-      return skills;
+      const scoped = await listScoped(db, "skill", ctx);
+      return scoped.map(({ row, scope }) => ({
+        id: row.id,
+        name: row.name,
+        description: row.description,
+        createdAt: row.createdAt,
+        updatedAt: row.updatedAt,
+        scope,
+      }));
     },
   });
 
@@ -39,18 +54,9 @@ export function createSkillManagementTools(
       name: z.string().describe("The name of the skill to retrieve"),
     }),
     execute: async ({ name }) => {
-      const result = await db
-        .select()
-        .from(skillTable)
-        .where(
-          and(
-            eq(skillTable.workspaceId, workspaceId),
-            eq(skillTable.name, name),
-          ),
-        )
-        .limit(1);
+      const found = await resolveScopedByName(db, "skill", name, ctx);
 
-      if (result.length === 0) {
+      if (!found) {
         return { error: "Skill not found" };
       }
 
@@ -58,16 +64,16 @@ export function createSkillManagementTools(
         frontendUrl,
         orgId,
         workspaceId,
-        `skills/${result[0].id}`,
+        `skills/${found.row.id}`,
       );
 
-      return { ...result[0], ...(url && { url }) };
+      return { ...found.row, scope: found.scope, ...(url && { url }) };
     },
   });
 
   const upsertSkill = tool({
     description:
-      "Create a new skill or update an existing skill by name. If a skill with the given name already exists in this workspace, it will be updated.",
+      "Create a new skill or update an existing skill by name. If a skill with the given name already exists in this workspace, it will be updated. Using the name of a shared skill creates this workspace's own version of it — the organization's skill is left untouched.",
     inputSchema: z.object({
       name: skillFields.name.describe(
         "Kebab-case name of the skill, unique within the workspace",
@@ -78,6 +84,11 @@ export function createSkillManagementTools(
       body: skillFields.body.describe("The Markdown content of the skill"),
     }),
     execute: async ({ name, description, body }) => {
+      // Writes only ever land on a workspace-scoped row: the conflict target is
+      // `(workspaceId, name)`, so upserting the name of an attached Shared Skill
+      // creates this Workspace's own version of it rather than editing the
+      // Organization's. `resolveScopedByName` then prefers that local row, which
+      // is what makes the override take effect.
       const { nanoid } = await import("nanoid");
       const now = new Date();
 
@@ -115,27 +126,24 @@ export function createSkillManagementTools(
 
   const deleteSkill = tool({
     description:
-      "Delete a skill by name. Will fail if the skill is referenced by one or more agents.",
+      "Delete a skill by name. Will fail if the skill is referenced by one or more agents, or if it is a shared skill managed at the organization level.",
     inputSchema: z.object({
       name: z.string().describe("The name of the skill to delete"),
     }),
     execute: async ({ name }) => {
-      const existing = await db
-        .select({ id: skillTable.id })
-        .from(skillTable)
-        .where(
-          and(
-            eq(skillTable.workspaceId, workspaceId),
-            eq(skillTable.name, name),
-          ),
-        )
-        .limit(1);
+      const existing = await resolveScopedByName(db, "skill", name, ctx);
 
-      if (existing.length === 0) {
+      if (!existing) {
         return { error: "Skill not found" };
       }
+      // Visible here, but a single source of truth deleted only on the
+      // Organization surface (ADR-0007) — detaching it is the workspace-side
+      // action, and that is an Attachment concern, not a delete.
+      if (existing.scope === "organization") {
+        return { error: workspaceMutationLockedMessage("skill") };
+      }
 
-      const skillId = existing[0].id;
+      const skillId = existing.row.id;
 
       const referencingAgents = await db
         .select({ id: agentTable.id })

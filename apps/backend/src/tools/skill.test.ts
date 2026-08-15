@@ -32,13 +32,41 @@ describe("createLoadSkillTool", () => {
   });
 
   it("falls back to an attached org-scoped skill", async () => {
-    const orgSkill = { name: "shared-skill", body: "Shared instructions" };
-    // Workspace query empty, then the attached org-scoped query resolves.
-    mockDb.limit.mockResolvedValueOnce([]).mockResolvedValueOnce([orgSkill]);
+    const orgSkill = {
+      id: "s2",
+      name: "shared-skill",
+      body: "Shared instructions",
+      organizationId: "org-1",
+      workspaceId: null,
+    };
+    mockDb.limit
+      .mockResolvedValueOnce([]) // no workspace-scoped skill of this name
+      .mockResolvedValueOnce([orgSkill]) // the Shared skill
+      .mockResolvedValueOnce([{ id: "att-1" }]); // attached to this workspace
 
-    expect(await loadSkill.execute({ name: "shared-skill" }, ctx)).toEqual(
-      orgSkill,
-    );
+    expect(await loadSkill.execute({ name: "shared-skill" }, ctx)).toEqual({
+      name: "shared-skill",
+      body: "Shared instructions",
+    });
+  });
+
+  it("refuses an org-scoped skill that is not attached here", async () => {
+    mockDb.limit
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([
+        {
+          id: "s2",
+          name: "shared-skill",
+          body: "Shared instructions",
+          organizationId: "org-1",
+          workspaceId: null,
+        },
+      ])
+      .mockResolvedValueOnce([]); // no attachment → not visible here
+
+    expect(await loadSkill.execute({ name: "shared-skill" }, ctx)).toEqual({
+      error: "Skill 'shared-skill' not found",
+    });
   });
 
   it("returns error when skill not found at either scope", async () => {

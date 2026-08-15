@@ -3,29 +3,41 @@ import { z } from "zod";
 import { nanoid } from "nanoid";
 import { and, desc, eq } from "drizzle-orm";
 import { db } from "../index.ts";
-import { trigger as triggerTable, agent as agentTable } from "../db/schema.ts";
+import { trigger as triggerTable } from "../db/schema.ts";
 import { validateCronExpression } from "../utils/cron.ts";
 import { buildResourceUrl } from "../utils/resource-url.ts";
+import {
+  listScoped,
+  resolveScoped,
+  type ScopeContext,
+} from "../services/scoped-resource.ts";
 
 export function createTriggerTools(
   workspaceId: string,
   orgId: string,
   frontendUrl: string | undefined,
 ): Record<string, Tool> {
+  // A trigger may point at any Agent this Workspace can run — its own, or a
+  // Shared one attached to it (ADR-0007), which is exactly what the Chat turn
+  // resolves when the trigger fires.
+  const ctx: ScopeContext = { orgId, wsId: workspaceId };
+
   const listAgents = tool({
     description:
-      "List all agents available in this workspace. Returns agent IDs, names, and descriptions. Use this to find agent IDs when creating or editing triggers.",
+      "List all agents available in this workspace, including shared agents attached to it. Returns agent IDs, names, and descriptions. Use this to find agent IDs when creating or editing triggers.",
     inputSchema: z.object({}),
     execute: async () => {
-      const agents = await db
-        .select({
-          id: agentTable.id,
-          name: agentTable.name,
-          description: agentTable.description,
-        })
-        .from(agentTable)
-        .where(eq(agentTable.workspaceId, workspaceId))
-        .orderBy(desc(agentTable.createdAt));
+      const scoped = await listScoped(db, "agent", ctx);
+      // Newest first across both scopes — `listScoped` returns the Workspace
+      // rows then the attached Shared ones, so the ordering is applied here.
+      const agents = scoped
+        .map(({ row }) => row)
+        .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+        .map((row) => ({
+          id: row.id,
+          name: row.name,
+          description: row.description,
+        }));
 
       return { agents, count: agents.length };
     },
@@ -221,20 +233,16 @@ export function createTriggerTools(
 
         const currentTrigger = existing[0];
 
-        // If agentId is being changed, verify new agent exists
+        // If agentId is being changed, verify the new agent is usable here
         if (fields.agentId && fields.agentId !== currentTrigger.agentId) {
-          const agentRecord = await db
-            .select()
-            .from(agentTable)
-            .where(
-              and(
-                eq(agentTable.id, fields.agentId),
-                eq(agentTable.workspaceId, workspaceId),
-              ),
-            )
-            .limit(1);
+          const agentRecord = await resolveScoped(
+            db,
+            "agent",
+            fields.agentId,
+            ctx,
+          );
 
-          if (agentRecord.length === 0) {
+          if (!agentRecord) {
             return {
               success: false,
               error:
@@ -346,19 +354,10 @@ export function createTriggerTools(
         };
       }
 
-      // Verify agent exists in workspace
-      const agentRecord = await db
-        .select()
-        .from(agentTable)
-        .where(
-          and(
-            eq(agentTable.id, agentId),
-            eq(agentTable.workspaceId, workspaceId),
-          ),
-        )
-        .limit(1);
+      // Verify the agent is usable in this workspace
+      const agentRecord = await resolveScoped(db, "agent", agentId, ctx);
 
-      if (agentRecord.length === 0) {
+      if (!agentRecord) {
         return {
           success: false,
           error:

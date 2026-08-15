@@ -354,6 +354,42 @@ export const workspaceConfigAccess = async (
   return { allowed: true };
 };
 
+/** The Scoped resource types that store Operator-entered credentials. */
+export type CredentialResourceType = "mcp" | "provider";
+
+/**
+ * ADR-0006's delegation flag for each credential-bearing Scoped resource —
+ * written down once, so a read path cannot redact on one rule while its write
+ * path rejects on another.
+ */
+const CREDENTIAL_DELEGATION_FLAG: Record<
+  CredentialResourceType,
+  DelegationFlag
+> = {
+  mcp: "mcpSelfManagement",
+  provider: "providerSelfManagement",
+};
+
+/**
+ * The Workspace surface's answer to "may this caller see this resource's stored
+ * credentials?" — {@link workspaceConfigAccess} read as a yes/no, since a read
+ * path redacts rather than reporting *why* it refused.
+ */
+export const workspaceCredentialsVisible = async (
+  c: Context<Env>,
+  type: CredentialResourceType,
+): Promise<boolean> =>
+  (await workspaceConfigAccess(c, CREDENTIAL_DELEGATION_FLAG[type])).allowed;
+
+/**
+ * The Organization surface's twin. A Shared resource is configured only by an
+ * Org Admin (ADR-0006, ADR-0007) — there is no per-workspace delegation at org
+ * scope — so admin *is* the whole rule. Super admins arrive here as admins,
+ * because `requireOrgAccess` grants them an admin membership.
+ */
+export const orgCredentialsVisible = (c: Context<Env>): boolean =>
+  c.get("orgMembership")?.role === "admin";
+
 /**
  * Middleware that restricts access to super admins only.
  *

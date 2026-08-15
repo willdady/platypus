@@ -1,10 +1,9 @@
 import { Hono } from "hono";
 import { getToolSets } from "../tools/index.ts";
 import { db } from "../index.ts";
-import { mcp as mcpTable } from "../db/schema.ts";
-import { eq } from "drizzle-orm";
 import { requireAuth } from "../middleware/authentication.ts";
 import { requireOrgAccess } from "../middleware/authorization.ts";
+import { listOrgScoped } from "../services/scoped-resource.ts";
 import type { Variables } from "../server.ts";
 
 // Tool sets available to an org-scoped (Shared) Agent: the statically
@@ -31,10 +30,7 @@ orgTool.get("/", requireAuth, requireOrgAccess(), async (c) => {
           })),
   }));
 
-  const mcps = await db
-    .select()
-    .from(mcpTable)
-    .where(eq(mcpTable.organizationId, orgId));
+  const mcps = await listOrgScoped(db, "mcp", orgId);
   const mcpList = mcps.map((mcp) => ({
     id: mcp.id,
     name: mcp.name,

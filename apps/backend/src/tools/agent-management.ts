@@ -5,6 +5,11 @@ import { db } from "../index.ts";
 import { agent as agentTable } from "../db/schema.ts";
 import { dedupeArray } from "../utils.ts";
 import { validateSubAgentAssignment } from "../services/sub-agent-validation.ts";
+import {
+  resolveScoped,
+  workspaceMutationLockedMessage,
+  type ScopeContext,
+} from "../services/scoped-resource.ts";
 import { getStorage } from "../storage/index.ts";
 import { buildResourceUrl } from "../utils/resource-url.ts";
 
@@ -25,6 +30,27 @@ export function createAgentManagementTools(
   orgId: string,
   frontendUrl: string | undefined,
 ): Record<string, Tool> {
+  const ctx: ScopeContext = { orgId, wsId: workspaceId };
+
+  /**
+   * Resolves an Agent this Workspace may write to, for the mutating tools. An
+   * attached Shared Agent is visible here but is a single source of truth edited
+   * only on the Organization surface (ADR-0007) — the same rule
+   * `requireWorkspaceMutable` enforces on the routes, in the same words,
+   * returned rather than thrown because a tool answers the model with an
+   * `{ error }` payload.
+   */
+  const resolveWritableAgent = async (
+    agentId: string,
+  ): Promise<{ row: typeof agentTable.$inferSelect } | { error: string }> => {
+    const found = await resolveScoped(db, "agent", agentId, ctx);
+    if (!found) return { error: "Agent not found" };
+    if (found.scope === "organization") {
+      return { error: workspaceMutationLockedMessage("agent") };
+    }
+    return { row: found.row };
+  };
+
   const createAgent = tool({
     description:
       "Create a new agent in the current workspace. Returns the created agent.",
@@ -178,9 +204,14 @@ export function createAgentManagementTools(
         data.subAgentIds = dedupeArray(data.subAgentIds);
       }
 
+      // Before validating the payload: a Shared Agent should be refused as
+      // locked, not answered with a complaint about the edit it will not apply.
+      const writable = await resolveWritableAgent(agentId);
+      if ("error" in writable) return writable;
+
       if (data.subAgentIds) {
         const validation = await validateSubAgentAssignment(
-          { orgId, wsId: workspaceId },
+          ctx,
           agentId,
           data.subAgentIds,
         );
@@ -225,25 +256,15 @@ export function createAgentManagementTools(
       label: z.string().describe("The agent name (for display purposes)"),
     }),
     execute: async ({ agentId }) => {
-      const existing = await db
-        .select({ avatarKey: agentTable.avatarKey })
-        .from(agentTable)
-        .where(
-          and(
-            eq(agentTable.id, agentId),
-            eq(agentTable.workspaceId, workspaceId),
-          ),
-        )
-        .limit(1);
+      // Detaching a Shared Agent is the workspace-side action, and that is an
+      // Attachment concern — never a delete of the Organization's row.
+      const writable = await resolveWritableAgent(agentId);
+      if ("error" in writable) return writable;
 
-      if (existing.length === 0) {
-        return { error: "Agent not found" };
-      }
-
-      if (existing[0]?.avatarKey) {
+      if (writable.row.avatarKey) {
         try {
           const storage = getStorage();
-          await storage.delete(existing[0].avatarKey);
+          await storage.delete(writable.row.avatarKey);
         } catch {
           // Ignore deletion errors
         }

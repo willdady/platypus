@@ -56,11 +56,11 @@ describe("Tool Routes", () => {
         { ownerId: "user-1", organizationId: "org-1" },
       ]); // requireWorkspaceAccess
 
-      const mockMcps = [{ id: "mcp-1", name: "MCP 1" }];
       mockDb.where
-        .mockReturnValueOnce(mockDb)
-        .mockReturnValueOnce(mockDb)
-        .mockResolvedValueOnce(mockMcps);
+        .mockReturnValueOnce(mockDb) // requireOrgAccess
+        .mockReturnValueOnce(mockDb) // requireWorkspaceAccess
+        .mockResolvedValueOnce([{ id: "mcp-1", name: "MCP 1" }]) // workspace MCPs
+        .mockResolvedValueOnce([]); // attached Shared MCPs
 
       const res = await app.request(baseUrl);
       expect(res.status).toBe(200);
@@ -90,6 +90,39 @@ describe("Tool Routes", () => {
         expect.objectContaining({
           id: "mcp-1",
           name: "MCP 1",
+          category: "MCP",
+        }),
+      );
+    });
+
+    it("includes Shared MCPs attached to this workspace", async () => {
+      // The catalog lists what the Workspace may actually use, which is what
+      // `GET /mcps` already lists: its own MCPs plus the Shared ones attached
+      // here (ADR-0007). Listing only workspace-scoped rows hid every attached
+      // Shared MCP from the tool-set picker.
+      mockSession();
+      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-1", organizationId: "org-1" },
+      ]); // requireWorkspaceAccess
+
+      mockDb.where
+        .mockReturnValueOnce(mockDb)
+        .mockReturnValueOnce(mockDb)
+        .mockResolvedValueOnce([]) // no workspace-scoped MCPs
+        // attached Shared MCPs arrive from an inner join, keyed by table name.
+        .mockResolvedValueOnce([
+          { mcp: { id: "mcp-shared", name: "Shared MCP" } },
+        ]);
+
+      const res = await app.request(baseUrl);
+      expect(res.status).toBe(200);
+      const json = (await res.json()) as Record<string, unknown>;
+
+      expect(json.results).toContainEqual(
+        expect.objectContaining({
+          id: "mcp-shared",
+          name: "Shared MCP",
           category: "MCP",
         }),
       );
