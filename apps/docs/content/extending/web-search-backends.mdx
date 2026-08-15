@@ -50,7 +50,7 @@ multi-hundred-kilobyte response lands in a context window.
 
 | Field               | Limit                                    | Over it                                                     |
 | ------------------- | ---------------------------------------- | ----------------------------------------------------------- |
-| `results`           | **10** entries                           | Sliced; core stops scanning after 1000 raw entries          |
+| `results`           | **10** entries                           | Sliced; core stops scanning after 100 raw entries           |
 | `results[].title`   | **200** characters                       | Truncated with a trailing `…`                               |
 | `results[].snippet` | **500** characters                       | Truncated with a trailing `…`                               |
 | `results[].url`     | **2048** characters, `http`/`https` only | **The whole entry is dropped** — a cut URL is a broken link |
@@ -84,10 +84,29 @@ index, so a 1M-character page is one `fetchUrl` call and ten `read_url` calls.
 - **`read_url` returns the URL it finally landed on**, after redirects. That
   value is what gets cited, so returning the requested URL instead misattributes
   the page.
-- **Throwing is a supported outcome.** A throw becomes a model-facing error
-  string for that call, logged against your Plugin; it does not fail the turn.
-  Time out on your own upstream if you want a better message than core's.
+- **Throwing is a supported outcome.** A throw becomes an error result for that
+  call, logged against your Plugin; it does not fail the turn.
 - **Nothing you return is trusted as markup.** Titles and snippets are text.
+- **The `query` you return is ignored.** Core echoes the model's own query into
+  the result, so a backend cannot substitute the text a reader sees. Return it
+  for symmetry; nothing reads it.
+
+<Callout type="warning">
+  **The model never sees your error message.** A throw is reported to the model
+  as fixed text naming the tool, and your cause goes to the log instead. That is
+  not tidiness: a hosted search API's error routinely embeds the URL it called,
+  and that URL routinely carries the Operator's API key as a query parameter —
+  putting it in a tool result would hand the key to the model and store it in
+  the Chat. Write the diagnostic detail you need into your own logger.
+</Callout>
+
+<Callout type="warning">
+  **A timed-out call is abandoned, not cancelled.** The executor contract
+  carries no abort signal, so when core stops waiting your upstream request
+  keeps running until its own socket timeout. What the timeout guarantees is
+  that the *turn* is not held open. If your backend holds a connection or a pool
+  slot per call, size it for calls that outlive their timeout.
+</Callout>
 
 ## The timeout is yours to declare and core's to enforce
 
@@ -95,6 +114,11 @@ index, so a 1M-character page is one `fetchUrl` call and ten `read_url` calls.
 `createExecutors` factory itself — so warming a pool or opening a connection
 spends the same budget the search does. It defaults to **30 000** ms when you
 omit it, and **120 000** is the ceiling.
+
+The two windows are **additive**, not shared: a turn can spend up to
+`(1 + calls) × timeoutMs` inside your backend, so one search at the ceiling is
+240 seconds worst case. Tune the value to the slowest of your factory and your
+upstream, not to their sum.
 
 <Callout type="warning">
   A contribution declaring more than 120 000 **fails startup** with an error
@@ -107,15 +131,12 @@ omit it, and **120 000** is the ceiling.
 ## The egress guard
 
 Core resolves the hostname of every URL the model supplies to `read_url` and
-refuses loopback, link-local, carrier-grade NAT (`100.64.0.0/10`), non-`http(s)`
-schemes, and anything it cannot resolve. Your executor is never called for a
-blocked URL.
-
-Private networks (`10/8`, `172.16/12`, `192.168/16`) are **allowed by default**,
-which suits a backend pointed at a SearXNG instance on the Operator's own
-network. An Operator who wants them refused sets
-`EGRESS_ALLOW_PRIVATE_NETWORKS=false` — see [Backend
-configuration](/reference/backend-configuration).
+refuses the fetch if any resolved address is blocked. **Your executor is never
+called for a blocked URL** — the block happens before you are reached, and the
+model gets a refusal instead of a page. Which ranges are refused, and why private
+networks are allowed by default, are in [the egress
+guard](/self-hosting/configuration#the-egress-guard); an Operator can tighten it
+with `EGRESS_ALLOW_PRIVATE_NETWORKS`.
 
 <Callout type="info">
   The guard is a **pre-flight check on the URL the model supplied**. It does not
