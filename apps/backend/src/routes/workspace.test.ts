@@ -1,6 +1,17 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { mockDb, mockSession, resetMockDb } from "../test-utils.ts";
 import app from "../server.ts";
+import { resolveScoped } from "../services/scoped-resource.ts";
+
+// The memory pointer-settings must resolve through the Scoped resource
+// authority, not a bare id lookup (GHSA-qg7h-g2rm-37qh). Spy on it so the tests
+// assert the route delegates the scoping decision — the chained mockDb ignores
+// WHERE predicates and cannot itself tell a scoped lookup from a global one.
+vi.mock("../services/scoped-resource.ts", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../services/scoped-resource.ts")>()),
+  resolveScoped: vi.fn(),
+}));
+const resolveScopedMock = vi.mocked(resolveScoped);
 
 describe("Workspace Routes", () => {
   beforeEach(() => {
@@ -233,6 +244,72 @@ describe("Workspace Routes", () => {
       const setArg = mockDb.set.mock.calls.at(-1)?.[0];
       expect(setArg).not.toHaveProperty("providerSelfManagement");
       expect(setArg).not.toHaveProperty("mcpSelfManagement");
+    });
+
+    // Security (GHSA-qg7h-g2rm-37qh): a memory Provider pointer must resolve
+    // through the Scoped resource authority, scoped to this Workspace, so a
+    // Provider not visible here — e.g. one owned by another Organization —
+    // resolves to null and is rejected, never stamped. Asserting the delegation
+    // (not just the 404) is what pins the fix: the vulnerable code did a bare id
+    // lookup and never called resolveScoped.
+    it("rejects a memory provider not visible in the workspace", async () => {
+      mockSession({ id: "user-1", role: "user" });
+      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-1", organizationId: "org-1" },
+      ]); // requireWorkspaceAccess
+      resolveScopedMock.mockResolvedValueOnce(null); // not visible in (org-1, ws-1)
+
+      const res = await app.request("/organizations/org-1/workspaces/ws-1", {
+        method: "PUT",
+        body: JSON.stringify({
+          name: "My Workspace",
+          memoryExtractionProviderId: "provider-other-org",
+        }),
+        headers: { "Content-Type": "application/json" },
+      });
+
+      expect(res.status).toBe(404);
+      expect(await res.json()).toEqual({
+        error: "Memory extraction provider not found",
+      });
+      expect(resolveScopedMock).toHaveBeenCalledWith(
+        expect.anything(),
+        "provider",
+        "provider-other-org",
+        { orgId: "org-1", wsId: "ws-1" },
+      );
+      expect(mockDb.update).not.toHaveBeenCalled();
+    });
+
+    it("accepts a workspace-visible memory provider that has the model", async () => {
+      mockSession({ id: "user-1", role: "user" });
+      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-1", organizationId: "org-1" },
+      ]); // requireWorkspaceAccess
+      resolveScopedMock.mockResolvedValueOnce({
+        row: {
+          id: "provider-1",
+          memoryExtractionModelId: "model-x",
+        } as never,
+        scope: "workspace",
+      });
+      mockDb.returning.mockResolvedValueOnce([
+        { id: "ws-1", name: "My Workspace" },
+      ]);
+
+      const res = await app.request("/organizations/org-1/workspaces/ws-1", {
+        method: "PUT",
+        body: JSON.stringify({
+          name: "My Workspace",
+          memoryExtractionProviderId: "provider-1",
+        }),
+        headers: { "Content-Type": "application/json" },
+      });
+
+      expect(res.status).toBe(200);
+      expect(mockDb.update).toHaveBeenCalled();
     });
 
     it("lets an org admin set delegation flags", async () => {
