@@ -117,10 +117,10 @@ File part follows from that:
   that accepts it.
 
 <Callout type="info">
-  Extracted text is **lossy**: tables, layout, and embedded images don't survive,
-  and a long document is truncated with a note saying so. If fidelity matters,
-  use a model that reads the format natively. There's no OCR, so a scanned
-  (image-only) PDF has no text to extract and is refused.
+  Extracted text is **lossy**: tables, layout, and embedded images don't
+  survive, and a long document is truncated with a note saying so. If fidelity
+  matters, use a model that reads the format natively. There's no OCR, so a
+  scanned (image-only) PDF has no text to extract and is refused.
 </Callout>
 
 **Why this matters to you:** attaching a PDF to a small self-hosted model still
@@ -142,6 +142,17 @@ plugins your deployment has installed — SearXNG, a headless browser, whatever
 the Operator added. Selecting a backend gives the Search toggle to Providers
 that never had it otherwise: a self-hosted vLLM or LiteLLM endpoint, or
 Bedrock.
+
+<Callout type="warning">
+  **Selecting a backend can grant page reading as well as search.** A backend
+  supplies its own search, and optionally a page reader; where it supplies both,
+  a searching turn on that Provider lets the model fetch pages by URL. The
+  vendors' built-in search does not — it returns results only. There is no
+  separate setting for it: the reader comes with the backend, so the decision is
+  which backend you select. What a fetch may reach is bounded by [the egress
+  guard](/self-hosting/configuration#the-egress-guard), and unlike the **Web
+  Fetch** Tool set, a backend's reader ignores `robots.txt`.
+</Callout>
 
 Two things the field tells you about a backend selection:
 

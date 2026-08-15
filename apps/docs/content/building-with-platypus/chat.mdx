@@ -64,6 +64,16 @@ or a **Web-search backend** an Org Admin selected on that Provider, which takes
 precedence when set. Either way the pages used appear as **Sources** under the
 reply.
 
+<Callout type="warning">
+  **A Web-search backend can also read pages, not just search.** Where one is
+  selected, turning **Search** on may hand the model a page reader for that turn
+  as well — it can fetch a URL it found in the results, or one you pasted into
+  the message. A vendor's built-in search never does this; it returns results
+  and nothing else. Whether you get the reader is the backend's choice, not a
+  separate switch, so the only control over it is which backend the Provider
+  points at.
+</Callout>
+
 The toggle is only there when the resolved Provider can search. It is **absent**
 when:
 
@@ -83,8 +93,9 @@ when:
 </Callout>
 
 Search is a Provider setting, not a tool you grant. An Agent that should read
-specific pages instead wants the **Web Fetch** Tool set — see
-[Tool sets](/building-with-platypus/tool-sets). Which search a Provider uses is
+specific pages whenever it likes wants the **Web Fetch** Tool set — see
+[Tool sets](/building-with-platypus/tool-sets) — which stays available every
+turn, where a backend's page reader exists only on a turn you searched. Which search a Provider uses is
 in [Providers & models](/concepts/providers#web-search).
 
 ## Voice input
@@ -170,7 +181,8 @@ switch to a model with a bigger window. Nothing happens automatically.
   **The meter appears; nothing enforces it.** Platypus does not trim, summarise,
   warn, or block a turn for approaching the window — reaching it fails at the
   vendor exactly as it did before, and the meter is the only thing that changed.
-  Treat a full meter as your cue to act, not as a guard rail that will catch you.
+  Treat a full meter as your cue to act, not as a guard rail that will catch
+  you.
 </Callout>
 
 **No meter at all** means one of two things, and both are normal: nobody has

@@ -31,6 +31,13 @@ Either may be async. Contribute a search-only backend by omitting `read_url` —
 the model then gets one tool that turn, and page reading is left to whatever else
 the Agent has.
 
+Supplying `read_url` is a bigger decision than it looks: it means the **Search**
+toggle grants page fetching on every Provider pointed at your backend, which the
+vendors' built-in search never does. `read_url` also does **not** check
+`robots.txt`, unlike the `fetchUrl` tool in `@platypus/web-fetch` — if your
+upstream should honour it, that is your executor's job, and your Plugin's config
+is where the switch for it belongs.
+
 What core owns, and you therefore cannot change: the tool names the model sees,
 their input schemas, their descriptions, the caps below, pagination, the per-call
 timeout, the error contract, and a guard on every URL the model supplies. That
