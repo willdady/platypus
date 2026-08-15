@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.7.1](https://github.com/willdady/platypus/compare/v2.7.0...v2.7.1) (2026-08-15)
+
+
+### Bug Fixes
+
+* **frontend:** trace the @swc/helpers ESM files into the standalone image ([#509](https://github.com/willdady/platypus/issues/509)) ([87da498](https://github.com/willdady/platypus/commit/87da498dfe8b56d9aa27b60fdc12844bcd130c3b))
+
 ## [2.7.0](https://github.com/willdady/platypus/compare/v2.6.0...v2.7.0) (2026-08-15)
 
 
