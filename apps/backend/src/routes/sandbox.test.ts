@@ -1,6 +1,11 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { z } from "zod";
-import { mockDb, mockSession, resetMockDb } from "../test-utils.ts";
+import {
+  loadedPluginsFixture,
+  mockDb,
+  mockSession,
+  resetMockDb,
+} from "../test-utils.ts";
 import app from "../server.ts";
 import { registerSandboxBackend } from "../sandbox/index.ts";
 import { setLoadedPlugins } from "../plugins/registry.ts";
@@ -59,16 +64,21 @@ describe("Sandbox Routes", () => {
         { ownerId: "user-1", organizationId: "org-1" },
       ]);
       // Attribute the pre-registered backend to a plugin (ADR-0013).
-      setLoadedPlugins([
-        {
-          name: "@platypus/test",
-          version: "1.0.0",
-          origin: "core",
-          toolSetIds: [],
-          sandboxBackendIds: [ANNOTATED_BACKEND],
-          webBackendIds: [],
-        },
-      ]);
+      setLoadedPlugins(
+        loadedPluginsFixture(
+          [
+            {
+              name: "@platypus/test",
+              version: "1.0.0",
+              origin: "core",
+              toolSetIds: [],
+              sandboxBackendIds: [ANNOTATED_BACKEND],
+              webBackendIds: [],
+            },
+          ],
+          { sandboxBackends: new Map([[ANNOTATED_BACKEND, "@platypus/test"]]) },
+        ),
+      );
 
       const res = await app.request(`${baseUrl}/backends`);
       expect(res.status).toBe(200);

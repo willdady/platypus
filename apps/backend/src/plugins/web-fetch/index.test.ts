@@ -47,9 +47,11 @@ describe("@platypus/web-fetch plugin manifest", () => {
     // The registry is module-global; vitest isolates modules per file, so this
     // load doesn't leak into other test files. Exercise the real plugin path:
     // loader → registerToolSet → getToolSet.
-    expect(getToolSets()).not.toHaveProperty("web-fetch");
+    expect(getToolSets().map((s) => s.id)).not.toContain("web-fetch");
 
-    const loaded = await loadPlugins({ pluginNames: ["@platypus/web-fetch"] });
+    const { plugins: loaded } = await loadPlugins({
+      pluginNames: ["@platypus/web-fetch"],
+    });
 
     expect(loaded).toHaveLength(1);
     expect(loaded[0]).toMatchObject({
@@ -58,7 +60,7 @@ describe("@platypus/web-fetch plugin manifest", () => {
       toolSetIds: ["web-fetch"],
     });
 
-    const set = getToolSet("web-fetch");
+    const set = getToolSet("web-fetch")!;
     expect(set.name).toBe("Web Fetch");
     expect(set.category).toBe("Web");
     // The loader binds the plugin config into a factory; resolving it (as a Chat

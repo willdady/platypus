@@ -1,5 +1,10 @@
 import { vi, type Mock } from "vitest";
 import type {
+  ContributionOwners,
+  LoadedPlugin,
+  LoadPluginsResult,
+} from "./plugins/loader.ts";
+import type {
   InferToolInput,
   InferToolOutput,
   Tool,
@@ -251,3 +256,22 @@ export const mockSession = (
 export const mockNoSession = () => {
   mockAuth.api.getSession.mockResolvedValue(null);
 };
+
+/**
+ * A {@link setLoadedPlugins} argument for tests. The loader hands the registry
+ * both the loaded plugins and the id → plugin-name maps it built while
+ * registering; a test states only the owner maps for the point it exercises and
+ * gets empty ones for the rest.
+ */
+export const loadedPluginsFixture = (
+  plugins: LoadedPlugin[] = [],
+  owners: Partial<ContributionOwners> = {},
+): LoadPluginsResult => ({
+  plugins,
+  owners: {
+    toolSets: new Map(),
+    sandboxBackends: new Map(),
+    webBackends: new Map(),
+    ...owners,
+  },
+});

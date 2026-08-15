@@ -1,11 +1,17 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import { mockDb, mockSession, resetMockDb } from "../test-utils.ts";
+import {
+  loadedPluginsFixture,
+  mockDb,
+  mockSession,
+  resetMockDb,
+} from "../test-utils.ts";
 import app from "../server.ts";
 import { setLoadedPlugins } from "../plugins/registry.ts";
 
 vi.mock("../tools/index.ts", () => ({
-  getToolSets: vi.fn().mockReturnValue({
-    math: {
+  getToolSets: vi.fn().mockReturnValue([
+    {
+      id: "math",
       name: "Math",
       category: "Utilities",
       description: "Math tools",
@@ -15,13 +21,14 @@ vi.mock("../tools/index.ts", () => ({
     },
     // A core-internal static set (e.g. `sandbox`) with no owning plugin: it
     // must annotate as core/built-in, not crash.
-    sandbox: {
+    {
+      id: "sandbox",
       name: "Sandbox",
       category: "Sandbox",
       description: "Sandbox tools",
       tools: () => ({}),
     },
-  }),
+  ]),
 }));
 
 describe("Tool Routes", () => {
@@ -32,16 +39,21 @@ describe("Tool Routes", () => {
     // Seed the plugin registry so the Tools listing can annotate the `math`
     // set with its originating plugin (ADR-0013). `sandbox` is intentionally
     // absent — it is a static registration, not a plugin contribution.
-    setLoadedPlugins([
-      {
-        name: "@platypus/tools-basic",
-        version: "1.0.0",
-        origin: "core",
-        toolSetIds: ["math"],
-        sandboxBackendIds: [],
-        webBackendIds: [],
-      },
-    ]);
+    setLoadedPlugins(
+      loadedPluginsFixture(
+        [
+          {
+            name: "@platypus/tools-basic",
+            version: "1.0.0",
+            origin: "core",
+            toolSetIds: ["math"],
+            sandboxBackendIds: [],
+            webBackendIds: [],
+          },
+        ],
+        { toolSets: new Map([["math", "@platypus/tools-basic"]]) },
+      ),
+    );
   });
 
   const orgId = "org-1";

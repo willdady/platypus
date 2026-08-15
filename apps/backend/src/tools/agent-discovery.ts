@@ -55,14 +55,12 @@ export function createAgentDiscoveryTools(
       "List all available tool sets and MCP servers. Use the returned IDs when assigning toolSetIds to agents.",
     inputSchema: z.object({}),
     execute: async () => {
-      const toolSetsList = Object.entries(getToolSets()).map(
-        ([id, toolSet]) => ({
-          id,
-          name: toolSet.name,
-          category: toolSet.category,
-          description: toolSet.description,
-        }),
-      );
+      const toolSetsList = getToolSets().map((toolSet) => ({
+        id: toolSet.id,
+        name: toolSet.name,
+        category: toolSet.category,
+        description: toolSet.description,
+      }));
 
       const mcps = await listScoped(db, "mcp", ctx);
       const mcpList = mcps.map(({ row }) => ({

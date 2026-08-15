@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import {
+  loadedPluginsFixture,
   mockDb,
   mockNoSession,
   mockSession,
@@ -21,6 +22,12 @@ const LOADED: LoadedPlugin[] = [
   },
 ];
 
+// The loader hands the registry the owner map it built while registering; this
+// fixture states the one entry the catalog annotation under test reads.
+const LOADED_RESULT = loadedPluginsFixture(LOADED, {
+  webBackends: new Map([["acme-search.searx", "acme-search"]]),
+});
+
 const baseUrl = "/organizations/org-1/web-backends";
 
 describe("Web backend catalog route", () => {
@@ -29,17 +36,17 @@ describe("Web backend catalog route", () => {
     vi.clearAllMocks();
     mockDb.where.mockReturnValue(mockDb);
     clearWebBackends();
-    setLoadedPlugins([]);
+    setLoadedPlugins(loadedPluginsFixture());
   });
 
   afterEach(() => {
     clearWebBackends();
-    setLoadedPlugins([]);
+    setLoadedPlugins(loadedPluginsFixture());
   });
 
   describe("GET /web-backends", () => {
     it("lists a registered backend annotated with the plugin that contributed it", async () => {
-      setLoadedPlugins(LOADED);
+      setLoadedPlugins(LOADED_RESULT);
       registerWebBackend({
         backend: "acme-search.searx",
         name: "SearXNG",

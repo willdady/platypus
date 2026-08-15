@@ -24,15 +24,21 @@ vi.mock("../storage/index.ts", () => ({
 import {
   getToolSets,
   getToolSet,
+  hasToolSet,
   registerToolSet,
   SANDBOX_TOOLSET_ID,
 } from "./index.ts";
 
+// The store's own contract — miss semantics, duplicate rejection, prototype-key
+// safety, listing, reset — is covered once in
+// `registry/contribution-registry.test.ts`. What is left here is what this
+// instance adds: the id it keys on, and what registers at import time.
 describe("Tool Set Registry", () => {
+  const registeredIds = () => getToolSets().map((s) => s.id);
+
   describe("getToolSets", () => {
     it("returns the statically-registered tool sets", () => {
-      const sets = getToolSets();
-      expect(Object.keys(sets).length).toBeGreaterThan(0);
+      expect(registeredIds().length).toBeGreaterThan(0);
     });
 
     it("no longer statically registers the plugin-migrated tool sets", () => {
@@ -40,7 +46,6 @@ describe("Tool Set Registry", () => {
       // loader (ADR-0013): `math-conversions`/`time` → @platypus/tools-basic,
       // `web-fetch` → @platypus/web-fetch, and the Platypus-domain sets →
       // @platypus/tools-platform. None register at import time here anymore.
-      const sets = getToolSets();
       for (const id of [
         "math-conversions",
         "time",
@@ -54,7 +59,7 @@ describe("Tool Set Registry", () => {
         "notifications",
         "memory",
       ]) {
-        expect(sets).not.toHaveProperty(id);
+        expect(registeredIds()).not.toContain(id);
       }
     });
 
@@ -62,42 +67,35 @@ describe("Tool Set Registry", () => {
       // The `sandbox` set is the consumer side of the Sandbox-backend extension
       // point (ADR-0002), not a native Tool set, so it stays a core-internal
       // static registration — the lone one left in tools/index.ts.
-      expect(getToolSets()).toHaveProperty(SANDBOX_TOOLSET_ID);
+      expect(registeredIds()).toContain(SANDBOX_TOOLSET_ID);
     });
   });
 
   describe("getToolSet", () => {
     it("returns the sandbox tool set by id", () => {
-      const set = getToolSet(SANDBOX_TOOLSET_ID);
+      const set = getToolSet(SANDBOX_TOOLSET_ID)!;
       expect(set).toBeDefined();
       expect(set.name).toBe("Sandbox");
       expect(set.category).toBe("Sandbox");
       expect(typeof set.tools).toBe("function");
     });
 
-    it("throws for an unregistered id", () => {
-      expect(() => getToolSet("nonexistent")).toThrow(
-        "Tool set with id 'nonexistent' has not been registered.",
-      );
+    it("returns undefined for an unregistered id", () => {
+      // Chat-turn resolution reads this `undefined` as "not a static tool set,
+      // try MCP", so the miss is a value here rather than an exception.
+      expect(getToolSet("nonexistent")).toBeUndefined();
     });
+  });
 
-    it("throws for Object.prototype members rather than resolving them", () => {
-      // `toolSetId` reaches this lookup from `agent.toolSetIds`, which is
-      // request-body data. A plain-object registry answered `"toString" in
-      // TOOL_SETS_REGISTRY` with true and handed back
-      // `Object.prototype.toString` — a function with no `tools`, so the chat
-      // turn resolved no tools *without* throwing, and the caller's MCP fallback
-      // never ran. Unregistered must mean unregistered whatever the id is called.
-      for (const id of ["toString", "constructor", "__proto__", "valueOf"]) {
-        expect(() => getToolSet(id)).toThrow(
-          `Tool set with id '${id}' has not been registered.`,
-        );
-      }
+  describe("hasToolSet", () => {
+    it("answers for a registered and an unregistered id", () => {
+      expect(hasToolSet(SANDBOX_TOOLSET_ID)).toBe(true);
+      expect(hasToolSet("nonexistent")).toBe(false);
     });
   });
 
   describe("registerToolSet", () => {
-    it("throws when registering a duplicate id", () => {
+    it("keys on the tool-set id, so a duplicate is refused", () => {
       expect(() =>
         registerToolSet(SANDBOX_TOOLSET_ID, {
           name: "Duplicate",
@@ -105,7 +103,7 @@ describe("Tool Set Registry", () => {
           tools: {},
         }),
       ).toThrow(
-        `Tool set with id '${SANDBOX_TOOLSET_ID}' has already been registered.`,
+        `Tool set '${SANDBOX_TOOLSET_ID}' has already been registered.`,
       );
     });
 

@@ -50,7 +50,9 @@ describe("@platypus/docker plugin manifest", () => {
     // loader → registerSandboxBackend → getSandboxBackend.
     expect(getSandboxBackend("docker")).toBeUndefined();
 
-    const loaded = await loadPlugins({ pluginNames: ["@platypus/docker"] });
+    const { plugins: loaded } = await loadPlugins({
+      pluginNames: ["@platypus/docker"],
+    });
 
     expect(loaded).toHaveLength(1);
     expect(loaded[0]).toMatchObject({

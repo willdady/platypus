@@ -65,7 +65,7 @@ const main = async () => {
   // fills — so the boot log is a complete, auditable statement of what runs
   // (ADR-0013 observability). Then hand the result to the registry, the single
   // read-only source behind `GET /plugins` and the catalog annotations.
-  for (const p of loadedPlugins) {
+  for (const p of loadedPlugins.plugins) {
     logger.info(
       {
         plugin: p.name,
@@ -79,7 +79,7 @@ const main = async () => {
     );
   }
   setLoadedPlugins(loadedPlugins);
-  logger.info(`Loaded ${loadedPlugins.length} plugin(s)`);
+  logger.info(`Loaded ${loadedPlugins.plugins.length} plugin(s)`);
 
   serve({
     fetch: app.fetch,

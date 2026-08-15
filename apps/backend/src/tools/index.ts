@@ -3,6 +3,7 @@ import { eq } from "drizzle-orm";
 import { db } from "../index.ts";
 import { sandbox as sandboxTable } from "../db/schema.ts";
 import { getSandboxBackend } from "../sandbox/index.ts";
+import { createContributionRegistry } from "../registry/contribution-registry.ts";
 import { createSandboxTools } from "../sandbox/tools.ts";
 import { logger } from "../logger.ts";
 
@@ -23,39 +24,26 @@ type ToolSet = {
       ) => Record<string, Tool> | Promise<Record<string, Tool>>);
 };
 
-// `Object.create(null)`, not `{}`, for the same reason as the Sandbox and
-// Web-search backend registries: `toolSetId` reaches `getToolSet` from
-// `agent.toolSetIds`, which is request-body data. With a plain object,
-// `"toString" in TOOL_SETS_REGISTRY` is true, so the lookup handed back
-// `Object.prototype.toString` — a function with no `tools`, which resolved to no
-// tools *without* throwing, so the caller's MCP fallback never ran. A null
-// prototype has nothing to inherit, so an unregistered id throws whatever it is
-// called.
-const TOOL_SETS_REGISTRY = Object.create(null) as {
-  [toolSetId: string]: ToolSet;
-};
+// The Tool-set instance of the shared Extension-point registry — same store,
+// same miss semantics, and same duplicate-id error as the Sandbox and Web-search
+// backend registries.
+const TOOL_SETS = createContributionRegistry<ToolSet>({ noun: "Tool set" });
 
 export const registerToolSet = (
   toolSetId: string,
   toolSet: Omit<ToolSet, "id">,
-): ToolSet => {
-  if (toolSetId in TOOL_SETS_REGISTRY) {
-    throw new Error(
-      `Tool set with id '${toolSetId}' has already been registered.`,
-    );
-  }
-  TOOL_SETS_REGISTRY[toolSetId] = { id: toolSetId, ...toolSet };
-  return TOOL_SETS_REGISTRY[toolSetId];
-};
+): ToolSet => TOOL_SETS.register(toolSetId, { id: toolSetId, ...toolSet });
 
-export const getToolSet = (toolSetId: string): ToolSet => {
-  if (!(toolSetId in TOOL_SETS_REGISTRY)) {
-    throw new Error(`Tool set with id '${toolSetId}' has not been registered.`);
-  }
-  return TOOL_SETS_REGISTRY[toolSetId];
-};
+/** The Tool set registered under `toolSetId`, or `undefined` if none is. */
+export const getToolSet = (toolSetId: string): ToolSet | undefined =>
+  TOOL_SETS.get(toolSetId);
 
-export const getToolSets = (): typeof TOOL_SETS_REGISTRY => TOOL_SETS_REGISTRY;
+/** Whether `toolSetId` names a statically-registered Tool set. */
+export const hasToolSet = (toolSetId: string): boolean =>
+  TOOL_SETS.has(toolSetId);
+
+/** Every registered Tool set, in registration order. Each carries its own id. */
+export const getToolSets = (): readonly ToolSet[] => TOOL_SETS.list();
 
 // Tool set ID constants for referencing registered tool sets by name
 export const MEMORY_TOOLSET_ID = "memory";

@@ -25,12 +25,12 @@ tool.get(
     // contributed it (ADR-0013 observability); the core-internal `sandbox` set is
     // a static registration (not a plugin contribution), so it reads as
     // core/built-in rather than a blank owner.
-    const toolSetsList = Object.entries(getToolSets()).map(([id, toolSet]) => ({
-      id,
+    const toolSetsList = getToolSets().map((toolSet) => ({
+      id: toolSet.id,
       name: toolSet.name,
       category: toolSet.category,
       description: toolSet.description,
-      plugin: getToolSetPlugin(id) ?? CORE_BUILTIN_OWNER,
+      plugin: getToolSetPlugin(toolSet.id) ?? CORE_BUILTIN_OWNER,
       tools:
         typeof toolSet.tools === "function"
           ? []

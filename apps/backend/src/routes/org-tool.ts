@@ -16,8 +16,8 @@ const orgTool = new Hono<{ Variables: Variables }>();
 orgTool.get("/", requireAuth, requireOrgAccess(), async (c) => {
   const orgId = c.req.param("orgId")!;
 
-  const toolSetsList = Object.entries(getToolSets()).map(([id, toolSet]) => ({
-    id,
+  const toolSetsList = getToolSets().map((toolSet) => ({
+    id: toolSet.id,
     name: toolSet.name,
     category: toolSet.category,
     description: toolSet.description,

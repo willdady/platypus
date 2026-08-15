@@ -997,10 +997,8 @@ const loadTools = async (
   }
 
   for (const toolSetId of agent.toolSetIds) {
-    let toolSet: ReturnType<typeof getToolSet>;
-    try {
-      toolSet = getToolSet(toolSetId);
-    } catch {
+    const toolSet = getToolSet(toolSetId);
+    if (!toolSet) {
       // Static tool set not found — fall back to MCP lookup.
       const mcp = await queries.getMcp(toolSetId, orgId, workspaceId);
       if (mcp && mcp.url) {

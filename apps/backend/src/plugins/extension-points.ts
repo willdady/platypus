@@ -1,0 +1,216 @@
+import type {
+  SandboxBackendContribution,
+  ToolSetContribution,
+  WebBackendContribution,
+} from "@platypuschat/plugin-sdk";
+import type { SandboxBackendRegistration } from "../sandbox/index.ts";
+import {
+  composeWebBackend,
+  MAX_WEB_TIMEOUT_MS,
+  type WebBackendRegistration,
+} from "../web-backends/index.ts";
+import type { ExtensionPoint } from "./contribution-pipeline.ts";
+
+// What each Extension point adds to the shared registration sequence in
+// `contribution-pipeline.ts`: the noun its errors read with, the field it takes
+// its id from, the shape checks the shared id/name pair does not cover, and how
+// the plugin's deploy-time config block is bound into what core registers.
+//
+// A point is a table entry, not a loop. Adding a fourth (ADR-0013 anticipates
+// them) means one more factory here and one more row in `loader.ts`'s table.
+//
+// Config binding is always a closure or a factory, never an object spread over
+// the contribution: a class-instance contribution loses its prototype and its
+// `this` when spread, and its factories must be called on the author's own
+// object.
+
+/** The Tool-set point (ADR-0013). Registers `{ name, category, description, tools }`. */
+export const toolSetPoint = (
+  register: (id: string, definition: Omit<ToolSetContribution, "id">) => void,
+): ExtensionPoint<Omit<ToolSetContribution, "id">> => ({
+  noun: "tool set",
+  idField: "id",
+  validate: (contribution, { pluginName, rawId }) => {
+    if (
+      typeof contribution.category !== "string" ||
+      contribution.category.trim() === ""
+    ) {
+      throw new Error(
+        `Plugin "${pluginName}": tool set "${rawId}" must declare a non-empty "category".`,
+      );
+    }
+    if (
+      typeof contribution.tools !== "function" &&
+      (typeof contribution.tools !== "object" ||
+        contribution.tools === null ||
+        Array.isArray(contribution.tools))
+    ) {
+      throw new Error(
+        `Plugin "${pluginName}": tool set "${rawId}" must provide a "tools" object or function.`,
+      );
+    }
+  },
+  prepare: (contribution, { plugin }) => {
+    const { name, category, description, tools } =
+      contribution as unknown as ToolSetContribution;
+    // Bind the shared plugin config into the factory so core's registry and its
+    // Chat-turn callers stay ignorant of it: they invoke the stored factory with
+    // only the ToolSetContext, as before. A static-map tool set has no factory
+    // to inject into and is registered untouched.
+    const boundTools =
+      typeof tools === "function"
+        ? (context: Parameters<typeof tools>[0]) => tools(context, plugin)
+        : tools;
+    return { name, category, description, tools: boundTools };
+  },
+  register,
+});
+
+/**
+ * The Sandbox-backend point (ADR-0002/0013). Registers the contribution with its
+ * `configSchema` factory form resolved away and `create` bound to the plugin's
+ * config block.
+ */
+export const sandboxBackendPoint = (
+  register: (registration: SandboxBackendRegistration) => void,
+): ExtensionPoint<SandboxBackendRegistration> => ({
+  noun: "sandbox backend",
+  idField: "backend",
+  validate: (contribution, { pluginName, rawId }) => {
+    // Guaranteed by `SandboxBackendContribution`, and not guaranteed by a
+    // third-party *JS* plugin: a missing `create` used to surface as a TypeError
+    // at chat-turn or teardown time, naming nothing.
+    if (typeof contribution.create !== "function") {
+      throw new Error(
+        `Plugin "${pluginName}": sandbox backend "${rawId}" must provide a "create" function.`,
+      );
+    }
+  },
+  prepare: (raw, { pluginName, id, plugin }) => {
+    const contribution = raw as unknown as SandboxBackendContribution;
+
+    // Resolve a factory-form configSchema against the boot-resolved plugin
+    // config so the three static `configSchema.safeParse` consumers (save route,
+    // teardown, tool resolver) always receive a concrete schema — they never see
+    // plugin config. A plain schema passes through untouched (append-only:
+    // plugin-config-agnostic backends are unaffected).
+    //
+    // The factory is third-party code reading a config block it narrows itself,
+    // so it can throw — a plugin that assumes an Operator supplied
+    // `config.region` raises a bare `Cannot read properties of undefined` naming
+    // nothing. Attributed here for the same reason the shape checks exist: the
+    // schema check below only catches a factory that *returns* a non-schema, not
+    // one that throws on the way there.
+    let configSchema: SandboxBackendRegistration["configSchema"];
+    try {
+      configSchema =
+        typeof contribution.configSchema === "function"
+          ? contribution.configSchema(plugin.config)
+          : contribution.configSchema;
+    } catch (cause) {
+      throw new Error(
+        `Plugin "${pluginName}": sandbox backend "${id}" configSchema factory threw (${
+          cause instanceof Error ? cause.message : String(cause)
+        }).`,
+        { cause },
+      );
+    }
+
+    // Checked after the factory form is resolved away, and duck-typed on
+    // `safeParse` rather than `instanceof z.ZodType`, because that is exactly
+    // what the three static consumers call. Without this, a contribution missing
+    // either schema registers fine and fails at *save* time — a 500 on an
+    // Operator's sandbox form, attributed to nothing.
+    for (const [field, schema] of [
+      ["configSchema", configSchema],
+      ["credentialsSchema", contribution.credentialsSchema],
+    ] as const) {
+      if (
+        typeof schema !== "object" ||
+        schema === null ||
+        typeof (schema as { safeParse?: unknown }).safeParse !== "function"
+      ) {
+        throw new Error(
+          `Plugin "${pluginName}": sandbox backend "${id}" must provide a Zod "${field}".`,
+        );
+      }
+    }
+
+    // Bind the same shared plugin config into create() so core's per-turn
+    // callers (chat resolution, teardown) keep calling create(config,
+    // credentials) with the per-Workspace values only. Third-party backends also
+    // register under the namespaced discriminator, so the `sandbox.backend`
+    // column resolves to the prefixed id (mirroring tool sets).
+    //
+    // Field by field rather than spread over the contribution: `create` must be
+    // called on the author's own object, or a class-instance contribution loses
+    // its prototype and its `this`.
+    return {
+      backend: id,
+      name: contribution.name,
+      configSchema,
+      credentialsSchema: contribution.credentialsSchema,
+      create: (config, credentials) =>
+        contribution.create(config, credentials, plugin),
+    };
+  },
+  register: (_id, registration) => register(registration),
+});
+
+/**
+ * The Web-search-backend point (ADR-0014). Registers core's *composed*
+ * registration — core owns the model-facing Tools — rather than the raw
+ * contribution.
+ */
+export const webBackendPoint = (
+  register: (registration: WebBackendRegistration) => void,
+): ExtensionPoint<WebBackendRegistration> => ({
+  noun: "web backend",
+  idField: "backend",
+  prepare: (raw, { pluginName, id, plugin }) => {
+    const contribution = raw as unknown as WebBackendContribution;
+
+    // A web backend supplies executors only — core builds the Tools — so a
+    // missing factory means the contribution can never serve a turn. The TS type
+    // says so; a third-party JS plugin can still ship it, and boot is where that
+    // is caught (ADR-0014's fail-loud boot posture).
+    if (typeof contribution.createExecutors !== "function") {
+      throw new Error(
+        `Plugin "${pluginName}": web backend "${id}" must provide a "createExecutors" function.`,
+      );
+    }
+
+    // `timeoutMs` is static on the contribution, so an over-ceiling value is
+    // knowable now — refused with attribution rather than silently clamped at
+    // turn time, where an Operator would never see it.
+    if (contribution.timeoutMs !== undefined) {
+      const { timeoutMs } = contribution;
+      if (
+        typeof timeoutMs !== "number" ||
+        !Number.isFinite(timeoutMs) ||
+        timeoutMs <= 0 ||
+        timeoutMs > MAX_WEB_TIMEOUT_MS
+      ) {
+        throw new Error(
+          `Plugin "${pluginName}": web backend "${id}" declares timeoutMs ${String(
+            timeoutMs,
+          )}, which must be a positive number no greater than ${MAX_WEB_TIMEOUT_MS}.`,
+        );
+      }
+    }
+
+    // Core wraps the executors here, binding the same shared plugin config that
+    // every other contribution factory receives. What lands in the registry is
+    // the finished, guarded builder — per-turn callers never see the executors.
+    // The contribution goes in by reference, with the namespaced id alongside it
+    // rather than spread over it, for the same prototype/`this` reason as the
+    // sandbox point above.
+    return composeWebBackend({
+      contribution,
+      backend: id,
+      plugin,
+      pluginName,
+    });
+  },
+  register: (_id, registration) => register(registration),
+});

@@ -2,6 +2,7 @@ import { tool, type Tool } from "ai";
 import type { PluginConfigContext } from "@platypuschat/plugin-sdk";
 import { isPresentableUrl, WEB_BACKEND_TOOL_MARKER } from "@platypus/schemas";
 import { logger } from "../logger.ts";
+import { createContributionRegistry } from "../registry/contribution-registry.ts";
 import { checkEgress, EGRESS_BLOCKED_MESSAGE } from "../utils/egress-guard.ts";
 import {
   MAX_READ_URL_CONTENT_CHARS,
@@ -66,48 +67,29 @@ const READ_URL_DESCRIPTION =
 // `WEB_BACKEND_TOOL_MARKER`.
 const WEB_BACKEND_TOOL_METADATA = { [WEB_BACKEND_TOOL_MARKER]: true };
 
-// The registry, mirroring `sandbox/index.ts`: a flat map keyed by the
-// discriminator stored in `provider.webBackend`. `Object.create(null)` — not
-// `{}` — so a discriminator that collides with an `Object.prototype` member
-// (`"toString"`, `"constructor"`…) cannot false-hit `in` or shadow a real
-// registration; PR2 feeds this from a nullable DB column, so an unguarded
-// object would let a stale value throw mid-turn instead of degrading cleanly.
-const WEB_BACKEND_REGISTRY = Object.create(null) as Record<
-  string,
-  WebBackendRegistration
->;
+// The Web-search-backend instance of the shared Extension-point registry, keyed
+// by the discriminator stored in `provider.webBackend`.
+const WEB_BACKENDS = createContributionRegistry<WebBackendRegistration>({
+  noun: "Web backend",
+});
 
 export const registerWebBackend = (
   registration: WebBackendRegistration,
 ): void => {
-  if (registration.backend in WEB_BACKEND_REGISTRY) {
-    throw new Error(
-      `Web backend '${registration.backend}' has already been registered.`,
-    );
-  }
-  WEB_BACKEND_REGISTRY[registration.backend] = registration;
+  WEB_BACKENDS.register(registration.backend, registration);
 };
 
+/** The backend registered under `backend`, or `undefined` if none is. */
 export const getWebBackend = (
   backend: string,
-): WebBackendRegistration | undefined => WEB_BACKEND_REGISTRY[backend];
+): WebBackendRegistration | undefined => WEB_BACKENDS.get(backend);
 
+/** Every registered Web-search backend, in registration order. */
 export const getWebBackends = (): ReadonlyArray<WebBackendRegistration> =>
-  Object.values(WEB_BACKEND_REGISTRY);
+  WEB_BACKENDS.list();
 
-/**
- * Test-only reset. Boot registers once; nothing in production unregisters.
- * `sandbox/index.test.ts` has no equivalent — it sidesteps the same
- * module-level-state problem by giving every test a unique backend id instead.
- * This module resets explicitly so most tests can reuse the same discriminator
- * (`"searx"`), which reads closer to a real registration than a fresh id per
- * `it()` would.
- */
-export const clearWebBackends = (): void => {
-  for (const key of Object.keys(WEB_BACKEND_REGISTRY)) {
-    delete WEB_BACKEND_REGISTRY[key];
-  }
-};
+/** Test-only reset — see {@link createContributionRegistry}. */
+export const clearWebBackends = (): void => WEB_BACKENDS.clear();
 
 // Cut a backend-supplied string to a core-owned bound, marking the cut so the
 // model can tell a truncated snippet from a naturally short one.

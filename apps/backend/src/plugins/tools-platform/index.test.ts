@@ -62,11 +62,12 @@ describe("@platypus/tools-platform — loaded into the core registry", () => {
   it("registers all eight domain tool sets with bare ids", async () => {
     // Module-global registry; vitest isolates modules per file so this doesn't
     // leak. Exercise the real path: loader → registerToolSet → getToolSet.
+    const registeredIds = () => getToolSets().map((s) => s.id);
     for (const id of EXPECTED_IDS) {
-      expect(getToolSets()).not.toHaveProperty(id);
+      expect(registeredIds()).not.toContain(id);
     }
 
-    const loaded = await loadPlugins({
+    const { plugins: loaded } = await loadPlugins({
       pluginNames: ["@platypus/tools-platform"],
     });
 
@@ -78,13 +79,13 @@ describe("@platypus/tools-platform — loaded into the core registry", () => {
     });
 
     for (const id of EXPECTED_IDS) {
-      expect(getToolSets()).toHaveProperty(id);
+      expect(registeredIds()).toContain(id);
     }
   });
 
   it("resolves each tool set's factory to a non-empty tool map at chat-turn time", () => {
     for (const id of EXPECTED_IDS) {
-      const set = getToolSet(id);
+      const set = getToolSet(id)!;
       expect(typeof set.tools).toBe("function");
       const tools =
         typeof set.tools === "function" ? set.tools(ctx) : set.tools;
@@ -93,7 +94,7 @@ describe("@platypus/tools-platform — loaded into the core registry", () => {
   });
 
   it("resolves the read/write agent-management split tools as before", () => {
-    const discovery = getToolSet("agent-discovery");
+    const discovery = getToolSet("agent-discovery")!;
     const discoveryTools =
       typeof discovery.tools === "function"
         ? discovery.tools(ctx)
@@ -102,7 +103,7 @@ describe("@platypus/tools-platform — loaded into the core registry", () => {
       ["getAgent", "listAgents", "listModelProviders", "listToolSets"].sort(),
     );
 
-    const management = getToolSet("agent-management");
+    const management = getToolSet("agent-management")!;
     const managementTools =
       typeof management.tools === "function"
         ? management.tools(ctx)

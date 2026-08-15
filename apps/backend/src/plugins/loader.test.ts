@@ -116,7 +116,7 @@ describe("parsePluginList", () => {
 describe("loadPlugins — apiVersion compatibility window (N and N−1)", () => {
   it("accepts a plugin declaring exactly core's apiVersion", async () => {
     const { register, calls } = makeRegister();
-    const loaded = await loadPlugins({
+    const { plugins: loaded } = await loadPlugins({
       pluginNames: ["@exact/plugin"],
       builtinPlugins: {},
       importPlugin: () =>
@@ -133,7 +133,7 @@ describe("loadPlugins — apiVersion compatibility window (N and N−1)", () => 
 
   it("accepts a plugin on the previous major (N−1)", async () => {
     const { register, calls } = makeRegister();
-    const loaded = await loadPlugins({
+    const { plugins: loaded } = await loadPlugins({
       pluginNames: ["@nminus1/plugin"],
       builtinPlugins: {},
       importPlugin: () =>
@@ -213,7 +213,7 @@ describe("loadPlugins", () => {
         }),
     };
 
-    const loaded = await loadPlugins({
+    const { plugins: loaded } = await loadPlugins({
       pluginNames: ["@platypus/tools-basic"],
       builtinPlugins,
       register,
@@ -234,13 +234,52 @@ describe("loadPlugins", () => {
 
   it("registers nothing for an empty list and does not crash", async () => {
     const { register, calls } = makeRegister();
-    const loaded = await loadPlugins({
+    const { plugins: loaded, owners } = await loadPlugins({
       pluginNames: [],
       builtinPlugins: {},
       register,
     });
     expect(loaded).toEqual([]);
     expect(calls).toHaveLength(0);
+    expect(owners.toolSets.size).toBe(0);
+    expect(owners.sandboxBackends.size).toBe(0);
+    expect(owners.webBackends.size).toBe(0);
+  });
+
+  it("returns the id → plugin owner map it built while registering", async () => {
+    // The registry serves catalog annotations from these maps rather than
+    // re-deriving them from each plugin's id arrays (ADR-0013 observability).
+    // One map per Extension point: a Tool set and a backend may share a bare id.
+    const { register } = makeRegister();
+    const { registerSandbox } = makeSandboxRegister();
+    const { registerWeb } = makeWebRegister();
+
+    const { owners } = await loadPlugins({
+      pluginNames: ["@platypus/tools-basic", "@acme/search"],
+      builtinPlugins: {
+        "@platypus/tools-basic": () =>
+          Promise.resolve({
+            plugin: {
+              ...manifest("@platypus/tools-basic", [toolSet("time")]),
+              contributes: {
+                toolSets: [toolSet("time")],
+                sandboxBackends: [sandboxBackend("docker")],
+              },
+            },
+          }),
+      },
+      importPlugin: () =>
+        Promise.resolve({ plugin: webManifest("acme", [webBackend("searx")]) }),
+      register,
+      registerSandbox,
+      registerWeb,
+    });
+
+    expect([...owners.toolSets]).toEqual([["time", "@platypus/tools-basic"]]);
+    expect([...owners.sandboxBackends]).toEqual([
+      ["docker", "@platypus/tools-basic"],
+    ]);
+    expect([...owners.webBackends]).toEqual([["acme.searx", "acme"]]);
   });
 
   it("resolves a third-party plugin via dynamic import", async () => {
@@ -251,7 +290,7 @@ describe("loadPlugins", () => {
       }),
     );
 
-    const loaded = await loadPlugins({
+    const { plugins: loaded } = await loadPlugins({
       pluginNames: ["@third/party"],
       builtinPlugins: {},
       importPlugin,
@@ -280,7 +319,7 @@ describe("loadPlugins", () => {
       }),
     );
 
-    const loaded = await loadPlugins({
+    const { plugins: loaded } = await loadPlugins({
       pluginNames: ["@platypus/tools-basic", "@third/party"],
       builtinPlugins,
       importPlugin,
@@ -357,37 +396,10 @@ describe("loadPlugins", () => {
     ).rejects.toThrow(/@empty\/plugin.*manifest/s);
   });
 
+  // Contribution shape, id, and name are the shared pipeline's checks, covered
+  // once in `contribution-pipeline.test.ts`. What is left here is what the
+  // Tool-set point itself demands of a contribution.
   it.each([
-    [
-      "a non-object entry",
-      null,
-      /@platypus\/bad.*tool set contribution must be an object/s,
-    ],
-    [
-      "a string entry",
-      "broken",
-      /@platypus\/bad.*tool set contribution must be an object/s,
-    ],
-    [
-      "an array entry",
-      [],
-      /@platypus\/bad.*tool set contribution must be an object/s,
-    ],
-    [
-      "a missing id",
-      { name: "Broken", category: "Test", tools: {} },
-      /@platypus\/bad.*non-empty "id"/s,
-    ],
-    [
-      "a whitespace-only id",
-      { id: "   ", name: "Broken", category: "Test", tools: {} },
-      /@platypus\/bad.*non-empty "id"/s,
-    ],
-    [
-      "a missing name",
-      { id: "broken", category: "Test", tools: {} },
-      /@platypus\/bad.*tool set "broken".*non-empty "name"/s,
-    ],
     [
       "a missing category",
       { id: "broken", name: "Broken", tools: {} },
@@ -436,54 +448,6 @@ describe("loadPlugins", () => {
       expect(calls).toHaveLength(0);
     },
   );
-
-  it("names the array index when a malformed entry has no usable id", async () => {
-    const { register, calls } = makeRegister();
-    await expect(
-      loadPlugins({
-        pluginNames: ["@platypus/bad"],
-        builtinPlugins: {
-          "@platypus/bad": () =>
-            Promise.resolve({
-              plugin: {
-                name: "@platypus/bad",
-                version: "0.1.0",
-                apiVersion: 1,
-                contributes: {
-                  toolSets: [
-                    toolSet("fine"),
-                    null,
-                  ] as unknown as ToolSetContribution[],
-                },
-              },
-            }),
-        },
-        register,
-      }),
-    ).rejects.toThrow(/at index 1/);
-    // Entries validate and register in the same pass, so the good entry ahead of
-    // the bad one is already in the registry. That is not a leak: the throw
-    // aborts boot, so the half-filled registry never serves a turn.
-    expect(calls.map((c) => c.id)).toEqual(["fine"]);
-  });
-
-  it("trims a padded id before namespacing it", async () => {
-    const { register, calls } = makeRegister();
-    const loaded = await loadPlugins({
-      pluginNames: ["@third/party"],
-      builtinPlugins: {},
-      importPlugin: () =>
-        Promise.resolve({
-          plugin: manifest("padded", [
-            { ...toolSet("spaced"), id: "  spaced  " },
-          ]),
-        }),
-      register,
-    });
-    // `acme. my set ` must never reach the registry or `agent.toolSetIds`.
-    expect(calls.map((c) => c.id)).toEqual(["padded.spaced"]);
-    expect(loaded[0].toolSetIds).toEqual(["padded.spaced"]);
-  });
 
   it("aborts (fail-loud) on a duplicate id, naming both owning plugins", async () => {
     const { register } = makeRegister();
@@ -551,7 +515,7 @@ describe("loadPlugins — sandbox backends", () => {
   it("registers a sandbox-backend contribution and reports its id", async () => {
     const { register } = makeRegister();
     const { registerSandbox, calls } = makeSandboxRegister();
-    const loaded = await loadPlugins({
+    const { plugins: loaded } = await loadPlugins({
       pluginNames: ["@platypus/docker"],
       builtinPlugins: {
         "@platypus/docker": () =>
@@ -578,57 +542,6 @@ describe("loadPlugins — sandbox backends", () => {
     ]);
   });
 
-  it("aborts (fail-loud) on a duplicate sandbox backend id, naming both plugins", async () => {
-    const { register } = makeRegister();
-    const { registerSandbox } = makeSandboxRegister();
-    // Two core plugins keep bare backend ids, so a shared `docker` collides.
-    const builtinPlugins = {
-      "@a/plugin": () =>
-        Promise.resolve({
-          plugin: sandboxManifest("@a/plugin", [sandboxBackend("docker")]),
-        }),
-      "@b/plugin": () =>
-        Promise.resolve({
-          plugin: sandboxManifest("@b/plugin", [sandboxBackend("docker")]),
-        }),
-    };
-
-    await expect(
-      loadPlugins({
-        pluginNames: ["@a/plugin", "@b/plugin"],
-        builtinPlugins,
-        register,
-        registerSandbox,
-      }),
-    ).rejects.toThrow(/"docker".*"@a\/plugin".*"@b\/plugin"/s);
-  });
-
-  it("re-throws a registry collision with plugin attribution", async () => {
-    const { register } = makeRegister();
-    const registerSandbox = () => {
-      throw new Error("Sandbox backend 'docker' has already been registered.");
-    };
-    // A core plugin keeps its bare `docker` backend id, colliding with a legacy
-    // static registration.
-    await expect(
-      loadPlugins({
-        pluginNames: ["@platypus/collides"],
-        builtinPlugins: {
-          "@platypus/collides": () =>
-            Promise.resolve({
-              plugin: sandboxManifest("@platypus/collides", [
-                sandboxBackend("docker"),
-              ]),
-            }),
-        },
-        register,
-        registerSandbox,
-      }),
-    ).rejects.toThrow(
-      /@platypus\/collides.*"docker".*already been registered/s,
-    );
-  });
-
   it("aborts (fail-loud) when sandboxBackends is not an array", async () => {
     const { register } = makeRegister();
     await expect(
@@ -650,36 +563,13 @@ describe("loadPlugins — sandbox backends", () => {
     ).rejects.toThrow(/@bad\/plugin.*sandboxBackends.*array/s);
   });
 
-  // `sandboxBackends` being an array is checked above; a third-party JS plugin can
-  // still put anything *inside* it. Each of these previously surfaced far from its
-  // cause — an unattributed TypeError at boot, a mystery `"acme.undefined"` in the
-  // catalog, or a 500 on an Operator's sandbox form.
+  // `sandboxBackends` being an array is checked above, and contribution shape,
+  // id, and name are the shared pipeline's checks (covered once in
+  // `contribution-pipeline.test.ts`). What is left here is what the
+  // Sandbox-backend point itself demands — each case previously surfaced far
+  // from its cause: an unattributed TypeError at boot, or a 500 on an Operator's
+  // sandbox form.
   it.each([
-    [
-      "a non-object entry",
-      null,
-      /@platypus\/bad.*sandbox backend contribution must be an object/s,
-    ],
-    [
-      "a missing backend id",
-      {
-        name: "x",
-        configSchema: z.object({}),
-        credentialsSchema: z.object({}),
-        create: () => ({}),
-      },
-      /@platypus\/bad.*non-empty "backend" id/s,
-    ],
-    [
-      "a missing name",
-      {
-        backend: "b",
-        configSchema: z.object({}),
-        credentialsSchema: z.object({}),
-        create: () => ({}),
-      },
-      /@platypus\/bad.*must declare a non-empty "name"/s,
-    ],
     [
       "a missing create",
       {
@@ -842,7 +732,7 @@ describe("loadPlugins — web-search backends", () => {
   it("registers a web-backend contribution and reports its id", async () => {
     const { register } = makeRegister();
     const { registerWeb, calls } = makeWebRegister();
-    const loaded = await loadPlugins({
+    const { plugins: loaded } = await loadPlugins({
       pluginNames: ["@platypus/searx"],
       builtinPlugins: {
         "@platypus/searx": () =>
@@ -868,7 +758,7 @@ describe("loadPlugins — web-search backends", () => {
   it("prefixes a third-party web-backend id with the manifest name", async () => {
     const { register } = makeRegister();
     const { registerWeb, calls } = makeWebRegister();
-    const loaded = await loadPlugins({
+    const { plugins: loaded } = await loadPlugins({
       pluginNames: ["@acme/platypus-search"],
       builtinPlugins: {},
       importPlugin: () =>
@@ -881,52 +771,6 @@ describe("loadPlugins — web-search backends", () => {
 
     expect(calls.map((c) => c.backend)).toEqual(["acme.web"]);
     expect(loaded[0].webBackendIds).toEqual(["acme.web"]);
-  });
-
-  it("aborts (fail-loud) on a duplicate web backend id, naming both plugins", async () => {
-    const { register } = makeRegister();
-    const { registerWeb } = makeWebRegister();
-    // Two core plugins keep bare backend ids, so a shared `searx` collides.
-    const builtinPlugins = {
-      "@a/plugin": () =>
-        Promise.resolve({
-          plugin: webManifest("@a/plugin", [webBackend("searx")]),
-        }),
-      "@b/plugin": () =>
-        Promise.resolve({
-          plugin: webManifest("@b/plugin", [webBackend("searx")]),
-        }),
-    };
-
-    await expect(
-      loadPlugins({
-        pluginNames: ["@a/plugin", "@b/plugin"],
-        builtinPlugins,
-        register,
-        registerWeb,
-      }),
-    ).rejects.toThrow(/"searx".*"@a\/plugin".*"@b\/plugin"/s);
-  });
-
-  it("re-throws a registry collision with plugin attribution", async () => {
-    const { register } = makeRegister();
-    const registerWeb = () => {
-      throw new Error("Web backend 'searx' has already been registered.");
-    };
-
-    await expect(
-      loadPlugins({
-        pluginNames: ["@platypus/collides"],
-        builtinPlugins: {
-          "@platypus/collides": () =>
-            Promise.resolve({
-              plugin: webManifest("@platypus/collides", [webBackend("searx")]),
-            }),
-        },
-        register,
-        registerWeb,
-      }),
-    ).rejects.toThrow(/@platypus\/collides.*"searx".*already been registered/s);
   });
 
   it("aborts (fail-loud) when webBackends is not an array", async () => {
@@ -950,33 +794,9 @@ describe("loadPlugins — web-search backends", () => {
     ).rejects.toThrow(/@bad\/plugin.*webBackends.*array/s);
   });
 
-  it("aborts (fail-loud, plugin-named) on a non-object web backend entry", async () => {
-    // `webBackends` being an array is checked; a third-party JS plugin can
-    // still put `null` inside it, which would otherwise throw an unattributed
-    // "Cannot read properties of null" reading `.backend` next.
-    const { register } = makeRegister();
-    await expect(
-      loadPlugins({
-        pluginNames: ["@platypus/searx"],
-        builtinPlugins: {
-          "@platypus/searx": () =>
-            Promise.resolve({
-              plugin: {
-                name: "@platypus/searx",
-                version: "0.1.0",
-                apiVersion: 1,
-                contributes: { webBackends: [null] },
-              },
-            }),
-        },
-        register,
-        registerWeb: () => {},
-      }),
-    ).rejects.toThrow(
-      /@platypus\/searx.*web backend contribution must be an object/s,
-    );
-  });
-
+  // Contribution shape, id, and name are the shared pipeline's checks, covered
+  // once in `contribution-pipeline.test.ts`. What is left here is what the
+  // Web-backend point itself demands of a contribution.
   it("aborts (fail-loud) when a contribution has no createExecutors function", async () => {
     const { register } = makeRegister();
     // The TS type requires it; a third-party JS plugin can still omit it, and
@@ -999,51 +819,6 @@ describe("loadPlugins — web-search backends", () => {
         registerWeb: () => {},
       }),
     ).rejects.toThrow(/@platypus\/searx.*"searx".*createExecutors/s);
-  });
-
-  it("aborts (fail-loud) on a contribution with no backend id, before namespacing it", async () => {
-    const { register } = makeRegister();
-    // Namespacing an absent id first would mint `"@platypus/searx.undefined"`
-    // and register it, turning a missing field into a mystery catalog entry.
-    const nameless = {
-      name: "SearXNG",
-      createExecutors: () => ({
-        web_search: () => ({ query: "", results: [] }),
-      }),
-    } as unknown as ReturnType<typeof webBackend>;
-
-    await expect(
-      loadPlugins({
-        pluginNames: ["@platypus/searx"],
-        builtinPlugins: {
-          "@platypus/searx": () =>
-            Promise.resolve({
-              plugin: webManifest("@platypus/searx", [nameless]),
-            }),
-        },
-        register,
-        registerWeb: () => {},
-      }),
-    ).rejects.toThrow(/@platypus\/searx.*non-empty "backend" id/s);
-  });
-
-  it("aborts (fail-loud) on a contribution with a blank display name", async () => {
-    const { register } = makeRegister();
-    await expect(
-      loadPlugins({
-        pluginNames: ["@platypus/searx"],
-        builtinPlugins: {
-          "@platypus/searx": () =>
-            Promise.resolve({
-              plugin: webManifest("@platypus/searx", [
-                { ...webBackend("searx"), name: "   " },
-              ]),
-            }),
-        },
-        register,
-        registerWeb: () => {},
-      }),
-    ).rejects.toThrow(/@platypus\/searx.*"searx".*non-empty "name"/s);
   });
 
   it("refuses an over-ceiling timeoutMs at boot rather than clamping it", async () => {
@@ -1411,7 +1186,7 @@ describe("loadPlugins — example third-party plugin", () => {
     const registered: Record<string, Omit<ToolSetContribution, "id">> = {};
     const sandboxCalls: SandboxBackendContribution[] = [];
 
-    const loaded = await loadPlugins({
+    const { plugins: loaded } = await loadPlugins({
       pluginNames: ["example-cloud-sandbox"],
       builtinPlugins: {},
       importPlugin: () => Promise.resolve({ plugin: examplePlugin }),
@@ -1489,7 +1264,7 @@ describe("loadPlugins — the documented quickstart package", () => {
 
     // No `importPlugin` override: this exercises the default dynamic import, the
     // same path a deployment takes for any installed third-party package.
-    const loaded = await loadPlugins({
+    const { plugins: loaded } = await loadPlugins({
       pluginNames: ["@platypus-examples/tool-set"],
       builtinPlugins: {},
       register,
@@ -1526,7 +1301,7 @@ describe("loadPlugins — always-on core set (ADR-0013 amendment)", () => {
         }),
     };
 
-    const loaded = await loadPlugins({
+    const { plugins: loaded } = await loadPlugins({
       pluginNames: [],
       alwaysOnPlugins: ["@platypus/tools-basic", "@platypus/tools-platform"],
       builtinPlugins,
@@ -1689,7 +1464,7 @@ describe("loadPlugins — third-party name slug validation (ADR-0013)", () => {
 
   it("accepts a clean slug name and prefixes contribution ids with it", async () => {
     const { register, calls } = makeRegister();
-    const loaded = await loadPlugins({
+    const { plugins: loaded } = await loadPlugins({
       pluginNames: ["@acme/platypus-widgets"],
       builtinPlugins: {},
       importPlugin: () =>
@@ -1715,7 +1490,7 @@ describe("loadPlugins — third-party namespacing (ADR-0013)", () => {
       Promise.resolve({ plugin: manifest("example", [toolSet("greeting")]) }),
     );
 
-    const loaded = await loadPlugins({
+    const { plugins: loaded } = await loadPlugins({
       pluginNames: ["@platypus/tools-basic", "@example-org/pkg"],
       builtinPlugins,
       importPlugin,
@@ -1732,7 +1507,7 @@ describe("loadPlugins — third-party namespacing (ADR-0013)", () => {
     const { register } = makeRegister();
     const { registerSandbox, calls } = makeSandboxRegister();
 
-    const loaded = await loadPlugins({
+    const { plugins: loaded } = await loadPlugins({
       pluginNames: ["@third/infra"],
       builtinPlugins: {},
       importPlugin: () =>
@@ -1759,7 +1534,7 @@ describe("loadPlugins — third-party namespacing (ADR-0013)", () => {
       }),
     );
 
-    const loaded = await loadPlugins({
+    const { plugins: loaded } = await loadPlugins({
       pluginNames: ["@platypus/impostor"],
       builtinPlugins: {},
       importPlugin,
@@ -1783,7 +1558,7 @@ describe("loadPlugins — example third-party npm package (end to end)", () => {
   it("loads the installed package via dynamic import and namespaces its id", async () => {
     const { register, calls } = makeRegister();
 
-    const loaded = await loadPlugins({
+    const { plugins: loaded } = await loadPlugins({
       pluginNames: ["@platypus-examples/tool-set"],
       builtinPlugins: {},
       register,
@@ -1805,9 +1580,9 @@ describe("loadPlugins — example third-party npm package (end to end)", () => {
 
     // Chat-turn resolution walks the tool-set registry by id (ADR-0013): the
     // example plugin is reachable only under its namespaced id.
-    const set = getToolSet("example.greeting");
+    const set = getToolSet("example.greeting")!;
     expect(set.category).toBe("Examples");
-    expect(() => getToolSet("greeting")).toThrow(/has not been registered/);
+    expect(getToolSet("greeting")).toBeUndefined();
 
     if (typeof set.tools === "function") {
       throw new Error("expected a static tool map");

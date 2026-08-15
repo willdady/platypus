@@ -6,7 +6,7 @@ import {
   skill as skillTable,
 } from "../db/schema.ts";
 import { eq, inArray } from "drizzle-orm";
-import { getToolSets } from "../tools/index.ts";
+import { hasToolSet } from "../tools/index.ts";
 import { isSharedRow } from "./scoped-resource.ts";
 
 /**
@@ -115,8 +115,7 @@ export const findNonSharedReferences = async (
   // always allowed; any other id is an MCP-backed tool set and must resolve to
   // an org-scoped MCP.
   const toolSetIds = refs.toolSetIds ?? [];
-  const registry = getToolSets();
-  const mcpIds = toolSetIds.filter((id) => !(id in registry));
+  const mcpIds = toolSetIds.filter((id) => !hasToolSet(id));
   if (mcpIds.length > 0) {
     const rows = await db
       .select({
