@@ -12,6 +12,7 @@ import { pointerSettingModelId } from "./model-capability.ts";
 import { dedupeArray, toKebabCase } from "../utils.ts";
 import { UNTITLED_CHAT_TITLE, type Provider } from "@platypus/schemas";
 import type { PlatypusUIMessage } from "../types.ts";
+import { logger } from "../logger.ts";
 
 export type GenerateChatMetadataParams = {
   chatId: string;
@@ -94,7 +95,23 @@ export const generateChatMetadata = async (
     orgId,
     wsId: workspaceId,
   });
-  if (!found) return null;
+  if (!found) {
+    // Titling is fire-and-forget, so an unresolvable provider leaves chats
+    // named "Untitled" with nothing else to show for it. Say so: the usual
+    // cause is a task-model override naming an Organization-scoped Provider
+    // that is not attached to this Workspace, which reads as "titling just
+    // stopped" from the outside.
+    logger.warn(
+      {
+        chatId,
+        workspaceId,
+        providerId: effectiveProviderId,
+        fromTaskModelOverride: !!workspace.taskModelProviderId,
+      },
+      "Chat titling skipped: provider is not visible in this workspace",
+    );
+    return null;
+  }
   const provider = found.row as Provider;
 
   // Fetch existing tags from all chats in the workspace so the model can reuse

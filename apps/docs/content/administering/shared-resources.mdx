@@ -60,6 +60,18 @@ To undo either, use **Detach**. On the Organization surface, each card also show
 **Shared with N workspaces**, which is the quickest read on whether you've
 actually handed something out.
 
+An Attachment governs more than what shows up in a list. A Workspace reaches a
+Shared resource only where one exists, background work included: a Trigger can
+run an attached Shared Agent, and a Workspace titles its chats with a Shared
+Provider only if that Provider is attached.
+
+<Callout type="warning">
+  Pointing a Workspace's **Task Model Provider** at a Shared Provider you never
+  attached is the trap. Nothing reports an error — chats simply stay
+  **Untitled**, because the Workspace cannot see the Provider doing the titling.
+  Attach the Provider to that Workspace and titling resumes on the next chat.
+</Callout>
+
 ## What a Workspace Owner sees
 
 An attached Shared resource appears in the Workspace list badged
