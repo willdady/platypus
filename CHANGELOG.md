@@ -1,5 +1,28 @@
 # Changelog
 
+## [2.7.0](https://github.com/willdady/platypus/compare/v2.6.0...v2.7.0) (2026-08-15)
+
+
+### Features
+
+* **backend:** give plugins a logger on PluginConfigContext ([#502](https://github.com/willdady/platypus/issues/502)) ([3c92e2b](https://github.com/willdady/platypus/commit/3c92e2b23fd8481dcdabfe41c0c730a23baeee18))
+* **backend:** route Sub-Agent runs through the run lifecycle ([#487](https://github.com/willdady/platypus/issues/487)) ([c61f7e0](https://github.com/willdady/platypus/commit/c61f7e019a76559e7740506e465db83221b50ad5))
+* select a Web-search backend on the Provider form ([#412](https://github.com/willdady/platypus/issues/412)) ([eeed0cf](https://github.com/willdady/platypus/commit/eeed0cf9b2d7e0571d3ebdc7c2cb337c28884ded))
+
+
+### Bug Fixes
+
+* **backend:** put the Kanban routes and Tool set behind one module ([#486](https://github.com/willdady/platypus/issues/486)) ([2214c68](https://github.com/willdady/platypus/commit/2214c680d30a3ed04c188fa66c40efba201da05c))
+* **backend:** say why chat titling was skipped ([#488](https://github.com/willdady/platypus/issues/488)) ([20c1332](https://github.com/willdady/platypus/commit/20c1332354ca96ac76ab1f8b84102cfa737e8754))
+* **backend:** scope workspace memory-provider pointers to the workspace ([#483](https://github.com/willdady/platypus/issues/483)) ([b588c78](https://github.com/willdady/platypus/commit/b588c785677f9ab789ad7cbac7e1f35318c6066f))
+* **backend:** validate tool set contributions ([#451](https://github.com/willdady/platypus/issues/451)) ([3cd022c](https://github.com/willdady/platypus/commit/3cd022c96e4a7a270ac10b2e1478beb24dba196b))
+* **backend:** widen the Scoped-resource authority and migrate the remaining hand-rolled lookups ([#484](https://github.com/willdady/platypus/issues/484)) ([385f543](https://github.com/willdady/platypus/commit/385f54387c2ccc3c5d54cb1f62eb68201933dde2))
+* **chat:** show elapsed time on the plugin Web search card ([#473](https://github.com/willdady/platypus/issues/473)) ([74b1900](https://github.com/willdady/platypus/commit/74b1900553f9810c7d8b2dff4841b0163fe27254))
+* **docs:** state all three Web-search backend visibility cases ([#477](https://github.com/willdady/platypus/issues/477)) ([e41fa24](https://github.com/willdady/platypus/commit/e41fa24e03eabd58cd88a8a6e4c1894c52102166))
+* **frontend:** gate the dead-backend warning on a selected backend ([#472](https://github.com/willdady/platypus/issues/472)) ([39609dc](https://github.com/willdady/platypus/commit/39609dc483a487d8695a8f75596cf19683f34e2e))
+* **frontend:** reset the Web-search backend latch between Providers ([#474](https://github.com/willdady/platypus/issues/474)) ([e9d01ca](https://github.com/willdady/platypus/commit/e9d01ca7cc7f6e06459d433911906d7145a8a940))
+* **frontend:** stop pointing at a Web-search backend field that is not there ([#507](https://github.com/willdady/platypus/issues/507)) ([da1c50e](https://github.com/willdady/platypus/commit/da1c50e8907906622844da470644ee26a74eef1c))
+
 ## [2.6.0](https://github.com/willdady/platypus/compare/v2.5.0...v2.6.0) (2026-08-15)
 
 
