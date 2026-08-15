@@ -143,6 +143,14 @@ the Operator added. Selecting a backend gives the Search toggle to Providers
 that never had it otherwise: a self-hosted vLLM or LiteLLM endpoint, or
 Bedrock.
 
+Two things the field tells you about a backend selection:
+
+- **A selection whose plugin is gone** stays in the list, marked **(not
+  installed)**, rather than quietly reading as None — so you can see what the
+  Provider points at and change it. Such a selection runs no search.
+- **Platypus couldn't load the installed backends** — the field says so and
+  leaves your stored selection alone; the list may be missing entries.
+
 Results are cited the same way whichever search ran: the pages used appear as
 **Sources** under the reply. Adding a backend to a deployment is an Operator task
 — see [Extending → Web-search
