@@ -378,9 +378,67 @@ export async function loadPlugins(
 
     const toolSetIds: string[] = [];
 
-    for (const contribution of manifest.contributes.toolSets ?? []) {
-      const { id, name: tsName, category, description, tools } = contribution;
-      const effectiveId = contributionId(id);
+    for (const [index, contribution] of (
+      manifest.contributes.toolSets ?? []
+    ).entries()) {
+      // TypeScript protects in-repo plugins, but a third-party JS package can
+      // put any value inside the array. Validate identity before namespacing:
+      // `contributionId(undefined)` otherwise mints a plausible-looking
+      // `"acme.undefined"` Tool set and exposes it through the catalog.
+      //
+      // The two checks that run before an id is known carry the array index —
+      // on a plugin contributing several tool sets it is the only thing an
+      // Operator can use to find the offending entry.
+      if (
+        typeof contribution !== "object" ||
+        contribution === null ||
+        Array.isArray(contribution)
+      ) {
+        throw new Error(
+          `Plugin "${manifest.name}": every tool set contribution must be an object (at index ${index}).`,
+        );
+      }
+      if (
+        typeof contribution.id !== "string" ||
+        contribution.id.trim() === ""
+      ) {
+        throw new Error(
+          `Plugin "${manifest.name}": every tool set must declare a non-empty "id" (at index ${index}).`,
+        );
+      }
+      if (
+        typeof contribution.name !== "string" ||
+        contribution.name.trim() === ""
+      ) {
+        throw new Error(
+          `Plugin "${manifest.name}": tool set "${contribution.id}" must declare a non-empty "name".`,
+        );
+      }
+      if (
+        typeof contribution.category !== "string" ||
+        contribution.category.trim() === ""
+      ) {
+        throw new Error(
+          `Plugin "${manifest.name}": tool set "${contribution.id}" must declare a non-empty "category".`,
+        );
+      }
+      if (
+        typeof contribution.tools !== "function" &&
+        (typeof contribution.tools !== "object" ||
+          contribution.tools === null ||
+          Array.isArray(contribution.tools))
+      ) {
+        throw new Error(
+          `Plugin "${manifest.name}": tool set "${contribution.id}" must provide a "tools" object or function.`,
+        );
+      }
+
+      const { name: tsName, category, description, tools } = contribution;
+      // Trimmed before namespacing: the id is half of a composed
+      // `${manifest.name}.${id}` that gets persisted into `agent.toolSetIds`,
+      // and the other half is held to a url-safe slug above for exactly that
+      // reason. `" my set "` must not reach the registry as `acme. my set `.
+      const effectiveId = contributionId(contribution.id.trim());
 
       const existingOwner = owners.get(effectiveId);
       if (existingOwner) {
@@ -457,7 +515,9 @@ export async function loadPlugins(
         );
       }
 
-      const effectiveBackend = contributionId(contribution.backend);
+      // Trimmed before namespacing, as in the tool set loop: this id is
+      // persisted into `sandbox.backend` and must not carry stray whitespace.
+      const effectiveBackend = contributionId(contribution.backend.trim());
 
       const existingOwner = sandboxOwners.get(effectiveBackend);
       if (existingOwner) {
@@ -581,7 +641,8 @@ export async function loadPlugins(
         );
       }
 
-      const effectiveBackend = contributionId(contribution.backend);
+      // Trimmed before namespacing, as in the tool set loop.
+      const effectiveBackend = contributionId(contribution.backend.trim());
 
       const existingOwner = webOwners.get(effectiveBackend);
       if (existingOwner) {

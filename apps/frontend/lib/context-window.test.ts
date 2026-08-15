@@ -7,6 +7,7 @@ import {
   optionForContextWindow,
   parseContextWindowInput,
   contextWindowForOption,
+  formatTokens,
 } from "./context-window";
 
 describe("CONTEXT_WINDOW_PRESETS", () => {
@@ -104,5 +105,43 @@ describe("parseContextWindowInput", () => {
 
   it("reads an unparseable field as no declaration", () => {
     expect(parseContextWindowInput("abc")).toBeUndefined();
+  });
+});
+
+describe("formatTokens", () => {
+  it("writes a figure under a thousand in full", () => {
+    expect(formatTokens(12)).toBe("12");
+    expect(formatTokens(260)).toBe("260");
+    expect(formatTokens(999)).toBe("999");
+  });
+
+  it("abbreviates a thousand and above", () => {
+    expect(formatTokens(1_000)).toBe("1K");
+    expect(formatTokens(1_100)).toBe("1.1K");
+    expect(formatTokens(42_000)).toBe("42K");
+    expect(formatTokens(128_000)).toBe("128K");
+  });
+
+  it("abbreviates a million and above", () => {
+    expect(formatTokens(1_000_000)).toBe("1M");
+    expect(formatTokens(1_500_000)).toBe("1.5M");
+    expect(formatTokens(2_000_000)).toBe("2M");
+    expect(formatTokens(10_000_000)).toBe("10M");
+  });
+
+  // A window declared in binary thousands is still the same window as one
+  // declared in decimal, and a reader comparing two models should not have to
+  // notice a 48,576-token difference that changes nothing about the reading.
+  it("drops a trailing zero rather than showing a false precision", () => {
+    expect(formatTokens(1_048_576)).toBe("1M");
+    expect(formatTokens(1_100_000)).toBe("1.1M");
+    expect(formatTokens(1_050)).toBe("1.1K");
+  });
+
+  // Rounding at one unit must not print a figure that belongs to the next:
+  // 999,999 is a hair under a million and reads as one, never as 1000K.
+  it("promotes to the next unit when rounding carries", () => {
+    expect(formatTokens(999_999)).toBe("1M");
+    expect(formatTokens(999_949)).toBe("999.9K");
   });
 });

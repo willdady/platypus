@@ -357,6 +357,134 @@ describe("loadPlugins", () => {
     ).rejects.toThrow(/@empty\/plugin.*manifest/s);
   });
 
+  it.each([
+    [
+      "a non-object entry",
+      null,
+      /@platypus\/bad.*tool set contribution must be an object/s,
+    ],
+    [
+      "a string entry",
+      "broken",
+      /@platypus\/bad.*tool set contribution must be an object/s,
+    ],
+    [
+      "an array entry",
+      [],
+      /@platypus\/bad.*tool set contribution must be an object/s,
+    ],
+    [
+      "a missing id",
+      { name: "Broken", category: "Test", tools: {} },
+      /@platypus\/bad.*non-empty "id"/s,
+    ],
+    [
+      "a whitespace-only id",
+      { id: "   ", name: "Broken", category: "Test", tools: {} },
+      /@platypus\/bad.*non-empty "id"/s,
+    ],
+    [
+      "a missing name",
+      { id: "broken", category: "Test", tools: {} },
+      /@platypus\/bad.*tool set "broken".*non-empty "name"/s,
+    ],
+    [
+      "a missing category",
+      { id: "broken", name: "Broken", tools: {} },
+      /@platypus\/bad.*tool set "broken".*non-empty "category"/s,
+    ],
+    [
+      "a whitespace-only category",
+      { id: "broken", name: "Broken", category: "   ", tools: {} },
+      /@platypus\/bad.*tool set "broken".*non-empty "category"/s,
+    ],
+    [
+      "missing tools",
+      { id: "broken", name: "Broken", category: "Test" },
+      /@platypus\/bad.*tool set "broken".*"tools" object or function/s,
+    ],
+    [
+      "an array tools",
+      { id: "broken", name: "Broken", category: "Test", tools: [] },
+      /@platypus\/bad.*tool set "broken".*"tools" object or function/s,
+    ],
+  ])(
+    "aborts (fail-loud, plugin-named) on %s",
+    async (_label, contribution, expected) => {
+      const { register, calls } = makeRegister();
+      await expect(
+        loadPlugins({
+          pluginNames: ["@platypus/bad"],
+          builtinPlugins: {
+            "@platypus/bad": () =>
+              Promise.resolve({
+                plugin: {
+                  name: "@platypus/bad",
+                  version: "0.1.0",
+                  apiVersion: 1,
+                  contributes: {
+                    toolSets: [
+                      contribution,
+                    ] as unknown as ToolSetContribution[],
+                  },
+                },
+              }),
+          },
+          register,
+        }),
+      ).rejects.toThrow(expected);
+      expect(calls).toHaveLength(0);
+    },
+  );
+
+  it("names the array index when a malformed entry has no usable id", async () => {
+    const { register, calls } = makeRegister();
+    await expect(
+      loadPlugins({
+        pluginNames: ["@platypus/bad"],
+        builtinPlugins: {
+          "@platypus/bad": () =>
+            Promise.resolve({
+              plugin: {
+                name: "@platypus/bad",
+                version: "0.1.0",
+                apiVersion: 1,
+                contributes: {
+                  toolSets: [
+                    toolSet("fine"),
+                    null,
+                  ] as unknown as ToolSetContribution[],
+                },
+              },
+            }),
+        },
+        register,
+      }),
+    ).rejects.toThrow(/at index 1/);
+    // Entries validate and register in the same pass, so the good entry ahead of
+    // the bad one is already in the registry. That is not a leak: the throw
+    // aborts boot, so the half-filled registry never serves a turn.
+    expect(calls.map((c) => c.id)).toEqual(["fine"]);
+  });
+
+  it("trims a padded id before namespacing it", async () => {
+    const { register, calls } = makeRegister();
+    const loaded = await loadPlugins({
+      pluginNames: ["@third/party"],
+      builtinPlugins: {},
+      importPlugin: () =>
+        Promise.resolve({
+          plugin: manifest("padded", [
+            { ...toolSet("spaced"), id: "  spaced  " },
+          ]),
+        }),
+      register,
+    });
+    // `acme. my set ` must never reach the registry or `agent.toolSetIds`.
+    expect(calls.map((c) => c.id)).toEqual(["padded.spaced"]);
+    expect(loaded[0].toolSetIds).toEqual(["padded.spaced"]);
+  });
+
   it("aborts (fail-loud) on a duplicate id, naming both owning plugins", async () => {
     const { register } = makeRegister();
     // Two core plugins keep bare ids, so a shared `time` id collides directly.

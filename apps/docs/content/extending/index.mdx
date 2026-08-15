@@ -58,6 +58,15 @@ what the caps are, what happens at boot. For the exact shape of an interface,
 read it from the package you have installed. A signature pasted onto a docs page
 drifts silently; the one in your `node_modules` cannot.
 
+Every Contribution is validated before it is registered. A Tool set with a
+blank `id`, `name`, or `category`, or with `tools` that is neither a map nor a
+factory, aborts startup with an error naming the Plugin and the entry that
+failed. The package types catch these mistakes in TypeScript; the same checks
+protect deployments that load JavaScript or a malformed package.
+
+Contribution ids are trimmed before they are namespaced, so surrounding
+whitespace never reaches a stored id.
+
 ## Web-search backends
 
 A **Web-search backend** fills the **Search** toggle in Chat for Providers whose

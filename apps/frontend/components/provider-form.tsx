@@ -278,12 +278,10 @@ const ModelRow = ({
           label="Context window"
           hint={
             <>
-              The vendor&apos;s published <strong>total</strong> token capacity
-              for this model — the whole window, not a cap on the reply. Sizes
-              in the list are decimal, so <code>128k</code> is 128,000.
-              Optional, and leaving it unset breaks nothing: without it, the
-              context meter in a Chat is hidden for this model, because Platypus
-              has no way to look the capacity up.
+              The model&apos;s <strong>total</strong> token capacity, not a cap
+              on the reply. Listed sizes are decimal, so <code>128k</code> is
+              128,000. Optional; without it a Chat on this model shows no
+              context meter.
             </>
           }
           error={errors.fields.contextWindow}

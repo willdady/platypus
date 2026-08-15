@@ -620,7 +620,7 @@ export const Chat = ({
                     disabled={isReconnectedToRunningRun}
                   />
                 </PromptInputBody>
-                <PromptInputFooter>
+                <PromptInputFooter className="flex-wrap">
                   <PromptInputTools>
                     <PromptInputActionMenu>
                       <PromptInputActionMenuTrigger className="cursor-pointer" />
@@ -722,7 +722,21 @@ export const Chat = ({
                       </Dialog>
                     )}
                   </PromptInputTools>
+                  {/*
+                    Two placements from one element, because the footer wraps.
+                    Narrow: ordered last onto a row of its own, so the tools and
+                    Send keep the first row to themselves and Send is never
+                    pushed off the edge. The row bleeds back over the footer's
+                    own padding — hence the negative margins and the width that
+                    adds them back — so the tint reaches the composer's edges and
+                    reads as a band rather than a chip floating in the middle.
+                    Wide: back in source order with `mr-auto` eating the free
+                    space, which reads as the last item of the tool row rather
+                    than drifting into the middle the way `justify-between`
+                    alone would leave it.
+                  */}
                   <ContextMeter
+                    className="order-last -mx-3 -mb-3 mt-1.5 w-[calc(100%+1.5rem)] justify-center rounded-b-md bg-foreground/5 px-3 py-1.5 sm:order-none sm:mx-0 sm:mt-0 sm:mb-0 sm:w-auto sm:justify-start sm:rounded-none sm:bg-transparent sm:p-0 sm:mr-auto"
                     occupancy={contextOccupancy?.inputTokens}
                     contextWindow={contextWindow}
                   />

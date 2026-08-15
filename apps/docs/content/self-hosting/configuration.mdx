@@ -144,9 +144,11 @@ empty list unless it says otherwise, and silently runs without web-fetch.
   remove it.
 - **An empty list yields the always-on core tool sets only** — never zero tools.
   The gate-able plugins (web-fetch, docker, third-party) are simply absent.
-- **Boot is fail-loud.** A listed plugin that can't be resolved or exports an
-  invalid manifest, or two plugins whose tool-set ids collide, aborts startup
-  with a plugin-named error — a misconfigured plugin never silently drops tools.
+- **Boot is fail-loud.** A listed plugin that can't be resolved, exports an
+  invalid manifest, or declares a malformed Contribution aborts startup with a
+  plugin-named error. This includes a Tool set with no usable `id`, `name`,
+  `category`, or `tools`; a misconfigured plugin never silently drops or invents
+  tools. Two plugins whose Tool set ids collide also abort startup.
 - **New gate-able core plugins in a later release are not auto-enabled** — add
   them to your pinned list to opt in.
 
