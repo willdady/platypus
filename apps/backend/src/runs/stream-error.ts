@@ -82,10 +82,12 @@ const describeStringifiedToolInputError = (
  * model — so it has to be short enough to read and specific enough to act on.
  *
  * Pure, and separate from {@link formatStreamError}, so a caller that is not
- * rendering a stream failure — naming the reason a sub-agent could not be built,
- * say — gets the same wording without a spurious "Chat stream error" log line.
+ * rendering a stream failure gets the same wording without a spurious "Chat
+ * stream error" log line. Naming why a sub-agent could not be built is the
+ * other caller: what fails there is a Provider being opened, so the cases this
+ * recognises — a missing API key, a 401, a rate limit — are exactly its causes.
  */
-export const describeStreamError = (error: unknown): string => {
+export const describeSdkError = (error: unknown): string => {
   if (LoadAPIKeyError.isInstance(error)) {
     return "AI provider API key is missing or not configured.";
   }
@@ -136,12 +138,12 @@ export const describeStreamError = (error: unknown): string => {
 };
 
 /**
- * {@link describeStreamError}, plus the log line every stream failure earns.
+ * {@link describeSdkError}, plus the log line every stream failure earns.
  * This is what `toUIMessageStream`'s `onError` is wired to on every run.
  */
 export const formatStreamError = (error: unknown): string => {
   logger.error({ error }, "Chat stream error");
-  return describeStreamError(error);
+  return describeSdkError(error);
 };
 
 /**

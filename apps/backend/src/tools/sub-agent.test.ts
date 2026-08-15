@@ -9,6 +9,8 @@ import {
   SUB_AGENT_TRUNCATION_NOTE,
 } from "./sub-agent.ts";
 import type { SubAgentActivity } from "./sub-agent.ts";
+import { runRegistry } from "../runs/run-registry.ts";
+import { orgScope, workspaceScope, type WorkspaceScope } from "../scope.ts";
 import { DEFAULT_AGENT_MAX_STEPS } from "@platypus/schemas";
 
 // A delegated run now goes through the same pipeline a Chat turn does —
@@ -90,6 +92,13 @@ const toolCall = (id: string, toolName: string, input: string): StepParts => [
   { type: "tool-input-end", id },
   { type: "tool-call", toolCallId: id, toolName, input },
 ];
+
+/** The scope a parent Chat turn would be running under. */
+const parentScope: WorkspaceScope = workspaceScope(
+  orgScope({ principal: { kind: "user", userId: "u1", name: "Ada" } }, "org-1"),
+  "ws-1",
+  true,
+);
 
 const baseOptions = {
   id: "agent-1",
@@ -537,6 +546,40 @@ describe("createSubAgentTool", () => {
       expect(abortSignal).not.toBe(parent.signal);
     });
 
+    // A Trigger run is started under bounds an Operator configured; work it
+    // delegates has to run under the same ones, not the process defaults.
+    it("registers under the bounds the parent run was started with", async () => {
+      const register = vi.spyOn(runRegistry, "register");
+      await delegate({
+        parentRun: {
+          runId: "parent-1",
+          scope: parentScope,
+          timeouts: { perStepTimeoutMs: 600_000, perRunTimeoutMs: 3_600_000 },
+        },
+      });
+
+      expect(register.mock.calls.at(-1)?.[1]).toMatchObject({
+        perStepTimeoutMs: 600_000,
+        perRunTimeoutMs: 3_600_000,
+      });
+      register.mockRestore();
+    });
+
+    // The generator body doesn't start until the consumer pulls, so a parent
+    // cancelled between dispatch and the first tick would never fire the abort
+    // listener and the delegation would run on regardless.
+    it("does not start work for a parent that was already cancelled", async () => {
+      const parent = new AbortController();
+      parent.abort(new Error("Chat run cancelled"));
+
+      await expect(
+        delegate(
+          { model: modelOf(step(text("t1", "should never be produced"))) },
+          { abortSignal: parent.signal },
+        ),
+      ).rejects.toThrow(/Stopped before finishing/);
+    });
+
     it("stops the delegated run when the parent run is cancelled", async () => {
       const parent = new AbortController();
       const { tool } = createSubAgentTool({
@@ -726,7 +769,7 @@ describe("createSubAgentTool", () => {
       });
     });
 
-    it("sends no value for a parameter that was never set", async () => {
+    it("omits parameters that were never set rather than sending undefined", async () => {
       await delegate({ sampling: { temperature: 0.2 } });
 
       const settings = streamArgs();
@@ -738,7 +781,7 @@ describe("createSubAgentTool", () => {
         "presencePenalty",
         "frequencyPenalty",
       ]) {
-        expect(settings[key]).toBeUndefined();
+        expect(settings).not.toHaveProperty(key);
       }
     });
 
@@ -755,7 +798,7 @@ describe("createSubAgentTool", () => {
     it("sends no ceiling when the sub-agent's model declares none", async () => {
       await delegate({});
 
-      expect(streamArgs().maxOutputTokens).toBeUndefined();
+      expect(streamArgs()).not.toHaveProperty("maxOutputTokens");
     });
 
     it("cannot have sampling override the model, instructions or tools", async () => {
@@ -1017,7 +1060,7 @@ describe("createSubAgentTools", () => {
     await runTool(tools.delegateToTuned);
 
     expect(streamArgs()).toMatchObject({ temperature: 0.3, seed: 7 });
-    expect(streamArgs().topP).toBeUndefined();
+    expect(streamArgs()).not.toHaveProperty("topP");
   });
 
   it("passes each sub-agent's own provider security text into its instructions", async () => {

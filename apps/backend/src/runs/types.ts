@@ -1,7 +1,23 @@
 import type { PlatypusUIMessage } from "../types.ts";
 import type { ChatTurnRequest, ChatTurn } from "../services/chat-execution.ts";
+import type { WorkspaceScope } from "../scope.ts";
+import type { RunTimeouts } from "./run-registry.ts";
 
 export type RunId = string;
+
+/**
+ * The run a sub-Agent delegation nests inside.
+ *
+ * A delegated run is a run in its own right — registry entry, timers,
+ * statistics — so it has to say whose child it is (`workspaceScopeForSubAgent`
+ * chains the principal), inherit the bounds the parent was started under rather
+ * than the process defaults, and be cancelled when the parent is.
+ */
+export type ParentRunContext = {
+  runId: RunId;
+  scope: WorkspaceScope;
+  timeouts?: RunTimeouts;
+};
 
 export type RunStatus = "running" | "succeeded" | "failed" | "cancelled";
 

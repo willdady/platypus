@@ -32,7 +32,7 @@ _Avoid_: parsed text, converted file, OCR (Platypus does not OCR).
 A configurable preset that pins a Provider, model, Instructions, generation parameters, Tools, Skills, and sub-Agents. Selecting an Agent on a Chat turn replaces direct Provider/model selection.
 
 **Sub-Agent**:
-An Agent referenced by a parent Agent and exposed to it as a delegate Tool.
+An Agent referenced by a parent Agent and exposed to it as a delegate Tool. Invoking it starts a run in its own right — bounded by the same per-step and per-run timeouts the parent turn was started under, and cancelled when the parent is — but never a Chat: nothing about a delegated run is persisted.
 
 **Instructions**:
 The free-text behaviour brief a User writes on an Agent — or on a Chat with no Agent. One input to the System prompt rather than the whole of it: it renders as the first fragment and cannot suppress the Platypus-owned fragments that follow.

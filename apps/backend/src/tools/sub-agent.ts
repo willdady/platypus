@@ -11,15 +11,13 @@ import {
 import { z } from "zod";
 import { logger } from "../logger.ts";
 import { createMessageMetadata } from "../runs/message-metadata.ts";
-import { buildModelInvocation, startRun } from "../runs/run-lifecycle.ts";
+import { startRun } from "../runs/run-lifecycle.ts";
+import { buildModelInvocation } from "../runs/run-plan.ts";
 import { runRegistry } from "../runs/run-registry.ts";
-import {
-  describeStreamError,
-  formatStreamError,
-} from "../runs/stream-error.ts";
-import type { RunId } from "../runs/types.ts";
+import { describeSdkError, formatStreamError } from "../runs/stream-error.ts";
+import type { ParentRunContext } from "../runs/types.ts";
 import { renderSecurityGuardrails } from "../security-prompt.ts";
-import { workspaceScopeForSubAgent, type WorkspaceScope } from "../scope.ts";
+import { actorUserId, workspaceScopeForSubAgent } from "../scope.ts";
 import { wrapToolsWithActivity } from "../services/tool-activity.ts";
 import {
   resolveSamplingSettings,
@@ -172,13 +170,6 @@ const finalToolResult = (
 };
 
 /**
- * The run a delegate tool nests inside: the parent's id and scope. A delegated
- * run registers as a run in its own right, so it needs to say whose child it is
- * (`workspaceScopeForSubAgent`) and to be cancelled when the parent is.
- */
-export type ParentRunContext = { runId: RunId; scope: WorkspaceScope };
-
-/**
  * Options for creating a sub-agent tool.
  */
 interface SubAgentToolOptions {
@@ -293,6 +284,9 @@ export const createSubAgentTool = (options: SubAgentToolOptions) => {
         // called twice in one turn, and two registry entries under one id is a
         // hard error.
         const runId = `sub_${randomUUID()}`;
+        // Chained rather than reused: the principal records that this run is a
+        // child of `parentRun.runId`, and `actorUserId` still walks back up it
+        // to the human the whole tree is executing for.
         const scope = parentRun
           ? workspaceScopeForSubAgent(parentRun.scope, parentRun.runId)
           : undefined;
@@ -304,12 +298,18 @@ export const createSubAgentTool = (options: SubAgentToolOptions) => {
 
         const run = startRun({
           runId,
+          // Inherited, not defaulted: a Trigger run is started under bounds an
+          // Operator configured (`TRIGGER_PER_RUN_TIMEOUT_MS` and friends), and
+          // work it delegates has to run under the same ones or a long
+          // delegation is cut short by a limit nobody chose.
+          timeouts: parentRun?.timeouts,
           log: {
             subAgentId: id,
             subAgentName: name,
             parentRunId: parentRun?.runId,
             orgId: scope?.orgId,
             workspaceId: scope?.workspaceId,
+            actorUserId: scope ? actorUserId(scope.principal) : undefined,
           },
           onTerminate: ({ status, error, stats }) => {
             logger.info(
@@ -334,6 +334,11 @@ export const createSubAgentTool = (options: SubAgentToolOptions) => {
         parentSignal?.addEventListener("abort", cancelWithParent, {
           once: true,
         });
+        // A generator body does not start until the consumer pulls, so the
+        // parent can already have been cancelled by the time we get here — in
+        // which case the listener will never fire and the delegation would run
+        // on regardless.
+        if (parentSignal?.aborted) cancelWithParent();
 
         // Everything below runs inside the registered run, so every exit —
         // including the consumer abandoning this generator mid-stream — reaches
@@ -385,7 +390,7 @@ export const createSubAgentTool = (options: SubAgentToolOptions) => {
             for await (const message of readUIMessageStream<PlatypusUIMessage>({
               stream: uiStream,
               onError: (error) => {
-                streamFailure ??= describeStreamError(error);
+                streamFailure ??= describeSdkError(error);
               },
             })) {
               latest = message;
@@ -399,14 +404,13 @@ export const createSubAgentTool = (options: SubAgentToolOptions) => {
             // An abort ends the stream normally, so the signal is the only record
             // that the run was stopped rather than finished.
             if (!streamFailure && run.handle.signal.aborted) {
-              const reason: unknown = run.handle.signal.reason;
-              streamFailure =
-                reason instanceof Error
-                  ? `Stopped before finishing: ${reason.message}`
-                  : "Stopped before finishing.";
+              const reason = run.abortReason();
+              streamFailure = reason
+                ? `Stopped before finishing: ${reason}`
+                : "Stopped before finishing.";
             }
           } catch (error) {
-            streamFailure ??= describeStreamError(error);
+            streamFailure ??= describeSdkError(error);
           }
 
           const aggregatedText = assistantText(latest);
@@ -592,7 +596,7 @@ export const createSubAgentTools = async (
       failures.push({
         id: subAgent.id,
         name: subAgent.name,
-        reason: describeStreamError(error),
+        reason: describeSdkError(error),
       });
     }
   }

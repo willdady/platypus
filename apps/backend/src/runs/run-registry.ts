@@ -34,6 +34,15 @@ export type RegisterOptions = {
   onTimeout?: (error: TimeoutError) => void;
 };
 
+/**
+ * The two bounds a caller may set per run. Named because four call sites
+ * across three modules pass exactly this pair.
+ */
+export type RunTimeouts = Pick<
+  RegisterOptions,
+  "perStepTimeoutMs" | "perRunTimeoutMs"
+>;
+
 export type RunHandle = {
   runId: RunId;
   signal: AbortSignal;

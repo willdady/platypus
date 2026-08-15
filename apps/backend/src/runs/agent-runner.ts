@@ -18,12 +18,10 @@ import type { ToolActivityEvent } from "../services/tool-activity.ts";
 import { logger } from "../logger.ts";
 import { actorUserId, type WorkspaceScope } from "../scope.ts";
 import type { PlatypusUIMessage } from "../types.ts";
-import { runRegistry, type RegisterOptions } from "./run-registry.ts";
-import {
-  buildModelInvocation,
-  computeStats,
-  startRun,
-} from "./run-lifecycle.ts";
+import { runRegistry, type RunTimeouts } from "./run-registry.ts";
+import { startRun } from "./run-lifecycle.ts";
+import { buildModelInvocation } from "./run-plan.ts";
+import { computeStats } from "./run-stats.ts";
 import {
   createNoProgressDetector,
   NoProgressError,
@@ -45,12 +43,12 @@ export type StreamOptions = {
    * abort signal is intentionally NOT accepted — Chat runs continue to
    * completion regardless of the client connection (see issue #113).
    */
-  timeouts?: Pick<RegisterOptions, "perStepTimeoutMs" | "perRunTimeoutMs">;
+  timeouts?: RunTimeouts;
 };
 
 export type GenerateOptions = {
   frontendUrl?: string;
-  timeouts?: Pick<RegisterOptions, "perStepTimeoutMs" | "perRunTimeoutMs">;
+  timeouts?: RunTimeouts;
 };
 
 export type GenerateResult = {
@@ -100,8 +98,9 @@ export class AgentRunner {
     scope: WorkspaceScope,
     input: RunInput,
     origin: string | undefined,
-    frontendUrl?: string,
-    onActivity?: (event: ToolActivityEvent) => void,
+    frontendUrl: string | undefined,
+    timeouts: RunTimeouts | undefined,
+    onActivity: (event: ToolActivityEvent) => void,
   ): Promise<ChatTurn> {
     return prepareChatTurn({
       orgId: scope.orgId,
@@ -114,8 +113,9 @@ export class AgentRunner {
       runMode: scope.principal.kind === "user" ? "interactive" : "headless",
       onActivity,
       // Sub-agent delegate tools built for this turn register their own runs
-      // as children of this one, so they need to know whose child they are.
-      run: { runId: input.runId, scope },
+      // as children of this one, so they need to know whose child they are and
+      // what bounds this run was started under.
+      run: { runId: input.runId, scope, timeouts },
     });
   }
 
@@ -143,7 +143,7 @@ export class AgentRunner {
     sink: RunSink;
     origin?: string;
     frontendUrl?: string;
-    timeouts?: Pick<RegisterOptions, "perStepTimeoutMs" | "perRunTimeoutMs">;
+    timeouts?: RunTimeouts;
     /**
      * Unattended (trigger/scheduled) runs enable no-progress detection: a
      * stuck model that re-issues the same call for the same result is aborted
@@ -202,15 +202,14 @@ export class AgentRunner {
       },
     });
 
-    const { handle, finish: finalize, onStep, onActivity } = run;
-
     try {
       state.turn = await this.prepare(
         scope,
         input,
         params.origin,
         params.frontendUrl,
-        onActivity,
+        params.timeouts,
+        run.onActivity,
       );
     } catch (error) {
       const err = error instanceof Error ? error : new Error(String(error));
@@ -218,7 +217,7 @@ export class AgentRunner {
         { error, runId: input.runId },
         "Run prepare failed before model invocation",
       );
-      await finalize("failed", err);
+      await run.finish("failed", err);
       throw err;
     }
 
@@ -237,13 +236,13 @@ export class AgentRunner {
     // delegated run uses.
     const modelArgs = {
       ...buildModelInvocation(state.turn.stream, {
-        abortSignal: handle.signal,
-        extraStopConditions: noProgress ? [noProgress.stopCondition] : [],
+        abortSignal: run.handle.signal,
+        extraStopCondition: noProgress?.stopCondition,
       }),
       messages: await convertToModelMessages(state.turn.stream.messages),
     };
 
-    return { state, run, handle, finalize, onStep, modelArgs, noProgress };
+    return { state, run, modelArgs, noProgress };
   }
 
   async stream(params: {
@@ -253,7 +252,7 @@ export class AgentRunner {
     options: StreamOptions;
   }): Promise<Response> {
     const { input, options } = params;
-    const { state, run, finalize, onStep, modelArgs } = await this.setup({
+    const { state, run, modelArgs } = await this.setup({
       scope: params.scope,
       input,
       sink: params.sink,
@@ -281,7 +280,7 @@ export class AgentRunner {
 
     const result = streamText({
       ...modelArgs,
-      onStepFinish: (step) => onStep(step),
+      onStepFinish: (step) => run.onStep(step),
       onToolExecutionEnd: ({ toolCall, toolExecutionMs }) => {
         toolDurations.set(toolCall.toolCallId, toolExecutionMs);
       },
@@ -309,7 +308,7 @@ export class AgentRunner {
         finalMessagesReceived = true;
         state.messages = applyToolDurations(finalMessages, toolDurations);
         const { status, error } = run.statusFromSignal();
-        await finalize(status, error);
+        await run.finish(status, error);
       },
     });
 
@@ -360,7 +359,7 @@ export class AgentRunner {
     const options = params.options ?? {};
     // No `origin`: headless callers don't have file URLs to inline.
     // Headless runs are unattended → enable no-progress detection.
-    const { run, finalize, onStep, modelArgs, noProgress } = await this.setup({
+    const { run, modelArgs, noProgress } = await this.setup({
       scope: params.scope,
       input,
       sink: params.sink,
@@ -373,13 +372,13 @@ export class AgentRunner {
     try {
       const result = await generateText({
         ...modelArgs,
-        onStepFinish: (step) => onStep(step),
+        onStepFinish: (step) => run.onStep(step),
       });
 
       const stats = computeStats(result as Parameters<typeof computeStats>[0]);
       // The terminal finish only, as on the streamed path: a step inside a tool
       // loop can end at the ceiling and the run still recover. Set before
-      // `finalize`, which is what carries `state.stats` to `sink.onFinish` —
+      // `finish`, which is what carries the run's stats to `sink.onFinish` —
       // the sink's record is the only channel an unattended run has.
       if (isTruncatedByTokenLimit(result.finishReason)) {
         stats.truncatedByTokenLimit = true;
@@ -406,7 +405,7 @@ export class AgentRunner {
           },
           "Run aborted: no progress",
         );
-        await finalize("failed", err);
+        await run.finish("failed", err);
         return { text: result.text, stats };
       }
 
@@ -424,7 +423,7 @@ export class AgentRunner {
         "Run generate completed",
       );
 
-      await finalize("succeeded");
+      await run.finish("succeeded");
       return { text: result.text, stats };
     } catch (error) {
       const err = error instanceof Error ? error : new Error(String(error));
@@ -439,7 +438,7 @@ export class AgentRunner {
       // A cancelled run is recorded as cancelled; a timed-out one stays a
       // failure, and so does anything the model call threw on its own.
       const aborted = run.statusFromSignal();
-      await finalize(
+      await run.finish(
         aborted.status === "cancelled" ? "cancelled" : "failed",
         err,
       );

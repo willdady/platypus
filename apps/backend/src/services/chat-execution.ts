@@ -60,8 +60,7 @@ import {
   wrapToolsWithActivity,
   type ToolActivityEvent,
 } from "./tool-activity.ts";
-import type { WorkspaceScope } from "../scope.ts";
-import type { RunId } from "../runs/types.ts";
+import type { ParentRunContext } from "../runs/types.ts";
 
 // --- Errors ---
 
@@ -208,10 +207,10 @@ export type PrepareChatTurnInput = {
   /**
    * The run this turn belongs to. Sub-agent delegate tools built here register
    * their own runs as children of it, so a delegated run is cancellable and
-   * subject to timeouts in its own right. Absent for callers that prepare a
-   * turn outside the run lifecycle (tests, the pre-persist file gate).
+   * subject to the same timeouts in its own right. Absent for callers that
+   * prepare a turn outside the run lifecycle (tests, the pre-persist file gate).
    */
-  run?: { runId: RunId; scope: WorkspaceScope };
+  run?: ParentRunContext;
 };
 
 // --- Queries seam ---
@@ -927,7 +926,7 @@ const loadSubAgents = async (
   orgId: string,
   workspaceId: string,
   frontendUrl: string | undefined,
-  run: { runId: RunId; scope: WorkspaceScope } | undefined,
+  run: ParentRunContext | undefined,
 ): Promise<{
   subAgents: Array<{ id: string; name: string; description?: string | null }>;
   unavailableSubAgents: SubAgentFailure[];
