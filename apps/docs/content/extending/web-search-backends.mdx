@@ -19,8 +19,10 @@ backend is a Plugin.
 
 ## You supply executors, not tools
 
-Your contribution returns two plain functions. Core builds the `Tool` objects
-around them.
+Your contribution returns two plain functions, typed by
+[`@platypuschat/plugin-sdk`](https://www.npmjs.com/package/@platypuschat/plugin-sdk).
+Core builds the `Tool` objects around them. Read the exact shapes off the package
+you have installed — this page states the rules those types don't encode.
 
 | Executor     | Required | Gets        | Returns                                                                    |
 | ------------ | -------- | ----------- | -------------------------------------------------------------------------- |
@@ -156,11 +158,12 @@ with `EGRESS_ALLOW_PRIVATE_NETWORKS`.
 
 Add an entry to `contributes.webBackends`. A `WebBackendContribution` declares:
 
-- **`backend`** — the discriminator string persisted on the Provider row.
-  Namespaced with your Plugin's name automatically. The stored value is capped at
-  200 characters, which no realistic namespaced id approaches.
-- **`name`** — the display name an Org Admin picks from in the **Web search**
-  field.
+- **`backend`** — the discriminator string persisted on the Provider row, and
+  the value of `searchSource` on the Provider API. Namespaced with your Plugin's
+  name automatically. The stored value is capped at 200 characters, which no
+  realistic namespaced id approaches.
+- **`name`** — the display name an Org Admin picks from under **Advanced
+  settings → Web search** on the Provider form.
 - **`timeoutMs`** — optional, as above.
 - **`createExecutors`** — returns `{ web_search, read_url? }`, given the request
   context (`orgId`, `workspaceId`, `userId`) and your Plugin's deploy-time

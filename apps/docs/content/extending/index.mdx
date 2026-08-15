@@ -86,16 +86,3 @@ The bundled Docker and SSH Sandbox backends write through this same logger, so
 what you are given is what the two most involved Plugins in the box get. If it
 turns out not to be enough for something you are building, that is a gap worth
 reporting rather than a reason to reach for `console`.
-
-## Web-search backends
-
-A **Web-search backend** fills the **Search** toggle in Chat for Providers whose
-model has no web search of its own — a self-hosted OpenAI-compatible endpoint
-such as vLLM, llama.cpp or LiteLLM. You supply two executors, a mandatory
-`web_search` and an optional `read_url`; core owns the tools built around them.
-**[Web-search backends](/extending/web-search-backends)** has the contract, the
-caps, and the egress guard.
-
-An Org Admin points a Provider at your backend from the Provider form under
-**Advanced settings → Web search**, by the display name your manifest gives it.
-The same field is on the Provider API as `searchSource`.

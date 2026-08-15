@@ -103,9 +103,11 @@ injects the resolved block into **every one** of your contributions:
 
 - a **Tool set** factory receives it as an appended second argument;
 - a **Sandbox backend** `create` receives it as a third argument, alongside the
-  per-Workspace config and credentials.
+  per-Workspace config and credentials;
+- a **Web-search backend** `createExecutors` receives it as a second argument,
+  alongside the request context.
 
-Both are optional to consume.
+All three are optional to consume.
 
 **One block is shared** across all of a plugin's contributions and all tenants.
 That is deliberate, and it is the mechanism that lets a plugin's Sandbox backend

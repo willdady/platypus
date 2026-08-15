@@ -187,8 +187,8 @@ for how a manifest's `contributes` block fills Extension points.
 An **Org Admin** can confirm what's actually loaded from the app:
 **Organization settings → Plugins** lists every plugin loaded at boot, its
 version, its origin (**Core** or **Third-party**), and the contributions it
-registered — the Tool sets and Sandbox backends it provides. That last part ties
-a Tool set or Sandbox backend back to the plugin it came from.
+registered — the Tool sets, Sandbox backends and Web-search backends it
+provides. That last part ties a contribution back to the plugin it came from.
 
 The view is **strictly read-only**: there is no enable / disable / install
 control, because enablement is the deploy-time `PLATYPUS_PLUGINS` list above — a
