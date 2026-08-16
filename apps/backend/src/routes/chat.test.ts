@@ -6,33 +6,20 @@ import {
   resetMockDb,
 } from "../test-utils.ts";
 
-const { mockPrepareChatTurn } = vi.hoisted(() => ({
+const { mockPrepareChatTurn, mockValidateTurnAttachments } = vi.hoisted(() => ({
   mockPrepareChatTurn: vi.fn(),
+  mockValidateTurnAttachments: vi.fn().mockResolvedValue(undefined),
 }));
 
-vi.mock("../services/chat-execution.ts", () => {
-  class ValidationError extends Error {
-    constructor(message: string) {
-      super(message);
-      this.name = "ValidationError";
-    }
-  }
-  class NotFoundError extends Error {
-    constructor(message: string) {
-      super(message);
-      this.name = "NotFoundError";
-    }
-  }
-  return {
-    prepareChatTurn: mockPrepareChatTurn,
-    validateTurnAttachments: vi.fn(),
-    ValidationError,
-    NotFoundError,
-    drizzleChatTurnQueries: {},
-  };
-});
+vi.mock("../services/chat-execution.ts", () => ({
+  prepareChatTurn: mockPrepareChatTurn,
+  validateTurnAttachments: mockValidateTurnAttachments,
+  drizzleChatTurnQueries: {},
+}));
 
 import app from "../server.ts";
+import { NotFoundError, ValidationError } from "../errors.ts";
+import { FileValidationError } from "../services/file-gate.ts";
 
 // Mock AI SDK
 vi.mock("ai", async () => {
@@ -279,6 +266,96 @@ describe("Chat Routes", () => {
 
       expect(res.status).toBe(200);
       expect(await res.text()).toBe("stream");
+    });
+
+    it("maps a NotFoundError from prepareChatTurn to 404 via the central onError seam", async () => {
+      mockSession();
+      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-1", organizationId: "org-1" },
+      ]); // requireWorkspaceAccess
+      mockDb.returning.mockResolvedValueOnce([{ id: "chat-2" }]); // ChatSink.onStart
+
+      mockPrepareChatTurn.mockRejectedValueOnce(
+        new NotFoundError("Agent 'agent-1' not found"),
+      );
+
+      const res = await app.request(baseUrl, {
+        method: "POST",
+        body: JSON.stringify({
+          id: "chat-2",
+          workspaceId,
+          agentId: "agent-1",
+          messages: [{ role: "user", content: "hello" }],
+        }),
+        headers: { "Content-Type": "application/json" },
+      });
+
+      expect(res.status).toBe(404);
+      expect(await res.json()).toEqual({
+        error: "Agent 'agent-1' not found",
+      });
+    });
+
+    it("maps a ValidationError from prepareChatTurn to 400 via the central onError seam", async () => {
+      mockSession();
+      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-1", organizationId: "org-1" },
+      ]); // requireWorkspaceAccess
+      mockDb.returning.mockResolvedValueOnce([{ id: "chat-3" }]); // ChatSink.onStart
+
+      mockPrepareChatTurn.mockRejectedValueOnce(
+        new ValidationError("Model id 'bogus' not enabled for provider 'p1'"),
+      );
+
+      const res = await app.request(baseUrl, {
+        method: "POST",
+        body: JSON.stringify({
+          id: "chat-3",
+          workspaceId,
+          providerId: "p1",
+          modelId: "bogus",
+          messages: [{ role: "user", content: "hello" }],
+        }),
+        headers: { "Content-Type": "application/json" },
+      });
+
+      expect(res.status).toBe(400);
+      expect(await res.json()).toEqual({
+        error: "Model id 'bogus' not enabled for provider 'p1'",
+      });
+    });
+
+    it("maps a FileValidationError from the file gate to 400 with the offending files", async () => {
+      mockSession();
+      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-1", organizationId: "org-1" },
+      ]); // requireWorkspaceAccess
+
+      const fileError = new FileValidationError([
+        { file: "scan.pdf", reason: "unextractable" },
+      ]);
+      mockValidateTurnAttachments.mockRejectedValueOnce(fileError);
+
+      const res = await app.request(baseUrl, {
+        method: "POST",
+        body: JSON.stringify({
+          id: "chat-4",
+          workspaceId,
+          providerId: "p1",
+          modelId: "m1",
+          messages: [{ role: "user", content: "hello" }],
+        }),
+        headers: { "Content-Type": "application/json" },
+      });
+
+      expect(res.status).toBe(400);
+      expect(await res.json()).toEqual({
+        error: fileError.message,
+        files: ["scan.pdf"],
+      });
     });
   });
 

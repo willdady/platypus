@@ -207,7 +207,7 @@ export const DEFAULT_AGENT_MAX_STEPS = 15;
 // Org-scoped Agents are Shared resources managed by Org Admins (ADR-0007);
 // the XOR is enforced on `agentSchema` below, while the create routes inject
 // the scope and Promote re-scopes a Workspace Agent to the Organization.
-const agentBaseSchema = z.object({
+export const agentBaseSchema = z.object({
   id: z.string(),
   organizationId: z.string().optional(),
   workspaceId: z.string().optional(),
@@ -1285,59 +1285,27 @@ export const isPresentableUrl = (value: unknown): value is string => {
  */
 export const WEB_BACKEND_TOOL_MARKER = "platypusWebBackend";
 
-/**
- * Maps a legacy `nativeSearchEnabled` + `webBackend` payload onto
- * `searchSource` (ADR-0014) — a one-release back-compat window for an API
- * caller still `PUT`/`POST`ing the pre-collapse shape. Applied only when the
- * payload omits `searchSource` outright; a caller sending both is assumed to
- * know what it's doing, and `searchSource` wins untouched.
- *
- * Mirrors the exact precedence `resolveSearchMode` used to encode inline
- * (`nativeSearchEnabled: false` beat a set `webBackend`), so a legacy payload
- * resolves to the same search behaviour it did before the collapse.
- */
-const withLegacySearchFields = (input: unknown): unknown => {
-  if (typeof input !== "object" || input === null) return input;
-  const data = input as Record<string, unknown>;
-  if (
-    "searchSource" in data ||
-    (!("nativeSearchEnabled" in data) && !("webBackend" in data))
-  ) {
-    return data;
-  }
-  const searchSource =
-    data.nativeSearchEnabled === false
-      ? SEARCH_SOURCE_NONE
-      : typeof data.webBackend === "string" && data.webBackend !== ""
-        ? data.webBackend
-        : SEARCH_SOURCE_NATIVE;
-  return { ...data, searchSource };
-};
-
-export const providerCreateSchema = z.preprocess(
-  withLegacySearchFields,
-  providerBaseSchema.pick({
-    organizationId: true,
-    workspaceId: true,
-    name: true,
-    providerType: true,
-    apiKey: true,
-    region: true,
-    baseUrl: true,
-    headers: true,
-    extraBody: true,
-    organization: true,
-    project: true,
-    apiMode: true,
-    searchSource: true,
-    securityGuardrails: true,
-    modelIds: true,
-    taskModelId: true,
-    memoryExtractionModelId: true,
-    embeddingModelId: true,
-    embeddingDimensions: true,
-  }),
-);
+export const providerCreateSchema = providerBaseSchema.pick({
+  organizationId: true,
+  workspaceId: true,
+  name: true,
+  providerType: true,
+  apiKey: true,
+  region: true,
+  baseUrl: true,
+  headers: true,
+  extraBody: true,
+  organization: true,
+  project: true,
+  apiMode: true,
+  searchSource: true,
+  securityGuardrails: true,
+  modelIds: true,
+  taskModelId: true,
+  memoryExtractionModelId: true,
+  embeddingModelId: true,
+  embeddingDimensions: true,
+});
 
 // Sandbox
 
@@ -1455,28 +1423,25 @@ export const invitationListItemSchema = invitationSchema.extend({
 
 export type InvitationListItem = z.infer<typeof invitationListItemSchema>;
 
-export const providerUpdateSchema = z.preprocess(
-  withLegacySearchFields,
-  providerBaseSchema.pick({
-    name: true,
-    providerType: true,
-    apiKey: true,
-    region: true,
-    baseUrl: true,
-    headers: true,
-    extraBody: true,
-    organization: true,
-    project: true,
-    apiMode: true,
-    searchSource: true,
-    securityGuardrails: true,
-    modelIds: true,
-    taskModelId: true,
-    memoryExtractionModelId: true,
-    embeddingModelId: true,
-    embeddingDimensions: true,
-  }),
-);
+export const providerUpdateSchema = providerBaseSchema.pick({
+  name: true,
+  providerType: true,
+  apiKey: true,
+  region: true,
+  baseUrl: true,
+  headers: true,
+  extraBody: true,
+  organization: true,
+  project: true,
+  apiMode: true,
+  searchSource: true,
+  securityGuardrails: true,
+  modelIds: true,
+  taskModelId: true,
+  memoryExtractionModelId: true,
+  embeddingModelId: true,
+  embeddingDimensions: true,
+});
 
 export type ProviderUpdateData = z.infer<typeof providerUpdateSchema>;
 

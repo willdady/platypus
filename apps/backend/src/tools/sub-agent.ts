@@ -5,27 +5,20 @@ import {
   readUIMessageStream,
   streamText,
   tool,
-  type LanguageModel,
   type Tool,
 } from "ai";
 import { z } from "zod";
 import { logger } from "../logger.ts";
 import { createMessageMetadata } from "../runs/message-metadata.ts";
 import { startRun } from "../runs/run-lifecycle.ts";
-import { buildModelInvocation } from "../runs/run-plan.ts";
+import { buildModelInvocation, type RunPlan } from "../runs/run-plan.ts";
 import { runRegistry } from "../runs/run-registry.ts";
 import { describeSdkError, formatStreamError } from "../runs/stream-error.ts";
 import type { ParentRunContext } from "../runs/types.ts";
 import { renderSecurityGuardrails } from "../security-prompt.ts";
 import { actorUserId, workspaceScopeForSubAgent } from "../scope.ts";
 import { wrapToolsWithActivity } from "../services/tool-activity.ts";
-import {
-  resolveSamplingSettings,
-  type SamplingSettings,
-  type SamplingSource,
-} from "../services/sampling-settings.ts";
 import type { PlatypusUIMessage } from "../types.ts";
-import { DEFAULT_AGENT_MAX_STEPS } from "@platypus/schemas";
 
 /**
  * Single source of truth for the sub-agent delegation tool name.
@@ -177,7 +170,6 @@ interface SubAgentToolOptions {
   name: string;
   description?: string;
   instructions?: string;
-  model: LanguageModel;
   /**
    * This sub-agent's own tools, opened on first delegation rather than supplied
    * up front: a parent that never delegates must not pay for — or warn about —
@@ -185,28 +177,21 @@ interface SubAgentToolOptions {
    * Tool session, see `tool-session.ts`).
    */
   loadTools: () => Promise<Record<string, Tool>>;
-  maxSteps?: number;
+  /**
+   * Everything THIS sub-agent's own (Provider, model) pair resolved to —
+   * model, step ceiling, output ceiling, sampling — via `resolveGenerationPlan`,
+   * the one place that decides it. An Agent generates with the parameters
+   * assigned to it wherever it runs, so a delegated run is tuned exactly as
+   * the same Agent would be on a Chat.
+   */
+  plan: Omit<RunPlan, "system" | "tools">;
   /**
    * Free-text security directives from THIS sub-agent's resolved provider,
    * appended (non-suppressibly) to its instructions. Null/empty → nothing
    * appended. Sub-agents never call renderSystemPrompt, so this is the only
    * path guardrails reach them (ADR-0016).
    */
-  securityGuardrails?: string | null;
-  /**
-   * THIS sub-agent's own sampling parameters, already narrowed to the ones set.
-   * An Agent generates with the parameters assigned to it wherever it runs, so
-   * a delegated run is tuned exactly as the same Agent would be on a Chat.
-   */
-  sampling?: SamplingSettings;
-  /**
-   * The output ceiling THIS sub-agent's model declares, or undefined for none
-   * (issue #454). Not a sampling parameter: it comes off the sub-agent's own
-   * Provider model entry rather than its Agent row, which is why it arrives
-   * separately from `sampling`. Omitted when undefined so the SDK is passed
-   * nothing at all.
-   */
-  maxOutputTokens?: number;
+  guardrails?: string | null;
   /** The parent run this delegate is invoked from, when there is one. */
   parentRun?: ParentRunContext;
 }
@@ -219,7 +204,7 @@ interface SubAgentToolOptions {
  * `RunStats` — and streams an activity log back to the parent, keeping the SSE
  * connection alive and giving users real-time visibility into sub-agent work.
  *
- * @param options Sub-agent configuration including model, tools, and prompts
+ * @param options Sub-agent configuration including its generation plan, tools, and prompts
  * @returns A tool that can be used by the parent agent to delegate tasks
  */
 export const createSubAgentTool = (options: SubAgentToolOptions) => {
@@ -228,12 +213,9 @@ export const createSubAgentTool = (options: SubAgentToolOptions) => {
     name,
     description,
     instructions,
-    model,
     loadTools,
-    maxSteps = DEFAULT_AGENT_MAX_STEPS,
-    securityGuardrails,
-    sampling,
-    maxOutputTokens,
+    plan,
+    guardrails,
     parentRun,
   } = options;
 
@@ -247,24 +229,10 @@ export const createSubAgentTool = (options: SubAgentToolOptions) => {
   const baseInstructions =
     instructions ||
     `You are a specialized sub-agent named "${name}". Complete the task you are given thoroughly and accurately.`;
-  const securityBlock = renderSecurityGuardrails(securityGuardrails);
+  const securityBlock = renderSecurityGuardrails(guardrails);
   const composedInstructions = securityBlock
     ? `${baseInstructions}\n\n${securityBlock}`
     : baseInstructions;
-
-  // A Sub-Agent invocation receives Instructions plus guardrails and nothing
-  // else — no workspace context, no memories, no user identity (ADR-0016). The
-  // exception is expressed here, in what is handed to the shared assembly,
-  // rather than as a mode inside the system-prompt renderer.
-  const plan = {
-    model,
-    system: composedInstructions,
-    maxSteps,
-    // Spread rather than assigned, so an undeclared ceiling leaves the key off
-    // entirely instead of sending `maxOutputTokens: undefined`.
-    ...(maxOutputTokens !== undefined ? { maxOutputTokens } : {}),
-    ...sampling,
-  };
 
   return {
     toolName,
@@ -368,6 +336,12 @@ export const createSubAgentTool = (options: SubAgentToolOptions) => {
               ...buildModelInvocation(
                 {
                   ...plan,
+                  // A Sub-Agent invocation receives Instructions plus
+                  // guardrails and nothing else — no workspace context, no
+                  // memories, no user identity (ADR-0016). The exception is
+                  // expressed here, in what is handed to the shared assembly,
+                  // rather than as a mode inside the system-prompt renderer.
+                  system: composedInstructions,
                   // Wrapped per invocation: the wrapper holds THIS run's
                   // per-step stall timer down for the duration of each tool
                   // call. Results arrive already normalized — the Tool session
@@ -517,6 +491,12 @@ export const createSubAgentTool = (options: SubAgentToolOptions) => {
  */
 export type SubAgentFailure = { id: string; name?: string; reason: string };
 
+/** What `createSubAgentTools` needs resolved for one sub-agent to build its tool. */
+export type SubAgentPlan = {
+  plan: Omit<RunPlan, "system" | "tools">;
+  guardrails: string | null;
+};
+
 /**
  * Creates sub-agent tools for all sub-agents assigned to a parent agent.
  * Each sub-agent becomes its own tool that the parent can call.
@@ -528,38 +508,31 @@ export type SubAgentFailure = { id: string; name?: string; reason: string };
  * building the delegation tools costs no connections. A failure to load them is
  * therefore reported to the parent as a tool error, not as a `failures` entry.
  *
+ * `resolvePlan` is expected to be `(subAgent) => resolveGenerationPlan({ agent:
+ * subAgent }, scope, queries)` — the same resolver the parent turn's own
+ * Agent-or-direct selection goes through (`runs/agent-plan.ts`), so a
+ * delegate's model, step ceiling, output ceiling and sampling can never drift
+ * from what a Chat turn on that same Agent would resolve to (issues #417,
+ * #456, #459). Taken as a callback rather than called directly here so tests
+ * can supply a plan without a real Provider row.
+ *
  * @param subAgents List of sub-agent configurations from the database
- * @param createModelFn Factory function to create a model instance for a sub-agent
+ * @param resolvePlan Resolves one sub-agent to its generation plan and guardrails
  * @param loadToolsFn Async function to load tools for a sub-agent, called lazily
  * @param parentRun The run these delegates will nest inside, when there is one
  * @returns The callable tools keyed by tool name, plus the sub-agents that failed
  */
-export const createSubAgentTools = async (
-  subAgents: Array<
-    {
-      id: string;
-      name: string;
-      description?: string | null;
-      instructions?: string | null;
-      providerId: string;
-      modelId: string;
-      toolSetIds?: string[] | null;
-      maxSteps?: number | null;
-    } & SamplingSource
-  >,
-  createModelFn: (
-    providerId: string,
-    modelId: string,
-  ) => Promise<{
-    model: LanguageModel;
-    securityGuardrails: string | null;
-    /**
-     * The output ceiling the resolved `(Provider, model)` pair declares, if any.
-     * Rides back with the model because resolving it needs the sub-agent's own
-     * Provider row, which only the caller's resolver has (issue #454).
-     */
-    maxOutputTokens?: number;
-  }>,
+export const createSubAgentTools = async <
+  T extends {
+    id: string;
+    name: string;
+    description?: string | null;
+    instructions?: string | null;
+    toolSetIds?: string[] | null;
+  },
+>(
+  subAgents: T[],
+  resolvePlan: (subAgent: T) => Promise<SubAgentPlan>,
   loadToolsFn: (
     subAgentId: string,
     toolSetIds: string[],
@@ -574,10 +547,7 @@ export const createSubAgentTools = async (
 
   for (const subAgent of subAgents) {
     try {
-      // Get the sub-agent's model, its provider's security directives, and
-      // the output ceiling that model declares.
-      const { model, securityGuardrails, maxOutputTokens } =
-        await createModelFn(subAgent.providerId, subAgent.modelId);
+      const { plan, guardrails } = await resolvePlan(subAgent);
 
       // The sub-agent's tools are opened on its first delegation, not here.
       // Memoized so a delegate called twice in one turn resolves them once.
@@ -591,12 +561,9 @@ export const createSubAgentTools = async (
         name: subAgent.name,
         description: subAgent.description || undefined,
         instructions: subAgent.instructions || undefined,
-        model,
         loadTools,
-        maxSteps: subAgent.maxSteps ?? DEFAULT_AGENT_MAX_STEPS,
-        securityGuardrails,
-        sampling: resolveSamplingSettings(subAgent),
-        maxOutputTokens,
+        plan,
+        guardrails,
         parentRun,
       });
 

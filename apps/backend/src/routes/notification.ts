@@ -13,6 +13,8 @@ import {
   requireWorkspaceAccess,
   workspaceScopeOf,
 } from "../middleware/authorization.ts";
+import { requireOwned, deleteOwned } from "../services/workspace-resource.ts";
+import { NotFoundError } from "../errors.ts";
 import type { Variables } from "../server.ts";
 import { dispatchEvent } from "../services/event-dispatch.ts";
 import { avatarKeyToUrl } from "../utils/avatar-url.ts";
@@ -125,20 +127,7 @@ notification.post(
     const { orgId, workspaceId } = workspaceScopeOf(c);
 
     // Verify notification exists in this workspace
-    const existing = await db
-      .select({ id: notificationTable.id })
-      .from(notificationTable)
-      .where(
-        and(
-          eq(notificationTable.id, notificationId),
-          eq(notificationTable.workspaceId, workspaceId),
-        ),
-      )
-      .limit(1);
-
-    if (existing.length === 0) {
-      return c.json({ error: "Notification not found" }, 404);
-    }
+    await requireOwned(db, "notification", notificationId, workspaceId);
 
     await db
       .insert(notificationReadTable)
@@ -216,18 +205,15 @@ notification.delete(
     const notificationId = c.req.param("notificationId");
     const { orgId, workspaceId } = workspaceScopeOf(c);
 
-    const result = await db
-      .delete(notificationTable)
-      .where(
-        and(
-          eq(notificationTable.id, notificationId),
-          eq(notificationTable.workspaceId, workspaceId),
-        ),
-      )
-      .returning();
+    const deleted = await deleteOwned(
+      db,
+      "notification",
+      notificationId,
+      workspaceId,
+    );
 
-    if (result.length === 0) {
-      return c.json({ error: "Notification not found" }, 404);
+    if (!deleted) {
+      throw new NotFoundError("Notification not found");
     }
 
     dispatchEvent(orgId, workspaceId, "notification.dismissed", {

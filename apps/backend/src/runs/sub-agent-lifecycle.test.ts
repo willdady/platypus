@@ -14,6 +14,7 @@ import { wrapToolsWithActivity } from "../services/tool-activity.ts";
 import { createSubAgentTool } from "../tools/sub-agent.ts";
 import { workspaceScope, orgScope, type WorkspaceScope } from "../scope.ts";
 import type { RunStatus } from "./types.ts";
+import { DEFAULT_AGENT_MAX_STEPS } from "@platypus/schemas";
 
 /**
  * A parent turn and the delegate tool it advertises, composed the way
@@ -98,26 +99,29 @@ describe("a delegated run inside a parent run", () => {
     const { toolName, tool } = createSubAgentTool({
       id: "sa-1",
       name: "Slow Agent",
-      model: modelOf(
-        stream(
-          [
-            { type: "tool-input-start", id: "tc1", toolName: "slowWork" },
-            { type: "tool-input-end", id: "tc1" },
-            {
-              type: "tool-call",
-              toolCallId: "tc1",
-              toolName: "slowWork",
-              input: "{}",
-            },
-          ],
-          "tool-calls",
+      plan: {
+        model: modelOf(
+          stream(
+            [
+              { type: "tool-input-start", id: "tc1", toolName: "slowWork" },
+              { type: "tool-input-end", id: "tc1" },
+              {
+                type: "tool-call",
+                toolCallId: "tc1",
+                toolName: "slowWork",
+                input: "{}",
+              },
+            ],
+            "tool-calls",
+          ),
+          stream([
+            { type: "text-start", id: "t1" },
+            { type: "text-delta", id: "t1", delta: "Took a while." },
+            { type: "text-end", id: "t1" },
+          ]),
         ),
-        stream([
-          { type: "text-start", id: "t1" },
-          { type: "text-delta", id: "t1", delta: "Took a while." },
-          { type: "text-end", id: "t1" },
-        ]),
-      ),
+        maxSteps: DEFAULT_AGENT_MAX_STEPS,
+      },
       loadTools: () =>
         Promise.resolve({
           slowWork: {
@@ -177,13 +181,16 @@ describe("a delegated run inside a parent run", () => {
     const { tool } = createSubAgentTool({
       id: "sa-1",
       name: "Quick Agent",
-      model: modelOf(
-        stream([
-          { type: "text-start", id: "t1" },
-          { type: "text-delta", id: "t1", delta: "Done." },
-          { type: "text-end", id: "t1" },
-        ]),
-      ),
+      plan: {
+        model: modelOf(
+          stream([
+            { type: "text-start", id: "t1" },
+            { type: "text-delta", id: "t1", delta: "Done." },
+            { type: "text-end", id: "t1" },
+          ]),
+        ),
+        maxSteps: DEFAULT_AGENT_MAX_STEPS,
+      },
       loadTools: () => Promise.resolve({}),
       parentRun: { runId: "parent", scope: parentScope },
     });

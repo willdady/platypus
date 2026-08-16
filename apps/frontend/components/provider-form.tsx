@@ -566,6 +566,22 @@ const ProviderForm = ({
   const webBackendsKnown =
     !!webBackendsData && !webBackendsError && !webBackendsLoading;
 
+  // A stored "native" on a Provider with no native tool — a backfilled row
+  // (ADR-0014), or one orphaned by a Provider Type / API Mode change made here.
+  // The option is otherwise offered only while `providerHasNativeSearch` holds,
+  // so without this the select points at a value nothing in the list matches.
+  //
+  // Named rather than silently rendered as None, exactly as a stored backend
+  // whose plugin is gone is: coercing the display instead would leave the value
+  // unclearable, because Radix fires no change when the reader picks the option
+  // already showing. The stored value is never rewritten here — `doSubmit` sends
+  // this field on every save, so a save that touched only the name round-trips
+  // it untouched, and it starts working again if the Provider regains a native
+  // tool.
+  const nativeSelectedButUnavailable =
+    formData.searchSource === SEARCH_SOURCE_NATIVE &&
+    !providerHasNativeSearch(formData);
+
   // Start the form over when the reader switches Provider within one mount, so
   // the initialisation flag the effect below reads belongs to the Provider on
   // screen. `useResetOnChange` rather than an effect: it adjusts state during
@@ -597,16 +613,15 @@ const ProviderForm = ({
         organization: provider.organization || "",
         project: provider.project || "",
         apiMode: provider.apiMode ?? "responses",
-        // A row backfilled to "native" (ADR-0014) on a Provider with no
-        // native tool at all — Bedrock, or vLLM on the chat API — is coerced
-        // to "none" here on load only: it would otherwise render the built-in
-        // search option selected on a Provider that doesn't offer it, and
-        // nothing here saves the coercion back.
-        searchSource:
-          provider.searchSource === SEARCH_SOURCE_NATIVE &&
-          !providerHasNativeSearch(provider)
-            ? SEARCH_SOURCE_NONE
-            : (provider.searchSource ?? SEARCH_SOURCE_NATIVE),
+        // Held exactly as stored, including a row backfilled to "native"
+        // (ADR-0014) on a Provider with no native tool at all — Bedrock, or
+        // vLLM on the chat API. Rendering that as the built-in search option
+        // would be wrong, but so is rewriting it: `doSubmit` sends this field
+        // on every save, so coercing here would let a save that touched only
+        // the name silently retire a selection the Operator never edited, and
+        // one that starts working again the moment the Provider regains a
+        // native tool. See `nativeSelectedButUnavailable` for what renders.
+        searchSource: provider.searchSource ?? SEARCH_SOURCE_NATIVE,
         securityGuardrails: provider.securityGuardrails ?? "",
         modelIds: provider.modelIds ? getModelConfigs(provider) : [],
         taskModelId: provider.taskModelId,
@@ -670,24 +685,7 @@ const ProviderForm = ({
     setValidationErrors((prev) => clearFieldError(prev, id));
     setError(null);
 
-    setFormData((prevData) => {
-      const newData = { ...prevData, [id]: value };
-      // Provider Type and API Mode both feed providerHasNativeSearch. A
-      // Provider Type/API Mode change can turn a selected
-      // SEARCH_SOURCE_NATIVE into a value with no matching SelectItem in
-      // the Web search select (that item only renders while
-      // providerHasNativeSearch is true) — coerce it to None rather than
-      // leave the control showing a value nothing in the list matches,
-      // mirroring the coercion already done for a stale stored value on load.
-      if (
-        (id === "providerType" || id === "apiMode") &&
-        newData.searchSource === SEARCH_SOURCE_NATIVE &&
-        !providerHasNativeSearch(newData)
-      ) {
-        newData.searchSource = SEARCH_SOURCE_NONE;
-      }
-      return newData;
-    });
+    setFormData((prevData) => ({ ...prevData, [id]: value }));
   };
 
   // --- Per-model config editing (issue #328) ---
@@ -1346,6 +1344,11 @@ const ProviderForm = ({
                       {providerHasNativeSearch(formData) && (
                         <SelectItem value={SEARCH_SOURCE_NATIVE}>
                           The provider&apos;s built-in search
+                        </SelectItem>
+                      )}
+                      {nativeSelectedButUnavailable && (
+                        <SelectItem value={SEARCH_SOURCE_NATIVE}>
+                          The provider&apos;s built-in search (unavailable here)
                         </SelectItem>
                       )}
                       {availableWebBackends.map((b) => (

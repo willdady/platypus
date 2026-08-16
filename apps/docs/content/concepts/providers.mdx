@@ -154,13 +154,18 @@ Bedrock.
   Fetch** Tool set, a backend's reader ignores `robots.txt`.
 </Callout>
 
-Two things the field tells you about a backend selection:
+Three things the field tells you about a selection:
 
 - **A selection whose plugin is gone** stays in the list, marked **(not
   installed)**, rather than quietly reading as None — so you can see what the
   Provider points at and change it. Such a selection runs no search.
 - **Platypus couldn't load the installed backends** — the field says so and
   leaves your stored selection alone; the list may be missing entries.
+- **The provider's built-in search, on a Provider that has none** — Bedrock, or
+  OpenAI on the Completions API — is marked **(unavailable here)**. It runs no
+  search, but the selection is kept rather than rewritten: switch that Provider
+  to a type or API mode that does have built-in search and it applies again. To
+  retire it instead, pick something else yourself.
 
 Results are cited the same way whichever search ran: the pages used appear as
 **Sources** under the reply. Adding a backend to a deployment is an Operator task

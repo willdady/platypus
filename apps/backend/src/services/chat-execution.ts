@@ -20,7 +20,6 @@ import {
   type SubAgentFailure,
 } from "../tools/sub-agent.ts";
 import { normalizeToolResult } from "./tool-result.ts";
-import { resolveSamplingSettings } from "./sampling-settings.ts";
 import {
   renderSystemPrompt,
   type SystemPromptContext,
@@ -30,8 +29,6 @@ import {
   type MemorySummary,
 } from "./memory-retrieval.ts";
 import {
-  aliasNameFromReference,
-  DEFAULT_AGENT_MAX_STEPS,
   providerHasNativeSearch,
   SEARCH_SOURCE_NATIVE,
   SEARCH_SOURCE_NONE,
@@ -41,14 +38,12 @@ import {
   getWebBackend,
   type WebBackendContext,
 } from "../web-backends/index.ts";
-import type { LanguageModel, Tool } from "ai";
+import type { Tool } from "ai";
 import { logger } from "../logger.ts";
 import { inlineFileUrls } from "../storage/utils.ts";
 import {
   maxExtractedTextCharsForModel,
-  maxOutputTokensForModel,
   passthroughFileTypesForModel,
-  resolveModelId,
 } from "./model-capability.ts";
 import {
   assertFilePartsSupported,
@@ -61,32 +56,17 @@ import {
   wrapToolsWithActivity,
   type ToolActivityEvent,
 } from "./tool-activity.ts";
-import type { ParentRunContext } from "../runs/types.ts";
-
-// --- Errors ---
-
-/**
- * Thrown when the caller's request is malformed or references resources in an
- * inconsistent way (e.g. a model id not enabled on the chosen provider).
- * The route maps this to a 400 response.
- */
-export class ValidationError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = "ValidationError";
-  }
-}
-
-/**
- * Thrown when a referenced record does not exist (Agent, Provider, Workspace).
- * The route maps this to a 404 response.
- */
-export class NotFoundError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = "NotFoundError";
-  }
-}
+import type {
+  ParentRunContext,
+  ChatTurnRequest,
+  ResolvedGeneration,
+} from "../runs/types.ts";
+import {
+  resolveGenerationPlan,
+  type GenerationSource,
+} from "../runs/agent-plan.ts";
+import type { RunPlan } from "../runs/run-plan.ts";
+import { NotFoundError, ValidationError } from "../errors.ts";
 
 // --- Types ---
 
@@ -108,74 +88,29 @@ type ChatContext = {
   resolvedModelId: ConcreteModelId;
   resolvedProviderId: string;
   resolvedAgentId?: string;
-  resolvedMaxSteps: number;
-};
-
-type GenerationConfig = {
-  systemPrompt?: string;
-  temperature?: number;
-  topP?: number;
-  topK?: number;
-  frequencyPenalty?: number;
-  presencePenalty?: number;
-  seed?: number;
-  skills?: Array<Pick<Skill, "name" | "description">>;
+  /**
+   * Everything `resolveGenerationPlan` decided this turn generates under —
+   * model, step ceiling, output ceiling, sampling — assembled once so a Chat
+   * turn and a delegated sub-Agent can never resolve it differently (issues
+   * #417, #456, #459).
+   */
+  plan: Omit<RunPlan, "system" | "tools">;
+  /** The resolved Provider's free-text security directives, or null. */
+  guardrails: string | null;
 };
 
 /**
  * The slim request shape `prepareChatTurn` actually consumes: agent/provider
- * selection plus generation overrides. Distinct from `@platypus/schemas`'
- * `ChatSubmitData` (the HTTP payload, which also carries id/workspaceId/
- * messages) — those arrive as separate `PrepareChatTurnInput` fields.
+ * selection plus generation overrides. Re-exported so this module's existing
+ * callers keep resolving it from here. Lives in `runs/types.ts` — not here —
+ * so `runs/` never imports a type from `services/` (see `RunInput`, which
+ * also carries this shape).
  */
-export type ChatTurnRequest = {
-  agentId?: string;
-  providerId?: string;
-  modelId?: string;
-  search?: boolean;
-  instructions?: string;
-  temperature?: number;
-  topP?: number;
-  topK?: number;
-  seed?: number;
-  presencePenalty?: number;
-  frequencyPenalty?: number;
-};
+export type { ChatTurnRequest };
 
 export type ChatTurn = {
-  stream: {
-    model: LanguageModel;
-    tools: Record<string, Tool>;
-    system: string;
-    messages: PlatypusUIMessage[];
-    maxSteps: number;
-    /**
-     * The Provider's declared output ceiling for the model in use, or undefined
-     * when it declares none (issue #454). A property of the (Provider, model)
-     * pair rather than of the Agent or the request, unlike the sampling params
-     * below — which is why it is never mirrored into `resolved` and never
-     * persisted onto the Chat row.
-     */
-    maxOutputTokens?: number;
-    temperature?: number;
-    topP?: number;
-    topK?: number;
-    frequencyPenalty?: number;
-    presencePenalty?: number;
-    seed?: number;
-  };
-  resolved: {
-    agentId?: string;
-    providerId: string;
-    modelId: string;
-    instructions?: string;
-    temperature?: number;
-    topP?: number;
-    topK?: number;
-    frequencyPenalty?: number;
-    presencePenalty?: number;
-    seed?: number;
-  };
+  stream: RunPlan & { messages: PlatypusUIMessage[] };
+  resolved: ResolvedGeneration;
   dispose: () => Promise<void>;
 };
 
@@ -546,10 +481,12 @@ export const prepareChatTurn = async (
     orgId,
     workspaceId,
   );
-  const { provider, agent, resolvedModelId, resolvedMaxSteps } = context;
+  const { provider, agent, resolvedModelId } = context;
 
+  // Opened again here (resolveGenerationPlan already opened it once, to build
+  // `context.plan.model`) only for its native search tools — a concern the
+  // generation plan itself has no reason to know about.
   const opened = openProvider(provider);
-  const model = opened.languageModel(resolvedModelId);
 
   // Where this turn runs, shared by the Agent and every delegate it may reach.
   const scope: ToolSessionScope = {
@@ -610,11 +547,11 @@ export const prepareChatTurn = async (
     sandboxEnvKeys,
     fallbackInstructions: request.instructions,
     runMode,
-    securityGuardrails: provider.securityGuardrails,
+    securityGuardrails: context.guardrails,
     organizationIdentityContext: organization?.identityContext,
   };
 
-  const generation = resolveGenerationConfig(request, agent, promptCtx);
+  const systemPrompt = renderSystemPrompt(promptCtx);
 
   if (skills.length > 0) {
     tools.loadSkill = createLoadSkillTool(orgId, workspaceId);
@@ -652,22 +589,12 @@ export const prepareChatTurn = async (
     },
   );
 
-  const systemPrompt = generation.systemPrompt!;
-
   return {
     stream: {
-      model,
+      ...context.plan,
       tools: wrappedTools,
       system: systemPrompt,
       messages: inlinedMessages,
-      maxSteps: resolvedMaxSteps,
-      maxOutputTokens: maxOutputTokensForModel(provider, resolvedModelId),
-      temperature: generation.temperature,
-      topP: generation.topP,
-      topK: generation.topK,
-      frequencyPenalty: generation.frequencyPenalty,
-      presencePenalty: generation.presencePenalty,
-      seed: generation.seed,
     },
     resolved: {
       agentId: context.resolvedAgentId,
@@ -685,12 +612,12 @@ export const prepareChatTurn = async (
       // (issue #365). What the model receives is unaffected; `stream.system`
       // still carries the composite.
       instructions: agent ? undefined : request.instructions,
-      temperature: agent ? undefined : generation.temperature,
-      topP: agent ? undefined : generation.topP,
-      topK: agent ? undefined : generation.topK,
-      frequencyPenalty: agent ? undefined : generation.frequencyPenalty,
-      presencePenalty: agent ? undefined : generation.presencePenalty,
-      seed: agent ? undefined : generation.seed,
+      temperature: agent ? undefined : context.plan.temperature,
+      topP: agent ? undefined : context.plan.topP,
+      topK: agent ? undefined : context.plan.topK,
+      frequencyPenalty: agent ? undefined : context.plan.frequencyPenalty,
+      presencePenalty: agent ? undefined : context.plan.presencePenalty,
+      seed: agent ? undefined : context.plan.seed,
     },
     // The session closes what it opened, delegates' nested sessions included —
     // the caller no longer reconciles two lists of clients to get there.
@@ -704,8 +631,8 @@ export const prepareChatTurn = async (
  * if any attached file (fresh upload or history) is neither natively accepted,
  * text-like, nor a document extraction can convert to text (#342 — a freshly
  * uploaded document is extracted here to prove it, so a scanned PDF is refused
- * before it can enter history). Throws `FileValidationError`, which the chat
- * route maps to a 400 naming the offending file(s).
+ * before it can enter history). Throws `FileValidationError`, which the
+ * central `onError` (ADR-0010) maps to a 400 naming the offending file(s).
  *
  * A no-op when the turn carries no file parts (the common case, including all
  * headless runs), so it adds no lookups there. If model resolution itself fails
@@ -754,19 +681,12 @@ export { normalizeToolResult };
 export { wrapToolsWithActivity, type ToolActivityEvent };
 
 /**
- * Why a model reference resolved to nothing, said in the caller's terms: a
- * dangling alias and a dangling concrete id are different mistakes to fix.
+ * Resolves the Agent-or-direct selection down to a `GenerationSource`
+ * (`resolveGenerationPlan`'s input), fetching the Agent row when `agentId` is
+ * given. The one place that decides whether THIS turn's fields — not an
+ * Agent's — feed the plan; the plan resolution itself is shared with every
+ * sub-Agent delegation (`loadSubAgents` below).
  */
-const unresolvedModelMessage = (
-  reference: string,
-  providerId: string,
-): string => {
-  const aliasName = aliasNameFromReference(reference);
-  return aliasName === null
-    ? `Model id '${reference}' not enabled for provider '${providerId}'`
-    : `Model alias '${aliasName}' is not defined on provider '${providerId}'`;
-};
-
 const resolveChatContext = async (
   queries: ChatTurnQueries,
   data: ChatTurnRequest,
@@ -775,75 +695,48 @@ const resolveChatContext = async (
 ): Promise<ChatContext> => {
   const { agentId, providerId, modelId } = data;
 
-  let resolvedProviderId: string;
-  // The reference AS STORED — a concrete id, or `alias:<name>` (ADR-0017).
-  let modelReference: string;
   let resolvedAgentId: string | undefined;
-  let resolvedMaxSteps = 1;
   let agent: AgentRow | undefined;
+  let source: GenerationSource;
 
   if (agentId) {
     resolvedAgentId = agentId;
     const found = await queries.getAgent(agentId, orgId, workspaceId);
     if (!found) throw new NotFoundError(`Agent '${agentId}' not found`);
     agent = found;
-    resolvedProviderId = agent.providerId;
-    modelReference = agent.modelId;
-    resolvedMaxSteps = agent.maxSteps ?? DEFAULT_AGENT_MAX_STEPS;
+    source = { agent: found };
   } else if (providerId && modelId) {
-    resolvedProviderId = providerId;
-    modelReference = modelId;
-    resolvedAgentId = undefined;
+    source = {
+      providerId,
+      modelId,
+      temperature: data.temperature,
+      topP: data.topP,
+      topK: data.topK,
+      seed: data.seed,
+      presencePenalty: data.presencePenalty,
+      frequencyPenalty: data.frequencyPenalty,
+    };
   } else {
     throw new ValidationError(
       "Must provide either agentId or (providerId and modelId)",
     );
   }
 
-  const provider = await queries.getProvider(
-    resolvedProviderId,
-    orgId,
-    workspaceId,
-  );
-  if (!provider) {
-    throw new NotFoundError(
-      `Provider with id '${resolvedProviderId}' not found`,
-    );
-  }
-
-  // Aliases re-resolve on EVERY turn — no pinning — so repointing an alias
-  // moves every Agent and Chat using it on their next turn. A reference that
-  // matches nothing is a hard error, never a fallback to some other model.
-  const resolvedModelId = resolveModelId(provider, modelReference);
-  if (!resolvedModelId) {
-    throw new ValidationError(
-      unresolvedModelMessage(modelReference, resolvedProviderId),
-    );
-  }
+  const { plan, provider, resolvedModelId, modelReference, guardrails } =
+    await resolveGenerationPlan(source, { orgId, workspaceId }, queries);
 
   return {
     provider,
     agent,
     modelReference,
     resolvedModelId,
-    resolvedProviderId,
+    // The Provider `resolveGenerationPlan` resolved IS the one named by the
+    // Agent or the direct selection above — its own id is simplest to read.
+    resolvedProviderId: provider.id,
     resolvedAgentId,
-    resolvedMaxSteps,
+    plan,
+    guardrails,
   };
-};
-
-const resolveGenerationConfig = (
-  data: ChatTurnRequest,
-  agent: AgentRow | undefined,
-  promptCtx: SystemPromptContext,
-): GenerationConfig => {
-  // `seed` is resolved from the same source as the other five. It used to be
-  // read straight off the request instead, so an Agent's stored Seed was
-  // silently ignored on every Agent-driven turn.
-  const config: GenerationConfig = resolveSamplingSettings(agent || data);
-
-  config.systemPrompt = renderSystemPrompt(promptCtx);
-  return config;
 };
 
 const loadSkills = async (
@@ -901,36 +794,16 @@ const loadSubAgents = async (
 
   const { tools: subAgentTools, failures } = await createSubAgentTools(
     subAgentRecords,
-    async (providerId: string, modelId: string) => {
-      const subProvider = await queries.getProvider(
-        providerId,
-        orgId,
-        workspaceId,
-      );
-      if (!subProvider) {
-        throw new Error(`Provider '${providerId}' not found for sub-agent`);
-      }
-      // A sub-Agent is an Agent row, so its `modelId` may hold an alias
-      // reference and needs the same resolution the parent turn gets — this
-      // path never goes through `resolveChatContext`.
-      const subModelId = resolveModelId(subProvider, modelId);
-      if (!subModelId) {
-        throw new Error(
-          `${unresolvedModelMessage(modelId, providerId)} (sub-agent)`,
-        );
-      }
-      // Each sub-agent gets its OWN resolved provider's security text appended
-      // to its instructions (not the parent's, not the org identity) — the one
-      // path sub-agents have to the guardrails, since they never call
-      // renderSystemPrompt.
-      return {
-        model: openProvider(subProvider).languageModel(subModelId),
-        securityGuardrails: subProvider.securityGuardrails ?? null,
-        // Read off the sub-agent's OWN Provider, not the parent's: a delegated
-        // run is a run on that model and truncates at its ceiling (issue #454).
-        maxOutputTokens: maxOutputTokensForModel(subProvider, subModelId),
-      };
-    },
+    // A sub-Agent's plan is resolved the same way the parent turn's is —
+    // through `resolveGenerationPlan`, not a second copy of model/ceiling/
+    // sampling resolution (this path used to say, in so many words, that it
+    // never went through `resolveChatContext`).
+    (subAgent) =>
+      resolveGenerationPlan(
+        { agent: subAgent },
+        { orgId, workspaceId },
+        queries,
+      ),
     // Called on a delegate's FIRST invocation, not now: a parent with three
     // MCP-backed delegates used to open — and warn about — every one of their
     // servers on every Chat turn, whether or not it delegated. The nested

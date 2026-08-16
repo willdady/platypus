@@ -73,9 +73,11 @@ const rejectionSentence = (
 /**
  * Thrown when an outgoing turn carries a file the target model can't be sent:
  * not ingestible natively, not inlinable as text, and not convertible by
- * extraction. The route maps it to a 400 with a message naming the offending
- * file(s). A standalone error (not a subclass of chat-execution's
- * `ValidationError`) to avoid an import cycle — callers match on it explicitly.
+ * extraction. Mapped by the central `onError` (ADR-0010) to a 400 carrying
+ * `files`. Defined here rather than in `errors.ts` because its constructor
+ * groups `FileRejection`s (a file-domain type) into the message — `errors.ts`
+ * imports this class for `mapError`, not the other way around, so there is no
+ * cycle to avoid.
  */
 export class FileValidationError extends Error {
   /** Offending filenames, in the order they appear in the message list. */

@@ -19,6 +19,16 @@ import {
   requireWorkspaceAccess,
   workspaceScopeOf,
 } from "../middleware/authorization.ts";
+import {
+  requireOwned,
+  listOwned,
+  updateOwned,
+  deleteOwned,
+  requireOwnedWidget,
+  listOwnedWidgets,
+  updateOwnedWidget,
+  deleteOwnedWidget,
+} from "../services/workspace-resource.ts";
 import type { Variables } from "../server.ts";
 
 const dashboard = new Hono<{ Variables: Variables }>();
@@ -32,11 +42,12 @@ dashboard.get(
   requireWorkspaceAccess,
   async (c) => {
     const { workspaceId } = workspaceScopeOf(c);
-    const results = await db
-      .select()
-      .from(dashboardTable)
-      .where(eq(dashboardTable.workspaceId, workspaceId))
-      .orderBy(asc(dashboardTable.createdAt));
+    const results = await listOwned(
+      db,
+      "dashboard",
+      workspaceId,
+      asc(dashboardTable.createdAt),
+    );
     return c.json({ results });
   },
 );
@@ -94,15 +105,13 @@ dashboard.get(
   async (c) => {
     const dashboardId = c.req.param("dashboardId");
     const { workspaceId } = workspaceScopeOf(c);
-    const record = await db
-      .select()
-      .from(dashboardTable)
-      .where(eq(dashboardTable.id, dashboardId))
-      .limit(1);
-    if (!record.length || record[0].workspaceId !== workspaceId) {
-      return c.json({ error: "Dashboard not found" }, 404);
-    }
-    return c.json(record[0]);
+    const record = await requireOwned(
+      db,
+      "dashboard",
+      dashboardId,
+      workspaceId,
+    );
+    return c.json(record);
   },
 );
 
@@ -116,19 +125,13 @@ dashboard.put(
     const data = c.req.valid("json");
     const dashboardId = c.req.param("dashboardId");
     const { workspaceId } = workspaceScopeOf(c);
-    const existing = await db
-      .select({
-        id: dashboardTable.id,
-        workspaceId: dashboardTable.workspaceId,
-        name: dashboardTable.name,
-      })
-      .from(dashboardTable)
-      .where(eq(dashboardTable.id, dashboardId))
-      .limit(1);
-    if (!existing.length || existing[0].workspaceId !== workspaceId) {
-      return c.json({ error: "Dashboard not found" }, 404);
-    }
-    if (data.name && data.name !== existing[0].name) {
+    const existing = await requireOwned(
+      db,
+      "dashboard",
+      dashboardId,
+      workspaceId,
+    );
+    if (data.name && data.name !== existing.name) {
       const conflict = await db
         .select({ id: dashboardTable.id })
         .from(dashboardTable)
@@ -149,12 +152,17 @@ dashboard.put(
         );
       }
     }
-    const updated = await db
-      .update(dashboardTable)
-      .set({ ...data, updatedAt: new Date() })
-      .where(eq(dashboardTable.id, dashboardId))
-      .returning();
-    return c.json(updated[0]);
+    const updated = await updateOwned(
+      db,
+      "dashboard",
+      dashboardId,
+      workspaceId,
+      {
+        ...data,
+        updatedAt: new Date(),
+      },
+    );
+    return c.json(updated);
   },
 );
 
@@ -166,18 +174,8 @@ dashboard.delete(
   async (c) => {
     const dashboardId = c.req.param("dashboardId");
     const { workspaceId } = workspaceScopeOf(c);
-    const existing = await db
-      .select({
-        id: dashboardTable.id,
-        workspaceId: dashboardTable.workspaceId,
-      })
-      .from(dashboardTable)
-      .where(eq(dashboardTable.id, dashboardId))
-      .limit(1);
-    if (!existing.length || existing[0].workspaceId !== workspaceId) {
-      return c.json({ error: "Dashboard not found" }, 404);
-    }
-    await db.delete(dashboardTable).where(eq(dashboardTable.id, dashboardId));
+    await requireOwned(db, "dashboard", dashboardId, workspaceId);
+    await deleteOwned(db, "dashboard", dashboardId, workspaceId);
     return c.body(null, 204);
   },
 );
@@ -192,22 +190,12 @@ dashboard.get(
   async (c) => {
     const dashboardId = c.req.param("dashboardId");
     const { workspaceId } = workspaceScopeOf(c);
-    const dash = await db
-      .select({
-        id: dashboardTable.id,
-        workspaceId: dashboardTable.workspaceId,
-      })
-      .from(dashboardTable)
-      .where(eq(dashboardTable.id, dashboardId))
-      .limit(1);
-    if (!dash.length || dash[0].workspaceId !== workspaceId) {
-      return c.json({ error: "Dashboard not found" }, 404);
-    }
-    const results = await db
-      .select()
-      .from(widgetTable)
-      .where(eq(widgetTable.dashboardId, dashboardId))
-      .orderBy(asc(widgetTable.createdAt));
+    await requireOwned(db, "dashboard", dashboardId, workspaceId);
+    const results = await listOwnedWidgets(
+      db,
+      dashboardId,
+      asc(widgetTable.createdAt),
+    );
     return c.json({ results });
   },
 );
@@ -222,17 +210,7 @@ dashboard.post(
     const data = c.req.valid("json");
     const dashboardId = c.req.param("dashboardId");
     const { workspaceId } = workspaceScopeOf(c);
-    const dash = await db
-      .select({
-        id: dashboardTable.id,
-        workspaceId: dashboardTable.workspaceId,
-      })
-      .from(dashboardTable)
-      .where(eq(dashboardTable.id, dashboardId))
-      .limit(1);
-    if (!dash.length || dash[0].workspaceId !== workspaceId) {
-      return c.json({ error: "Dashboard not found" }, 404);
-    }
+    await requireOwned(db, "dashboard", dashboardId, workspaceId);
     const conflict = await db
       .select({ id: widgetTable.id })
       .from(widgetTable)
@@ -277,30 +255,9 @@ dashboard.put(
     const dashboardId = c.req.param("dashboardId");
     const widgetId = c.req.param("widgetId");
     const { workspaceId } = workspaceScopeOf(c);
-    const dash = await db
-      .select({
-        id: dashboardTable.id,
-        workspaceId: dashboardTable.workspaceId,
-      })
-      .from(dashboardTable)
-      .where(eq(dashboardTable.id, dashboardId))
-      .limit(1);
-    if (!dash.length || dash[0].workspaceId !== workspaceId) {
-      return c.json({ error: "Dashboard not found" }, 404);
-    }
-    const existing = await db
-      .select({
-        id: widgetTable.id,
-        dashboardId: widgetTable.dashboardId,
-        type: widgetTable.type,
-      })
-      .from(widgetTable)
-      .where(eq(widgetTable.id, widgetId))
-      .limit(1);
-    if (!existing.length || existing[0].dashboardId !== dashboardId) {
-      return c.json({ error: "Widget not found" }, 404);
-    }
-    if (existing[0].type !== body.type) {
+    await requireOwned(db, "dashboard", dashboardId, workspaceId);
+    const existing = await requireOwnedWidget(db, widgetId, dashboardId);
+    if (existing.type !== body.type) {
       return c.json({ error: "Widget type mismatch" }, 400);
     }
     if (body.title) {
@@ -324,16 +281,12 @@ dashboard.put(
         );
       }
     }
-    const updated = await db
-      .update(widgetTable)
-      .set({
-        data: body.data,
-        ...(body.title && { title: body.title }),
-        updatedAt: new Date(),
-      })
-      .where(eq(widgetTable.id, widgetId))
-      .returning();
-    return c.json(updated[0]);
+    const updated = await updateOwnedWidget(db, widgetId, dashboardId, {
+      data: body.data,
+      ...(body.title && { title: body.title }),
+      updatedAt: new Date(),
+    });
+    return c.json(updated);
   },
 );
 
@@ -346,26 +299,9 @@ dashboard.delete(
     const dashboardId = c.req.param("dashboardId");
     const widgetId = c.req.param("widgetId");
     const { workspaceId } = workspaceScopeOf(c);
-    const dash = await db
-      .select({
-        id: dashboardTable.id,
-        workspaceId: dashboardTable.workspaceId,
-      })
-      .from(dashboardTable)
-      .where(eq(dashboardTable.id, dashboardId))
-      .limit(1);
-    if (!dash.length || dash[0].workspaceId !== workspaceId) {
-      return c.json({ error: "Dashboard not found" }, 404);
-    }
-    const existing = await db
-      .select({ id: widgetTable.id, dashboardId: widgetTable.dashboardId })
-      .from(widgetTable)
-      .where(eq(widgetTable.id, widgetId))
-      .limit(1);
-    if (!existing.length || existing[0].dashboardId !== dashboardId) {
-      return c.json({ error: "Widget not found" }, 404);
-    }
-    await db.delete(widgetTable).where(eq(widgetTable.id, widgetId));
+    await requireOwned(db, "dashboard", dashboardId, workspaceId);
+    await requireOwnedWidget(db, widgetId, dashboardId);
+    await deleteOwnedWidget(db, widgetId, dashboardId);
     return c.body(null, 204);
   },
 );

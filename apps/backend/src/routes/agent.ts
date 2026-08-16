@@ -8,7 +8,6 @@ import {
 } from "../db/schema.ts";
 import { agentCreateSchema, agentUpdateSchema } from "@platypus/schemas";
 import { eq, and } from "drizzle-orm";
-import { dedupeArray } from "../utils.ts";
 import { requireAuth } from "../middleware/authentication.ts";
 import {
   requireOrgAccess,
@@ -16,7 +15,11 @@ import {
   workspaceScopeOf,
 } from "../middleware/authorization.ts";
 import type { Variables } from "../server.ts";
-import { validateSubAgentAssignment } from "../services/sub-agent-validation.ts";
+import {
+  createAgent as createAgentRow,
+  updateAgent as updateAgentRow,
+  deleteAgent as deleteAgentRow,
+} from "../services/agent.ts";
 import { findNonSharedReferences } from "../services/agent-scope-validation.ts";
 import {
   listScoped,
@@ -49,44 +52,13 @@ agent.post(
   async (c) => {
     const data = c.req.valid("json");
     const scope = workspaceScopeOf(c);
-
-    // Deduplicate arrays
-    if (data.toolSetIds) {
-      data.toolSetIds = dedupeArray(data.toolSetIds);
-    }
-    if (data.skillIds) {
-      data.skillIds = dedupeArray(data.skillIds);
-    }
-    if (data.subAgentIds) {
-      data.subAgentIds = dedupeArray(data.subAgentIds);
-    }
-
-    // Validate sub-agent assignments
-    if (data.subAgentIds && data.subAgentIds.length > 0) {
-      const validation = await validateSubAgentAssignment(
-        scope,
-        "", // No ID yet for new agent
-        data.subAgentIds,
-      );
-      if (!validation.valid) {
-        return c.json({ error: validation.error }, 400);
-      }
-    }
-
     const baseUrl = getOrigin(c);
-    // The workspace route only ever creates Workspace-scoped Agents; the scope
-    // comes from the route, never the body (org-scoped Agents arrive via
-    // Promote).
-    const record = await db
-      .insert(agentTable)
-      .values({
-        id: nanoid(),
-        ...data,
-        workspaceId: scope.workspaceId,
-        organizationId: null,
-      })
-      .returning();
-    return c.json(agentWithAvatarUrl(record[0], baseUrl), 201);
+
+    const result = await createAgentRow(scope, data);
+    if ("error" in result) {
+      return c.json({ error: result.error }, 400);
+    }
+    return c.json(agentWithAvatarUrl(result.row, baseUrl), 201);
   },
 );
 
@@ -142,51 +114,16 @@ agent.put(
     const agentId = c.req.param("agentId");
     const data = c.req.valid("json");
     const scope = workspaceScopeOf(c);
-
-    // Deduplicate arrays
-    if (data.toolSetIds) {
-      data.toolSetIds = dedupeArray(data.toolSetIds);
-    }
-    if (data.skillIds) {
-      data.skillIds = dedupeArray(data.skillIds);
-    }
-    if (data.subAgentIds) {
-      data.subAgentIds = dedupeArray(data.subAgentIds);
-    }
-
-    // A Shared Agent is a single source of truth edited only on the Organization
-    // surface (ADR-0007); requireWorkspaceMutable throws NotFound (→404) when the
-    // Agent is not visible here, then Locked (→403) when it is org-scoped.
-    await requireWorkspaceMutable(db, "agent", agentId, scope);
-
     const baseUrl = getOrigin(c);
 
-    // Workspace-scoped update.
-    if (data.subAgentIds) {
-      const validation = await validateSubAgentAssignment(
-        scope,
-        agentId,
-        data.subAgentIds,
-      );
-      if (!validation.valid) {
-        return c.json({ error: validation.error }, 400);
-      }
+    // A Shared Agent is a single source of truth edited only on the Organization
+    // surface (ADR-0007); `updateAgentRow` throws NotFound (→404) when the
+    // Agent is not visible here, then Locked (→403) when it is org-scoped.
+    const result = await updateAgentRow(scope, agentId, data);
+    if ("error" in result) {
+      return c.json({ error: result.error }, 400);
     }
-
-    const record = await db
-      .update(agentTable)
-      .set({
-        ...data,
-        updatedAt: new Date(),
-      })
-      .where(
-        and(
-          eq(agentTable.id, agentId),
-          eq(agentTable.workspaceId, scope.workspaceId),
-        ),
-      )
-      .returning();
-    return c.json(agentWithAvatarUrl(record[0], baseUrl), 200);
+    return c.json(agentWithAvatarUrl(result.row, baseUrl), 200);
   },
 );
 
@@ -271,20 +208,10 @@ agent.delete(
     const scope = workspaceScopeOf(c);
 
     // A Shared Agent is deleted only from the Organization surface (ADR-0007):
-    // requireWorkspaceMutable throws NotFound (→404) when the Agent is not
-    // visible here, then Locked (→403) when it is org-scoped.
-    const found = await requireWorkspaceMutable(db, "agent", agentId, scope);
+    // `deleteAgentRow` throws NotFound (→404) when the Agent is not visible
+    // here, then Locked (→403) when it is org-scoped.
+    await deleteAgentRow(scope, agentId);
 
-    await deleteAvatar(found.row.avatarKey);
-
-    await db
-      .delete(agentTable)
-      .where(
-        and(
-          eq(agentTable.id, agentId),
-          eq(agentTable.workspaceId, scope.workspaceId),
-        ),
-      );
     return c.json({ message: "Agent deleted" });
   },
 );

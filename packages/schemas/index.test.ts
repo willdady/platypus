@@ -430,57 +430,22 @@ describe("Provider Create Schema", () => {
     ).toBe(false);
   });
 
-  describe("legacy nativeSearchEnabled / webBackend back-compat", () => {
-    // A one-release window (ADR-0014) for an API caller still `PUT`/`POST`ing
-    // the pre-collapse shape. Mirrors the exact precedence
-    // `resolveSearchMode` used to encode inline.
-    it("maps nativeSearchEnabled: false to searchSource: none, even with a webBackend set", () => {
-      const result = providerCreateSchema.safeParse({
-        ...baseProvider,
-        nativeSearchEnabled: false,
-        webBackend: "acme.searx",
-      });
-      expect(result.success).toBe(true);
-      if (result.success) {
-        expect(result.data.searchSource).toBe(SEARCH_SOURCE_NONE);
-      }
+  // The pre-collapse `nativeSearchEnabled` / `webBackend` pair is gone from the
+  // request shape entirely, not aliased onto `searchSource`: the Provider API is
+  // reachable only with a session cookie, so its one writer is the Provider form
+  // shipped alongside it, and that always sends `searchSource`.
+  it("ignores the pre-collapse search fields rather than mapping them", () => {
+    const result = providerCreateSchema.safeParse({
+      ...baseProvider,
+      nativeSearchEnabled: false,
+      webBackend: "acme.searx",
     });
-
-    it("maps a set webBackend to searchSource when native search is left on", () => {
-      const result = providerCreateSchema.safeParse({
-        ...baseProvider,
-        nativeSearchEnabled: true,
-        webBackend: "acme.searx",
-      });
-      expect(result.success).toBe(true);
-      if (result.success) {
-        expect(result.data.searchSource).toBe("acme.searx");
-      }
-    });
-
-    it("maps nativeSearchEnabled: true with no webBackend to native", () => {
-      const result = providerCreateSchema.safeParse({
-        ...baseProvider,
-        nativeSearchEnabled: true,
-      });
-      expect(result.success).toBe(true);
-      if (result.success) {
-        expect(result.data.searchSource).toBe(SEARCH_SOURCE_NATIVE);
-      }
-    });
-
-    it("leaves searchSource untouched when the caller sends both", () => {
-      const result = providerCreateSchema.safeParse({
-        ...baseProvider,
-        nativeSearchEnabled: false,
-        webBackend: "acme.searx",
-        searchSource: "explicit.searx",
-      });
-      expect(result.success).toBe(true);
-      if (result.success) {
-        expect(result.data.searchSource).toBe("explicit.searx");
-      }
-    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.searchSource).toBe(SEARCH_SOURCE_NATIVE);
+      expect(result.data).not.toHaveProperty("nativeSearchEnabled");
+      expect(result.data).not.toHaveProperty("webBackend");
+    }
   });
 });
 

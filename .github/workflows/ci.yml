@@ -11,6 +11,9 @@ on:
 permissions:
   contents: read
 
+env:
+  TURBO_TELEMETRY_DISABLED: "1"
+
 # Cancel superseded runs for the same ref (e.g. a new push to a PR branch).
 concurrency:
   group: ci-${{ github.ref }}

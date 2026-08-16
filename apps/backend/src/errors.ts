@@ -1,4 +1,5 @@
 import type { ContentfulStatusCode } from "hono/utils/http-status";
+import { FileValidationError } from "./services/file-gate.ts";
 
 /**
  * Typed domain errors raised by services and route handlers for the three
@@ -84,7 +85,11 @@ export const isUniqueViolation = (error: unknown): boolean => {
  */
 export const mapError = (
   error: unknown,
-): { status: ContentfulStatusCode; message: string } | null => {
+): {
+  status: ContentfulStatusCode;
+  message: string;
+  files?: string[];
+} | null => {
   if (error instanceof NotFoundError)
     return { status: 404, message: error.message };
   if (error instanceof LockedError)
@@ -93,6 +98,8 @@ export const mapError = (
     return { status: 409, message: error.message };
   if (error instanceof ValidationError)
     return { status: 400, message: error.message };
+  if (error instanceof FileValidationError)
+    return { status: 400, message: error.message, files: error.files };
   if (isUniqueViolation(error))
     return { status: 409, message: "A resource with that name already exists" };
   return null;

@@ -1,9 +1,34 @@
 import type { PlatypusUIMessage } from "../types.ts";
-import type { ChatTurnRequest, ChatTurn } from "../services/chat-execution.ts";
 import type { WorkspaceScope } from "../scope.ts";
 import type { RunTimeouts } from "./run-registry.ts";
 
 export type RunId = string;
+
+/**
+ * The slim request shape a run resolves its generation plan from: agent/
+ * provider selection plus generation overrides. Distinct from
+ * `@platypus/schemas`' `ChatSubmitData` (the HTTP payload, which also carries
+ * id/workspaceId/messages) — those arrive as separate fields on `RunInput` /
+ * `PrepareChatTurnInput`.
+ *
+ * Lives here rather than in `services/chat-execution.ts` so `runs/` never
+ * imports a type from `services/` — the reverse dependency (`chat-execution.ts`
+ * imports `ChatTurnRequest` from here) is what keeps this module and its
+ * caller from cycling.
+ */
+export type ChatTurnRequest = {
+  agentId?: string;
+  providerId?: string;
+  modelId?: string;
+  search?: boolean;
+  instructions?: string;
+  temperature?: number;
+  topP?: number;
+  topK?: number;
+  seed?: number;
+  presencePenalty?: number;
+  frequencyPenalty?: number;
+};
 
 /**
  * The run a sub-Agent delegation nests inside.
@@ -56,12 +81,31 @@ export type RunInput = {
 };
 
 /**
- * The fully-resolved plan for a run. Mirrors `ChatTurn["resolved"]` —
+ * What a run resolved its Agent/Provider/model selection to, for persistence —
  * already does agent-vs-direct nulling, so sinks just map fields to their
- * persistence schema.
+ * persistence schema. Mirrored by `ChatTurn["resolved"]` in
+ * `services/chat-execution.ts`, which is this same shape by declaration
+ * rather than the other way around, so `runs/` never imports a type from
+ * `services/`.
+ */
+export type ResolvedGeneration = {
+  agentId?: string;
+  providerId: string;
+  modelId: string;
+  instructions?: string;
+  temperature?: number;
+  topP?: number;
+  topK?: number;
+  frequencyPenalty?: number;
+  presencePenalty?: number;
+  seed?: number;
+};
+
+/**
+ * The fully-resolved plan for a run. Mirrors `ChatTurn["resolved"]`.
  */
 export type ResolvedRunPlan = {
-  resolved: ChatTurn["resolved"];
+  resolved: ResolvedGeneration;
 };
 
 /**
