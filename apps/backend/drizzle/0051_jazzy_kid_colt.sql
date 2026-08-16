@@ -9,8 +9,9 @@ ALTER TABLE "provider" ADD COLUMN "search_source" text DEFAULT 'native' NOT NULL
 -- so a row with both backfills to 'none', not the backend id — an old row
 -- resolves to the exact same search behaviour it had before the collapse. A
 -- backfilled 'native' on a provider with no native search (e.g. Bedrock) is
--- harmless at resolution time (the capability gate still applies) and is
--- coerced to 'none' by the Provider form on load, without auto-saving.
+-- harmless at resolution time (the capability gate still applies); the Provider
+-- form renders it as 'none' but stores it untouched, so it starts working again
+-- if that provider later gains a native tool.
 UPDATE "provider"
 SET "search_source" = CASE
   WHEN "native_search_enabled" = false THEN 'none'

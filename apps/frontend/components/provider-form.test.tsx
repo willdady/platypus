@@ -637,10 +637,12 @@ describe("ProviderForm Web search selector", () => {
     expect(searchSelect()).toHaveTextContent("SearXNG (acme-search)");
   });
 
-  // vLLM (apiMode: "chat") has no native search, so the fixture default must
-  // not offer a "built-in search" option that resolves to nothing.
+  // vLLM (apiMode: "chat") has no native search, so it must not be offered a
+  // "built-in search" option that resolves to nothing. Stored as "none" here:
+  // a Provider already storing "native" is the one case the option does render,
+  // named as unavailable, so that the stale value stays visible and clearable.
   it("omits the built-in search option for a Provider with no native search", () => {
-    renderWithAdvancedOpen({});
+    renderWithAdvancedOpen({ searchSource: "none" } as Partial<Provider>);
 
     expect(searchSelect()).not.toHaveTextContent("built-in search");
   });
@@ -654,23 +656,76 @@ describe("ProviderForm Web search selector", () => {
   // A row backfilled to "native" (ADR-0014) with no native search of its own
   // — the default fixture here is exactly that shape, vLLM (chat mode) — must
   // not leave the select showing a value nothing in the list matches.
-  it("coerces a stale native selection to None on load, for a Provider with no native search", () => {
+  it("names a stale native selection as unavailable, for a Provider with no native search", () => {
     renderWithAdvancedOpen({});
 
-    expect(searchSelect()).toHaveTextContent("None");
+    expect(searchSelect()).toHaveTextContent(
+      "The provider's built-in search (unavailable here)",
+    );
   });
 
-  it("coerces a stale native selection to None on load, for Bedrock too", () => {
+  it("names a stale native selection as unavailable, for Bedrock too", () => {
     renderWithAdvancedOpen({ providerType: "Bedrock" });
 
-    expect(searchSelect()).toHaveTextContent("None");
+    expect(searchSelect()).toHaveTextContent(
+      "The provider's built-in search (unavailable here)",
+    );
+  });
+
+  // Naming it must not become rewriting it. `doSubmit` sends `searchSource` on
+  // every save, so coercing the stored value would let a save that touched only
+  // the name silently retire a selection nobody edited — one that resolves to no
+  // search anyway while the capability is missing, and that comes back on its
+  // own if the Provider regains a native tool.
+  it("keeps a stale native selection stored when some other field is saved", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({}),
+    } as unknown as Response);
+    vi.stubGlobal("fetch", fetchMock);
+
+    renderWithAdvancedOpen({});
+    expect(searchSelect()).toHaveTextContent("unavailable here");
+    save();
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body as string);
+    expect(body.searchSource).toBe("native");
+  });
+
+  // The other half of keeping it: picking None explicitly is a real edit, and
+  // must overwrite the stored "native" rather than round-tripping it.
+  it("stores none when the reader picks it on a Provider with no native search", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({}),
+    } as unknown as Response);
+    vi.stubGlobal("fetch", fetchMock);
+
+    renderWithAdvancedOpen({});
+
+    const scrollIntoView = Element.prototype.scrollIntoView;
+    Element.prototype.scrollIntoView = vi.fn();
+    try {
+      fireEvent.keyDown(searchSelect()!, { key: "ArrowDown" });
+      const none = await screen.findByRole("option", { name: "None" });
+      fireEvent.keyDown(none, { key: "Enter" });
+    } finally {
+      Element.prototype.scrollIntoView = scrollIntoView;
+    }
+    save();
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body as string);
+    expect(body.searchSource).toBe("none");
   });
 
   // Switching Provider Type away from native search after "The provider's
-  // built-in search" was selected removes that SelectItem from the list —
-  // without this, the control would keep pointing at a value nothing
-  // matches until the page reloads.
-  it("clears a selected built-in search when Provider Type loses native search", async () => {
+  // built-in search" was selected takes that SelectItem out of the list — the
+  // control would otherwise point at a value nothing matches until the page
+  // reloads. Named as unavailable rather than cleared, so switching back
+  // restores the selection instead of silently retiring it.
+  it("names a selected built-in search unavailable when Provider Type loses native search", async () => {
     renderWithAdvancedOpen({ apiMode: "responses", searchSource: "native" });
     expect(searchSelect()).toHaveTextContent("The provider's built-in search");
 
@@ -690,8 +745,35 @@ describe("ProviderForm Web search selector", () => {
       Element.prototype.scrollIntoView = scrollIntoView;
     }
 
-    expect(searchSelect()).toHaveTextContent("None");
-    expect(searchSelect()).not.toHaveTextContent("built-in search");
+    expect(searchSelect()).toHaveTextContent(
+      "The provider's built-in search (unavailable here)",
+    );
+  });
+
+  // The round trip the naming exists to protect: an orphaned selection is still
+  // there, and applies again, once the Provider is capable a second time.
+  it("restores a selected built-in search when API Mode regains native search", async () => {
+    renderWithAdvancedOpen({ apiMode: "chat", searchSource: "native" });
+    expect(searchSelect()).toHaveTextContent("unavailable here");
+
+    const apiModeSelect = screen
+      .getAllByRole("combobox")
+      .find((el) => el.textContent === "Chat Completions")!;
+
+    const scrollIntoView = Element.prototype.scrollIntoView;
+    Element.prototype.scrollIntoView = vi.fn();
+    try {
+      fireEvent.keyDown(apiModeSelect, { key: "ArrowDown" });
+      const responses = await screen.findByRole("option", {
+        name: "Responses",
+      });
+      fireEvent.keyDown(responses, { key: "Enter" });
+    } finally {
+      Element.prototype.scrollIntoView = scrollIntoView;
+    }
+
+    expect(searchSelect()).toHaveTextContent("The provider's built-in search");
+    expect(searchSelect()).not.toHaveTextContent("unavailable here");
   });
 
   // Hiding the control would conceal a stored id nobody could then see or clear.
