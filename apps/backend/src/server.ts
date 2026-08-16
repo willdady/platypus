@@ -196,7 +196,10 @@ app.route("/organizations/:orgId/web-backends", webBackends);
 app.onError((error, c) => {
   const mapped = mapError(error);
   if (mapped) {
-    return c.json({ error: mapped.message }, mapped.status);
+    return c.json(
+      { error: mapped.message, files: mapped.files },
+      mapped.status,
+    );
   }
   logger.error({ error }, "Unhandled error");
   return c.json({ error: "Internal Server Error" }, 500);

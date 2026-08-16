@@ -7,6 +7,7 @@ import {
   isUniqueViolation,
   mapError,
 } from "./errors.ts";
+import { FileValidationError } from "./services/file-gate.ts";
 
 describe("central error mapping (app.onError)", () => {
   it("maps NotFoundError → 404", () => {
@@ -30,6 +31,17 @@ describe("central error mapping (app.onError)", () => {
     expect(mapError(new ValidationError("Invalid label ID"))).toEqual({
       status: 400,
       message: "Invalid label ID",
+    });
+  });
+
+  it("maps FileValidationError → 400, carrying the offending files", () => {
+    const error = new FileValidationError([
+      { file: "scan.pdf", reason: "unextractable" },
+    ]);
+    expect(mapError(error)).toEqual({
+      status: 400,
+      message: error.message,
+      files: ["scan.pdf"],
     });
   });
 

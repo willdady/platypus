@@ -2,16 +2,22 @@ import crypto from "node:crypto";
 import { Hono } from "hono";
 import { sValidator } from "@hono/standard-validator";
 import { nanoid } from "nanoid";
-import { and, eq } from "drizzle-orm";
 import { db } from "../index.ts";
 import { webhook as webhookTable } from "../db/schema.ts";
-import { webhookCreateSchema, webhookUpdateSchema } from "@platypus/schemas";
 import { requireAuth } from "../middleware/authentication.ts";
 import {
   requireOrgAccess,
   requireWorkspaceAccess,
   workspaceScopeOf,
 } from "../middleware/authorization.ts";
+import {
+  requireOwned,
+  listOwned,
+  updateOwned,
+  deleteOwned,
+} from "../services/workspace-resource.ts";
+import { NotFoundError } from "../errors.ts";
+import { webhookCreateSchema, webhookUpdateSchema } from "@platypus/schemas";
 import type { Variables } from "../server.ts";
 
 const webhook = new Hono<{ Variables: Variables }>();
@@ -29,10 +35,7 @@ webhook.get(
   async (c) => {
     const { workspaceId } = workspaceScopeOf(c);
 
-    const results = await db
-      .select()
-      .from(webhookTable)
-      .where(eq(webhookTable.workspaceId, workspaceId));
+    const results = await listOwned(db, "webhook", workspaceId, null);
 
     return c.json({ results });
   },
@@ -94,22 +97,9 @@ webhook.get(
     const { workspaceId } = workspaceScopeOf(c);
     const webhookId = c.req.param("webhookId");
 
-    const results = await db
-      .select()
-      .from(webhookTable)
-      .where(
-        and(
-          eq(webhookTable.id, webhookId),
-          eq(webhookTable.workspaceId, workspaceId),
-        ),
-      )
-      .limit(1);
+    const record = await requireOwned(db, "webhook", webhookId, workspaceId);
 
-    if (results.length === 0) {
-      return c.json({ error: "Webhook not found" }, 404);
-    }
-
-    return c.json(results[0]);
+    return c.json(record);
   },
 );
 
@@ -140,22 +130,19 @@ webhook.put(
     if (body.enabled !== undefined) updateData.enabled = body.enabled;
     if (body.events !== undefined) updateData.events = body.events;
 
-    const result = await db
-      .update(webhookTable)
-      .set(updateData)
-      .where(
-        and(
-          eq(webhookTable.id, webhookId),
-          eq(webhookTable.workspaceId, workspaceId),
-        ),
-      )
-      .returning();
+    const result = await updateOwned(
+      db,
+      "webhook",
+      webhookId,
+      workspaceId,
+      updateData,
+    );
 
-    if (result.length === 0) {
-      return c.json({ error: "Webhook not found" }, 404);
+    if (!result) {
+      throw new NotFoundError("Webhook not found");
     }
 
-    return c.json(result[0]);
+    return c.json(result);
   },
 );
 
@@ -169,18 +156,10 @@ webhook.delete(
     const { workspaceId } = workspaceScopeOf(c);
     const webhookId = c.req.param("webhookId");
 
-    const result = await db
-      .delete(webhookTable)
-      .where(
-        and(
-          eq(webhookTable.id, webhookId),
-          eq(webhookTable.workspaceId, workspaceId),
-        ),
-      )
-      .returning();
+    const deleted = await deleteOwned(db, "webhook", webhookId, workspaceId);
 
-    if (result.length === 0) {
-      return c.json({ error: "Webhook not found" }, 404);
+    if (!deleted) {
+      throw new NotFoundError("Webhook not found");
     }
 
     return c.json({ message: "Webhook deleted" });
@@ -197,25 +176,16 @@ webhook.post(
     const { workspaceId } = workspaceScopeOf(c);
     const webhookId = c.req.param("webhookId");
 
-    const result = await db
-      .update(webhookTable)
-      .set({
-        signingSecret: generateSigningSecret(),
-        updatedAt: new Date(),
-      })
-      .where(
-        and(
-          eq(webhookTable.id, webhookId),
-          eq(webhookTable.workspaceId, workspaceId),
-        ),
-      )
-      .returning();
+    const result = await updateOwned(db, "webhook", webhookId, workspaceId, {
+      signingSecret: generateSigningSecret(),
+      updatedAt: new Date(),
+    });
 
-    if (result.length === 0) {
-      return c.json({ error: "Webhook not found" }, 404);
+    if (!result) {
+      throw new NotFoundError("Webhook not found");
     }
 
-    return c.json(result[0]);
+    return c.json(result);
   },
 );
 

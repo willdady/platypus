@@ -86,13 +86,12 @@ vi.mock("@ai-sdk/mcp", () => ({
 import {
   prepareChatTurn,
   validateTurnAttachments,
-  NotFoundError,
-  ValidationError,
   resolveSearchMode,
   wrapToolsWithActivity,
   normalizeToolResult,
   type ToolActivityEvent,
 } from "./chat-execution.ts";
+import { NotFoundError, ValidationError } from "../errors.ts";
 import {
   clearWebBackends,
   composeWebBackend,

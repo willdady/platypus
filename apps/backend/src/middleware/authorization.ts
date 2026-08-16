@@ -1,6 +1,7 @@
 import type { Context } from "hono";
 import { createMiddleware } from "hono/factory";
 import { eq, and } from "drizzle-orm";
+import type { db as appDb } from "../index.ts";
 import {
   organizationMember,
   workspace as workspaceTable,
@@ -21,6 +22,11 @@ import {
 
 /** Hono environment for these middleware: carries the request-scoped Variables. */
 type Env = { Variables: Variables };
+
+export type Database = typeof appDb;
+
+/** The subset of the session user these decisions actually read. */
+type AuthUser = { id: string; role?: string | null };
 
 /**
  * The Organization scope {@link requireOrgAccess} resolved for this request —
@@ -74,7 +80,7 @@ export const workspaceScopeOf = (c: Context<Env>): WorkspaceScope => {
  * }
  * ```
  */
-const isSuperAdmin = (user: { role?: string | null } | undefined): boolean => {
+const isSuperAdmin = (user: AuthUser | undefined): boolean => {
   return user?.role === "admin";
 };
 
@@ -140,54 +146,104 @@ export const requireOrgAccess = (requiredRoles?: OrgRole[]) =>
     // requireAuth runs first, so user is always set here.
     const user = c.get("user")!;
     const db = c.get("db");
-
     const parentScope = c.get("userScope") ?? userScope(user);
-
-    // Super admins bypass all checks
-    if (isSuperAdmin(user)) {
-      const superAdminMembership: SuperAdminOrgMembership = {
-        role: "admin",
-        isSuperAdmin: true,
-      };
-      c.set("orgMembership", superAdminMembership);
-      const orgIdParam = c.req.param("orgId");
-      if (orgIdParam) {
-        c.set("orgScope", orgScope(parentScope, orgIdParam));
-      }
-      await next();
-      return;
-    }
-
-    // Get orgId from path parameters
     const orgId = c.req.param("orgId");
 
-    if (!orgId) {
-      return c.json({ error: "Organization ID required" }, 400);
+    const access = await resolveOrgMembership(db, user, orgId, requiredRoles);
+
+    if (!access.allowed) {
+      const { status, message } = ORG_ACCESS_DENIED[access.reason];
+      return c.json({ error: message }, status);
     }
 
-    const [membership] = await db
-      .select()
-      .from(organizationMember)
-      .where(
-        and(
-          eq(organizationMember.userId, user.id),
-          eq(organizationMember.organizationId, orgId),
-        ),
-      )
-      .limit(1);
-
-    if (!membership) {
-      return c.json({ error: "Not a member of this organization" }, 403);
+    c.set("orgMembership", access.membership);
+    // Super admins may reach this route with no orgId in the path (e.g.
+    // platform-level endpoints); there is then no Organization to scope to.
+    if (orgId) {
+      c.set("orgScope", orgScope(parentScope, orgId));
     }
-
-    if (requiredRoles && !requiredRoles.includes(membership.role as OrgRole)) {
-      return c.json({ error: "Insufficient organization permissions" }, 403);
-    }
-
-    c.set("orgMembership", membership);
-    c.set("orgScope", orgScope(parentScope, orgId));
     await next();
   });
+
+/** Why {@link resolveOrgMembership} refused a caller. */
+export type OrgAccessDenial =
+  /** No `orgId` in the request for a non-super-admin caller to be checked against. */
+  | "org-id-required"
+  /** Not a member of the organization. */
+  | "not-a-member"
+  /** A member, but not one of the roles the route requires. */
+  | "insufficient-role";
+
+export type OrgAccess =
+  | {
+      allowed: true;
+      membership: OrganizationMembership | SuperAdminOrgMembership;
+    }
+  | { allowed: false; reason: OrgAccessDenial };
+
+const ORG_ACCESS_DENIED: Record<
+  OrgAccessDenial,
+  { status: 400 | 403; message: string }
+> = {
+  "org-id-required": { status: 400, message: "Organization ID required" },
+  "not-a-member": {
+    status: 403,
+    message: "Not a member of this organization",
+  },
+  "insufficient-role": {
+    status: 403,
+    message: "Insufficient organization permissions",
+  },
+};
+
+/**
+ * The single authority on {@link requireOrgAccess}'s question: is this caller
+ * a member of this Organization — optionally restricted to specific roles?
+ *
+ * Returned rather than enforced here, mirroring {@link workspaceConfigAccess}:
+ * a pure decision is unit-testable against a fake executor without a Hono
+ * request, and the one place that maps a denial to a response is the
+ * middleware above.
+ */
+export const resolveOrgMembership = async (
+  db: Database,
+  user: AuthUser,
+  orgId: string | undefined,
+  requiredRoles?: OrgRole[],
+): Promise<OrgAccess> => {
+  // Super admins bypass all checks, including needing an orgId at all.
+  if (isSuperAdmin(user)) {
+    return {
+      allowed: true,
+      membership: { role: "admin", isSuperAdmin: true },
+    };
+  }
+
+  if (!orgId) {
+    return { allowed: false, reason: "org-id-required" };
+  }
+
+  const [membership] = await db
+    .select()
+    .from(organizationMember)
+    .where(
+      and(
+        eq(organizationMember.userId, user.id),
+        eq(organizationMember.organizationId, orgId),
+      ),
+    )
+    .limit(1);
+
+  if (!membership) {
+    return { allowed: false, reason: "not-a-member" };
+  }
+
+  if (requiredRoles && !requiredRoles.includes(membership.role as OrgRole)) {
+    return { allowed: false, reason: "insufficient-role" };
+  }
+
+  return { allowed: true, membership };
+};
 
 /**
  * Middleware that validates user access to a workspace.
@@ -227,7 +283,74 @@ export const requireWorkspaceAccess = createMiddleware<Env>(async (c, next) => {
     return c.json({ error: "Workspace ID required" }, 400);
   }
 
-  // Fetch the workspace once for every role branch below.
+  const access = await resolveWorkspaceAccess(
+    db,
+    user,
+    orgMembership,
+    parent.orgId,
+    workspaceId,
+  );
+
+  if (!access.allowed) {
+    const { status, message } = WORKSPACE_ACCESS_DENIED[access.reason];
+    return c.json({ error: message }, status);
+  }
+
+  c.set("isWorkspaceOwner", access.isWorkspaceOwner);
+  c.set(
+    "workspaceScope",
+    workspaceScope(parent, workspaceId, access.isWorkspaceOwner),
+  );
+  await next();
+});
+
+/** Why {@link resolveWorkspaceAccess} refused a caller. */
+export type WorkspaceAccessDenial =
+  /** No workspace exists with this id. */
+  | "not-found"
+  /** The workspace exists, but in a different Organization than the caller
+   * was cleared for. */
+  | "cross-org"
+  /** A member of the right Organization, but neither an admin nor the owner. */
+  | "no-access";
+
+export type WorkspaceAccess =
+  | { allowed: true; isWorkspaceOwner: boolean }
+  | { allowed: false; reason: WorkspaceAccessDenial };
+
+const WORKSPACE_ACCESS_DENIED: Record<
+  WorkspaceAccessDenial,
+  { status: 403 | 404; message: string }
+> = {
+  // Cross-org replies with the same 404 as not-found so we don't leak the
+  // existence of other orgs' workspaces.
+  "not-found": { status: 404, message: "Workspace not found" },
+  "cross-org": { status: 404, message: "Workspace not found" },
+  "no-access": { status: 403, message: "No access to this workspace" },
+};
+
+/**
+ * The single authority on {@link requireWorkspaceAccess}'s question: is this
+ * caller cleared to reach this Workspace? Super admins and Org admins reach
+ * any workspace in the Organization; a regular member reaches only one they
+ * own.
+ *
+ * Returned rather than enforced here, mirroring {@link workspaceConfigAccess}:
+ * unit-testable against a fake executor without a Hono request, with the one
+ * denial-to-response mapping living in the middleware above.
+ *
+ * @param orgId - The Organization the caller was cleared for by
+ *                {@link resolveOrgMembership}, i.e. `OrgScope.orgId` — never the
+ *                workspace's own `organizationId`, which is what this checks
+ *                the caller's `orgId` against (the cross-org guard).
+ */
+export const resolveWorkspaceAccess = async (
+  db: Database,
+  user: AuthUser,
+  membership: OrganizationMembership | SuperAdminOrgMembership,
+  orgId: string,
+  workspaceId: string,
+): Promise<WorkspaceAccess> => {
   const [ws] = await db
     .select()
     .from(workspaceTable)
@@ -235,17 +358,16 @@ export const requireWorkspaceAccess = createMiddleware<Env>(async (c, next) => {
     .limit(1);
 
   if (!ws) {
-    return c.json({ error: "Workspace not found" }, 404);
+    return { allowed: false, reason: "not-found" };
   }
 
   // Cross-org guard: the workspace must belong to the organization the caller
   // was cleared for. Without this, an admin (or super admin) of org A who knows
   // a workspace id in org B could operate on it via
-  // /organizations/A/workspaces/B. Reply 404 (not 403) so we don't leak the
-  // existence of other orgs' workspaces. Applies uniformly to the member,
-  // org-admin, and super-admin cases below.
-  if (ws.organizationId !== parent.orgId) {
-    return c.json({ error: "Workspace not found" }, 404);
+  // /organizations/A/workspaces/B. Applies uniformly to the member, org-admin,
+  // and super-admin cases below.
+  if (ws.organizationId !== orgId) {
+    return { allowed: false, reason: "cross-org" };
   }
 
   const isOwner = ws.ownerId === user.id;
@@ -255,15 +377,13 @@ export const requireWorkspaceAccess = createMiddleware<Env>(async (c, next) => {
   // an admin operating on someone else's workspace is not its owner, and the
   // routes that gate on ownership (ADR-0006) need to know.
   const mayAccess =
-    isSuperAdmin(user) || orgMembership.role === "admin" || isOwner;
+    isSuperAdmin(user) || membership.role === "admin" || isOwner;
   if (!mayAccess) {
-    return c.json({ error: "No access to this workspace" }, 403);
+    return { allowed: false, reason: "no-access" };
   }
 
-  c.set("isWorkspaceOwner", isOwner);
-  c.set("workspaceScope", workspaceScope(parent, workspaceId, isOwner));
-  await next();
-});
+  return { allowed: true, isWorkspaceOwner: isOwner };
+};
 
 /**
  * Middleware that gates configuration of credential- and reach-bearing

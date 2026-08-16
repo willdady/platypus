@@ -11,7 +11,7 @@ import {
   requireWorkspaceAccess,
   workspaceScopeOf,
 } from "../middleware/authorization.ts";
-import { isUniqueViolation } from "../errors.ts";
+import { isUniqueViolation, NotFoundError } from "../errors.ts";
 import { resolveOrgScoped } from "../services/scoped-resource.ts";
 import type { Variables } from "../server.ts";
 
@@ -57,9 +57,8 @@ attachment.post(
       orgId,
     );
     if (!resource) {
-      return c.json(
-        { error: "Org-scoped resource not found in this organization" },
-        404,
+      throw new NotFoundError(
+        "Org-scoped resource not found in this organization",
       );
     }
 
@@ -106,7 +105,7 @@ attachment.delete(
       )
       .returning();
     if (result.length === 0) {
-      return c.json({ error: "Attachment not found" }, 404);
+      throw new NotFoundError("Attachment not found");
     }
     return c.json({ message: "Detached" });
   },

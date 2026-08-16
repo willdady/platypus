@@ -157,7 +157,8 @@ export class AgentRunner {
     // File gate (issue #328): reject a turn carrying a file the target model
     // can't handle BEFORE the sink persists anything, so a bad attachment can
     // never brick the chat. Runs only when the turn has file parts; throws
-    // `FileValidationError`, which propagates to the route as a 400.
+    // `FileValidationError`, which the central `onError` (ADR-0010) maps to a
+    // 400.
     await validateTurnAttachments({
       request: input.request,
       messages: input.messages,

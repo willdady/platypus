@@ -207,7 +207,7 @@ export const DEFAULT_AGENT_MAX_STEPS = 15;
 // Org-scoped Agents are Shared resources managed by Org Admins (ADR-0007);
 // the XOR is enforced on `agentSchema` below, while the create routes inject
 // the scope and Promote re-scopes a Workspace Agent to the Organization.
-const agentBaseSchema = z.object({
+export const agentBaseSchema = z.object({
   id: z.string(),
   organizationId: z.string().optional(),
   workspaceId: z.string().optional(),

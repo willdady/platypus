@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import { sValidator } from "@hono/standard-validator";
 import { z } from "zod";
 import { nanoid } from "nanoid";
-import { and, desc, eq } from "drizzle-orm";
+import { desc, eq } from "drizzle-orm";
 import { db } from "../index.ts";
 import {
   trigger as triggerTable,
@@ -17,6 +17,13 @@ import {
   workspaceScopeOf,
 } from "../middleware/authorization.ts";
 import { resolveScoped } from "../services/scoped-resource.ts";
+import {
+  requireOwned,
+  listOwned,
+  updateOwned,
+  deleteOwned,
+} from "../services/workspace-resource.ts";
+import { NotFoundError } from "../errors.ts";
 import type { Variables } from "../server.ts";
 import { logger } from "../logger.ts";
 import { validateCronExpression } from "../utils/cron.ts";
@@ -31,11 +38,12 @@ trigger.get(
   requireWorkspaceAccess,
   async (c) => {
     const { workspaceId } = workspaceScopeOf(c);
-    const results = await db
-      .select()
-      .from(triggerTable)
-      .where(eq(triggerTable.workspaceId, workspaceId))
-      .orderBy(desc(triggerTable.createdAt));
+    const results = await listOwned(
+      db,
+      "trigger",
+      workspaceId,
+      desc(triggerTable.createdAt),
+    );
     return c.json({ results });
   },
 );
@@ -50,22 +58,9 @@ trigger.get(
     const triggerId = c.req.param("triggerId");
     const { workspaceId } = workspaceScopeOf(c);
 
-    const record = await db
-      .select()
-      .from(triggerTable)
-      .where(
-        and(
-          eq(triggerTable.id, triggerId),
-          eq(triggerTable.workspaceId, workspaceId),
-        ),
-      )
-      .limit(1);
+    const record = await requireOwned(db, "trigger", triggerId, workspaceId);
 
-    if (record.length === 0) {
-      return c.json({ error: "Trigger not found" }, 404);
-    }
-
-    return c.json(record[0]);
+    return c.json(record);
   },
 );
 
@@ -151,23 +146,10 @@ trigger.put(
     const data = c.req.valid("json");
 
     // Verify trigger exists in workspace
-    const existing = await db
-      .select()
-      .from(triggerTable)
-      .where(
-        and(
-          eq(triggerTable.id, triggerId),
-          eq(triggerTable.workspaceId, workspaceId),
-        ),
-      )
-      .limit(1);
-
-    if (existing.length === 0) {
-      return c.json({ error: "Trigger not found" }, 404);
-    }
+    const existing = await requireOwned(db, "trigger", triggerId, workspaceId);
 
     // If agentId is being changed, verify new agent exists
-    if (data.agentId && data.agentId !== existing[0].agentId) {
+    if (data.agentId && data.agentId !== existing.agentId) {
       // See the create route: workspace-scoped, or Shared and attached here.
       const agentRecord = await resolveScoped(db, "agent", data.agentId, scope);
 
@@ -182,7 +164,7 @@ trigger.put(
     };
 
     // Determine the effective type (updated or existing)
-    const effectiveType = data.type ?? existing[0].type;
+    const effectiveType = data.type ?? existing.type;
 
     if (effectiveType === "event") {
       // Event triggers don't have nextRunAt
@@ -199,7 +181,7 @@ trigger.put(
       updateData.nextRunAt = null;
     } else if (effectiveType === "cron") {
       // Recompute nextRunAt if cron config changes
-      const config = (data.config ?? existing[0].config) as Record<
+      const config = (data.config ?? existing.config) as Record<
         string,
         unknown
       >;
@@ -215,15 +197,17 @@ trigger.put(
       }
     }
 
-    const record = await db
-      .update(triggerTable)
-      .set(updateData)
-      .where(eq(triggerTable.id, triggerId))
-      .returning();
+    const record = await updateOwned(
+      db,
+      "trigger",
+      triggerId,
+      workspaceId,
+      updateData,
+    );
 
     logger.info(`Updated trigger '${triggerId}'`);
 
-    return c.json(record[0], 200);
+    return c.json(record, 200);
   },
 );
 
@@ -238,18 +222,10 @@ trigger.delete(
     const triggerId = c.req.param("triggerId");
     const { workspaceId } = workspaceScopeOf(c);
 
-    const result = await db
-      .delete(triggerTable)
-      .where(
-        and(
-          eq(triggerTable.id, triggerId),
-          eq(triggerTable.workspaceId, workspaceId),
-        ),
-      )
-      .returning();
+    const deleted = await deleteOwned(db, "trigger", triggerId, workspaceId);
 
-    if (result.length === 0) {
-      return c.json({ error: "Trigger not found" }, 404);
+    if (!deleted) {
+      throw new NotFoundError("Trigger not found");
     }
 
     logger.info(`Deleted trigger '${triggerId}'`);
@@ -280,20 +256,7 @@ trigger.get(
     const offset = parseInt(offsetStr ?? "0") || 0;
 
     // Verify trigger exists in workspace
-    const triggerRecord = await db
-      .select()
-      .from(triggerTable)
-      .where(
-        and(
-          eq(triggerTable.id, triggerId),
-          eq(triggerTable.workspaceId, workspaceId),
-        ),
-      )
-      .limit(1);
-
-    if (triggerRecord.length === 0) {
-      return c.json({ error: "Trigger not found" }, 404);
-    }
+    await requireOwned(db, "trigger", triggerId, workspaceId);
 
     const results = await db
       .select()

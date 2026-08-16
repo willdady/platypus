@@ -111,16 +111,70 @@ const toolsOf =
 const baseOptions = {
   id: "agent-1",
   name: "Research Agent",
-  model: modelOf(step([])),
   loadTools: toolsOf({}),
+};
+
+/**
+ * The pre-refactor option shape tests build with: `model`/`maxSteps`/
+ * `securityGuardrails`/`sampling`/`maxOutputTokens` as loose named fields.
+ * `buildOptions` folds them into the `plan`/`guardrails` shape
+ * `createSubAgentTool` now takes, so individual test bodies below don't have
+ * to restate that shape at every call site.
+ */
+type LegacyOptions = Partial<{
+  id: string;
+  name: string;
+  description: string;
+  instructions: string;
+  model: ReturnType<typeof modelOf>;
+  loadTools: () => Promise<Record<string, Tool>>;
+  maxSteps: number;
+  securityGuardrails: string | null;
+  sampling: Partial<
+    Record<
+      | "temperature"
+      | "topP"
+      | "topK"
+      | "seed"
+      | "presencePenalty"
+      | "frequencyPenalty",
+      number
+    >
+  >;
+  maxOutputTokens: number;
+  parentRun: Parameters<typeof createSubAgentTool>[0]["parentRun"];
+}>;
+
+const buildOptions = (
+  overrides: LegacyOptions = {},
+): Parameters<typeof createSubAgentTool>[0] => {
+  const {
+    model = modelOf(step([])),
+    maxSteps = DEFAULT_AGENT_MAX_STEPS,
+    securityGuardrails = null,
+    sampling = {},
+    maxOutputTokens,
+    ...rest
+  } = overrides;
+  return {
+    ...baseOptions,
+    ...rest,
+    plan: {
+      model,
+      maxSteps,
+      ...(maxOutputTokens !== undefined ? { maxOutputTokens } : {}),
+      ...sampling,
+    },
+    guardrails: securityGuardrails,
+  };
 };
 
 /** Build the delegate tool, run one delegation, collect every yield. */
 const delegate = async (
-  options: Partial<Parameters<typeof createSubAgentTool>[0]> = {},
+  options: LegacyOptions = {},
   execOptions: Partial<ToolExecutionOptions<Record<string, unknown>>> = {},
 ) => {
-  const { tool } = createSubAgentTool({ ...baseOptions, ...options });
+  const { tool } = createSubAgentTool(buildOptions(options));
   const gen = tool.execute({ task: "Do something" }, {
     ...execOptions,
   } as ToolExecutionOptions<
@@ -173,47 +227,41 @@ describe("createSubAgentTool", () => {
 
   describe("toolName generation", () => {
     it("generates PascalCase delegateTo prefix", () => {
-      const { toolName } = createSubAgentTool(baseOptions);
+      const { toolName } = createSubAgentTool(buildOptions());
       expect(toolName).toBe("delegateToResearchAgent");
     });
 
     it("handles single-word names", () => {
-      const { toolName } = createSubAgentTool({
-        ...baseOptions,
-        name: "Helper",
-      });
+      const { toolName } = createSubAgentTool(buildOptions({ name: "Helper" }));
       expect(toolName).toBe("delegateToHelper");
     });
 
     it("strips non-alphanumeric characters", () => {
-      const { toolName } = createSubAgentTool({
-        ...baseOptions,
-        name: "My (Special) Agent!",
-      });
+      const { toolName } = createSubAgentTool(
+        buildOptions({ name: "My (Special) Agent!" }),
+      );
       expect(toolName).toMatch(/^delegateTo[A-Za-z0-9]+$/);
     });
 
     it("handles hyphenated names", () => {
-      const { toolName } = createSubAgentTool({
-        ...baseOptions,
-        name: "code-review",
-      });
+      const { toolName } = createSubAgentTool(
+        buildOptions({ name: "code-review" }),
+      );
       expect(toolName).toBe("delegateToCodeReview");
     });
   });
 
   describe("tool description", () => {
     it("uses custom description when provided", () => {
-      const { tool } = createSubAgentTool({
-        ...baseOptions,
-        description: "Does research tasks",
-      });
+      const { tool } = createSubAgentTool(
+        buildOptions({ description: "Does research tasks" }),
+      );
       expect(tool.description).toContain("Does research tasks");
       expect(tool.description).toContain("Research Agent");
     });
 
     it("uses default description when none provided", () => {
-      const { tool } = createSubAgentTool(baseOptions);
+      const { tool } = createSubAgentTool(buildOptions());
       expect(tool.description).toContain("Research Agent");
     });
   });
@@ -409,10 +457,11 @@ describe("createSubAgentTool", () => {
 
     it("records the failure in the activity log before throwing", async () => {
       const yielded: SubAgentActivity[] = [];
-      const { tool } = createSubAgentTool({
-        ...baseOptions,
-        model: modelOf(step([{ type: "error", error: new Error("boom") }])),
-      });
+      const { tool } = createSubAgentTool(
+        buildOptions({
+          model: modelOf(step([{ type: "error", error: new Error("boom") }])),
+        }),
+      );
       const gen = tool.execute(
         { task: "Do something" },
         {} as ToolExecutionOptions<Record<string, unknown>>,
@@ -590,10 +639,9 @@ describe("createSubAgentTool", () => {
 
     it("stops the delegated run when the parent run is cancelled", async () => {
       const parent = new AbortController();
-      const { tool } = createSubAgentTool({
-        ...baseOptions,
-        model: modelOf(step(text("t1", "half an answ"))),
-      });
+      const { tool } = createSubAgentTool(
+        buildOptions({ model: modelOf(step(text("t1", "half an answ"))) }),
+      );
       const gen = tool.execute({ task: "Do something" }, {
         abortSignal: parent.signal,
       } as ToolExecutionOptions<
@@ -670,7 +718,7 @@ describe("createSubAgentTool", () => {
     });
 
     it("says only that the answer was cut off when there is no text at all", () => {
-      const { tool } = createSubAgentTool(baseOptions);
+      const { tool } = createSubAgentTool(buildOptions());
 
       expect(
         modelText(tool, {
@@ -826,7 +874,7 @@ describe("createSubAgentTool", () => {
   describe("sub-agent tools", () => {
     it("opens its tools on invocation, not when the delegate is built", async () => {
       const loadTools = vi.fn().mockResolvedValue({});
-      const { tool } = createSubAgentTool({ ...baseOptions, loadTools });
+      const { tool } = createSubAgentTool(buildOptions({ loadTools }));
       expect(loadTools).not.toHaveBeenCalled();
 
       const gen = tool.execute(
@@ -856,7 +904,7 @@ describe("createSubAgentTool", () => {
 
   describe("toModelOutput", () => {
     it("extracts text from activity output", () => {
-      const { tool } = createSubAgentTool(baseOptions);
+      const { tool } = createSubAgentTool(buildOptions());
       const result = tool.toModelOutput!({
         toolCallId: "tc1",
         input: { task: "test" },
@@ -866,7 +914,7 @@ describe("createSubAgentTool", () => {
     });
 
     it("returns fallback when output has no text", () => {
-      const { tool } = createSubAgentTool(baseOptions);
+      const { tool } = createSubAgentTool(buildOptions());
       const result = tool.toModelOutput!({
         toolCallId: "tc1",
         input: { task: "test" },
@@ -876,7 +924,7 @@ describe("createSubAgentTool", () => {
     });
 
     it("returns fallback when output is null", () => {
-      const { tool } = createSubAgentTool(baseOptions);
+      const { tool } = createSubAgentTool(buildOptions());
       const result = tool.toModelOutput!({
         toolCallId: "tc1",
         input: { task: "test" },
@@ -902,10 +950,19 @@ describe("createSubAgentTools", () => {
     for await (const _ of gen) void _;
   };
 
-  const workingModel = () =>
+  /**
+   * A `resolvePlan` stub, standing in for the production wiring —
+   * `(subAgent) => resolveGenerationPlan({ agent: subAgent }, scope, queries)`.
+   * Resolution itself (model, step ceiling, output ceiling, sampling, alias
+   * lookup) is `resolveGenerationPlan`'s own contract, unit-tested in
+   * `runs/agent-plan.test.ts`; this suite only has to prove
+   * `createSubAgentTools` calls it once per sub-agent, forwards its result
+   * unmodified, and keeps going when it rejects.
+   */
+  const workingPlan = () =>
     vi.fn().mockResolvedValue({
-      model: modelOf(step([])),
-      securityGuardrails: null,
+      plan: { model: modelOf(step([])), maxSteps: DEFAULT_AGENT_MAX_STEPS },
+      guardrails: null,
     });
 
   it("returns empty object when given no sub-agents", async () => {
@@ -915,28 +972,16 @@ describe("createSubAgentTools", () => {
 
   it("creates tools for each sub-agent", async () => {
     const subAgents = [
-      {
-        id: "sa-1",
-        name: "Research",
-        providerId: "p1",
-        modelId: "m1",
-        toolSetIds: ["ts1"],
-      },
-      {
-        id: "sa-2",
-        name: "Coder",
-        providerId: "p1",
-        modelId: "m1",
-        toolSetIds: [],
-      },
+      { id: "sa-1", name: "Research", toolSetIds: ["ts1"] },
+      { id: "sa-2", name: "Coder", toolSetIds: [] },
     ];
 
-    const createModelFn = workingModel();
+    const resolvePlan = workingPlan();
     const loadToolsFn = vi.fn().mockResolvedValue({});
 
     const result = await createSubAgentTools(
       subAgents,
-      createModelFn,
+      resolvePlan,
       loadToolsFn,
     );
 
@@ -944,7 +989,7 @@ describe("createSubAgentTools", () => {
     expect(result.tools).toHaveProperty("delegateToResearch");
     expect(result.tools).toHaveProperty("delegateToCoder");
     expect(result.failures).toEqual([]);
-    expect(createModelFn).toHaveBeenCalledTimes(2);
+    expect(resolvePlan).toHaveBeenCalledTimes(2);
     // Building the delegates opens nothing: each sub-agent's tools are loaded
     // if and when the parent actually delegates to it.
     expect(loadToolsFn).not.toHaveBeenCalled();
@@ -958,43 +1003,45 @@ describe("createSubAgentTools", () => {
     expect(loadToolsFn).toHaveBeenCalledTimes(1);
   });
 
-  // The ceiling belongs to the sub-agent's own (Provider, model) pair, which
-  // only the resolver has, so it rides back with the model it applies to.
-  it("forwards the resolved model's output ceiling to the sub-agent's run", async () => {
-    const createModelFn = vi.fn().mockResolvedValue({
-      model: modelOf(step([])),
-      securityGuardrails: null,
-      maxOutputTokens: 32000,
+  // `resolvePlan`'s result rides straight through to the sub-agent's run —
+  // this function no longer re-derives any of it (issue #454's output ceiling
+  // included), which is the whole point of routing every caller through the
+  // one resolver.
+  it("forwards the resolved plan straight through to the sub-agent's run", async () => {
+    const resolvePlan = vi.fn().mockResolvedValue({
+      plan: { model: modelOf(step([])), maxSteps: 3, maxOutputTokens: 32000 },
+      guardrails: null,
     });
 
     const { tools } = await createSubAgentTools(
-      [{ id: "sa-1", name: "Research", providerId: "p1", modelId: "m1" }],
-      createModelFn,
+      [{ id: "sa-1", name: "Research" }],
+      resolvePlan,
       vi.fn().mockResolvedValue({}),
     );
     await runTool(tools.delegateToResearch);
 
     expect(streamArgs()).toMatchObject({ maxOutputTokens: 32000 });
+    expect(stepCeilingOf()).toBe(3);
   });
 
   it("continues when a sub-agent fails to initialize, and reports it as a failure", async () => {
     const subAgents = [
-      { id: "sa-1", name: "Failing", providerId: "p1", modelId: "m1" },
-      { id: "sa-2", name: "Working", providerId: "p1", modelId: "m1" },
+      { id: "sa-1", name: "Failing" },
+      { id: "sa-2", name: "Working" },
     ];
 
-    const createModelFn = vi
+    const resolvePlan = vi
       .fn()
       .mockRejectedValueOnce(new Error("Model not found"))
       .mockResolvedValueOnce({
-        model: modelOf(step([])),
-        securityGuardrails: null,
+        plan: { model: modelOf(step([])), maxSteps: DEFAULT_AGENT_MAX_STEPS },
+        guardrails: null,
       });
     const loadToolsFn = vi.fn().mockResolvedValue({});
 
     const result = await createSubAgentTools(
       subAgents,
-      createModelFn,
+      resolvePlan,
       loadToolsFn,
     );
 
@@ -1007,87 +1054,15 @@ describe("createSubAgentTools", () => {
     ]);
   });
 
-  it("uses default maxSteps when not provided", async () => {
-    const { tools } = await createSubAgentTools(
-      [
-        {
-          id: "sa-1",
-          name: "Agent",
-          providerId: "p1",
-          modelId: "m1",
-          maxSteps: null,
-        },
-      ],
-      workingModel(),
-      vi.fn().mockResolvedValue({}),
-    );
-    await runTool(tools.delegateToAgent);
-
-    expect(stepCeilingOf()).toBe(DEFAULT_AGENT_MAX_STEPS);
-  });
-
-  // A delegated Agent runs on its own ceiling, not the parent's and not the
-  // fallback — the whole point of reading `maxSteps` off the row.
-  it("forwards an explicit maxSteps instead of the fallback default", async () => {
-    const { tools } = await createSubAgentTools(
-      [
-        {
-          id: "sa-1",
-          name: "Agent",
-          providerId: "p1",
-          modelId: "m1",
-          maxSteps: 3,
-        },
-      ],
-      workingModel(),
-      vi.fn().mockResolvedValue({}),
-    );
-    await runTool(tools.delegateToAgent);
-
-    expect(stepCeilingOf()).toBe(3);
-  });
-
-  it("forwards each sub-agent's stored sampling parameters, treating null as unset", async () => {
-    const { tools } = await createSubAgentTools(
-      [
-        {
-          id: "sa-1",
-          name: "Tuned",
-          providerId: "p1",
-          modelId: "m1",
-          temperature: 0.3,
-          seed: 7,
-          // Cleared in the UI writes null, which must mean "use the Provider
-          // default" rather than being sent as an explicit value (#263).
-          topP: null,
-        },
-      ],
-      workingModel(),
-      vi.fn().mockResolvedValue({}),
-    );
-    await runTool(tools.delegateToTuned);
-
-    expect(streamArgs()).toMatchObject({ temperature: 0.3, seed: 7 });
-    expect(streamArgs()).not.toHaveProperty("topP");
-  });
-
-  it("passes each sub-agent's own provider security text into its instructions", async () => {
-    const createModelFn = vi.fn().mockResolvedValue({
-      model: modelOf(step([])),
-      securityGuardrails: "Provider-specific rule.",
+  it("passes each sub-agent's own resolved guardrails into its instructions", async () => {
+    const resolvePlan = vi.fn().mockResolvedValue({
+      plan: { model: modelOf(step([])), maxSteps: DEFAULT_AGENT_MAX_STEPS },
+      guardrails: "Provider-specific rule.",
     });
 
     const { tools } = await createSubAgentTools(
-      [
-        {
-          id: "sa-1",
-          name: "Guarded",
-          providerId: "p1",
-          modelId: "m1",
-          instructions: "You are guarded.",
-        },
-      ],
-      createModelFn,
+      [{ id: "sa-1", name: "Guarded", instructions: "You are guarded." }],
+      resolvePlan,
       vi.fn().mockResolvedValue({}),
     );
     await runTool(tools.delegateToGuarded);

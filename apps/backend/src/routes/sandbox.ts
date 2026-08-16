@@ -1,7 +1,6 @@
 import { Hono } from "hono";
 import { sValidator } from "@hono/standard-validator";
 import { nanoid } from "nanoid";
-import { eq } from "drizzle-orm";
 import { db } from "../index.ts";
 import { sandbox as sandboxTable } from "../db/schema.ts";
 import { sandboxCreateSchema, sandboxUpdateSchema } from "@platypus/schemas";
@@ -12,6 +11,12 @@ import {
   requireWorkspaceConfigAccess,
   workspaceScopeOf,
 } from "../middleware/authorization.ts";
+import {
+  resolveOwnedSandbox,
+  requireOwnedSandbox,
+  updateOwnedSandbox,
+  deleteOwnedSandbox,
+} from "../services/workspace-resource.ts";
 import type { Variables } from "../server.ts";
 import { destroySandboxRow } from "../sandbox/teardown.ts";
 import { getSandboxBackend, getSandboxBackends } from "../sandbox/index.ts";
@@ -138,16 +143,9 @@ sandbox.get(
   requireWorkspaceAccess,
   async (c) => {
     const { workspaceId } = workspaceScopeOf(c);
-    const record = await db
-      .select()
-      .from(sandboxTable)
-      .where(eq(sandboxTable.workspaceId, workspaceId))
-      .limit(1);
-    if (record.length === 0) {
-      return c.json({ error: "Sandbox not configured" }, 404);
-    }
+    const record = await requireOwnedSandbox(db, workspaceId);
     const isAdmin = c.get("orgMembership")?.role === "admin";
-    return c.json(sanitizeSandboxResponse(record[0], isAdmin));
+    return c.json(sanitizeSandboxResponse(record, isAdmin));
   },
 );
 
@@ -189,12 +187,8 @@ sandbox.post(
       );
     }
 
-    const existing = await db
-      .select()
-      .from(sandboxTable)
-      .where(eq(sandboxTable.workspaceId, workspaceId))
-      .limit(1);
-    if (existing.length > 0) {
+    const existing = await resolveOwnedSandbox(db, workspaceId);
+    if (existing) {
       return c.json(
         { error: "Sandbox already configured for this workspace" },
         409,
@@ -246,15 +240,7 @@ sandbox.put(
     const force = c.req.query("force") === "true";
     const isAdmin = c.get("orgMembership")?.role === "admin";
 
-    const existing = await db
-      .select()
-      .from(sandboxTable)
-      .where(eq(sandboxTable.workspaceId, workspaceId))
-      .limit(1);
-    if (existing.length === 0) {
-      return c.json({ error: "Sandbox not configured" }, 404);
-    }
-    const current = existing[0];
+    const current = await requireOwnedSandbox(db, workspaceId);
 
     // Non-admin owner: restrict to name + userEnv, no backend/config changes.
     if (!isAdmin) {
@@ -267,17 +253,13 @@ sandbox.put(
           400,
         );
       }
-      const record = await db
-        .update(sandboxTable)
-        .set({
-          name: data.name,
-          ...(data.userEnv !== undefined ? { userEnv: data.userEnv } : {}),
-          updatedAt: new Date(),
-        })
-        .where(eq(sandboxTable.workspaceId, workspaceId))
-        .returning();
+      const record = await updateOwnedSandbox(db, workspaceId, {
+        name: data.name,
+        ...(data.userEnv !== undefined ? { userEnv: data.userEnv } : {}),
+        updatedAt: new Date(),
+      });
       // Non-admin owner — redact adminEnv values in the response.
-      return c.json(sanitizeSandboxResponse(record[0], false));
+      return c.json(sanitizeSandboxResponse(record!, false));
     }
 
     // Admin: full update.
@@ -355,16 +337,12 @@ sandbox.put(
       );
     }
 
-    const record = await db
-      .update(sandboxTable)
-      .set({
-        ...data,
-        updatedAt: new Date(),
-      })
-      .where(eq(sandboxTable.workspaceId, workspaceId))
-      .returning();
+    const record = await updateOwnedSandbox(db, workspaceId, {
+      ...data,
+      updatedAt: new Date(),
+    });
     // Reached only on the admin branch above.
-    return c.json(sanitizeSandboxResponse(record[0], true));
+    return c.json(sanitizeSandboxResponse(record!, true));
   },
 );
 
@@ -382,26 +360,19 @@ sandbox.delete(
     const { workspaceId } = workspaceScopeOf(c);
     const force = c.req.query("force") === "true";
 
-    const existing = await db
-      .select()
-      .from(sandboxTable)
-      .where(eq(sandboxTable.workspaceId, workspaceId))
-      .limit(1);
-    if (existing.length === 0) {
-      return c.json({ error: "Sandbox not configured" }, 404);
-    }
+    const existing = await requireOwnedSandbox(db, workspaceId);
 
     if (!force) {
       try {
-        await destroySandboxRow(existing[0]);
+        await destroySandboxRow(existing);
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         logger.warn(
           {
             workspaceId,
-            sandboxId: existing[0].id,
-            backend: existing[0].backend,
-            plugin: getSandboxBackendPlugin(existing[0].backend) ?? null,
+            sandboxId: existing.id,
+            backend: existing.backend,
+            plugin: getSandboxBackendPlugin(existing.backend) ?? null,
             err,
           },
           "Sandbox destroy() failed; row preserved so the user can retry",
@@ -417,17 +388,15 @@ sandbox.delete(
       logger.warn(
         {
           workspaceId,
-          sandboxId: existing[0].id,
-          backend: existing[0].backend,
-          plugin: getSandboxBackendPlugin(existing[0].backend) ?? null,
+          sandboxId: existing.id,
+          backend: existing.backend,
+          plugin: getSandboxBackendPlugin(existing.backend) ?? null,
         },
         "Sandbox row force-deleted; adapter destroy() was skipped — external resources may leak",
       );
     }
 
-    await db
-      .delete(sandboxTable)
-      .where(eq(sandboxTable.workspaceId, workspaceId));
+    await deleteOwnedSandbox(db, workspaceId);
     return c.json({ message: "Sandbox deleted" });
   },
 );
