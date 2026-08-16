@@ -2,13 +2,8 @@ import {
   convertToModelMessages,
   createIdGenerator,
   createUIMessageStreamResponse,
-  generateText,
-  readUIMessageStream,
-  streamText,
 } from "ai";
-import { formatStreamError, isTruncatedByTokenLimit } from "./stream-error.ts";
-import { createMessageMetadata } from "./message-metadata.ts";
-import { applyToolDurations } from "./tool-durations.ts";
+import type { ModelMessage } from "ai";
 import {
   prepareChatTurn,
   validateTurnAttachments,
@@ -20,13 +15,7 @@ import { actorUserId, type WorkspaceScope } from "../scope.ts";
 import type { PlatypusUIMessage } from "../types.ts";
 import { runRegistry, type RunTimeouts } from "./run-registry.ts";
 import { startRun } from "./run-lifecycle.ts";
-import { buildModelInvocation } from "./run-plan.ts";
-import { computeStats } from "./run-stats.ts";
-import {
-  createNoProgressDetector,
-  NoProgressError,
-  type NoProgressDetector,
-} from "./no-progress.ts";
+import { driveOnce, driveStreamed } from "./drive.ts";
 import type {
   ResolvedRunPlan,
   RunId,
@@ -144,14 +133,11 @@ export class AgentRunner {
     origin?: string;
     frontendUrl?: string;
     timeouts?: RunTimeouts;
-    /**
-     * Unattended (trigger/scheduled) runs enable no-progress detection: a
-     * stuck model that re-issues the same call for the same result is aborted
-     * before it burns compute up to the step ceiling. Interactive runs leave
-     * it off — a human can stop those themselves.
-     */
-    unattended?: boolean;
-  }) {
+  }): Promise<{
+    state: RunState;
+    run: ReturnType<typeof startRun>;
+    modelMessages: ModelMessage[];
+  }> {
     const { scope, input, sink } = params;
 
     // File gate (issue #328): reject a turn carrying a file the target model
@@ -225,25 +211,12 @@ export class AgentRunner {
     const plan: ResolvedRunPlan = { resolved: state.turn.resolved };
     await sink.onResolved({ runId: input.runId, plan });
 
-    // Unattended runs gain a second stop condition alongside the step
-    // ceiling: when the model makes no progress (same call → same result,
-    // K times) the loop halts before issuing yet another wasteful step.
-    // `tripped()` is read after generation to record the run as failed.
-    const noProgress: NoProgressDetector | null = params.unattended
-      ? createNoProgressDetector()
-      : null;
+    // The conversation is converted once, here, and handed to whichever drive
+    // the caller picks — `stream` for an HTTP client, `generate` for a headless
+    // run. The drives own the model call and the terminal decision from there.
+    const modelMessages = await convertToModelMessages(state.turn.stream.messages);
 
-    // Built once and shared by both invocations, by the same assembly a
-    // delegated run uses.
-    const modelArgs = {
-      ...buildModelInvocation(state.turn.stream, {
-        abortSignal: run.handle.signal,
-        extraStopCondition: noProgress?.stopCondition,
-      }),
-      messages: await convertToModelMessages(state.turn.stream.messages),
-    };
-
-    return { state, run, modelArgs, noProgress };
+    return { state, run, modelMessages };
   }
 
   async stream(params: {
@@ -253,7 +226,7 @@ export class AgentRunner {
     options: StreamOptions;
   }): Promise<Response> {
     const { input, options } = params;
-    const { state, run, modelArgs } = await this.setup({
+    const { state, run, modelMessages } = await this.setup({
       scope: params.scope,
       input,
       sink: params.sink,
@@ -262,77 +235,57 @@ export class AgentRunner {
       timeouts: options.timeouts,
     });
 
-    logger.debug({ systemPrompt: modelArgs.system }, "System prompt for chat");
+    logger.debug(
+      { systemPrompt: state.turn?.stream.system },
+      "System prompt for chat",
+    );
 
     // How long each locally-executed tool took, keyed by `toolCallId`. The SDK
-    // has already measured it; we only hold onto it long enough to stamp it onto
-    // the outgoing chunks and onto the finished messages (see
-    // `injectToolDurations` and `applyToolDurations`). Provider-executed tools
+    // has already measured it; the drive holds it long enough to stamp it onto
+    // the finished messages (see `applyToolDurations`). Provider-executed tools
     // never reach this callback and so carry no duration.
     const toolDurations = new Map<string, number>();
 
-    // Whether `onFinish` has handed over the finished messages. The two branches
-    // of the tee below race: the source can finish while the snapshot branch
-    // still has chunks buffered, and disposing the turn is real I/O that gives
-    // that branch time to drain. A snapshot arriving after the handover is
-    // strictly worse than what it would overwrite — same content, minus the
-    // tool durations — so the snapshot stops writing once this is set.
-    let finalMessagesReceived = false;
-
-    const result = streamText({
-      ...modelArgs,
-      onStepFinish: (step) => run.onStep(step),
+    // The drive runs the model loop and folds the stream; this runner keeps
+    // only the teeing (one branch is the HTTP body, the other is drained to
+    // keep `state.messages` fresh for the sink's mid-run flush) and the
+    // response. Terminal status, the output-ceiling cutoff and the no-progress
+    // stop condition are all decided inside `runs/drive.ts`.
+    const drive = driveStreamed({
+      plan: state.turn!.stream,
+      modelMessages,
+      run,
+      originalMessages: input.messages,
+      agentId: state.turn!.resolved.agentId,
+      generateMessageId: createIdGenerator({ prefix: "msg", size: 16 }),
+      toolDurations,
+      // Interactive runs leave no-progress off — a human can stop those.
+      stopSnapshotsAfterFinal: true,
+      returnResponse: true,
       onToolExecutionEnd: ({ toolCall, toolExecutionMs }) => {
         toolDurations.set(toolCall.toolCallId, toolExecutionMs);
       },
-    });
-
-    // Build the UI message stream and tee it. The response body consumes
-    // one branch; we drain the other server-side so a disconnected
-    // client (cancelling the response branch) doesn't propagate back to
-    // the source. The source keeps pulling as long as the snapshot
-    // branch is being read, so `onFinish` only fires on natural
-    // completion — not when the consumer cancels with partial state.
-    const uiStream = result.toUIMessageStream<PlatypusUIMessage>({
-      originalMessages: input.messages,
-      generateMessageId: createIdGenerator({ prefix: "msg", size: 16 }),
-      messageMetadata: createMessageMetadata(
-        state.turn?.resolved.agentId,
-        toolDurations,
-      ),
-      onError: (error) => formatStreamError(error),
-      onFinish: async ({ messages: finalMessages }) => {
-        // Stamped onto the parts here as well as travelling out as metadata:
-        // this is the per-part form the persisted messages use, and the one a
-        // reload reads. Setting the flag first closes the snapshot branch's
-        // window to overwrite this, so the sink's terminal write observes it.
-        finalMessagesReceived = true;
-        state.messages = applyToolDurations(finalMessages, toolDurations);
-        const { status, error } = run.statusFromSignal();
-        await run.finish(status, error);
+      // The terminal finish (with tool durations applied) is what the sink's
+      // final write must observe.
+      onFinal: (messages) => {
+        state.messages = messages;
       },
     });
 
-    const [forResponse, forSnapshot] = uiStream.tee();
-
-    // Read the snapshot branch as message snapshots and keep `state.messages`
-    // up to date. ChatSink's FlushScheduler then writes the in-progress
-    // assistant message to the DB on each onProgress bump, so a user who
-    // reconnects mid-run sees the partial answer (not just their own
-    // input message).
+    // Consume the snapshot branch server-side. The response body drives one
+    // branch; we drain the other so a disconnected client (cancelling the
+    // response branch) doesn't propagate back to the source — the run keeps
+    // pulling as long as the snapshot branch is being read. The drive stops
+    // yielding after the final handover, so this never overwrites the folded
+    // final with a duration-less snapshot.
     void (async () => {
       try {
-        for await (const message of readUIMessageStream<PlatypusUIMessage>({
-          stream: forSnapshot,
-          onError: (err) =>
-            logger.error(
-              { err, runId: input.runId },
-              "Snapshot stream parse error",
-            ),
-        })) {
-          // Keep draining after the handover — the branch is still teed to a
-          // live source — but stop writing; `onFinish` has the better copy.
-          if (finalMessagesReceived) continue;
+        for await (const message of drive.snapshots) {
+          // Keep `state.messages` current so ChatSink's FlushScheduler writes
+          // the in-progress assistant message on each onProgress bump — a user
+          // who reconnects mid-run sees the partial answer. The drive stops
+          // yielding after the final handover, so this never overwrites the
+          // folded final with a duration-less snapshot.
           state.messages = [...input.messages, message];
         }
       } catch (err) {
@@ -340,10 +293,14 @@ export class AgentRunner {
           { err, runId: input.runId },
           "Server-side UI stream consumer error",
         );
+      } finally {
+        await drive.done;
       }
-    })();
+    })().catch((err) =>
+      logger.error({ err, runId: input.runId }, "Chat drive background error"),
+    );
 
-    return createUIMessageStreamResponse({ stream: forResponse });
+    return createUIMessageStreamResponse({ stream: drive.response! });
   }
 
   /**
@@ -359,92 +316,25 @@ export class AgentRunner {
     const { input } = params;
     const options = params.options ?? {};
     // No `origin`: headless callers don't have file URLs to inline.
-    // Headless runs are unattended → enable no-progress detection.
-    const { run, modelArgs, noProgress } = await this.setup({
+    const { state, run, modelMessages } = await this.setup({
       scope: params.scope,
       input,
       sink: params.sink,
       frontendUrl: options.frontendUrl,
       timeouts: options.timeouts,
+    });
+
+    // Headless runs are unattended → the drive enables no-progress detection.
+    // The drive computes the stats, records the output-ceiling cutoff, decides
+    // the terminal status and finishes the run — this entry point only returns.
+    const { text, stats } = await driveOnce({
+      plan: state.turn!.stream,
+      modelMessages,
+      run,
       unattended: true,
     });
 
-    const startTime = Date.now();
-    try {
-      const result = await generateText({
-        ...modelArgs,
-        onStepFinish: (step) => run.onStep(step),
-      });
-
-      const stats = computeStats(result as Parameters<typeof computeStats>[0]);
-      // The terminal finish only, as on the streamed path: a step inside a tool
-      // loop can end at the ceiling and the run still recover. Set before
-      // `finish`, which is what carries the run's stats to `sink.onFinish` —
-      // the sink's record is the only channel an unattended run has.
-      if (isTruncatedByTokenLimit(result.finishReason)) {
-        stats.truncatedByTokenLimit = true;
-      }
-      run.setStats(stats);
-
-      // The no-progress stop condition halts the loop cleanly (the SDK
-      // resolves normally), so the abort is surfaced here rather than via the
-      // catch path. Record the run as failed with a machine-readable reason.
-      const trip = noProgress?.tripped() ?? null;
-      if (trip) {
-        const err = new NoProgressError(trip.toolName, trip.count);
-        logger.warn(
-          {
-            runId: input.runId,
-            toolName: trip.toolName,
-            count: trip.count,
-            duration: Date.now() - startTime,
-            // Carried here too: this path returns before the completion log
-            // below, so without it a no-progress run records neither reason.
-            finishReason: result.finishReason,
-            rawFinishReason: result.rawFinishReason,
-            stats,
-          },
-          "Run aborted: no progress",
-        );
-        await run.finish("failed", err);
-        return { text: result.text, stats };
-      }
-
-      // Nobody is watching an unattended run, so this log is the only record
-      // of how it ended. Carry both reasons for the same reason `onStep` does.
-      logger.info(
-        {
-          runId: input.runId,
-          duration: Date.now() - startTime,
-          responseLength: result.text.length,
-          finishReason: result.finishReason,
-          rawFinishReason: result.rawFinishReason,
-          stats,
-        },
-        "Run generate completed",
-      );
-
-      await run.finish("succeeded");
-      return { text: result.text, stats };
-    } catch (error) {
-      const err = error instanceof Error ? error : new Error(String(error));
-      logger.error(
-        {
-          error,
-          runId: input.runId,
-          duration: Date.now() - startTime,
-        },
-        "Run generate failed",
-      );
-      // A cancelled run is recorded as cancelled; a timed-out one stays a
-      // failure, and so does anything the model call threw on its own.
-      const aborted = run.statusFromSignal();
-      await run.finish(
-        aborted.status === "cancelled" ? "cancelled" : "failed",
-        err,
-      );
-      throw err;
-    }
+    return { text, stats };
   }
 }
 

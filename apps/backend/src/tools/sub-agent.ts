@@ -2,18 +2,16 @@ import { randomUUID } from "node:crypto";
 import {
   getToolOrDynamicToolName,
   isToolUIPart,
-  readUIMessageStream,
-  streamText,
   tool,
   type Tool,
 } from "ai";
 import { z } from "zod";
 import { logger } from "../logger.ts";
-import { createMessageMetadata } from "../runs/message-metadata.ts";
 import { startRun } from "../runs/run-lifecycle.ts";
-import { buildModelInvocation, type RunPlan } from "../runs/run-plan.ts";
+import { driveStreamed } from "../runs/drive.ts";
+import type { RunPlan } from "../runs/run-plan.ts";
 import { runRegistry } from "../runs/run-registry.ts";
-import { describeSdkError, formatStreamError } from "../runs/stream-error.ts";
+import { describeSdkError } from "../runs/stream-error.ts";
 import type { ParentRunContext } from "../runs/types.ts";
 import { renderSecurityGuardrails } from "../security-prompt.ts";
 import { actorUserId, workspaceScopeForSubAgent } from "../scope.ts";
@@ -323,60 +321,55 @@ export const createSubAgentTool = (options: SubAgentToolOptions) => {
           // ENDS NORMALLY after an error, so without this the generator would
           // return whatever text had accumulated — typically the model's opening
           // preamble — and the parent would read a crash as an answer.
-          let streamFailure: string | undefined;
           let latest: PlatypusUIMessage | undefined;
           let entries: SubAgentActivityEntry[] = [];
+          let drive: ReturnType<typeof driveStreamed> | null = null;
+          let setupError: string | undefined;
 
           try {
             // Inside the try: opening this delegate's own tools can fail the
             // same way its stream can, and it reaches the parent as a tool error
             // either way rather than an unattributed throw.
             const tools = await loadTools();
-            const result = streamText({
-              ...buildModelInvocation(
-                {
-                  ...plan,
-                  // A Sub-Agent invocation receives Instructions plus
-                  // guardrails and nothing else — no workspace context, no
-                  // memories, no user identity (ADR-0016). The exception is
-                  // expressed here, in what is handed to the shared assembly,
-                  // rather than as a mode inside the system-prompt renderer.
-                  system: composedInstructions,
-                  // Wrapped per invocation: the wrapper holds THIS run's
-                  // per-step stall timer down for the duration of each tool
-                  // call. Results arrive already normalized — the Tool session
-                  // that loaded them owns that (#321 one level down).
-                  tools: wrapToolsWithActivity(tools, run.onActivity),
-                },
-                { abortSignal: run.handle.signal },
-              ),
+            drive = driveStreamed({
+              // A Sub-Agent invocation receives Instructions plus guardrails and
+              // nothing else — no workspace context, no memories, no user
+              // identity (ADR-0016). The exception is expressed here, in what is
+              // handed to the shared drive, rather than as a mode inside the
+              // system-prompt renderer.
+              plan: {
+                ...plan,
+                system: composedInstructions,
+                // Wrapped per invocation: the wrapper holds THIS run's per-step
+                // stall timer down for the duration of each tool call. Results
+                // arrive already normalized — the Tool session that loaded them
+                // owns that (#321 one level down).
+                tools: wrapToolsWithActivity(tools, run.onActivity),
+              },
               prompt: task,
+              run,
+              // A delegated run is unattended: it gains the no-progress stop
+              // condition (same call → same result, K times) that an interactive
+              // Chat leaves off, and fails the run when its stream reports an
+              // error rather than reading the crash as the finding.
+              unattended: true,
+              failOnStreamError: true,
               onStepFinish: (step) => {
                 rawFinishReason = step.rawFinishReason;
-                run.onStep(step);
               },
             });
+          } catch (error) {
+            setupError = describeSdkError(error);
+          }
 
-            // The same consumption the run path uses: stream parts folded into a
-            // `UIMessage` by the SDK, errors rendered by `stream-error.ts`, and
-            // the output-ceiling cutoff carried on message metadata.
-            const uiStream = result.toUIMessageStream<PlatypusUIMessage>({
-              messageMetadata: createMessageMetadata(undefined),
-              onError: (error) => formatStreamError(error),
-            });
-
-            // Serialized entries of the last yield. Text deltas and growing tool
-            // inputs change the message on nearly every chunk but leave the
-            // activity log alone, and yielding for those would spam the parent's
-            // SSE stream.
+          // The drive folds the stream; this generator only projects it onto the
+          // activity log the parent's UI renders. Serialized entries of the last
+          // yield: text deltas and growing tool inputs change the message on
+          // nearly every chunk but leave the activity log alone, and yielding for
+          // those would spam the parent's SSE stream.
+          if (drive) {
             let lastYielded = "";
-
-            for await (const message of readUIMessageStream<PlatypusUIMessage>({
-              stream: uiStream,
-              onError: (error) => {
-                streamFailure ??= describeSdkError(error);
-              },
-            })) {
+            for await (const message of drive.snapshots) {
               latest = message;
               entries = activityEntries(message);
               const rendered = JSON.stringify(entries);
@@ -384,39 +377,34 @@ export const createSubAgentTool = (options: SubAgentToolOptions) => {
               lastYielded = rendered;
               yield { entries } satisfies SubAgentActivity;
             }
-
-            // An abort ends the stream normally, so the signal is the only record
-            // that the run was stopped rather than finished.
-            if (!streamFailure && run.handle.signal.aborted) {
-              const reason = run.abortReason();
-              streamFailure = reason
-                ? `Stopped before finishing: ${reason}`
-                : "Stopped before finishing.";
-            }
-          } catch (error) {
-            streamFailure ??= describeSdkError(error);
           }
 
+          const outcome = setupError
+            ? { failure: setupError, truncated: false as const }
+            : await drive!.done;
+
           const aggregatedText = assistantText(latest);
-          const truncatedByTokenLimit =
-            latest?.metadata?.truncatedByTokenLimit === true;
+          const truncatedByTokenLimit = outcome.truncated === true;
 
           // Throw rather than return: a failed delegation must reach the parent
           // as a tool error, not as a short answer it might summarize and pass
           // off to the user as the sub-agent's finding. Any partial text rides
           // along in the message so the work isn't lost.
-          if (streamFailure) {
+          if (outcome.failure) {
             // A delegation stopped because someone cancelled the parent is a
             // normal outcome, not a fault of this sub-agent — record and log it
-            // as the cancellation it is.
+            // as the cancellation it is. `run.finish` is once-only: when the
+            // drive already ended the run (its terminal decision) this is a
+            // no-op; when stream setup failed before the drive started, this is
+            // the run's only finish.
             const { status, error } = run.statusFromSignal();
             const cancelled = status === "cancelled";
             await run.finish(
               cancelled ? "cancelled" : "failed",
-              error ?? new Error(streamFailure),
+              error ?? new Error(outcome.failure),
             );
             logger[cancelled ? "warn" : "error"](
-              { runId, subAgentName: name, error: streamFailure },
+              { runId, subAgentName: name, error: outcome.failure },
               `Sub-agent "${name}" did not finish`,
             );
             // The failure is a step of the work as the parent's UI reads it, so
@@ -424,11 +412,15 @@ export const createSubAgentTool = (options: SubAgentToolOptions) => {
             yield {
               entries: [
                 ...entries,
-                { type: "failed", status: "error", error: streamFailure },
+                {
+                  type: "failed",
+                  status: "error",
+                  error: outcome.failure,
+                },
               ],
             } satisfies SubAgentActivity;
             throw new Error(
-              `Sub-agent "${name}" did not complete: ${streamFailure}` +
+              `Sub-agent "${name}" did not complete: ${outcome.failure}` +
                 (aggregatedText
                   ? `\n\nPartial output before the failure:\n${aggregatedText}`
                   : ""),
@@ -436,14 +428,11 @@ export const createSubAgentTool = (options: SubAgentToolOptions) => {
           }
 
           if (truncatedByTokenLimit) {
-            run.setStats({ ...run.stats, truncatedByTokenLimit: true });
             logger.warn(
               { runId, subAgentId: id, subAgentName: name, rawFinishReason },
               `Sub-agent "${name}" answer truncated at the output token limit`,
             );
           }
-
-          await run.finish("succeeded");
 
           const text =
             aggregatedText || summarizeToolResult(finalToolResult(latest));

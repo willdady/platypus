@@ -1101,7 +1101,13 @@ describe("AgentRunner.stream — success & interruption", () => {
       ],
     });
     queue.end();
-    await tick();
+    // The run is finished by the drive once the background snapshot branch
+    // drains (and teardown disposes the turn, pushing the racing snapshot).
+    // Await that drain deterministically before reading the terminal sink write.
+    await vi.waitFor(
+      () => expect(runRegistry.has("s-late-snapshot")).toBe(false),
+      { timeout: 2_000 },
+    );
 
     const finish = sink.events.at(-1) as Extract<
       LifecycleEvent,

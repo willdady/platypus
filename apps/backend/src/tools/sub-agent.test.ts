@@ -622,6 +622,18 @@ describe("createSubAgentTool", () => {
       register.mockRestore();
     });
 
+    // Issue #496: a delegated run is unattended, so it drives under the same
+    // no-progress stop condition a Trigger run has — a stuck model re-issuing
+    // the same call for the same result is aborted rather than burning compute
+    // up to the step ceiling. An interactive Chat turn leaves that off.
+    it("drives the delegated run with the no-progress stop condition", async () => {
+      await delegate({});
+
+      const { stopWhen } = streamArgs();
+      // Step ceiling (stepCountIs) + the no-progress detector.
+      expect(stopWhen).toHaveLength(2);
+    });
+
     // The generator body doesn't start until the consumer pulls, so a parent
     // cancelled between dispatch and the first tick would never fire the abort
     // listener and the delegation would run on regardless.
