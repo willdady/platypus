@@ -1,10 +1,5 @@
 import { randomUUID } from "node:crypto";
-import {
-  getToolOrDynamicToolName,
-  isToolUIPart,
-  tool,
-  type Tool,
-} from "ai";
+import { getToolOrDynamicToolName, isToolUIPart, tool, type Tool } from "ai";
 import { z } from "zod";
 import { logger } from "../logger.ts";
 import { startRun } from "../runs/run-lifecycle.ts";

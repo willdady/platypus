@@ -214,7 +214,9 @@ export class AgentRunner {
     // The conversation is converted once, here, and handed to whichever drive
     // the caller picks — `stream` for an HTTP client, `generate` for a headless
     // run. The drives own the model call and the terminal decision from there.
-    const modelMessages = await convertToModelMessages(state.turn.stream.messages);
+    const modelMessages = await convertToModelMessages(
+      state.turn.stream.messages,
+    );
 
     return { state, run, modelMessages };
   }

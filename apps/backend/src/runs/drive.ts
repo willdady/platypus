@@ -122,8 +122,6 @@ type StreamedDrive = {
   snapshots: AsyncIterable<PlatypusUIMessage>;
   /** A client stream branch, present when `returnResponse` (a Chat turn). */
   response?: ReadableStream<InferUIMessageChunk<PlatypusUIMessage>>;
-  /** True once the terminal `onFinish` has fired. */
-  finalHandedOver: () => boolean;
   /** Resolves once the run has ended, with the drive's outcome. */
   done: Promise<StreamedDriveResult>;
 };
@@ -155,7 +153,9 @@ const endStreamedRun = async (
   if (opts.failOnStreamError && opts.failure && status !== "failed") {
     await run.finish(
       status === "cancelled" ? "cancelled" : "failed",
-      status === "cancelled" ? (error ?? new Error(opts.failure)) : new Error(opts.failure),
+      status === "cancelled"
+        ? (error ?? new Error(opts.failure))
+        : new Error(opts.failure),
     );
     return;
   }
@@ -210,9 +210,7 @@ export const driveStreamed = (opts: StreamedDriveOptions): StreamedDrive => {
       abortSignal: run.handle.signal,
       extraStopCondition: noProgress?.stopCondition,
     }),
-    ...(prompt !== undefined
-      ? { prompt }
-      : { messages: modelMessages ?? [] }),
+    ...(prompt !== undefined ? { prompt } : { messages: modelMessages ?? [] }),
     onStepFinish: (step: RunStep) => {
       onStepFinish?.(step);
       run.onStep(step);
@@ -245,7 +243,8 @@ export const driveStreamed = (opts: StreamedDriveOptions): StreamedDrive => {
     },
   });
 
-  let response: ReadableStream<InferUIMessageChunk<PlatypusUIMessage>> | undefined;
+  let response:
+    ReadableStream<InferUIMessageChunk<PlatypusUIMessage>> | undefined;
   let consume: ReadableStream<InferUIMessageChunk<PlatypusUIMessage>>;
   if (returnResponse) {
     const [client, snapshot] = uiStream.tee();
@@ -277,17 +276,23 @@ export const driveStreamed = (opts: StreamedDriveOptions): StreamedDrive => {
       failure ??= describeSdkError(error);
     } finally {
       await endStreamedRun(run, { failure, noProgress, failOnStreamError });
-      // The failure the caller should act on: the observed stream failure, or a
-      // no-progress trip, or (for a fail-on-error drive) an abort mid-stream.
+      // The failure the caller should act on — only a fail-on-error drive carries
+      // one: the observed stream failure, a no-progress trip, or an abort
+      // mid-stream. A Chat turn that tolerates a stream error records its run as
+      // succeeded, so it reports no failure here either. This keeps the seam's
+      // two answers — the run's status and the returned outcome — consistent.
       const trip = noProgress?.tripped() ?? null;
-      const terminalFailure =
-        failure ||
-        (trip ? new NoProgressError(trip.toolName, trip.count).message : undefined) ||
-        (failOnStreamError && run.handle.signal.aborted
-          ? run.abortReason()
-            ? `Stopped before finishing: ${run.abortReason()}`
-            : "Stopped before finishing."
-          : undefined);
+      const terminalFailure = failOnStreamError
+        ? failure ||
+          (trip
+            ? new NoProgressError(trip.toolName, trip.count).message
+            : undefined) ||
+          (run.handle.signal.aborted
+            ? run.abortReason()
+              ? `Stopped before finishing: ${run.abortReason()}`
+              : "Stopped before finishing."
+            : undefined)
+        : undefined;
       resolveDone({
         messages: handoverMessages,
         latest,
@@ -300,7 +305,6 @@ export const driveStreamed = (opts: StreamedDriveOptions): StreamedDrive => {
   return {
     snapshots,
     response,
-    finalHandedOver: () => finalHandedOver,
     done,
   };
 };
@@ -337,13 +341,13 @@ export const driveOnce = async (
         abortSignal: run.handle.signal,
         extraStopCondition: noProgress?.stopCondition,
       }),
-      ...(prompt !== undefined ? { prompt } : { messages: modelMessages ?? [] }),
+      ...(prompt !== undefined
+        ? { prompt }
+        : { messages: modelMessages ?? [] }),
       onStepFinish: (step: RunStep) => run.onStep(step),
     });
 
-    const stats = computeStats(
-      result as Parameters<typeof computeStats>[0],
-    );
+    const stats = computeStats(result as Parameters<typeof computeStats>[0]);
     if (isTruncatedByTokenLimit(result.finishReason)) {
       stats.truncatedByTokenLimit = true;
     }

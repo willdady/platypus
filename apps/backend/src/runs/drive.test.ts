@@ -33,7 +33,11 @@ const text = (id: string, ...deltas: string[]): LanguageModelV3StreamPart[] => [
   { type: "text-start", id },
   ...deltas.map((delta) => ({ type: "text-delta" as const, id, delta })),
   { type: "text-end", id },
-  { type: "finish", finishReason: { unified: "stop", raw: "stop" }, usage: USAGE },
+  {
+    type: "finish",
+    finishReason: { unified: "stop", raw: "stop" },
+    usage: USAGE,
+  },
 ];
 
 const modelOf = (...steps: LanguageModelV3StreamPart[][]) => {
@@ -116,7 +120,9 @@ describe("driveOnce", () => {
 
     const { stats } = await driveOnce({
       plan: planOf(
-        generatingModel({ finishReason: { unified: "length", raw: "max_tokens" } }),
+        generatingModel({
+          finishReason: { unified: "length", raw: "max_tokens" },
+        }),
       ),
       prompt: "hi",
       run,
@@ -263,7 +269,7 @@ describe("driveStreamed", () => {
 
   it("finishes as cancelled when the run is stopped mid-stream", async () => {
     const { run, outcome } = startRecordedRun();
-const drive = driveStreamed({
+    const drive = driveStreamed({
       plan: planOf(modelOf(text("t1", "gone in a flash"))),
       run,
       prompt: "hi",
