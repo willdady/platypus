@@ -1,5 +1,19 @@
 # Changelog
 
+## [2.8.0](https://github.com/willdady/platypus/compare/v2.7.1...v2.8.0) (2026-08-17)
+
+
+### Features
+
+* **backend,frontend:** collapse native search and Web-search backend into one searchSource control ([#516](https://github.com/willdady/platypus/issues/516)) ([381c4ed](https://github.com/willdady/platypus/commit/381c4ed5c9ee4e37c3ba2fbe41072a362aabedfe))
+* **backend:** collapse the three run drivers into runs/drive ([#535](https://github.com/willdady/platypus/issues/535)) ([35415a4](https://github.com/willdady/platypus/commit/35415a47289e27a410e7c263fbd14d8d49a9293c))
+* **backend:** compose Tool sets like Web backends, behind one disposable tool session ([#513](https://github.com/willdady/platypus/issues/513)) ([f9ed50e](https://github.com/willdady/platypus/commit/f9ed50ee165bfea314db1814c7e724aaec64a7e6))
+
+
+### Bug Fixes
+
+* **backend:** throw shared typed errors from the Chat-turn path ([#530](https://github.com/willdady/platypus/issues/530)) ([1e46345](https://github.com/willdady/platypus/commit/1e46345f18b76871da6494cb451505a712d021af))
+
 ## [2.7.1](https://github.com/willdady/platypus/compare/v2.7.0...v2.7.1) (2026-08-15)
 
 
