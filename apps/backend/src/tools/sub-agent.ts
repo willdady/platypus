@@ -343,12 +343,12 @@ export const createSubAgentTool = (options: SubAgentToolOptions) => {
               },
               prompt: task,
               run,
-              // A delegated run is unattended: it gains the no-progress stop
-              // condition (same call → same result, K times) that an interactive
-              // Chat leaves off, and fails the run when its stream reports an
-              // error rather than reading the crash as the finding.
-              unattended: true,
-              failOnStreamError: true,
+              // A delegated sub-Agent is the unattended half of the streamed
+              // drive: it gains the no-progress stop condition (same call →
+              // same result, K times) that an interactive Chat leaves off, and
+              // fails when its stream reports an error rather than reading the
+              // crash as the finding.
+              mode: "delegate",
               onStepFinish: (step) => {
                 rawFinishReason = step.rawFinishReason;
               },

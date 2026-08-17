@@ -257,8 +257,7 @@ describe("driveStreamed", () => {
       plan: planOf(model),
       run,
       prompt: "hi",
-      failOnStreamError: true,
-      unattended: true,
+      mode: "delegate",
     });
     for await (const _ of drive.snapshots) void _;
     const result = await drive.done;

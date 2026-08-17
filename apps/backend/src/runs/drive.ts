@@ -23,7 +23,7 @@ import {
   isTruncatedByTokenLimit,
 } from "./stream-error.ts";
 import { applyToolDurations } from "./tool-durations.ts";
-import type { RunStats } from "./types.ts";
+import type { RunStats, RunStatus } from "./types.ts";
 
 /**
  * The model call inside a registered run.
@@ -52,6 +52,43 @@ import type { RunStats } from "./types.ts";
  */
 
 /**
+ * Which shape a streamed drive takes. The two callers converge on two frozen
+ * combinations of the pacing and failure knobs, so those are captured here as
+ * a single intent instead of four independent flags a caller can scramble.
+ *
+ * - `"chat"` — an interactive Chat turn. Tolerates a stream error (renders it
+ *   inline), splits off a client stream branch, and stops yielding snapshots
+ *   once the terminal finish has handed its folded messages over.
+ * - `"delegate"` — an unattended, delegated sub-Agent. Gains the no-progress
+ *   stop condition, fails when its stream reports an error (so the generated
+ *   answer is never read as the finding), and yields every snapshot into the
+ *   caller's activity log.
+ */
+export type StreamedDriveMode = "chat" | "delegate";
+
+type DriveModeBehavior = {
+  unattended: boolean;
+  failOnStreamError: boolean;
+  stopSnapshotsAfterFinal: boolean;
+  returnResponse: boolean;
+};
+
+const MODE_BEHAVIOR: Record<StreamedDriveMode, DriveModeBehavior> = {
+  chat: {
+    unattended: false,
+    failOnStreamError: false,
+    stopSnapshotsAfterFinal: true,
+    returnResponse: true,
+  },
+  delegate: {
+    unattended: true,
+    failOnStreamError: true,
+    stopSnapshotsAfterFinal: false,
+    returnResponse: false,
+  },
+};
+
+/**
  * A streamed drive's inputs. `plan` carries the generation settings plus, for
  * a Chat turn, the folded conversation under `messages`; a delegated run hands
  * the conversation as a single `prompt` instead. The two are mutually
@@ -72,25 +109,10 @@ export type StreamedDriveOptions = {
   /** The live map the caller fills from `onToolExecutionEnd`. */
   toolDurations?: Map<string, number>;
   /**
-   * Unattended runs (delegated sub-Agents) gain a no-progress stop condition
-   * alongside the step ceiling. Interactive Chat turns leave it off.
+   * Whether this is an interactive Chat turn or an unattended delegated
+   * sub-Agent. Defaults to `"chat"`.
    */
-  unattended?: boolean;
-  /**
-   * Whether the run fails when its stream reports an error. A delegated
-   * sub-Agent does (`failOnStreamError`), so the generated answer is never
-   * read as the finding; a Chat turn tolerates it and renders the error inline.
-   */
-  failOnStreamError?: boolean;
-  /**
-   * Once the terminal `onFinish` has handed over the folded final messages,
-   * keep draining the snapshot branch but stop yielding further snapshots.
-   * This is the Chat-turn teardown race: a snapshot landing during teardown
-   * carries no tool durations, so it must not overwrite the handover copy.
-   */
-  stopSnapshotsAfterFinal?: boolean;
-  /** Split the UI stream and hand back a client branch (only a Chat turn). */
-  returnResponse?: boolean;
+  mode?: StreamedDriveMode;
   /** Hooked before the run folds the step, so the caller can read what it can't
    *  otherwise recover (e.g. the provider's raw finish reason). */
   onStepFinish?: (step: RunStep) => void;
@@ -120,18 +142,70 @@ export type StreamedDriveResult = {
 type StreamedDrive = {
   /** The folded assistant messages. Consuming this is what drains the run. */
   snapshots: AsyncIterable<PlatypusUIMessage>;
-  /** A client stream branch, present when `returnResponse` (a Chat turn). */
+  /** A client stream branch, present in `"chat"` mode (a Chat turn). */
   response?: ReadableStream<InferUIMessageChunk<PlatypusUIMessage>>;
   /** Resolves once the run has ended, with the drive's outcome. */
   done: Promise<StreamedDriveResult>;
 };
 
 /**
- * The one terminal-status rule. Decided here, in a registered run's terms, so
- * no caller re-derives "did we succeed?" from the stream it happened to be
- * driving. A single no-progress trip or stream failure ends the run as a
- * failure; a run somebody stopped ends it as cancelled; a timeout stays a
- * failure with its `TimeoutError`; anything else is a success.
+ * The one terminal-status rule, in a registered run's terms.
+ *
+ * Shared by both drivers so neither re-derives "did we succeed?" from the
+ * stream or result it happened to be driving. Decides the status (and, where a
+ * failure is reported, the caller-facing sentence) an ended run should carry:
+ * a single no-progress trip or, on a fail-on-error drive, a stream failure
+ * ends the run as a failure; a run somebody stopped ends it as cancelled; a
+ * timeout stays a failure with its `TimeoutError`; anything else is a success.
+ */
+type TerminalDecision = {
+  status: RunStatus;
+  error?: Error;
+  /** A caller-facing sentence for a non-clean end, when one is reported. */
+  failure?: string;
+};
+
+const decideTerminalStatus = (
+  run: RunLifecycle,
+  opts: {
+    failure?: string;
+    noProgress: NoProgressDetector | null;
+    failOnStreamError: boolean;
+  },
+): TerminalDecision => {
+  const trip = opts.noProgress?.tripped() ?? null;
+
+  if (trip) {
+    const err = new NoProgressError(trip.toolName, trip.count);
+    return { status: "failed", error: err, failure: err.message };
+  }
+  const { status, error } = run.statusFromSignal();
+  // A timed-out run keeps its TimeoutError rather than whichever stream error
+  // also landed: the timeout names the bound that was exceeded.
+  if (opts.failOnStreamError && opts.failure && status !== "failed") {
+    const err = new Error(opts.failure);
+    return {
+      status: status === "cancelled" ? "cancelled" : "failed",
+      error: status === "cancelled" ? (error ?? err) : err,
+      failure: opts.failure,
+    };
+  }
+  // A fail-on-error drive that stopped mid-stream reports why it stopped, so
+  // the caller (a delegate's parent) can tell a stop from a finished answer.
+  const failure =
+    opts.failOnStreamError && run.handle.signal.aborted
+      ? run.abortReason()
+        ? `Stopped before finishing: ${run.abortReason()}`
+        : "Stopped before finishing."
+      : undefined;
+  return { status, error, failure };
+};
+
+/**
+ * Ends a streamed run with the terminal-status decision and the caller-facing
+ * reason for a non-clean end, computed once. The run's status and the returned
+ * outcome stay consistent by construction: the failure the caller is told is
+ * exactly the one the run was finished with.
  */
 const endStreamedRun = async (
   run: RunLifecycle,
@@ -140,26 +214,10 @@ const endStreamedRun = async (
     noProgress: NoProgressDetector | null;
     failOnStreamError: boolean;
   },
-): Promise<void> => {
-  const { status, error } = run.statusFromSignal();
-  const trip = opts.noProgress?.tripped() ?? null;
-
-  if (trip) {
-    await run.finish("failed", new NoProgressError(trip.toolName, trip.count));
-    return;
-  }
-  // A timed-out run keeps its TimeoutError rather than whichever stream error
-  // also landed: the timeout names the bound that was exceeded.
-  if (opts.failOnStreamError && opts.failure && status !== "failed") {
-    await run.finish(
-      status === "cancelled" ? "cancelled" : "failed",
-      status === "cancelled"
-        ? (error ?? new Error(opts.failure))
-        : new Error(opts.failure),
-    );
-    return;
-  }
-  await run.finish(status, error);
+): Promise<TerminalDecision> => {
+  const decision = decideTerminalStatus(run, opts);
+  await run.finish(decision.status, decision.error);
+  return decision;
 };
 
 /**
@@ -182,14 +240,18 @@ export const driveStreamed = (opts: StreamedDriveOptions): StreamedDrive => {
     agentId,
     generateMessageId,
     toolDurations,
-    unattended = false,
-    failOnStreamError = false,
-    stopSnapshotsAfterFinal = false,
-    returnResponse = false,
+    mode = "chat",
     onStepFinish,
     onToolExecutionEnd,
     onFinal,
   } = opts;
+
+  const {
+    unattended,
+    failOnStreamError,
+    stopSnapshotsAfterFinal,
+    returnResponse,
+  } = MODE_BEHAVIOR[mode];
 
   const noProgress: NoProgressDetector | null = unattended
     ? createNoProgressDetector()
@@ -232,13 +294,6 @@ export const driveStreamed = (opts: StreamedDriveOptions): StreamedDrive => {
         toolDurations && toolDurations.size > 0
           ? applyToolDurations(finalMessages, toolDurations)
           : finalMessages;
-      truncated =
-        handoverMessages.some(
-          (m) => m.metadata?.truncatedByTokenLimit === true,
-        ) ?? false;
-      if (truncated) {
-        run.setStats({ ...run.stats, truncatedByTokenLimit: true });
-      }
       onFinal?.(handoverMessages);
     },
   });
@@ -275,28 +330,30 @@ export const driveStreamed = (opts: StreamedDriveOptions): StreamedDrive => {
       );
       failure ??= describeSdkError(error);
     } finally {
-      await endStreamedRun(run, { failure, noProgress, failOnStreamError });
-      // The failure the caller should act on — only a fail-on-error drive carries
-      // one: the observed stream failure, a no-progress trip, or an abort
-      // mid-stream. A Chat turn that tolerates a stream error records its run as
-      // succeeded, so it reports no failure here either. This keeps the seam's
-      // two answers — the run's status and the returned outcome — consistent.
-      const trip = noProgress?.tripped() ?? null;
-      const terminalFailure = failOnStreamError
-        ? failure ||
-          (trip
-            ? new NoProgressError(trip.toolName, trip.count).message
-            : undefined) ||
-          (run.handle.signal.aborted
-            ? run.abortReason()
-              ? `Stopped before finishing: ${run.abortReason()}`
-              : "Stopped before finishing."
-            : undefined)
-        : undefined;
+      // The terminal finish attaches the cutoff marker to the folded messages it
+      // hands over; if that never fires (an abort before completion), the last
+      // snapshot still carries it. Either way it is recorded once, before the
+      // run's status is decided, so both the stats and the outcome agree.
+      truncated =
+        (handoverMessages?.some(
+          (m) => m.metadata?.truncatedByTokenLimit === true,
+        ) ??
+          false) ||
+        latest?.metadata?.truncatedByTokenLimit === true;
+      if (truncated) {
+        run.setStats({ ...run.stats, truncatedByTokenLimit: true });
+      }
+      // The failure and the terminal decision come from the same place, and only
+      // that place — no caller re-derives "did it fail?" from the pieces here.
+      const decision = await endStreamedRun(run, {
+        failure,
+        noProgress,
+        failOnStreamError,
+      });
       resolveDone({
         messages: handoverMessages,
         latest,
-        failure: terminalFailure,
+        failure: decision.failure,
         truncated,
       });
     }
@@ -353,11 +410,23 @@ export const driveOnce = async (
     }
     run.setStats(stats);
 
+    // The terminal decision is the same one `driveStreamed` ends its runs with.
     // The no-progress stop condition halts the loop cleanly (the SDK resolves
-    // normally), so the abort is surfaced here rather than via the catch path.
-    const trip = noProgress?.tripped() ?? null;
+    // normally), so a tripped detector surfaces here rather than in the catch.
+    const decision = decideTerminalStatus(run, {
+      failure: undefined,
+      noProgress,
+      failOnStreamError: false,
+    });
+    const trip =
+      decision.error instanceof NoProgressError
+        ? { toolName: decision.error.toolName, count: decision.error.count }
+        : null;
+
+    // Nobody is watching an unattended run, so this log is the only record of
+    // how it ended. Carried here because the completion log is the one place
+    // the raw reason survives for an unattended run.
     if (trip) {
-      const err = new NoProgressError(trip.toolName, trip.count);
       logger.warn(
         {
           runId: run.handle.runId,
@@ -370,26 +439,21 @@ export const driveOnce = async (
         },
         "Run aborted: no progress",
       );
-      await run.finish("failed", err);
-      return { text: result.text, stats };
+    } else {
+      logger.info(
+        {
+          runId: run.handle.runId,
+          duration: Date.now() - startTime,
+          responseLength: result.text.length,
+          finishReason: result.finishReason,
+          rawFinishReason: result.rawFinishReason,
+          stats,
+        },
+        "Run generate completed",
+      );
     }
 
-    // Nobody is watching an unattended run, so this log is the only record of
-    // how it ended. Carried here because the completion log is the one place
-    // the raw reason survives for an unattended run.
-    logger.info(
-      {
-        runId: run.handle.runId,
-        duration: Date.now() - startTime,
-        responseLength: result.text.length,
-        finishReason: result.finishReason,
-        rawFinishReason: result.rawFinishReason,
-        stats,
-      },
-      "Run generate completed",
-    );
-
-    await run.finish("succeeded");
+    await run.finish(decision.status, decision.error);
     return { text: result.text, stats };
   } catch (error) {
     const err = error instanceof Error ? error : new Error(String(error));
@@ -398,10 +462,16 @@ export const driveOnce = async (
       "Run generate failed",
     );
     // A cancelled run is recorded as cancelled; a timed-out one stays a
-    // failure, and so does anything the model call threw on its own.
-    const aborted = run.statusFromSignal();
+    // failure, and so does anything the model call threw on its own. The status
+    // choice is the shared one; only the error is the thrown one, not the
+    // signal's (there is no `TimeoutError` for a run that merely threw).
+    const decision = decideTerminalStatus(run, {
+      failure: undefined,
+      noProgress,
+      failOnStreamError: false,
+    });
     await run.finish(
-      aborted.status === "cancelled" ? "cancelled" : "failed",
+      decision.status === "cancelled" ? "cancelled" : "failed",
       err,
     );
     throw err;

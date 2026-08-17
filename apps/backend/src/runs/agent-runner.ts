@@ -261,9 +261,10 @@ export class AgentRunner {
       agentId: state.turn!.resolved.agentId,
       generateMessageId: createIdGenerator({ prefix: "msg", size: 16 }),
       toolDurations,
-      // Interactive runs leave no-progress off — a human can stop those.
-      stopSnapshotsAfterFinal: true,
-      returnResponse: true,
+      // An interactive Chat turn: no-progress left off (a human can stop
+      // those), a stream error rendered inline rather than failing the run,
+      // and a client stream split off.
+      mode: "chat",
       onToolExecutionEnd: ({ toolCall, toolExecutionMs }) => {
         toolDurations.set(toolCall.toolCallId, toolExecutionMs);
       },
