@@ -1274,6 +1274,7 @@ const ProviderForm = ({
                   </Field>
                 </>
               )}
+
               <Field
                 data-invalid={!!headersError || !!validationErrors.headers}
               >
@@ -1295,6 +1296,7 @@ const ProviderForm = ({
                   </FieldError>
                 )}
               </Field>
+
               {formData.providerType === "OpenRouter" && (
                 <Field
                   data-invalid={
@@ -1322,6 +1324,7 @@ const ProviderForm = ({
                   )}
                 </Field>
               )}
+
               <Field data-invalid={!!validationErrors.searchSource}>
                 <FieldLabel htmlFor="searchSource">Web search</FieldLabel>
                 <Select
@@ -1341,14 +1344,12 @@ const ProviderForm = ({
                     <SelectGroup>
                       <SelectLabel>Web search</SelectLabel>
                       <SelectItem value={SEARCH_SOURCE_NONE}>None</SelectItem>
-                      {providerHasNativeSearch(formData) && (
+                      {(providerHasNativeSearch(formData) ||
+                        nativeSelectedButUnavailable) && (
                         <SelectItem value={SEARCH_SOURCE_NATIVE}>
-                          The provider&apos;s built-in search
-                        </SelectItem>
-                      )}
-                      {nativeSelectedButUnavailable && (
-                        <SelectItem value={SEARCH_SOURCE_NATIVE}>
-                          The provider&apos;s built-in search (unavailable here)
+                          {nativeSelectedButUnavailable
+                            ? "The provider's built-in search (unavailable here)"
+                            : "The provider's built-in search"}
                         </SelectItem>
                       )}
                       {availableWebBackends.map((b) => (

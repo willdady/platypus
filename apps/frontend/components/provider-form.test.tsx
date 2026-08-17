@@ -93,6 +93,13 @@ function mockAcceptedSave() {
   } as unknown as Response);
 }
 
+/** `mockAcceptedSave`, installed as the global `fetch` and handed back to read. */
+function stubAcceptedSave() {
+  const fetchMock = mockAcceptedSave();
+  vi.stubGlobal("fetch", fetchMock);
+  return fetchMock;
+}
+
 /** The `modelIds` the form put on the wire for the last save. */
 function savedModelIds(fetchMock: ReturnType<typeof vi.fn>) {
   const [, init] = fetchMock.mock.calls.at(-1) as [string, RequestInit];
@@ -678,11 +685,7 @@ describe("ProviderForm Web search selector", () => {
   // search anyway while the capability is missing, and that comes back on its
   // own if the Provider regains a native tool.
   it("keeps a stale native selection stored when some other field is saved", async () => {
-    const fetchMock = vi.fn().mockResolvedValue({
-      ok: true,
-      json: async () => ({}),
-    } as unknown as Response);
-    vi.stubGlobal("fetch", fetchMock);
+    const fetchMock = stubAcceptedSave();
 
     renderWithAdvancedOpen({});
     expect(searchSelect()).toHaveTextContent("unavailable here");
@@ -696,11 +699,7 @@ describe("ProviderForm Web search selector", () => {
   // The other half of keeping it: picking None explicitly is a real edit, and
   // must overwrite the stored "native" rather than round-tripping it.
   it("stores none when the reader picks it on a Provider with no native search", async () => {
-    const fetchMock = vi.fn().mockResolvedValue({
-      ok: true,
-      json: async () => ({}),
-    } as unknown as Response);
-    vi.stubGlobal("fetch", fetchMock);
+    const fetchMock = stubAcceptedSave();
 
     renderWithAdvancedOpen({});
 
@@ -808,11 +807,7 @@ describe("ProviderForm Web search selector", () => {
 
   it("round-trips the stored backend through a save", async () => {
     webBackendCatalog = CATALOG;
-    const fetchMock = vi.fn().mockResolvedValue({
-      ok: true,
-      json: async () => ({}),
-    } as unknown as Response);
-    vi.stubGlobal("fetch", fetchMock);
+    const fetchMock = stubAcceptedSave();
 
     renderWithAdvancedOpen({
       searchSource: "acme-search.searx",
@@ -826,11 +821,7 @@ describe("ProviderForm Web search selector", () => {
 
   it("round-trips none through a save", async () => {
     webBackendCatalog = CATALOG;
-    const fetchMock = vi.fn().mockResolvedValue({
-      ok: true,
-      json: async () => ({}),
-    } as unknown as Response);
-    vi.stubGlobal("fetch", fetchMock);
+    const fetchMock = stubAcceptedSave();
 
     renderWithAdvancedOpen({ searchSource: "none" } as Partial<Provider>);
     save();
