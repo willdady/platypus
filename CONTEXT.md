@@ -34,6 +34,10 @@ A configurable preset that pins a Provider, model, Instructions, generation para
 **Sub-Agent**:
 An Agent referenced by a parent Agent and exposed to it as a delegate Tool. Invoking it starts a run in its own right — bounded by the same per-step and per-run timeouts the parent turn was started under, and cancelled when the parent is — but never a Chat: nothing about a delegated run is persisted.
 
+**Drive**:
+Running a resolved turn's model loop inside a registered run, through to a terminal status. Takes one of three shapes according to who is waiting on it: an interactive **Chat turn**, a delegated **Sub-Agent**, or a headless Trigger. Whichever shape, the drive owns the model invocation and its stop conditions, the succeeded / failed / cancelled decision, and recording an **Output ceiling** cutoff; the entry point that asked for it keeps only the result shape it hands back to its own caller.
+_Avoid_: driver, run executor, generation loop.
+
 **Instructions**:
 The free-text behaviour brief a User writes on an Agent — or on a Chat with no Agent. One input to the System prompt rather than the whole of it: it renders as the first fragment and cannot suppress the Platypus-owned fragments that follow.
 _Avoid_: system prompt (that names the composed artefact), prompt, persona.

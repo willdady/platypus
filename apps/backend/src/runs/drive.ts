@@ -28,106 +28,75 @@ import type { RunStats, RunStatus } from "./types.ts";
 /**
  * The model call inside a registered run.
  *
- * This module is the single place that *drives* a run to its terminal state —
- * every entry point that turns a prompt or a Chat history into a model answer
- * goes through one of these two functions. What used to be re-derived in three
- * places (two paths in `AgentRunner`, plus the delegate tool) now lives here:
+ * Every entry point that turns a prompt or a Chat history into a model answer
+ * drives it from here, so the rules that hold for all of them are stated once:
+ * how the invocation is assembled (step ceiling and stop conditions), which
+ * terminal status the run ends with, and when the output-ceiling cutoff is
+ * recorded on its stats.
  *
- * - building the model invocation (`buildModelInvocation`, step ceiling and
- *   the no-progress stop condition included),
- * - the terminal-status decision (succeeded / failed / cancelled),
- * - recording the output-ceiling cutoff (`truncatedByTokenLimit`) once, on
- *   the run's stats,
- * - ending the run.
+ * Three entry points, one per shape a caller needs:
  *
- * `driveStreamed` is for the `streamText` path — a Chat turn (which tees a
- * client stream) and a delegated sub-Agent (which folds the snapshots into an
- * activity log). It exposes the folded messages as an async iterable the
- * caller consumes, plus a `done` promise with the outcome, so a caller that
- * must *yield* per snapshot (the delegate tool) and one that must hand the
- * stream to a client immediately (the Chat route) each keep their own pacing.
+ * - `driveChat` — an interactive Chat turn. Splits off a client stream, renders
+ *   a stream error inline rather than failing the run, and stops yielding
+ *   snapshots once the terminal finish has handed its folded messages over.
+ * - `driveDelegate` — an unattended, delegated sub-Agent. Gains the no-progress
+ *   stop condition, fails when its stream reports an error (so a crash is never
+ *   read as the finding), and yields every snapshot into the caller's activity
+ *   log.
+ * - `driveOnce` — the headless `generateText` path (Triggers). Unattended by
+ *   construction; returns a single answer plus the computed stats.
  *
- * `driveOnce` is for the tail-free `generateText` path (Trigger runs), which
- * returns a single text answer and the computed stats.
+ * Both streamed drives expose the folded messages as an async iterable plus a
+ * `done` outcome, so a caller that must *yield* per snapshot and one that must
+ * hand a stream to a client immediately each keep their own pacing.
  */
 
 /**
- * Which shape a streamed drive takes. The two callers converge on two frozen
- * combinations of the pacing and failure knobs, so those are captured here as
- * a single intent instead of four independent flags a caller can scramble.
- *
- * - `"chat"` — an interactive Chat turn. Tolerates a stream error (renders it
- *   inline), splits off a client stream branch, and stops yielding snapshots
- *   once the terminal finish has handed its folded messages over.
- * - `"delegate"` — an unattended, delegated sub-Agent. Gains the no-progress
- *   stop condition, fails when its stream reports an error (so the generated
- *   answer is never read as the finding), and yields every snapshot into the
- *   caller's activity log.
+ * The conversation, in the one form its caller holds it: a delegated run has a
+ * single task `prompt`, a Chat turn has already-converted `modelMessages`. A
+ * union rather than two optionals, so a caller cannot pass both or neither.
  */
-export type StreamedDriveMode = "chat" | "delegate";
+export type DriveConversation =
+  | { prompt: string; modelMessages?: never }
+  | { prompt?: never; modelMessages: ModelMessage[] };
 
-type DriveModeBehavior = {
-  unattended: boolean;
-  failOnStreamError: boolean;
-  stopSnapshotsAfterFinal: boolean;
-  returnResponse: boolean;
-};
-
-const MODE_BEHAVIOR: Record<StreamedDriveMode, DriveModeBehavior> = {
-  chat: {
-    unattended: false,
-    failOnStreamError: false,
-    stopSnapshotsAfterFinal: true,
-    returnResponse: true,
-  },
-  delegate: {
-    unattended: true,
-    failOnStreamError: true,
-    stopSnapshotsAfterFinal: false,
-    returnResponse: false,
-  },
-};
-
-/**
- * A streamed drive's inputs. `plan` carries the generation settings plus, for
- * a Chat turn, the folded conversation under `messages`; a delegated run hands
- * the conversation as a single `prompt` instead. The two are mutually
- * exclusive.
- */
-export type StreamedDriveOptions = {
+/** What every drive needs, whichever shape it takes. */
+type DriveBase = {
   plan: RunPlan;
   run: RunLifecycle;
-  /** A single user prompt — the whole conversation of a delegated sub-Agent. */
-  prompt?: string;
-  /** A Chat turn's conversation, already converted to model messages. */
-  modelMessages?: ModelMessage[];
-  /** The opening messages a Chat turn folds its streamed answer onto. */
-  originalMessages?: PlatypusUIMessage[];
-  /** The resolved Agent id, stamped onto the streamed message. */
-  agentId?: string;
-  generateMessageId?: () => string;
-  /** The live map the caller fills from `onToolExecutionEnd`. */
-  toolDurations?: Map<string, number>;
-  /**
-   * Whether this is an interactive Chat turn or an unattended delegated
-   * sub-Agent. Defaults to `"chat"`.
-   */
-  mode?: StreamedDriveMode;
-  /** Hooked before the run folds the step, so the caller can read what it can't
-   *  otherwise recover (e.g. the provider's raw finish reason). */
-  onStepFinish?: (step: RunStep) => void;
-  onToolExecutionEnd?: (ctx: {
-    toolCall: { toolCallId: string };
-    toolExecutionMs: number;
-  }) => void;
-  /** The folded final messages (tool durations applied), right before the run
-   *  ends. The Chat turn persists these; the sink's terminal write observes
-   *  them. */
-  onFinal?: (messages: PlatypusUIMessage[]) => void;
 };
 
-/** What a `driveStreamed` run settled on. */
+/** The conversation as the SDK takes it — exactly one of the two keys. */
+const conversationArgs = (conversation: DriveConversation) =>
+  conversation.prompt !== undefined
+    ? { prompt: conversation.prompt }
+    : { messages: conversation.modelMessages };
+
+/**
+ * The arguments every drive hands the SDK: the shared assembly (model, tools,
+ * system, ceilings, sampling), this run's abort signal, the unattended stop
+ * condition when there is one, and the conversation.
+ */
+const modelArgs = (
+  opts: DriveBase & DriveConversation,
+  noProgress: NoProgressDetector | null,
+) => ({
+  ...buildModelInvocation(opts.plan, {
+    abortSignal: opts.run.handle.signal,
+    extraStopCondition: noProgress?.stopCondition,
+  }),
+  ...conversationArgs(opts),
+});
+
+/** An unattended run gets the no-progress detector; an attended one does not. */
+const detectorFor = (unattended: boolean): NoProgressDetector | null =>
+  unattended ? createNoProgressDetector() : null;
+
+/** What a streamed drive settled on. */
 export type StreamedDriveResult = {
+  /** The terminal status the run was finished with. Reported so a caller that
+   *  must tell a cancellation from a fault never re-derives one. */
+  status: RunStatus;
   /** The Chat turn's final folded messages (tool durations applied). */
   messages?: PlatypusUIMessage[];
   /** The last snapshot seen — the delegate's final assistant message. */
@@ -136,28 +105,9 @@ export type StreamedDriveResult = {
    *  clean finish. */
   failure?: string;
   /** The terminal finish hit the model's output ceiling. */
-  truncated?: boolean;
+  truncated: boolean;
 };
 
-type StreamedDrive = {
-  /** The folded assistant messages. Consuming this is what drains the run. */
-  snapshots: AsyncIterable<PlatypusUIMessage>;
-  /** A client stream branch, present in `"chat"` mode (a Chat turn). */
-  response?: ReadableStream<InferUIMessageChunk<PlatypusUIMessage>>;
-  /** Resolves once the run has ended, with the drive's outcome. */
-  done: Promise<StreamedDriveResult>;
-};
-
-/**
- * The one terminal-status rule, in a registered run's terms.
- *
- * Shared by both drivers so neither re-derives "did we succeed?" from the
- * stream or result it happened to be driving. Decides the status (and, where a
- * failure is reported, the caller-facing sentence) an ended run should carry:
- * a single no-progress trip or, on a fail-on-error drive, a stream failure
- * ends the run as a failure; a run somebody stopped ends it as cancelled; a
- * timeout stays a failure with its `TimeoutError`; anything else is a success.
- */
 type TerminalDecision = {
   status: RunStatus;
   error?: Error;
@@ -165,6 +115,14 @@ type TerminalDecision = {
   failure?: string;
 };
 
+/**
+ * The one terminal-status rule, in a registered run's terms.
+ *
+ * Decides the status an ended run carries, the error it records, and — for a
+ * drive that treats a stream error as fatal — the sentence its caller is told.
+ * Every drive ends through this, so none re-derives "did we succeed?" from the
+ * stream or result it happened to be holding.
+ */
 const decideTerminalStatus = (
   run: RunLifecycle,
   opts: {
@@ -174,88 +132,128 @@ const decideTerminalStatus = (
   },
 ): TerminalDecision => {
   const trip = opts.noProgress?.tripped() ?? null;
-
   if (trip) {
     const err = new NoProgressError(trip.toolName, trip.count);
     return { status: "failed", error: err, failure: err.message };
   }
+
   const { status, error } = run.statusFromSignal();
-  // A timed-out run keeps its TimeoutError rather than whichever stream error
-  // also landed: the timeout names the bound that was exceeded.
-  if (opts.failOnStreamError && opts.failure && status !== "failed") {
-    const err = new Error(opts.failure);
-    return {
-      status: status === "cancelled" ? "cancelled" : "failed",
-      error: status === "cancelled" ? (error ?? err) : err,
-      failure: opts.failure,
-    };
-  }
-  // A fail-on-error drive that stopped mid-stream reports why it stopped, so
-  // the caller (a delegate's parent) can tell a stop from a finished answer.
-  const failure =
-    opts.failOnStreamError && run.handle.signal.aborted
-      ? run.abortReason()
-        ? `Stopped before finishing: ${run.abortReason()}`
-        : "Stopped before finishing."
-      : undefined;
-  return { status, error, failure };
+  if (!opts.failOnStreamError) return { status, error };
+
+  // What the stream reported outranks why we stopped: a run that both timed out
+  // and reported an error is better explained by the error. Absent one, a run
+  // that stopped mid-stream still owes its caller a reason it ended short — a
+  // delegate's parent has to tell a stop from a finished answer.
+  const stoppedShort = run.handle.signal.aborted
+    ? run.abortReason()
+      ? `Stopped before finishing: ${run.abortReason()}`
+      : "Stopped before finishing."
+    : undefined;
+  const failure = opts.failure ?? stoppedShort;
+  if (!failure) return { status, error };
+
+  // A timed-out or cancelled run keeps the signal's own error: the timeout
+  // names the bound that was exceeded, and a cancellation names who stopped it.
+  // A failure only the stream saw becomes the run's error.
+  return status === "succeeded"
+    ? { status: "failed", error: new Error(failure), failure }
+    : { status, error, failure };
 };
 
 /**
- * Ends a streamed run with the terminal-status decision and the caller-facing
- * reason for a non-clean end, computed once. The run's status and the returned
- * outcome stay consistent by construction: the failure the caller is told is
- * exactly the one the run was finished with.
+ * Ends a run that failed before any drive started — a delegate's tool setup
+ * throwing is the case that exists — under the terminal-status rule a drive
+ * would have applied, so that caller does not grow its own copy.
  */
-const endStreamedRun = async (
+export const failBeforeDrive = async (
   run: RunLifecycle,
-  opts: {
-    failure?: string;
-    noProgress: NoProgressDetector | null;
-    failOnStreamError: boolean;
-  },
-): Promise<TerminalDecision> => {
-  const decision = decideTerminalStatus(run, opts);
+  failure: string,
+): Promise<StreamedDriveResult> => {
+  const decision = decideTerminalStatus(run, {
+    failure,
+    noProgress: null,
+    failOnStreamError: true,
+  });
   await run.finish(decision.status, decision.error);
-  return decision;
+  return {
+    status: decision.status,
+    failure: decision.failure ?? failure,
+    truncated: false,
+  };
+};
+
+/** The knobs the two streamed shapes differ on, frozen per entry point. */
+type StreamedBehavior = {
+  unattended: boolean;
+  failOnStreamError: boolean;
+  stopSnapshotsAfterFinal: boolean;
+};
+
+/** An interactive Chat turn's drive — also the widest streamed shape, so it is
+ *  what the shared runner accepts. */
+export type ChatDriveOptions = DriveBase &
+  DriveConversation & {
+    /** The opening messages a Chat turn folds its streamed answer onto. */
+    originalMessages?: PlatypusUIMessage[];
+    /** The resolved Agent id, stamped onto the streamed message. */
+    agentId?: string;
+    generateMessageId?: () => string;
+    /** The live map the caller fills from `onToolExecutionEnd`. */
+    toolDurations?: Map<string, number>;
+    /** Hooked before the run folds the step, so the caller can read what it
+     *  can't otherwise recover (e.g. the provider's raw finish reason). */
+    onStepFinish?: (step: RunStep) => void;
+    onToolExecutionEnd?: (ctx: {
+      toolCall: { toolCallId: string };
+      toolExecutionMs: number;
+    }) => void;
+    /** The folded final messages (tool durations applied), right before the run
+     *  ends. The Chat turn persists these; the sink's terminal write observes
+     *  them. */
+    onFinal?: (messages: PlatypusUIMessage[]) => void;
+  };
+
+/** A delegated sub-Agent's drive: the same conversation and step hook, none of
+ *  the Chat turn's folding and client-stream machinery. */
+export type DelegateDriveOptions = DriveBase &
+  DriveConversation & {
+    onStepFinish?: (step: RunStep) => void;
+  };
+
+/** Where a drive's UI stream goes before it is consumed. A Chat turn tees off a
+ *  client branch here; a delegate consumes the stream whole. */
+type SplitStream = (
+  ui: ReadableStream<InferUIMessageChunk<PlatypusUIMessage>>,
+) => ReadableStream<InferUIMessageChunk<PlatypusUIMessage>>;
+
+type StreamedCore = {
+  snapshots: AsyncIterable<PlatypusUIMessage>;
+  done: Promise<StreamedDriveResult>;
 };
 
 /**
- * Drives a `streamText` run inside its registered lifecycle.
- *
- * Runs the model loop, folds the streamed parts into `PlatypusUIMessage`s
- * (metadata, tool durations, stream errors and the terminal finish handled
- * here), and records the terminal status exactly once. Returns a handle the
- * caller paces: its `snapshots` feed a Chat route's client stream or a
- * delegate's activity log, and `done` reports the outcome after the run has
- * been finished.
+ * Runs a `streamText` model loop inside its registered lifecycle and folds the
+ * streamed parts into `PlatypusUIMessage`s — metadata, tool durations, stream
+ * errors and the terminal finish all handled here — then records the terminal
+ * status exactly once, when the snapshot stream drains.
  */
-export const driveStreamed = (opts: StreamedDriveOptions): StreamedDrive => {
+const runStreamedDrive = (
+  opts: ChatDriveOptions,
+  behavior: StreamedBehavior,
+  split: SplitStream,
+): StreamedCore => {
   const {
-    plan,
     run,
-    prompt,
-    modelMessages,
     originalMessages = [],
     agentId,
     generateMessageId,
     toolDurations,
-    mode = "chat",
     onStepFinish,
     onToolExecutionEnd,
     onFinal,
   } = opts;
 
-  const {
-    unattended,
-    failOnStreamError,
-    stopSnapshotsAfterFinal,
-    returnResponse,
-  } = MODE_BEHAVIOR[mode];
-
-  const noProgress: NoProgressDetector | null = unattended
-    ? createNoProgressDetector()
-    : null;
+  const noProgress = detectorFor(behavior.unattended);
 
   let failure: string | undefined;
   let truncated = false;
@@ -268,11 +266,7 @@ export const driveStreamed = (opts: StreamedDriveOptions): StreamedDrive => {
   });
 
   const result = streamText({
-    ...buildModelInvocation(plan, {
-      abortSignal: run.handle.signal,
-      extraStopCondition: noProgress?.stopCondition,
-    }),
-    ...(prompt !== undefined ? { prompt } : { messages: modelMessages ?? [] }),
+    ...modelArgs(opts, noProgress),
     onStepFinish: (step: RunStep) => {
       onStepFinish?.(step);
       run.onStep(step);
@@ -298,16 +292,7 @@ export const driveStreamed = (opts: StreamedDriveOptions): StreamedDrive => {
     },
   });
 
-  let response:
-    ReadableStream<InferUIMessageChunk<PlatypusUIMessage>> | undefined;
-  let consume: ReadableStream<InferUIMessageChunk<PlatypusUIMessage>>;
-  if (returnResponse) {
-    const [client, snapshot] = uiStream.tee();
-    response = client;
-    consume = snapshot;
-  } else {
-    consume = uiStream;
-  }
+  const consume = split(uiStream);
 
   const snapshots: AsyncIterable<PlatypusUIMessage> = (async function* () {
     try {
@@ -320,7 +305,7 @@ export const driveStreamed = (opts: StreamedDriveOptions): StreamedDrive => {
         latest = message;
         // Drain past the handover but don't yield: a snapshot after the folded
         // final is no better than what it would overwrite (no durations).
-        if (stopSnapshotsAfterFinal && finalHandedOver) continue;
+        if (behavior.stopSnapshotsAfterFinal && finalHandedOver) continue;
         yield message;
       }
     } catch (error) {
@@ -343,14 +328,14 @@ export const driveStreamed = (opts: StreamedDriveOptions): StreamedDrive => {
       if (truncated) {
         run.setStats({ ...run.stats, truncatedByTokenLimit: true });
       }
-      // The failure and the terminal decision come from the same place, and only
-      // that place — no caller re-derives "did it fail?" from the pieces here.
-      const decision = await endStreamedRun(run, {
+      const decision = decideTerminalStatus(run, {
         failure,
         noProgress,
-        failOnStreamError,
+        failOnStreamError: behavior.failOnStreamError,
       });
+      await run.finish(decision.status, decision.error);
       resolveDone({
+        status: decision.status,
         messages: handoverMessages,
         latest,
         failure: decision.failure,
@@ -359,48 +344,80 @@ export const driveStreamed = (opts: StreamedDriveOptions): StreamedDrive => {
     }
   })();
 
-  return {
-    snapshots,
-    response,
-    done,
-  };
+  return { snapshots, done };
 };
 
-export type OnceDriveOptions = {
-  plan: RunPlan;
-  run: RunLifecycle;
-  prompt?: string;
-  modelMessages?: ModelMessage[];
-  /** Unattended (Trigger) runs enable no-progress detection. */
-  unattended?: boolean;
+export type ChatDrive = StreamedCore & {
+  /** The client stream branch. Always present: a Chat turn is the shape that
+   *  has one. */
+  response: ReadableStream<InferUIMessageChunk<PlatypusUIMessage>>;
 };
+
+/**
+ * Drives an interactive Chat turn.
+ *
+ * A human is watching, so the no-progress condition is left off (they can stop
+ * it themselves) and a stream error is rendered inline rather than failing the
+ * run. The client branch is teed off before the server-side consumer drains the
+ * other, so a disconnected client never propagates back to the source.
+ */
+export const driveChat = (opts: ChatDriveOptions): ChatDrive => {
+  // Assigned by `split` below, which `runStreamedDrive` calls synchronously
+  // while constructing the drive — hence definite assignment before the return.
+  let response!: ReadableStream<InferUIMessageChunk<PlatypusUIMessage>>;
+  const core = runStreamedDrive(
+    opts,
+    {
+      unattended: false,
+      failOnStreamError: false,
+      stopSnapshotsAfterFinal: true,
+    },
+    (ui) => {
+      const [client, serverSide] = ui.tee();
+      response = client;
+      return serverSide;
+    },
+  );
+  return { ...core, response };
+};
+
+/**
+ * Drives a delegated sub-Agent.
+ *
+ * Nobody is watching this run's steps, so it gains the no-progress stop
+ * condition (same call → same result, K times) and fails when its stream
+ * reports an error, rather than letting the parent read a crash as the
+ * delegate's finding. Every snapshot is yielded, for the caller's activity log.
+ */
+export const driveDelegate = (opts: DelegateDriveOptions): StreamedCore =>
+  runStreamedDrive(
+    opts,
+    {
+      unattended: true,
+      failOnStreamError: true,
+      stopSnapshotsAfterFinal: false,
+    },
+    (ui) => ui,
+  );
 
 /**
  * Drives a headless `generateText` run inside its registered lifecycle.
  *
- * Returns a single answer and the computed statistics. The terminal status and
- * output-ceiling cutoff are decided here — the same rules `driveStreamed`
- * applies — and the run is finished (succeeded, or failed with a `NoProgressError`
- * when the no-progress condition trips) before returning.
+ * Returns a single answer and the computed statistics. Headless means
+ * unattended, so the no-progress condition is always on. The terminal status
+ * and output-ceiling cutoff are decided by the same rules the streamed drives
+ * apply, and the run is finished before returning.
  */
 export const driveOnce = async (
-  opts: OnceDriveOptions,
+  opts: DriveBase & DriveConversation,
 ): Promise<{ text: string; stats: RunStats }> => {
-  const { plan, run, prompt, modelMessages, unattended = false } = opts;
-  const noProgress: NoProgressDetector | null = unattended
-    ? createNoProgressDetector()
-    : null;
+  const { run } = opts;
+  const noProgress = detectorFor(true);
   const startTime = Date.now();
 
   try {
     const result = await generateText({
-      ...buildModelInvocation(plan, {
-        abortSignal: run.handle.signal,
-        extraStopCondition: noProgress?.stopCondition,
-      }),
-      ...(prompt !== undefined
-        ? { prompt }
-        : { messages: modelMessages ?? [] }),
+      ...modelArgs(opts, noProgress),
       onStepFinish: (step: RunStep) => run.onStep(step),
     });
 
@@ -410,11 +427,9 @@ export const driveOnce = async (
     }
     run.setStats(stats);
 
-    // The terminal decision is the same one `driveStreamed` ends its runs with.
     // The no-progress stop condition halts the loop cleanly (the SDK resolves
     // normally), so a tripped detector surfaces here rather than in the catch.
     const decision = decideTerminalStatus(run, {
-      failure: undefined,
       noProgress,
       failOnStreamError: false,
     });
@@ -424,34 +439,19 @@ export const driveOnce = async (
         : null;
 
     // Nobody is watching an unattended run, so this log is the only record of
-    // how it ended. Carried here because the completion log is the one place
-    // the raw reason survives for an unattended run.
-    if (trip) {
-      logger.warn(
-        {
-          runId: run.handle.runId,
-          toolName: trip.toolName,
-          count: trip.count,
-          duration: Date.now() - startTime,
-          finishReason: result.finishReason,
-          rawFinishReason: result.rawFinishReason,
-          stats,
-        },
-        "Run aborted: no progress",
-      );
-    } else {
-      logger.info(
-        {
-          runId: run.handle.runId,
-          duration: Date.now() - startTime,
-          responseLength: result.text.length,
-          finishReason: result.finishReason,
-          rawFinishReason: result.rawFinishReason,
-          stats,
-        },
-        "Run generate completed",
-      );
-    }
+    // how it ended, and the one place the raw finish reason survives.
+    logger[trip ? "warn" : "info"](
+      {
+        runId: run.handle.runId,
+        ...(trip ? { toolName: trip.toolName, count: trip.count } : {}),
+        duration: Date.now() - startTime,
+        responseLength: result.text.length,
+        finishReason: result.finishReason,
+        rawFinishReason: result.rawFinishReason,
+        stats,
+      },
+      trip ? "Run aborted: no progress" : "Run generate completed",
+    );
 
     await run.finish(decision.status, decision.error);
     return { text: result.text, stats };
@@ -466,7 +466,6 @@ export const driveOnce = async (
     // choice is the shared one; only the error is the thrown one, not the
     // signal's (there is no `TimeoutError` for a run that merely threw).
     const decision = decideTerminalStatus(run, {
-      failure: undefined,
       noProgress,
       failOnStreamError: false,
     });

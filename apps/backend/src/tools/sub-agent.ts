@@ -3,7 +3,7 @@ import { getToolOrDynamicToolName, isToolUIPart, tool, type Tool } from "ai";
 import { z } from "zod";
 import { logger } from "../logger.ts";
 import { startRun } from "../runs/run-lifecycle.ts";
-import { driveStreamed } from "../runs/drive.ts";
+import { driveDelegate, failBeforeDrive } from "../runs/drive.ts";
 import type { RunPlan } from "../runs/run-plan.ts";
 import { runRegistry } from "../runs/run-registry.ts";
 import { describeSdkError } from "../runs/stream-error.ts";
@@ -312,21 +312,25 @@ export const createSubAgentTool = (options: SubAgentToolOptions) => {
         // the terminal callback and unregisters. `finish` is once-only, so the
         // explicit outcomes below win over the fallback in the `finally`.
         try {
-          // Set when the sub-agent's own stream reports a failure. The stream
-          // ENDS NORMALLY after an error, so without this the generator would
-          // return whatever text had accumulated — typically the model's opening
-          // preamble — and the parent would read a crash as an answer.
+          // The last snapshot seen, which is where the delegate's answer is
+          // read from. Whether that answer is safe to hand the parent is the
+          // drive's call, not this loop's: a stream that errored ENDS NORMALLY,
+          // so `latest` on its own cannot tell a finished answer from the
+          // model's opening preamble before a crash. `outcome.failure` can.
           let latest: PlatypusUIMessage | undefined;
           let entries: SubAgentActivityEntry[] = [];
-          let drive: ReturnType<typeof driveStreamed> | null = null;
-          let setupError: string | undefined;
+          // Either the drive started or it didn't — one or the other, never
+          // neither, so the outcome below needs no fallback for the gap.
+          let started:
+            | { drive: ReturnType<typeof driveDelegate> }
+            | { setupError: string };
 
           try {
             // Inside the try: opening this delegate's own tools can fail the
             // same way its stream can, and it reaches the parent as a tool error
             // either way rather than an unattributed throw.
             const tools = await loadTools();
-            drive = driveStreamed({
+            const drive = driveDelegate({
               // A Sub-Agent invocation receives Instructions plus guardrails and
               // nothing else — no workspace context, no memories, no user
               // identity (ADR-0016). The exception is expressed here, in what is
@@ -343,18 +347,13 @@ export const createSubAgentTool = (options: SubAgentToolOptions) => {
               },
               prompt: task,
               run,
-              // A delegated sub-Agent is the unattended half of the streamed
-              // drive: it gains the no-progress stop condition (same call →
-              // same result, K times) that an interactive Chat leaves off, and
-              // fails when its stream reports an error rather than reading the
-              // crash as the finding.
-              mode: "delegate",
               onStepFinish: (step) => {
                 rawFinishReason = step.rawFinishReason;
               },
             });
+            started = { drive };
           } catch (error) {
-            setupError = describeSdkError(error);
+            started = { setupError: describeSdkError(error) };
           }
 
           // The drive folds the stream; this generator only projects it onto the
@@ -362,9 +361,9 @@ export const createSubAgentTool = (options: SubAgentToolOptions) => {
           // yield: text deltas and growing tool inputs change the message on
           // nearly every chunk but leave the activity log alone, and yielding for
           // those would spam the parent's SSE stream.
-          if (drive) {
+          if ("drive" in started) {
             let lastYielded = "";
-            for await (const message of drive.snapshots) {
+            for await (const message of started.drive.snapshots) {
               latest = message;
               entries = activityEntries(message);
               const rendered = JSON.stringify(entries);
@@ -374,12 +373,16 @@ export const createSubAgentTool = (options: SubAgentToolOptions) => {
             }
           }
 
-          const outcome = setupError
-            ? { failure: setupError, truncated: false as const }
-            : await drive!.done;
+          // Either the drive ended the run and reported how, or it never
+          // started and `failBeforeDrive` ends it under the same rule. Both
+          // hand back a decided status, so this tool never derives one.
+          const outcome =
+            "drive" in started
+              ? await started.drive.done
+              : await failBeforeDrive(run, started.setupError);
 
           const aggregatedText = assistantText(latest);
-          const truncatedByTokenLimit = outcome.truncated === true;
+          const truncatedByTokenLimit = outcome.truncated;
 
           // Throw rather than return: a failed delegation must reach the parent
           // as a tool error, not as a short answer it might summarize and pass
@@ -387,17 +390,9 @@ export const createSubAgentTool = (options: SubAgentToolOptions) => {
           // along in the message so the work isn't lost.
           if (outcome.failure) {
             // A delegation stopped because someone cancelled the parent is a
-            // normal outcome, not a fault of this sub-agent — record and log it
-            // as the cancellation it is. `run.finish` is once-only: when the
-            // drive already ended the run (its terminal decision) this is a
-            // no-op; when stream setup failed before the drive started, this is
-            // the run's only finish.
-            const { status, error } = run.statusFromSignal();
-            const cancelled = status === "cancelled";
-            await run.finish(
-              cancelled ? "cancelled" : "failed",
-              error ?? new Error(outcome.failure),
-            );
+            // normal outcome, not a fault of this sub-agent — log it as the
+            // cancellation it is.
+            const cancelled = outcome.status === "cancelled";
             logger[cancelled ? "warn" : "error"](
               { runId, subAgentName: name, error: outcome.failure },
               `Sub-agent "${name}" did not finish`,

@@ -15,7 +15,7 @@ import { actorUserId, type WorkspaceScope } from "../scope.ts";
 import type { PlatypusUIMessage } from "../types.ts";
 import { runRegistry, type RunTimeouts } from "./run-registry.ts";
 import { startRun } from "./run-lifecycle.ts";
-import { driveOnce, driveStreamed } from "./drive.ts";
+import { driveChat, driveOnce } from "./drive.ts";
 import type {
   ResolvedRunPlan,
   RunId,
@@ -136,6 +136,10 @@ export class AgentRunner {
   }): Promise<{
     state: RunState;
     run: ReturnType<typeof startRun>;
+    /** The resolved turn. Returned in its own right so a caller reads the plan
+     *  from here rather than re-narrowing `state.turn`, which stays optional
+     *  for the terminal callback that may run before it is assigned. */
+    turn: ChatTurn;
     modelMessages: ModelMessage[];
   }> {
     const { scope, input, sink } = params;
@@ -208,17 +212,16 @@ export class AgentRunner {
       throw err;
     }
 
-    const plan: ResolvedRunPlan = { resolved: state.turn.resolved };
+    const turn = state.turn;
+    const plan: ResolvedRunPlan = { resolved: turn.resolved };
     await sink.onResolved({ runId: input.runId, plan });
 
     // The conversation is converted once, here, and handed to whichever drive
     // the caller picks — `stream` for an HTTP client, `generate` for a headless
     // run. The drives own the model call and the terminal decision from there.
-    const modelMessages = await convertToModelMessages(
-      state.turn.stream.messages,
-    );
+    const modelMessages = await convertToModelMessages(turn.stream.messages);
 
-    return { state, run, modelMessages };
+    return { state, run, turn, modelMessages };
   }
 
   async stream(params: {
@@ -228,7 +231,7 @@ export class AgentRunner {
     options: StreamOptions;
   }): Promise<Response> {
     const { input, options } = params;
-    const { state, run, modelMessages } = await this.setup({
+    const { state, run, turn, modelMessages } = await this.setup({
       scope: params.scope,
       input,
       sink: params.sink,
@@ -238,7 +241,7 @@ export class AgentRunner {
     });
 
     logger.debug(
-      { systemPrompt: state.turn?.stream.system },
+      { systemPrompt: turn.stream.system },
       "System prompt for chat",
     );
 
@@ -248,23 +251,19 @@ export class AgentRunner {
     // never reach this callback and so carry no duration.
     const toolDurations = new Map<string, number>();
 
-    // The drive runs the model loop and folds the stream; this runner keeps
-    // only the teeing (one branch is the HTTP body, the other is drained to
-    // keep `state.messages` fresh for the sink's mid-run flush) and the
-    // response. Terminal status, the output-ceiling cutoff and the no-progress
-    // stop condition are all decided inside `runs/drive.ts`.
-    const drive = driveStreamed({
-      plan: state.turn!.stream,
+    // The drive runs the model loop, folds the stream and tees off the client
+    // branch; this runner keeps only the server-side drain (which keeps
+    // `state.messages` fresh for the sink's mid-run flush) and the response.
+    // Terminal status, the output-ceiling cutoff and the stop conditions are
+    // all decided inside `runs/drive.ts`.
+    const drive = driveChat({
+      plan: turn.stream,
       modelMessages,
       run,
       originalMessages: input.messages,
-      agentId: state.turn!.resolved.agentId,
+      agentId: turn.resolved.agentId,
       generateMessageId: createIdGenerator({ prefix: "msg", size: 16 }),
       toolDurations,
-      // An interactive Chat turn: no-progress left off (a human can stop
-      // those), a stream error rendered inline rather than failing the run,
-      // and a client stream split off.
-      mode: "chat",
       onToolExecutionEnd: ({ toolCall, toolExecutionMs }) => {
         toolDurations.set(toolCall.toolCallId, toolExecutionMs);
       },
@@ -278,9 +277,7 @@ export class AgentRunner {
     // Consume the snapshot branch server-side. The response body drives one
     // branch; we drain the other so a disconnected client (cancelling the
     // response branch) doesn't propagate back to the source — the run keeps
-    // pulling as long as the snapshot branch is being read. The drive stops
-    // yielding after the final handover, so this never overwrites the folded
-    // final with a duration-less snapshot.
+    // pulling as long as the snapshot branch is being read.
     void (async () => {
       try {
         for await (const message of drive.snapshots) {
@@ -303,7 +300,7 @@ export class AgentRunner {
       logger.error({ err, runId: input.runId }, "Chat drive background error"),
     );
 
-    return createUIMessageStreamResponse({ stream: drive.response! });
+    return createUIMessageStreamResponse({ stream: drive.response });
   }
 
   /**
@@ -319,7 +316,7 @@ export class AgentRunner {
     const { input } = params;
     const options = params.options ?? {};
     // No `origin`: headless callers don't have file URLs to inline.
-    const { state, run, modelMessages } = await this.setup({
+    const { run, turn, modelMessages } = await this.setup({
       scope: params.scope,
       input,
       sink: params.sink,
@@ -327,14 +324,12 @@ export class AgentRunner {
       timeouts: options.timeouts,
     });
 
-    // Headless runs are unattended → the drive enables no-progress detection.
     // The drive computes the stats, records the output-ceiling cutoff, decides
     // the terminal status and finishes the run — this entry point only returns.
     const { text, stats } = await driveOnce({
-      plan: state.turn!.stream,
+      plan: turn.stream,
       modelMessages,
       run,
-      unattended: true,
     });
 
     return { text, stats };
