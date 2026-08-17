@@ -10,6 +10,10 @@ Please be respectful and constructive in all interactions. We are committed to p
 
 Looking for something to work on? Browse our [good first issues](https://github.com/willdady/platypus/contribute) — scoped, newcomer-friendly tasks that are a great starting point.
 
+### Picking an issue
+
+Issues labelled `ready-for-agent` or `ready-for-human` have an agreed approach — go ahead and start. Issues labelled `needs-triage` haven't been decided yet. Some describe a real bug but leave the fix open; drop a comment before you start and we'll help you work out the direction.
+
 1. **Fork the repository** and clone your fork locally.
 2. **Set up your development environment** by following [Local Development](#local-development) below.
 3. **Create a branch** from `main` for your changes (see [Branch Naming](#branch-naming) below).
