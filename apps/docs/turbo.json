@@ -8,7 +8,9 @@
         "$TURBO_ROOT$/.env.example",
         "$TURBO_ROOT$/apps/backend/.env.example",
         "$TURBO_ROOT$/apps/frontend/.env.example",
-        "$TURBO_ROOT$/apps/backend/src/plugins/builtin.ts"
+        "$TURBO_ROOT$/apps/backend/src/plugins/builtin.ts",
+        "$TURBO_ROOT$/package.json",
+        "$TURBO_ROOT$/.github/workflows/build-and-push.yml"
       ]
     }
   }

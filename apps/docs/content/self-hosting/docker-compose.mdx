@@ -36,25 +36,45 @@ report status.
 ### Image tags
 
 The compose file ships pointing at `:latest` for both application images. Every
-release also publishes a version tag — `willdady/platypus-backend:2.2.1`,
-`willdady/platypus-frontend:2.2.1` — matching the release's version number.
+release publishes three tags per image, and which one you pin decides how much
+moves under you on the next `docker compose pull`:
 
-**Pin those tags.** `:latest` moves under you: the next `docker compose pull`
-fetches whatever the newest release happens to be, and you have no way to state
-which version a deployment is running. Override the images in a
-`compose.override.yaml` alongside `compose.yaml`:
+| Tag           | Example                            | What a pull fetches                     |
+| ------------- | ---------------------------------- | --------------------------------------- |
+| Latest        | `willdady/platypus-backend:latest` | The newest release, major bump included |
+| Major line    | `willdady/platypus-backend:2`      | The newest `2.x.y`, never `3.0.0`       |
+| Exact version | `willdady/platypus-backend:2.7.1`  | That release and nothing else           |
+
+**Pin something other than `:latest`.** It is the only tag that can carry a
+breaking major change into a running deployment, and it leaves you unable to say
+which version you are on.
+
+Pin the **major line** for a deployment you want to keep current without
+watching every release. Pin the **exact version** for one you upgrade
+deliberately — it is the only tag that makes an upgrade a change you made rather
+than a pull you ran.
+
+Override the images in a `compose.override.yaml` alongside `compose.yaml`:
 
 ```yaml
 services:
   backend:
-    image: willdady/platypus-backend:2.2.1
+    image: willdady/platypus-backend:2.7.1
   frontend:
-    image: willdady/platypus-frontend:2.2.1
+    image: willdady/platypus-frontend:2.7.1
 ```
 
 Compose merges `compose.override.yaml` automatically, so `docker compose up -d`
 picks it up with no extra flags. Bump both together — the two images are
 released as a pair and are only tested against each other.
+
+<Callout type="warning">
+  A major-line pin is not a record of what you deployed. Two hosts that pulled
+  `:2` a month apart run different builds from identical compose files, so
+  "we're both on 2" is not a statement anyone can act on during an incident.
+  Read `docker compose images` for the digest a host actually has, and pin exact
+  versions where that matters.
+</Callout>
 
 ### Ports
 
@@ -241,7 +261,9 @@ release — and rolls nothing back, because the shipped compose file doesn't pin
 version.
 
 Edit the pinned tags in your `compose.override.yaml` back to the version you
-were on, and bring the stack up again:
+were on, and bring the stack up again. Use exact versions here even if you
+normally pin the major line — `:2` has no way to express "the release before
+this one":
 
 ```bash
 docker compose up -d

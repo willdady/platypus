@@ -860,6 +860,110 @@ describe("field limits", () => {
   });
 });
 
+// --- docker image tags -------------------------------------------------------
+
+/**
+ * The Compose page tells Operators to pin a tag. Nothing but the release
+ * workflow makes those tags exist, so the page's three-way choice — `latest`,
+ * the floating major, an exact version — is pinned against the workflow that
+ * pushes them and against the version line the repository is actually on.
+ */
+const RELEASE_WORKFLOW = ".github/workflows/build-and-push.yml";
+const COMPOSE_PAGE = "self-hosting/docker-compose.mdx";
+const IMAGES = ["frontend", "backend"] as const;
+
+const currentMajor = (): string => {
+  const { version } = JSON.parse(readRepoFile("package.json")) as {
+    version?: string;
+  };
+  const major = version?.match(/^(\d+)\./)?.[1];
+  if (!major) {
+    throw new Error(
+      `No \`x.y.z\` version in the root package.json (read \`${version}\`). ` +
+        `The release workflow derives every image tag from it; update this test if the scheme changed.`,
+    );
+  }
+  return major;
+};
+
+describe("docker image tags", () => {
+  const workflow = readRepoFile(RELEASE_WORKFLOW);
+  const major = currentMajor();
+
+  it("pushes latest, the exact version, and a floating major for both images", () => {
+    const violations: string[] = [];
+
+    for (const image of IMAGES) {
+      const expected = [
+        `willdady/platypus-${image}:latest`,
+        `willdady/platypus-${image}:\${{ steps.version.outputs.version }}`,
+        `\${{ steps.tags.outputs.${image}_major }}`,
+      ];
+      for (const tag of expected) {
+        if (!workflow.includes(tag)) {
+          violations.push(
+            `${RELEASE_WORKFLOW} no longer tags the ${image} image with \`${tag}\`.\n` +
+              `${COMPOSE_PAGE} tells Operators all three tags exist; either restore the tag or rewrite that page.`,
+          );
+        }
+      }
+    }
+
+    expectNoViolations(violations);
+  });
+
+  /**
+   * The page promises `:2` tracks the newest `2.x.y`. A major written into the
+   * workflow by hand keeps resolving long after the repository has moved on, so
+   * the claim fails silently rather than loudly. This checks the shape of the
+   * tag, not the shell that builds it — how the major gets derived is the
+   * workflow's business.
+   */
+  it("hardcodes no major in the release workflow", () => {
+    const hardcoded = [
+      ...workflow.matchAll(
+        /willdady\/platypus-(?:frontend|backend):(\d[\w.]*)/g,
+      ),
+    ];
+
+    expectNoViolations(
+      hardcoded.map(
+        ([full]) =>
+          `${RELEASE_WORKFLOW} pushes \`${full}\`, a version literal.\n` +
+          `Every version-bearing tag has to come from the workflow's own version output, or it stops moving with the release.`,
+      ),
+    );
+  });
+
+  it("shows only tags that exist, on the major line the repository is on", () => {
+    const page = readDoc(COMPOSE_PAGE);
+    const tags = [
+      ...page.matchAll(/willdady\/platypus-(?:frontend|backend):([\w.-]+)/g),
+    ];
+
+    expect(
+      tags.length,
+      `Matched no image tags in ${COMPOSE_PAGE} — the page stopped naming them, or the matcher broke.`,
+    ).toBeGreaterThan(0);
+
+    const violations: string[] = [];
+    for (const [full, tag] of tags) {
+      const onCurrentLine =
+        tag === "latest" ||
+        tag === major ||
+        new RegExp(String.raw`^${major}\.\d+\.\d+$`).test(tag);
+      if (!onCurrentLine) {
+        violations.push(
+          `${COMPOSE_PAGE} shows \`${full}\`, which is not \`:latest\`, the floating \`:${major}\`, or an exact \`${major}.y.z\`.\n` +
+            `Source of truth: the root package.json version. A major bump is meant to fail here — update the page's examples with it.`,
+        );
+      }
+    }
+
+    expectNoViolations(violations);
+  });
+});
+
 // --- internal links and heading anchors --------------------------------------
 
 /** `content/index.mdx` → `/`, `content/foo/index.mdx` → `/foo`. */

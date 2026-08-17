@@ -23,6 +23,26 @@ jobs:
         id: version
         run: echo "version=$(node -p "require('./package.json').version")" >> $GITHUB_OUTPUT
 
+      # The floating major tag (`:2`) moves forward with every release in its
+      # line, so a deployment can pin a major and still take minors and patches.
+      # A prerelease never claims one: `:2` must not resolve to 2.0.0-rc.1. The
+      # outputs are empty in that case, and an empty tag line is dropped by
+      # build-push-action.
+      - name: Derive floating major tag
+        id: tags
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          if [[ "$VERSION" == *-* ]]; then
+            echo "Prerelease $VERSION — no floating major tag."
+            echo "frontend_major=" >> "$GITHUB_OUTPUT"
+            echo "backend_major=" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          major="${VERSION%%.*}"
+          echo "frontend_major=willdady/platypus-frontend:$major" >> "$GITHUB_OUTPUT"
+          echo "backend_major=willdady/platypus-backend:$major" >> "$GITHUB_OUTPUT"
+
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v4
 
@@ -45,6 +65,7 @@ jobs:
           tags: |
             willdady/platypus-frontend:latest
             willdady/platypus-frontend:${{ steps.version.outputs.version }}
+            ${{ steps.tags.outputs.frontend_major }}
 
       - name: Build and push backend image
         uses: docker/build-push-action@v7
@@ -56,3 +77,4 @@ jobs:
           tags: |
             willdady/platypus-backend:latest
             willdady/platypus-backend:${{ steps.version.outputs.version }}
+            ${{ steps.tags.outputs.backend_major }}
