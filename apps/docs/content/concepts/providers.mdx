@@ -150,8 +150,9 @@ Bedrock.
   vendors' built-in search does not — it returns results only. There is no
   separate setting for it: the reader comes with the backend, so the decision is
   which backend you select. What a fetch may reach is bounded by [the egress
-  guard](/self-hosting/configuration#the-egress-guard), and unlike the **Web
-  Fetch** Tool set, a backend's reader ignores `robots.txt`.
+  guard](/self-hosting/configuration#the-egress-guard), and a backend's reader
+  ignores `robots.txt` — whereas the **Web Fetch** Tool set honours it unless an
+  Operator has turned that off.
 </Callout>
 
 Three things the field tells you about a selection:

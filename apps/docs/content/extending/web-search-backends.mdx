@@ -10,12 +10,12 @@ import { Callout } from "nextra/components";
 A **Web-search backend** fills the Chat **Search** toggle from a service you
 choose — SearXNG, a commercial search API, a headless browser. It exists for the
 Providers that have no web search of their own: a self-hosted OpenAI-compatible
-endpoint such as vLLM, llama.cpp or LiteLLM, or Bedrock. An Org Admin points a
+endpoint such as vLLM, Ollama or LiteLLM, or Bedrock. An Org Admin points a
 Provider at your backend, and the **Search** toggle appears in Chat on a Provider
 that never had one.
 
-No search backend ships in the box. This is the Extension point, and every
-backend is a Plugin.
+No search backend ships in the box: core owns this Extension point and every
+backend that fills it is a Plugin.
 
 ## You supply executors, not tools
 
@@ -24,10 +24,10 @@ Your contribution returns two plain functions, typed by
 Core builds the `Tool` objects around them. Read the exact shapes off the package
 you have installed — this page states the rules those types don't encode.
 
-| Executor     | Required | Gets        | Returns                                                                    |
-| ------------ | -------- | ----------- | -------------------------------------------------------------------------- |
-| `web_search` | Yes      | `{ query }` | `{ query, results: [{ title, url, snippet? }], answer? }`                  |
-| `read_url`   | No       | `{ url }`   | the page's full content, its final URL after redirects, and a content type |
+| Executor     | Required | Gets        | Returns                                                                      |
+| ------------ | -------- | ----------- | ---------------------------------------------------------------------------- |
+| `web_search` | Yes      | `{ query }` | `{ query, results: [{ title, url, snippet? }], answer? }`                    |
+| `read_url`   | No       | `{ url }`   | the page's full content, its post-redirect URL, and an optional content type |
 
 Either may be async. Contribute a search-only backend by omitting `read_url` —
 the model then gets one tool that turn, and page reading is left to whatever else
@@ -36,9 +36,9 @@ the Agent has.
 Supplying `read_url` is a bigger decision than it looks: it means the **Search**
 toggle grants page fetching on every Provider pointed at your backend, which the
 vendors' built-in search never does. `read_url` also does **not** check
-`robots.txt`, unlike the `fetchUrl` tool in `@platypus/web-fetch` — if your
-upstream should honour it, that is your executor's job, and your Plugin's config
-is where the switch for it belongs.
+`robots.txt`, whereas the `fetchUrl` tool in `@platypus/web-fetch` honours it
+unless an Operator turns that off — if your upstream should honour it, that is
+your executor's job, and your Plugin's config is where the switch for it belongs.
 
 What core owns, and you therefore cannot change: the tool names the model sees,
 their input schemas, their descriptions, the caps below, pagination, the per-call
@@ -66,7 +66,7 @@ multi-hundred-kilobyte response lands in a context window.
 | `answer`            | **4000** characters                      | Truncated with a trailing `…`                               |
 | `read_url` content  | **1 000 000** characters held            | Cut, and the reply says the remainder cannot be read        |
 | One `read_url` page | **100 000** characters                   | `max_length` is clamped, never rejected                     |
-| `content_type`      | **200** characters                       | Truncated                                                   |
+| `content_type`      | **200** characters                       | Truncated, with no `…` — an ellipsis would make it invalid  |
 
 `read_url` paginates exactly like the `fetchUrl` tool in
 `@platypus/web-fetch`: `max_length` defaults to **5000** and accepts up to

@@ -22,7 +22,7 @@ deploy time; it exports a manifest whose `contributes` block fills one or more
 | Let an Agent call your internal service, or a third-party API              | **MCP server**                                                        | No code in Platypus, no restart, configured per Workspace by whoever needs it |
 | Ship tools that are part of the product for everyone on the deployment     | **[Tool set](/extending/tool-sets)** contribution                     | One install, one switch on the Agent form, available to every Workspace       |
 | Run an Agent's shell and filesystem tools somewhere new — Modal, E2B, a VM | **[Sandbox backend](/extending/sandbox-backends)** contribution       | Core owns the five tools; you supply the environment they run in              |
-| Serve the Chat **Search** toggle from your own search service              | **[Web-search backend](/extending/web-search-backends)** contribution | Core owns the two tools and the toggle; you supply the calls to your upstream |
+| Serve the Chat **Search** toggle from your own search service              | **[Web-search backend](/extending/web-search-backends)** contribution | Core owns the tools and the toggle; you supply the calls to your upstream     |
 
 If you are integrating an external service for your own use, you almost always
 want an MCP server. Reach for a Plugin when the capability should ship _with_

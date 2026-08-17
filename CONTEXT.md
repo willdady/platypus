@@ -82,11 +82,11 @@ A distributable bundle — one package, one version, one config namespace, one e
 _Avoid_: extension (reserve for Extension point), add-on, module.
 
 **Extension point**:
-A typed slot, defined and owned by core, that a Plugin fills. The set is fixed — Plugins cannot define new ones, though core may add points (each is a purely additive, minor API bump). The initial Extension points are Sandbox backends and Tool sets; a Web-search backend (ADR-0014) is a planned addition. The messaging **Gateway adapter** is deliberately _not_ a backend Extension point — it lives in the separate **Gateway** app behind its own adapter seam (ADR-0015).
+A typed slot, defined and owned by core, that a Plugin fills. The set is fixed — Plugins cannot define new ones, though core may add points (each is a purely additive, minor API bump). The Extension points are Sandbox backends, Tool sets and Web-search backends (ADR-0014); the first two shipped with the Plugin system, the third followed it. The messaging **Gateway adapter** is deliberately _not_ a backend Extension point — it lives in the separate **Gateway** app behind its own adapter seam (ADR-0015).
 _Avoid_: hook, slot.
 
 **Contribution**:
-A single filling of one Extension point by one Plugin — one Sandbox backend, or one Tool set. Each Contribution has a globally unique id: a core Plugin's ids stand alone; a third-party Plugin's ids are qualified by the Plugin name. A Plugin may make several Contributions.
+A single filling of one Extension point by one Plugin — one Sandbox backend, one Tool set, or one Web-search backend. Each Contribution has a globally unique id: a core Plugin's ids stand alone; a third-party Plugin's ids are qualified by the Plugin name. A Plugin may make several Contributions.
 _Avoid_: registration, extension.
 
 **Plugin config**:
