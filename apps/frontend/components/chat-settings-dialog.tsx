@@ -76,7 +76,7 @@ export const ChatSettingsDialog = ({
           <FieldDescription>
             How the assistant should behave in this chat. Platypus builds the
             full system prompt around it, adding workspace and user context,
-            memories, Skills, sub-Agents, and your Provider&apos;s security
+            memories, Skills, Sub-Agents, and your Provider&apos;s security
             guardrails.
           </FieldDescription>
         </div>

@@ -629,7 +629,7 @@ const AgentForm = ({
             <FieldDescription>
               How this Agent should behave. Platypus builds the full system
               prompt around it, adding workspace and user context, memories,
-              Skills, sub-Agents, and your Provider&apos;s security guardrails.
+              Skills, Sub-Agents, and your Provider&apos;s security guardrails.
             </FieldDescription>
           </Field>
           {/* Provider and model are chosen from one control, so surface either
