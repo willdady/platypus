@@ -56,9 +56,9 @@ usual home for it. Do not soften it into "note that".
 
 ## Conventions
 
-- **Domain nouns are capitalised**: Agent, Workspace, Organization, Chat, Skill,
-  Trigger, Board, Webhook, Sandbox, Plugin, Tool, Provider, Operator. Ordinary
-  words are not — a "card" on a Board is a card.
+- **Domain nouns are capitalised**: Agent, Sub-Agent, Workspace, Organization,
+  Chat, Skill, Trigger, Board, Webhook, Sandbox, Plugin, Tool, Provider,
+  Operator. Ordinary words are not — a "card" on a Board is a card.
 - **UI labels are bold**, and menu paths use an arrow: **Settings → Webhooks**.
   Bold the label exactly as it appears on screen.
 - **Code spans** for env vars, values, fields, and event names: `BACKEND_URL`,
