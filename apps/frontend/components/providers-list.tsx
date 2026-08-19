@@ -46,6 +46,7 @@ const ProvidersList = ({
     useState<ProviderWithScope | null>(null);
   const [attachOpen, setAttachOpen] = useState(false);
   const [detaching, setDetaching] = useState(false);
+  const [detachError, setDetachError] = useState<string | null>(null);
 
   const fetchUrl =
     backendUrl && user
@@ -68,16 +69,22 @@ const ProvidersList = ({
   const detachOrgProvider = async (providerId: string) => {
     if (!backendUrl || !workspaceId) return;
     setDetaching(true);
+    setDetachError(null);
     try {
-      await fetch(
+      const response = await fetch(
         joinUrl(
           backendUrl,
           `/organizations/${orgId}/workspaces/${workspaceId}/attachments/provider/${providerId}`,
         ),
         { method: "DELETE", credentials: "include" },
       );
-      setSelectedOrgProvider(null);
-      await mutate();
+      if (response.ok) {
+        setSelectedOrgProvider(null);
+        await mutate();
+      } else {
+        const info = await response.json().catch(() => ({}));
+        setDetachError(info.error || "Failed to detach provider.");
+      }
     } finally {
       setDetaching(false);
     }
@@ -128,7 +135,10 @@ const ProvidersList = ({
                 asChild={!isOrgScopedInWorkspace}
                 onClick={
                   isOrgScopedInWorkspace
-                    ? () => setSelectedOrgProvider(provider)
+                    ? () => {
+                        setDetachError(null);
+                        setSelectedOrgProvider(provider);
+                      }
                     : undefined
                 }
                 className={cn(isOrgScopedInWorkspace && "cursor-pointer")}
@@ -213,7 +223,12 @@ const ProvidersList = ({
       )}
       <Dialog
         open={!!selectedOrgProvider}
-        onOpenChange={(open) => !open && setSelectedOrgProvider(null)}
+        onOpenChange={(open) => {
+          if (!open) {
+            setSelectedOrgProvider(null);
+            setDetachError(null);
+          }
+        }}
       >
         <DialogContent>
           <DialogHeader>
@@ -224,10 +239,16 @@ const ProvidersList = ({
               organization settings.
             </DialogDescription>
           </DialogHeader>
+          {detachError && (
+            <p className="text-sm text-destructive">{detachError}</p>
+          )}
           <DialogFooter>
             <Button
               variant="outline"
-              onClick={() => setSelectedOrgProvider(null)}
+              onClick={() => {
+                setSelectedOrgProvider(null);
+                setDetachError(null);
+              }}
             >
               Close
             </Button>
