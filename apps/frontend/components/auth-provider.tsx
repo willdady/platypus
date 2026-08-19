@@ -10,7 +10,11 @@ import {
 } from "react";
 import { createAuthClient } from "better-auth/react";
 import { useParams } from "next/navigation";
-import { type Actor, resolveActor } from "@/lib/authorization";
+import {
+  type Actor,
+  type WorkspaceDelegationFlags,
+  resolveActor,
+} from "@/lib/authorization";
 
 interface OrgMembership {
   id: string;
@@ -18,10 +22,8 @@ interface OrgMembership {
   role: "admin" | "member";
 }
 
-interface WorkspaceData {
+interface WorkspaceData extends WorkspaceDelegationFlags {
   ownerId: string;
-  providerSelfManagement: boolean;
-  mcpSelfManagement: boolean;
 }
 
 interface User {
@@ -63,10 +65,7 @@ interface AuthContextType {
   /** The named actor for this request — see `lib/authorization.ts`. */
   actor: Actor;
   /** ADR-0006 delegation flags for the Workspace in scope, if any. */
-  workspaceDelegation: {
-    providerSelfManagement: boolean;
-    mcpSelfManagement: boolean;
-  } | null;
+  workspaceDelegation: WorkspaceDelegationFlags | null;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -192,12 +191,7 @@ export function AuthProvider({
     orgRole: orgMembership?.role ?? null,
     isWorkspaceOwner,
   });
-  const workspaceDelegation = workspaceData
-    ? {
-        providerSelfManagement: workspaceData.providerSelfManagement,
-        mcpSelfManagement: workspaceData.mcpSelfManagement,
-      }
-    : null;
+  const workspaceDelegation: WorkspaceDelegationFlags | null = workspaceData;
 
   return (
     <AuthContext.Provider

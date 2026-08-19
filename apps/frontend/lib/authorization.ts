@@ -38,8 +38,7 @@ const isOrgAdminOrAbove = (actor: Actor): boolean =>
 
 export type SharedResourceDenial = "no-workspace-context" | "not-org-admin";
 
-export type SharedResourceAccess =
-  { allowed: true } | { allowed: false; reason: SharedResourceDenial };
+export type SharedResourceAccess = Access<SharedResourceDenial>;
 
 /**
  * Attach, detach, and Promote a Shared resource are the same rule (ADR-0007)
@@ -63,11 +62,19 @@ export function canManageSharedResource(
 export type DelegatableResourceType = "provider" | "mcp";
 export type CredentialResourceType = DelegatableResourceType | "sandbox";
 
+/** A Workspace's own ADR-0006 delegation flags, as stored on its row. */
+export interface WorkspaceDelegationFlags {
+  providerSelfManagement: boolean;
+  mcpSelfManagement: boolean;
+}
+
 export type ConfigAccessDenial =
   "not-owner" | "not-delegatable" | "not-delegated";
 
-export type WorkspaceConfigAccess =
-  { allowed: true } | { allowed: false; reason: ConfigAccessDenial };
+export type Access<Reason> =
+  { allowed: true } | { allowed: false; reason: Reason };
+
+export type WorkspaceConfigAccess = Access<ConfigAccessDenial>;
 
 /**
  * ADR-0006: may this actor configure a credential- and reach-bearing
@@ -94,8 +101,7 @@ export function canConfigureWorkspaceResource(
 
 export type OrgAccessDenial = "not-a-member" | "insufficient-role";
 
-export type OrgAccess =
-  { allowed: true } | { allowed: false; reason: OrgAccessDenial };
+export type OrgAccess = Access<OrgAccessDenial>;
 
 /** Authority tiers, ordered so a higher role satisfies a lower requirement. */
 const ORG_ROLE_RANK: Record<OrgRole, number> = { member: 1, admin: 2 };
