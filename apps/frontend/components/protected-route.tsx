@@ -1,6 +1,12 @@
 "use client";
 
 import { useAuth } from "@/components/auth-provider";
+import {
+  canAccessOrganization,
+  canAccessWorkspace,
+  isOperator,
+  type OrgRole,
+} from "@/lib/authorization";
 import { useRouter, useParams } from "next/navigation";
 import { useEffect } from "react";
 import {
@@ -15,20 +21,13 @@ import { Button } from "@/components/ui/button";
 import { OctagonX, Home, Building } from "lucide-react";
 import Link from "next/link";
 
-type RequiredOrgRole = "member" | "admin";
-
 interface ProtectedRouteProps {
   children: React.ReactNode;
-  requiredOrgRole?: RequiredOrgRole;
+  requiredOrgRole?: OrgRole;
   requireOrgAccess?: boolean;
   requireWorkspaceAccess?: boolean;
   requireSuperAdmin?: boolean;
 }
-
-const orgRoleHierarchy: Record<RequiredOrgRole, number> = {
-  member: 1,
-  admin: 2,
-};
 
 interface AccessDeniedProps {
   title: string;
@@ -75,7 +74,7 @@ export function ProtectedRoute({
   requireWorkspaceAccess = false,
   requireSuperAdmin = false,
 }: ProtectedRouteProps) {
-  const { user, isAuthLoading, orgMembership, hasWorkspaceAccess } = useAuth();
+  const { user, isAuthLoading, orgMembership, actor } = useAuth();
   const router = useRouter();
   const params = useParams();
 
@@ -93,7 +92,7 @@ export function ProtectedRoute({
     return null;
   }
 
-  if (requireSuperAdmin && user?.role !== "admin") {
+  if (requireSuperAdmin && !isOperator(actor)) {
     return (
       <AccessDenied
         title="Super Admin Access Required"
@@ -102,19 +101,21 @@ export function ProtectedRoute({
     );
   }
 
-  if (requireOrgAccess && !orgMembership) {
-    return (
-      <AccessDenied
-        title="Organization Access Required"
-        description="You do not have permission to access this organization. Please contact your administrator or switch to an organization you have access to."
-      />
+  if (requireOrgAccess) {
+    const orgAccess = canAccessOrganization(
+      actor,
+      orgMembership?.role ?? null,
+      requiredOrgRole,
     );
-  }
-
-  if (requireOrgAccess && orgMembership) {
-    const hasRole =
-      orgRoleHierarchy[orgMembership.role] >= orgRoleHierarchy[requiredOrgRole];
-    if (!hasRole) {
+    if (!orgAccess.allowed && orgAccess.reason === "not-a-member") {
+      return (
+        <AccessDenied
+          title="Organization Access Required"
+          description="You do not have permission to access this organization. Please contact your administrator or switch to an organization you have access to."
+        />
+      );
+    }
+    if (!orgAccess.allowed && orgAccess.reason === "insufficient-role") {
       return (
         <AccessDenied
           title="Insufficient Organization Permissions"
@@ -123,7 +124,7 @@ export function ProtectedRoute({
               You need <span className="font-semibold">{requiredOrgRole}</span>{" "}
               permissions to access this page. Your current role in this
               organization is{" "}
-              <span className="font-semibold">{orgMembership.role}</span>.
+              <span className="font-semibold">{orgMembership?.role}</span>.
             </>
           }
         />
@@ -131,7 +132,7 @@ export function ProtectedRoute({
     }
   }
 
-  if (requireWorkspaceAccess && !hasWorkspaceAccess) {
+  if (requireWorkspaceAccess && !canAccessWorkspace(actor)) {
     return (
       <AccessDenied
         title="Workspace Access Required"

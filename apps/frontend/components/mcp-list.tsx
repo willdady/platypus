@@ -1,10 +1,14 @@
 "use client";
 
-import { MCP, type Workspace } from "@platypus/schemas";
+import { MCP } from "@platypus/schemas";
 import { Item, ItemActions, ItemContent, ItemTitle } from "./ui/item";
 import useSWR from "swr";
 import { cn, fetcher, joinUrl } from "../lib/utils";
 import { useAuth } from "@/components/auth-provider";
+import {
+  canConfigureWorkspaceResource,
+  canManageSharedResource,
+} from "@/lib/authorization";
 import {
   Building,
   ExternalLink,
@@ -40,7 +44,7 @@ const McpList = ({
   // Add scope to the MCP type for this component
   type McpWithScope = MCP & { scope?: "organization" | "workspace" };
 
-  const { user, isOrgAdmin } = useAuth();
+  const { user, isOrgAdmin, actor, workspaceDelegation } = useAuth();
   const backendUrl = useBackendUrl();
   const [selectedOrgMcp, setSelectedOrgMcp] = useState<McpWithScope | null>(
     null,
@@ -62,9 +66,9 @@ const McpList = ({
     results: McpWithScope[];
   }>(fetchUrl, fetcher);
 
-  // Attaching/detaching org-scoped Shared resources is an Org Admin action,
-  // available only inside a workspace (ADR-0007 / #154).
-  const canAttach = Boolean(workspaceId) && isOrgAdmin;
+  // Attach, detach, and Promote a Shared resource are the same rule
+  // (ADR-0007 / #154), asked of the auth module instead of re-derived here.
+  const canAttach = canManageSharedResource(actor, workspaceId).allowed;
 
   const detachOrgMcp = async (mcpId: string) => {
     if (!backendUrl || !workspaceId) return;
@@ -85,17 +89,16 @@ const McpList = ({
   };
 
   // Workspace-scoped MCP config is admin-only unless the workspace delegates
-  // it (ADR-0006). Org-level MCP management lives behind an admin-only route
-  // (the org settings layout already requires admin), so it is always
-  // manageable here.
-  const { data: workspace } = useSWR<Workspace>(
-    backendUrl && user && workspaceId
-      ? joinUrl(backendUrl, `/organizations/${orgId}/workspaces/${workspaceId}`)
-      : null,
-    fetcher,
-  );
+  // it (ADR-0006), resolved once by the auth module off the Workspace's own
+  // delegation flags — no separate fetch needed. Org-level MCP management
+  // lives behind an admin-only route (the org settings layout already
+  // requires admin), so it is always manageable here.
   const canManage = workspaceId
-    ? isOrgAdmin || workspace?.mcpSelfManagement === true
+    ? canConfigureWorkspaceResource(
+        actor,
+        "mcp",
+        workspaceDelegation?.mcpSelfManagement === true,
+      ).allowed
     : true;
 
   if (isLoading) {

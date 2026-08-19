@@ -1,10 +1,14 @@
 "use client";
 
-import { Provider, type Workspace } from "@platypus/schemas";
+import { Provider } from "@platypus/schemas";
 import { Item, ItemActions, ItemContent, ItemTitle } from "./ui/item";
 import useSWR from "swr";
 import { cn, fetcher, joinUrl } from "../lib/utils";
 import { useAuth } from "@/components/auth-provider";
+import {
+  canConfigureWorkspaceResource,
+  canManageSharedResource,
+} from "@/lib/authorization";
 import {
   Building,
   ExternalLink,
@@ -40,7 +44,7 @@ const ProvidersList = ({
   // Add scope to Provider type for this component
   type ProviderWithScope = Provider & { scope: "organization" | "workspace" };
 
-  const { user, isOrgAdmin } = useAuth();
+  const { user, isOrgAdmin, actor, workspaceDelegation } = useAuth();
   const backendUrl = useBackendUrl();
   const [selectedOrgProvider, setSelectedOrgProvider] =
     useState<ProviderWithScope | null>(null);
@@ -61,9 +65,9 @@ const ProvidersList = ({
     results: ProviderWithScope[];
   }>(fetchUrl, fetcher);
 
-  // Attaching/detaching org-scoped Shared resources is an Org Admin action,
-  // available only inside a workspace (ADR-0007 / #154).
-  const canAttach = Boolean(workspaceId) && isOrgAdmin;
+  // Attach, detach, and Promote a Shared resource are the same rule
+  // (ADR-0007 / #154), asked of the auth module instead of re-derived here.
+  const canAttach = canManageSharedResource(actor, workspaceId).allowed;
 
   const detachOrgProvider = async (providerId: string) => {
     if (!backendUrl || !workspaceId) return;
@@ -84,16 +88,16 @@ const ProvidersList = ({
   };
 
   // Workspace-scoped provider config is admin-only unless the workspace
-  // delegates it (ADR-0006). Org-level provider management lives behind an
-  // admin-only route, so it is always manageable here.
-  const { data: workspace } = useSWR<Workspace>(
-    backendUrl && user && workspaceId
-      ? joinUrl(backendUrl, `/organizations/${orgId}/workspaces/${workspaceId}`)
-      : null,
-    fetcher,
-  );
+  // delegates it (ADR-0006), resolved once by the auth module off the
+  // Workspace's own delegation flags — no separate fetch needed. Org-level
+  // provider management lives behind an admin-only route, so it is always
+  // manageable here.
   const canManage = workspaceId
-    ? isOrgAdmin || workspace?.providerSelfManagement === true
+    ? canConfigureWorkspaceResource(
+        actor,
+        "provider",
+        workspaceDelegation?.providerSelfManagement === true,
+      ).allowed
     : true;
 
   if (isLoading || error) return null; // FIXME

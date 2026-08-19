@@ -10,6 +10,7 @@ import {
 } from "react";
 import { createAuthClient } from "better-auth/react";
 import { useParams } from "next/navigation";
+import { type Actor, resolveActor } from "@/lib/authorization";
 
 interface OrgMembership {
   id: string;
@@ -19,6 +20,8 @@ interface OrgMembership {
 
 interface WorkspaceData {
   ownerId: string;
+  providerSelfManagement: boolean;
+  mcpSelfManagement: boolean;
 }
 
 interface User {
@@ -57,6 +60,13 @@ interface AuthContextType {
   isOrgAdmin: boolean;
   isWorkspaceOwner: boolean;
   hasWorkspaceAccess: boolean;
+  /** The named actor for this request — see `lib/authorization.ts`. */
+  actor: Actor;
+  /** ADR-0006 delegation flags for the Workspace in scope, if any. */
+  workspaceDelegation: {
+    providerSelfManagement: boolean;
+    mcpSelfManagement: boolean;
+  } | null;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -152,7 +162,15 @@ export function AuthProvider({
     })
       .then((res) => (res.ok ? res.json() : null))
       .then((ws) => {
-        setWorkspaceData(ws ? { ownerId: ws.ownerId } : null);
+        setWorkspaceData(
+          ws
+            ? {
+                ownerId: ws.ownerId,
+                providerSelfManagement: ws.providerSelfManagement === true,
+                mcpSelfManagement: ws.mcpSelfManagement === true,
+              }
+            : null,
+        );
         setIsWorkspaceLoading(false);
         setHasFetchedWorkspace(true);
       })
@@ -169,6 +187,17 @@ export function AuthProvider({
     (data?.user as unknown as User | undefined)?.role === "admin";
   const isWorkspaceOwner = workspaceData?.ownerId === data?.user?.id;
   const hasWorkspaceAccess = isSuperAdmin || isOrgAdmin || isWorkspaceOwner;
+  const actor = resolveActor({
+    isOperator: isSuperAdmin,
+    orgRole: orgMembership?.role ?? null,
+    isWorkspaceOwner,
+  });
+  const workspaceDelegation = workspaceData
+    ? {
+        providerSelfManagement: workspaceData.providerSelfManagement,
+        mcpSelfManagement: workspaceData.mcpSelfManagement,
+      }
+    : null;
 
   return (
     <AuthContext.Provider
@@ -187,6 +216,8 @@ export function AuthProvider({
         isOrgAdmin,
         isWorkspaceOwner,
         hasWorkspaceAccess,
+        actor,
+        workspaceDelegation,
       }}
     >
       {children}

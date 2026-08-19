@@ -61,6 +61,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useBackendUrl } from "@/app/client-context";
 import { useAuth } from "@/components/auth-provider";
+import { canManageSharedResource } from "@/lib/authorization";
 import { NoProvidersEmptyState } from "@/components/no-providers-empty-state";
 import { AttachSharedResourceDialog } from "@/components/attach-shared-resource-dialog";
 
@@ -89,7 +90,7 @@ export const AgentsList = ({
   orgId: string;
   workspaceId: string;
 }) => {
-  const { user, isOrgAdmin } = useAuth();
+  const { user, isOrgAdmin, actor } = useAuth();
   const backendUrl = useBackendUrl();
   const router = useRouter();
   const [cloneDialogOpen, setCloneDialogOpen] = useState(false);
@@ -168,8 +169,9 @@ export const AgentsList = ({
   const toolSets = toolSetsData?.results || [];
   const skills = skillsData?.results || [];
 
-  // Promote and attach are Org Admin actions (ADR-0007).
-  const canManageShared = isOrgAdmin;
+  // Attach, detach, and Promote a Shared resource are the same rule
+  // (ADR-0007), asked of the auth module instead of re-derived here.
+  const canManageShared = canManageSharedResource(actor, workspaceId).allowed;
   const attachedOrgIds = agents
     .filter((a) => a.scope === "organization")
     .map((a) => a.id);
