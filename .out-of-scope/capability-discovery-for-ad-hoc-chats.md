@@ -80,69 +80,23 @@ carries an ordered set of Blueprints applied on accept (ADR-0009, and #549 for
 the redemption path). A Workspace provisioned with one Agent presents no
 selection problem at all.
 
-## Also rejected: caching MCP tool listings, invalidated on edit
-
-Filed alongside the above as the "smallest change", and it does not hold up as
-specified. The invalidation trigger is a Platypus-side edit of the MCP row, and
-a redeploy of the server behind the URL edits no row — so a tool removed
-upstream keeps being advertised until the model calls it and fails mid-turn, and
-a tool added upstream stays invisible indefinitely. That is the same staleness
-class the request itself complains about, one layer down and with no human act
-to clear it. (#179's Profiles design had the identical hole: "persist tool
-inventory on `/mcp/test`; clear it on parent URL change".)
-
-MCP's own answer, `notifications/tools/list_changed`, requires holding the
-connection open — which is what the cache exists to avoid — and is optional for
-servers. A periodic background refresh scales with rows _configured_ rather than
-rows _used_ and still only bounds staleness, which a lazy TTL does more cheaply.
-
-It is also worth being clear about the payoff: a listing cache saves **no
-tokens**, because the schemas still go into the prompt in full. Since #513 made
-a delegate's tools load on first delegation, it saves only the parent Agent's
-own `tools/list` round-trips.
-
 ## What remains open
 
-**Per-step `activeTools` gating.** Declare the full tool set at the top-level
-call as today, render a name + description index into the system prompt exactly
-as Skills already do, and use `prepareStep`'s `activeTools` to expose only the
-meta-tools plus whatever the model has asked for on each step. This is the
-"dynamic tool discovery" direction recorded when #179 was closed: it attacks the
-base-catalogue cost generically, needs no per-server cooperation, self-selects
-rather than relying on curation, and adds **no new data-model concept**.
+The token cost underneath this request is real, and one direction for attacking
+it generically survives: **per-step `activeTools` gating** — declare the full
+tool set as today, render a name + description index into the system prompt
+exactly as Skills already do, and narrow per step to the meta-tools plus
+whatever the model has asked for. That is the "dynamic tool discovery" recorded
+when #179 was closed, and it adds no new data-model concept.
 
-Two constraints to carry into any such design:
+It is gated on measuring what opening MCP tool sessions actually costs. #557
+carries that measurement and the design constraints that go with it.
 
-- It cuts tokens and improves tool selection. It does **not** cut connections —
-  to declare a tool you need its schema, so every attached MCP is still opened
-  and listed every turn.
-- `prepareStep` cannot _add_ tools on `ai@7.0.48`: `PrepareStepResult` exposes
-  `model`, `toolChoice`, `activeTools`, `toolOrder`, `instructions`, `messages`,
-  `toolsContext`, `runtimeContext` and `providerOptions`, and `activeTools` can
-  only narrow the declared set. Declaring everything up front is what makes the
-  approach work without a new SDK capability.
-
-Nothing should be built here before the connection cost is measured. Tool
-sessions open MCPs **sequentially** — the loop in
-`apps/backend/src/tools/tool-session.ts` awaits each server in turn, because
-collision reporting needs each tool set to see the names claimed before it — so
-an Agent with five MCPs pays five sequential connect-and-list round-trips before
-its first token. Nobody has put a number on that, and it decides whether the
-remaining latency work is worth anything. It also means that fixing tool-name
-collisions at the naming layer (#467) may allow those connections to overlap,
-which would deliver most of what a listing cache was reaching for without any
-staleness question at all.
-
-## A correction owed to the reporter
-
-#464 argued that lever 2 of the #179 rejection (dedicated-agent-as-sub-agent)
-carried an unaccounted per-turn cost, because `createSubAgentTools` resolved
-every sub-agent's Provider and called `loadTools` — opening every sub-agent's
-MCP connections — before the parent generated a token. **That was accurate when
-the issue was filed and was fixed the following day** by #513, which made a
-delegate's tools load on its first invocation, memoized. What remains eager per
-parent turn is one generation-plan resolution per sub-agent: database lookups,
-no MCP connections. The lever-2 gap that reopened #179 has closed.
+Also proposed here and **not** taken: caching each MCP's tool listing,
+invalidated when the MCP row is edited. A server redeploy edits no row, so it
+reintroduces the same staleness this request complains about. The underlying
+want — stop re-listing every turn — is live, and belongs to #557 rather than
+here.
 
 ## Prior requests
 
