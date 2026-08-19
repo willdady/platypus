@@ -9,7 +9,8 @@ import {
 } from "./model-config";
 
 export type ModelSelectionInput = {
-  agentId: string;
+  /** Omit entirely for a caller (like the Agent form) that never selects by Agent. */
+  agentId?: string;
   modelId: string;
   providerId: string;
 };
@@ -44,10 +45,11 @@ export type ResolvedModel = {
  */
 export const resolveModel = (input: {
   providers: Provider[];
-  agents: Agent[];
+  /** Omit for a caller (like the Agent form) that never selects by Agent. */
+  agents?: Agent[];
   selection: ModelSelectionInput;
 }): ResolvedModel | null => {
-  const { providers, agents, selection } = input;
+  const { providers, agents = [], selection } = input;
 
   let provider: Provider | undefined;
   let modelReference: string | undefined;

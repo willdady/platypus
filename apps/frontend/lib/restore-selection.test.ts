@@ -43,8 +43,35 @@ describe("resolveRestoredSelection — priority 1 (existing chat)", () => {
       } as Chat,
       storedSelection: null,
       providers: [provider()],
-      agents: [], // Agent no longer exists
+      // A non-empty list missing the target id — genuinely deleted, as
+      // opposed to merely not having loaded yet (see the next test).
+      agents: [agent({ id: "some-other-agent" })],
     });
+    expect(result).toEqual({
+      agentId: "",
+      modelId: "gpt-4",
+      providerId: "p1",
+    });
+  });
+
+  it("does not judge the Agent reference before `agents` has loaded", () => {
+    // agents.length === 0 here means "still loading", not "deleted" — treating
+    // it as deleted would commit to Priority 3 before the Agent ever gets a
+    // chance to match once the real list arrives (a regression this guards).
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const result = resolveRestoredSelection({
+      chatData: {
+        agentId: "a1",
+        providerId: "p1",
+        modelId: "gpt-4",
+      } as Chat,
+      storedSelection: null,
+      providers: [provider()],
+      agents: [],
+    });
+    expect(warn).not.toHaveBeenCalledWith(
+      expect.stringContaining("no longer exists"),
+    );
     expect(result).toEqual({
       agentId: "",
       modelId: "gpt-4",

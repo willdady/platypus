@@ -42,7 +42,11 @@ export const resolveRestoredSelection = (
 
   // PRIORITY 1: restore from chatData (existing chat).
   if (chatData) {
-    if (chatData.agentId) {
+    // Only judge the Agent reference once `agents` has actually loaded —
+    // agents.length === 0 while data is still in flight looks identical to a
+    // genuinely empty list, and treating it as "deleted" would fall through to
+    // Priority 3 before the real Agent ever gets a chance to match.
+    if (chatData.agentId && agents.length > 0) {
       const agent = agents.find((a) => a.id === chatData.agentId);
       if (agent) {
         return { agentId: chatData.agentId, modelId: "", providerId: "" };

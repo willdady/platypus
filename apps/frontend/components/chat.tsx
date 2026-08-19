@@ -618,6 +618,7 @@ export const Chat = ({
                         }
                       }}
                       onModelChange={handleModelChange}
+                      maxOutputTokens={resolvedModel?.maxOutputTokens}
                     />
                     {agentId && selectedAgent && (
                       <Dialog

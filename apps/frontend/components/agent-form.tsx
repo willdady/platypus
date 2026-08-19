@@ -656,9 +656,7 @@ const AgentForm = ({
               : undefined;
             const resolvedModel = resolveModel({
               providers,
-              agents: [],
               selection: {
-                agentId: "",
                 providerId: formData.providerId,
                 modelId: formData.modelId,
               },

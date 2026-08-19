@@ -16,6 +16,8 @@ import {
   encodeAgentSelection,
   encodeProviderSelection,
 } from "@/lib/selection-reference";
+import { formatTokens } from "@/lib/context-window";
+import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip";
 
 const filterByKeywords = (
   _value: string,
@@ -35,6 +37,12 @@ interface ModelSelectorDialogProps {
   isOpen: boolean;
   onOpenChange: (open: boolean) => void;
   onModelChange: (value: string) => void;
+  /**
+   * The resolved model's Output ceiling (issue #454), shown as a tooltip on
+   * the trigger — the only reader this figure has today, so an Org Admin's
+   * declaration is visible before a reply is cut short, not only after.
+   */
+  maxOutputTokens?: number;
 }
 
 export const ModelSelectorDialog = ({
@@ -46,6 +54,7 @@ export const ModelSelectorDialog = ({
   isOpen,
   onOpenChange,
   onModelChange,
+  maxOutputTokens,
 }: ModelSelectorDialogProps) => {
   const selectedAgent = agentId ? agents.find((a) => a.id === agentId) : null;
 
@@ -59,24 +68,37 @@ export const ModelSelectorDialog = ({
       ? findModelOption(selectedProvider, modelId)?.label
       : undefined;
 
+  const trigger = (
+    <Button
+      variant="outline"
+      size="sm"
+      className="max-w-40 overflow-hidden sm:max-w-none"
+    >
+      {selectedAgent && (
+        <AgentAvatar agent={selectedAgent} className="size-4" />
+      )}
+      <span className="truncate">
+        {agentId
+          ? selectedAgent?.name || "Select model"
+          : selectedModelLabel || "Select model"}
+      </span>
+    </Button>
+  );
+
   return (
     <ModelSelector open={isOpen} onOpenChange={onOpenChange}>
-      <ModelSelectorTrigger asChild>
-        <Button
-          variant="outline"
-          size="sm"
-          className="max-w-40 overflow-hidden sm:max-w-none"
-        >
-          {selectedAgent && (
-            <AgentAvatar agent={selectedAgent} className="size-4" />
-          )}
-          <span className="truncate">
-            {agentId
-              ? selectedAgent?.name || "Select model"
-              : selectedModelLabel || "Select model"}
-          </span>
-        </Button>
-      </ModelSelectorTrigger>
+      {maxOutputTokens ? (
+        <Tooltip delayDuration={1000}>
+          <ModelSelectorTrigger asChild>
+            <TooltipTrigger asChild>{trigger}</TooltipTrigger>
+          </ModelSelectorTrigger>
+          <TooltipContent>
+            Max reply length: {formatTokens(maxOutputTokens)} tokens
+          </TooltipContent>
+        </Tooltip>
+      ) : (
+        <ModelSelectorTrigger asChild>{trigger}</ModelSelectorTrigger>
+      )}
       <ModelSelectorContent filter={filterByKeywords}>
         <ModelSelectorInput placeholder="Search agents and models..." />
         <ModelSelectorList>
