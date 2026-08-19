@@ -103,6 +103,7 @@ export const AgentsList = ({
   const [selectedOrgAgent, setSelectedOrgAgent] =
     useState<AgentWithScope | null>(null);
   const [detaching, setDetaching] = useState(false);
+  const [detachError, setDetachError] = useState<string | null>(null);
   const [agentToPromote, setAgentToPromote] = useState<AgentWithScope | null>(
     null,
   );
@@ -325,16 +326,22 @@ export const AgentsList = ({
   const detachOrgAgent = async (agentId: string) => {
     if (!backendUrl) return;
     setDetaching(true);
+    setDetachError(null);
     try {
-      await fetch(
+      const response = await fetch(
         joinUrl(
           backendUrl,
           `/organizations/${orgId}/workspaces/${workspaceId}/attachments/agent/${agentId}`,
         ),
         { method: "DELETE", credentials: "include" },
       );
-      setSelectedOrgAgent(null);
-      await mutate();
+      if (response.ok) {
+        setSelectedOrgAgent(null);
+        await mutate();
+      } else {
+        const info = await response.json().catch(() => ({}));
+        setDetachError(info.error || "Failed to detach agent.");
+      }
     } finally {
       setDetaching(false);
     }
@@ -373,7 +380,10 @@ export const AgentsList = ({
               </DropdownMenuItem>
               <DropdownMenuItem
                 className="cursor-pointer"
-                onSelect={() => setSelectedOrgAgent(agent)}
+                onSelect={() => {
+                  setDetachError(null);
+                  setSelectedOrgAgent(agent);
+                }}
               >
                 <Unlink /> Detach
               </DropdownMenuItem>
@@ -625,7 +635,12 @@ export const AgentsList = ({
 
       <Dialog
         open={!!selectedOrgAgent}
-        onOpenChange={(open) => !open && setSelectedOrgAgent(null)}
+        onOpenChange={(open) => {
+          if (!open) {
+            setSelectedOrgAgent(null);
+            setDetachError(null);
+          }
+        }}
       >
         <DialogContent>
           <DialogHeader>
@@ -636,8 +651,17 @@ export const AgentsList = ({
               appearing here.
             </DialogDescription>
           </DialogHeader>
+          {detachError && (
+            <p className="text-sm text-destructive">{detachError}</p>
+          )}
           <DialogFooter>
-            <Button variant="outline" onClick={() => setSelectedOrgAgent(null)}>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setSelectedOrgAgent(null);
+                setDetachError(null);
+              }}
+            >
               Close
             </Button>
             {isOrgAdmin && selectedOrgAgent && (

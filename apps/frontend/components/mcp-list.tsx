@@ -51,6 +51,7 @@ const McpList = ({
   );
   const [attachOpen, setAttachOpen] = useState(false);
   const [detaching, setDetaching] = useState(false);
+  const [detachError, setDetachError] = useState<string | null>(null);
 
   const fetchUrl =
     backendUrl && user
@@ -73,16 +74,22 @@ const McpList = ({
   const detachOrgMcp = async (mcpId: string) => {
     if (!backendUrl || !workspaceId) return;
     setDetaching(true);
+    setDetachError(null);
     try {
-      await fetch(
+      const response = await fetch(
         joinUrl(
           backendUrl,
           `/organizations/${orgId}/workspaces/${workspaceId}/attachments/mcp/${mcpId}`,
         ),
         { method: "DELETE", credentials: "include" },
       );
-      setSelectedOrgMcp(null);
-      await mutate();
+      if (response.ok) {
+        setSelectedOrgMcp(null);
+        await mutate();
+      } else {
+        const info = await response.json().catch(() => ({}));
+        setDetachError(info.error || "Failed to detach MCP.");
+      }
     } finally {
       setDetaching(false);
     }
@@ -147,7 +154,10 @@ const McpList = ({
                 asChild={!isOrgScopedInWorkspace}
                 onClick={
                   isOrgScopedInWorkspace
-                    ? () => setSelectedOrgMcp(mcp)
+                    ? () => {
+                        setDetachError(null);
+                        setSelectedOrgMcp(mcp);
+                      }
                     : undefined
                 }
                 className={cn(isOrgScopedInWorkspace && "cursor-pointer")}
@@ -232,7 +242,12 @@ const McpList = ({
       )}
       <Dialog
         open={!!selectedOrgMcp}
-        onOpenChange={(open) => !open && setSelectedOrgMcp(null)}
+        onOpenChange={(open) => {
+          if (!open) {
+            setSelectedOrgMcp(null);
+            setDetachError(null);
+          }
+        }}
       >
         <DialogContent>
           <DialogHeader>
@@ -243,8 +258,17 @@ const McpList = ({
               organization settings.
             </DialogDescription>
           </DialogHeader>
+          {detachError && (
+            <p className="text-sm text-destructive">{detachError}</p>
+          )}
           <DialogFooter>
-            <Button variant="outline" onClick={() => setSelectedOrgMcp(null)}>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setSelectedOrgMcp(null);
+                setDetachError(null);
+              }}
+            >
               Close
             </Button>
             {canAttach && selectedOrgMcp && (
