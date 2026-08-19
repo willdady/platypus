@@ -32,9 +32,6 @@ import {
   Agent,
   ToolSet,
   Skill,
-  providerHasNativeSearch,
-  SEARCH_SOURCE_NATIVE,
-  SEARCH_SOURCE_NONE,
 } from "@platypus/schemas";
 import { type PlatypusUIMessage } from "@platypus/backend/src/types";
 import useSWR from "swr";
@@ -42,11 +39,7 @@ import { fetcher, joinUrl } from "@/lib/utils";
 import { useResetOnChange } from "@/hooks/use-reset-on-change";
 import { useChatSettings } from "@/hooks/use-chat-settings";
 import { useModelSelection } from "@/hooks/use-model-selection";
-import {
-  getContextWindow,
-  getPassthroughFileTypes,
-  resolveModelId,
-} from "@/lib/model-config";
+import { resolveModel } from "@/lib/resolve-model";
 import { ContextMeter } from "./context-meter";
 import { FileCompatibilityWarning } from "./file-compatibility-warning";
 import { useMessageEditing } from "@/hooks/use-message-editing";
@@ -406,62 +399,23 @@ export const Chat = ({
   }
 
   const selectedAgent = agentId ? agents.find((a) => a.id === agentId) : null;
-  // Resolve the provider backing the current selection, whether that's a raw
-  // model (providerId) or an agent (which carries its own providerId). Used to
-  // decide whether the chat search toggle is shown.
-  const resolvedProviderId = agentId ? selectedAgent?.providerId : providerId;
-  const resolvedProvider = resolvedProviderId
-    ? providers.find((p) => p.id === resolvedProviderId)
-    : null;
-  // Show the search toggle only when a searching turn would actually serve
-  // tools. Hidden when nothing is resolved yet — we can't search without a
-  // model. (#167)
-  //
-  // Mirrors `resolveSearchMode`'s own precedence: `searchSource` of "none"
-  // serves nothing, a value naming a Web-search backend (ADR-0014) serves that
-  // backend, and "native" serves the provider's own search if it has one. So a
-  // vLLM or Bedrock Provider — no native search of any kind — gains the toggle
-  // as soon as a backend is selected on it.
-  //
-  // The capability test is `providerHasNativeSearch`, shared with the backend's
-  // injection gate, rather than a local `!== "Bedrock"`: the gate is the
-  // authority over what a turn actually serves (see `resolveSearchMode`), so a
-  // second copy of the table here would show a toggle that resolves to no
-  // tools. Bedrock is not the only case — OpenAI's search is Responses-API
-  // only, so a chat-completions endpoint (vLLM, llama.cpp) has none either.
-  //
-  // A configured backend is trusted on the stored id alone: no catalog fetch, no
-  // liveness check. An id whose plugin has since been dropped degrades to no
-  // tools server-side with a warn line, which is the documented posture.
-  const canSearch =
-    !!resolvedProvider &&
-    resolvedProvider.searchSource !== SEARCH_SOURCE_NONE &&
-    (resolvedProvider.searchSource === SEARCH_SOURCE_NATIVE
-      ? providerHasNativeSearch(resolvedProvider)
-      : Boolean(resolvedProvider.searchSource));
 
-  // The media types the currently-selected model ingests natively (issue #328),
-  // used to warn about incompatible attachments. Empty when nothing resolves yet.
-  //
-  // The Agent's / selection's stored value is a REFERENCE and may be an alias,
-  // so it is resolved to a concrete id first — matching it against entry ids
-  // directly would silently fall back to the provider-type defaults for every
-  // aliased model (ADR-0017).
-  const modelReference = agentId ? selectedAgent?.modelId : modelId;
-  const concreteModelId =
-    resolvedProvider && modelReference
-      ? resolveModelId(resolvedProvider, modelReference)
-      : undefined;
-  const passthroughFileTypes =
-    resolvedProvider && concreteModelId
-      ? getPassthroughFileTypes(resolvedProvider, concreteModelId)
-      : [];
+  // One entry point for "what model will this Chat turn use, and what can it
+  // do?" — replaces separately resolving the provider, the concrete model id,
+  // passthrough file types, context window and search capability by hand.
+  // `null` means nothing resolves yet: no selection made, or the selected
+  // Agent/Provider/model reference no longer exists.
+  const resolvedModel = resolveModel({
+    providers,
+    agents,
+    selection: { agentId, modelId, providerId },
+  });
 
   // Context occupancy (ADR-0018): the capacity comes from the Org Admin's
-  // declaration on the resolved model, the reading from the latest assistant
-  // message that CARRIES one. It rides in the message metadata, so it survives a
-  // reload rather than staying blank until the next send, and a cancelled turn
-  // keeps whatever the run reported.
+  // declaration on the resolved model (`resolvedModel.contextWindow`), the
+  // reading from the latest assistant message that CARRIES one. It rides in
+  // the message metadata, so it survives a reload rather than staying blank
+  // until the next send, and a cancelled turn keeps whatever the run reported.
   //
   // Latest-that-carries-one rather than simply the latest: a turn in flight has
   // no reading until its first step finishes, and blanking the meter over that
@@ -471,10 +425,6 @@ export const Chat = ({
   // presence is the test rather than its value.
   //
   // Either number missing hides the meter; `ContextMeter` owns that decision.
-  const contextWindow =
-    resolvedProvider && concreteModelId
-      ? getContextWindow(resolvedProvider, concreteModelId)
-      : undefined;
   const contextOccupancy = messages
     .filter(
       (m) => m.role === "assistant" && "contextOccupancy" in (m.metadata ?? {}),
@@ -601,7 +551,9 @@ export const Chat = ({
                   {(attachment) => <PromptInputAttachment data={attachment} />}
                 </PromptInputAttachments>
                 <FileCompatibilityWarning
-                  passthroughFileTypes={passthroughFileTypes}
+                  passthroughFileTypes={
+                    resolvedModel?.passthroughFileTypes ?? []
+                  }
                 />
                 <PromptInputBody>
                   <PromptInputTextarea
@@ -638,7 +590,7 @@ export const Chat = ({
                       </TooltipTrigger>
                       <TooltipContent>Microphone</TooltipContent>
                     </Tooltip>
-                    {canSearch && (
+                    {resolvedModel?.canSearch && (
                       <Tooltip delayDuration={1000}>
                         <TooltipTrigger asChild>
                           <PromptInputButton
@@ -738,7 +690,7 @@ export const Chat = ({
                   <ContextMeter
                     className="order-last -mx-3 -mb-3 mt-1.5 w-[calc(100%+1.5rem)] justify-center rounded-b-md bg-foreground/5 px-3 py-1.5 sm:order-none sm:mx-0 sm:mt-0 sm:mb-0 sm:w-auto sm:justify-start sm:rounded-none sm:bg-transparent sm:p-0 sm:mr-auto"
                     occupancy={contextOccupancy?.inputTokens}
-                    contextWindow={contextWindow}
+                    contextWindow={resolvedModel?.contextWindow}
                   />
                   <PromptInputSubmit status={effectiveStatus} />
                 </PromptInputFooter>

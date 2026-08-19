@@ -12,6 +12,10 @@ import {
 import { AgentAvatar } from "./agent-avatar";
 import { Button } from "./ui/button";
 import { findModelOption, getModelOptions } from "@/lib/model-config";
+import {
+  encodeAgentSelection,
+  encodeProviderSelection,
+} from "@/lib/selection-reference";
 
 const filterByKeywords = (
   _value: string,
@@ -83,11 +87,11 @@ export const ModelSelectorDialog = ({
               {agents.map((agent) => (
                 <ModelSelectorItem
                   key={agent.id}
-                  value={`agent:${agent.id}`}
+                  value={encodeAgentSelection(agent.id)}
                   keywords={[agent.name]}
                   className="cursor-pointer"
                   onSelect={() => {
-                    onModelChange(`agent:${agent.id}`);
+                    onModelChange(encodeAgentSelection(agent.id));
                     onOpenChange(false);
                   }}
                 >
@@ -103,12 +107,14 @@ export const ModelSelectorDialog = ({
             <ModelSelectorGroup key={provider.id} heading={provider.name}>
               {getModelOptions(provider).map((model) => (
                 <ModelSelectorItem
-                  key={`provider:${provider.id}:${model.value}`}
+                  key={encodeProviderSelection(provider.id, model.value)}
                   className="cursor-pointer"
-                  value={`provider:${provider.id}:${model.value}`}
+                  value={encodeProviderSelection(provider.id, model.value)}
                   keywords={[model.label, provider.name]}
                   onSelect={() => {
-                    onModelChange(`provider:${provider.id}:${model.value}`);
+                    onModelChange(
+                      encodeProviderSelection(provider.id, model.value),
+                    );
                     onOpenChange(false);
                   }}
                 >

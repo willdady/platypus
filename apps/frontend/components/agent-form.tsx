@@ -56,6 +56,12 @@ import {
   joinUrl,
 } from "@/lib/utils";
 import { findModelOption, getModelOptions } from "@/lib/model-config";
+import { resolveModel } from "@/lib/resolve-model";
+import {
+  decodeSelectionReference,
+  encodeProviderSelection,
+} from "@/lib/selection-reference";
+import { ModelCapabilityNotice } from "@/components/model-capability-notice";
 import { toast } from "sonner";
 import { useBackendUrl } from "@/app/client-context";
 import { useAuth } from "@/components/auth-provider";
@@ -302,17 +308,14 @@ const AgentForm = ({
   }, [setAvatarFromFile]);
 
   const handleModelChange = (value: string) => {
-    if (value.startsWith("provider:")) {
-      // Provider/model selected
-      const [, newProviderId, ...modelIdParts] = value.split(":");
-      const newModelId = modelIdParts.join(":");
-      clearValidationErrors("providerId", "modelId");
-      setFormData((prevData) => ({
-        ...prevData,
-        providerId: newProviderId,
-        modelId: newModelId,
-      }));
-    }
+    const decoded = decodeSelectionReference(value);
+    if (decoded?.type !== "provider") return;
+    clearValidationErrors("providerId", "modelId");
+    setFormData((prevData) => ({
+      ...prevData,
+      providerId: decoded.providerId,
+      modelId: decoded.modelReference,
+    }));
   };
 
   const handleSubmit = async () => {
@@ -649,8 +652,17 @@ const AgentForm = ({
                 ? findModelOption(provider, formData.modelId)
                 : undefined;
             const selectedModelValue = option
-              ? `provider:${formData.providerId}:${option.value}`
+              ? encodeProviderSelection(formData.providerId, option.value)
               : undefined;
+            const resolvedModel = resolveModel({
+              providers,
+              agents: [],
+              selection: {
+                agentId: "",
+                providerId: formData.providerId,
+                modelId: formData.modelId,
+              },
+            });
             return (
               <Field data-invalid={!!modelError}>
                 <FieldLabel htmlFor="modelId">Model</FieldLabel>
@@ -672,8 +684,14 @@ const AgentForm = ({
                         <SelectLabel>{provider.name}</SelectLabel>
                         {getModelOptions(provider).map((model) => (
                           <SelectItem
-                            key={`provider:${provider.id}:${model.value}`}
-                            value={`provider:${provider.id}:${model.value}`}
+                            key={encodeProviderSelection(
+                              provider.id,
+                              model.value,
+                            )}
+                            value={encodeProviderSelection(
+                              provider.id,
+                              model.value,
+                            )}
                           >
                             {model.label}
                           </SelectItem>
@@ -683,6 +701,11 @@ const AgentForm = ({
                   </SelectContent>
                 </Select>
                 {modelError && <FieldError>{modelError}</FieldError>}
+                {resolvedModel && (
+                  <ModelCapabilityNotice
+                    passthroughFileTypes={resolvedModel.passthroughFileTypes}
+                  />
+                )}
               </Field>
             );
           })()}

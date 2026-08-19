@@ -4,7 +4,10 @@ import {
   findModelEntry,
   modelLabelFor,
   modelReferenceFor,
+  providerHasNativeSearch,
   resolveModelReference,
+  SEARCH_SOURCE_NATIVE,
+  SEARCH_SOURCE_NONE,
   type ConcreteModelId,
   type Provider,
 } from "@platypus/schemas";
@@ -142,6 +145,35 @@ export const getContextWindow = (
   modelId: ConcreteModelId,
 ): number | undefined =>
   getModelConfigs(provider).find((m) => m.id === modelId)?.contextWindow;
+
+/**
+ * The output-token ceiling declared for a model, or `undefined` where the
+ * Provider declares none (issue #454) — which leaves the vendor's own default
+ * in force. Mirrors the backend's `maxOutputTokensForModel`.
+ */
+export const getMaxOutputTokens = (
+  provider: Pick<Provider, "modelIds">,
+  modelId: ConcreteModelId,
+): number | undefined =>
+  getModelConfigs(provider).find((m) => m.id === modelId)?.maxOutputTokens;
+
+/**
+ * Whether a searching turn against this Provider would actually serve search
+ * tools — Provider-scoped rather than per-model, since `searchSource` is a
+ * Provider setting (ADR-0014). `"none"` serves nothing; a value naming a
+ * Web-search backend serves that backend regardless of native support;
+ * `"native"` serves the Provider's own tool only where `providerHasNativeSearch`
+ * says the (providerType, apiMode) pair actually exposes one — a Bedrock or
+ * chat-completions OpenAI Provider has none, so setting `searchSource` to
+ * `"native"` there resolves to no capability at all.
+ */
+export const getSearchCapability = (
+  provider: Pick<Provider, "providerType" | "apiMode" | "searchSource">,
+): boolean =>
+  provider.searchSource !== SEARCH_SOURCE_NONE &&
+  (provider.searchSource === SEARCH_SOURCE_NATIVE
+    ? providerHasNativeSearch(provider)
+    : Boolean(provider.searchSource));
 
 /**
  * Classify an attachment against a model's passthrough set — the metadata-only

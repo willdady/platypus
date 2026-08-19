@@ -7,6 +7,8 @@ import {
   resolveModelId,
   getPassthroughFileTypes,
   getContextWindow,
+  getMaxOutputTokens,
+  getSearchCapability,
 } from "./model-config";
 
 const provider = (modelIds: unknown, over: Partial<Provider> = {}) =>
@@ -164,5 +166,71 @@ describe("getContextWindow", () => {
     expect(
       getContextWindow(legacy, resolveModelId(legacy, "legacy-model")!),
     ).toBeUndefined();
+  });
+});
+
+describe("getMaxOutputTokens", () => {
+  it("returns the declared ceiling for an aliased model", () => {
+    const p = provider([
+      {
+        id: "claude-sonnet",
+        passthroughFileTypes: [],
+        alias: "flagship",
+        maxOutputTokens: 64_000,
+      },
+    ]);
+    const resolved = resolveModelId(p, "alias:flagship")!;
+    expect(getMaxOutputTokens(p, resolved)).toBe(64_000);
+  });
+
+  it("returns undefined when undeclared or unknown", () => {
+    const declaredNone = provider([{ id: "gpt-4", passthroughFileTypes: [] }]);
+    expect(
+      getMaxOutputTokens(declaredNone, resolveModelId(declaredNone, "gpt-4")!),
+    ).toBeUndefined();
+    expect(
+      getMaxOutputTokens(declaredNone, "ghost" as ConcreteModelId),
+    ).toBeUndefined();
+  });
+});
+
+describe("getSearchCapability", () => {
+  it("is false when searchSource is none", () => {
+    expect(
+      getSearchCapability(provider(["gpt-4"], { searchSource: "none" })),
+    ).toBe(false);
+  });
+
+  it("is true for native search on a capable provider", () => {
+    expect(
+      getSearchCapability(
+        provider(["gpt-4"], {
+          providerType: "Anthropic" as Provider["providerType"],
+          searchSource: "native",
+        }),
+      ),
+    ).toBe(true);
+  });
+
+  it("is false for native search on a provider with no native tool (e.g. Bedrock)", () => {
+    expect(
+      getSearchCapability(
+        provider(["gpt-4"], {
+          providerType: "Bedrock" as Provider["providerType"],
+          searchSource: "native",
+        }),
+      ),
+    ).toBe(false);
+  });
+
+  it("is true when a Web-search backend is configured, regardless of native support", () => {
+    expect(
+      getSearchCapability(
+        provider(["gpt-4"], {
+          providerType: "Bedrock" as Provider["providerType"],
+          searchSource: "some-plugin.backend",
+        }),
+      ),
+    ).toBe(true);
   });
 });

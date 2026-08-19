@@ -1,7 +1,11 @@
 import { useState, useEffect } from "react";
 import { Provider, Agent, Chat } from "@platypus/schemas";
 import { setWithExpiry, getWithExpiry } from "@/lib/local-storage";
-import { findModelOption, getModelOptions } from "@/lib/model-config";
+import { decodeSelectionReference } from "@/lib/selection-reference";
+import {
+  resolveRestoredSelection,
+  type StoredSelection,
+} from "@/lib/restore-selection";
 
 export interface ModelSelection {
   agentId: string;
@@ -23,27 +27,26 @@ export const useModelSelection = (
   const STORAGE_KEY = `platypus:workspace:${workspaceId}:lastSelection`;
 
   const handleModelChange = (value: string) => {
-    if (value.startsWith("agent:")) {
-      // Agent selected
-      const newAgentId = value.replace("agent:", "");
-      setAgentId(newAgentId);
+    const decoded = decodeSelectionReference(value);
+    if (!decoded) return;
+    if (decoded.type === "agent") {
+      setAgentId(decoded.agentId);
       setProviderId(""); // Clear provider/model
       setModelId("");
-    } else if (value.startsWith("provider:")) {
-      // Provider/model selected
-      const [, newProviderId, ...modelIdParts] = value.split(":");
-      const newModelId = modelIdParts.join(":");
-      setProviderId(newProviderId);
-      setModelId(newModelId);
+    } else {
+      setProviderId(decoded.providerId);
+      setModelId(decoded.modelReference);
       setAgentId(""); // Clear agent
     }
   };
 
-  // Restore persisted agent/provider/model from chat data or localStorage, with
-  // validation and fallback. This runs once the async providers/agents/chat
-  // data are available (and only while nothing is selected), reading
-  // client-only localStorage — work that belongs in an effect, so the
-  // restoring setState calls below are intentional.
+  // Restore persisted agent/provider/model from chat data or localStorage.
+  // This runs once the async providers/agents/chat data are available (and
+  // only while nothing is selected), reading client-only localStorage — work
+  // that belongs in an effect, so the restoring setState calls below are
+  // intentional. The three-priority ladder itself (chatData → localStorage →
+  // first provider's first model) is `resolveRestoredSelection`, a pure
+  // function tested on its own without a DOM or storage stub.
   useEffect(() => {
     /* eslint-disable react-hooks/set-state-in-effect */
     if (isLoading || providers.length === 0) return;
@@ -51,98 +54,19 @@ export const useModelSelection = (
     // If we already have a selection, do nothing
     if (modelId || providerId || agentId) return;
 
-    // PRIORITY 1: Restore from chatData (existing chat)
-    if (chatData) {
-      // Check if chat has an agent
-      if (chatData.agentId && agents.length > 0) {
-        const agent = agents.find((a) => a.id === chatData.agentId);
-        if (agent) {
-          // Agent still exists, restore it
-          setAgentId(chatData.agentId);
-          return;
-        } else {
-          // Agent was deleted, fall back to provider/model
-          console.warn(`Agent '${chatData.agentId}' no longer exists`);
-        }
-      }
+    const restored = resolveRestoredSelection({
+      chatData,
+      storedSelection: chatData
+        ? null
+        : getWithExpiry<StoredSelection>(STORAGE_KEY),
+      providers,
+      agents,
+    });
+    if (!restored) return;
 
-      // Restore provider/model from chatData
-      const persistedProviderId = chatData.providerId;
-      const persistedModelId = chatData.modelId;
-
-      if (persistedProviderId && persistedModelId) {
-        // Check if the persisted provider still exists
-        const provider = providers.find((p) => p.id === persistedProviderId);
-        if (provider) {
-          // Resolve the persisted value to a model ENTRY rather than testing
-          // string membership: once a model is given an alias its option value
-          // becomes `alias:<name>`, so a stored bare id would fail the check
-          // and silently fall through to a DIFFERENT model (ADR-0017).
-          const option = findModelOption(provider, persistedModelId);
-          if (option) {
-            setProviderId(persistedProviderId);
-            setModelId(option.value);
-            return;
-          } else {
-            // Provider exists but model is no longer available, use provider's first model
-            console.warn(
-              `Model '${persistedModelId}' no longer available for provider '${persistedProviderId}', falling back to first model`,
-            );
-            setProviderId(persistedProviderId);
-            setModelId(getModelOptions(provider)[0]?.value ?? "");
-            return;
-          }
-        } else {
-          // Provider no longer exists, fall back to first available provider
-          console.warn(
-            `Provider '${persistedProviderId}' no longer exists, falling back to first available provider`,
-          );
-        }
-      }
-    }
-
-    // PRIORITY 2: Try to restore from localStorage (for NEW chats only)
-    if (!chatData) {
-      const lastSelection = getWithExpiry<{
-        type: "agent" | "provider";
-        id?: string;
-        providerId?: string;
-        modelId?: string;
-      }>(STORAGE_KEY);
-
-      if (lastSelection) {
-        if (lastSelection.type === "agent" && lastSelection.id) {
-          const agent = agents.find((a) => a.id === lastSelection.id);
-          if (agent) {
-            setAgentId(lastSelection.id);
-            return;
-          }
-          console.warn(
-            `Agent '${lastSelection.id}' from localStorage no longer exists`,
-          );
-        } else if (
-          lastSelection.type === "provider" &&
-          lastSelection.providerId &&
-          lastSelection.modelId
-        ) {
-          const provider = providers.find(
-            (p) => p.id === lastSelection.providerId,
-          );
-          const option =
-            provider && findModelOption(provider, lastSelection.modelId);
-          if (option) {
-            setProviderId(lastSelection.providerId);
-            setModelId(option.value);
-            return;
-          }
-          console.warn(`Provider/model from localStorage no longer valid`);
-        }
-      }
-    }
-
-    // PRIORITY 3: Fall back to first provider's first model (for new chats, invalid persisted data, or missing chatData)
-    setModelId(getModelOptions(providers[0])[0]?.value ?? "");
-    setProviderId(providers[0].id);
+    setAgentId(restored.agentId);
+    setModelId(restored.modelId);
+    setProviderId(restored.providerId);
     /* eslint-enable react-hooks/set-state-in-effect */
   }, [
     chatData,
