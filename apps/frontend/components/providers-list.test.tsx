@@ -9,7 +9,12 @@ vi.mock("@/app/client-context", () => ({
 }));
 
 vi.mock("@/components/auth-provider", () => ({
-  useAuth: () => ({ user: { id: "u1" }, isOrgAdmin: true }),
+  useAuth: () => ({
+    user: { id: "u1" },
+    isOrgAdmin: true,
+    actor: "org-admin",
+    workspaceDelegation: null,
+  }),
 }));
 
 type ProviderWithScope = Provider & { scope: "organization" | "workspace" };
