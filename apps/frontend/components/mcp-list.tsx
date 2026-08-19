@@ -1,10 +1,14 @@
 "use client";
 
-import { MCP, type Workspace } from "@platypus/schemas";
+import { MCP } from "@platypus/schemas";
 import { Item, ItemActions, ItemContent, ItemTitle } from "./ui/item";
 import useSWR from "swr";
 import { cn, fetcher, joinUrl } from "../lib/utils";
 import { useAuth } from "@/components/auth-provider";
+import {
+  canConfigureWorkspaceResource,
+  canManageSharedResource,
+} from "@/lib/authorization";
 import {
   Building,
   ExternalLink,
@@ -40,13 +44,14 @@ const McpList = ({
   // Add scope to the MCP type for this component
   type McpWithScope = MCP & { scope?: "organization" | "workspace" };
 
-  const { user, isOrgAdmin } = useAuth();
+  const { user, isOrgAdmin, actor, workspaceDelegation } = useAuth();
   const backendUrl = useBackendUrl();
   const [selectedOrgMcp, setSelectedOrgMcp] = useState<McpWithScope | null>(
     null,
   );
   const [attachOpen, setAttachOpen] = useState(false);
   const [detaching, setDetaching] = useState(false);
+  const [detachError, setDetachError] = useState<string | null>(null);
 
   const fetchUrl =
     backendUrl && user
@@ -62,40 +67,45 @@ const McpList = ({
     results: McpWithScope[];
   }>(fetchUrl, fetcher);
 
-  // Attaching/detaching org-scoped Shared resources is an Org Admin action,
-  // available only inside a workspace (ADR-0007 / #154).
-  const canAttach = Boolean(workspaceId) && isOrgAdmin;
+  // Attach, detach, and Promote a Shared resource are the same rule
+  // (ADR-0007 / #154), asked of the auth module instead of re-derived here.
+  const canAttach = canManageSharedResource(actor, workspaceId).allowed;
 
   const detachOrgMcp = async (mcpId: string) => {
     if (!backendUrl || !workspaceId) return;
     setDetaching(true);
+    setDetachError(null);
     try {
-      await fetch(
+      const response = await fetch(
         joinUrl(
           backendUrl,
           `/organizations/${orgId}/workspaces/${workspaceId}/attachments/mcp/${mcpId}`,
         ),
         { method: "DELETE", credentials: "include" },
       );
-      setSelectedOrgMcp(null);
-      await mutate();
+      if (response.ok) {
+        setSelectedOrgMcp(null);
+        await mutate();
+      } else {
+        const info = await response.json().catch(() => ({}));
+        setDetachError(info.error || "Failed to detach MCP.");
+      }
     } finally {
       setDetaching(false);
     }
   };
 
   // Workspace-scoped MCP config is admin-only unless the workspace delegates
-  // it (ADR-0006). Org-level MCP management lives behind an admin-only route
-  // (the org settings layout already requires admin), so it is always
-  // manageable here.
-  const { data: workspace } = useSWR<Workspace>(
-    backendUrl && user && workspaceId
-      ? joinUrl(backendUrl, `/organizations/${orgId}/workspaces/${workspaceId}`)
-      : null,
-    fetcher,
-  );
+  // it (ADR-0006), resolved once by the auth module off the Workspace's own
+  // delegation flags — no separate fetch needed. Org-level MCP management
+  // lives behind an admin-only route (the org settings layout already
+  // requires admin), so it is always manageable here.
   const canManage = workspaceId
-    ? isOrgAdmin || workspace?.mcpSelfManagement === true
+    ? canConfigureWorkspaceResource(
+        actor,
+        "mcp",
+        workspaceDelegation?.mcpSelfManagement === true,
+      ).allowed
     : true;
 
   if (isLoading) {
@@ -144,7 +154,10 @@ const McpList = ({
                 asChild={!isOrgScopedInWorkspace}
                 onClick={
                   isOrgScopedInWorkspace
-                    ? () => setSelectedOrgMcp(mcp)
+                    ? () => {
+                        setDetachError(null);
+                        setSelectedOrgMcp(mcp);
+                      }
                     : undefined
                 }
                 className={cn(isOrgScopedInWorkspace && "cursor-pointer")}
@@ -229,7 +242,12 @@ const McpList = ({
       )}
       <Dialog
         open={!!selectedOrgMcp}
-        onOpenChange={(open) => !open && setSelectedOrgMcp(null)}
+        onOpenChange={(open) => {
+          if (!open) {
+            setSelectedOrgMcp(null);
+            setDetachError(null);
+          }
+        }}
       >
         <DialogContent>
           <DialogHeader>
@@ -240,8 +258,17 @@ const McpList = ({
               organization settings.
             </DialogDescription>
           </DialogHeader>
+          {detachError && (
+            <p className="text-sm text-destructive">{detachError}</p>
+          )}
           <DialogFooter>
-            <Button variant="outline" onClick={() => setSelectedOrgMcp(null)}>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setSelectedOrgMcp(null);
+                setDetachError(null);
+              }}
+            >
               Close
             </Button>
             {canAttach && selectedOrgMcp && (

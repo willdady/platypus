@@ -7,6 +7,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import useSWR from "swr";
 import Link from "next/link";
+import { toast } from "sonner";
 import { ResponsiveGridLayout } from "react-grid-layout";
 import type { LayoutItem } from "react-grid-layout";
 import "react-grid-layout/css/styles.css";
@@ -186,18 +187,26 @@ const DashboardPage = ({
   // Cancel: undo pending additions and discard all other staged changes
   const cancelEdit = async () => {
     if (backendUrl && pendingAdditions.size > 0) {
-      await Promise.all(
-        [...pendingAdditions].map((widgetId) =>
-          fetch(
-            joinUrl(
-              backendUrl,
-              `/organizations/${orgId}/workspaces/${workspaceId}/dashboards/${dashboardId}/widgets/${widgetId}`,
+      try {
+        const results = await Promise.all(
+          [...pendingAdditions].map((widgetId) =>
+            fetch(
+              joinUrl(
+                backendUrl,
+                `/organizations/${orgId}/workspaces/${workspaceId}/dashboards/${dashboardId}/widgets/${widgetId}`,
+              ),
+              { method: "DELETE", credentials: "include" },
             ),
-            { method: "DELETE", credentials: "include" },
           ),
-        ),
-      );
-      await mutateWidgets();
+        );
+        if (results.some((res) => !res.ok)) {
+          throw new Error("Failed to remove widget");
+        }
+        await mutateWidgets();
+      } catch {
+        toast.error("Failed to cancel dashboard changes");
+        return;
+      }
     }
     setPendingDeletions(new Set());
     setPendingAdditions(new Set());
@@ -208,37 +217,47 @@ const DashboardPage = ({
   // Done: execute pending deletions then persist layouts
   const saveEdit = async () => {
     if (!backendUrl || !dashboard) return;
-    await Promise.all(
-      [...pendingDeletions].map((widgetId) =>
-        fetch(
-          joinUrl(
-            backendUrl,
-            `/organizations/${orgId}/workspaces/${workspaceId}/dashboards/${dashboardId}/widgets/${widgetId}`,
+    try {
+      const deleteResults = await Promise.all(
+        [...pendingDeletions].map((widgetId) =>
+          fetch(
+            joinUrl(
+              backendUrl,
+              `/organizations/${orgId}/workspaces/${workspaceId}/dashboards/${dashboardId}/widgets/${widgetId}`,
+            ),
+            { method: "DELETE", credentials: "include" },
           ),
-          { method: "DELETE", credentials: "include" },
         ),
-      ),
-    );
-    await fetch(
-      joinUrl(
-        backendUrl,
-        `/organizations/${orgId}/workspaces/${workspaceId}/dashboards/${dashboardId}`,
-      ),
-      {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({
-          desktopLayout: stagedDesktop,
-          mobileLayout: stagedMobile,
-        }),
-      },
-    );
-    await Promise.all([mutateWidgets(), mutateDashboard()]);
-    setPendingDeletions(new Set());
-    setPendingAdditions(new Set());
-    setEditMode(false);
-    setEditingWidgetId(null);
+      );
+      if (deleteResults.some((res) => !res.ok)) {
+        throw new Error("Failed to delete widget");
+      }
+      const layoutRes = await fetch(
+        joinUrl(
+          backendUrl,
+          `/organizations/${orgId}/workspaces/${workspaceId}/dashboards/${dashboardId}`,
+        ),
+        {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({
+            desktopLayout: stagedDesktop,
+            mobileLayout: stagedMobile,
+          }),
+        },
+      );
+      if (!layoutRes.ok) {
+        throw new Error("Failed to save layout");
+      }
+      await Promise.all([mutateWidgets(), mutateDashboard()]);
+      setPendingDeletions(new Set());
+      setPendingAdditions(new Set());
+      setEditMode(false);
+      setEditingWidgetId(null);
+    } catch {
+      toast.error("Failed to save dashboard changes");
+    }
   };
 
   // Sync layout only on user drag/resize stop to avoid the grid overwriting
@@ -260,24 +279,33 @@ const DashboardPage = ({
   const handleAddWidget = async () => {
     if (!backendUrl || !newWidgetTitle.trim()) return;
     setAddWidgetError(null);
-    const res = await fetch(
-      joinUrl(
-        backendUrl,
-        `/organizations/${orgId}/workspaces/${workspaceId}/dashboards/${dashboardId}/widgets`,
-      ),
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({ type: newWidgetType, title: newWidgetTitle }),
-      },
-    );
+    let res: Response;
+    try {
+      res = await fetch(
+        joinUrl(
+          backendUrl,
+          `/organizations/${orgId}/workspaces/${workspaceId}/dashboards/${dashboardId}/widgets`,
+        ),
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({ type: newWidgetType, title: newWidgetTitle }),
+        },
+      );
+    } catch {
+      toast.error("Failed to add widget");
+      return;
+    }
     if (res.status === 409) {
       const body = await res.json();
       setAddWidgetError(body.error);
       return;
     }
-    if (!res.ok) return;
+    if (!res.ok) {
+      toast.error("Failed to add widget");
+      return;
+    }
     const widget: Widget = await res.json();
 
     // Track as pending so Cancel can delete it from the API.
@@ -350,20 +378,27 @@ const DashboardPage = ({
     title: string,
   ) => {
     if (!backendUrl) return;
-    await fetch(
-      joinUrl(
-        backendUrl,
-        `/organizations/${orgId}/workspaces/${workspaceId}/dashboards/${dashboardId}/widgets/${widget.id}`,
-      ),
-      {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({ type: widget.type, data, title }),
-      },
-    );
-    await mutateWidgets();
-    setEditingWidgetId(null);
+    try {
+      const res = await fetch(
+        joinUrl(
+          backendUrl,
+          `/organizations/${orgId}/workspaces/${workspaceId}/dashboards/${dashboardId}/widgets/${widget.id}`,
+        ),
+        {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({ type: widget.type, data, title }),
+        },
+      );
+      if (!res.ok) {
+        throw new Error("Failed to save widget");
+      }
+      await mutateWidgets();
+      setEditingWidgetId(null);
+    } catch {
+      toast.error("Failed to save widget");
+    }
   };
 
   // Stamp minH onto every layout item at render time. Values are per widget

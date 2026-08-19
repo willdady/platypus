@@ -10,6 +10,11 @@ import {
 } from "react";
 import { createAuthClient } from "better-auth/react";
 import { useParams } from "next/navigation";
+import {
+  type Actor,
+  type WorkspaceDelegationFlags,
+  resolveActor,
+} from "@/lib/authorization";
 
 interface OrgMembership {
   id: string;
@@ -17,7 +22,7 @@ interface OrgMembership {
   role: "admin" | "member";
 }
 
-interface WorkspaceData {
+interface WorkspaceData extends WorkspaceDelegationFlags {
   ownerId: string;
 }
 
@@ -57,6 +62,10 @@ interface AuthContextType {
   isOrgAdmin: boolean;
   isWorkspaceOwner: boolean;
   hasWorkspaceAccess: boolean;
+  /** The named actor for this request — see `lib/authorization.ts`. */
+  actor: Actor;
+  /** ADR-0006 delegation flags for the Workspace in scope, if any. */
+  workspaceDelegation: WorkspaceDelegationFlags | null;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -152,7 +161,15 @@ export function AuthProvider({
     })
       .then((res) => (res.ok ? res.json() : null))
       .then((ws) => {
-        setWorkspaceData(ws ? { ownerId: ws.ownerId } : null);
+        setWorkspaceData(
+          ws
+            ? {
+                ownerId: ws.ownerId,
+                providerSelfManagement: ws.providerSelfManagement === true,
+                mcpSelfManagement: ws.mcpSelfManagement === true,
+              }
+            : null,
+        );
         setIsWorkspaceLoading(false);
         setHasFetchedWorkspace(true);
       })
@@ -169,6 +186,12 @@ export function AuthProvider({
     (data?.user as unknown as User | undefined)?.role === "admin";
   const isWorkspaceOwner = workspaceData?.ownerId === data?.user?.id;
   const hasWorkspaceAccess = isSuperAdmin || isOrgAdmin || isWorkspaceOwner;
+  const actor = resolveActor({
+    isOperator: isSuperAdmin,
+    orgRole: orgMembership?.role ?? null,
+    isWorkspaceOwner,
+  });
+  const workspaceDelegation: WorkspaceDelegationFlags | null = workspaceData;
 
   return (
     <AuthContext.Provider
@@ -187,6 +210,8 @@ export function AuthProvider({
         isOrgAdmin,
         isWorkspaceOwner,
         hasWorkspaceAccess,
+        actor,
+        workspaceDelegation,
       }}
     >
       {children}

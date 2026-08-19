@@ -50,6 +50,7 @@ import { fetcher, joinUrl } from "@/lib/utils";
 import Link from "next/link";
 import { useBackendUrl } from "@/app/client-context";
 import { useAuth } from "@/components/auth-provider";
+import { canManageSharedResource } from "@/lib/authorization";
 import { AttachSharedResourceDialog } from "@/components/attach-shared-resource-dialog";
 import {
   ManageAttachmentsDialog,
@@ -103,7 +104,7 @@ export const SkillsList = ({
   orgId: string;
   workspaceId?: string;
 }) => {
-  const { user, isOrgAdmin } = useAuth();
+  const { user, isOrgAdmin, actor } = useAuth();
   const backendUrl = useBackendUrl();
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [skillToDelete, setSkillToDelete] = useState<SkillWithScope | null>(
@@ -114,6 +115,7 @@ export const SkillsList = ({
   const [selectedOrgSkill, setSelectedOrgSkill] =
     useState<SkillWithScope | null>(null);
   const [detaching, setDetaching] = useState(false);
+  const [detachError, setDetachError] = useState<string | null>(null);
   const [attachOpen, setAttachOpen] = useState(false);
   const [skillToPromote, setSkillToPromote] = useState<SkillWithScope | null>(
     null,
@@ -162,10 +164,9 @@ export const SkillsList = ({
     a.name.localeCompare(b.name),
   );
 
-  // Attaching/detaching org-scoped Shared resources is an Org Admin action,
-  // available only inside a workspace (ADR-0007 / #154).
-  const canAttach = Boolean(workspaceId) && isOrgAdmin;
-  // Promote is an Org Admin action on a workspace-scoped Skill (ADR-0007).
+  // Attach, detach, and Promote a Shared resource are the same rule
+  // (ADR-0007 / #154), asked of the auth module instead of re-derived here.
+  const canAttach = canManageSharedResource(actor, workspaceId).allowed;
   const canPromote = canAttach;
 
   const attachedOrgIds = skills
@@ -234,16 +235,22 @@ export const SkillsList = ({
   const detachOrgSkill = async (skillId: string) => {
     if (!backendUrl || !workspaceId) return;
     setDetaching(true);
+    setDetachError(null);
     try {
-      await fetch(
+      const response = await fetch(
         joinUrl(
           backendUrl,
           `/organizations/${orgId}/workspaces/${workspaceId}/attachments/skill/${skillId}`,
         ),
         { method: "DELETE", credentials: "include" },
       );
-      setSelectedOrgSkill(null);
-      await mutate();
+      if (response.ok) {
+        setSelectedOrgSkill(null);
+        await mutate();
+      } else {
+        const info = await response.json().catch(() => ({}));
+        setDetachError(info.error || "Failed to detach skill.");
+      }
     } finally {
       setDetaching(false);
     }
@@ -295,7 +302,10 @@ export const SkillsList = ({
                 <Item
                   variant="outline"
                   className="h-full cursor-pointer"
-                  onClick={() => setSelectedOrgSkill(skill)}
+                  onClick={() => {
+                    setDetachError(null);
+                    setSelectedOrgSkill(skill);
+                  }}
                 >
                   <ItemContent>
                     <div className="flex items-center gap-2">
@@ -444,7 +454,12 @@ export const SkillsList = ({
 
       <Dialog
         open={!!selectedOrgSkill}
-        onOpenChange={(open) => !open && setSelectedOrgSkill(null)}
+        onOpenChange={(open) => {
+          if (!open) {
+            setSelectedOrgSkill(null);
+            setDetachError(null);
+          }
+        }}
       >
         <DialogContent>
           <DialogHeader>
@@ -455,8 +470,17 @@ export const SkillsList = ({
               organization settings.
             </DialogDescription>
           </DialogHeader>
+          {detachError && (
+            <p className="text-sm text-destructive">{detachError}</p>
+          )}
           <DialogFooter>
-            <Button variant="outline" onClick={() => setSelectedOrgSkill(null)}>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setSelectedOrgSkill(null);
+                setDetachError(null);
+              }}
+            >
               Close
             </Button>
             {canAttach && selectedOrgSkill && (

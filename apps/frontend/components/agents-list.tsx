@@ -61,6 +61,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useBackendUrl } from "@/app/client-context";
 import { useAuth } from "@/components/auth-provider";
+import { canManageSharedResource } from "@/lib/authorization";
 import { NoProvidersEmptyState } from "@/components/no-providers-empty-state";
 import { AttachSharedResourceDialog } from "@/components/attach-shared-resource-dialog";
 
@@ -89,7 +90,7 @@ export const AgentsList = ({
   orgId: string;
   workspaceId: string;
 }) => {
-  const { user, isOrgAdmin } = useAuth();
+  const { user, isOrgAdmin, actor } = useAuth();
   const backendUrl = useBackendUrl();
   const router = useRouter();
   const [cloneDialogOpen, setCloneDialogOpen] = useState(false);
@@ -102,6 +103,7 @@ export const AgentsList = ({
   const [selectedOrgAgent, setSelectedOrgAgent] =
     useState<AgentWithScope | null>(null);
   const [detaching, setDetaching] = useState(false);
+  const [detachError, setDetachError] = useState<string | null>(null);
   const [agentToPromote, setAgentToPromote] = useState<AgentWithScope | null>(
     null,
   );
@@ -168,8 +170,9 @@ export const AgentsList = ({
   const toolSets = toolSetsData?.results || [];
   const skills = skillsData?.results || [];
 
-  // Promote and attach are Org Admin actions (ADR-0007).
-  const canManageShared = isOrgAdmin;
+  // Attach, detach, and Promote a Shared resource are the same rule
+  // (ADR-0007), asked of the auth module instead of re-derived here.
+  const canManageShared = canManageSharedResource(actor, workspaceId).allowed;
   const attachedOrgIds = agents
     .filter((a) => a.scope === "organization")
     .map((a) => a.id);
@@ -323,16 +326,22 @@ export const AgentsList = ({
   const detachOrgAgent = async (agentId: string) => {
     if (!backendUrl) return;
     setDetaching(true);
+    setDetachError(null);
     try {
-      await fetch(
+      const response = await fetch(
         joinUrl(
           backendUrl,
           `/organizations/${orgId}/workspaces/${workspaceId}/attachments/agent/${agentId}`,
         ),
         { method: "DELETE", credentials: "include" },
       );
-      setSelectedOrgAgent(null);
-      await mutate();
+      if (response.ok) {
+        setSelectedOrgAgent(null);
+        await mutate();
+      } else {
+        const info = await response.json().catch(() => ({}));
+        setDetachError(info.error || "Failed to detach agent.");
+      }
     } finally {
       setDetaching(false);
     }
@@ -371,7 +380,10 @@ export const AgentsList = ({
               </DropdownMenuItem>
               <DropdownMenuItem
                 className="cursor-pointer"
-                onSelect={() => setSelectedOrgAgent(agent)}
+                onSelect={() => {
+                  setDetachError(null);
+                  setSelectedOrgAgent(agent);
+                }}
               >
                 <Unlink /> Detach
               </DropdownMenuItem>
@@ -623,7 +635,12 @@ export const AgentsList = ({
 
       <Dialog
         open={!!selectedOrgAgent}
-        onOpenChange={(open) => !open && setSelectedOrgAgent(null)}
+        onOpenChange={(open) => {
+          if (!open) {
+            setSelectedOrgAgent(null);
+            setDetachError(null);
+          }
+        }}
       >
         <DialogContent>
           <DialogHeader>
@@ -634,8 +651,17 @@ export const AgentsList = ({
               appearing here.
             </DialogDescription>
           </DialogHeader>
+          {detachError && (
+            <p className="text-sm text-destructive">{detachError}</p>
+          )}
           <DialogFooter>
-            <Button variant="outline" onClick={() => setSelectedOrgAgent(null)}>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setSelectedOrgAgent(null);
+                setDetachError(null);
+              }}
+            >
               Close
             </Button>
             {isOrgAdmin && selectedOrgAgent && (
