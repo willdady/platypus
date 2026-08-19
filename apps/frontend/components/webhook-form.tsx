@@ -12,11 +12,16 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { ConfirmDialog } from "@/components/confirm-dialog";
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { useResetOnChange } from "@/hooks/use-reset-on-change";
 import { useRouter } from "next/navigation";
 import useSWR from "swr";
-import { fetcher, parseValidationErrors, joinUrl } from "@/lib/utils";
+import {
+  fetcher,
+  parseValidationErrors,
+  clearFieldError,
+  joinUrl,
+} from "@/lib/utils";
 import { toast } from "sonner";
 import { useBackendUrl } from "@/app/client-context";
 import { useAuth } from "@/components/auth-provider";
@@ -118,7 +123,19 @@ const WebhookForm = ({ orgId, workspaceId, webhookId }: WebhookFormProps) => {
     }
   });
 
+  // Drop the stored server validation error for the given field(s) so a
+  // corrected field stops rendering its error and re-enables the Save button.
+  const clearValidationErrors = useCallback((...fieldNames: string[]) => {
+    setValidationErrors((prev) =>
+      fieldNames.reduce(
+        (errors, fieldName) => clearFieldError(errors, fieldName),
+        prev,
+      ),
+    );
+  }, []);
+
   const toggleEvent = (event: string) => {
+    clearValidationErrors("events");
     setEvents((prev) => {
       if (prev.includes(event)) {
         if (prev.length === 1) return prev;
@@ -247,11 +264,29 @@ const WebhookForm = ({ orgId, workspaceId, webhookId }: WebhookFormProps) => {
     }
   };
 
+  const headerRowErrorKey = (key: string) => `headers.${key}`;
+
   const addHeader = () => {
+    clearValidationErrors("headers");
     setHeaders((prev) => [...prev, { key: "", value: "" }]);
   };
 
+  // Retract the whole-field "headers" error (any edit is an attempt to fix
+  // it) and the row-level error keyed to this entry, without touching errors
+  // stranded on other rows.
+  const clearHeaderRowError = (index: number) => {
+    const rowKey = headerRowErrorKey(headers[index].key);
+    setValidationErrors((prev) => {
+      if (!("headers" in prev) && !(rowKey in prev)) return prev;
+      const next = { ...prev };
+      delete next.headers;
+      delete next[rowKey];
+      return next;
+    });
+  };
+
   const removeHeader = (index: number) => {
+    clearHeaderRowError(index);
     setHeaders((prev) => prev.filter((_, i) => i !== index));
   };
 
@@ -260,6 +295,7 @@ const WebhookForm = ({ orgId, workspaceId, webhookId }: WebhookFormProps) => {
     field: "key" | "value",
     value: string,
   ) => {
+    clearHeaderRowError(index);
     setHeaders((prev) =>
       prev.map((h, i) => (i === index ? { ...h, [field]: value } : h)),
     );
@@ -268,6 +304,14 @@ const WebhookForm = ({ orgId, workspaceId, webhookId }: WebhookFormProps) => {
   if (isLoading) {
     return <div>Loading...</div>;
   }
+
+  // parseValidationErrors mirrors any headers.<key> issue onto the bare
+  // "headers" key too, as a fallback for forms with no per-row UI. This form
+  // has one, so once a row is showing that message, repeating it at the
+  // field level would just be a duplicate.
+  const hasHeaderRowError = headers.some(
+    (header) => !!validationErrors[headerRowErrorKey(header.key)],
+  );
 
   return (
     <div>
@@ -281,14 +325,8 @@ const WebhookForm = ({ orgId, workspaceId, webhookId }: WebhookFormProps) => {
               placeholder="My Webhook"
               value={name}
               onChange={(e) => {
+                clearValidationErrors("name");
                 setName(e.target.value);
-                if (validationErrors.name) {
-                  setValidationErrors((prev) => {
-                    const next = { ...prev };
-                    delete next.name;
-                    return next;
-                  });
-                }
               }}
               disabled={isSubmitting}
               aria-invalid={!!validationErrors.name}
@@ -307,14 +345,8 @@ const WebhookForm = ({ orgId, workspaceId, webhookId }: WebhookFormProps) => {
               placeholder="https://example.com/webhook"
               value={url}
               onChange={(e) => {
+                clearValidationErrors("url");
                 setUrl(e.target.value);
-                if (validationErrors.url) {
-                  setValidationErrors((prev) => {
-                    const next = { ...prev };
-                    delete next.url;
-                    return next;
-                  });
-                }
               }}
               disabled={isSubmitting}
               aria-invalid={!!validationErrors.url}
@@ -327,12 +359,15 @@ const WebhookForm = ({ orgId, workspaceId, webhookId }: WebhookFormProps) => {
             )}
           </Field>
 
-          <Field>
+          <Field data-invalid={!!validationErrors.enabled}>
             <div className="flex items-center gap-3">
               <Switch
                 id="enabled"
                 checked={enabled}
-                onCheckedChange={setEnabled}
+                onCheckedChange={(checked) => {
+                  clearValidationErrors("enabled");
+                  setEnabled(checked);
+                }}
                 disabled={isSubmitting}
               />
               <FieldLabel htmlFor="enabled" className="mb-0">
@@ -342,9 +377,12 @@ const WebhookForm = ({ orgId, workspaceId, webhookId }: WebhookFormProps) => {
             <FieldDescription>
               When disabled, no webhook requests will be sent.
             </FieldDescription>
+            {validationErrors.enabled && (
+              <FieldError>{validationErrors.enabled}</FieldError>
+            )}
           </Field>
 
-          <Field>
+          <Field data-invalid={!!validationErrors.events}>
             <FieldLabel>Events</FieldLabel>
             <FieldDescription className="mb-3">
               Select which events trigger webhook delivery.
@@ -364,6 +402,9 @@ const WebhookForm = ({ orgId, workspaceId, webhookId }: WebhookFormProps) => {
                 </div>
               ))}
             </div>
+            {validationErrors.events && (
+              <FieldError>{validationErrors.events}</FieldError>
+            )}
           </Field>
 
           {isEditMode && webhook && (
@@ -414,42 +455,53 @@ const WebhookForm = ({ orgId, workspaceId, webhookId }: WebhookFormProps) => {
             </Field>
           )}
 
-          <Field>
+          <Field data-invalid={!!validationErrors.headers}>
             <FieldLabel>Custom Headers</FieldLabel>
             <FieldDescription className="mb-3">
               Additional headers to include with each webhook request.
             </FieldDescription>
             <div className="space-y-2">
-              {headers.map((header, index) => (
-                <div key={index} className="flex items-center gap-2">
-                  <Input
-                    placeholder="Header name"
-                    value={header.key}
-                    onChange={(e) => updateHeader(index, "key", e.target.value)}
-                    disabled={isSubmitting}
-                    className="flex-1"
-                  />
-                  <Input
-                    placeholder="Header value"
-                    value={header.value}
-                    onChange={(e) =>
-                      updateHeader(index, "value", e.target.value)
-                    }
-                    disabled={isSubmitting}
-                    className="flex-1"
-                  />
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="icon"
-                    className="shrink-0 cursor-pointer"
-                    onClick={() => removeHeader(index)}
-                    disabled={isSubmitting}
-                  >
-                    <X className="h-4 w-4" />
-                  </Button>
-                </div>
-              ))}
+              {headers.map((header, index) => {
+                const rowError =
+                  validationErrors[headerRowErrorKey(header.key)];
+                return (
+                  <div key={index} className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <Input
+                        placeholder="Header name"
+                        value={header.key}
+                        onChange={(e) =>
+                          updateHeader(index, "key", e.target.value)
+                        }
+                        disabled={isSubmitting}
+                        aria-invalid={!!rowError}
+                        className="flex-1"
+                      />
+                      <Input
+                        placeholder="Header value"
+                        value={header.value}
+                        onChange={(e) =>
+                          updateHeader(index, "value", e.target.value)
+                        }
+                        disabled={isSubmitting}
+                        aria-invalid={!!rowError}
+                        className="flex-1"
+                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="icon"
+                        className="shrink-0 cursor-pointer"
+                        onClick={() => removeHeader(index)}
+                        disabled={isSubmitting}
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
+                    </div>
+                    {rowError && <FieldError>{rowError}</FieldError>}
+                  </div>
+                );
+              })}
               <Button
                 type="button"
                 variant="outline"
@@ -460,6 +512,9 @@ const WebhookForm = ({ orgId, workspaceId, webhookId }: WebhookFormProps) => {
                 <Plus className="h-4 w-4" /> Add header
               </Button>
             </div>
+            {validationErrors.headers && !hasHeaderRowError && (
+              <FieldError>{validationErrors.headers}</FieldError>
+            )}
           </Field>
         </FieldGroup>
       </FieldSet>
