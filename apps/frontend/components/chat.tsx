@@ -520,30 +520,12 @@ export const Chat = ({
       return;
     }
 
-    // Convert blob: URLs to data: URLs so the backend can access the file
-    // content. blob: URLs are browser-only references that can't be resolved
-    // server-side.
-    const files = await Promise.all(
-      (message.files ?? []).map(async (file) => {
-        if (!file.url.startsWith("blob:")) return file;
-        const res = await fetch(file.url);
-        const blob = await res.blob();
-        const dataUrl = await new Promise<string>((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onload = () => resolve(reader.result as string);
-          reader.onerror = reject;
-          reader.readAsDataURL(blob);
-        });
-        return { ...file, url: dataUrl };
-      }),
-    );
-
     const body = getRequestBody();
 
     sendMessage(
       {
         text: message.text || "Sent with attachments",
-        files,
+        files: message.files,
       },
       { body },
     );

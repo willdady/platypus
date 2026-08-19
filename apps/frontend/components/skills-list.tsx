@@ -114,6 +114,7 @@ export const SkillsList = ({
   const [selectedOrgSkill, setSelectedOrgSkill] =
     useState<SkillWithScope | null>(null);
   const [detaching, setDetaching] = useState(false);
+  const [detachError, setDetachError] = useState<string | null>(null);
   const [attachOpen, setAttachOpen] = useState(false);
   const [skillToPromote, setSkillToPromote] = useState<SkillWithScope | null>(
     null,
@@ -234,16 +235,22 @@ export const SkillsList = ({
   const detachOrgSkill = async (skillId: string) => {
     if (!backendUrl || !workspaceId) return;
     setDetaching(true);
+    setDetachError(null);
     try {
-      await fetch(
+      const response = await fetch(
         joinUrl(
           backendUrl,
           `/organizations/${orgId}/workspaces/${workspaceId}/attachments/skill/${skillId}`,
         ),
         { method: "DELETE", credentials: "include" },
       );
-      setSelectedOrgSkill(null);
-      await mutate();
+      if (response.ok) {
+        setSelectedOrgSkill(null);
+        await mutate();
+      } else {
+        const info = await response.json().catch(() => ({}));
+        setDetachError(info.error || "Failed to detach skill.");
+      }
     } finally {
       setDetaching(false);
     }
@@ -295,7 +302,10 @@ export const SkillsList = ({
                 <Item
                   variant="outline"
                   className="h-full cursor-pointer"
-                  onClick={() => setSelectedOrgSkill(skill)}
+                  onClick={() => {
+                    setDetachError(null);
+                    setSelectedOrgSkill(skill);
+                  }}
                 >
                   <ItemContent>
                     <div className="flex items-center gap-2">
@@ -444,7 +454,12 @@ export const SkillsList = ({
 
       <Dialog
         open={!!selectedOrgSkill}
-        onOpenChange={(open) => !open && setSelectedOrgSkill(null)}
+        onOpenChange={(open) => {
+          if (!open) {
+            setSelectedOrgSkill(null);
+            setDetachError(null);
+          }
+        }}
       >
         <DialogContent>
           <DialogHeader>
@@ -455,8 +470,17 @@ export const SkillsList = ({
               organization settings.
             </DialogDescription>
           </DialogHeader>
+          {detachError && (
+            <p className="text-sm text-destructive">{detachError}</p>
+          )}
           <DialogFooter>
-            <Button variant="outline" onClick={() => setSelectedOrgSkill(null)}>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setSelectedOrgSkill(null);
+                setDetachError(null);
+              }}
+            >
               Close
             </Button>
             {canAttach && selectedOrgSkill && (
