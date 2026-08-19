@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.8.1](https://github.com/willdady/platypus/compare/v2.8.0...v2.8.1) (2026-08-19)
+
+
+### Bug Fixes
+
+* **backend:** make the chat idle timeout measure silence, not step duration ([#553](https://github.com/willdady/platypus/issues/553)) ([9ae3fe6](https://github.com/willdady/platypus/commit/9ae3fe63b0e3b80d418130c2e7e95b9b691f70f7))
+* **frontend:** correct sub-Agents to Sub-Agents in Instructions text ([#546](https://github.com/willdady/platypus/issues/546)) ([e4a4103](https://github.com/willdady/platypus/commit/e4a410393a6198d83fc2a6c330dafe6899a4af2d))
+
 ## [2.8.0](https://github.com/willdady/platypus/compare/v2.7.1...v2.8.0) (2026-08-17)
 
 
