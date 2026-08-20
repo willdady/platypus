@@ -62,6 +62,20 @@ function scopedPath(entity: string, scope: Scope): string {
     : `/organizations/${scope.orgId}/${entity}`;
 }
 
+/**
+ * The read-side counterpart to `writeEntity`'s path resolution: the same
+ * base URL and Organization-vs-Workspace path shape, for a caller that only
+ * needs a key to fetch (typically as an SWR key via `useScopedSWR`) rather
+ * than a full write outcome.
+ */
+export function scopedUrl(
+  backendUrl: string,
+  entity: string,
+  scope: Scope,
+): string {
+  return joinUrl(backendUrl, scopedPath(entity, scope));
+}
+
 function errorMessage(body: unknown): string | undefined {
   if (body && typeof body === "object" && "error" in body) {
     const { error } = body as { error: unknown };
