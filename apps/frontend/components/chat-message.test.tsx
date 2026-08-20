@@ -11,7 +11,11 @@ vi.mock("streamdown", () => ({
   ),
 }));
 
-import { ChatMessage, CUT_SHORT_NOTICE } from "./chat-message";
+import {
+  ChatMessage,
+  CUT_SHORT_NOTICE,
+  isGenericToolPart,
+} from "./chat-message";
 
 const makeAgent = (overrides: Partial<Agent>): Agent =>
   ({
@@ -555,6 +559,113 @@ describe("ChatMessage and provider-executed web_search", () => {
     fireEvent.click(screen.getByRole("button", { name: /Web search/ }));
     expect(screen.getByText("Parameters")).toBeInTheDocument();
     expect(screen.queryByText("Searching…")).toBeNull();
+  });
+});
+
+// Issue #578: the dispatch used to be an if/else-if chain where a specialised
+// tool part had to be checked before the generic catch-all or it would land
+// there too, rendering its raw JSON body a second time alongside the
+// specialised card (and, for search, the Sources row). `isGenericToolPart` now
+// excludes every specialised tool part by construction, so this holds
+// regardless of where a renderer sits in the dispatch list.
+describe("ChatMessage generic tool renderer exclusion", () => {
+  it("never matches a plugin web-search part", () => {
+    expect(
+      isGenericToolPart({
+        type: "tool-web_search",
+        toolCallId: "c1",
+        state: "output-available",
+        input: { query: "x" },
+        output: { query: "x", results: [] },
+      } as unknown as Parameters<typeof isGenericToolPart>[0]),
+    ).toBe(false);
+  });
+
+  it("never matches a sub-agent delegation part", () => {
+    expect(
+      isGenericToolPart({
+        type: "tool-delegateToResearchBot",
+        toolCallId: "c1",
+        state: "output-available",
+        input: { task: "x" },
+        output: { entries: [] },
+      } as unknown as Parameters<typeof isGenericToolPart>[0]),
+    ).toBe(false);
+  });
+
+  it("never matches a load-skill part", () => {
+    expect(
+      isGenericToolPart({
+        type: "tool-loadSkill",
+        toolCallId: "c1",
+        state: "output-available",
+        input: { name: "x" },
+        output: {},
+      } as unknown as Parameters<typeof isGenericToolPart>[0]),
+    ).toBe(false);
+  });
+
+  it("matches an ordinary tool part with no specialised renderer", () => {
+    expect(
+      isGenericToolPart({
+        type: "tool-getCard",
+        toolCallId: "c1",
+        state: "output-available",
+        input: {},
+        output: {},
+      } as unknown as Parameters<typeof isGenericToolPart>[0]),
+    ).toBe(true);
+  });
+
+  // Native provider search is `tool-web_search` shaped but not a plugin
+  // call — it must stay on the generic renderer, which is the only one
+  // that can show its vendor-shaped payload.
+  it("matches a provider-executed web_search part", () => {
+    expect(
+      isGenericToolPart({
+        type: "tool-web_search",
+        toolCallId: "c1",
+        state: "output-available",
+        providerExecuted: true,
+        input: { query: "x" },
+        output: [
+          { type: "web_search_result", url: "https://vendor.example/a" },
+        ],
+      } as unknown as Parameters<typeof isGenericToolPart>[0]),
+    ).toBe(true);
+  });
+});
+
+// Sub-agent delegations get a custom card the same way plugin web-search
+// does; the same double-render risk applies if the generic branch ever
+// caught one too.
+describe("ChatMessage sub-agent tool dispatch", () => {
+  const delegateMessage = (): PlatypusUIMessage =>
+    ({
+      id: "m1",
+      role: "assistant",
+      parts: [
+        {
+          type: "tool-delegateToResearchBot",
+          toolCallId: "c1",
+          state: "output-available",
+          input: { task: "Find the release date" },
+          output: { entries: [], text: "It shipped in March." },
+        },
+      ],
+    }) as unknown as PlatypusUIMessage;
+
+  it("renders the sub-agent card instead of the generic tool renderer", () => {
+    renderMessage(delegateMessage());
+
+    expect(screen.getByText("Research Bot")).toBeInTheDocument();
+    fireEvent.click(screen.getByText("Research Bot"));
+
+    // Only the sub-agent card's own labels appear — the generic renderer's
+    // "Parameters"/raw "Result" JSON would mean the call rendered twice.
+    expect(screen.getByText("Task")).toBeInTheDocument();
+    expect(screen.queryByText("Parameters")).toBeNull();
+    expect(screen.queryByText("Result")).toBeNull();
   });
 });
 

@@ -1,4 +1,4 @@
-import { Fragment, memo } from "react";
+import { Fragment, memo, type ReactNode } from "react";
 import { type PlatypusUIMessage } from "@platypus/backend/src/types";
 import {
   Message,
@@ -33,6 +33,7 @@ import {
   FileUIPart,
   SourceUrlUIPart,
   TextUIPart,
+  ToolUIPart,
   isToolUIPart,
   type ChatStatus,
 } from "ai";
@@ -64,6 +65,55 @@ import {
  */
 export const CUT_SHORT_NOTICE =
   "Response cut short at the model's output limit.";
+
+type MessagePart = NonNullable<PlatypusUIMessage["parts"]>[number];
+
+const isLoadSkillPart = (part: MessagePart) => part.type === "tool-loadSkill";
+
+const isSubAgentToolPart = (part: MessagePart) =>
+  isToolUIPart(part) && part.type.startsWith("tool-delegateTo");
+
+const isWebSearchToolPart = (part: MessagePart) =>
+  isToolUIPart(part) && isPluginWebSearchPart(part);
+
+/**
+ * Every tool-shaped part that has its own specialised renderer below. Kept as
+ * one list so the generic renderer's exclusion (`isGenericToolPart`) can be
+ * built from it directly, rather than restated by hand — a part can render
+ * through at most one of a specialised card or the generic renderer no
+ * matter what order `partRenderers` lists them in, because the generic
+ * predicate itself can never be true for a part one of these already claims.
+ * Adding a renderer for a new tool-shaped part means adding its predicate
+ * here; nothing about where it sits in `partRenderers` matters.
+ */
+const specializedToolMatchers: Array<(part: MessagePart) => boolean> = [
+  isLoadSkillPart,
+  isWebSearchToolPart,
+  isSubAgentToolPart,
+];
+
+/**
+ * Plugin- and MCP-contributed tools aren't enumerated in the part union (see
+ * `CustomUITools`), so they land here by elimination — anything tool-shaped
+ * that no specialised renderer above has already claimed.
+ *
+ * Exported so a test can assert the exclusion directly: a plugin web-search
+ * or sub-agent part must never also satisfy this, or its raw JSON body would
+ * repeat what the specialised card (and, for search, the Sources row above
+ * the parts loop) already shows.
+ */
+export const isGenericToolPart = (part: MessagePart) =>
+  isToolUIPart(part) &&
+  !specializedToolMatchers.some((matches) => matches(part));
+
+const isImageFilePart = (part: MessagePart) =>
+  part.type === "file" &&
+  Boolean((part as FileUIPart).mediaType?.startsWith("image/"));
+
+interface PartRenderer {
+  matches: (part: MessagePart) => boolean;
+  render: (part: MessagePart, i: number) => ReactNode;
+}
 
 interface ChatMessageProps {
   /** The message object to render */
@@ -177,6 +227,186 @@ export const ChatMessage = memo(function ChatMessage({
       .map((part) => part.text)
       .join("") || "";
 
+  // Each entry's `matches` is mutually exclusive with every other entry's by
+  // construction (see `isGenericToolPart`), so this list can be extended or
+  // reordered freely — the first (and only) match wins regardless of
+  // position.
+  const partRenderers: PartRenderer[] = [
+    {
+      matches: (part) => part.type === "text",
+      render: (part, i) => {
+        const textPart = part as TextUIPart;
+        if (isEditing) {
+          const isFirstTextPart =
+            i === (message.parts ?? []).findIndex((p) => p.type === "text");
+          if (!isFirstTextPart) return null;
+
+          return (
+            <Message
+              key={`${message.id}-${i}`}
+              from={message.role}
+              avatar={assistantAvatar}
+            >
+              <MessageContent className="max-w-full">
+                <Textarea
+                  ref={editTextareaRef}
+                  value={editContent}
+                  onChange={(e) => setEditContent(e.target.value)}
+                  className="min-h-[100px]"
+                  autoFocus
+                />
+              </MessageContent>
+            </Message>
+          );
+        }
+
+        return (
+          <Message
+            key={`${message.id}-${i}`}
+            from={message.role}
+            avatar={assistantAvatar}
+          >
+            <MessageContent className="max-w-full">
+              <MessageResponse>{textPart.text}</MessageResponse>
+            </MessageContent>
+          </Message>
+        );
+      },
+    },
+    {
+      matches: (part) => part.type === "reasoning",
+      render: (part, i) => {
+        const reasoningPart = part as Extract<
+          MessagePart,
+          { type: "reasoning" }
+        >;
+        return (
+          <Reasoning
+            key={`${message.id}-${i}`}
+            isStreaming={
+              status === "streaming" &&
+              i === (message.parts?.length ?? 0) - 1 &&
+              isLastMessage
+            }
+            defaultOpen={false}
+          >
+            <ReasoningTrigger className="cursor-pointer" />
+            <ReasoningContent>{reasoningPart.text}</ReasoningContent>
+          </Reasoning>
+        );
+      },
+    },
+    {
+      matches: (part) => part.type === "dynamic-tool",
+      render: (part, i) => {
+        const toolPart = part as DynamicToolUIPart;
+        return (
+          <Tool key={`${message.id}-${i}`}>
+            <DynamicToolHeader
+              state={toolPart.state}
+              title={toolPart.toolName}
+              durationMs={toolCallDurationMs(
+                toolPart.toolMetadata,
+                message.metadata,
+                toolPart.toolCallId,
+              )}
+            />
+            <ToolContent>
+              <ToolInput input={toolPart.input} />
+              <ToolOutput
+                output={toolPart.output}
+                errorText={toolPart.errorText}
+              />
+            </ToolContent>
+          </Tool>
+        );
+      },
+    },
+    {
+      matches: isLoadSkillPart,
+      render: (part, i) => (
+        <LoadSkillTool
+          key={`${message.id}-${i}`}
+          toolPart={part as Extract<MessagePart, { type: "tool-loadSkill" }>}
+        />
+      ),
+    },
+    {
+      matches: isWebSearchToolPart,
+      render: (part, i) => (
+        <WebSearchTool
+          key={`${message.id}-${i}`}
+          toolPart={part as ToolUIPart}
+          messageMetadata={message.metadata}
+        />
+      ),
+    },
+    {
+      matches: isSubAgentToolPart,
+      render: (part, i) => (
+        <SubAgentTool
+          key={`${message.id}-${i}`}
+          toolPart={part as ToolUIPart}
+          messageMetadata={message.metadata}
+        />
+      ),
+    },
+    {
+      matches: isGenericToolPart,
+      render: (part, i) => {
+        const toolPart = part as ToolUIPart;
+        const toolInput = toolPart.input as Record<string, unknown> | undefined;
+        const toolLabel = (toolInput?.label ?? toolInput?.name) as
+          string | undefined;
+        return (
+          <Tool key={`${message.id}-${i}`}>
+            <ToolHeader
+              state={toolPart.state}
+              type={toolPart.type}
+              label={toolLabel}
+              durationMs={toolCallDurationMs(
+                toolPart.toolMetadata,
+                message.metadata,
+                toolPart.toolCallId,
+              )}
+            />
+            <ToolContent>
+              <ToolInput input={toolPart.input} />
+              <ToolOutput
+                output={toolPart.output}
+                errorText={toolPart.errorText}
+              />
+            </ToolContent>
+          </Tool>
+        );
+      },
+    },
+    {
+      matches: isImageFilePart,
+      render: (part, i) => {
+        const filePart = part as FileUIPart;
+        return (
+          <Message
+            key={`${message.id}-${i}`}
+            from={message.role}
+            avatar={assistantAvatar}
+          >
+            <MessageContent className="max-w-full">
+              {/* Generated/uploaded image served from a backend or data: URL;
+              not routable through the Next image optimizer. */}
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={filePart.url}
+                alt={filePart.filename || "Generated image"}
+                className="max-w-full rounded-lg border"
+              />
+            </MessageContent>
+          </Message>
+        );
+      },
+    },
+  ];
+
   return (
     <Fragment key={message.id}>
       {fileParts && fileParts.length > 0 && (
@@ -210,158 +440,8 @@ export const ChatMessage = memo(function ChatMessage({
         </Sources>
       )}
       {message.parts?.map((part, i) => {
-        if (part.type === "text") {
-          if (isEditing) {
-            const isFirstTextPart =
-              i === message.parts.findIndex((p) => p.type === "text");
-            if (!isFirstTextPart) return null;
-
-            return (
-              <Message
-                key={`${message.id}-${i}`}
-                from={message.role}
-                avatar={assistantAvatar}
-              >
-                <MessageContent className="max-w-full">
-                  <Textarea
-                    ref={editTextareaRef}
-                    value={editContent}
-                    onChange={(e) => setEditContent(e.target.value)}
-                    className="min-h-[100px]"
-                    autoFocus
-                  />
-                </MessageContent>
-              </Message>
-            );
-          }
-
-          return (
-            <Message
-              key={`${message.id}-${i}`}
-              from={message.role}
-              avatar={assistantAvatar}
-            >
-              <MessageContent className="max-w-full">
-                <MessageResponse>{(part as TextUIPart).text}</MessageResponse>
-              </MessageContent>
-            </Message>
-          );
-        } else if (part.type === "reasoning") {
-          return (
-            <Reasoning
-              key={`${message.id}-${i}`}
-              isStreaming={
-                status === "streaming" &&
-                i === message.parts.length - 1 &&
-                isLastMessage
-              }
-              defaultOpen={false}
-            >
-              <ReasoningTrigger className="cursor-pointer" />
-              <ReasoningContent>{part.text}</ReasoningContent>
-            </Reasoning>
-          );
-        } else if (part.type === "dynamic-tool") {
-          const toolPart = part as DynamicToolUIPart;
-          return (
-            <Tool key={`${message.id}-${i}`}>
-              <DynamicToolHeader
-                state={toolPart.state}
-                title={toolPart.toolName}
-                durationMs={toolCallDurationMs(
-                  toolPart.toolMetadata,
-                  message.metadata,
-                  toolPart.toolCallId,
-                )}
-              />
-              <ToolContent>
-                <ToolInput input={toolPart.input} />
-                <ToolOutput
-                  output={toolPart.output}
-                  errorText={toolPart.errorText}
-                />
-              </ToolContent>
-            </Tool>
-          );
-        } else if (part.type === "tool-loadSkill") {
-          return <LoadSkillTool key={`${message.id}-${i}`} toolPart={part} />;
-        } else if (isToolUIPart(part) && isPluginWebSearchPart(part)) {
-          // Before the generic branch: its results are already the Sources row
-          // above, so the raw JSON body would repeat every one of them.
-          //
-          // The predicate is shared with the Sources lifting and excludes
-          // provider-executed calls: native search registers under the same
-          // `web_search` name, and its parts belong on the generic renderer, which
-          // shows the vendor payload this card cannot read.
-          return (
-            <WebSearchTool
-              key={`${message.id}-${i}`}
-              toolPart={part}
-              messageMetadata={message.metadata}
-            />
-          );
-        } else if (
-          isToolUIPart(part) &&
-          part.type.startsWith("tool-delegateTo")
-        ) {
-          // Sub-agent tools get custom UI with robot icon and nested chat
-          return (
-            <SubAgentTool
-              key={`${message.id}-${i}`}
-              toolPart={part}
-              messageMetadata={message.metadata}
-            />
-          );
-        } else if (isToolUIPart(part)) {
-          // Plugin- and MCP-contributed tools aren't enumerated in the part
-          // union (see `CustomUITools`), so they land on the generic renderer.
-          const toolInput = part.input as Record<string, unknown> | undefined;
-          const toolLabel = (toolInput?.label ?? toolInput?.name) as
-            string | undefined;
-          return (
-            <Tool key={`${message.id}-${i}`}>
-              <ToolHeader
-                state={part.state}
-                type={part.type}
-                label={toolLabel}
-                durationMs={toolCallDurationMs(
-                  part.toolMetadata,
-                  message.metadata,
-                  part.toolCallId,
-                )}
-              />
-              <ToolContent>
-                <ToolInput input={part.input} />
-                <ToolOutput output={part.output} errorText={part.errorText} />
-              </ToolContent>
-            </Tool>
-          );
-        } else if (
-          part.type === "file" &&
-          (part as FileUIPart).mediaType?.startsWith("image/")
-        ) {
-          const filePart = part as FileUIPart;
-          return (
-            <Message
-              key={`${message.id}-${i}`}
-              from={message.role}
-              avatar={assistantAvatar}
-            >
-              <MessageContent className="max-w-full">
-                {/* Generated/uploaded image served from a backend or data: URL;
-                not routable through the Next image optimizer. */}
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={filePart.url}
-                  alt={filePart.filename || "Generated image"}
-                  className="max-w-full rounded-lg border"
-                />
-              </MessageContent>
-            </Message>
-          );
-        } else {
-          return null;
-        }
+        const renderer = partRenderers.find((r) => r.matches(part));
+        return renderer ? renderer.render(part, i) : null;
       })}
       {message.role === "assistant" &&
         message.metadata?.truncatedByTokenLimit && (
