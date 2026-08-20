@@ -11,14 +11,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { ExpandableTextarea } from "@/components/expandable-textarea";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { ConfirmDialog } from "@/components/confirm-dialog";
 import { useState } from "react";
 import { useResetOnChange } from "@/hooks/use-reset-on-change";
 import { useRouter } from "next/navigation";
@@ -60,7 +53,6 @@ const OrganizationForm = ({ classNames, orgId }: OrganizationFormProps) => {
   >({});
 
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
-  const [deleteInput, setDeleteInput] = useState("");
   const [isDeleting, setIsDeleting] = useState(false);
 
   useResetOnChange(organization, () => {
@@ -220,10 +212,7 @@ const OrganizationForm = ({ classNames, orgId }: OrganizationFormProps) => {
         {orgId && (
           <Button
             variant="outline"
-            onClick={() => {
-              setIsDeleteDialogOpen(true);
-              setDeleteInput("");
-            }}
+            onClick={() => setIsDeleteDialogOpen(true)}
             disabled={isSubmitting}
           >
             <Trash2 /> Delete
@@ -231,63 +220,17 @@ const OrganizationForm = ({ classNames, orgId }: OrganizationFormProps) => {
         )}
       </div>
 
-      <Dialog
+      <ConfirmDialog
         open={isDeleteDialogOpen}
-        onOpenChange={(open) => {
-          if (!isDeleting) {
-            setIsDeleteDialogOpen(open);
-          }
-        }}
-      >
-        <DialogContent
-          onPointerDownOutside={(e) => {
-            if (isDeleting) {
-              e.preventDefault();
-            }
-          }}
-          onEscapeKeyDown={(e) => {
-            if (isDeleting) {
-              e.preventDefault();
-            }
-          }}
-          showCloseButton={false}
-        >
-          <DialogHeader>
-            <DialogTitle>Delete Organization</DialogTitle>
-            <DialogDescription>
-              Are you sure you want to delete this organization? This action
-              cannot be undone.
-            </DialogDescription>
-            <div className="mt-4">
-              <Input
-                placeholder="Type 'Delete organization' to confirm"
-                value={deleteInput}
-                onChange={(e) => setDeleteInput(e.target.value)}
-                disabled={isDeleting}
-              />
-            </div>
-          </DialogHeader>
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setIsDeleteDialogOpen(false)}
-              disabled={isDeleting}
-            >
-              Cancel
-            </Button>
-            <Button
-              variant="destructive"
-              onClick={handleDelete}
-              disabled={
-                isDeleting ||
-                deleteInput.toLowerCase() !== "delete organization"
-              }
-            >
-              Delete
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+        onOpenChange={setIsDeleteDialogOpen}
+        title="Delete Organization"
+        description="Are you sure you want to delete this organization? This action cannot be undone."
+        confirmLabel="Delete"
+        confirmVariant="destructive"
+        confirmPhrase="Delete organization"
+        onConfirm={handleDelete}
+        loading={isDeleting}
+      />
     </div>
   );
 };

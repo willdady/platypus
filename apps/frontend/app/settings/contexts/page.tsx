@@ -17,6 +17,10 @@ interface ContextWithWorkspaceName extends Context {
   workspaceName?: string | null;
 }
 
+const findGlobalContext = (contexts?: {
+  results: ContextWithWorkspaceName[];
+}) => contexts?.results.find((c) => !c.workspaceId);
+
 const ContextsPage = () => {
   const { user } = useAuth();
   const backendUrl = useBackendUrl();
@@ -25,7 +29,9 @@ const ContextsPage = () => {
     results: ContextWithWorkspaceName[];
   }>(user ? joinUrl(backendUrl, "/users/me/contexts") : null, fetcher);
 
-  const [globalContextContent, setGlobalContextContent] = useState("");
+  const [globalContextContent, setGlobalContextContent] = useState(
+    () => findGlobalContext(contexts)?.content || "",
+  );
   const [isSavingGlobal, setIsSavingGlobal] = useState(false);
 
   // Sync server-provided global context into editable local state whenever the
@@ -33,12 +39,11 @@ const ContextsPage = () => {
   const [prevContexts, setPrevContexts] = useState(contexts);
   if (contexts !== prevContexts) {
     setPrevContexts(contexts);
-    const globalCtx = contexts?.results.find((c) => !c.workspaceId);
-    setGlobalContextContent(globalCtx?.content || "");
+    setGlobalContextContent(findGlobalContext(contexts)?.content || "");
   }
 
   const handleSaveGlobal = async () => {
-    const globalCtx = contexts?.results.find((c) => !c.workspaceId);
+    const globalCtx = findGlobalContext(contexts);
     setIsSavingGlobal(true);
 
     const outcome = globalCtx
