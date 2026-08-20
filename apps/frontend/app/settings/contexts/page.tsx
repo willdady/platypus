@@ -5,6 +5,7 @@ import { useAuth } from "@/components/auth-provider";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { fetcher, joinUrl } from "@/lib/utils";
+import { writeAt } from "@/lib/api-write";
 import { useBackendUrl } from "@/app/client-context";
 import { type Context } from "@platypus/schemas";
 import { ExpandableTextarea } from "@/components/expandable-textarea";
@@ -40,54 +41,30 @@ const ContextsPage = () => {
     const globalCtx = contexts?.results.find((c) => !c.workspaceId);
     setIsSavingGlobal(true);
 
-    try {
-      if (globalCtx) {
-        // Update existing global context
-        const response = await fetch(
+    const outcome = globalCtx
+      ? await writeAt(
           joinUrl(backendUrl, `/users/me/contexts/${globalCtx.id}`),
           {
             method: "PUT",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ content: globalContextContent }),
-            credentials: "include",
+            data: { content: globalContextContent },
           },
-        );
+        )
+      : await writeAt(joinUrl(backendUrl, "/users/me/contexts"), {
+          method: "POST",
+          data: { content: globalContextContent, workspaceId: undefined },
+        });
 
-        if (response.ok) {
-          toast.success("Global context saved");
-          mutate();
-        } else {
-          toast.error("Failed to update context");
-        }
-      } else {
-        // Create new global context
-        const response = await fetch(
-          joinUrl(backendUrl, "/users/me/contexts"),
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              content: globalContextContent,
-              workspaceId: undefined,
-            }),
-            credentials: "include",
-          },
-        );
-
-        if (response.ok) {
-          toast.success("Global context saved");
-          mutate();
-        } else if (response.status === 409) {
-          toast.error("You already have a global context");
-        } else {
-          toast.error("Failed to create context");
-        }
-      }
-    } catch {
-      toast.error("Error saving context");
-    } finally {
-      setIsSavingGlobal(false);
+    if (outcome.outcome === "success") {
+      toast.success("Global context saved");
+      mutate();
+    } else if (!globalCtx && outcome.outcome === "conflict") {
+      toast.error("You already have a global context");
+    } else {
+      toast.error(
+        globalCtx ? "Failed to update context" : "Failed to create context",
+      );
     }
+    setIsSavingGlobal(false);
   };
 
   return (

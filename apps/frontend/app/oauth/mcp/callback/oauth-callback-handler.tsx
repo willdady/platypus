@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useBackendUrl } from "@/app/client-context";
 import { joinUrl } from "@/lib/utils";
+import { writeAt } from "@/lib/api-write";
 import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -44,61 +45,46 @@ export const OAuthCallbackHandler = ({
     }
 
     const exchangeCode = async () => {
-      try {
-        const response = await fetch(
-          joinUrl(backendUrl, "/oauth/mcp/callback"),
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ code, state }),
-            credentials: "include",
-          },
-        );
+      const outcome = await writeAt<{
+        mcpId: string;
+        orgId: string;
+        workspaceId?: string;
+      }>(joinUrl(backendUrl, "/oauth/mcp/callback"), {
+        method: "POST",
+        data: { code, state },
+      });
 
-        if (response.ok) {
-          const data = await response.json();
+      if (outcome.outcome === "success") {
+        const data = outcome.data;
 
-          // If opened as a popup, notify the opener and close
-          if (
-            notifyOpenerAndClose({
-              type: OAUTH_MCP_SUCCESS_EVENT,
-              mcpId: data.mcpId,
-            })
-          )
-            return;
-
-          // Fallback: if not a popup (e.g. popup was blocked and we fell
-          // back to same-window redirect), navigate to the MCP edit page. An
-          // org-scoped (Shared) MCP has no workspaceId, so it edits under the
-          // organization settings surface.
-          const mcpEditPath = data.workspaceId
-            ? `/${data.orgId}/workspace/${data.workspaceId}/settings/mcp/${data.mcpId}`
-            : `/${data.orgId}/settings/mcp/${data.mcpId}`;
-          window.location.replace(mcpEditPath);
-        } else {
-          const data = await response.json().catch(() => ({}));
-          const message =
-            data.error || "Failed to complete OAuth authorization.";
-
-          // Notify opener of failure if in a popup
-          if (notifyOpenerAndClose({ type: OAUTH_MCP_ERROR_EVENT, message }))
-            return;
-
-          setError(message);
-          setIsProcessing(false);
-        }
-      } catch (err) {
-        const message =
-          err instanceof Error
-            ? err.message
-            : "Network error during OAuth exchange.";
-
-        if (notifyOpenerAndClose({ type: OAUTH_MCP_ERROR_EVENT, message }))
+        // If opened as a popup, notify the opener and close
+        if (
+          notifyOpenerAndClose({
+            type: OAUTH_MCP_SUCCESS_EVENT,
+            mcpId: data.mcpId,
+          })
+        )
           return;
 
-        setError(message);
-        setIsProcessing(false);
+        // Fallback: if not a popup (e.g. popup was blocked and we fell
+        // back to same-window redirect), navigate to the MCP edit page. An
+        // org-scoped (Shared) MCP has no workspaceId, so it edits under the
+        // organization settings surface.
+        const mcpEditPath = data.workspaceId
+          ? `/${data.orgId}/workspace/${data.workspaceId}/settings/mcp/${data.mcpId}`
+          : `/${data.orgId}/settings/mcp/${data.mcpId}`;
+        window.location.replace(mcpEditPath);
+        return;
       }
+
+      const message = outcome.message;
+
+      // Notify opener of failure if in a popup
+      if (notifyOpenerAndClose({ type: OAUTH_MCP_ERROR_EVENT, message }))
+        return;
+
+      setError(message);
+      setIsProcessing(false);
     };
 
     exchangeCode();

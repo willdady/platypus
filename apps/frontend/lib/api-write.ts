@@ -80,29 +80,12 @@ function errorFiles(body: unknown): string[] | undefined {
   return undefined;
 }
 
-/**
- * Owns a single write (create, update, or delete) to the Platypus API: the
- * base URL, the Organization-vs-Workspace path shape, credentials, the HTTP
- * method, and the outcome mapping that mirrors the backend's ADR-0010 error
- * seam. Callers pass `id`/`data` rather than a method: `id` absent means
- * create (POST), `id` present with `data` means update (PUT), `id` present
- * without `data` means delete (DELETE).
- */
-export async function writeEntity<TResult = unknown, TData = unknown>(
-  backendUrl: string,
-  entity: string,
-  scope: Scope,
-  options: WriteOptions<TData> = {},
+async function performWrite<TResult, TData>(
+  url: string,
+  method: "POST" | "PUT" | "DELETE",
+  data: TData | undefined,
+  revalidateKeys: readonly string[],
 ): Promise<WriteOutcome<TResult>> {
-  const { id, data } = options;
-  const method: "POST" | "PUT" | "DELETE" =
-    id === undefined ? "POST" : data === undefined ? "DELETE" : "PUT";
-
-  const path = scopedPath(entity, scope);
-  const collectionUrl = joinUrl(backendUrl, path);
-  const url =
-    id === undefined ? collectionUrl : joinUrl(backendUrl, `${path}/${id}`);
-
   let response: Response;
   try {
     response = await fetch(url, {
@@ -122,8 +105,6 @@ export async function writeEntity<TResult = unknown, TData = unknown>(
   const body: unknown = await response.json().catch(() => null);
 
   if (response.ok) {
-    const revalidateKeys =
-      method === "PUT" ? [collectionUrl, url] : [collectionUrl];
     return { outcome: "success", data: body as TResult, revalidateKeys };
   }
 
@@ -165,4 +146,54 @@ export async function writeEntity<TResult = unknown, TData = unknown>(
         httpStatus: response.status,
       };
   }
+}
+
+/**
+ * Owns a single write (create, update, or delete) to the Platypus API: the
+ * base URL, the Organization-vs-Workspace path shape, credentials, the HTTP
+ * method, and the outcome mapping that mirrors the backend's ADR-0010 error
+ * seam. Callers pass `id`/`data` rather than a method: `id` absent means
+ * create (POST), `id` present with `data` means update (PUT), `id` present
+ * without `data` means delete (DELETE).
+ */
+export async function writeEntity<TResult = unknown, TData = unknown>(
+  backendUrl: string,
+  entity: string,
+  scope: Scope,
+  options: WriteOptions<TData> = {},
+): Promise<WriteOutcome<TResult>> {
+  const { id, data } = options;
+  const method: "POST" | "PUT" | "DELETE" =
+    id === undefined ? "POST" : data === undefined ? "DELETE" : "PUT";
+
+  const path = scopedPath(entity, scope);
+  const collectionUrl = joinUrl(backendUrl, path);
+  const url =
+    id === undefined ? collectionUrl : joinUrl(backendUrl, `${path}/${id}`);
+  const revalidateKeys =
+    method === "PUT" ? [collectionUrl, url] : [collectionUrl];
+
+  return performWrite<TResult, TData>(url, method, data, revalidateKeys);
+}
+
+export interface WriteAtOptions<TData> {
+  readonly method: "POST" | "PUT" | "DELETE";
+  /** Omit only when the write is a DELETE. */
+  readonly data?: TData;
+  /** SWR keys this write should invalidate. Defaults to none. */
+  readonly revalidateKeys?: readonly string[];
+}
+
+/**
+ * Same transport and ADR-0010 outcome mapping as `writeEntity`, for the
+ * handful of writes that don't fit its Organization/Workspace scope (ADR-0007)
+ * — a user-scoped resource, or a one-off action endpoint. The caller supplies
+ * the full URL, so there's no scope or entity path to get out of sync with it.
+ */
+export async function writeAt<TResult = unknown, TData = unknown>(
+  url: string,
+  options: WriteAtOptions<TData>,
+): Promise<WriteOutcome<TResult>> {
+  const { method, data, revalidateKeys = [] } = options;
+  return performWrite<TResult, TData>(url, method, data, revalidateKeys);
 }

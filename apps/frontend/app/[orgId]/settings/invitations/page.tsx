@@ -3,6 +3,7 @@
 import { useParams } from "next/navigation";
 import { InvitationForm } from "@/components/invitation-form";
 import { fetcher, joinUrl } from "@/lib/utils";
+import { writeEntity } from "@/lib/api-write";
 import { useBackendUrl } from "@/app/client-context";
 import {
   type InvitationListItem,
@@ -68,26 +69,20 @@ const OrgInvitationsPage = () => {
     if (!invitationToDelete) return;
 
     setIsDeleting(true);
-    try {
-      const response = await fetch(
-        joinUrl(
-          backendUrl,
-          `/organizations/${orgId}/invitations/${invitationToDelete}`,
-        ),
-        { method: "DELETE", credentials: "include" },
-      );
-      if (response.ok) {
-        toast.success("Invitation deleted");
-        mutate();
-        setInvitationToDelete(null);
-      } else {
-        toast.error("Failed to delete invitation");
-      }
-    } catch {
-      toast.error("Error deleting invitation");
-    } finally {
-      setIsDeleting(false);
+    const outcome = await writeEntity(
+      backendUrl,
+      "invitations",
+      { orgId },
+      { id: invitationToDelete },
+    );
+    if (outcome.outcome === "success") {
+      toast.success("Invitation deleted");
+      mutate();
+      setInvitationToDelete(null);
+    } else {
+      toast.error(outcome.message);
     }
+    setIsDeleting(false);
   };
 
   const getStatusBadge = (status: string) => {

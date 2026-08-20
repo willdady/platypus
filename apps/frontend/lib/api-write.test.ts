@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach, vi } from "vitest";
-import { writeEntity } from "./api-write";
+import { writeEntity, writeAt } from "./api-write";
 
 function mockResponse(status: number, body: unknown) {
   return {
@@ -426,5 +426,103 @@ describe("writeEntity — outcomes", () => {
     if (result.outcome === "success") {
       expect(result.data).toBeNull();
     }
+  });
+});
+
+describe("writeAt", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("sends the given method and body to the given URL", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(mockResponse(201, { id: "c1" }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await writeAt(`${BACKEND_URL}/users/me/contexts`, {
+      method: "POST",
+      data: { content: "hi" },
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      `${BACKEND_URL}/users/me/contexts`,
+      expect.objectContaining({
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content: "hi" }),
+      }),
+    );
+  });
+
+  it("sends no body for a DELETE", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(mockResponse(200, {}));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await writeAt(`${BACKEND_URL}/users/me/contexts/c1`, {
+      method: "DELETE",
+    });
+
+    const [, init] = fetchMock.mock.calls[0];
+    expect(init.method).toBe("DELETE");
+    expect(init.body).toBeUndefined();
+    expect(init.headers).toBeUndefined();
+  });
+
+  it("defaults revalidateKeys to an empty array when omitted", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(mockResponse(200, { ok: true })),
+    );
+
+    const result = await writeAt(`${BACKEND_URL}/oauth/mcp/callback`, {
+      method: "POST",
+      data: { code: "x", state: "y" },
+    });
+
+    expect(result).toEqual({
+      outcome: "success",
+      data: { ok: true },
+      revalidateKeys: [],
+    });
+  });
+
+  it("carries caller-supplied revalidateKeys on success", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(mockResponse(200, {})));
+
+    const result = await writeAt(`${BACKEND_URL}/users/me/contexts/c1`, {
+      method: "PUT",
+      data: { content: "updated" },
+      revalidateKeys: [`${BACKEND_URL}/users/me/contexts`],
+    });
+
+    expect(result.outcome).toBe("success");
+    if (result.outcome === "success") {
+      expect(result.revalidateKeys).toEqual([
+        `${BACKEND_URL}/users/me/contexts`,
+      ]);
+    }
+  });
+
+  it("maps outcomes through the same ADR-0010 mapping as writeEntity", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        mockResponse(409, {
+          error: "You already have a context for this scope",
+        }),
+      ),
+    );
+
+    const result = await writeAt(`${BACKEND_URL}/users/me/contexts`, {
+      method: "POST",
+      data: { content: "hi" },
+    });
+
+    expect(result).toEqual({
+      outcome: "conflict",
+      message: "You already have a context for this scope",
+    });
   });
 });

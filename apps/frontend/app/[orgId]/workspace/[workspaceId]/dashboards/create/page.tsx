@@ -10,6 +10,8 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useBackendUrl } from "@/app/client-context";
 import { joinUrl } from "@/lib/utils";
+import { writeEntity } from "@/lib/api-write";
+import type { Dashboard } from "@platypus/schemas";
 
 const CreateDashboardPage = ({
   params,
@@ -29,41 +31,33 @@ const CreateDashboardPage = ({
     if (!backendUrl || !name.trim()) return;
     setLoading(true);
     setError(null);
-    try {
-      const res = await fetch(
-        joinUrl(
-          backendUrl,
-          `/organizations/${orgId}/workspaces/${workspaceId}/dashboards`,
-        ),
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          credentials: "include",
-          body: JSON.stringify({
-            name: name.trim(),
-            description: description.trim() || null,
-          }),
+    const outcome = await writeEntity<Dashboard>(
+      backendUrl,
+      "dashboards",
+      { orgId, workspaceId },
+      {
+        data: {
+          name: name.trim(),
+          description: description.trim() || null,
         },
+      },
+    );
+    if (outcome.outcome === "conflict") {
+      setError(outcome.message);
+    } else if (outcome.outcome === "success") {
+      const dashboard = outcome.data;
+      const dashUrl = joinUrl(
+        backendUrl,
+        `/organizations/${orgId}/workspaces/${workspaceId}/dashboards/${dashboard.id}`,
       );
-      if (res.status === 409) {
-        const body = await res.json();
-        setError(body.error);
-        return;
-      }
-      if (res.ok) {
-        const dashboard = await res.json();
-        const dashUrl = joinUrl(
-          backendUrl,
-          `/organizations/${orgId}/workspaces/${workspaceId}/dashboards/${dashboard.id}`,
-        );
-        await mutate(dashUrl, dashboard, false);
-        router.push(
-          `/${orgId}/workspace/${workspaceId}/dashboards/${dashboard.id}`,
-        );
-      }
-    } finally {
-      setLoading(false);
+      await mutate(dashUrl, dashboard, false);
+      router.push(
+        `/${orgId}/workspace/${workspaceId}/dashboards/${dashboard.id}`,
+      );
+    } else {
+      setError(outcome.message);
     }
+    setLoading(false);
   };
 
   return (

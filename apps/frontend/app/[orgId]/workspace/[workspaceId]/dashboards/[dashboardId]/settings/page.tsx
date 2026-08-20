@@ -13,6 +13,7 @@ import { DeleteDashboardDialog } from "@/components/delete-dashboard-dialog";
 import { useBackendUrl } from "@/app/client-context";
 import { useAuth } from "@/components/auth-provider";
 import { fetcher, joinUrl } from "@/lib/utils";
+import { writeEntity } from "@/lib/api-write";
 import type { Dashboard } from "@platypus/schemas";
 import { toast } from "sonner";
 
@@ -57,39 +58,44 @@ const DashboardSettingsPage = ({
     if (!backendUrl || !displayName.trim()) return;
     setSaving(true);
     setSaveError(null);
-    try {
-      const res = await fetch(dashUrl!, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({
+    const outcome = await writeEntity(
+      backendUrl,
+      "dashboards",
+      { orgId, workspaceId },
+      {
+        id: dashboardId,
+        data: {
           name: displayName.trim(),
           description: displayDescription.trim() || null,
-        }),
-      });
-      if (res.status === 409) {
-        const body = await res.json();
-        setSaveError(body.error);
-        return;
-      }
-      if (res.ok) {
-        await mutate();
-        setName("");
-        setDescription(null);
-        toast.success("Dashboard updated");
-      }
-    } finally {
-      setSaving(false);
+        },
+      },
+    );
+    if (outcome.outcome === "conflict") {
+      setSaveError(outcome.message);
+    } else if (outcome.outcome === "success") {
+      await mutate();
+      setName("");
+      setDescription(null);
+      toast.success("Dashboard updated");
+    } else {
+      setSaveError(outcome.message);
     }
+    setSaving(false);
   };
 
   const handleDelete = async () => {
     if (!backendUrl) return;
     setDeleting(true);
-    try {
-      await fetch(dashUrl!, { method: "DELETE", credentials: "include" });
+    const outcome = await writeEntity(
+      backendUrl,
+      "dashboards",
+      { orgId, workspaceId },
+      { id: dashboardId },
+    );
+    if (outcome.outcome === "success") {
       router.push(`/${orgId}/workspace/${workspaceId}`);
-    } finally {
+    } else {
+      toast.error(outcome.message);
       setDeleting(false);
       setDeleteOpen(false);
     }
