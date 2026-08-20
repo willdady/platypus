@@ -149,4 +149,21 @@ describe("AgentForm validation error surfacing", () => {
     );
     expect(saveButton).not.toBeDisabled();
   });
+
+  // #571: toolSetIds has no field that retracts its error, so gating Save on
+  // it would disable Save forever with no way out but reloading.
+  it("never disables Save on a rejection keyed to a field with no retracting input", async () => {
+    vi.stubGlobal(
+      "fetch",
+      mockFailedSave([{ path: ["toolSetIds"], message: "Unknown tool set" }]),
+    );
+
+    renderCreateForm();
+
+    const saveButton = screen.getByRole("button", { name: "Save" });
+    fireEvent.click(saveButton);
+
+    await waitFor(() => expect(toastError).toHaveBeenCalled());
+    expect(saveButton).not.toBeDisabled();
+  });
 });

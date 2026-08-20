@@ -62,7 +62,8 @@ import {
   type Provider,
 } from "@platypus/schemas";
 import useSWR, { useSWRConfig } from "swr";
-import { clearFieldError, cn, fetcher, joinUrl } from "@/lib/utils";
+import { cn, fetcher, joinUrl } from "@/lib/utils";
+import { canSubmitForm, retractFieldError } from "@/lib/form-errors";
 import { writeEntity } from "@/lib/api-write";
 import {
   getModelConfigs,
@@ -453,6 +454,11 @@ type ProviderFormData = Omit<
   embeddingDimensions: string;
 };
 
+// Deliberately empty: this form's fields can be validation-rejected on a
+// provider type that then hides the very input needed to retract them (see
+// the Save button below).
+const RETRACTABLE_FIELDS: readonly string[] = [];
+
 const ProviderForm = ({
   classNames,
   orgId,
@@ -640,7 +646,7 @@ const ProviderForm = ({
     const { id, value } = e.target;
 
     // Clear validation error for this field
-    setValidationErrors((prev) => clearFieldError(prev, id));
+    setValidationErrors((prev) => retractFieldError(prev, id));
     setError(null);
 
     if (id === "headers") {
@@ -677,7 +683,7 @@ const ProviderForm = ({
 
   const handleSelectChange = (id: string, value: string) => {
     // Clear validation error for this field
-    setValidationErrors((prev) => clearFieldError(prev, id));
+    setValidationErrors((prev) => retractFieldError(prev, id));
     setError(null);
 
     setFormData((prevData) => ({ ...prevData, [id]: value }));
@@ -688,7 +694,7 @@ const ProviderForm = ({
   // Retracts the list's error and every row error under it, so a stale message
   // doesn't sit under a row the user has already corrected.
   const clearModelIdsError = () => {
-    setValidationErrors((prev) => clearFieldError(prev, "modelIds"));
+    setValidationErrors((prev) => retractFieldError(prev, "modelIds"));
   };
 
   /**
@@ -849,6 +855,10 @@ const ProviderForm = ({
           setError(result.message);
           break;
         case "locked":
+          // Guidance, not a failure — the backend's message already says
+          // where the Shared resource is actually managed (#570).
+          toast.info(result.message);
+          break;
         case "notFound":
         case "error":
           toast.error(result.message);
@@ -887,6 +897,12 @@ const ProviderForm = ({
       } else {
         router.push(`/${orgId}/settings/providers`);
       }
+    } else if (result.outcome === "locked") {
+      // Guidance, not a failure — the backend's message already says where
+      // the Shared resource is actually managed (#570).
+      toast.info(result.message);
+      setIsDeleting(false);
+      setIsDeleteDialogOpen(false);
     } else {
       toast.error(result.message);
       setIsDeleting(false);
@@ -1393,14 +1409,20 @@ const ProviderForm = ({
         <div className="flex gap-2">
           <Button
             className="cursor-pointer"
-            // Deliberately NOT gated on `validationErrors`. Those come back
-            // from the server, and every key needs a matching path that
-            // retracts it; one that has none disables Save forever, with no
-            // way out but reloading. Re-submitting simply re-validates. The
-            // JSON errors below are different — they are computed here as the
-            // user types and always clear themselves.
             onClick={handleSubmit}
-            disabled={isSubmitting || !!headersError || !!extraBodyError}
+            disabled={
+              isSubmitting ||
+              !!headersError ||
+              !!extraBodyError ||
+              // RETRACTABLE_FIELDS is deliberately empty: several fields here
+              // (apiMode, organization, project) render only for certain
+              // provider types, so a `validationErrors` key can outlive the
+              // input that would retract it. Server-returned errors must
+              // never gate Save for that reason — re-submitting simply
+              // re-validates. The JSON errors above are different: they are
+              // computed here as the user types and always clear themselves.
+              !canSubmitForm(validationErrors, RETRACTABLE_FIELDS)
+            }
           >
             {providerId ? "Update" : "Save"}
           </Button>

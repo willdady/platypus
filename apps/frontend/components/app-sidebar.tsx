@@ -60,7 +60,7 @@ import {
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Field, FieldLabel, FieldError } from "@/components/ui/field";
-import { parseValidationErrors } from "@/lib/utils";
+import { parseValidationErrors } from "@/lib/form-errors";
 import { useBackendUrl } from "@/app/client-context";
 import { TagInput } from "@/components/tag-input";
 import { useIsMobile } from "@/hooks/use-mobile";

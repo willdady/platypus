@@ -49,7 +49,8 @@ import {
   type Skill,
 } from "@platypus/schemas";
 import useSWR, { useSWRConfig } from "swr";
-import { clearFieldError, fetcher, joinUrl } from "@/lib/utils";
+import { fetcher, joinUrl } from "@/lib/utils";
+import { canSubmitForm, retractFieldError } from "@/lib/form-errors";
 import { writeEntity } from "@/lib/api-write";
 import { findModelOption, getModelOptions } from "@/lib/model-config";
 import { resolveModel } from "@/lib/resolve-model";
@@ -63,6 +64,25 @@ import { useBackendUrl } from "@/app/client-context";
 import { useAuth } from "@/components/auth-provider";
 import { AgentAvatar } from "@/components/agent-avatar";
 import { Skeleton } from "@/components/ui/skeleton";
+
+// toolSetIds, skillIds, and subAgentIds are deliberately excluded: this form
+// has no field that retracts an error keyed to them, so including them here
+// would disable Save forever the moment the server rejects one.
+const RETRACTABLE_FIELDS = [
+  "name",
+  "description",
+  "inputPlaceholder",
+  "instructions",
+  "providerId",
+  "modelId",
+  "maxSteps",
+  "temperature",
+  "topP",
+  "topK",
+  "seed",
+  "presencePenalty",
+  "frequencyPenalty",
+] as const;
 
 const AgentForm = ({
   classNames,
@@ -224,7 +244,7 @@ const AgentForm = ({
   // corrected field stops rendering its error and re-enables the Save button.
   const clearValidationErrors = useCallback((...ids: string[]) => {
     setValidationErrors((prev) =>
-      ids.reduce((errors, id) => clearFieldError(errors, id), prev),
+      ids.reduce((errors, id) => retractFieldError(errors, id), prev),
     );
   }, []);
 
@@ -407,6 +427,10 @@ const AgentForm = ({
           setValidationErrors({ name: result.message });
           break;
         case "locked":
+          // Guidance, not a failure — the backend's message already says
+          // where the Shared resource is actually managed (#570).
+          toast.info(result.message);
+          break;
         case "notFound":
         case "error":
           toast.error(result.message);
@@ -432,6 +456,12 @@ const AgentForm = ({
     if (result.outcome === "success") {
       result.revalidateKeys.forEach((key) => mutate(key));
       router.push(doneHref);
+    } else if (result.outcome === "locked") {
+      // Guidance, not a failure — the backend's message already says where
+      // the Shared resource is actually managed (#570).
+      toast.info(result.message);
+      setIsDeleting(false);
+      setIsDeleteDialogOpen(false);
     } else {
       toast.error(result.message);
       setIsDeleting(false);
@@ -1010,7 +1040,9 @@ const AgentForm = ({
           className="cursor-pointer"
           onClick={handleSubmit}
           disabled={
-            isSubmitting || readOnly || Object.keys(validationErrors).length > 0
+            isSubmitting ||
+            readOnly ||
+            !canSubmitForm(validationErrors, RETRACTABLE_FIELDS)
           }
         >
           {agentId ? "Update" : "Save"}

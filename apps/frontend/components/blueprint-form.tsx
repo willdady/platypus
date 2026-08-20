@@ -33,6 +33,7 @@ import type {
 } from "@platypus/schemas";
 import useSWR, { useSWRConfig } from "swr";
 import { fetcher, joinUrl } from "@/lib/utils";
+import { canSubmitForm, retractFieldError } from "@/lib/form-errors";
 import { writeEntity } from "@/lib/api-write";
 import { useBackendUrl } from "@/app/client-context";
 import { useAuth } from "@/components/auth-provider";
@@ -139,6 +140,15 @@ const ResourceGroup = ({
   );
 };
 
+const RETRACTABLE_FIELDS = [
+  "name",
+  "description",
+  "context",
+  "taskModelProviderId",
+  "memoryExtractionProviderId",
+  "memoryEmbeddingProviderId",
+] as const;
+
 const BlueprintForm = ({
   classNames,
   orgId,
@@ -222,13 +232,7 @@ const BlueprintForm = ({
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>,
   ) => {
     const { id, value } = e.target;
-    if (validationErrors[id]) {
-      setValidationErrors((prev) => {
-        const next = { ...prev };
-        delete next[id];
-        return next;
-      });
-    }
+    setValidationErrors((prev) => retractFieldError(prev, id));
     setFormData((prev) => ({ ...prev, [id]: value }));
   };
 
@@ -448,12 +452,15 @@ const BlueprintForm = ({
             </FieldLabel>
             <Select
               value={formData.taskModelProviderId || "none"}
-              onValueChange={(value) =>
+              onValueChange={(value) => {
+                setValidationErrors((prev) =>
+                  retractFieldError(prev, "taskModelProviderId"),
+                );
                 setFormData((prev) => ({
                   ...prev,
                   taskModelProviderId: value === "none" ? null : value,
-                }))
-              }
+                }));
+              }}
               disabled={isSubmitting || attachedProviders.length === 0}
             >
               <SelectTrigger>
@@ -483,12 +490,15 @@ const BlueprintForm = ({
             </FieldLabel>
             <Select
               value={formData.memoryExtractionProviderId || "none"}
-              onValueChange={(value) =>
+              onValueChange={(value) => {
+                setValidationErrors((prev) =>
+                  retractFieldError(prev, "memoryExtractionProviderId"),
+                );
                 setFormData((prev) => ({
                   ...prev,
                   memoryExtractionProviderId: value === "none" ? null : value,
-                }))
-              }
+                }));
+              }}
               disabled={isSubmitting || memoryExtractionProviders.length === 0}
             >
               <SelectTrigger>
@@ -520,12 +530,15 @@ const BlueprintForm = ({
             </FieldLabel>
             <Select
               value={formData.memoryEmbeddingProviderId || "none"}
-              onValueChange={(value) =>
+              onValueChange={(value) => {
+                setValidationErrors((prev) =>
+                  retractFieldError(prev, "memoryEmbeddingProviderId"),
+                );
                 setFormData((prev) => ({
                   ...prev,
                   memoryEmbeddingProviderId: value === "none" ? null : value,
-                }))
-              }
+                }));
+              }}
               disabled={isSubmitting || memoryEmbeddingProviders.length === 0}
             >
               <SelectTrigger>
@@ -559,7 +572,9 @@ const BlueprintForm = ({
         <Button
           className="cursor-pointer"
           onClick={handleSubmit}
-          disabled={isSubmitting}
+          disabled={
+            isSubmitting || !canSubmitForm(validationErrors, RETRACTABLE_FIELDS)
+          }
         >
           {blueprintId ? "Update" : "Save"}
         </Button>

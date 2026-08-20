@@ -20,12 +20,15 @@ import { useRouter } from "next/navigation";
 import { Trash2 } from "lucide-react";
 import { type Skill, type Agent } from "@platypus/schemas";
 import useSWR, { useSWRConfig } from "swr";
-import { clearFieldError, fetcher, joinUrl } from "@/lib/utils";
+import { fetcher, joinUrl } from "@/lib/utils";
+import { canSubmitForm, retractFieldError } from "@/lib/form-errors";
 import { writeEntity } from "@/lib/api-write";
 import { toast } from "sonner";
 import { useBackendUrl } from "@/app/client-context";
 import { useAuth } from "@/components/auth-provider";
 import { AgentAvatar } from "@/components/agent-avatar";
+
+const RETRACTABLE_FIELDS = ["name", "description", "body"] as const;
 
 const SkillForm = ({
   classNames,
@@ -119,7 +122,7 @@ const SkillForm = ({
 
     // Clear the error for this field, including any reported against a path
     // inside it.
-    setValidationErrors((prev) => clearFieldError(prev, id));
+    setValidationErrors((prev) => retractFieldError(prev, id));
 
     const nextValue = id === "name" ? value.toLowerCase() : value;
 
@@ -164,6 +167,10 @@ const SkillForm = ({
         setValidationErrors({ name: result.message });
         break;
       case "locked":
+        // Guidance, not a failure — the backend's message already says
+        // where the Shared resource is actually managed (#570).
+        toast.info(result.message);
+        break;
       case "notFound":
       case "error":
         toast.error(result.message);
@@ -186,6 +193,12 @@ const SkillForm = ({
     if (result.outcome === "success") {
       result.revalidateKeys.forEach((key) => globalMutate(key));
       router.push(returnPath);
+    } else if (result.outcome === "locked") {
+      // Guidance, not a failure — the backend's message already says where
+      // the Shared resource is actually managed (#570).
+      toast.info(result.message);
+      setIsDeleting(false);
+      setIsDeleteDialogOpen(false);
     } else {
       setDeleteError(result.message);
       setIsDeleting(false);
@@ -295,7 +308,9 @@ const SkillForm = ({
         <Button
           className="cursor-pointer"
           onClick={handleSubmit}
-          disabled={isSubmitting}
+          disabled={
+            isSubmitting || !canSubmitForm(validationErrors, RETRACTABLE_FIELDS)
+          }
         >
           {skillId ? "Update" : "Save"}
         </Button>

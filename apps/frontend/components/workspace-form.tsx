@@ -31,7 +31,8 @@ import { useState } from "react";
 import { useResetOnChange } from "@/hooks/use-reset-on-change";
 import { useRouter } from "next/navigation";
 import { type Workspace, type Provider } from "@platypus/schemas";
-import { clearFieldError, fetcher, joinUrl } from "@/lib/utils";
+import { fetcher, joinUrl } from "@/lib/utils";
+import { canSubmitForm, retractFieldError } from "@/lib/form-errors";
 import { writeEntity } from "@/lib/api-write";
 import { useBackendUrl } from "@/app/client-context";
 import { useAuth } from "@/components/auth-provider";
@@ -44,6 +45,18 @@ interface WorkspaceFormProps {
   orgId: string;
   workspaceId?: string;
 }
+
+// providerSelfManagement and mcpSelfManagement are deliberately excluded:
+// this form has no field that retracts an error keyed to them.
+const RETRACTABLE_FIELDS = [
+  "name",
+  "ownerId",
+  "context",
+  "taskModelProviderId",
+  "memoryExtractionProviderId",
+  "memoryEmbeddingProviderId",
+  "maxDailySummaries",
+] as const;
 
 const WorkspaceForm = ({
   classNames,
@@ -158,7 +171,7 @@ const WorkspaceForm = ({
 
     // Clear the error for this field, including any reported against a path
     // inside it.
-    setValidationErrors((prev) => clearFieldError(prev, id));
+    setValidationErrors((prev) => retractFieldError(prev, id));
 
     setFormData((prevData) => ({
       ...prevData,
@@ -276,6 +289,9 @@ const WorkspaceForm = ({
               <Select
                 value={formData.ownerId || undefined}
                 onValueChange={(value) => {
+                  setValidationErrors((prev) =>
+                    retractFieldError(prev, "ownerId"),
+                  );
                   setFormData((prevData) => ({ ...prevData, ownerId: value }));
                 }}
                 disabled={isSubmitting}
@@ -330,6 +346,9 @@ const WorkspaceForm = ({
               <Select
                 value={formData.taskModelProviderId || "none"}
                 onValueChange={(value) => {
+                  setValidationErrors((prev) =>
+                    retractFieldError(prev, "taskModelProviderId"),
+                  );
                   setFormData((prevData) => ({
                     ...prevData,
                     taskModelProviderId: value === "none" ? null : value,
@@ -367,6 +386,9 @@ const WorkspaceForm = ({
               <Select
                 value={formData.memoryExtractionProviderId || "none"}
                 onValueChange={(value) => {
+                  setValidationErrors((prev) =>
+                    retractFieldError(prev, "memoryExtractionProviderId"),
+                  );
                   setFormData((prevData) => ({
                     ...prevData,
                     memoryExtractionProviderId: value === "none" ? null : value,
@@ -408,6 +430,9 @@ const WorkspaceForm = ({
               <Select
                 value={formData.memoryEmbeddingProviderId || "none"}
                 onValueChange={(value) => {
+                  setValidationErrors((prev) =>
+                    retractFieldError(prev, "memoryEmbeddingProviderId"),
+                  );
                   setFormData((prevData) => ({
                     ...prevData,
                     memoryEmbeddingProviderId: value === "none" ? null : value,
@@ -457,6 +482,9 @@ const WorkspaceForm = ({
                 max={365}
                 value={formData.maxDailySummaries}
                 onChange={(e) => {
+                  setValidationErrors((prev) =>
+                    retractFieldError(prev, "maxDailySummaries"),
+                  );
                   setFormData((prevData) => ({
                     ...prevData,
                     maxDailySummaries: parseInt(e.target.value) || 90,
@@ -540,7 +568,9 @@ const WorkspaceForm = ({
       <div className="flex gap-2">
         <Button
           onClick={handleSubmit}
-          disabled={isSubmitting || Object.keys(validationErrors).length > 0}
+          disabled={
+            isSubmitting || !canSubmitForm(validationErrors, RETRACTABLE_FIELDS)
+          }
         >
           {workspaceId ? "Update" : "Save"}
         </Button>

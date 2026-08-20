@@ -16,7 +16,12 @@ import { useCallback, useState } from "react";
 import { useResetOnChange } from "@/hooks/use-reset-on-change";
 import { useRouter } from "next/navigation";
 import useSWR, { useSWRConfig } from "swr";
-import { fetcher, clearFieldError, joinUrl } from "@/lib/utils";
+import { fetcher, joinUrl } from "@/lib/utils";
+import {
+  canSubmitForm,
+  retractExactKeys,
+  retractFieldError,
+} from "@/lib/form-errors";
 import { writeEntity } from "@/lib/api-write";
 import { toast } from "sonner";
 import { useBackendUrl } from "@/app/client-context";
@@ -61,6 +66,14 @@ const EVENT_LABELS: Record<string, string> = {
   "card.updated": "Card updated",
   "card.deleted": "Card deleted",
 };
+
+const RETRACTABLE_FIELDS = [
+  "name",
+  "url",
+  "enabled",
+  "events",
+  "headers",
+] as const;
 
 const WebhookForm = ({ orgId, workspaceId, webhookId }: WebhookFormProps) => {
   const { user } = useAuth();
@@ -125,7 +138,7 @@ const WebhookForm = ({ orgId, workspaceId, webhookId }: WebhookFormProps) => {
   const clearValidationErrors = useCallback((...fieldNames: string[]) => {
     setValidationErrors((prev) =>
       fieldNames.reduce(
-        (errors, fieldName) => clearFieldError(errors, fieldName),
+        (errors, fieldName) => retractFieldError(errors, fieldName),
         prev,
       ),
     );
@@ -267,13 +280,7 @@ const WebhookForm = ({ orgId, workspaceId, webhookId }: WebhookFormProps) => {
   // stranded on other rows.
   const clearHeaderRowError = (index: number) => {
     const rowKey = headerRowErrorKey(headers[index].key);
-    setValidationErrors((prev) => {
-      if (!("headers" in prev) && !(rowKey in prev)) return prev;
-      const next = { ...prev };
-      delete next.headers;
-      delete next[rowKey];
-      return next;
-    });
+    setValidationErrors((prev) => retractExactKeys(prev, ["headers", rowKey]));
   };
 
   const removeHeader = (index: number) => {
@@ -514,7 +521,9 @@ const WebhookForm = ({ orgId, workspaceId, webhookId }: WebhookFormProps) => {
         <Button
           className="cursor-pointer"
           onClick={handleSubmit}
-          disabled={isSubmitting || Object.keys(validationErrors).length > 0}
+          disabled={
+            isSubmitting || !canSubmitForm(validationErrors, RETRACTABLE_FIELDS)
+          }
         >
           {isEditMode ? "Update" : "Save"}
         </Button>

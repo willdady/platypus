@@ -27,6 +27,10 @@ vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: pushSpy }),
 }));
 
+vi.mock("sonner", () => ({
+  toast: { error: vi.fn(), info: vi.fn(), success: vi.fn() },
+}));
+
 type AgentWithScope = Agent & { scope?: "organization" | "workspace" };
 
 // The `GET .../agents` list this component renders. Set per test.
@@ -53,6 +57,7 @@ vi.mock("swr", () => ({
 }));
 
 import { AgentsList } from "./agents-list";
+import { toast } from "sonner";
 
 // --- Helpers -----------------------------------------------------------------
 
@@ -146,6 +151,48 @@ describe("AgentsList delete", () => {
       "http://test/organizations/org1/workspaces/ws1/agents/a2",
       expect.objectContaining({ method: "DELETE" }),
     );
+  });
+
+  it("shows the backend's guidance, not an error, when delete is refused because the agent is Shared", async () => {
+    agents = [workspaceAgent];
+    const fetchMock = vi.fn().mockResolvedValue(
+      jsonResponse(403, {
+        error: "This agent is managed at the organization level",
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<AgentsList orgId="org1" workspaceId="ws1" />);
+    openMenu();
+    fireEvent.click(screen.getByText("Delete"));
+    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+
+    await waitFor(() =>
+      expect(toast.info).toHaveBeenCalledWith(
+        "This agent is managed at the organization level",
+      ),
+    );
+    expect(toast.error).not.toHaveBeenCalled();
+    expect(mutateSpy).not.toHaveBeenCalled();
+    expect(screen.queryByText("Delete Agent")).not.toBeInTheDocument();
+  });
+
+  it("surfaces the backend's reason inline when delete fails for another reason", async () => {
+    agents = [workspaceAgent];
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(jsonResponse(409, { error: "Agent is in use" }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<AgentsList orgId="org1" workspaceId="ws1" />);
+    openMenu();
+    fireEvent.click(screen.getByText("Delete"));
+    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+
+    await waitFor(() =>
+      expect(screen.getByText("Agent is in use")).toBeInTheDocument(),
+    );
+    expect(mutateSpy).not.toHaveBeenCalled();
   });
 });
 
