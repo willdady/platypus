@@ -28,6 +28,7 @@ import {
   SharedWithBadge,
 } from "@/components/manage-sharing";
 import Link from "next/link";
+import { scopedPath, writeEntity, type Scope } from "@/lib/api-write";
 
 // The Organization surface for Shared Agents (ADR-0007): Org Admins see and
 // manage every Shared Agent, attached or not. Promotion (from a Workspace) is
@@ -45,9 +46,14 @@ export const OrgAgentsList = ({ orgId }: { orgId: string }) => {
     count: number;
   } | null>(null);
 
+  // Resolved once per render and reused for the list's read and every write
+  // below, rather than re-deriving the Organization-vs-Workspace branch at
+  // each call site.
+  const scope: Scope = { orgId };
+
   const { data, isLoading, mutate } = useSWR<{ results: Agent[] }>(
     backendUrl && user
-      ? joinUrl(backendUrl, `/organizations/${orgId}/agents`)
+      ? joinUrl(backendUrl, scopedPath("agents", scope))
       : null,
     fetcher,
   );
@@ -65,7 +71,7 @@ export const OrgAgentsList = ({ orgId }: { orgId: string }) => {
       const res = await fetch(
         joinUrl(
           backendUrl,
-          `/organizations/${orgId}/attachments?resourceType=agent&resourceId=${agent.id}`,
+          `${scopedPath("attachments", scope)}?resourceType=agent&resourceId=${agent.id}`,
         ),
         { credentials: "include" },
       );
@@ -87,19 +93,14 @@ export const OrgAgentsList = ({ orgId }: { orgId: string }) => {
     setDeleting(true);
     setDeleteError(null);
     try {
-      const response = await fetch(
-        joinUrl(
-          backendUrl,
-          `/organizations/${orgId}/agents/${agentToDelete.id}`,
-        ),
-        { method: "DELETE", credentials: "include" },
-      );
-      if (response.ok) {
+      const outcome = await writeEntity(backendUrl, "agents", scope, {
+        id: agentToDelete.id,
+      });
+      if (outcome.outcome === "success") {
         await mutate();
         setAgentToDelete(null);
       } else {
-        const info = await response.json().catch(() => ({}));
-        setDeleteError(info.error || "Failed to delete agent.");
+        setDeleteError(outcome.message);
       }
     } finally {
       setDeleting(false);

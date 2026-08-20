@@ -31,6 +31,7 @@ import {
 } from "./ui/dialog";
 import { AttachSharedResourceDialog } from "./attach-shared-resource-dialog";
 import { useState } from "react";
+import { scopedPath, writeEntity, type Scope } from "@/lib/api-write";
 
 const ProvidersList = ({
   className,
@@ -52,14 +53,14 @@ const ProvidersList = ({
   const [detaching, setDetaching] = useState(false);
   const [detachError, setDetachError] = useState<string | null>(null);
 
+  // Resolved once per render and reused for the list's read and every write
+  // below, rather than re-deriving the Organization-vs-Workspace branch at
+  // each call site.
+  const scope: Scope = workspaceId ? { orgId, workspaceId } : { orgId };
+
   const fetchUrl =
     backendUrl && user
-      ? workspaceId
-        ? joinUrl(
-            backendUrl,
-            `/organizations/${orgId}/workspaces/${workspaceId}/providers`,
-          )
-        : joinUrl(backendUrl, `/organizations/${orgId}/providers`)
+      ? joinUrl(backendUrl, scopedPath("providers", scope))
       : null;
 
   const { data, error, isLoading, mutate } = useSWR<{
@@ -75,19 +76,19 @@ const ProvidersList = ({
     setDetaching(true);
     setDetachError(null);
     try {
-      const response = await fetch(
-        joinUrl(
-          backendUrl,
-          `/organizations/${orgId}/workspaces/${workspaceId}/attachments/provider/${providerId}`,
-        ),
-        { method: "DELETE", credentials: "include" },
+      const outcome = await writeEntity(
+        backendUrl,
+        "attachments/provider",
+        scope,
+        {
+          id: providerId,
+        },
       );
-      if (response.ok) {
+      if (outcome.outcome === "success") {
         setSelectedOrgProvider(null);
         await mutate();
       } else {
-        const info = await response.json().catch(() => ({}));
-        setDetachError(info.error || "Failed to detach provider.");
+        setDetachError(outcome.message);
       }
     } finally {
       setDetaching(false);

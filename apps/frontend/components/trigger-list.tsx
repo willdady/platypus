@@ -42,6 +42,7 @@ import { useAuth } from "@/components/auth-provider";
 import { describeSchedule } from "@/lib/cron-utils";
 import { toast } from "sonner";
 import { AgentAvatar } from "@/components/agent-avatar";
+import { scopedPath, writeEntity, type Scope } from "@/lib/api-write";
 
 export const TriggerList = ({
   orgId,
@@ -58,6 +59,11 @@ export const TriggerList = ({
   const [isToggling, setIsToggling] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
 
+  // Resolved once per render and reused for the list's reads and every write
+  // below, rather than re-deriving the Organization-vs-Workspace branch at
+  // each call site.
+  const scope: Scope = { orgId, workspaceId };
+
   const {
     data: triggersData,
     isLoading,
@@ -66,20 +72,14 @@ export const TriggerList = ({
     results: Trigger[];
   }>(
     backendUrl && user
-      ? joinUrl(
-          backendUrl,
-          `/organizations/${orgId}/workspaces/${workspaceId}/triggers`,
-        )
+      ? joinUrl(backendUrl, scopedPath("triggers", scope))
       : null,
     fetcher,
   );
 
   const { data: agentsData } = useSWR<{ results: Agent[] }>(
     backendUrl && user
-      ? joinUrl(
-          backendUrl,
-          `/organizations/${orgId}/workspaces/${workspaceId}/agents`,
-        )
+      ? joinUrl(backendUrl, scopedPath("agents", scope))
       : null,
     fetcher,
   );
@@ -102,18 +102,10 @@ export const TriggerList = ({
 
     setIsDeleting(true);
     try {
-      const response = await fetch(
-        joinUrl(
-          backendUrl,
-          `/organizations/${orgId}/workspaces/${workspaceId}/triggers/${triggerToDelete.id}`,
-        ),
-        {
-          method: "DELETE",
-          credentials: "include",
-        },
-      );
-
-      if (response.ok) {
+      const outcome = await writeEntity(backendUrl, "triggers", scope, {
+        id: triggerToDelete.id,
+      });
+      if (outcome.outcome === "success") {
         mutate();
         setDeleteDialogOpen(false);
         setTriggerToDelete(null);
@@ -131,24 +123,11 @@ export const TriggerList = ({
     setTriggerToToggle(trigger);
     setIsToggling(true);
     try {
-      const response = await fetch(
-        joinUrl(
-          backendUrl,
-          `/organizations/${orgId}/workspaces/${workspaceId}/triggers/${trigger.id}`,
-        ),
-        {
-          method: "PUT",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          credentials: "include",
-          body: JSON.stringify({
-            enabled: !trigger.enabled,
-          }),
-        },
-      );
-
-      if (response.ok) {
+      const outcome = await writeEntity(backendUrl, "triggers", scope, {
+        id: trigger.id,
+        data: { enabled: !trigger.enabled },
+      });
+      if (outcome.outcome === "success") {
         mutate();
       }
     } catch {
