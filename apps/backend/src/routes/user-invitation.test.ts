@@ -1,5 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { mockDb, mockSession, resetMockDb } from "../test-utils.ts";
+import { eq } from "drizzle-orm";
+import { invitation as invitationTable } from "../db/schema.ts";
 import app from "../server.ts";
 
 describe("User Invitation Routes", () => {
@@ -36,6 +38,34 @@ describe("User Invitation Routes", () => {
       const res = await app.request(baseUrl);
       expect(res.status).toBe(200);
       expect(await res.json()).toEqual({ results: mockInvitations });
+    });
+
+    it("lists an invitation normalized from a mixed-case invite email", async () => {
+      mockSession({ id: "u1", email: "User@Example.COM", role: "user" });
+
+      const futureDate = new Date();
+      futureDate.setDate(futureDate.getDate() + 7);
+
+      const normalizedInvitation = {
+        id: "inv-1",
+        email: "user@example.com",
+        status: "pending",
+        expiresAt: futureDate.toISOString(),
+        organizationName: "Org 1",
+        workspaceName: "WS 1",
+        invitedByName: "Admin",
+      };
+
+      mockDb.where.mockResolvedValueOnce([normalizedInvitation]);
+
+      const res = await app.request(baseUrl);
+
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({ results: [normalizedInvitation] });
+      expect(eq).toHaveBeenCalledWith(
+        invitationTable.email,
+        "user@example.com",
+      );
     });
   });
 
@@ -85,6 +115,42 @@ describe("User Invitation Routes", () => {
         ownerId: "u1",
         name: "Contractor Sandbox",
       });
+    });
+
+    it("accepts an invitation normalized from a mixed-case invite email", async () => {
+      mockSession({
+        id: "u1",
+        email: "User@Example.COM",
+        name: "Jane",
+        role: "user",
+      });
+
+      const futureDate = new Date();
+      futureDate.setDate(futureDate.getDate() + 7);
+
+      mockDb.limit.mockResolvedValueOnce([
+        {
+          id: "inv-1",
+          email: "user@example.com",
+          status: "pending",
+          expiresAt: futureDate.toISOString(),
+          organizationId: "org-1",
+          workspaceName: "Contractor Sandbox",
+        },
+      ]);
+      mockDb.limit.mockResolvedValueOnce([]);
+      mockDb.orderBy.mockResolvedValueOnce([]);
+
+      const res = await app.request(`${baseUrl}/inv-1/accept`, {
+        method: "POST",
+      });
+
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({ message: "Invitation accepted" });
+      expect(eq).toHaveBeenCalledWith(
+        invitationTable.email,
+        "user@example.com",
+      );
     });
 
     // ADR-0008: a blueprint-less / unnamed invite yields an empty workspace
@@ -381,6 +447,25 @@ describe("User Invitation Routes", () => {
 
       expect(res.status).toBe(200);
       expect(await res.json()).toEqual({ message: "Invitation declined" });
+    });
+
+    it("declines an invitation normalized from a mixed-case invite email", async () => {
+      mockSession({ id: "u1", email: "User@Example.COM", role: "user" });
+
+      mockDb.returning.mockResolvedValueOnce([
+        { id: "inv-1", email: "user@example.com", status: "declined" },
+      ]);
+
+      const res = await app.request(`${baseUrl}/inv-1/decline`, {
+        method: "POST",
+      });
+
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({ message: "Invitation declined" });
+      expect(eq).toHaveBeenCalledWith(
+        invitationTable.email,
+        "user@example.com",
+      );
     });
   });
 });

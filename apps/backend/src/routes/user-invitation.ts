@@ -39,6 +39,7 @@ const defaultWorkspaceName = (name: string): string => {
 /** List pending invitations for the current user */
 userInvitation.get("/", requireAuth, async (c) => {
   const user = c.get("user")!;
+  const userEmail = user.email.toLowerCase();
   const now = new Date();
 
   const results = await db
@@ -62,7 +63,7 @@ userInvitation.get("/", requireAuth, async (c) => {
     .innerJoin(userTable, eq(invitationTable.invitedBy, userTable.id))
     .where(
       and(
-        eq(invitationTable.email, user.email),
+        eq(invitationTable.email, userEmail),
         eq(invitationTable.status, "pending"),
       ),
     );
@@ -75,6 +76,7 @@ userInvitation.get("/", requireAuth, async (c) => {
 /** Accept an invitation */
 userInvitation.post("/:invitationId/accept", requireAuth, async (c) => {
   const user = c.get("user")!;
+  const userEmail = user.email.toLowerCase();
   const invitationId = c.req.param("invitationId");
   const now = new Date();
 
@@ -84,7 +86,7 @@ userInvitation.post("/:invitationId/accept", requireAuth, async (c) => {
     .where(
       and(
         eq(invitationTable.id, invitationId),
-        eq(invitationTable.email, user.email),
+        eq(invitationTable.email, userEmail),
         eq(invitationTable.status, "pending"),
       ),
     )
@@ -166,6 +168,7 @@ userInvitation.post("/:invitationId/accept", requireAuth, async (c) => {
 /** Decline an invitation */
 userInvitation.post("/:invitationId/decline", requireAuth, async (c) => {
   const user = c.get("user")!;
+  const userEmail = user.email.toLowerCase();
   const invitationId = c.req.param("invitationId");
 
   const result = await db
@@ -174,7 +177,7 @@ userInvitation.post("/:invitationId/decline", requireAuth, async (c) => {
     .where(
       and(
         eq(invitationTable.id, invitationId),
-        eq(invitationTable.email, user.email),
+        eq(invitationTable.email, userEmail),
         eq(invitationTable.status, "pending"),
       ),
     )

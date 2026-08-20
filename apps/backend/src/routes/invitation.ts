@@ -31,8 +31,9 @@ invitation.post(
     const { orgId } = orgScopeOf(c);
     const data = c.req.valid("json");
     const user = c.get("user")!;
+    const normalizedEmail = data.email.toLowerCase();
 
-    if (data.email.toLowerCase() === user.email.toLowerCase()) {
+    if (normalizedEmail === user.email.toLowerCase()) {
       return c.json({ error: "You cannot invite yourself" }, 400);
     }
 
@@ -73,7 +74,7 @@ invitation.post(
           .insert(invitationTable)
           .values({
             id: invitationId,
-            email: data.email,
+            email: normalizedEmail,
             organizationId: orgId,
             invitedBy: user.id,
             status: "pending",
