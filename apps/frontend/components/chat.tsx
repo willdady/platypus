@@ -35,7 +35,7 @@ import {
 } from "@platypus/schemas";
 import { type PlatypusUIMessage } from "@platypus/backend/src/types";
 import { joinUrl } from "@/lib/utils";
-import { writeEntity } from "@/lib/api-write";
+import { writeAt, scopedPath } from "@/lib/api-write";
 import { useScopedSWR } from "@/hooks/use-scoped-swr";
 import { useResetOnChange } from "@/hooks/use-reset-on-change";
 import { useChatSettings } from "@/hooks/use-chat-settings";
@@ -430,13 +430,17 @@ export const Chat = ({
       // idempotent no-ops, but silently swallowing a real failure (e.g. a
       // network error) would leave them thinking the run was cancelled
       // when it wasn't.
-      void writeEntity(backendUrl || "", `chat/${chatId}/cancel`, scope).then(
-        (outcome) => {
-          if (outcome.outcome !== "success") {
-            toast.error(outcome.message);
-          }
-        },
-      );
+      void writeAt(
+        joinUrl(
+          backendUrl || "",
+          `${scopedPath("chat", scope)}/${chatId}/cancel`,
+        ),
+        { method: "POST" },
+      ).then((outcome) => {
+        if (outcome.outcome !== "success") {
+          toast.error(outcome.message);
+        }
+      });
       return stop();
     }
 

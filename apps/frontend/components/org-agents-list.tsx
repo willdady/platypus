@@ -19,8 +19,8 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Bot, EllipsisVertical, Pencil, Share2, Trash2 } from "lucide-react";
 import { type Agent } from "@platypus/schemas";
-import useSWR from "swr";
-import { fetcher, joinUrl } from "@/lib/utils";
+import { joinUrl } from "@/lib/utils";
+import { useScopedSWR } from "@/hooks/use-scoped-swr";
 import { useBackendUrl } from "@/app/client-context";
 import { useAuth } from "@/components/auth-provider";
 import { canManageOrgSharedResource } from "@/lib/authorization";
@@ -36,7 +36,7 @@ import { scopedPath, writeEntity, type Scope } from "@/lib/api-write";
 // the way a Shared Agent is created; it is then edited, shared, and deleted
 // here on the Organization surface — in Workspaces it is locked.
 export const OrgAgentsList = ({ orgId }: { orgId: string }) => {
-  const { user, actor } = useAuth();
+  const { actor } = useAuth();
   const canManage = canManageOrgSharedResource(actor).allowed;
   const backendUrl = useBackendUrl();
   const [agentToDelete, setAgentToDelete] = useState<Agent | null>(null);
@@ -53,11 +53,9 @@ export const OrgAgentsList = ({ orgId }: { orgId: string }) => {
   // each call site.
   const scope: Scope = { orgId };
 
-  const { data, isLoading, mutate } = useSWR<{ results: Agent[] }>(
-    backendUrl && user
-      ? joinUrl(backendUrl, scopedPath("agents", scope))
-      : null,
-    fetcher,
+  const { data, isLoading, mutate } = useScopedSWR<{ results: Agent[] }>(
+    "agents",
+    scope,
   );
 
   const agents = [...(data?.results || [])].sort((a, b) =>

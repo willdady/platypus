@@ -34,15 +34,13 @@ import {
   type CronTriggerConfig,
   type EventTriggerConfig,
 } from "@platypus/schemas";
-import useSWR from "swr";
-import { fetcher, joinUrl } from "@/lib/utils";
 import Link from "next/link";
 import { useBackendUrl } from "@/app/client-context";
-import { useAuth } from "@/components/auth-provider";
 import { describeSchedule } from "@/lib/cron-utils";
 import { toast } from "sonner";
 import { AgentAvatar } from "@/components/agent-avatar";
-import { scopedPath, writeEntity, type Scope } from "@/lib/api-write";
+import { writeEntity, type Scope } from "@/lib/api-write";
+import { useScopedSWR } from "@/hooks/use-scoped-swr";
 
 export const TriggerList = ({
   orgId,
@@ -51,7 +49,6 @@ export const TriggerList = ({
   orgId: string;
   workspaceId: string;
 }) => {
-  const { user } = useAuth();
   const backendUrl = useBackendUrl();
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [triggerToDelete, setTriggerToDelete] = useState<Trigger | null>(null);
@@ -68,20 +65,13 @@ export const TriggerList = ({
     data: triggersData,
     isLoading,
     mutate,
-  } = useSWR<{
+  } = useScopedSWR<{
     results: Trigger[];
-  }>(
-    backendUrl && user
-      ? joinUrl(backendUrl, scopedPath("triggers", scope))
-      : null,
-    fetcher,
-  );
+  }>("triggers", scope);
 
-  const { data: agentsData } = useSWR<{ results: Agent[] }>(
-    backendUrl && user
-      ? joinUrl(backendUrl, scopedPath("agents", scope))
-      : null,
-    fetcher,
+  const { data: agentsData } = useScopedSWR<{ results: Agent[] }>(
+    "agents",
+    scope,
   );
 
   const agentsById = Object.fromEntries(

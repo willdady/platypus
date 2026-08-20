@@ -56,8 +56,8 @@ import {
   type ToolSet,
   type Skill,
 } from "@platypus/schemas";
-import useSWR from "swr";
-import { fetcher, joinUrl } from "@/lib/utils";
+import { joinUrl } from "@/lib/utils";
+import { useScopedSWR } from "@/hooks/use-scoped-swr";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useBackendUrl } from "@/app/client-context";
@@ -92,7 +92,7 @@ export const AgentsList = ({
   orgId: string;
   workspaceId: string;
 }) => {
-  const { user, actor } = useAuth();
+  const { actor } = useAuth();
   const backendUrl = useBackendUrl();
   const router = useRouter();
   const [cloneDialogOpen, setCloneDialogOpen] = useState(false);
@@ -124,39 +124,21 @@ export const AgentsList = ({
     data: agentsData,
     isLoading: isLoadingAgents,
     mutate,
-  } = useSWR<{
+  } = useScopedSWR<{
     results: AgentWithScope[];
-  }>(
-    backendUrl && user
-      ? joinUrl(backendUrl, scopedPath("agents", scope))
-      : null,
-    fetcher,
-  );
+  }>("agents", scope);
 
-  const { data: providersData, isLoading: isLoadingProviders } = useSWR<{
+  const { data: providersData, isLoading: isLoadingProviders } = useScopedSWR<{
     results: Provider[];
-  }>(
-    backendUrl && user
-      ? joinUrl(backendUrl, scopedPath("providers", scope))
-      : null,
-    fetcher,
-  );
+  }>("providers", scope);
 
-  const { data: toolSetsData } = useSWR<{
+  const { data: toolSetsData } = useScopedSWR<{
     results: ToolSet[];
-  }>(
-    backendUrl && user ? joinUrl(backendUrl, scopedPath("tools", scope)) : null,
-    fetcher,
-  );
+  }>("tools", scope);
 
-  const { data: skillsData } = useSWR<{
+  const { data: skillsData } = useScopedSWR<{
     results: Skill[];
-  }>(
-    backendUrl && user
-      ? joinUrl(backendUrl, scopedPath("skills", scope))
-      : null,
-    fetcher,
-  );
+  }>("skills", scope);
 
   const agents = [...(agentsData?.results || [])].sort((a, b) =>
     a.name.localeCompare(b.name),

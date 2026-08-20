@@ -42,7 +42,7 @@ import type {
   KanbanColumn,
 } from "@platypus/schemas";
 import { cn, fetcher, joinUrl } from "@/lib/utils";
-import { writeEntity, type Scope } from "@/lib/api-write";
+import { writeEntity, writeAt, type Scope } from "@/lib/api-write";
 import { useBackendUrl } from "@/app/client-context";
 import { useAuth } from "@/components/auth-provider";
 import { KanbanColumnComponent } from "@/components/kanban-column";
@@ -417,12 +417,10 @@ export function KanbanBoard({
         if (oldIndex !== newIndex && newIndex !== -1) {
           const reordered = arrayMove(cols, oldIndex, newIndex);
           setLocalColumns(reordered);
-          const outcome = await writeEntity(
-            backendUrl,
-            `${boardPath}/columns`,
-            scope,
-            { id: "reorder", data: { columnIds: reordered.map((c) => c.id) } },
-          );
+          const outcome = await writeAt(joinUrl(baseUrl, "columns/reorder"), {
+            method: "PUT",
+            data: { columnIds: reordered.map((c) => c.id) },
+          });
           if (outcome.outcome === "success") {
             await mutate();
           } else {
@@ -542,7 +540,7 @@ export function KanbanBoard({
         setLocalColumns(null);
       }
     },
-    [backendUrl, boardPath, scope, mutate, setLocalColumns],
+    [backendUrl, baseUrl, boardPath, scope, mutate, setLocalColumns],
   );
 
   const handleAddColumn = useCallback(() => {
@@ -678,12 +676,10 @@ export function KanbanBoard({
       if (newIndex < 0 || newIndex >= currentColumns.length) return;
       const reordered = arrayMove(currentColumns, index, newIndex);
       setLocalColumns(reordered);
-      const outcome = await writeEntity(
-        backendUrl,
-        `${boardPath}/columns`,
-        scope,
-        { id: "reorder", data: { columnIds: reordered.map((c) => c.id) } },
-      );
+      const outcome = await writeAt(joinUrl(baseUrl, "columns/reorder"), {
+        method: "PUT",
+        data: { columnIds: reordered.map((c) => c.id) },
+      });
       if (outcome.outcome === "success") {
         await mutate();
       } else {
@@ -691,7 +687,7 @@ export function KanbanBoard({
         setLocalColumns(null);
       }
     },
-    [data?.columns, backendUrl, boardPath, scope, mutate, setLocalColumns],
+    [data?.columns, baseUrl, mutate, setLocalColumns],
   );
 
   const handleCardSave = useCallback(

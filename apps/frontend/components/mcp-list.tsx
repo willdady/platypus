@@ -2,8 +2,8 @@
 
 import { MCP } from "@platypus/schemas";
 import { Item, ItemActions, ItemContent, ItemTitle } from "./ui/item";
-import useSWR from "swr";
-import { cn, fetcher, joinUrl } from "../lib/utils";
+import { cn } from "../lib/utils";
+import { useScopedSWR } from "@/hooks/use-scoped-swr";
 import { useAuth } from "@/components/auth-provider";
 import {
   canConfigureWorkspaceResource,
@@ -31,7 +31,7 @@ import {
 } from "./ui/dialog";
 import { AttachSharedResourceDialog } from "./attach-shared-resource-dialog";
 import { useState } from "react";
-import { scopedPath, writeEntity, type Scope } from "@/lib/api-write";
+import { writeEntity, type Scope } from "@/lib/api-write";
 
 const McpList = ({
   className,
@@ -45,7 +45,7 @@ const McpList = ({
   // Add scope to the MCP type for this component
   type McpWithScope = MCP & { scope?: "organization" | "workspace" };
 
-  const { user, actor, workspaceDelegation } = useAuth();
+  const { actor, workspaceDelegation } = useAuth();
   const backendUrl = useBackendUrl();
   const [selectedOrgMcp, setSelectedOrgMcp] = useState<McpWithScope | null>(
     null,
@@ -59,12 +59,9 @@ const McpList = ({
   // each call site.
   const scope: Scope = workspaceId ? { orgId, workspaceId } : { orgId };
 
-  const fetchUrl =
-    backendUrl && user ? joinUrl(backendUrl, scopedPath("mcps", scope)) : null;
-
-  const { data, error, isLoading, mutate } = useSWR<{
+  const { data, error, isLoading, mutate } = useScopedSWR<{
     results: McpWithScope[];
-  }>(fetchUrl, fetcher);
+  }>("mcps", scope);
 
   // Attach, detach, and Promote a Shared resource are the same rule
   // (ADR-0007 / #154), asked of the auth module instead of re-derived here.
