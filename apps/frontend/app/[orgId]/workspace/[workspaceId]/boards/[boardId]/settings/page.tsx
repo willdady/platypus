@@ -1,15 +1,17 @@
 "use client";
 
 import { use, useState } from "react";
-import useSWR from "swr";
+import useSWR, { useSWRConfig } from "swr";
 import { useRouter } from "next/navigation";
 import type { KanbanBoardState } from "@platypus/schemas";
 import { fetcher, joinUrl } from "@/lib/utils";
+import { writeEntity } from "@/lib/api-write";
 import { useBackendUrl } from "@/app/client-context";
 import { useAuth } from "@/components/auth-provider";
 import { BackButton } from "@/components/back-button";
 import { KanbanBoardForm } from "@/components/kanban-board-form";
 import { DeleteBoardDialog } from "@/components/delete-board-dialog";
+import { toast } from "sonner";
 
 const BoardSettingsPage = ({
   params,
@@ -20,6 +22,7 @@ const BoardSettingsPage = ({
   const { user } = useAuth();
   const backendUrl = useBackendUrl();
   const router = useRouter();
+  const { mutate: globalMutate } = useSWRConfig();
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
 
@@ -35,11 +38,18 @@ const BoardSettingsPage = ({
 
   const handleDeleteConfirm = async () => {
     setIsDeleting(true);
-    try {
-      await fetch(baseUrl, { method: "DELETE", credentials: "include" });
+    const result = await writeEntity(
+      backendUrl,
+      "boards",
+      { orgId, workspaceId },
+      { id: boardId },
+    );
+
+    if (result.outcome === "success") {
+      result.revalidateKeys.forEach((key) => globalMutate(key));
       router.push(`/${orgId}/workspace/${workspaceId}`);
-    } catch (err) {
-      console.error("Failed to delete board:", err);
+    } else {
+      toast.error(result.message);
       setIsDeleting(false);
       setIsDeleteDialogOpen(false);
     }

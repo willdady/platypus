@@ -10,7 +10,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { Field, FieldLabel, FieldError } from "@/components/ui/field";
 import { useBackendUrl } from "@/app/client-context";
-import { joinUrl, parseValidationErrors } from "@/lib/utils";
+import { joinUrl } from "@/lib/utils";
+import { writeEntity } from "@/lib/api-write";
 import { KANBAN_LABEL_COLORS, type KanbanLabel } from "@platypus/schemas";
 import { toast } from "sonner";
 
@@ -74,50 +75,50 @@ export function KanbanBoardForm({
     setIsSubmitting(true);
     setValidationErrors({});
 
-    const url = isEditing
-      ? joinUrl(
-          backendUrl,
-          `/organizations/${orgId}/workspaces/${workspaceId}/boards/${board.id}`,
-        )
-      : joinUrl(
-          backendUrl,
-          `/organizations/${orgId}/workspaces/${workspaceId}/boards`,
-        );
+    const result = await writeEntity<{ id: string }>(
+      backendUrl,
+      "boards",
+      { orgId, workspaceId },
+      {
+        id: board?.id,
+        data: { name, description: description || null, labels },
+      },
+    );
 
-    try {
-      const response = await fetch(url, {
-        method: isEditing ? "PUT" : "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name,
-          description: description || null,
-          labels,
-        }),
-        credentials: "include",
-      });
-
-      if (response.ok) {
+    switch (result.outcome) {
+      case "success":
+        result.revalidateKeys.forEach((key) => mutate(key));
         if (isEditing) {
           toast.success("Board updated");
           onSuccess?.();
         } else {
-          const data = await response.json();
           const stateUrl = joinUrl(
             backendUrl,
-            `/organizations/${orgId}/workspaces/${workspaceId}/boards/${data.id}/state`,
+            `/organizations/${orgId}/workspaces/${workspaceId}/boards/${result.data.id}/state`,
           );
-          await mutate(stateUrl, { board: data, columns: [] }, false);
-          router.push(`/${orgId}/workspace/${workspaceId}/boards/${data.id}`);
+          await mutate(stateUrl, { board: result.data, columns: [] }, false);
+          router.push(
+            `/${orgId}/workspace/${workspaceId}/boards/${result.data.id}`,
+          );
         }
-      } else {
-        const errorData = await response.json();
-        setValidationErrors(parseValidationErrors(errorData));
-      }
-    } catch (err) {
-      console.error("Failed to save board:", err);
-    } finally {
-      setIsSubmitting(false);
+        break;
+      case "invalid":
+        setValidationErrors(result.fieldErrors);
+        if (Object.keys(result.fieldErrors).length === 0) {
+          toast.error(result.message);
+        }
+        break;
+      case "conflict":
+        setValidationErrors({ name: result.message });
+        break;
+      case "locked":
+      case "notFound":
+      case "error":
+        toast.error(result.message);
+        break;
     }
+
+    setIsSubmitting(false);
   };
 
   return (

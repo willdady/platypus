@@ -13,6 +13,7 @@ import { requireAuth } from "../middleware/authentication.ts";
 import { orgScopeOf, requireOrgAccess } from "../middleware/authorization.ts";
 import type { Variables } from "../server.ts";
 import { logger } from "../logger.ts";
+import { ConflictError } from "../errors.ts";
 
 const invitation = new Hono<{ Variables: Variables }>();
 
@@ -111,12 +112,8 @@ invitation.post(
         !!e.detail?.includes("already exists");
 
       if (isDuplicate) {
-        return c.json(
-          {
-            message:
-              "A pending invitation already exists for this user and organization",
-          },
-          409,
+        throw new ConflictError(
+          "A pending invitation already exists for this user and organization",
         );
       }
       logger.error({ error }, "Error creating invitation");

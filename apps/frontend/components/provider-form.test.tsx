@@ -55,6 +55,7 @@ vi.mock("swr", () => ({
     }
     return { data: loadedProvider, isLoading: false, mutate: vi.fn() };
   },
+  useSWRConfig: () => ({ mutate: vi.fn() }),
 }));
 
 import { ProviderForm } from "./provider-form";

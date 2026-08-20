@@ -57,9 +57,10 @@ import { AgentForm } from "./agent-form";
 
 // --- Helpers -----------------------------------------------------------------
 
-function mockFailedSave(error: unknown) {
+function mockFailedSave(error: unknown, status = 400) {
   return vi.fn().mockResolvedValue({
     ok: false,
+    status,
     json: async () => ({ error }),
   } as unknown as Response);
 }

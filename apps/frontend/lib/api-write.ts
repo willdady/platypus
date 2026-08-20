@@ -2,11 +2,13 @@ import { joinUrl, parseValidationErrors } from "./utils";
 
 /**
  * A write's target scope (ADR-0007): an Organization-level (Shared) resource,
- * or a resource inside one Workspace. Presence of `workspaceId` is what
- * distinguishes the two — there is deliberately no separate discriminant to
- * get out of sync with it.
+ * a resource inside one Workspace, or — when `orgId` itself is omitted — the
+ * root `/organizations` collection, for writes to an Organization itself.
+ * Presence of `workspaceId` is what distinguishes the scoped two — there is
+ * deliberately no separate discriminant to get out of sync with it.
  */
 export type Scope =
+  | { readonly orgId?: undefined; readonly workspaceId?: undefined }
   | { readonly orgId: string; readonly workspaceId?: undefined }
   | { readonly orgId: string; readonly workspaceId: string };
 
@@ -57,6 +59,7 @@ const DEFAULT_MESSAGES = {
 } as const;
 
 function scopedPath(entity: string, scope: Scope): string {
+  if (!scope.orgId) return `/${entity}`;
   return scope.workspaceId
     ? `/organizations/${scope.orgId}/workspaces/${scope.workspaceId}/${entity}`
     : `/organizations/${scope.orgId}/${entity}`;

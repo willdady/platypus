@@ -30,15 +30,17 @@ vi.mock("sonner", () => ({
 vi.mock("swr", () => ({
   __esModule: true,
   default: () => ({ data: undefined, isLoading: false, mutate: vi.fn() }),
+  useSWRConfig: () => ({ mutate: vi.fn() }),
 }));
 
 import { WebhookForm } from "./webhook-form";
 
 // --- Helpers -----------------------------------------------------------------
 
-function mockFailedSave(error: unknown) {
+function mockFailedSave(error: unknown, status = 400) {
   return vi.fn().mockResolvedValue({
     ok: false,
+    status,
     json: async () => ({ error }),
   } as unknown as Response);
 }

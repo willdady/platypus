@@ -13,8 +13,9 @@ import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { useState } from "react";
 import Link from "next/link";
-import useSWR from "swr";
-import { fetcher, parseValidationErrors, joinUrl } from "@/lib/utils";
+import useSWR, { useSWRConfig } from "swr";
+import { fetcher, joinUrl } from "@/lib/utils";
+import { writeEntity } from "@/lib/api-write";
 import { useBackendUrl } from "@/app/client-context";
 import { useAuth } from "@/components/auth-provider";
 import type { Blueprint } from "@platypus/schemas";
@@ -29,6 +30,7 @@ interface InvitationFormProps {
 export function InvitationForm({ orgId, onSuccess }: InvitationFormProps) {
   const backendUrl = useBackendUrl();
   const { user } = useAuth();
+  const { mutate: globalMutate } = useSWRConfig();
 
   const [email, setEmail] = useState("");
   const [workspaceName, setWorkspaceName] = useState("");
@@ -71,52 +73,52 @@ export function InvitationForm({ orgId, onSuccess }: InvitationFormProps) {
     setIsSubmitting(true);
     setValidationErrors({});
 
-    try {
-      const response = await fetch(
-        joinUrl(backendUrl, `/organizations/${orgId}/invitations`),
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            email,
-            // Optional; the workspace provisioned on accept defaults to
-            // "<member name>'s Workspace" when blank (ADR-0008).
-            ...(workspaceName.trim()
-              ? { workspaceName: workspaceName.trim() }
-              : {}),
-            // The ordered set of blueprints applied on accept (ADR-0009).
-            ...(blueprintIds.length ? { blueprintIds } : {}),
-          }),
-          credentials: "include",
+    const result = await writeEntity(
+      backendUrl,
+      "invitations",
+      { orgId },
+      {
+        data: {
+          email,
+          // Optional; the workspace provisioned on accept defaults to
+          // "<member name>'s Workspace" when blank (ADR-0008).
+          ...(workspaceName.trim()
+            ? { workspaceName: workspaceName.trim() }
+            : {}),
+          // The ordered set of blueprints applied on accept (ADR-0009).
+          ...(blueprintIds.length ? { blueprintIds } : {}),
         },
-      );
+      },
+    );
 
-      if (response.ok) {
+    switch (result.outcome) {
+      case "success":
+        result.revalidateKeys.forEach((key) => globalMutate(key));
         toast.success("Invitation created");
         setEmail("");
         setWorkspaceName("");
         setBlueprintIds([]);
         onSuccess?.();
-      } else {
-        const errorData = await response.json();
-        const errors = parseValidationErrors(errorData);
-        setValidationErrors(errors);
-
-        if (errorData.message) {
-          toast.error(errorData.message);
-        } else if (errorData.error) {
-          toast.error(errorData.error);
-        } else if (Object.keys(errors).length > 0) {
-          toast.error("Please fix the errors in the form");
-        } else {
-          toast.error("Failed to send invitation");
-        }
-      }
-    } catch {
-      toast.error("Error sending invitation");
-    } finally {
-      setIsSubmitting(false);
+        break;
+      case "invalid":
+        setValidationErrors(result.fieldErrors);
+        toast.error(
+          Object.keys(result.fieldErrors).length > 0
+            ? "Please fix the errors in the form"
+            : result.message,
+        );
+        break;
+      case "conflict":
+        setValidationErrors({ email: result.message });
+        break;
+      case "locked":
+      case "notFound":
+      case "error":
+        toast.error(result.message);
+        break;
     }
+
+    setIsSubmitting(false);
   };
 
   return (

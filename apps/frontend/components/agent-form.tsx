@@ -49,12 +49,8 @@ import {
   type Skill,
 } from "@platypus/schemas";
 import useSWR, { useSWRConfig } from "swr";
-import {
-  clearFieldError,
-  fetcher,
-  parseValidationErrors,
-  joinUrl,
-} from "@/lib/utils";
+import { clearFieldError, fetcher, joinUrl } from "@/lib/utils";
+import { writeEntity } from "@/lib/api-write";
 import { findModelOption, getModelOptions } from "@/lib/model-config";
 import { resolveModel } from "@/lib/resolve-model";
 import {
@@ -361,61 +357,60 @@ const AgentForm = ({
         subAgentIds: formData.subAgentIds,
       };
 
-      const url = agentId
-        ? joinUrl(backendUrl, `${agentsBase}/${agentId}`)
-        : joinUrl(backendUrl, agentsBase);
-
-      const method = agentId ? "PUT" : "POST";
-
-      const response = await fetch(url, {
-        method,
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(payload),
-        credentials: "include",
+      const scope = orgScoped ? { orgId } : { orgId, workspaceId };
+      const result = await writeEntity<Agent>(backendUrl, "agents", scope, {
+        id: agentId,
+        data: payload,
       });
 
-      if (response.ok) {
-        const savedAgent = await response.json();
-        const savedAgentId = savedAgent.id || agentId;
+      switch (result.outcome) {
+        case "success": {
+          const savedAgentId = result.data.id || agentId;
 
-        if (avatarDeleted && agentId) {
-          await fetch(
-            joinUrl(backendUrl, `${agentsBase}/${savedAgentId}/avatar`),
-            {
-              method: "DELETE",
-              credentials: "include",
-            },
-          );
-        } else if (avatarFile) {
-          const avatarFormData = new FormData();
-          avatarFormData.append("file", avatarFile);
-          await fetch(
-            joinUrl(backendUrl, `${agentsBase}/${savedAgentId}/avatar`),
-            {
-              method: "POST",
-              body: avatarFormData,
-              credentials: "include",
-            },
-          );
+          if (avatarDeleted && agentId) {
+            await fetch(
+              joinUrl(backendUrl, `${agentsBase}/${savedAgentId}/avatar`),
+              {
+                method: "DELETE",
+                credentials: "include",
+              },
+            );
+          } else if (avatarFile) {
+            const avatarFormData = new FormData();
+            avatarFormData.append("file", avatarFile);
+            await fetch(
+              joinUrl(backendUrl, `${agentsBase}/${savedAgentId}/avatar`),
+              {
+                method: "POST",
+                body: avatarFormData,
+                credentials: "include",
+              },
+            );
+          }
+
+          result.revalidateKeys.forEach((key) => mutate(key));
+          router.push(doneHref);
+          break;
         }
-
-        await mutate(joinUrl(backendUrl, agentsBase));
-        router.push(doneHref);
-      } else {
-        // Parse standardschema.dev validation errors
-        const errorData = await response.json();
-        const errors = parseValidationErrors(errorData);
-        setValidationErrors(errors);
-        // Surface a user-visible signal even when the failure maps to a field
-        // without an inline error, so a rejected save is never silent (#331).
-        toast.error(
-          Object.keys(errors).length > 0
-            ? "Please fix the highlighted fields and try again"
-            : "Failed to save agent",
-        );
-        console.error("Failed to save agent");
+        case "invalid":
+          setValidationErrors(result.fieldErrors);
+          // Surface a user-visible signal even when the failure maps to a
+          // field without an inline error, so a rejected save is never
+          // silent (#331).
+          toast.error(
+            Object.keys(result.fieldErrors).length > 0
+              ? "Please fix the highlighted fields and try again"
+              : "Failed to save agent",
+          );
+          break;
+        case "conflict":
+          setValidationErrors({ name: result.message });
+          break;
+        case "locked":
+        case "notFound":
+        case "error":
+          toast.error(result.message);
+          break;
       }
     } catch (error) {
       console.error("Error saving agent:", error);
@@ -429,26 +424,16 @@ const AgentForm = ({
     if (!agentId) return;
 
     setIsDeleting(true);
-    try {
-      const response = await fetch(
-        joinUrl(backendUrl, `${agentsBase}/${agentId}`),
-        {
-          method: "DELETE",
-          credentials: "include",
-        },
-      );
+    const scope = orgScoped ? { orgId } : { orgId, workspaceId };
+    const result = await writeEntity(backendUrl, "agents", scope, {
+      id: agentId,
+    });
 
-      if (response.ok) {
-        router.push(doneHref);
-      } else {
-        console.error("Failed to delete agent");
-        toast.error("Failed to delete agent");
-        setIsDeleting(false);
-        setIsDeleteDialogOpen(false);
-      }
-    } catch (error) {
-      console.error("Error deleting agent:", error);
-      toast.error("Failed to delete agent");
+    if (result.outcome === "success") {
+      result.revalidateKeys.forEach((key) => mutate(key));
+      router.push(doneHref);
+    } else {
+      toast.error(result.message);
       setIsDeleting(false);
       setIsDeleteDialogOpen(false);
     }

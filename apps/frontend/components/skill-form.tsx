@@ -19,13 +19,10 @@ import { useResetOnChange } from "@/hooks/use-reset-on-change";
 import { useRouter } from "next/navigation";
 import { Trash2 } from "lucide-react";
 import { type Skill, type Agent } from "@platypus/schemas";
-import useSWR from "swr";
-import {
-  clearFieldError,
-  fetcher,
-  parseValidationErrors,
-  joinUrl,
-} from "@/lib/utils";
+import useSWR, { useSWRConfig } from "swr";
+import { clearFieldError, fetcher, joinUrl } from "@/lib/utils";
+import { writeEntity } from "@/lib/api-write";
+import { toast } from "sonner";
 import { useBackendUrl } from "@/app/client-context";
 import { useAuth } from "@/components/auth-provider";
 import { AgentAvatar } from "@/components/agent-avatar";
@@ -49,6 +46,7 @@ const SkillForm = ({
 
   const { user } = useAuth();
   const backendUrl = useBackendUrl();
+  const { mutate: globalMutate } = useSWRConfig();
 
   // The scope determines the backend collection and where we return after save.
   const collectionUrl = workspaceId
@@ -134,50 +132,45 @@ const SkillForm = ({
   const handleSubmit = async () => {
     setIsSubmitting(true);
     setValidationErrors({});
-    try {
-      const payload = {
-        name: formData.name,
-        description: formData.description,
-        body: formData.body,
-        // Scope and agent associations only apply to the workspace surface.
-        ...(workspaceId
-          ? { workspaceId, agentIds: selectedAgentIds }
-          : { organizationId: orgId }),
-      };
 
-      const url = skillId
-        ? joinUrl(backendUrl, `${collectionUrl}/${skillId}`)
-        : joinUrl(backendUrl, collectionUrl);
+    const payload = {
+      name: formData.name,
+      description: formData.description,
+      body: formData.body,
+      // Scope and agent associations only apply to the workspace surface.
+      ...(workspaceId
+        ? { workspaceId, agentIds: selectedAgentIds }
+        : { organizationId: orgId }),
+    };
 
-      const method = skillId ? "PUT" : "POST";
+    const scope = workspaceId ? { orgId, workspaceId } : { orgId };
+    const result = await writeEntity(backendUrl, "skills", scope, {
+      id: skillId,
+      data: payload,
+    });
 
-      const response = await fetch(url, {
-        method,
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(payload),
-        credentials: "include",
-      });
-
-      if (response.ok) {
+    switch (result.outcome) {
+      case "success":
+        result.revalidateKeys.forEach((key) => globalMutate(key));
         router.push(returnPath);
-      } else {
-        const errorData = await response.json();
-        if (response.status === 409) {
-          setValidationErrors({
-            name: errorData.error || errorData.message,
-          });
-        } else {
-          setValidationErrors(parseValidationErrors(errorData));
+        break;
+      case "invalid":
+        setValidationErrors(result.fieldErrors);
+        if (Object.keys(result.fieldErrors).length === 0) {
+          toast.error(result.message);
         }
-        console.error("Failed to save skill");
-      }
-    } catch (error) {
-      console.error("Error saving skill:", error);
-    } finally {
-      setIsSubmitting(false);
+        break;
+      case "conflict":
+        setValidationErrors({ name: result.message });
+        break;
+      case "locked":
+      case "notFound":
+      case "error":
+        toast.error(result.message);
+        break;
     }
+
+    setIsSubmitting(false);
   };
 
   const handleDelete = async () => {
@@ -185,27 +178,16 @@ const SkillForm = ({
 
     setIsDeleting(true);
     setDeleteError(null);
-    try {
-      const response = await fetch(
-        joinUrl(backendUrl, `${collectionUrl}/${skillId}`),
-        {
-          method: "DELETE",
-          credentials: "include",
-        },
-      );
+    const scope = workspaceId ? { orgId, workspaceId } : { orgId };
+    const result = await writeEntity(backendUrl, "skills", scope, {
+      id: skillId,
+    });
 
-      if (response.ok) {
-        router.push(returnPath);
-      } else {
-        const errorData = await response.json();
-        setDeleteError(
-          errorData.error || errorData.message || "Failed to delete skill",
-        );
-        setIsDeleting(false);
-      }
-    } catch (error) {
-      console.error("Error deleting skill:", error);
-      setDeleteError("An unexpected error occurred");
+    if (result.outcome === "success") {
+      result.revalidateKeys.forEach((key) => globalMutate(key));
+      router.push(returnPath);
+    } else {
+      setDeleteError(result.message);
       setIsDeleting(false);
     }
   };
