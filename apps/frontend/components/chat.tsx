@@ -34,8 +34,9 @@ import {
   Skill,
 } from "@platypus/schemas";
 import { type PlatypusUIMessage } from "@platypus/backend/src/types";
-import useSWR from "swr";
-import { fetcher, joinUrl } from "@/lib/utils";
+import { joinUrl } from "@/lib/utils";
+import { writeEntity } from "@/lib/api-write";
+import { useScopedSWR } from "@/hooks/use-scoped-swr";
 import { useResetOnChange } from "@/hooks/use-reset-on-change";
 import { useChatSettings } from "@/hooks/use-chat-settings";
 import { useModelSelection } from "@/hooks/use-model-selection";
@@ -72,23 +73,18 @@ export const Chat = ({
   chatId: string;
   initialAgentId?: string;
 }) => {
-  const { user, isWorkspaceOwner } = useAuth();
+  const { isWorkspaceOwner } = useAuth();
   const backendUrl = useBackendUrl();
+  const scope = useMemo(() => ({ orgId, workspaceId }), [orgId, workspaceId]);
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [search, setSearch] = useState(false);
   const [inputValue, setInputValue] = useState("");
 
   // Fetch providers
-  const { data: providersData, isLoading } = useSWR<{ results: Provider[] }>(
-    backendUrl && user
-      ? joinUrl(
-          backendUrl,
-          `/organizations/${orgId}/workspaces/${workspaceId}/providers`,
-        )
-      : null,
-    fetcher,
-  );
+  const { data: providersData, isLoading } = useScopedSWR<{
+    results: Provider[];
+  }>("providers", scope);
 
   // Memoize providers to prevent unnecessary re-renders
   const providers = useMemo(
@@ -97,14 +93,9 @@ export const Chat = ({
   );
 
   // Fetch agents
-  const { data: agentsData } = useSWR<{ results: Agent[] }>(
-    backendUrl && user
-      ? joinUrl(
-          backendUrl,
-          `/organizations/${orgId}/workspaces/${workspaceId}/agents`,
-        )
-      : null,
-    fetcher,
+  const { data: agentsData } = useScopedSWR<{ results: Agent[] }>(
+    "agents",
+    scope,
   );
 
   // Memoize agents to prevent unnecessary re-renders
@@ -114,14 +105,9 @@ export const Chat = ({
   );
 
   // Fetch tool sets
-  const { data: toolSetsData } = useSWR<{ results: ToolSet[] }>(
-    backendUrl && user
-      ? joinUrl(
-          backendUrl,
-          `/organizations/${orgId}/workspaces/${workspaceId}/tools`,
-        )
-      : null,
-    fetcher,
+  const { data: toolSetsData } = useScopedSWR<{ results: ToolSet[] }>(
+    "tools",
+    scope,
   );
 
   // Memoize tool sets to prevent unnecessary re-renders
@@ -131,14 +117,9 @@ export const Chat = ({
   );
 
   // Fetch skills
-  const { data: skillsData } = useSWR<{ results: Skill[] }>(
-    backendUrl && user
-      ? joinUrl(
-          backendUrl,
-          `/organizations/${orgId}/workspaces/${workspaceId}/skills`,
-        )
-      : null,
-    fetcher,
+  const { data: skillsData } = useScopedSWR<{ results: Skill[] }>(
+    "skills",
+    scope,
   );
   // Memoize skills to prevent unnecessary re-renders
   const skills = useMemo(
@@ -150,14 +131,9 @@ export const Chat = ({
   // still in progress so users who reconnect mid-run see partial messages
   // land without manually reloading. Stop polling once the run reaches a
   // terminal status.
-  const { data: chatData, isLoading: isChatLoading } = useSWR<ChatType>(
-    backendUrl && user
-      ? joinUrl(
-          backendUrl,
-          `/organizations/${orgId}/workspaces/${workspaceId}/chat/${chatId}`,
-        )
-      : null,
-    fetcher,
+  const { data: chatData, isLoading: isChatLoading } = useScopedSWR<ChatType>(
+    `chat/${chatId}`,
+    scope,
     {
       revalidateOnFocus: false,
       revalidateOnReconnect: false,
@@ -446,16 +422,19 @@ export const Chat = ({
       // aborting the local fetch (what `stop()` does) no longer cancels
       // the run. Send an explicit cancel POST so the server stops billing
       // tokens and persists the partial result with status="cancelled".
-      void fetch(
-        joinUrl(
-          backendUrl || "",
-          `/organizations/${orgId}/workspaces/${workspaceId}/chat/${chatId}/cancel`,
-        ),
-        { method: "POST", credentials: "include" },
-      ).catch(() => {
-        // Swallow: the user can retry by pressing stop again, and the
-        // server treats repeated cancels as idempotent no-ops.
-      });
+      // Fire-and-forget (not awaited) so `stop()` below isn't held up by
+      // the round trip, but a failure still surfaces — the user can retry
+      // by pressing stop again, and the server treats repeated cancels as
+      // idempotent no-ops, but silently swallowing a real failure (e.g. a
+      // network error) would leave them thinking the run was cancelled
+      // when it wasn't.
+      void writeEntity(backendUrl || "", `chat/${chatId}/cancel`, scope).then(
+        (outcome) => {
+          if (outcome.outcome !== "success") {
+            toast.error(outcome.message);
+          }
+        },
+      );
       return stop();
     }
 

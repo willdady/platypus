@@ -56,6 +56,7 @@ import {
   ManageAttachmentsDialog,
   SharedWithBadge,
 } from "@/components/manage-sharing";
+import { scopedPath, writeEntity, type Scope } from "@/lib/api-write";
 
 // The list serves two surfaces: a Workspace (workspaceId provided) where it
 // shows workspace-scoped Skills plus attached org-scoped Shared Skills as
@@ -130,9 +131,11 @@ export const SkillsList = ({
     count: number;
   } | null>(null);
 
-  const listUrl = workspaceId
-    ? `/organizations/${orgId}/workspaces/${workspaceId}/skills`
-    : `/organizations/${orgId}/skills`;
+  // Resolved once per render and reused for the list's read and every write
+  // below, rather than re-deriving the Organization-vs-Workspace branch at
+  // each call site.
+  const scope: Scope = workspaceId ? { orgId, workspaceId } : { orgId };
+  const listUrl = scopedPath("skills", scope);
   const editBasePath = workspaceId
     ? `/${orgId}/workspace/${workspaceId}/skills`
     : `/${orgId}/settings/skills`;
@@ -150,10 +153,7 @@ export const SkillsList = ({
     results: Agent[];
   }>(
     backendUrl && user && workspaceId
-      ? joinUrl(
-          backendUrl,
-          `/organizations/${orgId}/workspaces/${workspaceId}/agents`,
-        )
+      ? joinUrl(backendUrl, scopedPath("agents", scope))
       : null,
     fetcher,
   );
@@ -186,7 +186,7 @@ export const SkillsList = ({
         const res = await fetch(
           joinUrl(
             backendUrl,
-            `/organizations/${orgId}/attachments?resourceType=skill&resourceId=${skill.id}`,
+            `${scopedPath("attachments", scope)}?resourceType=skill&resourceId=${skill.id}`,
           ),
           { credentials: "include" },
         );
@@ -206,26 +206,18 @@ export const SkillsList = ({
 
   const handleDeleteConfirm = async () => {
     if (!skillToDelete || !backendUrl) return;
-    // Org-scoped Skills are deleted from the Organization surface; workspace
-    // Skills from the workspace route.
-    const deleteUrl =
-      skillToDelete.scope === "organization" && !workspaceId
-        ? `/organizations/${orgId}/skills/${skillToDelete.id}`
-        : `${listUrl}/${skillToDelete.id}`;
     setDeleting(true);
     setDeleteError(null);
     try {
-      const response = await fetch(joinUrl(backendUrl, deleteUrl), {
-        method: "DELETE",
-        credentials: "include",
+      const outcome = await writeEntity(backendUrl, "skills", scope, {
+        id: skillToDelete.id,
       });
-      if (response.ok) {
+      if (outcome.outcome === "success") {
         await mutate();
         setDeleteDialogOpen(false);
         setSkillToDelete(null);
       } else {
-        const info = await response.json().catch(() => ({}));
-        setDeleteError(info.error || "Failed to delete skill.");
+        setDeleteError(outcome.message);
       }
     } finally {
       setDeleting(false);
@@ -237,19 +229,19 @@ export const SkillsList = ({
     setDetaching(true);
     setDetachError(null);
     try {
-      const response = await fetch(
-        joinUrl(
-          backendUrl,
-          `/organizations/${orgId}/workspaces/${workspaceId}/attachments/skill/${skillId}`,
-        ),
-        { method: "DELETE", credentials: "include" },
+      const outcome = await writeEntity(
+        backendUrl,
+        "attachments/skill",
+        scope,
+        {
+          id: skillId,
+        },
       );
-      if (response.ok) {
+      if (outcome.outcome === "success") {
         setSelectedOrgSkill(null);
         await mutate();
       } else {
-        const info = await response.json().catch(() => ({}));
-        setDetachError(info.error || "Failed to detach skill.");
+        setDetachError(outcome.message);
       }
     } finally {
       setDetaching(false);
@@ -261,19 +253,16 @@ export const SkillsList = ({
     setPromoting(true);
     setPromoteError(null);
     try {
-      const response = await fetch(
-        joinUrl(
-          backendUrl,
-          `/organizations/${orgId}/workspaces/${workspaceId}/skills/${skillToPromote.id}/promote`,
-        ),
-        { method: "POST", credentials: "include" },
+      const outcome = await writeEntity(
+        backendUrl,
+        `skills/${skillToPromote.id}/promote`,
+        scope,
       );
-      if (response.ok) {
+      if (outcome.outcome === "success") {
         await mutate();
         setSkillToPromote(null);
       } else {
-        const info = await response.json().catch(() => ({}));
-        setPromoteError(info.error || "Failed to promote skill.");
+        setPromoteError(outcome.message);
       }
     } finally {
       setPromoting(false);

@@ -64,6 +64,7 @@ import { useAuth } from "@/components/auth-provider";
 import { canManageSharedResource } from "@/lib/authorization";
 import { NoProvidersEmptyState } from "@/components/no-providers-empty-state";
 import { AttachSharedResourceDialog } from "@/components/attach-shared-resource-dialog";
+import { scopedPath, writeEntity, type Scope } from "@/lib/api-write";
 
 // The Agent is shown either in a Workspace, where it may be a workspace-scoped
 // Agent or an attached org-scoped (Shared) Agent rendered with an Organization
@@ -111,6 +112,11 @@ export const AgentsList = ({
   const [promoteError, setPromoteError] = useState<string | null>(null);
   const [promoteBlockers, setPromoteBlockers] = useState<PromoteBlocker[]>([]);
 
+  // Resolved once per render and reused for the list's reads and every write
+  // below, rather than re-deriving the Organization-vs-Workspace branch at
+  // each call site.
+  const scope: Scope = { orgId, workspaceId };
+
   const {
     data: agentsData,
     isLoading: isLoadingAgents,
@@ -119,10 +125,7 @@ export const AgentsList = ({
     results: AgentWithScope[];
   }>(
     backendUrl && user
-      ? joinUrl(
-          backendUrl,
-          `/organizations/${orgId}/workspaces/${workspaceId}/agents`,
-        )
+      ? joinUrl(backendUrl, scopedPath("agents", scope))
       : null,
     fetcher,
   );
@@ -131,10 +134,7 @@ export const AgentsList = ({
     results: Provider[];
   }>(
     backendUrl && user
-      ? joinUrl(
-          backendUrl,
-          `/organizations/${orgId}/workspaces/${workspaceId}/providers`,
-        )
+      ? joinUrl(backendUrl, scopedPath("providers", scope))
       : null,
     fetcher,
   );
@@ -142,12 +142,7 @@ export const AgentsList = ({
   const { data: toolSetsData } = useSWR<{
     results: ToolSet[];
   }>(
-    backendUrl && user
-      ? joinUrl(
-          backendUrl,
-          `/organizations/${orgId}/workspaces/${workspaceId}/tools`,
-        )
-      : null,
+    backendUrl && user ? joinUrl(backendUrl, scopedPath("tools", scope)) : null,
     fetcher,
   );
 
@@ -155,10 +150,7 @@ export const AgentsList = ({
     results: Skill[];
   }>(
     backendUrl && user
-      ? joinUrl(
-          backendUrl,
-          `/organizations/${orgId}/workspaces/${workspaceId}/skills`,
-        )
+      ? joinUrl(backendUrl, scopedPath("skills", scope))
       : null,
     fetcher,
   );
@@ -213,25 +205,13 @@ export const AgentsList = ({
   const handleDeleteConfirm = async () => {
     if (!agentToDelete || !backendUrl) return;
 
-    try {
-      const response = await fetch(
-        joinUrl(
-          backendUrl,
-          `/organizations/${orgId}/workspaces/${workspaceId}/agents/${agentToDelete.id}`,
-        ),
-        {
-          method: "DELETE",
-          credentials: "include",
-        },
-      );
-
-      if (response.ok) {
-        mutate();
-        setDeleteDialogOpen(false);
-        setAgentToDelete(null);
-      }
-    } catch (error) {
-      console.error("Failed to delete agent:", error);
+    const outcome = await writeEntity(backendUrl, "agents", scope, {
+      id: agentToDelete.id,
+    });
+    if (outcome.outcome === "success") {
+      mutate();
+      setDeleteDialogOpen(false);
+      setAgentToDelete(null);
     }
   };
 
@@ -245,7 +225,7 @@ export const AgentsList = ({
       createdAt,
       updatedAt,
       avatarUrl,
-      scope,
+      scope: agentScope,
       organizationId,
       ...cloneData
     } = agentToClone as AgentWithScope;
@@ -258,43 +238,26 @@ export const AgentsList = ({
       }).map(([key, value]) => [key, value === null ? undefined : value]),
     );
 
-    try {
-      const response = await fetch(
-        joinUrl(
-          backendUrl,
-          `/organizations/${orgId}/workspaces/${workspaceId}/agents`,
-        ),
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          credentials: "include",
-          body: JSON.stringify(sanitizedData),
-        },
-      );
+    const outcome = await writeEntity<Agent>(backendUrl, "agents", scope, {
+      data: sanitizedData,
+    });
 
-      if (response.ok) {
-        const newAgent = await response.json();
-        mutate();
-        setCloneDialogOpen(false);
-        setAgentToClone(null);
-        setCloneName("");
-        router.push(`/${orgId}/workspace/${workspaceId}/agents/${newAgent.id}`);
-      } else {
-        const errorData = await response.json();
-        if (errorData.error && Array.isArray(errorData.error)) {
-          setCloneError(errorData.error[0]?.message || "Failed to clone agent");
-        } else {
-          setCloneError("Failed to clone agent");
-        }
-      }
-    } catch (error) {
-      console.error("Failed to clone agent:", error);
-      setCloneError("Failed to clone agent");
+    if (outcome.outcome === "success") {
+      mutate();
+      setCloneDialogOpen(false);
+      setAgentToClone(null);
+      setCloneName("");
+      router.push(
+        `/${orgId}/workspace/${workspaceId}/agents/${outcome.data.id}`,
+      );
+    } else {
+      setCloneError(outcome.message);
     }
   };
 
+  // The backend blocks Promote with a 422 fix-this checklist (ADR-0007's
+  // no-cascade rule) whose `blockers` array is outside the outcomes the
+  // request module maps, so this write stays raw rather than losing it.
   const handlePromoteConfirm = async () => {
     if (!agentToPromote || !backendUrl) return;
     setPromoting(true);
@@ -304,7 +267,7 @@ export const AgentsList = ({
       const response = await fetch(
         joinUrl(
           backendUrl,
-          `/organizations/${orgId}/workspaces/${workspaceId}/agents/${agentToPromote.id}/promote`,
+          `${scopedPath("agents", scope)}/${agentToPromote.id}/promote`,
         ),
         { method: "POST", credentials: "include" },
       );
@@ -328,19 +291,19 @@ export const AgentsList = ({
     setDetaching(true);
     setDetachError(null);
     try {
-      const response = await fetch(
-        joinUrl(
-          backendUrl,
-          `/organizations/${orgId}/workspaces/${workspaceId}/attachments/agent/${agentId}`,
-        ),
-        { method: "DELETE", credentials: "include" },
+      const outcome = await writeEntity(
+        backendUrl,
+        "attachments/agent",
+        scope,
+        {
+          id: agentId,
+        },
       );
-      if (response.ok) {
+      if (outcome.outcome === "success") {
         setSelectedOrgAgent(null);
         await mutate();
       } else {
-        const info = await response.json().catch(() => ({}));
-        setDetachError(info.error || "Failed to detach agent.");
+        setDetachError(outcome.message);
       }
     } finally {
       setDetaching(false);

@@ -31,6 +31,7 @@ import {
 } from "./ui/dialog";
 import { AttachSharedResourceDialog } from "./attach-shared-resource-dialog";
 import { useState } from "react";
+import { scopedPath, writeEntity, type Scope } from "@/lib/api-write";
 
 const McpList = ({
   className,
@@ -53,15 +54,13 @@ const McpList = ({
   const [detaching, setDetaching] = useState(false);
   const [detachError, setDetachError] = useState<string | null>(null);
 
+  // Resolved once per render and reused for the list's read and every write
+  // below, rather than re-deriving the Organization-vs-Workspace branch at
+  // each call site.
+  const scope: Scope = workspaceId ? { orgId, workspaceId } : { orgId };
+
   const fetchUrl =
-    backendUrl && user
-      ? workspaceId
-        ? joinUrl(
-            backendUrl,
-            `/organizations/${orgId}/workspaces/${workspaceId}/mcps`,
-          )
-        : joinUrl(backendUrl, `/organizations/${orgId}/mcps`)
-      : null;
+    backendUrl && user ? joinUrl(backendUrl, scopedPath("mcps", scope)) : null;
 
   const { data, error, isLoading, mutate } = useSWR<{
     results: McpWithScope[];
@@ -76,19 +75,14 @@ const McpList = ({
     setDetaching(true);
     setDetachError(null);
     try {
-      const response = await fetch(
-        joinUrl(
-          backendUrl,
-          `/organizations/${orgId}/workspaces/${workspaceId}/attachments/mcp/${mcpId}`,
-        ),
-        { method: "DELETE", credentials: "include" },
-      );
-      if (response.ok) {
+      const outcome = await writeEntity(backendUrl, "attachments/mcp", scope, {
+        id: mcpId,
+      });
+      if (outcome.outcome === "success") {
         setSelectedOrgMcp(null);
         await mutate();
       } else {
-        const info = await response.json().catch(() => ({}));
-        setDetachError(info.error || "Failed to detach MCP.");
+        setDetachError(outcome.message);
       }
     } finally {
       setDetaching(false);
