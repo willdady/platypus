@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach, vi } from "vitest";
-import { writeEntity } from "./api-write";
+import { writeEntity, scopedUrl } from "./api-write";
 
 function mockResponse(status: number, body: unknown) {
   return {
@@ -112,6 +112,23 @@ describe("writeEntity — transport", () => {
     );
 
     expect(fetchMock.mock.calls[0][1].credentials).toBe("include");
+  });
+});
+
+describe("scopedUrl — the read-side path shape", () => {
+  it("builds the workspace-scoped URL when a workspaceId is present", () => {
+    expect(
+      scopedUrl(BACKEND_URL, "providers", {
+        orgId: "org1",
+        workspaceId: "ws1",
+      }),
+    ).toBe("http://localhost:4000/organizations/org1/workspaces/ws1/providers");
+  });
+
+  it("builds the org-scoped URL when no workspaceId is given", () => {
+    expect(scopedUrl(BACKEND_URL, "agents", { orgId: "org1" })).toBe(
+      "http://localhost:4000/organizations/org1/agents",
+    );
   });
 });
 
