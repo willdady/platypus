@@ -49,7 +49,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { ConfirmDialog } from "@/components/confirm-dialog";
-import { useState, useEffect, useRef } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   CONTEXT_WINDOW_MAX,
@@ -470,7 +470,6 @@ const ProviderForm = ({
   const { user } = useAuth();
   const backendUrl = useBackendUrl();
   const router = useRouter();
-  const hasInitialized = useRef(false);
 
   const formScope = workspaceId ? "workspace" : "organization";
 
@@ -578,22 +577,23 @@ const ProviderForm = ({
     formData.searchSource === SEARCH_SOURCE_NATIVE &&
     !providerHasNativeSearch(formData);
 
-  // Start the form over when the reader switches Provider within one mount, so
-  // the initialisation flag the effect below reads belongs to the Provider on
-  // screen. `useResetOnChange` rather than an effect: it adjusts state during
-  // render, so the flag is already false when the effect runs (#474).
+  // Populate once per Provider, keyed on `providerId` rather than `provider`
+  // itself: `provider` gets a new object reference on every revalidation that
+  // actually changes the record (a save from another tab, a focus
+  // revalidation), and keying on it directly would re-run this on the Provider
+  // the reader is already editing, clobbering the edit in progress with
+  // whatever the server has right now. Gating the key on `provider` being
+  // loaded — rather than firing as soon as `providerId` changes — defers the
+  // reset until the switch actually has data to populate with, so a cold
+  // fetch (data not loaded yet) doesn't reset into a blank form early and
+  // then never fire again once the fetch resolves.
   //
-  // The Web-search backend selector's visibility rule and its `webBackendEdited`
-  // latch used to be reset here too. Both are gone with the collapse: `searchSource`
-  // is always rendered — "None" and, where the Provider is capable, its built-in
-  // search are real choices on every deployment — so there is no longer a condition
-  // that reads the value the field itself edits.
-  useResetOnChange(providerId, () => {
-    hasInitialized.current = false;
-  });
-
-  useEffect(() => {
-    if (provider && !hasInitialized.current) {
+  // `useResetOnChange` rather than an effect: it adjusts state during render,
+  // so a switch to a Provider already warm in SWR's cache repopulates on that
+  // same render instead of leaving the previous Provider's fields on screen
+  // for one extra frame (#474).
+  useResetOnChange(provider ? providerId : undefined, () => {
+    if (provider) {
       setFormData({
         providerType: provider.providerType,
         name: provider.name,
@@ -631,9 +631,8 @@ const ProviderForm = ({
       setSavedEmbeddingDimensions(
         provider.embeddingDimensions?.toString() || null,
       );
-      hasInitialized.current = true;
     }
-  }, [provider]);
+  });
 
   const handleChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>,
