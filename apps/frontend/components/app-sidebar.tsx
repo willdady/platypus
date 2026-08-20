@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useParams, usePathname, useRouter } from "next/navigation";
 import useSWR, { useSWRConfig } from "swr";
 import { fetcher, joinUrl } from "@/lib/utils";
+import { writeEntity } from "@/lib/api-write";
 import { toast } from "sonner";
 import type { Workspace, ChatListItem, Organization } from "@platypus/schemas";
 import { useAuth } from "@/components/auth-provider";
@@ -60,7 +61,6 @@ import {
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Field, FieldLabel, FieldError } from "@/components/ui/field";
-import { parseValidationErrors } from "@/lib/form-errors";
 import { useBackendUrl } from "@/app/client-context";
 import { TagInput } from "@/components/tag-input";
 import { useIsMobile } from "@/hooks/use-mobile";
@@ -182,27 +182,22 @@ export function AppSidebar() {
     setIsRenaming(true);
     setRenameValidationErrors({});
     try {
-      const response = await fetch(
-        joinUrl(
-          backendUrl,
-          `/organizations/${orgId}/workspaces/${workspaceId}/chat/${renameChatId}`,
-        ),
+      const outcome = await writeEntity(
+        backendUrl,
+        "chat",
+        { orgId, workspaceId },
         {
-          method: "PUT",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
+          id: renameChatId,
+          data: {
             workspaceId,
             title: renameTitle,
             isPinned: currentChat.isPinned,
             tags: renameTags,
-          }),
-          credentials: "include",
+          },
         },
       );
 
-      if (response.ok) {
+      if (outcome.outcome === "success") {
         // Close the dialog
         setRenameChatId(null);
         setRenameTitle("");
@@ -210,15 +205,14 @@ export function AppSidebar() {
 
         // Revalidate the chat list
         await revalidateChatList();
+      } else if (
+        outcome.outcome === "invalid" &&
+        Object.keys(outcome.fieldErrors).length > 0
+      ) {
+        setRenameValidationErrors(outcome.fieldErrors);
       } else {
-        // Parse standardschema.dev validation errors
-        const errorData = await response.json();
-        setRenameValidationErrors(parseValidationErrors(errorData));
-        console.error("Failed to rename chat");
+        toast.error(outcome.message);
       }
-    } catch (error) {
-      console.error("Error renaming chat:", error);
-      toast.error("Failed to rename chat");
     } finally {
       setIsRenaming(false);
     }
@@ -229,19 +223,16 @@ export function AppSidebar() {
 
     setIsDeleting(true);
     try {
-      const response = await fetch(
-        joinUrl(
-          backendUrl,
-          `/organizations/${orgId}/workspaces/${workspaceId}/chat/${deleteChatId}`,
-        ),
-        {
-          method: "DELETE",
-          credentials: "include",
-        },
+      const outcome = await writeEntity(
+        backendUrl,
+        "chat",
+        { orgId, workspaceId },
+        { id: deleteChatId },
       );
 
-      if (!response.ok) {
-        throw new Error("Failed to delete chat");
+      if (outcome.outcome !== "success") {
+        toast.error(outcome.message);
+        return;
       }
 
       // Close the dialog
@@ -258,9 +249,6 @@ export function AppSidebar() {
 
       // Revalidate the chat list
       await revalidateChatList();
-    } catch (error) {
-      console.error("Error deleting chat:", error);
-      toast.error("Failed to delete chat");
     } finally {
       setIsDeleting(false);
     }
@@ -272,35 +260,28 @@ export function AppSidebar() {
 
     setIsTogglingPin(true);
     try {
-      const response = await fetch(
-        joinUrl(
-          backendUrl,
-          `/organizations/${orgId}/workspaces/${workspaceId}/chat/${chatId}`,
-        ),
+      const outcome = await writeEntity(
+        backendUrl,
+        "chat",
+        { orgId, workspaceId },
         {
-          method: "PUT",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
+          id: chatId,
+          data: {
             workspaceId,
             title: currentChat.title,
             isPinned: !currentChat.isPinned,
             tags: currentChat.tags ?? [],
-          }),
-          credentials: "include",
+          },
         },
       );
 
-      if (!response.ok) {
-        throw new Error("Failed to toggle pin status");
+      if (outcome.outcome !== "success") {
+        toast.error(outcome.message);
+        return;
       }
 
       // Revalidate the chat list
       await revalidateChatList();
-    } catch (error) {
-      console.error("Error toggling pin status:", error);
-      toast.error("Failed to update pin status");
     } finally {
       setIsTogglingPin(false);
     }

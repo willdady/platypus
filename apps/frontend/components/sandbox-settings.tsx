@@ -10,7 +10,7 @@ import { type Sandbox } from "@platypus/schemas";
 import { useAuth } from "@/components/auth-provider";
 import { useBackendUrl } from "@/app/client-context";
 import { fetcher, joinUrl } from "@/lib/utils";
-import { parseValidationErrors } from "@/lib/form-errors";
+import { writeAt } from "@/lib/api-write";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
@@ -406,32 +406,25 @@ const SandboxSettings = ({
           userEnv: rowsToRecord(formData.userEnv),
         };
 
-    const response = await fetch(url, {
-      method,
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-      credentials: "include",
-    });
+    const outcome = await writeAt(url, { method, data: payload });
 
-    if (response.ok) return { ok: true };
+    if (outcome.outcome === "success") return { ok: true };
 
-    const errorData = (await response.json().catch(() => ({}))) as {
-      error?: string;
-    };
-
-    if (response.status === 500 && isForceRetryError(errorData?.error)) {
-      return {
-        ok: false,
-        forceRetry: true,
-        errorMessage: errorData.error,
-      };
+    if (
+      outcome.outcome === "error" &&
+      outcome.httpStatus === 500 &&
+      isForceRetryError(outcome.message)
+    ) {
+      return { ok: false, forceRetry: true, errorMessage: outcome.message };
     }
 
-    const fieldErrors = parseValidationErrors(errorData);
-    if (Object.keys(fieldErrors).length > 0) {
-      setValidationErrors(fieldErrors);
+    if (
+      outcome.outcome === "invalid" &&
+      Object.keys(outcome.fieldErrors).length > 0
+    ) {
+      setValidationErrors(outcome.fieldErrors);
     } else {
-      toast.error(errorData?.error || "Failed to save sandbox");
+      toast.error(outcome.message);
     }
     return { ok: false };
   };
@@ -474,20 +467,18 @@ const SandboxSettings = ({
     options: { force?: boolean } = {},
   ): Promise<{ ok: boolean; forceRetry?: boolean }> => {
     const url = options.force ? `${sandboxUrl}?force=true` : sandboxUrl;
-    const response = await fetch(url, {
-      method: "DELETE",
-      credentials: "include",
-    });
+    const outcome = await writeAt(url, { method: "DELETE" });
 
-    if (response.ok) return { ok: true };
+    if (outcome.outcome === "success") return { ok: true };
 
-    const errorData = (await response.json().catch(() => ({}))) as {
-      error?: string;
-    };
-    if (response.status === 500 && isForceRetryError(errorData?.error)) {
+    if (
+      outcome.outcome === "error" &&
+      outcome.httpStatus === 500 &&
+      isForceRetryError(outcome.message)
+    ) {
       return { ok: false, forceRetry: true };
     }
-    toast.error(errorData?.error || "Failed to delete sandbox");
+    toast.error(outcome.message);
     return { ok: false };
   };
 

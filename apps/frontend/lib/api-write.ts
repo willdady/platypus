@@ -105,7 +105,7 @@ function errorFiles(body: unknown): string[] | undefined {
 
 async function performWrite<TResult, TData>(
   url: string,
-  method: "POST" | "PUT" | "DELETE",
+  method: "POST" | "PUT" | "PATCH" | "DELETE",
   data: TData | undefined,
   revalidateKeys: readonly string[],
 ): Promise<WriteOutcome<TResult>> {
@@ -200,7 +200,7 @@ export async function writeEntity<TResult = unknown, TData = unknown>(
 }
 
 export interface WriteAtOptions<TData> {
-  readonly method: "POST" | "PUT" | "DELETE";
+  readonly method: "POST" | "PUT" | "PATCH" | "DELETE";
   /** Omit only when the write is a DELETE. */
   readonly data?: TData;
   /** SWR keys this write should invalidate. Defaults to none. */

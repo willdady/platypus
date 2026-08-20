@@ -21,6 +21,7 @@ import { EllipsisVertical, Pencil, Trash2 } from "lucide-react";
 import { type Dashboard } from "@platypus/schemas";
 import useSWR from "swr";
 import { fetcher, joinUrl } from "@/lib/utils";
+import { writeEntity } from "@/lib/api-write";
 import Link from "next/link";
 import { useBackendUrl } from "@/app/client-context";
 import { useAuth } from "@/components/auth-provider";
@@ -36,6 +37,7 @@ export const DashboardsList = ({
   const backendUrl = useBackendUrl();
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const [dashboardToDelete, setDashboardToDelete] = useState<Dashboard | null>(
     null,
   );
@@ -60,23 +62,28 @@ export const DashboardsList = ({
 
   const handleDeleteClick = (dashboard: Dashboard) => {
     setDashboardToDelete(dashboard);
+    setDeleteError(null);
     setDeleteDialogOpen(true);
   };
 
   const handleDeleteConfirm = async () => {
     if (!dashboardToDelete || !backendUrl) return;
     setDeleting(true);
+    setDeleteError(null);
     try {
-      await fetch(
-        joinUrl(
-          backendUrl,
-          `/organizations/${orgId}/workspaces/${workspaceId}/dashboards/${dashboardToDelete.id}`,
-        ),
-        { method: "DELETE", credentials: "include" },
+      const outcome = await writeEntity(
+        backendUrl,
+        "dashboards",
+        { orgId, workspaceId },
+        { id: dashboardToDelete.id },
       );
-      mutate();
-      setDeleteDialogOpen(false);
-      setDashboardToDelete(null);
+      if (outcome.outcome === "success") {
+        mutate();
+        setDeleteDialogOpen(false);
+        setDashboardToDelete(null);
+      } else {
+        setDeleteError(outcome.message);
+      }
     } finally {
       setDeleting(false);
     }
@@ -149,6 +156,7 @@ export const DashboardsList = ({
         onOpenChange={setDeleteDialogOpen}
         onConfirm={handleDeleteConfirm}
         loading={deleting}
+        error={deleteError}
       />
     </>
   );

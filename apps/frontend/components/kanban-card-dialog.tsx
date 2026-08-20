@@ -63,6 +63,7 @@ import {
   Link2,
 } from "lucide-react";
 import { cn, fetcher, joinUrl } from "@/lib/utils";
+import { writeEntity } from "@/lib/api-write";
 import { useBackendUrl } from "@/app/client-context";
 import { useAuth } from "@/components/auth-provider";
 import { useIsMobile } from "@/hooks/use-mobile";
@@ -406,50 +407,54 @@ export function KanbanCardDialog({
     });
   };
 
+  const commentsEntity = `boards/${boardId}/cards/${card.id}/comments`;
+
   const handleAddComment = async () => {
-    if (!newCommentBody.trim() || !commentsUrl) return;
-    try {
-      await fetch(commentsUrl, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ body: newCommentBody.trim() }),
-        credentials: "include",
-      });
-      setNewCommentBody("");
-      await mutateComments();
-    } catch {
-      toast.error("Failed to add comment");
+    if (!newCommentBody.trim() || !backendUrl) return;
+    const outcome = await writeEntity(
+      backendUrl,
+      commentsEntity,
+      { orgId, workspaceId },
+      { data: { body: newCommentBody.trim() } },
+    );
+    if (outcome.outcome !== "success") {
+      toast.error(outcome.message);
+      return;
     }
+    setNewCommentBody("");
+    await mutateComments();
   };
 
   const handleEditComment = async (commentId: string) => {
-    if (!editingCommentBody.trim() || !commentsUrl) return;
-    try {
-      await fetch(joinUrl(commentsUrl, `/${commentId}`), {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ body: editingCommentBody.trim() }),
-        credentials: "include",
-      });
-      setEditingCommentId(null);
-      setEditingCommentBody("");
-      await mutateComments();
-    } catch {
-      toast.error("Failed to update comment");
+    if (!editingCommentBody.trim() || !backendUrl) return;
+    const outcome = await writeEntity(
+      backendUrl,
+      commentsEntity,
+      { orgId, workspaceId },
+      { id: commentId, data: { body: editingCommentBody.trim() } },
+    );
+    if (outcome.outcome !== "success") {
+      toast.error(outcome.message);
+      return;
     }
+    setEditingCommentId(null);
+    setEditingCommentBody("");
+    await mutateComments();
   };
 
   const handleDeleteComment = async (commentId: string) => {
-    if (!commentsUrl) return;
-    try {
-      await fetch(joinUrl(commentsUrl, `/${commentId}`), {
-        method: "DELETE",
-        credentials: "include",
-      });
-      await mutateComments();
-    } catch {
-      toast.error("Failed to delete comment");
+    if (!backendUrl) return;
+    const outcome = await writeEntity(
+      backendUrl,
+      commentsEntity,
+      { orgId, workspaceId },
+      { id: commentId },
+    );
+    if (outcome.outcome !== "success") {
+      toast.error(outcome.message);
+      return;
     }
+    await mutateComments();
   };
 
   return (

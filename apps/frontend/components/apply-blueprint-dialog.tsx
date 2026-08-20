@@ -21,6 +21,7 @@ import { Field, FieldLabel } from "@/components/ui/field";
 import type { Workspace } from "@platypus/schemas";
 import useSWR from "swr";
 import { fetcher, joinUrl } from "@/lib/utils";
+import { writeAt } from "@/lib/api-write";
 import { useBackendUrl } from "@/app/client-context";
 import { useAuth } from "@/components/auth-provider";
 
@@ -73,30 +74,26 @@ export const ApplyBlueprintDialog = ({
     setApplying(true);
     setError(null);
     setResult(null);
-    try {
-      const response = await fetch(
-        joinUrl(
-          backendUrl,
-          `/organizations/${orgId}/blueprints/${blueprintId}/apply`,
-        ),
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ workspaceId }),
-          credentials: "include",
-        },
-      );
-      if (response.ok) {
-        setResult(await response.json());
-      } else {
-        const info = await response.json().catch(() => ({}));
-        setError(info.error || "Failed to apply blueprint.");
-      }
-    } catch {
-      setError("An unexpected error occurred.");
-    } finally {
-      setApplying(false);
+    const outcome = await writeAt<{
+      attached: number;
+      skipped: number;
+      total: number;
+    }>(
+      joinUrl(
+        backendUrl,
+        `/organizations/${orgId}/blueprints/${blueprintId}/apply`,
+      ),
+      {
+        method: "POST",
+        data: { workspaceId },
+      },
+    );
+    if (outcome.outcome === "success") {
+      setResult(outcome.data);
+    } else {
+      setError(outcome.message);
     }
+    setApplying(false);
   };
 
   return (

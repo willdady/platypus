@@ -27,6 +27,7 @@ import {
 } from "@/components/ui/tooltip";
 import { useState } from "react";
 import { cn, fetcher, joinUrl } from "@/lib/utils";
+import { writeAt } from "@/lib/api-write";
 import { useBackendUrl } from "@/app/client-context";
 
 type ResourceType = "mcp" | "provider" | "skill" | "agent";
@@ -121,6 +122,7 @@ export const ManageAttachmentsDialog = ({
 }) => {
   const backendUrl = useBackendUrl();
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   const { data: attData, mutate: mutateAtt } = useSWR<{
     results: AttachedWorkspace[];
@@ -147,25 +149,23 @@ export const ManageAttachmentsDialog = ({
   const toggle = async (workspaceId: string, isAttached: boolean) => {
     if (!backendUrl) return;
     setBusyId(workspaceId);
+    setError(null);
     try {
-      if (isAttached) {
-        await fetch(
-          joinUrl(
-            backendUrl,
-            `/organizations/${orgId}/attachments/${resourceType}/${resourceId}/${workspaceId}`,
-          ),
-          { method: "DELETE", credentials: "include" },
-        );
-      } else {
-        await fetch(
-          joinUrl(backendUrl, `/organizations/${orgId}/attachments`),
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            credentials: "include",
-            body: JSON.stringify({ resourceType, resourceId, workspaceId }),
-          },
-        );
+      const outcome = isAttached
+        ? await writeAt(
+            joinUrl(
+              backendUrl,
+              `/organizations/${orgId}/attachments/${resourceType}/${resourceId}/${workspaceId}`,
+            ),
+            { method: "DELETE" },
+          )
+        : await writeAt(
+            joinUrl(backendUrl, `/organizations/${orgId}/attachments`),
+            { method: "POST", data: { resourceType, resourceId, workspaceId } },
+          );
+      if (outcome.outcome !== "success") {
+        setError(outcome.message);
+        return;
       }
       await mutateAtt();
     } finally {
@@ -187,6 +187,8 @@ export const ManageAttachmentsDialog = ({
             runs against each workspace’s own resources.
           </DialogDescription>
         </DialogHeader>
+
+        {error && <p className="text-sm text-destructive">{error}</p>}
 
         {/* Currently-attached workspaces as removable chips. */}
         {count > 0 ? (

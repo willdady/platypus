@@ -34,7 +34,7 @@ import { type MCP } from "@platypus/schemas";
 import useSWR, { useSWRConfig } from "swr";
 import { fetcher, joinUrl } from "@/lib/utils";
 import { canSubmitForm, retractFieldError } from "@/lib/form-errors";
-import { writeEntity } from "@/lib/api-write";
+import { writeEntity, writeAt } from "@/lib/api-write";
 import { toast } from "sonner";
 import { useBackendUrl } from "@/app/client-context";
 import { useAuth } from "@/components/auth-provider";
@@ -335,36 +335,31 @@ const McpForm = ({
         payload.mcpId = mcpId;
       }
 
-      const response = await fetch(
-        joinUrl(backendUrl, `${collectionUrl}/test`),
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(payload),
-          credentials: "include",
-        },
-      );
+      const outcome = await writeAt<{
+        success: boolean;
+        toolNames?: string[];
+        error?: string;
+      }>(joinUrl(backendUrl, `${collectionUrl}/test`), {
+        method: "POST",
+        data: payload,
+      });
 
-      const data = await response.json();
-
-      if (response.ok && data.success) {
+      if (outcome.outcome === "success" && outcome.data.success) {
         setTestResult({
           success: true,
-          toolNames: data.toolNames,
+          toolNames: outcome.data.toolNames,
+        });
+      } else if (outcome.outcome === "success") {
+        setTestResult({
+          success: false,
+          error: outcome.data.error || "Failed to connect to MCP server",
         });
       } else {
         setTestResult({
           success: false,
-          error: data.error || "Failed to connect to MCP server",
+          error: outcome.message,
         });
       }
-    } catch (error) {
-      setTestResult({
-        success: false,
-        error: error instanceof Error ? error.message : "Network error",
-      });
     } finally {
       setIsTesting(false);
     }
@@ -420,14 +415,23 @@ const McpForm = ({
           oauthAuthorized ? "?force=true" : ""
         }`,
       );
-      const response = await fetch(authorizeUrl, {
-        method: "POST",
-        credentials: "include",
-      });
+      const outcome = await writeAt<{
+        alreadyAuthorized?: boolean;
+        authorizationUrl?: string;
+        error?: string;
+      }>(authorizeUrl, { method: "POST" });
 
-      const data = await response.json();
+      if (outcome.outcome !== "success") {
+        toast.error(outcome.message);
+        if (!mcpId && resolvedMcpId) {
+          router.replace(editPath(resolvedMcpId));
+        }
+        setIsAuthorizing(false);
+        return;
+      }
+      const data = outcome.data;
 
-      if (response.ok && data.alreadyAuthorized) {
+      if (data.alreadyAuthorized) {
         // Backend silently refreshed via stored refresh_token. Treat as
         // success rather than an error toast.
         toast.success("Already authorized");
@@ -436,7 +440,7 @@ const McpForm = ({
         return;
       }
 
-      if (response.ok && data.authorizationUrl) {
+      if (data.authorizationUrl) {
         // If we just created the MCP, redirect to the edit page so the URL
         // reflects the new mcpId and any later actions (retries, save,
         // re-authorize) update the existing record instead of creating
@@ -491,28 +495,19 @@ const McpForm = ({
     if (!mcpId) return;
     setIsRevoking(true);
 
-    try {
-      const response = await fetch(
-        joinUrl(backendUrl, `${collectionUrl}/${mcpId}/oauth/revoke`),
-        {
-          method: "POST",
-          credentials: "include",
-        },
-      );
+    const outcome = await writeAt(
+      joinUrl(backendUrl, `${collectionUrl}/${mcpId}/oauth/revoke`),
+      { method: "POST" },
+    );
 
-      if (response.ok) {
-        toast.success("OAuth authorization revoked");
-        mutateMcp();
-        setTestResult(null);
-      } else {
-        toast.error("Failed to revoke OAuth authorization");
-      }
-    } catch (error) {
-      console.error("OAuth revoke error:", error);
-      toast.error("Failed to revoke OAuth authorization");
-    } finally {
-      setIsRevoking(false);
+    if (outcome.outcome === "success") {
+      toast.success("OAuth authorization revoked");
+      mutateMcp();
+      setTestResult(null);
+    } else {
+      toast.error(outcome.message);
     }
+    setIsRevoking(false);
   };
 
   if (isLoading) {

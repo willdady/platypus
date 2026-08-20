@@ -25,6 +25,7 @@ import {
 } from "@/components/ui/dialog";
 import { ExpandableTextarea } from "@/components/expandable-textarea";
 import { fetcher, joinUrl } from "@/lib/utils";
+import { writeAt } from "@/lib/api-write";
 import { useBackendUrl } from "@/app/client-context";
 import { useAuth } from "@/components/auth-provider";
 import useSWR from "swr";
@@ -132,80 +133,52 @@ export const WorkspaceContextForm = ({ contextId }: { contextId?: string }) => {
 
     setIsSubmitting(true);
 
-    try {
-      if (contextId) {
-        // Update existing context (workspaceId cannot be changed)
-        const response = await fetch(
-          joinUrl(backendUrl, `/users/me/contexts/${contextId}`),
-          {
-            method: "PUT",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ content: formData.content }),
-            credentials: "include",
-          },
-        );
-
-        if (response.ok) {
-          toast.success("Workspace context updated");
-          router.push("/settings/contexts");
-        } else {
-          toast.error("Failed to update context");
-        }
+    if (contextId) {
+      // Update existing context (workspaceId cannot be changed)
+      const outcome = await writeAt(
+        joinUrl(backendUrl, `/users/me/contexts/${contextId}`),
+        { method: "PUT", data: { content: formData.content } },
+      );
+      if (outcome.outcome === "success") {
+        toast.success("Workspace context updated");
+        router.push("/settings/contexts");
       } else {
-        // Create new context
-        const response = await fetch(
-          joinUrl(backendUrl, "/users/me/contexts"),
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              content: formData.content,
-              workspaceId: formData.workspaceId,
-            }),
-            credentials: "include",
-          },
-        );
-
-        if (response.ok) {
-          toast.success("Workspace context created");
-          router.push("/settings/contexts");
-        } else if (response.status === 409) {
-          toast.error("This workspace already has a context");
-        } else {
-          toast.error("Failed to create context");
-        }
+        toast.error(outcome.message);
       }
-    } catch {
-      toast.error("Error saving context");
-    } finally {
-      setIsSubmitting(false);
+    } else {
+      // Create new context
+      const outcome = await writeAt(joinUrl(backendUrl, "/users/me/contexts"), {
+        method: "POST",
+        data: {
+          content: formData.content,
+          workspaceId: formData.workspaceId,
+        },
+      });
+      if (outcome.outcome === "success") {
+        toast.success("Workspace context created");
+        router.push("/settings/contexts");
+      } else {
+        toast.error(outcome.message);
+      }
     }
+    setIsSubmitting(false);
   };
 
   const handleDelete = async () => {
     if (!contextId) return;
 
     setIsDeleting(true);
-    try {
-      const response = await fetch(
-        joinUrl(backendUrl, `/users/me/contexts/${contextId}`),
-        {
-          method: "DELETE",
-          credentials: "include",
-        },
-      );
-
-      if (response.ok) {
-        toast.success("Context deleted");
-        router.push("/settings/contexts");
-      } else {
-        toast.error("Failed to delete context");
-      }
-    } catch {
-      toast.error("Error deleting context");
-    } finally {
-      setIsDeleting(false);
+    const outcome = await writeAt(
+      joinUrl(backendUrl, `/users/me/contexts/${contextId}`),
+      { method: "DELETE" },
+    );
+    if (outcome.outcome === "success") {
+      toast.success("Context deleted");
+      router.push("/settings/contexts");
+    } else {
+      toast.error(outcome.message);
     }
+    setIsDeleting(false);
   };
 
   return (

@@ -21,6 +21,7 @@ import { EllipsisVertical, Pencil, Trash2 } from "lucide-react";
 import { type KanbanBoard } from "@platypus/schemas";
 import useSWR from "swr";
 import { fetcher, joinUrl } from "@/lib/utils";
+import { writeEntity } from "@/lib/api-write";
 import Link from "next/link";
 import { useBackendUrl } from "@/app/client-context";
 import { useAuth } from "@/components/auth-provider";
@@ -36,6 +37,8 @@ export const BoardsList = ({
   const backendUrl = useBackendUrl();
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [boardToDelete, setBoardToDelete] = useState<KanbanBoard | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const {
     data: boardsData,
@@ -59,31 +62,31 @@ export const BoardsList = ({
 
   const handleDeleteClick = (board: KanbanBoard) => {
     setBoardToDelete(board);
+    setDeleteError(null);
     setDeleteDialogOpen(true);
   };
 
   const handleDeleteConfirm = async () => {
     if (!boardToDelete || !backendUrl) return;
 
+    setDeleting(true);
+    setDeleteError(null);
     try {
-      const response = await fetch(
-        joinUrl(
-          backendUrl,
-          `/organizations/${orgId}/workspaces/${workspaceId}/boards/${boardToDelete.id}`,
-        ),
-        {
-          method: "DELETE",
-          credentials: "include",
-        },
+      const outcome = await writeEntity(
+        backendUrl,
+        "boards",
+        { orgId, workspaceId },
+        { id: boardToDelete.id },
       );
-
-      if (response.ok) {
+      if (outcome.outcome === "success") {
         mutate();
         setDeleteDialogOpen(false);
         setBoardToDelete(null);
+      } else {
+        setDeleteError(outcome.message);
       }
-    } catch (error) {
-      console.error("Failed to delete board:", error);
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -157,6 +160,8 @@ export const BoardsList = ({
         open={deleteDialogOpen}
         onOpenChange={setDeleteDialogOpen}
         onConfirm={handleDeleteConfirm}
+        loading={deleting}
+        error={deleteError}
       />
     </>
   );

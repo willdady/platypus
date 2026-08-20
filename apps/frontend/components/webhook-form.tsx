@@ -22,7 +22,7 @@ import {
   retractExactKeys,
   retractFieldError,
 } from "@/lib/form-errors";
-import { writeEntity } from "@/lib/api-write";
+import { writeEntity, writeAt } from "@/lib/api-write";
 import { toast } from "sonner";
 import { useBackendUrl } from "@/app/client-context";
 import { useAuth } from "@/components/auth-provider";
@@ -235,30 +235,19 @@ const WebhookForm = ({ orgId, workspaceId, webhookId }: WebhookFormProps) => {
 
   const handleRegenerateSecret = async () => {
     setIsRegenerating(true);
-    try {
-      const response = await fetch(
-        joinUrl(webhooksBaseUrl, `/${webhookId}/regenerate-secret`),
-        {
-          method: "POST",
-          credentials: "include",
-        },
-      );
+    const outcome = await writeAt(
+      joinUrl(webhooksBaseUrl, `/${webhookId}/regenerate-secret`),
+      { method: "POST" },
+    );
 
-      if (response.ok) {
-        toast.success("Signing secret regenerated");
-        await mutate();
-        setIsRegenerateDialogOpen(false);
-      } else {
-        toast.error("Failed to regenerate signing secret");
-        setIsRegenerateDialogOpen(false);
-      }
-    } catch (error) {
-      console.error("Error regenerating secret:", error);
-      toast.error("Failed to regenerate signing secret");
-      setIsRegenerateDialogOpen(false);
-    } finally {
-      setIsRegenerating(false);
+    if (outcome.outcome === "success") {
+      toast.success("Signing secret regenerated");
+      await mutate();
+    } else {
+      toast.error(outcome.message);
     }
+    setIsRegenerateDialogOpen(false);
+    setIsRegenerating(false);
   };
 
   const handleCopySecret = async () => {
