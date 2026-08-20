@@ -61,14 +61,9 @@ import {
   type AliasRepoint,
   type Provider,
 } from "@platypus/schemas";
-import useSWR from "swr";
-import {
-  clearFieldError,
-  cn,
-  fetcher,
-  parseValidationErrors,
-  joinUrl,
-} from "@/lib/utils";
+import useSWR, { useSWRConfig } from "swr";
+import { clearFieldError, cn, fetcher, joinUrl } from "@/lib/utils";
+import { writeEntity } from "@/lib/api-write";
 import {
   getModelConfigs,
   defaultPassthroughFileTypes,
@@ -530,11 +525,12 @@ const ProviderForm = ({
         : joinUrl(backendUrl, `/organizations/${orgId}/providers/${providerId}`)
       : null;
 
-  const {
-    data: provider,
-    isLoading,
-    mutate,
-  } = useSWR<ProviderWithScope>(fetchUrl, fetcher);
+  const { mutate: globalMutate } = useSWRConfig();
+
+  const { data: provider, isLoading } = useSWR<ProviderWithScope>(
+    fetchUrl,
+    fetcher,
+  );
 
   // The Web-search backends this deployment has installed (ADR-0014). Org-scoped
   // rather than workspace-scoped because this form serves both Provider scopes and
@@ -825,53 +821,39 @@ const ProviderForm = ({
           : null,
       };
 
-      const url = providerId
-        ? formScope === "workspace"
-          ? joinUrl(
-              backendUrl,
-              `/organizations/${orgId}/workspaces/${workspaceId}/providers/${providerId}`,
-            )
-          : joinUrl(
-              backendUrl,
-              `/organizations/${orgId}/providers/${providerId}`,
-            )
-        : formScope === "workspace"
-          ? joinUrl(
-              backendUrl,
-              `/organizations/${orgId}/workspaces/${workspaceId}/providers`,
-            )
-          : joinUrl(backendUrl, `/organizations/${orgId}/providers`);
+      const scope =
+        formScope === "workspace" ? { orgId, workspaceId } : { orgId };
+      const result = await writeEntity<{
+        id: string;
+        aliasRepoints?: unknown;
+      }>(backendUrl, "providers", scope, { id: providerId, data: payload });
 
-      const method = providerId ? "PUT" : "POST";
-
-      const response = await fetch(url, {
-        method,
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(payload),
-        credentials: "include",
-      });
-
-      if (response.ok) {
-        const saved = await response.json().catch(() => null);
-        reportAliasRepoints(saved?.aliasRepoints);
-        if (providerId) {
-          await mutate();
-        }
-        if (formScope === "workspace") {
-          router.push(`/${orgId}/workspace/${workspaceId}/settings/providers`);
-        } else {
-          router.push(`/${orgId}/settings/providers`);
-        }
-      } else {
-        const errorData = await response.json();
-        if (response.status === 409) {
-          setError(errorData.message || "A conflict occurred");
-        } else {
-          // Parse standardschema.dev validation errors
-          setValidationErrors(parseValidationErrors(errorData));
-        }
+      switch (result.outcome) {
+        case "success":
+          reportAliasRepoints(result.data.aliasRepoints);
+          result.revalidateKeys.forEach((key) => globalMutate(key));
+          if (formScope === "workspace") {
+            router.push(
+              `/${orgId}/workspace/${workspaceId}/settings/providers`,
+            );
+          } else {
+            router.push(`/${orgId}/settings/providers`);
+          }
+          break;
+        case "invalid":
+          setValidationErrors(result.fieldErrors);
+          if (Object.keys(result.fieldErrors).length === 0) {
+            toast.error(result.message);
+          }
+          break;
+        case "conflict":
+          setError(result.message);
+          break;
+        case "locked":
+        case "notFound":
+        case "error":
+          toast.error(result.message);
+          break;
       }
     } catch (error) {
       console.error("Error saving provider:", error);
@@ -893,38 +875,21 @@ const ProviderForm = ({
     if (!providerId) return;
 
     setIsDeleting(true);
-    try {
-      const deleteUrl =
-        formScope === "workspace"
-          ? joinUrl(
-              backendUrl,
-              `/organizations/${orgId}/workspaces/${workspaceId}/providers/${providerId}`,
-            )
-          : joinUrl(
-              backendUrl,
-              `/organizations/${orgId}/providers/${providerId}`,
-            );
+    const scope =
+      formScope === "workspace" ? { orgId, workspaceId } : { orgId };
+    const result = await writeEntity(backendUrl, "providers", scope, {
+      id: providerId,
+    });
 
-      const response = await fetch(deleteUrl, {
-        method: "DELETE",
-        credentials: "include",
-      });
-
-      if (response.ok) {
-        if (formScope === "workspace") {
-          router.push(`/${orgId}/workspace/${workspaceId}/settings/providers`);
-        } else {
-          router.push(`/${orgId}/settings/providers`);
-        }
+    if (result.outcome === "success") {
+      result.revalidateKeys.forEach((key) => globalMutate(key));
+      if (formScope === "workspace") {
+        router.push(`/${orgId}/workspace/${workspaceId}/settings/providers`);
       } else {
-        console.error("Failed to delete provider");
-        toast.error("Failed to delete provider");
-        setIsDeleting(false);
-        setIsDeleteDialogOpen(false);
+        router.push(`/${orgId}/settings/providers`);
       }
-    } catch (error) {
-      console.error("Error deleting provider:", error);
-      toast.error("Failed to delete provider");
+    } else {
+      toast.error(result.message);
       setIsDeleting(false);
       setIsDeleteDialogOpen(false);
     }

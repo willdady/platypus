@@ -42,6 +42,7 @@ import type {
   KanbanColumn,
 } from "@platypus/schemas";
 import { cn, fetcher, joinUrl } from "@/lib/utils";
+import { writeEntity, type Scope } from "@/lib/api-write";
 import { useBackendUrl } from "@/app/client-context";
 import { useAuth } from "@/components/auth-provider";
 import { KanbanColumnComponent } from "@/components/kanban-column";
@@ -97,6 +98,11 @@ export function KanbanBoard({
     backendUrl,
     `/organizations/${orgId}/workspaces/${workspaceId}/boards/${boardId}`,
   );
+  const scope: Scope = useMemo(
+    () => ({ orgId, workspaceId }),
+    [orgId, workspaceId],
+  );
+  const boardPath = `boards/${boardId}`;
 
   const { data, error, mutate } = useSWR<KanbanBoardState>(
     backendUrl && user ? joinUrl(baseUrl, "/state") : null,
@@ -411,18 +417,16 @@ export function KanbanBoard({
         if (oldIndex !== newIndex && newIndex !== -1) {
           const reordered = arrayMove(cols, oldIndex, newIndex);
           setLocalColumns(reordered);
-          try {
-            await fetch(joinUrl(baseUrl, "/columns/reorder"), {
-              method: "PUT",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                columnIds: reordered.map((c) => c.id),
-              }),
-              credentials: "include",
-            });
+          const outcome = await writeEntity(
+            backendUrl,
+            `${boardPath}/columns`,
+            scope,
+            { id: "reorder", data: { columnIds: reordered.map((c) => c.id) } },
+          );
+          if (outcome.outcome === "success") {
             await mutate();
-          } catch {
-            toast.error("Failed to move card/column");
+          } else {
+            toast.error(outcome.message);
             setLocalColumns(null);
           }
         } else {
@@ -525,24 +529,20 @@ export function KanbanBoard({
         });
       });
 
-      try {
-        const res = await fetch(joinUrl(baseUrl, `/cards/${active.id}/move`), {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            columnId: targetColumn.id,
-            afterCardId,
-          }),
-          credentials: "include",
-        });
-        if (!res.ok) throw new Error("Failed to move card");
+      const outcome = await writeEntity(
+        backendUrl,
+        `${boardPath}/cards/${active.id}/move`,
+        scope,
+        { data: { columnId: targetColumn.id, afterCardId } },
+      );
+      if (outcome.outcome === "success") {
         await mutate();
-      } catch {
-        toast.error("Failed to move card/column");
+      } else {
+        toast.error(outcome.message);
         setLocalColumns(null);
       }
     },
-    [baseUrl, mutate, setLocalColumns],
+    [backendUrl, boardPath, scope, mutate, setLocalColumns],
   );
 
   const handleAddColumn = useCallback(() => {
@@ -552,20 +552,20 @@ export function KanbanBoard({
 
   const confirmAddColumn = useCallback(async () => {
     if (!newColumnName.trim()) return;
-    try {
-      await fetch(joinUrl(baseUrl, "/columns"), {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: newColumnName.trim() }),
-        credentials: "include",
-      });
+    const outcome = await writeEntity(
+      backendUrl,
+      `${boardPath}/columns`,
+      scope,
+      { data: { name: newColumnName.trim() } },
+    );
+    if (outcome.outcome === "success") {
       setAddColumnDialogOpen(false);
       setNewColumnName("");
       await mutate();
-    } catch {
-      toast.error("Failed to create column");
+    } else {
+      toast.error(outcome.message);
     }
-  }, [newColumnName, baseUrl, mutate]);
+  }, [newColumnName, backendUrl, boardPath, scope, mutate]);
 
   const handleAddCard = useCallback((columnId: string) => {
     setAddCardColumnId(columnId);
@@ -576,29 +576,35 @@ export function KanbanBoard({
 
   const confirmAddCard = useCallback(async () => {
     if (!newCardTitle.trim() || !addCardColumnId) return;
-    try {
-      const res = await fetch(
-        joinUrl(baseUrl, `/columns/${addCardColumnId}/cards`),
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            title: newCardTitle.trim(),
-            ...(newCardLabelIds.length > 0 && { labelIds: newCardLabelIds }),
-          }),
-          credentials: "include",
+    const outcome = await writeEntity(
+      backendUrl,
+      `${boardPath}/columns/${addCardColumnId}/cards`,
+      scope,
+      {
+        data: {
+          title: newCardTitle.trim(),
+          ...(newCardLabelIds.length > 0 && { labelIds: newCardLabelIds }),
         },
-      );
-      if (!res.ok) throw new Error("Failed to create card");
+      },
+    );
+    if (outcome.outcome === "success") {
       setAddCardDialogOpen(false);
       setNewCardTitle("");
       setNewCardLabelIds([]);
       setAddCardColumnId(null);
       await mutate();
-    } catch {
-      toast.error("Failed to create card");
+    } else {
+      toast.error(outcome.message);
     }
-  }, [newCardTitle, newCardLabelIds, addCardColumnId, baseUrl, mutate]);
+  }, [
+    newCardTitle,
+    newCardLabelIds,
+    addCardColumnId,
+    backendUrl,
+    boardPath,
+    scope,
+    mutate,
+  ]);
 
   const handleEditColumn = useCallback(
     (columnId: string) => {
@@ -613,21 +619,21 @@ export function KanbanBoard({
 
   const confirmEditColumn = useCallback(async () => {
     if (!editColumnName.trim() || !editColumnId) return;
-    try {
-      await fetch(joinUrl(baseUrl, `/columns/${editColumnId}`), {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: editColumnName.trim() }),
-        credentials: "include",
-      });
+    const outcome = await writeEntity(
+      backendUrl,
+      `${boardPath}/columns`,
+      scope,
+      { id: editColumnId, data: { name: editColumnName.trim() } },
+    );
+    if (outcome.outcome === "success") {
       setEditColumnDialogOpen(false);
       setEditColumnId(null);
       setEditColumnName("");
       await mutate();
-    } catch {
-      toast.error("Failed to update column");
+    } else {
+      toast.error(outcome.message);
     }
-  }, [editColumnName, editColumnId, baseUrl, mutate]);
+  }, [editColumnName, editColumnId, backendUrl, boardPath, scope, mutate]);
 
   const handleDeleteColumn = useCallback(
     (columnId: string, hasCards: boolean) => {
@@ -640,19 +646,28 @@ export function KanbanBoard({
 
   const confirmDeleteColumn = useCallback(async () => {
     if (!deleteColumnId || deleteColumnHasCards) return;
-    try {
-      await fetch(joinUrl(baseUrl, `/columns/${deleteColumnId}`), {
-        method: "DELETE",
-        credentials: "include",
-      });
+    const outcome = await writeEntity(
+      backendUrl,
+      `${boardPath}/columns`,
+      scope,
+      { id: deleteColumnId },
+    );
+    if (outcome.outcome === "success") {
       setDeleteColumnDialogOpen(false);
       setDeleteColumnId(null);
       setDeleteColumnHasCards(false);
       await mutate();
-    } catch {
-      toast.error("Failed to delete column");
+    } else {
+      toast.error(outcome.message);
     }
-  }, [deleteColumnId, deleteColumnHasCards, baseUrl, mutate]);
+  }, [
+    deleteColumnId,
+    deleteColumnHasCards,
+    backendUrl,
+    boardPath,
+    scope,
+    mutate,
+  ]);
 
   const handleMoveColumn = useCallback(
     async (columnId: string, direction: "left" | "right") => {
@@ -663,22 +678,20 @@ export function KanbanBoard({
       if (newIndex < 0 || newIndex >= currentColumns.length) return;
       const reordered = arrayMove(currentColumns, index, newIndex);
       setLocalColumns(reordered);
-      try {
-        await fetch(joinUrl(baseUrl, "/columns/reorder"), {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            columnIds: reordered.map((c) => c.id),
-          }),
-          credentials: "include",
-        });
+      const outcome = await writeEntity(
+        backendUrl,
+        `${boardPath}/columns`,
+        scope,
+        { id: "reorder", data: { columnIds: reordered.map((c) => c.id) } },
+      );
+      if (outcome.outcome === "success") {
         await mutate();
-      } catch {
-        toast.error("Failed to move column");
+      } else {
+        toast.error(outcome.message);
         setLocalColumns(null);
       }
     },
-    [data?.columns, baseUrl, mutate, setLocalColumns],
+    [data?.columns, backendUrl, boardPath, scope, mutate, setLocalColumns],
   );
 
   const handleCardSave = useCallback(
@@ -699,38 +712,34 @@ export function KanbanBoard({
       );
       if (!column) return;
       const { columnId: targetColumnId, ...updateData } = cardData;
-      try {
-        const res = await fetch(joinUrl(baseUrl, `/cards/${cardId}`), {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(updateData),
-          credentials: "include",
-        });
-        if (!res.ok) throw new Error("Failed to update card");
-        if (targetColumnId && targetColumnId !== column.id) {
-          const moveRes = await fetch(
-            joinUrl(baseUrl, `/cards/${cardId}/move`),
-            {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                columnId: targetColumnId,
-                afterCardId: null,
-              }),
-              credentials: "include",
-            },
-          );
-          if (!moveRes.ok) throw new Error("Failed to move card");
-        }
-        setDialogOpen(false);
-        setSelectedCard(null);
-        updateCardIdParam(null);
-        await mutate();
-      } catch {
-        toast.error("Failed to update card");
+      const updateOutcome = await writeEntity(
+        backendUrl,
+        `${boardPath}/cards`,
+        scope,
+        { id: cardId, data: updateData },
+      );
+      if (updateOutcome.outcome !== "success") {
+        toast.error(updateOutcome.message);
+        return;
       }
+      if (targetColumnId && targetColumnId !== column.id) {
+        const moveOutcome = await writeEntity(
+          backendUrl,
+          `${boardPath}/cards/${cardId}/move`,
+          scope,
+          { data: { columnId: targetColumnId, afterCardId: null } },
+        );
+        if (moveOutcome.outcome !== "success") {
+          toast.error(moveOutcome.message);
+          return;
+        }
+      }
+      setDialogOpen(false);
+      setSelectedCard(null);
+      updateCardIdParam(null);
+      await mutate();
     },
-    [columns, baseUrl, mutate, updateCardIdParam],
+    [columns, backendUrl, boardPath, scope, mutate, updateCardIdParam],
   );
 
   const handleCardDelete = useCallback(
@@ -739,21 +748,22 @@ export function KanbanBoard({
         col.cards.some((c) => c.id === cardId),
       );
       if (!column) return;
-      try {
-        const res = await fetch(joinUrl(baseUrl, `/cards/${cardId}`), {
-          method: "DELETE",
-          credentials: "include",
-        });
-        if (!res.ok) throw new Error("Failed to delete card");
+      const outcome = await writeEntity(
+        backendUrl,
+        `${boardPath}/cards`,
+        scope,
+        { id: cardId },
+      );
+      if (outcome.outcome === "success") {
         setDialogOpen(false);
         setSelectedCard(null);
         updateCardIdParam(null);
         await mutate();
-      } catch {
-        toast.error("Failed to delete card");
+      } else {
+        toast.error(outcome.message);
       }
     },
-    [columns, baseUrl, mutate, updateCardIdParam],
+    [columns, backendUrl, boardPath, scope, mutate, updateCardIdParam],
   );
 
   const activeCard =

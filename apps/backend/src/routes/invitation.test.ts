@@ -133,6 +133,28 @@ describe("Invitation Routes", () => {
       });
     });
 
+    it("409s with the central error envelope on a duplicate org+email invitation", async () => {
+      mockSession({ id: "admin-1", email: "admin@example.com", role: "user" });
+      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]); // requireOrgAccess
+      mockDb.returning.mockRejectedValueOnce({
+        code: "23505",
+        constraint: "unique_invitation_org_email",
+      });
+
+      const res = await app.request(baseUrl, {
+        method: "POST",
+        body: JSON.stringify({ email: "user@example.com" }),
+        headers: { "Content-Type": "application/json" },
+      });
+
+      expect(res.status).toBe(409);
+      expect(await res.json()).toEqual({
+        error:
+          "A pending invitation already exists for this user and organization",
+        files: undefined,
+      });
+    });
+
     it("should return 400 if inviting self", async () => {
       mockSession({ id: "admin-1", email: "admin@example.com", role: "user" });
       // requireOrgAccess

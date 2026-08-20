@@ -31,8 +31,9 @@ import type {
   AttachmentResourceType,
   Provider,
 } from "@platypus/schemas";
-import useSWR from "swr";
-import { fetcher, parseValidationErrors, joinUrl } from "@/lib/utils";
+import useSWR, { useSWRConfig } from "swr";
+import { fetcher, joinUrl } from "@/lib/utils";
+import { writeEntity } from "@/lib/api-write";
 import { useBackendUrl } from "@/app/client-context";
 import { useAuth } from "@/components/auth-provider";
 
@@ -153,6 +154,7 @@ const BlueprintForm = ({
 
   const { user } = useAuth();
   const backendUrl = useBackendUrl();
+  const { mutate: globalMutate } = useSWRConfig();
 
   const collectionUrl = `/organizations/${orgId}/blueprints`;
   const returnPath = `/${orgId}/settings/blueprints`;
@@ -280,82 +282,73 @@ const BlueprintForm = ({
     setIsSubmitting(true);
     setValidationErrors({});
     setFormError(null);
-    try {
-      const items: BlueprintItem[] = [...selected].map((key) => {
-        const [resourceType, resourceId] = key.split(":");
-        return {
-          resourceType: resourceType as AttachmentResourceType,
-          resourceId,
-        };
-      });
-      const payload = {
-        name: formData.name,
-        description: formData.description || undefined,
-        items,
-        // Tier 2 pointer-settings (ADR-0008). Null clears the slot; on apply a
-        // null slot leaves the workspace's existing value untouched.
-        context: formData.context || null,
-        taskModelProviderId: formData.taskModelProviderId,
-        memoryExtractionProviderId: formData.memoryExtractionProviderId,
-        memoryEmbeddingProviderId: formData.memoryEmbeddingProviderId,
+
+    const items: BlueprintItem[] = [...selected].map((key) => {
+      const [resourceType, resourceId] = key.split(":");
+      return {
+        resourceType: resourceType as AttachmentResourceType,
+        resourceId,
       };
+    });
+    const payload = {
+      name: formData.name,
+      description: formData.description || undefined,
+      items,
+      // Tier 2 pointer-settings (ADR-0008). Null clears the slot; on apply a
+      // null slot leaves the workspace's existing value untouched.
+      context: formData.context || null,
+      taskModelProviderId: formData.taskModelProviderId,
+      memoryExtractionProviderId: formData.memoryExtractionProviderId,
+      memoryEmbeddingProviderId: formData.memoryEmbeddingProviderId,
+    };
 
-      const url = blueprintId
-        ? joinUrl(backendUrl, `${collectionUrl}/${blueprintId}`)
-        : joinUrl(backendUrl, collectionUrl);
-      const method = blueprintId ? "PUT" : "POST";
+    const result = await writeEntity(
+      backendUrl,
+      "blueprints",
+      { orgId },
+      { id: blueprintId, data: payload },
+    );
 
-      const response = await fetch(url, {
-        method,
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-        credentials: "include",
-      });
-
-      if (response.ok) {
+    switch (result.outcome) {
+      case "success":
+        result.revalidateKeys.forEach((key) => globalMutate(key));
         router.push(returnPath);
-      } else {
-        const errorData = await response.json();
-        if (response.status === 409) {
-          setValidationErrors({ name: errorData.error || errorData.message });
-        } else if (response.status === 422) {
-          setFormError(
-            errorData.error ||
-              "A blueprint may only list organization-scoped resources.",
-          );
-        } else {
-          setValidationErrors(parseValidationErrors(errorData));
+        break;
+      case "invalid":
+        setValidationErrors(result.fieldErrors);
+        if (Object.keys(result.fieldErrors).length === 0) {
+          setFormError(result.message);
         }
-      }
-    } catch (error) {
-      console.error("Error saving blueprint:", error);
-      setFormError("An unexpected error occurred.");
-    } finally {
-      setIsSubmitting(false);
+        break;
+      case "conflict":
+        setValidationErrors({ name: result.message });
+        break;
+      case "locked":
+      case "notFound":
+      case "error":
+        setFormError(result.message);
+        break;
     }
+
+    setIsSubmitting(false);
   };
 
   const handleDelete = async () => {
     if (!blueprintId) return;
     setIsDeleting(true);
     setDeleteError(null);
-    try {
-      const response = await fetch(
-        joinUrl(backendUrl, `${collectionUrl}/${blueprintId}`),
-        { method: "DELETE", credentials: "include" },
-      );
-      if (response.ok) {
-        router.push(returnPath);
-      } else {
-        const errorData = await response.json();
-        setDeleteError(
-          errorData.error || errorData.message || "Failed to delete blueprint",
-        );
-        setIsDeleting(false);
-      }
-    } catch (error) {
-      console.error("Error deleting blueprint:", error);
-      setDeleteError("An unexpected error occurred");
+    const result = await writeEntity(
+      backendUrl,
+      "blueprints",
+      { orgId },
+      { id: blueprintId },
+    );
+
+    if (result.outcome === "success") {
+      result.revalidateKeys.forEach((key) => globalMutate(key));
+      router.push(returnPath);
+    } else {
+      setDeleteError(result.message);
       setIsDeleting(false);
     }
   };

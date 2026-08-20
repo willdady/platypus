@@ -31,6 +31,7 @@ vi.mock("swr", () => ({
     isLoading: false,
     mutate: vi.fn(),
   }),
+  useSWRConfig: () => ({ mutate: vi.fn() }),
 }));
 
 import { McpForm } from "./mcp-form";

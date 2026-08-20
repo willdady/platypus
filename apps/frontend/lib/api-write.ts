@@ -2,11 +2,13 @@ import { joinUrl, parseValidationErrors } from "./utils";
 
 /**
  * A write's target scope (ADR-0007): an Organization-level (Shared) resource,
- * or a resource inside one Workspace. Presence of `workspaceId` is what
- * distinguishes the two — there is deliberately no separate discriminant to
- * get out of sync with it.
+ * a resource inside one Workspace, or — when `orgId` itself is omitted — the
+ * root `/organizations` collection, for writes to an Organization itself.
+ * Presence of `workspaceId` is what distinguishes the scoped two — there is
+ * deliberately no separate discriminant to get out of sync with it.
  */
 export type Scope =
+  | { readonly orgId?: undefined; readonly workspaceId?: undefined }
   | { readonly orgId: string; readonly workspaceId?: undefined }
   | { readonly orgId: string; readonly workspaceId: string };
 
@@ -56,10 +58,30 @@ const DEFAULT_MESSAGES = {
   error: "Request failed",
 } as const;
 
-function scopedPath(entity: string, scope: Scope): string {
+/**
+ * The Organization-vs-Workspace path shape (ADR-0007), exported so a caller
+ * resolves it once per component and reuses it for both the list's read and
+ * every write, instead of re-deriving the branch at each call site.
+ */
+export function scopedPath(entity: string, scope: Scope): string {
+  if (!scope.orgId) return `/${entity}`;
   return scope.workspaceId
     ? `/organizations/${scope.orgId}/workspaces/${scope.workspaceId}/${entity}`
     : `/organizations/${scope.orgId}/${entity}`;
+}
+
+/**
+ * The read-side counterpart to `writeEntity`'s path resolution: the same
+ * base URL and Organization-vs-Workspace path shape, for a caller that only
+ * needs a key to fetch (typically as an SWR key via `useScopedSWR`) rather
+ * than a full write outcome.
+ */
+export function scopedUrl(
+  backendUrl: string,
+  entity: string,
+  scope: Scope,
+): string {
+  return joinUrl(backendUrl, scopedPath(entity, scope));
 }
 
 function errorMessage(body: unknown): string | undefined {

@@ -31,12 +31,8 @@ import { useState } from "react";
 import { useResetOnChange } from "@/hooks/use-reset-on-change";
 import { useRouter } from "next/navigation";
 import { type Workspace, type Provider } from "@platypus/schemas";
-import {
-  clearFieldError,
-  fetcher,
-  parseValidationErrors,
-  joinUrl,
-} from "@/lib/utils";
+import { clearFieldError, fetcher, joinUrl } from "@/lib/utils";
+import { writeEntity } from "@/lib/api-write";
 import { useBackendUrl } from "@/app/client-context";
 import { useAuth } from "@/components/auth-provider";
 import { Trash2 } from "lucide-react";
@@ -59,7 +55,7 @@ const WorkspaceForm = ({
   const router = useRouter();
   const { mutate: globalMutate } = useSWRConfig();
 
-  const { data: workspace, mutate } = useSWR<Workspace>(
+  const { data: workspace } = useSWR<Workspace>(
     workspaceId && user
       ? joinUrl(backendUrl, `/organizations/${orgId}/workspaces/${workspaceId}`)
       : null,
@@ -173,100 +169,81 @@ const WorkspaceForm = ({
   const handleSubmit = async () => {
     setIsSubmitting(true);
     setValidationErrors({});
-    try {
-      const url = workspaceId
-        ? joinUrl(
-            backendUrl,
-            `/organizations/${orgId}/workspaces/${workspaceId}`,
-          )
-        : joinUrl(backendUrl, `/organizations/${orgId}/workspaces`);
 
-      const method = workspaceId ? "PUT" : "POST";
+    const payload = workspaceId
+      ? {
+          name: formData.name,
+          context: formData.context || null,
+          taskModelProviderId: formData.taskModelProviderId,
+          memoryExtractionProviderId: formData.memoryExtractionProviderId,
+          memoryEmbeddingProviderId: formData.memoryEmbeddingProviderId,
+          maxDailySummaries: formData.maxDailySummaries,
+          // Admin-only; the backend strips these for non-admins (ADR-0006).
+          providerSelfManagement: formData.providerSelfManagement,
+          mcpSelfManagement: formData.mcpSelfManagement,
+        }
+      : {
+          organizationId: orgId,
+          name: formData.name,
+          context: formData.context || null,
+          // ADR-0008: an admin assigns the owner; defaults to themselves.
+          ownerId: formData.ownerId || user?.id,
+        };
 
-      const payload = workspaceId
-        ? {
-            name: formData.name,
-            context: formData.context || null,
-            taskModelProviderId: formData.taskModelProviderId,
-            memoryExtractionProviderId: formData.memoryExtractionProviderId,
-            memoryEmbeddingProviderId: formData.memoryEmbeddingProviderId,
-            maxDailySummaries: formData.maxDailySummaries,
-            // Admin-only; the backend strips these for non-admins (ADR-0006).
-            providerSelfManagement: formData.providerSelfManagement,
-            mcpSelfManagement: formData.mcpSelfManagement,
-          }
-        : {
-            organizationId: orgId,
-            name: formData.name,
-            context: formData.context || null,
-            // ADR-0008: an admin assigns the owner; defaults to themselves.
-            ownerId: formData.ownerId || user?.id,
-          };
+    const result = await writeEntity<Workspace>(
+      backendUrl,
+      "workspaces",
+      { orgId },
+      { id: workspaceId, data: payload },
+    );
 
-      const response = await fetch(url, {
-        method,
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(payload),
-        credentials: "include",
-      });
-
-      if (response.ok) {
+    switch (result.outcome) {
+      case "success":
+        result.revalidateKeys.forEach((key) => globalMutate(key));
         if (workspaceId) {
           toast.success("Workspace updated");
-          mutate(); // Refresh the local cache
-          globalMutate(
-            joinUrl(backendUrl, `/organizations/${orgId}/workspaces`),
-          );
           router.refresh();
         } else {
-          const workspace = await response.json();
           toast.success("Workspace created");
-          globalMutate(
-            joinUrl(backendUrl, `/organizations/${orgId}/workspaces`),
-          );
-          router.push(`/${orgId}/workspace/${workspace.id}`);
+          router.push(`/${orgId}/workspace/${result.data.id}`);
         }
-      } else {
-        // Parse standardschema.dev validation errors
-        const errorData = await response.json();
-        setValidationErrors(parseValidationErrors(errorData));
-        toast.error("Failed to save workspace");
-      }
-    } catch (error) {
-      console.error("Error saving workspace:", error);
-      toast.error("Error saving workspace");
-    } finally {
-      setIsSubmitting(false);
+        break;
+      case "invalid":
+        setValidationErrors(result.fieldErrors);
+        if (Object.keys(result.fieldErrors).length === 0) {
+          toast.error(result.message);
+        }
+        break;
+      case "conflict":
+        setValidationErrors({ name: result.message });
+        break;
+      case "locked":
+      case "notFound":
+      case "error":
+        toast.error(result.message);
+        break;
     }
+
+    setIsSubmitting(false);
   };
 
   const handleDelete = async () => {
     if (!workspaceId) return;
 
     setIsDeleting(true);
-    try {
-      const response = await fetch(
-        joinUrl(
-          backendUrl,
-          `/organizations/${orgId}/workspaces/${workspaceId}`,
-        ),
-        {
-          method: "DELETE",
-          credentials: "include",
-        },
-      );
-      if (response.ok) {
-        toast.success("Workspace deleted");
-        window.location.href = `/${orgId}`;
-      } else {
-        toast.error("Failed to delete workspace");
-        setIsDeleting(false);
-        setIsDeleteDialogOpen(false);
-      }
-    } catch {
-      toast.error("Error deleting workspace");
+    const result = await writeEntity(
+      backendUrl,
+      "workspaces",
+      { orgId },
+      { id: workspaceId },
+    );
+
+    if (result.outcome === "success") {
+      result.revalidateKeys.forEach((key) => globalMutate(key));
+      toast.success("Workspace deleted");
+      window.location.href = `/${orgId}`;
+    } else {
+      toast.error(result.message);
       setIsDeleting(false);
       setIsDeleteDialogOpen(false);
     }

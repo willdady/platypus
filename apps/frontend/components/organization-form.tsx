@@ -23,17 +23,13 @@ import { useState } from "react";
 import { useResetOnChange } from "@/hooks/use-reset-on-change";
 import { useRouter } from "next/navigation";
 import { type Organization } from "@platypus/schemas";
-import {
-  clearFieldError,
-  fetcher,
-  parseValidationErrors,
-  joinUrl,
-} from "@/lib/utils";
+import { clearFieldError, fetcher, joinUrl } from "@/lib/utils";
+import { writeEntity } from "@/lib/api-write";
 import { useBackendUrl } from "@/app/client-context";
 import { useAuth } from "@/components/auth-provider";
 import { Trash2 } from "lucide-react";
 import { toast } from "sonner";
-import useSWR from "swr";
+import useSWR, { useSWRConfig } from "swr";
 
 interface OrganizationFormProps {
   classNames?: string;
@@ -44,8 +40,9 @@ const OrganizationForm = ({ classNames, orgId }: OrganizationFormProps) => {
   const { user } = useAuth();
   const backendUrl = useBackendUrl();
   const router = useRouter();
+  const { mutate: globalMutate } = useSWRConfig();
 
-  const { data: organization, mutate } = useSWR<Organization>(
+  const { data: organization } = useSWR<Organization>(
     orgId && user ? joinUrl(backendUrl, `/organizations/${orgId}`) : null,
     fetcher,
   );
@@ -92,76 +89,69 @@ const OrganizationForm = ({ classNames, orgId }: OrganizationFormProps) => {
   const handleSubmit = async () => {
     setIsSubmitting(true);
     setValidationErrors({});
-    try {
-      const url = orgId
-        ? joinUrl(backendUrl, `/organizations/${orgId}`)
-        : joinUrl(backendUrl, "/organizations");
 
-      const method = orgId ? "PUT" : "POST";
+    // identityContext is update-only (the create schema accepts name only).
+    const payload = orgId
+      ? {
+          name: formData.name,
+          identityContext: formData.identityContext || null,
+        }
+      : { name: formData.name };
 
-      // identityContext is update-only (the create schema accepts name only).
-      const payload = orgId
-        ? {
-            name: formData.name,
-            identityContext: formData.identityContext || null,
-          }
-        : { name: formData.name };
+    const result = await writeEntity<Organization>(
+      backendUrl,
+      "organizations",
+      {},
+      { id: orgId, data: payload },
+    );
 
-      const response = await fetch(url, {
-        method,
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(payload),
-        credentials: "include",
-      });
-
-      if (response.ok) {
+    switch (result.outcome) {
+      case "success":
+        result.revalidateKeys.forEach((key) => globalMutate(key));
         if (orgId) {
           toast.success("Organization updated");
-          mutate(); // Refresh the local cache
           router.refresh();
         } else {
-          const organization = await response.json();
           toast.success("Organization created");
-          router.push(`/${organization.id}`);
+          router.push(`/${result.data.id}`);
         }
-      } else {
-        // Parse standardschema.dev validation errors
-        const errorData = await response.json();
-        setValidationErrors(parseValidationErrors(errorData));
-        toast.error("Failed to save organization");
-      }
-    } catch (error) {
-      console.error("Error saving organization:", error);
-      toast.error("Error saving organization");
-    } finally {
-      setIsSubmitting(false);
+        break;
+      case "invalid":
+        setValidationErrors(result.fieldErrors);
+        if (Object.keys(result.fieldErrors).length === 0) {
+          toast.error(result.message);
+        }
+        break;
+      case "conflict":
+        setValidationErrors({ name: result.message });
+        break;
+      case "locked":
+      case "notFound":
+      case "error":
+        toast.error(result.message);
+        break;
     }
+
+    setIsSubmitting(false);
   };
 
   const handleDelete = async () => {
     if (!orgId) return;
 
     setIsDeleting(true);
-    try {
-      const response = await fetch(
-        joinUrl(backendUrl, `/organizations/${orgId}`),
-        {
-          method: "DELETE",
-          credentials: "include",
-        },
-      );
-      if (response.ok) {
-        toast.success("Organization deleted");
-        window.location.href = `/`;
-      } else {
-        toast.error("Failed to delete organization");
-        setIsDeleting(false);
-        setIsDeleteDialogOpen(false);
-      }
-    } catch {
-      toast.error("Error deleting organization");
+    const result = await writeEntity(
+      backendUrl,
+      "organizations",
+      {},
+      { id: orgId },
+    );
+
+    if (result.outcome === "success") {
+      result.revalidateKeys.forEach((key) => globalMutate(key));
+      toast.success("Organization deleted");
+      window.location.href = `/`;
+    } else {
+      toast.error(result.message);
       setIsDeleting(false);
       setIsDeleteDialogOpen(false);
     }

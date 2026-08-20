@@ -35,13 +35,9 @@ import {
   type KanbanBoard,
   type KanbanBoardState,
 } from "@platypus/schemas";
-import useSWR from "swr";
-import {
-  clearFieldError,
-  fetcher,
-  parseValidationErrors,
-  joinUrl,
-} from "@/lib/utils";
+import useSWR, { useSWRConfig } from "swr";
+import { clearFieldError, fetcher, joinUrl } from "@/lib/utils";
+import { writeEntity } from "@/lib/api-write";
 import { useBackendUrl } from "@/app/client-context";
 import { useAuth } from "@/components/auth-provider";
 import { Cron } from "croner";
@@ -292,6 +288,7 @@ const TriggerForm = ({
 
   const { user } = useAuth();
   const backendUrl = useBackendUrl();
+  const { mutate: globalMutate } = useSWRConfig();
 
   const { data: agentsData, isLoading: agentsLoading } = useSWR<{
     results: Agent[];
@@ -548,33 +545,32 @@ const TriggerForm = ({
               },
             };
 
-      const url = triggerId
-        ? joinUrl(
-            backendUrl,
-            `/organizations/${orgId}/workspaces/${workspaceId}/triggers/${triggerId}`,
-          )
-        : joinUrl(
-            backendUrl,
-            `/organizations/${orgId}/workspaces/${workspaceId}/triggers`,
-          );
+      const result = await writeEntity(
+        backendUrl,
+        "triggers",
+        { orgId, workspaceId },
+        { id: triggerId, data: payload },
+      );
 
-      const method = triggerId ? "PUT" : "POST";
-
-      const response = await fetch(url, {
-        method,
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(payload),
-        credentials: "include",
-      });
-
-      if (response.ok) {
-        router.push(`/${orgId}/workspace/${workspaceId}`);
-      } else {
-        const errorData = await response.json();
-        setValidationErrors(parseValidationErrors(errorData));
-        toast.error("Failed to save trigger");
+      switch (result.outcome) {
+        case "success":
+          result.revalidateKeys.forEach((key) => globalMutate(key));
+          router.push(`/${orgId}/workspace/${workspaceId}`);
+          break;
+        case "invalid":
+          setValidationErrors(result.fieldErrors);
+          if (Object.keys(result.fieldErrors).length === 0) {
+            toast.error(result.message);
+          }
+          break;
+        case "conflict":
+          setValidationErrors({ name: result.message });
+          break;
+        case "locked":
+        case "notFound":
+        case "error":
+          toast.error(result.message);
+          break;
       }
     } catch {
       toast.error("Error saving trigger");
@@ -587,27 +583,18 @@ const TriggerForm = ({
     if (!triggerId) return;
 
     setIsDeleting(true);
-    try {
-      const response = await fetch(
-        joinUrl(
-          backendUrl,
-          `/organizations/${orgId}/workspaces/${workspaceId}/triggers/${triggerId}`,
-        ),
-        {
-          method: "DELETE",
-          credentials: "include",
-        },
-      );
+    const result = await writeEntity(
+      backendUrl,
+      "triggers",
+      { orgId, workspaceId },
+      { id: triggerId },
+    );
 
-      if (response.ok) {
-        router.push(`/${orgId}/workspace/${workspaceId}`);
-      } else {
-        toast.error("Failed to delete trigger");
-        setIsDeleting(false);
-        setIsDeleteDialogOpen(false);
-      }
-    } catch {
-      toast.error("Error deleting trigger");
+    if (result.outcome === "success") {
+      result.revalidateKeys.forEach((key) => globalMutate(key));
+      router.push(`/${orgId}/workspace/${workspaceId}`);
+    } else {
+      toast.error(result.message);
       setIsDeleting(false);
       setIsDeleteDialogOpen(false);
     }

@@ -15,13 +15,9 @@ import { ConfirmDialog } from "@/components/confirm-dialog";
 import { useCallback, useState } from "react";
 import { useResetOnChange } from "@/hooks/use-reset-on-change";
 import { useRouter } from "next/navigation";
-import useSWR from "swr";
-import {
-  fetcher,
-  parseValidationErrors,
-  clearFieldError,
-  joinUrl,
-} from "@/lib/utils";
+import useSWR, { useSWRConfig } from "swr";
+import { fetcher, clearFieldError, joinUrl } from "@/lib/utils";
+import { writeEntity } from "@/lib/api-write";
 import { toast } from "sonner";
 import { useBackendUrl } from "@/app/client-context";
 import { useAuth } from "@/components/auth-provider";
@@ -70,6 +66,7 @@ const WebhookForm = ({ orgId, workspaceId, webhookId }: WebhookFormProps) => {
   const { user } = useAuth();
   const backendUrl = useBackendUrl();
   const router = useRouter();
+  const { mutate: globalMutate } = useSWRConfig();
 
   const [name, setName] = useState("");
   const [url, setUrl] = useState("");
@@ -170,60 +167,54 @@ const WebhookForm = ({ orgId, workspaceId, webhookId }: WebhookFormProps) => {
     setIsSubmitting(true);
     setValidationErrors({});
 
-    try {
-      const payload = buildPayload();
-      const requestUrl = isEditMode
-        ? joinUrl(webhooksBaseUrl, `/${webhookId}`)
-        : webhooksBaseUrl;
-      const method = isEditMode ? "PUT" : "POST";
+    const payload = buildPayload();
+    const result = await writeEntity(
+      backendUrl,
+      "webhooks",
+      { orgId, workspaceId },
+      { id: webhookId, data: payload },
+    );
 
-      const response = await fetch(requestUrl, {
-        method,
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-        credentials: "include",
-      });
-
-      if (response.ok) {
-        if (isEditMode) {
-          toast.success("Webhook updated");
-          await mutate();
-        } else {
-          toast.success("Webhook created");
-        }
+    switch (result.outcome) {
+      case "success":
+        result.revalidateKeys.forEach((key) => globalMutate(key));
+        toast.success(isEditMode ? "Webhook updated" : "Webhook created");
         router.push(`/${orgId}/workspace/${workspaceId}/settings/webhooks`);
-      } else {
-        const errorData = await response.json();
-        setValidationErrors(parseValidationErrors(errorData));
-      }
-    } catch (error) {
-      console.error("Error saving webhook:", error);
-      toast.error("Failed to save webhook");
-    } finally {
-      setIsSubmitting(false);
+        break;
+      case "invalid":
+        setValidationErrors(result.fieldErrors);
+        if (Object.keys(result.fieldErrors).length === 0) {
+          toast.error(result.message);
+        }
+        break;
+      case "conflict":
+        setValidationErrors({ name: result.message });
+        break;
+      case "locked":
+      case "notFound":
+      case "error":
+        toast.error(result.message);
+        break;
     }
+
+    setIsSubmitting(false);
   };
 
   const handleDelete = async () => {
     setIsDeleting(true);
-    try {
-      const response = await fetch(joinUrl(webhooksBaseUrl, `/${webhookId}`), {
-        method: "DELETE",
-        credentials: "include",
-      });
+    const result = await writeEntity(
+      backendUrl,
+      "webhooks",
+      { orgId, workspaceId },
+      { id: webhookId },
+    );
 
-      if (response.ok) {
-        toast.success("Webhook deleted");
-        router.push(`/${orgId}/workspace/${workspaceId}/settings/webhooks`);
-      } else {
-        console.error("Failed to delete webhook");
-        toast.error("Failed to delete webhook");
-        setIsDeleting(false);
-        setIsDeleteDialogOpen(false);
-      }
-    } catch (error) {
-      console.error("Error deleting webhook:", error);
-      toast.error("Failed to delete webhook");
+    if (result.outcome === "success") {
+      result.revalidateKeys.forEach((key) => globalMutate(key));
+      toast.success("Webhook deleted");
+      router.push(`/${orgId}/workspace/${workspaceId}/settings/webhooks`);
+    } else {
+      toast.error(result.message);
       setIsDeleting(false);
       setIsDeleteDialogOpen(false);
     }

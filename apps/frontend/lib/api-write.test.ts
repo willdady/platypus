@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach, vi } from "vitest";
-import { writeEntity, writeAt } from "./api-write";
+import { writeEntity, writeAt, scopedUrl } from "./api-write";
 
 function mockResponse(status: number, body: unknown) {
   return {
@@ -98,6 +98,45 @@ describe("writeEntity — transport", () => {
     expect(init.headers).toBeUndefined();
   });
 
+  it("POSTs to the root collection path when the scope carries no orgId", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(mockResponse(201, { id: "org1" }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await writeEntity(
+      BACKEND_URL,
+      "organizations",
+      {},
+      { data: { name: "Acme" } },
+    );
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "http://localhost:4000/organizations",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ name: "Acme" }),
+      }),
+    );
+  });
+
+  it("PUTs to the root item path when the scope carries no orgId but an id is given", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(mockResponse(200, {}));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await writeEntity(
+      BACKEND_URL,
+      "organizations",
+      {},
+      { id: "org1", data: { name: "Renamed" } },
+    );
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "http://localhost:4000/organizations/org1",
+      expect.objectContaining({ method: "PUT" }),
+    );
+  });
+
   it("always sends credentials: include", async () => {
     const fetchMock = vi.fn().mockResolvedValue(mockResponse(200, {}));
     vi.stubGlobal("fetch", fetchMock);
@@ -112,6 +151,34 @@ describe("writeEntity — transport", () => {
     );
 
     expect(fetchMock.mock.calls[0][1].credentials).toBe("include");
+  });
+
+  it("DELETEs the root item path when the scope carries no orgId", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(mockResponse(200, {}));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await writeEntity(BACKEND_URL, "organizations", {}, { id: "org1" });
+
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toBe("http://localhost:4000/organizations/org1");
+    expect(init.method).toBe("DELETE");
+  });
+});
+
+describe("scopedUrl — the read-side path shape", () => {
+  it("builds the workspace-scoped URL when a workspaceId is present", () => {
+    expect(
+      scopedUrl(BACKEND_URL, "providers", {
+        orgId: "org1",
+        workspaceId: "ws1",
+      }),
+    ).toBe("http://localhost:4000/organizations/org1/workspaces/ws1/providers");
+  });
+
+  it("builds the org-scoped URL when no workspaceId is given", () => {
+    expect(scopedUrl(BACKEND_URL, "agents", { orgId: "org1" })).toBe(
+      "http://localhost:4000/organizations/org1/agents",
+    );
   });
 });
 

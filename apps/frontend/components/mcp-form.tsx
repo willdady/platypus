@@ -31,13 +31,9 @@ import { useState, useEffect } from "react";
 import { useResetOnChange } from "@/hooks/use-reset-on-change";
 import { useRouter } from "next/navigation";
 import { type MCP } from "@platypus/schemas";
-import useSWR from "swr";
-import {
-  clearFieldError,
-  fetcher,
-  parseValidationErrors,
-  joinUrl,
-} from "@/lib/utils";
+import useSWR, { useSWRConfig } from "swr";
+import { clearFieldError, fetcher, joinUrl } from "@/lib/utils";
+import { writeEntity } from "@/lib/api-write";
 import { toast } from "sonner";
 import { useBackendUrl } from "@/app/client-context";
 import { useAuth } from "@/components/auth-provider";
@@ -122,6 +118,7 @@ const McpForm = ({
   const [isRevoking, setIsRevoking] = useState(false);
 
   const router = useRouter();
+  const { mutate: globalMutate } = useSWRConfig();
 
   const {
     data: mcp,
@@ -239,28 +236,34 @@ const McpForm = ({
   const saveMcp = async (existingId?: string): Promise<string | null> => {
     setValidationErrors({});
     const payload = buildPayload();
+    const scope = workspaceId ? { orgId, workspaceId } : { orgId };
 
-    const url = existingId
-      ? joinUrl(backendUrl, `${collectionUrl}/${existingId}`)
-      : joinUrl(backendUrl, collectionUrl);
+    const result = await writeEntity<{ id: string }>(
+      backendUrl,
+      "mcps",
+      scope,
+      { id: existingId, data: payload },
+    );
 
-    const method = existingId ? "PUT" : "POST";
-
-    const response = await fetch(url, {
-      method,
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-      credentials: "include",
-    });
-
-    if (response.ok) {
-      const record = await response.json();
-      return record.id;
+    switch (result.outcome) {
+      case "success":
+        result.revalidateKeys.forEach((key) => globalMutate(key));
+        return result.data.id;
+      case "invalid":
+        setValidationErrors(result.fieldErrors);
+        if (Object.keys(result.fieldErrors).length === 0) {
+          toast.error(result.message);
+        }
+        return null;
+      case "conflict":
+        setValidationErrors({ name: result.message });
+        return null;
+      case "locked":
+      case "notFound":
+      case "error":
+        toast.error(result.message);
+        return null;
     }
-
-    const errorData = await response.json();
-    setValidationErrors(parseValidationErrors(errorData));
-    return null;
   };
 
   const handleSubmit = async () => {
@@ -282,26 +285,16 @@ const McpForm = ({
     if (!mcpId) return;
 
     setIsDeleting(true);
-    try {
-      const response = await fetch(
-        joinUrl(backendUrl, `${collectionUrl}/${mcpId}`),
-        {
-          method: "DELETE",
-          credentials: "include",
-        },
-      );
+    const scope = workspaceId ? { orgId, workspaceId } : { orgId };
+    const result = await writeEntity(backendUrl, "mcps", scope, {
+      id: mcpId,
+    });
 
-      if (response.ok) {
-        router.push(listPath);
-      } else {
-        console.error("Failed to delete MCP");
-        toast.error("Failed to delete MCP server");
-        setIsDeleting(false);
-        setIsDeleteDialogOpen(false);
-      }
-    } catch (error) {
-      console.error("Error deleting MCP:", error);
-      toast.error("Failed to delete MCP server");
+    if (result.outcome === "success") {
+      result.revalidateKeys.forEach((key) => globalMutate(key));
+      router.push(listPath);
+    } else {
+      toast.error(result.message);
       setIsDeleting(false);
       setIsDeleteDialogOpen(false);
     }
