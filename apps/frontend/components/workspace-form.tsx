@@ -19,14 +19,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { ConfirmDialog } from "@/components/confirm-dialog";
 import { useState } from "react";
 import { useResetOnChange } from "@/hooks/use-reset-on-change";
 import { useRouter } from "next/navigation";
@@ -138,7 +131,6 @@ const WorkspaceForm = ({
   >({});
 
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
-  const [deleteInput, setDeleteInput] = useState("");
   const [isDeleting, setIsDeleting] = useState(false);
 
   // When creating, default the owner to the current admin until they pick
@@ -584,10 +576,7 @@ const WorkspaceForm = ({
         {workspaceId && (
           <Button
             variant="outline"
-            onClick={() => {
-              setIsDeleteDialogOpen(true);
-              setDeleteInput("");
-            }}
+            onClick={() => setIsDeleteDialogOpen(true)}
             disabled={isSubmitting}
           >
             <Trash2 /> Delete
@@ -595,62 +584,17 @@ const WorkspaceForm = ({
         )}
       </div>
 
-      <Dialog
+      <ConfirmDialog
         open={isDeleteDialogOpen}
-        onOpenChange={(open) => {
-          if (!isDeleting) {
-            setIsDeleteDialogOpen(open);
-          }
-        }}
-      >
-        <DialogContent
-          onPointerDownOutside={(e) => {
-            if (isDeleting) {
-              e.preventDefault();
-            }
-          }}
-          onEscapeKeyDown={(e) => {
-            if (isDeleting) {
-              e.preventDefault();
-            }
-          }}
-          showCloseButton={false}
-        >
-          <DialogHeader>
-            <DialogTitle>Delete Workspace</DialogTitle>
-            <DialogDescription>
-              Are you sure you want to delete this workspace? This action cannot
-              be undone.
-            </DialogDescription>
-            <div className="mt-4">
-              <Input
-                placeholder="Type 'Delete workspace' to confirm"
-                value={deleteInput}
-                onChange={(e) => setDeleteInput(e.target.value)}
-                disabled={isDeleting}
-              />
-            </div>
-          </DialogHeader>
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setIsDeleteDialogOpen(false)}
-              disabled={isDeleting}
-            >
-              Cancel
-            </Button>
-            <Button
-              variant="destructive"
-              onClick={handleDelete}
-              disabled={
-                isDeleting || deleteInput.toLowerCase() !== "delete workspace"
-              }
-            >
-              Delete
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+        onOpenChange={setIsDeleteDialogOpen}
+        title="Delete Workspace"
+        description="Are you sure you want to delete this workspace? This action cannot be undone."
+        confirmLabel="Delete"
+        confirmVariant="destructive"
+        confirmPhrase="Delete workspace"
+        onConfirm={handleDelete}
+        loading={isDeleting}
+      />
     </div>
   );
 };

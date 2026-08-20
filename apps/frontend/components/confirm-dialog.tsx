@@ -9,6 +9,9 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { useState } from "react";
+import { useResetOnChange } from "@/hooks/use-reset-on-change";
 
 interface ConfirmDialogProps {
   open: boolean;
@@ -22,6 +25,9 @@ interface ConfirmDialogProps {
   onCancel?: () => void;
   loading?: boolean;
   error?: string | null;
+  // When set, the confirm button stays disabled until the user types this
+  // phrase (case-insensitively) into an input rendered in the dialog.
+  confirmPhrase?: string;
 }
 
 export const ConfirmDialog = ({
@@ -36,7 +42,19 @@ export const ConfirmDialog = ({
   onCancel,
   loading = false,
   error = null,
+  confirmPhrase,
 }: ConfirmDialogProps) => {
+  const [typedPhrase, setTypedPhrase] = useState("");
+
+  useResetOnChange(open, () => {
+    if (open) {
+      setTypedPhrase("");
+    }
+  });
+
+  const phraseMatches =
+    !confirmPhrase || typedPhrase.toLowerCase() === confirmPhrase.toLowerCase();
+
   const handleCancel = () => {
     if (onCancel) {
       onCancel();
@@ -69,6 +87,16 @@ export const ConfirmDialog = ({
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
           <DialogDescription>{description}</DialogDescription>
+          {confirmPhrase && (
+            <div className="mt-4">
+              <Input
+                placeholder={`Type '${confirmPhrase}' to confirm`}
+                value={typedPhrase}
+                onChange={(e) => setTypedPhrase(e.target.value)}
+                disabled={loading}
+              />
+            </div>
+          )}
         </DialogHeader>
         {error && (
           <div className="py-2 px-4 bg-destructive/10 text-destructive text-sm rounded">
@@ -82,7 +110,7 @@ export const ConfirmDialog = ({
           <Button
             variant={confirmVariant}
             onClick={onConfirm}
-            disabled={loading}
+            disabled={loading || !phraseMatches}
           >
             {confirmLabel}
           </Button>

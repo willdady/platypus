@@ -1,49 +1,30 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import {
+  navigationMock,
+  configMock,
+  authMock,
+  toastMock,
+  swrMock,
+  push,
+  resetFormHarness,
+  jsonResponse,
+  stubRejectedSave,
+} from "@/lib/form-test-harness";
 
 // --- Module mocks ------------------------------------------------------------
 
-const push = vi.fn();
-vi.mock("next/navigation", () => ({
-  useRouter: () => ({ push }),
-}));
-
-vi.mock("@/app/client-context", () => ({
-  useBackendUrl: () => "http://test",
-}));
-
-vi.mock("@/components/auth-provider", () => ({
-  useAuth: () => ({ user: { id: "u1" } }),
-}));
-
-const toastSuccess = vi.fn();
-const toastError = vi.fn();
-vi.mock("sonner", () => ({
-  toast: {
-    error: (...args: unknown[]) => toastError(...args),
-    success: (...args: unknown[]) => toastSuccess(...args),
-  },
-}));
-
+vi.mock("next/navigation", () => navigationMock);
+vi.mock("@/app/client-context", () => configMock);
+vi.mock("@/components/auth-provider", () => authMock);
+vi.mock("sonner", () => toastMock);
 // The create form never keys a fetch off a webhook id, so SWR never loads
-// real data here.
-vi.mock("swr", () => ({
-  __esModule: true,
-  default: () => ({ data: undefined, isLoading: false, mutate: vi.fn() }),
-  useSWRConfig: () => ({ mutate: vi.fn() }),
-}));
+// real data here — the harness's default (unset) response is `undefined`.
+vi.mock("swr", () => swrMock);
 
 import { WebhookForm } from "./webhook-form";
 
 // --- Helpers -----------------------------------------------------------------
-
-function mockFailedSave(error: unknown, status = 400) {
-  return vi.fn().mockResolvedValue({
-    ok: false,
-    status,
-    json: async () => ({ error }),
-  } as unknown as Response);
-}
 
 function renderForm() {
   return render(<WebhookForm orgId="org1" workspaceId="ws1" />);
@@ -53,9 +34,7 @@ function renderForm() {
 
 describe("WebhookForm validation error surfacing", () => {
   beforeEach(() => {
-    push.mockReset();
-    toastSuccess.mockReset();
-    toastError.mockReset();
+    resetFormHarness();
   });
 
   afterEach(() => {
@@ -63,10 +42,9 @@ describe("WebhookForm validation error surfacing", () => {
   });
 
   it("saves, shows the rejected events error, then saves again once corrected", async () => {
-    const fetchMock = mockFailedSave([
+    const fetchMock = stubRejectedSave([
       { path: ["events"], message: "At least one event is required" },
     ]);
-    vi.stubGlobal("fetch", fetchMock);
 
     renderForm();
 
@@ -95,20 +73,14 @@ describe("WebhookForm validation error surfacing", () => {
     expect(saveButton).not.toBeDisabled();
 
     // The round trip completes: re-submitting now succeeds.
-    fetchMock.mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({}),
-    } as unknown as Response);
+    fetchMock.mockResolvedValueOnce(jsonResponse(200, {}));
     fireEvent.click(saveButton);
 
     await waitFor(() => expect(push).toHaveBeenCalled());
   });
 
   it("clears the enabled field's error when the switch is toggled", async () => {
-    vi.stubGlobal(
-      "fetch",
-      mockFailedSave([{ path: ["enabled"], message: "Invalid enabled" }]),
-    );
+    stubRejectedSave([{ path: ["enabled"], message: "Invalid enabled" }]);
 
     renderForm();
 
@@ -126,12 +98,9 @@ describe("WebhookForm validation error surfacing", () => {
   });
 
   it("retracts a row-level headers error only when that row is edited", async () => {
-    vi.stubGlobal(
-      "fetch",
-      mockFailedSave([
-        { path: ["headers", "X-Foo"], message: "Header value is too long" },
-      ]),
-    );
+    stubRejectedSave([
+      { path: ["headers", "X-Foo"], message: "Header value is too long" },
+    ]);
 
     renderForm();
 
