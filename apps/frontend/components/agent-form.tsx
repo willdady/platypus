@@ -427,6 +427,10 @@ const AgentForm = ({
           setValidationErrors({ name: result.message });
           break;
         case "locked":
+          // Guidance, not a failure — the backend's message already says
+          // where the Shared resource is actually managed (#570).
+          toast.info(result.message);
+          break;
         case "notFound":
         case "error":
           toast.error(result.message);
@@ -452,6 +456,12 @@ const AgentForm = ({
     if (result.outcome === "success") {
       result.revalidateKeys.forEach((key) => mutate(key));
       router.push(doneHref);
+    } else if (result.outcome === "locked") {
+      // Guidance, not a failure — the backend's message already says where
+      // the Shared resource is actually managed (#570).
+      toast.info(result.message);
+      setIsDeleting(false);
+      setIsDeleteDialogOpen(false);
     } else {
       toast.error(result.message);
       setIsDeleting(false);
