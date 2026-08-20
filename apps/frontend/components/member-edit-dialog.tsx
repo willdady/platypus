@@ -21,6 +21,7 @@ import { useState } from "react";
 import { type OrgMemberListItem } from "@platypus/schemas";
 import { useBackendUrl } from "@/app/client-context";
 import { joinUrl } from "@/lib/utils";
+import { writeAt } from "@/lib/api-write";
 import { toast } from "sonner";
 
 interface MemberEditDialogProps {
@@ -45,27 +46,16 @@ export function MemberEditDialog({
   const handleSubmit = async () => {
     setIsSubmitting(true);
     try {
-      const response = await fetch(
+      const outcome = await writeAt(
         joinUrl(backendUrl, `/organizations/${orgId}/members/${member.id}`),
-        {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ role }),
-          credentials: "include",
-        },
+        { method: "PATCH", data: { role } },
       );
-
-      if (response.ok) {
+      if (outcome.outcome === "success") {
         toast.success("Member role updated");
         onSuccess();
       } else {
-        const data = await response.json();
-        toast.error(
-          data.error || data.message || "Failed to update member role",
-        );
+        toast.error(outcome.message);
       }
-    } catch {
-      toast.error("Error updating member role");
     } finally {
       setIsSubmitting(false);
     }

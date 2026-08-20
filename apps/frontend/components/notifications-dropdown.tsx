@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { fetcher, joinUrl } from "@/lib/utils";
+import { writeEntity } from "@/lib/api-write";
 import { useBackendUrl } from "@/app/client-context";
 import {
   type InvitationListItem,
@@ -23,6 +24,7 @@ import Link from "next/link";
 import useSWR from "swr";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { toast } from "sonner";
 
 function formatRelativeTime(date: Date | string): string {
   const now = Date.now();
@@ -90,28 +92,46 @@ export function NotificationsDropdown({
   const totalCount = unreadNotificationCount + invitations.length;
 
   const handleMarkAsRead = async (notificationId: string) => {
-    if (!notificationsUrl) return;
-    await fetcher(joinUrl(notificationsUrl, `/${notificationId}/read`), {
-      method: "POST",
-    });
+    if (!backendUrl || !orgId || !workspaceId) return;
+    const outcome = await writeEntity(
+      backendUrl,
+      `notifications/${notificationId}/read`,
+      { orgId, workspaceId },
+    );
+    if (outcome.outcome !== "success") {
+      toast.error(outcome.message);
+      return;
+    }
     mutateNotifications();
     mutateUnreadCount();
   };
 
   const handleMarkAllAsRead = async () => {
-    if (!notificationsUrl) return;
-    await fetcher(joinUrl(notificationsUrl, "/read-all"), {
-      method: "POST",
+    if (!backendUrl || !orgId || !workspaceId) return;
+    const outcome = await writeEntity(backendUrl, "notifications/read-all", {
+      orgId,
+      workspaceId,
     });
+    if (outcome.outcome !== "success") {
+      toast.error(outcome.message);
+      return;
+    }
     mutateNotifications();
     mutateUnreadCount();
   };
 
   const handleDismiss = async (notificationId: string) => {
-    if (!notificationsUrl) return;
-    await fetcher(joinUrl(notificationsUrl, `/${notificationId}`), {
-      method: "DELETE",
-    });
+    if (!backendUrl || !orgId || !workspaceId) return;
+    const outcome = await writeEntity(
+      backendUrl,
+      "notifications",
+      { orgId, workspaceId },
+      { id: notificationId },
+    );
+    if (outcome.outcome !== "success") {
+      toast.error(outcome.message);
+      return;
+    }
     if (expandedId === notificationId) setExpandedId(null);
     mutateNotifications();
     mutateUnreadCount();

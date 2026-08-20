@@ -592,4 +592,26 @@ describe("writeAt", () => {
       message: "You already have a context for this scope",
     });
   });
+
+  it("sends a PATCH with a body, for a partial update", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(mockResponse(200, { id: "m1", role: "admin" }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await writeAt(`${BACKEND_URL}/organizations/org1/members/m1`, {
+      method: "PATCH",
+      data: { role: "admin" },
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      `${BACKEND_URL}/organizations/org1/members/m1`,
+      expect.objectContaining({
+        method: "PATCH",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ role: "admin" }),
+      }),
+    );
+  });
 });

@@ -50,7 +50,7 @@ import {
 } from "@platypus/schemas";
 import useSWR, { useSWRConfig } from "swr";
 import { clearFieldError, fetcher, joinUrl } from "@/lib/utils";
-import { writeEntity } from "@/lib/api-write";
+import { writeEntity, writeAt } from "@/lib/api-write";
 import { findModelOption, getModelOptions } from "@/lib/model-config";
 import { resolveModel } from "@/lib/resolve-model";
 import {
@@ -368,12 +368,9 @@ const AgentForm = ({
           const savedAgentId = result.data.id || agentId;
 
           if (avatarDeleted && agentId) {
-            await fetch(
+            await writeAt(
               joinUrl(backendUrl, `${agentsBase}/${savedAgentId}/avatar`),
-              {
-                method: "DELETE",
-                credentials: "include",
-              },
+              { method: "DELETE" },
             );
           } else if (avatarFile) {
             const avatarFormData = new FormData();

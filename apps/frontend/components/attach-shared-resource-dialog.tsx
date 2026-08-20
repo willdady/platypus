@@ -2,6 +2,7 @@
 
 import useSWR from "swr";
 import { fetcher, joinUrl } from "../lib/utils";
+import { writeAt } from "../lib/api-write";
 import { useBackendUrl } from "@/app/client-context";
 import { Button } from "./ui/button";
 import {
@@ -76,21 +77,15 @@ const AttachSharedResourceDialog = ({
     setBusyId(resourceId);
     setError(null);
     try {
-      const res = await fetch(
+      const outcome = await writeAt(
         joinUrl(
           backendUrl,
           `/organizations/${orgId}/workspaces/${workspaceId}/attachments`,
         ),
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ resourceType, resourceId }),
-          credentials: "include",
-        },
+        { method: "POST", data: { resourceType, resourceId } },
       );
-      if (!res.ok) {
-        const info = await res.json().catch(() => ({}));
-        setError(info.error || "Failed to attach resource.");
+      if (outcome.outcome !== "success") {
+        setError(outcome.message);
         return;
       }
       onAttached();

@@ -18,6 +18,7 @@ interface DeleteBoardDialogProps {
   onOpenChange: (open: boolean) => void;
   onConfirm: () => void | Promise<void>;
   loading?: boolean;
+  error?: string | null;
 }
 
 export function DeleteBoardDialog({
@@ -26,6 +27,7 @@ export function DeleteBoardDialog({
   onOpenChange,
   onConfirm,
   loading = false,
+  error = null,
 }: DeleteBoardDialogProps) {
   const [confirmationText, setConfirmationText] = useState("");
 
@@ -67,6 +69,11 @@ export function DeleteBoardDialog({
             />
           </div>
         </DialogHeader>
+        {error && (
+          <div className="py-2 px-4 bg-destructive/10 text-destructive text-sm rounded">
+            {error}
+          </div>
+        )}
         <DialogFooter>
           <Button
             variant="outline"

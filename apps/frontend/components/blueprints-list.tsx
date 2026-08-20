@@ -21,6 +21,7 @@ import { EllipsisVertical, Pencil, Play, Plus, Trash2 } from "lucide-react";
 import type { Blueprint } from "@platypus/schemas";
 import useSWR from "swr";
 import { fetcher, joinUrl } from "@/lib/utils";
+import { writeEntity } from "@/lib/api-write";
 import Link from "next/link";
 import { useBackendUrl } from "@/app/client-context";
 import { useAuth } from "@/components/auth-provider";
@@ -56,19 +57,19 @@ export const BlueprintsList = ({ orgId }: { orgId: string }) => {
     setDeleting(true);
     setDeleteError(null);
     try {
-      const response = await fetch(
-        joinUrl(
-          backendUrl,
-          `/organizations/${orgId}/blueprints/${blueprintToDelete.id}`,
-        ),
-        { method: "DELETE", credentials: "include" },
+      const outcome = await writeEntity(
+        backendUrl,
+        "blueprints",
+        { orgId },
+        {
+          id: blueprintToDelete.id,
+        },
       );
-      if (response.ok) {
+      if (outcome.outcome === "success") {
         await mutate();
         setBlueprintToDelete(null);
       } else {
-        const info = await response.json().catch(() => ({}));
-        setDeleteError(info.error || "Failed to delete blueprint.");
+        setDeleteError(outcome.message);
       }
     } finally {
       setDeleting(false);

@@ -1,6 +1,7 @@
 "use client";
 
 import { fetcher, joinUrl } from "@/lib/utils";
+import { writeAt } from "@/lib/api-write";
 import { useBackendUrl } from "@/app/client-context";
 import { type InvitationListItem } from "@platypus/schemas";
 import { Button } from "@/components/ui/button";
@@ -33,20 +34,15 @@ const UserInvitationsPage = () => {
   const [isDeclining, setIsDeclining] = useState(false);
 
   const handleAccept = async (invitationId: string) => {
-    try {
-      const response = await fetch(
-        joinUrl(backendUrl, `/users/me/invitations/${invitationId}/accept`),
-        { method: "POST", credentials: "include" },
-      );
-      if (response.ok) {
-        toast.success("Invitation accepted");
-        mutate();
-      } else {
-        const errorData = await response.json();
-        toast.error(errorData.message || "Failed to accept invitation");
-      }
-    } catch {
-      toast.error("Error accepting invitation");
+    const result = await writeAt(
+      joinUrl(backendUrl, `/users/me/invitations/${invitationId}/accept`),
+      { method: "POST" },
+    );
+    if (result.outcome === "success") {
+      toast.success("Invitation accepted");
+      mutate();
+    } else {
+      toast.error(result.message);
     }
   };
 
@@ -54,26 +50,21 @@ const UserInvitationsPage = () => {
     if (!invitationToDecline) return;
 
     setIsDeclining(true);
-    try {
-      const response = await fetch(
-        joinUrl(
-          backendUrl,
-          `/users/me/invitations/${invitationToDecline}/decline`,
-        ),
-        { method: "POST", credentials: "include" },
-      );
-      if (response.ok) {
-        toast.success("Invitation declined");
-        mutate();
-        setInvitationToDecline(null);
-      } else {
-        toast.error("Failed to decline invitation");
-      }
-    } catch {
-      toast.error("Error declining invitation");
-    } finally {
-      setIsDeclining(false);
+    const result = await writeAt(
+      joinUrl(
+        backendUrl,
+        `/users/me/invitations/${invitationToDecline}/decline`,
+      ),
+      { method: "POST" },
+    );
+    if (result.outcome === "success") {
+      toast.success("Invitation declined");
+      mutate();
+      setInvitationToDecline(null);
+    } else {
+      toast.error(result.message);
     }
+    setIsDeclining(false);
   };
 
   return (

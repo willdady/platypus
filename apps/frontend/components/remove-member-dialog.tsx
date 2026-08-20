@@ -12,7 +12,7 @@ import { Button } from "@/components/ui/button";
 import { useState } from "react";
 import { type OrgMemberListItem } from "@platypus/schemas";
 import { useBackendUrl } from "@/app/client-context";
-import { joinUrl } from "@/lib/utils";
+import { writeEntity } from "@/lib/api-write";
 import { toast } from "sonner";
 import { AlertTriangle } from "lucide-react";
 
@@ -37,23 +37,20 @@ export function RemoveMemberDialog({
   const handleSubmit = async () => {
     setIsSubmitting(true);
     try {
-      const response = await fetch(
-        joinUrl(backendUrl, `/organizations/${orgId}/members/${member.id}`),
+      const outcome = await writeEntity(
+        backendUrl,
+        "members",
+        { orgId },
         {
-          method: "DELETE",
-          credentials: "include",
+          id: member.id,
         },
       );
-
-      if (response.ok) {
+      if (outcome.outcome === "success") {
         toast.success("Member removed from organization");
         onSuccess();
       } else {
-        const data = await response.json();
-        toast.error(data.error || data.message || "Failed to remove member");
+        toast.error(outcome.message);
       }
-    } catch {
-      toast.error("Error removing member");
     } finally {
       setIsSubmitting(false);
     }
