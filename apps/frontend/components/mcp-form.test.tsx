@@ -1,66 +1,44 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import type { MCP } from "@platypus/schemas";
+import {
+  navigationMock,
+  configMock,
+  authMock,
+  toastMock,
+  swrMock,
+  setData,
+  resetFormHarness,
+  stubRejectedSave,
+} from "@/lib/form-test-harness";
 
 // --- Module mocks ------------------------------------------------------------
 
-const push = vi.fn();
-vi.mock("next/navigation", () => ({
-  useRouter: () => ({ push }),
-}));
-
-vi.mock("@/app/client-context", () => ({
-  useBackendUrl: () => "http://test",
-}));
-
-vi.mock("@/components/auth-provider", () => ({
-  useAuth: () => ({ user: { id: "u1" } }),
-}));
-
-vi.mock("sonner", () => ({
-  toast: { error: vi.fn(), info: vi.fn(), success: vi.fn() },
-}));
-
-// The MCP the edit form loads. Set per test before rendering.
-let loadedMcp: MCP | undefined;
-
-vi.mock("swr", () => ({
-  __esModule: true,
-  default: () => ({
-    data: loadedMcp,
-    isLoading: false,
-    mutate: vi.fn(),
-  }),
-  useSWRConfig: () => ({ mutate: vi.fn() }),
-}));
+vi.mock("next/navigation", () => navigationMock);
+vi.mock("@/app/client-context", () => configMock);
+vi.mock("@/components/auth-provider", () => authMock);
+vi.mock("sonner", () => toastMock);
+vi.mock("swr", () => swrMock);
 
 import { McpForm } from "./mcp-form";
 import { toast } from "sonner";
-
-function jsonResponse(status: number, body: unknown) {
-  return {
-    ok: status >= 200 && status < 300,
-    status,
-    json: async () => body,
-  } as unknown as Response;
-}
 
 // --- Tests -------------------------------------------------------------------
 
 describe("McpForm secret reveal", () => {
   afterEach(() => {
-    loadedMcp = undefined;
+    resetFormHarness();
     vi.restoreAllMocks();
   });
 
   it("toggles the bearer token between masked and revealed", () => {
-    loadedMcp = {
+    setData({
       id: "m1",
       name: "Docs",
       url: "http://mcp.test",
       authType: "Bearer",
       bearerToken: "secret-token",
-    } as unknown as MCP;
+    } as unknown as MCP);
     render(<McpForm orgId="org1" mcpId="m1" />);
 
     const input = screen.getByLabelText("Bearer Token");
@@ -74,13 +52,13 @@ describe("McpForm secret reveal", () => {
   });
 
   it("toggles the OAuth client secret between masked and revealed", () => {
-    loadedMcp = {
+    setData({
       id: "m1",
       name: "Docs",
       url: "http://mcp.test",
       authType: "OAuth",
       oauthClientId: "client-id",
-    } as unknown as MCP;
+    } as unknown as MCP);
     render(<McpForm orgId="org1" mcpId="m1" />);
 
     const input = screen.getByLabelText("Client Secret");
@@ -96,23 +74,21 @@ describe("McpForm secret reveal", () => {
 
 describe("McpForm locked delete", () => {
   afterEach(() => {
-    loadedMcp = undefined;
+    resetFormHarness();
     vi.restoreAllMocks();
   });
 
   it("shows the backend's guidance, not an error toast, when the MCP is Shared", async () => {
-    loadedMcp = {
+    setData({
       id: "m1",
       name: "Docs",
       url: "http://mcp.test",
       authType: "None",
-    } as unknown as MCP;
-    const fetchMock = vi.fn().mockResolvedValue(
-      jsonResponse(403, {
-        error: "This MCP server is managed at the organization level",
-      }),
+    } as unknown as MCP);
+    stubRejectedSave(
+      "This MCP server is managed at the organization level",
+      403,
     );
-    vi.stubGlobal("fetch", fetchMock);
 
     render(<McpForm orgId="org1" workspaceId="ws1" mcpId="m1" />);
 

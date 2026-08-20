@@ -1,74 +1,48 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import type { Provider } from "@platypus/schemas";
+import {
+  navigationMock,
+  configMock,
+  authMock,
+  toastMock,
+  swrMock,
+  push,
+  toastError,
+  setData,
+  setDataFor,
+  resetFormHarness,
+  stubRejectedSave,
+  stubSaveSequence,
+} from "@/lib/form-test-harness";
 
 // --- Module mocks ------------------------------------------------------------
 
-const push = vi.fn();
-vi.mock("next/navigation", () => ({
-  useRouter: () => ({ push }),
-}));
+vi.mock("next/navigation", () => navigationMock);
+vi.mock("@/app/client-context", () => configMock);
+vi.mock("@/components/auth-provider", () => authMock);
+vi.mock("sonner", () => toastMock);
+// useSWR is called for providers, skills, agents, and (when editing) the
+// agent. The harness keys its responses off the request URL suffix, so
+// each call gets the right payload; a key with no matcher (skills, the
+// agents list) falls back to the default set below.
+vi.mock("swr", () => swrMock);
 
-vi.mock("@/app/client-context", () => ({
-  useBackendUrl: () => "http://test",
-}));
+import { AgentForm } from "./agent-form";
 
-vi.mock("@/components/auth-provider", () => ({
-  useAuth: () => ({ user: { id: "u1" } }),
-}));
+// --- Helpers -----------------------------------------------------------------
 
-const toastError = vi.fn();
-vi.mock("sonner", () => ({
-  toast: {
-    error: (...args: unknown[]) => toastError(...args),
-    success: vi.fn(),
-  },
-}));
-
-const mutate = vi.fn();
 const provider: Provider = {
   id: "p1",
   name: "OpenAI",
   modelIds: [{ id: "gpt-4o", passthroughFileTypes: [] }],
 } as unknown as Provider;
 
-// Stable references so re-renders don't churn identity (which would retrigger
-// useResetOnChange and loop).
-const providersResponse = { data: { results: [provider] }, isLoading: false };
-const emptyListResponse = { data: { results: [] }, isLoading: false };
-const nullResponse = { data: undefined, isLoading: false };
-
-// Set by a test that renders in edit mode (agentId="a1") before rendering.
-let agentResponse: { data: unknown; isLoading: boolean } = nullResponse;
-
-// useSWR is called for providers, skills, agents, and (when editing) the agent.
-// Key off the request URL so each call gets the right payload. A null key means
-// SWR would not fetch — mirror that by returning no data.
-vi.mock("swr", () => ({
-  __esModule: true,
-  default: (key: string | null) => {
-    if (!key) return nullResponse;
-    if (typeof key === "string" && key.endsWith("/providers")) {
-      return providersResponse;
-    }
-    if (typeof key === "string" && key.endsWith("/agents/a1")) {
-      return agentResponse;
-    }
-    return emptyListResponse;
-  },
-  useSWRConfig: () => ({ mutate }),
-}));
-
-import { AgentForm } from "./agent-form";
-
-// --- Helpers -----------------------------------------------------------------
-
-function mockFailedSave(error: unknown, status = 400) {
-  return vi.fn().mockResolvedValue({
-    ok: false,
-    status,
-    json: async () => ({ error }),
-  } as unknown as Response);
+// Registered fresh in each test's beforeEach (below) since resetFormHarness
+// clears the harness's data-fetching registrations along with its spies.
+function registerSwrData() {
+  setData({ results: [] });
+  setDataFor("/providers", { results: [provider] });
 }
 
 function renderCreateForm() {
@@ -77,21 +51,12 @@ function renderCreateForm() {
   );
 }
 
-function mockSequence(...responses: Array<Partial<Response>>) {
-  const fn = vi.fn();
-  for (const response of responses) {
-    fn.mockResolvedValueOnce(response as Response);
-  }
-  return fn;
-}
-
 // --- Tests -------------------------------------------------------------------
 
 describe("AgentForm validation error surfacing", () => {
   beforeEach(() => {
-    push.mockReset();
-    toastError.mockReset();
-    mutate.mockReset();
+    resetFormHarness();
+    registerSwrData();
   });
 
   afterEach(() => {
@@ -99,10 +64,7 @@ describe("AgentForm validation error surfacing", () => {
   });
 
   it("renders an inline error and marks the Model control invalid when the server rejects modelId", async () => {
-    vi.stubGlobal(
-      "fetch",
-      mockFailedSave([{ path: ["modelId"], message: "Model is required" }]),
-    );
+    stubRejectedSave([{ path: ["modelId"], message: "Model is required" }]);
 
     renderCreateForm();
 
@@ -121,10 +83,7 @@ describe("AgentForm validation error surfacing", () => {
   });
 
   it("shows a generic error toast when the failure maps to no inline field", async () => {
-    vi.stubGlobal(
-      "fetch",
-      mockFailedSave("something went wrong on the server"),
-    );
+    stubRejectedSave("something went wrong on the server");
 
     renderCreateForm();
 
@@ -136,10 +95,7 @@ describe("AgentForm validation error surfacing", () => {
   });
 
   it("clears a field's error and re-enables Save once the field is edited", async () => {
-    vi.stubGlobal(
-      "fetch",
-      mockFailedSave([{ path: ["maxSteps"], message: "Invalid max steps" }]),
-    );
+    stubRejectedSave([{ path: ["maxSteps"], message: "Invalid max steps" }]);
 
     renderCreateForm();
 
@@ -167,10 +123,7 @@ describe("AgentForm validation error surfacing", () => {
   // #571: toolSetIds has no field that retracts its error, so gating Save on
   // it would disable Save forever with no way out but reloading.
   it("never disables Save on a rejection keyed to a field with no retracting input", async () => {
-    vi.stubGlobal(
-      "fetch",
-      mockFailedSave([{ path: ["toolSetIds"], message: "Unknown tool set" }]),
-    );
+    stubRejectedSave([{ path: ["toolSetIds"], message: "Unknown tool set" }]);
 
     renderCreateForm();
 
@@ -187,30 +140,23 @@ describe("AgentForm validation error surfacing", () => {
 // navigation or silently look like it worked.
 describe("AgentForm avatar write partial-success handling", () => {
   beforeEach(() => {
-    push.mockReset();
-    toastError.mockReset();
-    mutate.mockReset();
-    agentResponse = nullResponse;
+    resetFormHarness();
+    registerSwrData();
+    setDataFor("/agents/a1", undefined);
   });
 
   afterEach(() => {
     vi.restoreAllMocks();
-    agentResponse = nullResponse;
   });
 
   it("surfaces a toast but still navigates when the avatar upload fails after a successful agent save", async () => {
     const file = new File(["avatar-bytes"], "avatar.png", {
       type: "image/png",
     });
-    const fetchMock = mockSequence(
-      { ok: true, status: 200, json: async () => ({ id: "a1" }) },
-      {
-        ok: false,
-        status: 500,
-        json: async () => ({ error: "Storage unavailable" }),
-      },
+    const fetchMock = stubSaveSequence(
+      { status: 200, body: { id: "a1" } },
+      { status: 500, body: { error: "Storage unavailable" } },
     );
-    vi.stubGlobal("fetch", fetchMock);
 
     const { container } = renderCreateForm();
     const fileInput = container.querySelector(
@@ -228,28 +174,20 @@ describe("AgentForm avatar write partial-success handling", () => {
   });
 
   it("surfaces a toast but still navigates when the avatar delete fails after a successful agent save", async () => {
-    agentResponse = {
-      data: {
-        id: "a1",
-        name: "Bot",
-        description: "A helpful bot",
-        instructions: "Be helpful",
-        providerId: "p1",
-        modelId: "gpt-4o",
-        maxSteps: 5,
-        avatarUrl: "http://cdn.test/avatar.png",
-      },
-      isLoading: false,
-    };
-    const fetchMock = mockSequence(
-      { ok: true, status: 200, json: async () => ({ id: "a1" }) },
-      {
-        ok: false,
-        status: 403,
-        json: async () => ({ error: "Avatar storage locked" }),
-      },
+    setDataFor("/agents/a1", {
+      id: "a1",
+      name: "Bot",
+      description: "A helpful bot",
+      instructions: "Be helpful",
+      providerId: "p1",
+      modelId: "gpt-4o",
+      maxSteps: 5,
+      avatarUrl: "http://cdn.test/avatar.png",
+    });
+    const fetchMock = stubSaveSequence(
+      { status: 200, body: { id: "a1" } },
+      { status: 403, body: { error: "Avatar storage locked" } },
     );
-    vi.stubGlobal("fetch", fetchMock);
 
     render(
       <AgentForm
