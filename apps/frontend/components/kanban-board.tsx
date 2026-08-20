@@ -527,11 +527,12 @@ export function KanbanBoard({
         });
       });
 
-      const outcome = await writeEntity(
-        backendUrl,
-        `${boardPath}/cards/${active.id}/move`,
-        scope,
-        { data: { columnId: targetColumn.id, afterCardId } },
+      const outcome = await writeAt(
+        joinUrl(baseUrl, `cards/${active.id}/move`),
+        {
+          method: "POST",
+          data: { columnId: targetColumn.id, afterCardId },
+        },
       );
       if (outcome.outcome === "success") {
         await mutate();
@@ -540,7 +541,7 @@ export function KanbanBoard({
         setLocalColumns(null);
       }
     },
-    [backendUrl, baseUrl, boardPath, scope, mutate, setLocalColumns],
+    [baseUrl, mutate, setLocalColumns],
   );
 
   const handleAddColumn = useCallback(() => {
@@ -719,11 +720,12 @@ export function KanbanBoard({
         return;
       }
       if (targetColumnId && targetColumnId !== column.id) {
-        const moveOutcome = await writeEntity(
-          backendUrl,
-          `${boardPath}/cards/${cardId}/move`,
-          scope,
-          { data: { columnId: targetColumnId, afterCardId: null } },
+        const moveOutcome = await writeAt(
+          joinUrl(baseUrl, `cards/${cardId}/move`),
+          {
+            method: "POST",
+            data: { columnId: targetColumnId, afterCardId: null },
+          },
         );
         if (moveOutcome.outcome !== "success") {
           toast.error(moveOutcome.message);
@@ -735,7 +737,7 @@ export function KanbanBoard({
       updateCardIdParam(null);
       await mutate();
     },
-    [columns, backendUrl, boardPath, scope, mutate, updateCardIdParam],
+    [columns, backendUrl, baseUrl, boardPath, scope, mutate, updateCardIdParam],
   );
 
   const handleCardDelete = useCallback(
