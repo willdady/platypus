@@ -49,7 +49,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { ConfirmDialog } from "@/components/confirm-dialog";
-import { useState, useEffect, useRef } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   CONTEXT_WINDOW_MAX,
@@ -62,7 +62,8 @@ import {
   type Provider,
 } from "@platypus/schemas";
 import useSWR, { useSWRConfig } from "swr";
-import { clearFieldError, cn, fetcher, joinUrl } from "@/lib/utils";
+import { cn, fetcher, joinUrl } from "@/lib/utils";
+import { canSubmitForm, retractFieldError } from "@/lib/form-errors";
 import { writeEntity } from "@/lib/api-write";
 import {
   getModelConfigs,
@@ -453,6 +454,11 @@ type ProviderFormData = Omit<
   embeddingDimensions: string;
 };
 
+// Deliberately empty: this form's fields can be validation-rejected on a
+// provider type that then hides the very input needed to retract them (see
+// the Save button below).
+const RETRACTABLE_FIELDS: readonly string[] = [];
+
 const ProviderForm = ({
   classNames,
   orgId,
@@ -470,7 +476,6 @@ const ProviderForm = ({
   const { user } = useAuth();
   const backendUrl = useBackendUrl();
   const router = useRouter();
-  const hasInitialized = useRef(false);
 
   const formScope = workspaceId ? "workspace" : "organization";
 
@@ -578,22 +583,23 @@ const ProviderForm = ({
     formData.searchSource === SEARCH_SOURCE_NATIVE &&
     !providerHasNativeSearch(formData);
 
-  // Start the form over when the reader switches Provider within one mount, so
-  // the initialisation flag the effect below reads belongs to the Provider on
-  // screen. `useResetOnChange` rather than an effect: it adjusts state during
-  // render, so the flag is already false when the effect runs (#474).
+  // Populate once per Provider, keyed on `providerId` rather than `provider`
+  // itself: `provider` gets a new object reference on every revalidation that
+  // actually changes the record (a save from another tab, a focus
+  // revalidation), and keying on it directly would re-run this on the Provider
+  // the reader is already editing, clobbering the edit in progress with
+  // whatever the server has right now. Gating the key on `provider` being
+  // loaded — rather than firing as soon as `providerId` changes — defers the
+  // reset until the switch actually has data to populate with, so a cold
+  // fetch (data not loaded yet) doesn't reset into a blank form early and
+  // then never fire again once the fetch resolves.
   //
-  // The Web-search backend selector's visibility rule and its `webBackendEdited`
-  // latch used to be reset here too. Both are gone with the collapse: `searchSource`
-  // is always rendered — "None" and, where the Provider is capable, its built-in
-  // search are real choices on every deployment — so there is no longer a condition
-  // that reads the value the field itself edits.
-  useResetOnChange(providerId, () => {
-    hasInitialized.current = false;
-  });
-
-  useEffect(() => {
-    if (provider && !hasInitialized.current) {
+  // `useResetOnChange` rather than an effect: it adjusts state during render,
+  // so a switch to a Provider already warm in SWR's cache repopulates on that
+  // same render instead of leaving the previous Provider's fields on screen
+  // for one extra frame (#474).
+  useResetOnChange(provider ? providerId : undefined, () => {
+    if (provider) {
       setFormData({
         providerType: provider.providerType,
         name: provider.name,
@@ -631,9 +637,8 @@ const ProviderForm = ({
       setSavedEmbeddingDimensions(
         provider.embeddingDimensions?.toString() || null,
       );
-      hasInitialized.current = true;
     }
-  }, [provider]);
+  });
 
   const handleChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>,
@@ -641,7 +646,7 @@ const ProviderForm = ({
     const { id, value } = e.target;
 
     // Clear validation error for this field
-    setValidationErrors((prev) => clearFieldError(prev, id));
+    setValidationErrors((prev) => retractFieldError(prev, id));
     setError(null);
 
     if (id === "headers") {
@@ -678,7 +683,7 @@ const ProviderForm = ({
 
   const handleSelectChange = (id: string, value: string) => {
     // Clear validation error for this field
-    setValidationErrors((prev) => clearFieldError(prev, id));
+    setValidationErrors((prev) => retractFieldError(prev, id));
     setError(null);
 
     setFormData((prevData) => ({ ...prevData, [id]: value }));
@@ -689,7 +694,7 @@ const ProviderForm = ({
   // Retracts the list's error and every row error under it, so a stale message
   // doesn't sit under a row the user has already corrected.
   const clearModelIdsError = () => {
-    setValidationErrors((prev) => clearFieldError(prev, "modelIds"));
+    setValidationErrors((prev) => retractFieldError(prev, "modelIds"));
   };
 
   /**
@@ -850,6 +855,10 @@ const ProviderForm = ({
           setError(result.message);
           break;
         case "locked":
+          // Guidance, not a failure — the backend's message already says
+          // where the Shared resource is actually managed (#570).
+          toast.info(result.message);
+          break;
         case "notFound":
         case "error":
           toast.error(result.message);
@@ -888,6 +897,12 @@ const ProviderForm = ({
       } else {
         router.push(`/${orgId}/settings/providers`);
       }
+    } else if (result.outcome === "locked") {
+      // Guidance, not a failure — the backend's message already says where
+      // the Shared resource is actually managed (#570).
+      toast.info(result.message);
+      setIsDeleting(false);
+      setIsDeleteDialogOpen(false);
     } else {
       toast.error(result.message);
       setIsDeleting(false);
@@ -1394,14 +1409,20 @@ const ProviderForm = ({
         <div className="flex gap-2">
           <Button
             className="cursor-pointer"
-            // Deliberately NOT gated on `validationErrors`. Those come back
-            // from the server, and every key needs a matching path that
-            // retracts it; one that has none disables Save forever, with no
-            // way out but reloading. Re-submitting simply re-validates. The
-            // JSON errors below are different — they are computed here as the
-            // user types and always clear themselves.
             onClick={handleSubmit}
-            disabled={isSubmitting || !!headersError || !!extraBodyError}
+            disabled={
+              isSubmitting ||
+              !!headersError ||
+              !!extraBodyError ||
+              // RETRACTABLE_FIELDS is deliberately empty: several fields here
+              // (apiMode, organization, project) render only for certain
+              // provider types, so a `validationErrors` key can outlive the
+              // input that would retract it. Server-returned errors must
+              // never gate Save for that reason — re-submitting simply
+              // re-validates. The JSON errors above are different: they are
+              // computed here as the user types and always clear themselves.
+              !canSubmitForm(validationErrors, RETRACTABLE_FIELDS)
+            }
           >
             {providerId ? "Update" : "Save"}
           </Button>

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { toast } from "sonner";
 import {
   Item,
   ItemTitle,
@@ -100,6 +101,8 @@ export const AgentsList = ({
   const [cloneError, setCloneError] = useState<string | null>(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [agentToDelete, setAgentToDelete] = useState<Agent | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const [attachOpen, setAttachOpen] = useState(false);
   const [selectedOrgAgent, setSelectedOrgAgent] =
     useState<AgentWithScope | null>(null);
@@ -199,19 +202,34 @@ export const AgentsList = ({
 
   const handleDeleteClick = (agent: Agent) => {
     setAgentToDelete(agent);
+    setDeleteError(null);
     setDeleteDialogOpen(true);
   };
 
   const handleDeleteConfirm = async () => {
     if (!agentToDelete || !backendUrl) return;
 
-    const outcome = await writeEntity(backendUrl, "agents", scope, {
-      id: agentToDelete.id,
-    });
-    if (outcome.outcome === "success") {
-      mutate();
-      setDeleteDialogOpen(false);
-      setAgentToDelete(null);
+    setDeleting(true);
+    setDeleteError(null);
+    try {
+      const outcome = await writeEntity(backendUrl, "agents", scope, {
+        id: agentToDelete.id,
+      });
+      if (outcome.outcome === "success") {
+        mutate();
+        setDeleteDialogOpen(false);
+        setAgentToDelete(null);
+      } else if (outcome.outcome === "locked") {
+        // Guidance, not a failure — the backend's message already says
+        // where the Shared resource is actually managed (#570).
+        setDeleteDialogOpen(false);
+        setAgentToDelete(null);
+        toast.info(outcome.message);
+      } else {
+        setDeleteError(outcome.message);
+      }
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -745,12 +763,17 @@ export const AgentsList = ({
 
       <ConfirmDialog
         open={deleteDialogOpen}
-        onOpenChange={setDeleteDialogOpen}
+        onOpenChange={(open) => {
+          setDeleteDialogOpen(open);
+          if (!open) setDeleteError(null);
+        }}
         title="Delete Agent"
         description={`Are you sure you want to delete "${agentToDelete?.name}"? This action cannot be undone.`}
         confirmLabel="Delete"
         confirmVariant="destructive"
         onConfirm={handleDeleteConfirm}
+        loading={deleting}
+        error={deleteError}
       />
     </>
   );

@@ -11,11 +11,17 @@ import { Button } from "@/components/ui/button";
 import { Field, FieldLabel, FieldError } from "@/components/ui/field";
 import { useBackendUrl } from "@/app/client-context";
 import { joinUrl } from "@/lib/utils";
+import { canSubmitForm, retractFieldError } from "@/lib/form-errors";
 import { writeEntity } from "@/lib/api-write";
 import { KANBAN_LABEL_COLORS, type KanbanLabel } from "@platypus/schemas";
 import { toast } from "sonner";
 
 const DEFAULT_COLOR = KANBAN_LABEL_COLORS[5].value; // Blue
+
+// `labels` is excluded: this form has no field that retracts an error keyed
+// to it, so including it here would disable Save forever the moment the
+// server rejects a label.
+const RETRACTABLE_FIELDS = ["name", "description"] as const;
 
 export function KanbanBoardForm({
   orgId,
@@ -128,7 +134,10 @@ export function KanbanBoardForm({
         <Input
           id="name"
           value={name}
-          onChange={(e) => setName(e.target.value)}
+          onChange={(e) => {
+            setValidationErrors((prev) => retractFieldError(prev, "name"));
+            setName(e.target.value);
+          }}
           placeholder="Board name"
           disabled={isSubmitting}
           required
@@ -143,7 +152,12 @@ export function KanbanBoardForm({
         <Textarea
           id="description"
           value={description}
-          onChange={(e) => setDescription(e.target.value)}
+          onChange={(e) => {
+            setValidationErrors((prev) =>
+              retractFieldError(prev, "description"),
+            );
+            setDescription(e.target.value);
+          }}
           placeholder="Optional description"
           disabled={isSubmitting}
         />
@@ -208,7 +222,12 @@ export function KanbanBoardForm({
       <div className="flex gap-2">
         <Button
           type="submit"
-          disabled={isSubmitting || isDeleting || !name.trim()}
+          disabled={
+            isSubmitting ||
+            isDeleting ||
+            !name.trim() ||
+            !canSubmitForm(validationErrors, RETRACTABLE_FIELDS)
+          }
         >
           {isEditing ? "Update" : "Create board"}
         </Button>

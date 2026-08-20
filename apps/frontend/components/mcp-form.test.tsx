@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { render, screen, fireEvent } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import type { MCP } from "@platypus/schemas";
 
 // --- Module mocks ------------------------------------------------------------
@@ -35,6 +35,15 @@ vi.mock("swr", () => ({
 }));
 
 import { McpForm } from "./mcp-form";
+import { toast } from "sonner";
+
+function jsonResponse(status: number, body: unknown) {
+  return {
+    ok: status >= 200 && status < 300,
+    status,
+    json: async () => body,
+  } as unknown as Response;
+}
 
 // --- Tests -------------------------------------------------------------------
 
@@ -82,5 +91,40 @@ describe("McpForm secret reveal", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Hide client secret" }));
     expect(input).toHaveAttribute("type", "password");
+  });
+});
+
+describe("McpForm locked delete", () => {
+  afterEach(() => {
+    loadedMcp = undefined;
+    vi.restoreAllMocks();
+  });
+
+  it("shows the backend's guidance, not an error toast, when the MCP is Shared", async () => {
+    loadedMcp = {
+      id: "m1",
+      name: "Docs",
+      url: "http://mcp.test",
+      authType: "None",
+    } as unknown as MCP;
+    const fetchMock = vi.fn().mockResolvedValue(
+      jsonResponse(403, {
+        error: "This MCP server is managed at the organization level",
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<McpForm orgId="org1" workspaceId="ws1" mcpId="m1" />);
+
+    fireEvent.click(screen.getByRole("button", { name: /Delete/ }));
+    const deleteButtons = screen.getAllByRole("button", { name: "Delete" });
+    fireEvent.click(deleteButtons[deleteButtons.length - 1]);
+
+    await waitFor(() =>
+      expect(toast.info).toHaveBeenCalledWith(
+        "This MCP server is managed at the organization level",
+      ),
+    );
+    expect(toast.error).not.toHaveBeenCalled();
   });
 });

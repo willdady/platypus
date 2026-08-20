@@ -50,7 +50,12 @@ vi.mock("swr", () => ({
 
 const mutateSpy = vi.fn();
 
+vi.mock("sonner", () => ({
+  toast: { error: vi.fn(), info: vi.fn(), success: vi.fn() },
+}));
+
 import { SkillsList } from "./skills-list";
+import { toast } from "sonner";
 
 // --- Helpers -----------------------------------------------------------------
 
@@ -157,6 +162,31 @@ describe("SkillsList delete", () => {
       "http://test/organizations/org1/workspaces/ws1/skills/s2",
       expect.objectContaining({ method: "DELETE" }),
     );
+  });
+
+  it("shows the backend's guidance, not an inline error, when delete is refused because the skill is Shared", async () => {
+    skills = [workspaceSkill];
+    const fetchMock = vi.fn().mockResolvedValue(
+      jsonResponse(403, {
+        error: "This skill is managed at the organization level",
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<SkillsList orgId="org1" workspaceId="ws1" />);
+    openMenu();
+    fireEvent.click(screen.getByText("Delete"));
+    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+
+    await waitFor(() =>
+      expect(toast.info).toHaveBeenCalledWith(
+        "This skill is managed at the organization level",
+      ),
+    );
+    expect(toast.error).not.toHaveBeenCalled();
+    expect(
+      screen.queryByText("This skill is managed at the organization level"),
+    ).not.toBeInTheDocument();
   });
 
   it("deletes from the org-scoped path on the Organization surface (no workspaceId)", async () => {

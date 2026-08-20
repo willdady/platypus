@@ -15,6 +15,7 @@ import { useState } from "react";
 import Link from "next/link";
 import useSWR, { useSWRConfig } from "swr";
 import { fetcher, joinUrl } from "@/lib/utils";
+import { canSubmitForm, retractFieldError } from "@/lib/form-errors";
 import { writeEntity } from "@/lib/api-write";
 import { useBackendUrl } from "@/app/client-context";
 import { useAuth } from "@/components/auth-provider";
@@ -26,6 +27,8 @@ interface InvitationFormProps {
   orgId: string;
   onSuccess?: () => void;
 }
+
+const RETRACTABLE_FIELDS = ["email", "workspaceName", "blueprintIds"] as const;
 
 export function InvitationForm({ orgId, onSuccess }: InvitationFormProps) {
   const backendUrl = useBackendUrl();
@@ -53,6 +56,7 @@ export function InvitationForm({ orgId, onSuccess }: InvitationFormProps) {
   const blueprintsById = new Map(blueprints.map((b) => [b.id, b]));
 
   const toggleBlueprint = (id: string, on: boolean) => {
+    setValidationErrors((prev) => retractFieldError(prev, "blueprintIds"));
     setBlueprintIds((prev) =>
       on ? [...prev, id] : prev.filter((bid) => bid !== id),
     );
@@ -139,13 +143,9 @@ export function InvitationForm({ orgId, onSuccess }: InvitationFormProps) {
                 value={email}
                 onChange={(e) => {
                   setEmail(e.target.value);
-                  if (validationErrors.email) {
-                    setValidationErrors((prev) => {
-                      const next = { ...prev };
-                      delete next.email;
-                      return next;
-                    });
-                  }
+                  setValidationErrors((prev) =>
+                    retractFieldError(prev, "email"),
+                  );
                 }}
                 disabled={isSubmitting}
                 autoFocus
@@ -165,13 +165,9 @@ export function InvitationForm({ orgId, onSuccess }: InvitationFormProps) {
                 value={workspaceName}
                 onChange={(e) => {
                   setWorkspaceName(e.target.value);
-                  if (validationErrors.workspaceName) {
-                    setValidationErrors((prev) => {
-                      const next = { ...prev };
-                      delete next.workspaceName;
-                      return next;
-                    });
-                  }
+                  setValidationErrors((prev) =>
+                    retractFieldError(prev, "workspaceName"),
+                  );
                 }}
                 disabled={isSubmitting}
               />
@@ -299,7 +295,9 @@ export function InvitationForm({ orgId, onSuccess }: InvitationFormProps) {
       </FieldSet>
       <Button
         type="submit"
-        disabled={isSubmitting}
+        disabled={
+          isSubmitting || !canSubmitForm(validationErrors, RETRACTABLE_FIELDS)
+        }
         className={`w-full md:w-auto mt-2 ${!isSubmitting ? "cursor-pointer" : ""}`}
       >
         {isSubmitting ? "Sending..." : "Send invitation"}

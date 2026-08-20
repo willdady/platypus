@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { toast } from "sonner";
 import {
   Item,
   ItemTitle,
@@ -216,6 +217,12 @@ export const SkillsList = ({
         await mutate();
         setDeleteDialogOpen(false);
         setSkillToDelete(null);
+      } else if (outcome.outcome === "locked") {
+        // Guidance, not a failure — the backend's message already says
+        // where the Shared resource is actually managed (#570).
+        setDeleteDialogOpen(false);
+        setSkillToDelete(null);
+        toast.info(outcome.message);
       } else {
         setDeleteError(outcome.message);
       }

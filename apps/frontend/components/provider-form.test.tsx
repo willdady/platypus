@@ -403,6 +403,89 @@ describe("ProviderForm model rows", () => {
   });
 });
 
+describe("ProviderForm switching Providers", () => {
+  afterEach(() => {
+    loadedProvider = undefined;
+    vi.restoreAllMocks();
+  });
+
+  // The form is reused across Providers within one mount. Populating from the
+  // warm SWR cache has to repopulate on the switch too, not just on first load —
+  // otherwise the reader would see the previous Provider's fields left on
+  // screen under the new Provider's name.
+  it("repopulates every field when the reader switches to another Provider, even from an already-warm cache", () => {
+    loadedProvider = {
+      id: "p1",
+      name: "OpenAI provider",
+      providerType: "OpenAI",
+      apiKey: "sk-p1",
+      baseUrl: "https://p1.example.com",
+      apiMode: "responses",
+      modelIds: [{ id: "gpt-4o", passthroughFileTypes: [] }],
+      taskModelId: "gpt-4o",
+      memoryExtractionModelId: "gpt-4o",
+    } as unknown as Provider;
+    const { rerender } = render(<ProviderForm orgId="org1" providerId="p1" />);
+
+    expect(screen.getByLabelText("Name")).toHaveValue("OpenAI provider");
+    expect(screen.getByLabelText("Model ID")).toHaveValue("gpt-4o");
+
+    // Already resolved before the rerender, as it would be for a Provider
+    // whose data is already warm in SWR's cache.
+    loadedProvider = {
+      id: "p2",
+      name: "Anthropic provider",
+      providerType: "Anthropic",
+      apiKey: "sk-p2",
+      baseUrl: "https://p2.example.com",
+      apiMode: "responses",
+      modelIds: [{ id: "claude-opus", passthroughFileTypes: [] }],
+      taskModelId: "claude-opus",
+      memoryExtractionModelId: "claude-opus",
+    } as unknown as Provider;
+    rerender(<ProviderForm orgId="org1" providerId="p2" />);
+
+    expect(screen.getByLabelText("Name")).toHaveValue("Anthropic provider");
+    expect(screen.getByLabelText("API Key")).toHaveValue("sk-p2");
+    expect(screen.getByLabelText("Base URL")).toHaveValue(
+      "https://p2.example.com",
+    );
+    expect(screen.getByLabelText("Model ID")).toHaveValue("claude-opus");
+  });
+
+  // The specific behaviour the old initialised-flag ref protected: a Provider
+  // is populated once, and a later SWR revalidation of that *same* Provider —
+  // a focus revalidation, another tab saving it — hands back a new object
+  // reference for unchanged (or server-updated) data. That must not re-run
+  // the populate and stomp an edit the reader hasn't saved yet. Keying the
+  // reset on `providerId` (gated on the fetch having resolved) rather than on
+  // `provider` itself is what keeps this working without the ref: `provider`
+  // gets a new reference on every such revalidation, but `providerId` does not.
+  it("does not clobber an in-progress edit when the same Provider's data revalidates", () => {
+    loadedProvider = {
+      id: "p1",
+      name: "OpenAI provider",
+      providerType: "OpenAI",
+      apiKey: "sk-p1",
+      apiMode: "responses",
+      modelIds: [{ id: "gpt-4o", passthroughFileTypes: [] }],
+      taskModelId: "gpt-4o",
+      memoryExtractionModelId: "gpt-4o",
+    } as unknown as Provider;
+    const { rerender } = render(<ProviderForm orgId="org1" providerId="p1" />);
+
+    fireEvent.change(screen.getByLabelText("Name"), {
+      target: { value: "My edited name" },
+    });
+
+    // A new object for the same Provider, as a revalidation would hand back.
+    loadedProvider = { ...loadedProvider };
+    rerender(<ProviderForm orgId="org1" providerId="p1" />);
+
+    expect(screen.getByLabelText("Name")).toHaveValue("My edited name");
+  });
+});
+
 describe("ProviderForm validation errors on model rows", () => {
   afterEach(() => {
     loadedProvider = undefined;
