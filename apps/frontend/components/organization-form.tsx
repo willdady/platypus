@@ -23,7 +23,8 @@ import { useState } from "react";
 import { useResetOnChange } from "@/hooks/use-reset-on-change";
 import { useRouter } from "next/navigation";
 import { type Organization } from "@platypus/schemas";
-import { clearFieldError, fetcher, joinUrl } from "@/lib/utils";
+import { fetcher, joinUrl } from "@/lib/utils";
+import { canSubmitForm, retractFieldError } from "@/lib/form-errors";
 import { writeEntity } from "@/lib/api-write";
 import { useBackendUrl } from "@/app/client-context";
 import { useAuth } from "@/components/auth-provider";
@@ -35,6 +36,8 @@ interface OrganizationFormProps {
   classNames?: string;
   orgId?: string;
 }
+
+const RETRACTABLE_FIELDS = ["name", "identityContext"] as const;
 
 const OrganizationForm = ({ classNames, orgId }: OrganizationFormProps) => {
   const { user } = useAuth();
@@ -78,7 +81,7 @@ const OrganizationForm = ({ classNames, orgId }: OrganizationFormProps) => {
 
     // Clear the error for this field, including any reported against a path
     // inside it.
-    setValidationErrors((prev) => clearFieldError(prev, id));
+    setValidationErrors((prev) => retractFieldError(prev, id));
 
     setFormData((prevData) => ({
       ...prevData,
@@ -207,7 +210,9 @@ const OrganizationForm = ({ classNames, orgId }: OrganizationFormProps) => {
       <div className="flex gap-2">
         <Button
           onClick={handleSubmit}
-          disabled={isSubmitting || Object.keys(validationErrors).length > 0}
+          disabled={
+            isSubmitting || !canSubmitForm(validationErrors, RETRACTABLE_FIELDS)
+          }
         >
           {orgId ? "Update" : "Save"}
         </Button>

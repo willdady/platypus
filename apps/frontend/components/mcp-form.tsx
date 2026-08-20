@@ -32,7 +32,8 @@ import { useResetOnChange } from "@/hooks/use-reset-on-change";
 import { useRouter } from "next/navigation";
 import { type MCP } from "@platypus/schemas";
 import useSWR, { useSWRConfig } from "swr";
-import { clearFieldError, fetcher, joinUrl } from "@/lib/utils";
+import { fetcher, joinUrl } from "@/lib/utils";
+import { canSubmitForm, retractFieldError } from "@/lib/form-errors";
 import { writeEntity } from "@/lib/api-write";
 import { toast } from "sonner";
 import { useBackendUrl } from "@/app/client-context";
@@ -62,6 +63,15 @@ type McpFormData = Omit<
 > & {
   headerRows: HeaderRow[];
 };
+
+const RETRACTABLE_FIELDS = [
+  "name",
+  "url",
+  "bearerToken",
+  "oauthClientId",
+  "oauthClientSecret",
+  "oauthRequestedScope",
+] as const;
 
 const McpForm = ({
   classNames,
@@ -157,7 +167,7 @@ const McpForm = ({
 
     // Clear the error for this field, including any reported against a path
     // inside it.
-    setValidationErrors((prev) => clearFieldError(prev, id));
+    setValidationErrors((prev) => retractFieldError(prev, id));
 
     setFormData((prevData) => ({
       ...prevData,
@@ -170,17 +180,14 @@ const McpForm = ({
 
   const handleSelectChange = (id: string, value: string) => {
     // Clear the error for this field, including any reported against a path
-    // inside it.
-    setValidationErrors((prev) => clearFieldError(prev, id));
-
-    // Clear bearerToken error when authType changes
-    if (id === "authType" && validationErrors.bearerToken) {
-      setValidationErrors((prev) => {
-        const newErrors = { ...prev };
-        delete newErrors.bearerToken;
-        return newErrors;
-      });
-    }
+    // inside it. Switching authType away from bearer also retracts a stale
+    // bearerToken error: that field disappears from the form, so nothing
+    // could otherwise clear it.
+    setValidationErrors((prev) =>
+      id === "authType"
+        ? retractFieldError(retractFieldError(prev, id), "bearerToken")
+        : retractFieldError(prev, id),
+    );
 
     setFormData((prevData) => ({
       ...prevData,
@@ -906,7 +913,7 @@ const McpForm = ({
           disabled={
             isSubmitting ||
             isTesting ||
-            Object.keys(validationErrors).length > 0
+            !canSubmitForm(validationErrors, RETRACTABLE_FIELDS)
           }
         >
           {mcpId ? "Update" : "Save"}

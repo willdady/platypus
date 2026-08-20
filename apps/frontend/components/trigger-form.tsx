@@ -36,7 +36,8 @@ import {
   type KanbanBoardState,
 } from "@platypus/schemas";
 import useSWR, { useSWRConfig } from "swr";
-import { clearFieldError, fetcher, joinUrl } from "@/lib/utils";
+import { fetcher, joinUrl } from "@/lib/utils";
+import { canSubmitForm, retractFieldError } from "@/lib/form-errors";
 import { writeEntity } from "@/lib/api-write";
 import { useBackendUrl } from "@/app/client-context";
 import { useAuth } from "@/components/auth-provider";
@@ -274,6 +275,19 @@ const parseCronExpression = (
   return null;
 };
 
+// isOneOff, maxRunsToKeep, search, filterBoardId/filterColumnId, and enabled
+// are deliberately excluded: this form has no field that retracts an error
+// keyed to them.
+const RETRACTABLE_FIELDS = [
+  "name",
+  "description",
+  "agentId",
+  "instruction",
+  "cronExpression",
+  "timezone",
+  "config",
+] as const;
+
 const TriggerForm = ({
   orgId,
   workspaceId,
@@ -474,7 +488,7 @@ const TriggerForm = ({
 
     // Clear the error for this field, including any reported against a path
     // inside it.
-    setValidationErrors((prev) => clearFieldError(prev, id));
+    setValidationErrors((prev) => retractFieldError(prev, id));
 
     setFormData((prevData) => ({
       ...prevData,
@@ -490,6 +504,7 @@ const TriggerForm = ({
   };
 
   const handleEventToggle = (event: string) => {
+    setValidationErrors((prev) => retractFieldError(prev, "config"));
     setSelectedEvents((prev) => {
       const next = prev.includes(event)
         ? prev.filter((e) => e !== event)
@@ -659,9 +674,12 @@ const TriggerForm = ({
             <FieldLabel>Agent</FieldLabel>
             <Select
               value={formData.agentId}
-              onValueChange={(value) =>
-                setFormData((prev) => ({ ...prev, agentId: value }))
-              }
+              onValueChange={(value) => {
+                setValidationErrors((prev) =>
+                  retractFieldError(prev, "agentId"),
+                );
+                setFormData((prev) => ({ ...prev, agentId: value }));
+              }}
               disabled={isSubmitting}
             >
               <SelectTrigger disabled={isSubmitting}>
@@ -939,9 +957,12 @@ const TriggerForm = ({
                 <FieldLabel>Timezone</FieldLabel>
                 <Select
                   value={formData.timezone}
-                  onValueChange={(value) =>
-                    setFormData((prev) => ({ ...prev, timezone: value }))
-                  }
+                  onValueChange={(value) => {
+                    setValidationErrors((prev) =>
+                      retractFieldError(prev, "timezone"),
+                    );
+                    setFormData((prev) => ({ ...prev, timezone: value }));
+                  }}
                   disabled={isSubmitting}
                 >
                   <SelectTrigger disabled={isSubmitting}>
@@ -1145,7 +1166,7 @@ const TriggerForm = ({
           onClick={handleSubmit}
           disabled={
             isSubmitting ||
-            Object.keys(validationErrors).length > 0 ||
+            !canSubmitForm(validationErrors, RETRACTABLE_FIELDS) ||
             !isCronValid ||
             (triggerType === "event" && selectedEvents.length === 0)
           }

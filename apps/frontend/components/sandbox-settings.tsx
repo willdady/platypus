@@ -9,7 +9,8 @@ import { type Sandbox } from "@platypus/schemas";
 
 import { useAuth } from "@/components/auth-provider";
 import { useBackendUrl } from "@/app/client-context";
-import { fetcher, joinUrl, parseValidationErrors } from "@/lib/utils";
+import { fetcher, joinUrl } from "@/lib/utils";
+import { parseValidationErrors } from "@/lib/form-errors";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";

@@ -20,12 +20,15 @@ import { useRouter } from "next/navigation";
 import { Trash2 } from "lucide-react";
 import { type Skill, type Agent } from "@platypus/schemas";
 import useSWR, { useSWRConfig } from "swr";
-import { clearFieldError, fetcher, joinUrl } from "@/lib/utils";
+import { fetcher, joinUrl } from "@/lib/utils";
+import { canSubmitForm, retractFieldError } from "@/lib/form-errors";
 import { writeEntity } from "@/lib/api-write";
 import { toast } from "sonner";
 import { useBackendUrl } from "@/app/client-context";
 import { useAuth } from "@/components/auth-provider";
 import { AgentAvatar } from "@/components/agent-avatar";
+
+const RETRACTABLE_FIELDS = ["name", "description", "body"] as const;
 
 const SkillForm = ({
   classNames,
@@ -119,7 +122,7 @@ const SkillForm = ({
 
     // Clear the error for this field, including any reported against a path
     // inside it.
-    setValidationErrors((prev) => clearFieldError(prev, id));
+    setValidationErrors((prev) => retractFieldError(prev, id));
 
     const nextValue = id === "name" ? value.toLowerCase() : value;
 
@@ -295,7 +298,9 @@ const SkillForm = ({
         <Button
           className="cursor-pointer"
           onClick={handleSubmit}
-          disabled={isSubmitting}
+          disabled={
+            isSubmitting || !canSubmitForm(validationErrors, RETRACTABLE_FIELDS)
+          }
         >
           {skillId ? "Update" : "Save"}
         </Button>
