@@ -6,14 +6,15 @@ import { cn } from "@/lib/utils";
  * or how it ended — under a Chat reply, under a delegated sub-agent response,
  * and in Trigger run history.
  *
- * It began as the output-ceiling row and keeps the name; it now also carries
- * the search-was-unavailable notice, and a Chat reply can show both at once.
+ * It carries the output-ceiling notice and the search-was-unavailable notice,
+ * and a Chat reply can show both at once — how the reply was produced, then how
+ * it ended.
  *
  * The row is shared; the wording is not. Each surface owns its own sentence as
  * an exported constant its tests assert against — the ceiling notices name
  * their subject ("Response", "Sub-agent response", "Run") per surface.
  */
-export const CutShortNotice = ({
+export const TurnNotice = ({
   children,
   className,
 }: {

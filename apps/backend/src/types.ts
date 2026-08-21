@@ -24,8 +24,9 @@ export type ChatMessageMetadata = {
   truncatedByTokenLimit?: true;
   /**
    * Search was requested for this turn and Turn resolution served no search
-   * tools, so the reply was written without it. The model was not told; the
-   * Chat renders a notice under the reply.
+   * tools, so the reply was written without it — the **Unavailable capability**
+   * of `CONTEXT.md`. The model was not told; the Chat renders a notice under the
+   * reply.
    *
    * Outcome-based, not cause-based: it covers an unregistered backend id, and a
    * backend whose `createExecutors` threw, outran its timeout, or returned no
@@ -35,7 +36,7 @@ export type ChatMessageMetadata = {
    * Web-search backend today.
    *
    * A `searchSource` that *resolves* to no search never sets this: nothing was
-   * promised, so nothing degraded. `"native"` on a Provider with no native tool
+   * promised, so nothing was missing. `"native"` on a Provider with no native tool
    * is that case, not the defensive one above — it resolves to the none-kind
    * long before any tool set is built.
    *

@@ -1121,6 +1121,59 @@ describe("chat-execution", () => {
           expect(turn.searchUnavailable).toBe(true);
         });
 
+        // Issue #522's last criterion: all three warns name the Provider row,
+        // which is the field an Operator edits. `providerId` reaches the two
+        // raised inside `buildTurnTools` on core's own context, so the
+        // plugin-facing `WebBackendContext` stays as ADR-0014 fixes it.
+        it("names the Provider row on the warn from a factory that threw", async () => {
+          const warn = vi.mocked(logger.warn);
+          register(
+            "searx",
+            {},
+            {
+              createExecutors: () => {
+                throw new Error("no credentials configured");
+              },
+            },
+          );
+
+          await turnFor(searxProvider);
+
+          expect(warn).toHaveBeenCalledWith(
+            expect.objectContaining({
+              providerId: searxProvider.id,
+              orgId: "org-1",
+              workspaceId: "ws-1",
+            }),
+            expect.stringContaining("createExecutors threw"),
+          );
+        });
+
+        it("names the Provider row on the warn from a missing web_search executor", async () => {
+          const warn = vi.mocked(logger.warn);
+          register(
+            "searx",
+            {},
+            {
+              createExecutors: () =>
+                ({}) as unknown as ReturnType<
+                  WebBackendContribution["createExecutors"]
+                >,
+            },
+          );
+
+          await turnFor(searxProvider);
+
+          expect(warn).toHaveBeenCalledWith(
+            expect.objectContaining({
+              providerId: searxProvider.id,
+              orgId: "org-1",
+              workspaceId: "ws-1",
+            }),
+            expect.stringContaining("no web_search executor"),
+          );
+        });
+
         it("flags a backend whose createExecutors outruns its timeout", async () => {
           register(
             "searx",

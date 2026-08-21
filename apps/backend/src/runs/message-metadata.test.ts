@@ -150,7 +150,7 @@ const uiStreamOf = (result: {
   }) => Parameters<typeof lastSnapshot>[0];
 }) =>
   result.toUIMessageStream({
-    messageMetadata: createMessageMetadata("agent-1"),
+    messageMetadata: createMessageMetadata({ agentId: "agent-1" }),
   });
 
 /**
@@ -314,7 +314,10 @@ describe("tool durations over a real multi-step stream", () => {
 
     const message = await lastSnapshot(
       result.toUIMessageStream({
-        messageMetadata: createMessageMetadata("agent-1", toolDurations),
+        messageMetadata: createMessageMetadata({
+          agentId: "agent-1",
+          toolDurations,
+        }),
       }),
     );
     return { message, toolDurations };
@@ -360,7 +363,7 @@ describe("tool durations over a real multi-step stream", () => {
 
     const message = await lastSnapshot(
       result.toUIMessageStream({
-        messageMetadata: createMessageMetadata("agent-1", new Map()),
+        messageMetadata: createMessageMetadata({ agentId: "agent-1" }),
       }),
     );
 
@@ -386,7 +389,10 @@ describe("search availability over a real stream", () => {
   it("marks the reply when the turn served no search tools", async () => {
     const message = await lastSnapshot(
       answerOnly().toUIMessageStream({
-        messageMetadata: createMessageMetadata("agent-1", new Map(), true),
+        messageMetadata: createMessageMetadata({
+          agentId: "agent-1",
+          searchUnavailable: true,
+        }),
       }),
     );
 
@@ -396,7 +402,10 @@ describe("search availability over a real stream", () => {
   it("keeps the agent attribution on the same message", async () => {
     const message = await lastSnapshot(
       answerOnly().toUIMessageStream({
-        messageMetadata: createMessageMetadata("agent-1", new Map(), true),
+        messageMetadata: createMessageMetadata({
+          agentId: "agent-1",
+          searchUnavailable: true,
+        }),
       }),
     );
 
@@ -410,7 +419,10 @@ describe("search availability over a real stream", () => {
   it("says nothing about search on a turn that had it", async () => {
     const message = await lastSnapshot(
       answerOnly().toUIMessageStream({
-        messageMetadata: createMessageMetadata("agent-1", new Map(), false),
+        messageMetadata: createMessageMetadata({
+          agentId: "agent-1",
+          searchUnavailable: false,
+        }),
       }),
     );
 
@@ -420,7 +432,7 @@ describe("search availability over a real stream", () => {
   it("marks a turn with no resolved agent, which carries no other metadata", async () => {
     const message = await lastSnapshot(
       answerOnly().toUIMessageStream({
-        messageMetadata: createMessageMetadata(undefined, new Map(), true),
+        messageMetadata: createMessageMetadata({ searchUnavailable: true }),
       }),
     );
 
@@ -446,7 +458,10 @@ describe("search availability over a real stream", () => {
 
     const message = await lastSnapshot(
       result.toUIMessageStream({
-        messageMetadata: createMessageMetadata("agent-1", new Map(), true),
+        messageMetadata: createMessageMetadata({
+          agentId: "agent-1",
+          searchUnavailable: true,
+        }),
       }),
     );
 

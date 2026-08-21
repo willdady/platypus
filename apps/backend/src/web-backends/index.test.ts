@@ -38,7 +38,23 @@ vi.mock("../logger.ts", () => ({
 
 const mockLogger = vi.mocked(logger);
 
-const CTX = { orgId: "org-1", workspaceId: "ws-1", userId: "user-1" };
+// What core hands its own `buildTurnTools`. `providerId` is core's alone: it
+// rides the warns so an Operator asked about a User-facing unavailable-search
+// notice (issue #522) can find the Provider row to edit, and it is stripped
+// before the plugin-facing `createExecutors` call.
+const CTX = {
+  orgId: "org-1",
+  workspaceId: "ws-1",
+  userId: "user-1",
+  providerId: "provider-1",
+};
+
+// The plugin-facing subset, fixed by ADR-0014 at `{ orgId, workspaceId, userId }`.
+const PLUGIN_CTX = {
+  orgId: CTX.orgId,
+  workspaceId: CTX.workspaceId,
+  userId: CTX.userId,
+};
 
 // A public address for the injected resolver, so the real egress guard stays in
 // the path (these tests assert core's guarding, not DNS).
@@ -164,7 +180,10 @@ describe("composeWebBackend — tool construction", () => {
       pluginName: "@acme/searx",
     }).buildTurnTools(CTX);
 
-    expect(createExecutors).toHaveBeenCalledWith(CTX, plugin);
+    // The narrow shape, not core's: a backend is given the turn's scope and
+    // nothing about which Provider row selected it.
+    // An exact match, so a leaked `providerId` fails here.
+    expect(createExecutors).toHaveBeenCalledWith(PLUGIN_CTX, plugin);
   });
 
   it("serves no tools (and warns) when the executor object has no web_search", async () => {
@@ -177,11 +196,13 @@ describe("composeWebBackend — tool construction", () => {
       {
         plugin: "@acme/searx",
         backend: "searx",
-        // The turn's scope, so an Operator asked about the User-facing notice
-        // (issue #522) can tell which Workspace saw it. The Provider row is not
-        // reachable from here — issue #627.
+        // The turn's scope and the Provider row, so an Operator asked about the
+        // User-facing notice (issue #522) can tell which Workspace saw it and
+        // which row to edit — an org-scoped Shared Provider (ADR-0007) serves
+        // many Workspaces, so the Workspace alone names a symptom.
         orgId: CTX.orgId,
         workspaceId: CTX.workspaceId,
+        providerId: CTX.providerId,
       },
       expect.stringContaining("no web_search executor"),
     );
@@ -207,6 +228,7 @@ describe("composeWebBackend — tool construction", () => {
         backend: "searx",
         orgId: CTX.orgId,
         workspaceId: CTX.workspaceId,
+        providerId: CTX.providerId,
       }),
       expect.stringContaining("createExecutors threw"),
     );
@@ -234,6 +256,7 @@ describe("composeWebBackend — tool construction", () => {
         backend: "searx",
         orgId: CTX.orgId,
         workspaceId: CTX.workspaceId,
+        providerId: CTX.providerId,
       }),
       expect.stringContaining("createExecutors timed out"),
     );

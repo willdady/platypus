@@ -13,7 +13,7 @@ import {
 } from "lucide-react";
 import type { ToolUIPart } from "ai";
 import { Badge } from "@/components/ui/badge";
-import { CutShortNotice } from "./cut-short-notice";
+import { TurnNotice } from "./turn-notice";
 import {
   Collapsible,
   CollapsibleContent,
@@ -226,9 +226,7 @@ const ResponseBlock = ({
       </MessageContent>
     </Message>
     {truncated && (
-      <CutShortNotice className="mt-2">
-        {SUB_AGENT_CUT_SHORT_NOTICE}
-      </CutShortNotice>
+      <TurnNotice className="mt-2">{SUB_AGENT_CUT_SHORT_NOTICE}</TurnNotice>
     )}
   </div>
 );

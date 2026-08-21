@@ -293,11 +293,11 @@ const runStreamedDrive = (
   const uiStream = result.toUIMessageStream<PlatypusUIMessage>({
     originalMessages,
     generateMessageId,
-    messageMetadata: createMessageMetadata(
+    messageMetadata: createMessageMetadata({
       agentId,
       toolDurations,
       searchUnavailable,
-    ),
+    }),
     onError: (error) => formatStreamError(error),
     onFinish: ({ messages: finalMessages }) => {
       finalHandedOver = true;

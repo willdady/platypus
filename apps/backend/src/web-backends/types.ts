@@ -131,6 +131,25 @@ export type ReadUrlToolResult = {
 export type WebToolError = { error: string };
 
 /**
+ * What core passes its own `buildTurnTools`, as distinct from what a Plugin's
+ * `createExecutors` is handed.
+ *
+ * `WebBackendContext` is the plugin-facing shape ADR-0014 fixes at
+ * `{ orgId, workspaceId, userId }`. This adds the one field core needs on its
+ * own side of the seam and a backend has no business seeing: the id of the
+ * Provider row whose `searchSource` named this backend. It is the field an
+ * Operator edits — an org-scoped Shared Provider (ADR-0007) is one row serving
+ * many Workspaces, so the Workspace alone names a symptom — and it is what the
+ * warns raised here log when a turn is left with no search tools (issue #522).
+ *
+ * `composeWebBackend` forwards only the plugin-facing subset onward, so
+ * widening this costs the published SDK contract nothing.
+ */
+export type TurnToolsContext = WebBackendContext & {
+  providerId: string;
+};
+
+/**
  * One registered Web-search backend. The discriminator string lives in the
  * `provider.searchSource` column.
  *
@@ -147,5 +166,5 @@ export type WebToolError = { error: string };
 export interface WebBackendRegistration {
   backend: string;
   name: string;
-  buildTurnTools(ctx: WebBackendContext): Promise<Record<string, Tool>>;
+  buildTurnTools(ctx: TurnToolsContext): Promise<Record<string, Tool>>;
 }

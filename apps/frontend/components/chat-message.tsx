@@ -50,7 +50,7 @@ import {
 } from "lucide-react";
 import { Textarea } from "./ui/textarea";
 import { toolCallDurationMs } from "@/lib/tool-duration";
-import { CutShortNotice } from "./cut-short-notice";
+import { TurnNotice } from "./turn-notice";
 import { LoadSkillTool } from "./load-skill-tool";
 import { SubAgentTool } from "./sub-agent-tool";
 import {
@@ -457,12 +457,12 @@ export const ChatMessage = memo(function ChatMessage({
       {message.role === "assistant" && (
         <>
           {message.metadata?.searchUnavailable && (
-            <CutShortNotice className="pl-8">
+            <TurnNotice className="pl-8">
               {SEARCH_UNAVAILABLE_NOTICE}
-            </CutShortNotice>
+            </TurnNotice>
           )}
           {message.metadata?.truncatedByTokenLimit && (
-            <CutShortNotice className="pl-8">{CUT_SHORT_NOTICE}</CutShortNotice>
+            <TurnNotice className="pl-8">{CUT_SHORT_NOTICE}</TurnNotice>
           )}
         </>
       )}

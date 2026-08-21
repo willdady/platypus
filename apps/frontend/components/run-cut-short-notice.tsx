@@ -1,6 +1,6 @@
 "use client";
 
-import { CutShortNotice } from "./cut-short-notice";
+import { TurnNotice } from "./turn-notice";
 
 /**
  * What the person reading run history is told when a run stopped at the
@@ -19,5 +19,5 @@ export const RUN_CUT_SHORT_NOTICE =
  * export the fields Next recognises, and the wording has to be importable.
  */
 export const RunCutShortNotice = () => (
-  <CutShortNotice className="mt-1">{RUN_CUT_SHORT_NOTICE}</CutShortNotice>
+  <TurnNotice className="mt-1">{RUN_CUT_SHORT_NOTICE}</TurnNotice>
 );

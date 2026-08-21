@@ -113,9 +113,11 @@ export type ChatTurn = {
   resolved: ResolvedGeneration;
   /**
    * Search was requested and resolution served no search tools, so the turn
-   * runs without it (issue #522). A sibling of `stream` and not a field on
-   * `resolved`, which describes the turn's plan and is mirrored into run
-   * records: this is an outcome of building that plan, not part of it.
+   * runs without it — an **Unavailable capability** (`CONTEXT.md`), issue #522.
+   *
+   * A sibling of `stream` and not a field on `resolved`, which describes the
+   * turn's plan and is mirrored into run records: this is an outcome of
+   * building that plan, not part of it.
    *
    * The runner forwards it to the drive, which stamps it onto the streamed
    * message's metadata for the Chat to render. The model is never told.
@@ -417,6 +419,11 @@ const resolveSearchTools = async (
   provider: Pick<Provider, "id">,
   ctx: WebBackendContext,
 ): Promise<Record<string, Tool>> => {
+  // Core's own context for the seam: `providerId` is the actionable field on
+  // every warn below, and a backend never sees it — `composeWebBackend` strips
+  // it before the plugin-facing `createExecutors` call.
+  const turnCtx = { ...ctx, providerId: provider.id };
+
   if (resolution.kind === "none") return {};
   if (resolution.kind === "native") return opened.searchTools?.() ?? {};
 
@@ -442,7 +449,7 @@ const resolveSearchTools = async (
     );
     return {};
   }
-  return registration.buildTurnTools(ctx);
+  return registration.buildTurnTools(turnCtx);
 };
 
 // --- Public Module: prepare a Chat turn ---

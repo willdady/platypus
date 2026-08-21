@@ -11,7 +11,7 @@ import {
   readUrlInputSchema,
   webSearchInputSchema,
   type ReadUrlToolResult,
-  type WebBackendContext,
+  type TurnToolsContext,
   type WebBackendContribution,
   type WebBackendExecutors,
   type WebBackendRegistration,
@@ -536,7 +536,25 @@ export const composeWebBackend = (
   return {
     backend,
     name: contribution.name,
-    buildTurnTools: async (ctx: WebBackendContext) => {
+    buildTurnTools: async (ctx: TurnToolsContext) => {
+      // The Provider row is core's to know and no business of a backend's, so
+      // it is stripped before the plugin-facing call and kept for the warns:
+      // `createExecutors` still receives exactly the `WebBackendContext`
+      // ADR-0014 fixes at `{ orgId, workspaceId, userId }`.
+      const { providerId, ...pluginCtx } = ctx;
+
+      // One context for both warns below. They report the same fault to the
+      // same reader — an Operator asked why a reply said search was unavailable
+      // (issue #522) — and the fields they need are identical, so drift between
+      // two literals is the only thing separate ones would buy.
+      const faultCtx = {
+        plugin: pluginName,
+        backend,
+        orgId: ctx.orgId,
+        workspaceId: ctx.workspaceId,
+        providerId,
+      };
+
       // A factory that throws or hangs must degrade exactly like the
       // missing-`web_search` case below, not reject/pin the turn: ADR-0014's
       // "runtime resolution graceful" and the timeout's "a backend cannot pin a
@@ -551,26 +569,18 @@ export const composeWebBackend = (
       let executors: WebBackendExecutors | undefined;
       try {
         executors = await withTimeout(
-          () => contribution.createExecutors(ctx, plugin),
+          () => contribution.createExecutors(pluginCtx, plugin),
           timeoutMs,
         );
       } catch (cause) {
-        // `orgId`/`workspaceId` ride this warn and the one below because the
-        // degradation they report is now shown to the User (issue #522): an
-        // Operator asked about a notice needs to know which Workspace saw it,
-        // not only which plugin failed. The Provider row that points at this
-        // backend is the field they actually edit, and it is not reachable from
-        // here — `WebBackendContext` is plugin-facing and carries no
-        // `providerId`. Tracked as issue #627 rather than widening the SDK type.
+        // The turn's scope and Provider ride this warn and the one below
+        // because what they report is now an Unavailable capability shown to
+        // the User (issue #522), not only a line in the log: an Operator asked
+        // about that notice needs the Workspace that saw it and the Provider
+        // row they have to edit, not just the plugin that failed.
         const timedOut = cause instanceof WebBackendTimeoutError;
         logger.warn(
-          {
-            plugin: pluginName,
-            backend,
-            orgId: ctx.orgId,
-            workspaceId: ctx.workspaceId,
-            cause,
-          },
+          { ...faultCtx, cause },
           timedOut
             ? "Web backend's createExecutors timed out; serving no tools this turn"
             : "Web backend's createExecutors threw; serving no tools this turn",
@@ -584,12 +594,7 @@ export const composeWebBackend = (
       // executor object costs the turn its search tools, not the turn.
       if (typeof executors?.web_search !== "function") {
         logger.warn(
-          {
-            plugin: pluginName,
-            backend,
-            orgId: ctx.orgId,
-            workspaceId: ctx.workspaceId,
-          },
+          faultCtx,
           "Web backend returned no web_search executor; serving no search tools this turn",
         );
         return {};
