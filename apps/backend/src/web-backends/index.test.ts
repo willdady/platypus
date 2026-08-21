@@ -4,6 +4,7 @@ import { WEB_BACKEND_TOOL_MARKER } from "@platypus/schemas";
 import { callTool } from "../test-utils.ts";
 import { EGRESS_BLOCKED_MESSAGE } from "../utils/egress-guard.ts";
 import { logger } from "../logger.ts";
+import { runCloser, type CoreCloserRegistrar } from "../tools/closers.ts";
 import {
   clearWebBackends,
   composeWebBackend,
@@ -797,7 +798,10 @@ describe("read_url — egress guard, capping, slicing", () => {
 
     const result = await read(read_url, { url: overlong });
     // No AI-SDK input-validation error: the request reached the executor whole.
-    expect(read_url_executor).toHaveBeenCalledWith({ url: overlong });
+    expect(read_url_executor).toHaveBeenCalledWith(
+      { url: overlong },
+      { signal: expect.any(AbortSignal) as unknown },
+    );
     expect(result.content).toBe("hi");
     expect(result.url).toBe("https://example.com");
     expect(result.url.length).toBeLessThanOrEqual(MAX_URL_CHARS);
@@ -998,6 +1002,251 @@ describe("composeWebBackend — the contribution is not copied", () => {
     const { web_search } = await buildTools(executors);
     expect((await search(web_search, "q")).answer).toBe(
       "from the executor object",
+    );
+  });
+});
+
+describe("the signal an executor is handed", () => {
+  it("passes one to both executors, as an appended argument", async () => {
+    const web_search = vi.fn(() => ({ query: "q", results: [] }));
+    const read_url = vi.fn(() => ({ content: "hi", url: "https://ok/" }));
+    const tools = await buildTools({ web_search, read_url });
+
+    await search(tools.web_search, "q");
+    await read(tools.read_url, { url: "https://example.com/page" });
+
+    expect(web_search).toHaveBeenCalledWith(
+      { query: "q" },
+      { signal: expect.any(AbortSignal) as unknown },
+    );
+    expect(read_url).toHaveBeenCalledWith(
+      { url: "https://example.com/page" },
+      { signal: expect.any(AbortSignal) as unknown },
+    );
+  });
+
+  it("runs a single-argument executor written before the signal existed", async () => {
+    // The type half of this is the fixture itself: a one-parameter function is
+    // still assignable to the two-parameter contract, so no `@ts-expect-error`.
+    const legacy: WebBackendExecutors = {
+      web_search: (input: { query: string }) => ({
+        query: input.query,
+        results: [{ title: "Old", url: "https://example.com/1" }],
+      }),
+    };
+
+    const { web_search } = await buildTools(legacy);
+    expect((await search(web_search, "q")).results).toEqual([
+      { title: "Old", url: "https://example.com/1" },
+    ]);
+  });
+
+  it("fires the executor's signal when the caller's aborts, and logs cancelled at debug", async () => {
+    const controller = new AbortController();
+    let aborted = false;
+    const { web_search } = await buildTools({
+      web_search: (_input, { signal }) =>
+        new Promise((_resolve, reject) => {
+          signal.addEventListener("abort", () => {
+            aborted = true;
+            reject(signal.reason);
+          });
+          controller.abort();
+        }),
+    });
+
+    const result = (await callTool(
+      web_search,
+      { query: "q" },
+      {
+        toolCallId: "t",
+        messages: [],
+        context: undefined,
+        abortSignal: controller.signal,
+      },
+    )) as WebToolError;
+
+    expect(aborted).toBe(true);
+    expect(result.error).toBe(
+      "The web backend could not complete this web_search request.",
+    );
+    // A User pressing stop is not a fault; warning on it would make healthy
+    // traffic the noisiest thing in an Operator's log.
+    expect(mockLogger.debug).toHaveBeenCalledWith(
+      expect.objectContaining({ tool: "web_search", outcome: "cancelled" }),
+      expect.stringContaining("cancelled"),
+    );
+    expect(mockLogger.warn).not.toHaveBeenCalled();
+  });
+
+  it("cancels read_url before the egress guard resolves anything", async () => {
+    const controller = new AbortController();
+    controller.abort();
+    const resolveHostname = vi.fn(resolvePublic);
+    const read_url = vi.fn(() => ({ content: "hi", url: "https://ok/" }));
+
+    const { read_url: tool } = await composeWebBackend({
+      contribution: contribution({
+        web_search: () => ({ query: "q", results: [] }),
+        read_url,
+      }),
+      pluginName: "@acme/searx",
+      resolveHostname,
+    }).buildTurnTools(CTX);
+
+    const result = (await callTool(
+      tool,
+      { url: "https://example.com/page", max_length: 5_000, start_index: 0 },
+      {
+        toolCallId: "t",
+        messages: [],
+        context: undefined,
+        abortSignal: controller.signal,
+      },
+    )) as WebToolError;
+
+    expect(result.error).toBe(
+      "The web backend could not complete this read_url request.",
+    );
+    // A turn nobody is waiting for does not get a DNS lookup spent on it.
+    expect(resolveHostname).not.toHaveBeenCalled();
+    expect(read_url).not.toHaveBeenCalled();
+  });
+
+  it("still bounds an executor that ignores its signal, with the timeout text unchanged", async () => {
+    let handed: AbortSignal | undefined;
+    const { web_search } = await buildTools(
+      {
+        web_search: (_input, { signal }) => {
+          handed = signal;
+          return new Promise(() => {
+            /* never settles, never reads the signal */
+          });
+        },
+      },
+      { timeoutMs: 20 },
+    );
+
+    const result = await search(web_search, "q");
+    expect(result.error).toBe(
+      "The web backend did not respond within 20ms (web_search).",
+    );
+    // The signal fired on the deadline too — a cooperating backend's upstream
+    // call now stops on a timeout, where before it was merely abandoned.
+    expect(handed?.aborted).toBe(true);
+    expect(mockLogger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({ tool: "web_search", outcome: "timeout" }),
+      expect.any(String),
+    );
+  });
+});
+
+describe("the closer a backend registers", () => {
+  /** A context carrying core's registrar, as a Tool session's would. */
+  const ctxWith = (register: CoreCloserRegistrar) => ({
+    ...CTX,
+    registerCloser: register,
+  });
+
+  it("hands createExecutors a context carrying registerCloser", async () => {
+    const createExecutors = vi.fn(() => ({
+      web_search: () => ({ query: "q", results: [] }),
+    }));
+
+    await composeWebBackend({
+      contribution: contribution({}, { createExecutors }),
+      pluginName: "@acme/searx",
+    }).buildTurnTools(ctxWith(() => {}));
+
+    expect(createExecutors).toHaveBeenCalledWith(
+      expect.objectContaining({
+        orgId: "org-1",
+        workspaceId: "ws-1",
+        userId: "user-1",
+        registerCloser: expect.any(Function) as unknown,
+      }),
+      undefined,
+    );
+  });
+
+  it("attributes what it registers to the plugin and the backend", async () => {
+    const close = () => {};
+    const register = vi.fn();
+
+    await composeWebBackend({
+      contribution: contribution(
+        { web_search: () => ({ query: "q", results: [] }) },
+        {
+          createExecutors: (ctx) => {
+            ctx.registerCloser?.(close);
+            return { web_search: () => ({ query: "q", results: [] }) };
+          },
+        },
+      ),
+      backend: "acme.searx",
+      pluginName: "@acme/searx",
+    }).buildTurnTools(ctxWith(register));
+
+    // The closer itself passes through unwrapped, so a session still dedupes on
+    // its identity; only the attribution is added.
+    expect(register).toHaveBeenCalledWith(close, {
+      plugin: "@acme/searx",
+      backend: "acme.searx",
+    });
+  });
+
+  it("does not fail the turn when the closer throws", async () => {
+    const registered: Array<() => Promise<void>> = [];
+    const tools = await composeWebBackend({
+      contribution: contribution(
+        {},
+        {
+          createExecutors: (ctx) => {
+            ctx.registerCloser?.(() => {
+              throw new Error("pool already gone");
+            });
+            return { web_search: () => ({ query: "q", results: [] }) };
+          },
+        },
+      ),
+      pluginName: "@acme/searx",
+    }).buildTurnTools(
+      ctxWith((close, attribution) => {
+        registered.push(() => runCloser(close, attribution));
+      }),
+    );
+
+    // The turn got its tools regardless — the closer runs at teardown, long
+    // after the model has been served.
+    expect(Object.keys(tools)).toEqual(["web_search"]);
+    await expect(registered[0]()).resolves.toBeUndefined();
+    expect(mockLogger.error).toHaveBeenCalledWith(
+      expect.objectContaining({ plugin: "@acme/searx", backend: "searx" }),
+      expect.stringContaining("Error closing"),
+    );
+  });
+
+  it("degrades to no search tools when a backend calls the registrar unguarded on an older core", async () => {
+    const tools = await composeWebBackend({
+      contribution: contribution(
+        {},
+        {
+          createExecutors: (ctx) => {
+            // The `!` this contract's docs tell an author not to write. On a core
+            // without the member it is a TypeError out of the factory.
+            ctx.registerCloser!(() => {});
+            return { web_search: () => ({ query: "q", results: [] }) };
+          },
+        },
+      ),
+      pluginName: "@acme/searx",
+    }).buildTurnTools(CTX);
+
+    expect(tools).toEqual({});
+    expect(mockLogger.warn).toHaveBeenCalledTimes(1);
+    expect(mockLogger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({ plugin: "@acme/searx", backend: "searx" }),
+      expect.stringContaining("createExecutors threw"),
     );
   });
 });

@@ -90,6 +90,19 @@ The practical consequence for you: a two-argument `create` keeps working after
 core started passing a third argument, and a single-argument factory keeps working
 after core started passing a second. Consume the new argument when you want it.
 
+The same rule cuts the other way on the contexts core hands you. A capability
+that arrived after your Plugin was written is an **optional** field, so call it
+guarded:
+
+- `ctx.registerCloser?.(close)` — register something to close when the turn ends,
+  on a [Tool set](/extending/tool-sets#releasing-what-a-factory-opened) or a
+  [Web-search backend](/extending/web-search-backends#releasing-what-you-opened).
+- `plugin?.logger?.info(...)` — the [logger](#logging) core binds to your name.
+
+Writing `ctx.registerCloser!(close)` to silence the compiler is the trap: on a
+core that predates the field it is a `TypeError` thrown out of your factory, and
+your Contribution serves nothing that turn.
+
 ## Deploy-time config and credentials
 
 Some plugins need settings that belong to the **Operator**, not to an end user: a

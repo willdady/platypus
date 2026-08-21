@@ -81,7 +81,7 @@ _Avoid_: degraded capability, disabled capability, failed tool.
 A named bundle of Tools an Agent can be granted. Either contributed by a Plugin (registered in code) or backed by an MCP server.
 
 **Tool session**:
-One Agent's Tool sets, resolved for one Chat turn, together with the connections opened to serve them. Sessions nest: a Sub-Agent's session is opened on its first delegation and closes with the parent's, so a turn has exactly one thing to dispose however many tool sources it reached. A Tool set that cannot serve the turn — a factory that throws, an unreachable MCP — costs its own Tools and no more.
+One Agent's Tool sets, resolved for one Chat turn, together with the connections opened to serve them. Sessions nest: a Sub-Agent's session is opened on its first delegation and closes with the parent's, so a turn has exactly one thing to dispose however many tool sources it reached. A Tool set or Web-search backend that opens something with a lifetime registers its own close into that same one thing. A Tool set that cannot serve the turn — a factory that throws, an unreachable MCP — costs its own Tools and no more.
 _Avoid_: tool context (that is the scope handed to a Tool set factory), tool loader.
 
 **MCP**:

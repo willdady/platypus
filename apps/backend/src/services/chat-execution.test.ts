@@ -1057,6 +1057,41 @@ describe("chat-execution", () => {
         expect(turn.stream.tools).not.toHaveProperty("read_url");
       });
 
+      it("closes what a backend registered, once, through the dispose the turn returns", async () => {
+        // The wiring test for the whole path: the registrar the search branch is
+        // handed defers onto a session promise the `Promise.all` is still
+        // awaiting, so this fails if that deferral is ever "simplified" into a
+        // session the search branch does not have yet.
+        const close = vi.fn().mockResolvedValue(undefined);
+        registerWebBackend(
+          composeWebBackend({
+            contribution: {
+              backend: "searx",
+              name: "SearXNG",
+              createExecutors: (ctx) => {
+                ctx.registerCloser?.(close);
+                return { web_search: () => ({ query: "q", results: [] }) };
+              },
+            },
+            pluginName: "@acme/searx",
+          }),
+        );
+
+        const turn = await turnFor({
+          ...googleProvider,
+          searchSource: "searx",
+        });
+        expect(turn.stream.tools).toHaveProperty("web_search");
+        expect(close).not.toHaveBeenCalled();
+
+        await turn.dispose();
+        expect(close).toHaveBeenCalledTimes(1);
+
+        // The caller disposes on abort and again on finish.
+        await turn.dispose();
+        expect(close).toHaveBeenCalledTimes(1);
+      });
+
       it("serves a backend on a trigger-initiated run, not only an interactive one", async () => {
         // G16: a non-user principal reaches `prepareChatTurn` through
         // `AgentRunner` with `runMode: "headless"`, and resolution must not be

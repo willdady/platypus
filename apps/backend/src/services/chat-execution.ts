@@ -10,6 +10,7 @@ import {
   workspace as workspaceTable,
 } from "../db/schema.ts";
 import {
+  deferCloserRegistrar,
   openToolSession,
   type ToolSession,
   type ToolSessionScope,
@@ -38,6 +39,7 @@ import {
   getWebBackend,
   type WebBackendContext,
 } from "../web-backends/index.ts";
+import type { WithCoreRegistrar } from "../tools/closers.ts";
 import type { Tool } from "ai";
 import { logger } from "../logger.ts";
 import { inlineFileUrls } from "../storage/utils.ts";
@@ -417,7 +419,7 @@ const resolveSearchTools = async (
   resolution: SearchResolution,
   opened: Pick<OpenedProvider, "searchTools">,
   provider: Pick<Provider, "id">,
-  ctx: WebBackendContext,
+  ctx: WithCoreRegistrar<WebBackendContext>,
 ): Promise<Record<string, Tool>> => {
   // Core's own context for the seam: `providerId` is the actionable field on
   // every warn below, and a backend never sees it — `composeWebBackend` strips
@@ -516,6 +518,10 @@ export const prepareChatTurn = async (
   // built alongside it nest their own sessions into this one — they take the
   // promise, not the session, and await it only if they are ever invoked.
   const sessionPromise = openToolSession(scope, agent, queries);
+  // The search path is awaited *beside* the session below, not after it, so it
+  // cannot be handed the session itself — it gets a registrar that defers onto
+  // the promise. See `deferCloserRegistrar`.
+  const registerCloser = deferCloserRegistrar(sessionPromise);
 
   // Hoisted out of the `Promise.all` argument list so the resolution and the
   // tools it produced are both in scope below — the pair is what says whether
@@ -542,6 +548,7 @@ export const prepareChatTurn = async (
       orgId,
       workspaceId,
       userId: user.id,
+      registerCloser,
     }),
   ]);
 

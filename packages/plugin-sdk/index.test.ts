@@ -249,10 +249,93 @@ describe("@platypuschat/plugin-sdk", () => {
       { orgId: "o", workspaceId: "w", userId: "u" },
       { config: {}, credentials: { apiKey: "k" } },
     );
-    expect((await executors.web_search({ query: "q" })).results).toHaveLength(
-      1,
+    // Core supplies the call's signal as an appended second argument. Reading it
+    // is the executor's choice; passing it is not core's.
+    const results = await executors.web_search(
+      { query: "q" },
+      { signal: AbortSignal.timeout(1_000) },
     );
+    expect(results.results).toHaveLength(1);
     expect(typeof executors.read_url).toBe("function");
+  });
+
+  it("lets a backend honour the signal core hands its executor", async () => {
+    const contribution: WebBackendContribution = {
+      backend: "searx",
+      name: "SearXNG",
+      createExecutors: () => ({
+        web_search: ({ query }, { signal }) => {
+          signal.throwIfAborted();
+          return { query, results: [] };
+        },
+      }),
+    };
+
+    const executors = await contribution.createExecutors(
+      { orgId: "o", workspaceId: "w", userId: "u" },
+      undefined,
+    );
+    const cancelled = new AbortController();
+    cancelled.abort();
+    expect(() =>
+      executors.web_search({ query: "q" }, { signal: cancelled.signal }),
+    ).toThrow();
+  });
+
+  it("lets a backend register a closer for what its factory opened", async () => {
+    const closed: string[] = [];
+    const contribution: WebBackendContribution = {
+      backend: "searx",
+      name: "SearXNG",
+      createExecutors: (ctx) => {
+        // Guarded, never `!`: the member is optional so that a plugin built
+        // against this SDK still loads on a core that predates it.
+        ctx.registerCloser?.(() => {
+          closed.push("pool");
+        });
+        return { web_search: () => ({ query: "q", results: [] }) };
+      },
+    };
+
+    const registered: Array<() => Promise<void> | void> = [];
+    await contribution.createExecutors(
+      {
+        orgId: "o",
+        workspaceId: "w",
+        userId: "u",
+        registerCloser: (close) => registered.push(close),
+      },
+      undefined,
+    );
+
+    expect(registered).toHaveLength(1);
+    await registered[0]();
+    expect(closed).toEqual(["pool"]);
+  });
+
+  it("leaves a Tool set factory free to register a closer too", () => {
+    const registered: Array<() => Promise<void> | void> = [];
+    const contribution: ToolSetContribution = {
+      id: "kanban",
+      name: "Kanban",
+      category: "Productivity",
+      tools: (ctx) => {
+        ctx.registerCloser?.(() => {});
+        return {};
+      },
+    };
+
+    if (typeof contribution.tools === "function") {
+      contribution.tools({
+        orgId: "o",
+        workspaceId: "w",
+        agentId: "a",
+        userId: "u",
+        frontendUrl: undefined,
+        registerCloser: (close) => registered.push(close),
+      });
+    }
+    expect(registered).toHaveLength(1);
   });
 
   it("accepts a search-only web backend (read_url is optional)", () => {

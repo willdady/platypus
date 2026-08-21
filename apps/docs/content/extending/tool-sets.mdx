@@ -111,6 +111,50 @@ never the chat. Returning an empty map is still the better habit — the outcome
 is the same, and you get to say _why_ through the
 [logger](/extending/plugin-api-and-config#logging).
 
+## Releasing what a factory opened
+
+A factory runs once per turn. If it opens something with a lifetime — a
+connection, a pool, a watcher — register a way to close it:
+
+```ts
+{
+  id: "kanban",
+  name: "Kanban",
+  category: "Productivity",
+  tools: (ctx) => {
+    const client = connect(ctx.workspaceId);
+    ctx.registerCloser?.(() => client.close());
+    return createKanbanTools(client);
+  },
+}
+```
+
+Core runs your closer once, when the turn ends — on a normal finish and on a
+cancellation alike. A closer that throws is logged against your Plugin and the
+rest still run; one that never settles is abandoned after **5 seconds**, because
+teardown happens while the reader is still waiting on the reply. Registering the
+same function twice registers it once.
+
+There is no matching deadline on the factory itself: a Tool set declares no
+per-call budget, and factories legitimately reach a database or a Sandbox on the
+way to building their tools. Teardown gets a ceiling because core knows what it
+is delaying; your factory's ceiling is a number only you know.
+
+<Callout type="warning">
+  **Write `ctx.registerCloser?.(...)`, not `ctx.registerCloser!(...)`.** Your
+  manifest's `apiVersion` names a *major*, so it cannot ask for a core new enough
+  to have this — on an older one the field is genuinely absent, and the
+  unguarded call throws out of your factory. The turn then serves **none of this
+  set's tools**, with a warning in the Operator's log as the only sign. The guard
+  is the difference between "no teardown on old core" and "no tools on old core".
+</Callout>
+
+<Callout type="info">
+  A static map is handed nothing, so it has nowhere to register from — the same
+  reason it has nowhere to log from. Use a factory if the set owns anything that
+  needs closing.
+</Callout>
+
 ## Tool names
 
 <Callout type="warning">

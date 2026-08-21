@@ -1,6 +1,7 @@
 import type { Tool } from "ai";
 import { z } from "zod";
 import type { WebBackendContext } from "@platypuschat/plugin-sdk";
+import type { WithCoreRegistrar } from "../tools/closers.ts";
 
 // The SDK is the single home of the executor-facing contract; core re-exports the
 // types its internal callers need so nothing below imports the SDK directly.
@@ -9,6 +10,7 @@ export type {
   WebBackendContext,
   WebBackendContribution,
   WebBackendExecutors,
+  WebExecutorOptions,
   WebSearchResult,
   WebSearchResults,
 } from "@platypuschat/plugin-sdk";
@@ -142,10 +144,15 @@ export type WebToolError = { error: string };
  * many Workspaces, so the Workspace alone names a symptom — and it is what the
  * warns raised here log when a turn is left with no search tools (issue #522).
  *
+ * It also carries core's own registrar rather than the plugin-facing one: the
+ * extra parameter is the attribution a closer's log line needs to name a culprit
+ * (see `../tools/closers.ts`). The extra parameter is optional, so this stays
+ * assignable to `WebBackendContext`.
+ *
  * `composeWebBackend` forwards only the plugin-facing subset onward, so
  * widening this costs the published SDK contract nothing.
  */
-export type TurnToolsContext = WebBackendContext & {
+export type TurnToolsContext = WithCoreRegistrar<WebBackendContext> & {
   providerId: string;
 };
 

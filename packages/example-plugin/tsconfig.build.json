@@ -1,7 +1,10 @@
 {
   "compilerOptions": {
     "target": "ES2022",
-    "lib": ["esnext"],
+    // Mirrors the SDK's own lib: its Web-search executor options name
+    // `AbortSignal`, a web-standard global that `esnext` alone does not declare.
+    // A plugin with `@types/node` gets it from there instead.
+    "lib": ["esnext", "dom"],
     "module": "esnext",
     "moduleResolution": "bundler",
     "esModuleInterop": true,
