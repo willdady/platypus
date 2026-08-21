@@ -24,10 +24,10 @@ Your contribution returns two plain functions, typed by
 Core builds the `Tool` objects around them. Read the exact shapes off the package
 you have installed — this page states the rules those types don't encode.
 
-| Executor     | Required | Gets                            | Returns                                                                      |
-| ------------ | -------- | ------------------------------- | ---------------------------------------------------------------------------- |
-| `web_search` | Yes      | `{ query }`, then `{ signal }`  | `{ query, results: [{ title, url, snippet? }], answer? }`                    |
-| `read_url`   | No       | `{ url }`, then `{ signal }`    | the page's full content, its post-redirect URL, and an optional content type |
+| Executor     | Required | Gets                           | Returns                                                                      |
+| ------------ | -------- | ------------------------------ | ---------------------------------------------------------------------------- |
+| `web_search` | Yes      | `{ query }`, then `{ signal }` | `{ query, results: [{ title, url, snippet? }], answer? }`                    |
+| `read_url`   | No       | `{ url }`, then `{ signal }`   | the page's full content, its post-redirect URL, and an optional content type |
 
 Either may be async. Contribute a search-only backend by omitting `read_url` —
 the model then gets one tool that turn, and page reading is left to whatever else
@@ -160,8 +160,8 @@ teardown happens while the reader is still waiting on the reply.
 
 <Callout type="warning">
   **Write `ctx.registerCloser?.(...)`, not `ctx.registerCloser!(...)`.** Your
-  manifest's `apiVersion` names a *major*, so it cannot ask for a core new enough
-  to have this — on an older one the field is genuinely absent, and the
+  manifest's `apiVersion` names a *major*, so it cannot ask for a core new
+  enough to have this — on an older one the field is genuinely absent, and the
   unguarded call throws out of your factory. The turn then serves **no search
   tools at all**, with a warning in the Operator's log as the only sign. The
   guard is the difference between "no teardown on old core" and "no search on
@@ -169,9 +169,13 @@ teardown happens while the reader is still waiting on the reply.
 </Callout>
 
 <Callout type="info">
-  Registering the same function twice registers it once. If your teardown is a
-  module-level `closePool`, you can register it on every turn without stacking
-  up duplicate closes.
+  Registering the same function twice **within one turn** registers it once —
+  handy when both your executors share a client. Registration does not carry
+  across turns: each turn resolves your backend afresh, and whatever it
+  registers is closed at the end of *that* turn. So register what this turn
+  opened, never something you mean to keep — a module-level `closePool`
+  registered on every turn is closed on the first one, leaving every turn after
+  it holding a closed pool.
 </Callout>
 
 ## The timeout is yours to declare and core's to enforce

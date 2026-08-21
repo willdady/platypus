@@ -57,8 +57,10 @@ export const OLDEST_SUPPORTED_API_VERSION = Math.max(1, PLUGIN_API_VERSION - 1);
  *
  * Rules core holds you to, so nothing you register can cost the turn:
  *
- * - **Called once.** The same function registered twice closes once, and a
- *   second `dispose` of the same turn closes nothing again.
+ * - **Called once.** The same function registered twice *in one turn* closes
+ *   once, and a second `dispose` of the same turn closes nothing again. Nothing
+ *   is deduped across turns — each turn owns what it registered — so register
+ *   what this turn opened rather than something you mean to keep between them.
  * - **A throw is logged, not propagated.** The closers after yours still run.
  * - **Bounded.** A closer that never settles is abandoned after a few seconds so
  *   it cannot delay the run's terminal write; treat it as a hint to give your own

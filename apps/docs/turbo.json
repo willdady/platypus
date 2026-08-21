@@ -9,6 +9,9 @@
         "$TURBO_ROOT$/apps/backend/.env.example",
         "$TURBO_ROOT$/apps/frontend/.env.example",
         "$TURBO_ROOT$/apps/backend/src/plugins/builtin.ts",
+        "$TURBO_ROOT$/apps/backend/src/tools/closers.ts",
+        "$TURBO_ROOT$/packages/plugin-sdk/README.md",
+        "$TURBO_ROOT$/docs/adr/0014-web-search-backend-extension-point.md",
         "$TURBO_ROOT$/package.json",
         "$TURBO_ROOT$/.github/workflows/build-and-push.yml"
       ]

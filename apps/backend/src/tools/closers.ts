@@ -65,7 +65,14 @@ export const runCloser = async (
       }),
     ]);
   } catch (error) {
-    logger.error(
+    // `warn`, not `error`, and for the same reason a cancelled executor call is
+    // logged at debug: the level has to match what the event costs. A closer
+    // failing means something a Contribution opened was not released — worth an
+    // Operator's attention, never worth paging for, and it cannot fail the turn
+    // or reach the User. `error` is what the sibling degrade paths in this
+    // change deliberately avoid (a throwing factory, a non-function closer), and
+    // most closers that reach here belong to third-party code core cannot fix.
+    logger.warn(
       { ...attribution, error },
       error instanceof CloserTimeoutError
         ? "A tool session's closer did not settle in time; abandoning it"

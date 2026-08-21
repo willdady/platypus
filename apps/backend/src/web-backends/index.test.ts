@@ -1079,6 +1079,36 @@ describe("the signal an executor is handed", () => {
     expect(mockLogger.warn).not.toHaveBeenCalled();
   });
 
+  it("does not call web_search at all when the turn is already cancelled", async () => {
+    const controller = new AbortController();
+    controller.abort();
+    const web_search = vi.fn(() => ({ query: "q", results: [] }));
+    const { web_search: tool } = await buildTools({ web_search });
+
+    const result = (await callTool(
+      tool,
+      { query: "q" },
+      {
+        toolCallId: "t",
+        messages: [],
+        context: undefined,
+        abortSignal: controller.signal,
+      },
+    )) as WebToolError;
+
+    // A backend that ignores its signal would otherwise spend a live upstream
+    // request on a turn nobody will read, so the call is not made at all.
+    expect(web_search).not.toHaveBeenCalled();
+    expect(result.error).toBe(
+      "The web backend could not complete this web_search request.",
+    );
+    expect(mockLogger.debug).toHaveBeenCalledWith(
+      expect.objectContaining({ tool: "web_search", outcome: "cancelled" }),
+      expect.stringContaining("cancelled"),
+    );
+    expect(mockLogger.warn).not.toHaveBeenCalled();
+  });
+
   it("cancels read_url before the egress guard resolves anything", async () => {
     const controller = new AbortController();
     controller.abort();
@@ -1220,7 +1250,7 @@ describe("the closer a backend registers", () => {
     // after the model has been served.
     expect(Object.keys(tools)).toEqual(["web_search"]);
     await expect(registered[0]()).resolves.toBeUndefined();
-    expect(mockLogger.error).toHaveBeenCalledWith(
+    expect(mockLogger.warn).toHaveBeenCalledWith(
       expect.objectContaining({ plugin: "@acme/searx", backend: "searx" }),
       expect.stringContaining("Error closing"),
     );

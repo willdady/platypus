@@ -123,10 +123,11 @@ tools: (ctx) => {
 ```
 
 Core runs it once, when the turn ends, on a normal finish and on the User
-cancelling alike. The same function registered twice runs once; a closer that
-throws is logged against your plugin and the rest still run; one that never
-settles is abandoned after five seconds, because teardown happens while the reader
-is still waiting on the reply.
+cancelling alike. The same function registered twice **in one turn** runs once —
+registration is per turn, so register what the turn opened and not a pool you mean
+to keep between turns. A closer that throws is logged against your plugin and the
+rest still run; one that never settles is abandoned after 5 seconds, because
+teardown happens while the reader is still waiting on the reply.
 
 Keep the optional chaining here too, for the same reason as the logger — and with
 a sharper consequence. `registerCloser!(…)` on a core that predates the member is

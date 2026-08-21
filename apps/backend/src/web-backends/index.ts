@@ -176,6 +176,10 @@ const rejectOnAbort = (
     // on what it was aborted with. Carried as `cause` so nothing is lost.
     const onAbort = () =>
       reject(new Error("aborted", { cause: signal.reason }));
+    // Not the live path: `withDeadline` refuses an already-aborted call before it
+    // gets here, precisely so this promise is never handed back already rejected
+    // with nothing attached to it. The branch stays as the guard that keeps that
+    // true for a second caller.
     if (signal.aborted) {
       onAbort();
       return;
@@ -198,23 +202,48 @@ const rejectOnAbort = (
  * remain bounded. That the *turn* is not pinned open is the property the ceiling
  * exists to protect, and it cannot rest on a Contribution's cooperation.
  *
- * Which signal aborted decides what the caller sees. `timer` is inspected first
- * so that a call which had already outrun its budget is reported as a timeout
- * even if the run was cancelled in the same instant — the deadline is the older
- * of the two facts, and the one an Operator can act on.
+ * Which signal aborted decides what the caller sees. The deadline is inspected
+ * first so that a call which had already outrun its budget is reported as a
+ * timeout even if the run was cancelled in the same instant — the deadline is the
+ * older of the two facts, and the one an Operator can act on.
  */
 const withDeadline = async <T>(
   run: (signal: AbortSignal) => Promise<T> | T,
   timeoutMs: number,
   caller?: AbortSignal,
 ): Promise<T> => {
-  const timer = AbortSignal.timeout(timeoutMs);
-  const signal = caller ? AbortSignal.any([timer, caller]) : timer;
-  const abort = rejectOnAbort(signal);
+  // A cleared timer rather than `AbortSignal.timeout`: the signal that helper
+  // returns cannot be released, so every *successful* call would leave a timer
+  // alive for the rest of its budget — 120s at the ceiling — to abort a signal
+  // nobody is listening to. Tool calls are the hottest path a backend has.
+  const deadline = new AbortController();
+  const timer = setTimeout(
+    () =>
+      deadline.abort(
+        new WebBackendTimeoutError(`executor timed out after ${timeoutMs}ms`),
+      ),
+    timeoutMs,
+  );
+  const signal = caller
+    ? AbortSignal.any([deadline.signal, caller])
+    : deadline.signal;
   try {
-    return await Promise.race([Promise.resolve(run(signal)), abort.promise]);
+    // Already cancelled before the call even reached the executor — a tool call
+    // dispatched just before the abort landed, or a delegate unwinding. The
+    // executor is not called at all: a backend that ignores its signal would
+    // otherwise spend a live upstream request on a turn nobody will read.
+    // `read_url`'s own guard still stands ahead of this one, because the egress
+    // guard's DNS lookup happens before control reaches here.
+    if (signal.aborted) throw new WebBackendCancelledError("turn cancelled");
+
+    const abort = rejectOnAbort(signal);
+    try {
+      return await Promise.race([Promise.resolve(run(signal)), abort.promise]);
+    } finally {
+      abort.release();
+    }
   } catch (cause) {
-    if (timer.aborted) {
+    if (deadline.signal.aborted) {
       throw new WebBackendTimeoutError(
         `executor timed out after ${timeoutMs}ms`,
       );
@@ -224,7 +253,7 @@ const withDeadline = async <T>(
     }
     throw cause;
   } finally {
-    abort.release();
+    clearTimeout(timer);
   }
 };
 
@@ -512,9 +541,11 @@ export const composeWebBackend = (
         const startedAt = Date.now();
         logger.debug({ backend, plugin: pluginName, url }, "read_url target");
 
-        // Checked before the egress guard, not after: the guard resolves DNS, and
-        // a turn that has already been cancelled has no reason to spend a lookup
-        // on a page nobody will read.
+        // `withDeadline` refuses an already-cancelled call too, so this is not
+        // the only guard — it is the *earlier* one, and it is here rather than
+        // there because the egress guard resolves DNS on the way. A turn that has
+        // already been cancelled has no reason to spend a lookup on a page nobody
+        // will read.
         if (abortSignal?.aborted) {
           return failed(
             "read_url",

@@ -860,6 +860,62 @@ describe("field limits", () => {
   });
 });
 
+// --- the closer timeout ------------------------------------------------------
+
+/**
+ * How long a Plugin's teardown gets before core abandons it is one line of core
+ * and four surfaces that quote it — two docs pages, the SDK readme, and the ADR
+ * that decided it. It is a judgement call, so it will be revisited, and an author
+ * who sizes their teardown against a stale figure gets no error for it: their
+ * close is simply cut off half-done.
+ */
+const CLOSER_SOURCE = "apps/backend/src/tools/closers.ts";
+
+const CLOSER_TIMEOUT_SURFACES = [
+  {
+    file: "apps/docs/content/extending/tool-sets.mdx",
+    phrase: (seconds: number) => `${seconds} seconds`,
+  },
+  {
+    file: "apps/docs/content/extending/web-search-backends.mdx",
+    phrase: (seconds: number) => `${seconds} seconds`,
+  },
+  {
+    file: "packages/plugin-sdk/README.md",
+    phrase: (seconds: number) => `${seconds} seconds`,
+  },
+  {
+    file: "docs/adr/0014-web-search-backend-extension-point.md",
+    phrase: (seconds: number) => `(${seconds}s)`,
+  },
+] as const;
+
+describe("the closer timeout", () => {
+  const declared = readRepoFile(CLOSER_SOURCE).match(
+    /CLOSER_TIMEOUT_MS = ([\d_]+)/,
+  );
+
+  it("has a constant to quote", () => {
+    expect(
+      declared,
+      `No \`CLOSER_TIMEOUT_MS = <ms>\` in ${CLOSER_SOURCE}. Four surfaces state ` +
+        `that number for Plugin authors — re-anchor this test if it moved.`,
+    ).not.toBeNull();
+  });
+
+  it.each(CLOSER_TIMEOUT_SURFACES)("$file states it", ({ file, phrase }) => {
+    if (!declared) return;
+    const expected = phrase(Number(declared[1].replace(/_/g, "")) / 1_000);
+    expect(
+      readRepoFile(file).includes(expected),
+      `${file} does not say "${expected}", but ${CLOSER_SOURCE} sets ` +
+        `CLOSER_TIMEOUT_MS to ${declared[1]}ms.\n` +
+        `An author sizing their teardown against the stale figure has their ` +
+        `close cut off with nothing to tell them why.`,
+    ).toBe(true);
+  });
+});
+
 // --- docker image tags -------------------------------------------------------
 
 /**

@@ -345,7 +345,7 @@ describe("openToolSession", () => {
       await expect(session.dispose()).resolves.toBeUndefined();
       expect(failing).toHaveBeenCalled();
       expect(second).toHaveBeenCalled();
-      expect(logger.error).toHaveBeenCalled();
+      expect(logger.warn).toHaveBeenCalled();
     });
   });
 
@@ -387,6 +387,7 @@ describe("openToolSession", () => {
 
       expect(session.tools).toHaveProperty("plain");
       await expect(session.dispose()).resolves.toBeUndefined();
+      expect(logger.warn).not.toHaveBeenCalled();
       expect(logger.error).not.toHaveBeenCalled();
     });
 
@@ -432,7 +433,7 @@ describe("openToolSession", () => {
 
       expect(failing).toHaveBeenCalledTimes(1);
       expect(after).toHaveBeenCalledTimes(1);
-      expect(logger.error).toHaveBeenCalledWith(
+      expect(logger.warn).toHaveBeenCalledWith(
         expect.objectContaining({ plugin: "acme", toolSet: "set.failing" }),
         expect.stringContaining("Error closing"),
       );
@@ -457,7 +458,7 @@ describe("openToolSession", () => {
         await expect(disposed).resolves.toBeUndefined();
 
         expect(after).toHaveBeenCalledTimes(1);
-        expect(logger.error).toHaveBeenCalledWith(
+        expect(logger.warn).toHaveBeenCalledWith(
           expect.objectContaining({ plugin: "acme", toolSet: "set.hung" }),
           expect.stringContaining("did not settle in time"),
         );
@@ -509,7 +510,7 @@ describe("openToolSession", () => {
         // A hanging `close()` used to stall the run's terminal write for the
         // life of the process.
         await expect(disposed).resolves.toBeUndefined();
-        expect(logger.error).toHaveBeenCalledWith(
+        expect(logger.warn).toHaveBeenCalledWith(
           expect.objectContaining({ mcpId: "mcp-1", scope: "ws" }),
           expect.stringContaining("did not settle in time"),
         );

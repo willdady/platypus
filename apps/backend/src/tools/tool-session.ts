@@ -144,8 +144,11 @@ export const openToolSession = async (
   // rather than the tool map alone.
   const owners = new Map<string, ToolOwner>();
   const closers: Array<() => Promise<void>> = [];
-  // Registered closers, by identity. A Tool-set factory that registers the same
-  // teardown on every call — a module-level `closePool`, say — closes once.
+  // Registered closers, by identity, and scoped to **this session** — so the
+  // case it collapses is one turn reaching the same teardown twice, as two Tool
+  // sets from one plugin sharing a client do. Across turns there is nothing to
+  // dedupe against, by design: a later turn gets its own session, and a closer
+  // it registers is its own to run.
   const registered = new Set<Closer>();
   let disposed = false;
 
@@ -273,7 +276,16 @@ export const openToolSession = async (
       try {
         await close();
       } catch (e) {
-        logger.error({ error: e }, "Error closing a tool session's connection");
+        // Unreachable by construction: everything in `closers` is either a
+        // `runCloser` wrapper, which catches and logs its own, or a nested
+        // session's `dispose`, which is this function. Kept anyway, because
+        // `dispose` never throwing is a contract the caller relies on while
+        // unwinding an abort — and with its own message, so a future push that
+        // breaks the invariant is not mistaken for a closer that simply failed.
+        logger.error(
+          { error: e },
+          "A tool session closer threw past its own guard; dispose continuing",
+        );
       }
     }
   };
