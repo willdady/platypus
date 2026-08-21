@@ -68,6 +68,14 @@ Where the Provider uses a backend rather than the vendor's own search, turning
 **Search** on may also hand the model a page reader for that turn — see [what a
 backend grants](/concepts/providers#web-search).
 
+Occasionally a turn gets no search even though you asked for it: the Provider
+names a backend your Operator has since removed, or the backend fails to start.
+The reply is still written, without searching, and a line under it reads
+**Search was unavailable — this reply was written without it.** The model is not
+told, so it won't mention the gap itself — the line is the only sign. Take the
+answer as written from what the model already knew, and tell your Operator —
+their log names what failed, and the fix is theirs, not yours.
+
 The toggle is only there when the resolved Provider can search. It is **absent**
 when:
 

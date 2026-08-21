@@ -1299,6 +1299,32 @@ describe("AgentRunner.stream — message metadata", () => {
     await stream.end();
   });
 
+  // Issue #522: the flag is decided during Turn resolution and reaches the
+  // stream on the same path the attribution takes — the runner forwards what
+  // `prepareChatTurn` returned, and nothing re-derives it here.
+  it("carries the search-unavailable flag from the prepared turn to the stream", async () => {
+    const turn = { ...fakeTurn(), searchUnavailable: true };
+    const stream = await startStream(turn);
+
+    expect(stream.metadataFor({ type: "start" })).toEqual({
+      agentId: "agent-1",
+      searchUnavailable: true,
+    });
+
+    await stream.end();
+  });
+
+  it("says nothing about search when the turn served what it was asked for", async () => {
+    const turn = { ...fakeTurn(), searchUnavailable: false };
+    const stream = await startStream(turn);
+
+    expect(stream.metadataFor({ type: "start" })).not.toHaveProperty(
+      "searchUnavailable",
+    );
+
+    await stream.end();
+  });
+
   it("flags the message as truncated when the terminal finish hit the output limit", async () => {
     const stream = await startStream(fakeTurn());
 

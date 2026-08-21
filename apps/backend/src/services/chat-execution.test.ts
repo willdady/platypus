@@ -96,6 +96,7 @@ import {
   clearWebBackends,
   composeWebBackend,
   registerWebBackend,
+  type WebBackendContribution,
 } from "../web-backends/index.ts";
 import { composeToolSet, registerToolSet } from "../tools/index.ts";
 import { logger } from "../logger.ts";
@@ -909,12 +910,17 @@ describe("chat-execution", () => {
       const googleSearchTool = () =>
         mockCreateGoogleGenerativeAI.instance.tools.googleSearch;
 
+      // `overrides` reaches the contribution itself so a test can register the
+      // misbehaving backends this suite needs — a factory that throws, one that
+      // never settles, one that returns no `web_search` — without a second
+      // helper. Omitted, it registers a healthy search-only backend.
       const register = (
         backend: string,
         executors: {
           web_search?: () => { query: string; results: [] };
           read_url?: () => { content: string; url: string };
         } = {},
+        overrides: Partial<WebBackendContribution> = {},
       ) =>
         registerWebBackend(
           composeWebBackend({
@@ -925,6 +931,7 @@ describe("chat-execution", () => {
                 web_search: () => ({ query: "q", results: [] }),
                 ...executors,
               }),
+              ...overrides,
             },
             pluginName: "@acme/searx",
           }),
@@ -1065,6 +1072,145 @@ describe("chat-execution", () => {
         expect(turn.stream.tools).toHaveProperty("web_search");
         expect(turn.stream.tools).toHaveProperty("read_url");
         expect(googleSearchTool()).not.toHaveBeenCalled();
+      });
+
+      /**
+       * Issue #522: search was asked for, resolution had somewhere to send it,
+       * and no tools came back. The turn still runs — the model is never told —
+       * so the flag is the only record the person reading the reply gets.
+       *
+       * Asserted on the outcome, not on a branch per cause: one condition
+       * covers a stale backend id, a factory that threw or hung, a malformed
+       * executor object, and whatever cause is added after them.
+       */
+      describe("reporting a turn that served no search", () => {
+        const searxProvider = { ...googleProvider, searchSource: "searx" };
+
+        // Silenced for the whole block: most of these cases warn by design.
+        // Restored in `afterEach` rather than at the end of each test body,
+        // which would leak the spy into the rest of the file the moment an
+        // assertion above it fails. Scoped here, so the file's other spies are
+        // untouched.
+        beforeEach(() => {
+          vi.spyOn(logger, "warn").mockImplementation(() => {});
+        });
+        afterEach(() => {
+          vi.restoreAllMocks();
+        });
+
+        it("flags a stored backend id that is no longer registered", async () => {
+          const turn = await turnFor(searxProvider);
+
+          expect(turn.searchUnavailable).toBe(true);
+        });
+
+        it("flags a backend whose createExecutors throws", async () => {
+          register(
+            "searx",
+            {},
+            {
+              createExecutors: () => {
+                throw new Error("no credentials configured");
+              },
+            },
+          );
+
+          const turn = await turnFor(searxProvider);
+
+          expect(turn.stream.tools).not.toHaveProperty("web_search");
+          expect(turn.searchUnavailable).toBe(true);
+        });
+
+        it("flags a backend whose createExecutors outruns its timeout", async () => {
+          register(
+            "searx",
+            {},
+            {
+              // A factory that never settles, against a timeout short enough
+              // for a test to wait out — the same shape the web-backend suite
+              // uses to prove a backend cannot pin a turn open.
+              timeoutMs: 20,
+              createExecutors: () => new Promise(() => {}),
+            },
+          );
+
+          const turn = await turnFor(searxProvider);
+
+          expect(turn.stream.tools).not.toHaveProperty("web_search");
+          expect(turn.searchUnavailable).toBe(true);
+        });
+
+        it("flags a backend that returns no web_search executor", async () => {
+          register(
+            "searx",
+            {},
+            {
+              // A third-party JS plugin is under no obligation to honour the
+              // SDK's types, so core narrows at runtime and this is what the
+              // turn is left with.
+              createExecutors: () =>
+                ({}) as unknown as ReturnType<
+                  WebBackendContribution["createExecutors"]
+                >,
+            },
+          );
+
+          const turn = await turnFor(searxProvider);
+
+          expect(turn.stream.tools).not.toHaveProperty("web_search");
+          expect(turn.searchUnavailable).toBe(true);
+        });
+
+        it("says nothing when the backend served its tools", async () => {
+          register("searx", { read_url: () => ({ content: "", url: "" }) });
+
+          const turn = await turnFor(searxProvider);
+
+          expect(turn.searchUnavailable).toBe(false);
+        });
+
+        it("says nothing when the Provider's own native tool served the turn", async () => {
+          const turn = await turnFor(googleProvider);
+
+          expect(turn.stream.tools).toHaveProperty("google_search");
+          expect(turn.searchUnavailable).toBe(false);
+        });
+
+        it("says nothing when the request never asked for search, stale id or not", async () => {
+          // Nothing registered, so the id is as stale as in the first case —
+          // but nothing was promised, so there is nothing to report.
+          const turn = await turnFor(searxProvider, false);
+
+          expect(turn.searchUnavailable).toBe(false);
+        });
+
+        it("says nothing when the Provider's searchSource resolves to no search", async () => {
+          // `baseProvider` is the stale-native row: `searchSource: "native"` on
+          // an OpenAI chat endpoint, which has no native tool. Resolution says
+          // "none" rather than promising search and failing to deliver it, so
+          // this degradation stays silent — the one the issue leaves standing.
+          const turn = await turnFor(baseProvider);
+
+          expect(turn.stream.tools).not.toHaveProperty("web_search");
+          expect(turn.searchUnavailable).toBe(false);
+        });
+
+        // The boundary the feature rests on: the model is not told, so an
+        // unavailable-search turn must be indistinguishable — prompt and tools
+        // alike — from a turn that never asked for search. No stub `web_search`
+        // is served, and no system-prompt fragment explains the absence.
+        it("changes neither the system prompt nor the tool set the model sees", async () => {
+          const unavailable = await turnFor(searxProvider);
+          const neverAsked = await turnFor(googleProvider, false);
+
+          expect(unavailable.searchUnavailable).toBe(true);
+          expect(unavailable.stream.system).toBe(neverAsked.stream.system);
+          expect(Object.keys(unavailable.stream.tools ?? {})).toEqual(
+            Object.keys(neverAsked.stream.tools ?? {}),
+          );
+          expect(unavailable.stream.tools).not.toHaveProperty("web_search");
+          expect(unavailable.stream.tools).not.toHaveProperty("read_url");
+        });
       });
     });
 

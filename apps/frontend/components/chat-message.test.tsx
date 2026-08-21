@@ -14,6 +14,7 @@ vi.mock("streamdown", () => ({
 import {
   ChatMessage,
   CUT_SHORT_NOTICE,
+  SEARCH_UNAVAILABLE_NOTICE,
   isGenericToolPart,
 } from "./chat-message";
 
@@ -738,6 +739,59 @@ describe("ChatMessage truncation marker", () => {
 
     expect(screen.getByAltText("Research Agent")).toBeInTheDocument();
     expect(screen.getByText(CUT_SHORT_NOTICE)).toBeInTheDocument();
+  });
+});
+
+// Issue #522: a user turns search on, the backend the Provider names is gone or
+// failed to start, and the reply is written without it. The model is never told
+// — this row is the only place the difference is visible.
+describe("ChatMessage search-unavailable notice", () => {
+  it("marks a reply the run flagged as written without search", () => {
+    renderMessage(assistantMessage({ searchUnavailable: true }));
+
+    expect(screen.getByText(SEARCH_UNAVAILABLE_NOTICE)).toBeInTheDocument();
+  });
+
+  it.each([
+    [
+      "a message whose turn had the search it asked for",
+      { agentId: "agent-1" },
+    ],
+    ["a message with no metadata at all", undefined],
+  ] as const)("renders no notice for %s", (_, metadata) => {
+    renderMessage(assistantMessage(metadata));
+
+    expect(screen.queryByText(SEARCH_UNAVAILABLE_NOTICE)).toBeNull();
+  });
+
+  // The two notices answer different questions — how the reply was produced,
+  // and how it ended — so a turn that lost its search and then ran out of
+  // output budget shows both, in that order.
+  it("renders both notices when the turn also stopped at the output limit", () => {
+    renderMessage(
+      assistantMessage({
+        searchUnavailable: true,
+        truncatedByTokenLimit: true,
+      }),
+    );
+
+    const search = screen.getByText(SEARCH_UNAVAILABLE_NOTICE);
+    const cutShort = screen.getByText(CUT_SHORT_NOTICE);
+    expect(search).toBeInTheDocument();
+    expect(cutShort).toBeInTheDocument();
+    expect(
+      search.compareDocumentPosition(cutShort) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
+  it("keeps the agent avatar on a search-less agent turn", () => {
+    renderMessage(
+      assistantMessage({ agentId: "agent-1", searchUnavailable: true }),
+    );
+
+    expect(screen.getByAltText("Research Agent")).toBeInTheDocument();
+    expect(screen.getByText(SEARCH_UNAVAILABLE_NOTICE)).toBeInTheDocument();
   });
 });
 

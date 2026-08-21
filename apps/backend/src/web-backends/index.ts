@@ -555,9 +555,22 @@ export const composeWebBackend = (
           timeoutMs,
         );
       } catch (cause) {
+        // `orgId`/`workspaceId` ride this warn and the one below because the
+        // degradation they report is now shown to the User (issue #522): an
+        // Operator asked about a notice needs to know which Workspace saw it,
+        // not only which plugin failed. The Provider row that points at this
+        // backend is the field they actually edit, and it is not reachable from
+        // here — `WebBackendContext` is plugin-facing and carries no
+        // `providerId`. Tracked as issue #627 rather than widening the SDK type.
         const timedOut = cause instanceof WebBackendTimeoutError;
         logger.warn(
-          { plugin: pluginName, backend, cause },
+          {
+            plugin: pluginName,
+            backend,
+            orgId: ctx.orgId,
+            workspaceId: ctx.workspaceId,
+            cause,
+          },
           timedOut
             ? "Web backend's createExecutors timed out; serving no tools this turn"
             : "Web backend's createExecutors threw; serving no tools this turn",
@@ -571,7 +584,12 @@ export const composeWebBackend = (
       // executor object costs the turn its search tools, not the turn.
       if (typeof executors?.web_search !== "function") {
         logger.warn(
-          { plugin: pluginName, backend },
+          {
+            plugin: pluginName,
+            backend,
+            orgId: ctx.orgId,
+            workspaceId: ctx.workspaceId,
+          },
           "Web backend returned no web_search executor; serving no search tools this turn",
         );
         return {};

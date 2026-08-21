@@ -111,6 +111,16 @@ export type { ChatTurnRequest };
 export type ChatTurn = {
   stream: RunPlan & { messages: PlatypusUIMessage[] };
   resolved: ResolvedGeneration;
+  /**
+   * Search was requested and resolution served no search tools, so the turn
+   * runs without it (issue #522). A sibling of `stream` and not a field on
+   * `resolved`, which describes the turn's plan and is mirrored into run
+   * records: this is an outcome of building that plan, not part of it.
+   *
+   * The runner forwards it to the drive, which stamps it onto the streamed
+   * message's metadata for the Chat to render. The model is never told.
+   */
+  searchUnavailable?: boolean;
   dispose: () => Promise<void>;
 };
 
@@ -500,6 +510,12 @@ export const prepareChatTurn = async (
   // promise, not the session, and await it only if they are ever invoked.
   const sessionPromise = openToolSession(scope, agent, queries);
 
+  // Hoisted out of the `Promise.all` argument list so the resolution and the
+  // tools it produced are both in scope below — the pair is what says whether
+  // search was promised and not delivered. Pure and synchronous, so nothing
+  // about the awaited work moves.
+  const searchResolution = resolveSearchMode(request.search, provider);
+
   const [
     session,
     skills,
@@ -515,13 +531,22 @@ export const prepareChatTurn = async (
     queries.getUserContexts(user.id, workspaceId),
     queries.getRecentMemories(user.id, workspaceId),
     queries.getSandboxEnvKeys(workspaceId),
-    resolveSearchTools(
-      resolveSearchMode(request.search, provider),
-      opened,
-      provider,
-      { orgId, workspaceId, userId: user.id },
-    ),
+    resolveSearchTools(searchResolution, opened, provider, {
+      orgId,
+      workspaceId,
+      userId: user.id,
+    }),
   ]);
+
+  // Search was asked for, resolution had somewhere to send it, and nothing came
+  // back (issue #522). Outcome-based rather than a branch per cause, so an
+  // unregistered backend, a factory that threw or timed out and a missing
+  // `web_search` executor are all one condition — as is whatever cause is added
+  // next. An empty native tool set would land here too, though nothing can
+  // produce one today. The three server-side warns still name the specific
+  // fault for the Operator; this is what the person reading the reply is told.
+  const searchUnavailable =
+    searchResolution.kind !== "none" && Object.keys(searchTools).length === 0;
 
   // Assignment order is the precedence order, and it is deliberate: search lands
   // after the session's tools so it wins over an agent/MCP tool that happens to
@@ -619,6 +644,7 @@ export const prepareChatTurn = async (
       presencePenalty: agent ? undefined : context.plan.presencePenalty,
       seed: agent ? undefined : context.plan.seed,
     },
+    searchUnavailable,
     // The session closes what it opened, delegates' nested sessions included —
     // the caller no longer reconciles two lists of clients to get there.
     dispose: session.dispose,

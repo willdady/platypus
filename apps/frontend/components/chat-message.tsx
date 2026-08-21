@@ -67,6 +67,15 @@ import {
 export const CUT_SHORT_NOTICE =
   "Response cut short at the model's output limit.";
 
+/**
+ * What the person reading a reply is told when they turned search on and the
+ * turn served none — the backend the Provider names is gone, or it failed to
+ * start. The model was never told, so the reply reads as if it simply had
+ * nothing to look up; this is the only place that difference is visible.
+ */
+export const SEARCH_UNAVAILABLE_NOTICE =
+  "Search was unavailable — this reply was written without it.";
+
 type MessagePart = NonNullable<PlatypusUIMessage["parts"]>[number];
 
 const isLoadSkillPart = (part: MessagePart) => part.type === "tool-loadSkill";
@@ -443,10 +452,20 @@ export const ChatMessage = memo(function ChatMessage({
         const renderer = partRenderers.find((r) => r.matches(part));
         return renderer ? renderer.render(part, i) : null;
       })}
-      {message.role === "assistant" &&
-        message.metadata?.truncatedByTokenLimit && (
-          <CutShortNotice className="pl-8">{CUT_SHORT_NOTICE}</CutShortNotice>
-        )}
+      {/* How the reply was produced, then how it ended — both rows render when
+      both apply, in that order. */}
+      {message.role === "assistant" && (
+        <>
+          {message.metadata?.searchUnavailable && (
+            <CutShortNotice className="pl-8">
+              {SEARCH_UNAVAILABLE_NOTICE}
+            </CutShortNotice>
+          )}
+          {message.metadata?.truncatedByTokenLimit && (
+            <CutShortNotice className="pl-8">{CUT_SHORT_NOTICE}</CutShortNotice>
+          )}
+        </>
+      )}
       {!(isLastMessage && status === "streaming") &&
         (isEditing ? (
           <MessageActions className="justify-end">

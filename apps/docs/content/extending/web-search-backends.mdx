@@ -137,6 +137,18 @@ upstream, not to their sum.
   is worse than one that will not start.
 </Callout>
 
+<Callout type="warning">
+  **A factory that throws or outruns its timeout costs the whole turn its
+  search**, not one call. The turn still runs — the model is given no search
+  tools and is not told why — and the person who asked for search reads
+  **Search was unavailable — this reply was written without it.** under the
+  reply. So a factory failure is visible to your users, not only in the
+  Operator's log, and a factory that fails intermittently reads to them as
+  search that works some days. Do the work that can fail per call inside the
+  executors, where a failure costs that call and the model can try something
+  else.
+</Callout>
+
 ## The egress guard
 
 Core resolves the hostname of every URL the model supplies to `read_url` and
@@ -217,8 +229,9 @@ from the Provider form.
   A Provider pointing at a backend you have since removed from
   `PLATYPUS_PLUGINS` keeps its stored selection. The form shows it as **(not
   installed)** rather than silently reading as **None**, and a searching turn on
-  that Provider runs no search and logs a warning. Removing a Plugin is not a
-  way to migrate Providers off it — change the field first.
+  that Provider runs no search, logs a warning, and tells the person who asked
+  that search was unavailable. Removing a Plugin is not a way to migrate
+  Providers off it — change the field first.
 </Callout>
 
 ## Results are cited for you

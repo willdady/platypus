@@ -174,7 +174,15 @@ describe("composeWebBackend — tool construction", () => {
 
     expect(tools).toEqual({});
     expect(mockLogger.warn).toHaveBeenCalledWith(
-      { plugin: "@acme/searx", backend: "searx" },
+      {
+        plugin: "@acme/searx",
+        backend: "searx",
+        // The turn's scope, so an Operator asked about the User-facing notice
+        // (issue #522) can tell which Workspace saw it. The Provider row is not
+        // reachable from here — issue #627.
+        orgId: CTX.orgId,
+        workspaceId: CTX.workspaceId,
+      },
       expect.stringContaining("no web_search executor"),
     );
   });
@@ -194,7 +202,12 @@ describe("composeWebBackend — tool construction", () => {
 
     expect(tools).toEqual({});
     expect(mockLogger.warn).toHaveBeenCalledWith(
-      expect.objectContaining({ plugin: "@acme/searx", backend: "searx" }),
+      expect.objectContaining({
+        plugin: "@acme/searx",
+        backend: "searx",
+        orgId: CTX.orgId,
+        workspaceId: CTX.workspaceId,
+      }),
       expect.stringContaining("createExecutors threw"),
     );
   });
@@ -216,7 +229,12 @@ describe("composeWebBackend — tool construction", () => {
 
     expect(tools).toEqual({});
     expect(mockLogger.warn).toHaveBeenCalledWith(
-      expect.objectContaining({ plugin: "@acme/searx", backend: "searx" }),
+      expect.objectContaining({
+        plugin: "@acme/searx",
+        backend: "searx",
+        orgId: CTX.orgId,
+        workspaceId: CTX.workspaceId,
+      }),
       expect.stringContaining("createExecutors timed out"),
     );
   });

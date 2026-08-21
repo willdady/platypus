@@ -2,13 +2,16 @@ import { TriangleAlertIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 /**
- * The muted warning row shown wherever an answer stopped at the model's output
- * ceiling rather than because the model was finished — under a Chat reply, under
- * a delegated sub-agent response, and in Trigger run history.
+ * The muted warning row for a per-turn notice about how an answer was produced
+ * or how it ended — under a Chat reply, under a delegated sub-agent response,
+ * and in Trigger run history.
  *
- * The row is shared; the wording is not. Each surface names its own subject
- * ("Response", "Sub-agent response", "Run") and owns that sentence as an
- * exported constant its tests assert against.
+ * It began as the output-ceiling row and keeps the name; it now also carries
+ * the search-was-unavailable notice, and a Chat reply can show both at once.
+ *
+ * The row is shared; the wording is not. Each surface owns its own sentence as
+ * an exported constant its tests assert against — the ceiling notices name
+ * their subject ("Response", "Sub-agent response", "Run") per surface.
  */
 export const CutShortNotice = ({
   children,
