@@ -100,6 +100,7 @@ describe("assertFilePartsSupported", () => {
     ).toBeNull();
   });
 
+  // Builds 2 distinct byte payloads in one test (buildTestDocx, buildTestPdf, bytesDataUrl) -- cold-import cost can push this past the default 5000ms vitest timeout under load.
   it("lets a freshly uploaded, text-based document through", async () => {
     expect(
       await gateError([
@@ -119,7 +120,7 @@ describe("assertFilePartsSupported", () => {
         ]),
       ]),
     ).toBeNull();
-  });
+  }, 15000);
 
   it("rejects a freshly uploaded scanned PDF before it can be persisted", async () => {
     const error = await gateError([
