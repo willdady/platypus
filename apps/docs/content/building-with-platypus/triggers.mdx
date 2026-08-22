@@ -53,9 +53,14 @@ Trigger** to run once and then disable itself.
 ### Or choose events (Event)
 
 For an Event trigger, select one or more **Events** (e.g. `card.created`,
-`card.updated`, `notification.created`). Optionally narrow with **Filter by
-Board** and **Filter by Column** so the Trigger only fires for activity on a
-specific board.
+`card.updated`, `card.moved`, `notification.created`). Optionally narrow with
+**Filter by Board** and **Filter by Column** so the Trigger only fires for
+activity on a specific board.
+
+`card.moved` fires only when a card's column actually changes, so a column
+filter on it matches the card's **destination** column — use it to run an
+Agent whenever a card enters a specific column, without re-firing on later
+edits to cards already sitting there.
 
 ### Finish
 

@@ -102,6 +102,7 @@ const AVAILABLE_EVENTS = [
   "notification.dismissed",
   "card.created",
   "card.updated",
+  "card.moved",
   "card.deleted",
 ] as const;
 

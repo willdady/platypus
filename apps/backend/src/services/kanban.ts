@@ -139,6 +139,24 @@ const dispatch = (ctx: KanbanContext, event: WebhookEvent, data: unknown) =>
     isAgent(ctx.actor) ? { actorAgentId: ctx.actor.agentId } : undefined,
   );
 
+/**
+ * Announces a card write that may have changed its column. Emits
+ * `card.moved` (with `previousColumnId`) only when the column actually
+ * changed, always followed by `card.updated` — a within-column reorder or
+ * a plain field edit emits `card.updated` alone.
+ */
+const dispatchCardWrite = (
+  ctx: KanbanContext,
+  row: CardRow,
+  boardId: string,
+  previousColumnId: string,
+) => {
+  if (previousColumnId !== row.columnId) {
+    dispatch(ctx, "card.moved", { ...row, boardId, previousColumnId });
+  }
+  dispatch(ctx, "card.updated", { ...row, boardId });
+};
+
 // --- Scope guards ---
 
 /** The board-side condition every guard joins through: Workspace, then board. */
@@ -657,7 +675,7 @@ export const moveCard = async (
   ctx: KanbanContext,
   input: { cardId: string; columnId: string; afterCardId: string | null },
 ): Promise<CardResult> => {
-  await requireCard(database, ctx, input.cardId);
+  const previous = await requireCard(database, ctx, input.cardId);
   const column = await requireColumn(database, ctx, input.columnId);
 
   const record = await database.transaction(async (tx) => {
@@ -681,7 +699,7 @@ export const moveCard = async (
     return rows[0];
   });
 
-  dispatch(ctx, "card.updated", { ...record, boardId: column.boardId });
+  dispatchCardWrite(ctx, record, column.boardId, previous.columnId);
   return { card: record, boardId: column.boardId };
 };
 
@@ -948,7 +966,7 @@ export const bulkUpdateCards = async (
   });
 
   for (const { card, row } of updated) {
-    dispatch(ctx, "card.updated", { ...row, boardId: card.boardId });
+    dispatchCardWrite(ctx, row, card.boardId, card.columnId);
   }
 
   return input.cardIds.map((id) => outcomes.get(id)!);

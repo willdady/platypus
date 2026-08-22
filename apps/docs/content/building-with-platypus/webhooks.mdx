@@ -26,6 +26,7 @@ A Webhook subscribes to one or more events. The available events are:
 | ------------------------ | ------------------------------------------------------------- |
 | `card.created`           | A card is added to a [Board](/building-with-platypus/boards). |
 | `card.updated`           | A card's fields, column, or position change.                  |
+| `card.moved`             | A card's column changes — fires alongside `card.updated`.     |
 | `card.deleted`           | A card is removed.                                            |
 | `notification.created`   | An Agent posts a notification.                                |
 | `notification.updated`   | A notification is edited.                                     |
@@ -128,8 +129,40 @@ the full notification record:
 }
 ```
 
-while lighter-weight events carry only the affected IDs. For example,
-`card.deleted`:
+`card.moved` carries the full card record plus `previousColumnId`, so a handler
+can tell where the card came from without a separate lookup:
+
+```json
+{
+  "event": "card.moved",
+  "timestamp": "2026-06-26T09:31:30.000Z",
+  "orgId": "g7Qw3pLm9xRt2nK5vB8dY",
+  "workspaceId": "k4Tn2pXqRf7Lm9sWvB3dY",
+  "data": {
+    "id": "V1StGXR8_Z5jdHi6B-myT",
+    "boardId": "lbfQ0p7xKmR2nT4vZ8wYs",
+    "columnId": "9zHcN3eW1qoP5rUaB7dKt",
+    "previousColumnId": "3mYtQ8vNc1RpZ7wLdB4sK",
+    "title": "Review onboarding flow",
+    "body": "Check the new sign-up steps.",
+    "labelIds": [],
+    "assignees": [],
+    "dueDate": null,
+    "priority": "none",
+    "position": 1024,
+    "createdByUserId": "x6Ym2Qp9LrT4nW8sVdB1k",
+    "createdByAgentId": null,
+    "createdAt": "2026-06-26T09:30:00.000Z",
+    "updatedAt": "2026-06-26T09:31:30.000Z"
+  }
+}
+```
+
+Moving a card to a different column always fires both `card.moved` and
+`card.updated`. Reordering a card within the same column fires only
+`card.updated` — `card.moved` means the card changed columns.
+
+Other events carry only the affected IDs. For example, `card.deleted`:
 
 ```json
 {

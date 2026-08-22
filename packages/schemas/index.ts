@@ -1536,6 +1536,7 @@ export const webhookEventSchema = z.enum([
   "notification.dismissed",
   "card.created",
   "card.updated",
+  "card.moved",
   "card.deleted",
 ]);
 

@@ -6,10 +6,12 @@ vi.mock("./event-dispatch.ts", () => ({
 }));
 
 import { NotFoundError, ValidationError } from "../errors.ts";
+import { dispatchEvent } from "./event-dispatch.ts";
 import {
   applyBodyDiff,
   bulkUpdateCards,
   keepKnownLabelIds,
+  moveCard,
   placeCardInColumn,
   rebalancedPositions,
   requireCard,
@@ -26,6 +28,7 @@ describe("kanban module", () => {
 
   beforeEach(() => {
     db = createMockDb();
+    vi.mocked(dispatchEvent).mockClear();
   });
 
   describe("requireCard", () => {
@@ -289,6 +292,79 @@ describe("kanban module", () => {
     });
   });
 
+  describe("moveCard", () => {
+    it("dispatches card.moved with the previous column when the column changes", async () => {
+      db.limit
+        .mockResolvedValueOnce([
+          { id: "card-1", columnId: "col-old", boardId: "board-1" },
+        ]) // requireCard
+        .mockResolvedValueOnce([{ id: "col-new", boardId: "board-1" }]); // requireColumn
+      db.orderBy.mockResolvedValue([]); // placeCardInColumn
+      db.returning.mockResolvedValue([
+        { id: "card-1", columnId: "col-new", position: 1 },
+      ]);
+
+      await moveCard(asDb(db), ctx, {
+        cardId: "card-1",
+        columnId: "col-new",
+        afterCardId: null,
+      });
+
+      expect(dispatchEvent).toHaveBeenCalledWith(
+        "org-1",
+        "ws-1",
+        "card.moved",
+        expect.objectContaining({
+          id: "card-1",
+          columnId: "col-new",
+          previousColumnId: "col-old",
+          boardId: "board-1",
+        }),
+        expect.anything(),
+      );
+      expect(dispatchEvent).toHaveBeenCalledWith(
+        "org-1",
+        "ws-1",
+        "card.updated",
+        expect.objectContaining({ id: "card-1", boardId: "board-1" }),
+        expect.anything(),
+      );
+    });
+
+    it("does not dispatch card.moved for a within-column reorder", async () => {
+      db.limit
+        .mockResolvedValueOnce([
+          { id: "card-1", columnId: "col-1", boardId: "board-1" },
+        ]) // requireCard
+        .mockResolvedValueOnce([{ id: "col-1", boardId: "board-1" }]); // requireColumn
+      db.orderBy.mockResolvedValue([]); // placeCardInColumn
+      db.returning.mockResolvedValue([
+        { id: "card-1", columnId: "col-1", position: 1 },
+      ]);
+
+      await moveCard(asDb(db), ctx, {
+        cardId: "card-1",
+        columnId: "col-1",
+        afterCardId: null,
+      });
+
+      expect(dispatchEvent).not.toHaveBeenCalledWith(
+        "org-1",
+        "ws-1",
+        "card.moved",
+        expect.anything(),
+        expect.anything(),
+      );
+      expect(dispatchEvent).toHaveBeenCalledWith(
+        "org-1",
+        "ws-1",
+        "card.updated",
+        expect.objectContaining({ id: "card-1", boardId: "board-1" }),
+        expect.anything(),
+      );
+    });
+  });
+
   describe("bulkUpdateCards", () => {
     it("reports the cards it could not reach and updates the rest", async () => {
       db.limit
@@ -321,6 +397,61 @@ describe("kanban module", () => {
         }),
       ).rejects.toThrow("Invalid user assignee");
       expect(db.update).not.toHaveBeenCalled();
+    });
+
+    it("dispatches card.moved for a card whose column changes, but not for one that stays put", async () => {
+      db.limit
+        .mockResolvedValueOnce([{ id: "col-new", boardId: "board-1" }]) // requireColumn (target)
+        .mockResolvedValueOnce([
+          { id: "card-1", columnId: "col-old", boardId: "board-1" },
+        ]) // requireCard card-1
+        .mockResolvedValueOnce([
+          { id: "card-2", columnId: "col-new", boardId: "board-1" },
+        ]); // requireCard card-2, already in the target column
+      db.returning
+        .mockResolvedValueOnce([
+          { id: "card-1", columnId: "col-new", position: 1 },
+        ])
+        .mockResolvedValueOnce([
+          { id: "card-2", columnId: "col-new", position: 2 },
+        ]);
+
+      await bulkUpdateCards(asDb(db), ctx, {
+        cardIds: ["card-1", "card-2"],
+        columnId: "col-new",
+      });
+
+      expect(dispatchEvent).toHaveBeenCalledWith(
+        "org-1",
+        "ws-1",
+        "card.moved",
+        expect.objectContaining({
+          id: "card-1",
+          previousColumnId: "col-old",
+        }),
+        expect.anything(),
+      );
+      expect(dispatchEvent).not.toHaveBeenCalledWith(
+        "org-1",
+        "ws-1",
+        "card.moved",
+        expect.objectContaining({ id: "card-2" }),
+        expect.anything(),
+      );
+      expect(dispatchEvent).toHaveBeenCalledWith(
+        "org-1",
+        "ws-1",
+        "card.updated",
+        expect.objectContaining({ id: "card-1" }),
+        expect.anything(),
+      );
+      expect(dispatchEvent).toHaveBeenCalledWith(
+        "org-1",
+        "ws-1",
+        "card.updated",
+        expect.objectContaining({ id: "card-2" }),
+        expect.anything(),
+      );
     });
   });
 });
