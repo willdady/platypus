@@ -1188,13 +1188,11 @@ describe("the closer a backend registers", () => {
       pluginName: "@acme/searx",
     }).buildTurnTools(ctxWith(() => {}));
 
+    // An exact match, not `objectContaining`: deriving this context is a spread
+    // of core's own, so it is the one path a core-only field can ride across the
+    // seam on. A leaked `providerId` fails here.
     expect(createExecutors).toHaveBeenCalledWith(
-      expect.objectContaining({
-        orgId: "org-1",
-        workspaceId: "ws-1",
-        userId: "user-1",
-        registerCloser: expect.any(Function) as unknown,
-      }),
+      { ...PLUGIN_CTX, registerCloser: expect.any(Function) as unknown },
       undefined,
     );
   });
