@@ -162,6 +162,26 @@ describe("composeToolSet", () => {
     );
   });
 
+  // The Tool-set half of the version-skew guarantee the Web-search side pins in
+  // `web-backends/index.test.ts`. `ctx` above carries no `registerCloser`, which
+  // is exactly what a factory compiled against a newer SDK meets on an older
+  // core — the member is optional precisely so this is a guarded call.
+  it("serves no tools when a factory calls the registrar unguarded on an older core", async () => {
+    const registration = compose((ctx) => {
+      // The `!` this contract's docs tell an author never to write. On a core
+      // without the member it is a TypeError out of the factory.
+      ctx.registerCloser!(() => {});
+      return {};
+    });
+
+    await expect(registration.buildTurnTools(ctx)).resolves.toEqual({});
+    expect(logger.warn).toHaveBeenCalledTimes(1);
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({ plugin: "acme", toolSet: "acme.widgets" }),
+      expect.stringContaining("Tool set factory threw"),
+    );
+  });
+
   it("serves no tools when a factory resolves to something that is not a tool map", async () => {
     const registration = compose(
       () => "oops" as unknown as Record<string, Tool>,

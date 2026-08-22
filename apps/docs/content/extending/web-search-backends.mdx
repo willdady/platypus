@@ -147,7 +147,7 @@ browser page, a pool, a keep-alive connection — register a way to close it:
 
 ```ts
 createExecutors(ctx, plugin) {
-  const pool = createPool(plugin.config.endpoint);
+  const pool = createPool(plugin?.config.endpoint);
   ctx.registerCloser?.(() => pool.close());
   return { web_search: (input, { signal }) => pool.search(input.query, signal) };
 }

@@ -20,10 +20,7 @@ import type {
   ToolSetContext,
   ToolSetContribution,
 } from "@platypuschat/plugin-sdk";
-import {
-  withAttributedRegistrar,
-  type WithCoreRegistrar,
-} from "./closers.ts";
+import { withAttributedRegistrar, type WithCoreRegistrar } from "./closers.ts";
 
 /**
  * The context core builds for a Tool set factory: the published shape, but
