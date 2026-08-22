@@ -3,7 +3,7 @@
 // meets while building, then how resources are shared across Workspaces.
 const meta = {
   index: "The big picture",
-  agents: "Agents & sub-agents",
+  agents: "Agents & Sub-Agents",
   providers: "Providers & models",
   tools: "Tools, tool sets & MCP",
   sandboxes: "Sandboxes",

@@ -33,7 +33,13 @@ vi.mock("@ai-sdk/mcp", () => ({
   auth: vi.fn(),
 }));
 
-import { openToolSession, type ToolSessionScope } from "./tool-session.ts";
+import {
+  deferCloserRegistrar,
+  openToolSession,
+  type ToolSession,
+  type ToolSessionScope,
+} from "./tool-session.ts";
+import { CLOSER_TIMEOUT_MS } from "./closers.ts";
 import { composeToolSet, registerToolSet } from "./index.ts";
 import { logger } from "../logger.ts";
 import type { mcp as mcpTable } from "../db/schema.ts";
@@ -132,6 +138,8 @@ describe("openToolSession", () => {
         agentId: "agent-1",
         userId: "user-1",
         frontendUrl: undefined,
+        // The scope's fields, plus the one capability on the context.
+        registerCloser: expect.any(Function) as unknown,
       },
       undefined,
     );
@@ -337,7 +345,209 @@ describe("openToolSession", () => {
       await expect(session.dispose()).resolves.toBeUndefined();
       expect(failing).toHaveBeenCalled();
       expect(second).toHaveBeenCalled();
-      expect(logger.error).toHaveBeenCalled();
+      expect(logger.warn).toHaveBeenCalled();
+    });
+  });
+
+  describe("registered closers", () => {
+    /** A Tool set whose factory registers `close`, guarded as an author's would be. */
+    const registering = (id: string, close: () => Promise<void> | void) =>
+      register(id, (ctx) => {
+        ctx.registerCloser?.(close);
+        return {};
+      });
+
+    it("closes what a Tool-set factory registered, once, on dispose", async () => {
+      const close = vi.fn().mockResolvedValue(undefined);
+      registering("set.pooled", close);
+
+      const session = await openToolSession(
+        scope,
+        grantedAgent("set.pooled"),
+        noMcps(),
+      );
+
+      expect(close).not.toHaveBeenCalled();
+      await session.dispose();
+      expect(close).toHaveBeenCalledTimes(1);
+
+      // The caller disposes on abort *and* on finish; the second is a no-op.
+      await session.dispose();
+      expect(close).toHaveBeenCalledTimes(1);
+    });
+
+    it("resolves a factory that registers nothing exactly as before", async () => {
+      register("set.plain", () => ({ plain: toolNamed("plain") }));
+
+      const session = await openToolSession(
+        scope,
+        grantedAgent("set.plain"),
+        noMcps(),
+      );
+
+      expect(session.tools).toHaveProperty("plain");
+      await expect(session.dispose()).resolves.toBeUndefined();
+      expect(logger.warn).not.toHaveBeenCalled();
+      expect(logger.error).not.toHaveBeenCalled();
+    });
+
+    it("closes at once when registered after dispose", async () => {
+      const session = await openToolSession(scope, grantedAgent(), noMcps());
+      await session.dispose();
+
+      const close = vi.fn().mockResolvedValue(undefined);
+      session.registerCloser(close);
+
+      // Fire-and-forget, so the call lands a microtask after the registration —
+      // a delegate unwinding under an abort is the real caller here.
+      await vi.waitFor(() => expect(close).toHaveBeenCalledTimes(1));
+    });
+
+    it("closes once for the same function registered twice", async () => {
+      const close = vi.fn().mockResolvedValue(undefined);
+      registering("set.a", close);
+      registering("set.b", close);
+
+      const session = await openToolSession(
+        scope,
+        grantedAgent("set.a", "set.b"),
+        noMcps(),
+      );
+      await session.dispose();
+
+      expect(close).toHaveBeenCalledTimes(1);
+    });
+
+    it("keeps closing the rest when one closer throws, and names the culprit", async () => {
+      const failing = vi.fn().mockRejectedValue(new Error("pool already gone"));
+      const after = vi.fn().mockResolvedValue(undefined);
+      registering("set.failing", failing);
+      registering("set.after", after);
+
+      const session = await openToolSession(
+        scope,
+        grantedAgent("set.failing", "set.after"),
+        noMcps(),
+      );
+      await expect(session.dispose()).resolves.toBeUndefined();
+
+      expect(failing).toHaveBeenCalledTimes(1);
+      expect(after).toHaveBeenCalledTimes(1);
+      expect(logger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({ plugin: "acme", toolSet: "set.failing" }),
+        expect.stringContaining("Error closing"),
+      );
+    });
+
+    it("abandons a closer that never settles, and still disposes", async () => {
+      vi.useFakeTimers();
+      try {
+        const hung = vi.fn(() => new Promise<void>(() => {}));
+        const after = vi.fn().mockResolvedValue(undefined);
+        registering("set.hung", hung);
+        registering("set.next", after);
+
+        const session = await openToolSession(
+          scope,
+          grantedAgent("set.hung", "set.next"),
+          noMcps(),
+        );
+
+        const disposed = session.dispose();
+        await vi.advanceTimersByTimeAsync(CLOSER_TIMEOUT_MS);
+        await expect(disposed).resolves.toBeUndefined();
+
+        expect(after).toHaveBeenCalledTimes(1);
+        expect(logger.warn).toHaveBeenCalledWith(
+          expect.objectContaining({ plugin: "acme", toolSet: "set.hung" }),
+          expect.stringContaining("did not settle in time"),
+        );
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it("ignores, with a warning, anything registered that is not a function", async () => {
+      register("set.js-plugin", (ctx) => {
+        // What the types forbid and a third-party *JS* plugin can still do.
+        (ctx.registerCloser as unknown as (c: unknown) => void)?.("close me");
+        return {};
+      });
+
+      const session = await openToolSession(
+        scope,
+        grantedAgent("set.js-plugin"),
+        noMcps(),
+      );
+
+      expect(logger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          plugin: "acme",
+          toolSet: "set.js-plugin",
+          received: "string",
+        }),
+        expect.stringContaining("not a function"),
+      );
+      await expect(session.dispose()).resolves.toBeUndefined();
+    });
+
+    it("bounds an MCP client whose close hangs", async () => {
+      vi.useFakeTimers();
+      try {
+        mockCreateMCPClient.mockResolvedValueOnce({
+          tools: vi.fn().mockResolvedValue({ a: toolNamed("a") }),
+          close: vi.fn(() => new Promise<void>(() => {})),
+        });
+
+        const session = await openToolSession(
+          scope,
+          grantedAgent("mcp-1"),
+          queriesFor([mcpRow()]),
+        );
+
+        const disposed = session.dispose();
+        await vi.advanceTimersByTimeAsync(CLOSER_TIMEOUT_MS);
+        // A hanging `close()` used to stall the run's terminal write for the
+        // life of the process.
+        await expect(disposed).resolves.toBeUndefined();
+        expect(logger.warn).toHaveBeenCalledWith(
+          expect.objectContaining({ mcpId: "mcp-1", scope: "ws" }),
+          expect.stringContaining("did not settle in time"),
+        );
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+  });
+
+  describe("deferCloserRegistrar", () => {
+    it("registers onto a session that has not opened yet", async () => {
+      const close = vi.fn().mockResolvedValue(undefined);
+      let resolveSession: (s: ToolSession) => void = () => {};
+      const pending = new Promise<ToolSession>((resolve) => {
+        resolveSession = resolve;
+      });
+
+      deferCloserRegistrar(pending)(close);
+
+      const session = await openToolSession(scope, grantedAgent(), noMcps());
+      resolveSession(session);
+      await pending;
+      expect(close).not.toHaveBeenCalled();
+
+      await session.dispose();
+      expect(close).toHaveBeenCalledTimes(1);
+    });
+
+    it("runs the closer itself when the session never opened", async () => {
+      const close = vi.fn().mockResolvedValue(undefined);
+      const failed = Promise.reject<ToolSession>(new Error("no session"));
+
+      deferCloserRegistrar(failed)(close);
+
+      // Nothing else will ever dispose it, so dropping it would leak whatever
+      // the Contribution opened for the life of the process.
+      await vi.waitFor(() => expect(close).toHaveBeenCalledTimes(1));
     });
   });
 

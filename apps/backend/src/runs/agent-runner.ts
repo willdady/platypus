@@ -262,6 +262,7 @@ export class AgentRunner {
       run,
       originalMessages: input.messages,
       agentId: turn.resolved.agentId,
+      searchUnavailable: turn.searchUnavailable,
       generateMessageId: createIdGenerator({ prefix: "msg", size: 16 }),
       toolDurations,
       onToolExecutionEnd: ({ toolCall, toolExecutionMs }) => {

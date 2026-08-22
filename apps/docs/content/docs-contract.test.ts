@@ -51,11 +51,24 @@ const REPO_ROOT = join(CONTENT_DIR, "..", "..", "..");
 
 // --- reading -----------------------------------------------------------------
 
+/**
+ * Normalise CRLF to LF at the point of reading.
+ *
+ * Git can check out CRLF on Windows. Everything downstream splits on `"\n"` and
+ * several patterns anchor with `$`, and a trailing `"\r"` defeats both — most
+ * sharply the heading pattern, which then matches nothing and leaves the
+ * internal-link check with no anchors to resolve against. One normalisation
+ * here rather than a tolerance every future pattern has to remember.
+ */
+const normalizeNewlines = (text: string): string => text.replace(/\r\n/g, "\n");
+
 const readRepoFile = (repoRelativePath: string): string =>
-  readFileSync(join(REPO_ROOT, repoRelativePath), "utf8");
+  normalizeNewlines(readFileSync(join(REPO_ROOT, repoRelativePath), "utf8"));
 
 const readDoc = (contentRelativePath: string): string =>
-  readFileSync(join(CONTENT_DIR, contentRelativePath), "utf8");
+  normalizeNewlines(
+    readFileSync(join(CONTENT_DIR, contentRelativePath), "utf8"),
+  );
 
 /** Every `.mdx` page under `content/`, as paths relative to `content/`. */
 const listDocs = (dir = CONTENT_DIR): string[] => {
@@ -111,6 +124,33 @@ const inlineCodeSpans = (content: string): Located[] => {
       }
     });
   return spans;
+};
+
+/**
+ * Every fenced block on the page, as raw text with its opening line number.
+ *
+ * The counterpart to `withoutCodeFences`: that one throws the fences away
+ * because a snippet is not a claim, and this one keeps them for the rare
+ * snippet that is — text the reader is told the product produces verbatim.
+ */
+const fencedBlocks = (content: string): Located[] => {
+  const blocks: Located[] = [];
+  let open: number | null = null;
+  let body: string[] = [];
+  content.split("\n").forEach((line, index) => {
+    if (!/^\s*```/.test(line)) {
+      if (open !== null) body.push(line);
+      return;
+    }
+    if (open === null) {
+      open = index + 1;
+      body = [];
+    } else {
+      blocks.push({ text: body.join("\n"), line: open });
+      open = null;
+    }
+  });
+  return blocks;
 };
 
 type MarkdownTable = { line: number; header: string[]; rows: string[][] };
@@ -417,6 +457,107 @@ describe("webhook events", () => {
             `That event never fires.`,
         );
       }
+    }
+    expectNoViolations(violations);
+  });
+});
+
+// --- trigger event payloads --------------------------------------------------
+
+/**
+ * The Triggers page reproduces the prefix an Event trigger's Agent actually
+ * receives, because there is no other way for a Workspace Owner to learn the
+ * shape short of firing an event and reading the run. That makes the prefix a
+ * quoted string with one authoritative source, so pin it: the docs show a
+ * worked example, and the example's scaffolding has to be the scaffolding the
+ * service builds.
+ */
+const TRIGGER_PREFIX_SOURCE = "apps/backend/src/services/trigger-execution.ts";
+
+/**
+ * The fixed text of the event prefix template, in order — the parts of the
+ * template literal that are not interpolations, with escapes resolved.
+ */
+const parseEventPrefixSegments = (): string[] => {
+  const source = readRepoFile(TRIGGER_PREFIX_SOURCE);
+  const template = source.match(/effectiveInstruction\s*=[\s\S]*?`([^`]*)`/);
+  if (!template) {
+    throw new Error(
+      `No \`effectiveInstruction = \` template literal in ${TRIGGER_PREFIX_SOURCE}. ` +
+        `The prefix moved or stopped being a template; re-anchor this test.`,
+    );
+  }
+  return template[1]
+    .split(/\$\{[^}]*\}/)
+    .map((segment) => segment.replace(/\\n/g, "\n").trim())
+    .filter((segment) => segment.length > 0);
+};
+
+describe("trigger event payloads", () => {
+  const page = "building-with-platypus/triggers.mdx";
+  const content = readDoc(page);
+  const segments = parseEventPrefixSegments();
+
+  it("parsed the prefix template", () => {
+    expect(
+      segments.length,
+      `Parsed no fixed text out of the event prefix in ${TRIGGER_PREFIX_SOURCE}. ` +
+        `A test that checks nothing is worse than no test; re-anchor it.`,
+    ).toBeGreaterThan(0);
+  });
+
+  it("shows the prefix the service builds", () => {
+    const examples = fencedBlocks(content).filter((block) =>
+      /^Event: \S/.test(block.text),
+    );
+    expect(
+      examples.length,
+      `apps/docs/content/${page} has ${examples.length} fenced blocks starting with ` +
+        `"Event: ". This check reads one — it is the worked example of the prefix ` +
+        `built in ${TRIGGER_PREFIX_SOURCE}.`,
+    ).toBe(1);
+
+    const example = examples[0];
+    const violations: string[] = [];
+    for (const segment of segments) {
+      if (!example.text.includes(segment)) {
+        violations.push(
+          `apps/docs/content/${page}:${example.line} does not contain ${JSON.stringify(segment)}, ` +
+            `but ${TRIGGER_PREFIX_SOURCE} puts it in the prefix every Event trigger sends.\n` +
+            `An Instruction written against the wrong prefix refers to text the Agent never sees.`,
+        );
+      }
+    }
+    const named = example.text.match(/^Event: (\S+)/);
+    const events: readonly string[] = webhookEventSchema.options;
+    if (named && !events.includes(named[1])) {
+      violations.push(
+        `apps/docs/content/${page}:${example.line} works the example through \`${named[1]}\`, ` +
+          `which is not in packages/schemas/index.ts (webhookEventSchema).\n` +
+          `That event never fires.`,
+      );
+    }
+    expectNoViolations(violations);
+  });
+
+  it("names only events that exist", () => {
+    const namespaces = new Set(
+      webhookEventSchema.options.map((event) => event.split(".")[0]),
+    );
+    const looksLikeEvent = new RegExp(
+      `^(?:${[...namespaces].join("|")})\\.[A-Za-z.]+$`,
+    );
+    const events: readonly string[] = webhookEventSchema.options;
+
+    const violations: string[] = [];
+    for (const span of inlineCodeSpans(content)) {
+      if (!looksLikeEvent.test(span.text)) continue;
+      if (events.includes(span.text)) continue;
+      violations.push(
+        `apps/docs/content/${page}:${span.line} mentions \`${span.text}\`, which is not in ` +
+          `packages/schemas/index.ts (webhookEventSchema).\n` +
+          `A Trigger cannot subscribe to an event that never fires.`,
+      );
     }
     expectNoViolations(violations);
   });
@@ -860,6 +1001,62 @@ describe("field limits", () => {
   });
 });
 
+// --- the closer timeout ------------------------------------------------------
+
+/**
+ * How long a Plugin's teardown gets before core abandons it is one line of core
+ * and four surfaces that quote it — two docs pages, the SDK readme, and the ADR
+ * that decided it. It is a judgement call, so it will be revisited, and an author
+ * who sizes their teardown against a stale figure gets no error for it: their
+ * close is simply cut off half-done.
+ */
+const CLOSER_SOURCE = "apps/backend/src/tools/closers.ts";
+
+const CLOSER_TIMEOUT_SURFACES = [
+  {
+    file: "apps/docs/content/extending/tool-sets.mdx",
+    phrase: (seconds: number) => `${seconds} seconds`,
+  },
+  {
+    file: "apps/docs/content/extending/web-search-backends.mdx",
+    phrase: (seconds: number) => `${seconds} seconds`,
+  },
+  {
+    file: "packages/plugin-sdk/README.md",
+    phrase: (seconds: number) => `${seconds} seconds`,
+  },
+  {
+    file: "docs/adr/0014-web-search-backend-extension-point.md",
+    phrase: (seconds: number) => `(${seconds}s)`,
+  },
+] as const;
+
+describe("the closer timeout", () => {
+  const declared = readRepoFile(CLOSER_SOURCE).match(
+    /CLOSER_TIMEOUT_MS = ([\d_]+)/,
+  );
+
+  it("has a constant to quote", () => {
+    expect(
+      declared,
+      `No \`CLOSER_TIMEOUT_MS = <ms>\` in ${CLOSER_SOURCE}. Four surfaces state ` +
+        `that number for Plugin authors — re-anchor this test if it moved.`,
+    ).not.toBeNull();
+  });
+
+  it.each(CLOSER_TIMEOUT_SURFACES)("$file states it", ({ file, phrase }) => {
+    if (!declared) return;
+    const expected = phrase(Number(declared[1].replace(/_/g, "")) / 1_000);
+    expect(
+      readRepoFile(file).includes(expected),
+      `${file} does not say "${expected}", but ${CLOSER_SOURCE} sets ` +
+        `CLOSER_TIMEOUT_MS to ${declared[1]}ms.\n` +
+        `An author sizing their teardown against the stale figure has their ` +
+        `close cut off with nothing to tell them why.`,
+    ).toBe(true);
+  });
+});
+
 // --- docker image tags -------------------------------------------------------
 
 /**
@@ -994,6 +1191,29 @@ const headingSlugs = (content: string): Set<string> => {
   }
   return slugs;
 };
+
+// Git can check out CRLF on Windows, and every reader here splits on "\n" and
+// anchors patterns with `$`. A trailing "\r" defeats both: the heading pattern
+// matches nothing, the internal-link check collects no anchors, and every link
+// is then reported as broken. Pinned because that failure names the links
+// rather than the line endings, which sends a reader to the wrong place.
+describe("line endings", () => {
+  it("normalises CRLF, so heading anchors survive a Windows checkout", () => {
+    const lf = readDoc("extending/web-search-backends.mdx");
+    const crlf = lf.replace(/\n/g, "\r\n");
+
+    expect(normalizeNewlines(crlf)).toBe(lf);
+    expect([...headingSlugs(normalizeNewlines(crlf))]).toEqual([
+      ...headingSlugs(lf),
+    ]);
+  });
+
+  // Trivially true on an LF checkout, and that is the point: on a CRLF one this
+  // is what fails if a reader stops normalising, instead of every link check.
+  it("hands the checks below no carriage returns", () => {
+    for (const doc of DOCS) expect(readDoc(doc)).not.toContain("\r");
+  });
+});
 
 describe("internal links", () => {
   const slugsByRoute = new Map<string, Set<string>>();

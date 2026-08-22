@@ -23,6 +23,28 @@ export type ChatMessageMetadata = {
    */
   truncatedByTokenLimit?: true;
   /**
+   * Search was requested for this turn and Turn resolution served no search
+   * tools, so the reply was written without it — the **Unavailable capability**
+   * of `CONTEXT.md`. The model was not told; the Chat renders a notice under the
+   * reply.
+   *
+   * Outcome-based, not cause-based: it covers an unregistered backend id, and a
+   * backend whose `createExecutors` threw, outran its timeout, or returned no
+   * `web_search` executor. An empty native tool set is covered by the same
+   * check but cannot currently arise — every provider type that passes
+   * `providerHasNativeSearch` returns a tool — so a `true` here always names a
+   * Web-search backend today.
+   *
+   * A `searchSource` that *resolves* to no search never sets this: nothing was
+   * promised, so nothing was missing. `"native"` on a Provider with no native tool
+   * is that case, not the defensive one above — it resolves to the none-kind
+   * long before any tool set is built.
+   *
+   * Known before the model is called, so it is emitted on `start`, not derived
+   * from a `finish` part.
+   */
+  searchUnavailable?: true;
+  /**
    * How long each of the turn's locally-executed tools took, in whole
    * milliseconds, keyed by `toolCallId`.
    *

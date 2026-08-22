@@ -111,14 +111,61 @@ never the chat. Returning an empty map is still the better habit — the outcome
 is the same, and you get to say _why_ through the
 [logger](/extending/plugin-api-and-config#logging).
 
+## Releasing what a factory opened
+
+A factory runs once per turn. If it opens something with a lifetime — a
+connection, a pool, a watcher — register a way to close it:
+
+```ts
+{
+  id: "kanban",
+  name: "Kanban",
+  category: "Productivity",
+  tools: (ctx) => {
+    const client = connect(ctx.workspaceId);
+    ctx.registerCloser?.(() => client.close());
+    return createKanbanTools(client);
+  },
+}
+```
+
+Core runs your closer once, when the turn ends — on a normal finish and on a
+cancellation alike. A closer that throws is logged against your Plugin and the
+rest still run; one that never settles is abandoned after **5 seconds**, because
+teardown happens while the reader is still waiting on the reply. Registering the
+same function twice within one turn registers it once — but registration does not
+carry across turns, so register what this turn opened rather than something you
+mean to keep between them.
+
+There is no matching deadline on the factory itself: a Tool set declares no
+per-call budget, and factories legitimately reach a database or a Sandbox on the
+way to building their tools. Teardown gets a ceiling because core knows what it
+is delaying; your factory's ceiling is a number only you know.
+
+<Callout type="warning">
+  **Write `ctx.registerCloser?.(...)`, not `ctx.registerCloser!(...)`.** Your
+  manifest's `apiVersion` names a *major*, so it cannot ask for a core new
+  enough to have this — on an older one the field is genuinely absent, and the
+  unguarded call throws out of your factory. The turn then serves **none of this
+  set's tools**, with a warning in the Operator's log as the only sign. The
+  guard is the difference between "no teardown on old core" and "no tools on old
+  core".
+</Callout>
+
+<Callout type="info">
+  A static map is handed nothing, so it has nowhere to register from — the same
+  reason it has nowhere to log from. Use a factory if the set owns anything that
+  needs closing.
+</Callout>
+
 ## Tool names
 
 <Callout type="warning">
   Tool names are **not** namespaced the way ids are. An Agent granted two Tool
   sets that both define `search` gets one of them — whichever sits later in its
   list — and the other's tool is never offered to the model. Core logs a warning
-  naming both sets and both Plugins. Prefix the names in your set
-  (`acmeSearch`) if a collision with a set you don't control would be confusing.
+  naming both sets and both Plugins. Prefix the names in your set (`acmeSearch`)
+  if a collision with a set you don't control would be confusing.
 </Callout>
 
 ## Adding one to a core plugin

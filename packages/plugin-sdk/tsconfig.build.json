@@ -1,7 +1,11 @@
 {
   "compilerOptions": {
     "target": "ES2022",
-    "lib": ["esnext"],
+    // `dom` is here for one web-standard global: `AbortSignal`, which the
+    // Web-search executor options carry. The SDK uses no DOM API and has no
+    // `@types/node` dependency to declare it instead — this package is types
+    // only, and a dependency for one global would be the heavier of the two.
+    "lib": ["esnext", "dom"],
     "module": "esnext",
     "moduleResolution": "bundler",
     "esModuleInterop": true,

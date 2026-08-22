@@ -24,11 +24,31 @@ import type { ChatMessageMetadata } from "../types.ts";
  * `toolDurations` is the live map the runner fills from `onToolExecutionEnd`.
  * It is read rather than copied: this extractor runs per part, and each read
  * happens after the entry it wants has been written.
+ *
+ * `searchUnavailable` is a setup-time fact like `agentId` — Turn resolution
+ * decided it before the stream existed — and rides `start` for a second reason
+ * besides: an aborted run never emits a `finish` part, and a turn cancelled
+ * halfway should still say it ran without the search it was promised.
+ *
+ * The setup-time facts arrive as one object rather than as positional
+ * arguments: `agentId` and `searchUnavailable` travel together at every hop
+ * from Turn resolution to here, and the next such fact should not have to
+ * become a fourth position that call sites read as a bare `true`.
  */
-export const createMessageMetadata = (
-  agentId: string | undefined,
-  toolDurations: ReadonlyMap<string, number> = new Map(),
-) => {
+export type MessageMetadataFacts = {
+  /** The resolved Agent id, absent on a turn that resolved no Agent. */
+  agentId?: string;
+  /** The live map the runner fills from `onToolExecutionEnd`. */
+  toolDurations?: ReadonlyMap<string, number>;
+  /** Turn resolution served no search tools for a turn that asked for search. */
+  searchUnavailable?: boolean;
+};
+
+export const createMessageMetadata = ({
+  agentId,
+  toolDurations = new Map(),
+  searchUnavailable = false,
+}: MessageMetadataFacts = {}) => {
   // Whether any step of this turn has reported an input-token count. Only
   // read to erase a reading, never to synthesise one — see the `finish-step`
   // branch below.
@@ -40,7 +60,10 @@ export const createMessageMetadata = (
     part: TextStreamPart<ToolSet>;
   }): ChatMessageMetadata | undefined => {
     if (part.type === "start") {
-      return agentId ? { agentId } : undefined;
+      const meta: ChatMessageMetadata = {};
+      if (agentId) meta.agentId = agentId;
+      if (searchUnavailable) meta.searchUnavailable = true;
+      return Object.keys(meta).length > 0 ? meta : undefined;
     }
     // Context occupancy (ADR-0018), emitted per step rather than once at the
     // end: the terminal `finish` part is never sent on an aborted run, and

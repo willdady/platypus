@@ -148,7 +148,7 @@ const AgentForm = ({
   );
   const skills = skillsData?.results || [];
 
-  // Fetch agents for sub-agent selection
+  // Fetch agents for Sub-Agent selection
   const { data: agentsData } = useSWR<{ results: Agent[] }>(
     backendUrl && user ? joinUrl(backendUrl, agentsBase) : null,
     fetcher,
@@ -866,7 +866,7 @@ const AgentForm = ({
             <CardContent>
               <FieldDescription className="mb-4">
                 Select agents that this agent can delegate tasks to. When
-                running as a sub-agent, these agents will not be able to
+                running as a Sub-Agent, these agents will not be able to
                 delegate further.
               </FieldDescription>
               <FieldGroup className="grid grid-cols-1 sm:grid-cols-2 gap-4">

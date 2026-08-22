@@ -13,7 +13,7 @@ import {
 } from "lucide-react";
 import type { ToolUIPart } from "ai";
 import { Badge } from "@/components/ui/badge";
-import { CutShortNotice } from "./cut-short-notice";
+import { TurnNotice } from "./turn-notice";
 import {
   Collapsible,
   CollapsibleContent,
@@ -45,14 +45,14 @@ type SubAgentActivity = {
 };
 
 /**
- * What the person reading a delegated run is told when the sub-agent stopped at
+ * What the person reading a delegated run is told when the Sub-Agent stopped at
  * its model's output ceiling rather than because it had finished. The Chat
  * counterpart of the marker a cut-short reply carries, one level down: the card
  * shows the delegate's answer verbatim, so an unmarked fragment reads as a
  * finished finding. A constant so tests assert the wording without restating it.
  */
 export const SUB_AGENT_CUT_SHORT_NOTICE =
-  "Sub-agent response cut short at the model's output limit.";
+  "Sub-Agent response cut short at the model's output limit.";
 
 const isSubAgentActivity = (output: unknown): output is SubAgentActivity =>
   typeof output === "object" &&
@@ -226,9 +226,7 @@ const ResponseBlock = ({
       </MessageContent>
     </Message>
     {truncated && (
-      <CutShortNotice className="mt-2">
-        {SUB_AGENT_CUT_SHORT_NOTICE}
-      </CutShortNotice>
+      <TurnNotice className="mt-2">{SUB_AGENT_CUT_SHORT_NOTICE}</TurnNotice>
     )}
   </div>
 );

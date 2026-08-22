@@ -1,9 +1,9 @@
 ---
-title: Agents & sub-agents
-description: Agents are reusable presets that pin a model, Instructions, tools, and skills. Sub-agents let one agent delegate to another.
+title: Agents & Sub-Agents
+description: Agents are reusable presets that pin a model, Instructions, tools, and skills. Sub-Agents let one agent delegate to another.
 ---
 
-# Agents & sub-agents
+# Agents & Sub-Agents
 
 ## Agent
 
@@ -19,7 +19,7 @@ An Agent pins together:
 - **generation parameters** (such as temperature),
 - the **tools** it's allowed to use (see [Tools, tool sets & MCP](/concepts/tools)),
 - any **[Skills](/concepts/skills)** it can draw on,
-- and any **sub-agents** it can delegate to.
+- and any **Sub-Agents** it can delegate to.
 
 When you select an Agent on a Chat turn, that selection takes the place of
 choosing a Provider and model by hand — the Agent already carries those choices.
@@ -34,18 +34,18 @@ prompt](/concepts/system-prompt) lists every part in order.
 Instructions, model, and tools. Build them once, use them across many Chats, and
 tweak them in one place.
 
-## Sub-agent
+## Sub-Agent
 
 A **Sub-Agent** is simply an Agent that another Agent can call on. When you add an
-Agent as a sub-agent of a parent Agent, the parent gains the ability to hand off
-work to it — the sub-agent shows up to the parent as a tool it can invoke.
+Agent as a Sub-Agent of a parent Agent, the parent gains the ability to hand off
+work to it — the Sub-Agent shows up to the parent as a tool it can invoke.
 
 **Why you'd use one:** to break a big job into specialists. A top-level Agent can
-stay focused on coordinating, then delegate research to one sub-agent, drafting to
+stay focused on coordinating, then delegate research to one Sub-Agent, drafting to
 another, and fact-checking to a third.
 
-A sub-agent brings its own model, Instructions and tools — but **not** its
+A Sub-Agent brings its own model, Instructions and tools — but **not** its
 Skills, and none of the surrounding context. A delegated run receives the parent's
 task description and nothing else: no Memories, no Workspace or user Context, no
-Chat history, and no ability to delegate further. See [what a sub-agent run does
+Chat history, and no ability to delegate further. See [what a Sub-Agent run does
 and doesn't get](/building-with-platypus/agents#what-a-sub-agent-run-does-and-doesnt-get).

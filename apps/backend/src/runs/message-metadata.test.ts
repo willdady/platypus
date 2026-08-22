@@ -150,7 +150,7 @@ const uiStreamOf = (result: {
   }) => Parameters<typeof lastSnapshot>[0];
 }) =>
   result.toUIMessageStream({
-    messageMetadata: createMessageMetadata("agent-1"),
+    messageMetadata: createMessageMetadata({ agentId: "agent-1" }),
   });
 
 /**
@@ -314,7 +314,10 @@ describe("tool durations over a real multi-step stream", () => {
 
     const message = await lastSnapshot(
       result.toUIMessageStream({
-        messageMetadata: createMessageMetadata("agent-1", toolDurations),
+        messageMetadata: createMessageMetadata({
+          agentId: "agent-1",
+          toolDurations,
+        }),
       }),
     );
     return { message, toolDurations };
@@ -360,10 +363,111 @@ describe("tool durations over a real multi-step stream", () => {
 
     const message = await lastSnapshot(
       result.toUIMessageStream({
-        messageMetadata: createMessageMetadata("agent-1", new Map()),
+        messageMetadata: createMessageMetadata({ agentId: "agent-1" }),
       }),
     );
 
     expect(message?.metadata?.toolDurations).toBeUndefined();
+  });
+});
+
+/**
+ * The search-was-unavailable flag (issue #522).
+ *
+ * Driven through a real stream for one reason the unit shape cannot show: the
+ * fact is emitted on `start`, and `start` is the only part guaranteed to have
+ * been sent by the time a turn is cancelled. A `finish`-derived flag would be
+ * absent on exactly the turns a reader most needs it on.
+ */
+describe("search availability over a real stream", () => {
+  const answerOnly = () =>
+    streamText({
+      model: mockModel([answerStep(usage(1_000, 30))]),
+      prompt: "What happened today?",
+    });
+
+  it("marks the reply when the turn served no search tools", async () => {
+    const message = await lastSnapshot(
+      answerOnly().toUIMessageStream({
+        messageMetadata: createMessageMetadata({
+          agentId: "agent-1",
+          searchUnavailable: true,
+        }),
+      }),
+    );
+
+    expect(message?.metadata?.searchUnavailable).toBe(true);
+  });
+
+  it("keeps the agent attribution on the same message", async () => {
+    const message = await lastSnapshot(
+      answerOnly().toUIMessageStream({
+        messageMetadata: createMessageMetadata({
+          agentId: "agent-1",
+          searchUnavailable: true,
+        }),
+      }),
+    );
+
+    expect(message?.metadata?.agentId).toBe("agent-1");
+    expect(message?.metadata?.searchUnavailable).toBe(true);
+  });
+
+  // A key that does not apply is absent rather than `false` — the metadata
+  // convention `ChatMessageMetadata` states, and what the Chat's render guard
+  // relies on.
+  it("says nothing about search on a turn that had it", async () => {
+    const message = await lastSnapshot(
+      answerOnly().toUIMessageStream({
+        messageMetadata: createMessageMetadata({
+          agentId: "agent-1",
+          searchUnavailable: false,
+        }),
+      }),
+    );
+
+    expect(message?.metadata).not.toHaveProperty("searchUnavailable");
+  });
+
+  it("marks a turn with no resolved agent, which carries no other metadata", async () => {
+    const message = await lastSnapshot(
+      answerOnly().toUIMessageStream({
+        messageMetadata: createMessageMetadata({ searchUnavailable: true }),
+      }),
+    );
+
+    expect(message?.metadata?.searchUnavailable).toBe(true);
+    expect(message?.metadata).not.toHaveProperty("agentId");
+  });
+
+  // The reason it rides `start`: no `finish` part is ever emitted here, and a
+  // turn cancelled halfway still ran without the search it was promised.
+  it("marks a turn cancelled mid-stream", async () => {
+    const controller = new AbortController();
+    const result = streamText({
+      model: mockModel([
+        toolCallStep(usage(1_000, 30)),
+        answerStep(usage(4_200, 70)),
+      ]),
+      prompt: "Ping the service and tell me what it said.",
+      tools: { ping },
+      stopWhen: [stepCountIs(5)],
+      abortSignal: controller.signal,
+      onStepFinish: () => controller.abort(),
+    });
+
+    const message = await lastSnapshot(
+      result.toUIMessageStream({
+        messageMetadata: createMessageMetadata({
+          agentId: "agent-1",
+          searchUnavailable: true,
+        }),
+      }),
+    );
+
+    expect(message?.parts).not.toContainEqual(
+      expect.objectContaining({ type: "text" }),
+    );
+    expect(message?.metadata?.searchUnavailable).toBe(true);
   });
 });

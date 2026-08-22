@@ -1,16 +1,16 @@
 ---
-title: Agents & sub-agents
-description: Create and configure an Agent — pin a Provider and model, write its Instructions, tune generation parameters, grant tools and Skills, and compose sub-agents.
+title: Agents & Sub-Agents
+description: Create and configure an Agent — pin a Provider and model, write its Instructions, tune generation parameters, grant tools and Skills, and compose Sub-Agents.
 ---
 
 import { Callout, Steps } from "nextra/components";
 
-# Agents & sub-agents
+# Agents & Sub-Agents
 
 An **Agent** is a reusable preset for how the assistant behaves: a Provider and
 model, its Instructions, generation settings, and the tools, Skills, and
-sub-agents it's allowed to use. Build it once, then select it on any Chat. For
-the concept, see [Agents & sub-agents](/concepts/agents); this page is the
+Sub-Agents it's allowed to use. Build it once, then select it on any Chat. For
+the concept, see [Agents & Sub-Agents](/concepts/agents); this page is the
 build.
 
 ## Create an Agent
@@ -25,7 +25,7 @@ From your Workspace, go to the **Agents** section and click **Create agent**.
 
 - **Name** — what to call the Agent (3–30 characters).
 - **Description** — a short summary (1–128 characters). This is also what a
-  parent Agent sees when it considers delegating to this one as a sub-agent.
+  parent Agent sees when it considers delegating to this one as a Sub-Agent.
 - **Input Placeholder** _(optional)_ — custom placeholder text shown in the chat
   input when this Agent is selected.
 - **Avatar** _(optional)_ — click to upload or paste an image.
@@ -128,21 +128,21 @@ An Agent that can only talk is limited. Give it the ability to _act_:
   show them.
 </Callout>
 
-## Compose sub-agents
+## Compose Sub-Agents
 
-A **sub-agent** is just another Agent that this one can hand work to. In the
+A **Sub-Agent** is just another Agent that this one can hand work to. In the
 **Sub-Agents** card, flip a switch for each Agent you want this Agent to be able
 to delegate to.
 
-At run time each selected sub-agent is exposed to the parent as a **delegate
+At run time each selected Sub-Agent is exposed to the parent as a **delegate
 tool** named `delegateTo` plus the Agent's name in PascalCase — "Research Agent"
-becomes `delegateToResearchAgent`. Calling it runs the sub-agent (with its
+becomes `delegateToResearchAgent`. Calling it runs the Sub-Agent (with its
 own model, Instructions, and tools) and returns the result. This lets a coordinator
 Agent stay focused while specialists do the detailed work.
 
-### What a sub-agent run does and doesn't get
+### What a Sub-Agent run does and doesn't get
 
-A sub-agent run is not a Chat turn, and it gets far less than the same Agent
+A Sub-Agent run is not a Chat turn, and it gets far less than the same Agent
 would get if you selected it on a Chat. What it does get is everything that
 belongs to the Agent itself: its own **model**, its own **Instructions**
 verbatim, its granted **Tool sets**, its **Max steps** and **sampling
@@ -154,37 +154,37 @@ and a delegated run uses it, exactly as a Chat turn would.
 
 Everything else is absent:
 
-| Not passed to a sub-agent | Consequence                                                                                       |
+| Not passed to a Sub-Agent | Consequence                                                                                       |
 | ------------------------- | --------------------------------------------------------------------------------------------------- |
-| **Skills**                | Attaching a Skill to an Agent used as a sub-agent does nothing in that run — no catalogue is injected and `loadSkill` isn't offered. Fold the know-how into its Instructions instead. |
+| **Skills**                | Attaching a Skill to an Agent used as a Sub-Agent does nothing in that run — no catalogue is injected and `loadSkill` isn't offered. Fold the know-how into its Instructions instead. |
 | **Memories and Context**  | No user Context, no Workspace Context, no Memory summaries.                                       |
 | **Workspace / user identity** | No Workspace id or user name in the prompt. Tools needing one still work; the prompt won't mention it. |
-| **Chat history**          | The sub-agent sees only the `task` string, never the conversation it came from.                   |
-| **Its own sub-agents**    | Delegation is one level deep — see below.                                                         |
+| **Chat history**          | The Sub-Agent sees only the `task` string, never the conversation it came from.                   |
+| **Its own Sub-Agents**    | Delegation is one level deep — see below.                                                         |
 
 <Callout type="warning">
-  Because the parent's `task` string is the sub-agent's entire view of the
-  world, write sub-agent **Instructions so they stand alone**, and expect the
-  parent to restate context it wants carried across. A sub-agent that "forgets
+  Because the parent's `task` string is the Sub-Agent's entire view of the
+  world, write Sub-Agent **Instructions so they stand alone**, and expect the
+  parent to restate context it wants carried across. A Sub-Agent that "forgets
   what we were talking about" is working as designed.
 </Callout>
 
 <Callout type="warning">
-  Delegation is **one level deep**. An Agent running _as_ a sub-agent cannot
-  delegate further — its own sub-agents are not wired up in that context. Design
+  Delegation is **one level deep**. An Agent running _as_ a Sub-Agent cannot
+  delegate further — its own Sub-Agents are not wired up in that context. Design
   for a coordinator plus a flat set of specialists, not deep chains.
 </Callout>
 
-### When a sub-agent can't run
+### When a Sub-Agent can't run
 
-Selecting a sub-agent in the form is not a guarantee it will be there at run
+Selecting a Sub-Agent in the form is not a guarantee it will be there at run
 time. Each one is resolved and built fresh on every turn, and three things stop
 it:
 
-- The sub-agent is **not available in this Workspace** — it was deleted, or it
+- The Sub-Agent is **not available in this Workspace** — it was deleted, or it
   is a Shared Agent that was detached from this Workspace or never attached to
   it. A Shared Agent is only ever visible where it is attached, so a parent
-  attached to a second Workspace loses a sub-agent attached only to the first.
+  attached to a second Workspace loses a Sub-Agent attached only to the first.
 - Its **Provider** no longer resolves in this Workspace — a Shared Provider that
   was detached, say.
 - Its pinned **model** is gone from the Provider's model list.
@@ -196,30 +196,30 @@ can't be honoured right now. Re-attach the Agent, or fix its Provider or model,
 and the tool comes back on the next turn.
 
 <Callout type="warning">
-  "The Agent says it can't reach its sub-agent, but I can see the switch is on"
+  "The Agent says it can't reach its Sub-Agent, but I can see the switch is on"
   is the trap. The **Sub-Agents** card shows what you assigned, not what loaded.
-  Check the sub-agent is still attached to this Workspace, then open it and check
+  Check the Sub-Agent is still attached to this Workspace, then open it and check
   its Provider and model still resolve.
 </Callout>
 
-If the sub-agent builds but its run then fails part-way, the delegate tool
-reports an **error** rather than a short answer. Anything the sub-agent had
+If the Sub-Agent builds but its run then fails part-way, the delegate tool
+reports an **error** rather than a short answer. Anything the Sub-Agent had
 written before the failure comes back with it, so the parent can say what was
 done and what wasn't instead of passing a half-finished reply off as the result.
 
-### When a sub-agent answer stops early
+### When a Sub-Agent answer stops early
 
-A sub-agent writes against its own model's output ceiling, the same one that cuts
+A Sub-Agent writes against its own model's output ceiling, the same one that cuts
 a Chat reply short. Hit it and the delegated answer breaks off wherever it got
 to. That is not treated as a failure: the fragment comes back as the delegate's
 result, the parent Agent is told in the same breath that the answer is partial,
-and expanding the sub-agent's card in the Chat shows a muted line under the
-response reading **Sub-agent response cut short at the model's output limit.**
+and expanding the Sub-Agent's card in the Chat shows a muted line under the
+response reading **Sub-Agent response cut short at the model's output limit.**
 
 <Callout type="warning">
-  The ceiling that applies is the sub-agent's own model's, not the parent's — a
+  The ceiling that applies is the Sub-Agent's own model's, not the parent's — a
   parent on a large model can delegate to a small one and get a fragment back.
-  Split the work into narrower tasks, or pin the sub-agent to a model whose
+  Split the work into narrower tasks, or pin the Sub-Agent to a model whose
   output limit fits the answer you want.
 </Callout>
 

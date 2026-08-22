@@ -8,9 +8,11 @@ import { logger } from "../logger.ts";
 import { CORE_BUILTIN_OWNER, getToolSetPlugin } from "../plugins/registry.ts";
 import { buildMcpTransportConfig } from "../services/mcp-oauth-provider.ts";
 import { normalizeToolResults } from "../services/tool-result.ts";
+import { runCloser, type Closer, type CoreCloserRegistrar } from "./closers.ts";
 import {
   getToolSet,
   reportToolNameCollisions,
+  type CoreToolSetContext,
   type ToolOwner,
   type ToolSetContext,
 } from "./index.ts";
@@ -26,8 +28,43 @@ type McpRow = typeof mcpTable.$inferSelect;
  * Declared as the SDK's `ToolSetContext` minus its `agentId` rather than as a
  * fresh list of fields, so a field added to the context reaches Tool-set
  * factories without a second edit here.
+ *
+ * `registerCloser` is omitted for a different reason than `agentId`, and the two
+ * must not be collapsed into one idea: a scope is **data** the caller hands in
+ * and shares with every delegate, while `registerCloser` is a **capability** each
+ * session owns — a session's closers are its own, and a delegate's close with the
+ * parent because the parent registered the child, not because they share a
+ * registrar. Letting a scope carry one would mean a caller could pass a registrar
+ * belonging to some other lifetime.
  */
-export type ToolSessionScope = Omit<ToolSetContext, "agentId">;
+export type ToolSessionScope = Omit<
+  ToolSetContext,
+  "agentId" | "registerCloser"
+>;
+
+/**
+ * A registrar for a caller that must register a closer before the session it
+ * belongs to exists.
+ *
+ * `prepareChatTurn` awaits the Tool session and a search backend's factory in the
+ * *same* `Promise.all`, and that concurrency is load-bearing for first-token
+ * latency — so the search path cannot be handed a session it would have to wait
+ * for. It gets this instead, which defers onto the promise.
+ *
+ * Registration therefore lands a microtask after the Contribution's call. Safe:
+ * `dispose` is unreachable until `prepareChatTurn` has returned it, and a late
+ * registration closes immediately anyway.
+ */
+export const deferCloserRegistrar =
+  (session: Promise<ToolSession>): CoreCloserRegistrar =>
+  (close, attribution) => {
+    void session.then(
+      (s) => s.registerCloser(close, attribution),
+      // A session that never opened has nothing that will ever dispose it, so
+      // the closer runs here rather than being dropped.
+      () => runCloser(close, attribution),
+    );
+  };
 
 /** The Agent a session resolves Tool sets for — the parent, or one delegate. */
 export type ToolSessionAgent = {
@@ -69,6 +106,15 @@ export type ToolSession = {
    */
   nest: (agent: ToolSessionAgent) => Promise<ToolSession>;
   /**
+   * Hand this session something to close when it is disposed — the seam a Tool
+   * set or a Web-search backend reaches through `ctx.registerCloser`, and the one
+   * the MCP branch registers its own `client.close()` through.
+   *
+   * Deduped by identity, bounded by `CLOSER_TIMEOUT_MS`, and closed at once if
+   * the session is already disposed.
+   */
+  registerCloser: CoreCloserRegistrar;
+  /**
    * Close everything this session and its nested sessions opened. Idempotent, and
    * never throws: the caller runs it on abort and on finish alike.
    */
@@ -98,6 +144,37 @@ export const openToolSession = async (
   // rather than the tool map alone.
   const owners = new Map<string, ToolOwner>();
   const closers: Array<() => Promise<void>> = [];
+  // Registered closers, by identity, and scoped to **this session** — so the
+  // case it collapses is one turn reaching the same teardown twice, as two Tool
+  // sets from one plugin sharing a client do. Across turns there is nothing to
+  // dedupe against, by design: a later turn gets its own session, and a closer
+  // it registers is its own to run.
+  const registered = new Set<Closer>();
+  let disposed = false;
+
+  const registerCloser: CoreCloserRegistrar = (close, attribution) => {
+    // The TS type says `close` is a function; a third-party *JS* plugin can hand
+    // over anything, and pushing a non-function would surface at teardown as a
+    // TypeError inside `dispose` — far from the plugin that caused it. Same
+    // posture as `asRecord` and the `typeof executors.web_search` guard.
+    if (typeof close !== "function") {
+      logger.warn(
+        { ...attribution, received: typeof close },
+        "Ignoring a closer that is not a function",
+      );
+      return;
+    }
+    if (registered.has(close)) return;
+    registered.add(close);
+    // Registered after teardown — a delegate resolving its Tool sets while an
+    // abort unwinds the turn. Closed at once rather than pushed onto a list
+    // nothing will read again; same reasoning as `nest`'s disposed branch below.
+    if (disposed) {
+      void runCloser(close, attribution);
+      return;
+    }
+    closers.push(() => runCloser(close, attribution));
+  };
 
   const claim = (incoming: Record<string, Tool>, owner: ToolOwner): void => {
     for (const [name, tool] of Object.entries(incoming)) {
@@ -109,7 +186,7 @@ export const openToolSession = async (
   /** Resolve one assigned id — a registered Tool set, or else an MCP server. */
   const open = async (
     toolSetId: string,
-    context: ToolSetContext,
+    context: CoreToolSetContext,
   ): Promise<void> => {
     const registration = getToolSet(toolSetId);
     if (registration) {
@@ -157,7 +234,10 @@ export const openToolSession = async (
     // Registered the moment the connection exists, and before anything else can
     // fail on it — a server that connects and then fails to list its tools used
     // to leave the socket open for the life of the process.
-    closers.push(() => client.close());
+    registerCloser(() => client.close(), {
+      mcpId: mcp.id,
+      scope: mcp.organizationId ? "org" : "ws",
+    });
 
     let mcpTools: Record<string, Tool>;
     try {
@@ -176,14 +256,19 @@ export const openToolSession = async (
   if (agent) {
     // What a Tool-set factory is handed: the turn's scope with this session's
     // Agent on it, so a parent's and a delegate's differ by exactly the Agent.
-    const context: ToolSetContext = { ...scope, agentId: agent.id };
+    // The registrar is this session's own — a delegate registers into itself and
+    // the parent closes the delegate, so lifetime nests without a shared list.
+    const context: CoreToolSetContext = {
+      ...scope,
+      agentId: agent.id,
+      registerCloser,
+    };
     // Sequentially: each Tool set is shown the names the ones before it claimed.
     for (const toolSetId of agent.toolSetIds ?? []) {
       await open(toolSetId, context);
     }
   }
 
-  let disposed = false;
   const dispose = async (): Promise<void> => {
     if (disposed) return;
     disposed = true;
@@ -191,7 +276,16 @@ export const openToolSession = async (
       try {
         await close();
       } catch (e) {
-        logger.error({ error: e }, "Error closing a tool session's connection");
+        // Unreachable by construction: everything in `closers` is either a
+        // `runCloser` wrapper, which catches and logs its own, or a nested
+        // session's `dispose`, which is this function. Kept anyway, because
+        // `dispose` never throwing is a contract the caller relies on while
+        // unwinding an abort — and with its own message, so a future push that
+        // breaks the invariant is not mistaken for a closer that simply failed.
+        logger.error(
+          { error: e },
+          "A tool session closer threw past its own guard; dispose continuing",
+        );
       }
     }
   };
@@ -212,5 +306,5 @@ export const openToolSession = async (
     return child;
   };
 
-  return { tools, nest, dispose };
+  return { tools, nest, registerCloser, dispose };
 };

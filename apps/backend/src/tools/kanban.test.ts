@@ -291,6 +291,7 @@ describe("createKanbanTools", () => {
         .mockResolvedValueOnce([
           { id: "card-1", columnId: "col-1", boardId: "board-1" },
         ]) // card guard
+        .mockResolvedValueOnce([{ id: "card-1", columnId: "col-1" }]) // prior row, for the changedFields value-diff
         .mockResolvedValueOnce([{ labels: [{ id: "lbl-a" }] }]); // board labels
       mockDb.returning.mockResolvedValueOnce([{ id: "card-1" }]);
 
@@ -309,10 +310,13 @@ describe("createKanbanTools", () => {
     });
 
     it("rejects an invalid assignee when updating", async () => {
-      mockDb.limit.mockResolvedValueOnce([
-        { id: "card-1", columnId: "col-1", boardId: "board-1" },
-      ]); // card guard
+      mockDb.limit
+        .mockResolvedValueOnce([
+          { id: "card-1", columnId: "col-1", boardId: "board-1" },
+        ]) // card guard
+        .mockResolvedValueOnce([{ id: "card-1", columnId: "col-1" }]); // prior row, for the changedFields value-diff
       mockDb.where.mockReturnValueOnce(mockDb); // card guard chain
+      mockDb.where.mockReturnValueOnce(mockDb); // currentCardRow chain
       mockDb.where.mockResolvedValueOnce([]); // org member lookup — not found
       mockDb.where.mockResolvedValueOnce([]); // super admin lookup — not found
 
@@ -337,6 +341,7 @@ describe("createKanbanTools", () => {
         .mockResolvedValueOnce([
           { id: "card-1", columnId: "col-1", boardId: "board-1" },
         ]) // card guard
+        .mockResolvedValueOnce([{ id: "card-1", columnId: "col-1" }]) // prior row, for the changedFields value-diff
         .mockResolvedValueOnce([{ labels: [{ id: "lbl-a" }] }]); // board labels
       mockDb.returning.mockResolvedValueOnce([{ id: "card-1" }]);
 

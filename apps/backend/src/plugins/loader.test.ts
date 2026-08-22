@@ -933,10 +933,12 @@ describe("loadPlugins — web-search backends", () => {
       },
     });
 
-    const ctx = { orgId: "org-1", workspaceId: "ws-1", userId: "user-1" };
-    await calls[0].buildTurnTools(ctx);
+    // Core's own context; `providerId` is stripped before the plugin-facing
+    // call, so the factory sees only the ADR-0014 shape.
+    const pluginCtx = { orgId: "org-1", workspaceId: "ws-1", userId: "user-1" };
+    await calls[0].buildTurnTools({ ...pluginCtx, providerId: "provider-1" });
 
-    expect(createExecutors).toHaveBeenCalledWith(ctx, {
+    expect(createExecutors).toHaveBeenCalledWith(pluginCtx, {
       config: { endpoint: "https://searx.internal" },
       credentials: { apiKey: "sk-test" },
       logger: A_LOGGER_MATCHER,
@@ -1305,6 +1307,7 @@ describe("loadPlugins — plugin logger injection", () => {
       orgId: "o",
       workspaceId: "w",
       userId: "u",
+      providerId: "p",
     });
   };
 

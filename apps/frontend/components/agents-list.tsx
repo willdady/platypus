@@ -83,7 +83,7 @@ type PromoteBlocker = {
 const BLOCKER_LABEL: Record<PromoteBlocker["type"], string> = {
   provider: "Provider",
   skill: "Skill",
-  subAgent: "Sub-agent",
+  subAgent: "Sub-Agent",
   mcp: "MCP tool set",
 };
 

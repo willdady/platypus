@@ -48,6 +48,29 @@ export const PLUGIN_API_VERSION = 1 as const;
 export const OLDEST_SUPPORTED_API_VERSION = Math.max(1, PLUGIN_API_VERSION - 1);
 
 /**
+ * Hand core something to close when the Chat turn ends.
+ *
+ * The one capability a Contribution's runtime context carries. A factory that
+ * opens something with a lifetime — a browser page, a connection pool, a
+ * keep-alive socket — registers its close here and core runs it once, on the
+ * turn's normal finish and on the User cancelling alike.
+ *
+ * Rules core holds you to, so nothing you register can cost the turn:
+ *
+ * - **Called once.** The same function registered twice *in one turn* closes
+ *   once, and a second `dispose` of the same turn closes nothing again. Nothing
+ *   is deduped across turns — each turn owns what it registered — so register
+ *   what this turn opened rather than something you mean to keep between them.
+ * - **A throw is logged, not propagated.** The closers after yours still run.
+ * - **Bounded.** A closer that never settles is abandoned after a few seconds so
+ *   it cannot delay the run's terminal write; treat it as a hint to give your own
+ *   teardown a deadline rather than as a budget to spend.
+ * - **Late registration still closes.** Registering after the turn was already
+ *   torn down (a delegate unwinding under an abort) closes immediately.
+ */
+export type CloserRegistrar = (close: () => Promise<void> | void) => void;
+
+/**
  * Runtime scope handed to a Tool set factory at Chat-turn time. This SDK is the
  * single home of the type; core re-exports it for its internal callers.
  */
@@ -57,6 +80,18 @@ export interface ToolSetContext {
   orgId: string;
   frontendUrl: string | undefined;
   userId: string;
+  /**
+   * Register something to close when this turn ends — see
+   * {@link CloserRegistrar}.
+   *
+   * **Optional on purpose, and it must stay optional.** A manifest declares a
+   * *major* `apiVersion` only, so a plugin cannot ask for a core new enough to
+   * have this member; on an older core it is genuinely absent. Call it guarded —
+   * `ctx.registerCloser?.(close)` — and never with `!`: an unguarded call on
+   * older core throws out of your factory, which costs the turn every tool in
+   * this set. Core always supplies it.
+   */
+  registerCloser?: CloserRegistrar;
 }
 
 /**
@@ -300,11 +335,27 @@ export interface SandboxBackendContribution<
  * signed identity token — a backend that wants to attribute to its *own*
  * upstream does so as its own implementation detail, using its own Plugin
  * credentials (ADR-0014).
+ *
+ * No longer plain data: it carries exactly one capability, `registerCloser`.
+ * Everything else on it is still a value to read.
  */
 export interface WebBackendContext {
   orgId: string;
   workspaceId: string;
   userId: string;
+  /**
+   * Register something to close when this turn ends — see
+   * {@link CloserRegistrar}. This is where a browser pool or a keep-alive
+   * connection opened by `createExecutors` gets released.
+   *
+   * **Optional on purpose, and it must stay optional.** A manifest declares a
+   * *major* `apiVersion` only, so a plugin cannot ask for a core new enough to
+   * have this member; on an older core it is genuinely absent. Call it guarded —
+   * `ctx.registerCloser?.(close)` — and never with `!`: an unguarded call on
+   * older core throws out of `createExecutors`, which costs the turn its search
+   * tools entirely. Core always supplies it.
+   */
+  registerCloser?: CloserRegistrar;
 }
 
 /** One search hit. Core caps the count and truncates the strings (ADR-0014). */
@@ -348,6 +399,27 @@ export interface ReadUrlResult {
 }
 
 /**
+ * The second argument core passes every executor call.
+ *
+ * `signal`, not `abortSignal`, because what a backend does with it is
+ * `fetch(url, { signal })`.
+ *
+ * Reading it is optional — an existing single-argument executor keeps compiling
+ * and keeps working, because appending a parameter core supplies breaks nothing
+ * (append-only compatibility, ADR-0013). Honour it and your upstream request
+ * stops when it fires; ignore it and you get the historical behaviour, where
+ * core stops waiting and your call runs on until its own socket timeout.
+ *
+ * It fires for **either** reason: the User cancelled the turn, or the
+ * contribution's own `timeoutMs` deadline passed. A backend has no reason to
+ * tell the two apart — both mean core is no longer waiting for this call — so
+ * they arrive as one signal.
+ */
+export interface WebExecutorOptions {
+  signal: AbortSignal;
+}
+
+/**
  * The executors a Web-search backend supplies — plain functions, **not** `Tool`s.
  * Core builds the `Tool` objects around these: it owns the input schemas, the
  * model-facing descriptions, result caps, slicing, the per-call timeout, the
@@ -358,12 +430,19 @@ export interface ReadUrlResult {
  * `web_search` is mandatory — a Web-search backend that cannot search is
  * meaningless. `read_url` is optional: a search-only Operator (SearXNG, no
  * browser service) omits it and the model simply gets search that turn.
+ *
+ * Both take {@link WebExecutorOptions} as an appended second argument, carrying
+ * the signal for the call. Consume it or don't; core supplies it either way.
  */
 export interface WebBackendExecutors {
-  web_search: (input: {
-    query: string;
-  }) => Promise<WebSearchResults> | WebSearchResults;
-  read_url?: (input: { url: string }) => Promise<ReadUrlResult> | ReadUrlResult;
+  web_search: (
+    input: { query: string },
+    options: WebExecutorOptions,
+  ) => Promise<WebSearchResults> | WebSearchResults;
+  read_url?: (
+    input: { url: string },
+    options: WebExecutorOptions,
+  ) => Promise<ReadUrlResult> | ReadUrlResult;
 }
 
 /**

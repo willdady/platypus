@@ -832,6 +832,54 @@ describe("AgentRunner.cancel", () => {
     expect(finish.status).toBe("cancelled");
   });
 
+  // AC 2 of #523 rests on this: a closer a Contribution registered runs on a
+  // cancelled turn because the run's teardown disposes the session, and it runs
+  // *once* because dispose is idempotent. That a session's dispose then closes
+  // each registered closer exactly once is pinned in `tool-session.test.ts`;
+  // what this pins is the half only the run knows — that cancellation reaches
+  // dispose at all, and reaches it before the terminal write.
+  it("disposes the turn exactly once when a run is cancelled, before onFinish", async () => {
+    const sink = new RecordingSink();
+    // What the sink had recorded at the moment teardown ran. Teardown must
+    // precede the terminal write, or a closer's work outlives the run's status.
+    const seenAtDispose: string[][] = [];
+    const dispose = vi.fn().mockImplementation(() => {
+      seenAtDispose.push(sink.names());
+      return Promise.resolve();
+    });
+    mockPrepareChatTurn.mockResolvedValueOnce(fakeTurn({ dispose }));
+    mockGenerateText.mockImplementation(
+      async ({ abortSignal }: { abortSignal: AbortSignal }) => {
+        await new Promise<never>((_, reject) => {
+          abortSignal.addEventListener("abort", () =>
+            reject(new Error("aborted")),
+          );
+        });
+        throw new Error("unreachable");
+      },
+    );
+
+    const inFlight = runner.generate({
+      scope,
+      input: { ...baseInput, runId: "cancel-dispose" },
+      sink,
+    });
+
+    await new Promise((r) => setTimeout(r, 0));
+    expect(runner.cancel("cancel-dispose")).toBe(true);
+    await expect(inFlight).rejects.toThrow();
+
+    expect(dispose).toHaveBeenCalledTimes(1);
+    expect(seenAtDispose).toHaveLength(1);
+    expect(seenAtDispose[0]).not.toContain("onFinish");
+
+    const finish = sink.events.at(-1) as Extract<
+      LifecycleEvent,
+      { name: "onFinish" }
+    >;
+    expect(finish.status).toBe("cancelled");
+  });
+
   it("cancel(unknown) returns false", () => {
     expect(runner.cancel("never-existed")).toBe(false);
   });
@@ -1295,6 +1343,32 @@ describe("AgentRunner.stream — message metadata", () => {
     expect(
       stream.metadataFor({ type: "finish", finishReason: "length" }),
     ).toEqual({ truncatedByTokenLimit: true });
+
+    await stream.end();
+  });
+
+  // Issue #522: the flag is decided during Turn resolution and reaches the
+  // stream on the same path the attribution takes — the runner forwards what
+  // `prepareChatTurn` returned, and nothing re-derives it here.
+  it("carries the search-unavailable flag from the prepared turn to the stream", async () => {
+    const turn = { ...fakeTurn(), searchUnavailable: true };
+    const stream = await startStream(turn);
+
+    expect(stream.metadataFor({ type: "start" })).toEqual({
+      agentId: "agent-1",
+      searchUnavailable: true,
+    });
+
+    await stream.end();
+  });
+
+  it("says nothing about search when the turn served what it was asked for", async () => {
+    const turn = { ...fakeTurn(), searchUnavailable: false };
+    const stream = await startStream(turn);
+
+    expect(stream.metadataFor({ type: "start" })).not.toHaveProperty(
+      "searchUnavailable",
+    );
 
     await stream.end();
   });

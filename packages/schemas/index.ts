@@ -1536,6 +1536,7 @@ export const webhookEventSchema = z.enum([
   "notification.dismissed",
   "card.created",
   "card.updated",
+  "card.moved",
   "card.deleted",
 ]);
 
@@ -1558,6 +1559,7 @@ export type CronTriggerConfig = z.infer<typeof cronTriggerConfigSchema>;
 export const eventTriggerFiltersSchema = z.object({
   boardId: z.string().optional(),
   columnId: z.string().optional(),
+  changedFields: z.array(z.string()).optional(),
 });
 
 export type EventTriggerFilters = z.infer<typeof eventTriggerFiltersSchema>;

@@ -232,7 +232,7 @@ run is marked cut short at the model's output limit.
 Leave it empty and Platypus sends no ceiling at all, so whatever the vendor does
 by default applies. Set it to the model's published output maximum when you want
 long answers, or lower to hold replies (and spend) down. The same ceiling
-applies when that model runs as a sub-Agent.
+applies when that model runs as a Sub-Agent.
 
 <Callout type="warning">
   **On Amazon Bedrock, empty is not "the model's maximum".** Bedrock applies a
@@ -387,7 +387,7 @@ Before taking an irreversible or high-impact action — sending a message, delet
 
 <Callout type="warning">
   Guardrails are provider-scoped and apply to **every** run on that Provider,
-  including sub-agent runs. They are also non-suppressible: an Agent's own
+  including Sub-Agent runs. They are also non-suppressible: an Agent's own
   Instructions render first and cannot opt out of text that renders last. The
   escape hatch for an Agent that must not carry them is a different Provider.
 </Callout>

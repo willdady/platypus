@@ -33,8 +33,8 @@ In your Workspace, go to the **Triggers** section and click **Create trigger**.
 - **Name** and **Description** — label the Trigger (description optional).
 - **Agent** — which Agent to run.
 - **Instruction** — the message sent to the Agent every time the Trigger fires
-  (up to 10,000 characters). For Event triggers, the event's data is appended
-  automatically.
+  (up to 10,000 characters). For Event triggers, the event's data arrives
+  above it — see [Event payloads](#event-payloads).
 
 ### Set the cadence (Cron)
 
@@ -53,9 +53,28 @@ Trigger** to run once and then disable itself.
 ### Or choose events (Event)
 
 For an Event trigger, select one or more **Events** (e.g. `card.created`,
-`card.updated`, `notification.created`). Optionally narrow with **Filter by
-Board** and **Filter by Column** so the Trigger only fires for activity on a
-specific board.
+`card.updated`, `card.moved`, `notification.created`). Optionally narrow with
+**Only cards in this Board** and **Only cards in this Column** so the Trigger
+only fires for activity in one place.
+
+`card.moved` fires only when a card's column actually changes, so a column
+filter on it matches the card's **destination** column — use it to run an
+Agent whenever a card enters a specific column, without re-firing on later
+edits to cards already sitting there.
+
+When `card.updated` is among the selected events, an **Only when these fields
+change** control appears — pick one or more card attributes (Title, Body,
+Labels, Assignees, Due date, Priority) and `card.updated` fires only when one
+of them actually changed, not on every write to a matching card. Leave them all
+off to fire on any change. It composes with the Board and Column filters: every
+filter set on the Trigger must match. See [Webhooks: the
+payload](/building-with-platypus/webhooks#the-payload) for what counts as a
+changed field.
+
+The control applies to `card.updated` alone. Other events you selected are
+unaffected — a Trigger on both `card.moved` and `card.updated` still fires on
+every move, whatever fields the control names. To act on a column change, use
+`card.moved`: it is the event for that, and it carries the previous column.
 
 ### Finish
 
@@ -93,6 +112,52 @@ A few details worth knowing:
   whole step budget. (This guard is unattended-only; interactive Chats are never
   stopped this way.)
 - Older run records beyond **Max Runs to Keep** are pruned automatically.
+
+## Event payloads
+
+An Event trigger's Agent doesn't only get your **Instruction** — the event
+arrives first, above it:
+
+```
+Event: card.updated
+Event Data:
+{
+  "id": "V1StGXR8_Z5jdHi6B-myT",
+  "boardId": "lbfQ0p7xKmR2nT4vZ8wYs",
+  "columnId": "9zHcN3eW1qoP5rUaB7dKt",
+  "title": "Review onboarding flow",
+  "body": "Check the new sign-up steps and confirm the copy.",
+  ... the rest of the card ...
+  "changedFields": ["body"]
+}
+---
+Post a one-line summary of what changed on this card.
+```
+
+Because the event sits above your text, the Instruction can point at it — "the
+card in the event data above" — instead of describing where to look. It only
+appears for Event triggers; a Cron run gets the Instruction on its own.
+
+The JSON is the event's data and nothing more. There's no `event`, `timestamp`,
+`orgId`, or `workspaceId` wrapper — a Trigger already knows which Workspace it
+belongs to. Every event's shape is written up once, on the Webhooks page: see
+[`data` by event](/building-with-platypus/webhooks#data-by-event), and read the
+`data` object there as the whole of what your Agent gets.
+
+<Callout type="warning">
+  **Not every event carries a whole record.** `card.created`, `card.updated`,
+  and `card.moved` send the full card; `notification.created` and
+  `notification.updated` send the full notification. `card.deleted`,
+  `notification.read`, and `notification.dismissed` send only the IDs of what
+  changed. An Instruction that reads the card's title works on `card.updated`
+  and finds nothing on `card.deleted` — and an Agent handed a field that isn't
+  there will often invent one rather than stop. Put each shape on its own
+  Trigger, or write the Instruction to cope with both.
+</Callout>
+
+Run history does not show the payload itself. To read a real one, point a
+[Webhook](/building-with-platypus/webhooks) at the same event and inspect the
+delivery — the `data` object it sends is what the Trigger received.
 
 ## Review run history
 
@@ -139,7 +204,7 @@ Worth checking before rewriting the Instruction.
 
 ## Where to next
 
-- **[Agents & sub-agents](/building-with-platypus/agents)** — the Agent a Trigger
+- **[Agents & Sub-Agents](/building-with-platypus/agents)** — the Agent a Trigger
   runs.
 - **[Boards](/building-with-platypus/boards)** — a common source of Trigger
   events and a common target for scheduled runs.

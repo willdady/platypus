@@ -4,6 +4,7 @@ import { isPresentableUrl, WEB_BACKEND_TOOL_MARKER } from "@platypus/schemas";
 import { logger } from "../logger.ts";
 import { createContributionRegistry } from "../registry/contribution-registry.ts";
 import { checkEgress, EGRESS_BLOCKED_MESSAGE } from "../utils/egress-guard.ts";
+import { withAttributedRegistrar } from "../tools/closers.ts";
 import {
   MAX_READ_URL_CONTENT_CHARS,
   MAX_READ_URL_SLICE_CHARS,
@@ -12,6 +13,7 @@ import {
   webSearchInputSchema,
   type ReadUrlToolResult,
   type WebBackendContext,
+  type TurnToolsContext,
   type WebBackendContribution,
   type WebBackendExecutors,
   type WebBackendRegistration,
@@ -153,36 +155,105 @@ const presentableReadUrl = (resolved: unknown, requested: string): string => {
 /** Raised when an executor outruns its per-call timeout. */
 class WebBackendTimeoutError extends Error {}
 
+/** Raised when the turn the executor was called for was cancelled under it. */
+class WebBackendCancelledError extends Error {}
+
 /**
- * Race an executor against its timeout.
+ * Reject as soon as `signal` aborts, and hand back the means to drop the listener.
  *
- * The loser is not cancelled: the v1 executor contract carries no `AbortSignal`,
- * so a hung upstream call keeps running in the background until its own socket
- * timeout. What the timeout guarantees is that the *turn* is not pinned open —
- * which is the property the ceiling exists to protect.
+ * Released in a `finally` rather than left to garbage collection. The signal
+ * listened on is per-call, but it is *derived from* the run's, which outlives
+ * every individual tool call — and the shape of that retention is the platform's
+ * business, not something a searching turn should depend on being generous.
  */
-const withTimeout = async <T>(
-  run: () => Promise<T> | T,
+const rejectOnAbort = (
+  signal: AbortSignal,
+): { promise: Promise<never>; release: () => void } => {
+  let release = () => {};
+  const promise = new Promise<never>((_resolve, reject) => {
+    // The signal's own `reason` is `any` — a caller may abort with anything — and
+    // it is never read: `withDeadline` classifies on *which* signal aborted, not
+    // on what it was aborted with. Carried as `cause` so nothing is lost.
+    const onAbort = () =>
+      reject(new Error("aborted", { cause: signal.reason }));
+    // Not the live path: `withDeadline` refuses an already-aborted call before it
+    // gets here, precisely so this promise is never handed back already rejected
+    // with nothing attached to it. The branch stays as the guard that keeps that
+    // true for a second caller.
+    if (signal.aborted) {
+      onAbort();
+      return;
+    }
+    signal.addEventListener("abort", onAbort, { once: true });
+    release = () => signal.removeEventListener("abort", onAbort);
+  });
+  return { promise, release };
+};
+
+/**
+ * Run an executor under a deadline, and hand it the signal for that deadline.
+ *
+ * Two things at once, because they are one signal to whoever is called: the
+ * per-call `timeoutMs`, and the caller's own — a User cancelling the turn. A
+ * backend that honours it stops its upstream request for either reason.
+ *
+ * Still a **race**, not a bare signal: honouring the signal is optional (it is an
+ * appended parameter on a v1 contract), so an executor that ignores it must
+ * remain bounded. That the *turn* is not pinned open is the property the ceiling
+ * exists to protect, and it cannot rest on a Contribution's cooperation.
+ *
+ * Which signal aborted decides what the caller sees. The deadline is inspected
+ * first so that a call which had already outrun its budget is reported as a
+ * timeout even if the run was cancelled in the same instant — the deadline is the
+ * older of the two facts, and the one an Operator can act on.
+ */
+const withDeadline = async <T>(
+  run: (signal: AbortSignal) => Promise<T> | T,
   timeoutMs: number,
+  caller?: AbortSignal,
 ): Promise<T> => {
-  let timer: ReturnType<typeof setTimeout> | undefined;
+  // A cleared timer rather than `AbortSignal.timeout`: the signal that helper
+  // returns cannot be released, so every *successful* call would leave a timer
+  // alive for the rest of its budget — 120s at the ceiling — to abort a signal
+  // nobody is listening to. Tool calls are the hottest path a backend has.
+  const deadline = new AbortController();
+  const timer = setTimeout(
+    () =>
+      deadline.abort(
+        new WebBackendTimeoutError(`executor timed out after ${timeoutMs}ms`),
+      ),
+    timeoutMs,
+  );
+  const signal = caller
+    ? AbortSignal.any([deadline.signal, caller])
+    : deadline.signal;
   try {
-    return await Promise.race([
-      Promise.resolve(run()),
-      new Promise<never>((_resolve, reject) => {
-        timer = setTimeout(
-          () =>
-            reject(
-              new WebBackendTimeoutError(
-                `executor timed out after ${timeoutMs}ms`,
-              ),
-            ),
-          timeoutMs,
-        );
-      }),
-    ]);
+    // Already cancelled before the call even reached the executor — a tool call
+    // dispatched just before the abort landed, or a delegate unwinding. The
+    // executor is not called at all: a backend that ignores its signal would
+    // otherwise spend a live upstream request on a turn nobody will read.
+    // `read_url`'s own guard still stands ahead of this one, because the egress
+    // guard's DNS lookup happens before control reaches here.
+    if (signal.aborted) throw new WebBackendCancelledError("turn cancelled");
+
+    const abort = rejectOnAbort(signal);
+    try {
+      return await Promise.race([Promise.resolve(run(signal)), abort.promise]);
+    } finally {
+      abort.release();
+    }
+  } catch (cause) {
+    if (deadline.signal.aborted) {
+      throw new WebBackendTimeoutError(
+        `executor timed out after ${timeoutMs}ms`,
+      );
+    }
+    if (caller?.aborted) {
+      throw new WebBackendCancelledError("turn cancelled");
+    }
+    throw cause;
   } finally {
-    if (timer !== undefined) clearTimeout(timer);
+    clearTimeout(timer);
   }
 };
 
@@ -264,7 +335,7 @@ export const composeWebBackend = (
   // resolution, since that is all that ran.
   const logCall = (
     toolName: string,
-    outcome: "ok" | "timeout" | "blocked" | "error",
+    outcome: "ok" | "timeout" | "blocked" | "error" | "cancelled",
     startedAt: number,
     details?: Record<string, unknown>,
   ): void => {
@@ -279,12 +350,51 @@ export const composeWebBackend = (
       logger.debug(line, "Web backend executor call");
       return;
     }
+    // `cancelled` sits with `ok` at debug rather than with the failures at warn.
+    // A User pressing stop is not a fault — it is the single most ordinary way for
+    // a long search to end — and warning on it would make an Operator's healthy
+    // traffic noisy enough to hide the outcomes that are faults. The `cause` still
+    // rides the line for anyone reading at debug.
+    if (outcome === "cancelled") {
+      logger.debug(
+        { ...line, ...details },
+        "Web backend executor call cancelled",
+      );
+      return;
+    }
     logger.warn(
       { ...line, ...details },
       outcome === "blocked"
         ? "Blocked a model-supplied URL by network policy"
         : "Web backend executor call failed",
     );
+  };
+
+  /**
+   * The one place a throw out of an executor becomes a model-facing result.
+   *
+   * Three outcomes, two model-facing strings: cancellation deliberately reuses
+   * the failure text rather than adding a third. In practice the model never
+   * reads the cancelled one — the turn that would have read it is the turn being
+   * torn down — and a string nobody reads is not worth another one for a
+   * Contribution author to learn.
+   */
+  const failed = (
+    toolName: string,
+    cause: unknown,
+    startedAt: number,
+  ): WebToolError => {
+    if (cause instanceof WebBackendCancelledError) {
+      logCall(toolName, "cancelled", startedAt, { cause });
+      return { error: failureMessage(toolName) };
+    }
+    const timedOut = cause instanceof WebBackendTimeoutError;
+    logCall(toolName, timedOut ? "timeout" : "error", startedAt, { cause });
+    return {
+      error: timedOut
+        ? timeoutMessage(toolName, timeoutMs)
+        : failureMessage(toolName),
+    };
   };
 
   const buildSearchTool = (
@@ -294,9 +404,10 @@ export const composeWebBackend = (
       description: WEB_SEARCH_DESCRIPTION,
       metadata: WEB_BACKEND_TOOL_METADATA,
       inputSchema: webSearchInputSchema,
-      execute: async ({
-        query,
-      }): Promise<WebSearchToolResult | WebToolError> => {
+      execute: async (
+        { query },
+        { abortSignal },
+      ): Promise<WebSearchToolResult | WebToolError> => {
         const startedAt = Date.now();
         logger.debug(
           { backend, plugin: pluginName, query },
@@ -305,17 +416,13 @@ export const composeWebBackend = (
 
         let raw: unknown;
         try {
-          raw = await withTimeout(() => webSearch({ query }), timeoutMs);
+          raw = await withDeadline(
+            (signal) => webSearch({ query }, { signal }),
+            timeoutMs,
+            abortSignal,
+          );
         } catch (cause) {
-          const timedOut = cause instanceof WebBackendTimeoutError;
-          logCall("web_search", timedOut ? "timeout" : "error", startedAt, {
-            cause,
-          });
-          return {
-            error: timedOut
-              ? timeoutMessage("web_search", timeoutMs)
-              : failureMessage("web_search"),
-          };
+          return failed("web_search", cause, startedAt);
         }
 
         const payload = asRecord(raw);
@@ -427,13 +534,25 @@ export const composeWebBackend = (
       description: READ_URL_DESCRIPTION,
       metadata: WEB_BACKEND_TOOL_METADATA,
       inputSchema: readUrlInputSchema,
-      execute: async ({
-        url,
-        max_length,
-        start_index,
-      }): Promise<ReadUrlToolResult | WebToolError> => {
+      execute: async (
+        { url, max_length, start_index },
+        { abortSignal },
+      ): Promise<ReadUrlToolResult | WebToolError> => {
         const startedAt = Date.now();
         logger.debug({ backend, plugin: pluginName, url }, "read_url target");
+
+        // `withDeadline` refuses an already-cancelled call too, so this is not
+        // the only guard — it is the *earlier* one, and it is here rather than
+        // there because the egress guard resolves DNS on the way. A turn that has
+        // already been cancelled has no reason to spend a lookup on a page nobody
+        // will read.
+        if (abortSignal?.aborted) {
+          return failed(
+            "read_url",
+            new WebBackendCancelledError("turn cancelled"),
+            startedAt,
+          );
+        }
 
         // The URL comes from the model, so it is vetted before anything reaches
         // the network — the whole reason core, not the backend, owns this Tool.
@@ -451,17 +570,13 @@ export const composeWebBackend = (
 
         let raw: unknown;
         try {
-          raw = await withTimeout(() => readUrl({ url }), timeoutMs);
+          raw = await withDeadline(
+            (signal) => readUrl({ url }, { signal }),
+            timeoutMs,
+            abortSignal,
+          );
         } catch (cause) {
-          const timedOut = cause instanceof WebBackendTimeoutError;
-          logCall("read_url", timedOut ? "timeout" : "error", startedAt, {
-            cause,
-          });
-          return {
-            error: timedOut
-              ? timeoutMessage("read_url", timeoutMs)
-              : failureMessage("read_url"),
-          };
+          return failed("read_url", cause, startedAt);
         }
 
         // Cap first, then slice within the capped string: the cap bounds what core
@@ -536,7 +651,27 @@ export const composeWebBackend = (
   return {
     backend,
     name: contribution.name,
-    buildTurnTools: async (ctx: WebBackendContext) => {
+    buildTurnTools: async (ctx: TurnToolsContext) => {
+      // The Provider row is core's to know and no business of a backend's, so
+      // it is stripped before the plugin-facing call and kept for the warns:
+      // `createExecutors` still receives exactly the `WebBackendContext`
+      // ADR-0014 fixes at `{ orgId, workspaceId, userId }` plus the optional
+      // registrar. The strip has to happen before the registrar is attributed,
+      // or the spread inside that helper would put `providerId` back.
+      const { providerId, ...coreCtx } = ctx;
+
+      // One context for both warns below. They report the same fault to the
+      // same reader — an Operator asked why a reply said search was unavailable
+      // (issue #522) — and the fields they need are identical, so drift between
+      // two literals is the only thing separate ones would buy.
+      const faultCtx = {
+        plugin: pluginName,
+        backend,
+        orgId: ctx.orgId,
+        workspaceId: ctx.workspaceId,
+        providerId,
+      };
+
       // A factory that throws or hangs must degrade exactly like the
       // missing-`web_search` case below, not reject/pin the turn: ADR-0014's
       // "runtime resolution graceful" and the timeout's "a backend cannot pin a
@@ -548,16 +683,32 @@ export const composeWebBackend = (
       // turn can spend inside a backend is `(1 + calls) × timeoutMs` — 240s for a
       // single search at the 120s boot ceiling. Still bounded, which is the
       // property the ceiling exists to protect, but no longer one window.
+      // The *context* is derived so a closer this backend registers is logged
+      // against the plugin and backend that registered it. The **contribution**
+      // is passed through untouched — that invariant is about `this`, not `ctx`.
+      const factoryCtx: WebBackendContext = withAttributedRegistrar(coreCtx, {
+        plugin: pluginName,
+        backend,
+      });
+
       let executors: WebBackendExecutors | undefined;
       try {
-        executors = await withTimeout(
-          () => contribution.createExecutors(ctx, plugin),
+        // No caller signal here, deliberately: the prepare phase has no abort of
+        // its own to hand over yet, so this call behaves exactly as it did before
+        // executors gained a signal. Wiring one in is its own change.
+        executors = await withDeadline(
+          () => contribution.createExecutors(factoryCtx, plugin),
           timeoutMs,
         );
       } catch (cause) {
+        // The turn's scope and Provider ride this warn and the one below
+        // because what they report is now an Unavailable capability shown to
+        // the User (issue #522), not only a line in the log: an Operator asked
+        // about that notice needs the Workspace that saw it and the Provider
+        // row they have to edit, not just the plugin that failed.
         const timedOut = cause instanceof WebBackendTimeoutError;
         logger.warn(
-          { plugin: pluginName, backend, cause },
+          { ...faultCtx, cause },
           timedOut
             ? "Web backend's createExecutors timed out; serving no tools this turn"
             : "Web backend's createExecutors threw; serving no tools this turn",
@@ -571,7 +722,7 @@ export const composeWebBackend = (
       // executor object costs the turn its search tools, not the turn.
       if (typeof executors?.web_search !== "function") {
         logger.warn(
-          { plugin: pluginName, backend },
+          faultCtx,
           "Web backend returned no web_search executor; serving no search tools this turn",
         );
         return {};

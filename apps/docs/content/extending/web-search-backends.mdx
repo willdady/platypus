@@ -24,14 +24,18 @@ Your contribution returns two plain functions, typed by
 Core builds the `Tool` objects around them. Read the exact shapes off the package
 you have installed — this page states the rules those types don't encode.
 
-| Executor     | Required | Gets        | Returns                                                                      |
-| ------------ | -------- | ----------- | ---------------------------------------------------------------------------- |
-| `web_search` | Yes      | `{ query }` | `{ query, results: [{ title, url, snippet? }], answer? }`                    |
-| `read_url`   | No       | `{ url }`   | the page's full content, its post-redirect URL, and an optional content type |
+| Executor     | Required | Gets                           | Returns                                                                      |
+| ------------ | -------- | ------------------------------ | ---------------------------------------------------------------------------- |
+| `web_search` | Yes      | `{ query }`, then `{ signal }` | `{ query, results: [{ title, url, snippet? }], answer? }`                    |
+| `read_url`   | No       | `{ url }`, then `{ signal }`   | the page's full content, its post-redirect URL, and an optional content type |
 
 Either may be async. Contribute a search-only backend by omitting `read_url` —
 the model then gets one tool that turn, and page reading is left to whatever else
 the Agent has.
+
+The second argument is optional to read: a one-parameter executor written before
+it existed keeps working. What it carries is worth taking, though — see
+[the signal](#the-signal-your-executors-get).
 
 Supplying `read_url` is a bigger decision than it looks: it means the **Search**
 toggle grants page fetching on every Provider pointed at your backend, which the
@@ -49,8 +53,9 @@ backend and identical to what a Provider's built-in search fills the same slot
 with.
 
 The tools are ephemeral. They exist for a turn the toggle was on for, and no
-other. There is no teardown hook: your executors are built per turn and dropped
-when it ends, so a connection you open lives for one turn only.
+other: your executors are built per turn and dropped when it ends, so a
+connection you open lives for one turn only. Hand core a way to close it — see
+[releasing what you opened](#releasing-what-you-opened).
 
 ## What core does to what you return
 
@@ -109,12 +114,68 @@ index, so a 1M-character page is one `fetchUrl` call and ten `read_url` calls.
   the Chat. Write the diagnostic detail you need into your own logger.
 </Callout>
 
+## The signal your executors get
+
+Every executor call gets a second argument carrying `{ signal }`. Pass it
+straight to whatever you call — `fetch(url, { signal })` is the whole of it for
+most backends — and your upstream request stops when core stops waiting.
+
+It fires for either of two reasons, and you do not need to tell them apart:
+
+- the person in the Chat pressed stop, or their run was cancelled;
+- your own `timeoutMs` deadline passed.
+
 <Callout type="warning">
-  **A timed-out call is abandoned, not cancelled.** The executor contract
-  carries no abort signal, so when core stops waiting your upstream request
-  keeps running until its own socket timeout. What the timeout guarantees is
-  that the *turn* is not held open. If your backend holds a connection or a pool
-  slot per call, size it for calls that outlive their timeout.
+  **Ignoring the signal is allowed, and it costs you a request you are no longer
+  being paid for.** An executor that never reads it behaves as every backend did
+  before the signal existed: core stops waiting, the turn is not held open, and
+  your call runs on until its own socket timeout — burning a rate-limit slot and
+  a pool slot on an answer nobody will read. If you hold a connection or a pool
+  slot per call and do not honour the signal, size the pool for calls that
+  outlive their timeout.
+</Callout>
+
+`AbortSignal` is a platform global rather than something the SDK declares, so a
+`tsconfig.json` with `"lib": ["esnext"]` and no `@types/node` reports `Cannot
+find name 'AbortSignal'` the moment you install a version that has it. Add
+`@types/node` — you are running on Node — or `"dom"` to `lib`.
+
+## Releasing what you opened
+
+`createExecutors` runs once per turn. If it opens something with a lifetime — a
+browser page, a pool, a keep-alive connection — register a way to close it:
+
+```ts
+createExecutors(ctx, plugin) {
+  const pool = createPool(plugin?.config.endpoint);
+  ctx.registerCloser?.(() => pool.close());
+  return { web_search: (input, { signal }) => pool.search(input.query, signal) };
+}
+```
+
+Core runs your closer once, when the turn ends — on a normal finish and on a
+cancellation alike. A closer that throws is logged against your Plugin and the
+rest still run; one that never settles is abandoned after **5 seconds**, because
+teardown happens while the reader is still waiting on the reply.
+
+<Callout type="warning">
+  **Write `ctx.registerCloser?.(...)`, not `ctx.registerCloser!(...)`.** Your
+  manifest's `apiVersion` names a *major*, so it cannot ask for a core new
+  enough to have this — on an older one the field is genuinely absent, and the
+  unguarded call throws out of your factory. The turn then serves **no search
+  tools at all**, with a warning in the Operator's log as the only sign. The
+  guard is the difference between "no teardown on old core" and "no search on
+  old core".
+</Callout>
+
+<Callout type="info">
+  Registering the same function twice **within one turn** registers it once —
+  handy when both your executors share a client. Registration does not carry
+  across turns: each turn resolves your backend afresh, and whatever it
+  registers is closed at the end of *that* turn. So register what this turn
+  opened, never something you mean to keep — a module-level `closePool`
+  registered on every turn is closed on the first one, leaving every turn after
+  it holding a closed pool.
 </Callout>
 
 ## The timeout is yours to declare and core's to enforce
@@ -135,6 +196,17 @@ upstream, not to their sum.
   is fixed in your manifest and therefore knowable before anything runs — a
   deployment that would silently run at a quarter of the timeout you asked for
   is worse than one that will not start.
+</Callout>
+
+<Callout type="warning">
+  **A factory that throws or outruns its timeout costs the whole turn its
+  search**, not one call. The turn still runs — the model is given no search
+  tools and is not told why — and the person who asked for search reads **Search
+  was unavailable — this reply was written without it.** under the reply. So a
+  factory failure is visible to your users, not only in the Operator's log, and
+  a factory that fails intermittently reads to them as search that works some
+  days. Do the work that can fail per call inside the executors, where a failure
+  costs that call and the model can try something else.
 </Callout>
 
 ## The egress guard
@@ -196,7 +268,7 @@ inside the factory:
 ```ts
 createExecutors(ctx, plugin) {
   const endpoint =
-    plugin.config.endpoints[ctx.orgId] ?? plugin.config.endpoints.default;
+    plugin?.config.endpoints[ctx.orgId] ?? plugin?.config.endpoints.default;
   // ...
 }
 ```
@@ -217,8 +289,9 @@ from the Provider form.
   A Provider pointing at a backend you have since removed from
   `PLATYPUS_PLUGINS` keeps its stored selection. The form shows it as **(not
   installed)** rather than silently reading as **None**, and a searching turn on
-  that Provider runs no search and logs a warning. Removing a Plugin is not a
-  way to migrate Providers off it — change the field first.
+  that Provider runs no search, logs a warning, and tells the person who asked
+  that search was unavailable. Removing a Plugin is not a way to migrate
+  Providers off it — change the field first.
 </Callout>
 
 ## Results are cited for you

@@ -58,6 +58,7 @@ const ALL_EVENTS = [
   "notification.dismissed",
   "card.created",
   "card.updated",
+  "card.moved",
   "card.deleted",
 ] as const;
 
@@ -68,6 +69,7 @@ const EVENT_LABELS: Record<string, string> = {
   "notification.dismissed": "Notification dismissed",
   "card.created": "Card created",
   "card.updated": "Card updated",
+  "card.moved": "Card moved",
   "card.deleted": "Card deleted",
 };
 

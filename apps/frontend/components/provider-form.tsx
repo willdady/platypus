@@ -1377,7 +1377,7 @@ const ProviderForm = ({
                 <FieldDescription>
                   Free-text security directives appended to the end of the
                   system prompt for every run on this provider (including
-                  sub-agents). Recommended for self-hosted or open models, which
+                  Sub-Agents). Recommended for self-hosted or open models, which
                   are more susceptible to prompt injection. This is a
                   prompt-level floor, not a guarantee — see the docs for
                   paste-in starter snippets and the enforcement layers behind a

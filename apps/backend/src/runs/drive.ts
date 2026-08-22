@@ -198,6 +198,13 @@ export type ChatDriveOptions = DriveBase &
     originalMessages?: PlatypusUIMessage[];
     /** The resolved Agent id, stamped onto the streamed message. */
     agentId?: string;
+    /**
+     * Turn resolution served no search tools for a turn that asked for search,
+     * so the reply is written without it (issue #522). A setup-time fact on the
+     * same path `agentId` takes: stamped onto the streamed message's metadata,
+     * never onto the prompt.
+     */
+    searchUnavailable?: boolean;
     generateMessageId?: () => string;
     /** The live map the caller fills from `onToolExecutionEnd`. */
     toolDurations?: Map<string, number>;
@@ -247,6 +254,7 @@ const runStreamedDrive = (
     run,
     originalMessages = [],
     agentId,
+    searchUnavailable,
     generateMessageId,
     toolDurations,
     onStepFinish,
@@ -285,7 +293,11 @@ const runStreamedDrive = (
   const uiStream = result.toUIMessageStream<PlatypusUIMessage>({
     originalMessages,
     generateMessageId,
-    messageMetadata: createMessageMetadata(agentId, toolDurations),
+    messageMetadata: createMessageMetadata({
+      agentId,
+      toolDurations,
+      searchUnavailable,
+    }),
     onError: (error) => formatStreamError(error),
     onFinish: ({ messages: finalMessages }) => {
       finalHandedOver = true;

@@ -7,7 +7,7 @@
 const meta = {
   index: "Overview",
   chat: "Chat",
-  agents: "Agents & sub-agents",
+  agents: "Agents & Sub-Agents",
   skills: "Skills",
   "tool-sets": "Tool sets",
   mcp: "MCP servers",

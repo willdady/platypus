@@ -108,6 +108,32 @@ does not. Don't put your plugin's name in them; core binds it for you. And keep
 the optional chaining: `logger` is an appended optional member, so
 `plugin?.logger?.` is what lets the same code run on a core that predates it.
 
+## Closing what a factory opened
+
+Tool set factories and Web-search backends are resolved **once per Chat turn**. If
+yours opens something with a lifetime — a pool, a browser page, a keep-alive
+socket — hand core its close:
+
+```ts
+tools: (ctx) => {
+  const client = connect(ctx.workspaceId);
+  ctx.registerCloser?.(() => client.close());
+  return createTools(client);
+};
+```
+
+Core runs it once, when the turn ends, on a normal finish and on the User
+cancelling alike. The same function registered twice **in one turn** runs once —
+registration is per turn, so register what the turn opened and not a pool you mean
+to keep between turns. A closer that throws is logged against your plugin and the
+rest still run; one that never settles is abandoned after 5 seconds, because
+teardown happens while the reader is still waiting on the reply.
+
+Keep the optional chaining here too, for the same reason as the logger — and with
+a sharper consequence. `registerCloser!(…)` on a core that predates the member is
+a `TypeError` thrown out of your factory, and your contribution then serves
+**nothing** that turn.
+
 ## Web-search backends
 
 A Web-search backend fills the chat **web-search toggle** for Providers without
@@ -145,21 +171,32 @@ export const plugin: PlatypusPlugin = {
         // work the factory does — a factory that outruns it, or throws, serves no
         // web tools that turn (warn-logged, never fatal).
         timeoutMs: 5_000,
-        createExecutors: (ctx, plugin) => ({
-          // Mandatory. Return results; never truncate or paginate — core does.
-          web_search: async ({ query }) => ({
-            query,
-            results: [{ title: "…", url: "https://…", snippet: "…" }],
-            // Optional: an upstream answer box (Brave, Tavily) survives here.
-            answer: undefined,
-          }),
-          // Optional. Omit it and the model just gets search that turn.
-          read_url: async ({ url }) => ({
-            content: "the page's FULL text — core slices it",
-            url, // the post-redirect final URL, so the model cites where it landed
-            contentType: "text/markdown",
-          }),
-        }),
+        createExecutors: (ctx, plugin) => {
+          const pool = createPool(plugin?.config.endpoint);
+          // Anything with a lifetime gets a close core will run when the turn
+          // ends — on a normal finish and on a cancellation alike. Guarded,
+          // never `!`: the member is optional so this plugin still loads on a
+          // core that predates it, and an unguarded call would cost the turn
+          // its search tools entirely.
+          ctx.registerCloser?.(() => pool.close());
+          return {
+            // Mandatory. Return results; never truncate or paginate — core does.
+            // `signal` fires when the User cancels or `timeoutMs` runs out;
+            // forward it and your upstream request stops with the turn.
+            web_search: async ({ query }, { signal }) => ({
+              query,
+              results: await pool.search(query, { signal }),
+              // Optional: an upstream answer box (Brave, Tavily) survives here.
+              answer: undefined,
+            }),
+            // Optional. Omit it and the model just gets search that turn.
+            read_url: async ({ url }, { signal }) => ({
+              content: await pool.render(url, { signal }), // FULL text — core slices it
+              url, // the post-redirect final URL, so the model cites where it landed
+              contentType: "text/markdown",
+            }),
+          };
+        },
       },
     ],
   },
@@ -172,6 +209,12 @@ the model-facing return fields are snake_case (`web_search`, `read_url`,
 own `fetchUrl`. There are deliberately no per-contribution config schemas — a web
 backend has no per-Provider row to validate, so its credentials ride the
 plugin-level `credentialsSchema` and arrive as `plugin.credentials`.
+
+`AbortSignal` is a platform global rather than something this package declares, so
+a `tsconfig.json` with `"lib": ["esnext"]` and no `@types/node` reports `Cannot
+find name 'AbortSignal'`. Add `@types/node` — you are running on Node — or `"dom"`
+to `lib`. A one-argument executor written before the signal existed still
+compiles and still works.
 
 ## Documentation
 

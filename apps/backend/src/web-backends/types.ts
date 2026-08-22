@@ -1,6 +1,7 @@
 import type { Tool } from "ai";
 import { z } from "zod";
 import type { WebBackendContext } from "@platypuschat/plugin-sdk";
+import type { WithCoreRegistrar } from "../tools/closers.ts";
 
 // The SDK is the single home of the executor-facing contract; core re-exports the
 // types its internal callers need so nothing below imports the SDK directly.
@@ -9,6 +10,7 @@ export type {
   WebBackendContext,
   WebBackendContribution,
   WebBackendExecutors,
+  WebExecutorOptions,
   WebSearchResult,
   WebSearchResults,
 } from "@platypuschat/plugin-sdk";
@@ -131,6 +133,30 @@ export type ReadUrlToolResult = {
 export type WebToolError = { error: string };
 
 /**
+ * What core passes its own `buildTurnTools`, as distinct from what a Plugin's
+ * `createExecutors` is handed.
+ *
+ * `WebBackendContext` is the plugin-facing shape ADR-0014 fixes at
+ * `{ orgId, workspaceId, userId }`. This adds the one field core needs on its
+ * own side of the seam and a backend has no business seeing: the id of the
+ * Provider row whose `searchSource` named this backend. It is the field an
+ * Operator edits — an org-scoped Shared Provider (ADR-0007) is one row serving
+ * many Workspaces, so the Workspace alone names a symptom — and it is what the
+ * warns raised here log when a turn is left with no search tools (issue #522).
+ *
+ * It also carries core's own registrar rather than the plugin-facing one: the
+ * extra parameter is the attribution a closer's log line needs to name a culprit
+ * (see `../tools/closers.ts`). The extra parameter is optional, so this stays
+ * assignable to `WebBackendContext`.
+ *
+ * `composeWebBackend` forwards only the plugin-facing subset onward, so
+ * widening this costs the published SDK contract nothing.
+ */
+export type TurnToolsContext = WithCoreRegistrar<WebBackendContext> & {
+  providerId: string;
+};
+
+/**
  * One registered Web-search backend. The discriminator string lives in the
  * `provider.searchSource` column.
  *
@@ -147,5 +173,5 @@ export type WebToolError = { error: string };
 export interface WebBackendRegistration {
   backend: string;
   name: string;
-  buildTurnTools(ctx: WebBackendContext): Promise<Record<string, Tool>>;
+  buildTurnTools(ctx: TurnToolsContext): Promise<Record<string, Tool>>;
 }

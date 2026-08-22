@@ -50,7 +50,7 @@ import {
 } from "lucide-react";
 import { Textarea } from "./ui/textarea";
 import { toolCallDurationMs } from "@/lib/tool-duration";
-import { CutShortNotice } from "./cut-short-notice";
+import { TurnNotice } from "./turn-notice";
 import { LoadSkillTool } from "./load-skill-tool";
 import { SubAgentTool } from "./sub-agent-tool";
 import {
@@ -66,6 +66,15 @@ import {
  */
 export const CUT_SHORT_NOTICE =
   "Response cut short at the model's output limit.";
+
+/**
+ * What the person reading a reply is told when they turned search on and the
+ * turn served none — the backend the Provider names is gone, or it failed to
+ * start. The model was never told, so the reply reads as if it simply had
+ * nothing to look up; this is the only place that difference is visible.
+ */
+export const SEARCH_UNAVAILABLE_NOTICE =
+  "Search was unavailable — this reply was written without it.";
 
 type MessagePart = NonNullable<PlatypusUIMessage["parts"]>[number];
 
@@ -99,7 +108,7 @@ const specializedToolMatchers: Array<(part: MessagePart) => boolean> = [
  * that no specialised renderer above has already claimed.
  *
  * Exported so a test can assert the exclusion directly: a plugin web-search
- * or sub-agent part must never also satisfy this, or its raw JSON body would
+ * or Sub-Agent part must never also satisfy this, or its raw JSON body would
  * repeat what the specialised card (and, for search, the Sources row above
  * the parts loop) already shows.
  */
@@ -443,10 +452,20 @@ export const ChatMessage = memo(function ChatMessage({
         const renderer = partRenderers.find((r) => r.matches(part));
         return renderer ? renderer.render(part, i) : null;
       })}
-      {message.role === "assistant" &&
-        message.metadata?.truncatedByTokenLimit && (
-          <CutShortNotice className="pl-8">{CUT_SHORT_NOTICE}</CutShortNotice>
-        )}
+      {/* How the reply was produced, then how it ended — both rows render when
+      both apply, in that order. */}
+      {message.role === "assistant" && (
+        <>
+          {message.metadata?.searchUnavailable && (
+            <TurnNotice className="pl-8">
+              {SEARCH_UNAVAILABLE_NOTICE}
+            </TurnNotice>
+          )}
+          {message.metadata?.truncatedByTokenLimit && (
+            <TurnNotice className="pl-8">{CUT_SHORT_NOTICE}</TurnNotice>
+          )}
+        </>
+      )}
       {!(isLastMessage && status === "streaming") &&
         (isEditing ? (
           <MessageActions className="justify-end">

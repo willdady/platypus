@@ -190,6 +190,42 @@ describe("ChatSink", () => {
       expect(finishSet.frequencyPenalty).toBeNull();
     });
 
+    // Issue #522's "the notice is present after a page reload" criterion. The
+    // notice renders off `metadata.searchUnavailable`, so reload survival is
+    // exactly whether the flag reaches the messages column — the row the Chat
+    // is rebuilt from. Pinned here rather than inferred from the stream tests:
+    // `onFinish` writes messages through `extractFiles`, which rebuilds parts,
+    // and nothing else asserts that it leaves metadata alone.
+    it("persists per-turn message metadata into the messages column", async () => {
+      mockDb.returning.mockResolvedValueOnce([{ id: "chat-1" }]); // onStart
+      mockDb.returning.mockResolvedValueOnce([{ id: "chat-1" }]); // onFinish
+
+      const reply: PlatypusUIMessage = {
+        id: "m-2",
+        role: "assistant",
+        parts: [{ type: "text", text: "Answered without searching." }],
+        metadata: { agentId: "a1", searchUnavailable: true },
+      };
+
+      const sink = new ChatSink({ orgId: "org-1", workspaceId: "ws-1" });
+      await sink.onStart({ runId: "chat-1", messages: [] });
+      await sink.onResolved({ runId: "chat-1", plan: planWithAgent });
+      await sink.onFinish({
+        runId: "chat-1",
+        status: "succeeded",
+        messages: [{ id: "m-1", role: "user", parts: [] }, reply],
+        stats: {},
+      });
+
+      const finishSet = mockDb.set.mock.calls[1][0] as {
+        messages: PlatypusUIMessage[];
+      };
+      expect(finishSet.messages[1]?.metadata).toMatchObject({
+        agentId: "a1",
+        searchUnavailable: true,
+      });
+    });
+
     it("falls back to insert when finish update affects zero rows", async () => {
       mockDb.returning.mockResolvedValueOnce([{ id: "chat-2" }]); // onStart
       mockDb.returning.mockResolvedValueOnce([]); // onFinish update misses

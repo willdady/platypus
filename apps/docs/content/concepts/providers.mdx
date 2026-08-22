@@ -178,7 +178,7 @@ backends](/extending/web-search-backends).
 A Provider carries an optional free-text **security guardrails** field. Whatever
 you write there is appended **last** in the system prompt — the final
 instructions the model reads before the conversation — for **every** run on that
-Provider, including sub-agent runs that resolve to it.
+Provider, including Sub-Agent runs that resolve to it.
 
 It is provider-scoped on purpose: how susceptible a model is to prompt injection
 is a property of the endpoint. Frontier hosted models resist most attacks

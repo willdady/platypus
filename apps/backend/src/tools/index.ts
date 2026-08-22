@@ -20,6 +20,15 @@ import type {
   ToolSetContext,
   ToolSetContribution,
 } from "@platypuschat/plugin-sdk";
+import { withAttributedRegistrar, type WithCoreRegistrar } from "./closers.ts";
+
+/**
+ * The context core builds for a Tool set factory: the published shape, but
+ * carrying core's own registrar, which takes the attribution a log line needs
+ * (see `./closers.ts`). Assignable to `ToolSetContext`, so what a Contribution is
+ * handed is still the published shape.
+ */
+export type CoreToolSetContext = WithCoreRegistrar<ToolSetContext>;
 
 /**
  * Who put a tool name into a turn's tool map. Carried alongside the map so a
@@ -60,7 +69,7 @@ export type ToolSetRegistration = {
    * isolation has no turn map to compare against.
    */
   buildTurnTools: (
-    context: ToolSetContext,
+    context: CoreToolSetContext,
     claimed?: ReadonlyMap<string, ToolOwner>,
   ) => Promise<Record<string, Tool>>;
   /**
@@ -162,6 +171,13 @@ export interface ComposeToolSetOptions {
  * the database and a Sandbox backend on the way to building their tools. A
  * hanging factory still pins the turn open; a ceiling for that belongs on the
  * contribution, where an author can state it.
+ *
+ * A Tool set now has a *lifetime* hook without having a *budget* — the factory
+ * may register a closer through `ctx.registerCloser`, and that closer is bounded
+ * even though the factory that registered it is not. The asymmetry is deliberate,
+ * not an oversight to tidy up: teardown runs while a reader waits on the run's
+ * terminal write, so it needs a ceiling core can pick; the factory's ceiling is a
+ * number only the author knows, and `ToolSetContribution` has nowhere to say it.
  */
 export const composeToolSet = (
   options: ComposeToolSetOptions,
@@ -170,13 +186,20 @@ export const composeToolSet = (
   const { name, category, description, tools } = contribution;
 
   const buildTurnTools = async (
-    context: ToolSetContext,
+    context: CoreToolSetContext,
     claimed?: ReadonlyMap<string, ToolOwner>,
   ): Promise<Record<string, Tool>> => {
     let resolved: unknown = tools;
     if (typeof tools === "function") {
+      // The *context* is derived so a closer this factory registers is logged
+      // against the plugin and Tool set that registered it. The **contribution**
+      // is still called untouched — that invariant is about `this`, not `ctx`.
+      const ctx: ToolSetContext = withAttributedRegistrar(context, {
+        plugin: pluginName,
+        toolSet: id,
+      });
       try {
-        resolved = await tools(context, plugin);
+        resolved = await tools(ctx, plugin);
       } catch (cause) {
         logger.warn(
           {
