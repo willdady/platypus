@@ -898,6 +898,58 @@ describe("loadPlugins — web-search backends", () => {
     expect(calls).toHaveLength(1);
   });
 
+  it('aborts (fail-loud) when a core web backend claims the reserved id "none"', async () => {
+    const { register } = makeRegister();
+    await expect(
+      loadPlugins({
+        pluginNames: ["@platypus/searx"],
+        builtinPlugins: {
+          "@platypus/searx": () =>
+            Promise.resolve({
+              plugin: webManifest("@platypus/searx", [webBackend("none")]),
+            }),
+        },
+        register,
+        registerWeb: () => {},
+      }),
+    ).rejects.toThrow(/@platypus\/searx.*"none".*reserved/s);
+  });
+
+  it('aborts (fail-loud) when a core web backend claims the reserved id "native"', async () => {
+    const { register } = makeRegister();
+    await expect(
+      loadPlugins({
+        pluginNames: ["@platypus/searx"],
+        builtinPlugins: {
+          "@platypus/searx": () =>
+            Promise.resolve({
+              plugin: webManifest("@platypus/searx", [webBackend("native")]),
+            }),
+        },
+        register,
+        registerWeb: () => {},
+      }),
+    ).rejects.toThrow(/@platypus\/searx.*"native".*reserved/s);
+  });
+
+  it('still loads a third-party plugin\'s bare "none" id, namespaced and unaffected', async () => {
+    const { register } = makeRegister();
+    const { registerWeb, calls } = makeWebRegister();
+    const { plugins: loaded } = await loadPlugins({
+      pluginNames: ["@acme/platypus-search"],
+      builtinPlugins: {},
+      importPlugin: () =>
+        Promise.resolve({
+          plugin: webManifest("acme", [webBackend("none")]),
+        }),
+      register,
+      registerWeb,
+    });
+
+    expect(calls.map((c) => c.backend)).toEqual(["acme.none"]);
+    expect(loaded[0].webBackendIds).toEqual(["acme.none"]);
+  });
+
   it("injects the shared plugin config block into createExecutors", async () => {
     const { register } = makeRegister();
     const { registerWeb, calls } = makeWebRegister();
