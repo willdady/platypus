@@ -162,6 +162,40 @@ Moving a card to a different column always fires both `card.moved` and
 `card.updated`. Reordering a card within the same column fires only
 `card.updated` — `card.moved` means the card changed columns.
 
+`card.updated` also carries `changedFields` — the names of the attributes that
+actually changed, e.g. `["body"]` for a body edit or `["columnId"]` for a
+cross-column move. It's a value comparison, not a report of which fields the
+update submitted: resending a field with the same value (an Agent that echoes
+the whole card back) doesn't add it to `changedFields`, and re-ordering
+`labelIds` or `assignees` without changing the set doesn't either. A pure
+reorder within a column emits `card.updated` with `changedFields: []`.
+
+```json
+{
+  "event": "card.updated",
+  "timestamp": "2026-06-26T09:31:30.000Z",
+  "orgId": "g7Qw3pLm9xRt2nK5vB8dY",
+  "workspaceId": "k4Tn2pXqRf7Lm9sWvB3dY",
+  "data": {
+    "id": "V1StGXR8_Z5jdHi6B-myT",
+    "boardId": "lbfQ0p7xKmR2nT4vZ8wYs",
+    "columnId": "9zHcN3eW1qoP5rUaB7dKt",
+    "title": "Review onboarding flow",
+    "body": "Check the new sign-up steps and confirm the copy.",
+    "labelIds": [],
+    "assignees": [],
+    "dueDate": null,
+    "priority": "none",
+    "position": 1024,
+    "createdByUserId": "x6Ym2Qp9LrT4nW8sVdB1k",
+    "createdByAgentId": null,
+    "createdAt": "2026-06-26T09:30:00.000Z",
+    "updatedAt": "2026-06-26T09:31:30.000Z",
+    "changedFields": ["body"]
+  }
+}
+```
+
 Other events carry only the affected IDs. For example, `card.deleted`:
 
 ```json

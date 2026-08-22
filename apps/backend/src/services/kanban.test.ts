@@ -10,6 +10,7 @@ import { dispatchEvent } from "./event-dispatch.ts";
 import {
   applyBodyDiff,
   bulkUpdateCards,
+  changedCardFields,
   keepKnownLabelIds,
   moveCard,
   placeCardInColumn,
@@ -17,6 +18,8 @@ import {
   requireCard,
   requireKnownLabelIds,
   requireValidAssignees,
+  updateCard,
+  type CardRow,
   type KanbanContext,
 } from "./kanban.ts";
 
@@ -292,6 +295,116 @@ describe("kanban module", () => {
     });
   });
 
+  describe("changedCardFields", () => {
+    const baseCard: CardRow = {
+      id: "card-1",
+      columnId: "col-1",
+      title: "Title",
+      body: "Body",
+      labelIds: ["lbl-a", "lbl-b"],
+      assignees: [
+        { type: "user", id: "user-1" },
+        { type: "agent", id: "agent-1" },
+      ],
+      dueDate: new Date("2026-01-01T00:00:00Z"),
+      priority: "medium",
+      position: 1,
+      createdByUserId: "user-1",
+      createdByAgentId: null,
+      lastEditedByUserId: null,
+      lastEditedByAgentId: null,
+      createdAt: new Date("2026-01-01T00:00:00Z"),
+      updatedAt: new Date("2026-01-01T00:00:00Z"),
+    };
+
+    it("reports nothing when every value-bearing field is unchanged", () => {
+      expect(changedCardFields(baseCard, { ...baseCard })).toEqual([]);
+    });
+
+    it("ignores bookkeeping columns even when they differ", () => {
+      const next: CardRow = {
+        ...baseCard,
+        position: 99,
+        updatedAt: new Date("2026-02-01T00:00:00Z"),
+        lastEditedByUserId: "user-2",
+        lastEditedByAgentId: "agent-2",
+      };
+      expect(changedCardFields(baseCard, next)).toEqual([]);
+    });
+
+    it("reports body when only the body differs", () => {
+      expect(
+        changedCardFields(baseCard, { ...baseCard, body: "New body" }),
+      ).toEqual(["body"]);
+    });
+
+    it("does not report labelIds when the same set arrives in a different order", () => {
+      expect(
+        changedCardFields(baseCard, {
+          ...baseCard,
+          labelIds: ["lbl-b", "lbl-a"],
+        }),
+      ).toEqual([]);
+    });
+
+    it("reports labelIds when the set actually differs", () => {
+      expect(
+        changedCardFields(baseCard, { ...baseCard, labelIds: ["lbl-a"] }),
+      ).toEqual(["labelIds"]);
+    });
+
+    it("does not report assignees when the same set arrives in a different order", () => {
+      expect(
+        changedCardFields(baseCard, {
+          ...baseCard,
+          assignees: [
+            { type: "agent", id: "agent-1" },
+            { type: "user", id: "user-1" },
+          ],
+        }),
+      ).toEqual([]);
+    });
+
+    it("reports assignees when the set actually differs", () => {
+      expect(
+        changedCardFields(baseCard, {
+          ...baseCard,
+          assignees: [{ type: "user", id: "user-1" }],
+        }),
+      ).toEqual(["assignees"]);
+    });
+
+    it("compares dueDate by value, not by object identity", () => {
+      expect(
+        changedCardFields(baseCard, {
+          ...baseCard,
+          dueDate: new Date("2026-01-01T00:00:00Z"),
+        }),
+      ).toEqual([]);
+      expect(
+        changedCardFields(baseCard, {
+          ...baseCard,
+          dueDate: new Date("2026-03-01T00:00:00Z"),
+        }),
+      ).toEqual(["dueDate"]);
+    });
+
+    it("reports columnId when the column changes", () => {
+      expect(
+        changedCardFields(baseCard, { ...baseCard, columnId: "col-2" }),
+      ).toEqual(["columnId"]);
+    });
+
+    it("reports priority and title changes", () => {
+      expect(
+        changedCardFields(baseCard, { ...baseCard, priority: "urgent" }),
+      ).toEqual(["priority"]);
+      expect(
+        changedCardFields(baseCard, { ...baseCard, title: "New title" }),
+      ).toEqual(["title"]);
+    });
+  });
+
   describe("moveCard", () => {
     it("dispatches card.moved with the previous column when the column changes", async () => {
       db.limit
@@ -326,7 +439,11 @@ describe("kanban module", () => {
         "org-1",
         "ws-1",
         "card.updated",
-        expect.objectContaining({ id: "card-1", boardId: "board-1" }),
+        expect.objectContaining({
+          id: "card-1",
+          boardId: "board-1",
+          changedFields: ["columnId"],
+        }),
         expect.anything(),
       );
     });
@@ -359,7 +476,85 @@ describe("kanban module", () => {
         "org-1",
         "ws-1",
         "card.updated",
-        expect.objectContaining({ id: "card-1", boardId: "board-1" }),
+        expect.objectContaining({
+          id: "card-1",
+          boardId: "board-1",
+          changedFields: [],
+        }),
+        expect.anything(),
+      );
+    });
+  });
+
+  describe("updateCard", () => {
+    it("emits an empty changedFields when the update echoes the card back unchanged", async () => {
+      const previous = {
+        id: "card-1",
+        columnId: "col-1",
+        title: "Title",
+        body: "Body",
+        priority: "medium",
+      };
+      db.limit
+        .mockResolvedValueOnce([
+          { id: "card-1", columnId: "col-1", boardId: "board-1" },
+        ]) // requireCard
+        .mockResolvedValueOnce([previous]); // currentCardRow
+      db.returning.mockResolvedValue([{ ...previous }]);
+
+      await updateCard(asDb(db), ctx, "card-1", {
+        title: "Title",
+        body: "Body",
+        priority: "medium",
+      });
+
+      expect(dispatchEvent).toHaveBeenCalledWith(
+        "org-1",
+        "ws-1",
+        "card.updated",
+        expect.objectContaining({ changedFields: [] }),
+        expect.anything(),
+      );
+    });
+
+    it("reports body when the change arrives as a plain edit", async () => {
+      const previous = { id: "card-1", columnId: "col-1", body: "Old body" };
+      db.limit
+        .mockResolvedValueOnce([
+          { id: "card-1", columnId: "col-1", boardId: "board-1" },
+        ])
+        .mockResolvedValueOnce([previous]);
+      db.returning.mockResolvedValue([{ ...previous, body: "New body" }]);
+
+      await updateCard(asDb(db), ctx, "card-1", { body: "New body" });
+
+      expect(dispatchEvent).toHaveBeenCalledWith(
+        "org-1",
+        "ws-1",
+        "card.updated",
+        expect.objectContaining({ changedFields: ["body"] }),
+        expect.anything(),
+      );
+    });
+
+    it("reports body when the change arrives as a bodyDiff", async () => {
+      const previous = { id: "card-1", columnId: "col-1", body: "Old body" };
+      db.limit
+        .mockResolvedValueOnce([
+          { id: "card-1", columnId: "col-1", boardId: "board-1" },
+        ])
+        .mockResolvedValueOnce([previous]);
+      db.returning.mockResolvedValue([{ ...previous, body: "New body" }]);
+
+      await updateCard(asDb(db), ctx, "card-1", {
+        bodyDiff: [{ search: "Old", replace: "New" }],
+      });
+
+      expect(dispatchEvent).toHaveBeenCalledWith(
+        "org-1",
+        "ws-1",
+        "card.updated",
+        expect.objectContaining({ changedFields: ["body"] }),
         expect.anything(),
       );
     });
@@ -371,7 +566,8 @@ describe("kanban module", () => {
         .mockResolvedValueOnce([
           { id: "card-1", columnId: "col-1", boardId: "board-1" },
         ])
-        .mockResolvedValueOnce([]); // card-2 is out of scope
+        .mockResolvedValueOnce([]) // card-2 is out of scope
+        .mockResolvedValueOnce([{ id: "card-1", priority: "low" }]); // card-1's row before this write
       db.returning.mockResolvedValue([{ id: "card-1" }]);
 
       expect(
@@ -384,6 +580,13 @@ describe("kanban module", () => {
         { cardId: "card-2", success: false, error: "Card not found" },
       ]);
       expect(db.set).toHaveBeenCalledTimes(1);
+      expect(dispatchEvent).toHaveBeenCalledWith(
+        "org-1",
+        "ws-1",
+        "card.updated",
+        expect.objectContaining({ changedFields: ["priority"] }),
+        expect.anything(),
+      );
     });
 
     it("refuses the whole batch when the assignee cannot work here", async () => {
@@ -407,7 +610,9 @@ describe("kanban module", () => {
         ]) // requireCard card-1
         .mockResolvedValueOnce([
           { id: "card-2", columnId: "col-new", boardId: "board-1" },
-        ]); // requireCard card-2, already in the target column
+        ]) // requireCard card-2, already in the target column
+        .mockResolvedValueOnce([{ id: "card-1", columnId: "col-old" }]) // card-1's row before this write
+        .mockResolvedValueOnce([{ id: "card-2", columnId: "col-new" }]); // card-2's row before this write
       db.returning
         .mockResolvedValueOnce([
           { id: "card-1", columnId: "col-new", position: 1 },
@@ -442,14 +647,14 @@ describe("kanban module", () => {
         "org-1",
         "ws-1",
         "card.updated",
-        expect.objectContaining({ id: "card-1" }),
+        expect.objectContaining({ id: "card-1", changedFields: ["columnId"] }),
         expect.anything(),
       );
       expect(dispatchEvent).toHaveBeenCalledWith(
         "org-1",
         "ws-1",
         "card.updated",
-        expect.objectContaining({ id: "card-2" }),
+        expect.objectContaining({ id: "card-2", changedFields: [] }),
         expect.anything(),
       );
     });

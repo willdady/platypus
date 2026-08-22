@@ -65,6 +65,44 @@ describe("event-trigger-debounce", () => {
     expect(executeFn).toHaveBeenCalledWith(trigger, ctx3);
   });
 
+  it("should union changedFields across coalesced events rather than replacing them", () => {
+    const executeFn = vi
+      .fn<Parameters<typeof debounceTriggerExecution>[3]>()
+      .mockResolvedValue(undefined);
+    const trigger = makeTrigger("t-1");
+
+    const ctx1 = makeContext({ id: "card-1", changedFields: ["body"] });
+    const ctx2 = makeContext({ id: "card-1", changedFields: ["assignees"] });
+
+    debounceTriggerExecution("t-1:card-1", trigger, ctx1, executeFn);
+    vi.advanceTimersByTime(1_000);
+    debounceTriggerExecution("t-1:card-1", trigger, ctx2, executeFn);
+    vi.advanceTimersByTime(5_000);
+
+    expect(executeFn).toHaveBeenCalledOnce();
+    const deliveredCtx = executeFn.mock.calls[0][1];
+    const changedFields = (
+      deliveredCtx.eventData as { changedFields: string[] }
+    ).changedFields;
+    expect(changedFields.slice().sort()).toEqual(["assignees", "body"]);
+  });
+
+  it("does not union changedFields when only one of the two events carries it", () => {
+    const executeFn = vi.fn().mockResolvedValue(undefined);
+    const trigger = makeTrigger("t-1");
+
+    const ctx1 = makeContext({ id: "card-1" }); // e.g. card.created, no changedFields
+    const ctx2 = makeContext({ id: "card-1", changedFields: ["body"] });
+
+    debounceTriggerExecution("t-1:card-1", trigger, ctx1, executeFn);
+    vi.advanceTimersByTime(1_000);
+    debounceTriggerExecution("t-1:card-1", trigger, ctx2, executeFn);
+    vi.advanceTimersByTime(5_000);
+
+    expect(executeFn).toHaveBeenCalledOnce();
+    expect(executeFn).toHaveBeenCalledWith(trigger, ctx2);
+  });
+
   it("should fire independently for different debounce keys", () => {
     const executeFn = vi.fn().mockResolvedValue(undefined);
     const trigger1 = makeTrigger("t-1");

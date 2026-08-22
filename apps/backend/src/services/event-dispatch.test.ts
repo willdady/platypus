@@ -228,6 +228,76 @@ describe("event-dispatch", () => {
       expect(mockExecuteTrigger).not.toHaveBeenCalled();
     });
 
+    it("should filter triggers by changedFields when the filter set does not intersect", async () => {
+      const trigger = makeEventTrigger({
+        config: {
+          events: ["card.updated"],
+          filters: { changedFields: ["assignees"] },
+        },
+      });
+      mockDb.where.mockResolvedValueOnce([]).mockResolvedValueOnce([trigger]);
+
+      dispatchEvent("org-1", "ws-1", "card.updated", {
+        id: "c1",
+        changedFields: ["body"],
+      });
+      await flushMicrotasks();
+
+      expect(mockExecuteTrigger).not.toHaveBeenCalled();
+    });
+
+    it("should execute the trigger when the changedFields filter intersects the event", async () => {
+      const trigger = makeEventTrigger({
+        config: {
+          events: ["card.updated"],
+          filters: { changedFields: ["assignees"] },
+        },
+      });
+      mockDb.where.mockResolvedValueOnce([]).mockResolvedValueOnce([trigger]);
+
+      dispatchEvent("org-1", "ws-1", "card.updated", {
+        id: "c1",
+        changedFields: ["assignees", "body"],
+      });
+      await flushMicrotasks();
+
+      expect(mockExecuteTrigger).toHaveBeenCalled();
+    });
+
+    it("should not fire a changedFields filter for an event that carries no changedFields", async () => {
+      const trigger = makeEventTrigger({
+        config: {
+          events: ["card.created"],
+          filters: { changedFields: ["assignees"] },
+        },
+      });
+      mockDb.where.mockResolvedValueOnce([]).mockResolvedValueOnce([trigger]);
+
+      dispatchEvent("org-1", "ws-1", "card.created", { cardId: "c1" });
+      await flushMicrotasks();
+
+      expect(mockExecuteTrigger).not.toHaveBeenCalled();
+    });
+
+    it("should compose the changedFields filter with the boardId filter", async () => {
+      const trigger = makeEventTrigger({
+        config: {
+          events: ["card.updated"],
+          filters: { boardId: "board-1", changedFields: ["assignees"] },
+        },
+      });
+      mockDb.where.mockResolvedValueOnce([]).mockResolvedValueOnce([trigger]);
+
+      dispatchEvent("org-1", "ws-1", "card.updated", {
+        id: "c1",
+        boardId: "board-2",
+        changedFields: ["assignees"],
+      });
+      await flushMicrotasks();
+
+      expect(mockExecuteTrigger).not.toHaveBeenCalled();
+    });
+
     it("should fire card.moved for a column filter matching the destination column", async () => {
       const trigger = makeEventTrigger({
         config: {

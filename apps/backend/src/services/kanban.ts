@@ -140,6 +140,55 @@ const dispatch = (ctx: KanbanContext, event: WebhookEvent, data: unknown) =>
   );
 
 /**
+ * The card attributes a value-diff considers. Bookkeeping columns
+ * (`updatedAt`, the `lastEditedBy*` attribution, `position`) are excluded —
+ * every write touches them, so including them would make `changedFields`
+ * meaningless. `id`, `createdAt`, and `createdBy*` are left in for
+ * completeness but never differ between an old and new row.
+ */
+const CHANGED_FIELD_KEYS = [
+  "title",
+  "body",
+  "labelIds",
+  "assignees",
+  "dueDate",
+  "priority",
+  "columnId",
+] as const satisfies readonly (keyof CardRow)[];
+
+/** The set-like fields compared order-insensitively, not by array equality. */
+const SET_LIKE_FIELDS = new Set<string>(["labelIds", "assignees"]);
+
+/** A field's value, reduced to a form where `===`-by-JSON is the right test. */
+const comparableFieldValue = (key: string, value: unknown): unknown => {
+  if (value === undefined || value === null) return value;
+  if (key === "labelIds") return [...(value as string[])].sort();
+  if (key === "assignees") {
+    return (value as KanbanCardAssignee[])
+      .map((assignee) => `${assignee.type}:${assignee.id}`)
+      .sort();
+  }
+  if (value instanceof Date) return value.getTime();
+  return value;
+};
+
+/**
+ * The names of the fields whose values actually differ between the pre-write
+ * and post-write row — a value-diff, not a report of which input keys were
+ * supplied (see #622: an update that echoes a field back unchanged, or an
+ * agent that resends `labelIds`/`assignees` in a different order, must not
+ * report that field as changed).
+ */
+export const changedCardFields = (previous: CardRow, next: CardRow): string[] =>
+  CHANGED_FIELD_KEYS.filter((key) => {
+    const before = comparableFieldValue(key, previous[key]);
+    const after = comparableFieldValue(key, next[key]);
+    return SET_LIKE_FIELDS.has(key)
+      ? JSON.stringify(before) !== JSON.stringify(after)
+      : before !== after;
+  });
+
+/**
  * Announces a card write that may have changed its column. Emits
  * `card.moved` (with `previousColumnId`) only when the column actually
  * changed, always followed by `card.updated` — a within-column reorder or
@@ -150,11 +199,12 @@ const dispatchCardWrite = (
   row: CardRow,
   boardId: string,
   previousColumnId: string,
+  changedFields: string[],
 ) => {
   if (previousColumnId !== row.columnId) {
     dispatch(ctx, "card.moved", { ...row, boardId, previousColumnId });
   }
-  dispatch(ctx, "card.updated", { ...row, boardId });
+  dispatch(ctx, "card.updated", { ...row, boardId, changedFields });
 };
 
 // --- Scope guards ---
@@ -535,18 +585,24 @@ export const placeCardInColumn = async (
 
 // --- Card body ---
 
-/** The card's body as stored, or an empty string when it has none. */
-const currentBody = async (
-  database: Database,
+/**
+ * The card row as it stands before a write — the pre-write side of the
+ * `changedFields` value-diff, and (for a `bodyDiff` edit) what the diff
+ * applies against.
+ */
+const currentCardRow = async (
+  database: Executor,
   cardId: string,
-): Promise<string> => {
+): Promise<CardRow> => {
   const rows = await database
-    .select({ body: kanbanCardTable.body })
+    .select()
     .from(kanbanCardTable)
     .where(eq(kanbanCardTable.id, cardId))
     .limit(1);
 
-  return rows[0]?.body ?? "";
+  const row = rows[0];
+  if (!row) throw new NotFoundError("Card not found");
+  return row;
 };
 
 /**
@@ -635,6 +691,7 @@ export const updateCard = async (
   input: CardInput,
 ): Promise<CardResult> => {
   const card = await requireCard(database, ctx, cardId);
+  const previous = await currentCardRow(database, cardId);
 
   const labelIds =
     input.labelIds === undefined
@@ -645,7 +702,7 @@ export const updateCard = async (
   const body =
     input.bodyDiff === undefined
       ? input.body
-      : applyBodyDiff(await currentBody(database, cardId), input.bodyDiff);
+      : applyBodyDiff(previous.body ?? "", input.bodyDiff);
 
   const rows = await database
     .update(kanbanCardTable)
@@ -661,7 +718,11 @@ export const updateCard = async (
   const record = rows[0];
   if (!record) throw new NotFoundError("Card not found");
 
-  dispatch(ctx, "card.updated", { ...record, boardId: card.boardId });
+  dispatch(ctx, "card.updated", {
+    ...record,
+    boardId: card.boardId,
+    changedFields: changedCardFields(previous, record),
+  });
   return { card: record, boardId: card.boardId };
 };
 
@@ -699,7 +760,18 @@ export const moveCard = async (
     return rows[0];
   });
 
-  dispatchCardWrite(ctx, record, column.boardId, previous.columnId);
+  // A move only ever touches columnId and position (bookkeeping, excluded),
+  // so the changedFields diff is this one comparison rather than a
+  // `changedCardFields` call — `previous` here is a narrow `CardRef`
+  // (from `requireCard`), not a full `CardRow`, and doesn't carry the other
+  // fields a general diff would need.
+  dispatchCardWrite(
+    ctx,
+    record,
+    column.boardId,
+    previous.columnId,
+    previous.columnId !== record.columnId ? ["columnId"] : [],
+  );
   return { card: record, boardId: column.boardId };
 };
 
@@ -931,9 +1003,15 @@ export const bulkUpdateCards = async (
     : 0;
 
   const updated = await database.transaction(async (tx) => {
-    const records: { card: CardRef; row: CardRow }[] = [];
+    const records: { card: CardRef; row: CardRow; previous: CardRow }[] = [];
 
     for (const [index, card] of cards.entries()) {
+      // The value-diff each card's `card.updated` event carries is computed
+      // against the row as it stood right before this write. `card` (from
+      // `requireCard`) only carries id/columnId/boardId, not the field values
+      // a diff needs, so this is a genuine extra read rather than reuse.
+      const previous = await currentCardRow(tx, card.id);
+
       const labelIds = editsLabels
         ? filterKnownLabelIds(
             resolveBulkLabels(input, currentLabels.get(card.id) ?? []),
@@ -960,13 +1038,19 @@ export const bulkUpdateCards = async (
         .where(eq(kanbanCardTable.id, card.id))
         .returning();
 
-      records.push({ card, row: rows[0] });
+      records.push({ card, row: rows[0], previous });
     }
     return records;
   });
 
-  for (const { card, row } of updated) {
-    dispatchCardWrite(ctx, row, card.boardId, card.columnId);
+  for (const { card, row, previous } of updated) {
+    dispatchCardWrite(
+      ctx,
+      row,
+      card.boardId,
+      card.columnId,
+      changedCardFields(previous, row),
+    );
   }
 
   return input.cardIds.map((id) => outcomes.get(id)!);
