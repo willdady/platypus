@@ -37,3 +37,19 @@ Platypus, not the Agent author, composes the system prompt for a run. `renderSys
 - **Adding, removing or reordering a fragment is a core change with no per-Agent migration**, because no Agent row references the list. The cost is the other side of the same coin: a new fragment lands in every Agent's prompt at once, so it must be worth spending everyone's context on, and the renderer's ordering snapshots in `apps/backend/src/system-prompt.test.ts` are the regression guard for position.
 - **The rename to Instructions follows from this contract rather than motivating it.** Because the User's text is one fragment of twelve, a field labelled "System prompt" misdescribes it; the field, the wire contract, the shared schemas, and the `agent`/`chat` columns are all `instructions`. Names that genuinely denote the composite keep saying system prompt — the renderer module, `renderSystemPrompt`, `SystemPromptContext`, and `ChatTurn["stream"].system` — and that split is the contract made visible in the code.
 - **Composition happens once per turn, at one call site**: `prepareChatTurn` in `apps/backend/src/services/chat-execution.ts` calls `renderSystemPrompt(promptCtx)` directly. The renderer is a pure function of `SystemPromptContext`, which is what makes a future read-only "what will the model receive" view cheap.
+
+## Amended by ADR-0020
+
+[ADR-0020](0020-the-system-prompt-prefix-is-stable-while-a-chat-is-active.md)
+keeps every invariant recorded above — Instructions first, guardrails last, no
+suppression, no reordering, no Plugin-contributed fragment — and adds one this
+ADR did not consider: the composed prompt must be **byte-stable while a Chat is
+active**, because it is the cached prefix ahead of the entire transcript. Two
+statements above are narrowed rather than withdrawn. `SystemPromptContext` is
+split so that the prefix renderer cannot reference per-turn state, which is why
+the retrieved Memories fragment (7) renders a snapshot pinned on the Chat rather
+than a live retrieval; and the renderer's ordering snapshots remain the
+regression guard for fragment *position*, while fragment *volatility* is guarded
+by the type split and a prefix byte-equality test. Composition remains a pure
+function of its inputs, and the composite is still never persisted as an input —
+what persists is one fragment's rendered text, on an internal column.

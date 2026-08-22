@@ -1,0 +1,55 @@
+---
+status: accepted-pending-implementation
+implemented-by: "#623"
+---
+
+# The system prompt is stable while a Chat is active, and volatile turn state cannot reach it by construction
+
+> **Not in the code yet.** This decision is settled, but the change lands with
+> [#623](https://github.com/willdady/platypus/issues/623). Until that merges,
+> `renderSystemPrompt` still takes one undivided `SystemPromptContext` and the
+> Memories fragment still retrieves live on every turn — the behaviour described
+> below is the target, not the current state. Whoever implements #623 flips this
+> status to `accepted` in the same PR.
+
+Every Provider Platypus supports caches the front of a request, and a cache is a
+prefix match: the rendered request is `tools` → `system` → `messages`, and a byte
+that changes at any position discards the cache for everything after it. Because
+the whole System prompt precedes every message, a fragment that changes between
+turns costs the conversation, not the fragment — a memory write at fragment seven
+re-processes the four fragments behind it **and the entire transcript**. The
+retrieved **Memories** fragment does exactly that: the memory-extraction job
+rewrites the current day's summary every five minutes, and the two-day retrieval
+window is computed from `new Date()` at render time, so the fragment also drifts
+at midnight regardless of whether anything was extracted. The decision is that
+the System prompt is **pinned for as long as a Chat is active**: the rendered
+Memories block is snapshotted onto the Chat and re-taken only when the gap since
+the previous turn exceeds one hour, by which point every Provider's cache has
+certainly expired and re-taking it is free. Enforcement is structural rather than
+conventional: `SystemPromptContext` splits into a stable half and a turn half,
+the prefix renderer receives only the stable half, and a volatile field is
+therefore not something a future fragment can read — it is a compile error.
+Originates from [#623](https://github.com/willdady/platypus/issues/623), found
+while triaging [#522](https://github.com/willdady/platypus/issues/522).
+
+## Considered Options
+
+- **Reorder `FRAGMENTS` stable-first / volatile-last.** This was the original proposal in #623 and it is close to worthless: the entire System prompt sits ahead of every message, so no ordering within it can protect the transcript, which is nearly all of the tokens. Moving Memories to position twelve rescues the four fragments behind it and loses the conversation anyway. It also contradicts ADR-0016, where the order is a load-bearing primacy/recency decision rather than an arbitrary one.
+- **Deliver Memories in a tail channel** — after the message history, either as a `{role: "system"}` message or as a `<system-reminder>` block on the last User turn — so the prefix never carries them at all. Genuinely simpler than pinning (no snapshot, no horizon) and always fresh, and it was rejected on three grounds. A block appended to the User's message is a block the model may attribute **to the User**, especially a smaller model: it answers something the User never said and the User cannot see why. It is also forgeable, where a System prompt fragment is not. And tail content is never cached, so the block is re-sent at full price every turn, where a pinned block is written once and read at roughly a tenth. The `{role: "system"}` form keeps operator authority but throws on Google and Bedrock and is model-gated on Anthropic (Sonnet 5 returns 400), so it needs pinning as a fallback and means building both.
+- **A `memory_block_revision` table, with Chats pinning a revision id.** Attractive because two Chats pinning the same revision would share a prefix and read each other's cache. Rejected on growth: extraction rewrites the day's summary every five minutes, so the table accrues up to 288 rows per User per Workspace per day and nothing ever deletes them. Adding a garbage-collection job to clean up after a table introduced for a speculative benefit is the wrong trade — and on inspection the benefit barely exists, since two Chats share a revision only if they pinned inside the same five-minute window. Headless runs, which take the current block rather than a pin, share a prefix without any table as soon as the retrieval window stops depending on the render-time clock.
+- **A per-Provider re-pin horizon instead of one constant.** Raised because the constant is moot for a self-hosted OpenAI-compatible server. Rejected because for those servers the horizon is not a duration at all: vLLM, SGLang and Ollama evict prefix blocks by memory pressure under LRU, so a prefix can survive for days under light load and vanish in seconds under contention. An Operator asked for a number would be guessing, and a knob implies a correct setting exists to find. See Consequences for the two ways this could evolve if it ever needs to be right.
+- **A stability tag on each fragment, sorted and asserted at render time.** Rejected as a weaker form of the type split: it still lets the author of fragment thirteen pick the wrong tag, which is the same review-miss the tag was meant to prevent.
+- **A property test alone, with no type split.** Not adopted as the primary guard. A test asserting byte-identical prefixes is a tripwire someone deletes or weakens when it goes red on unrelated work; a context type that does not carry the field cannot be argued with. The test is kept as the second line — see Consequences.
+
+## Consequences
+
+- **What pins, and what is still allowed to invalidate.** The rendered Memories block pins. So do the fragments whose inputs change only when someone changes a configuration: **User Contexts**, the **Skills** catalogue, the **Sub-Agent** catalogue and its unavailable list, and **Sandbox** orientation. Attaching a Skill or breaking a Sub-Agent's Provider reference is a real change a person made, and paying one cache miss for it is correct — it happens on the order of once per Chat, where the extraction job fires every five minutes. What this ADR removes is churn caused by a background writer, not churn caused by a User.
+- **The re-pin rule and its bound.** A turn re-takes the snapshot when the elapsed time since the previous turn exceeds a one-hour module constant — the longest cache TTL any supported Provider offers, so past it there is provably nothing left to invalidate. Staleness is therefore bounded by "as fresh as the last cold start": a Chat resumed after ten days renders today's Memories, and a Chat in continuous use for eight hours holds an ageing block for the whole session. The second is deliberate. That Chat has the conversation itself in context, and re-taking the snapshot would discard a large warm prefix to deliver a summary of a _different_ conversation.
+- **The retrieval window is an input, not a clock read.** `retrieveRecentSummaries` computing its cutoff from `new Date()` is the original defect: it makes every Chat's prefix differ by wall-clock and rolls all of them over at midnight. The window's reference date is passed in. This matters independently of pinning, because it is what lets headless runs share one prefix.
+- **The pin resolves outside composition.** The Chat route owns the `chat` row and already reads and writes it, so it does the arithmetic — compare the previous turn's time against the horizon, re-take and persist the snapshot or keep the existing one — and passes the resolved block down through `RunInput` into `prepareChatTurn`'s own input. `prepareChatTurn` stays a pure function of its inputs, which is what ADR-0016 banks on for the deferred "what will the model receive" viewer, and no database write moves into turn resolution. The renderer never learns about clocks.
+- **Headless runs pass no pin.** Triggers and Sub-Agent runs carry no Chat identity — `RunInput` has none — and an absent pin means "use the current block", which is right: each is a fresh conversation with no transcript to protect. A Trigger firing hourly now renders a byte-identical prefix across runs, which it cannot today.
+- **A persisted fragment input is not a persisted composite.** ADR-0016 records that the composite is derived per turn and never persisted as an input, which is the [#373](https://github.com/willdady/platypus/pull/373) lesson. The snapshot is on the right side of that line and this ADR says so out loud so a future reader need not re-derive it: what persists is one **fragment's** rendered text, on an internal column that is absent from the Chat response schema, never surfaced in the product and never editable. The composite is still composed from scratch every turn.
+- **The guard is a type, backed by a test.** `SystemPromptContext` splits so that `renderPromptPrefix` receives a context carrying no per-turn field. A fragment cannot read what its context does not have, so fragment thirteen's author must either put the data on the turn half or add a field to the stable half — a one-line diff in a type named for stability, which a reviewer will ask about. The property test is the second line, for volatile data smuggled behind a stable-looking field: render the prefix twice from contexts differing in every per-turn input and assert the bytes match. This replaces the ordering snapshots named in ADR-0016 as the primary regression guard for fragment volatility; those snapshots remain the guard for fragment _position_.
+- **There is no tail channel, and that is a decision rather than an omission.** No fragment needs per-turn delivery once the above pins, and #522 — the one candidate — shipped as a report on the turn instead. Building a tail renderer with no caller would mean choosing between the native and portable wire forms, and declaring per-model support for the native one, to serve nothing. When a genuinely per-turn fact arrives it arrives with the context needed to choose; the type split is what forces that conversation to happen.
+- **Two ways this could evolve, neither built.** A declared per-Provider-type property in the ADR-0018 sense, or — better — dropping the duration proxy for the measured signal: every Provider reports whether the previous turn actually read from cache (`cache_read_input_tokens`, `cached_tokens`, `cachedContentTokenCount`), and "re-pin when the last turn reported no cache read" observes eviction instead of predicting it, which is correct for LRU-evicting self-hosted servers too. That needs per-Provider usage plumbing that this decision deliberately does not require.
+- **The `tools` tier is untouched and remains volatile.** Tool definitions render at position 0 and invalidate all three tiers, and Platypus rebuilds the tool record every turn from the Tool session's MCP tools, resolved search tools and Sub-Agent delegates, merged in insertion order. One unreachable MCP server therefore still discards the System prompt this ADR stabilises. That is tracked separately; the prefix/turn seam defined here is what a fix for it would extend.
