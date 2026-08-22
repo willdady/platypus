@@ -201,13 +201,12 @@ upstream, not to their sum.
 <Callout type="warning">
   **A factory that throws or outruns its timeout costs the whole turn its
   search**, not one call. The turn still runs — the model is given no search
-  tools and is not told why — and the person who asked for search reads
-  **Search was unavailable — this reply was written without it.** under the
-  reply. So a factory failure is visible to your users, not only in the
-  Operator's log, and a factory that fails intermittently reads to them as
-  search that works some days. Do the work that can fail per call inside the
-  executors, where a failure costs that call and the model can try something
-  else.
+  tools and is not told why — and the person who asked for search reads **Search
+  was unavailable — this reply was written without it.** under the reply. So a
+  factory failure is visible to your users, not only in the Operator's log, and
+  a factory that fails intermittently reads to them as search that works some
+  days. Do the work that can fail per call inside the executors, where a failure
+  costs that call and the model can try something else.
 </Callout>
 
 ## The egress guard
@@ -269,7 +268,7 @@ inside the factory:
 ```ts
 createExecutors(ctx, plugin) {
   const endpoint =
-    plugin.config.endpoints[ctx.orgId] ?? plugin.config.endpoints.default;
+    plugin?.config.endpoints[ctx.orgId] ?? plugin?.config.endpoints.default;
   // ...
 }
 ```
