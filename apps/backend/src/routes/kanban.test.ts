@@ -669,6 +669,9 @@ describe("Kanban Routes", () => {
       mockDb.limit.mockResolvedValueOnce([
         { id: "card-1", columnId: "col-1", boardId: "board-1" },
       ]); // card guard
+      mockDb.limit.mockResolvedValueOnce([
+        { id: "card-1", columnId: "col-1", title: "Card" },
+      ]); // prior row, for the changedFields value-diff
 
       const mockCard = { id: "card-1", title: "Updated Card" };
       mockDb.returning.mockResolvedValueOnce([mockCard]);
@@ -714,6 +717,9 @@ describe("Kanban Routes", () => {
         mockDb.limit.mockResolvedValueOnce([
           { id: "card-1", columnId: "col-1", boardId: "board-1" },
         ]); // card guard
+        mockDb.limit.mockResolvedValueOnce([
+          { id: "card-1", columnId: "col-1", labelIds: [] },
+        ]); // prior row, for the changedFields value-diff
         mockBoardLabels([{ id: "lbl-a" }, { id: "lbl-b" }]);
         mockDb.returning.mockResolvedValueOnce([{ id: "card-1" }]);
 
@@ -738,6 +744,9 @@ describe("Kanban Routes", () => {
         mockDb.limit.mockResolvedValueOnce([
           { id: "card-1", columnId: "col-1", boardId: "board-1" },
         ]); // card guard
+        mockDb.limit.mockResolvedValueOnce([
+          { id: "card-1", columnId: "col-1", labelIds: [] },
+        ]); // prior row, for the changedFields value-diff
         mockBoardLabels([{ id: "lbl-new" }]);
         mockDb.returning.mockResolvedValueOnce([{ id: "card-1" }]);
 
@@ -770,6 +779,9 @@ describe("Kanban Routes", () => {
         mockDb.limit.mockResolvedValueOnce([
           { id: "card-1", columnId: "col-1", boardId: "board-1" },
         ]); // card guard
+        mockDb.limit.mockResolvedValueOnce([
+          { id: "card-1", columnId: "col-1", labelIds: [] },
+        ]); // prior row, for the changedFields value-diff
         mockBoardLabels([]);
         mockDb.returning.mockResolvedValueOnce([{ id: "card-1" }]);
 
@@ -796,10 +808,14 @@ describe("Kanban Routes", () => {
         mockDb.limit.mockResolvedValueOnce([
           { id: "card-1", columnId: "col-1", boardId: "board-1" },
         ]); // card guard
+        mockDb.limit.mockResolvedValueOnce([
+          { id: "card-1", columnId: "col-1" },
+        ]); // prior row, for the changedFields value-diff
         // assignee validation: org member query then super admin query
         mockDb.where.mockReturnValueOnce(mockDb); // requireOrgAccess chain
         mockDb.where.mockReturnValueOnce(mockDb); // requireWorkspaceAccess chain
         mockDb.where.mockReturnValueOnce(mockDb); // card guard chain
+        mockDb.where.mockReturnValueOnce(mockDb); // currentCardRow chain
         mockDb.where.mockResolvedValueOnce([]); // org member lookup — not found
         mockDb.where.mockResolvedValueOnce([]); // super admin lookup — not found
 
@@ -829,9 +845,13 @@ describe("Kanban Routes", () => {
         mockDb.limit.mockResolvedValueOnce([
           { id: "card-1", columnId: "col-1", boardId: "board-1" },
         ]); // card guard
+        mockDb.limit.mockResolvedValueOnce([
+          { id: "card-1", columnId: "col-1" },
+        ]); // prior row, for the changedFields value-diff
         // assignee validation queries
         mockDb.where.mockReturnValueOnce(mockDb); // requireWorkspaceAccess chain
         mockDb.where.mockReturnValueOnce(mockDb); // card guard chain
+        mockDb.where.mockReturnValueOnce(mockDb); // currentCardRow chain
         mockDb.where.mockResolvedValueOnce([]); // org member lookup — not found
         mockDb.where.mockResolvedValueOnce([{ id: "admin-user" }]); // super admin lookup — found
         mockDb.where.mockReturnValueOnce(mockDb); // card update chain
@@ -868,9 +888,13 @@ describe("Kanban Routes", () => {
         mockDb.limit.mockResolvedValueOnce([
           { id: "card-1", columnId: "col-1", boardId: "board-1" },
         ]); // card guard
+        mockDb.limit.mockResolvedValueOnce([
+          { id: "card-1", columnId: "col-1" },
+        ]); // prior row, for the changedFields value-diff
         mockDb.where.mockReturnValueOnce(mockDb); // requireOrgAccess chain
         mockDb.where.mockReturnValueOnce(mockDb); // requireWorkspaceAccess chain
         mockDb.where.mockReturnValueOnce(mockDb); // card guard chain
+        mockDb.where.mockReturnValueOnce(mockDb); // currentCardRow chain
         // No user assignees, so the visibility lookup's two queries come first:
         // workspace-scoped agents, then org-scoped ones joined to an attachment.
         mockDb.where.mockResolvedValueOnce([]);
@@ -915,9 +939,13 @@ describe("Kanban Routes", () => {
         mockDb.limit.mockResolvedValueOnce([
           { id: "card-1", columnId: "col-1", boardId: "board-1" },
         ]); // card guard
+        mockDb.limit.mockResolvedValueOnce([
+          { id: "card-1", columnId: "col-1" },
+        ]); // prior row, for the changedFields value-diff
         mockDb.where.mockReturnValueOnce(mockDb); // requireOrgAccess chain
         mockDb.where.mockReturnValueOnce(mockDb); // requireWorkspaceAccess chain
         mockDb.where.mockReturnValueOnce(mockDb); // card guard chain
+        mockDb.where.mockReturnValueOnce(mockDb); // currentCardRow chain
         mockDb.where.mockResolvedValueOnce([]); // no workspace-scoped match
         mockDb.where.mockResolvedValueOnce([]); // no attached org-scoped match
 
@@ -947,10 +975,14 @@ describe("Kanban Routes", () => {
         mockDb.limit.mockResolvedValueOnce([
           { id: "card-1", columnId: "col-1", boardId: "board-1" },
         ]); // card guard
+        mockDb.limit.mockResolvedValueOnce([
+          { id: "card-1", columnId: "col-1" },
+        ]); // prior row, for the changedFields value-diff
         // assignee validation queries
         mockDb.where.mockReturnValueOnce(mockDb); // requireOrgAccess chain
         mockDb.where.mockReturnValueOnce(mockDb); // requireWorkspaceAccess chain
         mockDb.where.mockReturnValueOnce(mockDb); // card guard chain
+        mockDb.where.mockReturnValueOnce(mockDb); // currentCardRow chain
         mockDb.where.mockResolvedValueOnce([{ userId: "user-1" }]); // org member lookup — found
         mockDb.where.mockResolvedValueOnce([]); // super admin lookup — not found
         mockDb.where.mockReturnValueOnce(mockDb); // card update chain

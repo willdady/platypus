@@ -62,6 +62,14 @@ filter on it matches the card's **destination** column — use it to run an
 Agent whenever a card enters a specific column, without re-firing on later
 edits to cards already sitting there.
 
+A Trigger listening for `card.updated` can also be narrowed to specific
+attributes with a `changedFields` filter, so it fires only when one of the
+named fields actually changed — not on every write to a matching card. It
+composes with the Board and Column filters: every filter set on the Trigger
+must match. See [Webhooks: the
+payload](/building-with-platypus/webhooks#the-payload) for what counts as a
+changed field.
+
 ### Finish
 
 Set **Max Runs to Keep** (how many run records to retain), optionally enable

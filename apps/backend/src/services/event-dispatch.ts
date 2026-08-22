@@ -105,6 +105,20 @@ export function dispatchEvent(
           const eventData = data as Record<string, unknown>;
           if (eventData.columnId !== triggerConfig.filters.columnId) continue;
         }
+        if (triggerConfig.filters?.changedFields) {
+          const eventData = data as Record<string, unknown>;
+          const changedFields = eventData.changedFields;
+          const filterFields = triggerConfig.filters.changedFields;
+          if (
+            !Array.isArray(changedFields) ||
+            !changedFields.some(
+              (field): boolean =>
+                typeof field === "string" && filterFields.includes(field),
+            )
+          ) {
+            continue;
+          }
+        }
 
         // Debounce per trigger+entity to coalesce rapid events
         const entityId = (data as { id?: string | number })?.id ?? "unknown";
