@@ -51,11 +51,24 @@ const REPO_ROOT = join(CONTENT_DIR, "..", "..", "..");
 
 // --- reading -----------------------------------------------------------------
 
+/**
+ * Normalise CRLF to LF at the point of reading.
+ *
+ * Git can check out CRLF on Windows. Everything downstream splits on `"\n"` and
+ * several patterns anchor with `$`, and a trailing `"\r"` defeats both — most
+ * sharply the heading pattern, which then matches nothing and leaves the
+ * internal-link check with no anchors to resolve against. One normalisation
+ * here rather than a tolerance every future pattern has to remember.
+ */
+const normalizeNewlines = (text: string): string => text.replace(/\r\n/g, "\n");
+
 const readRepoFile = (repoRelativePath: string): string =>
-  readFileSync(join(REPO_ROOT, repoRelativePath), "utf8");
+  normalizeNewlines(readFileSync(join(REPO_ROOT, repoRelativePath), "utf8"));
 
 const readDoc = (contentRelativePath: string): string =>
-  readFileSync(join(CONTENT_DIR, contentRelativePath), "utf8");
+  normalizeNewlines(
+    readFileSync(join(CONTENT_DIR, contentRelativePath), "utf8"),
+  );
 
 /** Every `.mdx` page under `content/`, as paths relative to `content/`. */
 const listDocs = (dir = CONTENT_DIR): string[] => {
@@ -1050,6 +1063,29 @@ const headingSlugs = (content: string): Set<string> => {
   }
   return slugs;
 };
+
+// Git can check out CRLF on Windows, and every reader here splits on "\n" and
+// anchors patterns with `$`. A trailing "\r" defeats both: the heading pattern
+// matches nothing, the internal-link check collects no anchors, and every link
+// is then reported as broken. Pinned because that failure names the links
+// rather than the line endings, which sends a reader to the wrong place.
+describe("line endings", () => {
+  it("normalises CRLF, so heading anchors survive a Windows checkout", () => {
+    const lf = readDoc("extending/web-search-backends.mdx");
+    const crlf = lf.replace(/\n/g, "\r\n");
+
+    expect(normalizeNewlines(crlf)).toBe(lf);
+    expect([...headingSlugs(normalizeNewlines(crlf))]).toEqual([
+      ...headingSlugs(lf),
+    ]);
+  });
+
+  // Trivially true on an LF checkout, and that is the point: on a CRLF one this
+  // is what fails if a reader stops normalising, instead of every link check.
+  it("hands the checks below no carriage returns", () => {
+    for (const doc of DOCS) expect(readDoc(doc)).not.toContain("\r");
+  });
+});
 
 describe("internal links", () => {
   const slugsByRoute = new Map<string, Set<string>>();
