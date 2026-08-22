@@ -202,6 +202,26 @@ export type ChatList = z.infer<typeof chatListSchema>;
  */
 export const DEFAULT_AGENT_MAX_STEPS = 15;
 
+/**
+ * Default agentic step ceiling for a Direct (no-Agent) Chat turn — a bare
+ * Provider+model selection with no `agent` row to declare its own `maxSteps`.
+ *
+ * Deliberately BELOW `DEFAULT_AGENT_MAX_STEPS`: a Direct chat is a
+ * conversation, not a configured workflow, it has no step-limit control in
+ * the UI, and — unlike an unattended run — it is never guarded by the
+ * no-progress detector. The ceiling itself is the only guard here, so do not
+ * raise it to match the Agent default.
+ *
+ * 10 rather than something smaller because the page-reader tool a Web-search
+ * backend contributes is meant to be called repeatedly: it slices a long page
+ * and tells the model to keep reading with a continuation index. A realistic
+ * turn looks like search → read → continuation → continuation → answer — five
+ * steps already, so a ceiling of 5 sits right on that boundary and would fail
+ * in the same silent way as the bug this constant fixes. 10 leaves headroom
+ * above it.
+ */
+export const DEFAULT_DIRECT_MAX_STEPS = 10;
+
 // An Agent is scoped to either a Workspace or an Organization (mutually
 // exclusive), mirroring the dual-scope shape of `provider`/`mcp`/`skill`.
 // Org-scoped Agents are Shared resources managed by Org Admins (ADR-0007);
