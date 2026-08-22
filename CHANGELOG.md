@@ -1,5 +1,35 @@
 # Changelog
 
+## [2.9.0](https://github.com/willdady/platypus/compare/v2.8.1...v2.9.0) (2026-08-22)
+
+
+### Features
+
+* add card.moved event so triggers can fire on column entry ([#633](https://github.com/willdady/platypus/issues/633)) ([b6693f0](https://github.com/willdady/platypus/commit/b6693f07c05396fa1bd70750c276f95308b0f288))
+* **backend,plugin-sdk:** optional per-turn teardown and executor cancellation for search backends and Tool sets ([#629](https://github.com/willdady/platypus/issues/629)) ([5973943](https://github.com/willdady/platypus/commit/5973943fe1bb4bba095318e3e95988f23fec6019))
+* card.updated payload carries changedFields, with a matching trigger filter ([#634](https://github.com/willdady/platypus/issues/634)) ([56000b6](https://github.com/willdady/platypus/commit/56000b687530facd71fc884024ce7de0ba244171))
+* **docs:** document the event payload an Event trigger delivers ([#637](https://github.com/willdady/platypus/issues/637)) ([0d888f8](https://github.com/willdady/platypus/commit/0d888f8e2f09a64a166cb3898e6e5fdf29845bbc))
+* **frontend:** add a typed-outcome request module for API writes ([#585](https://github.com/willdady/platypus/issues/585)) ([f749633](https://github.com/willdady/platypus/commit/f749633d6e7db7212823c7fb60efc1402ab8d3aa))
+* **frontend:** finish [#572](https://github.com/willdady/platypus/issues/572) — retire role booleans from the auth surface ([#610](https://github.com/willdady/platypus/issues/610)) ([d494278](https://github.com/willdady/platypus/commit/d494278fcb45957b889edc0eb6a264ebcf7055c5))
+* **frontend:** gate Save only on errors the form can retract ([#600](https://github.com/willdady/platypus/issues/600)) ([ba32620](https://github.com/willdady/platypus/commit/ba326200a96c1ec3239e2a8d96bb230479646e55))
+* **frontend:** have the auth module answer capabilities, not role booleans ([#587](https://github.com/willdady/platypus/issues/587)) ([77ccbf5](https://github.com/willdady/platypus/commit/77ccbf58d4a2049281e30d8eee0580763bb62754))
+* **frontend:** resolve a Chat turn's model once, behind one interface ([#588](https://github.com/willdady/platypus/issues/588)) ([3fc939d](https://github.com/willdady/platypus/commit/3fc939d4df21f1b7686be290385893839edcf18a))
+
+
+### Bug Fixes
+
+* **backend,frontend:** report a Chat turn that served no search tools ([#628](https://github.com/willdady/platypus/issues/628)) ([028cea9](https://github.com/willdady/platypus/commit/028cea9f056c1d04499fb724358091044333ecfe))
+* **docs,frontend:** sweep sub-agent prose to Sub-Agent casing ([fac9202](https://github.com/willdady/platypus/commit/fac92022473f1a11ed182af8a29688c8e470e05d)), closes [#545](https://github.com/willdady/platypus/issues/545)
+* **docs,frontend:** sweep sub-agent prose to Sub-Agent casing ([#631](https://github.com/willdady/platypus/issues/631)) ([a79e3ea](https://github.com/willdady/platypus/commit/a79e3eaaf71d3455838185c8b4b9c4ccb9a009c6))
+* **docs:** read the docs contract's inputs with normalised line endings ([#632](https://github.com/willdady/platypus/issues/632)) ([65a8f0c](https://github.com/willdady/platypus/commit/65a8f0cd74c776aa2de5884ff047d14ed268f3de))
+* **frontend:** a refused detach of a Shared resource reports success ([#582](https://github.com/willdady/platypus/issues/582)) ([02d4575](https://github.com/willdady/platypus/commit/02d45750d4b3ed4218810576a0309d53084dec7f))
+* **frontend:** check response before treating dashboard mutations as applied ([#584](https://github.com/willdady/platypus/issues/584)) ([f3253dc](https://github.com/willdady/platypus/commit/f3253dc9ee37eb5d0b516e5dfb20f8d93ee3fd14))
+* **frontend:** populate Global Context on warm-cache remount ([#611](https://github.com/willdady/platypus/issues/611)) ([5ae13b2](https://github.com/willdady/platypus/commit/5ae13b27402c152ed6b860292deadc5685fec01b))
+* **frontend:** retract Webhook form errors on every submitted field ([#583](https://github.com/willdady/platypus/issues/583)) ([3e0c68b](https://github.com/willdady/platypus/commit/3e0c68b30d00041bd3b3cdcc223646d34f587822))
+* **frontend:** surface refused writes on the agent avatar and trigger toggle ([#609](https://github.com/willdady/platypus/issues/609)) ([d574a0b](https://github.com/willdady/platypus/commit/d574a0ba0591c6c2723a1aaa809e29caca4cf7f3))
+* **frontend:** surface the locked-Shared-resource message instead of a generic failure ([#599](https://github.com/willdady/platypus/issues/599)) ([97dd390](https://github.com/willdady/platypus/commit/97dd390511ebf27221aab88a32c99c2612916171))
+* scope the changed-fields trigger filter to card.updated ([#639](https://github.com/willdady/platypus/issues/639)) ([115b801](https://github.com/willdady/platypus/commit/115b801abf5c238494bf603e79bae6dbbd503fd5))
+
 ## [2.8.1](https://github.com/willdady/platypus/compare/v2.8.0...v2.8.1) (2026-08-19)
 
 
