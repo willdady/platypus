@@ -108,8 +108,7 @@ export const labelOf = (type: ScopedResourceType): string =>
   REGISTRY[type].label;
 
 /** The noun for mid-sentence messages ("agent", "skill", "mcp", "provider"). */
-export const nounOf = (type: ScopedResourceType): string =>
-  REGISTRY[type].noun;
+export const nounOf = (type: ScopedResourceType): string => REGISTRY[type].noun;
 
 type Database = typeof db;
 

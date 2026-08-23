@@ -10,10 +10,7 @@ import {
   requireWorkspaceAccess,
   workspaceScopeOf,
 } from "../middleware/authorization.ts";
-import {
-  listScoped,
-  requireScoped,
-} from "../services/scoped-resource.ts";
+import { listScoped, requireScoped } from "../services/scoped-resource.ts";
 import { createSkill, deleteSkill, updateSkill } from "../services/skill.ts";
 import { promoteScoped } from "../services/promote.ts";
 import type { Variables } from "../server.ts";

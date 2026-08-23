@@ -77,7 +77,13 @@ describe("promoteScoped module", () => {
 
   it("runs a supplied guard and reports any blockers it returns", async () => {
     mockDb.limit.mockResolvedValueOnce([
-      { id: "a1", providerId: "p1", skillIds: ["s1"], subAgentIds: [], toolSetIds: [] },
+      {
+        id: "a1",
+        providerId: "p1",
+        skillIds: ["s1"],
+        subAgentIds: [],
+        toolSetIds: [],
+      },
     ]);
 
     const outcome = await promoteScoped(asDb(mockDb), {
@@ -85,12 +91,15 @@ describe("promoteScoped module", () => {
       id: "a1",
       orgId: "org-1",
       workspaceId: "ws-1",
-      guard: (_) => Promise.resolve([{ type: "skill", id: "s1", name: "ws-skill" }]),
+      guard: (_) =>
+        Promise.resolve([{ type: "skill", id: "s1", name: "ws-skill" }]),
     });
 
     expect(outcome.ok).toBe(false);
     if (!outcome.ok) {
-      expect(outcome.blockers).toEqual([{ type: "skill", id: "s1", name: "ws-skill" }]);
+      expect(outcome.blockers).toEqual([
+        { type: "skill", id: "s1", name: "ws-skill" },
+      ]);
     }
     expect(mockDb.transaction).not.toHaveBeenCalled();
   });

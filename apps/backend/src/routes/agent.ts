@@ -232,7 +232,10 @@ agent.post(
     });
 
     if (!outcome.ok) {
-      return c.json({ error: outcome.message, blockers: outcome.blockers }, 422);
+      return c.json(
+        { error: outcome.message, blockers: outcome.blockers },
+        422,
+      );
     }
     return c.json(
       { ...agentWithAvatarUrl(outcome.row, baseUrl), scope: "organization" },
