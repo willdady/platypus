@@ -104,8 +104,11 @@ default Context.
 ### Apply it
 
 From the Blueprints list, open a Blueprint's menu and choose **Apply to
-workspace**. Applying is additive — it attaches what's missing and leaves the rest
-alone, so running it twice is safe.
+workspace**. The Shared resources it attaches are additive — it attaches
+whatever's missing and leaves existing attachments alone. The task and memory
+Provider defaults and the default Context are not: applying always overwrites
+those on the target Workspace, even if the Owner has since set their own.
+Reapply only when you intend to reset those too.
 
 ### Or apply it automatically
 
