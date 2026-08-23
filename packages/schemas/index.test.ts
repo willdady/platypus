@@ -10,6 +10,7 @@ import {
   mcpSchema,
   skillSchema,
   attachmentSchema,
+  nextTurnOccupancy,
   attachmentCreateSchema,
   sandboxEnvSchema,
   SANDBOX_ENV_MAX_ENTRIES,
@@ -1176,5 +1177,32 @@ describe("triggerRunStatsSchema", () => {
         triggerRunStatsSchema.safeParse({ ...base, contextOccupancy }).success,
       ).toBe(false);
     }
+  });
+});
+
+describe("nextTurnOccupancy", () => {
+  it("adds the reply to what the last call was sent", () => {
+    // The forward-looking figure the composer's meter shows: 222 input on the
+    // last call plus the 118-token reply it produced, because the Transcript is
+    // re-sent in full and that reply is now part of it (ADR-0018).
+    expect(nextTurnOccupancy({ inputTokens: 222, outputTokens: 118 })).toBe(
+      340,
+    );
+  });
+
+  it("reads low rather than estimating when the output count is unknown", () => {
+    // A Provider that reported an input count and no output one leaves the
+    // reply's size unknown, not zero. Under-reading is the safe direction and
+    // the only alternative is the estimate ADR-0018 rejected.
+    expect(nextTurnOccupancy({ inputTokens: 222, outputTokens: null })).toBe(
+      222,
+    );
+  });
+
+  it("is unknown where the reading is", () => {
+    // Absent and `null` say the same thing — no reading — and both must stay
+    // undefined so the meter hides rather than showing a confident 0.
+    expect(nextTurnOccupancy(null)).toBeUndefined();
+    expect(nextTurnOccupancy(undefined)).toBeUndefined();
   });
 });

@@ -4,11 +4,20 @@ import { formatTokens } from "@/lib/context-window";
 import { cn } from "@/lib/utils";
 
 /**
- * How full the model's context was on the last completed turn (ADR-0018).
+ * How full the model's context will be on the next call (ADR-0018).
+ *
+ * Forward-looking, because it sits in the composer: the figure it shows is the
+ * last call's vendor-reported input count PLUS the reply that call produced,
+ * since a Chat re-sends its Transcript in full and that reply is part of it now
+ * (`nextTurnOccupancy`). It still cannot include an unsent draft — counting
+ * tokens locally is the estimate ADR-0018 rejected — so it is one draft behind
+ * rather than one turn behind. A retrospective display of a finished run wants
+ * plain Context occupancy instead, and the Trigger runs page shows that.
  *
  * Purely presentational: it takes the two numbers and decides only how to show
- * them. Picking the reading off the most recent assistant message, and the
- * declared window off the resolved model, belongs to the composing component.
+ * them. Picking the reading off the most recent assistant message, deriving the
+ * projection, and taking the declared window off the resolved model all belong
+ * to the composing component.
  *
  * Renders nothing unless BOTH numbers are known — one hidden state with two
  * causes (no window declared, or the Provider reported no usage). A numerator
@@ -22,7 +31,8 @@ export const ContextMeter = ({
   className,
 }: {
   /**
-   * Input tokens the vendor reported for the last model call of the turn.
+   * What the next model call starts at: the vendor's reported input count for
+   * the last call plus its reported output count (`nextTurnOccupancy`).
    * `null` and absent both mean unknown and differ only in why.
    */
   occupancy?: number | null;

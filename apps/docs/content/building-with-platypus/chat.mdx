@@ -222,17 +222,19 @@ A further limit sits alongside the two above, and it is not the same as either:
 as well as a ceiling on what a model can **write**, there is a ceiling on what it
 can be **sent**. A Chat sends the whole conversation every turn, so a Chat that has been
 going a while is spending more of that room on each reply. A small meter beside
-the prompt input tells you how much of it the last turn used: a short bar, the
-percentage, and both token figures, as in `33% · 42K/128K`.
+the prompt input tells you how much of it your next message will start from: a
+short bar, the percentage, and both token figures, as in `33% · 42K/128K`.
 
 The numbers matter as much as the bar. 33% of a 128,000-token model and 33% of
 an 8,000-token one are the same fraction and very different situations, so the
 meter always shows what it is a third _of_.
 
-It reads the **last completed turn**, which makes it one message behind: it
-cannot include what you are typing, because counting tokens is something only the
-model's vendor can do. Read it as "this is where the conversation stood", not "if
-I send this it will be that".
+Every figure in it is counted by the model's vendor, never estimated here — so
+the meter covers the whole conversation up to and including the last reply, and
+the one thing it cannot include is **what you are typing**. Counting the tokens
+in an unsent message is something only the vendor can do, and it has not seen it
+yet. Read it as "this is where the next message starts from", and expect a long
+message to add to it.
 
 When the meter is filling up, you have three options: prune the Chat by hand
 (see [editing and deleting

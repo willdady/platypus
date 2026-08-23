@@ -32,6 +32,7 @@ import {
   Agent,
   ToolSet,
   Skill,
+  nextTurnOccupancy,
 } from "@platypus/schemas";
 import { type PlatypusUIMessage } from "@platypus/backend/src/types";
 import { joinUrl } from "@/lib/utils";
@@ -410,12 +411,20 @@ export const Chat = ({
     )
     .at(-1)?.metadata?.contextOccupancy;
 
+  // What the NEXT call starts at, not what the last one was sent: that reply is
+  // part of the Transcript now and gets re-sent with it. Both figures are the
+  // vendor's; the unsent draft stays uncounted because nothing here can count
+  // it. `nextTurnOccupancy` is shared with the backend, which gates clearing's
+  // first call on the same derivation (`initialOccupancyFrom`) — the meter and
+  // the clearing it explains cannot read one turn differently.
+  const projectedOccupancy = nextTurnOccupancy(contextOccupancy);
+
   // Tool-result clearing (ADR-0018 Notes, issue #524): which tool results the
   // NEXT model call would no longer receive, derived from the same reading the
   // meter above shows rather than a stored flag — a message this session
   // hasn't reloaded can't carry a stale one.
   const staleToolCallIds = clearedToolCallIds(messages, {
-    occupancy: contextOccupancy?.inputTokens,
+    occupancy: projectedOccupancy,
     contextWindow: resolvedModel?.contextWindow,
   });
 
@@ -668,7 +677,7 @@ export const Chat = ({
                   */}
                   <ContextMeter
                     className="order-last -mx-3 -mb-3 mt-1.5 w-[calc(100%+1.5rem)] justify-center rounded-b-md bg-foreground/5 px-3 py-1.5 sm:order-none sm:mx-0 sm:mt-0 sm:mb-0 sm:w-auto sm:justify-start sm:rounded-none sm:bg-transparent sm:p-0 sm:mr-auto"
-                    occupancy={contextOccupancy?.inputTokens}
+                    occupancy={projectedOccupancy}
                     contextWindow={resolvedModel?.contextWindow}
                   />
                   <PromptInputSubmit status={effectiveStatus} />

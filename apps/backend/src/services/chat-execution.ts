@@ -30,6 +30,7 @@ import {
   type MemorySummary,
 } from "./memory-retrieval.ts";
 import {
+  nextTurnOccupancy,
   providerHasNativeSearch,
   SEARCH_SOURCE_NATIVE,
   SEARCH_SOURCE_NONE,
@@ -134,8 +135,8 @@ export type ChatTurn = {
  *
  * Read from the last assistant message that carries a `contextOccupancy`
  * reading — mirroring the context-meter derivation in `chat.tsx` — and summed
- * from that reading's input AND output tokens, because the assistant's own
- * reply becomes part of what the next turn resends. `null` (an erased,
+ * by the shared `nextTurnOccupancy`, which both sides call so the meter and
+ * this gate cannot read the same turn differently. `null` (an erased,
  * mid-turn-stale reading) counts as unknown, same as absent.
  *
  * Undefined for a Chat's first turn, and for a delegated Sub-Agent or headless
@@ -150,8 +151,7 @@ const initialOccupancyFrom = (
     .map((m) => m.metadata?.contextOccupancy)
     .filter((reading) => reading !== undefined)
     .at(-1);
-  if (!lastReading) return undefined;
-  return lastReading.inputTokens + (lastReading.outputTokens ?? 0);
+  return nextTurnOccupancy(lastReading);
 };
 
 export type PrepareChatTurnInput = {

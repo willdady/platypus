@@ -815,6 +815,46 @@ export const TOOL_RESULT_CLEARING_THRESHOLD = 0.7;
 /** How many of the most recent clearable tool results survive a clearing pass. */
 export const TOOL_RESULT_CLEARING_KEEP_RECENT = 4;
 
+/**
+ * A Context occupancy reading as it is stored on an assistant message
+ * (`ChatMessageMetadata.contextOccupancy`): the input-token count the vendor
+ * reported for the last model call of a turn, and that call's output count.
+ *
+ * Both figures are the vendor's own. Nothing here is estimated, and no reading
+ * is ever synthesised where a Provider reported no usage (ADR-0018).
+ */
+export type ContextOccupancyReading = {
+  inputTokens: number;
+  outputTokens: number | null;
+};
+
+/**
+ * The size the NEXT model call starts at, given the last one's reading:
+ * everything that call was sent, plus the reply it produced, because a Chat
+ * re-sends its Transcript in full and that reply is now part of it.
+ *
+ * Distinct from Context occupancy itself, which is one call's input count and
+ * is what a retrospective display (a Trigger run's stats) should show. This is
+ * the forward-looking figure, and the one to show anywhere a reader is about to
+ * send — the composer's meter — or anywhere a decision is being made about the
+ * call that has not happened yet: Tool-result clearing's gate on a turn's first
+ * call.
+ *
+ * ADR-0018 anticipated this derivation ("makes the next turn's starting size
+ * derivable exactly") without naming it; it lives here rather than in either
+ * app because both compute it and a silent disagreement between them shows up
+ * as a meter contradicting the clearing it is supposed to explain.
+ *
+ * `null`/absent output means the Provider reported an input count and no output
+ * one. The reply's tokens are then unknown, not zero, so this reads low by
+ * however many they were — the same conservative direction as an under-declared
+ * window, and the only alternative would be estimating them.
+ */
+export const nextTurnOccupancy = (
+  reading: ContextOccupancyReading | null | undefined,
+): number | undefined =>
+  reading ? reading.inputTokens + (reading.outputTokens ?? 0) : undefined;
+
 export const modelConfigSchema = z.object({
   id: z.string().min(1),
   // The bare alias name. Absent means the model is referenced by its id.
