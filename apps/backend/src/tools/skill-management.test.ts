@@ -153,8 +153,9 @@ describe("createSkillManagementTools", () => {
     });
 
     it("returns error when skill is referenced by agents", async () => {
-      mockDb.limit.mockResolvedValueOnce([{ id: "s1" }]);
-      mockDb.limit.mockResolvedValueOnce([{ id: "a1" }]);
+      mockDb.limit.mockResolvedValueOnce([{ id: "s1" }]); // name → workspace skill
+      mockDb.limit.mockResolvedValueOnce([{ id: "s1", workspaceId }]); // write model re-checks visibility
+      mockDb.limit.mockResolvedValueOnce([{ id: "a1" }]); // referencing agents
 
       const result = (await tools.deleteSkill.execute!(
         { name: "referenced-skill" },
@@ -182,12 +183,14 @@ describe("createSkillManagementTools", () => {
     });
 
     it("deletes skill when no agents reference it", async () => {
-      mockDb.limit.mockResolvedValueOnce([{ id: "s1" }]);
-      mockDb.limit.mockResolvedValueOnce([]);
+      mockDb.limit.mockResolvedValueOnce([{ id: "s1" }]); // name → workspace skill
+      mockDb.limit.mockResolvedValueOnce([{ id: "s1", workspaceId }]); // write model re-checks visibility
+      mockDb.limit.mockResolvedValueOnce([]); // referencing agents: none
 
       expect(
         await tools.deleteSkill.execute!({ name: "unused-skill" }, ctx),
       ).toEqual({ success: true });
+      expect(mockDb.delete).toHaveBeenCalled();
     });
   });
 });

@@ -117,6 +117,10 @@ describe("Organization Skill Routes", () => {
     it("updates an org skill if org admin", async () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]); // requireOrgAccess
+      // requireOrgScoped: the Skill is a Shared resource of this org
+      mockDb.limit.mockResolvedValueOnce([
+        { id: "skill-1", organizationId: orgId },
+      ]);
       const updated = {
         id: "skill-1",
         name: "org-skill",
@@ -136,6 +140,27 @@ describe("Organization Skill Routes", () => {
 
       expect(res.status).toBe(200);
       expect(await res.json()).toEqual(updated);
+    });
+
+    // #605: the org surface used to skip the existence pre-check, discovering a
+    // missing Skill only when the UPDATE matched no row.
+    it("404s a skill that is not a Shared resource of this org, without touching the write", async () => {
+      mockSession();
+      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]); // requireOrgAccess
+      mockDb.limit.mockResolvedValueOnce([]); // requireOrgScoped: not found
+
+      const res = await app.request(`${baseUrl}/missing`, {
+        method: "PUT",
+        body: JSON.stringify({
+          name: "org-skill",
+          description: "This is a long enough description for the skill.",
+          body: "This is a long enough body for the skill to pass the validation requirements.",
+        }),
+        headers: { "Content-Type": "application/json" },
+      });
+
+      expect(res.status).toBe(404);
+      expect(mockDb.update).not.toHaveBeenCalled();
     });
 
     it("returns 403 for a non-admin", async () => {
