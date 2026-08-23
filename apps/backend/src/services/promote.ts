@@ -20,8 +20,9 @@ import {
  * One module owns the mechanism for any {@link ScopedResourceType}; the routes
  * are thin adapters that authorize, run their per-resource precondition, and
  * shape the response. The mechanism was previously copy-pasted inline in the
- * Agent and Skill route handlers, byte-for-byte identical apart from the table
- * and the noun, with copies #3 and #4 pending for MCP/Provider.
+ * Agent and Skill route handlers, identical apart from the table, the noun, and
+ * the Agent's inline no-cascade blocker check, with copies #3 and #4 pending
+ * for MCP/Provider.
  *
  * The invariants that make Promote correct live here, once:
  * - only a Workspace-scoped resource in the given Workspace can be promoted;
@@ -55,20 +56,30 @@ export type PromoteGuard<T extends ScopedResourceType> = (
   resource: RowOf[T],
 ) => Promise<PromoteBlocker[]>;
 
-/** How a promote attempt answers — promoted, or blocked pending fixes. */
+/** How a guard-backed promote attempt answers — promoted, or blocked pending fixes. */
 export type PromoteOutcome<T extends ScopedResourceType> =
   | { ok: true; row: RowOf[T] }
   | { ok: false; message: string; blockers: PromoteBlocker[] };
 
+export type PromoteArgs<T extends ScopedResourceType> = {
+  type: T;
+  id: string;
+  orgId: string;
+  workspaceId: string;
+};
+
+/** A guarded surface may be blocked; an unguarded leaf cannot, so it narrows. */
 export async function promoteScoped<T extends ScopedResourceType>(
   database: Database,
-  args: {
-    type: T;
-    id: string;
-    orgId: string;
-    workspaceId: string;
-    guard?: PromoteGuard<T>;
-  },
+  args: PromoteArgs<T> & { guard: PromoteGuard<T> },
+): Promise<PromoteOutcome<T>>;
+export async function promoteScoped<T extends ScopedResourceType>(
+  database: Database,
+  args: PromoteArgs<T> & { guard?: undefined },
+): Promise<{ ok: true; row: RowOf[T] }>;
+export async function promoteScoped<T extends ScopedResourceType>(
+  database: Database,
+  args: PromoteArgs<T> & { guard?: PromoteGuard<T> },
 ): Promise<PromoteOutcome<T>> {
   const { type, id, orgId, workspaceId, guard } = args;
   const table = tableOf(type);
@@ -99,8 +110,7 @@ export async function promoteScoped<T extends ScopedResourceType>(
   // Re-scope and auto-attach atomically. Throwing `NotFoundError` for a lost
   // race rolls back the whole transaction, so we never leave a dangling
   // Attachment; the typed error reaches the central `app.onError` (ADR-0010).
-  let promoted: RowOf[T] | undefined;
-  await database.transaction(async (tx) => {
+  return database.transaction(async (tx) => {
     const [record] = await tx
       .update(table)
       .set({
@@ -126,8 +136,6 @@ export async function promoteScoped<T extends ScopedResourceType>(
       })
       .onConflictDoNothing();
 
-    promoted = record as RowOf[T];
+    return { ok: true as const, row: record as RowOf[T] };
   });
-
-  return { ok: true, row: promoted! };
 }

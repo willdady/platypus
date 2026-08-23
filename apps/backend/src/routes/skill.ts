@@ -164,13 +164,6 @@ skill.post(
       workspaceId,
     });
 
-    if (!outcome.ok) {
-      // A leaf resource has no no-cascade guard, so this branch is unreachable;
-      // it exists only to satisfy the discriminated outcome. Return it the same
-      // way the guarded surfaces do.
-      return c.json({ error: outcome.message, blockers: outcome.blockers }, 422);
-    }
-
     return c.json({ ...outcome.row, scope: "organization" }, 200);
   },
 );
