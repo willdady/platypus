@@ -1,6 +1,6 @@
 ---
 name: docs-audit
-description: Audit one section of apps/docs/content against the code, and report what is wrong, stale, fragile, off-voice, or missing. Use when the user wants a documentation section checked for drift.
+description: Audit one section of the docs content against the code, and report what is wrong, stale, fragile, off-voice, or missing.
 disable-model-invocation: true
 ---
 
@@ -18,8 +18,9 @@ A claim you did not open the source for is a claim you did not check.
 
 ## Step 1 — Pick the section and build the suspect pool
 
-Audit **one** section per run: `getting-started/`, `self-hosting/`, `concepts/`,
-`building-with-platypus/`, `extending/`, or `reference/`. Ask the user which if
+Audit **one** section per run — one top-level directory of the docs content.
+List what is actually there rather than working from a remembered set, so a
+section added since cannot be the one you never audit. Ask the user which if
 they did not say.
 
 Find when the section was last touched, then list what changed in the code

@@ -1,42 +1,62 @@
+---
+name: api-conventions
+description: Response-body conventions for the Platypus backend API — the `error` key for failures, the `message` key for 2xx status messages, and when to throw a typed error instead of returning a response. Use when adding or changing a backend route or its tests.
+---
+
 # API Response Conventions
 
-## Error Responses (4xx/5xx)
+## The two keys
 
-All error responses MUST use the `error` key:
-
-```json
-{ "error": "Description of what went wrong" }
-```
-
-**Correct:**
+`error` carries a failure. `message` carries a 2xx status line for an
+operation that has no resource to return.
 
 ```typescript
-return c.json({ error: "Card not found" }, 404);
-return c.json({ error: "Invalid user assignee" }, 400);
-return c.json({ error: "Not a member of this organization" }, 403);
+return c.json({ error: "Workspace not found" }, 404);
+return c.json({ message: "Board deleted" });
 ```
 
-**Incorrect:**
+Never `message` on a 4xx/5xx — that is the one crossing the codebase does not
+make.
+
+## The error seam
+
+Four cross-cutting failures are **thrown**, not returned. A single `onError`
+seam maps each to its status and emits the same `{ error }` body, so a domain
+rule states its message once instead of once per caller:
+
+| Throw             | Becomes |
+| ----------------- | ------- |
+| `NotFoundError`   | 404     |
+| `ValidationError` | 400     |
+| `LockedError`     | 403     |
+| `ConflictError`   | 409     |
+
+A Postgres unique violation also maps to 409 — detect it through the shared
+helper rather than re-reading the driver's error shape.
 
 ```typescript
-return c.json({ message: "Card not found" }, 404); // WRONG — use "error" for errors
+if (!row) throw new NotFoundError("Card not found");
+throw new ValidationError("Invalid user assignee");
 ```
 
-## Success Messages (2xx)
+Throwing is what lets one rule serve more than one surface: the Kanban rules
+answer both the HTTP routes and the Agent tool set from a single place. Reach
+for the seam whenever the failure is one of those four; a 4xx that only one
+route can produce still answers inline with `c.json({ error }, status)`. Both
+are current and roughly equally common — the seam is not a migration you
+should finish.
 
-When a 2xx response returns a status message (rather than a resource), use the `message` key:
+## Test assertions
 
-```json
-{ "message": "Board deleted" }
+Assert against the key the response actually uses:
+
+```typescript
+expect(body.error).toBe("Invalid user assignee");
+expect(await res.json()).toEqual({ message: "Board deleted" });
 ```
 
-## Test Assertions
+A service test covering a thrown failure asserts the error, not a body:
 
-- Assert errors with `body.error`:
-  ```typescript
-  expect(body.error).toBe("Invalid user assignee");
-  ```
-- Assert success messages with `body.message`:
-  ```typescript
-  expect(await res.json()).toEqual({ message: "Board deleted" });
-  ```
+```typescript
+await expect(fn()).rejects.toThrow(NotFoundError);
+```

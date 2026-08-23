@@ -12,7 +12,10 @@ import {
   type GenerationPlanQueries,
 } from "./agent-plan.ts";
 import { NotFoundError, ValidationError } from "../errors.ts";
-import { DEFAULT_AGENT_MAX_STEPS } from "@platypus/schemas";
+import {
+  DEFAULT_AGENT_MAX_STEPS,
+  DEFAULT_DIRECT_MAX_STEPS,
+} from "@platypus/schemas";
 import type { Provider } from "@platypus/schemas";
 
 const baseProvider: Provider = {
@@ -70,9 +73,11 @@ describe("resolveGenerationPlan", () => {
     ).rejects.toBeInstanceOf(ValidationError);
   });
 
-  // A direct (no-Agent) selection always runs one step — there is no Agent row
-  // to declare a ceiling.
-  it("resolves a direct Provider+model selection to a one-step plan", async () => {
+  // A direct (no-Agent) selection has no Agent row to declare a ceiling, so it
+  // falls back to DEFAULT_DIRECT_MAX_STEPS rather than 1 — a Direct turn can
+  // be served a locally-executed search tool (issue #167 / ADR-0014) whose
+  // result the model must still get a step to answer from (issue #463).
+  it("resolves a direct Provider+model selection to the Direct step ceiling", async () => {
     const { plan, resolvedModelId, modelReference } =
       await resolveGenerationPlan(
         { providerId: "p1", modelId: "gpt-4" },
@@ -80,7 +85,7 @@ describe("resolveGenerationPlan", () => {
         queriesWith([baseProvider]),
       );
 
-    expect(plan.maxSteps).toBe(1);
+    expect(plan.maxSteps).toBe(DEFAULT_DIRECT_MAX_STEPS);
     expect(resolvedModelId).toBe("gpt-4");
     expect(modelReference).toBe("gpt-4");
   });

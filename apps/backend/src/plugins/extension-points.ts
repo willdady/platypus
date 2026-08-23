@@ -3,6 +3,7 @@ import type {
   ToolSetContribution,
   WebBackendContribution,
 } from "@platypuschat/plugin-sdk";
+import { SEARCH_SOURCE_NATIVE, SEARCH_SOURCE_NONE } from "@platypus/schemas";
 import type { SandboxBackendRegistration } from "../sandbox/index.ts";
 import { composeToolSet, type ToolSetRegistration } from "../tools/index.ts";
 import {
@@ -171,6 +172,17 @@ export const webBackendPoint = (
   idField: "backend",
   prepare: (raw, { pluginName, id, plugin }) => {
     const contribution = raw as unknown as WebBackendContribution;
+
+    // Checked against the *namespaced* id, not the raw one: `provider.searchSource`
+    // reserves these two literals ahead of any backend id (`resolveSearchMode`
+    // checks them first), and only a bare — i.e. core — id can ever collide with
+    // them, since a third-party id is always prefixed with the plugin's name. A
+    // backend registered under either would silently never serve a turn.
+    if (id === SEARCH_SOURCE_NONE || id === SEARCH_SOURCE_NATIVE) {
+      throw new Error(
+        `Plugin "${pluginName}": web backend "${id}" is reserved by provider.searchSource and can never serve a turn — choose a different id.`,
+      );
+    }
 
     // A web backend supplies executors only — core builds the Tools — so a
     // missing factory means the contribution can never serve a turn. The TS type
