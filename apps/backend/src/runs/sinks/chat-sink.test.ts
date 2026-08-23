@@ -49,6 +49,7 @@ const planAdhoc: ResolvedRunPlan = {
     seed: 42,
     presencePenalty: 0.1,
     frequencyPenalty: 0.2,
+    maxSteps: 25,
   },
 };
 
@@ -188,6 +189,7 @@ describe("ChatSink", () => {
       expect(finishSet.seed).toBeNull();
       expect(finishSet.presencePenalty).toBeNull();
       expect(finishSet.frequencyPenalty).toBeNull();
+      expect(finishSet.maxSteps).toBeNull();
     });
 
     // Issue #522's "the notice is present after a page reload" criterion. The
@@ -297,6 +299,32 @@ describe("ChatSink", () => {
       expect(finishSet.seed).toBe(42);
       expect(finishSet.presencePenalty).toBe(0.1);
       expect(finishSet.frequencyPenalty).toBe(0.2);
+      expect(finishSet.maxSteps).toBe(25);
+    });
+
+    // Issue #539's #263 guard: a Direct turn with no per-chat maxSteps must
+    // write the column null, not leave a previously-set value standing —
+    // clearing only persists because every turn rewrites all generation
+    // columns.
+    it("writes maxSteps null when the direct turn carries none", async () => {
+      mockDb.returning.mockResolvedValueOnce([{ id: "chat-4" }]); // onStart
+      mockDb.returning.mockResolvedValueOnce([{ id: "chat-4" }]); // onFinish
+
+      const sink = new ChatSink({ orgId: "org-1", workspaceId: "ws-1" });
+      await sink.onStart({ runId: "chat-4", messages: [] });
+      await sink.onResolved({
+        runId: "chat-4",
+        plan: { resolved: { ...planAdhoc.resolved, maxSteps: undefined } },
+      });
+      await sink.onFinish({
+        runId: "chat-4",
+        status: "succeeded",
+        messages: [],
+        stats: {},
+      });
+
+      const finishSet = mockDb.set.mock.calls[1][0] as Record<string, unknown>;
+      expect(finishSet.maxSteps).toBeNull();
     });
   });
 

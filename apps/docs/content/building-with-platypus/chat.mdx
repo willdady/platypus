@@ -212,9 +212,10 @@ The two markers name different limits. **Output limit** means the model ran out
 of room to write the reply it was writing; **step limit** means it ran out of
 steps before the work was done. For a Chat that uses an Agent, the number of
 steps is that Agent's **Max steps** — see
-[Tune generation](/building-with-platypus/agents#tune-generation). Asking for
-less in one message, so fewer tool calls are needed, is the other way to stay
-under it.
+[Tune generation](/building-with-platypus/agents#tune-generation). For a Chat
+that picks a Provider and model directly, it is **Max steps** in Chat Settings,
+described below. Asking for less in one message, so fewer tool calls are
+needed, is the other way to stay under it.
 
 ## How full the conversation is
 
@@ -374,21 +375,27 @@ Chat.
 When you have picked a Provider and model directly, a gear button — tooltip
 **Settings** — opens **Chat Settings**: an **Instructions** box, and under
 **Advanced settings** the sampling parameters — **Temperature**, **Seed**,
-**Top-p**, **Top-k**, **Presence Penalty** and **Frequency Penalty**. They are
-saved on this Chat and apply to every turn in it.
+**Top-p**, **Top-k**, **Presence Penalty** and **Frequency Penalty** — plus
+**Max steps**. They are saved on this Chat and apply to every turn in it.
 
 Think of it as the Agent form for a conversation you didn't build an Agent for.
 Platypus still composes the full system prompt around your Instructions, adding
 Workspace and user context, Memories and your Provider's guardrails, exactly as
 it does for an Agent.
 
+**Max steps** caps how many steps a tool-using turn may run before it stops —
+the same ceiling an Agent's **Max steps** sets, tuned for this conversation. It
+takes a whole number from 1-50 steps; leave it empty and a default of 10
+applies. A research-shaped turn that keeps reading long pages through a
+Web-search backend is the usual reason to raise it.
+
 <Callout type="warning">
   **With an Agent selected there is no settings button.** A Chat does not
   override an Agent's Instructions or sampling parameters for one conversation —
-  the Agent's own settings win, and the info button shows you what they are. If
-  you want different behaviour, edit the Agent, or copy it and edit the copy.
-  Looking for the gear on an Agent-backed Chat and concluding it's a bug is the
-  usual confusion here.
+  the Agent's own settings win, including its **Max steps**, and the info
+  button shows you what they are. If you want different behaviour, edit the
+  Agent, or copy it and edit the copy. Looking for the gear on an Agent-backed
+  Chat and concluding it's a bug is the usual confusion here.
 </Callout>
 
 ## Sharing a Chat

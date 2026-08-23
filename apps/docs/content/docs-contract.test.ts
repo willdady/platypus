@@ -35,6 +35,7 @@ import GithubSlugger from "github-slugger";
 import { describe, expect, it } from "vitest";
 import {
   agentSchema,
+  chatSchema,
   dashboardCreateSchema,
   DEFAULT_MAX_EXTRACTED_TEXT_CHARS,
   kanbanBoardSchema,
@@ -899,6 +900,12 @@ const LIMIT_CLAIMS: LimitClaim[] = [
     source: "packages/schemas/index.ts (modelConfigSchema.contextWindow)",
     expected: numberField(modelConfigSchema, "contextWindow"),
   },
+  {
+    doc: "building-with-platypus/chat.mdx",
+    anchor: "**Max steps** caps how many steps",
+    source: "packages/schemas/index.ts (chatSchema.maxSteps)",
+    expected: numberField(chatSchema, "maxSteps"),
+  },
 ];
 
 // A claim with no bound to compare is a test that always passes. Catch it here,
@@ -945,11 +952,11 @@ const normaliseNumbers = (text: string): string =>
     .replace(/(\d),(?=\d)/g, "$1");
 
 /**
- * The units a limit can be stated in. A character count and a token count are
- * both bounds a reader is rejected by, and neither page would thank us for
- * restating its number in the other's unit.
+ * The units a limit can be stated in. A character count, a token count, and a
+ * step count are all bounds a reader is rejected by, and none of these pages
+ * would thank us for restating its number in another's unit.
  */
-const LIMIT_UNIT = "(?:characters|tokens)";
+const LIMIT_UNIT = "(?:characters|tokens|steps)";
 
 const readClaimedLimits = (
   text: string,

@@ -41,7 +41,14 @@ export type GenerationAgentSource = {
  */
 export type GenerationSource =
   | { agent: GenerationAgentSource }
-  | ({ providerId: string; modelId: string } & SamplingSource);
+  // `maxSteps` is the per-chat Max steps setting riding the turn request
+  // (#539); null/absent means unset and falls back to the shared Direct
+  // ceiling, exactly as an Agent's null does to the Agent default.
+  | ({
+      providerId: string;
+      modelId: string;
+      maxSteps?: number | null;
+    } & SamplingSource);
 
 /**
  * Where a generation plan resolves — the half of a `WorkspaceScope` a
@@ -111,7 +118,7 @@ export const resolveGenerationPlan = async (
   const maxSteps =
     "agent" in source
       ? (source.agent.maxSteps ?? DEFAULT_AGENT_MAX_STEPS)
-      : DEFAULT_DIRECT_MAX_STEPS;
+      : (source.maxSteps ?? DEFAULT_DIRECT_MAX_STEPS);
   const samplingSource: SamplingSource =
     "agent" in source ? source.agent : source;
 

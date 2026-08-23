@@ -90,6 +90,30 @@ describe("resolveGenerationPlan", () => {
     expect(modelReference).toBe("gpt-4");
   });
 
+  // Issue #539: the per-chat Max steps setting rides the turn request on the
+  // direct source and overrides the shared Direct ceiling when set.
+  it("forwards a direct selection's own step ceiling over the Direct default", async () => {
+    const { plan } = await resolveGenerationPlan(
+      { providerId: "p1", modelId: "gpt-4", maxSteps: 25 },
+      scope,
+      queriesWith([baseProvider]),
+    );
+
+    expect(plan.maxSteps).toBe(25);
+  });
+
+  // A cleared setting serialises as null; null must mean "unset" here exactly
+  // as it does on the Agent branch (#263).
+  it("resolves a direct selection's null step ceiling to the Direct default", async () => {
+    const { plan } = await resolveGenerationPlan(
+      { providerId: "p1", modelId: "gpt-4", maxSteps: null },
+      scope,
+      queriesWith([baseProvider]),
+    );
+
+    expect(plan.maxSteps).toBe(DEFAULT_DIRECT_MAX_STEPS);
+  });
+
   it("forwards a direct selection's own sampling overrides, treating unset as absent", async () => {
     const { plan } = await resolveGenerationPlan(
       { providerId: "p1", modelId: "gpt-4", temperature: 0.2, topP: undefined },

@@ -691,6 +691,10 @@ export const prepareChatTurn = async (
       frequencyPenalty: agent ? undefined : context.plan.frequencyPenalty,
       presencePenalty: agent ? undefined : context.plan.presencePenalty,
       seed: agent ? undefined : context.plan.seed,
+      // The REQUESTED value, not the plan's resolved ceiling — see
+      // `ResolvedGeneration.maxSteps`. Normalised to undefined so a cleared
+      // null writes null to the column like every other unset field here.
+      maxSteps: agent ? undefined : (request.maxSteps ?? undefined),
     },
     searchUnavailable,
     // The session closes what it opened, delegates' nested sessions included —
@@ -789,6 +793,7 @@ const resolveChatContext = async (
       seed: data.seed,
       presencePenalty: data.presencePenalty,
       frequencyPenalty: data.frequencyPenalty,
+      maxSteps: data.maxSteps,
     };
   } else {
     throw new ValidationError(

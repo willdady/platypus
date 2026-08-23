@@ -1,0 +1,1 @@
+ALTER TABLE "chat" ADD COLUMN "max_steps" integer;

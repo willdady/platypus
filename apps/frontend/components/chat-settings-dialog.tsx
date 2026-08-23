@@ -17,6 +17,7 @@ import {
 } from "./ui/collapsible";
 import { ChevronsUpDown } from "lucide-react";
 import { useState } from "react";
+import { CHAT_MAX_STEPS_MAX, CHAT_MAX_STEPS_MIN } from "@platypus/schemas";
 
 interface ChatSettingsDialogProps {
   instructions: string;
@@ -33,6 +34,8 @@ interface ChatSettingsDialogProps {
   onPresencePenaltyChange: (value: number | undefined) => void;
   frequencyPenalty: number | undefined;
   onFrequencyPenaltyChange: (value: number | undefined) => void;
+  maxSteps: number | undefined;
+  onMaxStepsChange: (value: number | undefined) => void;
   onClose?: () => void;
 }
 
@@ -51,9 +54,23 @@ export const ChatSettingsDialog = ({
   onPresencePenaltyChange,
   frequencyPenalty,
   onFrequencyPenaltyChange,
+  maxSteps,
+  onMaxStepsChange,
   onClose,
 }: ChatSettingsDialogProps) => {
   const [isAdvancedOpen, setIsAdvancedOpen] = useState(false);
+
+  // Derived from the value, not stored: a flag would reset when the dialog
+  // remounts while an out-of-range value stayed in state.
+  const maxStepsInvalid =
+    maxSteps !== undefined &&
+    (!Number.isInteger(maxSteps) ||
+      maxSteps < CHAT_MAX_STEPS_MIN ||
+      maxSteps > CHAT_MAX_STEPS_MAX);
+
+  const handleMaxStepsChange = (value: string) => {
+    onMaxStepsChange(value === "" ? undefined : parseInt(value));
+  };
 
   return (
     <DialogContent className="sm:max-w-[600px]" showCloseButton={false}>
@@ -192,6 +209,25 @@ export const ChatSettingsDialog = ({
                     )
                   }
                 />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="maxSteps">Max steps</Label>
+                <Input
+                  id="maxSteps"
+                  type="number"
+                  min={String(CHAT_MAX_STEPS_MIN)}
+                  max={String(CHAT_MAX_STEPS_MAX)}
+                  step="1"
+                  aria-invalid={maxStepsInvalid}
+                  value={maxSteps ?? ""}
+                  onChange={(e) => handleMaxStepsChange(e.target.value)}
+                />
+                {maxStepsInvalid && (
+                  <p className="text-destructive text-sm">
+                    Max steps must be a whole number between{" "}
+                    {CHAT_MAX_STEPS_MIN} and {CHAT_MAX_STEPS_MAX}.
+                  </p>
+                )}
               </div>
             </div>
           </CollapsibleContent>

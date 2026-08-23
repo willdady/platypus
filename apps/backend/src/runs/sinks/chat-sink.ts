@@ -228,6 +228,7 @@ export class ChatSink implements RunSink {
       seed: resolved.seed ?? null,
       presencePenalty: resolved.presencePenalty ?? null,
       frequencyPenalty: resolved.frequencyPenalty ?? null,
+      maxSteps: resolved.maxSteps ?? null,
       updatedAt: new Date(),
     };
 

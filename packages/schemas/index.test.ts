@@ -12,6 +12,7 @@ import {
   attachmentSchema,
   nextTurnOccupancy,
   attachmentCreateSchema,
+  chatSubmitSchema,
   sandboxEnvSchema,
   SANDBOX_ENV_MAX_ENTRIES,
   SANDBOX_ENV_MAX_VALUE_BYTES,
@@ -323,6 +324,44 @@ describe("Agent Schema", () => {
     });
     expect(result.success).toBe(false);
   });
+});
+
+describe("Chat Submit Schema", () => {
+  const baseSubmit = {
+    id: "chat-1",
+    workspaceId: "ws-1",
+    messages: [],
+    providerId: "p1",
+    modelId: "gpt-4",
+  };
+
+  it("should accept a maxSteps override on the turn", () => {
+    const result = chatSubmitSchema.safeParse({ ...baseSubmit, maxSteps: 25 });
+    expect(result.success).toBe(true);
+  });
+
+  // Issue #263 class of bug, guarded at the schema: a cleared field must reach
+  // the server as an explicit `null`, not a dropped key that silently keeps
+  // the column's previous value. null parses and means "unset".
+  it("should accept a null maxSteps as cleared", () => {
+    const result = chatSubmitSchema.safeParse({ ...baseSubmit, maxSteps: null });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.maxSteps).toBeNull();
+    }
+  });
+
+  // A Direct turn has no no-progress detector, so this ceiling is its only
+  // backstop — bounded deliberately (unlike the Agent's unbounded field), and
+  // integer because it reaches `stepCountIs(n)`, where a fraction or a value
+  // below 1 can never equal a real step count.
+  it.each([0, -1, 2.5, 51])(
+    "should reject a chat maxSteps of %s",
+    (maxSteps) => {
+      const result = chatSubmitSchema.safeParse({ ...baseSubmit, maxSteps });
+      expect(result.success).toBe(false);
+    },
+  );
 });
 
 describe("Provider Create Schema", () => {

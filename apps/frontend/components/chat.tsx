@@ -216,6 +216,7 @@ export const Chat = ({
     seed,
     presencePenalty,
     frequencyPenalty,
+    maxSteps,
   } = settings;
   const {
     isModelSelectorOpen,
@@ -249,6 +250,7 @@ export const Chat = ({
           seed,
           presencePenalty,
           frequencyPenalty,
+          maxSteps,
           search,
         };
 
@@ -264,6 +266,7 @@ export const Chat = ({
     seed,
     presencePenalty,
     frequencyPenalty,
+    maxSteps,
     search,
   ]);
 
@@ -657,6 +660,8 @@ export const Chat = ({
                           onPresencePenaltyChange={setters.setPresencePenalty}
                           frequencyPenalty={frequencyPenalty}
                           onFrequencyPenaltyChange={setters.setFrequencyPenalty}
+                          maxSteps={maxSteps}
+                          onMaxStepsChange={setters.setMaxSteps}
                           onClose={() => setIsSettingsDialogOpen(false)}
                         />
                       </Dialog>

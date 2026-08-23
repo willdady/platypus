@@ -553,6 +553,71 @@ describe("chat-execution", () => {
       expect(turn.resolved.seed).toBe(99);
     });
 
+    // Issue #539: the per-chat Max steps setting rides the turn request and,
+    // on a Direct turn, becomes both the ceiling the model loop runs under
+    // and the value persisted back to the row — the same round-trip as seed
+    // above.
+    it("takes maxSteps from the request on a Direct turn", async () => {
+      const queries = createInMemoryChatTurnQueries({
+        workspaces: [baseWorkspace],
+        providers: [baseProvider],
+      });
+
+      const turn = await prepareChatTurn(
+        {
+          ...baseInput,
+          request: { providerId: baseProvider.id, modelId: "gpt-4", maxSteps: 25 },
+        },
+        queries,
+      );
+
+      expect(turn.stream.maxSteps).toBe(25);
+      expect(turn.resolved.maxSteps).toBe(25);
+    });
+
+    // The #263 shape at this seam: a cleared setting serialises as null, and
+    // null must leave the row's copy unset rather than persisting the default
+    // over it — otherwise "unset" and "explicitly 10" become indistinguishable
+    // after one turn.
+    it("treats a cleared per-chat maxSteps as unset on a Direct turn", async () => {
+      const queries = createInMemoryChatTurnQueries({
+        workspaces: [baseWorkspace],
+        providers: [baseProvider],
+      });
+
+      const turn = await prepareChatTurn(
+        {
+          ...baseInput,
+          request: { providerId: baseProvider.id, modelId: "gpt-4", maxSteps: null },
+        },
+        queries,
+      );
+
+      expect(turn.stream.maxSteps).toBe(DEFAULT_DIRECT_MAX_STEPS);
+      expect(turn.resolved.maxSteps).toBeUndefined();
+    });
+
+    // Mirrors the seed test above: an Agent's stored settings win on an
+    // Agent-backed Chat, and the row keeps no generation params of its own.
+    it("sends the Agent's own maxSteps, not the request's, on an Agent turn", async () => {
+      const queries = createInMemoryChatTurnQueries({
+        workspaces: [baseWorkspace],
+        agents: [baseAgent],
+        providers: [baseProvider],
+      });
+
+      const turn = await prepareChatTurn(
+        {
+          ...baseInput,
+          request: { agentId: baseAgent.id, maxSteps: 25 },
+        },
+        queries,
+      );
+
+      expect(turn.stream.maxSteps).toBe(3);
+      expect(turn.resolved.maxSteps).toBeUndefined();
+    });
+
     // The output ceiling comes off the PROVIDER's model entry, not the Agent or
     // the request — it is a property of the (Provider, model) pair (issue #454).
     it("streams the model's declared maxOutputTokens", async () => {

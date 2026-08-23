@@ -190,6 +190,10 @@ export const chat = pgTable(
     seed: t.real("seed"),
     presencePenalty: t.real("presence_penalty"),
     frequencyPenalty: t.real("frequency_penalty"),
+    // The per-chat Max steps setting for Direct (no-Agent) turns (#539),
+    // mirroring the Agent table's column. Nullable: null means "unset" and
+    // the turn falls back to DEFAULT_DIRECT_MAX_STEPS.
+    maxSteps: t.integer("max_steps"),
 
     // Memory processing tracking
     lastMemoryProcessedAt: t.timestamp("last_memory_processed_at"),

@@ -10,6 +10,7 @@ export interface ChatSettings {
   seed: number | undefined;
   presencePenalty: number | undefined;
   frequencyPenalty: number | undefined;
+  maxSteps: number | undefined;
 }
 
 export const useChatSettings = (
@@ -25,6 +26,7 @@ export const useChatSettings = (
   const [frequencyPenalty, setFrequencyPenalty] = useState<
     number | undefined
   >();
+  const [maxSteps, setMaxSteps] = useState<number | undefined>();
 
   // Initialize chat settings from existing chat data (only when no agent is
   // selected — an agent supplies its own settings). Re-syncs when either the
@@ -38,6 +40,7 @@ export const useChatSettings = (
       setSeed(chatData.seed ?? undefined);
       setPresencePenalty(chatData.presencePenalty ?? undefined);
       setFrequencyPenalty(chatData.frequencyPenalty ?? undefined);
+      setMaxSteps(chatData.maxSteps ?? undefined);
     }
   };
   useResetOnChange(chatData, initializeFromChat);
@@ -51,6 +54,7 @@ export const useChatSettings = (
     seed,
     presencePenalty,
     frequencyPenalty,
+    maxSteps,
   };
 
   const setters = {
@@ -61,6 +65,7 @@ export const useChatSettings = (
     setSeed,
     setPresencePenalty,
     setFrequencyPenalty,
+    setMaxSteps,
   };
 
   return { settings, setters, ...setters };
