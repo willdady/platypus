@@ -1,19 +1,14 @@
 import { Hono } from "hono";
 import { sValidator } from "@hono/standard-validator";
-import { nanoid } from "nanoid";
 import { db } from "../index.ts";
-import { skill as skillTable } from "../db/schema.ts";
 import { skillCreateSchema, skillUpdateSchema } from "@platypus/schemas";
 import { requireAuth } from "../middleware/authentication.ts";
 import { orgScopeOf, requireOrgAccess } from "../middleware/authorization.ts";
-import { scrubDeletedAgentReference } from "../services/agent-references.ts";
 import {
   listOrgScoped,
-  orgScopedWhere,
   requireOrgScoped,
-  requireSharedDeletable,
 } from "../services/scoped-resource.ts";
-import { NotFoundError } from "../errors.ts";
+import { createSkill, deleteSkill, updateSkill } from "../services/skill.ts";
 import type { Variables } from "../server.ts";
 
 // Org-scoped Skills are Shared resources (ADR-0007): a single source of truth
@@ -30,23 +25,13 @@ orgSkill.post(
   sValidator("json", skillCreateSchema),
   async (c) => {
     const { orgId } = orgScopeOf(c);
-    // Agent associations are a workspace concern; org-scoped Skills carry none.
-    const { agentIds: _agentIds, ...data } = c.req.valid("json");
+    const data = c.req.valid("json");
 
-    // A duplicate name surfaces as a Postgres unique violation, mapped to 409
-    // by the central onError (ADR-0010).
-    const record = await db
-      .insert(skillTable)
-      .values({
-        id: nanoid(),
-        name: data.name,
-        description: data.description,
-        body: data.body,
-        organizationId: orgId,
-        workspaceId: null,
-      })
-      .returning();
-    return c.json(record[0], 201);
+    // Agent associations are a workspace concern; `createSkill` ignores any
+    // `agentIds` at Organization scope. A duplicate name surfaces as a Postgres
+    // unique violation, mapped to 409 by the central onError (ADR-0010).
+    const row = await createSkill({ kind: "organization", orgId }, data);
+    return c.json(row, 201);
   },
 );
 
@@ -74,24 +59,19 @@ orgSkill.put(
   async (c) => {
     const { orgId } = orgScopeOf(c);
     const skillId = c.req.param("skillId");
-    const { agentIds: _agentIds, ...data } = c.req.valid("json");
+    const data = c.req.valid("json");
 
-    // A duplicate name surfaces as a Postgres unique violation, mapped to 409
-    // by the central onError (ADR-0010).
-    const record = await db
-      .update(skillTable)
-      .set({
-        name: data.name,
-        description: data.description,
-        body: data.body,
-        updatedAt: new Date(),
-      })
-      .where(orgScopedWhere("skill", skillId, orgId))
-      .returning();
-    if (record.length === 0) {
-      throw new NotFoundError("Skill not found");
-    }
-    return c.json(record[0], 200);
+    // `updateSkill` throws NotFound (→404) via requireOrgScoped when the Skill
+    // is not a Shared resource of this Organization, before the write ever
+    // runs (#605). Agent associations are a workspace concern and are ignored. A
+    // duplicate name surfaces as a Postgres unique violation, mapped to 409 by
+    // the central onError (ADR-0010).
+    const row = await updateSkill(
+      { kind: "organization", orgId },
+      skillId,
+      data,
+    );
+    return c.json(row, 200);
   },
 );
 
@@ -104,26 +84,11 @@ orgSkill.delete(
     const { orgId } = orgScopeOf(c);
     const skillId = c.req.param("skillId");
 
-    // A Shared resource cannot be deleted while anything still points at it —
-    // an Attachment (ADR-0007) or a Blueprint (ADR-0008). Throws ConflictError
-    // → 409 via the central onError (ADR-0010).
-    await requireSharedDeletable(db, "skill", skillId);
+    // `deleteSkill` throws ConflictError (→409, ADR-0007/0008) while an
+    // Attachment or Blueprint still references the Skill, and NotFound (→404)
+    // when it is not visible here.
+    await deleteSkill({ kind: "organization", orgId }, skillId);
 
-    // Delete the Skill and scrub its (now-dead) id from any Agent's skillIds in
-    // the same transaction, so deletion never leaves dangling references.
-    const result = await db.transaction(async (tx) => {
-      const rows = await tx
-        .delete(skillTable)
-        .where(orgScopedWhere("skill", skillId, orgId))
-        .returning();
-      if (rows.length > 0) {
-        await scrubDeletedAgentReference(tx, "skillIds", skillId);
-      }
-      return rows;
-    });
-    if (result.length === 0) {
-      throw new NotFoundError("Skill not found");
-    }
     return c.json({ message: "Skill deleted" });
   },
 );

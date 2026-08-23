@@ -1,16 +1,15 @@
 import { tool, type Tool } from "ai";
 import { z } from "zod";
-import { and, eq, sql } from "drizzle-orm";
 import { skillBaseSchema } from "@platypus/schemas";
 import { db } from "../index.ts";
-import { skill as skillTable, agent as agentTable } from "../db/schema.ts";
 import { buildResourceUrl } from "../utils/resource-url.ts";
 import {
   listScoped,
   resolveScopedByName,
   workspaceMutationLockedMessage,
-  workspaceScopedWhere,
 } from "../services/scoped-resource.ts";
+import { deleteSkill, upsertSkill } from "../services/skill.ts";
+import { ConflictError, LockedError, NotFoundError } from "../errors.ts";
 import type { ScopeContext } from "../scope.ts";
 
 // Field constraints come from the shared schema so the agent-facing tool can
@@ -32,7 +31,7 @@ export function createSkillManagementTools(
 ): Record<string, Tool> {
   const ctx: ScopeContext = { orgId, workspaceId };
 
-  const listSkills = tool({
+  const listSkillsTool = tool({
     description:
       "List the skills available in the current workspace, including shared skills attached to it. A skill with scope 'organization' is shared and cannot be edited or deleted here.",
     inputSchema: z.object({}),
@@ -49,7 +48,7 @@ export function createSkillManagementTools(
     },
   });
 
-  const getSkill = tool({
+  const getSkillTool = tool({
     description: "Get the full content of a skill by name.",
     inputSchema: z.object({
       name: z.string().describe("The name of the skill to retrieve"),
@@ -72,7 +71,7 @@ export function createSkillManagementTools(
     },
   });
 
-  const upsertSkill = tool({
+  const upsertSkillTool = tool({
     description:
       "Create a new skill or update an existing skill by name. If a skill with the given name already exists in this workspace, it will be updated. Using the name of a shared skill creates this workspace's own version of it — the organization's skill is left untouched.",
     inputSchema: z.object({
@@ -85,47 +84,25 @@ export function createSkillManagementTools(
       body: skillFields.body.describe("The Markdown content of the skill"),
     }),
     execute: async ({ name, description, body }) => {
-      // Writes only ever land on a workspace-scoped row: the conflict target is
-      // `(workspaceId, name)`, so upserting the name of an attached Shared Skill
-      // creates this Workspace's own version of it rather than editing the
-      // Organization's. `resolveScopedByName` then prefers that local row, which
-      // is what makes the override take effect.
-      const { nanoid } = await import("nanoid");
-      const now = new Date();
-
-      const record = await db
-        .insert(skillTable)
-        .values({
-          id: nanoid(),
-          workspaceId,
-          name,
-          description,
-          body,
-          createdAt: now,
-          updatedAt: now,
-        })
-        .onConflictDoUpdate({
-          target: [skillTable.workspaceId, skillTable.name],
-          set: {
-            description,
-            body,
-            updatedAt: now,
-          },
-        })
-        .returning();
+      // Writes only ever land on a workspace-scoped row: the conflict target
+      // inside `upsertSkill` is `(workspaceId, name)`, so upserting the name of
+      // an attached Shared Skill creates this Workspace's own version of it
+      // rather than editing the Organization's. `resolveScopedByName` then
+      // prefers that local row, which is what makes the override take effect.
+      const row = await upsertSkill(ctx, { name, description, body });
 
       const url = buildResourceUrl(
         frontendUrl,
         orgId,
         workspaceId,
-        `skills/${record[0].id}`,
+        `skills/${row.id}`,
       );
 
-      return { ...record[0], ...(url && { url }) };
+      return { ...row, ...(url && { url }) };
     },
   });
 
-  const deleteSkill = tool({
+  const deleteSkillTool = tool({
     description:
       "Delete a skill by name. Will fail if the skill is referenced by one or more agents, or if it is a shared skill managed at the organization level.",
     inputSchema: z.object({
@@ -137,45 +114,41 @@ export function createSkillManagementTools(
       if (!existing) {
         return { error: "Skill not found" };
       }
+
       // Visible here, but a single source of truth deleted only on the
       // Organization surface (ADR-0007) — detaching it is the workspace-side
-      // action, and that is an Attachment concern, not a delete.
+      // action, and that is an Attachment concern, not a delete. The scope is
+      // already in hand, so refuse in `workspaceMutationLockedMessage`'s words
+      // rather than paying a second resolution to be told the same by the
+      // write model's `LockedError`.
       if (existing.scope === "organization") {
         return { error: workspaceMutationLockedMessage("skill") };
       }
 
-      const skillId = existing.row.id;
-
-      const referencingAgents = await db
-        .select({ id: agentTable.id })
-        .from(agentTable)
-        .where(
-          and(
-            eq(agentTable.workspaceId, workspaceId),
-            sql`${agentTable.skillIds} @> ${JSON.stringify([skillId])}::jsonb`,
-          ),
-        )
-        .limit(1);
-
-      if (referencingAgents.length > 0) {
-        return {
-          error:
-            "Cannot delete skill because it is referenced by one or more agents",
-        };
+      // The write model re-establishes visibility (→404 here, when a race
+      // removed it), refuses a Skill this Workspace's agents still reference
+      // (→409), then deletes. Those types become the `{ error }` payload a tool
+      // reports instead of throwing into the run.
+      try {
+        await deleteSkill({ kind: "workspace", ctx }, existing.row.id);
+        return { success: true };
+      } catch (error) {
+        if (
+          error instanceof NotFoundError ||
+          error instanceof LockedError ||
+          error instanceof ConflictError
+        ) {
+          return { error: error.message };
+        }
+        throw error;
       }
-
-      await db
-        .delete(skillTable)
-        .where(workspaceScopedWhere("skill", skillId, workspaceId));
-
-      return { success: true };
     },
   });
 
   return {
-    listSkills,
-    getSkill,
-    upsertSkill,
-    deleteSkill,
+    listSkills: listSkillsTool,
+    getSkill: getSkillTool,
+    upsertSkill: upsertSkillTool,
+    deleteSkill: deleteSkillTool,
   };
 }
