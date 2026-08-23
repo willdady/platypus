@@ -169,11 +169,23 @@ renders.
   full. On a short turn the gap is the whole assistant message — 222 shown
   against 340 actually queued up.
 - **Nothing new is measured.** The figure is the last reading's input plus its
-  output, both vendor-reported. This ADR already called the next turn's starting
-  size "derivable exactly" from what is persisted; the derivation now has a name
-  (**Projected occupancy**, `CONTEXT.md`) and one implementation
-  (`nextTurnOccupancy` in `packages/schemas`) rather than being open-coded where
-  each consumer needed it.
+  output, both vendor-reported. The derivation now has a name (**Projected
+  occupancy**, `CONTEXT.md`) and one implementation (`nextTurnOccupancy` in
+  `packages/schemas`) rather than being open-coded where each consumer needed it.
+- **"Derivable exactly" above is too strong, and measurement says so.** Three
+  consecutive turns on a reasoning model projected 275 against an actual 260, and
+  855 against an actual 946. Two causes pull opposite ways. A thinking turn bills
+  its reasoning tokens as output and then does NOT resend them — the first turn
+  there carried a 272-character `reasoning` part alongside 265 characters of
+  text, and only the text came back — so the projection reads HIGH by whatever
+  the model thought. And it cannot include the next message, which is the draft
+  nothing local can count, so it reads LOW by however much someone types. The
+  figure is an upper-ish bound on the conversation so far, not an arithmetic
+  identity. It is still far closer than the input-only figure it replaced, which
+  was low by 38% on that same turn, and the reasoning-token error is in the
+  conservative direction — the same direction an under-declared window already
+  errs in. A future ADR wanting an exact projection would need the vendor to
+  report resent-token counts, which none does.
 - **This closes a real divergence, not just a cosmetic one.** Tool-result
   clearing's backend gate for a turn's first call already summed input and output
   (`initialOccupancyFrom`); the frontend mirror that renders results as cleared
