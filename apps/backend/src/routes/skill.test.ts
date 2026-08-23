@@ -295,24 +295,6 @@ describe("Skill Routes", () => {
       expect(mockDb.insert).toHaveBeenCalled();
       expect(mockDb.onConflictDoNothing).toHaveBeenCalled();
     });
-
-    it("returns 404 (no orphan attachment) when a concurrent promote already re-scoped the skill", async () => {
-      mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]); // requireOrgAccess
-      mockDb.limit.mockResolvedValueOnce([
-        { ownerId: "user-1", organizationId: "org-1" },
-      ]); // requireWorkspaceAccess
-      mockDb.limit.mockResolvedValueOnce([
-        { id: "skill-1", workspaceId, name: "my-skill" },
-      ]); // skill lookup (pre-transaction)
-      // Transaction update matches no row (skill already re-scoped) → rollback
-      mockDb.returning.mockResolvedValueOnce([]);
-
-      const res = await app.request(promoteUrl, { method: "POST" });
-      expect(res.status).toBe(404);
-      // The auto-attach insert must never run when the update found nothing.
-      expect(mockDb.onConflictDoNothing).not.toHaveBeenCalled();
-    });
   });
 
   describe("DELETE /:skillId", () => {

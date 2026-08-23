@@ -23,7 +23,7 @@ import { FileValidationError } from "../services/file-gate.ts";
 import {
   retrieveRecentSummaries,
   formatSummariesForSystemPrompt,
-  shouldRePinMemorySnapshot,
+  resolveMemoryPin,
   type MemorySummary,
 } from "../services/memory-retrieval.ts";
 
@@ -76,7 +76,7 @@ vi.mock("@ai-sdk/mcp", () => ({
 vi.mock("../services/memory-retrieval.ts", () => ({
   retrieveRecentSummaries: vi.fn().mockResolvedValue([]),
   formatSummariesForSystemPrompt: vi.fn().mockReturnValue(""),
-  shouldRePinMemorySnapshot: vi.fn().mockReturnValue(true),
+  resolveMemoryPin: vi.fn().mockReturnValue({ reuse: false }),
 }));
 
 describe("Chat Routes", () => {
@@ -390,7 +390,7 @@ describe("Chat Routes", () => {
       mockDb.limit.mockResolvedValueOnce([]); // ADR-0020 row lookup (no row → new chat)
       mockDb.returning.mockResolvedValueOnce([{ id: "chat-a" }]); // ChatSink.onStart
 
-      vi.mocked(shouldRePinMemorySnapshot).mockReturnValueOnce(true);
+      vi.mocked(resolveMemoryPin).mockReturnValueOnce({ reuse: false });
       vi.mocked(retrieveRecentSummaries).mockResolvedValueOnce([
         { id: "s1", summaryDate: "2026-04-29", summary: "Likes coffee." },
       ] as MemorySummary[]);
@@ -416,11 +416,11 @@ describe("Chat Routes", () => {
       };
       // The resolved block rides down through RunInput into prepareChatTurn.
       expect(inputArg.memorySnapshot).toBe("pinned-fresh");
-      // The two-day window is anchored to the re-take moment, not a clock read.
+      // The window is anchored to the re-take moment, not a clock read. Its
+      // span is not a call-site argument — the retrieval owns it.
       expect(retrieveRecentSummaries).toHaveBeenCalledWith(
         "user-1",
         "ws-1",
-        2,
         expect.any(Date),
       );
     });
@@ -442,7 +442,10 @@ describe("Chat Routes", () => {
       ]);
       mockDb.returning.mockResolvedValueOnce([{ id: "chat-b" }]); // ChatSink.onStart
 
-      vi.mocked(shouldRePinMemorySnapshot).mockReturnValueOnce(false);
+      vi.mocked(resolveMemoryPin).mockReturnValueOnce({
+        reuse: true,
+        block: "pinned-block",
+      });
 
       mockPrepareChatTurn.mockResolvedValueOnce(validTurn);
 

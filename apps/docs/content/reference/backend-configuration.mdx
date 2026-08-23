@@ -30,12 +30,13 @@ For a guided walkthrough of configuring a deployment, see
 | `NODE_OPTIONS`    | Node runtime flags. Ships set to silence the experimental-feature warning.                                                                                                                                                                 | `--disable-warning=ExperimentalWarning`                  | No       |
 
 <Callout type="warning">
-  `TIMEZONE` is read in exactly one place: the `getCurrentTime` and
-  `convertTimezone` tools. It does **not** set the zone a Trigger's cron
-  schedule is evaluated in — each Trigger carries its own **Timezone** field,
-  set in the Trigger form and defaulting to the browser's zone — and it does not
-  affect log timestamps. Setting `TIMEZONE` and expecting a 9am Trigger to fire
-  at 9am local is the trap; set the zone on the Trigger.
+  `TIMEZONE` is read in exactly one place: the `getCurrentTime` tool.
+  `convertTimezone` takes explicit `fromTimezone`/`toTimezone` parameters and
+  never reads this variable. `TIMEZONE` also does **not** set the zone a
+  Trigger's cron schedule is evaluated in — each Trigger carries its own
+  **Timezone** field, set in the Trigger form and defaulting to the browser's
+  zone — and it does not affect log timestamps. Setting `TIMEZONE` and expecting
+  a 9am Trigger to fire at 9am local is the trap; set the zone on the Trigger.
 </Callout>
 
 ## Plugins
@@ -55,11 +56,19 @@ The manifest side is in
 
 ## Authentication
 
-| Variable                 | Purpose                                                                                                                  | Default                                                    | Required |
-| ------------------------ | ------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------- | -------- |
-| `BETTER_AUTH_SECRET`     | Secret used to sign session tokens (better-auth). Must be a secure random string, 32+ characters. Treat like a password. | `your-secret-key-min-32-chars` _(placeholder — change it)_ | **Yes**  |
-| `BETTER_AUTH_URL`        | Public base URL of the backend, used by better-auth.                                                                     | `http://localhost:4001`                                    | **Yes**  |
-| `INVITATION_EXPIRY_DAYS` | Days a Workspace/Org invitation remains valid.                                                                           | `7`                                                        | No       |
+| Variable                 | Purpose                                                                                                                                                                                                                 | Default                                                    | Required |
+| ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------- | -------- |
+| `BETTER_AUTH_SECRET`     | Secret used to sign session tokens (better-auth). Must be a secure random string, 32+ characters. Treat like a password.                                                                                                | `your-secret-key-min-32-chars` _(placeholder — change it)_ | **Yes**  |
+| `BETTER_AUTH_URL`        | Public base URL of the backend, used by better-auth. Falls back to `http://localhost:4001`, which only works for local dev — a real deployment must set this explicitly or auth redirects and callbacks break silently. | `http://localhost:4001`                                    | No       |
+| `INVITATION_EXPIRY_DAYS` | Days a Workspace/Org invitation remains valid.                                                                                                                                                                          | `7`                                                        | No       |
+
+<Callout type="warning">
+  `BETTER_AUTH_SECRET`'s 32+ character requirement is enforced only when
+  `NODE_ENV=production` — the published Docker image sets this, but running from
+  source without it gets no hard failure at all: an unset or weak secret
+  silently falls back to a well-known default and only logs a warning. Don't
+  rely on the runtime to catch a missing secret outside the published image.
+</Callout>
 
 ## Default admin
 
@@ -113,10 +122,10 @@ tool call never trips it; only a provider that stops responding does. Raise the
 wall-clock timeout if your Agents run long multi-step turns that people wait
 through.
 
-| Variable                   | Purpose                                                                                                 | Default                | Required |
-| -------------------------- | ------------------------------------------------------------------------------------------------------- | ---------------------- | -------- |
+| Variable                   | Purpose                                                                                                  | Default                | Required |
+| -------------------------- | -------------------------------------------------------------------------------------------------------- | ---------------------- | -------- |
 | `CHAT_PER_STEP_TIMEOUT_MS` | Idle timeout for a Chat turn; the run is stopped after this long with no streamed output from the model. | `120000` (2 minutes)   | No       |
-| `CHAT_PER_RUN_TIMEOUT_MS`  | Wall-clock timeout for an entire Chat turn.                                                             | `1800000` (30 minutes) | No       |
+| `CHAT_PER_RUN_TIMEOUT_MS`  | Wall-clock timeout for an entire Chat turn.                                                              | `1800000` (30 minutes) | No       |
 
 When either bound stops a turn, the reason is shown in the chat rather than the
 answer simply ending.

@@ -19,7 +19,7 @@ spending the Organization row, or an env allowlist, to buy it.
 
 `CONTEXT.md` states the tiering plainly: authority over configuration runs
 **Operator → Org Admin → Workspace Owner**, each tier bounded by the tier above
-it. Holding an account sits *above* the top of that chain — only a Super Admin
+it. Holding an account sits _above_ the top of that chain — only a Super Admin
 creates an Organization, and an Org Admin's entire authority is scoped to the
 Organization they were given.
 
@@ -38,7 +38,7 @@ makes the field attractive and precisely what makes it wrong.
 ### An address is not evidence
 
 Platypus does not verify email addresses — `requireEmailVerification` is off and
-there is no mail transport to turn it on with. So a domain rule tests a *claim*,
+there is no mail transport to turn it on with. So a domain rule tests a _claim_,
 not a fact: nothing establishes that the person registering as
 `someone@example.com` controls that mailbox, or exists.
 

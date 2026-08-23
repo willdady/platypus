@@ -49,7 +49,7 @@ statements above are narrowed rather than withdrawn. `SystemPromptContext` is
 split so that the prefix renderer cannot reference per-turn state, which is why
 the retrieved Memories fragment (7) renders a snapshot pinned on the Chat rather
 than a live retrieval; and the renderer's ordering snapshots remain the
-regression guard for fragment *position*, while fragment *volatility* is guarded
+regression guard for fragment _position_, while fragment _volatility_ is guarded
 by the type split and a prefix byte-equality test. Composition remains a pure
 function of its inputs, and the composite is still never persisted as an input —
 what persists is one fragment's rendered text, on an internal column.

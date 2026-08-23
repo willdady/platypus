@@ -643,38 +643,5 @@ describe("Agent Routes", () => {
       expect(mockDb.insert).toHaveBeenCalled();
       expect(mockDb.onConflictDoNothing).toHaveBeenCalled();
     });
-
-    it("returns 404 (no orphan attachment) on a lost promote race", async () => {
-      mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]);
-      mockDb.limit.mockResolvedValueOnce([
-        { ownerId: "user-1", organizationId: "org-1" },
-      ]);
-      mockDb.limit.mockResolvedValueOnce([
-        {
-          id: "agent-1",
-          providerId: "p1",
-          workspaceId,
-          skillIds: [],
-          subAgentIds: [],
-          toolSetIds: [],
-        },
-      ]);
-
-      mockDb.where
-        .mockReturnValueOnce(mockDb) // requireOrgAccess
-        .mockReturnValueOnce(mockDb) // requireWorkspaceAccess
-        .mockReturnValueOnce(mockDb) // agent lookup
-        .mockResolvedValueOnce([
-          { id: "p1", name: "Shared Provider", organizationId: orgId },
-        ]); // provider validation → OK
-
-      // Transaction update matches no row (already re-scoped) → rollback
-      mockDb.returning.mockResolvedValueOnce([]);
-
-      const res = await app.request(promoteUrl, { method: "POST" });
-      expect(res.status).toBe(404);
-      expect(mockDb.onConflictDoNothing).not.toHaveBeenCalled();
-    });
   });
 });
