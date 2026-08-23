@@ -8,11 +8,7 @@ import {
 import { requireAuth } from "../middleware/authentication.ts";
 import { orgScopeOf, requireOrgAccess } from "../middleware/authorization.ts";
 import { isScopedResourceType } from "../services/scoped-resource.ts";
-import {
-  attachResource,
-  detachResource,
-  requireWorkspaceInOrg,
-} from "../services/attachment.ts";
+import { attachResource, detachResource } from "../services/attachment.ts";
 import type { Variables } from "../server.ts";
 
 // Org-surface management of where a Shared resource is attached (ADR-0007).
@@ -76,20 +72,15 @@ orgAttachment.post("/", requireAuth, requireOrgAccess(["admin"]), async (c) => {
   };
   const { resourceType, resourceId, workspaceId } = body;
 
-  if (!resourceId || !workspaceId) {
-    return c.json({ error: "resourceId and workspaceId are required" }, 400);
-  }
-
-  // The target workspace must belong to this organization; the resource must be
-  // a Shared resource of this Organization (ADR-0007). Both rules and the
-  // already-attached → 409 live in the Attachment module.
-  await requireWorkspaceInOrg(orgId, workspaceId);
-  const record = await attachResource(
-    orgId,
+  // Every rule — well-formed resourceType, the target workspace belonging to
+  // this organization, the resource being a Shared one of it (ADR-0007), and
+  // already-attached → 409 — lives in the Attachment module, which also owns
+  // the order they fail in.
+  const record = await attachResource({ kind: "organization" }, orgId, {
     resourceType,
     resourceId,
     workspaceId,
-  );
+  });
   return c.json(record, 201);
 });
 
@@ -106,8 +97,11 @@ orgAttachment.delete(
 
     // Guard against detaching across orgs, and let the module throw NotFound
     // (→404) when no such Attachment exists (ADR-0010).
-    await requireWorkspaceInOrg(orgId, workspaceId);
-    await detachResource(resourceType, resourceId, workspaceId);
+    await detachResource({ kind: "organization" }, orgId, {
+      resourceType,
+      resourceId,
+      workspaceId,
+    });
 
     return c.json({ message: "Detached" });
   },

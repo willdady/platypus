@@ -26,24 +26,49 @@ import { isScopedResourceType, resolveOrgScoped } from "./scoped-resource.ts";
  * - **resource-is-Shared**: you can only attach a Shared resource of this
  *   Organization, never a Workspace-private one — `resolveOrgScoped` enforces
  *   it, and a miss is a `NotFoundError` (→404).
- * - **workspace-in-org**: `requireWorkspaceInOrg` — a workspace outside the
- *   Organization is as absent as a missing one (→404). The per-Workspace
- *   surface never calls it directly: `requireWorkspaceAccess` already answers
- *   the same question for a workspace the URL named, so only the Organization
- *   surface (which takes an arbitrary `workspaceId` from the body) needs it.
+ * - **workspace-in-org**: a workspace outside the Organization is as absent as
+ *   a missing one (→404). Only the Organization surface needs it, since it
+ *   takes an arbitrary `workspaceId` from the request; the per-Workspace
+ *   surface has already had `requireWorkspaceAccess` answer the same question.
+ *   `AttachmentScope` is how a caller says which of the two it is.
  * - **already-attached**: the `(workspaceId, resourceType, resourceId)` unique
  *   constraint is the authority; a violation surfaces as a `ConflictError`
  *   (→409) instead of leaking the driver error.
+ *
+ * The *order* those rules run in is part of the contract, not the caller's to
+ * remember: a request that trips more than one must fail on the same rule it
+ * always did (an invalid `resourceType` is a 400 even when the workspace is
+ * also out of org). Keeping the sequence here is what stops the two surfaces
+ * drifting on precedence the way they drifted on everything else.
  */
 
 export type AttachmentRow = typeof attachmentTable.$inferSelect;
 
 /**
- * Throws `NotFoundError` when `workspaceId` is not a Workspace of `orgId` —
- * the workspace-in-org rule. Exported so the Organization surface can name it
- * for both its attach and detach routes without duplicating the query.
+ * Which surface a write comes from — the per-Workspace route, whose
+ * `workspaceId` the middleware already proved belongs to the Organization, or
+ * the Organization route, which names an arbitrary workspace and must have it
+ * checked. Mirrors `SkillScope`/`ProviderScope`.
  */
-export const requireWorkspaceInOrg = async (
+export type AttachmentScope = { kind: "workspace" } | { kind: "organization" };
+
+/**
+ * The resource an attach or detach names. `resourceType` is untrusted input
+ * from a body or a path on both surfaces, so it is validated rather than cast;
+ * the Organization attach surface reads the whole triple from an unvalidated
+ * body, so every field arrives possibly absent.
+ */
+export type AttachmentTarget = {
+  resourceType: string | undefined;
+  resourceId: string | undefined;
+  workspaceId: string | undefined;
+};
+
+/**
+ * Throws `NotFoundError` when `workspaceId` is not a Workspace of `orgId` —
+ * the workspace-in-org rule.
+ */
+const requireWorkspaceInOrg = async (
   orgId: string,
   workspaceId: string,
 ): Promise<void> => {
@@ -63,20 +88,25 @@ export const requireWorkspaceInOrg = async (
 };
 
 /**
- * Attaches a Shared resource to a Workspace. The resource must be a Shared
- * resource of this Organization (ADR-0007) — a miss is a `NotFoundError`; an
- * insert colliding on the `(workspaceId, resourceType, resourceId)` unique
- * constraint is a `ConflictError` (→409). `resourceType` is untrusted input
- * from the body, so it is validated rather than cast.
+ * Attaches a Shared resource to a Workspace, applying the three rules in the
+ * order described above. Returns the new Attachment row.
  */
 export async function attachResource(
+  scope: AttachmentScope,
   orgId: string,
-  resourceType: string | undefined,
-  resourceId: string,
-  workspaceId: string,
+  target: AttachmentTarget,
 ): Promise<AttachmentRow> {
+  const { resourceType, resourceId, workspaceId } = target;
+
   if (!isScopedResourceType(resourceType)) {
     throw new ValidationError("Invalid resourceType");
+  }
+  if (!resourceId || !workspaceId) {
+    throw new ValidationError("resourceId and workspaceId are required");
+  }
+
+  if (scope.kind === "organization") {
+    await requireWorkspaceInOrg(orgId, workspaceId);
   }
 
   // The resource must be org-scoped and belong to this organization — you can
@@ -106,17 +136,27 @@ export async function attachResource(
 }
 
 /**
- * Detaches a Shared resource from a Workspace. Throws `NotFoundError` when no
- * such Attachment exists. `resourceType` is untrusted input from the path, so
- * it's validated rather than cast.
+ * Detaches a Shared resource from a Workspace. Both identifying fields reach
+ * this from a path, so only `resourceType` needs validating; the rules run in
+ * the same order as `attachResource` — bad type before out-of-org workspace.
+ * Throws `NotFoundError` when no such Attachment exists.
  */
 export async function detachResource(
-  resourceType: string | undefined,
-  resourceId: string,
-  workspaceId: string,
+  scope: AttachmentScope,
+  orgId: string,
+  target: AttachmentTarget,
 ): Promise<void> {
+  const { resourceType, resourceId, workspaceId } = target;
+
   if (!isScopedResourceType(resourceType)) {
     throw new ValidationError("Invalid resourceType");
+  }
+  if (!resourceId || !workspaceId) {
+    throw new ValidationError("resourceId and workspaceId are required");
+  }
+
+  if (scope.kind === "organization") {
+    await requireWorkspaceInOrg(orgId, workspaceId);
   }
 
   const result = await db

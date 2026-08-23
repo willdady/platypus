@@ -52,12 +52,11 @@ attachment.post(
     // Organization by requireWorkspaceAccess); the module checks the resource
     // is a Shared one of this Organization (→404) and that it is not already
     // attached (→409, ADR-0007/ADR-0010).
-    const record = await attachResource(
-      orgId,
+    const record = await attachResource({ kind: "workspace" }, orgId, {
       resourceType,
       resourceId,
       workspaceId,
-    );
+    });
     return c.json(record, 201);
   },
 );
@@ -69,13 +68,17 @@ attachment.delete(
   requireOrgAccess(["admin"]),
   requireWorkspaceAccess,
   async (c) => {
-    const { workspaceId } = workspaceScopeOf(c);
+    const { orgId, workspaceId } = workspaceScopeOf(c);
     const resourceType = c.req.param("resourceType");
     const resourceId = c.req.param("resourceId");
 
     // `detachResource` validates the path-typed resourceType and throws
     // NotFound (→404) when no such Attachment exists (ADR-0010).
-    await detachResource(resourceType, resourceId, workspaceId);
+    await detachResource({ kind: "workspace" }, orgId, {
+      resourceType,
+      resourceId,
+      workspaceId,
+    });
 
     return c.json({ message: "Detached" });
   },

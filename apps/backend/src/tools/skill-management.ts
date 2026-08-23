@@ -8,10 +8,7 @@ import {
   resolveScopedByName,
   workspaceMutationLockedMessage,
 } from "../services/scoped-resource.ts";
-import {
-  deleteSkill as deleteSkillRow,
-  upsertSkill as upsertSkillRow,
-} from "../services/skill.ts";
+import { deleteSkill, upsertSkill } from "../services/skill.ts";
 import { ConflictError, LockedError, NotFoundError } from "../errors.ts";
 import type { ScopeContext } from "../scope.ts";
 
@@ -34,7 +31,7 @@ export function createSkillManagementTools(
 ): Record<string, Tool> {
   const ctx: ScopeContext = { orgId, workspaceId };
 
-  const listSkills = tool({
+  const listSkillsTool = tool({
     description:
       "List the skills available in the current workspace, including shared skills attached to it. A skill with scope 'organization' is shared and cannot be edited or deleted here.",
     inputSchema: z.object({}),
@@ -51,7 +48,7 @@ export function createSkillManagementTools(
     },
   });
 
-  const getSkill = tool({
+  const getSkillTool = tool({
     description: "Get the full content of a skill by name.",
     inputSchema: z.object({
       name: z.string().describe("The name of the skill to retrieve"),
@@ -74,7 +71,7 @@ export function createSkillManagementTools(
     },
   });
 
-  const upsertSkill = tool({
+  const upsertSkillTool = tool({
     description:
       "Create a new skill or update an existing skill by name. If a skill with the given name already exists in this workspace, it will be updated. Using the name of a shared skill creates this workspace's own version of it — the organization's skill is left untouched.",
     inputSchema: z.object({
@@ -92,7 +89,7 @@ export function createSkillManagementTools(
       // an attached Shared Skill creates this Workspace's own version of it
       // rather than editing the Organization's. `resolveScopedByName` then
       // prefers that local row, which is what makes the override take effect.
-      const row = await upsertSkillRow(ctx, { name, description, body });
+      const row = await upsertSkill(ctx, { name, description, body });
 
       const url = buildResourceUrl(
         frontendUrl,
@@ -105,7 +102,7 @@ export function createSkillManagementTools(
     },
   });
 
-  const deleteSkill = tool({
+  const deleteSkillTool = tool({
     description:
       "Delete a skill by name. Will fail if the skill is referenced by one or more agents, or if it is a shared skill managed at the organization level.",
     inputSchema: z.object({
@@ -117,9 +114,13 @@ export function createSkillManagementTools(
       if (!existing) {
         return { error: "Skill not found" };
       }
+
       // Visible here, but a single source of truth deleted only on the
       // Organization surface (ADR-0007) — detaching it is the workspace-side
-      // action, and that is an Attachment concern, not a delete.
+      // action, and that is an Attachment concern, not a delete. The scope is
+      // already in hand, so refuse in `workspaceMutationLockedMessage`'s words
+      // rather than paying a second resolution to be told the same by the
+      // write model's `LockedError`.
       if (existing.scope === "organization") {
         return { error: workspaceMutationLockedMessage("skill") };
       }
@@ -129,7 +130,7 @@ export function createSkillManagementTools(
       // (→409), then deletes. Those types become the `{ error }` payload a tool
       // reports instead of throwing into the run.
       try {
-        await deleteSkillRow({ kind: "workspace", ctx }, existing.row.id);
+        await deleteSkill({ kind: "workspace", ctx }, existing.row.id);
         return { success: true };
       } catch (error) {
         if (
@@ -145,9 +146,9 @@ export function createSkillManagementTools(
   });
 
   return {
-    listSkills,
-    getSkill,
-    upsertSkill,
-    deleteSkill,
+    listSkills: listSkillsTool,
+    getSkill: getSkillTool,
+    upsertSkill: upsertSkillTool,
+    deleteSkill: deleteSkillTool,
   };
 }
