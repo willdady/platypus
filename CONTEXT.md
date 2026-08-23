@@ -39,7 +39,7 @@ The phase of a **Chat turn** before the model request is sent: the **Tool sessio
 _Avoid_: setup, initialisation, warmup, preflight.
 
 **Drive**:
-Running a resolved turn's model loop inside a registered run, through to a terminal status. Takes one of three shapes according to who is waiting on it: an interactive **Chat turn**, a delegated **Sub-Agent**, or a headless Trigger. Whichever shape, the drive owns the model invocation and its stop conditions, the succeeded / failed / cancelled decision, and recording that a run was cut short — either at the **Output ceiling** or by the **Step ceiling** stopping a loop the model meant to continue; the entry point that asked for it keeps only the result shape it hands back to its own caller.
+Running a resolved turn's model loop inside a registered run, through to a terminal status. Takes one of three shapes according to who is waiting on it: an interactive **Chat turn**, a delegated **Sub-Agent**, or a headless **Trigger**. Whichever shape, the drive owns the model invocation and its stop conditions, the succeeded / failed / cancelled decision, and recording that a run was cut short — either at the **Output ceiling** or by the **Step ceiling** stopping a loop the model meant to continue; the entry point that asked for it keeps only the result shape it hands back to its own caller.
 _Avoid_: driver, run executor, generation loop.
 
 **Instructions**:
@@ -108,6 +108,46 @@ A named capability with a description, attached to an Agent. Surfaced to the mod
 
 **Sandbox**:
 A configured, isolated execution environment registered in a Workspace, providing shell and filesystem tools that operate inside it. Resolves to a Tool set at Chat-turn time. The Sandbox interface is an Extension point: different backends (local container, remote VM, hosted sandbox-as-a-service, …) are contributed by Plugins. A Sandbox also carries workspace-default environment variables that are merged into every shell execution without transiting the model.
+
+**Board**:
+A Kanban board scoped to a Workspace: ordered **Columns**, **Cards**, and Board-level colour-coded Labels. A shared working surface — Users and Agents read and update the same Board, Agents through the Kanban Tool set. Board activity is the source of the `card.*` **Webhook events**. Deleting a Label removes it from every Card using it; everything else on the Card survives.
+_Avoid_: kanban (that names the Tool set), task list, project.
+
+**Column**:
+A named stage on a **Board**; a **Card** sits in exactly one Column at a time, ordered by position within it. Crossing Columns is what `card.moved` means — a reorder within one Column fires only `card.updated`.
+_Avoid_: lane, swimlane, list, stage.
+
+**Card**:
+The unit of work on a **Board**: title, Markdown body, Labels, due date, priority (none/low/medium/high/urgent), a single Assignee, and threaded Comments. Every write records who made it — a User _or_ an Agent — and an Assignee may be either. An Agent is held to the same rules as a person: only Labels the Board actually has, only Assignees who can work in the Workspace.
+_Avoid_: ticket, issue, item, task.
+
+**Dashboard**:
+A Workspace-scoped grid of **Widgets** with separate desktop and mobile layouts, auto-refreshing in view mode. Deliberately split by ownership: Users own the layout and the widget set; an Agent updates Widget data only.
+_Avoid_: report, page, view.
+
+**Widget**:
+A typed tile on a **Dashboard** — metric, text/markdown, image, weather, or chart. An Agent may bring a Widget's data current but can never change its type, placement, size, or presence; updating requires matching the declared type, so a chart cannot be overwritten into a metric.
+_Avoid_: tile, panel, component.
+
+**Trigger**:
+A saved automation that runs an Agent unattended against a fixed Instruction — no Chat, nobody watching. One of two shapes: a **Cron Trigger**, firing on a schedule evaluated in the Trigger's own timezone, or an **Event Trigger**, firing when a subscribed **Webhook event** occurs in the Workspace, debounced so a burst coalesces into one run. The event's payload arrives above the Instruction, so the Instruction can point at it. An Agent's own writes never fire that Agent's own Event Trigger.
+_Avoid_: automation, job, scheduler, webhook (that delivers events out; it runs nothing).
+
+**Trigger run**:
+One execution of a **Trigger** — the headless shape of a **Drive**. Recorded separately from any Chat under its own status vocabulary (`pending` / `running` / `success` / `failed` — not the chat-run words), with its own stats and retention bounded by Max Runs to Keep. Bounded by the same **Output ceiling** and **Step ceiling** as any Drive, plus the unattended-only no-progress stop: repeating the same tool call and getting the same result several times in a row ends the run as _failed_, naming the tool — distinct from a step-limit stop, which still ends _success_.
+_Avoid_: trigger execution, scheduled run (ambiguous between the Trigger shapes).
+
+**Webhook**:
+An outbound subscription that delivers Workspace **Webhook events** to an external HTTPS URL — fire-and-forget, never blocking the action that produced the event. Each delivery carries an envelope (event name, timestamp, org and workspace ids, the event's `data`) and is signed with the Webhook's signing secret (HMAC-SHA256 over the raw body); failures retry three times (1s/2s/4s backoff), then the delivery is given up. Consumes the same event stream as an **Event Trigger** but sends it out rather than running an Agent.
+_Avoid_: callback, integration, outgoing hook.
+
+**Webhook event**:
+One of the enumerated Workspace occurrences a **Webhook** subscribes to and an **Event Trigger** fires on — `card.*` and `notification.*`, one shared stream with two consumers. Payload shape varies per event: some carry the full record, others only the IDs of what changed, and a few carry both shapes (`notification.read` has a singular and a bulk form).
+_Avoid_: domain event, platform event; "notification" (reserved for the Notification itself).
+
+**Notification**:
+A short message an Agent posts to a Workspace's feed — the reply an unattended run leaves when there was no Chat anyone was watching. In-app only: nothing is emailed or pushed, and in-app Notifications never route to a messaging **Surface**. Read-state tracked per User; an Agent can edit and dismiss only the Notifications it posted itself. Posting one is granted per-Agent through the Notifications Tool set.
+_Avoid_: alert, push, mention, message (that names a Chat's unit).
 
 **Plugin**:
 A distributable bundle — one package, one version, one config namespace, one enable/disable switch — that the Operator installs at deploy time to extend Platypus without maintaining a fork. Runs in-process (no isolation); the trust boundary is the deployment, not an in-app install step. A Plugin makes one or more Contributions to Extension points, possibly across several points sharing one config namespace (e.g. a Sandbox backend and a Tool set on one credential block). Core Plugins ship pre-bundled; third-party Plugins are installed alongside them and loaded identically. Not hot-loaded; not a marketplace.
@@ -197,7 +237,7 @@ The record binding a Conversation locus to a Chat (which carries the Workspace +
 ## Relationships
 
 - An **Organization** has many **Workspaces**.
-- A **Workspace** has many **Chats**, **Agents**, **MCPs**, and **Skills**, and zero-or-one **Sandbox**.
+- A **Workspace** has many **Chats**, **Agents**, **MCPs**, **Skills**, **Boards**, **Dashboards**, **Triggers**, **Webhooks**, and **Notifications**, and zero-or-one **Sandbox**.
 - A **Chat** is produced by a sequence of **Chat turns**.
 - A **Chat turn** runs in two sequential phases: **Turn resolution** assembles what the turn needs, then the **Drive** runs the model loop. A slow turn is slow in one phase or the other, and they are attributed separately.
 - A **Chat turn** uses either an **Agent** or a direct **Provider** + model selection.
@@ -209,7 +249,10 @@ The record binding a Conversation locus to a Chat (which carries the Workspace +
 - A **Chat turn**'s **Context occupancy** and its reply's tokens together give the next turn's **Projected occupancy**, which is what a reader is shown before they send.
 - A **Chat turn** sends its **Transcript** in full. **Tool-result clearing** narrows what an individual model call receives without altering the stored **Transcript**, so what a User reads and what the model was given can legitimately differ; it is driven by **Projected occupancy** on a turn's first call and by **Context occupancy** on every call after, and therefore engages only where a **Context window** was declared.
 - Each model a **Provider** exposes may also declare an **Output ceiling**, which a **Chat turn** — or a **Sub-Agent** run — against that model is generated under. Independent of the **Context window**: one bounds the reply and is enforced, the other describes the whole capacity and is not.
-- Every **Chat turn**, **Sub-Agent** run and Trigger run also drives under a **Step ceiling**, which bounds the loop rather than any one reply. Both ceilings can cut a turn short, and each records which one did, so the notice a reader sees names the limit that applied.
+- Every **Chat turn**, **Sub-Agent** run and **Trigger** run also drives under a **Step ceiling**, which bounds the loop rather than any one reply. Both ceilings can cut a turn short, and each records which one did, so the notice a reader sees names the limit that applied.
+- A **Board** owns its ordered **Columns**; a **Card** lives in exactly one **Column** at a time. Moving a Card between Columns is what `card.moved` names — a reorder within one Column fires only `card.updated`.
+- A **Board** write and a **Notification** post emit **Webhook events**. The stream has two consumers: an **Event Trigger** runs an Agent inside Platypus in response, a **Webhook** delivers the event to an external URL — and neither consumer affects the other.
+- A **Trigger** is the headless shape of a **Drive**: its Agent runs unattended as a **Trigger run**, and a **Notification** is the reply it leaves behind when there was no Chat anyone was watching.
 - A **Chat turn** may also record an **Unavailable capability** — something it was asked to run with that **Turn resolution** could not supply. Like the **Output ceiling** cutoff it is a per-turn outcome told to the User under the reply, and unlike it, it is known before the model is ever called.
 - An **Agent**, **Skill**, **MCP**, or **Provider** is a **Scoped resource**: its row carries either an `organizationId` or a `workspaceId`, never both. Resolved relative to a **Workspace**, an Organization-scoped one is a **Shared resource**, visible only through an **Attachment**; a Sandbox-backed **Tool set** instead rebinds to the invoking **Workspace**'s **Sandbox** at Chat-turn time.
 - A **Blueprint** names a set of **Shared resources** and, applied to a **Workspace**, creates their **Attachments** in one step.
