@@ -37,6 +37,7 @@ import {
   agentSchema,
   chatSchema,
   dashboardCreateSchema,
+  DEFAULT_DIRECT_MAX_STEPS,
   DEFAULT_MAX_EXTRACTED_TEXT_CHARS,
   kanbanBoardSchema,
   mcpSchema,
@@ -905,6 +906,14 @@ const LIMIT_CLAIMS: LimitClaim[] = [
     anchor: "**Max steps** caps how many steps",
     source: "packages/schemas/index.ts (chatSchema.maxSteps)",
     expected: numberField(chatSchema, "maxSteps"),
+  },
+  {
+    // Its own paragraph, not the bound's: a block states one limit, and the
+    // range above would be the number read from a shared one.
+    doc: "building-with-platypus/chat.mdx",
+    anchor: "Leave it empty and a default of",
+    source: "packages/schemas/index.ts (DEFAULT_DIRECT_MAX_STEPS)",
+    expected: { max: DEFAULT_DIRECT_MAX_STEPS },
   },
 ];
 

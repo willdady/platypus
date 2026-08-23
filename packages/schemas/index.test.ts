@@ -13,6 +13,7 @@ import {
   nextTurnOccupancy,
   attachmentCreateSchema,
   chatSubmitSchema,
+  isValidChatMaxSteps,
   sandboxEnvSchema,
   SANDBOX_ENV_MAX_ENTRIES,
   SANDBOX_ENV_MAX_VALUE_BYTES,
@@ -340,11 +341,15 @@ describe("Chat Submit Schema", () => {
     expect(result.success).toBe(true);
   });
 
-  // Issue #263 class of bug, guarded at the schema: a cleared field must reach
-  // the server as an explicit `null`, not a dropped key that silently keeps
-  // the column's previous value. null parses and means "unset".
+  // Issue #263 class of bug, guarded at the schema: a client that clears a
+  // field by sending an explicit `null` — rather than dropping the key, which
+  // silently keeps the column's previous value — is accepted here, and null
+  // means "unset".
   it("should accept a null maxSteps as cleared", () => {
-    const result = chatSubmitSchema.safeParse({ ...baseSubmit, maxSteps: null });
+    const result = chatSubmitSchema.safeParse({
+      ...baseSubmit,
+      maxSteps: null,
+    });
     expect(result.success).toBe(true);
     if (result.success) {
       expect(result.data.maxSteps).toBeNull();
@@ -362,6 +367,38 @@ describe("Chat Submit Schema", () => {
       expect(result.success).toBe(false);
     },
   );
+});
+
+describe("isValidChatMaxSteps", () => {
+  // The predicate the Chat settings input and the send guard both decide from,
+  // so an inline error and a 400 can never disagree about the bound.
+  it.each([1, 10, 50])("accepts %s", (value) => {
+    expect(isValidChatMaxSteps(value)).toBe(true);
+  });
+
+  it.each([0, -1, 2.5, 51])("rejects %s", (value) => {
+    expect(isValidChatMaxSteps(value)).toBe(false);
+  });
+
+  // Unset is not an error — it means fall back to the Direct default.
+  it.each([null, undefined])("treats %s as valid", (value) => {
+    expect(isValidChatMaxSteps(value)).toBe(true);
+  });
+
+  it("agrees with the request schema it is derived from", () => {
+    const base = {
+      id: "chat-1",
+      workspaceId: "ws-1",
+      messages: [],
+      providerId: "p1",
+      modelId: "gpt-4",
+    };
+    for (const value of [0, 1, 50, 51]) {
+      expect(isValidChatMaxSteps(value)).toBe(
+        chatSubmitSchema.safeParse({ ...base, maxSteps: value }).success,
+      );
+    }
+  });
 });
 
 describe("Provider Create Schema", () => {

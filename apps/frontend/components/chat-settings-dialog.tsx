@@ -17,7 +17,18 @@ import {
 } from "./ui/collapsible";
 import { ChevronsUpDown } from "lucide-react";
 import { useState } from "react";
-import { CHAT_MAX_STEPS_MAX, CHAT_MAX_STEPS_MIN } from "@platypus/schemas";
+import {
+  CHAT_MAX_STEPS_MAX,
+  CHAT_MAX_STEPS_MIN,
+  isValidChatMaxSteps,
+} from "@platypus/schemas";
+
+/**
+ * Shown inline under the field and raised as a toast if a bad value somehow
+ * reaches send. One string so the two paths cannot describe the bound
+ * differently.
+ */
+export const CHAT_MAX_STEPS_ERROR = `Max steps must be a whole number between ${CHAT_MAX_STEPS_MIN} and ${CHAT_MAX_STEPS_MAX}.`;
 
 interface ChatSettingsDialogProps {
   instructions: string;
@@ -61,12 +72,9 @@ export const ChatSettingsDialog = ({
   const [isAdvancedOpen, setIsAdvancedOpen] = useState(false);
 
   // Derived from the value, not stored: a flag would reset when the dialog
-  // remounts while an out-of-range value stayed in state.
-  const maxStepsInvalid =
-    maxSteps !== undefined &&
-    (!Number.isInteger(maxSteps) ||
-      maxSteps < CHAT_MAX_STEPS_MIN ||
-      maxSteps > CHAT_MAX_STEPS_MAX);
+  // remounts while an out-of-range value stayed in state. Judged by the schema
+  // that will judge the request, not by a copy of its bounds.
+  const maxStepsInvalid = !isValidChatMaxSteps(maxSteps);
 
   const handleMaxStepsChange = (value: string) => {
     onMaxStepsChange(value === "" ? undefined : parseInt(value));
@@ -215,8 +223,8 @@ export const ChatSettingsDialog = ({
                 <Input
                   id="maxSteps"
                   type="number"
-                  min={String(CHAT_MAX_STEPS_MIN)}
-                  max={String(CHAT_MAX_STEPS_MAX)}
+                  min={CHAT_MAX_STEPS_MIN}
+                  max={CHAT_MAX_STEPS_MAX}
                   step="1"
                   aria-invalid={maxStepsInvalid}
                   value={maxSteps ?? ""}
@@ -224,8 +232,7 @@ export const ChatSettingsDialog = ({
                 />
                 {maxStepsInvalid && (
                   <p className="text-destructive text-sm">
-                    Max steps must be a whole number between{" "}
-                    {CHAT_MAX_STEPS_MIN} and {CHAT_MAX_STEPS_MAX}.
+                    {CHAT_MAX_STEPS_ERROR}
                   </p>
                 )}
               </div>

@@ -566,7 +566,11 @@ describe("chat-execution", () => {
       const turn = await prepareChatTurn(
         {
           ...baseInput,
-          request: { providerId: baseProvider.id, modelId: "gpt-4", maxSteps: 25 },
+          request: {
+            providerId: baseProvider.id,
+            modelId: "gpt-4",
+            maxSteps: 25,
+          },
         },
         queries,
       );
@@ -575,10 +579,10 @@ describe("chat-execution", () => {
       expect(turn.resolved.maxSteps).toBe(25);
     });
 
-    // The #263 shape at this seam: a cleared setting serialises as null, and
-    // null must leave the row's copy unset rather than persisting the default
-    // over it — otherwise "unset" and "explicitly 10" become indistinguishable
-    // after one turn.
+    // The #263 shape at this seam: a null arriving from a client that clears
+    // by sending one must leave the row's copy unset rather than persisting
+    // the default over it — otherwise "unset" and "explicitly 10" become
+    // indistinguishable after one turn.
     it("treats a cleared per-chat maxSteps as unset on a Direct turn", async () => {
       const queries = createInMemoryChatTurnQueries({
         workspaces: [baseWorkspace],
@@ -588,7 +592,11 @@ describe("chat-execution", () => {
       const turn = await prepareChatTurn(
         {
           ...baseInput,
-          request: { providerId: baseProvider.id, modelId: "gpt-4", maxSteps: null },
+          request: {
+            providerId: baseProvider.id,
+            modelId: "gpt-4",
+            maxSteps: null,
+          },
         },
         queries,
       );

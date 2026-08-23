@@ -102,8 +102,8 @@ describe("resolveGenerationPlan", () => {
     expect(plan.maxSteps).toBe(25);
   });
 
-  // A cleared setting serialises as null; null must mean "unset" here exactly
-  // as it does on the Agent branch (#263).
+  // A client may clear by sending an explicit null (the Agent form's way);
+  // null must mean "unset" here exactly as it does on the Agent branch (#263).
   it("resolves a direct selection's null step ceiling to the Direct default", async () => {
     const { plan } = await resolveGenerationPlan(
       { providerId: "p1", modelId: "gpt-4", maxSteps: null },

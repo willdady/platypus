@@ -33,6 +33,7 @@ import {
   ToolSet,
   Skill,
   nextTurnOccupancy,
+  isValidChatMaxSteps,
 } from "@platypus/schemas";
 import { type PlatypusUIMessage } from "@platypus/backend/src/types";
 import { joinUrl } from "@/lib/utils";
@@ -54,7 +55,10 @@ import { useAuth } from "@/components/auth-provider";
 import { canSendChatMessages } from "@/lib/authorization";
 import { NoProvidersEmptyState } from "./no-providers-empty-state";
 import { AgentInfoDialog } from "./agent-info-dialog";
-import { ChatSettingsDialog } from "./chat-settings-dialog";
+import {
+  ChatSettingsDialog,
+  CHAT_MAX_STEPS_ERROR,
+} from "./chat-settings-dialog";
 import { ErrorDialog } from "./error-dialog";
 import {
   Tooltip,
@@ -474,6 +478,15 @@ export const Chat = ({
 
     if (!agentId && (!modelId || !providerId)) {
       toast.error("Please select a model or agent to start the chat");
+      return;
+    }
+
+    // The dialog already marks an out-of-range ceiling invalid, but nothing
+    // stopped it riding the turn — the user saw the inline error, sent anyway,
+    // and got a 400 back as a failed run instead of a correctable mistake
+    // (#539). Only Direct turns carry the value; an Agent turn ignores it.
+    if (!agentId && !isValidChatMaxSteps(maxSteps)) {
+      toast.error(CHAT_MAX_STEPS_ERROR);
       return;
     }
 

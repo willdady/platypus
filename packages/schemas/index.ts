@@ -127,12 +127,15 @@ export const chatSchema = z.object({
   presencePenalty: z.number().optional(),
   frequencyPenalty: z.number().optional(),
   // Per-chat step ceiling for Direct (no-Agent) turns (#539). Nullable like
-  // the Agent's sampling params rather than shaped like the Agent's own
-  // `maxSteps`: without null, a cleared value serialises as a dropped key and
-  // the column silently keeps its previous value (#263). Bounded above
-  // because a Direct turn never meets the no-progress detector — this ceiling
-  // is its only backstop — while the Agent form's field is deliberately left
-  // unbounded by its author.
+  // its six sampling neighbours rather than shaped like the Agent's own
+  // `maxSteps`, so a client that clears a field by sending an explicit null
+  // — as the Agent form does — cannot hit #263, where a dropped key leaves
+  // the column's previous value standing. A chat turn happens to clear by
+  // omission instead and survives it only because every turn rewrites all
+  // generation columns; accepting null keeps the seam honest either way.
+  // Bounded above because a Direct turn never meets the no-progress detector
+  // — this ceiling is its only backstop — while the Agent form's field is
+  // deliberately left unbounded by its author.
   maxSteps: z
     .number()
     .int()
@@ -145,6 +148,18 @@ export const chatSchema = z.object({
 });
 
 export type Chat = z.infer<typeof chatSchema>;
+
+/**
+ * Whether a per-chat Max steps value is one the turn endpoint will accept.
+ *
+ * Shared so the Chat settings input, the send guard and the request validator
+ * all decide from `chatSchema.maxSteps` itself. Restating `int/min/max` in the
+ * UI is how the field's inline error and its 400 drift apart. "Unset" (null or
+ * undefined) is valid — it means fall back to the Direct default.
+ */
+export const isValidChatMaxSteps = (
+  value: number | null | undefined,
+): boolean => chatSchema.shape.maxSteps.safeParse(value).success;
 
 export const chatSubmitSchema = chatSchema
   .pick({
