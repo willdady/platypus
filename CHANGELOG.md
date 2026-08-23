@@ -1,5 +1,23 @@
 # Changelog
 
+## [2.10.0](https://github.com/willdady/platypus/compare/v2.9.0...v2.10.0) (2026-08-23)
+
+
+### Features
+
+* **backend,frontend:** add a per-chat Max steps setting for Direct chats ([#657](https://github.com/willdady/platypus/issues/657)) ([bcd8e4d](https://github.com/willdady/platypus/commit/bcd8e4d6f0a1644188e9ae3678546a9c4cc8266c))
+* **backend:** clear stale tool results from a run's transcript ([#644](https://github.com/willdady/platypus/issues/644)) ([63731a2](https://github.com/willdady/platypus/commit/63731a27835ba5dddf35189e713635adc9c6fc98))
+* **chat:** per-response metrics panel ([#643](https://github.com/willdady/platypus/issues/643)) ([645a4c6](https://github.com/willdady/platypus/commit/645a4c623c1eab39c9cd61bdf029356c5a43e049))
+* **chat:** pin the memories fragment while a chat is active ([#658](https://github.com/willdady/platypus/issues/658)) ([7ed3a07](https://github.com/willdady/platypus/commit/7ed3a074aa2c23856c9d0361516951a18c40cf5e))
+
+
+### Bug Fixes
+
+* **backend,frontend:** report a turn stopped at its step ceiling ([#650](https://github.com/willdady/platypus/issues/650)) ([3356f91](https://github.com/willdady/platypus/commit/3356f914acdf4318c50c5f0c1091138989988492))
+* **backend:** give Direct chat turns a real step ceiling ([#641](https://github.com/willdady/platypus/issues/641)) ([bbfb2fa](https://github.com/willdady/platypus/commit/bbfb2faa8d29b1f9d0d1053b19fc84da6479e9cb))
+* **chat:** read the context meter forward, not back ([#654](https://github.com/willdady/platypus/issues/654)) ([cc8af18](https://github.com/willdady/platypus/commit/cc8af185033d8ba05d8b19c58e82f6b4fc0a7fec))
+* reject a core web backend that claims the searchSource reserved ids ([#642](https://github.com/willdady/platypus/issues/642)) ([5e816e3](https://github.com/willdady/platypus/commit/5e816e386fb88258dda4f8b80b48eac084288cad))
+
 ## [2.9.0](https://github.com/willdady/platypus/compare/v2.8.1...v2.9.0) (2026-08-22)
 
 
