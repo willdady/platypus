@@ -1,11 +1,7 @@
 import { Hono } from "hono";
 import { sValidator } from "@hono/standard-validator";
-import { nanoid } from "nanoid";
 import { db } from "../index.ts";
-import {
-  agent as agentTable,
-  attachment as attachmentTable,
-} from "../db/schema.ts";
+import { agent as agentTable } from "../db/schema.ts";
 import { agentCreateSchema, agentUpdateSchema } from "@platypus/schemas";
 import { requireAuth } from "../middleware/authentication.ts";
 import {
@@ -20,13 +16,13 @@ import {
   deleteAgent as deleteAgentRow,
 } from "../services/agent.ts";
 import { findNonSharedReferences } from "../services/agent-scope-validation.ts";
+import { promoteScoped } from "../services/promote.ts";
 import {
   listScoped,
   requireScoped,
   requireWorkspaceMutable,
   workspaceScopedWhere,
 } from "../services/scoped-resource.ts";
-import { NotFoundError } from "../errors.ts";
 import { storeAvatar, deleteAvatar } from "../services/avatar.ts";
 import { agentWithAvatarUrl } from "../utils/avatar-url.ts";
 import { getOrigin } from "../utils/get-origin.ts";
@@ -204,13 +200,12 @@ agent.delete(
 /**
  * Promote a workspace-scoped Agent to Organization scope (admin only — ADR-0007).
  *
- * Enforces the no-cascade rule: a Shared Agent may reference only other Shared
- * resources, so Promotion is blocked unless the Agent's Provider, every Skill,
- * every sub-Agent, and every MCP-backed tool set is already Organization-scoped.
- * When blocked, the offending references are returned as `blockers` so the UI
- * can present a fix-this checklist. On success the Agent re-scopes to the
- * Organization and its origin Workspace is auto-attached so it stays visible
- * and usable there; editing thereafter happens on the Organization surface.
+ * Runs the no-cascade rule (`findNonSharedReferences`) as the module's guard: a
+ * shared Agent may reference only other Shared resources, so Promotion is
+ * blocked unless the Agent's Provider, every Skill, every sub-agent, and every
+ * MCP-backed tool set is already Organization-scoped. When blocked, the
+ * offending references are returned as `blockers`. On success the Agent
+ * re-scopes to the Organization and its origin Workspace is auto-attached.
  */
 agent.post(
   "/:agentId/promote",
@@ -222,82 +217,27 @@ agent.post(
     const agentId = c.req.param("agentId");
     const baseUrl = getOrigin(c);
 
-    // Only a workspace-scoped Agent in this workspace can be promoted.
-    const [existing] = await db
-      .select()
-      .from(agentTable)
-      .where(workspaceScopedWhere("agent", agentId, workspaceId))
-      .limit(1);
-    if (!existing) {
-      throw new NotFoundError("Agent not found");
-    }
-
-    // No-cascade guard (ADR-0007): every travels-with reference must already be
-    // Organization-scoped, or Promotion is blocked with a fix-this checklist.
-    const blockers = await findNonSharedReferences(orgId, {
-      providerId: existing.providerId,
-      skillIds: existing.skillIds,
-      subAgentIds: existing.subAgentIds,
-      toolSetIds: existing.toolSetIds,
+    const outcome = await promoteScoped(db, {
+      type: "agent",
+      id: agentId,
+      orgId,
+      workspaceId,
+      guard: (existing) =>
+        findNonSharedReferences(orgId, {
+          providerId: existing.providerId,
+          skillIds: existing.skillIds,
+          subAgentIds: existing.subAgentIds,
+          toolSetIds: existing.toolSetIds,
+        }),
     });
-    if (blockers.length > 0) {
-      return c.json(
-        {
-          error:
-            "Promote blocked: this agent references workspace-private resources. Promote them first.",
-          blockers,
-        },
-        422,
-      );
+
+    if (!outcome.ok) {
+      return c.json({ error: outcome.message, blockers: outcome.blockers }, 422);
     }
-
-    // Sentinel for a lost TOCTOU race: the Agent was re-scoped or deleted between
-    // the lookup above and the in-transaction update. Throwing rolls back the
-    // auto-attach so we never leave a dangling Attachment.
-    const PROMOTE_RACE = "agent_no_longer_workspace_scoped";
-
-    try {
-      const promoted = await db.transaction(async (tx) => {
-        const [record] = await tx
-          .update(agentTable)
-          .set({
-            organizationId: orgId,
-            workspaceId: null,
-            updatedAt: new Date(),
-          })
-          .where(workspaceScopedWhere("agent", agentId, workspaceId))
-          .returning();
-
-        if (!record) {
-          throw new Error(PROMOTE_RACE);
-        }
-
-        // Auto-attach the origin Workspace so it keeps seeing the Agent.
-        await tx
-          .insert(attachmentTable)
-          .values({
-            id: nanoid(),
-            workspaceId,
-            resourceType: "agent",
-            resourceId: agentId,
-          })
-          .onConflictDoNothing();
-
-        return record;
-      });
-
-      return c.json(
-        { ...agentWithAvatarUrl(promoted, baseUrl), scope: "organization" },
-        200,
-      );
-    } catch (error) {
-      if (error instanceof Error && error.message === PROMOTE_RACE) {
-        throw new NotFoundError("Agent not found");
-      }
-      // A duplicate Shared-Agent name surfaces as a Postgres unique violation,
-      // mapped to 409 by the central onError (ADR-0010).
-      throw error;
-    }
+    return c.json(
+      { ...agentWithAvatarUrl(outcome.row, baseUrl), scope: "organization" },
+      200,
+    );
   },
 );
 

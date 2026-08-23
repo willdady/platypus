@@ -99,6 +99,18 @@ export const isScopedResourceType = (
 ): value is ScopedResourceType =>
   value !== undefined && SCOPED_RESOURCE_TYPES.has(value);
 
+/** The Drizzle table backing a Scoped-resource type, for the generic Writes. */
+export const tableOf = (type: ScopedResourceType): ScopedTable =>
+  REGISTRY[type].table;
+
+/** The human title of a Scoped-resource type ("Agent", "Skill", "MCP", "Provider"). */
+export const labelOf = (type: ScopedResourceType): string =>
+  REGISTRY[type].label;
+
+/** The noun for mid-sentence messages ("agent", "skill", "mcp", "provider"). */
+export const nounOf = (type: ScopedResourceType): string =>
+  REGISTRY[type].noun;
+
 type Database = typeof db;
 
 /**

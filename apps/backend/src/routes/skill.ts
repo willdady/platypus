@@ -1,12 +1,7 @@
 import { Hono } from "hono";
 import { sValidator } from "@hono/standard-validator";
-import { nanoid } from "nanoid";
 import { db } from "../index.ts";
-import {
-  skill as skillTable,
-  agent as agentTable,
-  attachment as attachmentTable,
-} from "../db/schema.ts";
+import { skill as skillTable, agent as agentTable } from "../db/schema.ts";
 import { skillCreateSchema, skillUpdateSchema } from "@platypus/schemas";
 import { eq, and, sql } from "drizzle-orm";
 import { requireAuth } from "../middleware/authentication.ts";
@@ -21,7 +16,7 @@ import {
   workspaceScopedWhere,
 } from "../services/scoped-resource.ts";
 import { createSkill, deleteSkill, updateSkill } from "../services/skill.ts";
-import { NotFoundError } from "../errors.ts";
+import { promoteScoped } from "../services/promote.ts";
 import type { Variables } from "../server.ts";
 
 const skill = new Hono<{ Variables: Variables }>();
@@ -148,10 +143,10 @@ skill.delete(
  * Re-scopes the Skill from this Workspace to the Organization, turning it into a
  * Shared resource, and auto-attaches the origin Workspace so the author keeps
  * using/editing it in place. A Skill is leaf text (it references no other
- * resource), so there is no "references must already be Shared" prerequisite —
- * Skills establish the Promote pattern that Agents build on. Workspace Agents
- * that already reference the Skill keep their references intact (the id is
- * unchanged) and resolve it at Chat-turn time via the Attachment.
+ * resource), so it passes no no-cascade guard — Skills establish the Promote
+ * pattern that Agents build on. Workspace Agents that already reference the
+ * Skill keep their references intact (the id is unchanged) and resolve it at
+ * Chat-turn time via the Attachment.
  */
 skill.post(
   "/:skillId/promote",
@@ -162,60 +157,21 @@ skill.post(
     const { orgId, workspaceId } = workspaceScopeOf(c);
     const skillId = c.req.param("skillId");
 
-    // Only a workspace-scoped Skill in this workspace can be promoted.
-    const [existing] = await db
-      .select()
-      .from(skillTable)
-      .where(workspaceScopedWhere("skill", skillId, workspaceId))
-      .limit(1);
-    if (!existing) {
-      throw new NotFoundError("Skill not found");
+    const outcome = await promoteScoped(db, {
+      type: "skill",
+      id: skillId,
+      orgId,
+      workspaceId,
+    });
+
+    if (!outcome.ok) {
+      // A leaf resource has no no-cascade guard, so this branch is unreachable;
+      // it exists only to satisfy the discriminated outcome. Return it the same
+      // way the guarded surfaces do.
+      return c.json({ error: outcome.message, blockers: outcome.blockers }, 422);
     }
 
-    // Sentinel for a lost TOCTOU race: the Skill was re-scoped or deleted
-    // between the lookup above and the in-transaction update. Throwing rolls
-    // back the auto-attach so we never leave a dangling Attachment.
-    const PROMOTE_RACE = "skill_no_longer_workspace_scoped";
-
-    try {
-      const promoted = await db.transaction(async (tx) => {
-        const [record] = await tx
-          .update(skillTable)
-          .set({
-            organizationId: orgId,
-            workspaceId: null,
-            updatedAt: new Date(),
-          })
-          .where(workspaceScopedWhere("skill", skillId, workspaceId))
-          .returning();
-
-        if (!record) {
-          throw new Error(PROMOTE_RACE);
-        }
-
-        // Auto-attach the origin Workspace so it keeps seeing the Skill.
-        await tx
-          .insert(attachmentTable)
-          .values({
-            id: nanoid(),
-            workspaceId,
-            resourceType: "skill",
-            resourceId: skillId,
-          })
-          .onConflictDoNothing();
-
-        return record;
-      });
-
-      return c.json({ ...promoted, scope: "organization" }, 200);
-    } catch (error) {
-      if (error instanceof Error && error.message === PROMOTE_RACE) {
-        throw new NotFoundError("Skill not found");
-      }
-      // A duplicate Shared-Skill name surfaces as a Postgres unique violation,
-      // mapped to 409 by the central onError (ADR-0010).
-      throw error;
-    }
+    return c.json({ ...outcome.row, scope: "organization" }, 200);
   },
 );
 
