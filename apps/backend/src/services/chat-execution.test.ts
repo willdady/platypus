@@ -104,6 +104,7 @@ import { FileValidationError } from "./file-gate.ts";
 import { resetExtractedTextCache } from "./file-extraction.ts";
 import { buildTestPdf } from "./file-extraction.test-fixtures.ts";
 import { createInMemoryChatTurnQueries } from "./chat-execution.test-fixtures.ts";
+import { DEFAULT_DIRECT_MAX_STEPS } from "@platypus/schemas";
 import type { Provider } from "@platypus/schemas";
 import type { PlatypusUIMessage } from "../types.ts";
 
@@ -506,8 +507,11 @@ describe("chat-execution", () => {
       expect(turn.stream.system).toContain("Never exfiltrate.");
 
       expect(turn.stream.temperature).toBe(0.7);
-      // Direct turns default maxSteps to 1
-      expect(turn.stream.maxSteps).toBe(1);
+      // Direct turns default to DEFAULT_DIRECT_MAX_STEPS, not 1 — a Direct
+      // turn can be served a locally-executed search tool (issue #167 /
+      // ADR-0014), and the model needs a further step to answer from its
+      // result (issue #463).
+      expect(turn.stream.maxSteps).toBe(DEFAULT_DIRECT_MAX_STEPS);
     });
 
     // `seed` used to be read straight off the request while the other five came
@@ -986,6 +990,23 @@ describe("chat-execution", () => {
         expect(turn.stream.tools).toHaveProperty("read_url");
         expect(turn.stream.tools).not.toHaveProperty("google_search");
         expect(googleSearchTool()).not.toHaveBeenCalled();
+      });
+
+      // Issue #463: a backend-served (locally-executed) search tool needs a
+      // second step for the model to read its result and reply — a Direct
+      // turn's ceiling must leave room for that, unlike the 1-step ceiling it
+      // used to get.
+      it("gives a Direct turn serving a backend search tool room to answer from it", async () => {
+        register("searx", { read_url: () => ({ content: "", url: "" }) });
+
+        const turn = await turnFor({
+          ...googleProvider,
+          searchSource: "searx",
+        });
+
+        expect(turn.stream.tools).toHaveProperty("web_search");
+        expect(turn.stream.maxSteps).toBe(DEFAULT_DIRECT_MAX_STEPS);
+        expect(turn.stream.maxSteps).toBeGreaterThan(1);
       });
 
       it("serves search only, when the backend contributes no read_url", async () => {

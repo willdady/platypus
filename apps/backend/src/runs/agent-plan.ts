@@ -11,6 +11,7 @@ import {
 import {
   aliasNameFromReference,
   DEFAULT_AGENT_MAX_STEPS,
+  DEFAULT_DIRECT_MAX_STEPS,
 } from "@platypus/schemas";
 import type { ConcreteModelId, Provider } from "@platypus/schemas";
 import type { RunPlan } from "./run-plan.ts";
@@ -31,10 +32,11 @@ export type GenerationAgentSource = {
 /**
  * What an Agent generates under, resolved from either of its two sources: an
  * Agent row (Chat's Agent path, and every sub-Agent) or a direct Provider +
- * model selection (Chat's Direct path, which has no row and always runs one
- * step). One module decides this so the parent turn and a delegated sub-Agent
- * can never resolve it differently (issues #417, #456, #459 each had to patch
- * this logic in two places, in the same commit).
+ * model selection (Chat's Direct path, which has no row and falls back to
+ * `DEFAULT_DIRECT_MAX_STEPS`, issue #463). One module decides this so the
+ * parent turn and a delegated sub-Agent can never resolve it differently
+ * (issues #417, #456, #459 each had to patch this logic in two places, in the
+ * same commit).
  */
 export type GenerationSource =
   | { agent: GenerationAgentSource }
@@ -106,7 +108,9 @@ export const resolveGenerationPlan = async (
   const modelReference =
     "agent" in source ? source.agent.modelId : source.modelId;
   const maxSteps =
-    "agent" in source ? (source.agent.maxSteps ?? DEFAULT_AGENT_MAX_STEPS) : 1;
+    "agent" in source
+      ? (source.agent.maxSteps ?? DEFAULT_AGENT_MAX_STEPS)
+      : DEFAULT_DIRECT_MAX_STEPS;
   const samplingSource: SamplingSource =
     "agent" in source ? source.agent : source;
 
