@@ -5,8 +5,9 @@ import {
   retrieveRecentSummaries,
   formatSummariesForSystemPrompt,
   summaryCutoffForReference,
-  shouldRePinMemorySnapshot,
+  resolveMemoryPin,
   MEMORY_SNAPSHOT_RE_PIN_HORIZON_MS,
+  MEMORY_SUMMARY_WINDOW_DAYS,
   type MemorySummary,
 } from "./memory-retrieval.ts";
 
@@ -36,26 +37,12 @@ describe("retrieveRecentSummaries", () => {
     const result = await retrieveRecentSummaries(
       "u1",
       "ws-1",
-      2,
       new Date("2026-05-03T12:00:00Z"),
     );
 
     expect(result).toBe(rows);
     expect(mockDb.select).toHaveBeenCalled();
     expect(mockDb.orderBy).toHaveBeenCalled();
-  });
-
-  it("uses a default cutoff of 2 days when not specified", async () => {
-    mockDb.orderBy.mockResolvedValueOnce([]);
-
-    await retrieveRecentSummaries(
-      "u1",
-      "ws-1",
-      2,
-      new Date("2026-05-03T12:00:00Z"),
-    );
-
-    expect(mockDb.where).toHaveBeenCalled();
   });
 });
 
@@ -73,29 +60,36 @@ describe("summaryCutoffForReference", () => {
     expect(summaryCutoffForReference(ref, 2)).toBe("2026-05-01");
     expect(summaryCutoffForReference(nextDay, 2)).toBe("2026-05-02");
   });
+
+  it("spans MEMORY_SUMMARY_WINDOW_DAYS back for the window the code actually ships", () => {
+    const ref = new Date("2026-05-03T12:00:00Z");
+    expect(summaryCutoffForReference(ref, MEMORY_SUMMARY_WINDOW_DAYS)).toBe(
+      "2026-05-01",
+    );
+  });
 });
 
-describe("shouldRePinMemorySnapshot", () => {
+describe("resolveMemoryPin", () => {
   const now = new Date("2026-05-03T12:00:00Z");
 
   it("re-pins when there is no existing snapshot (new Chat / pre-feature row)", () => {
     expect(
-      shouldRePinMemorySnapshot({
+      resolveMemoryPin({
         existingSnapshot: null,
         previousTurnAt: now,
         now,
       }),
-    ).toBe(true);
+    ).toEqual({ reuse: false });
   });
 
   it("re-pins when there is no recorded previous turn to measure idleness", () => {
     expect(
-      shouldRePinMemorySnapshot({
+      resolveMemoryPin({
         existingSnapshot: "block",
         previousTurnAt: null,
         now,
       }),
-    ).toBe(true);
+    ).toEqual({ reuse: false });
   });
 
   it("keeps the snapshot while the gap since the previous turn is within the horizon", () => {
@@ -103,23 +97,23 @@ describe("shouldRePinMemorySnapshot", () => {
       now.getTime() - MEMORY_SNAPSHOT_RE_PIN_HORIZON_MS + 1,
     );
     expect(
-      shouldRePinMemorySnapshot({
+      resolveMemoryPin({
         existingSnapshot: "block",
         previousTurnAt,
         now,
       }),
-    ).toBe(false);
+    ).toEqual({ reuse: true, block: "block" });
   });
 
   it("treats a pinned empty block as a valid pin, not an absent one", () => {
     const previousTurnAt = new Date(now.getTime() - 60 * 1000);
     expect(
-      shouldRePinMemorySnapshot({
+      resolveMemoryPin({
         existingSnapshot: "",
         previousTurnAt,
         now,
       }),
-    ).toBe(false);
+    ).toEqual({ reuse: true, block: "" });
   });
 
   it("keeps the snapshot at exactly the horizon boundary", () => {
@@ -127,12 +121,12 @@ describe("shouldRePinMemorySnapshot", () => {
       now.getTime() - MEMORY_SNAPSHOT_RE_PIN_HORIZON_MS,
     );
     expect(
-      shouldRePinMemorySnapshot({
+      resolveMemoryPin({
         existingSnapshot: "block",
         previousTurnAt,
         now,
       }),
-    ).toBe(false);
+    ).toEqual({ reuse: true, block: "block" });
   });
 
   it("re-pins once the idle gap exceeds the horizon — by which point the cached prefix is provably gone", () => {
@@ -140,24 +134,24 @@ describe("shouldRePinMemorySnapshot", () => {
       now.getTime() - MEMORY_SNAPSHOT_RE_PIN_HORIZON_MS - 1,
     );
     expect(
-      shouldRePinMemorySnapshot({
+      resolveMemoryPin({
         existingSnapshot: "block",
         previousTurnAt,
         now,
       }),
-    ).toBe(true);
+    ).toEqual({ reuse: false });
   });
 
   it("compares the idle gap, never the snapshot's own age", () => {
     // An eight-hour-old snapshot within an active Chat (short gaps) is kept.
     const previousTurnAt = new Date(now.getTime() - 60 * 1000);
     expect(
-      shouldRePinMemorySnapshot({
+      resolveMemoryPin({
         existingSnapshot: "block",
         previousTurnAt,
         now,
       }),
-    ).toBe(false);
+    ).toEqual({ reuse: true, block: "block" });
   });
 });
 

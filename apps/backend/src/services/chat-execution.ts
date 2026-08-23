@@ -253,7 +253,7 @@ export type ChatTurnQueries = {
   ): Promise<{ global?: string; workspace?: string }>;
   /**
    * The recent daily memory summaries, anchored to `referenceDate` for the
-   * two-day window (ADR-0020) — the caller, never the renderer, bounds
+   * retrieval window (ADR-0020) — the caller, never the renderer, bounds
    * freshness.
    */
   getRecentMemories(
@@ -380,7 +380,7 @@ export const drizzleChatTurnQueries: ChatTurnQueries = {
   },
 
   async getRecentMemories(userId, workspaceId, referenceDate) {
-    return retrieveRecentSummaries(userId, workspaceId, 2, referenceDate);
+    return retrieveRecentSummaries(userId, workspaceId, referenceDate);
   },
 
   async getSandboxEnvKeys(workspaceId) {

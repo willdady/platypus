@@ -28,8 +28,8 @@ import type { RunInput } from "../runs/types.ts";
 import { actorUserId } from "../scope.ts";
 import {
   formatSummariesForSystemPrompt,
+  resolveMemoryPin,
   retrieveRecentSummaries,
-  shouldRePinMemorySnapshot,
 } from "../services/memory-retrieval.ts";
 
 /**
@@ -191,33 +191,28 @@ chat.post(
       .from(chatTable)
       .where(ownedWhere("chat", data.id, scope.workspaceId))
       .limit(1);
-    const existingSnapshot = existingChat[0]?.memorySnapshot ?? null;
-
     const now = new Date();
-    let memorySnapshot: string;
-    if (
-      shouldRePinMemorySnapshot({
-        existingSnapshot,
-        previousTurnAt: existingChat[0]?.lastTurnAt ?? null,
-        now,
-      })
-    ) {
-      // Re-take: a fresh Chat, a row written before this feature, or a Chat
-      // that has idled past the horizon (by which point the cached prefix is
-      // provably expired, so the re-take is free). The two-day retrieval window
-      // is anchored to `now`, not a render-time clock read.
-      const summaries = await retrieveRecentSummaries(
-        actorUserId(scope.principal),
-        scope.workspaceId,
-        2,
-        now,
-      );
-      memorySnapshot = formatSummariesForSystemPrompt(summaries);
-    } else {
-      // The Chat has not idled past the horizon — keep the existing pin so the
-      // prefix stays byte-identical across its turns.
-      memorySnapshot = existingSnapshot!;
-    }
+    const pin = resolveMemoryPin({
+      existingSnapshot: existingChat[0]?.memorySnapshot,
+      previousTurnAt: existingChat[0]?.lastTurnAt,
+      now,
+    });
+
+    // Reuse carries its own block, so there is no snapshot to assert about: the
+    // Chat has not idled past the horizon and the prefix stays byte-identical
+    // across its turns. Otherwise re-take — a fresh Chat, a row written before
+    // this feature, or a Chat that has idled past the horizon (by which point
+    // the cached prefix is provably expired, so the re-take is free). The
+    // retrieval window is anchored to `now`, not a render-time clock read.
+    const memorySnapshot = pin.reuse
+      ? pin.block
+      : formatSummariesForSystemPrompt(
+          await retrieveRecentSummaries(
+            actorUserId(scope.principal),
+            scope.workspaceId,
+            now,
+          ),
+        );
 
     const input: RunInput = {
       runId: data.id,
