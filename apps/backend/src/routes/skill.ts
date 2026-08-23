@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { sValidator } from "@hono/standard-validator";
 import { db } from "../index.ts";
-import { skill as skillTable, agent as agentTable } from "../db/schema.ts";
+import { agent as agentTable } from "../db/schema.ts";
 import { skillCreateSchema, skillUpdateSchema } from "@platypus/schemas";
 import { eq, and, sql } from "drizzle-orm";
 import { requireAuth } from "../middleware/authentication.ts";
@@ -13,7 +13,6 @@ import {
 import {
   listScoped,
   requireScoped,
-  workspaceScopedWhere,
 } from "../services/scoped-resource.ts";
 import { createSkill, deleteSkill, updateSkill } from "../services/skill.ts";
 import { promoteScoped } from "../services/promote.ts";
