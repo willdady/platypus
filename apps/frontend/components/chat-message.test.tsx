@@ -1,6 +1,10 @@
 import { describe, it, expect, vi } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
-import { WEB_BACKEND_TOOL_MARKER, type Agent } from "@platypus/schemas";
+import {
+  WEB_TOOL_NORMALIZED_KEY,
+  type Agent,
+  type NormalizedWebToolResult,
+} from "@platypus/schemas";
 import type { PlatypusUIMessage } from "@platypus/backend/src/types";
 
 // Streamdown pulls in shiki and a worker-ish runtime that jsdom can't host;
@@ -125,18 +129,22 @@ describe("ChatMessage image parts", () => {
   });
 });
 
-// A Web-search backend's `web_search` is client-executed, so its citations arrive
-// as a tool result rather than as `source-url` parts. Without lifting them, the
-// same Chat toggle gives pills on Anthropic and nothing on vLLM (ADR-0014).
+// A Web-search backend's `web_search` result is normalized server-side into
+// `{ kind: "search", results, ... }` and stamped onto `toolMetadata` (issue
+// #525, `apps/backend/src/runs/web-tool-normalize.ts`) before the frontend
+// ever sees it — these tests build parts exactly as that normalizer leaves
+// them. Its results are client-executed, so its citations arrive as a tool
+// result rather than as `source-url` parts; without lifting them, the same
+// Chat toggle gives pills on Anthropic and nothing on vLLM (ADR-0014).
 describe("ChatMessage sources from a Web-search backend", () => {
-  // Core stamps this on the Tool it builds; the AI SDK carries it onto the part and
-  // into the stored message. It is what identifies a plugin call on a provider that
-  // does not report its own executions.
-  const marker = { [WEB_BACKEND_TOOL_MARKER]: true };
+  const normalizedMetadata = (result: NormalizedWebToolResult) => ({
+    [WEB_TOOL_NORMALIZED_KEY]: result,
+  });
 
   const searchMessage = (
-    output: unknown,
+    result: NormalizedWebToolResult,
     extraParts: unknown[] = [],
+    partOverrides: Record<string, unknown> = {},
   ): PlatypusUIMessage =>
     ({
       id: "m1",
@@ -146,9 +154,10 @@ describe("ChatMessage sources from a Web-search backend", () => {
           type: "tool-web_search",
           toolCallId: "c1",
           state: "output-available",
-          toolMetadata: marker,
           input: { query: "platypus habitat" },
-          output,
+          output: {},
+          toolMetadata: normalizedMetadata(result),
+          ...partOverrides,
         },
         ...extraParts,
       ],
@@ -168,7 +177,9 @@ describe("ChatMessage sources from a Web-search backend", () => {
     fireEvent.click(screen.getByRole("button", { name: /Web search/ }));
 
   it("renders a Sources pill per result, titled by the backend's title", () => {
-    renderMessage(searchMessage({ query: "platypus habitat", results }));
+    renderMessage(
+      searchMessage({ kind: "search", query: "platypus habitat", results }),
+    );
     openSources();
 
     expect(screen.getByRole("link", { name: "Platypus" })).toHaveAttribute(
@@ -183,6 +194,7 @@ describe("ChatMessage sources from a Web-search backend", () => {
   it("renders no pill for a result whose URL is not http(s)", () => {
     renderMessage(
       searchMessage({
+        kind: "search",
         query: "x",
         results: [
           { title: "Evil", url: "javascript:alert(1)" },
@@ -206,6 +218,7 @@ describe("ChatMessage sources from a Web-search backend", () => {
   it("counts only the results it will render", () => {
     renderMessage(
       searchMessage({
+        kind: "search",
         query: "x",
         results: [
           { title: "Evil", url: "javascript:alert(1)" },
@@ -222,6 +235,7 @@ describe("ChatMessage sources from a Web-search backend", () => {
   it("counts only the presentable results on the card", () => {
     renderMessage(
       searchMessage({
+        kind: "search",
         query: "x",
         results: [
           { title: "Evil", url: "javascript:alert(1)" },
@@ -240,6 +254,7 @@ describe("ChatMessage sources from a Web-search backend", () => {
   it("reports 0 results when no result was presentable", () => {
     renderMessage(
       searchMessage({
+        kind: "search",
         query: "x",
         results: [{ title: "Evil", url: "javascript:alert(1)" }],
       }),
@@ -253,6 +268,7 @@ describe("ChatMessage sources from a Web-search backend", () => {
   it("falls back to the URL when a result carries no usable title", () => {
     renderMessage(
       searchMessage({
+        kind: "search",
         query: "x",
         results: [{ title: "", url: "https://example.com/untitled" }],
       }),
@@ -266,13 +282,18 @@ describe("ChatMessage sources from a Web-search backend", () => {
 
   it("cites a page once when two searches in a turn both return it", () => {
     renderMessage(
-      searchMessage({ query: "a", results }, [
+      searchMessage({ kind: "search", query: "a", results }, [
         {
           type: "tool-web_search",
           toolCallId: "c2",
           state: "output-available",
           input: { query: "b" },
-          output: { query: "b", results: [results[0]] },
+          output: {},
+          toolMetadata: normalizedMetadata({
+            kind: "search",
+            query: "b",
+            results: [results[0]],
+          }),
         },
       ]),
     );
@@ -285,7 +306,7 @@ describe("ChatMessage sources from a Web-search backend", () => {
   // a history that mixes both reads as one list with one count.
   it("merges plugin results with native source-url parts", () => {
     renderMessage(
-      searchMessage({ query: "a", results: [results[0]] }, [
+      searchMessage({ kind: "search", query: "a", results: [results[0]] }, [
         {
           type: "source-url",
           sourceId: "s1",
@@ -306,7 +327,13 @@ describe("ChatMessage sources from a Web-search backend", () => {
   // The tool returns `{ error }` rather than rejecting, so a failed search
   // arrives as a successful part with nothing to cite.
   it("renders no Sources row when the search returned an error", () => {
-    renderMessage(searchMessage({ error: "Web search is unavailable." }));
+    renderMessage(
+      searchMessage({
+        kind: "search",
+        query: "x",
+        error: "Web search is unavailable.",
+      }),
+    );
 
     expect(screen.queryByText(/Used \d+ sources/)).toBeNull();
     openToolCard();
@@ -316,7 +343,9 @@ describe("ChatMessage sources from a Web-search backend", () => {
   // The generic tool renderer would repeat every result as a raw JSON body,
   // beneath pills that already list them — where native search shows pills alone.
   it("shows the query on a compact card instead of the raw result JSON", () => {
-    renderMessage(searchMessage({ query: "platypus habitat", results }));
+    renderMessage(
+      searchMessage({ kind: "search", query: "platypus habitat", results }),
+    );
 
     expect(
       screen.getByRole("button", { name: /Web search.*platypus habitat/ }),
@@ -333,7 +362,7 @@ describe("ChatMessage sources from a Web-search backend", () => {
   // `source-url` part has only the URL.
   it("cites a page once, by its title, when both rows name it", () => {
     renderMessage(
-      searchMessage({ query: "a", results: [results[0]] }, [
+      searchMessage({ kind: "search", query: "a", results: [results[0]] }, [
         {
           type: "source-url",
           sourceId: "s1",
@@ -352,75 +381,46 @@ describe("ChatMessage sources from a Web-search backend", () => {
   });
 
   // "0 results" is true of a search that has not answered yet, and reads as a
-  // search that found nothing. The marker is what identifies the call this early:
-  // there is no output to recognise yet.
+  // search that found nothing.
   it("says it is searching rather than reporting 0 results mid-call", () => {
-    renderMessage({
-      id: "m1",
-      role: "assistant",
-      parts: [
-        {
-          type: "tool-web_search",
-          toolCallId: "c1",
-          state: "input-available",
-          toolMetadata: marker,
-          input: { query: "platypus habitat" },
-        },
-      ],
-    } as unknown as PlatypusUIMessage);
+    renderMessage(
+      searchMessage({ kind: "search" }, [], { state: "input-available" }),
+    );
 
     openToolCard();
     expect(screen.getByText("Searching…")).toBeInTheDocument();
     expect(screen.queryByText(/0 results/)).toBeNull();
   });
 
-  // A denied call is not a running one. The header reports the state; the body must
-  // not claim a search is in flight.
+  // A denied call is not a running one. The header reports the state; the body
+  // must not claim a search is in flight.
   it("claims no search in flight for a call that was denied", () => {
-    renderMessage({
-      id: "m1",
-      role: "assistant",
-      parts: [
-        {
-          type: "tool-web_search",
-          toolCallId: "c1",
-          state: "output-denied",
-          toolMetadata: marker,
-          input: { query: "platypus habitat" },
-        },
-      ],
-    } as unknown as PlatypusUIMessage);
+    renderMessage(
+      searchMessage({ kind: "search" }, [], { state: "output-denied" }),
+    );
 
     openToolCard();
     expect(screen.queryByText("Searching…")).toBeNull();
     expect(screen.queryByText(/0 results/)).toBeNull();
   });
 
-  // The marker rides the first streaming chunk (`ai@7`, `tool-input-start`), so one
-  // of our own calls is identifiable before its input finishes arriving.
-  it("shows the card for a marked call still streaming its input", () => {
-    renderMessage({
-      id: "m1",
-      role: "assistant",
-      parts: [
-        {
-          type: "tool-web_search",
-          toolCallId: "c1",
-          state: "input-streaming",
-          toolMetadata: marker,
-          input: { query: "platypus habitat" },
-        },
-      ],
-    } as unknown as PlatypusUIMessage);
+  it("shows the card for a call still streaming its input", () => {
+    renderMessage(
+      searchMessage({ kind: "search" }, [], { state: "input-streaming" }),
+    );
 
     openToolCard();
     expect(screen.getByText("Searching…")).toBeInTheDocument();
     expect(screen.queryByText("Parameters")).toBeNull();
   });
 
-  // Messages stored before the marker shipped carry none. A finished call is still
-  // recognisable by the result shape core owns, so their pills do not vanish.
-  it("still lifts sources from a stored result that carries no marker", () => {
+  // Restoring the pre-normalization back-compat guess is explicitly out of
+  // scope (issue #525): a search stored before normalization existed carries
+  // no normalized `toolMetadata` and falls to the generic renderer, losing its
+  // card and its Sources pills. An accepted, narrow regression — nothing is
+  // lost from the Transcript, and the alternative is the guess this issue
+  // exists to delete.
+  it("falls to the generic renderer for a stored result with no normalized metadata", () => {
     renderMessage({
       id: "m1",
       role: "assistant",
@@ -435,15 +435,17 @@ describe("ChatMessage sources from a Web-search backend", () => {
       ],
     } as unknown as PlatypusUIMessage);
 
-    expect(screen.getByText("Used 1 sources")).toBeInTheDocument();
+    expect(screen.queryByText(/Used \d+ sources/)).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: /Web search/ }));
+    expect(screen.getByText("Parameters")).toBeInTheDocument();
   });
 });
 
-// Native provider search registers under the same `web_search` name as a plugin
-// backend's (`services/provider.ts` — OpenAI, OpenRouter, Anthropic), so the tool
-// name alone cannot tell them apart. `providerExecuted` can: a native part belongs
-// on the generic renderer, which shows the vendor payload the compact card cannot
-// read, and its citations come from `source-url` parts.
+// Native provider search is normalized server-side too (issue #525), reduced
+// to a bare count rather than the raw vendor payload. A shape the backend
+// cannot read (OpenRouter's unknown output, an MCP `web_search`) carries no
+// normalized metadata at all and stays on the generic renderer, which is the
+// only one that can show whatever it really is.
 describe("ChatMessage and provider-executed web_search", () => {
   const nativeSearchMessage = (extraParts: unknown[] = []): PlatypusUIMessage =>
     ({
@@ -456,24 +458,30 @@ describe("ChatMessage and provider-executed web_search", () => {
           state: "output-available",
           providerExecuted: true,
           input: { query: "platypus habitat" },
-          // Vendor-shaped: not core's `{ query, results }`.
+          // Vendor-shaped: not core's `{ query, results }` — the normalizer
+          // already reduced this to `resultCount` before the frontend saw it.
           output: [
             { type: "web_search_result", url: "https://vendor.example/a" },
           ],
+          toolMetadata: {
+            [WEB_TOOL_NORMALIZED_KEY]: {
+              kind: "search",
+              query: "platypus habitat",
+              resultCount: 1,
+            },
+          },
         },
         ...extraParts,
       ],
     }) as unknown as PlatypusUIMessage;
 
-  it("leaves a native search on the generic tool renderer", () => {
+  it("shows a bare count on the compact card, not the raw vendor payload", () => {
     renderMessage(nativeSearchMessage());
 
-    // Only the generic renderer shows the input/output blocks; the compact card
-    // has neither, and would claim "0 results" on this vendor-shaped output.
     fireEvent.click(screen.getByRole("button", { name: /Web search/ }));
-    expect(screen.getByText("Parameters")).toBeInTheDocument();
-    expect(screen.queryByText(/\d+ results?/)).toBeNull();
-    expect(screen.queryByText("Searching…")).toBeNull();
+    expect(screen.getByText("1 result")).toBeInTheDocument();
+    expect(screen.queryByText(/listed above as sources/)).toBeNull();
+    expect(screen.queryByText("Parameters")).toBeNull();
   });
 
   it("lifts no sources out of a native search result", () => {
@@ -555,12 +563,11 @@ describe("ChatMessage and provider-executed web_search", () => {
     expect(screen.getByText("Used 1 sources")).toBeInTheDocument();
   });
 
-  // `providerExecuted` is the provider package's to set, and
-  // `@openrouter/ai-sdk-provider` never sets it — so a native search there is a
-  // `tool-web_search` part with no flag, no marker, and no core-shaped output. It
-  // must not read as a plugin call: on the card it would sit at "Searching…" for a
-  // search that already ran.
-  it("leaves an unflagged, unmarked native search on the generic renderer", () => {
+  // A shape the backend cannot read at all (OpenRouter's unknown output, an
+  // MCP `web_search`) carries no normalized metadata — the backend never
+  // guesses a tool's identity from its payload, so this stays on the generic
+  // renderer exactly as an unrecognised tool always has.
+  it("leaves an unreadable native search on the generic renderer", () => {
     renderMessage({
       id: "m1",
       role: "assistant",
@@ -580,47 +587,27 @@ describe("ChatMessage and provider-executed web_search", () => {
     expect(screen.queryByText("Searching…")).toBeNull();
     expect(screen.queryByText(/Used \d+ sources/)).toBeNull();
   });
-
-  // The same part one chunk earlier. Core's marker is attached from the first
-  // streaming chunk, so an unmarked `input-streaming` part is native by
-  // elimination — treating the state itself as ours put a native OpenRouter search
-  // on the compact card mid-stream, which then swapped renderer at
-  // `input-available`.
-  it("leaves an unmarked, streaming native search on the generic renderer", () => {
-    renderMessage({
-      id: "m1",
-      role: "assistant",
-      parts: [
-        {
-          type: "tool-web_search",
-          toolCallId: "c1",
-          state: "input-streaming",
-          input: { query: "platypus habitat" },
-        },
-      ],
-    } as unknown as PlatypusUIMessage);
-
-    fireEvent.click(screen.getByRole("button", { name: /Web search/ }));
-    expect(screen.getByText("Parameters")).toBeInTheDocument();
-    expect(screen.queryByText("Searching…")).toBeNull();
-  });
 });
 
 // Issue #578: the dispatch used to be an if/else-if chain where a specialised
 // tool part had to be checked before the generic catch-all or it would land
 // there too, rendering its raw JSON body a second time alongside the
-// specialised card (and, for search, the Sources row). `isGenericToolPart` now
-// excludes every specialised tool part by construction, so this holds
-// regardless of where a renderer sits in the dispatch list.
+// specialised card (and, for search, the Sources row above the parts loop).
+// `isGenericToolPart` now excludes every specialised tool part by
+// construction, so this holds regardless of where a renderer sits in the
+// dispatch list.
 describe("ChatMessage generic tool renderer exclusion", () => {
-  it("never matches a plugin web-search part", () => {
+  it("never matches a web tool part carrying a normalized result", () => {
     expect(
       isGenericToolPart({
         type: "tool-web_search",
         toolCallId: "c1",
         state: "output-available",
         input: { query: "x" },
-        output: { query: "x", results: [] },
+        output: {},
+        toolMetadata: {
+          [WEB_TOOL_NORMALIZED_KEY]: { kind: "search", query: "x" },
+        },
       } as unknown as Parameters<typeof isGenericToolPart>[0]),
     ).toBe(false);
   });
@@ -661,10 +648,10 @@ describe("ChatMessage generic tool renderer exclusion", () => {
     ).toBe(true);
   });
 
-  // Native provider search is `tool-web_search` shaped but not a plugin
-  // call — it must stay on the generic renderer, which is the only one
-  // that can show its vendor-shaped payload.
-  it("matches a provider-executed web_search part", () => {
+  // Native provider search is `tool-web_search` shaped but carries no
+  // normalized metadata here — it must stay on the generic renderer, which is
+  // the only one that can show its vendor-shaped payload.
+  it("matches a web_search part with no normalized metadata", () => {
     expect(
       isGenericToolPart({
         type: "tool-web_search",

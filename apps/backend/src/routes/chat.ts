@@ -24,6 +24,7 @@ import { rewriteStorageUrls, deleteFiles } from "../storage/utils.ts";
 import { getOrigin } from "../utils/get-origin.ts";
 import { agentRunner } from "../runs/agent-runner.ts";
 import { ChatSink } from "../runs/sinks/chat-sink.ts";
+import { normalizeWebToolParts } from "../runs/web-tool-normalize.ts";
 import type { RunInput } from "../runs/types.ts";
 import { actorUserId } from "../scope.ts";
 import {
@@ -155,6 +156,14 @@ chat.get(
       chatResponse.messages = rewriteStorageUrls(
         chatResponse.messages as PlatypusUIMessage[],
         origin,
+      );
+      // A view over stored data, same as the URL rewrite above: the
+      // Transcript's appearance must not depend on which week it was sent
+      // (issue #525), and this is the read-path counterpart to the live
+      // stream's normalization in `runs/drive.ts` — no migration, no change
+      // to the stored part.
+      chatResponse.messages = normalizeWebToolParts(
+        chatResponse.messages as PlatypusUIMessage[],
       );
     }
 

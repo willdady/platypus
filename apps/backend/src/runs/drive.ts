@@ -26,6 +26,7 @@ import {
 } from "./stream-error.ts";
 import { applyToolDurations } from "./tool-durations.ts";
 import type { RunStats, RunStatus } from "./types.ts";
+import { normalizeWebToolParts } from "./web-tool-normalize.ts";
 
 /**
  * The model call inside a registered run.
@@ -325,11 +326,14 @@ const runStreamedDrive = (
     onError: (error) => formatStreamError(error),
     onFinish: ({ messages: finalMessages }) => {
       finalHandedOver = true;
-      // The terminal finish, stamped with the locally-measured tool durations.
-      handoverMessages =
+      // The terminal finish, stamped with the locally-measured tool durations
+      // and the normalized web-tool view (issue #525) — same order both apply
+      // in the read path (`routes/chat.ts`), for one composed shape either way.
+      const withDurations =
         toolDurations && toolDurations.size > 0
           ? applyToolDurations(finalMessages, toolDurations)
           : finalMessages;
+      handoverMessages = normalizeWebToolParts(withDurations);
       onFinal?.(handoverMessages);
     },
   });
@@ -344,11 +348,15 @@ const runStreamedDrive = (
           failure ??= describeSdkError(error);
         },
       })) {
-        latest = message;
+        // Normalized live, not only on the folded final: a search must render
+        // identically while streaming and after a reload (issue #525), and the
+        // final's own normalization run happens separately, in `onFinish` above.
+        const normalized = normalizeWebToolParts([message])[0];
+        latest = normalized;
         // Drain past the handover but don't yield: a snapshot after the folded
         // final is no better than what it would overwrite (no durations).
         if (behavior.stopSnapshotsAfterFinal && finalHandedOver) continue;
-        yield message;
+        yield normalized;
       }
     } catch (error) {
       logger.error(

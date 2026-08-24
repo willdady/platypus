@@ -156,3 +156,68 @@ does **not** widen the **Backend context** consequence above:
 Core passes its own `buildTurnTools` a `TurnToolsContext` that adds `providerId`
 and strips it again before the plugin-facing `createExecutors` call, so the
 published SDK contract is untouched.
+
+## Amendment — one Web tool block, normalized server-side (#525)
+
+The **Presenting results** decision above, and the **Citations** consequence's
+"the frontend reads it" — reasonable when core's own result shape was the only
+one the frontend had to read — no longer describes what ships. A native
+Provider's search rendered on the generic tool renderer, dumping a raw vendor
+payload (Anthropic's `web_search_result` array, `encryptedContent` included)
+into the Transcript, and the frontend's discriminator carried a **shape-guessing
+fallback**: a finished `tool-web_search` part with no marker and a `results`
+array or `error` string was read as a plugin call, on the theory that a message
+stored before the marker shipped needed some way back onto the card. That
+fallback was an ownership hole — nothing stopped an MCP server exposing its own
+`web_search` from being claimed the same way — and it is now **deleted
+outright**, not narrowed.
+
+**Uniform presentation, vendor-varying contents.** A native provider search, a
+Web-search backend's `web_search` / `read_url`, and `@platypus/web-fetch`'s
+`fetchUrl` now render on one block — the same title shape, the same place a
+query or a URL appears, the same place an error appears — discriminated by
+`kind: "search" | "page" | "find"` rather than by which tool produced the part.
+Strict indistinguishability was rejected as the goal: OpenAI's hosted tool may
+report no query and no result count at all, and suppressing what Anthropic
+legitimately has would be a worse Transcript, not a better one. "One shell,
+vendor-varying contents" is what shipped, not "no reader can tell which search
+ran."
+
+**The read moved to the backend, not the frontend.** `apps/backend/src/runs/web-tool-normalize.ts`
+holds one pure function, `normalizeWebToolPart`, called from both the live
+stream relay (`runs/drive.ts`) and the saved-Transcript read path
+(`routes/chat.ts`, beside `rewriteStorageUrls`) — a **view over stored data**,
+computed at read/serve time and never written back to storage, so a normalizer
+defect is a redeploy, not data loss, and a Chat saved before this shipped
+renders on the block with no migration run. This is a deliberate departure from
+this ADR's own "core owns the result shape, so the frontend reads it" — that
+principle held when core was reading its own normalized shape; here the
+backend is reading Anthropic's raw array and OpenAI's `{action, sources}`
+object, which is vendor knowledge the frontend must never carry, so the read
+could only move server-side once it became per-vendor.
+
+**Ownership is decided once, and never from the payload.** Two positive
+signals only: the existing `WEB_BACKEND_TOOL_MARKER` (now also stamped on
+`fetchUrl`, which is core-built in the same sense a Web-search backend's tools
+are, even though it is not one), or `providerExecuted === true` on a known
+native search tool name (`web_search`, `google_search`). Everything else —
+an MCP `web_search`, a native OpenRouter search (whose provider package never
+sets `providerExecuted`), an unmarked pre-#525 backend result — renders on the
+generic renderer. The **OpenRouter exception is permanent**: its hosted
+`webSearch` declares no output type at all, so even where ownership could be
+read some other way, the payload itself cannot be.
+
+**Citation-lifting did not widen.** `webSearchSources` still reads only a
+`results` array, and the normalizer only ever puts one on a Web-search
+backend's search — a native search's normalized result carries `resultCount`
+instead, deliberately absent `results`. The Provider emits its own citation
+parts (`source-url`) for the pages it actually used; lifting a native search's
+full, unfiltered result list into the same row as well would cite every page a
+search returned rather than the ones the reply drew from.
+
+**Deletion, not narrowing, of the guess.** `isPluginWebSearchPart`'s shape
+fallback is gone from the frontend, and there is no successor guess anywhere:
+a message stored before this issue's marker-and-normalize scheme existed now
+renders on the generic renderer, permanently. Accepted as a narrow regression
+— nothing is lost from the Transcript, since the raw part is unchanged, only
+its presentation reverts to what a truly unrecognised tool always got.

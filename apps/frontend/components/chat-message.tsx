@@ -55,8 +55,8 @@ import { TurnNotice } from "./turn-notice";
 import { LoadSkillTool } from "./load-skill-tool";
 import { SubAgentTool } from "./sub-agent-tool";
 import {
-  WebSearchTool,
-  isPluginWebSearchPart,
+  WebToolCard,
+  isNormalizedWebToolPart,
   webSearchSources,
 } from "./web-search-tool";
 
@@ -93,8 +93,8 @@ const isLoadSkillPart = (part: MessagePart) => part.type === "tool-loadSkill";
 const isSubAgentToolPart = (part: MessagePart) =>
   isToolUIPart(part) && part.type.startsWith("tool-delegateTo");
 
-const isWebSearchToolPart = (part: MessagePart) =>
-  isToolUIPart(part) && isPluginWebSearchPart(part);
+const isWebToolPart = (part: MessagePart) =>
+  isToolUIPart(part) && isNormalizedWebToolPart(part);
 
 /**
  * Every tool-shaped part that has its own specialised renderer below. Kept as
@@ -108,7 +108,7 @@ const isWebSearchToolPart = (part: MessagePart) =>
  */
 const specializedToolMatchers: Array<(part: MessagePart) => boolean> = [
   isLoadSkillPart,
-  isWebSearchToolPart,
+  isWebToolPart,
   isSubAgentToolPart,
 ];
 
@@ -117,7 +117,7 @@ const specializedToolMatchers: Array<(part: MessagePart) => boolean> = [
  * `CustomUITools`), so they land here by elimination — anything tool-shaped
  * that no specialised renderer above has already claimed.
  *
- * Exported so a test can assert the exclusion directly: a plugin web-search
+ * Exported so a test can assert the exclusion directly: a Web tool block part
  * or Sub-Agent part must never also satisfy this, or its raw JSON body would
  * repeat what the specialised card (and, for search, the Sources row above
  * the parts loop) already shows.
@@ -359,9 +359,9 @@ export const ChatMessage = memo(function ChatMessage({
       ),
     },
     {
-      matches: isWebSearchToolPart,
+      matches: isWebToolPart,
       render: (part, i) => (
-        <WebSearchTool
+        <WebToolCard
           key={`${message.id}-${i}`}
           toolPart={part as ToolUIPart}
           messageMetadata={message.metadata}
