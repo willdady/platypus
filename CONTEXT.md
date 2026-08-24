@@ -74,7 +74,7 @@ The ordered messages of a **Chat**, held as its record and re-sent to the model 
 _Avoid_: history, conversation, message log, context (which already carries three other meanings).
 
 **Tool-result clearing**:
-Replacing the content of an older tool result in what a model call receives, leaving the tool call itself and the stored **Transcript** untouched. Bounds a **Transcript** by retention rather than by summary, so a cleared result is plainly absent to the model instead of silently condensed; Platypus does not summarise a **Transcript** at all. Engages only where a **Context window** was declared, and only for tools whose results are safe to lose.
+Replacing the content of an older tool result in what a model call receives, leaving the tool call itself and the stored **Transcript** untouched. Bounds a **Transcript** by retention rather than by summary, so a cleared result is plainly absent to the model instead of silently condensed; Platypus does not summarise a **Transcript** at all. Engages only where a **Context window** was declared, and only for tools whose results are safe to lose — a core tool core knows to be read-only, or an MCP tool carrying a **Read-only hint**. A tool that has said nothing about itself is treated as one that writes.
 _Avoid_: pruning, compaction (reserve for summarising, which Platypus does not do), context editing, truncation (that names a per-call bound on a single result or reply).
 
 **Token usage**:
@@ -102,6 +102,10 @@ _Avoid_: tool context (that is the scope handed to a Tool set factory), tool loa
 
 **MCP**:
 A Model Context Protocol server registered at Workspace scope, or — as a Shared resource — at Organization scope. Resolves to a Tool set at Chat-turn time.
+
+**Read-only hint**:
+An **MCP** server's own declaration that one of its tools does not change anything — it only reads. Self-reported and unverified, which is what "hint" is doing in the name: the protocol states plainly that it may not describe a tool faithfully. Trusted in proportion to what acting on it costs, and decided per consumer rather than once for all of them (ADR-0021): enough to let **Tool-result clearing** drop a result, never enough to skip something a User would want to have been asked about. A tool that declares nothing is treated as one that writes.
+_Avoid_: read-only flag, safe tool, tool safety (all three claim a verification nobody performed), annotation (that names the protocol's whole carrier, of which this is one field).
 
 **Skill**:
 A named capability with a description, attached to an Agent. Surfaced to the model so it can request the skill's instructions on demand via the `loadSkill` Tool. Lives at Workspace scope, or — as a Shared resource — at Organization scope.
