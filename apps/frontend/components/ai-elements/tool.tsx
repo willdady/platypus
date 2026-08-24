@@ -27,6 +27,7 @@ import {
   FileIcon,
   FilePenIcon,
   FilePlusIcon,
+  FingerprintIcon,
   FolderIcon,
   GlobeIcon,
   KanbanSquareIcon,
@@ -104,6 +105,9 @@ const toolToToolSet: Record<string, string> = {
   // time
   getCurrentTime: "time",
   convertTimezone: "time",
+  // identifiers
+  generateUuid: "identifiers",
+  generateNanoId: "identifiers",
   // math-conversions
   convertTemperature: "math-conversions",
   convertDistance: "math-conversions",
@@ -157,6 +161,7 @@ const toolSetIcons: Record<string, LucideIcon> = {
   "skill-management": SparklesIcon,
   "agent-management": BotIcon,
   time: ClockIcon,
+  identifiers: FingerprintIcon,
   "math-conversions": ArrowRightLeftIcon,
   "web-fetch": GlobeIcon,
   notifications: BellIcon,

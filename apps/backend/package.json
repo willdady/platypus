@@ -52,6 +52,7 @@
     "ssh2": "^1.17.0",
     "turndown": "^7.2.4",
     "unpdf": "^1.8.0",
+    "uuid": "^14.0.1",
     "zod": "^4.4.3"
   },
   "devDependencies": {

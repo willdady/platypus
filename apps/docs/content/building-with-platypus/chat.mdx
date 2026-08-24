@@ -94,11 +94,11 @@ when:
 - nothing has resolved yet, because no Agent or model is selected.
 
 <Callout type="warning">
-  The toggle resets itself when you pick a different Provider or model directly
-  — the new endpoint may not support search, so it starts off. It does **not**
-  reset when you switch from one Agent to another, even though that changes
-  Provider too. So search you turned on for one Agent silently stays on for the
-  next one; turn it off yourself if you don't want it.
+  The toggle turns itself off the moment you switch to an Agent, Provider, or
+  model that can't search — the new endpoint may not support it, so it starts
+  off. Switching between two selections that both search leaves the toggle as
+  you set it, whether you're changing Agent or picking a Provider and model
+  directly; it never turns itself back on.
 </Callout>
 
 Search is a Provider setting, not a tool you grant. An Agent that should be able
@@ -253,7 +253,8 @@ switch to a model with a bigger window. Nothing happens automatically.
   **The meter appears; nothing enforces it.** Platypus does not trim, summarise,
   warn, or block a turn for approaching the window — reaching it fails at the
   vendor exactly as it did before, and the meter is the only thing that changed.
-  Treat a full meter as your cue to act, not as a guard rail that will catch you.
+  Treat a full meter as your cue to act, not as a guard rail that will catch
+  you.
 </Callout>
 
 **No meter at all** means one of two things, and both are normal: nobody has

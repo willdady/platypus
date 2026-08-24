@@ -9,13 +9,13 @@ describe("@platypus/tools-basic plugin manifest", () => {
     expect(plugin.apiVersion).toBe(PLUGIN_API_VERSION);
   });
 
-  it("contributes the math-conversions and time tool sets with unprefixed ids", () => {
+  it("contributes the math-conversions, time and identifiers tool sets with unprefixed ids", () => {
     const ids = (plugin.contributes.toolSets ?? []).map((t) => t.id);
-    expect(ids).toEqual(["math-conversions", "time"]);
+    expect(ids).toEqual(["math-conversions", "time", "identifiers"]);
   });
 
   it("exposes the expected tools as static maps", () => {
-    const [math, time] = plugin.contributes.toolSets ?? [];
+    const [math, time, identifiers] = plugin.contributes.toolSets ?? [];
 
     expect(typeof math.tools).not.toBe("function");
     expect(Object.keys(math.tools as Record<string, unknown>)).toEqual([
@@ -29,6 +29,12 @@ describe("@platypus/tools-basic plugin manifest", () => {
     expect(Object.keys(time.tools as Record<string, unknown>)).toEqual([
       "getCurrentTime",
       "convertTimezone",
+    ]);
+
+    expect(typeof identifiers.tools).not.toBe("function");
+    expect(Object.keys(identifiers.tools as Record<string, unknown>)).toEqual([
+      "generateUuid",
+      "generateNanoId",
     ]);
   });
 });
