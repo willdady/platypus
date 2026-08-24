@@ -53,3 +53,15 @@ regression guard for fragment _position_, while fragment _volatility_ is guarded
 by the type split and a prefix byte-equality test. Composition remains a pure
 function of its inputs, and the composite is still never persisted as an input —
 what persists is one fragment's rendered text, on an internal column.
+
+## Note: the Sub-Agent catalogue after issue #556
+
+Every invariant above stands. Two references to the code as it was in #364 have
+since been renamed, and are recorded here rather than edited into the text
+above. Sub-Agent delegation is now **one** `delegate` tool that resolves its
+target from fragment 10's catalogue, not one `delegateTo<Name>` tool per
+Sub-Agent — so fragment 10 lists each Sub-Agent by the name the tool expects
+back, and the "only way the model learns what the tools can reach" argument in
+Considered Options applies to that one tool. The guardrail guarantee is
+unchanged and still enforced in two places; on the sub-agent side that place is
+now called `createSubAgentDelegate`, in the same module.

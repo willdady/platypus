@@ -518,8 +518,9 @@ describe("chat-execution", () => {
         queries,
       );
 
-      expect(turn.stream.tools).toHaveProperty("delegateToResearchAgent");
-      expect(turn.stream.tools).toHaveProperty("delegateToSharedAgent");
+      // One delegation tool for both sub-agents; the prompt's catalogue is
+      // what tells them apart.
+      expect(turn.stream.tools).toHaveProperty("delegate");
       expect(turn.stream.system).toContain("Research Agent");
       expect(turn.stream.system).toContain("Shared Agent");
       expect(turn.stream.system).not.toContain("## Unavailable Sub-Agents");
@@ -557,7 +558,7 @@ describe("chat-execution", () => {
         queries,
       );
 
-      expect(turn.stream.tools).toHaveProperty("delegateToResearchAgent");
+      expect(turn.stream.tools).toHaveProperty("delegate");
       expect(mockCreateMCPClient).not.toHaveBeenCalled();
       expect(getMcp).not.toHaveBeenCalled();
       await turn.dispose();
@@ -595,10 +596,10 @@ describe("chat-execution", () => {
         queries,
       );
 
-      // No delegate tool, and nothing read off the unresolvable rows reaches the
-      // prompt — the ids the parent's own configuration holds identify them.
-      expect(turn.stream.tools).not.toHaveProperty("delegateToForeignAgent");
-      expect(turn.stream.tools).not.toHaveProperty("delegateToDetachedAgent");
+      // No delegation tool at all — neither sub-agent resolved, so it could
+      // only ever error — and nothing read off the unresolvable rows reaches
+      // the prompt: the ids the parent's own configuration holds identify them.
+      expect(turn.stream.tools).not.toHaveProperty("delegate");
       expect(turn.stream.system).not.toContain("Foreign Agent");
       expect(turn.stream.system).not.toContain("Belongs to another workspace.");
       expect(turn.stream.system).not.toContain("Detached Agent");

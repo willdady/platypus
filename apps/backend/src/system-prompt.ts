@@ -1,6 +1,6 @@
 import { type Skill } from "@platypus/schemas";
 import type { agent as agentTable } from "./db/schema.ts";
-import { subAgentToolName } from "./tools/sub-agent.ts";
+import { DELEGATE_TOOL_NAME } from "./tools/sub-agent.ts";
 import { MEMORY_TOOLSET_ID, SANDBOX_TOOLSET_ID } from "./tools/index.ts";
 import type { MemorySummary } from "./services/memory-retrieval.ts";
 import { renderSecurityGuardrails } from "./security-prompt.ts";
@@ -184,11 +184,14 @@ const subAgentsFragment: Fragment = (ctx) => {
   if (ctx.subAgents.length) {
     const lines = ctx.subAgents.map(
       (sa) =>
-        `- **${sa.name}**: Use the \`${subAgentToolName(sa)}\` tool. ${sa.description || "No description provided"}`,
+        `- **${sa.name}**: ${sa.description || "No description provided"}`,
     );
+    // The catalogue is the model's only route to a valid target — the
+    // `delegate` tool resolves what it is given against exactly these names —
+    // so each entry is named the way the tool expects it back.
     sections.push(`## Available Sub-Agents
 
-You can delegate specialized tasks to the following sub-agents. Each sub-agent has its own dedicated tool:
+You can delegate specialized tasks to the following sub-agents. Call the \`${DELEGATE_TOOL_NAME}\` tool with \`subAgent\` set to the name of the one you want:
 
 ${lines.join("\n")}
 
@@ -197,19 +200,25 @@ Each task description MUST be entirely self-contained — sub-agents cannot see 
 
   if (unavailable.length) {
     const lines = unavailable.map((sa) =>
-      // A nameless entry never resolved, so there is no tool slug to quote —
-      // deriving one from `undefined` would invent `delegateToUndefined`.
+      // Listed by whichever identifier it has — a nameless entry never resolved
+      // far enough to have a name. Either way it is the identifier the
+      // delegation tool refuses it under, where that tool exists at all.
       sa.name
-        ? `- **${sa.name}**: ${sa.reason || "failed to load"} — no \`${subAgentToolName({ name: sa.name })}\` tool exists this turn.`
-        : `- Sub-agent \`${sa.id}\`: ${sa.reason || "failed to load"} — no delegation tool exists this turn.`,
+        ? `- **${sa.name}**: ${sa.reason || "failed to load"}`
+        : `- Sub-agent \`${sa.id}\`: ${sa.reason || "failed to load"}`,
     );
+    // With nothing left to delegate to there is no delegation tool this turn,
+    // so promising a refusal would describe a tool the model was never given.
+    const consequence = ctx.subAgents.length
+      ? "Delegating to them will be refused:"
+      : "None of them can be delegated to, and you have no delegation tool this turn:";
     sections.push(`## Unavailable Sub-Agents
 
-These sub-agents are assigned to you but failed to load, so they cannot be delegated to right now:
+These sub-agents are assigned to you but failed to load. ${consequence}
 
 ${lines.join("\n")}
 
-Do not try to call a delegation tool for them. If a request needs one, tell the user it is unavailable and give the reason above rather than silently working around it.`);
+Do not try to delegate to them. If a request needs one, tell the user it is unavailable and give the reason above rather than silently working around it.`);
   }
 
   return sections.join("\n\n");

@@ -339,23 +339,29 @@ describe("renderSystemPrompt — sub-agents", () => {
     expect(renderSystemPrompt(baseCtx())).not.toContain("Available Sub-Agents");
   });
 
-  it("uses subAgentToolName for the slug and includes the description", () => {
+  // The catalogue is the model's only route to a valid target: the `delegate`
+  // tool resolves what it is given against exactly these names.
+  it("lists each sub-agent by the name the delegate tool expects, with its description", () => {
     const ctx = baseCtx();
     ctx.subAgents = [
       { name: "Research Agent", description: "Looks things up." },
+      { name: "Coder", description: "Writes code." },
     ];
     const out = renderSystemPrompt(ctx);
     expect(out).toContain(
-      "- **Research Agent**: Use the `delegateToResearchAgent` tool. Looks things up.",
+      "Call the `delegate` tool with `subAgent` set to the name of the one you want:",
     );
+    expect(out).toContain("- **Research Agent**: Looks things up.");
+    expect(out).toContain("- **Coder**: Writes code.");
+    // One tool for all of them — no per-sub-agent slug is promised any more.
+    expect(out).not.toContain("delegateTo");
   });
 
   it("falls back to a default description when none is provided", () => {
     const ctx = baseCtx();
     ctx.subAgents = [{ name: "Helper" }];
     const out = renderSystemPrompt(ctx);
-    expect(out).toContain("`delegateToHelper`");
-    expect(out).toContain("No description provided");
+    expect(out).toContain("- **Helper**: No description provided");
   });
 
   it("names sub-agents that failed to load as unavailable, with the reason", () => {
@@ -371,13 +377,15 @@ describe("renderSystemPrompt — sub-agents", () => {
     const out = renderSystemPrompt(ctx);
 
     expect(out).toContain("## Unavailable Sub-Agents");
+    // The tool always exists now, so the prompt describes the refusal rather
+    // than promising a missing tool.
+    expect(out).toContain("Delegating to them will be refused:");
     expect(out).toContain(
-      "- **Dashboard Agent**: Provider 'p1' not found for sub-agent — no `delegateToDashboardAgent` tool exists this turn.",
+      "- **Dashboard Agent**: Provider 'p1' not found for sub-agent",
     );
+    expect(out).not.toContain("no `delegateToDashboardAgent` tool");
     // The working one is still advertised normally.
-    expect(out).toContain(
-      "- **Obsidian Agent**: Use the `delegateToObsidianAgent` tool. Notes.",
-    );
+    expect(out).toContain("- **Obsidian Agent**: Notes.");
   });
 
   it("emits the unavailable block even when no sub-agent loaded at all", () => {
@@ -389,6 +397,10 @@ describe("renderSystemPrompt — sub-agents", () => {
     expect(out).not.toContain("## Available Sub-Agents");
     expect(out).toContain("## Unavailable Sub-Agents");
     expect(out).toContain("- **Kanban Agent**: failed to load");
+    // Nothing resolved means no delegation tool was declared either, so the
+    // section must not promise a refusal from a tool the model does not have.
+    expect(out).toContain("you have no delegation tool this turn");
+    expect(out).not.toContain("Delegating to them will be refused");
   });
 
   it("names an unavailable sub-agent by id when it has no name to report", () => {
@@ -401,9 +413,9 @@ describe("renderSystemPrompt — sub-agents", () => {
 
     expect(out).toContain("## Unavailable Sub-Agents");
     expect(out).toContain(
-      "- Sub-agent `sub-1`: not available in this workspace — no delegation tool exists this turn.",
+      "- Sub-agent `sub-1`: not available in this workspace",
     );
-    // No name means no tool slug to name; `delegateToUndefined` must never appear.
+    // No name means no target the model could have asked for either way.
     expect(out).not.toContain("delegateTo");
   });
 });
@@ -512,9 +524,9 @@ describe("renderSystemPrompt — ordering snapshots", () => {
 
       ## Available Sub-Agents
 
-      You can delegate specialized tasks to the following sub-agents. Each sub-agent has its own dedicated tool:
+      You can delegate specialized tasks to the following sub-agents. Call the \`delegate\` tool with \`subAgent\` set to the name of the one you want:
 
-      - **Helper**: Use the \`delegateToHelper\` tool. Helps.
+      - **Helper**: Helps.
 
       Each task description MUST be entirely self-contained — sub-agents cannot see the parent conversation, other tasks, or any prior context. Include all relevant information directly in each task description. Wait for the sub-agent to complete before using its result."
     `);

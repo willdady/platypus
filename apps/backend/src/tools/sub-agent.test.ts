@@ -4,8 +4,12 @@ import { MockLanguageModelV3, simulateReadableStream } from "ai/test";
 import type { Tool, ToolExecutionOptions } from "ai";
 import { z } from "zod";
 import {
-  createSubAgentTool,
-  createSubAgentTools,
+  COLLIDING_SUB_AGENT_NAME_REASON,
+  createDelegateTool,
+  createDelegateTools,
+  createSubAgentDelegate,
+  DELEGATE_TOOL_NAME,
+  subAgentToolName,
   SUB_AGENT_STEP_LIMIT_NOTE,
   SUB_AGENT_TRUNCATION_NOTE,
 } from "./sub-agent.ts";
@@ -119,7 +123,7 @@ const baseOptions = {
  * The pre-refactor option shape tests build with: `model`/`maxSteps`/
  * `securityGuardrails`/`sampling`/`maxOutputTokens` as loose named fields.
  * `buildOptions` folds them into the `plan`/`guardrails` shape
- * `createSubAgentTool` now takes, so individual test bodies below don't have
+ * `createSubAgentDelegate` now takes, so individual test bodies below don't have
  * to restate that shape at every call site.
  */
 type LegacyOptions = Partial<{
@@ -143,12 +147,12 @@ type LegacyOptions = Partial<{
     >
   >;
   maxOutputTokens: number;
-  parentRun: Parameters<typeof createSubAgentTool>[0]["parentRun"];
+  parentRun: Parameters<typeof createSubAgentDelegate>[0]["parentRun"];
 }>;
 
 const buildOptions = (
   overrides: LegacyOptions = {},
-): Parameters<typeof createSubAgentTool>[0] => {
+): Parameters<typeof createSubAgentDelegate>[0] => {
   const {
     model = modelOf(step([])),
     maxSteps = DEFAULT_AGENT_MAX_STEPS,
@@ -170,13 +174,23 @@ const buildOptions = (
   };
 };
 
+/**
+ * The single `delegate` tool a parent gets when ONE sub-agent resolved. Every
+ * exercise of a delegated run goes through the dispatcher rather than around
+ * it, because the dispatcher is now the only way a model reaches one.
+ */
+const delegateToolFor = (
+  options: Parameters<typeof createSubAgentDelegate>[0],
+) => createDelegateTool([createSubAgentDelegate(options)]);
+
 /** Build the delegate tool, run one delegation, collect every yield. */
 const delegate = async (
   options: LegacyOptions = {},
   execOptions: Partial<ToolExecutionOptions<Record<string, unknown>>> = {},
 ) => {
-  const { tool } = createSubAgentTool(buildOptions(options));
-  const gen = tool.execute({ task: "Do something" }, {
+  const built = buildOptions(options);
+  const tool = delegateToolFor(built);
+  const gen = tool.execute({ subAgent: built.name, task: "Do something" }, {
     ...execOptions,
   } as ToolExecutionOptions<
     Record<string, unknown>
@@ -210,61 +224,48 @@ const stepCeilingOf = (call = 0): number => {
 // `toModelOutput` is declared as returning any tool-result shape, so the text
 // case is narrowed once here rather than at each assertion.
 const modelText = (
-  tool: ReturnType<typeof createSubAgentTool>["tool"],
+  tool: ReturnType<typeof createDelegateTool>,
   output: SubAgentActivity,
 ): string =>
   (
     tool.toModelOutput!({
       toolCallId: "tc1",
-      input: { task: "Audit the board" },
+      input: { subAgent: "Research Agent", task: "Audit the board" },
       output,
     }) as { value: string }
   ).value;
 
-describe("createSubAgentTool", () => {
+// The names delegations were STORED under before the single dispatcher. No
+// tool is declared under them any more, and none ever will be again — but every
+// Chat written before this change holds parts named this way, permanently, and
+// the frontend recovers the Sub-Agent's display name by inverting exactly this.
+describe("subAgentToolName — the pre-dispatcher stored shape", () => {
+  it("generates PascalCase delegateTo prefix", () => {
+    expect(subAgentToolName({ name: "Research Agent" })).toBe(
+      "delegateToResearchAgent",
+    );
+  });
+
+  it("handles single-word names", () => {
+    expect(subAgentToolName({ name: "Helper" })).toBe("delegateToHelper");
+  });
+
+  it("strips non-alphanumeric characters", () => {
+    expect(subAgentToolName({ name: "My (Special) Agent!" })).toMatch(
+      /^delegateTo[A-Za-z0-9]+$/,
+    );
+  });
+
+  it("handles hyphenated names", () => {
+    expect(subAgentToolName({ name: "code-review" })).toBe(
+      "delegateToCodeReview",
+    );
+  });
+});
+
+describe("createSubAgentDelegate", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-  });
-
-  describe("toolName generation", () => {
-    it("generates PascalCase delegateTo prefix", () => {
-      const { toolName } = createSubAgentTool(buildOptions());
-      expect(toolName).toBe("delegateToResearchAgent");
-    });
-
-    it("handles single-word names", () => {
-      const { toolName } = createSubAgentTool(buildOptions({ name: "Helper" }));
-      expect(toolName).toBe("delegateToHelper");
-    });
-
-    it("strips non-alphanumeric characters", () => {
-      const { toolName } = createSubAgentTool(
-        buildOptions({ name: "My (Special) Agent!" }),
-      );
-      expect(toolName).toMatch(/^delegateTo[A-Za-z0-9]+$/);
-    });
-
-    it("handles hyphenated names", () => {
-      const { toolName } = createSubAgentTool(
-        buildOptions({ name: "code-review" }),
-      );
-      expect(toolName).toBe("delegateToCodeReview");
-    });
-  });
-
-  describe("tool description", () => {
-    it("uses custom description when provided", () => {
-      const { tool } = createSubAgentTool(
-        buildOptions({ description: "Does research tasks" }),
-      );
-      expect(tool.description).toContain("Does research tasks");
-      expect(tool.description).toContain("Research Agent");
-    });
-
-    it("uses default description when none provided", () => {
-      const { tool } = createSubAgentTool(buildOptions());
-      expect(tool.description).toContain("Research Agent");
-    });
   });
 
   // ADR-0016: a delegated run is the one path that receives Instructions plus
@@ -458,13 +459,13 @@ describe("createSubAgentTool", () => {
 
     it("records the failure in the activity log before throwing", async () => {
       const yielded: SubAgentActivity[] = [];
-      const { tool } = createSubAgentTool(
+      const tool = delegateToolFor(
         buildOptions({
           model: modelOf(step([{ type: "error", error: new Error("boom") }])),
         }),
       );
       const gen = tool.execute(
-        { task: "Do something" },
+        { subAgent: "Research Agent", task: "Do something" },
         {} as ToolExecutionOptions<Record<string, unknown>>,
       ) as AsyncGenerator<SubAgentActivity>;
 
@@ -652,14 +653,15 @@ describe("createSubAgentTool", () => {
 
     it("stops the delegated run when the parent run is cancelled", async () => {
       const parent = new AbortController();
-      const { tool } = createSubAgentTool(
+      const tool = delegateToolFor(
         buildOptions({ model: modelOf(step(text("t1", "half an answ"))) }),
       );
-      const gen = tool.execute({ task: "Do something" }, {
-        abortSignal: parent.signal,
-      } as ToolExecutionOptions<
-        Record<string, unknown>
-      >) as AsyncGenerator<SubAgentActivity>;
+      const gen = tool.execute(
+        { subAgent: "Research Agent", task: "Do something" },
+        {
+          abortSignal: parent.signal,
+        } as ToolExecutionOptions<Record<string, unknown>>,
+      ) as AsyncGenerator<SubAgentActivity>;
 
       await expect(
         (async () => {
@@ -731,7 +733,7 @@ describe("createSubAgentTool", () => {
     });
 
     it("says only that the answer was cut off when there is no text at all", () => {
-      const { tool } = createSubAgentTool(buildOptions());
+      const tool = delegateToolFor(buildOptions());
 
       expect(
         modelText(tool, {
@@ -979,11 +981,11 @@ describe("createSubAgentTool", () => {
   describe("sub-agent tools", () => {
     it("opens its tools on invocation, not when the delegate is built", async () => {
       const loadTools = vi.fn().mockResolvedValue({});
-      const { tool } = createSubAgentTool(buildOptions({ loadTools }));
+      const tool = delegateToolFor(buildOptions({ loadTools }));
       expect(loadTools).not.toHaveBeenCalled();
 
       const gen = tool.execute(
-        { task: "Do something" },
+        { subAgent: "Research Agent", task: "Do something" },
         {} as ToolExecutionOptions<Record<string, unknown>>,
       ) as AsyncGenerator<SubAgentActivity>;
       for await (const _ of gen) void _;
@@ -1009,30 +1011,30 @@ describe("createSubAgentTool", () => {
 
   describe("toModelOutput", () => {
     it("extracts text from activity output", () => {
-      const { tool } = createSubAgentTool(buildOptions());
+      const tool = delegateToolFor(buildOptions());
       const result = tool.toModelOutput!({
         toolCallId: "tc1",
-        input: { task: "test" },
+        input: { subAgent: "Research Agent", task: "test" },
         output: { entries: [], text: "Final answer" },
       });
       expect(result).toEqual({ type: "text", value: "Final answer" });
     });
 
     it("returns fallback when output has no text", () => {
-      const { tool } = createSubAgentTool(buildOptions());
+      const tool = delegateToolFor(buildOptions());
       const result = tool.toModelOutput!({
         toolCallId: "tc1",
-        input: { task: "test" },
+        input: { subAgent: "Research Agent", task: "test" },
         output: { entries: [] },
       });
       expect(result).toEqual({ type: "text", value: "Task completed." });
     });
 
     it("returns fallback when output is null", () => {
-      const { tool } = createSubAgentTool(buildOptions());
+      const tool = delegateToolFor(buildOptions());
       const result = tool.toModelOutput!({
         toolCallId: "tc1",
-        input: { task: "test" },
+        input: { subAgent: "Research Agent", task: "test" },
         output: null as unknown as SubAgentActivity,
       });
       expect(result).toEqual({ type: "text", value: "Task completed." });
@@ -1040,18 +1042,95 @@ describe("createSubAgentTool", () => {
   });
 });
 
-describe("createSubAgentTools", () => {
+describe("createDelegateTool — dispatch", () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
-  /** Run the delegate a builder produced, so its run arguments can be read. */
-  const runTool = async (tool: Tool) => {
+  /** Two named delegates over the same trivial model, for routing tests. */
+  const twoDelegates = () => [
+    createSubAgentDelegate(
+      buildOptions({ id: "sa-1", name: "Research Agent" }),
+    ),
+    createSubAgentDelegate(buildOptions({ id: "sa-2", name: "Coder" })),
+  ];
+
+  const dispatch = async (
+    tool: ReturnType<typeof createDelegateTool>,
+    input: { subAgent: string; task?: string },
+  ) => {
+    const gen = tool.execute(
+      { task: "Do something", ...input },
+      {} as ToolExecutionOptions<Record<string, unknown>>,
+    ) as AsyncGenerator<SubAgentActivity>;
+    for await (const _ of gen) void _;
+  };
+
+  it("runs the named sub-agent, and only that one", async () => {
+    const tool = createDelegateTool(twoDelegates());
+    await dispatch(tool, { subAgent: "Coder", task: "Write a parser" });
+
+    // One delegated run, and its prompt is the task it was given.
+    expect(streamTextSpy).toHaveBeenCalledTimes(1);
+    expect(streamArgs().system).toContain('sub-agent named "Coder"');
+    expect(streamArgs().prompt).toBe("Write a parser");
+  });
+
+  it("forgives case and surrounding whitespace in the target name", async () => {
+    const tool = createDelegateTool(twoDelegates());
+    await dispatch(tool, { subAgent: "  research agent " });
+
+    expect(streamArgs().system).toContain('sub-agent named "Research Agent"');
+  });
+
+  // The parent turn survives this: the model gets a tool error it can act on,
+  // and nothing is delegated. Falling through to an arbitrary sub-agent — the
+  // one thing this must never do — would show up as a stream call here.
+  it("fails with the valid targets when the sub-agent is unknown", async () => {
+    const tool = createDelegateTool(twoDelegates());
+
+    await expect(dispatch(tool, { subAgent: "Nobody" })).rejects.toThrow(
+      /Unknown sub-agent "Nobody"\. The sub-agents you can delegate to are: "Research Agent", "Coder"\./,
+    );
+    expect(streamTextSpy).not.toHaveBeenCalled();
+  });
+
+  // Under one tool the tool always exists, so a sub-agent that failed to
+  // resolve is refused HERE rather than by its tool being absent.
+  it("refuses a sub-agent that failed to resolve, with its recorded reason", async () => {
+    const tool = createDelegateTool(
+      [twoDelegates()[0]],
+      new Map([
+        ["coder", { name: "Coder", reason: "Model 'gpt-9' not found" }],
+      ]),
+    );
+
+    await expect(dispatch(tool, { subAgent: "Coder" })).rejects.toThrow(
+      /Sub-agent "Coder" is unavailable this turn: Model 'gpt-9' not found\. Do not retry it\. The sub-agents you can delegate to are: "Research Agent"\./,
+    );
+    expect(streamTextSpy).not.toHaveBeenCalled();
+  });
+
+  it("sends the model to the catalogue for the targets it accepts", () => {
+    const tool = createDelegateTool(twoDelegates());
+    expect(tool.description).toContain(
+      "Sub-Agents section of your instructions",
+    );
+  });
+});
+
+describe("createDelegateTools", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  /** Run the one tool a builder produced against a named sub-agent. */
+  const runTool = async (tools: Record<string, Tool>, subAgent: string) => {
     const gen = (
-      tool as unknown as {
+      tools[DELEGATE_TOOL_NAME] as unknown as {
         execute: (a: unknown, o: unknown) => AsyncGenerator<SubAgentActivity>;
       }
-    ).execute({ task: "Do something" }, {});
+    ).execute({ subAgent, task: "Do something" }, {});
     for await (const _ of gen) void _;
   };
 
@@ -1061,7 +1140,7 @@ describe("createSubAgentTools", () => {
    * Resolution itself (model, step ceiling, output ceiling, sampling, alias
    * lookup) is `resolveGenerationPlan`'s own contract, unit-tested in
    * `runs/agent-plan.test.ts`; this suite only has to prove
-   * `createSubAgentTools` calls it once per sub-agent, forwards its result
+   * `createDelegateTools` calls it once per sub-agent, forwards its result
    * unmodified, and keeps going when it rejects.
    */
   const workingPlan = () =>
@@ -1070,41 +1149,55 @@ describe("createSubAgentTools", () => {
       guardrails: null,
     });
 
-  it("returns empty object when given no sub-agents", async () => {
-    const result = await createSubAgentTools([], vi.fn(), vi.fn());
-    expect(result).toEqual({ tools: {}, failures: [] });
+  it("declares no delegation tool and no catalogue when there are no sub-agents", async () => {
+    const result = await createDelegateTools([], vi.fn(), vi.fn());
+    expect(result).toEqual({ tools: {}, catalogue: [], failures: [] });
   });
 
-  it("creates tools for each sub-agent", async () => {
+  // The whole point of the dispatcher: the tool count no longer tracks the
+  // sub-agent count.
+  it("declares exactly one tool however many sub-agents there are", async () => {
     const subAgents = [
-      { id: "sa-1", name: "Research", toolSetIds: ["ts1"] },
+      {
+        id: "sa-1",
+        name: "Research",
+        description: "Looks things up",
+        toolSetIds: ["ts1"],
+      },
       { id: "sa-2", name: "Coder", toolSetIds: [] },
+      { id: "sa-3", name: "Reviewer", toolSetIds: [] },
     ];
 
     const resolvePlan = workingPlan();
     const loadToolsFn = vi.fn().mockResolvedValue({});
 
-    const result = await createSubAgentTools(
+    const result = await createDelegateTools(
       subAgents,
       resolvePlan,
       loadToolsFn,
     );
 
-    expect(Object.keys(result.tools)).toHaveLength(2);
-    expect(result.tools).toHaveProperty("delegateToResearch");
-    expect(result.tools).toHaveProperty("delegateToCoder");
+    expect(Object.keys(result.tools)).toEqual([DELEGATE_TOOL_NAME]);
     expect(result.failures).toEqual([]);
-    expect(resolvePlan).toHaveBeenCalledTimes(2);
+    expect(resolvePlan).toHaveBeenCalledTimes(3);
+    // The catalogue is what the prompt advertises: every resolvable sub-agent,
+    // by the name the tool expects back, with its description.
+    expect(result.catalogue).toEqual([
+      { name: "Research", description: "Looks things up" },
+      { name: "Coder", description: undefined },
+      { name: "Reviewer", description: undefined },
+    ]);
+
     // Building the delegates opens nothing: each sub-agent's tools are loaded
     // if and when the parent actually delegates to it.
     expect(loadToolsFn).not.toHaveBeenCalled();
 
-    await runTool(result.tools.delegateToResearch);
+    await runTool(result.tools, "Research");
     expect(loadToolsFn).toHaveBeenCalledExactlyOnceWith("sa-1", ["ts1"]);
 
     // Memoized per delegate: a second delegation in the same turn reuses the
     // tools — and the connections — the first one opened.
-    await runTool(result.tools.delegateToResearch);
+    await runTool(result.tools, "Research");
     expect(loadToolsFn).toHaveBeenCalledTimes(1);
   });
 
@@ -1118,12 +1211,12 @@ describe("createSubAgentTools", () => {
       guardrails: null,
     });
 
-    const { tools } = await createSubAgentTools(
+    const { tools } = await createDelegateTools(
       [{ id: "sa-1", name: "Research" }],
       resolvePlan,
       vi.fn().mockResolvedValue({}),
     );
-    await runTool(tools.delegateToResearch);
+    await runTool(tools, "Research");
 
     expect(streamArgs()).toMatchObject({ maxOutputTokens: 32000 });
     expect(stepCeilingOf()).toBe(3);
@@ -1142,21 +1235,93 @@ describe("createSubAgentTools", () => {
         plan: { model: modelOf(step([])), maxSteps: DEFAULT_AGENT_MAX_STEPS },
         guardrails: null,
       });
-    const loadToolsFn = vi.fn().mockResolvedValue({});
 
-    const result = await createSubAgentTools(
+    const result = await createDelegateTools(
       subAgents,
       resolvePlan,
-      loadToolsFn,
+      vi.fn().mockResolvedValue({}),
     );
 
-    expect(Object.keys(result.tools)).toHaveLength(1);
-    expect(result.tools).toHaveProperty("delegateToWorking");
-    // The dropped sub-agent must come back named, so the caller can stop
-    // advertising a tool it never registered.
+    // Advertised: only the one that resolved.
+    expect(result.catalogue).toEqual([
+      { name: "Working", description: undefined },
+    ]);
+    // The dropped sub-agent must come back named, so the caller can describe
+    // it as unavailable rather than leave the model to discover the gap.
     expect(result.failures).toEqual([
       { id: "sa-1", name: "Failing", reason: "Model not found" },
     ]);
+    // And the tool refuses it by name, with that same reason.
+    await expect(runTool(result.tools, "Failing")).rejects.toThrow(
+      /is unavailable this turn: Model not found/,
+    );
+  });
+
+  // Two sub-agents sharing a name have no unambiguous target between them, so
+  // BOTH are dropped and reported. Previously one silently won.
+  it("drops every sub-agent in a name collision rather than picking a winner", async () => {
+    const subAgents = [
+      { id: "sa-1", name: "Helper" },
+      { id: "sa-2", name: "helper " },
+      { id: "sa-3", name: "Coder" },
+    ];
+
+    const resolvePlan = workingPlan();
+    const result = await createDelegateTools(
+      subAgents,
+      resolvePlan,
+      vi.fn().mockResolvedValue({}),
+    );
+
+    expect(result.catalogue).toEqual([
+      { name: "Coder", description: undefined },
+    ]);
+    expect(result.failures).toEqual([
+      { id: "sa-1", name: "Helper", reason: COLLIDING_SUB_AGENT_NAME_REASON },
+      { id: "sa-2", name: "helper ", reason: COLLIDING_SUB_AGENT_NAME_REASON },
+    ]);
+    // Neither was built, so neither cost a plan resolution.
+    expect(resolvePlan).toHaveBeenCalledTimes(1);
+    await expect(runTool(result.tools, "Helper")).rejects.toThrow(
+      /another sub-agent assigned to this agent has the same name/,
+    );
+  });
+
+  // A tool that can only ever error is worth nothing to the model; the prompt's
+  // unavailable section still says what happened.
+  it("declares no tool when every sub-agent failed", async () => {
+    const result = await createDelegateTools(
+      [{ id: "sa-1", name: "Failing" }],
+      vi.fn().mockRejectedValue(new Error("Model not found")),
+      vi.fn(),
+    );
+
+    expect(result.tools).toEqual({});
+    expect(result.catalogue).toEqual([]);
+    expect(result.failures).toHaveLength(1);
+  });
+
+  // The caller knows about assignments whose row never resolved in the
+  // Workspace before the factory is called. They have no name — reading one off
+  // the row is the boundary crossing that dropped them — so the id the prompt
+  // lists them under is the identifier the tool refuses them by.
+  it("refuses a sub-agent the caller already reported as unavailable, by id", async () => {
+    const result = await createDelegateTools(
+      [{ id: "sa-1", name: "Working" }],
+      workingPlan(),
+      vi.fn().mockResolvedValue({}),
+      undefined,
+      [{ id: "sub-gone", reason: "not available in this workspace" }],
+    );
+
+    // Reported back alongside the factory's own failures, so the caller has one
+    // list to render.
+    expect(result.failures).toEqual([
+      { id: "sub-gone", reason: "not available in this workspace" },
+    ]);
+    await expect(runTool(result.tools, "sub-gone")).rejects.toThrow(
+      /Sub-agent "sub-gone" is unavailable this turn: not available in this workspace/,
+    );
   });
 
   it("passes each sub-agent's own resolved guardrails into its instructions", async () => {
@@ -1165,12 +1330,12 @@ describe("createSubAgentTools", () => {
       guardrails: "Provider-specific rule.",
     });
 
-    const { tools } = await createSubAgentTools(
+    const { tools } = await createDelegateTools(
       [{ id: "sa-1", name: "Guarded", instructions: "You are guarded." }],
       resolvePlan,
       vi.fn().mockResolvedValue({}),
     );
-    await runTool(tools.delegateToGuarded);
+    await runTool(tools, "Guarded");
 
     const { system } = streamArgs();
     expect(system).toContain("You are guarded.");

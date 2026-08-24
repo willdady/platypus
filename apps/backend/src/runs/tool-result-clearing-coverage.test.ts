@@ -4,6 +4,7 @@ import { isClearableToolName } from "./tool-result-clearing.ts";
 import { createWebFetchTools } from "../tools/fetch.ts";
 import { createSandboxTools } from "../sandbox/tools.ts";
 import { createLoadSkillTool } from "../tools/skill.ts";
+import { DELEGATE_TOOL_NAME } from "../tools/sub-agent.ts";
 import type { SandboxBackend, SandboxContext } from "../sandbox/types.ts";
 
 // Every core plugin the domain Tool sets transitively import the db and a few
@@ -71,9 +72,9 @@ import { getToolSets, SANDBOX_TOOLSET_ID } from "../tools/index.ts";
  *
  * Scope: core plugins only, matching the allowlist's own scope — MCP and
  * third-party plugin tools are deny-by-default and untouched by #524 pending
- * read-only hints (#626). `delegateTo*` sub-Agent tool names are dynamic
- * (per-configuration), so they are asserted by pattern rather than literal
- * name.
+ * read-only hints (#626). Sub-Agent delegation is one fixed tool name,
+ * `delegate`, assigned ad hoc in `chat-execution.ts` like `loadSkill` — the
+ * `delegateTo*` names it replaced live on only in stored Chat history.
  */
 
 const CORE_PLUGIN_NAMES = ["@platypus/web-fetch"];
@@ -121,6 +122,10 @@ beforeAll(async () => {
   // through the Tool-set registry.
   void createLoadSkillTool;
   names.add("loadSkill");
+
+  // Ad hoc for the same reason: the one delegation tool is assigned directly
+  // in `chat-execution.ts` when at least one sub-agent resolved.
+  names.add(DELEGATE_TOOL_NAME);
 
   // Web-search backend (see doc comment above: can't be materialized here).
   names.add("web_search");
@@ -196,12 +201,16 @@ const EXPECTED_CLEARABLE: Record<string, boolean> = {
 
   // Not clearable: instructions the model is meant to keep following.
   loadSkill: false,
+
+  // Not clearable: a delegation result is the whole of a sub-agent's work, and
+  // re-delegating to get it back would re-run the run.
+  delegate: false,
 };
 
 describe("Tool-result clearing — core tool inventory", () => {
   it("classifies every core tool name the currently-registered plugins produce", () => {
     const unclassified = materializedNames.filter(
-      (name) => !(name in EXPECTED_CLEARABLE) && !/^delegateTo[A-Z]/.test(name),
+      (name) => !(name in EXPECTED_CLEARABLE),
     );
 
     expect(
@@ -219,7 +228,9 @@ describe("Tool-result clearing — core tool inventory", () => {
     }
   });
 
-  it("denies dynamic sub-Agent delegate tool names, whatever the sub-Agent is called", () => {
+  // Stored Chat history keeps the pre-dispatcher names for ever, and a
+  // Transcript rebuilt from it is what clearing runs over.
+  it("denies the pre-dispatcher sub-Agent tool names still held in stored history", () => {
     expect(isClearableToolName("delegateToResearchAgent")).toBe(false);
     expect(isClearableToolName("delegateToBillingHelper")).toBe(false);
   });

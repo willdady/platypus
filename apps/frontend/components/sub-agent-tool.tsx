@@ -99,8 +99,12 @@ const getStatusBadge = (status: ToolUIPart["state"]) => {
 };
 
 /**
- * Extracts the sub-agent name from the tool name.
+ * Extracts the sub-agent name from a pre-dispatcher tool name.
  * e.g., "delegateToDadJokeBot" -> "Dad Joke Bot"
+ *
+ * Only reachable for parts stored before delegation collapsed into a single
+ * `delegate` tool, which is for ever: stored Chat messages carry the tool name
+ * that was current when they were written and are never rewritten.
  */
 const extractSubAgentName = (toolName: string): string => {
   const prefix = "delegateTo";
@@ -109,6 +113,22 @@ const extractSubAgentName = (toolName: string): string => {
     return namePart.replace(/([A-Z])/g, " $1").trim();
   }
   return toolName;
+};
+
+/**
+ * Whose name to put on the card.
+ *
+ * A new-shape part names its target in the tool's own input, because one tool
+ * serves every sub-agent — there is nothing in `tool-delegate` to un-mangle.
+ * The name arrives with the streamed input, so the fallback covers only the
+ * sliver of a turn before the model has finished writing the call.
+ */
+const subAgentNameOf = (toolPart: ToolUIPart): string => {
+  const toolName = toolPart.type.replace("tool-", "");
+  if (toolName !== "delegate") return extractSubAgentName(toolName);
+  const target = (toolPart.input as { subAgent?: string } | undefined)
+    ?.subAgent;
+  return target?.trim() || "Sub-Agent";
 };
 
 type CompactEntry = SubAgentActivityEntry & { count?: number };
@@ -254,7 +274,7 @@ export const SubAgentTool = ({
   const input = toolPart.input as { task?: string };
   const output = toolPart.output as SubAgentActivity | string | null;
   const errorText = toolPart.errorText;
-  const subAgentName = extractSubAgentName(toolPart.type.replace("tool-", ""));
+  const subAgentName = subAgentNameOf(toolPart);
   const isRunning =
     toolPart.state === "input-streaming" ||
     toolPart.state === "input-available";

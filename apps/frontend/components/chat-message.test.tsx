@@ -612,13 +612,16 @@ describe("ChatMessage generic tool renderer exclusion", () => {
     ).toBe(false);
   });
 
-  it("never matches a sub-agent delegation part", () => {
+  it.each([
+    ["a stored pre-dispatcher delegation part", "tool-delegateToResearchBot"],
+    ["a single-tool delegation part", "tool-delegate"],
+  ])("never matches %s", (_, type) => {
     expect(
       isGenericToolPart({
-        type: "tool-delegateToResearchBot",
+        type,
         toolCallId: "c1",
         state: "output-available",
-        input: { task: "x" },
+        input: { subAgent: "Research Bot", task: "x" },
         output: { entries: [] },
       } as unknown as Parameters<typeof isGenericToolPart>[0]),
     ).toBe(false);
@@ -697,6 +700,29 @@ describe("ChatMessage sub-agent tool dispatch", () => {
     expect(screen.getByText("Task")).toBeInTheDocument();
     expect(screen.queryByText("Parameters")).toBeNull();
     expect(screen.queryByText("Result")).toBeNull();
+  });
+
+  // The new shape: one `delegate` tool for every sub-agent, so the target is
+  // named in the input rather than in the tool name.
+  it("routes a single-tool delegation to the same card", () => {
+    renderMessage({
+      id: "m1",
+      role: "assistant",
+      parts: [
+        {
+          type: "tool-delegate",
+          toolCallId: "c1",
+          state: "output-available",
+          input: { subAgent: "Research Bot", task: "Find the release date" },
+          output: { entries: [], text: "It shipped in March." },
+        },
+      ],
+    } as unknown as PlatypusUIMessage);
+
+    expect(screen.getByText("Research Bot")).toBeInTheDocument();
+    fireEvent.click(screen.getByText("Research Bot"));
+    expect(screen.getByText("Task")).toBeInTheDocument();
+    expect(screen.queryByText("Parameters")).toBeNull();
   });
 });
 

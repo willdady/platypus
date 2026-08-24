@@ -41,6 +41,55 @@ const truncatedDelegateCall = (
     },
   }) as unknown as ToolUIPart;
 
+// The two shapes a delegation is ever stored in. `tool-delegate` is what every
+// new one writes and names its target in the input; `tool-delegateTo<Name>` is
+// what Chats written before the single dispatcher hold — permanently, since
+// stored messages are never rewritten — and names it in the tool name.
+describe("SubAgentTool name resolution", () => {
+  it("names the sub-agent from the tool input on a new delegation", () => {
+    render(
+      <SubAgentTool
+        toolPart={
+          {
+            type: "tool-delegate",
+            toolCallId: "call-1",
+            state: "output-available",
+            input: { subAgent: "Research Bot", task: "Find the release date" },
+            output: { entries: [], text: "It shipped in March." },
+          } as unknown as ToolUIPart
+        }
+      />,
+    );
+
+    expect(screen.getByText("Research Bot")).toBeInTheDocument();
+  });
+
+  it("un-mangles the tool name on a delegation stored before the single tool", () => {
+    render(<SubAgentTool toolPart={delegateCall()} />);
+
+    expect(screen.getByText("Research Bot")).toBeInTheDocument();
+  });
+
+  // The target arrives with the streamed input, so this covers only the sliver
+  // of a turn before the model has finished writing the call.
+  it("falls back to a generic label before the target has streamed in", () => {
+    render(
+      <SubAgentTool
+        toolPart={
+          {
+            type: "tool-delegate",
+            toolCallId: "call-1",
+            state: "input-streaming",
+            input: {},
+          } as unknown as ToolUIPart
+        }
+      />,
+    );
+
+    expect(screen.getByText("Sub-Agent")).toBeInTheDocument();
+  });
+});
+
 // A delegated run is the longest thing that happens in a chat, so its card is
 // the one where the duration matters most.
 describe("SubAgentTool duration", () => {

@@ -45,6 +45,7 @@ describe("isClearableToolName", () => {
     expect(isClearableToolName("fsEdit")).toBe(false);
     expect(isClearableToolName("shellExec")).toBe(false);
     expect(isClearableToolName("loadSkill")).toBe(false);
+    expect(isClearableToolName("delegate")).toBe(false);
     expect(isClearableToolName("delegateToResearchAgent")).toBe(false);
     expect(isClearableToolName("some_new_tool_nobody_classified_yet")).toBe(
       false,
