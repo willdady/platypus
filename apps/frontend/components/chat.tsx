@@ -39,8 +39,8 @@ import { type PlatypusUIMessage } from "@platypus/backend/src/types";
 import { joinUrl } from "@/lib/utils";
 import { writeAt, scopedPath } from "@/lib/api-write";
 import { useScopedSWR } from "@/hooks/use-scoped-swr";
-import { useResetOnChange } from "@/hooks/use-reset-on-change";
 import { useChatSettings } from "@/hooks/use-chat-settings";
+import { useSearchToggle } from "@/hooks/use-search-toggle";
 import { useModelSelection } from "@/hooks/use-model-selection";
 import { resolveModel } from "@/lib/resolve-model";
 import { clearedToolCallIds } from "@/lib/tool-result-clearing";
@@ -86,7 +86,6 @@ export const Chat = ({
   const scope = useMemo(() => ({ orgId, workspaceId }), [orgId, workspaceId]);
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const [search, setSearch] = useState(false);
   const [inputValue, setInputValue] = useState("");
 
   // Fetch providers
@@ -212,6 +211,18 @@ export const Chat = ({
 
   // Extract values from hooks for easier access
   const { agentId, modelId, providerId } = selection;
+
+  // One entry point for "what model will this Chat turn use, and what can it
+  // do?" — replaces separately resolving the provider, the concrete model id,
+  // passthrough file types, context window and search capability by hand.
+  // `null` means nothing resolves yet: no selection made, or the selected
+  // Agent/Provider/model reference no longer exists.
+  const resolvedModel = resolveModel({
+    providers,
+    agents,
+    selection: { agentId, modelId, providerId },
+  });
+  const [search, setSearch] = useSearchToggle(resolvedModel);
   const {
     instructions,
     temperature,
@@ -342,9 +353,6 @@ export const Chat = ({
     }
   }, [initialAgentId, agentId, chatData, modelSetters]);
 
-  // Reset search when model or provider changes
-  useResetOnChange(`${modelId}:${providerId}`, () => setSearch(false));
-
   const handleCopyMessage = useCallback(
     async (content: string, messageId: string) => {
       try {
@@ -386,17 +394,6 @@ export const Chat = ({
   }
 
   const selectedAgent = agentId ? agents.find((a) => a.id === agentId) : null;
-
-  // One entry point for "what model will this Chat turn use, and what can it
-  // do?" — replaces separately resolving the provider, the concrete model id,
-  // passthrough file types, context window and search capability by hand.
-  // `null` means nothing resolves yet: no selection made, or the selected
-  // Agent/Provider/model reference no longer exists.
-  const resolvedModel = resolveModel({
-    providers,
-    agents,
-    selection: { agentId, modelId, providerId },
-  });
 
   // Context occupancy (ADR-0018): the capacity comes from the Org Admin's
   // declaration on the resolved model (`resolvedModel.contextWindow`), the
