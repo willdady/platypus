@@ -134,8 +134,14 @@ chore(tests): add missing test coverage
    the reference tables, webhook events, core plugin names, field limits, or
    internal links no longer match the code.
 4. Open a pull request against the `main` branch.
-5. Provide a clear description of the changes and the motivation behind them.
-6. Link any related issues in your PR description.
+5. **Title the pull request as a Conventional Commit**, using the same types as above —
+   for example `feat: add user authentication`. Pull requests are squash-merged and the
+   title becomes the commit message on `main`, so it is the title, not your individual
+   commit messages, that ends up in the history and in the release changelog. A title
+   without a `feat`/`fix`/`chore` prefix means your change is missing from the changelog
+   and from the version bump.
+6. Provide a clear description of the changes and the motivation behind them.
+7. Link any related issues in your PR description.
 
 ## Project Structure
 
