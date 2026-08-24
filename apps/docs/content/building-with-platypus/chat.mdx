@@ -68,6 +68,13 @@ Where the Provider uses a backend rather than the vendor's own search, turning
 **Search** on may also hand the model a page reader for that turn — see [what a
 backend grants](/concepts/providers#web-search).
 
+A search or a page read renders the same way whichever ran: a compact card
+naming the query or the page, a result count where one is knowable, and an
+error line where it failed — never a raw dump of what the vendor or backend
+actually returned. The **Web Fetch** Tool set's page reads render on the same
+card. A count isn't always shown; some Providers don't report one for their own
+search, and the card says nothing there rather than guessing.
+
 Occasionally a turn gets no search even though you asked for it: the Provider
 names a backend your Operator has since removed, or the backend fails to start.
 The reply is still written, without searching, and a line under it reads

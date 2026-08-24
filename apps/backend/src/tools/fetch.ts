@@ -4,6 +4,7 @@ import { JSDOM } from "jsdom";
 import { Readability } from "@mozilla/readability";
 import TurndownService from "turndown";
 import robotsParser from "robots-parser";
+import { WEB_BACKEND_TOOL_MARKER } from "@platypus/schemas";
 import { logger } from "../logger.ts";
 import { checkEgress, EGRESS_BLOCKED_MESSAGE } from "../utils/egress-guard.ts";
 
@@ -52,6 +53,10 @@ export const createWebFetchTools = (ignoreRobotsTxt: boolean) => ({
   fetchUrl: tool({
     description:
       "Fetch content from a URL on the web. HTML is converted to Markdown to reduce token usage. Supports pagination for large pages.",
+    // Stamped so the Web tool block recognises this as a core-built page read
+    // (issue #525) — the same marker `composeWebBackend` stamps on `read_url`,
+    // reused rather than mirrored for `WEB_BACKEND_TOOL_MARKER`'s own reason.
+    metadata: { [WEB_BACKEND_TOOL_MARKER]: true },
     inputSchema: z.object({
       url: z.string().url().describe("URL to fetch"),
       max_length: z

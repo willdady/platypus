@@ -100,6 +100,10 @@ A named bundle of Tools an Agent can be granted. Either contributed by a Plugin 
 One Agent's Tool sets, resolved for one Chat turn, together with the connections opened to serve them. Sessions nest: a Sub-Agent's session is opened on its first delegation and closes with the parent's, so a turn has exactly one thing to dispose however many tool sources it reached. A Tool set or Web-search backend that opens something with a lifetime registers its own close into that same one thing. A Tool set that cannot serve the turn — a factory that throws, an unreachable MCP — costs its own Tools and no more.
 _Avoid_: tool context (that is the scope handed to a Tool set factory), tool loader.
 
+**Web tool block**:
+The one presentation a reader sees for a native Provider search, a Web-search backend's `web_search` or `read_url`, and `@platypus/web-fetch`'s `fetchUrl` alike — a reader cannot tell which of them ran. Backed by a normalized result the backend computes once, server-side, discriminated by `kind: "search" | "page" | "find"` rather than by which tool produced it; the frontend renders only that shape and carries no vendor knowledge of its own. A tool the backend does not recognise as one of these — an MCP server's own `web_search`, a native search whose vendor payload it cannot read — keeps the generic Tool renderer, on the same "never guess a tool's identity from its payload" rule the block itself is built on.
+_Avoid_: web search card, search result block (both name only the search case; the block also covers a page read).
+
 **MCP**:
 A Model Context Protocol server registered at Workspace scope, or — as a Shared resource — at Organization scope. Resolves to a Tool set at Chat-turn time.
 

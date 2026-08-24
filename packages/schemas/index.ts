@@ -1471,8 +1471,83 @@ export const isPresentableUrl = (value: unknown): value is string => {
  *
  * Shared here rather than mirrored for `isPresentableUrl`'s reason: the frontend
  * reads what the backend writes, and two copies of the key drift.
+ *
+ * Also stamped on the web-fetch Tool set's `fetchUrl` (issue #525): that tool is
+ * not a Web-search backend, but it is core-built in exactly the same sense — a
+ * fixed, model-facing contract with no vendor behind it — and needs the same
+ * "core built this, don't guess" signal so its page reads join the Web tool
+ * block instead of dumping page content into the Transcript.
  */
 export const WEB_BACKEND_TOOL_MARKER = "platypusWebBackend";
+
+/**
+ * The `toolMetadata` key holding the outcome of backend-side web-tool
+ * normalization (issue #525): one shape for a native provider search, a
+ * Web-search backend's search or page read, and the web-fetch Tool set's
+ * `fetchUrl` — computed once, server-side (`normalizeWebToolPart` in
+ * `apps/backend/src/runs/web-tool-normalize.ts`), and read by the frontend
+ * with no vendor knowledge of its own.
+ *
+ * Absent means "not a recognised web tool" — the part renders on the generic
+ * tool renderer. Never inferred from the payload on the frontend; the backend
+ * is the only place that decides this.
+ */
+export const WEB_TOOL_NORMALIZED_KEY = "platypusNormalizedWebTool";
+
+/**
+ * A web tool's result, reduced to what every reader needs regardless of which
+ * search ran, which page-reader fetched it, or which vendor answered — the
+ * uniform presentation issue #525 asks for. Supersedes the frontend's old,
+ * search-only `WebSearchSource`-adjacent shape, which could not express a
+ * page read at all.
+ *
+ * `kind` follows what actually happened, not which tool was called: OpenAI's
+ * hosted web tool covers a search, an opened page, and an in-page find under
+ * one tool name, and only its output says which occurred.
+ *
+ * `results` is present only for a Web-search backend's search — the one case
+ * whose entries may still be lifted into the Sources row (ADR-0014). Native
+ * search deliberately omits it: the Provider emits its own citation parts for
+ * the pages it actually used, and lifting a native search's full result list
+ * as well would fill the row with pages the reply never cited. `resultCount`
+ * carries a native search's raw, unfiltered count instead — the entries the
+ * vendor returned, not the subset that could become a pill.
+ */
+export type NormalizedWebToolResult =
+  | {
+      kind: "search";
+      query?: string;
+      results?: Array<{ title: string; url: string; snippet?: string }>;
+      resultCount?: number;
+      answer?: string;
+      error?: string;
+    }
+  | {
+      kind: "page";
+      url?: string;
+      contentType?: string;
+      contentLength?: number;
+      truncated?: boolean;
+      error?: string;
+    }
+  | {
+      kind: "find";
+      url?: string;
+      pattern?: string;
+      error?: string;
+    };
+
+/**
+ * Tool names a Provider may execute natively for web search, keyed by the part
+ * type the AI SDK produces (`tool-<name>`). Read alongside `providerExecuted`,
+ * never alone: `google_search` is in this set purely because Google's native
+ * search registers under a name the old shape-guessing discriminator never
+ * saw, not because the name alone proves anything.
+ */
+export const WEB_TOOL_KNOWN_NATIVE_SEARCH_NAMES: ReadonlySet<string> = new Set([
+  "web_search",
+  "google_search",
+]);
 
 export const providerCreateSchema = providerBaseSchema.pick({
   organizationId: true,
