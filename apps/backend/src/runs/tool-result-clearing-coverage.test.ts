@@ -159,6 +159,8 @@ const EXPECTED_CLEARABLE: Record<string, boolean> = {
   convertVolume: false,
   getCurrentTime: false,
   convertTimezone: false,
+  generateUuid: false,
+  generateNanoId: false,
 
   // Not clearable: Platypus-domain tools — mutating, or small/metadata-shaped
   // reads whose value is in staying visible, not in being large.
