@@ -8,6 +8,11 @@ import {
   organizationCreateSchema,
   invitationCreateSchema,
   mcpSchema,
+  mcpCreateSchema,
+  mcpUpdateSchema,
+  slugifyMcpName,
+  namespaceMcpToolName,
+  MCP_TOOL_NAME_PATTERN,
   skillSchema,
   attachmentSchema,
   nextTurnOccupancy,
@@ -146,6 +151,7 @@ describe("MCP Schema", () => {
   const base = {
     id: "mcp-1",
     name: "Test MCP",
+    slug: "test_mcp",
     url: "https://mcp.example.com",
     authType: "None" as const,
     createdAt: new Date(),
@@ -174,6 +180,65 @@ describe("MCP Schema", () => {
   it("rejects an MCP scoped to neither", () => {
     const result = mcpSchema.safeParse(base);
     expect(result.success).toBe(false);
+  });
+});
+
+describe("MCP name slugification (issue #467)", () => {
+  it("lowercases, maps disallowed characters to a single underscore, and trims edges", () => {
+    expect(slugifyMcpName("Marys MCP Server")).toBe("marys_mcp_server");
+    expect(slugifyMcpName("Mary's MCP Server")).toBe("marys_mcp_server");
+    expect(slugifyMcpName("  GitHub!!  ")).toBe("github");
+  });
+
+  it("never produces a slug containing a double underscore", () => {
+    expect(slugifyMcpName("a---__--b")).toBe("a_b");
+    expect(slugifyMcpName("a__b")).toBe("a_b");
+  });
+
+  it("slugifies a name of only disallowed characters to an empty string", () => {
+    expect(slugifyMcpName("!!!")).toBe("");
+  });
+
+  it("namespaces a tool name under a slug, without stripping an existing prefix", () => {
+    expect(namespaceMcpToolName("github", "pull")).toBe("github__pull");
+    expect(namespaceMcpToolName("github", "github__pull")).toBe(
+      "github__github__pull",
+    );
+  });
+
+  it("MCP_TOOL_NAME_PATTERN matches the model-provider name ceiling", () => {
+    expect(MCP_TOOL_NAME_PATTERN.test("a".repeat(64))).toBe(true);
+    expect(MCP_TOOL_NAME_PATTERN.test("a".repeat(65))).toBe(false);
+    expect(MCP_TOOL_NAME_PATTERN.test("has.a.dot")).toBe(false);
+  });
+});
+
+describe("MCP create/update schemas reject a name that slugifies to empty", () => {
+  const createBase = {
+    name: "!!!",
+    workspaceId: "ws-1",
+    url: "https://mcp.example.com",
+    authType: "None" as const,
+  };
+
+  it("rejects on create", () => {
+    expect(mcpCreateSchema.safeParse(createBase).success).toBe(false);
+  });
+
+  it("rejects on update", () => {
+    expect(
+      mcpUpdateSchema.safeParse({
+        name: "!!!",
+        url: "https://mcp.example.com",
+        authType: "None" as const,
+      }).success,
+    ).toBe(false);
+  });
+
+  it("accepts an ordinary name", () => {
+    expect(
+      mcpCreateSchema.safeParse({ ...createBase, name: "My Server" }).success,
+    ).toBe(true);
   });
 });
 

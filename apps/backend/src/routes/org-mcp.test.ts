@@ -32,6 +32,7 @@ describe("Organization MCP Routes", () => {
     it("creates an org MCP if org admin", async () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]); // requireOrgAccess
+      mockDb.limit.mockResolvedValueOnce([]); // assertMcpSlugAvailable — no conflict
 
       const mockMcp = {
         id: "mcp-1",
@@ -67,6 +68,7 @@ describe("Organization MCP Routes", () => {
     it("returns 409 if an MCP name already exists in the org", async () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]); // requireOrgAccess
+      mockDb.limit.mockResolvedValueOnce([]); // assertMcpSlugAvailable — no conflict
 
       const drizzleError = Object.assign(
         new Error("DrizzleQueryError: Failed query"),

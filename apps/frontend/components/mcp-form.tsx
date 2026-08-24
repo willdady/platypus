@@ -64,7 +64,7 @@ type HeaderRow = { key: string; value: string };
 
 type McpFormData = Omit<
   MCP,
-  "id" | "createdAt" | "updatedAt" | "workspaceId" | "oauthAuthorized"
+  "id" | "createdAt" | "updatedAt" | "workspaceId" | "oauthAuthorized" | "slug"
 > & {
   headerRows: HeaderRow[];
 };
@@ -127,6 +127,7 @@ const McpForm = ({
   const [testResult, setTestResult] = useState<{
     success: boolean;
     toolNames?: string[];
+    invalidToolNames?: string[];
     error?: string;
   } | null>(null);
   const [isAuthorizing, setIsAuthorizing] = useState(false);
@@ -315,6 +316,9 @@ const McpForm = ({
         authType: formData.authType,
         bearerToken:
           formData.authType === "Bearer" ? formData.bearerToken : undefined,
+        // So the backend can report the tool-namespace-prefixed names this MCP
+        // will actually contribute once saved (issue #467).
+        name: formData.name,
       };
 
       // For OAuth, include mcpId so the backend can use stored tokens
@@ -325,6 +329,7 @@ const McpForm = ({
       const outcome = await writeAt<{
         success: boolean;
         toolNames?: string[];
+        invalidToolNames?: string[];
         error?: string;
       }>(joinUrl(backendUrl, `${collectionUrl}/test`), {
         method: "POST",
@@ -335,6 +340,7 @@ const McpForm = ({
         setTestResult({
           success: true,
           toolNames: outcome.data.toolNames,
+          invalidToolNames: outcome.data.invalidToolNames,
         });
       } else if (outcome.outcome === "success") {
         setTestResult({
@@ -881,6 +887,26 @@ const McpForm = ({
                               <span
                                 key={name}
                                 className="inline-flex items-center px-2 py-0.5 rounded text-xs font-mono bg-muted text-muted-foreground"
+                              >
+                                {name}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    {testResult.invalidToolNames &&
+                      testResult.invalidToolNames.length > 0 && (
+                        <div className="mt-2">
+                          <p className="text-xs font-medium mb-1 text-destructive">
+                            These tools&apos; names are too long once namespaced
+                            and will be unavailable. Rename this MCP shorter to
+                            fix this:
+                          </p>
+                          <div className="flex flex-wrap gap-1">
+                            {testResult.invalidToolNames.map((name) => (
+                              <span
+                                key={name}
+                                className="inline-flex items-center px-2 py-0.5 rounded text-xs font-mono bg-destructive/10 text-destructive"
                               >
                                 {name}
                               </span>

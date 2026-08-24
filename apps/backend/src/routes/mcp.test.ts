@@ -30,6 +30,7 @@ describe("MCP Routes", () => {
         { ownerId: "user-1", organizationId: "org-1" },
       ]); // requireWorkspaceAccess
 
+      mockDb.limit.mockResolvedValueOnce([]); // assertMcpSlugAvailable — no conflict
       const mockMcp = { id: "mcp-1", name: "New MCP", url: "http://mcp.com" };
       mockDb.returning.mockResolvedValueOnce([mockMcp]);
 
@@ -58,6 +59,7 @@ describe("MCP Routes", () => {
         { ownerId: "user-1", organizationId: "org-1" },
       ]); // requireWorkspaceAccess
 
+      mockDb.limit.mockResolvedValueOnce([]); // assertMcpSlugAvailable — no conflict
       mockDb.returning.mockResolvedValueOnce([
         { id: "mcp-1", name: "New MCP" },
       ]);
@@ -112,6 +114,7 @@ describe("MCP Routes", () => {
         { ownerId: "user-1", organizationId: "org-1" },
       ]);
       mockDb.limit.mockResolvedValueOnce([{ flag: true }]); // delegation flag set
+      mockDb.limit.mockResolvedValueOnce([]); // assertMcpSlugAvailable — no conflict
       mockDb.returning.mockResolvedValueOnce([
         { id: "mcp-1", name: "New MCP" },
       ]);
@@ -303,6 +306,7 @@ describe("MCP Routes", () => {
           organizationId: null,
         },
       ]);
+      mockDb.limit.mockResolvedValueOnce([]); // assertMcpSlugAvailable — no conflict
       mockDb.returning.mockResolvedValueOnce([
         { id: "mcp-1", name: "Renamed" },
       ]);
@@ -434,7 +438,36 @@ describe("MCP Routes", () => {
       });
 
       expect(res.status).toBe(200);
-      expect(await res.json()).toEqual({ success: true, toolNames: ["tool1"] });
+      expect(await res.json()).toEqual({
+        success: true,
+        toolNames: ["tool1"],
+        invalidToolNames: [],
+      });
+    });
+
+    it("namespaces tool names under the slug derived from the given name", async () => {
+      mockSession();
+      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]); // requireOrgAccess
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-1", organizationId: "org-1" },
+      ]); // requireWorkspaceAccess
+
+      const res = await app.request(`${baseUrl}/test`, {
+        method: "POST",
+        body: JSON.stringify({
+          url: "http://mcp.com",
+          authType: "None",
+          name: "My Server",
+        }),
+        headers: { "Content-Type": "application/json" },
+      });
+
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({
+        success: true,
+        toolNames: ["my_server__tool1"],
+        invalidToolNames: [],
+      });
     });
   });
 

@@ -45,6 +45,11 @@ import {
   buildOAuthCallbackUrl,
   buildMcpTransportConfig,
 } from "../services/mcp-oauth-provider.ts";
+import {
+  assertMcpSlugAvailable,
+  deriveMcpSlug,
+} from "../services/mcp-namespace.ts";
+import { resolveMcpTestToolNames } from "../services/mcp-test-tools.ts";
 
 /** Fields to null-out when clearing OAuth tokens. */
 export const OAUTH_TOKEN_CLEAR_FIELDS = {
@@ -66,12 +71,15 @@ mcp.post(
   sValidator("json", mcpCreateSchema),
   async (c) => {
     const data = c.req.valid("json");
-    const { workspaceId } = workspaceScopeOf(c);
+    const { orgId, workspaceId } = workspaceScopeOf(c);
+    const slug = deriveMcpSlug(data.name);
+    await assertMcpSlugAvailable(slug, { orgId });
     const record = await db
       .insert(mcpTable)
       .values({
         id: nanoid(),
         ...data,
+        slug,
         // The scope comes from the route, never the body — as it does for Agents
         // and Skills. Spreading the body let a caller name another Workspace, or
         // set `organizationId` and mint a Shared MCP from the Workspace surface,
@@ -143,10 +151,14 @@ mcp.put(
     // If the URL is changing, clear stored OAuth tokens (they're server-specific)
     const urlChanged = row.url !== data.url;
 
+    const slug = deriveMcpSlug(data.name);
+    await assertMcpSlugAvailable(slug, { orgId: scope.orgId }, mcpId);
+
     const record = await db
       .update(mcpTable)
       .set({
         ...data,
+        slug,
         ...(urlChanged && {
           ...OAUTH_TOKEN_CLEAR_FIELDS,
           oauthClientId: null,
@@ -243,18 +255,32 @@ mcp.post(
 
       // Fetch available tools
       const mcpTools = await mcpClient.tools();
-
-      // Extract tool names from the tools object
-      const toolNames = Object.keys(mcpTools);
+      const rawToolNames = Object.keys(mcpTools);
 
       // Close connection
       await mcpClient.close();
 
-      // Return success with tool names
+      // Namespaced under the MCP's slug (issue #467), so this reports exactly
+      // what a Chat turn will see.
+      const { toolNames, invalidToolNames } = await resolveMcpTestToolNames(
+        rawToolNames,
+        data.name,
+        data.mcpId,
+        async (id) =>
+          (
+            await db
+              .select({ name: mcpTable.name })
+              .from(mcpTable)
+              .where(workspaceScopedWhere("mcp", id, workspaceId))
+              .limit(1)
+          )[0]?.name,
+      );
+
       return c.json(
         {
           success: true,
           toolNames,
+          invalidToolNames,
         },
         200,
       );

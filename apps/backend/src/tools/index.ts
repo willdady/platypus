@@ -44,6 +44,12 @@ export type ToolOwner = {
    * belongs to no plugin.
    */
   plugin: string | null;
+  /**
+   * The owning MCP's tool-namespace slug (issue #467), so a collision or
+   * exclusion log names an MCP an Operator recognises rather than only its
+   * internal id. `undefined` for anything that is not an MCP.
+   */
+  mcpSlug?: string;
 };
 
 /**
@@ -130,8 +136,12 @@ export const reportToolNameCollisions = (
         tool,
         toolSet: owner.toolSetId,
         plugin: owner.plugin,
+        // Only ever set on the MCP branch — an Operator debugging a shadowed
+        // tool then sees the MCP by the name they gave it, not just its id.
+        mcpSlug: owner.mcpSlug,
         shadowedToolSet: incumbent.toolSetId,
         shadowedPlugin: incumbent.plugin,
+        shadowedMcpSlug: incumbent.mcpSlug,
       },
       "Two tool sets contribute the same tool name; the later one wins this turn",
     );

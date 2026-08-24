@@ -441,6 +441,45 @@ export type ToolSet = z.infer<typeof toolSetSchema>;
 
 // MCP
 
+/**
+ * Derive an MCP's tool-namespace slug from its display `name` (issue #467):
+ * lowercase, apostrophes dropped outright (so a possessive collapses onto its
+ * unpunctuated spelling — "Marys MCP Server" and "Mary's MCP Server" both
+ * resolve to `marys_mcp_server`, which is exactly the pre-existing-collision
+ * case the turn-time backstop in the Tool session exists for), every
+ * remaining run of characters outside `[a-z0-9]` collapsed to a single `_`,
+ * and leading/trailing `_` trimmed. Collapsing runs (rather than mapping each
+ * disallowed character individually) is what guarantees a slug never contains
+ * `__` — the split point a namespaced tool name is decoded on later — since
+ * two adjacent underscores can only arise from two adjacent disallowed
+ * characters, which collapse to one.
+ *
+ * Shared by the MCP create/update schemas below, the create/update routes
+ * (uniqueness checks), the MCP test-connection route, and the Tool session's
+ * merge site, so every caller agrees on exactly what a given name slugifies
+ * to. A name of only disallowed characters slugifies to `""`; the create and
+ * update schemas reject that, but this function itself does not, so the
+ * one-time data backfill can still resolve pre-existing rows with it.
+ */
+export const slugifyMcpName = (name: string): string =>
+  name
+    .toLowerCase()
+    .replace(/['’]/g, "")
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+
+/**
+ * The ceiling a namespaced MCP tool name (`<slug>__<toolName>`) must satisfy
+ * to be callable — the Anthropic/OpenAI tool-name ceiling of 64 characters,
+ * tighter than the 128 the MCP spec itself permits, and a stricter character
+ * set than the spec's (which also allows `.`).
+ */
+export const MCP_TOOL_NAME_PATTERN = /^[a-zA-Z0-9_-]{1,64}$/;
+
+/** Namespace a raw MCP-server tool name under its owning MCP's slug. */
+export const namespaceMcpToolName = (slug: string, toolName: string): string =>
+  `${slug}__${toolName}`;
+
 const mcpBearerTokenRefine = {
   validator: (data: { authType: string; bearerToken?: string }) => {
     if (data.authType === "Bearer") {
@@ -454,11 +493,21 @@ const mcpBearerTokenRefine = {
   },
 };
 
+const mcpNameSlugifiesRefine = {
+  validator: (data: { name: string }) => slugifyMcpName(data.name).length > 0,
+  params: {
+    message:
+      "Name must contain at least one letter or digit — it becomes this MCP's tool-namespace prefix",
+    path: ["name"],
+  },
+};
+
 const mcpBaseSchema = z.object({
   id: z.string(),
   organizationId: z.string().optional(),
   workspaceId: z.string().optional(),
   name: z.string().min(3).max(30),
+  slug: z.string(),
   url: z.url(),
   headers: z.record(z.string(), z.string()).optional(),
   authType: z.enum(["None", "Bearer", "OAuth"]),
@@ -506,7 +555,8 @@ export const mcpCreateSchema = mcpBaseSchema
     oauthClientSecret: true,
     oauthRequestedScope: true,
   })
-  .refine(mcpBearerTokenRefine.validator, mcpBearerTokenRefine.params);
+  .refine(mcpBearerTokenRefine.validator, mcpBearerTokenRefine.params)
+  .refine(mcpNameSlugifiesRefine.validator, mcpNameSlugifiesRefine.params);
 
 export const mcpUpdateSchema = mcpBaseSchema
   .pick({
@@ -519,7 +569,8 @@ export const mcpUpdateSchema = mcpBaseSchema
     oauthClientSecret: true,
     oauthRequestedScope: true,
   })
-  .refine(mcpBearerTokenRefine.validator, mcpBearerTokenRefine.params);
+  .refine(mcpBearerTokenRefine.validator, mcpBearerTokenRefine.params)
+  .refine(mcpNameSlugifiesRefine.validator, mcpNameSlugifiesRefine.params);
 
 export const mcpTestSchema = mcpBaseSchema
   .pick({
@@ -530,6 +581,10 @@ export const mcpTestSchema = mcpBaseSchema
   })
   .extend({
     mcpId: z.string().optional(),
+    // The form's current Name, so the test can report the namespaced tool
+    // names the MCP will actually contribute once saved (issue #467). Falls
+    // back to the stored MCP's name (via `mcpId`) when omitted.
+    name: z.string().optional(),
   })
   .refine(mcpBearerTokenRefine.validator, mcpBearerTokenRefine.params)
   .refine(

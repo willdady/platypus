@@ -40,6 +40,11 @@ import {
   sanitizeMcpResponse,
 } from "../services/credential-redaction.ts";
 import { NotFoundError } from "../errors.ts";
+import {
+  assertMcpSlugAvailable,
+  deriveMcpSlug,
+} from "../services/mcp-namespace.ts";
+import { resolveMcpTestToolNames } from "../services/mcp-test-tools.ts";
 
 // Org-scoped MCPs are Shared resources (ADR-0007). They introduce credentials
 // and external reach, so all mutations are org-admin-only (ADR-0006) — there is
@@ -56,6 +61,9 @@ orgMcp.post(
     const { orgId } = orgScopeOf(c);
     const data = c.req.valid("json");
 
+    const slug = deriveMcpSlug(data.name);
+    await assertMcpSlugAvailable(slug, { orgId });
+
     // A duplicate name surfaces as a Postgres unique violation, mapped to 409
     // by the central onError (ADR-0010).
     const record = await db
@@ -63,6 +71,7 @@ orgMcp.post(
       .values({
         id: nanoid(),
         ...data,
+        slug,
         organizationId: orgId,
         workspaceId: null,
       })
@@ -109,12 +118,16 @@ orgMcp.put(
 
     const urlChanged = !!existing && existing.url !== data.url;
 
+    const slug = deriveMcpSlug(data.name);
+    await assertMcpSlugAvailable(slug, { orgId }, mcpId);
+
     // A duplicate name surfaces as a Postgres unique violation, mapped to 409
     // by the central onError (ADR-0010).
     const record = await db
       .update(mcpTable)
       .set({
         ...data,
+        slug,
         ...(urlChanged && {
           ...OAUTH_TOKEN_CLEAR_FIELDS,
           oauthClientId: null,
@@ -216,10 +229,19 @@ orgMcp.post(
       }
 
       const mcpTools = await mcpClient.tools();
-      const toolNames = Object.keys(mcpTools);
+      const rawToolNames = Object.keys(mcpTools);
       await mcpClient.close();
 
-      return c.json({ success: true, toolNames }, 200);
+      // Namespaced under the MCP's slug (issue #467) — see mcp.ts's test
+      // route for why `data.name` falls back to the stored MCP's name.
+      const { toolNames, invalidToolNames } = await resolveMcpTestToolNames(
+        rawToolNames,
+        data.name,
+        data.mcpId,
+        async (id) => (await resolveOrgScoped(db, "mcp", id, orgId))?.name,
+      );
+
+      return c.json({ success: true, toolNames, invalidToolNames }, 200);
     } catch (error) {
       if (mcpClient) {
         try {
