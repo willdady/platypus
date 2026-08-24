@@ -11,7 +11,11 @@ vi.mock("../logger.ts", () => ({
 import { startRun } from "./run-lifecycle.ts";
 import { runRegistry, type RunHandle } from "./run-registry.ts";
 import { wrapToolsWithActivity } from "../services/tool-activity.ts";
-import { createSubAgentTool } from "../tools/sub-agent.ts";
+import {
+  createDelegateTool,
+  createSubAgentDelegate,
+  DELEGATE_TOOL_NAME,
+} from "../tools/sub-agent.ts";
 import { workspaceScope, orgScope, type WorkspaceScope } from "../scope.ts";
 import type { RunStatus } from "./types.ts";
 import { DEFAULT_AGENT_MAX_STEPS } from "@platypus/schemas";
@@ -96,7 +100,7 @@ describe("a delegated run inside a parent run", () => {
   it("does not trip the parent's per-step stall timeout", async () => {
     const parent = startParent();
 
-    const { toolName, tool } = createSubAgentTool({
+    const delegate = createSubAgentDelegate({
       id: "sa-1",
       name: "Slow Agent",
       plan: {
@@ -135,21 +139,21 @@ describe("a delegated run inside a parent run", () => {
       parentRun: { runId: "parent", scope: parentScope },
     });
 
-    // Exactly what `prepareChatTurn` hands the model: the delegate wrapped so
-    // its boundaries reach the parent's run lifecycle.
+    // Exactly what `prepareChatTurn` hands the model: the one `delegate` tool,
+    // wrapped so its boundaries reach the parent's run lifecycle.
     const wrapped = wrapToolsWithActivity(
-      { [toolName]: tool },
+      { [DELEGATE_TOOL_NAME]: createDelegateTool([delegate]) },
       parent.onActivity,
     );
 
     const execute = (
-      wrapped[toolName] as unknown as {
+      wrapped[DELEGATE_TOOL_NAME] as unknown as {
         execute: (a: unknown, o: unknown) => AsyncIterable<unknown>;
       }
     ).execute;
 
     for await (const _ of execute(
-      { task: "Take your time" },
+      { subAgent: "Slow Agent", task: "Take your time" },
       { abortSignal: parent.handle.signal },
     )) {
       void _;
@@ -178,7 +182,7 @@ describe("a delegated run inside a parent run", () => {
     const parent = startParent();
     const registerSpy = vi.spyOn(runRegistry, "register");
 
-    const { tool } = createSubAgentTool({
+    const delegate = createSubAgentDelegate({
       id: "sa-1",
       name: "Quick Agent",
       plan: {
@@ -196,10 +200,13 @@ describe("a delegated run inside a parent run", () => {
     });
 
     const gen = (
-      tool as unknown as {
+      createDelegateTool([delegate]) as unknown as {
         execute: (a: unknown, o: unknown) => AsyncIterable<unknown>;
       }
-    ).execute({ task: "Be quick" }, { abortSignal: parent.handle.signal });
+    ).execute(
+      { subAgent: "Quick Agent", task: "Be quick" },
+      { abortSignal: parent.handle.signal },
+    );
 
     let subRunId: string | undefined;
     for await (const _ of gen) {

@@ -90,8 +90,15 @@ type MessagePart = NonNullable<PlatypusUIMessage["parts"]>[number];
 
 const isLoadSkillPart = (part: MessagePart) => part.type === "tool-loadSkill";
 
+/**
+ * Both shapes a delegation is stored in. `tool-delegate` is what every new one
+ * writes; `tool-delegateTo<Name>` is what Chats written before the single
+ * dispatcher hold, permanently — stored messages are never rewritten, so this
+ * predicate matches the old shape IN ADDITION to the new one, for ever.
+ */
 const isSubAgentToolPart = (part: MessagePart) =>
-  isToolUIPart(part) && part.type.startsWith("tool-delegateTo");
+  isToolUIPart(part) &&
+  (part.type === "tool-delegate" || part.type.startsWith("tool-delegateTo"));
 
 const isWebToolPart = (part: MessagePart) =>
   isToolUIPart(part) && isNormalizedWebToolPart(part);

@@ -32,7 +32,7 @@ _Avoid_: parsed text, converted file, OCR (Platypus does not OCR).
 A configurable preset that pins a Provider, model, Instructions, generation parameters, Tools, Skills, and Sub-Agents. Selecting an Agent on a Chat turn replaces direct Provider/model selection.
 
 **Sub-Agent**:
-An Agent referenced by a parent Agent and exposed to it as a delegate Tool. Invoking it starts a run in its own right — bounded by the same per-step and per-run timeouts the parent turn was started under, and cancelled when the parent is — but never a Chat: nothing about a delegated run is persisted.
+An Agent referenced by a parent Agent, advertised to it in a catalogue and reachable by name through the parent's one delegation Tool. Invoking it starts a run in its own right — bounded by the same per-step and per-run timeouts the parent turn was started under, and cancelled when the parent is — but never a Chat: nothing about a delegated run is persisted.
 
 **Turn resolution**:
 The phase of a **Chat turn** before the model request is sent: the **Tool session** is opened, Skills, Memories and **Contexts** are loaded, **File parts** are resolved to bytes or **Extracted text**, and the **System prompt** is rendered. Ends where the **Drive** begins, so the two are sequential and together are the whole of what a User waits for. Surfaced to Users as "Preparation".

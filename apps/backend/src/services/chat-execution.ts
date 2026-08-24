@@ -17,7 +17,8 @@ import {
 } from "../tools/tool-session.ts";
 import { createLoadSkillTool } from "../tools/skill.ts";
 import {
-  createSubAgentTools,
+  createDelegateTools,
+  type SubAgentCatalogueEntry,
   type SubAgentFailure,
 } from "../tools/sub-agent.ts";
 import { normalizeToolResult } from "./tool-result.ts";
@@ -904,7 +905,7 @@ const loadSubAgents = async (
   session: Promise<ToolSession>,
   run: ParentRunContext | undefined,
 ): Promise<{
-  subAgents: Array<{ id: string; name: string; description?: string | null }>;
+  subAgents: SubAgentCatalogueEntry[];
   unavailableSubAgents: SubAgentFailure[];
   subAgentTools: Record<string, Tool>;
 }> => {
@@ -932,7 +933,11 @@ const loadSubAgents = async (
     .filter((id) => !resolvedIds.has(id))
     .map((id) => ({ id, reason: UNRESOLVED_SUB_AGENT_REASON }));
 
-  const { tools: subAgentTools, failures } = await createSubAgentTools(
+  const {
+    tools: subAgentTools,
+    catalogue,
+    failures,
+  } = await createDelegateTools(
     subAgentRecords,
     // A sub-Agent's plan is resolved the same way the parent turn's is —
     // through `resolveGenerationPlan`, not a second copy of model/ceiling/
@@ -960,23 +965,18 @@ const loadSubAgents = async (
       return nested.tools;
     },
     run,
+    // Handed over rather than concatenated onto the result below: the tool
+    // refuses these by the id the prompt lists them under, with this reason,
+    // instead of telling the model it named something unknown.
+    unresolved,
   );
 
-  // The system prompt must describe only sub-agents that produced a callable
-  // tool. Listing one that dropped out tells the model to call a tool that was
-  // never registered, and the turn dies on AI_NoSuchToolError.
-  const failedIds = new Set(failures.map((f) => f.id));
-  const subAgents = subAgentRecords
-    .filter((sa) => !failedIds.has(sa.id))
-    .map((sa) => ({
-      id: sa.id,
-      name: sa.name,
-      description: sa.description,
-    }));
-
+  // The catalogue comes back from the factory rather than being re-derived
+  // here: it lists exactly the sub-agents the `delegate` tool will accept as a
+  // target, which is what stops the prompt advertising one the tool refuses.
   return {
-    subAgents,
-    unavailableSubAgents: [...unresolved, ...failures],
+    subAgents: catalogue,
+    unavailableSubAgents: failures,
     subAgentTools,
   };
 };

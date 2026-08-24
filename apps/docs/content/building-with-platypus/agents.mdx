@@ -69,11 +69,12 @@ Agent something it can't read.
 <Callout type="warning">
   **An Agent's settings are the Agent's, and a Chat cannot override them.** The
   **Chat Settings** dialog — with its own Instructions and sampling parameters —
-  only exists on a Chat where you picked a Provider and model directly. Select an
-  Agent and the button is gone, because everything it would edit lives on the
+  only exists on a Chat where you picked a Provider and model directly. Select
+  an Agent and the button is gone, because everything it would edit lives on the
   Agent. To try a different temperature or a different prompt for one
-  conversation, either use a direct Provider and model, or copy the Agent and edit
-  the copy. See [Chat](/building-with-platypus/chat#per-chat-settings-and-when-they-exist).
+  conversation, either use a direct Provider and model, or copy the Agent and
+  edit the copy. See
+  [Chat](/building-with-platypus/chat#per-chat-settings-and-when-they-exist).
 </Callout>
 
 ## Tune generation
@@ -106,8 +107,8 @@ Two levels of control over how the model generates:
   Not every Provider or model honours every parameter. Setting **Temperature**
   and assuming the model used it is the trap: some Providers drop a parameter
   they don't support, and some clamp it into a narrower range, and the run
-  succeeds either way with no sign in the UI. The backend log records each one at
-  `warn` level, naming the parameter, the Provider and the model. Ask your
+  succeeds either way with no sign in the UI. The backend log records each one
+  at `warn` level, naming the parameter, the Provider and the model. Ask your
   Operator to search the log for the parameter — `temperature`, `seed` — after a
   run to find out whether it reached the model.
 </Callout>
@@ -138,11 +139,17 @@ A **Sub-Agent** is just another Agent that this one can hand work to. In the
 **Sub-Agents** card, flip a switch for each Agent you want this Agent to be able
 to delegate to.
 
-At run time each selected Sub-Agent is exposed to the parent as a **delegate
-tool** named `delegateTo` plus the Agent's name in PascalCase — "Research Agent"
-becomes `delegateToResearchAgent`. Calling it runs the Sub-Agent (with its
-own model, Instructions, and tools) and returns the result. This lets a coordinator
-Agent stay focused while specialists do the detailed work.
+At run time the parent gets a single **`delegate` tool**, however many
+Sub-Agents you switched on, plus a list of them — name and Description — in its
+instructions. It picks one by name and hands it a task; that runs the Sub-Agent
+(with its own model, Instructions, and tools) and returns the result. This lets
+a coordinator Agent stay focused while specialists do the detailed work.
+
+<Callout type="info">
+  The Sub-Agent's **name** is how the parent picks it, and its **Description**
+  is how the parent decides when to. Both are worth writing for that reader. Two
+  Sub-Agents switched on for the same parent must not share a name — see below.
+</Callout>
 
 ### What a Sub-Agent run does and doesn't get
 
@@ -158,13 +165,13 @@ and a delegated run uses it, exactly as a Chat turn would.
 
 Everything else is absent:
 
-| Not passed to a Sub-Agent | Consequence                                                                                       |
-| ------------------------- | --------------------------------------------------------------------------------------------------- |
-| **Skills**                | Attaching a Skill to an Agent used as a Sub-Agent does nothing in that run — no catalogue is injected and `loadSkill` isn't offered. Fold the know-how into its Instructions instead. |
-| **Memories and Context**  | No user Context, no Workspace Context, no Memory summaries.                                       |
-| **Workspace / user identity** | No Workspace id or user name in the prompt. Tools needing one still work; the prompt won't mention it. |
-| **Chat history**          | The Sub-Agent sees only the `task` string, never the conversation it came from.                   |
-| **Its own Sub-Agents**    | Delegation is one level deep — see below.                                                         |
+| Not passed to a Sub-Agent     | Consequence                                                                                                                                                                           |
+| ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Skills**                    | Attaching a Skill to an Agent used as a Sub-Agent does nothing in that run — no catalogue is injected and `loadSkill` isn't offered. Fold the know-how into its Instructions instead. |
+| **Memories and Context**      | No user Context, no Workspace Context, no Memory summaries.                                                                                                                           |
+| **Workspace / user identity** | No Workspace id or user name in the prompt. Tools needing one still work; the prompt won't mention it.                                                                                |
+| **Chat history**              | The Sub-Agent sees only the `task` string, never the conversation it came from.                                                                                                       |
+| **Its own Sub-Agents**        | Delegation is one level deep — see below.                                                                                                                                             |
 
 <Callout type="warning">
   Because the parent's `task` string is the Sub-Agent's entire view of the
@@ -182,7 +189,7 @@ Everything else is absent:
 ### When a Sub-Agent can't run
 
 Selecting a Sub-Agent in the form is not a guarantee it will be there at run
-time. Each one is resolved and built fresh on every turn, and three things stop
+time. Each one is resolved and built fresh on every turn, and four things stop
 it:
 
 - The Sub-Agent is **not available in this Workspace** — it was deleted, or it
@@ -192,18 +199,23 @@ it:
 - Its **Provider** no longer resolves in this Workspace — a Shared Provider that
   was detached, say.
 - Its pinned **model** is gone from the Provider's model list.
+- **Two Sub-Agents on the same parent share a name.** The name is how the parent
+  picks one, so a shared name leaves no way to say which — and rather than pick
+  for you, Platypus drops **both**. Capitalisation and surrounding spaces don't
+  separate two names here: "Research" and "research " count as the same one.
+  Rename one and both come back.
 
-Any of these means **no delegate tool for that turn**. The parent Agent is told
-which ones are unavailable and why, so ask it and it will tell you. The switch
-stays flipped in the form either way: the assignment is still saved, it just
-can't be honoured right now. Re-attach the Agent, or fix its Provider or model,
-and the tool comes back on the next turn.
+Any of these means the parent **can't delegate to that Sub-Agent this turn**: it
+is told which ones are unavailable and why, and asking it will get you the
+reason. The switch stays flipped in the form either way: the assignment is still
+saved, it just can't be honoured right now. Re-attach the Agent, rename it, or
+fix its Provider or model, and it is delegable again on the next turn.
 
 <Callout type="warning">
   "The Agent says it can't reach its Sub-Agent, but I can see the switch is on"
   is the trap. The **Sub-Agents** card shows what you assigned, not what loaded.
-  Check the Sub-Agent is still attached to this Workspace, then open it and check
-  its Provider and model still resolve.
+  Check the Sub-Agent is still attached to this Workspace, then open it and
+  check its Provider and model still resolve.
 </Callout>
 
 If the Sub-Agent builds but its run then fails part-way, the delegate tool

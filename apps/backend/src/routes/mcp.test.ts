@@ -469,6 +469,75 @@ describe("MCP Routes", () => {
         invalidToolNames: [],
       });
     });
+
+    it("probes an attached org-scoped OAuth MCP — the Shared-MCP visibility fix", async () => {
+      // Read-only, so an attached Shared MCP resolves and the probe runs
+      // (mcp-connection.ts's docstring), unlike the bare 404 this used to be.
+      mockSession();
+      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]); // requireOrgAccess
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-1", organizationId: "org-1" },
+      ]); // requireWorkspaceAccess
+      // resolveScoped lookup → org-scoped row, authorized
+      mockDb.limit.mockResolvedValueOnce([
+        {
+          id: "mcp-org",
+          organizationId: orgId,
+          workspaceId: null,
+          authType: "OAuth",
+          oauthAccessToken: "access-token",
+        },
+      ]);
+      // attachment check → attached here, so visible
+      mockDb.limit.mockResolvedValueOnce([{ id: "att-1" }]);
+
+      const res = await app.request(`${baseUrl}/test`, {
+        method: "POST",
+        body: JSON.stringify({
+          url: "http://mcp.com",
+          authType: "OAuth",
+          mcpId: "mcp-org",
+        }),
+        headers: { "Content-Type": "application/json" },
+      });
+
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({
+        success: true,
+        toolNames: ["tool1"],
+        invalidToolNames: [],
+      });
+    });
+
+    it("returns a 404 result for an org-scoped OAuth MCP not attached here", async () => {
+      mockSession();
+      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]); // requireOrgAccess
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-1", organizationId: "org-1" },
+      ]); // requireWorkspaceAccess
+      // resolveScoped lookup → org-scoped row
+      mockDb.limit.mockResolvedValueOnce([
+        { id: "mcp-org", organizationId: orgId, workspaceId: null },
+      ]);
+      // attachment check → not attached here
+      mockDb.limit.mockResolvedValueOnce([]);
+
+      const res = await app.request(`${baseUrl}/test`, {
+        method: "POST",
+        body: JSON.stringify({
+          url: "http://mcp.com",
+          authType: "OAuth",
+          mcpId: "mcp-org",
+        }),
+        headers: { "Content-Type": "application/json" },
+      });
+
+      expect(res.status).toBe(404);
+      expect(await res.json()).toEqual({
+        success: false,
+        error: "MCP not found",
+      });
+    });
   });
 
   describe("POST /:mcpId/oauth/authorize", () => {
@@ -547,6 +616,121 @@ describe("MCP Routes", () => {
       expect(await res.json()).toEqual({ alreadyAuthorized: true });
 
       // No update issued → token columns untouched
+      expect(mockDb.update).not.toHaveBeenCalled();
+    });
+
+    it("returns 403 (locked) for an attached org-scoped MCP — mutates org-owned credentials", async () => {
+      // Shared-MCP visibility fix: this used to be a bare 404 that denied the
+      // row exists; it is now the same Locked refusal PUT/DELETE give.
+      mockSession();
+      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]); // requireOrgAccess
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-1", organizationId: "org-1" },
+      ]); // requireWorkspaceAccess
+      // requireWorkspaceMutable lookup → org-scoped row
+      mockDb.limit.mockResolvedValueOnce([
+        { id: "mcp-org", organizationId: orgId, workspaceId: null },
+      ]);
+      // attachment check → attached here, so visible but locked
+      mockDb.limit.mockResolvedValueOnce([{ id: "att-1" }]);
+
+      const res = await app.request(`${baseUrl}/mcp-org/oauth/authorize`, {
+        method: "POST",
+      });
+
+      expect(res.status).toBe(403);
+      expect(mockDb.update).not.toHaveBeenCalled();
+    });
+
+    it("returns 404 for an org-scoped MCP not attached here", async () => {
+      mockSession();
+      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]); // requireOrgAccess
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-1", organizationId: "org-1" },
+      ]); // requireWorkspaceAccess
+      // requireWorkspaceMutable lookup → org-scoped row
+      mockDb.limit.mockResolvedValueOnce([
+        { id: "mcp-org", organizationId: orgId, workspaceId: null },
+      ]);
+      // attachment check → not attached here
+      mockDb.limit.mockResolvedValueOnce([]);
+
+      const res = await app.request(`${baseUrl}/mcp-org/oauth/authorize`, {
+        method: "POST",
+      });
+
+      expect(res.status).toBe(404);
+    });
+  });
+
+  describe("POST /:mcpId/oauth/revoke", () => {
+    it("clears tokens for a workspace-scoped MCP", async () => {
+      mockSession();
+      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]); // requireOrgAccess
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-1", organizationId: "org-1" },
+      ]); // requireWorkspaceAccess
+      // requireWorkspaceMutable lookup → workspace-scoped row
+      mockDb.limit.mockResolvedValueOnce([
+        { id: "mcp-1", workspaceId, organizationId: null },
+      ]);
+
+      const res = await app.request(`${baseUrl}/mcp-1/oauth/revoke`, {
+        method: "POST",
+      });
+
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({ success: true });
+      expect(mockDb.set).toHaveBeenCalledWith(
+        expect.objectContaining({
+          oauthAccessToken: null,
+          oauthRefreshToken: null,
+          oauthTokenExpiresAt: null,
+          oauthScope: null,
+        }),
+      );
+    });
+
+    it("returns 403 (locked) for an attached org-scoped MCP", async () => {
+      // Same refusal semantics as PUT/DELETE and /oauth/authorize above.
+      mockSession();
+      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]); // requireOrgAccess
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-1", organizationId: "org-1" },
+      ]); // requireWorkspaceAccess
+      // requireWorkspaceMutable lookup → org-scoped row
+      mockDb.limit.mockResolvedValueOnce([
+        { id: "mcp-org", organizationId: orgId, workspaceId: null },
+      ]);
+      // attachment check → attached here, so visible but locked
+      mockDb.limit.mockResolvedValueOnce([{ id: "att-1" }]);
+
+      const res = await app.request(`${baseUrl}/mcp-org/oauth/revoke`, {
+        method: "POST",
+      });
+
+      expect(res.status).toBe(403);
+      expect(mockDb.update).not.toHaveBeenCalled();
+    });
+
+    it("returns 404 for an org-scoped MCP not attached here", async () => {
+      mockSession();
+      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]); // requireOrgAccess
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-1", organizationId: "org-1" },
+      ]); // requireWorkspaceAccess
+      // requireWorkspaceMutable lookup → org-scoped row
+      mockDb.limit.mockResolvedValueOnce([
+        { id: "mcp-org", organizationId: orgId, workspaceId: null },
+      ]);
+      // attachment check → not attached here
+      mockDb.limit.mockResolvedValueOnce([]);
+
+      const res = await app.request(`${baseUrl}/mcp-org/oauth/revoke`, {
+        method: "POST",
+      });
+
+      expect(res.status).toBe(404);
       expect(mockDb.update).not.toHaveBeenCalled();
     });
   });

@@ -1,5 +1,6 @@
 import { type UIMessage, type InferUITool, type UIDataTypes } from "ai";
 import { createLoadSkillTool } from "./tools/skill.ts";
+import type { DelegateTool } from "./tools/sub-agent.ts";
 
 /**
  * Metadata the run pipeline attaches to a streamed assistant message.
@@ -143,12 +144,16 @@ export type ChatMessageMetadata = {
  * contribute tools under namespaced contribution ids, and MCP tools are
  * unknown until connect time. Add an entry only when a component needs that
  * tool's typed input or output — every other tool renders through the generic
- * `ToolUIPart` path. Sub-agent delegate tools cannot be listed either: their
- * names are generated per sub-agent, so the renderer matches on the
- * `tool-delegateTo` prefix instead of a static key.
+ * `ToolUIPart` path.
+ *
+ * `delegate` earns its place because the Sub-Agent card reads the target's name
+ * off the tool's input. Chats that predate the single dispatcher still hold
+ * parts named `tool-delegateTo<Name>`, which no static key can cover — the
+ * renderer keeps matching those by prefix, in addition to this one.
  */
 export type CustomUITools = {
   loadSkill: InferUITool<ReturnType<typeof createLoadSkillTool>>;
+  delegate: InferUITool<DelegateTool>;
 };
 
 export type PlatypusUIMessage = UIMessage<
