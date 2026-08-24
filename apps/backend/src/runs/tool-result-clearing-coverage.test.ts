@@ -70,11 +70,13 @@ import { getToolSets, SANDBOX_TOOLSET_ID } from "../tools/index.ts";
  * materialized without one, so they are asserted by their known, grep-stable
  * literal names.
  *
- * Scope: core plugins only, matching the allowlist's own scope — MCP and
- * third-party plugin tools are deny-by-default and untouched by #524 pending
- * read-only hints (#626). Sub-Agent delegation is one fixed tool name,
- * `delegate`, assigned ad hoc in `chat-execution.ts` like `loadSkill` — the
- * `delegateTo*` names it replaced live on only in stored Chat history.
+ * Scope: core plugins only, matching the allowlist's own scope — an MCP or
+ * third-party plugin tool is deny-by-default here too, unless its MCP
+ * declared `readOnlyHint` (ADR-0021, issue #626), which this inventory does
+ * not exercise: that resolver lives on the Tool session, not in
+ * `isClearableToolName`'s own default. Sub-Agent delegation is one fixed tool
+ * name, `delegate`, assigned ad hoc in `chat-execution.ts` like `loadSkill` —
+ * the `delegateTo*` names it replaced live on only in stored Chat history.
  */
 
 const CORE_PLUGIN_NAMES = ["@platypus/web-fetch"];

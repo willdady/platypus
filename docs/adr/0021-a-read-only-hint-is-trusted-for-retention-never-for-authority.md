@@ -1,17 +1,23 @@
 ---
-status: accepted-pending-implementation
+status: accepted
 implemented-by: "#626"
 ---
 
 # A tool's read-only hint is trusted for retention, never for authority
 
-> **In the code.** Nothing here is built yet. Today Platypus holds no notion of
-> whether a Tool reads or writes: **Tool-result clearing** consults
-> `CLEARABLE_TOOL_NAMES`, a fixed set of five core Tool names, and every MCP Tool
-> is denied by default. The MCP client's `annotations` never reach core, because
-> the Tool session resolves an MCP through the combined `tools()` call and the
-> definitions-to-Tools conversion inside it reads `annotations.title` and drops
-> the rest. To be built by [#626](https://github.com/willdady/platypus/issues/626).
+> **In the code.** The Tool session resolves an MCP in two steps —
+> `client.listTools()` then `client.toolsFromDefinitions()` — the same single
+> round trip as the combined `client.tools()` call it replaced, and keeps each
+> Tool's declared `readOnlyHint` in a sidecar (`ToolSession.readOnlyToolNames`)
+> keyed by the name the Tool enters the turn under. Tool-result clearing's
+> `isClearableToolName` takes that sidecar as a resolver alongside the core
+> `CLEARABLE_TOOL_NAMES` allowlist it already had, so an MCP tool with a
+> declared `readOnlyHint: true` is clearable and everything else — a declared
+> `false`, a non-boolean, or nothing declared at all — is not. The hint rides
+> a turn's assistant-message metadata (`readOnlyToolNames`, alongside Context
+> occupancy) so the Chat UI's clearing mirror can union it across the
+> Transcript instead of holding a name list of its own. See `apps/backend/src/tools/tool-session.ts`, `apps/backend/src/runs/tool-result-clearing.ts`,
+> and `apps/backend/src/runs/message-metadata.ts`.
 
 The MCP specification lets a server declare `readOnlyHint` on a Tool, meaning the
 Tool does not modify its environment. The specification is also unambiguous about

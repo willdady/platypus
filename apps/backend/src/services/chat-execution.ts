@@ -706,6 +706,11 @@ export const prepareChatTurn = async (
       tools: wrappedTools,
       system: systemPrompt,
       messages: inlinedMessages,
+      // Tool-result clearing's other input beyond the core allowlist
+      // (ADR-0021, issue #626): only the session's OWN MCP resolutions, never
+      // a delegate's — a Sub-Agent's plan carries its own nested session's
+      // hints (`createSubAgentDelegate`), resolved under its own rule.
+      readOnlyToolNames: session.readOnlyToolNames,
       ...(initialOccupancy !== undefined ? { initialOccupancy } : {}),
     },
     resolved: {
@@ -962,7 +967,10 @@ const loadSubAgents = async (
     async (subAgentId: string, toolSetIds: string[]) => {
       const parent = await session;
       const nested = await parent.nest({ id: subAgentId, toolSetIds });
-      return nested.tools;
+      return {
+        tools: nested.tools,
+        readOnlyToolNames: nested.readOnlyToolNames,
+      };
     },
     run,
     // Handed over rather than concatenated onto the result below: the tool

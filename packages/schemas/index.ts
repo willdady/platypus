@@ -890,8 +890,13 @@ export const CONTEXT_WINDOW_MAX = 10_000_000;
  * Excludes anything that mutates state (`fsWrite`, `fsEdit`, `shellExec`),
  * sub-Agent delegation (its result is the point of the call, not disposable
  * page content), and `loadSkill` (its result is instructions the model is
- * meant to keep following, not data to discard). MCP and third-party plugin
- * tools are out of scope until read-only hints are surfaced (#626).
+ * meant to keep following, not data to discard).
+ *
+ * This is the core half of clearability, not the whole of it: an MCP tool
+ * whose server declares `readOnlyHint` is also clearable (ADR-0021, issue
+ * #626), resolved separately by the Tool session and combined with this set
+ * at the one place both are consulted — `isClearableToolName` in
+ * `apps/backend/src/runs/tool-result-clearing.ts`.
  */
 export const CLEARABLE_TOOL_NAMES: ReadonlySet<string> = new Set([
   "web_search",

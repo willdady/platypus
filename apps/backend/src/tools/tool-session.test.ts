@@ -62,6 +62,34 @@ const grantedAgent = (...toolSetIds: string[]) => ({
 const toolNamed = (name: string): Tool =>
   ({ description: name }) as unknown as Tool;
 
+/**
+ * Queues one `createMCPClient` resolution behind the client's own two-step
+ * API (`listTools` + `toolsFromDefinitions`, #626) — mocked the way the real
+ * one behaves: `toolsFromDefinitions` ignores the definitions it's handed and
+ * returns the tools this helper already declared. `readOnlyHints` marks a
+ * subset of `tools`'s keys as MCP-declared read-only, for the tests that need
+ * one. Shared by every describe block below that opens an MCP connection.
+ */
+const connected = (
+  tools: Record<string, unknown>,
+  readOnlyHints: Record<string, unknown> = {},
+) => {
+  const close = vi.fn().mockResolvedValue(undefined);
+  mockCreateMCPClient.mockResolvedValueOnce({
+    listTools: vi.fn().mockResolvedValue({
+      tools: Object.keys(tools).map((name) => ({
+        name,
+        ...(name in readOnlyHints
+          ? { annotations: { readOnlyHint: readOnlyHints[name] } }
+          : {}),
+      })),
+    }),
+    toolsFromDefinitions: vi.fn().mockReturnValue(tools),
+    close,
+  });
+  return close;
+};
+
 /** Register a Tool set through the composed path a plugin's would take. */
 const register = (
   id: string,
@@ -187,15 +215,6 @@ describe("openToolSession", () => {
   });
 
   describe("the MCP branch", () => {
-    const connected = (tools: Record<string, unknown>) => {
-      const close = vi.fn().mockResolvedValue(undefined);
-      mockCreateMCPClient.mockResolvedValueOnce({
-        tools: vi.fn().mockResolvedValue(tools),
-        close,
-      });
-      return close;
-    };
-
     it("serves an MCP server's tools, namespaced under its slug, for an id no Tool set claims, and closes it on dispose", async () => {
       const close = connected({ mcpTool: toolNamed("mcpTool") });
 
@@ -262,7 +281,7 @@ describe("openToolSession", () => {
     it("closes a server that connects and then fails to list its tools", async () => {
       const close = vi.fn().mockResolvedValue(undefined);
       mockCreateMCPClient.mockResolvedValueOnce({
-        tools: vi.fn().mockRejectedValue(new Error("protocol error")),
+        listTools: vi.fn().mockRejectedValue(new Error("protocol error")),
         close,
       });
 
@@ -395,7 +414,8 @@ describe("openToolSession", () => {
     it("closes every connection even when one close throws", async () => {
       const failing = vi.fn().mockRejectedValue(new Error("socket gone"));
       mockCreateMCPClient.mockResolvedValueOnce({
-        tools: vi.fn().mockResolvedValue({ a: toolNamed("a") }),
+        listTools: vi.fn().mockResolvedValue({ tools: [{ name: "a" }] }),
+        toolsFromDefinitions: vi.fn().mockReturnValue({ a: toolNamed("a") }),
         close: failing,
       });
       const second = connected({ b: toolNamed("b") });
@@ -413,6 +433,72 @@ describe("openToolSession", () => {
       expect(failing).toHaveBeenCalled();
       expect(second).toHaveBeenCalled();
       expect(logger.warn).toHaveBeenCalled();
+    });
+  });
+
+  describe("MCP read-only hints (issue #626)", () => {
+    it("carries a declared read-only hint through, keyed by the namespaced name", async () => {
+      connected({ readTool: toolNamed("readTool") }, { readTool: true });
+
+      const session = await openToolSession(
+        scope,
+        grantedAgent("mcp-1"),
+        queriesFor([mcpRow()]),
+      );
+
+      expect(session.readOnlyToolNames.has("test_mcp__readTool")).toBe(true);
+    });
+
+    it("treats a declared writes hint as not read-only", async () => {
+      connected({ writeTool: toolNamed("writeTool") }, { writeTool: false });
+
+      const session = await openToolSession(
+        scope,
+        grantedAgent("mcp-1"),
+        queriesFor([mcpRow()]),
+      );
+
+      expect(session.readOnlyToolNames.has("test_mcp__writeTool")).toBe(false);
+    });
+
+    it("treats an undeclared hint as not read-only", async () => {
+      connected({ plainTool: toolNamed("plainTool") });
+
+      const session = await openToolSession(
+        scope,
+        grantedAgent("mcp-1"),
+        queriesFor([mcpRow()]),
+      );
+
+      expect(session.readOnlyToolNames.has("test_mcp__plainTool")).toBe(false);
+    });
+
+    // Tri-state, never coerced (ADR-0021): only the boolean `true` counts.
+    it("treats a non-boolean hint as not read-only", async () => {
+      connected(
+        { sneaky: toolNamed("sneaky") },
+        { sneaky: "true" as unknown as boolean },
+      );
+
+      const session = await openToolSession(
+        scope,
+        grantedAgent("mcp-1"),
+        queriesFor([mcpRow()]),
+      );
+
+      expect(session.readOnlyToolNames.has("test_mcp__sneaky")).toBe(false);
+    });
+
+    it("carries no hint for a Tool set that is not an MCP", async () => {
+      register("set.readOnlyHints.plain", { plain: toolNamed("plain") });
+
+      const session = await openToolSession(
+        scope,
+        grantedAgent("set.readOnlyHints.plain"),
+        noMcps(),
+      );
+
+      expect(session.readOnlyToolNames.size).toBe(0);
     });
   });
 
@@ -562,7 +648,8 @@ describe("openToolSession", () => {
       vi.useFakeTimers();
       try {
         mockCreateMCPClient.mockResolvedValueOnce({
-          tools: vi.fn().mockResolvedValue({ a: toolNamed("a") }),
+          listTools: vi.fn().mockResolvedValue({ tools: [{ name: "a" }] }),
+          toolsFromDefinitions: vi.fn().mockReturnValue({ a: toolNamed("a") }),
           close: vi.fn(() => new Promise<void>(() => {})),
         });
 
@@ -619,15 +706,6 @@ describe("openToolSession", () => {
   });
 
   describe("nested sessions", () => {
-    const connected = (tools: Record<string, unknown>) => {
-      const close = vi.fn().mockResolvedValue(undefined);
-      mockCreateMCPClient.mockResolvedValueOnce({
-        tools: vi.fn().mockResolvedValue(tools),
-        close,
-      });
-      return close;
-    };
-
     it("keeps a delegate's tools to itself and closes them with the parent", async () => {
       register("set.parent", { parentTool: toolNamed("parentTool") });
       const parent = await openToolSession(
@@ -650,6 +728,30 @@ describe("openToolSession", () => {
       // One dispose, at the seam that opened everything.
       await parent.dispose();
       expect(close).toHaveBeenCalledTimes(1);
+    });
+
+    it("resolves a delegate's read-only hints independently of the parent's", async () => {
+      register("set.parent.readOnlyHints", {
+        parentTool: toolNamed("parentTool"),
+      });
+      const parent = await openToolSession(
+        scope,
+        grantedAgent("set.parent.readOnlyHints"),
+        queriesFor([mcpRow()]),
+      );
+      expect(parent.readOnlyToolNames.size).toBe(0);
+
+      connected(
+        { delegateTool: toolNamed("delegateTool") },
+        { delegateTool: true },
+      );
+      const child = await parent.nest({
+        id: "sub-agent-1",
+        toolSetIds: ["mcp-1"],
+      });
+
+      expect(child.readOnlyToolNames.has("test_mcp__delegateTool")).toBe(true);
+      expect(parent.readOnlyToolNames.size).toBe(0);
     });
 
     it("resolves the delegate's Tool sets under its own Agent id", async () => {

@@ -100,6 +100,19 @@ doesn't fit is excluded from the turn (and flagged by **Test Connection**)
 rather than being cut short; if you hit this, the fix is to give the MCP a
 shorter Name.
 
+### Read-only tools free up space automatically
+
+An MCP server can mark a tool as read-only — meaning it only looks things up
+and never changes anything. Platypus honours that declaration: once a long
+Chat turn is using a lot of its **Context window**, older results from a
+read-only tool stop being sent to the model to make room, the same way the
+built-in read tools already do (see
+[Freeing up space during a long tool-using turn](/building-with-platypus/chat#freeing-up-space-during-a-long-tool-using-turn)).
+
+This only ever affects a tool the server itself has declared read-only. A
+server that declares nothing gets no benefit from this for that tool — nothing
+is guessed on its behalf.
+
 ## Grant an MCP to an Agent
 
 Open the [Agent form](/building-with-platypus/agents) and find the **Tools** card.

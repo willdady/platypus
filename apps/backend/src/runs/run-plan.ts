@@ -5,7 +5,10 @@ import {
   type Tool,
 } from "ai";
 import type { NoProgressDetector } from "./no-progress.ts";
-import { applyToolResultClearing } from "./tool-result-clearing.ts";
+import {
+  applyToolResultClearing,
+  DEFAULT_CLEARING_POLICY,
+} from "./tool-result-clearing.ts";
 import { stepOccupancy } from "./run-stats.ts";
 
 /**
@@ -41,6 +44,16 @@ export type RunPlan = {
    * history, and for a Chat's very first turn.
    */
   initialOccupancy?: number;
+  /**
+   * Names this turn's Tool session resolved to an MCP-declared `readOnlyHint`
+   * (ADR-0021, issue #626) — keyed by the name a Tool enters the turn's tool
+   * map under, so it agrees with `ModelMessage` tool-result parts whether or
+   * not #467's namespacing has landed. The one input Tool-result clearing
+   * needs beyond the core allowlist it already knows; see
+   * `buildModelInvocation` below. Absent for a plan no Tool session resolved
+   * (a headless Trigger run), which clears only the core allowlist.
+   */
+  readOnlyToolNames?: ReadonlySet<string>;
 };
 
 /** The generation settings, minus any the plan never set. */
@@ -115,10 +128,12 @@ export const buildModelInvocation = (
       steps.length > 0
         ? stepOccupancy(steps[steps.length - 1]?.usage)
         : plan.initialOccupancy;
-    const cleared = applyToolResultClearing(messages, {
-      occupancy,
-      contextWindow: plan.contextWindow,
-    });
+    const cleared = applyToolResultClearing(
+      messages,
+      { occupancy, contextWindow: plan.contextWindow },
+      DEFAULT_CLEARING_POLICY,
+      (toolName) => plan.readOnlyToolNames?.has(toolName) ?? false,
+    );
     return cleared === messages ? {} : { messages: cleared };
   },
   ...declaredSettings(plan),

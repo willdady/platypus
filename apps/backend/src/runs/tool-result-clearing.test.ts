@@ -51,6 +51,26 @@ describe("isClearableToolName", () => {
       false,
     );
   });
+
+  // The MCP read-only hint (ADR-0021, issue #626): a caller-supplied resolver,
+  // never a concept this module holds itself.
+  describe("with an isReadOnlyTool resolver", () => {
+    it("allows a name the resolver reports read-only", () => {
+      expect(isClearableToolName("docs__search", () => true)).toBe(true);
+    });
+
+    it("denies a name the resolver reports not read-only", () => {
+      expect(isClearableToolName("docs__write", () => false)).toBe(false);
+    });
+
+    it("still allows the core allowlist even when the resolver denies everything", () => {
+      expect(isClearableToolName("web_search", () => false)).toBe(true);
+    });
+
+    it("denies everything outside the core allowlist with no resolver given", () => {
+      expect(isClearableToolName("docs__search")).toBe(false);
+    });
+  });
 });
 
 describe("clearStaleToolResults", () => {
@@ -116,6 +136,39 @@ describe("clearStaleToolResults", () => {
       toolResultMessage("read_url", "t2", "content"),
     ];
     expect(clearStaleToolResults(messages, POLICY)).toBe(messages);
+  });
+
+  it("clears an MCP tool's results when the resolver reports it read-only", () => {
+    const messages: ModelMessage[] = [
+      toolResultMessage("docs__search", "t1", "content"),
+      toolResultMessage("docs__search", "t2", "content"),
+      toolResultMessage("docs__search", "t3", "content"),
+    ];
+
+    const result = clearStaleToolResults(messages, POLICY, () => true);
+    const contents = result
+      .filter((m) => m.role === "tool")
+      .map((m) => (m as { content: unknown[] }).content[0]);
+    expect(contents).toEqual([
+      expect.objectContaining({
+        toolCallId: "t1",
+        output: { type: "text", value: CLEARED_TOOL_RESULT_MARKER },
+      }),
+      expect.objectContaining({ toolCallId: "t2" }),
+      expect.objectContaining({ toolCallId: "t3" }),
+    ]);
+  });
+
+  it("never clears an MCP tool's results when the resolver reports it not read-only", () => {
+    const messages: ModelMessage[] = [
+      toolResultMessage("docs__write", "w1", "wrote"),
+      toolResultMessage("docs__write", "w2", "wrote"),
+      toolResultMessage("docs__write", "w3", "wrote"),
+      toolResultMessage("docs__write", "w4", "wrote"),
+    ];
+
+    const result = clearStaleToolResults(messages, POLICY, () => false);
+    expect(result).toBe(messages);
   });
 
   it("counts recency across mixed clearable and non-clearable tool results", () => {
@@ -189,5 +242,21 @@ describe("applyToolResultClearing", () => {
       POLICY,
     );
     expect(result).toBe(messages);
+  });
+
+  it("passes isReadOnlyTool through to the underlying clearing pass", () => {
+    const mcpMessages: ModelMessage[] = [
+      toolResultMessage("docs__search", "t1", "content"),
+      toolResultMessage("docs__search", "t2", "content"),
+      toolResultMessage("docs__search", "t3", "content"),
+    ];
+
+    const result = applyToolResultClearing(
+      mcpMessages,
+      { occupancy: 95, contextWindow: 100 },
+      POLICY,
+      () => true,
+    );
+    expect(result).not.toBe(mcpMessages);
   });
 });

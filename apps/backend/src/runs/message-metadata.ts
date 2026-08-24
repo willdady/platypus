@@ -72,6 +72,15 @@ export type MessageMetadataFacts = {
   /** Injectable clock, so a test can assert an exact `modelDurationMs` rather
    *  than a real elapsed delay. Defaults to `Date.now`. */
   now?: () => number;
+  /**
+   * Whether a tool name is clearable this turn — the core allowlist plus
+   * whatever the Tool session resolved from MCP `readOnlyHint` declarations
+   * (ADR-0021, issue #626). Read on `tool-result`/`tool-error`, the same
+   * parts `toolDurations` is read on, since both need the call that just
+   * finished. Absent means no tool is ever reported, which is what a run with
+   * no resolved Tool session (a headless Trigger) already gets today.
+   */
+  isClearableTool?: (toolName: string) => boolean;
 };
 
 export const createMessageMetadata = ({
@@ -82,6 +91,7 @@ export const createMessageMetadata = ({
   prepDurationMs,
   driveStartMs,
   now = Date.now,
+  isClearableTool,
 }: MessageMetadataFacts = {}) => {
   // Whether any step of this turn has reported an input-token count. Only
   // read to erase a reading, never to synthesise one — see the `finish-step`
@@ -96,6 +106,10 @@ export const createMessageMetadata = ({
   // right beside it.
   let inputTokensSum = 0;
   let outputTokensSum = 0;
+  // The turn's clearable Tool names among the ones it has actually called so
+  // far — reported in full each time, like `tokenUsage`'s sum, since the
+  // merge replaces an array rather than concatenating it.
+  const calledClearableToolNames = new Set<string>();
 
   return ({
     part,
@@ -183,10 +197,16 @@ export const createMessageMetadata = ({
     // survives. A call absent from the map was executed by the Provider, never
     // locally, and so was never measured.
     if (part.type === "tool-result" || part.type === "tool-error") {
+      const meta: ChatMessageMetadata = {};
       const durationMs = toolDurations.get(part.toolCallId);
-      return durationMs === undefined
-        ? undefined
-        : { toolDurations: { [part.toolCallId]: Math.round(durationMs) } };
+      if (durationMs !== undefined) {
+        meta.toolDurations = { [part.toolCallId]: Math.round(durationMs) };
+      }
+      if (isClearableTool?.(part.toolName)) {
+        calledClearableToolNames.add(part.toolName);
+        meta.readOnlyToolNames = [...calledClearableToolNames];
+      }
+      return Object.keys(meta).length > 0 ? meta : undefined;
     }
     // The terminal finish only. A step inside a tool loop can end at the
     // ceiling and the run still recover and complete normally; flagging those

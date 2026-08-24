@@ -8,6 +8,7 @@ import {
 import { logger } from "../logger.ts";
 import type { PlatypusUIMessage } from "../types.ts";
 import { createMessageMetadata } from "./message-metadata.ts";
+import { isClearableToolName } from "./tool-result-clearing.ts";
 import {
   createNoProgressDetector,
   NoProgressError,
@@ -322,6 +323,11 @@ const runStreamedDrive = (
       stepCeiling: opts.plan.maxSteps,
       prepDurationMs,
       driveStartMs,
+      isClearableTool: (toolName) =>
+        isClearableToolName(
+          toolName,
+          (n) => opts.plan.readOnlyToolNames?.has(n) ?? false,
+        ),
     }),
     onError: (error) => formatStreamError(error),
     onFinish: ({ messages: finalMessages }) => {

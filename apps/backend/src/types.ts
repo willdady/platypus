@@ -134,6 +134,21 @@ export type ChatMessageMetadata = {
    * cancelled turn is exactly when someone wants to know how long it ran.
    */
   modelDurationMs?: number;
+  /**
+   * The names of this turn's clearable Tools among the ones it actually
+   * called — the core allowlist and any MCP tool whose server declared
+   * `readOnlyHint` (ADR-0021, issue #626) — not the turn's whole resolved Tool
+   * set, which would put a large MCP server's whole catalogue on every
+   * message.
+   *
+   * The Chat UI's client-side clearing mirror unions this across every
+   * assistant message rather than importing a name list of its own: an MCP
+   * tool's clearability is only knowable by connecting, which only the server
+   * that resolved it has done. Absent for a turn that called no clearable
+   * tool — never an empty array, matching the rest of this type's optional
+   * fields.
+   */
+  readOnlyToolNames?: string[];
 };
 
 /**

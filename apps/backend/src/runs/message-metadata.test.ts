@@ -572,6 +572,83 @@ describe("Preparation and Model durations", () => {
   });
 });
 
+/**
+ * The turn's clearable Tool names, among the ones it actually called
+ * (ADR-0021, issue #626) — the fact the Chat UI's client-side clearing mirror
+ * reads instead of importing a name list of its own.
+ */
+describe("read-only Tool names over a real multi-step stream", () => {
+  it("reports a called tool the resolver says is clearable", async () => {
+    const result = streamText({
+      model: mockModel([
+        toolCallStep(usage(1_000, 30)),
+        answerStep(usage(4_200, 70)),
+      ]),
+      prompt: "Ping the service and tell me what it said.",
+      tools: { ping },
+      stopWhen: [stepCountIs(5)],
+    });
+
+    const message = await lastSnapshot(
+      result.toUIMessageStream({
+        messageMetadata: createMessageMetadata({
+          agentId: "agent-1",
+          isClearableTool: (name) => name === "ping",
+        }),
+      }),
+    );
+
+    expect(message?.metadata?.readOnlyToolNames).toEqual(["ping"]);
+  });
+
+  it("reports nothing when the resolver says no called tool is clearable", async () => {
+    const result = streamText({
+      model: mockModel([
+        toolCallStep(usage(1_000, 30)),
+        answerStep(usage(4_200, 70)),
+      ]),
+      prompt: "Ping the service and tell me what it said.",
+      tools: { ping },
+      stopWhen: [stepCountIs(5)],
+    });
+
+    const message = await lastSnapshot(
+      result.toUIMessageStream({
+        messageMetadata: createMessageMetadata({
+          agentId: "agent-1",
+          isClearableTool: () => false,
+        }),
+      }),
+    );
+
+    expect(message?.metadata).not.toHaveProperty("readOnlyToolNames");
+  });
+
+  it("reports nothing when no resolver is given at all", async () => {
+    const { message } = await runTurn();
+
+    expect(message?.metadata).not.toHaveProperty("readOnlyToolNames");
+  });
+
+  it("reports nothing for a turn that called no tools", async () => {
+    const result = streamText({
+      model: mockModel([answerStep(usage(1_000, 30))]),
+      prompt: "Just answer.",
+    });
+
+    const message = await lastSnapshot(
+      result.toUIMessageStream({
+        messageMetadata: createMessageMetadata({
+          agentId: "agent-1",
+          isClearableTool: () => true,
+        }),
+      }),
+    );
+
+    expect(message?.metadata).not.toHaveProperty("readOnlyToolNames");
+  });
+});
+
 describe("search availability over a real stream", () => {
   const answerOnly = () =>
     streamText({

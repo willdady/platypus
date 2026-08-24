@@ -17,6 +17,16 @@ import type { PlatypusUIMessage } from "../types.ts";
 export const DELEGATE_TOOL_NAME = "delegate";
 
 /**
+ * What loading a delegate's tools resolves to: its Tools, plus which of them
+ * an MCP declared `readOnlyHint` on (ADR-0021, issue #626) — the nested Tool
+ * session's own sidecar, resolved by the same rule its parent's is.
+ */
+export type LoadedSubAgentTools = {
+  tools: Record<string, Tool>;
+  readOnlyToolNames: ReadonlySet<string>;
+};
+
+/**
  * The tool name a delegation was recorded under BEFORE the single `delegate`
  * dispatcher — "delegateTo<PascalCaseName>", e.g. "Research Agent" →
  * "delegateToResearchAgent".
@@ -196,7 +206,7 @@ interface SubAgentDelegateOptions {
    * the MCP servers its delegates would have used (the sub-agent's half of the
    * Tool session, see `tool-session.ts`).
    */
-  loadTools: () => Promise<Record<string, Tool>>;
+  loadTools: () => Promise<LoadedSubAgentTools>;
   /**
    * Everything THIS sub-agent's own (Provider, model) pair resolved to —
    * model, step ceiling, output ceiling, sampling — via `resolveGenerationPlan`,
@@ -362,7 +372,7 @@ export const createSubAgentDelegate = (
           // Inside the try: opening this delegate's own tools can fail the
           // same way its stream can, and it reaches the parent as a tool error
           // either way rather than an unattributed throw.
-          const tools = await loadTools();
+          const { tools, readOnlyToolNames } = await loadTools();
           const drive = driveDelegate({
             // A Sub-Agent invocation receives Instructions plus guardrails and
             // nothing else — no workspace context, no memories, no user
@@ -377,6 +387,11 @@ export const createSubAgentDelegate = (
               // arrive already normalized — the Tool session that loaded them
               // owns that (#321 one level down).
               tools: wrapToolsWithActivity(tools, run.onActivity),
+              // This delegate's OWN Tool session resolved these — never the
+              // parent's (ADR-0021, issue #626): a Sub-Agent's session
+              // resolves hints by the same rule its parent's does, but is a
+              // distinct session with its own MCP connections.
+              readOnlyToolNames,
             },
             prompt: task,
             run,
@@ -670,7 +685,7 @@ export const createDelegateTools = async <
   loadToolsFn: (
     subAgentId: string,
     toolSetIds: string[],
-  ) => Promise<Record<string, Tool>>,
+  ) => Promise<LoadedSubAgentTools>,
   parentRun?: ParentRunContext,
   alreadyUnavailable: SubAgentFailure[] = [],
 ): Promise<{
@@ -710,7 +725,7 @@ export const createDelegateTools = async <
 
       // The sub-agent's tools are opened on its first delegation, not here.
       // Memoized so a delegate called twice in one turn resolves them once.
-      let toolsPromise: Promise<Record<string, Tool>> | undefined;
+      let toolsPromise: Promise<LoadedSubAgentTools> | undefined;
       const loadTools = () =>
         (toolsPromise ??= loadToolsFn(subAgent.id, subAgent.toolSetIds || []));
 

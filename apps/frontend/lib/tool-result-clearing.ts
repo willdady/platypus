@@ -1,9 +1,9 @@
 import {
-  CLEARABLE_TOOL_NAMES,
   TOOL_RESULT_CLEARING_KEEP_RECENT,
   TOOL_RESULT_CLEARING_THRESHOLD,
 } from "@platypus/schemas";
-import { isToolUIPart, type UIMessage } from "ai";
+import { isToolUIPart } from "ai";
+import type { PlatypusUIMessage } from "@platypus/backend/src/types";
 
 /**
  * The client-side mirror of Tool-result clearing's "which results are stale"
@@ -11,11 +11,31 @@ import { isToolUIPart, type UIMessage } from "ai";
  * #524) — derived, never persisted, so it can never drift into a stored lie
  * about a message that a later turn changes the answer for.
  *
- * Shares its constants with the backend via `@platypus/schemas`, so this and
- * the actual clearing decision can't silently disagree on the threshold or how
- * many recent results survive; only the "what was sent" mechanics differ,
- * because this reads UI messages rather than `ModelMessage[]`.
+ * Shares its threshold and keep-recent constants with the backend via
+ * `@platypus/schemas`, so this and the actual clearing decision can't silently
+ * disagree on those; only the "what was sent" mechanics differ, because this
+ * reads UI messages rather than `ModelMessage[]`.
+ *
+ * Holds no clearability policy of its own (ADR-0021, issue #626): an MCP
+ * tool's clearability is only knowable by connecting to it, which only the
+ * backend has done, so the core allowlist has no client-side counterpart.
+ * Instead this unions `ChatMessageMetadata.readOnlyToolNames` across every
+ * assistant message in the Transcript — the turn's clearable Tool names among
+ * the ones it actually called.
  */
+
+/** Every clearable Tool name any assistant message in `messages` has reported. */
+const clearableToolNamesOf = (
+  messages: readonly PlatypusUIMessage[],
+): ReadonlySet<string> => {
+  const names = new Set<string>();
+  for (const message of messages) {
+    for (const name of message.metadata?.readOnlyToolNames ?? []) {
+      names.add(name);
+    }
+  }
+  return names;
+};
 
 type ToolLikePart = {
   type: string;
@@ -41,7 +61,7 @@ const toolNameOf = (part: ToolLikePart): string =>
 
 /**
  * The `toolCallId`s of tool results this session's Chat meter would report as
- * cleared: allowlisted, output-available, and NOT among the most recent
+ * cleared: clearable, output-available, and NOT among the most recent
  * `TOOL_RESULT_CLEARING_KEEP_RECENT` such results, given the Context occupancy
  * reading is at or above the shared threshold.
  *
@@ -49,7 +69,7 @@ const toolNameOf = (part: ToolLikePart): string =>
  * itself does nothing when occupancy or the Context window is unknown.
  */
 export const clearedToolCallIds = (
-  messages: readonly UIMessage[],
+  messages: readonly PlatypusUIMessage[],
   reading: { occupancy?: number; contextWindow?: number },
 ): ReadonlySet<string> => {
   const { occupancy, contextWindow } = reading;
@@ -60,12 +80,14 @@ export const clearedToolCallIds = (
     return new Set();
   }
 
+  const clearableToolNames = clearableToolNamesOf(messages);
+
   const clearableIds: string[] = [];
   for (const message of messages) {
     for (const part of message.parts ?? []) {
       if (!isToolLikePart(part)) continue;
       if (part.state !== "output-available") continue;
-      if (!CLEARABLE_TOOL_NAMES.has(toolNameOf(part))) continue;
+      if (!clearableToolNames.has(toolNameOf(part))) continue;
       clearableIds.push(part.toolCallId);
     }
   }

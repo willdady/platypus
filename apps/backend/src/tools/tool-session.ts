@@ -101,6 +101,18 @@ export type ToolSession = {
   /** The Tools this session's Tool sets contributed, keyed by tool name. */
   tools: Record<string, Tool>;
   /**
+   * The names, among {@link tools}, whose MCP server declared `readOnlyHint`
+   * (ADR-0021, issue #626) — keyed the same way `tools` is, by the name the
+   * Tool enters this session under (post-namespacing, issue #467). Only the
+   * MCP branch ever adds to this: a registered Tool set has nowhere to
+   * declare the hint (out of scope for #626 — core Tool sets stay a literal
+   * allowlist).
+   *
+   * Resolved per session and never persisted — it lives exactly as long as
+   * `tools` does, and dies with this session the same way.
+   */
+  readOnlyToolNames: ReadonlySet<string>;
+  /**
    * Open a session for another Agent — a delegate — under this session's scope,
    * whose connections close with this one's. Lifetime nests so a delegate never
    * hands its clients back to a caller to remember.
@@ -144,6 +156,9 @@ export const openToolSession = async (
   // it can report the names it is about to take, and the reason this is a Map
   // rather than the tool map alone.
   const owners = new Map<string, ToolOwner>();
+  // Every name, among `tools`, whose MCP declared `readOnlyHint` (#626). Only
+  // ever added to from the MCP branch of `open` below.
+  const readOnlyToolNames = new Set<string>();
   const closers: Array<() => Promise<void>> = [];
   // Registered closers, by identity, and scoped to **this session** — so the
   // case it collapses is one turn reaching the same teardown twice, as two Tool
@@ -259,13 +274,30 @@ export const openToolSession = async (
       scope: mcp.organizationId ? "org" : "ws",
     });
 
-    let mcpTools: Record<string, Tool>;
+    // Split into the listing and the definitions-to-Tools conversion — still
+    // one round trip, not two — so the raw `readOnlyHint` annotation (#626)
+    // is in hand before it is discarded: `client.tools()` collapses both
+    // steps and keeps only what it needs to resolve a display title, and the
+    // hint is gone by the time it would return.
+    let definitions: Awaited<ReturnType<MCPClient["listTools"]>>;
     try {
-      mcpTools = await client.tools();
+      definitions = await client.listTools();
     } catch (error) {
       warnUnreachable(error);
       return;
     }
+    const mcpTools = client.toolsFromDefinitions(definitions);
+
+    // `true` only — the specification's own default for a missing hint, and
+    // the tri-state this reduces to a boolean at: a string `"false"`, a `1`,
+    // or any other non-boolean reads as undeclared exactly like an absent one
+    // (ADR-0021), never coerced.
+    const readOnlyHintByRawName = new Map<string, boolean>(
+      definitions.tools.map((def) => [
+        def.name,
+        def.annotations?.readOnlyHint === true,
+      ]),
+    );
 
     // Every MCP-sourced tool enters the turn under `<slug>__<toolName>`,
     // unconditionally rather than only on collision, so a name never depends
@@ -290,6 +322,13 @@ export const openToolSession = async (
         continue;
       }
       namespaced[namespacedName] = tool;
+      // Keyed by the namespaced name — the name Tool-result clearing and the
+      // rest of core will ever see this Tool under (#626) — so a Transcript
+      // predating #467's namespacing degrades safely: an unrecognised name
+      // reads as undeclared rather than being matched by accident.
+      if (readOnlyHintByRawName.get(rawName)) {
+        readOnlyToolNames.add(namespacedName);
+      }
     }
 
     const owner: ToolOwner = { toolSetId, plugin: null, mcpSlug: mcp.slug };
@@ -345,11 +384,11 @@ export const openToolSession = async (
     // having none simply leaves it without them.
     if (disposed) {
       await child.dispose();
-      return { ...child, tools: {} };
+      return { ...child, tools: {}, readOnlyToolNames: new Set() };
     }
     closers.push(child.dispose);
     return child;
   };
 
-  return { tools, nest, registerCloser, dispose };
+  return { tools, readOnlyToolNames, nest, registerCloser, dispose };
 };

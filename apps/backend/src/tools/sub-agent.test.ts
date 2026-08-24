@@ -9,6 +9,7 @@ import {
   createDelegateTools,
   createSubAgentDelegate,
   DELEGATE_TOOL_NAME,
+  type LoadedSubAgentTools,
   subAgentToolName,
   SUB_AGENT_STEP_LIMIT_NOTE,
   SUB_AGENT_TRUNCATION_NOTE,
@@ -107,11 +108,13 @@ const parentScope: WorkspaceScope = workspaceScope(
 
 /**
  * A delegate's tools as the lazy loader it now takes: they are opened on first
- * invocation, so the option is a thunk rather than a resolved map.
+ * invocation, so the option is a thunk rather than a resolved map. Carries no
+ * read-only hints — a test that needs one builds `LoadedSubAgentTools`
+ * directly.
  */
 const toolsOf =
-  (tools: Record<string, Tool>) => (): Promise<Record<string, Tool>> =>
-    Promise.resolve(tools);
+  (tools: Record<string, Tool>) => (): Promise<LoadedSubAgentTools> =>
+    Promise.resolve({ tools, readOnlyToolNames: new Set() });
 
 const baseOptions = {
   id: "agent-1",
@@ -132,7 +135,7 @@ type LegacyOptions = Partial<{
   description: string;
   instructions: string;
   model: ReturnType<typeof modelOf>;
-  loadTools: () => Promise<Record<string, Tool>>;
+  loadTools: () => Promise<LoadedSubAgentTools>;
   maxSteps: number;
   securityGuardrails: string | null;
   sampling: Partial<
@@ -980,7 +983,9 @@ describe("createSubAgentDelegate", () => {
   // (#321 one level down), which is why this wrapper no longer touches them.
   describe("sub-agent tools", () => {
     it("opens its tools on invocation, not when the delegate is built", async () => {
-      const loadTools = vi.fn().mockResolvedValue({});
+      const loadTools = vi
+        .fn()
+        .mockResolvedValue({ tools: {}, readOnlyToolNames: new Set() });
       const tool = delegateToolFor(buildOptions({ loadTools }));
       expect(loadTools).not.toHaveBeenCalled();
 
@@ -1169,7 +1174,9 @@ describe("createDelegateTools", () => {
     ];
 
     const resolvePlan = workingPlan();
-    const loadToolsFn = vi.fn().mockResolvedValue({});
+    const loadToolsFn = vi
+      .fn()
+      .mockResolvedValue({ tools: {}, readOnlyToolNames: new Set() });
 
     const result = await createDelegateTools(
       subAgents,
@@ -1214,7 +1221,7 @@ describe("createDelegateTools", () => {
     const { tools } = await createDelegateTools(
       [{ id: "sa-1", name: "Research" }],
       resolvePlan,
-      vi.fn().mockResolvedValue({}),
+      vi.fn().mockResolvedValue({ tools: {}, readOnlyToolNames: new Set() }),
     );
     await runTool(tools, "Research");
 
@@ -1239,7 +1246,7 @@ describe("createDelegateTools", () => {
     const result = await createDelegateTools(
       subAgents,
       resolvePlan,
-      vi.fn().mockResolvedValue({}),
+      vi.fn().mockResolvedValue({ tools: {}, readOnlyToolNames: new Set() }),
     );
 
     // Advertised: only the one that resolved.
@@ -1270,7 +1277,7 @@ describe("createDelegateTools", () => {
     const result = await createDelegateTools(
       subAgents,
       resolvePlan,
-      vi.fn().mockResolvedValue({}),
+      vi.fn().mockResolvedValue({ tools: {}, readOnlyToolNames: new Set() }),
     );
 
     expect(result.catalogue).toEqual([
@@ -1309,7 +1316,7 @@ describe("createDelegateTools", () => {
     const result = await createDelegateTools(
       [{ id: "sa-1", name: "Working" }],
       workingPlan(),
-      vi.fn().mockResolvedValue({}),
+      vi.fn().mockResolvedValue({ tools: {}, readOnlyToolNames: new Set() }),
       undefined,
       [{ id: "sub-gone", reason: "not available in this workspace" }],
     );
@@ -1333,7 +1340,7 @@ describe("createDelegateTools", () => {
     const { tools } = await createDelegateTools(
       [{ id: "sa-1", name: "Guarded", instructions: "You are guarded." }],
       resolvePlan,
-      vi.fn().mockResolvedValue({}),
+      vi.fn().mockResolvedValue({ tools: {}, readOnlyToolNames: new Set() }),
     );
     await runTool(tools, "Guarded");
 

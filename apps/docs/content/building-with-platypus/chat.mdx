@@ -268,10 +268,13 @@ model switches the meter with it, since the window belongs to the model.
 
 Where a **Context window** is declared, a long turn that reads a lot of pages
 or files gets one piece of automatic help: once the meter above would be
-running high, older results from a small set of read-only tools — web search,
-reading a URL, reading a file or listing a directory in a Sandbox — stop being
-sent to the model. Only the oldest ones go, and only enough to make room; the
-most recent stay.
+running high, older results from a small set of read-only tools stop being
+sent to the model. That set covers a handful of built-in reads — web search,
+reading a URL, reading a file or listing a directory in a Sandbox — plus any
+MCP tool whose server declares it read-only (see
+[MCP](/building-with-platypus/mcp)). An MCP server that declares nothing gets
+no benefit from this for that tool. Only the oldest results go, and only
+enough to make room; the most recent stay.
 
 Nothing is deleted. The full result is still in the message, still yours to
 read, and still there after a reload — this only changes what the model itself

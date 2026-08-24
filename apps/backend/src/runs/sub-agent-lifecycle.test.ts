@@ -1,7 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import type { LanguageModelV3StreamPart } from "@ai-sdk/provider";
 import { MockLanguageModelV3, simulateReadableStream } from "ai/test";
-import type { Tool } from "ai";
 import { z } from "zod";
 
 vi.mock("../logger.ts", () => ({
@@ -128,14 +127,17 @@ describe("a delegated run inside a parent run", () => {
       },
       loadTools: () =>
         Promise.resolve({
-          slowWork: {
-            inputSchema: z.object({}),
-            execute: async () => {
-              await sleep(SUB_AGENT_MS);
-              return "done";
+          tools: {
+            slowWork: {
+              inputSchema: z.object({}),
+              execute: async () => {
+                await sleep(SUB_AGENT_MS);
+                return "done";
+              },
             },
           },
-        } as unknown as Record<string, Tool>),
+          readOnlyToolNames: new Set(),
+        }),
       parentRun: { runId: "parent", scope: parentScope },
     });
 
@@ -195,7 +197,8 @@ describe("a delegated run inside a parent run", () => {
         ),
         maxSteps: DEFAULT_AGENT_MAX_STEPS,
       },
-      loadTools: () => Promise.resolve({}),
+      loadTools: () =>
+        Promise.resolve({ tools: {}, readOnlyToolNames: new Set() }),
       parentRun: { runId: "parent", scope: parentScope },
     });
 

@@ -1848,7 +1848,10 @@ describe("chat-execution", () => {
 
     it("resolves an org-scoped (Shared) MCP at Chat-turn time", async () => {
       mockCreateMCPClient.mockResolvedValueOnce({
-        tools: vi.fn().mockResolvedValue({ mcpTool: { description: "x" } }),
+        listTools: vi.fn().mockResolvedValue({ tools: [{ name: "mcpTool" }] }),
+        toolsFromDefinitions: vi
+          .fn()
+          .mockReturnValue({ mcpTool: { description: "x" } }),
         close: vi.fn().mockResolvedValue(undefined),
       });
 
@@ -1876,6 +1879,37 @@ describe("chat-execution", () => {
       );
 
       expect(turn.stream.tools).toHaveProperty("test_mcp__mcpTool");
+      await turn.dispose();
+    });
+
+    // ADR-0021, issue #626: the Tool session's read-only sidecar rides the
+    // resolved plan, keyed the same way the tool map is.
+    it("carries an MCP tool's declared read-only hint onto the plan", async () => {
+      mockCreateMCPClient.mockResolvedValueOnce({
+        listTools: vi.fn().mockResolvedValue({
+          tools: [{ name: "readTool", annotations: { readOnlyHint: true } }],
+        }),
+        toolsFromDefinitions: vi
+          .fn()
+          .mockReturnValue({ readTool: { description: "reads only" } }),
+        close: vi.fn().mockResolvedValue(undefined),
+      });
+
+      const queries = createInMemoryChatTurnQueries({
+        workspaces: [baseWorkspace],
+        agents: [agentWithMcp],
+        providers: [baseProvider],
+        mcps: [{ ...baseMcp, workspaceId: baseWorkspace.id }],
+      });
+
+      const turn = await prepareChatTurn(
+        { ...baseInput, request: { agentId: agentWithMcp.id } },
+        queries,
+      );
+
+      expect(turn.stream.readOnlyToolNames?.has("test_mcp__readTool")).toBe(
+        true,
+      );
       await turn.dispose();
     });
 
