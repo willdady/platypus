@@ -85,6 +85,7 @@ const mcpRow = (overrides: Partial<McpRow> = {}): McpRow =>
     organizationId: null,
     workspaceId: "ws-1",
     name: "Test MCP",
+    slug: "test_mcp",
     url: "https://mcp.example.com",
     headers: null,
     authType: "None",
@@ -195,7 +196,7 @@ describe("openToolSession", () => {
       return close;
     };
 
-    it("serves an MCP server's tools for an id no Tool set claims, and closes it on dispose", async () => {
+    it("serves an MCP server's tools, namespaced under its slug, for an id no Tool set claims, and closes it on dispose", async () => {
       const close = connected({ mcpTool: toolNamed("mcpTool") });
 
       const session = await openToolSession(
@@ -204,7 +205,8 @@ describe("openToolSession", () => {
         queriesFor([mcpRow()]),
       );
 
-      expect(session.tools).toHaveProperty("mcpTool");
+      expect(session.tools).toHaveProperty("test_mcp__mcpTool");
+      expect(session.tools).not.toHaveProperty("mcpTool");
       expect(close).not.toHaveBeenCalled();
 
       await session.dispose();
@@ -229,7 +231,7 @@ describe("openToolSession", () => {
         queriesFor([mcpRow()]),
       );
       const execute = (
-        session.tools.listItems as unknown as {
+        session.tools["test_mcp__listItems"] as unknown as {
           execute: (a: unknown, o: unknown) => Promise<unknown>;
         }
       ).execute;
@@ -304,28 +306,90 @@ describe("openToolSession", () => {
       );
     });
 
-    it("reports a tool name an MCP server takes from a Tool set", async () => {
-      register("set.shadowed", { search: toolNamed("first") }, "first-plugin");
+    // The bug issue #467 fixes: an MCP tool literally named `search` (or
+    // `web_search`) used to shadow a same-named Tool set or built-in outright.
+    // Namespacing means the two names never collide in the first place.
+    it("does not let an MCP tool shadow a Tool set's same-named tool", async () => {
+      register("set.search", { search: toolNamed("native") }, "search-plugin");
       connected({ search: toolNamed("mcp") });
 
-      await openToolSession(
+      const session = await openToolSession(
         scope,
-        grantedAgent("set.shadowed", "mcp-1"),
+        grantedAgent("set.search", "mcp-1"),
         queriesFor([mcpRow()]),
       );
 
+      expect(session.tools.search).toEqual(toolNamed("native"));
+      expect(session.tools["test_mcp__search"]).toEqual(toolNamed("mcp"));
+      expect(logger.warn).not.toHaveBeenCalled();
+    });
+
+    it("namespaces a tool name that already looks namespaced, rather than stripping it", async () => {
+      connected({ github__pull: toolNamed("pull") });
+
+      const session = await openToolSession(
+        scope,
+        grantedAgent("mcp-1"),
+        queriesFor([mcpRow({ name: "GitHub", slug: "github" })]),
+      );
+
+      expect(session.tools).toHaveProperty("github__github__pull");
+    });
+
+    it("lets two MCPs with distinct slugs both contribute a tool of the same raw name", async () => {
+      connected({ search: toolNamed("from-one") });
+      connected({ search: toolNamed("from-two") });
+
+      const session = await openToolSession(
+        scope,
+        grantedAgent("mcp-1", "mcp-2"),
+        queriesFor([
+          mcpRow(),
+          mcpRow({ id: "mcp-2", name: "Other MCP", slug: "other_mcp" }),
+        ]),
+      );
+
+      expect(session.tools["test_mcp__search"]).toEqual(toolNamed("from-one"));
+      expect(session.tools["other_mcp__search"]).toEqual(toolNamed("from-two"));
+    });
+
+    it("excludes a tool whose namespaced name exceeds the model-provider name limit, keeping the MCP's other tools", async () => {
+      const longSlug = "a".repeat(60);
+      connected({
+        ok: toolNamed("ok"),
+        thisNameIsWayTooLongToFitOnceNamespaced: toolNamed("too-long"),
+      });
+
+      const session = await openToolSession(
+        scope,
+        grantedAgent("mcp-1"),
+        queriesFor([mcpRow({ slug: longSlug })]),
+      );
+
+      expect(session.tools).toHaveProperty(`${longSlug}__ok`);
+      expect(Object.keys(session.tools)).toEqual([`${longSlug}__ok`]);
       expect(logger.warn).toHaveBeenCalledWith(
         expect.objectContaining({
-          tool: "search",
-          toolSet: "mcp-1",
-          // An MCP server belongs to no plugin, and says so rather than
-          // reading as an unanswered question.
-          plugin: null,
-          shadowedToolSet: "set.shadowed",
-          shadowedPlugin: "first-plugin",
+          mcpId: "mcp-1",
+          tool: "thisNameIsWayTooLongToFitOnceNamespaced",
         }),
-        expect.stringContaining("same tool name"),
+        expect.stringContaining("exceeds the model-provider name limit"),
       );
+    });
+
+    it("fails the turn loudly when two attached MCPs resolve to the same slug", async () => {
+      connected({ a: toolNamed("a") });
+
+      await expect(
+        openToolSession(
+          scope,
+          grantedAgent("mcp-1", "mcp-2"),
+          queriesFor([
+            mcpRow(),
+            mcpRow({ id: "mcp-2", name: "Test MCP Again" }),
+          ]),
+        ),
+      ).rejects.toThrow(/same tool-namespace slug "test_mcp"/);
     });
 
     it("closes every connection even when one close throws", async () => {
@@ -339,7 +403,10 @@ describe("openToolSession", () => {
       const session = await openToolSession(
         scope,
         grantedAgent("mcp-1", "mcp-2"),
-        queriesFor([mcpRow(), mcpRow({ id: "mcp-2" })]),
+        queriesFor([
+          mcpRow(),
+          mcpRow({ id: "mcp-2", name: "Second MCP", slug: "second_mcp" }),
+        ]),
       );
 
       await expect(session.dispose()).resolves.toBeUndefined();
@@ -577,8 +644,8 @@ describe("openToolSession", () => {
 
       // The delegate's tools are its own — a parent must not be able to call
       // them directly.
-      expect(child.tools).toHaveProperty("delegateTool");
-      expect(parent.tools).not.toHaveProperty("delegateTool");
+      expect(child.tools).toHaveProperty("test_mcp__delegateTool");
+      expect(parent.tools).not.toHaveProperty("test_mcp__delegateTool");
 
       // One dispose, at the seam that opened everything.
       await parent.dispose();

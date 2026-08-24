@@ -28,7 +28,9 @@ In your Workspace, go to **Settings → MCP** and click **Add MCP**.
 
 ### Enter the connection
 
-- **Name** — a label for this server (3–30 characters).
+- **Name** — a label for this server (3–30 characters). It must contain at
+  least one letter or digit, because it also becomes this server's
+  **tool-namespace prefix** — see below.
 - **URL** — the server's HTTP endpoint, e.g. `https://example.com/mcp`.
 
 ### Choose how it authenticates
@@ -55,7 +57,8 @@ Under **Custom Headers**, add any extra HTTP headers to send with every request
   Authorized** / **Authorized**). Click **Authorize** to complete the OAuth flow;
   use **Re-authorize** or **Revoke** later as needed.
 - Click **Test Connection** to verify the server responds — on success it lists
-  the tools the server exposes. Then **Save**.
+  the tools the server exposes, already shown under the namespaced names
+  described below. Then **Save**.
 
 ## How an MCP resolves to a tool set
 
@@ -73,6 +76,29 @@ are merged into what the model can call for that turn.
   it simply contributes no tools and the turn continues, rather than failing the
   whole Chat.
 </Callout>
+
+### Tool names are namespaced by MCP
+
+Every tool an MCP server contributes enters a Chat turn under
+`<slug>__<toolName>` — a prefix derived from the MCP's **Name** (lowercased,
+punctuation and spaces collapsed to underscores), followed by the server's own
+tool name. A server exposing a tool called `search` registered on an MCP named
+"Docs Search" contributes `docs_search__search`, never bare `search` — so it
+can never be confused with, or silently take the place of, a built-in tool of
+the same name (like the native Web-search tool) or another MCP's tool.
+
+Because two different names can lowercase and punctuation-strip to the same
+prefix (e.g. "Docs Search" and "Docs-Search"), an MCP's Name must be unique
+against every other MCP it could be granted alongside in one Agent — both other
+MCPs in the same Workspace or Organization, and (for a Shared MCP) every
+Workspace it could be attached to. Saving a conflicting name is rejected,
+naming the MCP it collides with; rename one of them to resolve it.
+
+The combined `<slug>__<toolName>` name must also be 64 characters or fewer —
+the ceiling Anthropic and OpenAI models place on tool names. A tool name that
+doesn't fit is excluded from the turn (and flagged by **Test Connection**)
+rather than being cut short; if you hit this, the fix is to give the MCP a
+shorter Name.
 
 ## Grant an MCP to an Agent
 

@@ -301,6 +301,10 @@ export const mcp = pgTable(
       onDelete: "cascade",
     }),
     name: t.text("name").notNull(),
+    // Derived from `name` via `slugifyMcpName` (issue #467): the namespace
+    // prefix an MCP's tools carry into a turn's tool map, so a collision with a
+    // built-in or another MCP's tool cannot arise from raw server-side names.
+    slug: t.text("slug").notNull(),
     url: t.text("url"),
     headers: t.jsonb("headers").$type<Record<string, string>>(),
     authType: t.text("auth_type").notNull(),
@@ -322,6 +326,13 @@ export const mcp = pgTable(
     index("idx_mcp_organization_id").on(t.organizationId),
     unique("unique_mcp_name_org").on(t.organizationId, t.name),
     unique("unique_mcp_name_workspace").on(t.workspaceId, t.name),
+    // Same-scope slug uniqueness (issue #467), mirroring the name constraints
+    // above. Cross-scope collisions (an org-scoped and a workspace-scoped MCP
+    // sharing a slug) are legal — they cannot both be a DB constraint since
+    // they differ in which scope column is set — and are instead checked at
+    // create/update time and backstopped at Chat-turn time.
+    unique("unique_mcp_slug_org").on(t.organizationId, t.slug),
+    unique("unique_mcp_slug_workspace").on(t.workspaceId, t.slug),
   ],
 );
 

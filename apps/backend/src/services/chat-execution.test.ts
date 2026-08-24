@@ -1827,6 +1827,7 @@ describe("chat-execution", () => {
       organizationId: null as string | null,
       workspaceId: null as string | null,
       name: "Test MCP",
+      slug: "test_mcp",
       url: "https://mcp.example.com",
       headers: null,
       authType: "None",
@@ -1873,7 +1874,7 @@ describe("chat-execution", () => {
         queries,
       );
 
-      expect(turn.stream.tools).toHaveProperty("mcpTool");
+      expect(turn.stream.tools).toHaveProperty("test_mcp__mcpTool");
       await turn.dispose();
     });
 

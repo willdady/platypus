@@ -3,6 +3,7 @@ import {
   type MCPClient,
 } from "@ai-sdk/mcp";
 import type { Tool } from "ai";
+import { MCP_TOOL_NAME_PATTERN, namespaceMcpToolName } from "@platypus/schemas";
 import type { mcp as mcpTable } from "../db/schema.ts";
 import { logger } from "../logger.ts";
 import { CORE_BUILTIN_OWNER, getToolSetPlugin } from "../plugins/registry.ts";
@@ -151,6 +152,9 @@ export const openToolSession = async (
   // it registers is its own to run.
   const registered = new Set<Closer>();
   let disposed = false;
+  // MCP slug -> the MCP that already claimed it this turn (issue #467); see
+  // the collision check in `open` below for why this fails loudly.
+  const usedMcpSlugs = new Map<string, McpRow>();
 
   const registerCloser: CoreCloserRegistrar = (close, attribution) => {
     // The TS type says `close` is a function; a third-party *JS* plugin can hand
@@ -214,6 +218,22 @@ export const openToolSession = async (
       return;
     }
 
+    // Checked before connecting — a turn-time backstop for two attached MCPs
+    // resolving to the same tool-namespace slug (issue #467). The DB and the
+    // create/update routes prevent this going forward, but a row created
+    // before this fix (or backfilled with a collision the app-level check
+    // never saw) can still reach here, and silently picking a winner would
+    // reintroduce the exact shadowing this issue is about — just one level up,
+    // at the MCP rather than the tool. So this fails the turn loudly instead
+    // of warning and continuing, the way a plain tool-name collision does.
+    const incumbentMcp = usedMcpSlugs.get(mcp.slug);
+    if (incumbentMcp) {
+      throw new Error(
+        `Two attached MCPs resolve to the same tool-namespace slug "${mcp.slug}": "${incumbentMcp.name}" (${incumbentMcp.id}) and "${mcp.name}" (${mcp.id}). Rename one of them.`,
+      );
+    }
+    usedMcpSlugs.set(mcp.slug, mcp);
+
     const warnUnreachable = (error: unknown) => {
       logger.warn(
         { error, mcpId: mcp.id, scope: mcp.organizationId ? "org" : "ws" },
@@ -247,8 +267,33 @@ export const openToolSession = async (
       return;
     }
 
-    const owner: ToolOwner = { toolSetId, plugin: null };
-    const normalized = normalizeToolResults(mcpTools);
+    // Every MCP-sourced tool enters the turn under `<slug>__<toolName>`,
+    // unconditionally rather than only on collision, so a name never depends
+    // on load order (issue #467). A server tool name that already looks
+    // namespaced (e.g. `github__pull`) is prefixed anyway, not stripped:
+    // stripping would guess at a third-party server's intent, and would
+    // reintroduce this same bug for a server exposing both `pull` and
+    // `github__pull`.
+    const namespaced: Record<string, Tool> = {};
+    for (const [rawName, tool] of Object.entries(mcpTools)) {
+      const namespacedName = namespaceMcpToolName(mcp.slug, rawName);
+      if (!MCP_TOOL_NAME_PATTERN.test(namespacedName)) {
+        // Never truncated or rewritten to fit: two long tool names from one
+        // server could truncate onto each other and reintroduce the
+        // collision invisibly. The MCP name is the User's own, so the report
+        // points at the remedy — renaming the MCP shorter — rather than at
+        // an internal id.
+        logger.warn(
+          { mcpId: mcp.id, mcpName: mcp.name, tool: rawName, namespacedName },
+          "MCP tool name exceeds the model-provider name limit once namespaced; excluding it. Rename the MCP shorter to fix this.",
+        );
+        continue;
+      }
+      namespaced[namespacedName] = tool;
+    }
+
+    const owner: ToolOwner = { toolSetId, plugin: null, mcpSlug: mcp.slug };
+    const normalized = normalizeToolResults(namespaced);
     reportToolNameCollisions(normalized, owners, owner);
     claim(normalized, owner);
   };
