@@ -169,6 +169,12 @@ when it ran and how long it took, the event type for Event triggers, per-run
 stats, and any error message. It's the place to confirm a schedule is actually
 firing and to debug a Trigger that's failing.
 
+Each run's identifier isn't shown on the row — it's an opaque value nobody
+reads at a glance. Instead every run offers a **Copy run id** control. Use it
+when a run fails and you need to find that run's log lines: backend logs are
+keyed by the run id, so copying it here and pasting it into your log query is
+how you cross-reference a failed run against what happened behind the scenes.
+
 Among the per-run stats, **in / out** are the run's total token counts across
 every step — what the run cost — while **context** is a different quantity: how
 much of the model's Context window the conversation filled on the run's final

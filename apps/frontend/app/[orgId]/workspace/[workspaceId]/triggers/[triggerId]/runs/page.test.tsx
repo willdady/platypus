@@ -1,5 +1,5 @@
-import { describe, it, expect, vi } from "vitest";
-import { act, render, screen } from "@testing-library/react";
+import { describe, it, expect, vi, beforeEach } from "vitest";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { Suspense } from "react";
 import type { TriggerRun, TriggerRunStats } from "@platypus/schemas";
 
@@ -23,6 +23,25 @@ vi.mock("@/components/auth-provider", () => ({
 vi.mock("@/components/back-button", () => ({
   BackButton: () => null,
 }));
+
+const { toastSuccessSpy, toastErrorSpy } = vi.hoisted(() => ({
+  toastSuccessSpy: vi.fn(),
+  toastErrorSpy: vi.fn(),
+}));
+vi.mock("sonner", () => ({
+  toast: { success: toastSuccessSpy, error: toastErrorSpy },
+}));
+
+// Radix Tooltip content measures itself on focus, which jsdom has no
+// ResizeObserver for.
+vi.stubGlobal(
+  "ResizeObserver",
+  class {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  },
+);
 
 import TriggerRunsPage from "./page";
 import {
@@ -158,5 +177,56 @@ describe("Trigger runs Context occupancy", () => {
 
     expect(screen.getByText(/1M context/)).toBeInTheDocument();
     expect(screen.getByText(/2\.5M in/)).toBeInTheDocument();
+  });
+});
+
+// Issue #665. Backend logs are keyed by runId, but the id is never rendered —
+// the clipboard is the only place an Operator can get it out of the UI.
+describe("Trigger runs copy-run-id control", () => {
+  const writeText = vi.fn();
+
+  beforeEach(() => {
+    writeText.mockReset().mockResolvedValue(undefined);
+    Object.assign(navigator, { clipboard: { writeText } });
+    toastSuccessSpy.mockClear();
+    toastErrorSpy.mockClear();
+  });
+
+  it("never renders the run id as visible text", async () => {
+    await renderRuns([run(stats())]);
+
+    expect(screen.queryByText("run-1")).toBeNull();
+  });
+
+  it("exposes an accessible name and a matching tooltip", async () => {
+    await renderRuns([run(stats())]);
+
+    const button = screen.getByRole("button", { name: "Copy run id" });
+    expect(button).toBeInTheDocument();
+
+    fireEvent.focus(button);
+    expect(await screen.findAllByText("Copy run id")).not.toHaveLength(0);
+  });
+
+  it("copies the full run id and shows a success toast", async () => {
+    await renderRuns([run(stats())]);
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Copy run id" }));
+    });
+
+    expect(writeText).toHaveBeenCalledWith("run-1");
+    expect(toastSuccessSpy).toHaveBeenCalledWith("Copied to clipboard");
+  });
+
+  it("shows an error toast when the clipboard write rejects", async () => {
+    writeText.mockReset().mockRejectedValue(new Error("denied"));
+    await renderRuns([run(stats())]);
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Copy run id" }));
+    });
+
+    expect(toastErrorSpy).toHaveBeenCalledWith("Failed to copy to clipboard");
   });
 });
