@@ -104,13 +104,13 @@ describe("optionalFetcher", () => {
   // as an error, or a broken deployment reads as an empty Chat.
   it("throws on every other failure", async () => {
     respondWith(500, { error: "boom" });
-    await expect(optionalFetcher("http://test/chat/chat-1")).rejects.toMatchObject(
-      { status: 500 },
-    );
+    await expect(
+      optionalFetcher("http://test/chat/chat-1"),
+    ).rejects.toMatchObject({ status: 500 });
 
     respondWith(403, { error: "nope" });
-    await expect(optionalFetcher("http://test/chat/chat-1")).rejects.toMatchObject(
-      { status: 403 },
-    );
+    await expect(
+      optionalFetcher("http://test/chat/chat-1"),
+    ).rejects.toMatchObject({ status: 403 });
   });
 });

@@ -212,9 +212,9 @@ describe("composerTurnStatus", () => {
   // button — the same "a dropped connection reported as a failed turn" symptom
   // the modal fix removed, only moved onto the button.
   it("clears a recovered drop rather than leaving a failure on the button", () => {
-    expect(
-      composerTurnStatus(belief("succeeded", "error", true), "none"),
-    ).toBe("ready");
+    expect(composerTurnStatus(belief("succeeded", "error", true), "none")).toBe(
+      "ready",
+    );
   });
 
   // A turn that genuinely failed keeps its reading: the button should say so.
@@ -228,7 +228,9 @@ describe("composerTurnStatus", () => {
   });
 
   it("passes an ordinary turn through untouched", () => {
-    expect(composerTurnStatus(belief(undefined, "ready"), "none")).toBe("ready");
+    expect(composerTurnStatus(belief(undefined, "ready"), "none")).toBe(
+      "ready",
+    );
     expect(composerTurnStatus(belief("running", "streaming"), "none")).toBe(
       "streaming",
     );

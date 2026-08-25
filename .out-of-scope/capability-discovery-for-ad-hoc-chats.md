@@ -103,7 +103,7 @@ the #464 record did not know and which changes the case materially:
   therefore discards the prefix mid-turn, re-processing the whole conversation
   on every step that follows a disclosure.
 - Appending rather than removing does not rescue it. An appended definition is
-  inserted *before* the System prompt, not at the end of the request, so
+  inserted _before_ the System prompt, not at the end of the request, so
   everything behind the insertion point is discarded anyway. `toolOrder` keeps
   the stable core byte-identical and can do nothing about what follows it.
 - Delivering disclosed schemas in a tail channel after the messages — the one
@@ -140,7 +140,7 @@ here.
 
 #581 returned to the subscription with two of the three objections above
 answered. #467 has since landed, so a tool-name collision renames rather than
-overwrites; and #581 sequenced progressive disclosure *ahead* of the
+overwrites; and #581 sequenced progressive disclosure _ahead_ of the
 subscription so that "everything is eagerly loaded" would no longer follow. It
 also offered two smaller forms: a subscription covering only Skills and
 Sub-Agents, where no version of the collision argument applies, and — in place

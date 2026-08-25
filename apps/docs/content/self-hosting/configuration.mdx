@@ -91,7 +91,7 @@ The deeper model — Providers, the role ladder, and the default admin — lives
 Platypus loads its extensions — starting with Tool sets — as **plugins**.
 Plugins come in two tiers:
 
-- **Always-on core** — `@platypus/tools-basic` (math, time) and
+- **Always-on core** — `@platypus/tools-basic` (math, time, identifiers) and
   `@platypus/tools-platform` (kanban, dashboards, triggers, memory,
   notifications, agent discovery/management, skill management). These load
   **unconditionally**; you neither list them nor can you disable them. They carry
@@ -108,7 +108,7 @@ repeat it.
 
 | Plugin                     | Tier      | Contributes                                                                                          |
 | -------------------------- | --------- | ---------------------------------------------------------------------------------------------------- |
-| `@platypus/tools-basic`    | Always-on | Pure-utility Tool sets — math conversions, time.                                                     |
+| `@platypus/tools-basic`    | Always-on | Pure-utility Tool sets — math conversions, time, identifiers.                                         |
 | `@platypus/tools-platform` | Always-on | The Platypus-domain Tool sets — kanban, dashboards, triggers, memory, notifications, agent discovery/management, skill management. |
 | `@platypus/web-fetch`      | Gate-able | The web-fetch Tool set. Its own plugin so **network egress** can be denied in isolation.             |
 | `@platypus/docker`         | Gate-able | The Docker Sandbox backend. Opt-in infra; also needs the `compose.sandbox.yaml` overlay.             |
