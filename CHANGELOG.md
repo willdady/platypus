@@ -1,5 +1,24 @@
 # Changelog
 
+## [2.11.0](https://github.com/willdady/platypus/compare/v2.10.0...v2.11.0) (2026-08-25)
+
+
+### Features
+
+* **backend:** add identifiers Tool set for UUID and nanoid generation ([#680](https://github.com/willdady/platypus/issues/680)) ([12f5697](https://github.com/willdady/platypus/commit/12f5697f8558b9525a5ea3958f720b2aeac875c2))
+* **backend:** surface MCP read-only hints for Tool-result clearing ([#681](https://github.com/willdady/platypus/issues/681)) ([140c6d8](https://github.com/willdady/platypus/commit/140c6d8d1864fc0f27493f7628bd933cdf8cb4fd))
+* **frontend:** add a copy-run-id control to the Trigger runs page ([#685](https://github.com/willdady/platypus/issues/685)) ([41f67a9](https://github.com/willdady/platypus/commit/41f67a9d6144477564632bd0a05cb511621bdcd6))
+* one delegate tool resolving sub-agents from a catalogue ([#556](https://github.com/willdady/platypus/issues/556)) ([#677](https://github.com/willdady/platypus/issues/677)) ([02dc258](https://github.com/willdady/platypus/commit/02dc258f1f4ea1a0ea700d8aa2c9a680f2e2261e))
+* one presentation for web search and page reads ([#674](https://github.com/willdady/platypus/issues/674)) ([49cb112](https://github.com/willdady/platypus/commit/49cb112641ecdd31167a1d0eedb0d41edb297112))
+
+
+### Bug Fixes
+
+* **backend,frontend:** recover a chat stream that drops mid-run ([#687](https://github.com/willdady/platypus/issues/687)) ([6d57e0c](https://github.com/willdady/platypus/commit/6d57e0c7711e714d69f72c11af0b923e26fe3d15))
+* **backend:** delete Workspace-scoped Providers on workspace delete ([#684](https://github.com/willdady/platypus/issues/684)) ([0808e65](https://github.com/willdady/platypus/commit/0808e65f9f2c588d1739e5a772144c79d355a6ab))
+* **backend:** namespace MCP tools under their MCP slug ([#673](https://github.com/willdady/platypus/issues/673)) ([7524683](https://github.com/willdady/platypus/commit/75246839bedfd3ab081fa1b1b1b54a866a699c3a))
+* **frontend:** force Chat search off once the resolved selection can't search ([#679](https://github.com/willdady/platypus/issues/679)) ([cfeedb5](https://github.com/willdady/platypus/commit/cfeedb5518e64a5972c25da8c8e037d3b1d16e2f))
+
 ## [2.10.0](https://github.com/willdady/platypus/compare/v2.9.0...v2.10.0) (2026-08-23)
 
 
