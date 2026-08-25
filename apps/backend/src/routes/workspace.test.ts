@@ -2,6 +2,10 @@ import { describe, it, expect, beforeEach, vi } from "vitest";
 import { mockDb, mockSession, resetMockDb } from "../test-utils.ts";
 import app from "../server.ts";
 import { resolveScoped } from "../services/scoped-resource.ts";
+import {
+  workspace as workspaceTable,
+  provider as providerTable,
+} from "../db/schema.ts";
 
 // The memory pointer-settings must resolve through the Scoped resource
 // authority, not a bare id lookup (GHSA-qg7h-g2rm-37qh). Spy on it so the tests
@@ -349,10 +353,11 @@ describe("Workspace Routes", () => {
 
       // Mock delete — order: orgAccess where (chained) → workspaceAccess where
       // (chained) → destroyWorkspaceSandboxes select-where (resolves []) →
-      // workspace delete where (resolves).
+      // workspace delete where (resolves) → provider delete where (resolves).
       mockDb.where
         .mockReturnValueOnce(mockDb)
         .mockReturnValueOnce(mockDb)
+        .mockResolvedValueOnce([])
         .mockResolvedValueOnce([])
         .mockResolvedValueOnce([]);
 
@@ -362,6 +367,14 @@ describe("Workspace Routes", () => {
 
       expect(res.status).toBe(200);
       expect(await res.json()).toEqual({ message: "Workspace deleted" });
+      // The route must delete Workspace-scoped Providers itself (issue #661):
+      // `provider.workspaceId` carries no FK, so nothing cascades this away.
+      expect(mockDb.delete).toHaveBeenCalledWith(providerTable);
+      const deleteCalls = mockDb.delete.mock.calls.map((call) => call[0]);
+      const workspaceDeleteIndex = deleteCalls.indexOf(workspaceTable);
+      const providerDeleteIndex = deleteCalls.indexOf(providerTable);
+      expect(workspaceDeleteIndex).toBeGreaterThanOrEqual(0);
+      expect(providerDeleteIndex).toBeGreaterThan(workspaceDeleteIndex);
     });
   });
 });

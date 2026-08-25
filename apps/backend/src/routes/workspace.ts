@@ -5,6 +5,7 @@ import { db } from "../index.ts";
 import {
   workspace as workspaceTable,
   organizationMember,
+  provider as providerTable,
 } from "../db/schema.ts";
 import {
   workspaceCreateSchema,
@@ -222,7 +223,18 @@ workspace.delete(
     // Best-effort sandbox teardown before the DB cascade fires. Never throws;
     // failures are recorded in sandbox_teardown_failure (ADR-0001).
     await destroyWorkspaceSandboxes(workspaceId);
-    await db.delete(workspaceTable).where(eq(workspaceTable.id, workspaceId));
+    // `provider` carries no FK to `workspace` (issue #661) — a cascade FK
+    // would race `agent.providerId`'s `restrict` constraint, since Postgres
+    // checks RESTRICT immediately rather than deferring to end of statement.
+    // Delete the workspace first (cascading its Agents away) so the
+    // Workspace-scoped Providers below are no longer referenced, then delete
+    // them explicitly, all within one transaction.
+    await db.transaction(async (tx) => {
+      await tx.delete(workspaceTable).where(eq(workspaceTable.id, workspaceId));
+      await tx
+        .delete(providerTable)
+        .where(eq(providerTable.workspaceId, workspaceId));
+    });
     return c.json({ message: "Workspace deleted" });
   },
 );
