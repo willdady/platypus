@@ -39,8 +39,11 @@ export const organization = pgTable("organization", (t) => ({
   updatedAt: t.timestamp("updated_at").notNull().defaultNow(),
 }));
 
-// Provider defined before workspace to avoid circular reference with task_model_provider_id
-// The workspace_id FK will be added after workspace is defined
+// Provider defined before workspace to avoid circular reference with task_model_provider_id.
+// workspaceId intentionally carries no FK to `workspace`: a cascade FK would
+// race `agent.providerId`'s `restrict` constraint (Postgres checks RESTRICT
+// immediately, not deferred to end of statement), so the Workspace delete
+// route deletes Workspace-scoped Providers explicitly instead (issue #661).
 export const provider = pgTable(
   "provider",
   (t) => ({
