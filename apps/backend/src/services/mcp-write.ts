@@ -144,7 +144,11 @@ export async function updateMcp(
     .returning();
 
   // The pre-checks above prove the row exists, but a concurrent delete can
-  // still win the race between the check and the UPDATE.
+  // still win the race between the check and the UPDATE. Checked at both
+  // scopes here — unlike `updateProvider` (neither scope) and `updateSkill`
+  // (organization scope only) — since nothing about the race is
+  // scope-specific; this is a small tightening over those two, not a
+  // deliberate divergence.
   if (!row) {
     throw new NotFoundError("MCP not found");
   }
