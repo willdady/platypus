@@ -49,38 +49,10 @@ describe("MCP Routes", () => {
       expect(await res.json()).toEqual(mockMcp);
     });
 
-    it("takes the scope from the route, ignoring any scope in the body", async () => {
-      // A workspace-surface create is always Workspace-scoped. Spreading the body
-      // let a caller name another Workspace, or set organizationId and mint a
-      // Shared MCP here — which only an Org Admin may do (ADR-0006/0007).
-      mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]); // requireOrgAccess
-      mockDb.limit.mockResolvedValueOnce([
-        { ownerId: "user-1", organizationId: "org-1" },
-      ]); // requireWorkspaceAccess
-
-      mockDb.limit.mockResolvedValueOnce([]); // assertMcpSlugAvailable — no conflict
-      mockDb.returning.mockResolvedValueOnce([
-        { id: "mcp-1", name: "New MCP" },
-      ]);
-
-      const res = await app.request(baseUrl, {
-        method: "POST",
-        body: JSON.stringify({
-          name: "New MCP",
-          url: "http://mcp.com",
-          authType: "None",
-          workspaceId: "ws-somewhere-else",
-          organizationId: orgId,
-        }),
-        headers: { "Content-Type": "application/json" },
-      });
-
-      expect(res.status).toBe(201);
-      expect(mockDb.values).toHaveBeenCalledWith(
-        expect.objectContaining({ workspaceId, organizationId: null }),
-      );
-    });
+    // The scope-from-route-not-body rule (a caller cannot name another
+    // Workspace, or set organizationId and mint a Shared MCP here — only an
+    // Org Admin may do that, ADR-0006/0007) is `createMcp`'s job now; see
+    // `services/mcp-write.test.ts`'s createMcp tests.
 
     // ADR-0006: MCP config is admin-only unless the workspace's
     // mcpSelfManagement flag delegates it to the owner.

@@ -1,8 +1,6 @@
 import { Hono } from "hono";
 import { sValidator } from "@hono/standard-validator";
-import { nanoid } from "nanoid";
 import { db } from "../index.ts";
-import { mcp as mcpTable } from "../db/schema.ts";
 import {
   mcpCreateSchema,
   mcpUpdateSchema,
@@ -14,30 +12,23 @@ import {
   orgScopeOf,
   requireOrgAccess,
 } from "../middleware/authorization.ts";
-import { scrubDeletedAgentReference } from "../services/agent-references.ts";
 import {
   listOrgScoped,
   orgScopedWhere,
   requireOrgScoped,
   resolveOrgScoped,
-  requireSharedDeletable,
 } from "../services/scoped-resource.ts";
 import type { Variables } from "../server.ts";
 import {
   authorizeMcpOAuth,
   clearOAuthTokens,
-  OAUTH_TOKEN_CLEAR_FIELDS,
   probeMcpConnection,
 } from "../services/mcp-connection.ts";
 import {
   mcpReadModel,
   sanitizeMcpResponse,
 } from "../services/credential-redaction.ts";
-import { NotFoundError } from "../errors.ts";
-import {
-  assertMcpSlugAvailable,
-  deriveMcpSlug,
-} from "../services/mcp-namespace.ts";
+import { createMcp, deleteMcp, updateMcp } from "../services/mcp-write.ts";
 
 // Org-scoped MCPs are Shared resources (ADR-0007). They introduce credentials
 // and external reach, so all mutations are org-admin-only (ADR-0006) — there is
@@ -54,22 +45,10 @@ orgMcp.post(
     const { orgId } = orgScopeOf(c);
     const data = c.req.valid("json");
 
-    const slug = deriveMcpSlug(data.name);
-    await assertMcpSlugAvailable(slug, { orgId });
-
     // A duplicate name surfaces as a Postgres unique violation, mapped to 409
     // by the central onError (ADR-0010).
-    const record = await db
-      .insert(mcpTable)
-      .values({
-        id: nanoid(),
-        ...data,
-        slug,
-        organizationId: orgId,
-        workspaceId: null,
-      })
-      .returning();
-    return c.json(sanitizeMcpResponse(record[0]), 201);
+    const row = await createMcp({ kind: "organization", orgId }, data);
+    return c.json(sanitizeMcpResponse(row), 201);
   },
 );
 
@@ -106,34 +85,10 @@ orgMcp.put(
     const mcpId = c.req.param("mcpId");
     const data = c.req.valid("json");
 
-    // If URL is changing, clear stored OAuth tokens (they're server-specific)
-    const existing = await resolveOrgScoped(db, "mcp", mcpId, orgId);
-
-    const urlChanged = !!existing && existing.url !== data.url;
-
-    const slug = deriveMcpSlug(data.name);
-    await assertMcpSlugAvailable(slug, { orgId }, mcpId);
-
     // A duplicate name surfaces as a Postgres unique violation, mapped to 409
     // by the central onError (ADR-0010).
-    const record = await db
-      .update(mcpTable)
-      .set({
-        ...data,
-        slug,
-        ...(urlChanged && {
-          ...OAUTH_TOKEN_CLEAR_FIELDS,
-          oauthClientId: null,
-          oauthClientSecret: null,
-        }),
-        updatedAt: new Date(),
-      })
-      .where(orgScopedWhere("mcp", mcpId, orgId))
-      .returning();
-    if (record.length === 0) {
-      throw new NotFoundError("MCP not found");
-    }
-    return c.json(sanitizeMcpResponse(record[0]), 200);
+    const row = await updateMcp({ kind: "organization", orgId }, mcpId, data);
+    return c.json(sanitizeMcpResponse(row), 200);
   },
 );
 
@@ -146,26 +101,10 @@ orgMcp.delete(
     const { orgId } = orgScopeOf(c);
     const mcpId = c.req.param("mcpId");
 
-    // A Shared resource cannot be deleted while anything still points at it —
-    // an Attachment (ADR-0007) or a Blueprint (ADR-0008). Throws ConflictError
-    // → 409 via the central onError (ADR-0010).
-    await requireSharedDeletable(db, "mcp", mcpId);
-
-    // Delete the MCP and scrub its (now-dead) id from any Agent's toolSetIds in
-    // the same transaction, so deletion never leaves dangling references.
-    const result = await db.transaction(async (tx) => {
-      const rows = await tx
-        .delete(mcpTable)
-        .where(orgScopedWhere("mcp", mcpId, orgId))
-        .returning();
-      if (rows.length > 0) {
-        await scrubDeletedAgentReference(tx, "toolSetIds", mcpId);
-      }
-      return rows;
-    });
-    if (result.length === 0) {
-      throw new NotFoundError("MCP not found");
-    }
+    // Throws ConflictError (→409) while an Attachment or Blueprint still
+    // references the MCP (ADR-0007/0008), and scrubs its (now-dead) id from
+    // any Agent's toolSetIds in the same transaction as the delete.
+    await deleteMcp({ kind: "organization", orgId }, mcpId);
     return c.json({ message: "MCP deleted" });
   },
 );

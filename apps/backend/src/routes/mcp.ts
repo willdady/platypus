@@ -1,8 +1,6 @@
 import { Hono } from "hono";
 import { sValidator } from "@hono/standard-validator";
-import { nanoid } from "nanoid";
 import { db } from "../index.ts";
-import { mcp as mcpTable } from "../db/schema.ts";
 import {
   mcpCreateSchema,
   mcpUpdateSchema,
@@ -37,13 +35,9 @@ const requireMcpConfigAccess =
 import {
   authorizeMcpOAuth,
   clearOAuthTokens,
-  OAUTH_TOKEN_CLEAR_FIELDS,
   probeMcpConnection,
 } from "../services/mcp-connection.ts";
-import {
-  assertMcpSlugAvailable,
-  deriveMcpSlug,
-} from "../services/mcp-namespace.ts";
+import { createMcp, deleteMcp, updateMcp } from "../services/mcp-write.ts";
 
 const mcp = new Hono<{ Variables: Variables }>();
 
@@ -57,24 +51,13 @@ mcp.post(
   sValidator("json", mcpCreateSchema),
   async (c) => {
     const data = c.req.valid("json");
-    const { orgId, workspaceId } = workspaceScopeOf(c);
-    const slug = deriveMcpSlug(data.name);
-    await assertMcpSlugAvailable(slug, { orgId });
-    const record = await db
-      .insert(mcpTable)
-      .values({
-        id: nanoid(),
-        ...data,
-        slug,
-        // The scope comes from the route, never the body — as it does for Agents
-        // and Skills. Spreading the body let a caller name another Workspace, or
-        // set `organizationId` and mint a Shared MCP from the Workspace surface,
-        // which only an Org Admin may do (ADR-0006, ADR-0007).
-        workspaceId,
-        organizationId: null,
-      })
-      .returning();
-    return c.json(sanitizeMcpResponse(record[0]), 201);
+    const scope = workspaceScopeOf(c);
+    // The scope comes from the route, never the body — as it does for Agents
+    // and Skills. `createMcp` overrides any `organizationId`/`workspaceId` the
+    // body carried, so a caller cannot name another Workspace, or mint a
+    // Shared MCP from the Workspace surface (ADR-0006, ADR-0007).
+    const row = await createMcp({ kind: "workspace", ctx: scope }, data);
+    return c.json(sanitizeMcpResponse(row), 201);
   },
 );
 
@@ -129,32 +112,10 @@ mcp.put(
     const data = c.req.valid("json");
 
     // A Shared MCP is a single source of truth edited only on the Organization
-    // surface (ADR-0007); requireWorkspaceMutable throws NotFound (→404) when the
-    // MCP is not visible here, then Locked (→403) when it is org-scoped. On
-    // success the row is guaranteed Workspace-scoped.
-    const { row } = await requireWorkspaceMutable(db, "mcp", mcpId, scope);
-
-    // If the URL is changing, clear stored OAuth tokens (they're server-specific)
-    const urlChanged = row.url !== data.url;
-
-    const slug = deriveMcpSlug(data.name);
-    await assertMcpSlugAvailable(slug, { orgId: scope.orgId }, mcpId);
-
-    const record = await db
-      .update(mcpTable)
-      .set({
-        ...data,
-        slug,
-        ...(urlChanged && {
-          ...OAUTH_TOKEN_CLEAR_FIELDS,
-          oauthClientId: null,
-          oauthClientSecret: null,
-        }),
-        updatedAt: new Date(),
-      })
-      .where(workspaceScopedWhere("mcp", mcpId, scope.workspaceId))
-      .returning();
-    return c.json(sanitizeMcpResponse(record[0]), 200);
+    // surface (ADR-0007); `updateMcp` throws NotFound (→404) when the MCP is
+    // not visible here, then Locked (→403) when it is org-scoped.
+    const row = await updateMcp({ kind: "workspace", ctx: scope }, mcpId, data);
+    return c.json(sanitizeMcpResponse(row), 200);
   },
 );
 
@@ -170,14 +131,10 @@ mcp.delete(
     const scope = workspaceScopeOf(c);
 
     // A Shared MCP is deleted only from the Organization surface (ADR-0007):
-    // requireWorkspaceMutable throws NotFound (→404) when the MCP is not visible
-    // here, then Locked (→403) when it is org-scoped.
-    await requireWorkspaceMutable(db, "mcp", mcpId, scope);
-
-    await db
-      .delete(mcpTable)
-      .where(workspaceScopedWhere("mcp", mcpId, scope.workspaceId))
-      .returning();
+    // `deleteMcp` throws NotFound (→404) when the MCP is not visible here, then
+    // Locked (→403) when it is org-scoped. It also scrubs the deleted MCP's id
+    // from any referencing Agent's toolSetIds (#689).
+    await deleteMcp({ kind: "workspace", ctx: scope }, mcpId);
     return c.json({ message: "MCP deleted" });
   },
 );
