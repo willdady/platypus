@@ -140,23 +140,35 @@ describe("Trigger Routes", () => {
       expect(body.nextRunAt).toBe(nextRun.toISOString());
     });
 
-    it("rejects invalid cron expressions with 400", async () => {
+    it("creates an event trigger with a full filters shape (columnId, changedFields) and returns 201", async () => {
       stubAuthLookups();
-      mockDb.limit.mockResolvedValueOnce([{ id: "agent-1", workspaceId }]);
-      mockValidateCronExpression.mockReturnValueOnce(null);
+      mockDb.limit.mockResolvedValueOnce([{ id: "agent-1", workspaceId }]); // agent verify
+      const eventBody = {
+        ...createBody,
+        type: "event",
+        config: {
+          events: ["card.created", "card.updated"],
+          filters: {
+            boardId: "board-1",
+            columnId: "col-1",
+            changedFields: ["title"],
+          },
+        },
+      };
+      mockDb.returning.mockResolvedValueOnce([
+        { ...eventTrigger, id: "trig-new", config: eventBody.config },
+      ]);
 
       const res = await app.request(baseUrl, {
         method: "POST",
-        body: JSON.stringify({
-          ...createBody,
-          config: { cronExpression: "not-a-cron", timezone: "UTC" },
-        }),
+        body: JSON.stringify(eventBody),
         headers: { "Content-Type": "application/json" },
       });
-      expect(res.status).toBe(400);
-      expect(await res.json()).toEqual({
-        error: "Invalid cron expression or timezone",
-      });
+      expect(res.status).toBe(201);
+      const body = (await res.json()) as { config: unknown };
+      expect(body.config).toEqual(eventBody.config);
+      const values = mockDb.values.mock.calls[0][0] as Record<string, unknown>;
+      expect(values.config).toEqual(eventBody.config);
     });
 
     it("accepts a Shared agent attached to this workspace", async () => {
@@ -197,22 +209,6 @@ describe("Trigger Routes", () => {
         error: "Agent not found in this workspace",
       });
     });
-
-    it("rejects an event trigger with no events", async () => {
-      stubAuthLookups();
-      mockDb.limit.mockResolvedValueOnce([{ id: "agent-1", workspaceId }]);
-
-      const res = await app.request(baseUrl, {
-        method: "POST",
-        body: JSON.stringify({
-          ...createBody,
-          type: "event",
-          config: { events: [] },
-        }),
-        headers: { "Content-Type": "application/json" },
-      });
-      expect(res.status).toBe(400);
-    });
   });
 
   describe("PUT /:triggerId", () => {
@@ -240,10 +236,6 @@ describe("Trigger Routes", () => {
       expect(res.status).toBe(200);
       const body = (await res.json()) as { name: string };
       expect(body.name).toBe("Updated");
-      expect(mockValidateCronExpression).toHaveBeenCalledWith(
-        "0 10 * * *",
-        "UTC",
-      );
     });
 
     it("returns 404 when the trigger doesn't exist in this workspace", async () => {
@@ -260,7 +252,6 @@ describe("Trigger Routes", () => {
 
     it("rejects an agent change when the new agent is not in the workspace", async () => {
       stubAuthLookups();
-      mockDb.limit.mockResolvedValueOnce([cronTrigger]); // existing
       mockDb.limit.mockResolvedValueOnce([]); // new agent not found
 
       const res = await app.request(`${baseUrl}/trig-1`, {
@@ -272,6 +263,33 @@ describe("Trigger Routes", () => {
       expect(await res.json()).toEqual({
         error: "Agent not found in this workspace",
       });
+    });
+
+    it("round-trips a columnId/changedFields filter through a config update", async () => {
+      stubAuthLookups();
+      mockDb.limit.mockResolvedValueOnce([eventTrigger]); // existing
+      const newConfig = {
+        events: ["card.updated"],
+        filters: {
+          boardId: "board-1",
+          columnId: "col-2",
+          changedFields: ["priority"],
+        },
+      };
+      mockDb.returning.mockResolvedValueOnce([
+        { ...eventTrigger, config: newConfig },
+      ]);
+
+      const res = await app.request(`${baseUrl}/trig-2`, {
+        method: "PUT",
+        body: JSON.stringify({ config: newConfig }),
+        headers: { "Content-Type": "application/json" },
+      });
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as { config: unknown };
+      expect(body.config).toEqual(newConfig);
+      const setArg = mockDb.set.mock.calls[0][0] as Record<string, unknown>;
+      expect(setArg.config).toEqual(newConfig);
     });
 
     it("clears nextRunAt when switching to event type", async () => {

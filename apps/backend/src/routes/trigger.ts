@@ -1,7 +1,6 @@
 import { Hono } from "hono";
 import { sValidator } from "@hono/standard-validator";
 import { z } from "zod";
-import { nanoid } from "nanoid";
 import { desc, eq } from "drizzle-orm";
 import { db } from "../index.ts";
 import {
@@ -20,13 +19,12 @@ import { resolveScoped } from "../services/scoped-resource.ts";
 import {
   requireOwned,
   listOwned,
-  updateOwned,
   deleteOwned,
 } from "../services/workspace-resource.ts";
+import { createTrigger, updateTrigger } from "../services/trigger.ts";
 import { NotFoundError } from "../errors.ts";
 import type { Variables } from "../server.ts";
 import { logger } from "../logger.ts";
-import { validateCronExpression } from "../utils/cron.ts";
 
 const trigger = new Hono<{ Variables: Variables }>();
 
@@ -86,48 +84,13 @@ trigger.post(
       return c.json({ error: "Agent not found in this workspace" }, 400);
     }
 
-    let nextRunAt: Date | null = null;
-    const config = data.config as Record<string, unknown>;
-
-    if (data.type === "cron") {
-      const cronExpression = config.cronExpression as string;
-      const timezone = (config.timezone as string) || "UTC";
-      nextRunAt = validateCronExpression(cronExpression, timezone);
-
-      if (!nextRunAt) {
-        return c.json({ error: "Invalid cron expression or timezone" }, 400);
-      }
-    } else if (data.type === "event") {
-      const events = config.events as unknown[];
-      if (!events || !Array.isArray(events) || events.length === 0) {
-        return c.json(
-          { message: "Event triggers must have at least one event" },
-          400,
-        );
-      }
-    }
-
-    const id = nanoid();
-    const now = new Date();
-
-    const record = await db
-      .insert(triggerTable)
-      .values({
-        id,
-        ...data,
-        workspaceId,
-        nextRunAt,
-        config: data.config,
-        createdAt: now,
-        updatedAt: now,
-      })
-      .returning();
+    const record = await createTrigger(scope, data);
 
     logger.info(
-      `Created trigger '${id}' in workspace '${workspaceId}'${nextRunAt ? ` - next run at ${nextRunAt.toISOString()}` : ""}`,
+      `Created trigger '${record.id}' in workspace '${workspaceId}'${record.nextRunAt ? ` - next run at ${record.nextRunAt.toISOString()}` : ""}`,
     );
 
-    return c.json(record[0], 201);
+    return c.json(record, 201);
   },
 );
 
@@ -142,15 +105,12 @@ trigger.put(
   async (c) => {
     const triggerId = c.req.param("triggerId");
     const scope = workspaceScopeOf(c);
-    const { workspaceId } = scope;
     const data = c.req.valid("json");
 
-    // Verify trigger exists in workspace
-    const existing = await requireOwned(db, "trigger", triggerId, workspaceId);
-
-    // If agentId is being changed, verify new agent exists
-    if (data.agentId && data.agentId !== existing.agentId) {
-      // See the create route: workspace-scoped, or Shared and attached here.
+    // A new agentId must be usable here: workspace-scoped, or a Shared one
+    // attached to this Workspace (ADR-0007) — see the create route.
+    // `updateTrigger` itself 404s if the trigger doesn't exist.
+    if (data.agentId) {
       const agentRecord = await resolveScoped(db, "agent", data.agentId, scope);
 
       if (!agentRecord) {
@@ -158,52 +118,7 @@ trigger.put(
       }
     }
 
-    const updateData: Record<string, unknown> = {
-      ...data,
-      updatedAt: new Date(),
-    };
-
-    // Determine the effective type (updated or existing)
-    const effectiveType = data.type ?? existing.type;
-
-    if (effectiveType === "event") {
-      // Event triggers don't have nextRunAt
-      if (data.config) {
-        const config = data.config as Record<string, unknown>;
-        const events = config.events as unknown[];
-        if (!events || !Array.isArray(events) || events.length === 0) {
-          return c.json(
-            { error: "Event triggers must have at least one event" },
-            400,
-          );
-        }
-      }
-      updateData.nextRunAt = null;
-    } else if (effectiveType === "cron") {
-      // Recompute nextRunAt if cron config changes
-      const config = (data.config ?? existing.config) as Record<
-        string,
-        unknown
-      >;
-      const cronExpression = config.cronExpression as string;
-      const timezone = (config.timezone as string) || "UTC";
-
-      if (data.config || data.type) {
-        const nextRunAt = validateCronExpression(cronExpression, timezone);
-        if (!nextRunAt) {
-          return c.json({ error: "Invalid cron expression or timezone" }, 400);
-        }
-        updateData.nextRunAt = nextRunAt;
-      }
-    }
-
-    const record = await updateOwned(
-      db,
-      "trigger",
-      triggerId,
-      workspaceId,
-      updateData,
-    );
+    const record = await updateTrigger(scope, triggerId, data);
 
     logger.info(`Updated trigger '${triggerId}'`);
 

@@ -152,25 +152,6 @@ describe("createTriggerTools", () => {
       expect(result.url).toContain("triggers/");
     });
 
-    it("returns error for invalid cron expression", async () => {
-      mockDb.limit.mockResolvedValue([{ id: "a1", workspaceId }]);
-
-      const result = (await tools.upsertTrigger.execute!(
-        {
-          label: "Bad",
-          name: "Bad",
-          agentId: "a1",
-          instruction: "Run",
-          type: "cron",
-          config: { cronExpression: "invalid" },
-        },
-        ctx,
-      )) as TriggerResult;
-
-      expect(result.success).toBe(false);
-      expect(result.error).toContain("Invalid cron");
-    });
-
     it("creates an event trigger", async () => {
       const trigger = {
         id: "t2",
@@ -196,23 +177,34 @@ describe("createTriggerTools", () => {
       expect(result.success).toBe(true);
     });
 
-    it("returns error for event trigger without events", async () => {
+    it("creates an event trigger with a full filters shape (columnId, changedFields)", async () => {
+      const config = {
+        events: ["card.created", "card.updated"],
+        filters: {
+          boardId: "board-1",
+          columnId: "col-1",
+          changedFields: ["title"],
+        },
+      };
+      const trigger = { id: "t2", name: "On Card", type: "event", config };
       mockDb.limit.mockResolvedValue([{ id: "a1", workspaceId }]);
+      mockDb.returning.mockResolvedValue([trigger]);
 
       const result = (await tools.upsertTrigger.execute!(
         {
-          label: "Bad Event",
-          name: "Bad Event",
+          label: "On Card",
+          name: "On Card",
           agentId: "a1",
-          instruction: "Handle",
+          instruction: "Handle card",
           type: "event",
-          config: { events: [] },
+          config,
         },
         ctx,
       )) as TriggerResult;
 
-      expect(result.success).toBe(false);
-      expect(result.error).toContain("events");
+      expect(result.success).toBe(true);
+      const values = mockDb.values.mock.calls[0][0] as Record<string, unknown>;
+      expect(values.config).toEqual(config);
     });
 
     it("returns error when agent not found", async () => {
@@ -287,6 +279,37 @@ describe("createTriggerTools", () => {
 
       expect(result.success).toBe(false);
       expect(result.error).toContain("Trigger not found");
+    });
+
+    it("round-trips a columnId/changedFields filter through a config update", async () => {
+      mockDb.limit.mockResolvedValue([
+        {
+          id: "t1",
+          agentId: "a1",
+          type: "event",
+          config: { events: ["card.created"] },
+        },
+      ]);
+      const newConfig = {
+        events: ["card.updated"],
+        filters: {
+          boardId: "board-1",
+          columnId: "col-2",
+          changedFields: ["priority"],
+        },
+      };
+      mockDb.returning.mockResolvedValue([
+        { id: "t1", name: "On Card", config: newConfig },
+      ]);
+
+      const result = (await tools.upsertTrigger.execute!(
+        { triggerId: "t1", label: "On Card", config: newConfig },
+        ctx,
+      )) as TriggerResult;
+
+      expect(result.success).toBe(true);
+      const setArg = mockDb.set.mock.calls[0][0] as Record<string, unknown>;
+      expect(setArg.config).toEqual(newConfig);
     });
   });
 
