@@ -42,8 +42,8 @@ moves under you on the next `docker compose pull`:
 | Tag           | Example                            | What a pull fetches                     |
 | ------------- | ---------------------------------- | --------------------------------------- |
 | Latest        | `willdady/platypus-backend:latest` | The newest release, major bump included |
-| Major line    | `willdady/platypus-backend:2`      | The newest `2.x.y`, never `3.0.0`       |
-| Exact version | `willdady/platypus-backend:2.7.1`  | That release and nothing else           |
+| Major line    | `willdady/platypus-backend:3`      | The newest `3.x.y`, never `4.0.0`       |
+| Exact version | `willdady/platypus-backend:3.0.0`  | That release and nothing else           |
 
 **Pin something other than `:latest`.** It is the only tag that can carry a
 breaking major change into a running deployment, and it leaves you unable to say
@@ -59,9 +59,9 @@ Override the images in a `compose.override.yaml` alongside `compose.yaml`:
 ```yaml
 services:
   backend:
-    image: willdady/platypus-backend:2.7.1
+    image: willdady/platypus-backend:3.0.0
   frontend:
-    image: willdady/platypus-frontend:2.7.1
+    image: willdady/platypus-frontend:3.0.0
 ```
 
 Compose merges `compose.override.yaml` automatically, so `docker compose up -d`
