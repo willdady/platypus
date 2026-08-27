@@ -117,7 +117,7 @@ describe("trigger-execution", () => {
     });
 
     it("forwards the Trigger's memory-injection opt-out into the run input", async () => {
-      mockDb.limit.mockResolvedValueOnce([mockWorkspace]);
+      mockDb.limit.mockResolvedValueOnce([mockScopeRow]);
       mockGenerate.mockResolvedValueOnce({ text: "ok", stats: {} });
 
       await executeTrigger(baseTrigger);
@@ -127,7 +127,7 @@ describe("trigger-execution", () => {
     });
 
     it("forwards the Trigger's memory-injection opt-in into the run input", async () => {
-      mockDb.limit.mockResolvedValueOnce([mockWorkspace]);
+      mockDb.limit.mockResolvedValueOnce([mockScopeRow]);
       mockGenerate.mockResolvedValueOnce({ text: "ok", stats: {} });
 
       await executeTrigger({ ...baseTrigger, includeMemories: true });
