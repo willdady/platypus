@@ -70,14 +70,14 @@ const baseTrigger = {
   updatedAt: new Date(),
 };
 
-const mockWorkspace = {
-  id: "ws-1",
+/**
+ * The row the run scope is built from — not a Workspace row: the lookup
+ * projects the Workspace's org and owner joined to the owner's name.
+ */
+const mockScopeRow = {
   organizationId: "org-1",
   ownerId: "user-1",
-  name: "Test Workspace",
-  context: null,
-  createdAt: new Date(),
-  updatedAt: new Date(),
+  ownerName: "Ada Lovelace",
 };
 
 describe("trigger-execution", () => {
@@ -89,7 +89,7 @@ describe("trigger-execution", () => {
 
   describe("executeTrigger", () => {
     it("returns a runId and delegates execution to agentRunner.generate", async () => {
-      mockDb.limit.mockResolvedValueOnce([mockWorkspace]);
+      mockDb.limit.mockResolvedValueOnce([mockScopeRow]);
       mockGenerate.mockResolvedValueOnce({ text: "ok", stats: {} });
 
       const runId = await executeTrigger(baseTrigger);
@@ -105,6 +105,7 @@ describe("trigger-execution", () => {
         throw new Error("expected a trigger principal");
       expect(principal.triggerId).toBe("trigger-1");
       expect(principal.onBehalfOfUserId).toBe("user-1");
+      expect(principal.name).toBe("Ada Lovelace");
       expect(args.input.runId).toBe("test-id");
       expect(args.input.request.agentId).toBe("agent-1");
       expect(args.input.messages).toHaveLength(1);
@@ -115,7 +116,7 @@ describe("trigger-execution", () => {
     });
 
     it("prepends event context to the instruction for event triggers", async () => {
-      mockDb.limit.mockResolvedValueOnce([mockWorkspace]);
+      mockDb.limit.mockResolvedValueOnce([mockScopeRow]);
       mockGenerate.mockResolvedValueOnce({ text: "ok", stats: {} });
 
       await executeTrigger(baseTrigger, {
@@ -130,8 +131,31 @@ describe("trigger-execution", () => {
       expect(text).toContain("Do something");
     });
 
+    it("names the owner looked up for this workspace, on an event trigger too", async () => {
+      mockDb.limit.mockResolvedValueOnce([
+        { ...mockScopeRow, ownerName: "Grace Hopper" },
+      ]);
+      mockGenerate.mockResolvedValueOnce({ text: "ok", stats: {} });
+
+      const trigger = {
+        ...baseTrigger,
+        type: "event",
+        config: { events: ["card.created"] },
+      } as TriggerRow;
+      await executeTrigger(trigger, {
+        eventType: "card.created",
+        eventData: { cardId: "c1" },
+      });
+
+      const { principal } = (mockGenerate.mock.calls[0][0] as GenerateArgs)
+        .scope;
+      if (principal.kind !== "trigger")
+        throw new Error("expected a trigger principal");
+      expect(principal.name).toBe("Grace Hopper");
+    });
+
     it("constructs a TriggerSink with the trigger id and event metadata", async () => {
-      mockDb.limit.mockResolvedValueOnce([mockWorkspace]);
+      mockDb.limit.mockResolvedValueOnce([mockScopeRow]);
       mockGenerate.mockResolvedValueOnce({ text: "ok", stats: {} });
 
       await executeTrigger(baseTrigger, {
@@ -147,7 +171,7 @@ describe("trigger-execution", () => {
     });
 
     it("propagates a search override from the trigger to the run input", async () => {
-      mockDb.limit.mockResolvedValueOnce([mockWorkspace]);
+      mockDb.limit.mockResolvedValueOnce([mockScopeRow]);
       mockGenerate.mockResolvedValueOnce({ text: "ok", stats: {} });
 
       const trigger = { ...baseTrigger, search: true };
@@ -167,7 +191,7 @@ describe("trigger-execution", () => {
     });
 
     it("rethrows runner failures so callers can log/observe", async () => {
-      mockDb.limit.mockResolvedValueOnce([mockWorkspace]);
+      mockDb.limit.mockResolvedValueOnce([mockScopeRow]);
       mockGenerate.mockRejectedValueOnce(new Error("Model error"));
 
       await expect(executeTrigger(baseTrigger as TriggerRow)).rejects.toThrow(

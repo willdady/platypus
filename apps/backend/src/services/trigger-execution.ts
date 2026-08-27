@@ -5,6 +5,7 @@ import { db } from "../index.ts";
 import {
   trigger as triggerTable,
   triggerRun as triggerRunTable,
+  user as userTable,
   workspace as workspaceTable,
 } from "../db/schema.ts";
 import { logger } from "../logger.ts";
@@ -72,12 +73,20 @@ export const executeTrigger = async (
   const { id, workspaceId, agentId, instruction } = trigger;
   const runId = nanoid();
 
-  // Workspace is fetched up-front to derive the run scope. The runner
-  // re-reads it for system-prompt context — at trigger volumes the extra
-  // round-trip is acceptable.
+  // Workspace is fetched up-front to derive the run scope, joined to its
+  // owner because the scope names the user the run acts on behalf of and that
+  // name lives on the user row. The join is inner: `ownerId` is a non-null FK
+  // under cascade delete, so a Workspace that loads always has an owner. The
+  // runner re-reads the Workspace for system-prompt context — at trigger
+  // volumes the extra round-trip is acceptable.
   const [workspace] = await db
-    .select()
+    .select({
+      organizationId: workspaceTable.organizationId,
+      ownerId: workspaceTable.ownerId,
+      ownerName: userTable.name,
+    })
     .from(workspaceTable)
+    .innerJoin(userTable, eq(userTable.id, workspaceTable.ownerId))
     .where(eq(workspaceTable.id, workspaceId))
     .limit(1);
 
@@ -92,7 +101,7 @@ export const executeTrigger = async (
     workspaceId,
     organizationId: workspace.organizationId,
     ownerUserId: workspace.ownerId,
-    ownerName: "Trigger User",
+    ownerName: workspace.ownerName,
   });
 
   const effectiveInstruction = eventContext
