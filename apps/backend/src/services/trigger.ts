@@ -196,10 +196,17 @@ export async function updateTrigger(
   // `config`, when supplied, is set below alongside validation — normalized
   // (Zod defaults applied), not the raw input.
   if (effectiveType === "event") {
-    // Event triggers don't have nextRunAt; only (re)validate when config
-    // actually changed on this update.
-    if (fields.config !== undefined) {
-      updateData.config = parseEventConfig(fields.config);
+    // Event triggers don't have nextRunAt. Revalidate when the config changed
+    // *or* when the type did: a change of type re-reads the stored config under
+    // the other shape's schema, so flipping a cron Trigger to `event` without
+    // supplying a config fails loud here rather than storing a cron config under
+    // `type: "event"` — a Trigger that looks configured and can never fire. The
+    // cron branch below guards the mirror case; this is the same guard.
+    if (fields.config !== undefined || fields.type !== undefined) {
+      const parsed = parseEventConfig(fields.config ?? existing.config);
+      if (fields.config !== undefined) {
+        updateData.config = parsed;
+      }
     }
     updateData.nextRunAt = null;
   } else if (effectiveType === "cron") {

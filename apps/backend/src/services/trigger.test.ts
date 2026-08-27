@@ -244,6 +244,57 @@ describe("trigger module", () => {
       expect(setArg.nextRunAt).toBeNull();
     });
 
+    // A type change re-reads the stored config under the other shape's schema.
+    // Without it, a cron config survives under `type: "event"`: the cron
+    // scheduler skips it (nextRunAt is nulled) and the event dispatcher never
+    // matches it (no `events`), so the Trigger looks configured and can never
+    // fire. The cron branch already guarded the mirror case.
+    it("throws ValidationError when flipping to event type without a config", async () => {
+      mockDb.limit.mockResolvedValueOnce([
+        {
+          id: "trig-1",
+          type: "cron",
+          config: { cronExpression: "0 9 * * *", timezone: "UTC" },
+        },
+      ]);
+
+      await expect(
+        updateTrigger(ctx, "trig-1", { type: "event" }),
+      ).rejects.toThrow(ValidationError);
+    });
+
+    // The mirror of the above, kept alongside it so the symmetry is visible.
+    it("throws ValidationError when flipping to cron type without a config", async () => {
+      mockDb.limit.mockResolvedValueOnce([
+        { id: "trig-1", type: "event", config: { events: ["card.created"] } },
+      ]);
+
+      await expect(
+        updateTrigger(ctx, "trig-1", { type: "cron" }),
+      ).rejects.toThrow(ValidationError);
+    });
+
+    // The guard keys on the type *field being present*, not on it changing, so
+    // a caller that re-sends the type it already has must still succeed — the
+    // stored config revalidates cleanly under its own schema.
+    it("accepts a no-op event type on update, leaving the stored config alone", async () => {
+      mockDb.limit.mockResolvedValueOnce([
+        {
+          id: "trig-1",
+          type: "event",
+          config: { events: ["card.created"], filters: { boardId: "board-1" } },
+        },
+      ]);
+      mockDb.returning.mockResolvedValueOnce([{ id: "trig-1", type: "event" }]);
+
+      await updateTrigger(ctx, "trig-1", { type: "event", name: "renamed" });
+
+      const setArg = mockDb.set.mock.calls[0][0] as Record<string, unknown>;
+      expect(setArg.name).toBe("renamed");
+      // Untouched: validated, not rewritten, because no config was supplied.
+      expect(setArg.config).toBeUndefined();
+    });
+
     it("throws ValidationError for an empty events array on update", async () => {
       mockDb.limit.mockResolvedValueOnce([
         { id: "trig-1", type: "event", config: { events: ["card.created"] } },
