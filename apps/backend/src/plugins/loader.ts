@@ -6,6 +6,7 @@ import {
   type PluginLogger,
   type SandboxBackendContribution,
 } from "@platypuschat/plugin-sdk";
+import { MAX_PLUGIN_NAME_LENGTH } from "@platypus/schemas";
 import { logger } from "../logger.ts";
 import { ALWAYS_ON_PLUGINS, BUILTIN_PLUGINS } from "./builtin.ts";
 import { registerToolSet, type ToolSetRegistration } from "../tools/index.ts";
@@ -458,6 +459,18 @@ export async function loadPlugins(
       );
     }
 
+    // The name is also the namespace every one of this plugin's Tool-set tool
+    // names enters a turn under (issue #664), so it is capped. With the tool-name
+    // cap `composeToolSet` applies, the composed `<name>__<toolName>` is bounded
+    // below the model-provider ceiling by arithmetic — which is why nothing
+    // downstream needs a total-length check. Core plugins are exempt for the same
+    // reason they are exempt from the slug rule: their names are never a prefix.
+    if (!isCore && manifest.name.length > MAX_PLUGIN_NAME_LENGTH) {
+      throw new Error(
+        `Plugin "${name}": third-party manifest "name" is ${manifest.name.length} characters ("${manifest.name}"), over the cap of ${MAX_PLUGIN_NAME_LENGTH} characters — it becomes the namespace on every tool name this plugin contributes. Rename it in the manifest.`,
+      );
+    }
+
     // A manifest name is the key for a plugin's deploy-time config and
     // credentials — the block below is looked up by it, and the registry stores
     // the result under it — so it has to be unique across loaded plugins.
@@ -514,6 +527,7 @@ export async function loadPlugins(
         pluginName: manifest.name,
         plugin: pluginCtx,
         contributionId,
+        isCore,
         owners: entry.owners,
       });
     }

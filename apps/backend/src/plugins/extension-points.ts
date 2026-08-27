@@ -56,7 +56,7 @@ export const toolSetPoint = (
       );
     }
   },
-  prepare: (raw, { pluginName, id, plugin }) => {
+  prepare: (raw, { pluginName, id, plugin, isCore }) => {
     const contribution = raw as unknown as ToolSetContribution;
     // Core wraps the contribution here, binding the same shared plugin config
     // that every other contribution factory receives. What lands in the registry
@@ -64,7 +64,11 @@ export const toolSetPoint = (
     // `tools`. The contribution goes in by reference, with the namespaced id
     // alongside it rather than spread over it, for the same prototype/`this`
     // reason as the sandbox and web points.
-    return composeToolSet({ contribution, id, plugin, pluginName });
+    //
+    // `isCore` rides along because the tool-*name* rule turns on the same origin
+    // decision the namespaced id already did (issue #664), and the loader is the
+    // only place that decision is made.
+    return composeToolSet({ contribution, id, plugin, pluginName, isCore });
   },
   register,
 });

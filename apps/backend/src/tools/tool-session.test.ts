@@ -41,6 +41,7 @@ import {
 } from "./tool-session.ts";
 import { CLOSER_TIMEOUT_MS } from "./closers.ts";
 import { composeToolSet, registerToolSet } from "./index.ts";
+import { CORE_BUILTIN_OWNER } from "../plugins/registry.ts";
 import { logger } from "../logger.ts";
 import type { mcp as mcpTable } from "../db/schema.ts";
 
@@ -90,11 +91,21 @@ const connected = (
   return close;
 };
 
-/** Register a Tool set through the composed path a plugin's would take. */
+/**
+ * Register a Tool set through the composed path a plugin's would take.
+ *
+ * Core by default, so a test about session mechanics reads with the bare tool
+ * names it declares. The third-party rule — every tool name namespaced under the
+ * manifest name (issue #664) — has its own describe block below, and the tests
+ * that turn on it pass `isCore: false` explicitly.
+ */
 const register = (
   id: string,
   tools: Parameters<typeof composeToolSet>[0]["contribution"]["tools"],
-  pluginName = "acme",
+  {
+    pluginName = CORE_BUILTIN_OWNER,
+    isCore = true,
+  }: { pluginName?: string; isCore?: boolean } = {},
 ) => {
   pluginOwners.set(id, pluginName);
   registerToolSet(
@@ -102,6 +113,7 @@ const register = (
     composeToolSet({
       id,
       pluginName,
+      isCore,
       contribution: { name: id, category: "Test", tools },
     }),
   );
@@ -192,8 +204,16 @@ describe("openToolSession", () => {
   // Assignment order is the precedence order, as it always was. What is new is
   // that the swap is reported, naming the Tool set and plugin that lost.
   it("reports a tool name one Tool set takes from another", async () => {
-    register("set.first", { search: toolNamed("first") }, "first-plugin");
-    register("set.second", { search: toolNamed("second") }, "second-plugin");
+    register(
+      "set.first",
+      { search: toolNamed("first") },
+      { pluginName: "core-a" },
+    );
+    register(
+      "set.second",
+      { search: toolNamed("second") },
+      { pluginName: "core-b" },
+    );
 
     const session = await openToolSession(
       scope,
@@ -206,12 +226,63 @@ describe("openToolSession", () => {
       expect.objectContaining({
         tool: "search",
         toolSet: "set.second",
-        plugin: "second-plugin",
+        plugin: "core-b",
         shadowedToolSet: "set.first",
-        shadowedPlugin: "first-plugin",
+        shadowedPlugin: "core-a",
       }),
       expect.stringContaining("same tool name"),
     );
+  });
+
+  // Issue #664 removed the cross-plugin case — two third-party plugins now
+  // namespace apart — but not this one: two Tool sets from ONE plugin still
+  // contest a name, and it is still reported. Within one author's control.
+  it("still reports two Tool sets from the same plugin contesting a name", async () => {
+    const origin = { pluginName: "acme", isCore: false };
+    register("acme.first", { search: toolNamed("first") }, origin);
+    register("acme.second", { search: toolNamed("second") }, origin);
+
+    const session = await openToolSession(
+      scope,
+      grantedAgent("acme.first", "acme.second"),
+      noMcps(),
+    );
+
+    expect(session.tools.acme__search).toEqual(toolNamed("second"));
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tool: "acme__search",
+        toolSet: "acme.second",
+        plugin: "acme",
+        shadowedToolSet: "acme.first",
+        shadowedPlugin: "acme",
+      }),
+      expect.stringContaining("same tool name"),
+    );
+  });
+
+  it("gives two third-party plugins that contribute one tool name distinct names", async () => {
+    register(
+      "acme.issues",
+      { createIssue: toolNamed("acme") },
+      { pluginName: "acme", isCore: false },
+    );
+    register(
+      "globex.issues",
+      { createIssue: toolNamed("globex") },
+      { pluginName: "globex", isCore: false },
+    );
+
+    const session = await openToolSession(
+      scope,
+      grantedAgent("acme.issues", "globex.issues"),
+      noMcps(),
+    );
+
+    // Both present, neither dropped, nothing to report.
+    expect(session.tools.acme__createIssue).toEqual(toolNamed("acme"));
+    expect(session.tools.globex__createIssue).toEqual(toolNamed("globex"));
+    expect(logger.warn).not.toHaveBeenCalled();
   });
 
   describe("the MCP branch", () => {
@@ -329,7 +400,11 @@ describe("openToolSession", () => {
     // `web_search`) used to shadow a same-named Tool set or built-in outright.
     // Namespacing means the two names never collide in the first place.
     it("does not let an MCP tool shadow a Tool set's same-named tool", async () => {
-      register("set.search", { search: toolNamed("native") }, "search-plugin");
+      register(
+        "set.search",
+        { search: toolNamed("native") },
+        { pluginName: "search-plugin" },
+      );
       connected({ search: toolNamed("mcp") });
 
       const session = await openToolSession(
@@ -504,11 +579,17 @@ describe("openToolSession", () => {
 
   describe("registered closers", () => {
     /** A Tool set whose factory registers `close`, guarded as an author's would be. */
+    // Third-party, because closer attribution is what these tests read: the
+    // `plugin` field on a closer's log line is the manifest name.
     const registering = (id: string, close: () => Promise<void> | void) =>
-      register(id, (ctx) => {
-        ctx.registerCloser?.(close);
-        return {};
-      });
+      register(
+        id,
+        (ctx) => {
+          ctx.registerCloser?.(close);
+          return {};
+        },
+        { pluginName: "acme", isCore: false },
+      );
 
     it("closes what a Tool-set factory registered, once, on dispose", async () => {
       const close = vi.fn().mockResolvedValue(undefined);
@@ -621,11 +702,15 @@ describe("openToolSession", () => {
     });
 
     it("ignores, with a warning, anything registered that is not a function", async () => {
-      register("set.js-plugin", (ctx) => {
-        // What the types forbid and a third-party *JS* plugin can still do.
-        (ctx.registerCloser as unknown as (c: unknown) => void)?.("close me");
-        return {};
-      });
+      register(
+        "set.js-plugin",
+        (ctx) => {
+          // What the types forbid and a third-party *JS* plugin can still do.
+          (ctx.registerCloser as unknown as (c: unknown) => void)?.("close me");
+          return {};
+        },
+        { pluginName: "acme", isCore: false },
+      );
 
       const session = await openToolSession(
         scope,
@@ -728,6 +813,26 @@ describe("openToolSession", () => {
       // One dispose, at the seam that opened everything.
       await parent.dispose();
       expect(close).toHaveBeenCalledTimes(1);
+    });
+
+    // Issue #664: a nested session resolves Tool sets through the same
+    // composition step, so a Sub-Agent's third-party sets follow the same rule
+    // without the nesting path knowing anything about it.
+    it("namespaces a Sub-Agent's third-party Tool set by the same rule", async () => {
+      register(
+        "acme.sub-664",
+        { createIssue: toolNamed("createIssue") },
+        { pluginName: "acme", isCore: false },
+      );
+      const parent = await openToolSession(scope, undefined, noMcps());
+
+      const child = await parent.nest({
+        id: "sub-agent-1",
+        toolSetIds: ["acme.sub-664"],
+      });
+
+      expect(Object.keys(child.tools)).toEqual(["acme__createIssue"]);
+      await parent.dispose();
     });
 
     it("resolves a delegate's read-only hints independently of the parent's", async () => {

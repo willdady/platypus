@@ -8,13 +8,13 @@ import {
   createDelegateTool,
   createDelegateTools,
   createSubAgentDelegate,
-  DELEGATE_TOOL_NAME,
   type LoadedSubAgentTools,
   subAgentToolName,
   SUB_AGENT_STEP_LIMIT_NOTE,
   SUB_AGENT_TRUNCATION_NOTE,
 } from "./sub-agent.ts";
 import type { SubAgentActivity } from "./sub-agent.ts";
+import { DELEGATE_TOOL_NAME } from "./turn-tool-names.ts";
 import { runRegistry } from "../runs/run-registry.ts";
 import { orgScope, workspaceScope, type WorkspaceScope } from "../scope.ts";
 import { DEFAULT_AGENT_MAX_STEPS } from "@platypus/schemas";

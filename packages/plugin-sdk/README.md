@@ -33,9 +33,11 @@ import { tool } from "ai";
 import { z } from "zod";
 
 export const plugin: PlatypusPlugin = {
-  // A third-party plugin's `name` is a short url-safe slug, distinct from the
-  // npm package specifier an Operator lists in PLATYPUS_PLUGINS. Core prefixes
-  // every contribution id with it, so `greeting` registers as `example.greeting`.
+  // A third-party plugin's `name` is a short url-safe slug (up to 24
+  // characters), distinct from the npm package specifier an Operator lists in
+  // PLATYPUS_PLUGINS. Core prefixes every contribution id with it, so `greeting`
+  // registers as `example.greeting`, and every tool name, so `greet` below is
+  // called as `example__greet`.
   name: "example",
   version: "0.1.0",
   apiVersion: PLUGIN_API_VERSION,
@@ -47,6 +49,8 @@ export const plugin: PlatypusPlugin = {
         category: "Examples",
         description: "A tiny example tool set contributed by a plugin",
         tools: {
+          // Bare, like the id — core namespaces it to `example__greet`. Up to
+          // 32 characters; over that fails boot.
           greet: tool({
             description: "Return a friendly greeting for the given name.",
             inputSchema: z.object({

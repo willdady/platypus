@@ -6,6 +6,7 @@ import {
   type NormalizedWebToolResult,
 } from "@platypus/schemas";
 import type { PlatypusUIMessage } from "../types.ts";
+import { READ_URL_TOOL_NAME } from "../tools/turn-tool-names.ts";
 
 // Everything read here is `unknown` on purpose: a native payload is vendor
 // JSON the AI SDK hands through untouched, and a backend/plugin payload is
@@ -19,8 +20,10 @@ const asRecord = (value: unknown): Record<string, unknown> =>
 const asString = (value: unknown): string | undefined =>
   typeof value === "string" ? value : undefined;
 
+// `read_url` from its declaration (it is one of the four names core assigns to a
+// turn); `fetchUrl` is core's own web-fetch tool, which is not.
 const isPageToolName = (toolName: string): boolean =>
-  toolName === "read_url" || toolName === "fetchUrl";
+  toolName === READ_URL_TOOL_NAME || toolName === "fetchUrl";
 
 /**
  * Anthropic's `webSearch_20250305` output: `Array<web_search_result>`, each

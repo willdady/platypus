@@ -1,6 +1,6 @@
 import { type Skill } from "@platypus/schemas";
 import type { agent as agentTable } from "./db/schema.ts";
-import { DELEGATE_TOOL_NAME } from "./tools/sub-agent.ts";
+import { DELEGATE_TOOL_NAME } from "./tools/turn-tool-names.ts";
 import { MEMORY_TOOLSET_ID, SANDBOX_TOOLSET_ID } from "./tools/index.ts";
 import type { MemorySummary } from "./services/memory-retrieval.ts";
 import { renderSecurityGuardrails } from "./security-prompt.ts";

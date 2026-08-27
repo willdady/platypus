@@ -40,9 +40,13 @@ import {
   DEFAULT_DIRECT_MAX_STEPS,
   DEFAULT_MAX_EXTRACTED_TEXT_CHARS,
   kanbanBoardSchema,
+  MAX_PLUGIN_NAME_LENGTH,
+  MAX_PLUGIN_TOOL_NAME_LENGTH,
   mcpSchema,
   modelConfigSchema,
   skillSchema,
+  TOOL_NAME_NAMESPACE_SEPARATOR,
+  TOOL_NAME_PATTERN,
   triggerSchema,
   webhookEventSchema,
   workspaceSchema,
@@ -1014,6 +1018,98 @@ describe("field limits", () => {
       }
     }
     expectNoViolations(violations);
+  });
+});
+
+// --- the plugin naming caps --------------------------------------------------
+
+/**
+ * A third-party plugin's tool names enter a Chat turn namespaced under its
+ * manifest name (issue #664), and each half of that composed name is capped. The
+ * two numbers are what a plugin author sizes their manifest and their tools
+ * against, and getting one wrong does not surface as a warning — the deployment
+ * refuses to boot.
+ *
+ * Checked the way the closer timeout is: one constant, every surface that quotes
+ * it. A page saying "24 characters" while core enforces 20 sends an author to
+ * rename something that was already short enough, and leaves the real cap
+ * undocumented.
+ *
+ * The surface lists are short on purpose. Every other page that mentions a cap
+ * says "over its cap" and links here, because a number restated on five pages
+ * rots on four of them — so this pins the two places a reader is actually
+ * standing when they need the figure, and nowhere else.
+ */
+const NAMING_CAPS = [
+  {
+    constant: "MAX_PLUGIN_NAME_LENGTH",
+    value: MAX_PLUGIN_NAME_LENGTH,
+    subject: "a third-party plugin's manifest name",
+    // The tool-name page composes it; the plugin-API page is where an author
+    // chooses the name in the first place.
+    surfaces: [
+      "extending/tool-sets.mdx",
+      "extending/plugin-api-and-config.mdx",
+    ],
+  },
+  {
+    constant: "MAX_PLUGIN_TOOL_NAME_LENGTH",
+    value: MAX_PLUGIN_TOOL_NAME_LENGTH,
+    subject: "a tool name in a third-party Tool set",
+    surfaces: ["extending/tool-sets.mdx"],
+  },
+] as const;
+
+describe("the plugin naming caps", () => {
+  it.each(
+    NAMING_CAPS.flatMap((cap) => cap.surfaces.map((doc) => ({ ...cap, doc }))),
+  )("$doc states the cap on $subject", ({ doc, value, constant, subject }) => {
+    // "24 characters" and "24-character cap" both satisfy this; a stale number
+    // satisfies neither.
+    expect(
+      new RegExp(`\\b${value}[ -]character`).test(readDoc(doc)),
+      `apps/docs/content/${doc} does not state ${value} characters, but ` +
+        `packages/schemas/index.ts sets ${constant} to ${value} — the cap on ${subject}.\n` +
+        `An author sizing against the stale figure has their deployment refuse to boot.`,
+    ).toBe(true);
+  });
+
+  it("shows the separator core actually namespaces with", () => {
+    // The shape an author reads their tool names off. `__` is also why a
+    // namespaced name renders in the UI with no separator showing, so changing
+    // it changes more than one thing.
+    expect(
+      readDoc("extending/tool-sets.mdx").includes(
+        `<manifest-name>${TOOL_NAME_NAMESPACE_SEPARATOR}<toolName>`,
+      ),
+      `apps/docs/content/extending/tool-sets.mdx does not show ` +
+        `\`<manifest-name>${TOOL_NAME_NAMESPACE_SEPARATOR}<toolName>\`, but that is the shape ` +
+        `TOOL_NAME_NAMESPACE_SEPARATOR composes. An author cannot guess the separator.`,
+    ).toBe(true);
+  });
+
+  // The third limit a third-party tool name is held to, alongside the two caps.
+  // It is stated in prose rather than as a regex, because an author has to read
+  // it — so it is checked against the pattern in both directions here, or the
+  // prose is free to drift from what boot enforces.
+  it("states the character rule the pattern enforces", () => {
+    const PROSE = "letters, digits, underscores and hyphens";
+
+    expect(
+      TOOL_NAME_PATTERN.test("aZ9_-"),
+      `TOOL_NAME_PATTERN rejects one of the characters ` +
+        `apps/docs/content/extending/tool-sets.mdx promises ("${PROSE}").`,
+    ).toBe(true);
+    expect(
+      TOOL_NAME_PATTERN.test("has.a.dot"),
+      `TOOL_NAME_PATTERN now accepts a "."; the page still promises only "${PROSE}".`,
+    ).toBe(false);
+    expect(
+      readDoc("extending/tool-sets.mdx").includes(PROSE),
+      `apps/docs/content/extending/tool-sets.mdx does not say "${PROSE}", but ` +
+        `TOOL_NAME_PATTERN refuses a tool name outside that set at boot.\n` +
+        `An enforced limit no page states is one an author meets as a failed deploy.`,
+    ).toBe(true);
   });
 });
 

@@ -3,7 +3,7 @@ import {
   type MCPClient,
 } from "@ai-sdk/mcp";
 import type { Tool } from "ai";
-import { MCP_TOOL_NAME_PATTERN, namespaceMcpToolName } from "@platypus/schemas";
+import { TOOL_NAME_PATTERN, namespaceMcpToolName } from "@platypus/schemas";
 import type { mcp as mcpTable } from "../db/schema.ts";
 import { logger } from "../logger.ts";
 import { CORE_BUILTIN_OWNER, getToolSetPlugin } from "../plugins/registry.ts";
@@ -309,7 +309,7 @@ export const openToolSession = async (
     const namespaced: Record<string, Tool> = {};
     for (const [rawName, tool] of Object.entries(mcpTools)) {
       const namespacedName = namespaceMcpToolName(mcp.slug, rawName);
-      if (!MCP_TOOL_NAME_PATTERN.test(namespacedName)) {
+      if (!TOOL_NAME_PATTERN.test(namespacedName)) {
         // Never truncated or rewritten to fit: two long tool names from one
         // server could truncate onto each other and reintroduce the
         // collision invisibly. The MCP name is the User's own, so the report

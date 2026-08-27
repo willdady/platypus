@@ -11,6 +11,7 @@ import {
   type ToolSetContribution,
   type WebBackendContribution,
 } from "@platypuschat/plugin-sdk";
+import { MAX_PLUGIN_NAME_LENGTH } from "@platypus/schemas";
 import {
   MAX_WEB_TIMEOUT_MS,
   type WebBackendRegistration,
@@ -1479,7 +1480,9 @@ describe("loadPlugins — example third-party plugin", () => {
       string,
       { execute: (i: unknown) => Promise<string> }
     >;
-    const msg = await tools.listSandboxes.execute({});
+    // Namespaced under the manifest name (issue #664), because the plugin is
+    // third-party — the same rule its contribution id already followed.
+    const msg = await tools["example-cloud-sandbox__listSandboxes"].execute({});
     expect(msg).toContain("ap");
     expect(msg).toContain("dtn");
   });
@@ -1708,6 +1711,65 @@ describe("loadPlugins — third-party name slug validation (ADR-0013)", () => {
         register: () => {},
       }),
     ).rejects.toThrow(/@acme\/pkg.*"@acme\/thing".*url-safe slug/s);
+  });
+
+  // Issue #664: the manifest name is also the namespace every one of the
+  // plugin's tool names enters a turn under, so it is capped — with the tool-name
+  // cap, that bounds the composed `<name>__<tool>` below the model-provider
+  // ceiling by arithmetic rather than by a runtime discovery.
+  it("rejects a third-party manifest name over the cap, naming the field, the cap and the length", async () => {
+    const tooLong = "a".repeat(MAX_PLUGIN_NAME_LENGTH + 1);
+    let thrown = "";
+    try {
+      await loadPlugins({
+        pluginNames: ["@acme/pkg"],
+        builtinPlugins: {},
+        importPlugin: () =>
+          Promise.resolve({ plugin: manifest(tooLong, [toolSet("custom")]) }),
+        register: () => {},
+      });
+    } catch (error) {
+      thrown = (error as Error).message;
+    }
+    for (const fragment of [
+      "@acme/pkg",
+      `"${tooLong}"`,
+      '"name"',
+      `${MAX_PLUGIN_NAME_LENGTH} characters`,
+      `${tooLong.length}`,
+    ]) {
+      expect(thrown).toContain(fragment);
+    }
+  });
+
+  it("accepts a name exactly at the cap", async () => {
+    const atCap = "a".repeat(MAX_PLUGIN_NAME_LENGTH);
+    const { register, calls } = makeRegister();
+    await loadPlugins({
+      pluginNames: ["@acme/pkg"],
+      builtinPlugins: {},
+      importPlugin: () =>
+        Promise.resolve({ plugin: manifest(atCap, [toolSet("custom")]) }),
+      register,
+    });
+    expect(calls.map((c) => c.id)).toEqual([`${atCap}.custom`]);
+  });
+
+  it("holds a core plugin to no name cap — its name is never a namespace", async () => {
+    const { register } = makeRegister();
+    const longCoreName = `@platypus/${"a".repeat(MAX_PLUGIN_NAME_LENGTH)}`;
+    await expect(
+      loadPlugins({
+        pluginNames: [longCoreName],
+        builtinPlugins: {
+          [longCoreName]: () =>
+            Promise.resolve({
+              plugin: manifest(longCoreName, [toolSet("custom")]),
+            }),
+        },
+        register,
+      }),
+    ).resolves.toBeDefined();
   });
 
   it("accepts a clean slug name and prefixes contribution ids with it", async () => {
@@ -1939,7 +2001,11 @@ describe("loadPlugins — example third-party npm package (end to end)", () => {
       frontendUrl: undefined,
       userId: "user-1",
     });
-    const result = (await tools.greet.execute!(
+    // The author writes `greet`; the model is offered `example__greet`
+    // (issue #664). The bare name is gone, so core's own turn tools have nothing
+    // of this plugin's left to overwrite.
+    expect(Object.keys(tools)).toEqual(["example__greet"]);
+    const result = (await tools.example__greet.execute!(
       { name: "Ada" },
       { toolCallId: "t1", messages: [], context: {} },
     )) as string;

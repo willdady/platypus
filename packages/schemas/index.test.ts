@@ -12,7 +12,10 @@ import {
   mcpUpdateSchema,
   slugifyMcpName,
   namespaceMcpToolName,
-  MCP_TOOL_NAME_PATTERN,
+  MAX_PLUGIN_NAME_LENGTH,
+  MAX_PLUGIN_TOOL_NAME_LENGTH,
+  namespaceToolName,
+  TOOL_NAME_PATTERN,
   skillSchema,
   attachmentSchema,
   nextTurnOccupancy,
@@ -206,10 +209,22 @@ describe("MCP name slugification (issue #467)", () => {
     );
   });
 
-  it("MCP_TOOL_NAME_PATTERN matches the model-provider name ceiling", () => {
-    expect(MCP_TOOL_NAME_PATTERN.test("a".repeat(64))).toBe(true);
-    expect(MCP_TOOL_NAME_PATTERN.test("a".repeat(65))).toBe(false);
-    expect(MCP_TOOL_NAME_PATTERN.test("has.a.dot")).toBe(false);
+  it("TOOL_NAME_PATTERN matches the model-provider name ceiling", () => {
+    expect(TOOL_NAME_PATTERN.test("a".repeat(64))).toBe(true);
+    expect(TOOL_NAME_PATTERN.test("a".repeat(65))).toBe(false);
+    expect(TOOL_NAME_PATTERN.test("has.a.dot")).toBe(false);
+  });
+
+  // The two caps a third-party plugin is held to (issue #664) exist to keep a
+  // composed `<manifest-name>__<toolName>` under the pattern above by
+  // arithmetic, so nothing downstream needs a total-length check.
+  it("bounds a composed plugin tool name below the pattern's ceiling", () => {
+    const longest = namespaceToolName(
+      "a".repeat(MAX_PLUGIN_NAME_LENGTH),
+      "b".repeat(MAX_PLUGIN_TOOL_NAME_LENGTH),
+    );
+    expect(longest).toHaveLength(58);
+    expect(TOOL_NAME_PATTERN.test(longest)).toBe(true);
   });
 });
 

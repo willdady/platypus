@@ -13,8 +13,8 @@ import { wrapToolsWithActivity } from "../services/tool-activity.ts";
 import {
   createDelegateTool,
   createSubAgentDelegate,
-  DELEGATE_TOOL_NAME,
 } from "../tools/sub-agent.ts";
+import { DELEGATE_TOOL_NAME } from "../tools/turn-tool-names.ts";
 import { workspaceScope, orgScope, type WorkspaceScope } from "../scope.ts";
 import type { RunStatus } from "./types.ts";
 import { DEFAULT_AGENT_MAX_STEPS } from "@platypus/schemas";

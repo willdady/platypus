@@ -32,6 +32,7 @@ export const plugin: PlatypusPlugin = {
           // Core's logger, already tagged with `example`
           plugin?.logger?.debug({ workspaceId: ctx.workspaceId }, "Resolving");
           return {
+            // bare — core namespaces it to `example__greet`
             greet: tool({
               description: "Return a friendly greeting for the given name.",
               inputSchema: z.object({ name: z.string() }),
@@ -48,7 +49,9 @@ export const plugin: PlatypusPlugin = {
 Two names, doing two different jobs. `@platypus-examples/tool-set` is the **npm
 package specifier** — what you install and what the Operator lists. `example` is
 the manifest **`name`** — the config namespace, and the prefix core puts on every
-contribution id. Get them the wrong way round and boot fails naming your plugin.
+contribution id and every tool name, so the `greet` tool above reaches the model
+as `example__greet`. Get them the wrong way round and boot fails naming your
+plugin.
 
 ## Load it
 
@@ -110,7 +113,7 @@ Open any Agent in a Workspace and find the **Tools** card. Under an **Examples**
 heading there is a **Greeting** switch. Flip it, click **Save**, then start a
 Chat on that Agent and ask it to greet someone by name.
 
-The reply comes back through a `greet` tool call you can expand in the
+The reply comes back through an **Example greet** tool call you can expand in the
 transcript. That is the loop closed: your code ran inside a Chat turn.
 
 ## Checkpoint 3: it can log
@@ -135,6 +138,8 @@ is loud on a busy deployment.
 | --------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
 | Backend exits at boot, log names your plugin and "failed to resolve"   | The package isn't installed where the backend can `import()` it                          | Install it into the deployment, not only the repository, and check the specifier for typos                              |
 | Backend exits, log complains about the manifest `name`                 | A third-party `name` must be a url-safe slug — lowercase letters, digits, hyphens         | Use `widgets`, not `@acme/platypus-widgets`. The package specifier stays scoped; the manifest name doesn't              |
+| Backend exits, log says your manifest `name` is over its cap           | A third-party `name` is capped — it is the namespace on every tool name this plugin adds  | The error states the cap and your length. Shorten it in the manifest; the package specifier can stay as long as you like |
+| Backend exits, log names a tool over its cap                           | A tool name in a Tool set is capped for the same reason                                   | Rename the tool. See [Tool names](/extending/tool-sets#two-length-caps)                                                 |
 | Backend exits, log says your manifest `name` is declared by two plugins | Another loaded plugin ships the same manifest `name` — often a fork installed alongside the original | Rename one of them in its manifest. The two would otherwise share one deploy-time config and credential block |
 | Backend starts, but **Plugins** doesn't list it and nothing is logged   | It isn't in `PLATYPUS_PLUGINS` — most often a `compose.sandbox.yaml` overlay replaced the list | The overlay sets `PLATYPUS_PLUGINS` under `services.backend.environment`, which wins over `.env`. Put your full list in the overlay |
 

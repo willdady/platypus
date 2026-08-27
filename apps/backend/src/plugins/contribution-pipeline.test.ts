@@ -48,6 +48,7 @@ const run = (
     point?: ExtensionPoint<Widget>;
     pluginName?: string;
     contributionId?: (id: string) => string;
+    isCore?: boolean;
     owners?: Map<string, string>;
   } = {},
 ) =>
@@ -57,6 +58,7 @@ const run = (
     pluginName: options.pluginName ?? "acme",
     plugin: PLUGIN,
     contributionId: options.contributionId ?? ((id) => id),
+    isCore: options.isCore ?? false,
     owners: options.owners ?? new Map<string, string>(),
   });
 
@@ -214,6 +216,24 @@ describe("registerContributions", () => {
     // identity IS "one credential block per plugin" (ADR-0013).
     expect(registered[0].registration.plugin).toBe(PLUGIN);
   });
+
+  // The Tool-set point namespaces tool *names* by origin as well as ids (issue
+  // #664), so the loader's origin decision has to reach `prepare` rather than
+  // being re-derived from the plugin name there.
+  it.each([true, false])(
+    "hands prepare the origin decision (isCore=%s)",
+    (isCore) => {
+      const seen: boolean[] = [];
+      const { point } = makePoint({
+        prepare: (_c, ctx) => {
+          seen.push(ctx.isCore);
+          return { id: ctx.id, label: "", plugin: ctx.plugin };
+        },
+      });
+      run([widget("a")], { point, isCore });
+      expect(seen).toEqual([isCore]);
+    },
+  );
 
   it("re-throws a registry collision with plugin attribution", () => {
     // A registry that rejects the id (an already-registered core built-in, say)

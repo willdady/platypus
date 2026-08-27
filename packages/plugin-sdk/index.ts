@@ -163,6 +163,14 @@ export interface PluginConfigContext<
  * every one of the plugin's contribution factories. It is appended and optional
  * so existing single-argument factories keep working unchanged (append-only
  * compatibility, ADR-0013). Core always supplies it at Chat-turn time.
+ *
+ * Write **bare** tool names. For a third-party plugin core namespaces each one
+ * under the manifest {@link PlatypusPlugin.name} before the model sees it, so
+ * `createIssue` in a plugin named `widgets` is called as
+ * `widgets__createIssue`. A tool name is capped at 32 characters: one declared
+ * in a static map over the cap fails boot, and one a factory resolves over the
+ * cap is left out of that turn with a warning. Neither is truncated to fit.
+ * Core plugins keep bare tool names, as they keep bare ids.
  */
 export type ToolSetTools =
   | Record<string, Tool>
@@ -521,7 +529,8 @@ export interface PluginContributions {
 export interface PlatypusPlugin {
   /**
    * The plugin's identity — its config namespace and, for third-party plugins,
-   * the prefix core prepends to every contribution id (`${name}.${id}`).
+   * the prefix core prepends to every contribution id (`${name}.${id}`) and to
+   * every tool name its Tool sets contribute (`${name}__${toolName}`).
    *
    * This is **distinct from the npm package specifier** an Operator lists in
    * `PLATYPUS_PLUGINS`: a package published as `@acme/platypus-widgets` may set
@@ -530,8 +539,10 @@ export interface PlatypusPlugin {
    * url-safe slug — lowercase letters, digits, and hyphens
    * (`/^[a-z0-9]+(?:-[a-z0-9]+)*$/`) — so the prefixed id stays clean and
    * unambiguous (no `.`, `/`, `@`, or whitespace to muddle the `name.id`
-   * boundary or a URL path). Core plugins are exempt: their `@platypus/*` names
-   * are logical ids reached through the built-in map and never used as a prefix.
+   * boundary or a URL path), and at most **24 characters**, so the composed tool
+   * name stays inside what a model provider allows. Both are refused at boot.
+   * Core plugins are exempt: their `@platypus/*` names are logical ids reached
+   * through the built-in map and never used as a prefix.
    */
   name: string;
   version: string;

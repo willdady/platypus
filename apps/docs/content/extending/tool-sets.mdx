@@ -160,13 +160,63 @@ is delaying; your factory's ceiling is a number only you know.
 
 ## Tool names
 
+Write **bare** tool names, the same way you write bare ids. Core namespaces them
+for you: every tool a third-party Tool set contributes reaches the model as
+`<manifest-name>__<toolName>`.
+
+```
+you write:   createIssue
+model calls: widgets__createIssue
+a User sees: Widgets create issue
+```
+
+That happens on every turn, whether or not anything collides, so a tool's name
+never depends on the order an Agent's Tool sets happen to sit in. It is also what
+stops core taking one of your names: a turn assigns `web_search`, `read_url`,
+`delegate` and `loadSkill` onto its tool map *after* your Tool set, so a set
+contributing a bare `web_search` used to lose it on every turn where search was
+on, with nothing anywhere saying so.
+
+Do not hand-prefix. `acmeCreateIssue` in a plugin named `acme` reaches the model
+as `acme__acmeCreateIssue`, which reads worse and spends the budget below twice.
+Core plugins are the exception and keep bare tool names, the same way they keep
+bare ids.
+
+Keep to letters, digits, underscores and hyphens. That is the character set a
+model provider accepts for a tool name, and a name carrying anything else fails
+boot alongside the caps below.
+
+### Two length caps
+
+Because the two halves compose into one name, each half is capped:
+
+- **The manifest `name`** — up to 24 characters.
+- **A tool name** — up to 32 characters.
+
+Both are checked at boot for a third-party plugin, and both are a floor rather
+than a quota: a plugin named `linear` leaves 56 characters for a tool name. The
+cap is what you may _declare_, not what you get. Together they keep the composed
+name inside what a model provider allows, so you never have to do that arithmetic
+yourself.
+
 <Callout type="warning">
-  Tool names are **not** namespaced the way ids are. An Agent granted two Tool
-  sets that both define `search` gets one of them — whichever sits later in its
-  list — and the other's tool is never offered to the model. Core logs a warning
-  naming both sets and both Plugins. Prefix the names in your set (`acmeSearch`)
-  if a collision with a set you don't control would be confusing.
+  Either cap, exceeded, **aborts startup**. A statically-declared tool name over
+  its cap is reported with your plugin, the Tool set, the tool, the cap and the
+  actual length; a manifest `name` over its cap with your plugin, the field, the
+  cap and the actual length. Nothing is truncated to fit — two long names from
+  one set could truncate onto each other and quietly become one tool.
 </Callout>
+
+A **factory** resolves its names per turn, so boot cannot see them. A name over
+the cap there is left out of the turn with a warning naming the same things, and
+the rest of the set is served. It is the one case where a tool an Agent was
+granted goes missing, so keep a factory's names inside the cap too.
+
+### What can still collide
+
+Two Tool sets from the **same** plugin that define one tool name still contest
+it: they share a namespace, so the later one wins and core logs a warning naming
+both sets. That is within your own control — give them distinct names.
 
 ## Adding one to a core plugin
 

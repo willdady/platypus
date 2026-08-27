@@ -16,6 +16,7 @@ import {
   type ToolSessionScope,
 } from "../tools/tool-session.ts";
 import { createLoadSkillTool } from "../tools/skill.ts";
+import { LOAD_SKILL_TOOL_NAME } from "../tools/turn-tool-names.ts";
 import {
   createDelegateTools,
   type SubAgentCatalogueEntry,
@@ -684,7 +685,7 @@ export const prepareChatTurn = async (
   const systemPrompt = renderSystemPrompt(stable);
 
   if (skills.length > 0) {
-    tools.loadSkill = createLoadSkillTool(orgId, workspaceId);
+    tools[LOAD_SKILL_TOOL_NAME] = createLoadSkillTool(orgId, workspaceId);
   }
 
   // Activity events only. Result normalization (#321) is no longer bolted on

@@ -1,5 +1,5 @@
 import {
-  MCP_TOOL_NAME_PATTERN,
+  TOOL_NAME_PATTERN,
   namespaceMcpToolName,
   slugifyMcpName,
 } from "@platypus/schemas";
@@ -10,7 +10,7 @@ export type NamespacedTestToolNames = {
   toolNames: string[];
   /**
    * Namespaced names that fail the model-provider name ceiling
-   * (`MCP_TOOL_NAME_PATTERN`) and would be excluded from a turn — reported so
+   * (`TOOL_NAME_PATTERN`) and would be excluded from a turn — reported so
    * an Operator sees the same exclusion the Tool session applies later,
    * before ever attaching the MCP.
    */
@@ -31,7 +31,7 @@ export const namespaceMcpTestToolNames = (
   const invalidToolNames: string[] = [];
   for (const raw of rawToolNames) {
     const namespaced = namespaceMcpToolName(slug, raw);
-    if (MCP_TOOL_NAME_PATTERN.test(namespaced)) {
+    if (TOOL_NAME_PATTERN.test(namespaced)) {
       toolNames.push(namespaced);
     } else {
       invalidToolNames.push(namespaced);

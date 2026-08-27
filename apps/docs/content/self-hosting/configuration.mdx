@@ -150,7 +150,10 @@ empty list unless it says otherwise, and silently runs without web-fetch.
   `category`, or `tools`; a misconfigured plugin never silently drops or invents
   tools. Two plugins whose Tool set ids collide also abort startup, as do two
   plugins declaring the same manifest `name` — the error names both package
-  specifiers, and the fix is to rename one of them in its manifest.
+  specifiers, and the fix is to rename one of them in its manifest. So does a
+  third-party manifest `name`, or a Tool set's tool name, over its length cap;
+  the error names the plugin, what was too long, the cap and the actual length,
+  and the fix belongs to whoever wrote the plugin.
 - **New gate-able core plugins in a later release are not auto-enabled** — add
   them to your pinned list to opt in.
 - **After boot, a failing plugin is a warning, not an outage.** A Tool set whose

@@ -74,6 +74,11 @@ with it.
 Contribution ids are trimmed before they are namespaced, so surrounding
 whitespace never reaches a stored id.
 
+A third-party Plugin's tool **names** are namespaced too, under its manifest
+`name`, so core's own turn tools can never overwrite one of yours. That puts a
+length cap on both halves of the composed name, refused at boot — see [Tool
+names](/extending/tool-sets#tool-names).
+
 ## Logging
 
 A Plugin does not bring its own logger. Core puts one on the deploy-time block it

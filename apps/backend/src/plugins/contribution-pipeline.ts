@@ -41,6 +41,14 @@ export interface ContributionContext {
    * block per plugin, bound into every contribution factory.
    */
   plugin: PluginConfigContext;
+  /**
+   * Whether the contributing plugin is a core built-in — the loader's own
+   * decision, carried rather than re-derived. It already shapes the id through
+   * {@link RegisterContributionsOptions.contributionId}; the Tool-set point needs
+   * the decision itself, because a third-party plugin's tool *names* are
+   * namespaced too (issue #664).
+   */
+  isCore: boolean;
 }
 
 /**
@@ -87,6 +95,8 @@ export interface RegisterContributionsOptions<TRegistration> {
   plugin: PluginConfigContext;
   /** Applies the origin's id-namespacing rule (core bare, third-party prefixed). */
   contributionId: (id: string) => string;
+  /** Whether this plugin is a core built-in, passed through to every `prepare`. */
+  isCore: boolean;
   /**
    * Point-wide id → owning plugin map, carried across plugins so a collision
    * can name both sides. Mutated as each contribution registers.
@@ -110,8 +120,15 @@ const sentenceCase = (noun: string): string =>
 export const registerContributions = <TRegistration>(
   options: RegisterContributionsOptions<TRegistration>,
 ): string[] => {
-  const { point, contributions, pluginName, plugin, contributionId, owners } =
-    options;
+  const {
+    point,
+    contributions,
+    pluginName,
+    plugin,
+    contributionId,
+    isCore,
+    owners,
+  } = options;
   const registeredIds: string[] = [];
 
   for (const [index, contribution] of contributions.entries()) {
@@ -161,7 +178,12 @@ export const registerContributions = <TRegistration>(
       );
     }
 
-    const registration = point.prepare(raw, { pluginName, id, plugin });
+    const registration = point.prepare(raw, {
+      pluginName,
+      id,
+      plugin,
+      isCore,
+    });
 
     try {
       point.register(id, registration);

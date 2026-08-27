@@ -6,6 +6,10 @@ import { createContributionRegistry } from "../registry/contribution-registry.ts
 import { checkEgress, EGRESS_BLOCKED_MESSAGE } from "../utils/egress-guard.ts";
 import { withAttributedRegistrar } from "../tools/closers.ts";
 import {
+  READ_URL_TOOL_NAME,
+  WEB_SEARCH_TOOL_NAME,
+} from "../tools/turn-tool-names.ts";
+import {
   MAX_READ_URL_CONTENT_CHARS,
   MAX_READ_URL_SLICE_CHARS,
   MAX_URL_CHARS,
@@ -731,10 +735,14 @@ export const composeWebBackend = (
       // Both executors are bound to the object that supplied them, so a backend
       // may write them as methods reaching sibling state through `this`.
       const tools: Record<string, Tool> = {
-        web_search: buildSearchTool(executors.web_search.bind(executors)),
+        [WEB_SEARCH_TOOL_NAME]: buildSearchTool(
+          executors.web_search.bind(executors),
+        ),
       };
       if (typeof executors.read_url === "function") {
-        tools.read_url = buildReadUrlTool(executors.read_url.bind(executors));
+        tools[READ_URL_TOOL_NAME] = buildReadUrlTool(
+          executors.read_url.bind(executors),
+        );
       }
       return tools;
     },

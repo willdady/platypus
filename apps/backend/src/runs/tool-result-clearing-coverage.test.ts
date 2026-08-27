@@ -4,7 +4,7 @@ import { isClearableToolName } from "./tool-result-clearing.ts";
 import { createWebFetchTools } from "../tools/fetch.ts";
 import { createSandboxTools } from "../sandbox/tools.ts";
 import { createLoadSkillTool } from "../tools/skill.ts";
-import { DELEGATE_TOOL_NAME } from "../tools/sub-agent.ts";
+import { DELEGATE_TOOL_NAME } from "../tools/turn-tool-names.ts";
 import type { SandboxBackend, SandboxContext } from "../sandbox/types.ts";
 
 // Every core plugin the domain Tool sets transitively import the db and a few

@@ -1889,6 +1889,7 @@ describe("chat-execution", () => {
         composeToolSet({
           id: toolSetId,
           pluginName: "test-plugin",
+          isCore: true,
           contribution: {
             name: "Throwing test Tool set",
             category: "Test",
@@ -1905,6 +1906,7 @@ describe("chat-execution", () => {
         composeToolSet({
           id: workingId,
           pluginName: "test-plugin",
+          isCore: true,
           contribution: {
             name: "Working test Tool set",
             category: "Test",
@@ -1934,6 +1936,133 @@ describe("chat-execution", () => {
       expect(turn.stream.tools).toHaveProperty("stillHere");
       // A registered id is never re-read as an MCP, however its factory ended.
       expect(getMcp).not.toHaveBeenCalled();
+    });
+  });
+
+  // Issue #664. A turn assembles its tool map in four ordered stages, each
+  // overwriting the last by plain assignment: the Tool session, the Web-search
+  // pair, `delegate`, then `loadSkill`. The order is deliberate and unchanged.
+  // What changed is that a third-party Tool set's tools are namespaced under its
+  // manifest name before they are claimed, so stages 2–4 have nothing of its left
+  // to overwrite — and nothing is lost with nothing said.
+  describe("A third-party Tool set against core's own turn tools", () => {
+    const stub = (description: string) =>
+      ({ description, execute: () => ({}) }) as never;
+
+    /** Grant one third-party Tool set contributing exactly `tools`. */
+    const grant = (id: string, tools: Record<string, never>) => {
+      registerToolSet(
+        id,
+        composeToolSet({
+          id,
+          pluginName: "acme",
+          isCore: false,
+          contribution: { name: "Acme", category: "Test", tools },
+        }),
+      );
+      return { ...baseAgent, toolSetIds: [id] };
+    };
+
+    beforeEach(() => {
+      clearWebBackends();
+    });
+    afterEach(() => {
+      clearWebBackends();
+    });
+
+    it("keeps a Tool set's web_search and read_url alongside the Web-search backend's", async () => {
+      registerWebBackend(
+        composeWebBackend({
+          contribution: {
+            backend: "searx-664",
+            name: "SearXNG",
+            createExecutors: () => ({
+              web_search: () => ({ query: "q", results: [] }),
+              read_url: () => ({ content: "", url: "" }),
+            }),
+          },
+          pluginName: "@acme/searx",
+        }),
+      );
+      const provider = { ...baseProvider, searchSource: "searx-664" };
+      const agent = grant("acme.search-664", {
+        web_search: stub("the plugin's own search"),
+        read_url: stub("the plugin's own reader"),
+      });
+
+      const turn = await prepareChatTurn(
+        {
+          ...baseInput,
+          request: { agentId: agent.id, search: true },
+        },
+        createInMemoryChatTurnQueries({
+          workspaces: [baseWorkspace],
+          agents: [agent],
+          providers: [provider],
+        }),
+      );
+
+      // All four, under distinct names, none dropped.
+      for (const name of [
+        "web_search",
+        "read_url",
+        "acme__web_search",
+        "acme__read_url",
+      ]) {
+        expect(turn.stream.tools).toHaveProperty(name);
+      }
+    });
+
+    it("keeps a Tool set's delegate alongside core's on a turn with Sub-Agents", async () => {
+      const agent = grant("acme.delegate-664", {
+        delegate: stub("the plugin's own delegate"),
+      });
+      const subAgent = {
+        ...baseAgent,
+        id: "sub-664",
+        name: "Research Agent",
+        description: "A specialist.",
+      };
+      const parent = { ...agent, subAgentIds: [subAgent.id] };
+
+      const turn = await prepareChatTurn(
+        { ...baseInput, request: { agentId: parent.id } },
+        createInMemoryChatTurnQueries({
+          workspaces: [baseWorkspace],
+          agents: [parent, subAgent],
+          providers: [baseProvider],
+        }),
+      );
+
+      expect(turn.stream.tools).toHaveProperty("delegate");
+      expect(turn.stream.tools).toHaveProperty("acme__delegate");
+    });
+
+    it("keeps a Tool set's loadSkill alongside core's on a turn with Skills", async () => {
+      const agent = grant("acme.skill-664", {
+        loadSkill: stub("the plugin's own loader"),
+      });
+      const withSkill = { ...agent, skillIds: ["skill-664"] };
+
+      const turn = await prepareChatTurn(
+        { ...baseInput, request: { agentId: withSkill.id } },
+        createInMemoryChatTurnQueries({
+          workspaces: [baseWorkspace],
+          agents: [withSkill],
+          providers: [baseProvider],
+          skills: [
+            {
+              id: "skill-664",
+              workspaceId: "ws-1",
+              name: "kanban-flow",
+              description: "Manage kanban boards",
+            },
+          ],
+        }),
+      );
+
+      expect(turn.stream.tools).toHaveProperty("loadSkill");
+      expect(turn.stream.tools).toHaveProperty("acme__loadSkill");
     });
   });
 

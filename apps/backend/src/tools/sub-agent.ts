@@ -12,9 +12,7 @@ import { renderSecurityGuardrails } from "../security-prompt.ts";
 import { actorUserId, workspaceScopeForSubAgent } from "../scope.ts";
 import { wrapToolsWithActivity } from "../services/tool-activity.ts";
 import type { PlatypusUIMessage } from "../types.ts";
-
-/** The one delegation tool declared to a parent Agent, whatever its sub-agents are. */
-export const DELEGATE_TOOL_NAME = "delegate";
+import { DELEGATE_TOOL_NAME } from "./turn-tool-names.ts";
 
 /**
  * What loading a delegate's tools resolves to: its Tools, plus which of them

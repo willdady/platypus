@@ -439,6 +439,61 @@ export const toolSetSchema = z.object({
 
 export type ToolSet = z.infer<typeof toolSetSchema>;
 
+// Tool names
+
+/**
+ * The ceiling a tool name must satisfy to be callable by a model — the
+ * Anthropic/OpenAI tool-name ceiling of 64 characters, tighter than the 128 the
+ * MCP specification itself permits, and a stricter character set than that
+ * specification's (which also allows `.`).
+ *
+ * Two producers namespace a tool name under a prefix and are held to this:
+ * MCP-sourced tools, under their server's slug (issue #467), and a third-party
+ * plugin's Tool-set tools, under its manifest name (issue #664). It is
+ * producer-neutral for that reason — {@link namespaceMcpToolName} is one caller,
+ * not the owner.
+ */
+export const TOOL_NAME_PATTERN = /^[a-zA-Z0-9_-]{1,64}$/;
+
+/**
+ * The separator between a namespace and the tool name under it. `__` rather than
+ * anything else because it survives {@link TOOL_NAME_PATTERN}, and because
+ * `humanizeToolType` in the frontend treats `_` as a word boundary — so
+ * `acme__createIssue` renders as "Acme create issue" with no separator left
+ * showing.
+ */
+export const TOOL_NAME_NAMESPACE_SEPARATOR = "__";
+
+/**
+ * Namespace a tool name under a prefix.
+ *
+ * A name that already looks namespaced (`github__pull`) is prefixed anyway,
+ * never stripped: stripping would guess at the author's intent, and would
+ * reintroduce a collision for a producer exposing both `pull` and `github__pull`.
+ */
+export const namespaceToolName = (prefix: string, toolName: string): string =>
+  `${prefix}${TOOL_NAME_NAMESPACE_SEPARATOR}${toolName}`;
+
+/**
+ * How long a third-party plugin's manifest `name` may be (issue #664).
+ *
+ * The name is the namespace every one of the plugin's Tool-set tool names enters
+ * a turn under, so this and {@link MAX_PLUGIN_TOOL_NAME_LENGTH} together bound
+ * the composed name below {@link TOOL_NAME_PATTERN}'s 64 — 24 + 2 + 32 = 58,
+ * with six characters of slack. Bounding the two halves is why no total-length
+ * check is needed anywhere.
+ *
+ * Read it as a floor, not a quota: a plugin named `linear` leaves 56 characters
+ * for a tool name. The cap is what a plugin may *declare*, not what it gets.
+ */
+export const MAX_PLUGIN_NAME_LENGTH = 24;
+
+/**
+ * How long a tool name in a third-party plugin's Tool set may be (issue #664).
+ * See {@link MAX_PLUGIN_NAME_LENGTH} for the arithmetic the pair guarantees.
+ */
+export const MAX_PLUGIN_TOOL_NAME_LENGTH = 32;
+
 // MCP
 
 /**
@@ -468,17 +523,9 @@ export const slugifyMcpName = (name: string): string =>
     .replace(/[^a-z0-9]+/g, "_")
     .replace(/^_+|_+$/g, "");
 
-/**
- * The ceiling a namespaced MCP tool name (`<slug>__<toolName>`) must satisfy
- * to be callable — the Anthropic/OpenAI tool-name ceiling of 64 characters,
- * tighter than the 128 the MCP spec itself permits, and a stricter character
- * set than the spec's (which also allows `.`).
- */
-export const MCP_TOOL_NAME_PATTERN = /^[a-zA-Z0-9_-]{1,64}$/;
-
 /** Namespace a raw MCP-server tool name under its owning MCP's slug. */
 export const namespaceMcpToolName = (slug: string, toolName: string): string =>
-  `${slug}__${toolName}`;
+  namespaceToolName(slug, toolName);
 
 const mcpBearerTokenRefine = {
   validator: (data: { authType: string; bearerToken?: string }) => {

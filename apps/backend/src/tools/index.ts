@@ -11,6 +11,12 @@ import { createContributionRegistry } from "../registry/contribution-registry.ts
 import { createSandboxTools } from "../sandbox/tools.ts";
 import { normalizeToolResults } from "../services/tool-result.ts";
 import { logger } from "../logger.ts";
+import {
+  MAX_PLUGIN_TOOL_NAME_LENGTH,
+  namespaceToolName,
+  TOOL_NAME_PATTERN,
+} from "@platypus/schemas";
+import { RESERVED_TURN_TOOL_NAMES } from "./turn-tool-names.ts";
 
 // The Extension-point surface lives in the published SDK; re-export the context
 // type so core's internal callers keep importing it from here.
@@ -159,8 +165,22 @@ export interface ComposeToolSetOptions {
   id: string;
   /** The plugin's boot-resolved deploy-time config/credentials (ADR-0013). */
   plugin?: PluginConfigContext;
-  /** Owning plugin's manifest name, for attribution in every log line. */
+  /**
+   * Owning plugin's manifest name, for attribution in every log line — and, for
+   * a third-party plugin, the namespace its tool names enter a turn under.
+   */
   pluginName: string;
+  /**
+   * Whether the owning plugin is a core built-in. Decides the tool-name rule
+   * below the same way it already decides the contribution-id rule: core bare,
+   * third-party prefixed.
+   *
+   * Carried from the loader, which is the sole authority on origin (membership of
+   * the built-in map), rather than inferred here by comparing {@link pluginName}
+   * against a core sentinel — a plugin that borrowed the sentinel string would
+   * then buy itself bare tool names.
+   */
+  isCore: boolean;
 }
 
 /**
@@ -192,8 +212,131 @@ export interface ComposeToolSetOptions {
 export const composeToolSet = (
   options: ComposeToolSetOptions,
 ): ToolSetRegistration => {
-  const { contribution, id, plugin, pluginName } = options;
+  const { contribution, id, plugin, pluginName, isCore } = options;
   const { name, category, description, tools } = contribution;
+
+  /**
+   * Why `toolName` cannot enter a turn under this plugin's namespace, or `null`
+   * if it can. Third-party only — a core Tool set is not namespaced, so neither
+   * bound applies to it.
+   *
+   * `reason` is phrased for an author and never quotes the regex: the rule an
+   * author has to satisfy is a sentence, not a pattern. `bindings` are the
+   * structured fields for the log line, and they differ per fault on purpose —
+   * reporting `cap` and `length` on a charset fault would tell an Operator the
+   * wrong reason while the message said the right one.
+   *
+   * Two bounds, because they say different things: the cap is the documented
+   * limit an author is held to, and the pattern is the model-provider ceiling
+   * that catches a character the cap says nothing about. Neither is a
+   * total-length check — the manifest-name cap the loader enforces and the cap
+   * here bound the composed name by arithmetic, so the pattern's own `{1,64}` is
+   * unreachable and only its character set can fire.
+   */
+  const toolNameFault = (
+    toolName: string,
+  ): { reason: string; bindings: Record<string, string | number> } | null => {
+    if (toolName.length > MAX_PLUGIN_TOOL_NAME_LENGTH) {
+      return {
+        reason: `its name is ${toolName.length} characters, over the ${MAX_PLUGIN_TOOL_NAME_LENGTH}-character cap for a third-party tool name. Rename the tool shorter`,
+        bindings: {
+          cap: MAX_PLUGIN_TOOL_NAME_LENGTH,
+          length: toolName.length,
+        },
+      };
+    }
+    const namespaced = namespaceToolName(pluginName, toolName);
+    if (!TOOL_NAME_PATTERN.test(namespaced)) {
+      return {
+        reason: `namespaced as "${namespaced}" it is not a callable tool name — a tool name may use only letters, digits, underscores and hyphens. Rename the tool`,
+        bindings: { namespacedName: namespaced },
+      };
+    }
+    return null;
+  };
+
+  /**
+   * Every tool a third-party Tool set contributes enters the turn as
+   * `<manifest-name>__<toolName>` (issue #664) — unconditionally, not only on
+   * collision, so a name never depends on load order. Core Tool sets keep their
+   * bare names, exactly as core contribution ids do.
+   *
+   * A name over the cap is excluded and reported, never truncated to fit: two
+   * long names from one Tool set could truncate onto each other and reintroduce
+   * the very collision this removes, invisibly. A static map's names are known at
+   * boot and fail there instead (see {@link namespaceStaticToolsOrThrow} below),
+   * so the exclusion is only reachable for a factory.
+   */
+  const namespaceToolNames = (
+    turnTools: Record<string, Tool>,
+  ): Record<string, Tool> => {
+    if (isCore) return turnTools;
+    const namespaced: Record<string, Tool> = {};
+    for (const [toolName, entry] of Object.entries(turnTools)) {
+      const fault = toolNameFault(toolName);
+      if (fault) {
+        logger.warn(
+          {
+            plugin: pluginName,
+            toolSet: id,
+            tool: toolName,
+            ...fault.bindings,
+          },
+          `Tool set's tool cannot enter a turn: ${fault.reason}. Excluding it from this turn.`,
+        );
+        continue;
+      }
+      namespaced[namespaceToolName(pluginName, toolName)] = entry;
+    }
+    return namespaced;
+  };
+
+  /**
+   * The static map as the catalogs should list it — namespaced — or a throw.
+   *
+   * A static map's names are known at boot, so a name core cannot serve fails
+   * there rather than going missing from a turn: fail-loud per ADR-0013, naming
+   * the plugin the way every other Tool-set boot error does. One pass, so the
+   * names are checked exactly where they are rewritten.
+   *
+   * The two origins fail on opposite rules. A third-party name is held to the
+   * cap and the ceiling, because it is about to be namespaced. A core name is
+   * held to neither and is instead refused if it takes one of the four names core
+   * assigns to a turn after the Tool session — the residual case namespacing
+   * leaves behind, since a core set's names stay bare.
+   */
+  const namespaceStaticToolsOrThrow = (
+    declared: Record<string, Tool>,
+  ): Record<string, Tool> => {
+    const namespaced: Record<string, Tool> = {};
+    for (const [toolName, entry] of Object.entries(declared)) {
+      if (isCore) {
+        if (RESERVED_TURN_TOOL_NAMES.includes(toolName)) {
+          throw new Error(
+            `Plugin "${pluginName}": tool set "${id}" declares a tool named "${toolName}", which core assigns to every turn that has it. A core tool set's names are not namespaced, so this one would be overwritten with nothing said. Rename the tool.`,
+          );
+        }
+        namespaced[toolName] = entry;
+        continue;
+      }
+      const fault = toolNameFault(toolName);
+      if (fault) {
+        throw new Error(
+          `Plugin "${pluginName}": tool set "${id}" declares a tool "${toolName}" that cannot enter a turn: ${fault.reason}.`,
+        );
+      }
+      namespaced[namespaceToolName(pluginName, toolName)] = entry;
+    }
+    return namespaced;
+  };
+
+  const staticTools = typeof tools === "function" ? undefined : tools;
+  // Boot-time: throws here, inside `composeToolSet`, because the loader calls it
+  // at boot and a throw from a `prepare` is how every other Tool-set fault
+  // aborts startup.
+  const namespacedStaticTools = staticTools
+    ? namespaceStaticToolsOrThrow(staticTools)
+    : undefined;
 
   const buildTurnTools = async (
     context: CoreToolSetContext,
@@ -241,7 +384,13 @@ export const composeToolSet = (
       return {};
     }
 
-    const turnTools = normalizeToolResults(resolved as Record<string, Tool>);
+    // Namespaced after per-tool result normalization and before the tools are
+    // collision-reported and claimed, so ownership keying and collision
+    // reporting both see the final name — the only name the model, the
+    // Transcript, and a second Tool set can contest.
+    const turnTools = namespaceToolNames(
+      normalizeToolResults(resolved as Record<string, Tool>),
+    );
     reportToolNameCollisions(turnTools, claimed, {
       toolSetId: id,
       plugin: pluginName,
@@ -255,7 +404,9 @@ export const composeToolSet = (
     category,
     description,
     buildTurnTools,
-    ...(typeof tools === "function" ? {} : { staticTools: tools }),
+    // Namespaced: `staticTools` backs the Tool-set listing endpoints, and a
+    // listing has to show the names the model will actually call.
+    ...(namespacedStaticTools ? { staticTools: namespacedStaticTools } : {}),
   };
 };
 
@@ -289,6 +440,7 @@ registerToolSet(
   composeToolSet({
     id: SANDBOX_TOOLSET_ID,
     pluginName: CORE_BUILTIN_OWNER,
+    isCore: true,
     contribution: {
       name: "Sandbox",
       category: "Sandbox",

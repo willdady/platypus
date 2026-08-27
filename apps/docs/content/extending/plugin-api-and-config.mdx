@@ -24,13 +24,18 @@ a `contributes` block naming what it fills.
 
 ### Two names, two jobs
 
-| This                             | Is                                                                 | Example                       |
-| -------------------------------- | ------------------------------------------------------------------ | ----------------------------- |
-| The **npm package specifier**    | What you publish, what an Operator installs and lists              | `@acme/platypus-widgets`      |
-| The manifest **`name`**          | The config namespace, and the prefix on every contribution id      | `widgets`                     |
+| This                          | Is                                                                                 | Example                  |
+| ----------------------------- | ---------------------------------------------------------------------------------- | ------------------------ |
+| The **npm package specifier** | What you publish, what an Operator installs and lists                              | `@acme/platypus-widgets` |
+| The manifest **`name`**       | The config namespace, and the prefix on every contribution id **and tool name**    | `widgets`                |
 
 A third-party manifest `name` must be a url-safe slug — lowercase letters, digits
-and hyphens. It is validated at boot.
+and hyphens — of up to 24 characters. Both are validated at boot.
+
+The cap is there because the name is also the namespace on every tool name the
+plugin contributes (see
+[Tool names](/extending/tool-sets#tool-names)), and the composed
+`<name>__<toolName>` has to stay inside what a model provider allows.
 
 <Callout type="warning">
   A scoped, npm-style manifest `name` such as `@acme/platypus-widgets` is
@@ -63,6 +68,9 @@ Any of these aborts startup with an error naming your plugin:
 - its manifest is invalid,
 - its deploy-time config or credentials fail their own schema,
 - its manifest `name` is already declared by another loaded plugin,
+- its manifest `name` is longer than the cap above,
+- a Tool set statically declares a tool name over
+  [its own cap](/extending/tool-sets#two-length-caps),
 - a contribution is missing a required field,
 - its contribution ids collide with another plugin's.
 

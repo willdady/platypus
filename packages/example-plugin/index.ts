@@ -11,7 +11,9 @@ import { z } from "zod";
 // The manifest `name` ("example") is the namespace: because this package is NOT
 // in core's built-in allowlist, the loader auto-prefixes every contribution id
 // with it, so the bare `greeting` tool set below registers as `example.greeting`.
-// Authors write bare ids; core prefixes at load. Core plugins stay unprefixed.
+// Tool *names* follow the same rule (issue #664) — the bare `greet` below reaches
+// the model as `example__greet`, so core's own turn tools can never overwrite it.
+// Authors write both bare; core prefixes at load. Core plugins stay unprefixed.
 export const plugin: PlatypusPlugin = {
   name: "example",
   version: "0.1.0",
