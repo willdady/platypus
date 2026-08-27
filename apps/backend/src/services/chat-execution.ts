@@ -205,6 +205,9 @@ export type PrepareChatTurnInput = {
    * composed, so a headless run's prompt does not drift with interactive-chat
    * activity that has nothing to do with it.
    *
+   * Beats `memorySnapshot` where a caller supplies both: this decides *whether*
+   * a block is composed, the pin only decides *what* is in it.
+   *
    * Orthogonal to the `memory` tool set: an Agent holding `memorySearch` /
    * `memoryGet` keeps them and can still retrieve deliberately.
    */
@@ -590,6 +593,11 @@ export const prepareChatTurn = async (
   // about the awaited work moves.
   const searchResolution = resolveSearchMode(request.search, provider);
 
+  // Absent means yes, which is what every interactive Chat turn relies on.
+  // Resolved once, here, so the retrieval below and the block composed further
+  // down read the same decision rather than each re-deriving it (#645).
+  const includeMemories = input.includeMemories ?? true;
+
   const [
     session,
     skills,
@@ -609,7 +617,7 @@ export const prepareChatTurn = async (
       workspaceId,
       input.memorySnapshot,
       input.memoriesReferenceDate,
-      input.includeMemories,
+      includeMemories,
     ),
     queries.getSandboxEnvKeys(workspaceId),
     resolveSearchTools(searchResolution, opened, provider, {
@@ -655,8 +663,14 @@ export const prepareChatTurn = async (
       globalContext: userContexts.global,
       workspaceContext: userContexts.workspace,
     },
-    memoriesBlock:
-      input.memorySnapshot ?? formatSummariesForSystemPrompt(turn.memories),
+    // The flag gates the block; the pin and the live retrieval are only sources
+    // for it. Gating here rather than trusting the sources to be empty is what
+    // makes "off means no `<memories>`" true by construction: `turn.memories` is
+    // already empty when off, but a pin would otherwise slip past the gate and
+    // make the flag's name a lie for a caller that supplied both.
+    memoriesBlock: includeMemories
+      ? (input.memorySnapshot ?? formatSummariesForSystemPrompt(turn.memories))
+      : "",
     skills,
     subAgents,
     unavailableSubAgents,
@@ -818,10 +832,12 @@ export const validateTurnAttachments = async (
  * summaries (the **turn** half); the caller folds them into the stable
  * `memoriesBlock` text.
  *
- * `includeMemories: false` is the third way to reach "no memories": the run
- * opted out (a Trigger, #645), so the retrieval is skipped rather than
- * performed and discarded. The pin still wins where both are supplied — a
- * pinned turn retrieves nothing either way, and the renderer consumes the pin.
+ * `includeMemories` is the second way to reach "no memories": the run opted out
+ * (a Trigger, #645), so the retrieval is skipped rather than performed and
+ * discarded. It arrives here already resolved — the caller collapses "absent"
+ * to true, so this reads a plain boolean rather than a third state. Both routes
+ * to "no memories" are about the *retrieval*; whether a block is composed at all
+ * is decided once by the caller, which gates the pin on the same flag.
  */
 const resolveMemories = async (
   queries: ChatTurnQueries,
@@ -829,10 +845,10 @@ const resolveMemories = async (
   workspaceId: string,
   memorySnapshot: string | undefined,
   referenceDate: Date,
-  includeMemories: boolean | undefined,
+  includeMemories: boolean,
 ): Promise<MemorySummary[]> => {
   if (memorySnapshot !== undefined) return [];
-  if (includeMemories === false) return [];
+  if (!includeMemories) return [];
   return queries.getRecentMemories(userId, workspaceId, referenceDate);
 };
 

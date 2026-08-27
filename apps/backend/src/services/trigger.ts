@@ -57,10 +57,10 @@ type TriggerBaseFields = {
 
 /**
  * The fields a create carries. Defaults (`enabled`, `maxRunsToKeep`, `search`,
- * `includeMemories`)
- * are the caller's responsibility to resolve first — the HTTP route gets them
- * from `triggerCreateSchema`'s own Zod defaults, the Tool applies its own
- * (intentionally different) defaults — this module only validates and writes.
+ * `includeMemories`) are the caller's responsibility to resolve first — the HTTP
+ * route gets them from `triggerCreateSchema`'s own Zod defaults, the Tool
+ * applies its own (intentionally different) defaults — this module only
+ * validates and writes.
  */
 export type TriggerCreateFields = TriggerBaseFields;
 
