@@ -40,6 +40,17 @@ and hyphens. It is validated at boot.
   from a built-in map, not published packages.
 </Callout>
 
+A manifest `name` must also be unique across the plugins a deployment loads.
+Two plugins declaring the same one abort startup, with an error naming both
+package specifiers.
+
+<Callout type="warning">
+  Installing a fork or a vendored variant alongside the plugin it came from is
+  the trap: both ship the same manifest `name`, and the name is the key for
+  deploy-time config and credentials. One would be handed the other's API token.
+  The backend refuses to start instead — rename one of them in its manifest.
+</Callout>
+
 ## Boot is fail-loud and all-or-nothing
 
 Before the HTTP server starts, core loads the always-on core plugins, then reads
@@ -51,6 +62,7 @@ Any of these aborts startup with an error naming your plugin:
 - it can't be resolved,
 - its manifest is invalid,
 - its deploy-time config or credentials fail their own schema,
+- its manifest `name` is already declared by another loaded plugin,
 - a contribution is missing a required field,
 - its contribution ids collide with another plugin's.
 

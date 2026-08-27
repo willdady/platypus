@@ -501,17 +501,20 @@ describe("loadPlugins", () => {
     ).rejects.toThrow(/"time".*"@a\/plugin".*"@b\/plugin"/s);
   });
 
-  it("aborts (fail-loud) when two third-party plugins share a manifest name and id", async () => {
+  it("aborts (fail-loud) when one third-party plugin contributes an id twice", async () => {
     const { register } = makeRegister();
-    // Both packages resolve to a manifest named "dup", so their bare `custom`
-    // ids both namespace to `dup.custom` and collide.
+    // Namespacing means a third-party id can only collide with another from the
+    // same manifest — two plugins can no longer share the prefix, since a
+    // duplicate manifest name is refused before either registers.
     const importPlugin = vi.fn(() =>
-      Promise.resolve({ plugin: manifest("dup", [toolSet("custom")]) }),
+      Promise.resolve({
+        plugin: manifest("dup", [toolSet("custom"), toolSet("custom")]),
+      }),
     );
 
     await expect(
       loadPlugins({
-        pluginNames: ["@a/pkg", "@b/pkg"],
+        pluginNames: ["@a/pkg"],
         builtinPlugins: {},
         importPlugin,
         register,
@@ -1719,6 +1722,101 @@ describe("loadPlugins — third-party name slug validation (ADR-0013)", () => {
 
     expect(calls.map((c) => c.id)).toEqual(["widgets.greeting"]);
     expect(loaded[0].name).toBe("widgets");
+  });
+});
+
+describe("loadPlugins — manifest name uniqueness (ADR-0013)", () => {
+  // A manifest name is the key for a plugin's deploy-time config and
+  // credentials, so two plugins declaring the same one are handed the same
+  // block. Contribution ids do not catch it — `acme.foo` and `acme.bar`
+  // namespace apart and collide on nothing — so both used to load cleanly.
+  it("refuses two plugins sharing a manifest name, naming both package specifiers", async () => {
+    const { register } = makeRegister();
+    const modules: Record<string, PlatypusPlugin> = {
+      "@acme/pkg": manifest("acme", [toolSet("foo")]),
+      "@fork/acme-pkg": manifest("acme", [toolSet("bar")]),
+    };
+
+    await expect(
+      loadPlugins({
+        pluginNames: ["@acme/pkg", "@fork/acme-pkg"],
+        builtinPlugins: {},
+        importPlugin: (name) => Promise.resolve({ plugin: modules[name] }),
+        register,
+      }),
+      // Both specifiers, because the shared manifest name alone does not tell
+      // an Operator which two PLATYPUS_PLUGINS entries to look at.
+    ).rejects.toThrow(/"acme".*"@acme\/pkg".*"@fork\/acme-pkg"/s);
+  });
+
+  it("refuses before the second plugin's credentials are resolved against the shared block", async () => {
+    const { register } = makeRegister();
+    const modules: Record<string, PlatypusPlugin> = {
+      "@acme/pkg": {
+        ...manifest("acme", [toolSet("foo")]),
+        credentialsSchema: z.object({ token: z.string() }),
+      },
+      "@fork/acme-pkg": {
+        ...manifest("acme", [toolSet("bar")]),
+        credentialsSchema: z.object({ apiKey: z.string() }),
+      },
+    };
+
+    // The Operator supplied one block, for the plugin they meant. The fork
+    // would be handed it too — and reject it, since its schema differs. The
+    // failure an Operator reads must be the shared name, not the downstream
+    // validation error it causes.
+    await expect(
+      loadPlugins({
+        pluginNames: ["@acme/pkg", "@fork/acme-pkg"],
+        builtinPlugins: {},
+        importPlugin: (name) => Promise.resolve({ plugin: modules[name] }),
+        register,
+        pluginConfig: { acme: { credentials: { token: "secret" } } },
+      }),
+    ).rejects.toThrow(/"acme".*"@acme\/pkg".*"@fork\/acme-pkg"/s);
+  });
+
+  it("covers core plugins too", async () => {
+    const { register } = makeRegister();
+
+    // Core and third-party names are character-disjoint (`@platypus/*` cannot
+    // match the third-party slug rule), so the uniform check can only ever fire
+    // on a core-vs-core pair — a repo bug, caught in the same place.
+    await expect(
+      loadPlugins({
+        pluginNames: ["@platypus/tools-basic", "@platypus/tools-platform"],
+        builtinPlugins: {
+          "@platypus/tools-basic": () =>
+            Promise.resolve({
+              plugin: manifest("@platypus/tools", [toolSet("time")]),
+            }),
+          "@platypus/tools-platform": () =>
+            Promise.resolve({
+              plugin: manifest("@platypus/tools", [toolSet("agents")]),
+            }),
+        },
+        register,
+      }),
+    ).rejects.toThrow(
+      /"@platypus\/tools".*"@platypus\/tools-basic".*"@platypus\/tools-platform"/s,
+    );
+  });
+
+  it("reads as a list problem when the same specifier is listed twice", async () => {
+    const { register } = makeRegister();
+
+    await expect(
+      loadPlugins({
+        pluginNames: ["@acme/pkg", "@acme/pkg"],
+        builtinPlugins: {},
+        importPlugin: () =>
+          Promise.resolve({ plugin: manifest("acme", [toolSet("foo")]) }),
+        register,
+      }),
+      // One package, listed twice — "rename one of them in its manifest" is
+      // advice that cannot be followed.
+    ).rejects.toThrow(/"@acme\/pkg".*more than once.*PLATYPUS_PLUGINS/s);
   });
 });
 

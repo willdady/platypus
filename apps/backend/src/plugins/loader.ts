@@ -390,6 +390,12 @@ export async function loadPlugins(
   const sandboxOwners = new Map<string, string>();
   const webOwners = new Map<string, string>();
 
+  // Manifest name -> the package specifier that declared it. Keyed against the
+  // specifier rather than the manifest, because a duplicate is only actionable
+  // if the error names the two PLATYPUS_PLUGINS entries to look at, and the
+  // manifest carries only the name they share.
+  const manifestNameOwners = new Map<string, string>();
+
   // The Extension-point table. Every point runs the same registration sequence
   // (`contribution-pipeline.ts`) over its slice of a manifest and differs only
   // in what it declares here plus its entry in `extension-points.ts`. A fourth
@@ -451,6 +457,29 @@ export async function loadPlugins(
         `Plugin "${name}": third-party manifest name "${manifest.name}" must be a url-safe slug (lowercase letters, digits, and hyphens) — it becomes the contribution-id prefix. Rename it in the manifest.`,
       );
     }
+
+    // A manifest name is the key for a plugin's deploy-time config and
+    // credentials — the block below is looked up by it, and the registry stores
+    // the result under it — so it has to be unique across loaded plugins.
+    // Contribution ids do not enforce that: two plugins both named `acme`
+    // contributing `foo` and `bar` namespace to `acme.foo` and `acme.bar` and
+    // collide on nothing, so both would load and then be handed each other's
+    // credentials. Refused here, ahead of the resolve below, so an Operator
+    // reads the shared name rather than the schema failure it causes.
+    //
+    // Uniform over both origins: core names are `@platypus/*` and third-party
+    // names are slugs, which the check above holds to a character set that
+    // forbids `@` and `/`, so the two spaces are disjoint and this can only ever
+    // fire on a same-origin pair.
+    const nameOwner = manifestNameOwners.get(manifest.name);
+    if (nameOwner !== undefined) {
+      throw new Error(
+        nameOwner === name
+          ? `Plugin "${name}" is listed more than once in PLATYPUS_PLUGINS. Remove the duplicate entry.`
+          : `Manifest name "${manifest.name}" is declared by both "${nameOwner}" and "${name}". A manifest name is the key for a plugin's deploy-time config and credentials, so two plugins sharing one would be handed the same credential block. Rename one of them in its manifest.`,
+      );
+    }
+    manifestNameOwners.set(manifest.name, name);
 
     // Resolve the plugin's deploy-time config/credentials once (fail-loud) and
     // share the single block across every contribution factory below — this
