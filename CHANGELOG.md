@@ -1,5 +1,36 @@
 # Changelog
 
+## [3.0.0](https://github.com/willdady/platypus/compare/v2.11.0...v3.0.0) (2026-08-27)
+
+
+### ⚠ BREAKING CHANGES
+
+* The plugin API is now major 2. Core accepts 1 and 2 together, so a plugin already in the field keeps loading and an Operator has a release to migrate. For plugin authors: raise `apiVersion` to 2 and you can drop the guards — `ctx.registerCloser(close)` and `plugin.logger.info(...)` rather than `ctx.registerCloser?.(close)` and `plugin?.logger?.info(...)`. Dropping the guards while the manifest still says 1 is the trap: a core on the previous release will load the plugin, because 1 is inside its window, and the first unguarded read throws inside a Chat turn. One member changed shape rather than optionality: a Sandbox backend's `configSchema` factory now receives the whole deploy-time block, so read `plugin.config` where the argument used to be the config itself. `@platypuschat/plugin-sdk` goes to 1.0.0 for this.
+* Two new caps on third-party plugins, both refused at boot. A manifest `name` may be at most 24 characters, and a tool name in a Tool set at most 32. A plugin over either no longer loads, and the deployment does not start; the error names the plugin, what was too long, the cap and the actual length. The remedy is a rename in the plugin's manifest — of the plugin, or of the tool. Read the caps as a floor rather than a quota: the two together keep a composed `<manifest-name>__<toolName>` inside the 64 characters a model provider allows, so a plugin named `linear` still has 56 characters available for a tool name. Separately, and not gated by the caps: every tool a third-party Tool set contributes is now called as `<manifest-name>__<toolName>` instead of the bare name its author declared, so Agent instructions naming a third-party tool literally must be updated, and a resumed Chat whose transcript holds an old bare name can fail one turn on `NoSuchToolError` before the model reads the new name.
+* namespace third-party Tool-set tool names so core turn tools cannot silently overwrite them ([#701](https://github.com/willdady/platypus/issues/701))
+* **backend:** A deployment that loads two plugins declaring the same manifest name no longer boots. That is the silent credential sharing being surfaced — the two were resolving one config block between them, so one plugin was authenticated with the other's secret. Rename one of them in its manifest.
+* **backend:** `include_memories` defaults to false and is deliberately not backfilled, so every Trigger already in the database stops receiving the `<memories>` block on upgrade. That is the intended outcome. Turn Advanced settings → Include Memories back on for any Trigger whose instruction relied on it.
+
+### Features
+
+* **backend:** let a Trigger keep the Memories block out of its runs ([#699](https://github.com/willdady/platypus/issues/699)) ([7bce30f](https://github.com/willdady/platypus/commit/7bce30f3c7e6d3631509aa50af139ea5c6fde67b))
+* require what core always supplied on the plugin API (v2) ([db2d342](https://github.com/willdady/platypus/commit/db2d342b146831913654c6144eef23df5b649749))
+
+
+### Bug Fixes
+
+* **backend:** give Trigger CRUD one write model instead of two drifted copies ([#694](https://github.com/willdady/platypus/issues/694)) ([b547ab2](https://github.com/willdady/platypus/commit/b547ab2a24eedc1eb79b4f56d3d6eb1359e766b6))
+* **backend:** hand a v1 configSchema factory the config half it expects ([#705](https://github.com/willdady/platypus/issues/705)) ([76c4e47](https://github.com/willdady/platypus/commit/76c4e473a51b00e38f7ef6633edfad351a58b567))
+* **backend:** name the real user a Trigger run acts on behalf of ([#698](https://github.com/willdady/platypus/issues/698)) ([bd25c88](https://github.com/willdady/platypus/commit/bd25c88087d3979a400251a7fe6c81c58dc9d1ac))
+* **backend:** refuse boot when two plugins share a manifest name ([#700](https://github.com/willdady/platypus/issues/700)) ([e78d973](https://github.com/willdady/platypus/commit/e78d973f2174aaef2edecf14644c58fd301cb358))
+* **backend:** scrub dangling MCP references on workspace-scope delete ([#693](https://github.com/willdady/platypus/issues/693)) ([4fafa84](https://github.com/willdady/platypus/commit/4fafa8496d76561dbbcc6e0a23e485cf0c4114e1))
+* namespace third-party Tool-set tool names so core turn tools cannot silently overwrite them ([#701](https://github.com/willdady/platypus/issues/701)) ([fc2a48b](https://github.com/willdady/platypus/commit/fc2a48bc0a6ae6ca431ecd8ec3e5bff0bc97d47b))
+
+
+### Miscellaneous Chores
+
+* record the breaking change for the plugin tool-name caps ([#702](https://github.com/willdady/platypus/issues/702)) ([bfa24a5](https://github.com/willdady/platypus/commit/bfa24a551d159cf217e379e6b5244928f4318cd1))
+
 ## [2.11.0](https://github.com/willdady/platypus/compare/v2.10.0...v2.11.0) (2026-08-25)
 
 
