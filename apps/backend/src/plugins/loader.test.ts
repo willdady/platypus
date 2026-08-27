@@ -690,7 +690,7 @@ describe("loadPlugins — sandbox backends", () => {
     },
   );
 
-  it("resolves a factory-form configSchema against the plugin config at load", async () => {
+  it("resolves a factory-form configSchema against the plugin context at load (v2)", async () => {
     const { register } = makeRegister();
     const { registerSandbox, calls } = makeSandboxRegister();
 
@@ -720,7 +720,7 @@ describe("loadPlugins — sandbox backends", () => {
           plugin: {
             name: "fenced",
             version: "0.1.0",
-            apiVersion: 1,
+            apiVersion: PLUGIN_API_VERSION,
             configSchema: z.object({
               allowed: z.array(z.string()).default([]),
             }),
@@ -739,6 +739,58 @@ describe("loadPlugins — sandbox backends", () => {
     // runtime check below is the one that earns its keep.
     expect(typeof registered.configSchema).not.toBe("function");
     const schema = registered.configSchema;
+    expect(schema.safeParse({ net: "ok" }).success).toBe(true);
+    expect(schema.safeParse({ net: "blocked" }).success).toBe(false);
+  });
+
+  // The one member whose shape changed across core's [1, 2] window rather than
+  // being appended to: a v1 factory was written against the `config` half, a v2
+  // one against the whole context. Core admits both versions, so it must hand
+  // each the shape it was written against — otherwise a v1 factory narrows the
+  // wrong object and silently builds a schema that validates nothing it meant to.
+  it("hands a v1 factory-form configSchema the config half, not the context", async () => {
+    const { register } = makeRegister();
+    const { registerSandbox, calls } = makeSandboxRegister();
+
+    let received: unknown;
+    // Written against API v1: the argument *is* the resolved plugin config.
+    const factoryBackend: SandboxBackendContribution = {
+      backend: "fenced",
+      name: "Fenced",
+      configSchema: (pluginConfig: unknown) => {
+        received = pluginConfig;
+        const { allowed } = pluginConfig as { allowed: string[] };
+        return z
+          .object({ net: z.string() })
+          .refine((c) => allowed.includes(c.net), { message: "not allowed" });
+      },
+      credentialsSchema: z.object({}),
+      create: () => ({}) as unknown as SandboxBackend,
+    };
+
+    await loadPlugins({
+      pluginNames: ["fencedpkg"],
+      builtinPlugins: {},
+      importPlugin: () =>
+        Promise.resolve({
+          plugin: {
+            name: "fenced",
+            version: "0.1.0",
+            apiVersion: 1,
+            configSchema: z.object({
+              allowed: z.array(z.string()).default([]),
+            }),
+            contributes: { sandboxBackends: [factoryBackend] },
+          } satisfies PlatypusPlugin,
+        }),
+      register,
+      registerSandbox,
+      pluginConfig: { fenced: { config: { allowed: ["ok"] } } },
+    });
+
+    // The config half itself — not a context wrapping it.
+    expect(received).toEqual({ allowed: ["ok"] });
+    const schema = calls[0].configSchema;
     expect(schema.safeParse({ net: "ok" }).success).toBe(true);
     expect(schema.safeParse({ net: "blocked" }).success).toBe(false);
   });

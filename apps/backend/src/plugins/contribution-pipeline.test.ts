@@ -1,5 +1,8 @@
 import { describe, it, expect } from "vitest";
-import type { PluginConfigContext } from "@platypuschat/plugin-sdk";
+import {
+  PLUGIN_API_VERSION,
+  type PluginConfigContext,
+} from "@platypuschat/plugin-sdk";
 import {
   registerContributions,
   type ContributionIdentity,
@@ -54,6 +57,7 @@ const run = (
     pluginName?: string;
     contributionId?: (id: string) => string;
     isCore?: boolean;
+    apiVersion?: number;
     owners?: Map<string, string>;
   } = {},
 ) =>
@@ -64,6 +68,7 @@ const run = (
     plugin: PLUGIN,
     contributionId: options.contributionId ?? ((id) => id),
     isCore: options.isCore ?? false,
+    apiVersion: options.apiVersion ?? PLUGIN_API_VERSION,
     owners: options.owners ?? new Map<string, string>(),
   });
 

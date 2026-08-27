@@ -49,6 +49,17 @@ export interface ContributionContext {
    * namespaced too (issue #664).
    */
   isCore: boolean;
+  /**
+   * The major API version the plugin's manifest declares — carried for the same
+   * reason {@link ContributionContext.isCore} is, rather than re-read from the
+   * manifest a point does not otherwise hold.
+   *
+   * Core admits a window of `[OLDEST_SUPPORTED_API_VERSION, PLUGIN_API_VERSION]`
+   * (ADR-0013's N and N−1), and a point needs the declared version where a
+   * member changed *shape* across that window rather than being appended to. The
+   * Sandbox point's `configSchema` factory is the one such member.
+   */
+  apiVersion: number;
 }
 
 /**
@@ -97,6 +108,8 @@ export interface RegisterContributionsOptions<TRegistration> {
   contributionId: (id: string) => string;
   /** Whether this plugin is a core built-in, passed through to every `prepare`. */
   isCore: boolean;
+  /** The manifest's declared major API version, passed through to every `prepare`. */
+  apiVersion: number;
   /**
    * Point-wide id → owning plugin map, carried across plugins so a collision
    * can name both sides. Mutated as each contribution registers.
@@ -127,6 +140,7 @@ export const registerContributions = <TRegistration>(
     plugin,
     contributionId,
     isCore,
+    apiVersion,
     owners,
   } = options;
   const registeredIds: string[] = [];
@@ -183,6 +197,7 @@ export const registerContributions = <TRegistration>(
       id,
       plugin,
       isCore,
+      apiVersion,
     });
 
     try {

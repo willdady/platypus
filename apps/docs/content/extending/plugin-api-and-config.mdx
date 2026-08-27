@@ -128,6 +128,11 @@ it received the `config` half on its own. Read `plugin.config` where the argumen
 used to be the config itself — and you can now reach `plugin.credentials` and
 `plugin.logger` from there too.
 
+This is the one place the argument you get depends on the `apiVersion` you
+declare: core hands a v1 factory the `config` half it was written against, and a
+v2 factory the whole block. So the migration is the two edits together — raise
+the number, then read `plugin.config` — and doing neither is equally correct.
+
 <Callout type="warning">
   Upgrading the SDK without raising `apiVersion` to 2 is the trap. Nothing stops
   you dropping the guards while your manifest still says 1, and it will run

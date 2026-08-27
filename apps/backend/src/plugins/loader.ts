@@ -536,6 +536,7 @@ export async function loadPlugins(
         plugin: pluginCtx,
         contributionId,
         isCore,
+        apiVersion: manifest.apiVersion,
         owners: entry.owners,
       });
     }
