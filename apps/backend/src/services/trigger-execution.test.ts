@@ -63,6 +63,7 @@ const baseTrigger = {
   enabled: true,
   maxRunsToKeep: 10,
   search: false,
+  includeMemories: false,
   config: { cronExpression: "0 * * * *", timezone: "UTC", isOneOff: false },
   lastRunAt: null,
   nextRunAt: null,
@@ -112,6 +113,26 @@ describe("trigger-execution", () => {
       expect(part.type).toBe("text");
       if (part.type !== "text") throw new Error("expected a text part");
       expect(part.text).toBe("Do something");
+    });
+
+    it("forwards the Trigger's memory-injection opt-out into the run input", async () => {
+      mockDb.limit.mockResolvedValueOnce([mockWorkspace]);
+      mockGenerate.mockResolvedValueOnce({ text: "ok", stats: {} });
+
+      await executeTrigger(baseTrigger);
+
+      const args = mockGenerate.mock.calls[0][0] as GenerateArgs;
+      expect(args.input.includeMemories).toBe(false);
+    });
+
+    it("forwards the Trigger's memory-injection opt-in into the run input", async () => {
+      mockDb.limit.mockResolvedValueOnce([mockWorkspace]);
+      mockGenerate.mockResolvedValueOnce({ text: "ok", stats: {} });
+
+      await executeTrigger({ ...baseTrigger, includeMemories: true });
+
+      const args = mockGenerate.mock.calls[0][0] as GenerateArgs;
+      expect(args.input.includeMemories).toBe(true);
     });
 
     it("prepends event context to the instruction for event triggers", async () => {

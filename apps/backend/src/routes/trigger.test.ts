@@ -35,6 +35,7 @@ const cronTrigger = {
   enabled: true,
   maxRunsToKeep: 10,
   search: false,
+  includeMemories: false,
   config: { cronExpression: "0 9 * * *", timezone: "UTC", isOneOff: false },
   lastRunAt: null,
   nextRunAt: null,
@@ -169,6 +170,51 @@ describe("Trigger Routes", () => {
       expect(body.config).toEqual(eventBody.config);
       const values = mockDb.values.mock.calls[0][0] as Record<string, unknown>;
       expect(values.config).toEqual(eventBody.config);
+    });
+
+    it("defaults includeMemories off when the create body omits it, and writes it when set", async () => {
+      stubAuthLookups();
+      mockDb.limit.mockResolvedValueOnce([{ id: "agent-1", workspaceId }]);
+      mockValidateCronExpression.mockReturnValueOnce(
+        new Date("2026-02-01T09:00:00Z"),
+      );
+      mockDb.returning.mockResolvedValueOnce([cronTrigger]);
+
+      const res = await app.request(baseUrl, {
+        method: "POST",
+        body: JSON.stringify(createBody),
+        headers: { "Content-Type": "application/json" },
+      });
+      expect(res.status).toBe(201);
+      const values = mockDb.values.mock.calls[0][0] as Record<string, unknown>;
+      expect(values.includeMemories).toBe(false);
+
+      resetMockDb();
+      vi.clearAllMocks();
+      mockDb.where.mockReturnValue(mockDb);
+      mockDb.limit.mockReturnValue(mockDb);
+      stubAuthLookups();
+      mockDb.limit.mockResolvedValueOnce([{ id: "agent-1", workspaceId }]);
+      mockValidateCronExpression.mockReturnValueOnce(
+        new Date("2026-02-01T09:00:00Z"),
+      );
+      mockDb.returning.mockResolvedValueOnce([
+        { ...cronTrigger, includeMemories: true },
+      ]);
+
+      const optedIn = await app.request(baseUrl, {
+        method: "POST",
+        body: JSON.stringify({ ...createBody, includeMemories: true }),
+        headers: { "Content-Type": "application/json" },
+      });
+      expect(optedIn.status).toBe(201);
+      const optedInValues = mockDb.values.mock.calls[0][0] as Record<
+        string,
+        unknown
+      >;
+      expect(optedInValues.includeMemories).toBe(true);
+      const body = (await optedIn.json()) as { includeMemories: boolean };
+      expect(body.includeMemories).toBe(true);
     });
 
     it("accepts a Shared agent attached to this workspace", async () => {
@@ -310,6 +356,28 @@ describe("Trigger Routes", () => {
       expect(res.status).toBe(200);
       const setArg = mockDb.set.mock.calls[0][0] as Record<string, unknown>;
       expect(setArg.nextRunAt).toBeNull();
+    });
+
+    it("round-trips includeMemories through an update", async () => {
+      stubAuthLookups();
+      mockDb.limit.mockResolvedValueOnce([cronTrigger]); // existing
+      mockValidateCronExpression.mockReturnValueOnce(
+        new Date("2026-02-02T09:00:00Z"),
+      );
+      mockDb.returning.mockResolvedValueOnce([
+        { ...cronTrigger, includeMemories: true },
+      ]);
+
+      const res = await app.request(`${baseUrl}/trig-1`, {
+        method: "PUT",
+        body: JSON.stringify({ includeMemories: true }),
+        headers: { "Content-Type": "application/json" },
+      });
+      expect(res.status).toBe(200);
+      const setArg = mockDb.set.mock.calls[0][0] as Record<string, unknown>;
+      expect(setArg.includeMemories).toBe(true);
+      const body = (await res.json()) as { includeMemories: boolean };
+      expect(body.includeMemories).toBe(true);
     });
   });
 

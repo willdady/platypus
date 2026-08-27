@@ -311,6 +311,70 @@ describe("createTriggerTools", () => {
       const setArg = mockDb.set.mock.calls[0][0] as Record<string, unknown>;
       expect(setArg.config).toEqual(newConfig);
     });
+
+    it("creates with includeMemories off unless the tool call opts in", async () => {
+      mockDb.limit.mockResolvedValue([{ id: "a1", workspaceId }]);
+      mockDb.returning.mockResolvedValue([{ id: "t1", name: "Daily" }]);
+
+      await tools.upsertTrigger.execute!(
+        {
+          label: "Daily",
+          name: "Daily",
+          agentId: "a1",
+          instruction: "Run daily",
+          type: "cron",
+          config: { cronExpression: "0 9 * * *" },
+        },
+        ctx,
+      );
+
+      let values = mockDb.values.mock.calls[0][0] as Record<string, unknown>;
+      expect(values.includeMemories).toBe(false);
+
+      vi.clearAllMocks();
+      resetMockDb();
+      mockDb.limit.mockResolvedValue([{ id: "a1", workspaceId }]);
+      mockDb.returning.mockResolvedValue([{ id: "t1", name: "Daily" }]);
+
+      await tools.upsertTrigger.execute!(
+        {
+          label: "Daily",
+          name: "Daily",
+          agentId: "a1",
+          instruction: "Run daily",
+          type: "cron",
+          config: { cronExpression: "0 9 * * *" },
+          includeMemories: true,
+        },
+        ctx,
+      );
+
+      values = mockDb.values.mock.calls[0][0] as Record<string, unknown>;
+      expect(values.includeMemories).toBe(true);
+    });
+
+    it("round-trips includeMemories through an update", async () => {
+      mockDb.limit.mockResolvedValue([
+        {
+          id: "t1",
+          agentId: "a1",
+          type: "cron",
+          config: { cronExpression: "0 9 * * *", timezone: "UTC" },
+        },
+      ]);
+      mockDb.returning.mockResolvedValue([
+        { id: "t1", name: "Daily", includeMemories: true },
+      ]);
+
+      const result = (await tools.upsertTrigger.execute!(
+        { triggerId: "t1", label: "Daily", includeMemories: true },
+        ctx,
+      )) as TriggerResult;
+
+      expect(result.success).toBe(true);
+      const setArg = mockDb.set.mock.calls[0][0] as Record<string, unknown>;
+      expect(setArg.includeMemories).toBe(true);
+    });
   });
 
   describe("deleteTrigger", () => {

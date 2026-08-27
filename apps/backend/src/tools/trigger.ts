@@ -203,6 +203,12 @@ export function createTriggerTools(
         .boolean()
         .optional()
         .describe("If true, enables web search for the LLM"),
+      includeMemories: z
+        .boolean()
+        .optional()
+        .describe(
+          "If true, the trigger's runs include the user's recent memory summaries in the system prompt. Defaults to false, so a run's prompt does not vary with unrelated chat activity.",
+        ),
     }),
     execute: async (params) => {
       const { triggerId, label: _label, ...fields } = params;
@@ -241,6 +247,7 @@ export function createTriggerTools(
             enabled: fields.enabled,
             maxRunsToKeep: fields.maxRunsToKeep,
             search: fields.search,
+            includeMemories: fields.includeMemories,
             config,
           });
 
@@ -298,6 +305,7 @@ export function createTriggerTools(
           enabled: fields.enabled ?? true,
           maxRunsToKeep: fields.maxRunsToKeep ?? 10,
           search: fields.search ?? false,
+          includeMemories: fields.includeMemories ?? false,
           config,
         });
 

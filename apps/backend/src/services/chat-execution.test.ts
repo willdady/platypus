@@ -365,6 +365,123 @@ describe("chat-execution", () => {
       await turnB.dispose();
     });
 
+    it("a run with memory injection off composes no <memories> block and issues no retrieval", async () => {
+      const day = new Date();
+      const memory = {
+        id: "m1",
+        userId: "user-1",
+        workspaceId: "ws-1",
+        summaryDate: "2026-04-29",
+        summary: "Likes coffee.",
+        embedding: null,
+        createdAt: day,
+        updatedAt: day,
+      };
+      const queries = createInMemoryChatTurnQueries({
+        workspaces: [baseWorkspace],
+        agents: [baseAgent],
+        providers: [baseProvider],
+        memories: [memory],
+      });
+      const calls: string[] = [];
+      const recording = {
+        ...queries,
+        getRecentMemories(userId: string, workspaceId: string, ref: Date) {
+          calls.push(userId);
+          return queries.getRecentMemories(userId, workspaceId, ref);
+        },
+      };
+
+      const turn = await prepareChatTurn(
+        {
+          ...baseInput,
+          request: { agentId: baseAgent.id },
+          includeMemories: false,
+        },
+        recording,
+      );
+
+      // Skipped, not fetched and discarded: the round trip is the point.
+      expect(calls).toEqual([]);
+      expect(turn.stream.system).not.toContain("<memories>");
+      expect(turn.stream.system).not.toContain("Likes coffee.");
+      await turn.dispose();
+    });
+
+    it("(control) the same run with memory injection left on retrieves and composes the block", async () => {
+      const day = new Date();
+      const memory = {
+        id: "m1",
+        userId: "user-1",
+        workspaceId: "ws-1",
+        summaryDate: "2026-04-29",
+        summary: "Likes coffee.",
+        embedding: null,
+        createdAt: day,
+        updatedAt: day,
+      };
+      const queries = createInMemoryChatTurnQueries({
+        workspaces: [baseWorkspace],
+        agents: [baseAgent],
+        providers: [baseProvider],
+        memories: [memory],
+      });
+      const calls: string[] = [];
+      const recording = {
+        ...queries,
+        getRecentMemories(userId: string, workspaceId: string, ref: Date) {
+          calls.push(userId);
+          return queries.getRecentMemories(userId, workspaceId, ref);
+        },
+      };
+
+      const turn = await prepareChatTurn(
+        {
+          ...baseInput,
+          request: { agentId: baseAgent.id },
+          includeMemories: true,
+        },
+        recording,
+      );
+
+      expect(calls).toEqual(["user-1"]);
+      expect(turn.stream.system).toContain("<memories>");
+      expect(turn.stream.system).toContain("Likes coffee.");
+      await turn.dispose();
+    });
+
+    it("a pinned interactive turn still wins over the flag: the pin is consumed verbatim", async () => {
+      const day = new Date();
+      const memory = {
+        id: "m1",
+        userId: "user-1",
+        workspaceId: "ws-1",
+        summaryDate: "2026-04-29",
+        summary: "Likes coffee.",
+        embedding: null,
+        createdAt: day,
+        updatedAt: day,
+      };
+      const queries = createInMemoryChatTurnQueries({
+        workspaces: [baseWorkspace],
+        agents: [baseAgent],
+        providers: [baseProvider],
+        memories: [memory],
+      });
+
+      const turn = await prepareChatTurn(
+        {
+          ...baseInput,
+          request: { agentId: baseAgent.id },
+          memorySnapshot: formatSummariesForSystemPrompt([memory]),
+        },
+        queries,
+      );
+
+      expect(turn.stream.system).toContain("Likes coffee.");
+      await turn.dispose();
+    });
+
     it("resolves an org-scoped (Shared) Skill referenced by the Agent only where attached", async () => {
       const agentWithSkill = { ...baseAgent, skillIds: ["org-skill-1"] };
       const orgSkill = {

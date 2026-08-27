@@ -52,10 +52,15 @@ function stubAcceptedSave() {
   return fetchMock;
 }
 
+/** The body the form put on the wire for the last save. */
+function savedBody(fetchMock: ReturnType<typeof vi.fn>) {
+  const [, init] = fetchMock.mock.calls.at(-1) as [string, RequestInit];
+  return JSON.parse(String(init.body));
+}
+
 /** The `config` the form put on the wire for the last save. */
 function savedConfig(fetchMock: ReturnType<typeof vi.fn>) {
-  const [, init] = fetchMock.mock.calls.at(-1) as [string, RequestInit];
-  return JSON.parse(String(init.body)).config;
+  return savedBody(fetchMock).config;
 }
 
 afterEach(() => {
@@ -155,5 +160,47 @@ describe("TriggerForm — changed-fields filter", () => {
       events: ["card.updated"],
       filters: { changedFields: ["assignees"] },
     });
+  });
+});
+
+describe("TriggerForm — Include Memories", () => {
+  it("keeps the control behind a collapsed Advanced settings panel and saves it off", async () => {
+    const fetchMock = stubAcceptedSave();
+    render(<TriggerForm orgId="org1" workspaceId="ws1" />);
+    await waitFor(() => expect(screen.getByText("Agent")).toBeInTheDocument());
+
+    // Collapsed by default, so the switch isn't reachable yet.
+    expect(screen.queryByLabelText(/Include Memories/)).toBeNull();
+
+    fireEvent.change(screen.getByLabelText("Name"), {
+      target: { value: "My Trigger" },
+    });
+    fireEvent.change(screen.getByLabelText("Instruction"), {
+      target: { value: "Do something" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /save/i }));
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    expect(savedBody(fetchMock).includeMemories).toBe(false);
+  });
+
+  it("saves the opt-in once Advanced settings is expanded and the switch turned on", async () => {
+    const fetchMock = stubAcceptedSave();
+    render(<TriggerForm orgId="org1" workspaceId="ws1" />);
+    await waitFor(() => expect(screen.getByText("Agent")).toBeInTheDocument());
+
+    fireEvent.click(screen.getByText("Advanced settings"));
+    fireEvent.click(screen.getByLabelText(/Include Memories/));
+
+    fireEvent.change(screen.getByLabelText("Name"), {
+      target: { value: "My Trigger" },
+    });
+    fireEvent.change(screen.getByLabelText("Instruction"), {
+      target: { value: "Do something" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /save/i }));
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    expect(savedBody(fetchMock).includeMemories).toBe(true);
   });
 });

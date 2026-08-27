@@ -65,3 +65,23 @@ back, and the "only way the model learns what the tools can reach" argument in
 Considered Options applies to that one tool. The guardrail guarantee is
 unchanged and still enforced in two places; on the sub-agent side that place is
 now called `createSubAgentDelegate`, in the same module.
+
+## Note: the Memories fragment after issue #645
+
+Fragment 7's emission condition as recorded above — "when retrieved Memories
+format to a non-empty block" — still reads true, and is qualified here rather
+than edited. A Trigger now carries `includeMemories`, default false, and a
+firing with it off retrieves nothing, so the block formats empty and the
+fragment is absent by the condition already stated. The retrieval is skipped
+rather than performed and discarded, which is a round trip saved, not a second
+emission rule.
+
+The Considered Option this ADR rejected is still rejected. `includeMemories` is a
+property of the **invocation**, not of an Agent: the same Agent invoked from a
+Chat composes the block and invoked from a Trigger does not, so no Agent row
+gains a suppression flag and no author gains per-fragment control. What the flag
+answers is ADR-0020's stability argument reaching an invocation that has no Chat
+to pin against — a Trigger's prompt would otherwise vary with interactive-chat
+activity unrelated to it. An **Agent**-level memories flag, or any control over
+the User, Workspace or Organization Context fragments, remains the option
+rejected above and would need its own amendment.

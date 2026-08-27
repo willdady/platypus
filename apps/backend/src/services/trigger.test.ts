@@ -30,6 +30,7 @@ const cronFields = (): TriggerCreateFields => ({
   enabled: true,
   maxRunsToKeep: 10,
   search: false,
+  includeMemories: false,
   config: { cronExpression: "0 9 * * *", timezone: "UTC", isOneOff: false },
 });
 
@@ -41,6 +42,7 @@ const eventFields = (): TriggerCreateFields => ({
   enabled: true,
   maxRunsToKeep: 10,
   search: false,
+  includeMemories: false,
   config: { events: ["card.created"] },
 });
 

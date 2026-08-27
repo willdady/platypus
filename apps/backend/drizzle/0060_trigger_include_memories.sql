@@ -1,0 +1,1 @@
+ALTER TABLE "trigger" ADD COLUMN "include_memories" boolean DEFAULT false NOT NULL;

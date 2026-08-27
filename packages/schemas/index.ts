@@ -1851,6 +1851,10 @@ export const triggerSchema = z.object({
   enabled: z.boolean().default(true),
   maxRunsToKeep: z.number().int().min(1).max(1000).default(50),
   search: z.boolean().default(false),
+  // Whether a firing composes the `<memories>` block. Off by default: a
+  // headless run should not have a system prompt that drifts with the
+  // Workspace User's unrelated interactive-chat activity.
+  includeMemories: z.boolean().default(false),
   config: z.union([cronTriggerConfigSchema, eventTriggerConfigSchema]),
   lastRunAt: z.date().nullable().optional(),
   nextRunAt: z.date().nullable().optional(),
@@ -1870,6 +1874,7 @@ export const triggerCreateSchema = triggerSchema.pick({
   enabled: true,
   maxRunsToKeep: true,
   search: true,
+  includeMemories: true,
   config: true,
 });
 
@@ -1882,6 +1887,7 @@ export const triggerUpdateSchema = triggerSchema
     maxRunsToKeep: true,
     agentId: true,
     search: true,
+    includeMemories: true,
     type: true,
     config: true,
   })

@@ -199,6 +199,17 @@ export type PrepareChatTurnInput = {
    */
   memoriesReferenceDate: Date;
   /**
+   * Whether this run composes a Memories block at all. Absent means yes, which
+   * is what every interactive Chat turn relies on. `false` is the Trigger
+   * opt-out (#645): the retrieval is not issued and no `<memories>` fragment is
+   * composed, so a headless run's prompt does not drift with interactive-chat
+   * activity that has nothing to do with it.
+   *
+   * Orthogonal to the `memory` tool set: an Agent holding `memorySearch` /
+   * `memoryGet` keeps them and can still retrieve deliberately.
+   */
+  includeMemories?: boolean;
+  /**
    * The run this turn belongs to. Sub-agent delegate tools built here register
    * their own runs as children of it, so a delegated run is cancellable and
    * subject to the same timeouts in its own right. Absent for callers that
@@ -598,6 +609,7 @@ export const prepareChatTurn = async (
       workspaceId,
       input.memorySnapshot,
       input.memoriesReferenceDate,
+      input.includeMemories,
     ),
     queries.getSandboxEnvKeys(workspaceId),
     resolveSearchTools(searchResolution, opened, provider, {
@@ -805,6 +817,11 @@ export const validateTurnAttachments = async (
  * reference date render a byte-identical prefix (ADR-0020). Returns the raw
  * summaries (the **turn** half); the caller folds them into the stable
  * `memoriesBlock` text.
+ *
+ * `includeMemories: false` is the third way to reach "no memories": the run
+ * opted out (a Trigger, #645), so the retrieval is skipped rather than
+ * performed and discarded. The pin still wins where both are supplied — a
+ * pinned turn retrieves nothing either way, and the renderer consumes the pin.
  */
 const resolveMemories = async (
   queries: ChatTurnQueries,
@@ -812,8 +829,10 @@ const resolveMemories = async (
   workspaceId: string,
   memorySnapshot: string | undefined,
   referenceDate: Date,
+  includeMemories: boolean | undefined,
 ): Promise<MemorySummary[]> => {
   if (memorySnapshot !== undefined) return [];
+  if (includeMemories === false) return [];
   return queries.getRecentMemories(userId, workspaceId, referenceDate);
 };
 
