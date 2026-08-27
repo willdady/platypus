@@ -365,6 +365,121 @@ describe("chat-execution", () => {
       await turnB.dispose();
     });
 
+    // The memory-injection opt-out (#645) asserts on the query seam as much as
+    // on the rendered prompt, so these three share one summary and one
+    // retrieval-recording wrapper around it.
+    const coffeeMemory = () => {
+      const day = new Date("2026-04-29T00:00:00Z");
+      return {
+        id: "m1",
+        userId: "user-1",
+        workspaceId: "ws-1",
+        summaryDate: "2026-04-29",
+        summary: "Likes coffee.",
+        embedding: null,
+        createdAt: day,
+        updatedAt: day,
+      };
+    };
+
+    /** Queries over one memory, plus the userIds `getRecentMemories` was asked for. */
+    const recordingMemoryQueries = () => {
+      const queries = createInMemoryChatTurnQueries({
+        workspaces: [baseWorkspace],
+        agents: [baseAgent],
+        providers: [baseProvider],
+        memories: [coffeeMemory()],
+      });
+      const retrievedFor: string[] = [];
+      return {
+        retrievedFor,
+        queries: {
+          ...queries,
+          getRecentMemories(userId: string, workspaceId: string, ref: Date) {
+            retrievedFor.push(userId);
+            return queries.getRecentMemories(userId, workspaceId, ref);
+          },
+        },
+      };
+    };
+
+    it("a run with memory injection off composes no <memories> block and issues no retrieval", async () => {
+      const { queries, retrievedFor } = recordingMemoryQueries();
+
+      const turn = await prepareChatTurn(
+        {
+          ...baseInput,
+          request: { agentId: baseAgent.id },
+          includeMemories: false,
+        },
+        queries,
+      );
+
+      // Skipped, not fetched and discarded: the round trip saved is the point.
+      expect(retrievedFor).toEqual([]);
+      expect(turn.stream.system).not.toContain("<memories>");
+      expect(turn.stream.system).not.toContain("Likes coffee.");
+      await turn.dispose();
+    });
+
+    it("(control) the same run with memory injection left on retrieves and composes the block", async () => {
+      const { queries, retrievedFor } = recordingMemoryQueries();
+
+      const turn = await prepareChatTurn(
+        {
+          ...baseInput,
+          request: { agentId: baseAgent.id },
+          includeMemories: true,
+        },
+        queries,
+      );
+
+      expect(retrievedFor).toEqual(["user-1"]);
+      expect(turn.stream.system).toContain("<memories>");
+      expect(turn.stream.system).toContain("Likes coffee.");
+      await turn.dispose();
+    });
+
+    it("the flag beats a pin: off composes no block even where a snapshot was supplied", async () => {
+      const { queries, retrievedFor } = recordingMemoryQueries();
+
+      // No caller does both today — a Chat never opts out, a Trigger never
+      // pins. Asserted anyway because it is what makes "off means no
+      // `<memories>`" true by construction rather than by convention: the flag
+      // decides whether a block is composed, the pin only what is in it.
+      const turn = await prepareChatTurn(
+        {
+          ...baseInput,
+          request: { agentId: baseAgent.id },
+          memorySnapshot: formatSummariesForSystemPrompt([coffeeMemory()]),
+          includeMemories: false,
+        },
+        queries,
+      );
+
+      expect(retrievedFor).toEqual([]);
+      expect(turn.stream.system).not.toContain("<memories>");
+      expect(turn.stream.system).not.toContain("Likes coffee.");
+      await turn.dispose();
+    });
+
+    it("a pin is still consumed verbatim when the flag is left alone", async () => {
+      const { queries, retrievedFor } = recordingMemoryQueries();
+
+      const turn = await prepareChatTurn(
+        {
+          ...baseInput,
+          request: { agentId: baseAgent.id },
+          memorySnapshot: formatSummariesForSystemPrompt([coffeeMemory()]),
+        },
+        queries,
+      );
+
+      expect(retrievedFor).toEqual([]);
+      expect(turn.stream.system).toContain("Likes coffee.");
+      await turn.dispose();
+    });
+
     it("resolves an org-scoped (Shared) Skill referenced by the Agent only where attached", async () => {
       const agentWithSkill = { ...baseAgent, skillIds: ["org-skill-1"] };
       const orgSkill = {

@@ -5,6 +5,7 @@ import { db } from "../index.ts";
 import {
   trigger as triggerTable,
   triggerRun as triggerRunTable,
+  user as userTable,
   workspace as workspaceTable,
 } from "../db/schema.ts";
 import { logger } from "../logger.ts";
@@ -72,12 +73,20 @@ export const executeTrigger = async (
   const { id, workspaceId, agentId, instruction } = trigger;
   const runId = nanoid();
 
-  // Workspace is fetched up-front to derive the run scope. The runner
-  // re-reads it for system-prompt context — at trigger volumes the extra
-  // round-trip is acceptable.
+  // Workspace is fetched up-front to derive the run scope, joined to its
+  // owner because the scope names the user the run acts on behalf of and that
+  // name lives on the user row. The join is inner: `ownerId` is a non-null FK
+  // under cascade delete, so a Workspace that loads always has an owner. The
+  // runner re-reads the Workspace for system-prompt context — at trigger
+  // volumes the extra round-trip is acceptable.
   const [workspace] = await db
-    .select()
+    .select({
+      organizationId: workspaceTable.organizationId,
+      ownerId: workspaceTable.ownerId,
+      ownerName: userTable.name,
+    })
     .from(workspaceTable)
+    .innerJoin(userTable, eq(userTable.id, workspaceTable.ownerId))
     .where(eq(workspaceTable.id, workspaceId))
     .limit(1);
 
@@ -92,7 +101,7 @@ export const executeTrigger = async (
     workspaceId,
     organizationId: workspace.organizationId,
     ownerUserId: workspace.ownerId,
-    ownerName: "Trigger User",
+    ownerName: workspace.ownerName,
   });
 
   const effectiveInstruction = eventContext
@@ -111,11 +120,15 @@ export const executeTrigger = async (
     runId,
     request: { agentId, search: trigger.search ?? undefined },
     messages,
-    // A headless run carries no Chat identity and so no pin: it renders the
-    // current Memories block, anchored to the moment this firing resolved
-    // (ADR-0020). Stamped once here rather than read inside turn preparation,
-    // so the reference date is an input the run can be replayed against.
+    // A headless run carries no Chat identity and so no pin: when it composes
+    // Memories at all it renders the current block, anchored to the moment this
+    // firing resolved (ADR-0020). Stamped once here rather than read inside turn
+    // preparation, so the reference date is an input the run can be replayed
+    // against.
     memoriesReferenceDate: new Date(),
+    // Off unless this Trigger opts in (#645), which is what keeps a firing's
+    // prompt from drifting with interactive-chat activity unrelated to it.
+    includeMemories: trigger.includeMemories,
   };
 
   const sink = new TriggerSink({

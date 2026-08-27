@@ -81,7 +81,9 @@ every move, whatever fields the control names. To act on a column change, use
 Set **Max Runs to Keep** (how many run records to retain), optionally enable
 **Web Search** (web search on the resolved Provider — its built-in tool, or a
 Web-search backend selected on it; see [Providers &
-models](/concepts/providers#web-search)), and leave **Enabled** on. Click save.
+models](/concepts/providers#web-search)), and leave **Enabled** on. Expand
+**Advanced settings** if the run needs your Memory summaries — see [Memories
+in a run](#memories-in-a-run). Click save.
 
 </Steps>
 
@@ -112,6 +114,32 @@ A few details worth knowing:
   whole step budget. (This guard is unattended-only; interactive Chats are never
   stopped this way.)
 - Older run records beyond **Max Runs to Keep** are pruned automatically.
+
+### Memories in a run
+
+A Trigger run does not carry your Memory summaries. **Advanced settings →
+Include Memories** on the Trigger adds them, and it is **off** by default.
+
+Off is the default because it keeps a firing repeatable. Summaries are written
+in the background from the Chats you hold elsewhere, so a Trigger with them on
+composes a different system prompt from one day to the next while its
+Instruction, its Agent and its cadence have not changed. Turn them on where the
+Instruction is about you — a daily briefing, a summary written in your voice —
+and leave them off for a narrow, repetitive job.
+
+<Callout type="warning">
+  Upgrading to this version turns Memories **off for every Trigger you already
+  have** — before it, every run carried them. A Trigger whose Instruction
+  quietly relied on a summary — "the project I mentioned", "my usual format" —
+  has nothing to read it from on its next firing, and the run does not fail, it
+  just answers differently. Turn **Include Memories** back on for those
+  Triggers, or write the fact into the Instruction where it belongs.
+</Callout>
+
+The control governs the summaries in the system prompt, nothing else. An Agent
+with the memory Tool set keeps `memorySearch` and `memoryGet` either way and can
+look a memory up during the run. See [Memory &
+context](/concepts/memory-and-context).
 
 ## Event payloads
 

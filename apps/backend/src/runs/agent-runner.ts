@@ -100,6 +100,7 @@ export class AgentRunner {
       messages: input.messages,
       memorySnapshot: input.memorySnapshot,
       memoriesReferenceDate: input.memoriesReferenceDate,
+      includeMemories: input.includeMemories,
       origin,
       frontendUrl,
       runMode: scope.principal.kind === "user" ? "interactive" : "headless",

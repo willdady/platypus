@@ -13,11 +13,16 @@ import { ExpandableTextarea } from "@/components/expandable-textarea";
 import { AgentAvatar } from "@/components/agent-avatar";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { useState, useMemo } from "react";
 import { useResetOnChange } from "@/hooks/use-reset-on-change";
 import { useRouter } from "next/navigation";
-import { Trash2 } from "lucide-react";
+import { ChevronsUpDown, Trash2 } from "lucide-react";
 import {
   Select,
   SelectContent,
@@ -291,9 +296,9 @@ const parseCronExpression = (
   return null;
 };
 
-// isOneOff, maxRunsToKeep, search, filterBoardId/filterColumnId, and enabled
-// are deliberately excluded: this form has no field that retracts an error
-// keyed to them.
+// isOneOff, maxRunsToKeep, search, includeMemories,
+// filterBoardId/filterColumnId, and enabled are deliberately excluded: this
+// form has no field that retracts an error keyed to them.
 const RETRACTABLE_FIELDS = [
   "name",
   "description",
@@ -384,8 +389,10 @@ const TriggerForm = ({
     enabled: true,
     maxRunsToKeep: 10,
     search: false,
+    includeMemories: false,
   });
 
+  const [isAdvancedOpen, setIsAdvancedOpen] = useState(false);
   const [scheduleMode, setScheduleMode] = useState<"simple" | "advanced">(
     "simple",
   );
@@ -433,6 +440,7 @@ const TriggerForm = ({
         enabled: trigger.enabled,
         maxRunsToKeep: trigger.maxRunsToKeep,
         search: trigger.search ?? false,
+        includeMemories: trigger.includeMemories ?? false,
       });
 
       if (trigger.type === "cron") {
@@ -559,6 +567,7 @@ const TriggerForm = ({
         enabled: formData.enabled,
         maxRunsToKeep: formData.maxRunsToKeep,
         search: formData.search,
+        includeMemories: formData.includeMemories,
       };
 
       const payload =
@@ -1206,6 +1215,48 @@ const TriggerForm = ({
               </div>
             </FieldLabel>
           </Field>
+
+          <Collapsible open={isAdvancedOpen} onOpenChange={setIsAdvancedOpen}>
+            <CollapsibleTrigger asChild>
+              <div className="flex text-sm justify-between items-center">
+                <span className="cursor-default">Advanced settings</span>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="cursor-pointer size-8"
+                >
+                  <ChevronsUpDown />
+                  <span className="sr-only">Toggle</span>
+                </Button>
+              </div>
+            </CollapsibleTrigger>
+            <CollapsibleContent>
+              <Field orientation="horizontal" className="pt-2">
+                <Switch
+                  id="includeMemories"
+                  className="cursor-pointer"
+                  checked={formData.includeMemories}
+                  onCheckedChange={(checked) =>
+                    setFormData((prev) => ({
+                      ...prev,
+                      includeMemories: checked,
+                    }))
+                  }
+                  disabled={isSubmitting}
+                />
+                <FieldLabel htmlFor="includeMemories">
+                  <div className="flex flex-col">
+                    <p>Include Memories</p>
+                    <p className="text-xs text-muted-foreground">
+                      Add your recent memory summaries to this trigger&apos;s
+                      system prompt. Off by default, so a run isn&apos;t
+                      influenced by chat activity unrelated to it.
+                    </p>
+                  </div>
+                </FieldLabel>
+              </Field>
+            </CollapsibleContent>
+          </Collapsible>
         </FieldGroup>
       </FieldSet>
 

@@ -112,6 +112,13 @@ export type RunInput = {
    * its pin; a headless run passes its own resolution moment.
    */
   memoriesReferenceDate: Date;
+  /**
+   * Whether this run composes a Memories block at all (#645). Absent means yes.
+   * A Trigger forwards its own opt-out here, exactly as it forwards `search`,
+   * so turn preparation decides from its inputs rather than re-reading the
+   * Trigger row.
+   */
+  includeMemories?: boolean;
 };
 
 /**

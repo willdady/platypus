@@ -696,6 +696,11 @@ export const trigger = pgTable(
     enabled: t.boolean("enabled").notNull().default(true),
     maxRunsToKeep: t.integer("max_runs_to_keep").notNull().default(10),
     search: t.boolean("search").notNull().default(false),
+    // Off by default, and deliberately not backfilled (#645): a headless run
+    // should not have a system prompt that drifts with interactive-chat
+    // activity unrelated to it. Existing Triggers stop composing the
+    // `<memories>` block when this column lands — the intended outcome.
+    includeMemories: t.boolean("include_memories").notNull().default(false),
     config: t.jsonb("config").notNull(),
     lastRunAt: t.timestamp("last_run_at"),
     nextRunAt: t.timestamp("next_run_at"),

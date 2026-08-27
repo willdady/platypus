@@ -51,14 +51,16 @@ type TriggerBaseFields = {
   enabled: boolean;
   maxRunsToKeep: number;
   search: boolean;
+  includeMemories: boolean;
   config: CronTriggerConfig | EventTriggerConfig;
 };
 
 /**
- * The fields a create carries. Defaults (`enabled`, `maxRunsToKeep`, `search`)
- * are the caller's responsibility to resolve first — the HTTP route gets them
- * from `triggerCreateSchema`'s own Zod defaults, the Tool applies its own
- * (intentionally different) defaults — this module only validates and writes.
+ * The fields a create carries. Defaults (`enabled`, `maxRunsToKeep`, `search`,
+ * `includeMemories`) are the caller's responsibility to resolve first — the HTTP
+ * route gets them from `triggerCreateSchema`'s own Zod defaults, the Tool
+ * applies its own (intentionally different) defaults — this module only
+ * validates and writes.
  */
 export type TriggerCreateFields = TriggerBaseFields;
 
@@ -146,6 +148,7 @@ export async function createTrigger(
       enabled: fields.enabled,
       maxRunsToKeep: fields.maxRunsToKeep,
       search: fields.search,
+      includeMemories: fields.includeMemories,
       config,
       nextRunAt,
     })
@@ -186,6 +189,8 @@ export async function updateTrigger(
   if (fields.maxRunsToKeep !== undefined)
     updateData.maxRunsToKeep = fields.maxRunsToKeep;
   if (fields.search !== undefined) updateData.search = fields.search;
+  if (fields.includeMemories !== undefined)
+    updateData.includeMemories = fields.includeMemories;
   if (fields.type !== undefined) updateData.type = fields.type;
 
   // `config`, when supplied, is set below alongside validation — normalized
