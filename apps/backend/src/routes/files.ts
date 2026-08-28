@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { eq, and } from "drizzle-orm";
 import { requireAuth } from "../middleware/authentication.ts";
 import { isSuperAdmin } from "../middleware/authorization.ts";
+import { assertValidStorageKey } from "../storage/keys.ts";
 import {
   organizationMember,
   workspace as workspaceTable,
@@ -48,6 +49,11 @@ files.get("/*", requireAuth, async (c) => {
   if (!key) {
     return c.json({ error: "File key required" }, 400);
   }
+
+  // The path is attacker-controlled and `c.req.path` is not percent-decoded,
+  // so reject anything Platypus could not have stored before it reaches a
+  // backend. Throws, so the `onError` seam answers 400 (ADR-0010).
+  assertValidStorageKey(key);
 
   // Parse org and workspace from the key
   const keyParts = parseStorageKey(key);

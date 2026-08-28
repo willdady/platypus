@@ -569,5 +569,132 @@ describe("Storage Utils", () => {
       const filePart = inlined[0].parts[0];
       expect((filePart as FileUIPart).url).toBe(storageUrl);
     });
+
+    // A File part's key round-trips through the client, so a Chat turn can
+    // carry a key Platypus never generated. Before validation, a traversal key
+    // read a host file and inlined its bytes into the System prompt.
+    it("should not inline a file reached by traversing out of the storage root", async () => {
+      const secretPath = path.join(tempDir, "..", "outside-secret.txt");
+      await fs.writeFile(secretPath, "SUPER_SECRET_VALUE");
+      await fs.writeFile(
+        `${secretPath}.meta`,
+        JSON.stringify({ contentType: "text/plain" }),
+      );
+
+      const traversalUrl = "storage://../outside-secret.txt";
+      const messages: PlatypusUIMessage[] = [
+        {
+          id: "msg-1",
+          role: "user",
+          parts: [{ type: "file", url: traversalUrl, mediaType: "text/plain" }],
+        },
+      ];
+
+      const inlined = await inlineFileUrls(messages, backendOrigin);
+
+      const filePart = inlined[0].parts[0] as FileUIPart;
+      expect(filePart.url).toBe(traversalUrl);
+      expect(filePart.url).not.toContain("data:");
+    });
+
+    it("should not inline a traversal key arriving in the HTTP URL form", async () => {
+      const secretPath = path.join(tempDir, "..", "outside-secret-http.txt");
+      await fs.writeFile(secretPath, "SUPER_SECRET_VALUE");
+      await fs.writeFile(
+        `${secretPath}.meta`,
+        JSON.stringify({ contentType: "text/plain" }),
+      );
+
+      const traversalUrl = `${backendOrigin}/files/../outside-secret-http.txt`;
+      const messages: PlatypusUIMessage[] = [
+        {
+          id: "msg-1",
+          role: "user",
+          parts: [{ type: "file", url: traversalUrl, mediaType: "text/plain" }],
+        },
+      ];
+
+      const inlined = await inlineFileUrls(messages, backendOrigin);
+
+      expect((inlined[0].parts[0] as FileUIPart).url).toBe(traversalUrl);
+    });
+  });
+
+  describe("extractFiles - untrusted message id", () => {
+    // `message.id` is the client's, and it lands mid-key. Before validation a
+    // message id of `../../x` filed the file outside its own Chat and
+    // Workspace prefix — the prefix `/files/*` parses back to authorize.
+    it("should not store a file under a key escaping its chat prefix", async () => {
+      const messages: PlatypusUIMessage[] = [
+        {
+          id: "../../pwned",
+          role: "user",
+          parts: [
+            { type: "file", url: createPngDataUrl(), mediaType: "image/png" },
+          ],
+        },
+      ];
+
+      const processed = await extractFiles(messages, {
+        orgId: "org-1",
+        workspaceId: "ws-1",
+        chatId: "chat-1",
+      });
+
+      // The data URL is left in place, exactly as for any other store failure.
+      expect((processed[0].parts[0] as FileUIPart).url).toBe(
+        createPngDataUrl(),
+      );
+      expect(await countPngFiles(tempDir)).toBe(0);
+    });
+
+    it("should store a file under a well-formed message id", async () => {
+      const messages: PlatypusUIMessage[] = [
+        {
+          id: "msg-1",
+          role: "user",
+          parts: [
+            { type: "file", url: createPngDataUrl(), mediaType: "image/png" },
+          ],
+        },
+      ];
+
+      const processed = await extractFiles(messages, {
+        orgId: "org-1",
+        workspaceId: "ws-1",
+        chatId: "chat-1",
+      });
+
+      expect((processed[0].parts[0] as FileUIPart).url).toMatch(
+        /^storage:\/\/org-1\/ws-1\/chat-1\/msg-1\/0-[0-9a-f]{8}\.png$/,
+      );
+    });
+  });
+
+  describe("extractStorageKeys - untrusted keys", () => {
+    it("should skip a traversal key so deletion never leaves the root", () => {
+      const messages: PlatypusUIMessage[] = [
+        {
+          id: "msg-1",
+          role: "user",
+          parts: [
+            {
+              type: "file",
+              url: "storage://../../etc/passwd",
+              mediaType: "text/plain",
+            },
+            {
+              type: "file",
+              url: "storage://org-1/ws-1/chat-1/msg-1/0-abc12345.png",
+              mediaType: "image/png",
+            },
+          ],
+        },
+      ];
+
+      expect(extractStorageKeys(messages)).toEqual([
+        "org-1/ws-1/chat-1/msg-1/0-abc12345.png",
+      ]);
+    });
   });
 });

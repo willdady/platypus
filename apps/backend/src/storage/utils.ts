@@ -3,6 +3,7 @@ import type { PlatypusUIMessage } from "../types.ts";
 import type { FileExtractionContext } from "./types.ts";
 import { getStorage } from "./index.ts";
 import { logger } from "../logger.ts";
+import { assertValidStorageKey, isValidStorageKey } from "./keys.ts";
 
 /**
  * Storage URL prefix used to identify storage references.
@@ -38,6 +39,13 @@ function getExtensionFromMimeType(mimeType: string): string {
 /**
  * Generate a storage key for a file.
  * Format: {orgId}/{workspaceId}/{chatId}/{messageId}/{partIndex}-{hash8}.{ext}
+ *
+ * `messageId` is the id the client put on the message, so the composed key is
+ * checked before it is returned: without that, a message id of `../../x` writes
+ * the file outside its own Chat and Workspace prefix — the prefix `/files/*`
+ * reads back to authorize. Throws rather than repairing the id, so the file is
+ * not quietly filed under a key that does not name where it came from; the
+ * caller already treats a failure here as "leave the data URL alone".
  */
 function generateStorageKey(
   context: FileExtractionContext,
@@ -47,7 +55,9 @@ function generateStorageKey(
 ): string {
   const hash8 = contentHash.slice(0, 8);
   const messageId = context.messageId || "unknown";
-  return `${context.orgId}/${context.workspaceId}/${context.chatId}/${messageId}/${partIndex}-${hash8}.${extension}`;
+  const key = `${context.orgId}/${context.workspaceId}/${context.chatId}/${messageId}/${partIndex}-${hash8}.${extension}`;
+  assertValidStorageKey(key);
+  return key;
 }
 
 /**
@@ -259,6 +269,23 @@ export function extractStorageKeys(messages: PlatypusUIMessage[]): string[] {
  * `rewriteStorageUrls` produces. Returns undefined when the URL is neither.
  */
 function storageKeyFromUrl(url: string): string | undefined {
+  const key = rawStorageKeyFromUrl(url);
+
+  // The URL came back from the client, so the key in it is untrusted. A key
+  // Platypus never generated names nothing it stored, so callers treat it the
+  // same as a URL that carried no key at all.
+  if (key === undefined || !isValidStorageKey(key)) {
+    return undefined;
+  }
+
+  return key;
+}
+
+/**
+ * Slice the key out of each URL form `rewriteStorageUrls` can produce, without
+ * judging it. Split out so {@link storageKeyFromUrl} has one place to validate.
+ */
+function rawStorageKeyFromUrl(url: string): string | undefined {
   if (url.startsWith(STORAGE_URL_PREFIX)) {
     return url.slice(STORAGE_URL_PREFIX.length);
   }
@@ -337,6 +364,18 @@ export async function inlineFileUrls(
           }
 
           if (!key) {
+            return part;
+          }
+
+          // The client returned this URL to us, so the key is untrusted: a
+          // traversal key here would otherwise read a host file and inline it
+          // into the System prompt. `normalizeFileParts` announces the part as
+          // unavailable, exactly as it does for a storage miss.
+          if (!isValidStorageKey(key)) {
+            logger.warn(
+              { key },
+              "Rejected invalid storage key during inlining",
+            );
             return part;
           }
 

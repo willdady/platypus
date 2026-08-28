@@ -46,6 +46,19 @@ describe("Files Routes", () => {
       expect(body.error).toBe("File key required");
     });
 
+    it.each([
+      ["percent-encoded traversal", "/files/..%2f..%2fetc%2fpasswd"],
+      ["percent-encoded dots", "/files/%2e%2e%2fsecret"],
+      ["backslash traversal", "/files/..%5c..%5cwindows%5cwin.ini"],
+    ])("should return 400 for a %s key", async (_label, url) => {
+      mockSession();
+      const res = await app.request(url);
+      expect(res.status).toBe(400);
+      const body = (await res.json()) as Record<string, unknown>;
+      expect(body.error).toBe("Invalid file key");
+      expect(mockStorageGet).not.toHaveBeenCalled();
+    });
+
     it("should return 400 for invalid key format with less than 2 segments", async () => {
       mockSession();
       const res = await app.request("/files/just-one-segment");
