@@ -57,6 +57,7 @@ import { clearedToolCallIds } from "@/lib/tool-result-clearing";
 import { ContextMeter } from "./context-meter";
 import { FileCompatibilityWarning } from "./file-compatibility-warning";
 import { useMessageEditing } from "@/hooks/use-message-editing";
+import { ATTACHMENTS_ONLY_TEXT } from "@/lib/message-parts";
 import { useChatTitlePoll } from "@/hooks/use-chat-title-poll";
 import { useChatUI } from "@/hooks/use-chat-ui";
 import { Dialog, DialogTrigger } from "./ui/dialog";
@@ -76,6 +77,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { ChatMessage } from "./chat-message";
+import { MessageEditor } from "./message-editor";
 import { ChatReconnectingNotice } from "./chat-reconnecting-notice";
 import { ModelSelectorDialog } from "./model-selector-dialog";
 import { toast } from "sonner";
@@ -347,20 +349,12 @@ export const Chat = ({
   }, [getRequestBody]);
 
   // Message editing hook (needs getRequestBody to be defined)
-  const messageEditing = useMessageEditing(
-    messages,
-    setMessages,
-    sendMessage,
-    getRequestBody,
-  );
   const {
-    editingMessageId,
-    editContent,
-    editTextareaRef,
+    editing,
     handleMessageEditStart,
     handleMessageEditCancel,
     handleMessageEditSubmit,
-  } = messageEditing;
+  } = useMessageEditing(messages, setMessages, sendMessage, getRequestBody);
 
   // Hydrate chat from persisted data on load (or when chatData changes).
   // We use a ref for status so that this effect only fires when chatData
@@ -561,7 +555,7 @@ export const Chat = ({
 
     sendMessage(
       {
-        text: message.text || "Sent with attachments",
+        text: message.text || ATTACHMENTS_ONLY_TEXT,
         files: message.files,
       },
       { body },
@@ -591,14 +585,33 @@ export const Chat = ({
                   message={message}
                   isLastMessage={messageIndex === messages.length - 1}
                   status={status}
-                  isEditing={editingMessageId === message.id}
-                  editContent={editContent}
-                  editTextareaRef={editTextareaRef}
+                  canSendMessages={canSendMessages}
+                  editor={
+                    editing?.messageId === message.id ? (
+                      <MessageEditor
+                        // Remounted per message, so the surface reseeds from
+                        // the message it was opened on rather than carrying
+                        // the last one's text and attachments over.
+                        key={editing.messageId}
+                        initialText={editing.text}
+                        initialAttachments={editing.attachments}
+                        agents={agents}
+                        providers={providers}
+                        agentId={agentId}
+                        modelId={modelId}
+                        providerId={providerId}
+                        onModelChange={handleModelChange}
+                        maxOutputTokens={resolvedModel?.maxOutputTokens}
+                        passthroughFileTypes={
+                          resolvedModel?.passthroughFileTypes ?? []
+                        }
+                        onSubmit={handleMessageEditSubmit}
+                        onCancel={handleMessageEditCancel}
+                      />
+                    ) : undefined
+                  }
                   agents={agents}
-                  setEditContent={messageEditing.setEditContent}
                   onEditStart={handleMessageEditStart}
-                  onEditCancel={handleMessageEditCancel}
-                  onEditSubmit={handleMessageEditSubmit}
                   onMessageDelete={handleMessageDelete}
                   onRegenerate={handleRegenerate}
                   onCopyMessage={handleCopyMessage}

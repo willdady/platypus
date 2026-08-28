@@ -52,8 +52,8 @@ jobs:
 
   # Source-level type gate (`tsc --noEmit`). ESLint does not surface type errors,
   # so without this a strict-tsconfig violation can land on main unnoticed
-  # (see #233). Currently covers @platypus/backend; other packages join by
-  # adding their own `typecheck` script.
+  # (see #233). Covers every package exposing a `typecheck` script, test files
+  # included; others join by adding one.
   typecheck:
     if: ${{ !startsWith(github.head_ref, 'release-please--') }}
     runs-on: ubuntu-latest

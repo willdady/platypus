@@ -111,6 +111,9 @@ a Provider uses is in [Providers & models](/concepts/providers#web-search).
 
 A microphone button next to it transcribes speech into the input box. The text
 lands in the box rather than sending, so you can edit before pressing **Enter**.
+The same button is in the box you get when [rewriting a
+message](#rewriting-a-message), and it writes into that message rather than into
+the one below.
 
 ## How long a Tool took
 
@@ -297,21 +300,47 @@ above.
 
 Hover a message for its actions:
 
-| Action         | On                       | Does                                                                |
-| -------------- | ------------------------ | ------------------------------------------------------------------- |
-| **Edit**       | Your own messages        | Rewrites the message and re-runs from there — see the warning below |
-| **Copy**       | Any message              | Copies the message text to the clipboard                            |
-| **Delete**     | Any message              | Removes it from the view                                            |
-| **Regenerate** | The last assistant reply | Runs the turn again, same message, fresh response                   |
+| Action         | On                       | Does                                              |
+| -------------- | ------------------------ | ------------------------------------------------- |
+| **Edit**       | Your own messages        | Reopens the message for rewriting — see below     |
+| **Copy**       | Any message              | Copies the message text to the clipboard          |
+| **Delete**     | Any message              | Removes it from the view                          |
+| **Regenerate** | The last assistant reply | Runs the turn again, same message, fresh response |
 
-The actions are hidden while the last reply is still streaming.
+The actions are hidden while the last reply is still streaming. **Edit**,
+**Delete** and **Regenerate** are absent entirely if you cannot send messages in
+this Chat — see [Sharing a Chat](#sharing-a-chat). **Copy** stays.
+
+### Rewriting a message
+
+**Edit** reopens the message in a prompt input holding everything it carried:
+the text, selected so typing replaces it, and the files attached to it. It works
+like the one at the bottom of the screen — attach more files, remove the ones
+that are there, dictate into it, pick a different model.
+
+On a full-width screen **Enter** saves and **Shift+Enter** adds a line; on a
+narrow one Enter adds a line and the send button saves, the same as the input
+below. **Escape** cancels, and so does the **✕** beside the send button.
+
+The box carries a model picker, and it is the picker that matters: an edit
+re-runs on whatever this Chat is set to **now**, not on the model that answered
+the first time. Change the picker earlier in the session and the edit goes to
+the new selection. Read the picker in the box before saving, and change it there
+if that isn't what you want — it changes the Chat's selection too.
 
 <Callout type="warning">
-  **Edit discards everything after the message you edited.** Submitting the edit
-  drops that message and every message below it, then sends your new text as a
-  fresh turn. That is usually what you want — you're correcting a wrong turn and
-  re-running from there — but there is no undo, so an edit near the top of a
-  long conversation throws away the rest of it.
+  **Edit discards everything after the message you edited.** Saving the edit
+  drops that message and every message below it, then sends the rewritten
+  message as a fresh turn. That is usually what you want — you're correcting a
+  wrong turn and re-running from there — but there is no undo, so an edit near
+  the top of a long conversation throws away the rest of it.
+</Callout>
+
+<Callout type="warning">
+  **A file you remove while editing is gone from the resubmitted message.** The
+  attachments in the box are what the new turn is sent with, so removing one and
+  saving asks the model the same question without it. If you only wanted to
+  reword the question, leave the files alone.
 </Callout>
 
 <Callout type="warning">
@@ -437,8 +466,15 @@ raise it.
 
 Chats belong to the Workspace Owner. Anyone else who can reach the Chat sees it
 read-only: the input is replaced with a note saying only the Workspace Owner can
-send messages. They can read the whole conversation, including tool calls; they
-cannot continue it.
+send messages, and the per-message **Edit**, **Delete** and **Regenerate**
+actions are not offered. They can read the whole conversation, including tool
+calls, and copy from it; they cannot change it or continue it.
+
+<Callout type="info">
+  This includes an Org Admin and an Operator. Reaching a Workspace's Chats and
+  writing to them are separate things: the Chat is the Owner's conversation, and
+  everyone else reads it.
+</Callout>
 
 ## Where to next
 

@@ -38,17 +38,14 @@ import {
   type ChatStatus,
 } from "ai";
 import { Agent, isPresentableUrl } from "@platypus/schemas";
-import { isImageAttachment } from "@/lib/message-parts";
+import { isImageAttachment, messageText } from "@/lib/message-parts";
 import {
   BotIcon,
-  CheckIcon,
   PencilIcon,
   CopyIcon,
   TrashIcon,
   RefreshCwIcon,
-  XIcon,
 } from "lucide-react";
-import { Textarea } from "./ui/textarea";
 import { toolCallDurationMs } from "@/lib/tool-duration";
 import { ResponseMetricsPopover } from "./response-metrics-popover";
 import { TurnNotice } from "./turn-notice";
@@ -148,22 +145,22 @@ interface ChatMessageProps {
   isLastMessage: boolean;
   /** Current chat status from useChat hook */
   status: ChatStatus;
-  /** Whether this message is currently being edited */
-  isEditing: boolean;
-  /** Current content of the message being edited */
-  editContent: string;
-  /** Ref to the textarea element for editing */
-  editTextareaRef: React.RefObject<HTMLTextAreaElement | null>;
+  /**
+   * Whether the reader may write to this Chat — the same condition that gates
+   * the composer. Every action that changes the transcript hangs off it; Copy
+   * and the metrics popover do not (issue #710).
+   */
+  canSendMessages: boolean;
+  /**
+   * The edit surface for this message, when it is the one being edited. It
+   * replaces the message entirely — its parts, its attachments and its action
+   * bar — because the surface shows all three itself.
+   */
+  editor?: ReactNode;
   /** Available agents for resolving avatars */
   agents: Agent[];
-  /** Callback to update the edit content */
-  setEditContent: (content: string) => void;
   /** Callback when user starts editing a message */
-  onEditStart: (messageId: string, content: string) => void;
-  /** Callback when user cancels editing */
-  onEditCancel: () => void;
-  /** Callback when user submits edited message */
-  onEditSubmit: () => void;
+  onEditStart: (messageId: string) => void;
   /** Callback when user deletes a message */
   onMessageDelete: (messageId: string) => void;
   /** Callback when user regenerates the last assistant message */
@@ -185,20 +182,27 @@ export const ChatMessage = memo(function ChatMessage({
   message,
   isLastMessage,
   status,
-  isEditing,
-  editContent,
-  editTextareaRef,
+  canSendMessages,
+  editor,
   agents,
-  setEditContent,
   onEditStart,
-  onEditCancel,
-  onEditSubmit,
   onMessageDelete,
   onRegenerate,
   onCopyMessage,
   copiedMessageId,
   staleToolCallIds,
 }: ChatMessageProps) {
+  // An edit takes the message's place rather than sitting inside it: the
+  // surface holds the text, the attachments and its own Save/Cancel, so
+  // rendering the stored parts alongside it would show each of those twice.
+  if (editor) {
+    return (
+      <div key={message.id} className="w-full">
+        {editor}
+      </div>
+    );
+  }
+
   const messageAgentId = message.metadata?.agentId;
   const messageAgent = messageAgentId
     ? agents.find((a) => a.id === messageAgentId)
@@ -255,11 +259,7 @@ export const ChatMessage = memo(function ChatMessage({
   const sourceCount =
     (nativeSourceParts?.length ?? 0) + pluginSearchSources.length;
 
-  const textContent =
-    message.parts
-      ?.filter((part): part is TextUIPart => part.type === "text")
-      .map((part) => part.text)
-      .join("") || "";
+  const textContent = messageText(message.parts);
 
   // Each entry's `matches` is mutually exclusive with every other entry's by
   // construction (see `isGenericToolPart`), so this list can be extended or
@@ -270,30 +270,6 @@ export const ChatMessage = memo(function ChatMessage({
       matches: (part) => part.type === "text",
       render: (part, i) => {
         const textPart = part as TextUIPart;
-        if (isEditing) {
-          const isFirstTextPart =
-            i === (message.parts ?? []).findIndex((p) => p.type === "text");
-          if (!isFirstTextPart) return null;
-
-          return (
-            <Message
-              key={`${message.id}-${i}`}
-              from={message.role}
-              avatar={assistantAvatar}
-            >
-              <MessageContent className="max-w-full">
-                <Textarea
-                  ref={editTextareaRef}
-                  value={editContent}
-                  onChange={(e) => setEditContent(e.target.value)}
-                  className="min-h-[100px]"
-                  autoFocus
-                />
-              </MessageContent>
-            </Message>
-          );
-        }
-
         return (
           <Message
             key={`${message.id}-${i}`}
@@ -496,58 +472,42 @@ export const ChatMessage = memo(function ChatMessage({
           )}
         </>
       )}
-      {!(isLastMessage && status === "streaming") &&
-        (isEditing ? (
-          <MessageActions className="justify-end">
+      {!(isLastMessage && status === "streaming") && (
+        <MessageActions
+          className={message.role === "user" ? "justify-end" : "pl-8"}
+        >
+          {message.role === "assistant" && (
+            // Leftmost, before Copy, and deliberately not adjacent to
+            // Delete — a frequently-poked new control beside an
+            // undoable action invites mis-clicks (issue #354).
+            <ResponseMetricsPopover metadata={message.metadata} />
+          )}
+          {/* Edit, Delete and Regenerate all change the transcript, so all
+          three hang off the same condition as the composer. Delete is the one
+          that made the gap visible: it mutates the local transcript with no
+          server call to refuse it, so an ungated button was a real write for
+          anyone who could reach the Chat (issue #710). */}
+          {canSendMessages && message.role === "user" && (
             <MessageAction
               className="cursor-pointer text-muted-foreground"
-              onClick={onEditSubmit}
+              onClick={() => onEditStart(message.id)}
               variant="ghost"
               size="icon"
-              label="Save"
+              label="Edit"
             >
-              <CheckIcon className="size-4" />
+              <PencilIcon className="size-4" />
             </MessageAction>
-            <MessageAction
-              className="cursor-pointer text-muted-foreground"
-              onClick={onEditCancel}
-              variant="ghost"
-              size="icon"
-              label="Cancel"
-            >
-              <XIcon className="size-4" />
-            </MessageAction>
-          </MessageActions>
-        ) : (
-          <MessageActions
-            className={message.role === "user" ? "justify-end" : "pl-8"}
+          )}
+          <MessageAction
+            className="cursor-pointer text-muted-foreground"
+            onClick={() => onCopyMessage(textContent, message.id)}
+            variant={copiedMessageId === message.id ? "secondary" : "ghost"}
+            size="icon"
+            label="Copy"
           >
-            {message.role === "assistant" && (
-              // Leftmost, before Copy, and deliberately not adjacent to
-              // Delete — a frequently-poked new control beside an
-              // undoable action invites mis-clicks (issue #354).
-              <ResponseMetricsPopover metadata={message.metadata} />
-            )}
-            {message.role === "user" && (
-              <MessageAction
-                className="cursor-pointer text-muted-foreground"
-                onClick={() => onEditStart(message.id, textContent)}
-                variant="ghost"
-                size="icon"
-                label="Edit"
-              >
-                <PencilIcon className="size-4" />
-              </MessageAction>
-            )}
-            <MessageAction
-              className="cursor-pointer text-muted-foreground"
-              onClick={() => onCopyMessage(textContent, message.id)}
-              variant={copiedMessageId === message.id ? "secondary" : "ghost"}
-              size="icon"
-              label="Copy"
-            >
-              <CopyIcon className="size-4" />
-            </MessageAction>
+            <CopyIcon className="size-4" />
+          </MessageAction>
+          {canSendMessages && (
             <MessageAction
               className="cursor-pointer text-muted-foreground"
               onClick={() => onMessageDelete(message.id)}
@@ -557,19 +517,20 @@ export const ChatMessage = memo(function ChatMessage({
             >
               <TrashIcon className="size-4" />
             </MessageAction>
-            {message.role === "assistant" && isLastMessage && (
-              <MessageAction
-                className="cursor-pointer text-muted-foreground"
-                onClick={onRegenerate}
-                variant="ghost"
-                size="icon"
-                label="Regenerate"
-              >
-                <RefreshCwIcon className="size-4" />
-              </MessageAction>
-            )}
-          </MessageActions>
-        ))}
+          )}
+          {canSendMessages && message.role === "assistant" && isLastMessage && (
+            <MessageAction
+              className="cursor-pointer text-muted-foreground"
+              onClick={onRegenerate}
+              variant="ghost"
+              size="icon"
+              label="Regenerate"
+            >
+              <RefreshCwIcon className="size-4" />
+            </MessageAction>
+          )}
+        </MessageActions>
+      )}
     </Fragment>
   );
 });

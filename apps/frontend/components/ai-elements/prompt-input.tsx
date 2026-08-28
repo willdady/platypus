@@ -265,6 +265,14 @@ export type PromptInputProps = Omit<
 > & {
   accept?: string; // e.g., "image/*", ".pdf", or a comma-separated list of either
   multiple?: boolean;
+  /**
+   * Parts the input opens holding, for a surface editing a message that already
+   * carries attachments (issue #710). Read once, on mount: after that the list
+   * is the user's, so a later change to this prop leaves it alone. Persisted
+   * parts carry a fetchable URL rather than a `blob:` one, so they pass through
+   * submit untouched.
+   */
+  initialAttachments?: FileUIPart[];
   // When true, accepts drops anywhere on document. Default false (opt-in).
   globalDrop?: boolean;
   // Minimal constraints
@@ -284,6 +292,7 @@ export const PromptInput = ({
   className,
   accept,
   multiple,
+  initialAttachments,
   globalDrop,
   maxFiles,
   maxFileSize,
@@ -294,18 +303,17 @@ export const PromptInput = ({
 }: PromptInputProps) => {
   // Refs
   const inputRef = useRef<HTMLInputElement | null>(null);
-  const anchorRef = useRef<HTMLSpanElement>(null);
+  // Held on the form element itself. It used to be resolved by walking up from
+  // a hidden anchor span with `closest("form")` — but that span renders as a
+  // SIBLING of the form, so the walk found nothing and the form-scoped drop
+  // below never bound. Harmless while one input on the page claimed the
+  // window-level drop; with a second, inline input (issue #710) a file dropped
+  // on that one landed in the other.
   const formRef = useRef<HTMLFormElement | null>(null);
 
-  // Find nearest form to scope drag & drop
-  useEffect(() => {
-    const root = anchorRef.current?.closest("form");
-    if (root instanceof HTMLFormElement) {
-      formRef.current = root;
-    }
-  }, []);
-
-  const [files, setItems] = useState<(FileUIPart & { id: string })[]>([]);
+  const [files, setItems] = useState<(FileUIPart & { id: string })[]>(() =>
+    (initialAttachments ?? []).map((part) => ({ ...part, id: nanoid() })),
+  );
 
   const openFileDialog = useCallback(() => {
     inputRef.current?.click();
@@ -393,7 +401,7 @@ export const PromptInput = ({
     });
   }, []);
 
-  // Attach drop handlers on nearest form and document (opt-in)
+  // Attach drop handlers on this input's own form and document (opt-in)
   useEffect(() => {
     const form = formRef.current;
     if (!form) return;
@@ -407,6 +415,11 @@ export const PromptInput = ({
       if (e.dataTransfer?.types?.includes("Files")) {
         e.preventDefault();
       }
+      // A drop that landed on this input is this input's, so it stops here
+      // rather than bubbling on to a window-level listener — which belongs to
+      // whichever OTHER input on the page set `globalDrop`, and would take the
+      // same file a second time.
+      e.stopPropagation();
       if (e.dataTransfer?.files && e.dataTransfer.files.length > 0) {
         add(e.dataTransfer.files);
       }
@@ -524,7 +537,6 @@ export const PromptInput = ({
 
   return (
     <PromptInputAttachmentsContext.Provider value={ctx}>
-      <span aria-hidden="true" className="hidden" ref={anchorRef} />
       <input
         accept={accept}
         aria-label="Upload files"
@@ -538,6 +550,7 @@ export const PromptInput = ({
       <form
         className={cn("w-full", className)}
         onSubmit={handleSubmit}
+        ref={formRef}
         {...props}
       >
         <InputGroup className="overflow-hidden">{children}</InputGroup>
@@ -565,6 +578,7 @@ export const PromptInputTextarea = ({
   className,
   placeholder = "What would you like to know?",
   status,
+  onKeyDown,
   ...props
 }: PromptInputTextareaProps) => {
   const attachments = usePromptInputAttachments();
@@ -572,6 +586,15 @@ export const PromptInputTextarea = ({
   const isMobile = useIsMobile();
 
   const handleKeyDown: KeyboardEventHandler<HTMLTextAreaElement> = (e) => {
+    // A caller's handler runs first and claims the key by preventing the
+    // default — Escape cancelling an inline edit, say (issue #710). Leaving
+    // `onKeyDown` in the spread below would replace this handler outright
+    // instead, taking Enter-to-submit and Backspace-removes-attachment with it.
+    onKeyDown?.(e);
+    if (e.defaultPrevented) {
+      return;
+    }
+
     if (e.key === "Enter") {
       if (isComposing || e.nativeEvent.isComposing) {
         return;

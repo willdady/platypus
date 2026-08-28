@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import { render } from "@testing-library/react";
-import type { ChatStatus } from "ai";
+import { render, screen, fireEvent } from "@testing-library/react";
+import type { ChatStatus, FileUIPart } from "ai";
 import type { PlatypusUIMessage } from "@platypus/backend/src/types";
 
 /**
@@ -139,7 +139,59 @@ vi.mock("@/components/ai-elements/prompt-input", () => ({
   ),
 }));
 
-vi.mock("./chat-message", () => ({ ChatMessage: () => null }));
+// Stubbed to the edit seam: an Edit button per message, and whatever edit
+// surface the Chat hands down for the one being edited. The transcript itself
+// is `chat-message`'s own test's business.
+vi.mock("./chat-message", () => ({
+  ChatMessage: ({
+    message,
+    editor,
+    onEditStart,
+  }: {
+    message: PlatypusUIMessage;
+    editor?: React.ReactNode;
+    onEditStart: (messageId: string) => void;
+  }) => (
+    <div>
+      {editor ?? (
+        <button type="button" onClick={() => onEditStart(message.id)}>
+          Edit {message.id}
+        </button>
+      )}
+    </div>
+  ),
+}));
+
+// Stubbed to what the Chat hands the edit surface, and to the one thing the
+// surface hands back: the whole message, attachments included.
+vi.mock("./message-editor", () => ({
+  MessageEditor: ({
+    initialText,
+    initialAttachments,
+    onSubmit,
+  }: {
+    initialText: string;
+    initialAttachments: FileUIPart[];
+    onSubmit: (message: { text: string; files: FileUIPart[] }) => void;
+  }) => (
+    <div data-testid="editor" data-text={initialText}>
+      {initialAttachments.map((file) => (
+        <span key={file.url}>{file.filename}</span>
+      ))}
+      <button
+        type="button"
+        onClick={() =>
+          onSubmit({
+            text: `${initialText} (edited)`,
+            files: initialAttachments,
+          })
+        }
+      >
+        Save
+      </button>
+    </div>
+  ),
+}));
 vi.mock("./context-meter", () => ({ ContextMeter: () => null }));
 vi.mock("./file-compatibility-warning", () => ({
   FileCompatibilityWarning: () => null,
@@ -474,5 +526,90 @@ describe("holding the composer", () => {
     const { getByTestId } = renderThrough(...DROPPED);
 
     expect(getByTestId("submit")).toHaveAttribute("data-status", "error");
+  });
+});
+
+/**
+ * The wiring an edit runs through (issue #710). The pieces have their own
+ * tests; what those cannot see is whether the Chat actually hands the edit
+ * surface the message's parts and resubmits what comes back. The original
+ * defect was exactly here: the surface was handed a string, so a message with
+ * a file resubmitted without it.
+ */
+describe("editing a message", () => {
+  const report: FileUIPart = {
+    type: "file",
+    url: "https://files.example.com/report.pdf",
+    mediaType: "application/pdf",
+    filename: "report.pdf",
+  };
+
+  const withAttachment = (): PlatypusUIMessage =>
+    ({
+      id: "u1",
+      role: "user",
+      parts: [report, { type: "text", text: "What does this say?" }],
+    }) as PlatypusUIMessage;
+
+  const openEditOn = (id: string) => {
+    renderChat();
+    fireEvent.click(screen.getByRole("button", { name: `Edit ${id}` }));
+  };
+
+  it("opens the edit surface on the message's text and attachments", () => {
+    harness.turn.messages = [withAttachment()];
+
+    openEditOn("u1");
+
+    expect(screen.getByTestId("editor")).toHaveAttribute(
+      "data-text",
+      "What does this say?",
+    );
+    expect(screen.getByText("report.pdf")).toBeInTheDocument();
+  });
+
+  it("resubmits the edit with its attachments and the current request body", () => {
+    harness.turn.messages = [withAttachment()];
+
+    openEditOn("u1");
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    expect(harness.sendMessage).toHaveBeenCalledWith(
+      { text: "What does this say? (edited)", files: [report] },
+      { body: expect.objectContaining({ providerId: expect.anything() }) },
+    );
+  });
+
+  it("truncates the transcript at the edited message", () => {
+    harness.turn.messages = [
+      withAttachment(),
+      message("a1", "It says X."),
+      message("u2", "And this?"),
+    ];
+
+    openEditOn("u2");
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    expect(harness.setMessages).toHaveBeenCalledWith(
+      harness.turn.messages.slice(0, 2),
+    );
+  });
+
+  it("closes the surface once the edit is sent", () => {
+    harness.turn.messages = [withAttachment()];
+
+    openEditOn("u1");
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    expect(screen.queryByTestId("editor")).toBeNull();
+  });
+
+  it("edits one message at a time", () => {
+    harness.turn.messages = [withAttachment(), message("u2", "And this?")];
+
+    openEditOn("u1");
+
+    expect(screen.getAllByTestId("editor")).toHaveLength(1);
+    expect(screen.getByRole("button", { name: "Edit u2" })).toBeInTheDocument();
   });
 });

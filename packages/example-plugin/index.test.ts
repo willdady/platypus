@@ -59,7 +59,7 @@ describe("@platypus-examples/tool-set", () => {
     const tools = await resolveTools();
     const result = await tools.greet.execute!(
       { name: "Ada" },
-      { toolCallId: "t1", messages: [] },
+      { toolCallId: "t1", messages: [], context: {} },
     );
     expect(result).toContain("Ada");
   });

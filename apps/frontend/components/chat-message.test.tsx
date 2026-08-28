@@ -42,24 +42,23 @@ const assistantMessage = (
   parts: [{ type: "text", text: "Hello" }],
 });
 
-function renderMessage(message: PlatypusUIMessage) {
+function renderMessage(
+  message: PlatypusUIMessage,
+  overrides: Partial<React.ComponentProps<typeof ChatMessage>> = {},
+) {
   return render(
     <ChatMessage
       message={message}
       isLastMessage
       status="ready"
-      isEditing={false}
-      editContent=""
-      editTextareaRef={{ current: null }}
+      canSendMessages
       agents={agents}
-      setEditContent={vi.fn()}
       onEditStart={vi.fn()}
-      onEditCancel={vi.fn()}
-      onEditSubmit={vi.fn()}
       onMessageDelete={vi.fn()}
       onRegenerate={vi.fn()}
       onCopyMessage={vi.fn()}
       copiedMessageId={null}
+      {...overrides}
     />,
   );
 }
@@ -923,5 +922,100 @@ describe("ChatMessage tool duration", () => {
     renderMessage(withToolPart(staticToolPart({ durationMs: 1234 })));
 
     expect(screen.getByText(/1\.2s/).textContent).toBe(live);
+  });
+});
+
+const userMessage = (): PlatypusUIMessage => ({
+  id: "u1",
+  role: "user",
+  parts: [{ type: "text", text: "Ask" }],
+});
+
+/**
+ * Sending is workspace ownership, and until issue #710 the client gated only
+ * the composer on it. The action bar was ungated, so an Org Admin or Operator
+ * reading someone else's Chat got Edit, Delete and Regenerate — and Delete
+ * mutated their transcript with no server call to refuse it.
+ */
+describe("ChatMessage action bar permissions", () => {
+  it("offers Edit, Delete and Copy on a user message to someone who can send", () => {
+    renderMessage(userMessage());
+
+    for (const action of ["Edit", "Delete", "Copy"]) {
+      expect(screen.getByRole("button", { name: action })).toBeInTheDocument();
+    }
+  });
+
+  it("offers Regenerate on the last reply to someone who can send", () => {
+    renderMessage(assistantMessage());
+
+    expect(
+      screen.getByRole("button", { name: "Regenerate" }),
+    ).toBeInTheDocument();
+  });
+
+  it.each([
+    ["a user message", userMessage()],
+    ["an assistant reply", assistantMessage()],
+  ])("withholds every write action on %s from a reader", (_, message) => {
+    renderMessage(message, { canSendMessages: false });
+
+    for (const action of ["Edit", "Delete", "Regenerate"]) {
+      expect(screen.queryByRole("button", { name: action })).toBeNull();
+    }
+  });
+
+  // Reading is not writing: Copy takes nothing away from the Chat.
+  it("still offers Copy to a reader", () => {
+    renderMessage(userMessage(), { canSendMessages: false });
+
+    expect(screen.getByRole("button", { name: "Copy" })).toBeInTheDocument();
+  });
+});
+
+describe("ChatMessage while editing", () => {
+  const editing = { editor: <div data-testid="editor">editing</div> };
+
+  it("renders the edit surface in the message's place", () => {
+    renderMessage(userMessage(), editing);
+
+    expect(screen.getByTestId("editor")).toBeInTheDocument();
+    expect(screen.queryByText("Ask")).toBeNull();
+  });
+
+  // The edit surface carries its own Save and Cancel; the message's own
+  // actions would act on a message that is no longer on screen.
+  it("withholds the message's own actions", () => {
+    renderMessage(userMessage(), editing);
+
+    for (const action of ["Edit", "Copy", "Delete"]) {
+      expect(screen.queryByRole("button", { name: action })).toBeNull();
+    }
+  });
+
+  // A message being edited shows its attachments inside the edit surface, not
+  // above it — the transcript's copy would be a second, unremovable list.
+  it("withholds the attachments the transcript would show", () => {
+    const withImage: PlatypusUIMessage = {
+      id: "u1",
+      role: "user",
+      parts: [
+        {
+          type: "file",
+          url: "https://example.com/shot.png",
+          mediaType: "image/png",
+          filename: "shot.png",
+        },
+        { type: "text", text: "Ask" },
+      ],
+    };
+
+    const { unmount } = renderMessage(withImage);
+    expect(screen.getByAltText("shot.png")).toBeInTheDocument();
+    unmount();
+
+    renderMessage(withImage, editing);
+
+    expect(screen.queryByAltText("shot.png")).toBeNull();
   });
 });
