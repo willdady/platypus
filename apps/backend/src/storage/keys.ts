@@ -57,3 +57,33 @@ export function assertValidStorageKey(key: string): void {
     throw new ValidationError("Invalid file key");
   }
 }
+
+/** The Chat a File part's key belongs to — the key's first three segments. */
+export interface ChatKeyScope {
+  orgId: string;
+  workspaceId: string;
+  chatId: string;
+}
+
+/**
+ * The prefix every File part key for one Chat shares. `generateStorageKey`
+ * builds keys from this and {@link isKeyUnderChat} reads them back with it, so
+ * the writer and the ownership check cannot drift apart.
+ */
+export function chatStorageKeyPrefix(scope: ChatKeyScope): string {
+  return `${scope.orgId}/${scope.workspaceId}/${scope.chatId}/`;
+}
+
+/**
+ * Whether a key names an object stored for this Chat.
+ *
+ * Validity is not ownership. `isValidStorageKey` answers "could Platypus have
+ * stored this?", which every well-formed key satisfies — including one naming
+ * another tenant's file. A client can put any URL on a file part (`extractFiles`
+ * stores a non-`data:` URL verbatim), so a key read back out of a message part
+ * says only what the client claimed, not what this Chat owns. Anything
+ * destructive must ask this question instead.
+ */
+export function isKeyUnderChat(key: string, scope: ChatKeyScope): boolean {
+  return isValidStorageKey(key) && key.startsWith(chatStorageKeyPrefix(scope));
+}

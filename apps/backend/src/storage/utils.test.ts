@@ -407,7 +407,7 @@ describe("Storage Utils", () => {
       expect(metaFilesBefore.length).toBe(1);
 
       // Delete files
-      await deleteFiles(storedMessages);
+      await deleteFiles(storedMessages, context);
 
       // Verify files are deleted (directories may remain)
       const filesAfterDelete = await fs.readdir(tempDir, { recursive: true });
@@ -432,7 +432,13 @@ describe("Storage Utils", () => {
       ];
 
       // Should not throw
-      await expect(deleteFiles(messages)).resolves.not.toThrow();
+      await expect(
+        deleteFiles(messages, {
+          orgId: "org-1",
+          workspaceId: "ws-1",
+          chatId: "chat-1",
+        }),
+      ).resolves.not.toThrow();
     });
 
     // Issue #715: a file attached on the second turn onward is stored in the
@@ -464,9 +470,50 @@ describe("Storage Utils", () => {
       const pngBefore = await countPngFiles(tempDir);
       expect(pngBefore).toBe(1);
 
-      await deleteFiles(httpMessages);
+      await deleteFiles(httpMessages, context);
 
       expect(await countPngFiles(tempDir)).toBe(0);
+    });
+
+    // A client can put any URL on a file part, and `extractFiles` stores a
+    // non-`data:` URL verbatim. Without an ownership filter, planting another
+    // tenant's key in a Chat you own and deleting that Chat destroys their
+    // file — and reading any Chat reveals such a key, because
+    // `rewriteStorageUrls` puts it in the URL it hands every reader.
+    it("does not delete a file belonging to another Chat", async () => {
+      const victim = {
+        orgId: "org-victim",
+        workspaceId: "ws-victim",
+        chatId: "chat-victim",
+      };
+      const attacker = {
+        orgId: "org-attacker",
+        workspaceId: "ws-attacker",
+        chatId: "chat-attacker",
+      };
+
+      // The victim's file, stored the ordinary way.
+      const victimMessages = await extractFiles(
+        [createMessageWithFile("msg-victim", createPngDataUrl())],
+        victim,
+      );
+      const victimKey = extractStorageKeys(victimMessages)[0];
+      expect(victimKey).toBeDefined();
+      expect(await countPngFiles(tempDir)).toBe(1);
+
+      // The attacker's own Chat, carrying a part that points at the victim's
+      // key in both reachable forms.
+      const plantedMessages: PlatypusUIMessage[] = [
+        createMessageWithFile("msg-1", `storage://${victimKey}`),
+        createMessageWithFile(
+          "msg-2",
+          `https://attacker.example.com/files/${victimKey}`,
+        ),
+      ];
+
+      await deleteFiles(plantedMessages, attacker);
+
+      expect(await countPngFiles(tempDir)).toBe(1);
     });
   });
 

@@ -289,14 +289,19 @@ chat.delete(
   requireWorkspaceOwner,
   async (c) => {
     const chatId = c.req.param("chatId");
-    const { workspaceId } = workspaceScopeOf(c);
+    const { orgId, workspaceId } = workspaceScopeOf(c);
 
     // First fetch the chat to get its messages for file cleanup
     const chatRecord = await requireOwned(db, "chat", chatId, workspaceId);
 
-    // Delete associated files from storage (best-effort)
+    // Delete associated files from storage (best-effort). Scoped to this Chat,
+    // so a planted file part naming another tenant's key deletes nothing.
     if (chatRecord.messages) {
-      await deleteFiles(chatRecord.messages as PlatypusUIMessage[]);
+      await deleteFiles(chatRecord.messages as PlatypusUIMessage[], {
+        orgId,
+        workspaceId,
+        chatId,
+      });
     }
 
     // Delete the chat record

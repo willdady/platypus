@@ -3,7 +3,13 @@ import type { PlatypusUIMessage } from "../types.ts";
 import type { FileExtractionContext } from "./types.ts";
 import { getStorage } from "./index.ts";
 import { logger } from "../logger.ts";
-import { assertValidStorageKey, isValidStorageKey } from "./keys.ts";
+import {
+  assertValidStorageKey,
+  chatStorageKeyPrefix,
+  isKeyUnderChat,
+  isValidStorageKey,
+  type ChatKeyScope,
+} from "./keys.ts";
 
 /**
  * Storage URL prefix used to identify storage references.
@@ -55,7 +61,7 @@ function generateStorageKey(
 ): string {
   const hash8 = contentHash.slice(0, 8);
   const messageId = context.messageId || "unknown";
-  const key = `${context.orgId}/${context.workspaceId}/${context.chatId}/${messageId}/${partIndex}-${hash8}.${extension}`;
+  const key = `${chatStorageKeyPrefix(context)}${messageId}/${partIndex}-${hash8}.${extension}`;
   assertValidStorageKey(key);
   return key;
 }
@@ -230,8 +236,14 @@ export function rewriteStorageUrls(
  * - `<filesBase>/<key>` (the HTTP form the client returns on later turns, via
  *   `rewriteStorageUrls`)
  *
- * Both forms must be recognised so cleanup never orphans a file. This mirrors
- * `inlineFileUrls`, which already accepts both URL forms.
+ * Both forms must be recognised so cleanup never orphans a file. The HTTP match
+ * is deliberately looser than `inlineFileUrls`, which anchors on the request's
+ * own origin: a deployment whose origin has changed still has rows carrying the
+ * old one, and failing to recognise those would leak files forever.
+ *
+ * The cost of that tolerance is that the key here is only what the client
+ * claimed. These keys therefore name candidates, not property — a caller that
+ * deletes must filter them with `isKeyUnderChat`, as {@link deleteFiles} does.
  *
  * @param messages - Array of chat messages
  * @returns Array of storage keys found in the messages
@@ -407,12 +419,24 @@ export async function inlineFileUrls(
  * Delete all files associated with a chat's messages.
  * Best-effort operation - errors are logged but don't fail the operation.
  *
+ * Only keys under this Chat's own prefix are deleted. The keys come out of
+ * message parts, and a client can put any URL on a part, so an unfiltered
+ * delete lets a user plant `…/files/{another org}/…` in a Chat they own and
+ * destroy another tenant's files by deleting it. Reading a Chat is enough to
+ * learn such a key: `rewriteStorageUrls` hands every reader HTTP URLs with the
+ * keys in them, so without this filter read access to a Chat implies the power
+ * to delete its files.
+ *
  * @param messages - Array of chat messages
+ * @param scope - The Chat being deleted, whose files these must be
  */
 export async function deleteFiles(
   messages: PlatypusUIMessage[],
+  scope: ChatKeyScope,
 ): Promise<void> {
-  const keys = extractStorageKeys(messages);
+  const keys = extractStorageKeys(messages).filter((key) =>
+    isKeyUnderChat(key, scope),
+  );
   if (keys.length === 0) {
     return;
   }
