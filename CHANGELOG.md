@@ -1,5 +1,22 @@
 # Changelog
 
+## [3.1.0](https://github.com/willdady/platypus/compare/v3.0.0...v3.1.0) (2026-08-28)
+
+
+### Features
+
+* **frontend:** edit messages through the composer, preserving all message parts ([#718](https://github.com/willdady/platypus/issues/718)) ([34d1469](https://github.com/willdady/platypus/commit/34d14697244ee6c7a1f76b7c0fdfeb4d82b5540a))
+
+
+### Bug Fixes
+
+* **backend:** delete file parts stored as HTTP URLs when a chat is deleted ([#719](https://github.com/willdady/platypus/issues/719)) ([298cff1](https://github.com/willdady/platypus/commit/298cff1889ab90461f21d0f2d35f1326697d8218))
+* **backend:** scope a Chat's file deletion to its own keys ([#723](https://github.com/willdady/platypus/issues/723)) ([4ef6f30](https://github.com/willdady/platypus/commit/4ef6f301d20dba5c69a0eb1743a9292dbdabec62))
+* **backend:** validate a Trigger's config when its type changes ([#707](https://github.com/willdady/platypus/issues/707)) ([d2355d1](https://github.com/willdady/platypus/commit/d2355d1796c33954779c6dd49701d64a64571415))
+* **backend:** validate storage keys where they enter Platypus ([a0cc599](https://github.com/willdady/platypus/commit/a0cc59942982cc7d0136ca04a88086d8a78efb29))
+* bring packages/plugin-sdk, example-plugin, schemas into the typecheck gate ([#717](https://github.com/willdady/platypus/issues/717)) ([466f2ec](https://github.com/willdady/platypus/commit/466f2ec2f7d52f072427eae2b9f413ce7a8aae39))
+* **docs:** move the Docker image tag examples to the 3.x line ([#706](https://github.com/willdady/platypus/issues/706)) ([be4f366](https://github.com/willdady/platypus/commit/be4f3668dd297ac2b593ed95464ee71cea81b30b))
+
 ## [3.0.0](https://github.com/willdady/platypus/compare/v2.11.0...v3.0.0) (2026-08-27)
 
 
