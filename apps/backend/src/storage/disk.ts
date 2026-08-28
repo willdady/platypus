@@ -24,11 +24,14 @@ export class DiskStorage implements StorageBackend {
   /**
    * Get the full filesystem path for a storage key.
    *
-   * Keys are validated where they enter Platypus (`storage/keys.ts`), which is
-   * the gate that also covers `S3Storage`. This resolves and re-checks
-   * containment anyway: it is the last point before a path reaches the
-   * filesystem, and it is the only backend where escaping the root reads an
-   * unrelated host file.
+   * Keys reaching a backend from a client are validated where they enter
+   * Platypus (`storage/keys.ts`), which is the gate that also covers
+   * `S3Storage`. This check is not merely a second copy of that one: the Agent
+   * avatar path (`services/avatar.ts`) composes its own key and does not go
+   * through that gate, so for the disk backend this is the only containment
+   * guard it has. It is also the last point before a path reaches the
+   * filesystem, and this is the one backend where leaving the root reads an
+   * unrelated host file rather than missing an object.
    */
   private getFilePath(key: string): string {
     const filePath = path.resolve(this.basePath, key);
