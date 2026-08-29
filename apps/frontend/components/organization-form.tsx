@@ -136,6 +136,13 @@ const OrganizationForm = ({ classNames, orgId }: OrganizationFormProps) => {
       mutate: globalMutate,
       onSuccess: () => {
         toast.success("Organization deleted");
+        // A full document load, deliberately, not `router.push`. The
+        // Organization this view is scoped to no longer exists, and a
+        // client-side transition keeps the app shell alive — the cached RSC
+        // payload and SWR entries for the deleted Org included, which the
+        // surrounding layout would go on rendering. Reloading rebuilds
+        // everything from a server that now agrees the Org is gone.
+        // eslint-disable-next-line @next/next/no-location-assign-relative-destination
         window.location.href = `/`;
       },
       onError: (message) => {

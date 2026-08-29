@@ -243,6 +243,11 @@ const WorkspaceForm = ({
       mutate: globalMutate,
       onSuccess: () => {
         toast.success("Workspace deleted");
+        // A full document load, deliberately — see the matching note in
+        // `organization-form.tsx`. The Workspace this view is scoped to is
+        // gone, and a client-side transition would keep the app shell (and its
+        // cached payload for the deleted Workspace) alive around it.
+        // eslint-disable-next-line @next/next/no-location-assign-relative-destination
         window.location.href = `/${orgId}`;
       },
       onError: (message) => {

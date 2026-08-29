@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { useBackendUrl } from "@/app/client-context";
 import { joinUrl } from "@/lib/utils";
 import { writeAt } from "@/lib/api-write";
@@ -38,6 +39,7 @@ export const OAuthCallbackHandler = ({
     missingParams ? "Missing authorization code or state parameter." : null,
   );
   const [isProcessing, setIsProcessing] = useState(!missingParams);
+  const router = useRouter();
 
   useEffect(() => {
     if (!code || !state) {
@@ -106,7 +108,7 @@ export const OAuthCallbackHandler = ({
         <Button
           variant="outline"
           className="cursor-pointer"
-          onClick={() => (window.location.href = "/")}
+          onClick={() => router.push("/")}
         >
           Back to Home
         </Button>

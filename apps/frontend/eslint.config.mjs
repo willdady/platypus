@@ -60,6 +60,11 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Vitest's coverage report. Generated JavaScript, and it carries its own
+    // `eslint-disable` headers that this config then reports as unused — so a
+    // developer who has run `test:coverage` lints a different set of warnings
+    // from CI, which has no such directory.
+    "coverage/**",
   ]),
 ]);
 
