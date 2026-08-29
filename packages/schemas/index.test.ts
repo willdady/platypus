@@ -321,7 +321,6 @@ describe("Workspace Create Schema", () => {
   it("accepts an optional ownerId", () => {
     const result = workspaceCreateSchema.safeParse({
       name: "Test Workspace",
-      organizationId: "org-1",
       ownerId: "member-2",
     });
     expect(result.success).toBe(true);
@@ -330,9 +329,20 @@ describe("Workspace Create Schema", () => {
   it("is valid without an ownerId", () => {
     const result = workspaceCreateSchema.safeParse({
       name: "Test Workspace",
-      organizationId: "org-1",
     });
     expect(result.success).toBe(true);
+  });
+
+  // The organization is a tenancy boundary, taken from the route rather than
+  // the body. Pinned here so the field cannot drift back into the create
+  // contract: a body that names one is accepted, but the name is dropped.
+  it("drops an organizationId supplied in the payload", () => {
+    const result = workspaceCreateSchema.safeParse({
+      name: "Test Workspace",
+      organizationId: "org-2",
+    });
+    expect(result.success).toBe(true);
+    expect(result.data).not.toHaveProperty("organizationId");
   });
 });
 

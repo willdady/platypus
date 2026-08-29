@@ -10,6 +10,7 @@ import {
 import { contextCreateSchema, contextUpdateSchema } from "@platypus/schemas";
 import { eq, and, sql } from "drizzle-orm";
 import { requireAuth } from "../middleware/authentication.ts";
+import { userMayUseWorkspace } from "../middleware/authorization.ts";
 import type { Variables } from "../server.ts";
 import { logger } from "../logger.ts";
 
@@ -84,6 +85,19 @@ context.post(
   async (c) => {
     const user = c.get("user")!;
     const data = c.req.valid("json");
+
+    // This route hangs off `/users/me`, so there is no Organization in its path
+    // and neither `requireOrgAccess` nor `requireWorkspaceAccess` has run — the
+    // Workspace arrives in the body, proved by nothing. A Context is bound to a
+    // Workspace the caller can actually use, and this is the only place that
+    // says so. Reported as absent rather than refused: the caller supplied the
+    // id, so the two answers must not be distinguishable.
+    if (
+      data.workspaceId &&
+      !(await userMayUseWorkspace(db, user, data.workspaceId))
+    ) {
+      return c.json({ error: "Workspace not found" }, 404);
+    }
 
     try {
       const record = await db

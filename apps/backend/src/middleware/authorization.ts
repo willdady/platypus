@@ -386,6 +386,50 @@ export const resolveWorkspaceAccess = async (
 };
 
 /**
+ * Whether this caller may name `workspaceId` on a route that carries no
+ * Organization in its path — the User surface (`/users/me/…`), where nothing
+ * upstream has run {@link requireOrgAccess} or {@link requireWorkspaceAccess}
+ * to prove it for them and the id arrives in a request body.
+ *
+ * Asks the same two authorities the scoped routes ask, in the same order, but
+ * takes the Organization from the Workspace row rather than from the caller:
+ * there is no path `orgId` here to check against, so "which Organization?" is
+ * a question about the Workspace, and "may you?" is the question about the
+ * caller. Membership resolves first so a non-member never reaches the
+ * Workspace decision at all.
+ *
+ * Collapses absence and refusal into one `false`. The caller supplied the id,
+ * so distinguishing "no such Workspace" from "not yours" would answer, for a
+ * stranger's Workspace, exactly the question this check exists to refuse —
+ * which is the disclosure, not merely a step toward it. Callers should report
+ * a miss as not-found for the same reason.
+ */
+export const userMayUseWorkspace = async (
+  db: Database,
+  user: AuthUser,
+  workspaceId: string,
+): Promise<boolean> => {
+  const [ws] = await db
+    .select({ organizationId: workspaceTable.organizationId })
+    .from(workspaceTable)
+    .where(eq(workspaceTable.id, workspaceId))
+    .limit(1);
+  if (!ws) return false;
+
+  const org = await resolveOrgMembership(db, user, ws.organizationId);
+  if (!org.allowed) return false;
+
+  const access = await resolveWorkspaceAccess(
+    db,
+    user,
+    org.membership,
+    ws.organizationId,
+    workspaceId,
+  );
+  return access.allowed;
+};
+
+/**
  * Middleware that gates configuration of credential- and reach-bearing
  * resources (Providers, Sandboxes, MCPs) per ADR-0006.
  *
