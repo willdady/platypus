@@ -37,10 +37,18 @@ const toTriggerRunStats = (stats: RunStats): TriggerRunStats | null => {
     outputTokens: stats.outputTokens ?? 0,
     // Spread rather than defaulted to 0: unlike the sums above, an absent
     // occupancy means the Provider reported no usage, and writing 0 there would
-    // record an empty context as a measurement (ADR-0018).
+    // record an empty context as a measurement (ADR-0018). The cached-token
+    // breakdowns follow the same idiom — absent means the Provider reported no
+    // cache detail, never a zero (issue #734).
     ...(stats.contextOccupancy === undefined
       ? {}
       : { contextOccupancy: stats.contextOccupancy }),
+    ...(stats.cacheReadTokens === undefined
+      ? {}
+      : { cacheReadTokens: stats.cacheReadTokens }),
+    ...(stats.cacheWriteTokens === undefined
+      ? {}
+      : { cacheWriteTokens: stats.cacheWriteTokens }),
     // Spread so an untruncated run stores no key at all, matching the schema's
     // `z.literal(true).optional()`.
     ...(stats.truncatedByTokenLimit

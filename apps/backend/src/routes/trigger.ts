@@ -1,12 +1,8 @@
 import { Hono } from "hono";
 import { sValidator } from "@hono/standard-validator";
-import { z } from "zod";
-import { desc, eq } from "drizzle-orm";
+import { desc } from "drizzle-orm";
 import { db } from "../index.ts";
-import {
-  trigger as triggerTable,
-  triggerRun as triggerRunTable,
-} from "../db/schema.ts";
+import { trigger as triggerTable } from "../db/schema.ts";
 import { triggerCreateSchema, triggerUpdateSchema } from "@platypus/schemas";
 import { requireAuth } from "../middleware/authentication.ts";
 import {
@@ -146,42 +142,6 @@ trigger.delete(
     logger.info(`Deleted trigger '${triggerId}'`);
 
     return c.json({ message: "Trigger deleted" });
-  },
-);
-
-/** List runs for a trigger */
-trigger.get(
-  "/:triggerId/runs",
-  requireAuth,
-  requireOrgAccess(),
-  requireWorkspaceAccess,
-  sValidator(
-    "query",
-    z.object({
-      limit: z.string().optional(),
-      offset: z.string().optional(),
-    }),
-  ),
-  async (c) => {
-    const triggerId = c.req.param("triggerId");
-    const { workspaceId } = workspaceScopeOf(c);
-    const { limit: limitStr, offset: offsetStr } = c.req.valid("query");
-
-    const limit = Math.min(parseInt(limitStr ?? "100") || 100, 100);
-    const offset = parseInt(offsetStr ?? "0") || 0;
-
-    // Verify trigger exists in workspace
-    await requireOwned(db, "trigger", triggerId, workspaceId);
-
-    const results = await db
-      .select()
-      .from(triggerRunTable)
-      .where(eq(triggerRunTable.triggerId, triggerId))
-      .orderBy(desc(triggerRunTable.startedAt))
-      .limit(limit)
-      .offset(offset);
-
-    return c.json({ results });
   },
 );
 

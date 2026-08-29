@@ -84,6 +84,20 @@ vi.mock("@ai-sdk/mcp", () => ({
   auth: vi.fn(),
 }));
 
+// Passed through to the real implementation for every test but one: issue
+// #630's Path A needs a failure AFTER the concurrently-resolved group, and file
+// inlining is the step that reaches a store which can genuinely be unreachable.
+const { mockInlineFileUrls } = vi.hoisted(() => ({
+  mockInlineFileUrls: vi.fn(),
+}));
+vi.mock("../storage/utils.ts", async () => {
+  const actual = await vi.importActual<typeof import("../storage/utils.ts")>(
+    "../storage/utils.ts",
+  );
+  mockInlineFileUrls.mockImplementation(actual.inlineFileUrls);
+  return { ...actual, inlineFileUrls: mockInlineFileUrls };
+});
+
 import {
   prepareChatTurn,
   validateTurnAttachments,
@@ -105,6 +119,7 @@ import { FileValidationError } from "./file-gate.ts";
 import { resetExtractedTextCache } from "./file-extraction.ts";
 import { buildTestPdf } from "./file-extraction.test-fixtures.ts";
 import { createInMemoryChatTurnQueries } from "./chat-execution.test-fixtures.ts";
+import type { ChatTurnQueries } from "./chat-execution.ts";
 import { formatSummariesForSystemPrompt } from "./memory-retrieval.ts";
 import { DEFAULT_DIRECT_MAX_STEPS } from "@platypus/schemas";
 import type { Provider } from "@platypus/schemas";
@@ -2217,6 +2232,185 @@ describe("chat-execution", () => {
 
       expect(turn.stream.tools).not.toHaveProperty("mcpTool");
       await turn.dispose();
+    });
+  });
+
+  // Issue #630, Path A. The Tool session is opened early — before the group of
+  // lookups the turn resolves concurrently — and its `dispose` reaches the
+  // caller only on the success path. Any failure in between and the session,
+  // its MCP clients and every closer a Contribution registered are unreachable
+  // for the life of the process.
+  //
+  // The window opens at the concurrent group itself, not after it: a rejection
+  // there settles the group immediately while the session goes on resolving
+  // beside it, unowned. A transient database error is enough.
+  describe("Tool session disposal when Turn resolution fails", () => {
+    const baseMcp = {
+      id: "mcp-630",
+      organizationId: null as string | null,
+      workspaceId: "ws-1" as string | null,
+      name: "Test MCP",
+      slug: "test_mcp",
+      url: "https://mcp.example.com",
+      headers: null,
+      authType: "None",
+      bearerToken: null,
+      oauthAccessToken: null,
+      oauthRefreshToken: null,
+      oauthTokenExpiresAt: null,
+      oauthScope: null,
+      oauthRequestedScope: null,
+      oauthClientId: null,
+      oauthClientSecret: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+    const agentWithMcp = {
+      ...baseAgent,
+      id: "agent-630",
+      toolSetIds: [baseMcp.id],
+    };
+
+    /** An MCP that connects successfully, so the session really does hold a
+     *  client that something has to close. */
+    const mcpClientWithClose = () => {
+      const close = vi.fn().mockResolvedValue(undefined);
+      mockCreateMCPClient.mockResolvedValueOnce({
+        listTools: vi.fn().mockResolvedValue({ tools: [{ name: "mcpTool" }] }),
+        toolsFromDefinitions: vi
+          .fn()
+          .mockReturnValue({ mcpTool: { description: "x" } }),
+        close,
+      });
+      return close;
+    };
+
+    const queriesWith = (
+      overrides: Partial<ChatTurnQueries>,
+    ): ChatTurnQueries => ({
+      ...createInMemoryChatTurnQueries({
+        workspaces: [baseWorkspace],
+        agents: [agentWithMcp],
+        providers: [baseProvider],
+        mcps: [baseMcp],
+      }),
+      ...overrides,
+    });
+
+    const turnWith = (queries: ChatTurnQueries) =>
+      prepareChatTurn(
+        { ...baseInput, request: { agentId: agentWithMcp.id } },
+        queries,
+      );
+
+    it("closes the session's MCP client when a concurrently-resolved lookup rejects", async () => {
+      const close = mcpClientWithClose();
+      const boom = new ValidationError("sandbox lookup failed");
+
+      await expect(
+        turnWith(
+          queriesWith({ getSandboxEnvKeys: () => Promise.reject(boom) }),
+        ),
+      ).rejects.toBe(boom);
+
+      expect(close).toHaveBeenCalledTimes(1);
+    });
+
+    // Not the same lookup twice over: the group settles on the FIRST rejection,
+    // so which member fails decides how much of the group is still in flight
+    // when the session resolves. Both have to close it.
+    it("closes it when a different member of the same group rejects", async () => {
+      const close = mcpClientWithClose();
+      const boom = new Error("user contexts unavailable");
+
+      await expect(
+        turnWith(queriesWith({ getUserContexts: () => Promise.reject(boom) })),
+      ).rejects.toBe(boom);
+
+      expect(close).toHaveBeenCalledTimes(1);
+    });
+
+    it("closes it when resolution fails after the group, on the way to the plan", async () => {
+      const close = mcpClientWithClose();
+      const boom = new Error("attachment store unreachable");
+      mockInlineFileUrls.mockRejectedValueOnce(boom);
+
+      await expect(turnWith(queriesWith({}))).rejects.toBe(boom);
+
+      expect(close).toHaveBeenCalledTimes(1);
+    });
+
+    // The caller's error handling is downstream of this: `AgentRunner` records
+    // the failure and the central `onError` maps it to a status code, both off
+    // the error's own type. Disposal must not launder it.
+    it("lets the original error through unchanged", async () => {
+      mcpClientWithClose();
+      const boom = new NotFoundError("provider row vanished mid-turn");
+
+      const caught = await turnWith(
+        queriesWith({ getSandboxEnvKeys: () => Promise.reject(boom) }),
+      ).catch((e: unknown) => e);
+
+      expect(caught).toBeInstanceOf(NotFoundError);
+      expect((caught as Error).message).toBe("provider row vanished mid-turn");
+    });
+
+    // A Contribution's closers live on the session, so they leak exactly like an
+    // MCP client does — and the deferred registrar the search path is handed
+    // only runs a closer itself when the session promise REJECTS. A session that
+    // opened and was abandoned still holds them.
+    it("runs a closer a Web-search backend registered", async () => {
+      const close = vi.fn().mockResolvedValue(undefined);
+      registerWebBackend(
+        composeWebBackend({
+          contribution: {
+            backend: "searx",
+            name: "SearXNG",
+            createExecutors: (ctx) => {
+              ctx.registerCloser?.(close);
+              return { web_search: () => ({ query: "q", results: [] }) };
+            },
+          },
+          pluginName: "@acme/searx",
+          plugin: makePluginContext(),
+        }),
+      );
+      const boom = new Error("sandbox lookup failed");
+
+      await expect(
+        prepareChatTurn(
+          {
+            ...baseInput,
+            request: {
+              providerId: baseProvider.id,
+              modelId: "gpt-4",
+              search: true,
+            },
+          },
+          {
+            ...createInMemoryChatTurnQueries({
+              workspaces: [baseWorkspace],
+              providers: [{ ...baseProvider, searchSource: "searx" }],
+            }),
+            getSandboxEnvKeys: () => Promise.reject(boom),
+          },
+        ),
+      ).rejects.toBe(boom);
+
+      expect(close).toHaveBeenCalledTimes(1);
+      clearWebBackends();
+    });
+
+    // `openToolSession` fails soft per tool source, but the session itself can
+    // still fail to open — and then the rejection the caller is about to see IS
+    // that failure. Disposal has nothing to close and must not replace it with
+    // an error of its own.
+    it("still reports the original failure when there is no session to dispose", async () => {
+      const boom = new Error("mcp lookup exploded");
+
+      await expect(
+        turnWith(queriesWith({ getMcp: () => Promise.reject(boom) })),
+      ).rejects.toBe(boom);
     });
   });
 

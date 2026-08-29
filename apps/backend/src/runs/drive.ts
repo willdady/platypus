@@ -28,6 +28,7 @@ import {
 import { applyToolDurations } from "./tool-durations.ts";
 import type { RunStats, RunStatus } from "./types.ts";
 import { normalizeWebToolParts } from "./web-tool-normalize.ts";
+import { withAgentCausation, withChildCausation } from "../event-causation.ts";
 
 /**
  * The model call inside a registered run.
@@ -237,6 +238,12 @@ export type ChatDriveOptions = DriveBase &
 export type DelegateDriveOptions = DriveBase &
   DriveConversation & {
     onStepFinish?: (step: RunStep) => void;
+    /**
+     * The delegated Agent's id. Appended to the parent run's ambient causation
+     * chain for the duration of the delegate's drive, so a write the delegate
+     * makes is attributed to every Agent above it too (ADR-0022, issue #668).
+     */
+    agentId?: string;
   };
 
 /** Where a drive's UI stream goes before it is consumed. A Chat turn tees off a
@@ -469,21 +476,26 @@ export const driveChat = (opts: ChatDriveOptions): ChatDrive => {
   // Assigned by `split` below, which `runStreamedDrive` calls synchronously
   // while constructing the drive — hence definite assignment before the return.
   let response!: ReadableStream<InferUIMessageChunk<PlatypusUIMessage>>;
-  const core = runStreamedDrive(
-    opts,
-    {
-      unattended: false,
-      failOnStreamError: false,
-      stopSnapshotsAfterFinal: true,
-    },
-    (ui) => {
-      const [client, serverSide] = ui.tee();
-      // Only the client branch carries the notice: the run itself already
-      // records the timeout through `statusFromSignal`, so adding it to the
-      // server-side drain would report the same failure twice.
-      response = client.pipeThrough(withAbortNotice(opts.run));
-      return serverSide;
-    },
+  // The turn's Agent is what caused any write it makes; a direct (no-Agent)
+  // turn establishes no causation and so never suppresses an Event Trigger
+  // (ADR-0022).
+  const core = withAgentCausation(opts.agentId, () =>
+    runStreamedDrive(
+      opts,
+      {
+        unattended: false,
+        failOnStreamError: false,
+        stopSnapshotsAfterFinal: true,
+      },
+      (ui) => {
+        const [client, serverSide] = ui.tee();
+        // Only the client branch carries the notice: the run itself already
+        // records the timeout through `statusFromSignal`, so adding it to the
+        // server-side drain would report the same failure twice.
+        response = client.pipeThrough(withAbortNotice(opts.run));
+        return serverSide;
+      },
+    ),
   );
   return { ...core, response };
 };
@@ -496,16 +508,36 @@ export const driveChat = (opts: ChatDriveOptions): ChatDrive => {
  * reports an error, rather than letting the parent read a crash as the
  * delegate's finding. Every snapshot is yielded, for the caller's activity log.
  */
-export const driveDelegate = (opts: DelegateDriveOptions): StreamedCore =>
-  runStreamedDrive(
-    opts,
-    {
-      unattended: true,
-      failOnStreamError: true,
-      stopSnapshotsAfterFinal: false,
-    },
-    (ui) => ui,
-  );
+export const driveDelegate = (opts: DelegateDriveOptions): StreamedCore => {
+  // The delegated Agent extends the ambient causation chain established by the
+  // parent's drive: anything the delegate writes is attributed to it AND to
+  // every Agent above it, so a parent's Event Trigger is still suppressed when
+  // the work is done through a Sub-Agent (ADR-0022, issue #668).
+  const { agentId, ...rest } = opts;
+  const drive = (): StreamedCore =>
+    runStreamedDrive(
+      rest,
+      {
+        unattended: true,
+        failOnStreamError: true,
+        stopSnapshotsAfterFinal: false,
+      },
+      (ui) => ui,
+    );
+  // A delegate without an id (if ever reached) extends nothing; one with an id
+  // chains beneath the parent's ambient causation.
+  return agentId ? withChildCausation(agentId, drive) : drive();
+};
+
+export type DriveOnceOptions = DriveBase &
+  DriveConversation & {
+    /**
+     * The Agent this headless run is driving (a Trigger's agent). Establishes
+     * the ambient causation chain the run's writes read as (ADR-0022): an
+     * Event Trigger's own writes never re-fire it, at any delegation depth.
+     */
+    agentId?: string;
+  };
 
 /**
  * Drives a headless `generateText` run inside its registered lifecycle.
@@ -517,17 +549,19 @@ export const driveDelegate = (opts: DelegateDriveOptions): StreamedCore =>
  * returning.
  */
 export const driveOnce = async (
-  opts: DriveBase & DriveConversation,
+  opts: DriveOnceOptions,
 ): Promise<{ text: string; stats: RunStats }> => {
   const { run } = opts;
   const noProgress = detectorFor(true);
   const startTime = Date.now();
 
   try {
-    const result = await generateText({
-      ...modelArgs(opts, noProgress),
-      onStepFinish: (step: RunStep) => run.onStep(step),
-    });
+    const result = await withAgentCausation(opts.agentId, () =>
+      generateText({
+        ...modelArgs(opts, noProgress),
+        onStepFinish: (step: RunStep) => run.onStep(step),
+      }),
+    );
 
     const stats = computeStats(result as Parameters<typeof computeStats>[0]);
     if (isTruncatedByTokenLimit(result.finishReason)) {

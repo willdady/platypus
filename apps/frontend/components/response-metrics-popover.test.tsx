@@ -51,6 +51,72 @@ describe("ResponseMetricsPopover", () => {
     expect(screen.getByText("5,300")).toBeInTheDocument();
   });
 
+  it("shows the cached-input breakdown under Input (issue #734)", async () => {
+    render(
+      <ResponseMetricsPopover
+        metadata={{
+          tokenUsage: {
+            inputTokens: 5_200,
+            outputTokens: 100,
+            cacheReadTokens: 2_700,
+            cacheWriteTokens: 150,
+          },
+        }}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Response metrics" }));
+
+    expect(
+      await screen.findByText("of which 2,700 read from cache"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("of which 150 written to cache"),
+    ).toBeInTheDocument();
+  });
+
+  it("renders the read breakdown without a write one when the Provider reports no write", async () => {
+    render(
+      <ResponseMetricsPopover
+        metadata={{
+          tokenUsage: {
+            inputTokens: 5_200,
+            outputTokens: 100,
+            cacheReadTokens: 900,
+          },
+        }}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Response metrics" }));
+
+    expect(
+      await screen.findByText("of which 900 read from cache"),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/written to cache/)).not.toBeInTheDocument();
+  });
+
+  it("keeps Input, Output and Total unchanged when cache details are present", async () => {
+    render(
+      <ResponseMetricsPopover
+        metadata={{
+          tokenUsage: {
+            inputTokens: 5_200,
+            outputTokens: 100,
+            cacheReadTokens: 2_700,
+            cacheWriteTokens: 150,
+          },
+        }}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Response metrics" }));
+
+    await screen.findByText("5,200");
+    expect(screen.getByText("100")).toBeInTheDocument();
+    expect(screen.getByText("5,300")).toBeInTheDocument();
+  });
+
   it("shows Preparation and Model, formatted by the shared duration formatter", async () => {
     render(
       <ResponseMetricsPopover

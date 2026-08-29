@@ -25,6 +25,7 @@ import { userInvitation } from "./routes/user-invitation.ts";
 import { member } from "./routes/member.ts";
 import { context } from "./routes/context.ts";
 import { trigger } from "./routes/trigger.ts";
+import { triggerRun } from "./routes/trigger-run.ts";
 import { kanban } from "./routes/kanban.ts";
 import { dashboard } from "./routes/dashboard.ts";
 import { notification } from "./routes/notification.ts";
@@ -164,6 +165,12 @@ app.route(
 );
 app.route("/organizations/:orgId/workspaces/:workspaceId/tools", tool);
 app.route("/organizations/:orgId/workspaces/:workspaceId/triggers", trigger);
+// Runs are addressed at Workspace scope, not under their Trigger: the list
+// mixes every Trigger in the Workspace and filters down to one.
+app.route(
+  "/organizations/:orgId/workspaces/:workspaceId/trigger-runs",
+  triggerRun,
+);
 app.route("/organizations/:orgId/workspaces/:workspaceId/boards", kanban);
 app.route(
   "/organizations/:orgId/workspaces/:workspaceId/dashboards",

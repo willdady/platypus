@@ -205,6 +205,53 @@ describe("TriggerSink", () => {
       expect(setArg.stats).not.toHaveProperty("contextOccupancy");
     });
 
+    // Issue #734. The cached-input breakdown is a spread, the same idiom as
+    // occupancy: absent means the Provider reported no cache detail, never a 0.
+    it("persists the cached-input breakdown alongside the unchanged token sums", async () => {
+      const sink = new TriggerSink({ triggerId: "trigger-1" });
+
+      await sink.onFinish({
+        runId: "run-1",
+        status: "succeeded",
+        messages: [],
+        stats: {
+          steps: 4,
+          toolCalls: [{ name: "tool1", count: 3 }],
+          inputTokens: 100,
+          outputTokens: 50,
+          cacheReadTokens: 900,
+          cacheWriteTokens: 0,
+        },
+      });
+
+      const setArg = mockDb.set.mock.calls[0][0] as Record<string, unknown>;
+      expect(setArg.stats).toEqual({
+        steps: 4,
+        toolCalls: [{ name: "tool1", count: 3 }],
+        inputTokens: 100,
+        outputTokens: 50,
+        cacheReadTokens: 900,
+        cacheWriteTokens: 0,
+      });
+    });
+
+    it("omits the cache fields for a run whose Provider reported none", async () => {
+      const sink = new TriggerSink({ triggerId: "trigger-1" });
+
+      await sink.onFinish({
+        runId: "run-1",
+        status: "succeeded",
+        messages: [],
+        stats: { steps: 1, toolCalls: [], inputTokens: 10, outputTokens: 5 },
+      });
+
+      const setArg = mockDb.set.mock.calls[0][0] as Record<string, unknown>;
+      // A real reported write of 0 above was kept — here neither key exists at
+      // all because the Provider never reported a cache detail.
+      expect(setArg.stats).not.toHaveProperty("cacheReadTokens");
+      expect(setArg.stats).not.toHaveProperty("cacheWriteTokens");
+    });
+
     it("maps a failed run to status 'failed' with the error message", async () => {
       const sink = new TriggerSink({ triggerId: "trigger-1" });
 

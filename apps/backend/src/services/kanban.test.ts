@@ -433,7 +433,6 @@ describe("kanban module", () => {
           previousColumnId: "col-old",
           boardId: "board-1",
         }),
-        expect.anything(),
       );
       expect(dispatchEvent).toHaveBeenCalledWith(
         "org-1",
@@ -444,7 +443,6 @@ describe("kanban module", () => {
           boardId: "board-1",
           changedFields: ["columnId"],
         }),
-        expect.anything(),
       );
     });
 
@@ -470,7 +468,6 @@ describe("kanban module", () => {
         "ws-1",
         "card.moved",
         expect.anything(),
-        expect.anything(),
       );
       expect(dispatchEvent).toHaveBeenCalledWith(
         "org-1",
@@ -481,7 +478,6 @@ describe("kanban module", () => {
           boardId: "board-1",
           changedFields: [],
         }),
-        expect.anything(),
       );
     });
   });
@@ -513,7 +509,6 @@ describe("kanban module", () => {
         "ws-1",
         "card.updated",
         expect.objectContaining({ changedFields: [] }),
-        expect.anything(),
       );
     });
 
@@ -533,7 +528,6 @@ describe("kanban module", () => {
         "ws-1",
         "card.updated",
         expect.objectContaining({ changedFields: ["body"] }),
-        expect.anything(),
       );
     });
 
@@ -555,7 +549,6 @@ describe("kanban module", () => {
         "ws-1",
         "card.updated",
         expect.objectContaining({ changedFields: ["body"] }),
-        expect.anything(),
       );
     });
   });
@@ -585,7 +578,6 @@ describe("kanban module", () => {
         "ws-1",
         "card.updated",
         expect.objectContaining({ changedFields: ["priority"] }),
-        expect.anything(),
       );
     });
 
@@ -634,28 +626,24 @@ describe("kanban module", () => {
           id: "card-1",
           previousColumnId: "col-old",
         }),
-        expect.anything(),
       );
       expect(dispatchEvent).not.toHaveBeenCalledWith(
         "org-1",
         "ws-1",
         "card.moved",
         expect.objectContaining({ id: "card-2" }),
-        expect.anything(),
       );
       expect(dispatchEvent).toHaveBeenCalledWith(
         "org-1",
         "ws-1",
         "card.updated",
         expect.objectContaining({ id: "card-1", changedFields: ["columnId"] }),
-        expect.anything(),
       );
       expect(dispatchEvent).toHaveBeenCalledWith(
         "org-1",
         "ws-1",
         "card.updated",
         expect.objectContaining({ id: "card-2", changedFields: [] }),
-        expect.anything(),
       );
     });
   });

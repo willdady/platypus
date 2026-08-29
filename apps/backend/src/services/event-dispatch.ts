@@ -9,32 +9,23 @@ import { executeTrigger } from "./trigger-execution.ts";
 import { updateTriggerAfterRun } from "./trigger-execution.ts";
 import { debounceTriggerExecution } from "./event-trigger-debounce.ts";
 import { logger } from "../logger.ts";
+import { currentCausingAgents } from "../event-causation.ts";
 import type { WebhookEvent, EventTriggerConfig } from "@platypus/schemas";
-
-/**
- * Optional context about who caused the event being dispatched.
- *
- * `actorAgentId` is the agent that performed the write. It is supplied by
- * agent-facing tool write paths and is absent for human-originated (HTTP
- * route) writes. The dispatcher uses it to skip an event trigger when the
- * trigger's own agent caused the event — preventing an agent's writes from
- * re-firing the very trigger that started it (see #267).
- *
- * This is keyed off the actor of *this specific event*, not a persisted
- * attribution column (e.g. `lastEditedByAgentId`), which is sticky and would
- * cause false-negatives on later human edits.
- */
-export interface DispatchEventOptions {
-  actorAgentId?: string;
-}
 
 export function dispatchEvent(
   orgId: string,
   workspaceId: string,
   event: WebhookEvent,
   data: unknown,
-  options?: DispatchEventOptions,
 ): void {
+  // Causation is ambient run context (ADR-0022): the chain of Agents acting
+  // when the write happened, read once here so the fire-and-forget body below
+  // keeps a stable view of it. A human write establishes no chain, so it reads
+  // empty and no guard engages. Keyed off the ambient actor rather than a
+  // persisted attribution column (e.g. `lastEditedByAgentId`), which is sticky
+  // and would cause false-negatives on later human edits.
+  const causingAgents = currentCausingAgents();
+
   // Fire-and-forget — never awaited by the caller
   void (async () => {
     try {
@@ -85,14 +76,11 @@ export function dispatchEvent(
         if (!triggerConfig.events.includes(event)) continue;
 
         // Self-actor guard: skip when the agent that caused this event is the
-        // very same agent this trigger would run. This stops an agent's own
-        // card writes from re-firing the trigger that started it (#267).
-        // Human-originated events carry no actor, so they always pass.
-        if (
-          options?.actorAgentId &&
-          trigger.agentId &&
-          trigger.agentId === options.actorAgentId
-        ) {
+        // very same agent this trigger would run — or a delegate beneath it, at
+        // any depth. This stops an agent's own card writes (through any of its
+        // Sub-Agents) from re-firing the trigger that started it (#267, #668).
+        // Human-originated events carry an empty chain, so they always pass.
+        if (trigger.agentId && causingAgents.includes(trigger.agentId)) {
           continue;
         }
 

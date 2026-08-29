@@ -12,6 +12,11 @@ import { driveChat, driveDelegate, driveOnce } from "./drive.ts";
 import type { RunStatus } from "./types.ts";
 import { CLEARED_TOOL_RESULT_MARKER } from "./tool-result-clearing.ts";
 import type { ModelMessage } from "ai";
+import {
+  currentCausingAgents,
+  withCausation,
+  type AgentChain,
+} from "../event-causation.ts";
 
 /**
  * The drive is the seam that owns the model drill and the terminal decision.
@@ -186,6 +191,85 @@ const oneStepPlanOf = (model: MockLanguageModelV3) => ({
   maxSteps: 1,
 });
 
+/** A plan whose only tool records the ambient causation chain at execute time. */
+const causationProbePlan = (model: MockLanguageModelV3) => {
+  const seen: AgentChain[] = [];
+  const plan = {
+    model,
+    maxSteps: 5,
+    tools: {
+      probe: {
+        inputSchema: z.object({}),
+        execute: () => {
+          seen.push(currentCausingAgents());
+          return "ok";
+        },
+      },
+    } as unknown as Record<string, Tool>,
+  };
+  return { plan, seen };
+};
+
+/** The streamed model: one tool call then a clean stop. */
+const streamingToolThenStopModel = (): MockLanguageModelV3 => {
+  let index = 0;
+  return new MockLanguageModelV3({
+    doStream: () => {
+      index += 1;
+      if (index === 1) {
+        return Promise.resolve({
+          stream: simulateReadableStream({
+            chunks: [
+              { type: "stream-start", warnings: [] },
+              { type: "tool-input-start", id: "tc1", toolName: "probe" },
+              { type: "tool-input-end", id: "tc1" },
+              {
+                type: "tool-call",
+                toolCallId: "tc1",
+                toolName: "probe",
+                input: "{}",
+              },
+              {
+                type: "finish",
+                finishReason: { unified: "tool-calls", raw: "tool_calls" },
+                usage: USAGE,
+              },
+            ],
+          }),
+        });
+      }
+      return Promise.resolve({
+        stream: simulateReadableStream({
+          chunks: [
+            { type: "stream-start", warnings: [] },
+            { type: "text-start", id: "t1" },
+            ...text("t1", "done"),
+          ],
+        }),
+      });
+    },
+  });
+};
+
+/** The generate model: a tool call and text in one result. */
+const generatingToolThenStopModel = (): MockLanguageModelV3 =>
+  new MockLanguageModelV3({
+    doGenerate: (): Promise<LanguageModelV3GenerateResult> =>
+      Promise.resolve({
+        content: [
+          {
+            type: "tool-call",
+            toolCallId: "tc1",
+            toolName: "probe",
+            input: "{}",
+          },
+          { type: "text", text: "ok" },
+        ],
+        finishReason: { unified: "stop", raw: "stop" },
+        usage: USAGE,
+      } as unknown as LanguageModelV3GenerateResult),
+  });
+
 describe("driveOnce", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -222,6 +306,52 @@ describe("driveOnce", () => {
 
     expect(stats.truncatedByTokenLimit).toBe(true);
     expect(outcome[0].stats).toMatchObject({ truncatedByTokenLimit: true });
+  });
+
+  // Issue #734. The non-streamed `generateText` path folds usage through
+  // `computeStats`, which must carry the cached-input breakdown the same way
+  // the streamed accumulator does. A write of 0 is a real measurement and is
+  // kept, not treated as absent.
+  it("carries cached read and write counts onto the run's stats", async () => {
+    const { run, outcome } = startRecordedRun();
+
+    const { stats } = await driveOnce({
+      plan: planOf(
+        generatingModel({
+          usage: {
+            inputTokens: {
+              total: 920,
+              noCache: 20,
+              cacheRead: 900,
+              cacheWrite: 0,
+            },
+            outputTokens: { total: 4, text: 4, reasoning: undefined },
+          },
+        }),
+      ),
+      prompt: "hi",
+      run,
+    });
+
+    expect(stats.cacheReadTokens).toBe(900);
+    expect(stats.cacheWriteTokens).toBe(0);
+    expect(outcome[0].stats).toMatchObject({
+      cacheReadTokens: 900,
+      cacheWriteTokens: 0,
+    });
+  });
+
+  it("keeps no cache key when the Provider reports no cache detail", async () => {
+    const { run } = startRecordedRun();
+
+    const { stats } = await driveOnce({
+      plan: planOf(generatingModel()),
+      prompt: "hi",
+      run,
+    });
+
+    expect(stats).not.toHaveProperty("cacheReadTokens");
+    expect(stats).not.toHaveProperty("cacheWriteTokens");
   });
 
   it("finishes as failed and rethrows when the model call throws", async () => {
@@ -323,6 +453,28 @@ describe("driveOnce", () => {
     expect(stats).not.toHaveProperty("stoppedAtStepLimit");
     expect(outcome[0].status).toBe("failed");
     expect(outcome[0].stats).not.toHaveProperty("stoppedAtStepLimit");
+  });
+
+  // The ambient causation chain a headless run establishes reaches its tools:
+  // the chain is what an Event Trigger's loop guard reads (ADR-0022, #668).
+  it("establishes its agent's causation chain for the tools it runs", async () => {
+    const { run } = startRecordedRun();
+    const { plan, seen } = causationProbePlan(generatingToolThenStopModel());
+
+    await driveOnce({ plan, run, prompt: "hi", agentId: "agent-9" });
+
+    expect(seen.length).toBeGreaterThan(0);
+    for (const chain of seen) expect(chain).toEqual(["agent-9"]);
+  });
+
+  it("runs uncaused when no agent id is given", async () => {
+    const { run } = startRecordedRun();
+    const { plan, seen } = causationProbePlan(generatingToolThenStopModel());
+
+    await driveOnce({ plan, run, prompt: "hi" });
+
+    expect(seen.length).toBeGreaterThan(0);
+    for (const chain of seen) expect(chain).toEqual([]);
   });
 });
 
@@ -508,6 +660,30 @@ describe("driveDelegate", () => {
     expect(outcome[0].status).toBe("failed");
     expect(outcome[0].error).toBeInstanceOf(TimeoutError);
   });
+
+  // A delegate chains beneath its parent's ambient causation, so a write it
+  // makes carries every Agent above it too (ADR-0022, #668).
+  it("extends the parent's causation chain with the delegate's agent id", async () => {
+    const { run } = startRecordedRun();
+    const { plan, seen } = causationProbePlan(streamingToolThenStopModel());
+
+    let drain!: Promise<void>;
+    withCausation(["agent-1"], () => {
+      const drive = driveDelegate({
+        plan,
+        run,
+        prompt: "hi",
+        agentId: "sub-1",
+      });
+      drain = (async () => {
+        for await (const _ of drive.snapshots) void _;
+        await drive.done;
+      })();
+    });
+
+    await drain;
+    expect(seen).toEqual([["agent-1", "sub-1"]]);
+  });
 });
 
 describe("driveChat", () => {
@@ -669,6 +845,24 @@ describe("driveChat", () => {
     expect(result.messages?.at(-1)?.metadata ?? {}).not.toHaveProperty(
       "stoppedAtStepLimit",
     );
+  });
+
+  // An interactive Chat turn with an Agent establishes that Agent's causation
+  // chain for its tools (ADR-0022, #668).
+  it("establishes the agent's causation chain for its tools", async () => {
+    const { run } = startRecordedRun();
+    const { plan, seen } = causationProbePlan(streamingToolThenStopModel());
+
+    const drive = driveChat({
+      plan,
+      run,
+      agentId: "agent-7",
+      modelMessages: [{ role: "user", content: "hi" }],
+    });
+    for await (const _ of drive.snapshots) void _;
+    await drive.done;
+
+    expect(seen).toEqual([["agent-7"]]);
   });
 });
 

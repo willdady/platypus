@@ -126,18 +126,13 @@ const lastEditedBy = (actor: KanbanActor) =>
     : { lastEditedByUserId: actor.userId };
 
 /**
- * Emits a board event. The acting Agent rides along on Agent-originated writes
- * so an event trigger does not re-fire on its own agent's work (see #267);
- * human writes carry no actor.
+ * Emits a board event. Causation is ambient run context (ADR-0022), read by the
+ * dispatcher rather than named by the writer, so the acting Agent is not
+ * volunteered here — whether this write re-fires an Event Trigger is decided by
+ * the chain of Agents the run established, not by this helper.
  */
 const dispatch = (ctx: KanbanContext, event: WebhookEvent, data: unknown) =>
-  dispatchEvent(
-    ctx.orgId,
-    ctx.workspaceId,
-    event,
-    data,
-    isAgent(ctx.actor) ? { actorAgentId: ctx.actor.agentId } : undefined,
-  );
+  dispatchEvent(ctx.orgId, ctx.workspaceId, event, data);
 
 /**
  * The card attributes a value-diff considers. Bookkeeping columns

@@ -1344,6 +1344,41 @@ describe("triggerRunStatsSchema", () => {
       ).toBe(false);
     }
   });
+
+  it("accepts the cached-input breakdown, and keeps a reported zero", () => {
+    const result = triggerRunStatsSchema.safeParse({
+      ...base,
+      cacheReadTokens: 900,
+      cacheWriteTokens: 0,
+    });
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.cacheReadTokens).toBe(900);
+      expect(result.data.cacheWriteTokens).toBe(0);
+    }
+  });
+
+  it("leaves the cache fields undefined where the Provider reported none", () => {
+    const result = triggerRunStatsSchema.safeParse(base);
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.cacheReadTokens).toBeUndefined();
+      expect(result.data.cacheWriteTokens).toBeUndefined();
+    }
+  });
+
+  it("rejects a negative or fractional cache count", () => {
+    for (const cacheReadTokens of [-1, 1.5]) {
+      expect(
+        triggerRunStatsSchema.safeParse({ ...base, cacheReadTokens }).success,
+      ).toBe(false);
+    }
+    for (const cacheWriteTokens of [-1, 1.5]) {
+      expect(
+        triggerRunStatsSchema.safeParse({ ...base, cacheWriteTokens }).success,
+      ).toBe(false);
+    }
+  });
 });
 
 describe("nextTurnOccupancy", () => {

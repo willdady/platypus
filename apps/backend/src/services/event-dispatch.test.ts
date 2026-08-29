@@ -27,6 +27,7 @@ vi.mock("../logger.ts", () => ({
 }));
 
 import { dispatchEvent } from "./event-dispatch.ts";
+import { withCausation } from "../event-causation.ts";
 
 const makeWebhook = (overrides: Record<string, unknown> = {}) => ({
   id: "wh-1",
@@ -348,12 +349,12 @@ describe("event-dispatch", () => {
       });
       mockDb.where.mockResolvedValueOnce([]).mockResolvedValueOnce([trigger]);
 
-      dispatchEvent(
-        "org-1",
-        "ws-1",
-        "card.moved",
-        { id: "c1", columnId: "col-dest", previousColumnId: "col-source" },
-        { actorAgentId: "agent-1" },
+      withCausation(["agent-1"], () =>
+        dispatchEvent("org-1", "ws-1", "card.moved", {
+          id: "c1",
+          columnId: "col-dest",
+          previousColumnId: "col-source",
+        }),
       );
       await flushMicrotasks();
 
@@ -423,12 +424,33 @@ describe("event-dispatch", () => {
       const trigger = makeEventTrigger({ agentId: "agent-1" });
       mockDb.where.mockResolvedValueOnce([]).mockResolvedValueOnce([trigger]);
 
-      dispatchEvent(
-        "org-1",
-        "ws-1",
-        "card.updated",
-        { id: "c1" },
-        { actorAgentId: "agent-1" },
+      withCausation(["agent-1"], () =>
+        dispatchEvent("org-1", "ws-1", "card.updated", { id: "c1" }),
+      );
+      await flushMicrotasks();
+
+      expect(mockExecuteTrigger).not.toHaveBeenCalled();
+    });
+
+    it("should skip a trigger when a sub-agent of its own agent caused the event (depth 1)", async () => {
+      const trigger = makeEventTrigger({ agentId: "agent-1" });
+      mockDb.where.mockResolvedValueOnce([]).mockResolvedValueOnce([trigger]);
+
+      // The run's chain is the parent Agent plus the delegate beneath it.
+      withCausation(["agent-1", "sub-1"], () =>
+        dispatchEvent("org-1", "ws-1", "card.updated", { id: "c1" }),
+      );
+      await flushMicrotasks();
+
+      expect(mockExecuteTrigger).not.toHaveBeenCalled();
+    });
+
+    it("should skip a trigger when a sub-agent of its own agent caused the event (depth 2+)", async () => {
+      const trigger = makeEventTrigger({ agentId: "agent-1" });
+      mockDb.where.mockResolvedValueOnce([]).mockResolvedValueOnce([trigger]);
+
+      withCausation(["agent-1", "sub-1", "sub-2"], () =>
+        dispatchEvent("org-1", "ws-1", "card.updated", { id: "c1" }),
       );
       await flushMicrotasks();
 
@@ -454,12 +476,10 @@ describe("event-dispatch", () => {
       const trigger = makeEventTrigger({ agentId: "agent-1" });
       mockDb.where.mockResolvedValueOnce([]).mockResolvedValueOnce([trigger]);
 
-      dispatchEvent(
-        "org-1",
-        "ws-1",
-        "card.updated",
-        { id: "c1" },
-        { actorAgentId: "agent-2" },
+      // A genuinely unrelated Agent, with no delegation relationship to the
+      // trigger's Agent, still fires it.
+      withCausation(["agent-2"], () =>
+        dispatchEvent("org-1", "ws-1", "card.updated", { id: "c1" }),
       );
       await flushMicrotasks();
 
@@ -470,12 +490,8 @@ describe("event-dispatch", () => {
       const trigger = makeEventTrigger({ agentId: null });
       mockDb.where.mockResolvedValueOnce([]).mockResolvedValueOnce([trigger]);
 
-      dispatchEvent(
-        "org-1",
-        "ws-1",
-        "card.updated",
-        { id: "c1" },
-        { actorAgentId: "agent-1" },
+      withCausation(["agent-1"], () =>
+        dispatchEvent("org-1", "ws-1", "card.updated", { id: "c1" }),
       );
       await flushMicrotasks();
 
@@ -494,6 +510,75 @@ describe("event-dispatch", () => {
 
       expect(mockDeliverWebhook).toHaveBeenCalledTimes(1);
       expect(mockExecuteTrigger).toHaveBeenCalledTimes(1);
+    });
+
+    it("should not fire a trigger on its own agent's notification writes", async () => {
+      const trigger = makeEventTrigger({
+        agentId: "agent-1",
+        config: { events: ["notification.created"], filters: undefined },
+      });
+
+      for (const event of [
+        "notification.created",
+        "notification.updated",
+        "notification.dismissed",
+      ] as const) {
+        mockDb.where.mockClear();
+        vi.mocked(mockExecuteTrigger).mockClear();
+        mockDb.where.mockResolvedValueOnce([]).mockResolvedValueOnce([trigger]);
+
+        withCausation(["agent-1"], () =>
+          dispatchEvent("org-1", "ws-1", event, { id: "n-1" }),
+        );
+        await flushMicrotasks();
+
+        expect(mockExecuteTrigger).not.toHaveBeenCalled();
+      }
+    });
+
+    it("should not fire a trigger on its own agent's notification writes under delegation", async () => {
+      const trigger = makeEventTrigger({
+        agentId: "agent-1",
+        config: { events: ["notification.created"], filters: undefined },
+      });
+      mockDb.where.mockResolvedValueOnce([]).mockResolvedValueOnce([trigger]);
+
+      withCausation(["agent-1", "sub-1"], () =>
+        dispatchEvent("org-1", "ws-1", "notification.created", { id: "n-1" }),
+      );
+      await flushMicrotasks();
+
+      expect(mockExecuteTrigger).not.toHaveBeenCalled();
+    });
+
+    it("suppresses only the trigger whose agent caused the event, running the rest", async () => {
+      const suppressed = makeEventTrigger({
+        id: "trigger-1",
+        agentId: "agent-1",
+      });
+      const unrelated = makeEventTrigger({
+        id: "trigger-2",
+        agentId: "agent-9",
+      });
+      const webhook = makeWebhook();
+      mockDb.where
+        .mockResolvedValueOnce([webhook])
+        .mockResolvedValueOnce([suppressed, unrelated]);
+
+      withCausation(["agent-1"], () =>
+        dispatchEvent("org-1", "ws-1", "card.created", { cardId: "c1" }),
+      );
+      await flushMicrotasks();
+
+      // Every subscribed Webhook still receives the event even though one of
+      // the triggers was suppressed.
+      expect(mockDeliverWebhook).toHaveBeenCalledTimes(1);
+      // The suppressed trigger's run never starts, but the unrelated one does.
+      expect(mockExecuteTrigger).toHaveBeenCalledTimes(1);
+      expect(mockExecuteTrigger).toHaveBeenCalledWith(unrelated, {
+        eventType: "card.created",
+        eventData: { cardId: "c1" },
+      });
     });
   });
 });

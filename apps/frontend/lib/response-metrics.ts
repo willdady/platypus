@@ -1,7 +1,12 @@
 import type { ChatMessageMetadata } from "@platypus/backend/src/types";
 
 export type ResponseMetrics = {
-  tokenUsage?: { inputTokens: number; outputTokens: number };
+  tokenUsage?: {
+    inputTokens: number;
+    outputTokens: number;
+    cacheReadTokens?: number;
+    cacheWriteTokens?: number;
+  };
   prepDurationMs?: number;
   modelDurationMs?: number;
   /** The sum of the turn's locally-executed tool durations, when the message

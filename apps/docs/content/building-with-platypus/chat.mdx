@@ -152,7 +152,13 @@ into whichever of these it has a reading for:
 - **Input**, **Output**, **Total** tokens — how many tokens this reply was
   billed for. If it took several passes through the model (it called a Tool
   and then answered, say), this is the total across every one of them, not
-  just the last.
+  just the last. The **Input** figure already includes any tokens the Provider
+  served from its cache, which are billed at a fraction of the uncached rate,
+  so under it a smaller line names how much of the Input was **read from
+  cache** (and, where the Provider reports one, how much was **written to
+  cache**). The Input number itself never drops the cached tokens — a big Input
+  that was mostly cache stays a big Input, and the breakdown is how you read
+  that it was cheap.
 - **Preparation** — how long it took to get ready to ask the model at all:
   opening Tool connections, loading Skills, Memories and Contexts, and turning
   any attached files into something the model can read.
@@ -348,9 +354,9 @@ if that isn't what you want — it changes the Chat's selection too.
   that permanent.** Nothing is written when you click it, so anything that
   re-reads the Chat brings the message back — reloading, and also switching away
   from the tab and returning. Send a message afterwards and the shortened
-  conversation is what gets stored — the deletion you thought was cosmetic is now
-  the history. If you are pruning a long Chat, send in the same sitting rather
-  than leaving it and coming back.
+  conversation is what gets stored — the deletion you thought was cosmetic is
+  now the history. If you are pruning a long Chat, send in the same sitting
+  rather than leaving it and coming back.
 </Callout>
 
 ## Organising a long history
