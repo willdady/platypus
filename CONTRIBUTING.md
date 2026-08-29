@@ -125,6 +125,12 @@ chore(tests): add missing test coverage
 
 ## Submitting a Pull Request
 
+> **Fixing a security vulnerability? Do not open a pull request.** Report it
+> privately first — see [Reporting Issues](#reporting-issues) and
+> [SECURITY.md](SECURITY.md). A branch name and a commit message disclose a
+> vulnerability as surely as an issue does. We can share a private fork with you
+> so the fix still lands as your work.
+
 1. Ensure your code passes all tests (`pnpm test`) and is formatted (`pnpm format`).
 2. Write clear, descriptive commit messages following the conventions above.
 3. Update the docs in `apps/docs/content` in the same PR, not a follow-up one.
@@ -156,6 +162,8 @@ Platypus is a monorepo managed by [Turborepo](https://turbo.build/) with the fol
 ## Reporting Issues
 
 If you find a bug or have a feature request, please [open an issue](https://github.com/willdady/platypus/issues) with a clear description and, if applicable, steps to reproduce.
+
+**Security vulnerabilities are the exception — do not open an issue or a pull request.** [Report it privately](https://github.com/willdady/platypus/security/advisories/new) instead. Until a release exists, a public report tells every deployment that has not upgraded exactly where the hole is, and offers them nothing to upgrade to. See [SECURITY.md](SECURITY.md) for what to include and what happens next.
 
 ## License
 

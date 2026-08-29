@@ -154,8 +154,19 @@ describe("Context Routes", () => {
       expect(mockDb.insert).toHaveBeenCalled();
     });
 
+    // The three lookups `userMayUseWorkspace` makes, in order: the Workspace's
+    // Organization, the caller's membership of it, then the Workspace itself.
+    const mockWorkspaceReachable = () => {
+      mockDb.limit.mockResolvedValueOnce([{ organizationId: "org-1" }]);
+      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
+      mockDb.limit.mockResolvedValueOnce([
+        { id: "ws-1", organizationId: "org-1", ownerId: userId },
+      ]);
+    };
+
     it("should create a workspace context", async () => {
       mockSession({ id: userId, email: "test@example.com" });
+      mockWorkspaceReachable();
 
       const now = new Date();
       const mockContext = {
@@ -189,6 +200,7 @@ describe("Context Routes", () => {
 
     it("should return 409 if context already exists for the scope", async () => {
       mockSession({ id: userId, email: "test@example.com" });
+      mockWorkspaceReachable();
 
       // Mock unique constraint violation
       mockDb.returning.mockRejectedValueOnce({ code: "23505" });
@@ -218,6 +230,86 @@ describe("Context Routes", () => {
       });
 
       expect(res.status).toBe(400);
+    });
+
+    // This route has no Organization in its path, so the Workspace arrives in
+    // the body with nothing upstream having proved the caller may name it.
+    // Every refusal reads as "not found", whatever the reason — a caller who
+    // named an id they have no claim to learns nothing about it, not even
+    // whether it exists.
+    it("refuses a workspaceId in an organization the caller is not a member of", async () => {
+      mockSession({ id: userId, email: "test@example.com" });
+      mockDb.limit.mockResolvedValueOnce([{ organizationId: "org-2" }]);
+      mockDb.limit.mockResolvedValueOnce([]);
+
+      const res = await app.request(baseUrl, {
+        method: "POST",
+        body: JSON.stringify({
+          content: "Planted context",
+          workspaceId: "ws-in-org-2",
+        }),
+        headers: { "Content-Type": "application/json" },
+      });
+
+      expect(res.status).toBe(404);
+      expect(await res.json()).toEqual({ error: "Workspace not found" });
+      expect(mockDb.insert).not.toHaveBeenCalled();
+    });
+
+    it("refuses a workspaceId owned by another member of the caller's own organization", async () => {
+      mockSession({ id: userId, email: "test@example.com" });
+      mockDb.limit.mockResolvedValueOnce([{ organizationId: "org-1" }]);
+      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
+      mockDb.limit.mockResolvedValueOnce([
+        { id: "ws-2", organizationId: "org-1", ownerId: "someone-else" },
+      ]);
+
+      const res = await app.request(baseUrl, {
+        method: "POST",
+        body: JSON.stringify({
+          content: "Planted context",
+          workspaceId: "ws-2",
+        }),
+        headers: { "Content-Type": "application/json" },
+      });
+
+      expect(res.status).toBe(404);
+      expect(mockDb.insert).not.toHaveBeenCalled();
+    });
+
+    it("refuses a workspaceId that does not exist", async () => {
+      mockSession({ id: userId, email: "test@example.com" });
+      mockDb.limit.mockResolvedValueOnce([]);
+
+      const res = await app.request(baseUrl, {
+        method: "POST",
+        body: JSON.stringify({
+          content: "Planted context",
+          workspaceId: "ws-nope",
+        }),
+        headers: { "Content-Type": "application/json" },
+      });
+
+      expect(res.status).toBe(404);
+      expect(mockDb.insert).not.toHaveBeenCalled();
+    });
+
+    // A global Context names no Workspace, so there is nothing to check and no
+    // lookup to make — the guard must not turn a null scope into a 404.
+    it("makes no workspace check for a global context", async () => {
+      mockSession({ id: userId, email: "test@example.com" });
+      mockDb.returning.mockResolvedValueOnce([
+        { id: "ctx-new", userId, workspaceId: null, content: "Global" },
+      ]);
+
+      const res = await app.request(baseUrl, {
+        method: "POST",
+        body: JSON.stringify({ content: "Global" }),
+        headers: { "Content-Type": "application/json" },
+      });
+
+      expect(res.status).toBe(201);
+      expect(mockDb.limit).not.toHaveBeenCalled();
     });
 
     it("should return 401 if not authenticated", async () => {

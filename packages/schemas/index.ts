@@ -59,7 +59,6 @@ export type Workspace = z.infer<typeof workspaceSchema>;
 export const workspaceCreateSchema = workspaceSchema
   .pick({
     name: true,
-    organizationId: true,
     context: true,
   })
   // ownerId is admin-assignable (ADR-0008). When omitted, the create handler

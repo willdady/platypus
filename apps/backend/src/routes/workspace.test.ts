@@ -42,7 +42,6 @@ describe("Workspace Routes", () => {
         method: "POST",
         body: JSON.stringify({
           name: "New Workspace",
-          organizationId: "org-1",
         }),
         headers: { "Content-Type": "application/json" },
       });
@@ -68,7 +67,6 @@ describe("Workspace Routes", () => {
         method: "POST",
         body: JSON.stringify({
           name: "New Workspace",
-          organizationId: "org-1",
         }),
         headers: { "Content-Type": "application/json" },
       });
@@ -90,7 +88,6 @@ describe("Workspace Routes", () => {
         method: "POST",
         body: JSON.stringify({
           name: "Member Workspace",
-          organizationId: "org-1",
           ownerId: "member-2",
         }),
         headers: { "Content-Type": "application/json" },
@@ -115,7 +112,6 @@ describe("Workspace Routes", () => {
         method: "POST",
         body: JSON.stringify({
           name: "Member Workspace",
-          organizationId: "org-1",
           ownerId: "outsider",
         }),
         headers: { "Content-Type": "application/json" },
@@ -126,6 +122,34 @@ describe("Workspace Routes", () => {
         error: "Owner must be a member of the organization",
       });
       expect(mockDb.insert).not.toHaveBeenCalled();
+    });
+
+    // The organization id is a tenancy boundary. It is derived from the path
+    // after requireOrgAccess, rather than accepted from the request body.
+    it("binds a workspace to the authorized organization", async () => {
+      mockSession({ id: "admin-1", role: "user" });
+      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]);
+      mockDb.returning.mockResolvedValueOnce([
+        { id: "ws-1", name: "Bound Workspace", organizationId: "org-1" },
+      ]);
+
+      const res = await app.request("/organizations/org-1/workspaces", {
+        method: "POST",
+        body: JSON.stringify({
+          name: "Bound Workspace",
+          // A stale or malicious client cannot redirect creation into org-2.
+          organizationId: "org-2",
+        }),
+        headers: { "Content-Type": "application/json" },
+      });
+
+      expect(res.status).toBe(201);
+      expect(mockDb.values).toHaveBeenCalledWith(
+        expect.objectContaining({
+          organizationId: "org-1",
+          ownerId: "admin-1",
+        }),
+      );
     });
   });
 

@@ -198,7 +198,6 @@ const WorkspaceForm = ({
           mcpSelfManagement: formData.mcpSelfManagement,
         }
       : {
-          organizationId: orgId,
           name: formData.name,
           context: formData.context || null,
           // ADR-0008: an admin assigns the owner; defaults to themselves.

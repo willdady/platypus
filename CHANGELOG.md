@@ -1,5 +1,13 @@
 # Changelog
 
+## [3.1.1](https://github.com/willdady/platypus/compare/v3.1.0...v3.1.1) (2026-08-29)
+
+
+### Bug Fixes
+
+* **backend:** scope a user Context to a Workspace the caller can use ([4c6a6a2](https://github.com/willdady/platypus/commit/4c6a6a2126ce49ded0cd2b44d869dd60889e6755))
+* bind workspace creation to route organization ([#727](https://github.com/willdady/platypus/issues/727)) ([2a03128](https://github.com/willdady/platypus/commit/2a03128cdab4b762018541081abc8bcfcda14d0e))
+
 ## [3.1.0](https://github.com/willdady/platypus/compare/v3.0.0...v3.1.0) (2026-08-28)
 
 

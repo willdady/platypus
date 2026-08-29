@@ -66,6 +66,10 @@ workspace.post(
       .values({
         id: nanoid(),
         ...data,
+        // The route's organization has already passed requireOrgAccess. Never
+        // take this tenancy boundary from client input: an admin of one org
+        // must not be able to create a workspace in another org.
+        organizationId: orgId,
         ownerId,
       })
       .returning();
