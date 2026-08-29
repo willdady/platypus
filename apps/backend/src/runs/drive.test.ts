@@ -224,6 +224,52 @@ describe("driveOnce", () => {
     expect(outcome[0].stats).toMatchObject({ truncatedByTokenLimit: true });
   });
 
+  // Issue #734. The non-streamed `generateText` path folds usage through
+  // `computeStats`, which must carry the cached-input breakdown the same way
+  // the streamed accumulator does. A write of 0 is a real measurement and is
+  // kept, not treated as absent.
+  it("carries cached read and write counts onto the run's stats", async () => {
+    const { run, outcome } = startRecordedRun();
+
+    const { stats } = await driveOnce({
+      plan: planOf(
+        generatingModel({
+          usage: {
+            inputTokens: {
+              total: 920,
+              noCache: 20,
+              cacheRead: 900,
+              cacheWrite: 0,
+            },
+            outputTokens: { total: 4, text: 4, reasoning: undefined },
+          },
+        }),
+      ),
+      prompt: "hi",
+      run,
+    });
+
+    expect(stats.cacheReadTokens).toBe(900);
+    expect(stats.cacheWriteTokens).toBe(0);
+    expect(outcome[0].stats).toMatchObject({
+      cacheReadTokens: 900,
+      cacheWriteTokens: 0,
+    });
+  });
+
+  it("keeps no cache key when the Provider reports no cache detail", async () => {
+    const { run } = startRecordedRun();
+
+    const { stats } = await driveOnce({
+      plan: planOf(generatingModel()),
+      prompt: "hi",
+      run,
+    });
+
+    expect(stats).not.toHaveProperty("cacheReadTokens");
+    expect(stats).not.toHaveProperty("cacheWriteTokens");
+  });
+
   it("finishes as failed and rethrows when the model call throws", async () => {
     const { run, outcome } = startRecordedRun();
     const model = new MockLanguageModelV3({

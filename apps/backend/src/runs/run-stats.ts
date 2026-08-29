@@ -22,7 +22,15 @@ export const stepOccupancy = (usage?: {
 /** As much of an SDK step result as the run lifecycle reads. */
 export type RunStep = {
   toolCalls?: Array<{ toolName: string }>;
-  usage?: { inputTokens?: number; outputTokens?: number };
+  usage?: {
+    inputTokens?: number;
+    outputTokens?: number;
+    /** Cached-input read/write breakdown of the input figure (issue #734). */
+    inputTokenDetails?: {
+      cacheReadTokens?: number;
+      cacheWriteTokens?: number;
+    };
+  };
   // Both reasons, deliberately. The unified union collapses any reason the
   // provider adapter doesn't recognise into `other` — which is how Bedrock's
   // `malformed_tool_use` becomes indistinguishable from a dozen other endings.
@@ -57,6 +65,19 @@ export const accumulateStepStats = (stats: RunStats, step: RunStep): void => {
       (stats.inputTokens ?? 0) + (step.usage.inputTokens ?? 0);
     stats.outputTokens =
       (stats.outputTokens ?? 0) + (step.usage.outputTokens ?? 0);
+    // Cached input, summed the same way as a breakdown of the input figure
+    // (issue #734). Each key only appears once some step has reported a value
+    // for it; a step that reports none adds nothing and needs no erasing,
+    // because a billing sum only grows.
+    const details = step.usage.inputTokenDetails;
+    if (typeof details?.cacheReadTokens === "number") {
+      stats.cacheReadTokens =
+        (stats.cacheReadTokens ?? 0) + details.cacheReadTokens;
+    }
+    if (typeof details?.cacheWriteTokens === "number") {
+      stats.cacheWriteTokens =
+        (stats.cacheWriteTokens ?? 0) + details.cacheWriteTokens;
+    }
   }
   // REPLACED, not summed, and outside the guard above: the whole conversation
   // is in every step's input count, so the latest step is the current context
@@ -76,7 +97,15 @@ export const computeStats = (result: {
     toolCalls: Array<{ toolName: string }>;
     usage?: { inputTokens?: number };
   }>;
-  totalUsage: { inputTokens?: number; outputTokens?: number };
+  totalUsage: {
+    inputTokens?: number;
+    outputTokens?: number;
+    /** Cached-input read/write breakdown summed across steps (issue #734). */
+    inputTokenDetails?: {
+      cacheReadTokens?: number;
+      cacheWriteTokens?: number;
+    };
+  };
 }): RunStats => {
   const toolCallCounts = new Map<string, number>();
   for (const step of result.steps) {
@@ -91,11 +120,21 @@ export const computeStats = (result: {
   // a count would answer with a smaller, earlier context as though it were the
   // one the run ended on.
   const contextOccupancy = stepOccupancy(result.steps.at(-1)?.usage);
+  const cacheDetails = result.totalUsage.inputTokenDetails;
   return {
     steps: result.steps.length,
     toolCalls: Array.from(toolCallCounts, ([name, count]) => ({ name, count })),
     inputTokens: result.totalUsage.inputTokens ?? 0,
     outputTokens: result.totalUsage.outputTokens ?? 0,
+    // Spread so a Provider that reports no cache detail stores no key at all:
+    // absent means unknown, and 0 would read as a measurement of no cached
+    // reads or writes (issue #734).
+    ...(typeof cacheDetails?.cacheReadTokens === "number"
+      ? { cacheReadTokens: cacheDetails.cacheReadTokens }
+      : {}),
+    ...(typeof cacheDetails?.cacheWriteTokens === "number"
+      ? { cacheWriteTokens: cacheDetails.cacheWriteTokens }
+      : {}),
     // Spread so a run whose Provider reported no usage stores no key at all,
     // matching the schema's optional field: absent means unknown, and 0 would
     // read as a measurement of an empty context.

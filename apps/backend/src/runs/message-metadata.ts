@@ -106,6 +106,14 @@ export const createMessageMetadata = ({
   // right beside it.
   let inputTokensSum = 0;
   let outputTokensSum = 0;
+  // Cached-input read and write counts, summed the same way as a breakdown of
+  // the input figure (issue #734). Each key is written only once some step has
+  // reported a value for it, so a Provider that reports no cache detail
+  // persists no cache key rather than a `0` sum.
+  let cacheReadReported = false;
+  let cacheWriteReported = false;
+  let cacheReadTokensSum = 0;
+  let cacheWriteTokensSum = 0;
   // The turn's clearable Tool names among the ones it has actually called so
   // far — reported in full each time, like `tokenUsage`'s sum, since the
   // merge replaces an array rather than concatenating it.
@@ -168,10 +176,33 @@ export const createMessageMetadata = ({
       if (typeof inputTokens === "number" || typeof outputTokens === "number") {
         inputTokensSum += inputTokens ?? 0;
         outputTokensSum += outputTokens ?? 0;
-        meta.tokenUsage = {
+        const tokenUsage: {
+          inputTokens: number;
+          outputTokens: number;
+          cacheReadTokens?: number;
+          cacheWriteTokens?: number;
+        } = {
           inputTokens: inputTokensSum,
           outputTokens: outputTokensSum,
         };
+        // Cached input, summed across the turn's steps just like the flat input
+        // figure beside it — a breakdown of that number, never subtracted. A
+        // step that reports no read (or write) count adds nothing and, unlike
+        // occupancy, needs no erasing: the sum only grows. Each key is written
+        // only once some step has reported a value.
+        const details = part.usage.inputTokenDetails;
+        if (typeof details?.cacheReadTokens === "number") {
+          cacheReadReported = true;
+          cacheReadTokensSum += details.cacheReadTokens;
+        }
+        if (cacheReadReported) tokenUsage.cacheReadTokens = cacheReadTokensSum;
+        if (typeof details?.cacheWriteTokens === "number") {
+          cacheWriteReported = true;
+          cacheWriteTokensSum += details.cacheWriteTokens;
+        }
+        if (cacheWriteReported)
+          tokenUsage.cacheWriteTokens = cacheWriteTokensSum;
+        meta.tokenUsage = tokenUsage;
       }
 
       if (typeof driveStartMs === "number") {

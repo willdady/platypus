@@ -1960,6 +1960,21 @@ export const triggerRunStatsSchema = z.object({
   inputTokens: z.number(),
   outputTokens: z.number(),
   /**
+   * Cached input tokens READ across the run's model calls, summed the same way
+   * `inputTokens` is (issue #734). A breakdown of that figure, which already
+   * includes cached tokens — never subtracted. Optional following the pattern
+   * `contextOccupancy` sets here: a non-negative integer, absent meaning
+   * unknown (the Provider never reported one).
+   */
+  cacheReadTokens: z.number().int().nonnegative().optional(),
+  /**
+   * Cached input tokens the run's model calls caused to be WRITTEN, summed as
+   * above. Optional for the same reason, and only present where the Provider
+   * reports a write count at all — OpenAI and Google cache implicitly and
+   * report none (issue #734).
+   */
+  cacheWriteTokens: z.number().int().nonnegative().optional(),
+  /**
    * How full the model's context got: the input tokens reported for the FINAL
    * step of the run, which is the whole conversation as last sent. A last
    * value, never a sum. Absent where the Provider reported no usage — occupancy

@@ -27,6 +27,7 @@ import {
   MessageSquare,
   Gauge,
   Copy,
+  Database,
 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -217,11 +218,55 @@ const TriggerRunsPage = ({
                                     <Wrench className="h-3 w-3" />0 tool calls
                                   </span>
                                 )}
-                                <span className="flex items-center gap-1">
-                                  <MessageSquare className="h-3 w-3" />
-                                  {formatTokens(stats.inputTokens)} in /{" "}
-                                  {formatTokens(stats.outputTokens)} out
-                                </span>
+                                {/* Cached input is a breakdown of the in figure
+                                  above, which already includes it — never
+                                  subtracted (issue #734). A tooltip on a cache
+                                  icon so the token line stays as tight as it
+                                  was: absent means the Provider reported no
+                                  cache detail, which is never rendered as zero. */}
+                                {stats.cacheReadTokens !== undefined ||
+                                stats.cacheWriteTokens !== undefined ? (
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <span className="flex items-center gap-1 cursor-default">
+                                        <MessageSquare className="h-3 w-3" />
+                                        {formatTokens(stats.inputTokens)} in /{" "}
+                                        {formatTokens(stats.outputTokens)} out
+                                        <Database className="h-3 w-3 text-muted-foreground" />
+                                      </span>
+                                    </TooltipTrigger>
+                                    <TooltipContent>
+                                      <ul className="text-left">
+                                        {stats.cacheReadTokens !==
+                                          undefined && (
+                                          <li>
+                                            of which{" "}
+                                            {formatTokens(
+                                              stats.cacheReadTokens,
+                                            )}{" "}
+                                            read from cache
+                                          </li>
+                                        )}
+                                        {stats.cacheWriteTokens !==
+                                          undefined && (
+                                          <li>
+                                            of which{" "}
+                                            {formatTokens(
+                                              stats.cacheWriteTokens,
+                                            )}{" "}
+                                            written to cache
+                                          </li>
+                                        )}
+                                      </ul>
+                                    </TooltipContent>
+                                  </Tooltip>
+                                ) : (
+                                  <span className="flex items-center gap-1">
+                                    <MessageSquare className="h-3 w-3" />
+                                    {formatTokens(stats.inputTokens)} in /{" "}
+                                    {formatTokens(stats.outputTokens)} out
+                                  </span>
+                                )}
                                 {/* How full the context got on the run's LAST
                                   step, which is a different quantity from the
                                   cross-step sums above (ADR-0018). Absent where

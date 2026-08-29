@@ -113,6 +113,25 @@ export type ChatMessageMetadata = {
   tokenUsage?: {
     inputTokens: number;
     outputTokens: number;
+    /**
+     * Cached input tokens READ across the turn's model calls, summed the same
+     * way `inputTokens` is (issue #734). A breakdown of the input figure, which
+     * already includes cached tokens — never subtracted from it.
+     *
+     * Optional rather than defaulted so a message persisted before this change
+     * is distinguishable from a turn whose Provider genuinely reported no
+     * cached reads. Absent where the Provider reported none on any step;
+     * nothing is estimated. A reported `0` is a measurement and is kept.
+     */
+    cacheReadTokens?: number;
+    /**
+     * Cached input tokens the turn's model calls caused to be WRITTEN, summed
+     * as above. Optional for the same reason, and only present where the
+     * Provider reports a write count at all — OpenAI and Google cache
+     * implicitly and report none, so the key (and any row) is legitimately
+     * missing on those two rather than zero.
+     */
+    cacheWriteTokens?: number;
   };
   /**
    * How long Turn resolution took, in whole milliseconds, before the model
