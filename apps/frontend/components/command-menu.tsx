@@ -18,6 +18,7 @@ import {
   Radio,
   LayoutDashboard,
   BookOpen,
+  History,
 } from "lucide-react";
 
 import {
@@ -195,6 +196,17 @@ export function CommandMenu({ orgId, workspaceId }: CommandMenuProps) {
           >
             <Zap />
             <span>New trigger</span>
+          </CommandItem>
+          <CommandItem
+            className="cursor-pointer"
+            onSelect={() => {
+              runCommand(() =>
+                router.push(`/${orgId}/workspace/${workspaceId}/trigger-runs`),
+              );
+            }}
+          >
+            <History />
+            <span>Trigger runs</span>
           </CommandItem>
           <CommandItem
             className="cursor-pointer"

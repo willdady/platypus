@@ -401,30 +401,4 @@ describe("Trigger Routes", () => {
       expect(res.status).toBe(404);
     });
   });
-
-  describe("GET /:triggerId/runs", () => {
-    it("lists trigger runs ordered by start time", async () => {
-      stubAuthLookups();
-      mockDb.limit.mockResolvedValueOnce([cronTrigger]); // trigger verify
-
-      const runs = [
-        { id: "run-1", triggerId: "trig-1", status: "success" },
-        { id: "run-2", triggerId: "trig-1", status: "failed" },
-      ];
-      mockDb.offset.mockResolvedValueOnce(runs);
-
-      const res = await app.request(`${baseUrl}/trig-1/runs`);
-      expect(res.status).toBe(200);
-      const body = (await res.json()) as { results: unknown[] };
-      expect(body.results).toHaveLength(2);
-    });
-
-    it("returns 404 when the trigger doesn't exist in this workspace", async () => {
-      stubAuthLookups();
-      mockDb.limit.mockResolvedValueOnce([]); // trigger verify: not found
-
-      const res = await app.request(`${baseUrl}/trig-missing/runs`);
-      expect(res.status).toBe(404);
-    });
-  });
 });

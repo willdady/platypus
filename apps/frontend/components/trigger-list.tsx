@@ -233,7 +233,7 @@ export const TriggerList = ({
                       <DropdownMenuItem asChild>
                         <Link
                           className="cursor-pointer"
-                          href={`/${orgId}/workspace/${workspaceId}/triggers/${trigger.id}/runs`}
+                          href={`/${orgId}/workspace/${workspaceId}/trigger-runs?triggerId=${trigger.id}`}
                         >
                           <List /> View runs
                         </Link>

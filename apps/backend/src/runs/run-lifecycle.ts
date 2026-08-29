@@ -45,6 +45,24 @@ export type RunLifecycle = {
   /** Terminate once, with the outcome. Repeat calls are no-ops. */
   finish: (status: RunStatus, error?: Error) => Promise<void>;
   /**
+   * Hand the run a Tool session's `dispose` to close when it ends — or, if the
+   * run has already ended, have it closed here and be told so. `false` means
+   * the second: `dispose` has been run, and the caller must not go on.
+   *
+   * Both halves are the method, which is why the name carries them. A run's
+   * timers are armed the moment it registers, and that is *before* Turn
+   * resolution is awaited — so a resolution slower than the per-step bound
+   * reaches a run whose teardown has already been and gone. A caller that
+   * simply stored the disposer would have stored it where nothing will ever
+   * read it again (issue #630), and a caller that checked first would be
+   * checking across an await. Nothing here awaits between the check and the
+   * store, so no termination can land in the middle of one.
+   *
+   * The invariant this exists to make true by construction: **a disposer is
+   * only ever held by a run that can still run it.**
+   */
+  adoptOrDispose: (dispose: () => Promise<void>) => Promise<boolean>;
+  /**
    * How this run ended, as far as its abort signal knows: `succeeded` while the
    * signal is clear, `cancelled` where someone stopped it, and `failed` with the
    * `TimeoutError` where a timer did. The one place that reading is made, so no
@@ -85,16 +103,47 @@ export const startRun = (params: {
   const logFields = { runId, ...params.log };
   let stats: RunStats = {};
   let terminated = false;
+  /** The Tool session this run must close, once it has one — see
+   *  {@link RunLifecycle.adoptOrDispose}. One, not a list: a run resolves one
+   *  turn, and a turn has exactly one session to dispose however many tool
+   *  sources it reached (`CONTEXT.md`, **Tool session**). */
+  let disposer: (() => Promise<void>) | undefined;
+
+  /** Run the disposer without letting it break the path it is on — the guard
+   *  `AgentRunner`'s terminal callback used to hold, moved here with the
+   *  disposal it protects. A teardown that throws must not stop the run being
+   *  finished, nor a failure from reaching the caller. */
+  const runDisposer = async (dispose: () => Promise<void>): Promise<void> => {
+    try {
+      await dispose();
+    } catch (err) {
+      logger.error({ err, ...logFields }, "Error disposing turn");
+    }
+  };
 
   const finish = async (status: RunStatus, error?: Error): Promise<void> => {
     if (terminated) return;
     terminated = true;
+    // Before `onTerminate`, so the connections a turn opened are closed by the
+    // time the sink writes the run's terminal record.
+    if (disposer) await runDisposer(disposer);
     try {
       await onTerminate({ status, error, stats });
     } catch (err) {
       logger.error({ err, ...logFields }, "Error terminating run");
     }
     runRegistry.unregister(runId);
+  };
+
+  const adoptOrDispose = async (
+    dispose: () => Promise<void>,
+  ): Promise<boolean> => {
+    if (terminated) {
+      await runDisposer(dispose);
+      return false;
+    }
+    disposer = dispose;
+    return true;
   };
 
   const handle = runRegistry.register(runId, {
@@ -190,6 +239,7 @@ export const startRun = (params: {
     onStreamChunk: () => handle.noteActivity(),
     onActivity,
     finish,
+    adoptOrDispose,
     statusFromSignal,
     abortReason,
   };

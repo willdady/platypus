@@ -112,6 +112,7 @@ import { AgentRunner } from "./agent-runner.ts";
 import { ConflictError, mapError } from "../errors.ts";
 import { logger } from "../logger.ts";
 import { runRegistry, TimeoutError } from "./run-registry.ts";
+import { openToolSession } from "../tools/tool-session.ts";
 import type { ResolvedRunPlan, RunInput, RunSink, RunStats } from "./types.ts";
 import type { WorkspaceScope } from "../scope.ts";
 
@@ -1103,6 +1104,111 @@ const primeStreamText = () => {
     },
   );
 };
+
+// Issue #630, Path B. Both run timers are armed when the run is registered,
+// which happens BEFORE Turn resolution is awaited — so a resolution slower
+// than the per-step bound terminates the run while it is still in flight.
+// The turn then arrives at a run that can no longer dispose it: the session,
+// its MCP clients and every closer a Contribution registered stayed open for
+// the life of the process, and the run — already recorded as failed — went
+// on to spend a provider call the caller was handed as a success.
+describe("a turn that resolves after its run has already terminated", () => {
+  let runner: AgentRunner;
+  beforeEach(() => {
+    runner = new AgentRunner();
+    vi.clearAllMocks();
+  });
+
+  /** Resolves a turn well after the 5ms per-step bound below has fired. */
+  const slowPrepare = (dispose: () => Promise<void>) =>
+    mockPrepareChatTurn.mockImplementationOnce(async () => {
+      await new Promise((r) => setTimeout(r, 60));
+      return fakeTurn({ dispose });
+    });
+
+  const timedOutRun = (sink: RunSink, dispose: () => Promise<void>) => {
+    slowPrepare(dispose);
+    return runner.generate({
+      scope,
+      input: { ...baseInput, runId: "late-prepare" },
+      sink,
+      options: {
+        timeouts: { perStepTimeoutMs: 5, perRunTimeoutMs: 1_000_000 },
+      },
+    });
+  };
+
+  it("disposes it, since the run's own teardown has already been and gone", async () => {
+    const dispose = vi.fn().mockResolvedValue(undefined);
+
+    await expect(timedOutRun(new RecordingSink(), dispose)).rejects.toThrow(
+      TimeoutError,
+    );
+
+    expect(dispose).toHaveBeenCalledTimes(1);
+  });
+
+  // Against a REAL session, not a stub `dispose`: what leaks on this path is
+  // whatever the session holds, and a Contribution's closers are the half that
+  // a fake turn cannot speak for. `registerCloser` is the seam `ctx.registerCloser`
+  // reaches, so this is the Plugin-facing promise — "core runs your closer once,
+  // when the turn ends" — asserted on the path that used to break it.
+  it("runs a closer a Contribution registered, exactly once", async () => {
+    const session = await openToolSession(
+      {
+        orgId: "org-1",
+        workspaceId: "ws-1",
+        userId: "user-1",
+        frontendUrl: undefined,
+      },
+      undefined,
+      { getMcp: () => Promise.resolve(null) },
+    );
+    const close = vi.fn().mockResolvedValue(undefined);
+    session.registerCloser(close);
+
+    await expect(
+      timedOutRun(new RecordingSink(), session.dispose),
+    ).rejects.toThrow(TimeoutError);
+
+    expect(close).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not invoke the model", async () => {
+    mockGenerateText.mockResolvedValue(fakeGenerateResult);
+    const sink = new RecordingSink();
+
+    await expect(
+      timedOutRun(sink, vi.fn().mockResolvedValue(undefined)),
+    ).rejects.toThrow(TimeoutError);
+
+    expect(mockGenerateText).not.toHaveBeenCalled();
+    // The run was told it failed and nothing walked that back — no second
+    // terminal write, and no `onResolved` for a plan that never ran.
+    expect(sink.names()).toEqual(["onStart", "onFinish"]);
+    const finish = sink.events.at(-1) as Extract<
+      LifecycleEvent,
+      { name: "onFinish" }
+    >;
+    expect(finish.status).toBe("failed");
+    expect(finish.error).toMatch(/per-step timeout/);
+    expect(runRegistry.has("late-prepare")).toBe(false);
+  });
+
+  // The caller has to be able to tell. Before the fix `generate` returned the
+  // model's text as though nothing had happened.
+  it("fails the caller with the error the run terminated on", async () => {
+    const inFlight = timedOutRun(
+      new RecordingSink(),
+      vi.fn().mockResolvedValue(undefined),
+    );
+
+    await expect(inFlight).rejects.toMatchObject({
+      name: "TimeoutError",
+      kind: "step",
+    });
+  });
+});
 
 describe("AgentRunner.stream — success & interruption", () => {
   let runner: AgentRunner;
