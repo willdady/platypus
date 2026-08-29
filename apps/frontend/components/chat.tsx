@@ -67,7 +67,7 @@ import { ChatMessage } from "./chat-message";
 import { MessageEditor } from "./message-editor";
 import { ChatReconnectingNotice } from "./chat-reconnecting-notice";
 import { toast } from "sonner";
-import { Composer } from "./composer";
+import { Composer, type ModelSelection } from "./composer";
 
 export const Chat = ({
   orgId,
@@ -266,6 +266,16 @@ export const Chat = ({
     agents,
     selection: { agentId, modelId, providerId },
   });
+  // What the model picker on both surfaces is configured with (issue #724).
+  const modelSelection: ModelSelection = {
+    agents,
+    providers,
+    agentId,
+    modelId,
+    providerId,
+    onModelChange: handleModelChange,
+    maxOutputTokens: resolvedModel?.maxOutputTokens,
+  };
   const [search, setSearch] = useSearchToggle(resolvedModel);
   const {
     instructions,
@@ -580,15 +590,7 @@ export const Chat = ({
                         key={editing.messageId}
                         initialText={editing.text}
                         initialAttachments={editing.attachments}
-                        modelSelection={{
-                          agents,
-                          providers,
-                          agentId,
-                          modelId,
-                          providerId,
-                          onModelChange: handleModelChange,
-                          maxOutputTokens: resolvedModel?.maxOutputTokens,
-                        }}
+                        modelSelection={modelSelection}
                         passthroughFileTypes={
                           resolvedModel?.passthroughFileTypes ?? []
                         }
@@ -623,15 +625,7 @@ export const Chat = ({
                 }}
                 globalDrop
                 passthroughFileTypes={resolvedModel?.passthroughFileTypes ?? []}
-                modelSelection={{
-                  agents,
-                  providers,
-                  agentId,
-                  modelId,
-                  providerId,
-                  onModelChange: handleModelChange,
-                  maxOutputTokens: resolvedModel?.maxOutputTokens,
-                }}
+                modelSelection={modelSelection}
                 textarea={{
                   ref: textareaRef,
                   value: inputValue,
