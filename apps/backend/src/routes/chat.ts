@@ -116,7 +116,7 @@ chat.get(
       })
       .from(chatTable)
       .where(whereClause)
-      .orderBy(desc(chatTable.isPinned), desc(chatTable.createdAt))
+      .orderBy(desc(chatTable.isPinned), desc(chatTable.updatedAt))
       .limit(limit)
       .offset(offset);
 

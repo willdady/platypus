@@ -151,10 +151,10 @@ export function AppSidebar() {
   const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
 
   const last7Days = regularChats.filter(
-    (chat) => new Date(chat.createdAt) >= sevenDaysAgo,
+    (chat) => new Date(chat.updatedAt) >= sevenDaysAgo,
   );
   const other = regularChats.filter(
-    (chat) => new Date(chat.createdAt) < sevenDaysAgo,
+    (chat) => new Date(chat.updatedAt) < sevenDaysAgo,
   );
 
   const hasRecent = last7Days.length > 0;
