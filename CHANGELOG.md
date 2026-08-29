@@ -1,5 +1,22 @@
 # Changelog
 
+## [3.2.0](https://github.com/willdady/platypus/compare/v3.1.1...v3.2.0) (2026-08-29)
+
+
+### Features
+
+* **chat:** show cached input tokens on a Chat turn and Trigger run ([#737](https://github.com/willdady/platypus/issues/737)) ([3673a50](https://github.com/willdady/platypus/commit/3673a503d75b328505e45891bb3813c533f5cd9e))
+* **frontend:** consolidate trigger runs into a workspace-wide page ([#736](https://github.com/willdady/platypus/issues/736)) ([97d9355](https://github.com/willdady/platypus/commit/97d9355a7e67daf1f3056ed2e36602bace317748))
+
+
+### Bug Fixes
+
+* **backend:** dispose a Tool session on every path out of Turn resolution ([#735](https://github.com/willdady/platypus/issues/735)) ([ef4db2f](https://github.com/willdady/platypus/commit/ef4db2fbc2a36c06694f96cc5c8417c7c21a12db))
+* **backend:** guard event triggers against sub-agent self-re-firing ([#738](https://github.com/willdady/platypus/issues/738)) ([ec21994](https://github.com/willdady/platypus/commit/ec21994a6311b8e75bd67fde6dd32fc98e932df5))
+* **backend:** move the Bedrock cache point instead of accumulating one per step ([b4df92e](https://github.com/willdady/platypus/commit/b4df92eb96d2cade0592ed9836d40859d6faa4f3))
+* **backend:** request prompt caching on Anthropic, Bedrock and OpenRouter ([#682](https://github.com/willdady/platypus/issues/682)) ([#739](https://github.com/willdady/platypus/issues/739)) ([d595ae9](https://github.com/willdady/platypus/commit/d595ae92c1a7d36cf1de2e554c82778ee7892776))
+* **backend:** restart a cron Trigger's schedule when it is enabled ([aac7110](https://github.com/willdady/platypus/commit/aac71109807f221de5ce6a700b21ce5e2a966980))
+
 ## [3.1.1](https://github.com/willdady/platypus/compare/v3.1.0...v3.1.1) (2026-08-29)
 
 
