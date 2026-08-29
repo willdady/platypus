@@ -205,19 +205,52 @@ export const buildModelInvocation = (
 });
 
 /**
- * Attaches the Bedrock cache point to the final message of `messages`, without
+ * Removes a cache point this function placed on an earlier step, leaving any
+ * other `amazonBedrock` option on the message alone. A message carrying no
+ * point is returned as-is rather than needlessly cloned.
+ */
+const withoutBedrockCachePoint = (message: ModelMessage): ModelMessage => {
+  const bedrock = message.providerOptions?.amazonBedrock;
+  if (bedrock?.cachePoint === undefined) return message;
+  const { cachePoint: _removed, ...rest } = bedrock;
+  return {
+    ...message,
+    providerOptions: { ...message.providerOptions, amazonBedrock: rest },
+  };
+};
+
+/**
+ * Moves the Bedrock cache point to the final message of `messages`, without
  * mutating the array or the messages handed in — the last message is cloned
  * and its existing `providerOptions` are merged into, not replaced. An empty
  * conversation passes through untouched.
+ *
+ * Moves, not merely adds: `prepareStep`'s `messages` override carries forward
+ * into the next step (`stepMessages` becomes `[...override, ...response]`), so
+ * the point this placed on step one's final message is still sitting there,
+ * mid-conversation, when step two runs. Adding without removing accumulates one
+ * point per step — and Converse caps how many checkpoints a request may carry,
+ * so a long tool-using turn eventually exceeds it and the whole request fails.
+ * Stripping the previous point first is what makes the trailing point actually
+ * trail the conversation rather than leave a trail behind it.
  */
 const withBedrockCachePoint = (messages: ModelMessage[]): ModelMessage[] => {
   const final = messages.at(-1);
   if (final === undefined) return messages;
   return [
-    ...messages.slice(0, -1),
+    ...messages.slice(0, -1).map(withoutBedrockCachePoint),
     {
       ...final,
-      providerOptions: { ...final.providerOptions, ...BEDROCK_CACHE_POINT },
+      // Merged into the namespace, not over it: this function owns the
+      // `cachePoint` key and nothing else in `amazonBedrock`, which is the same
+      // contract `withoutBedrockCachePoint` keeps on the way back out.
+      providerOptions: {
+        ...final.providerOptions,
+        amazonBedrock: {
+          ...final.providerOptions?.amazonBedrock,
+          ...BEDROCK_CACHE_POINT.amazonBedrock,
+        },
+      },
     },
   ];
 };
