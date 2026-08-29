@@ -107,11 +107,10 @@ export const createMessageMetadata = ({
   let inputTokensSum = 0;
   let outputTokensSum = 0;
   // Cached-input read and write counts, summed the same way as a breakdown of
-  // the input figure (issue #734). Each key is written only once some step has
-  // reported a value for it, so a Provider that reports no cache detail
-  // persists no cache key rather than a `0` sum.
-  let cacheReadReported = false;
-  let cacheWriteReported = false;
+  // the input figure (issue #734). A step that reports none leaves the sum
+  // standing — the deep merge keeps a key an override omits — so a key exists
+  // only once some step has reported a value for it, never as a `0` sum for a
+  // Provider that reports no cache detail.
   let cacheReadTokensSum = 0;
   let cacheWriteTokensSum = 0;
   // The turn's clearable Tool names among the ones it has actually called so
@@ -188,20 +187,18 @@ export const createMessageMetadata = ({
         // Cached input, summed across the turn's steps just like the flat input
         // figure beside it — a breakdown of that number, never subtracted. A
         // step that reports no read (or write) count adds nothing and, unlike
-        // occupancy, needs no erasing: the sum only grows. Each key is written
-        // only once some step has reported a value.
+        // occupancy, needs no erasing: the sum only grows, and the merge keeps
+        // the key an override omits, so a Provider that reports no cache detail
+        // at all persists no cache key rather than a `0` sum.
         const details = part.usage.inputTokenDetails;
         if (typeof details?.cacheReadTokens === "number") {
-          cacheReadReported = true;
           cacheReadTokensSum += details.cacheReadTokens;
+          tokenUsage.cacheReadTokens = cacheReadTokensSum;
         }
-        if (cacheReadReported) tokenUsage.cacheReadTokens = cacheReadTokensSum;
         if (typeof details?.cacheWriteTokens === "number") {
-          cacheWriteReported = true;
           cacheWriteTokensSum += details.cacheWriteTokens;
-        }
-        if (cacheWriteReported)
           tokenUsage.cacheWriteTokens = cacheWriteTokensSum;
+        }
         meta.tokenUsage = tokenUsage;
       }
 

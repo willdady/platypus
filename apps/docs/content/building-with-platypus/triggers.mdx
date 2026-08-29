@@ -209,6 +209,12 @@ much of the model's Context window the conversation filled on the run's final
 step. Watch that one to see a Trigger heading for its model's limit before it
 starts failing there. It is absent for a Provider that reports no token usage.
 
+The **in** figure already includes any tokens the Provider served from its
+cache, which are billed at a fraction of the uncached rate, so where one exists
+a cache icon next to it explains how much of the input was read from cache (and
+how much was written to it). The figure itself never drops the cached tokens;
+it is absent for a Provider that reports no cache detail.
+
 <Callout type="info">
   Anything an Agent does in a run uses that Agent's own tools — so a Trigger
   can, for example, update a [Board](/building-with-platypus/boards) or a
