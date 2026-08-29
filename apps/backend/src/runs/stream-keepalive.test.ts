@@ -45,16 +45,18 @@ describe("withHeartbeatFrames", () => {
   });
 
   it("puts bytes on the wire while the source says nothing", async () => {
+    vi.useFakeTimers();
     const source = controllable();
     const kept = withHeartbeatFrames(source.stream, HEARTBEAT_MS);
     const collected = readAll(kept);
 
     // Nothing from the model for several heartbeat intervals — the case a
-    // proxy's idle timeout would otherwise kill.
-    await new Promise((r) => setTimeout(r, HEARTBEAT_MS * 3.5));
+    // proxy's idle timeout would otherwise kill. Advanced asynchronously so the
+    // reader gets a turn to drain each heartbeat before the next fires.
+    await vi.advanceTimersByTimeAsync(HEARTBEAT_MS * 3);
     source.end();
 
-    expect(heartbeats(await collected)).toBeGreaterThanOrEqual(3);
+    expect(heartbeats(await collected)).toBe(3);
   });
 
   it("passes the source's own frames through untouched", async () => {
@@ -159,6 +161,10 @@ describe("withHeartbeatFrames", () => {
 });
 
 describe("withStreamKeepalive", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   /** The response shape the runner hands over, built the way the SDK builds it. */
   const streamedRunResponse = () =>
     createUIMessageStreamResponse({
@@ -190,6 +196,7 @@ describe("withStreamKeepalive", () => {
   });
 
   it("beats on a real streamed run response that has gone quiet", async () => {
+    vi.useFakeTimers();
     let close!: () => void;
     const response = createUIMessageStreamResponse({
       stream: new ReadableStream({
@@ -201,9 +208,9 @@ describe("withStreamKeepalive", () => {
 
     const kept = withStreamKeepalive(response, HEARTBEAT_MS);
     const collected = readAll(kept.body!);
-    await new Promise((r) => setTimeout(r, HEARTBEAT_MS * 2.5));
+    await vi.advanceTimersByTimeAsync(HEARTBEAT_MS * 2);
     close();
 
-    expect(heartbeats(await collected)).toBeGreaterThanOrEqual(2);
+    expect(heartbeats(await collected)).toBe(2);
   });
 });
