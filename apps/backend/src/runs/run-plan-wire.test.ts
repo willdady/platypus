@@ -27,23 +27,22 @@ type CapturedBody = { url: string; body: Record<string, unknown> };
 type RecFetch = (input: unknown, init?: RequestInit) => Promise<Response>;
 
 /** A `fetch` that records each JSON request body, then answers with `payload`. */
-const recordingFetch = (captured: CapturedBody[], payload: string): RecFetch => (
-  input,
-  init,
-) => {
-  captured.push({
-    url: String(input),
-    body: JSON.parse(
-      typeof init?.body === "string" ? init.body : "",
-    ) as Record<string, unknown>,
-  });
-  return Promise.resolve(
-    new Response(payload, {
-      status: 200,
-      headers: { "content-type": "application/json" },
-    }),
-  );
-};
+const recordingFetch =
+  (captured: CapturedBody[], payload: string): RecFetch =>
+  (input, init) => {
+    captured.push({
+      url: String(input),
+      body: JSON.parse(
+        typeof init?.body === "string" ? init.body : "",
+      ) as Record<string, unknown>,
+    });
+    return Promise.resolve(
+      new Response(payload, {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }),
+    );
+  };
 
 const ANTHROPIC_RESPONSE = JSON.stringify({
   id: "msg_01",
@@ -59,14 +58,18 @@ const ANTHROPIC_RESPONSE = JSON.stringify({
 const OPENROUTER_RESPONSE = JSON.stringify({
   id: "gen-1",
   model: "x",
-  choices: [{ message: { role: "assistant", content: "ok" }, finish_reason: "stop" }],
+  choices: [
+    { message: { role: "assistant", content: "ok" }, finish_reason: "stop" },
+  ],
   usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
 });
 
 const BEDROCK_RESPONSE = JSON.stringify({
   stopReason: "end_turn",
   usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
-  output: { message: { role: "assistant", content: [{ type: "text", text: "ok" }] } },
+  output: {
+    message: { role: "assistant", content: [{ type: "text", text: "ok" }] },
+  },
   metrics: { latencyMs: 5 },
 });
 
@@ -89,7 +92,11 @@ const OPENAI_RESPONSE = JSON.stringify({
 
 const GOOGLE_RESPONSE = JSON.stringify({
   candidates: [{ content: { role: "model", parts: [{ text: "ok" }] } }],
-  usageMetadata: { promptTokenCount: 10, candidatesTokenCount: 5, totalTokenCount: 15 },
+  usageMetadata: {
+    promptTokenCount: 10,
+    candidatesTokenCount: 5,
+    totalTokenCount: 15,
+  },
 });
 
 const planWith = (model: LanguageModel): RunPlan => ({
@@ -109,7 +116,10 @@ const runOne = async (model: LanguageModel, prompt?: string) => {
   const invocation = buildModelInvocation(planWith(model), {
     abortSignal: new AbortController().signal,
   });
-  return generateText({ ...invocation, ...(prompt ? { prompt } : { messages: TWO_TURN }) });
+  return generateText({
+    ...invocation,
+    ...(prompt ? { prompt } : { messages: TWO_TURN }),
+  });
 };
 
 describe("prompt cache wire shape", () => {
@@ -127,11 +137,15 @@ describe("prompt cache wire shape", () => {
     // content block must be free of block-level cache_control.
     expect(JSON.stringify(body).match(/"cache_control"/g)?.length ?? 0).toBe(1);
     for (const entry of body.system as unknown[]) {
-      expect((entry as { cache_control?: unknown }).cache_control).toBeUndefined();
+      expect(
+        (entry as { cache_control?: unknown }).cache_control,
+      ).toBeUndefined();
     }
     for (const message of body.messages as Array<{ content: unknown[] }>) {
       for (const part of message.content) {
-        expect((part as { cache_control?: unknown }).cache_control).toBeUndefined();
+        expect(
+          (part as { cache_control?: unknown }).cache_control,
+        ).toBeUndefined();
       }
     }
     expect(result.warnings ?? []).toEqual([]);
@@ -160,17 +174,22 @@ describe("prompt cache wire shape", () => {
     })("anthropic.claude-3-5-sonnet-20240620-v1:0");
     const result = await runOne(model);
 
-    const body = captured.find((c) => c.url.includes("converse")) ?? captured[0];
+    const body =
+      captured.find((c) => c.url.includes("converse")) ?? captured[0];
     // The trap: a top-level cachePoint is the negative half of this test.
     expect(body.body.cachePoint).toBeUndefined();
     const system = body.body.system as unknown[];
     expect(
-      system.some((e) => (e as { cachePoint?: unknown }).cachePoint !== undefined),
+      system.some(
+        (e) => (e as { cachePoint?: unknown }).cachePoint !== undefined,
+      ),
     ).toBe(true);
     const messages = body.body.messages as Array<{ content: unknown[] }>;
     const finalContent = messages.at(-1)!.content;
     expect(
-      finalContent.some((e) => (e as { cachePoint?: unknown }).cachePoint !== undefined),
+      finalContent.some(
+        (e) => (e as { cachePoint?: unknown }).cachePoint !== undefined,
+      ),
     ).toBe(true);
     expect(result.warnings ?? []).toEqual([]);
   });
@@ -179,7 +198,8 @@ describe("prompt cache wire shape", () => {
     const cases = [
       {
         response: OPENAI_RESPONSE,
-        model: (fetch: RecFetch) => createOpenAI({ apiKey: "sk-x", fetch })("gpt-4o"),
+        model: (fetch: RecFetch) =>
+          createOpenAI({ apiKey: "sk-x", fetch })("gpt-4o"),
       },
       {
         response: GOOGLE_RESPONSE,
@@ -196,7 +216,9 @@ describe("prompt cache wire shape", () => {
       // The emitted request carries no cache key — the vendor namespaces are
       // read by their own packages and dropped, not forwarded.
       for (const { body } of captured) {
-        expect(JSON.stringify(body)).not.toMatch(/cache_control|cachePoint|cacheControl|"head"/i);
+        expect(JSON.stringify(body)).not.toMatch(
+          /cache_control|cachePoint|cacheControl|"head"/i,
+        );
       }
       expect(result.warnings ?? []).toEqual([]);
     }

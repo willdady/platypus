@@ -120,7 +120,9 @@ describe("buildModelInvocation prepareStep", () => {
       {
         role: "assistant" as const,
         content: [{ type: "text" as const, text: "hi" }],
-        providerOptions: { anthropic: { thinking: { type: "enabled" as const } } },
+        providerOptions: {
+          anthropic: { thinking: { type: "enabled" as const } },
+        },
       },
     ];
     const result = await prepareStep({ steps: [], messages });

@@ -325,9 +325,9 @@ describe("createSubAgentDelegate", () => {
       });
 
       for (const call of streamTextSpy.mock.calls) {
-        expect(systemOf(call[0] as ReturnType<typeof streamArgs>)).not.toContain(
-          "## Security and trust",
-        );
+        expect(
+          systemOf(call[0] as ReturnType<typeof streamArgs>),
+        ).not.toContain("## Security and trust");
       }
     });
 
@@ -1096,7 +1096,9 @@ describe("createDelegateTool — dispatch", () => {
     const tool = createDelegateTool(twoDelegates());
     await dispatch(tool, { subAgent: "  research agent " });
 
-    expect(systemOf(streamArgs())).toContain('sub-agent named "Research Agent"');
+    expect(systemOf(streamArgs())).toContain(
+      'sub-agent named "Research Agent"',
+    );
   });
 
   // The parent turn survives this: the model gets a tool error it can act on,
