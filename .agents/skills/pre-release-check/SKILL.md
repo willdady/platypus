@@ -53,12 +53,19 @@ Establish the range: previous release tag to the tip of `main`.
 
 ```bash
 git tag --sort=-v:refname | head -1        # previous release
+gh release view <prev-tag>                 # what it told self-hosters
 gh pr list --state open --search "chore(main): release" --json number,title,body
 git log <prev-tag>..origin/main --oneline
 git diff <prev-tag>..origin/main --stat
 ```
 
-Read the release PR body (its changelog), then read the range itself — open every file the
+Read the previous release's notes first. A changelog lists what changed; the notes are
+where a breaking change gets its **commentary** — the migration step, the deprecation
+naming the release that removes it, the caveat a self-hoster acted on. That commentary is
+the state this upgrade starts from, so the pending range can complete it, contradict it,
+or strand someone who followed it.
+
+Then read the release PR body (its changelog), then the range itself — open every file the
 stat flags as substantial. **Never reconcile from commit subjects alone**; the subject is
 the thing under suspicion.
 
@@ -73,6 +80,9 @@ Report:
   and a patch bump on the PR is a **hold**.
 - Anything breaking: a removed or renamed env var, a changed default, an API or schema shift
   a self-hoster upgrades into. Breaking work in a non-major release is a **hold**.
+- Commentary in the previous notes that this range settles, contradicts, or strands — a
+  deprecation this range removes, a migration step it invalidates, a "lands next release"
+  it either delivers or silently skips.
 - User-facing changes the changelog technically lists but doesn't convey.
 
 The remedy for a mismatched bump is the user's call, not yours. Surface it and stop.
@@ -82,7 +92,7 @@ The remedy for a mismatched bump is the user's call, not yours. Surface it and s
 The gate in Step 1 is a floor. These four hold the release and none of them go red:
 
 - **Focused or disabled tests.** `grep -rn "\.only(\|\.skip(\|todo(" --include="*.test.ts"
-  --include="*.test.tsx" apps packages` — a `.only` left in the range silently disables the
+--include="*.test.tsx" apps packages` — a `.only` left in the range silently disables the
   rest of its file, so Step 1 went green over tests that never ran. Any hit introduced in
   this range is a hold until it's removed or justified.
 - **Docs that ship with the code.** `CLAUDE.md` maps changed paths to the docs page that
