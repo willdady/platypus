@@ -34,18 +34,45 @@ git fetch --tags && git fetch origin main
 git status --short && git log --oneline origin/main..HEAD
 ```
 
-Then run the gate from the repo root:
+Lint, typecheck and tests are **not** re-run here. CI runs them on every push to `main`,
+so the tip has already been through them — but "CI runs on main" is only a guarantee if
+you look at the result. Read it:
 
 ```bash
-pnpm lint && pnpm typecheck && pnpm test && pnpm build
+git rev-parse origin/main
+gh run list --branch main --workflow ci.yml --limit 1 \
+  --json headSha,status,conclusion,url --jq '.[0]'
+```
+
+The run's `headSha` must equal `origin/main` and its conclusion must be `success`. Three
+ways that goes wrong, all holds:
+
+- **The newest run is for an older commit.** The tip is unverified — most likely it
+  arrived by a push that bypassed the pull request, which is how a security fix lands off
+  a private advisory. Wait for its run, or trigger one.
+- **No run at all**, or one still in progress. Wait for it. An absent result is not a
+  passing one.
+- **A failing run.** Stop here.
+
+Do not accept the release PR's own green check as evidence. CI skips lint, typecheck and
+tests on any branch starting `release-please--`, and the `gate` job passes on skipped
+jobs — so the release PR is green whatever state the code is in. The run that means
+something is the one on `main`.
+
+Then run what CI does **not** cover, from the repo root:
+
+```bash
+pnpm build
 ```
 
 Then `pnpm format` followed by `git status --short`. `format` **writes**, so a dirty tree
-afterwards means formatting has drifted on `main` and needs its own commit.
+afterwards means formatting has drifted on `main` and needs its own commit. Neither the
+build nor formatting drift is checked anywhere upstream of here.
 
-Report each check as pass or fail with the failing output. **Green is every check passing
-on an unmodified tree.** Anything red is a hold — say so and stop; do not carry a failure
-forward into the later steps hoping it looks smaller in a summary.
+Report the CI run and each local check as pass or fail, with the failing output. **Green
+is a CI success on this exact commit plus every local check passing on an unmodified
+tree.** Anything red is a hold — say so and stop; do not carry a failure forward into the
+later steps hoping it looks smaller in a summary.
 
 ## Step 2 — Reconcile the release
 
@@ -89,17 +116,17 @@ The remedy for a mismatched bump is the user's call, not yours. Surface it and s
 
 ## Step 3 — Sweep what CI can't see
 
-The gate in Step 1 is a floor. These four hold the release and none of them go red:
+The gate Step 1 confirmed is a floor. These four hold the release and none of them go red:
 
 - **Focused or disabled tests.** `grep -rn "\.only(\|\.skip(\|todo(" --include="*.test.ts"
 --include="*.test.tsx" apps packages` — a `.only` left in the range silently disables the
-  rest of its file, so Step 1 went green over tests that never ran. Any hit introduced in
+  rest of its file, so CI went green over tests that never ran. Any hit introduced in
   this range is a hold until it's removed or justified.
 - **Docs that ship with the code.** `CLAUDE.md` maps changed paths to the docs page that
   must change with them — `.env.example`, `packages/schemas` limits, `apps/backend/src/plugins/**`,
   and visible frontend labels. Apply that table to the range's paths: if a mapped path
   changed and `apps/docs/content` didn't, the release ships a docs lie. `docs-contract.test.ts`
-  already passed in Step 1 and cannot see UI labels; for those, ask the user to run
+  already passed in CI and cannot see UI labels; for those, ask the user to run
   `/docs-audit` — it is user-invoked and you cannot start it yourself.
 - **The plugin SDK version.** If the range touches `packages/plugin-sdk`, its
   `package.json` version must already be bumped by hand. `publish-sdk.yml` fires on release
