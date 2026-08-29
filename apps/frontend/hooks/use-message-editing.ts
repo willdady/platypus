@@ -1,16 +1,11 @@
 import { useCallback, useMemo, useState } from "react";
 import { FileUIPart, UIMessage } from "ai";
+import type { PromptInputMessage } from "@/components/ai-elements/prompt-input";
 import {
   ATTACHMENTS_ONLY_TEXT,
   messageAttachments,
   messageText,
 } from "@/lib/message-parts";
-
-/** What an edit resubmits: the whole message, not just its words. */
-export type EditedMessage = {
-  text: string;
-  files?: FileUIPart[];
-};
 
 /**
  * The message an edit surface should open with. `null` when nothing is being
@@ -37,7 +32,7 @@ export const useMessageEditing = <T extends UIMessage = UIMessage>(
   messages: T[],
   setMessages: (messages: T[]) => void,
   sendMessage: (
-    message: EditedMessage,
+    message: PromptInputMessage,
     options?: { body?: Record<string, unknown> },
   ) => void,
   getRequestBody: () => Record<string, unknown>,
@@ -64,12 +59,12 @@ export const useMessageEditing = <T extends UIMessage = UIMessage>(
   }, []);
 
   const handleMessageEditSubmit = useCallback(
-    (edited: EditedMessage) => {
+    (edited: PromptInputMessage) => {
       if (!editingMessageId) return;
       const messageIndex = messages.findIndex((m) => m.id === editingMessageId);
       if (messageIndex === -1) return;
 
-      const files = edited.files ?? [];
+      const files = edited.files;
       // An edit emptied of both its words and its files would truncate the
       // transcript and send nothing in its place — the one edit with no way
       // back. Left open instead, so the user can see what they are about to do.

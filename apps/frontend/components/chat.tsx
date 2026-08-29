@@ -6,20 +6,8 @@ import {
   ConversationScrollButton,
 } from "@/components/ai-elements/conversation";
 import {
-  PromptInput,
-  PromptInputActionAddAttachments,
-  PromptInputActionMenu,
-  PromptInputActionMenuContent,
-  PromptInputActionMenuTrigger,
-  PromptInputAttachment,
-  PromptInputAttachments,
-  PromptInputBody,
   PromptInputButton,
-  PromptInputFooter,
-  PromptInputSpeechButton,
   PromptInputSubmit,
-  PromptInputTextarea,
-  PromptInputTools,
   type PromptInputMessage,
 } from "@/components/ai-elements/prompt-input";
 import { useChat } from "@ai-sdk/react";
@@ -55,7 +43,6 @@ import { useModelSelection } from "@/hooks/use-model-selection";
 import { resolveModel } from "@/lib/resolve-model";
 import { clearedToolCallIds } from "@/lib/tool-result-clearing";
 import { ContextMeter } from "./context-meter";
-import { FileCompatibilityWarning } from "./file-compatibility-warning";
 import { useMessageEditing } from "@/hooks/use-message-editing";
 import { ATTACHMENTS_ONLY_TEXT } from "@/lib/message-parts";
 import { useChatTitlePoll } from "@/hooks/use-chat-title-poll";
@@ -79,8 +66,8 @@ import {
 import { ChatMessage } from "./chat-message";
 import { MessageEditor } from "./message-editor";
 import { ChatReconnectingNotice } from "./chat-reconnecting-notice";
-import { ModelSelectorDialog } from "./model-selector-dialog";
 import { toast } from "sonner";
+import { Composer } from "./composer";
 
 export const Chat = ({
   orgId,
@@ -291,8 +278,6 @@ export const Chat = ({
     maxSteps,
   } = settings;
   const {
-    isModelSelectorOpen,
-    setIsModelSelectorOpen,
     isSettingsDialogOpen,
     setIsSettingsDialogOpen,
     isAgentInfoDialogOpen,
@@ -595,13 +580,15 @@ export const Chat = ({
                         key={editing.messageId}
                         initialText={editing.text}
                         initialAttachments={editing.attachments}
-                        agents={agents}
-                        providers={providers}
-                        agentId={agentId}
-                        modelId={modelId}
-                        providerId={providerId}
-                        onModelChange={handleModelChange}
-                        maxOutputTokens={resolvedModel?.maxOutputTokens}
+                        modelSelection={{
+                          agents,
+                          providers,
+                          agentId,
+                          modelId,
+                          providerId,
+                          onModelChange: handleModelChange,
+                          maxOutputTokens: resolvedModel?.maxOutputTokens,
+                        }}
                         passthroughFileTypes={
                           resolvedModel?.passthroughFileTypes ?? []
                         }
@@ -629,57 +616,38 @@ export const Chat = ({
           <div className="w-full xl:w-4/5 max-w-4xl min-w-0">
             {isRecoveringRun && <ChatReconnectingNotice />}
             {canSendMessages ? (
-              <PromptInput
+              <Composer
                 onSubmit={(message) => {
                   handleSubmit(message);
                   setInputValue("");
                 }}
                 globalDrop
-                multiple
-              >
-                <PromptInputAttachments className="w-full">
-                  {(attachment) => <PromptInputAttachment data={attachment} />}
-                </PromptInputAttachments>
-                <FileCompatibilityWarning
-                  passthroughFileTypes={
-                    resolvedModel?.passthroughFileTypes ?? []
-                  }
-                />
-                <PromptInputBody>
-                  <PromptInputTextarea
-                    ref={textareaRef}
-                    value={inputValue}
-                    onChange={(e) => setInputValue(e.target.value)}
-                    className={messages.length === 0 ? "min-h-24" : undefined}
-                    placeholder={
-                      runHeldElsewhere
-                        ? "Run in progress…"
-                        : selectedAgent?.inputPlaceholder ||
-                          "What would you like to know?"
-                    }
-                    autoFocus
-                    status={effectiveStatus}
-                    disabled={runHeldElsewhere}
-                  />
-                </PromptInputBody>
-                <PromptInputFooter className="flex-wrap">
-                  <PromptInputTools>
-                    <PromptInputActionMenu>
-                      <PromptInputActionMenuTrigger className="cursor-pointer" />
-                      <PromptInputActionMenuContent>
-                        <PromptInputActionAddAttachments className="cursor-pointer" />
-                      </PromptInputActionMenuContent>
-                    </PromptInputActionMenu>
-                    <Tooltip delayDuration={1000}>
-                      <TooltipTrigger asChild>
-                        <PromptInputSpeechButton
-                          className="cursor-pointer"
-                          textareaRef={textareaRef}
-                          onTranscriptionChange={setInputValue}
-                        />
-                      </TooltipTrigger>
-                      <TooltipContent>Microphone</TooltipContent>
-                    </Tooltip>
+                passthroughFileTypes={resolvedModel?.passthroughFileTypes ?? []}
+                modelSelection={{
+                  agents,
+                  providers,
+                  agentId,
+                  modelId,
+                  providerId,
+                  onModelChange: handleModelChange,
+                  maxOutputTokens: resolvedModel?.maxOutputTokens,
+                }}
+                textarea={{
+                  ref: textareaRef,
+                  value: inputValue,
+                  onChange: (e) => setInputValue(e.target.value),
+                  className: messages.length === 0 ? "min-h-24" : undefined,
+                  placeholder: runHeldElsewhere
+                    ? "Run in progress…"
+                    : selectedAgent?.inputPlaceholder ||
+                      "What would you like to know?",
+                  autoFocus: true,
+                  status: effectiveStatus,
+                  disabled: runHeldElsewhere,
+                }}
+                onTranscriptionChange={setInputValue}
+                tools={
+                  <>
                     {resolvedModel?.canSearch && (
                       <Tooltip delayDuration={1000}>
                         <TooltipTrigger asChild>
@@ -694,22 +662,6 @@ export const Chat = ({
                         <TooltipContent>Search</TooltipContent>
                       </Tooltip>
                     )}
-                    <ModelSelectorDialog
-                      agents={agents}
-                      providers={providers}
-                      agentId={agentId}
-                      modelId={modelId}
-                      providerId={providerId}
-                      isOpen={isModelSelectorOpen}
-                      onOpenChange={(open) => {
-                        setIsModelSelectorOpen(open);
-                        if (!open) {
-                          setTimeout(() => textareaRef.current?.focus(), 250);
-                        }
-                      }}
-                      onModelChange={handleModelChange}
-                      maxOutputTokens={resolvedModel?.maxOutputTokens}
-                    />
                     {agentId && selectedAgent && (
                       <Dialog
                         open={isAgentInfoDialogOpen}
@@ -766,28 +718,28 @@ export const Chat = ({
                         />
                       </Dialog>
                     )}
-                  </PromptInputTools>
-                  {/*
-                    Two placements from one element, because the footer wraps.
-                    Narrow: ordered last onto a row of its own, so the tools and
-                    Send keep the first row to themselves and Send is never
-                    pushed off the edge. The row bleeds back over the footer's
-                    own padding — hence the negative margins and the width that
-                    adds them back — so the tint reaches the composer's edges and
-                    reads as a band rather than a chip floating in the middle.
-                    Wide: back in source order with `mr-auto` eating the free
-                    space, which reads as the last item of the tool row rather
-                    than drifting into the middle the way `justify-between`
-                    alone would leave it.
-                  */}
+                  </>
+                }
+                footerContent={
+                  // Two placements from one element, because the footer wraps.
+                  // Narrow: ordered last onto a row of its own, so the tools and
+                  // Send keep the first row to themselves and Send is never
+                  // pushed off the edge. The row bleeds back over the footer's
+                  // own padding — hence the negative margins and the width that
+                  // adds them back — so the tint reaches the composer's edges and
+                  // reads as a band rather than a chip floating in the middle.
+                  // Wide: back in source order with `mr-auto` eating the free
+                  // space, which reads as the last item of the tool row rather
+                  // than drifting into the middle the way `justify-between`
+                  // alone would leave it.
                   <ContextMeter
                     className="order-last -mx-3 -mb-3 mt-1.5 w-[calc(100%+1.5rem)] justify-center rounded-b-md bg-foreground/5 px-3 py-1.5 sm:order-none sm:mx-0 sm:mt-0 sm:mb-0 sm:w-auto sm:justify-start sm:rounded-none sm:bg-transparent sm:p-0 sm:mr-auto"
                     occupancy={projectedOccupancy}
                     contextWindow={resolvedModel?.contextWindow}
                   />
-                  <PromptInputSubmit status={effectiveStatus} />
-                </PromptInputFooter>
-              </PromptInput>
+                }
+                submit={<PromptInputSubmit status={effectiveStatus} />}
+              />
             ) : (
               <div className="flex items-center justify-center py-4 px-6 border rounded-lg bg-muted/50">
                 <p className="text-sm text-muted-foreground">

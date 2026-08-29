@@ -12,7 +12,6 @@ export const useChatUI = (
    */
   errorTreatment: ChatErrorTreatment,
 ) => {
-  const [isModelSelectorOpen, setIsModelSelectorOpen] = useState(false);
   const [isSettingsDialogOpen, setIsSettingsDialogOpen] = useState(false);
   const [isAgentInfoDialogOpen, setIsAgentInfoDialogOpen] = useState(false);
   const [isAdvancedOpen, setIsAdvancedOpen] = useState(false);
@@ -29,8 +28,6 @@ export const useChatUI = (
   });
 
   return {
-    isModelSelectorOpen,
-    setIsModelSelectorOpen,
     isSettingsDialogOpen,
     setIsSettingsDialogOpen,
     isAgentInfoDialogOpen,

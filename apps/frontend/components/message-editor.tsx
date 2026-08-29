@@ -2,46 +2,20 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { FileUIPart } from "ai";
-import type { Agent, Provider } from "@platypus/schemas";
 import { XIcon } from "lucide-react";
 import {
-  PromptInput,
-  PromptInputActionAddAttachments,
-  PromptInputActionMenu,
-  PromptInputActionMenuContent,
-  PromptInputActionMenuTrigger,
-  PromptInputAttachment,
-  PromptInputAttachments,
-  PromptInputBody,
   PromptInputButton,
-  PromptInputFooter,
-  PromptInputSpeechButton,
   PromptInputSubmit,
-  PromptInputTextarea,
-  PromptInputTools,
   type PromptInputMessage,
 } from "./ai-elements/prompt-input";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
-import { FileCompatibilityWarning } from "./file-compatibility-warning";
-import { ModelSelectorDialog } from "./model-selector-dialog";
+import { Composer, type ModelSelection } from "./composer";
 
 interface MessageEditorProps {
   /** The message's text as it stands, which the editor opens on. */
   initialText: string;
   /** The attachments it already carries, which the editor opens holding. */
   initialAttachments: FileUIPart[];
-  agents: Agent[];
-  providers: Provider[];
-  agentId: string;
-  modelId: string;
-  providerId: string;
-  onModelChange: (value: string) => void;
-  /** The resolved model's Output ceiling, for the picker's tooltip. */
-  maxOutputTokens?: number;
+  modelSelection: ModelSelection;
   /** What the resolved model reads natively, for the compatibility notice. */
   passthroughFileTypes: string[];
   onSubmit: (message: PromptInputMessage) => void;
@@ -72,22 +46,13 @@ interface MessageEditorProps {
 export const MessageEditor = ({
   initialText,
   initialAttachments,
-  agents,
-  providers,
-  agentId,
-  modelId,
-  providerId,
-  onModelChange,
-  maxOutputTokens,
+  modelSelection,
   passthroughFileTypes,
   onSubmit,
   onCancel,
 }: MessageEditorProps) => {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [text, setText] = useState(initialText);
-  // The edit surface's own picker state: sharing the composer's would open both
-  // dialogs at once.
-  const [isModelSelectorOpen, setIsModelSelectorOpen] = useState(false);
 
   // Opening an edit selects what is there, so retyping the message replaces it
   // rather than appending to it.
@@ -96,69 +61,29 @@ export const MessageEditor = ({
   }, []);
 
   return (
-    <PromptInput
+    <Composer
       className="w-full"
       onSubmit={onSubmit}
       initialAttachments={initialAttachments}
-      multiple
-    >
-      <PromptInputAttachments className="w-full">
-        {(attachment) => <PromptInputAttachment data={attachment} />}
-      </PromptInputAttachments>
-      <FileCompatibilityWarning passthroughFileTypes={passthroughFileTypes} />
-      <PromptInputBody>
-        <PromptInputTextarea
-          ref={textareaRef}
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          // Escape belongs to the edit; claiming it here keeps the built-in
-          // Enter-to-submit and Backspace-removes-attachment intact.
-          onKeyDown={(e) => {
-            if (e.key === "Escape") {
-              e.preventDefault();
-              e.stopPropagation();
-              onCancel();
-            }
-          }}
-          autoFocus
-        />
-      </PromptInputBody>
-      <PromptInputFooter className="flex-wrap">
-        <PromptInputTools>
-          <PromptInputActionMenu>
-            <PromptInputActionMenuTrigger className="cursor-pointer" />
-            <PromptInputActionMenuContent>
-              <PromptInputActionAddAttachments className="cursor-pointer" />
-            </PromptInputActionMenuContent>
-          </PromptInputActionMenu>
-          <Tooltip delayDuration={1000}>
-            <TooltipTrigger asChild>
-              <PromptInputSpeechButton
-                aria-label="Microphone"
-                className="cursor-pointer"
-                textareaRef={textareaRef}
-                onTranscriptionChange={setText}
-              />
-            </TooltipTrigger>
-            <TooltipContent>Microphone</TooltipContent>
-          </Tooltip>
-          <ModelSelectorDialog
-            agents={agents}
-            providers={providers}
-            agentId={agentId}
-            modelId={modelId}
-            providerId={providerId}
-            isOpen={isModelSelectorOpen}
-            onOpenChange={(open) => {
-              setIsModelSelectorOpen(open);
-              if (!open) {
-                setTimeout(() => textareaRef.current?.focus(), 250);
-              }
-            }}
-            onModelChange={onModelChange}
-            maxOutputTokens={maxOutputTokens}
-          />
-        </PromptInputTools>
+      passthroughFileTypes={passthroughFileTypes}
+      modelSelection={modelSelection}
+      textarea={{
+        ref: textareaRef,
+        value: text,
+        onChange: (e) => setText(e.target.value),
+        // Escape belongs to the edit; claiming it here keeps the built-in
+        // Enter-to-submit and Backspace-removes-attachment intact.
+        onKeyDown: (e) => {
+          if (e.key === "Escape") {
+            e.preventDefault();
+            e.stopPropagation();
+            onCancel();
+          }
+        },
+        autoFocus: true,
+      }}
+      onTranscriptionChange={setText}
+      submit={
         <div className="flex items-center gap-1">
           <PromptInputButton
             aria-label="Cancel"
@@ -169,7 +94,7 @@ export const MessageEditor = ({
           </PromptInputButton>
           <PromptInputSubmit aria-label="Save" className="cursor-pointer" />
         </div>
-      </PromptInputFooter>
-    </PromptInput>
+      }
+    />
   );
 };

@@ -95,12 +95,14 @@ const renderEditor = (
     <MessageEditor
       initialText="What does this say?"
       initialAttachments={[report]}
-      agents={[]}
-      providers={[provider]}
-      agentId=""
-      modelId="m1"
-      providerId="p1"
-      onModelChange={vi.fn()}
+      modelSelection={{
+        agents: [],
+        providers: [provider],
+        agentId: "",
+        modelId: "m1",
+        providerId: "p1",
+        onModelChange: vi.fn(),
+      }}
       // The seeded PDF reads natively by default, so the compatibility notice
       // stays out of the way of every test that isn't about it.
       passthroughFileTypes={["application/pdf"]}
