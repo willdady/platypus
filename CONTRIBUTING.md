@@ -163,7 +163,7 @@ Platypus is a monorepo managed by [Turborepo](https://turbo.build/) with the fol
 
 If you find a bug or have a feature request, please [open an issue](https://github.com/willdady/platypus/issues) with a clear description and, if applicable, steps to reproduce.
 
-**Security vulnerabilities are the exception — do not open an issue or a pull request.** [Report it privately](https://github.com/willdady/platypus/security/advisories/new) instead. Platypus is self-hosted, so until a release exists a public report tells every deployment that has not upgraded exactly where the hole is, and offers them nothing to upgrade to. See [SECURITY.md](SECURITY.md) for what to include and what happens next.
+**Security vulnerabilities are the exception — do not open an issue or a pull request.** [Report it privately](https://github.com/willdady/platypus/security/advisories/new) instead. Until a release exists, a public report tells every deployment that has not upgraded exactly where the hole is, and offers them nothing to upgrade to. See [SECURITY.md](SECURITY.md) for what to include and what happens next.
 
 ## License
 

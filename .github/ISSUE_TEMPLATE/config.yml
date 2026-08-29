@@ -2,4 +2,4 @@ blank_issues_enabled: true
 contact_links:
   - name: Report a security vulnerability
     url: https://github.com/willdady/platypus/security/advisories/new
-    about: Report privately — not as an issue or a pull request. Platypus is self-hosted, so a public report exposes every deployment that has not upgraded yet. See SECURITY.md.
+    about: Report privately — not as an issue or a pull request. A public report exposes every deployment that has not upgraded yet. See SECURITY.md.

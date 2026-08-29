@@ -19,10 +19,10 @@ have. A short reproduction beats a long description.
 
 ### Why not a pull request
 
-Platypus is self-hosted. Every deployment is upgraded by its own Operator, on
-their own schedule — there is no central instance a maintainer can patch on
-everyone's behalf. Until a release exists, a public fix tells every unpatched
-deployment where the hole is and gives them nothing to upgrade to.
+Every deployment is upgraded by its own Operator, on their own schedule — there
+is no central instance a maintainer can patch on everyone's behalf. Until a
+release exists, a public fix tells every unpatched deployment where the hole is
+and gives them nothing to upgrade to.
 
 A pull request discloses as surely as an issue does, and it is easy to disclose
 without meaning to. The branch name, the commit message, a test named after the
