@@ -1,6 +1,6 @@
 ---
 name: pre-release-check
-description: The final gate before a release is cut — go green, reconcile the release PR against what actually landed, sweep what CI can't see, check the roadmap, optionally deep-review, then return a ship-or-hold verdict.
+description: The final gate before a release is cut — go green, reconcile the release PR against what actually landed, sweep what CI can't see, check the roadmap and ADR statuses, optionally deep-review, then return a ship-or-hold verdict.
 disable-model-invocation: true
 ---
 
@@ -155,7 +155,41 @@ A stale roadmap is not a hold — it's an edit. If nothing shifted, say so plain
 something did, propose the edit as a concrete diff for the user to accept or reject; leave
 `ROADMAP.md` unwritten until they do.
 
-## Step 5 — Offer the deep review
+## Step 5 — Check ADR statuses
+
+`docs/adr/` records decisions, and each ADR's frontmatter `status` claims where that
+decision stands relative to the code. A release is when that claim goes stale: a shipped
+range implements a decision, or contradicts one, and nothing mechanical notices.
+
+Read the statuses, then the range against them:
+
+```bash
+grep -H "^status:\|^implemented-by:" docs/adr/*.md
+```
+
+- **Every `accepted-pending-implementation` ADR.** Its `implemented-by` key names the issue
+  or PR that builds it. If that number appears in the range — or the range's code otherwise
+  makes the ADR true — the flip to `accepted` was meant to land **with the implementing
+  PR** and didn't. The release would ship an ADR telling readers its own decision is unbuilt
+  while the code does it. Propose: `status: accepted`, drop `implemented-by`, and remove the
+  "In the code today" admonition under the title, which is now false.
+- **The reverse.** An ADR already at `accepted` whose implementation is not actually in the
+  range or in `main` is the same lie pointing the other way — flag it, but confirm against
+  the code before proposing a downgrade.
+- **Decisions this range overturns.** If the range changes something an accepted ADR
+  decided, that ADR needs `superseded-by-NNNN` (the later ADR replacing it) or `deprecated`
+  (nothing replaced it). If no ADR records the new decision and the change is architectural,
+  say so — the missing ADR is the finding, not the status.
+- **Never rewrite an accepted ADR's text to match the new state.** The repo's rule is that
+  the old ADR keeps its history and gains a pointer: append an `## Amended by ADR-NNNN`
+  section naming which claims are narrowed or withdrawn, and let the newer ADR carry the
+  reasoning. `docs/adr/README.md` is the authority on the status vocabulary and this rule.
+
+Like the roadmap, a stale ADR status is not a hold — it's an edit. If nothing shifted, say
+so plainly. If something did, propose each change as a concrete diff for the user to accept
+or reject; leave the ADRs unwritten until they do.
+
+## Step 6 — Offer the deep review
 
 Ask the user whether they want a deep review of the release range. Recommend it when Step 2
 or Step 3 turned anything up, and say why.
@@ -168,12 +202,12 @@ severity order, and for each, propose the fix and let the user decide whether it
 before the release or after it. Some findings are worth blocking a release; most aren't,
 and that call is theirs.
 
-## Step 6 — Return the verdict
+## Step 7 — Return the verdict
 
 Close with the call, in this shape:
 
 - **SHIP** — every check in Steps 1–3 passed, the bump matches the range, and any roadmap
-  edit is agreed. Name the version being cut and the PR number to merge.
+  or ADR-status edit is agreed. Name the version being cut and the PR number to merge.
 - **HOLD** — list every blocker, each with the step that found it and what would clear it.
 
 State the verdict plainly and let it stand. Do not soften a hold into a list of
