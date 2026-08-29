@@ -377,6 +377,7 @@ export const createSubAgentDelegate = (
             // identity (ADR-0016). The exception is expressed here, in what is
             // handed to the shared drive, rather than as a mode inside the
             // system-prompt renderer.
+            agentId: id,
             plan: {
               ...plan,
               system: composedInstructions,

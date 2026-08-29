@@ -1,16 +1,16 @@
 ---
-status: accepted-pending-implementation
+status: accepted
 implemented-by: "#668"
 ---
 
 # Event causation is ambient run context, not a plugin-boundary parameter
 
-> **In the code today.** None of this is built yet. `dispatchEvent` takes an
-> optional `actorAgentId` that each write path passes explicitly, and skips an
-> Event Trigger when that id equals the Trigger's own Agent. The Kanban Tool set
-> passes it; the Notification Tool set does not, so `notification.*` events are
-> unguarded. The id is the leaf Agent that performed the write, so a Sub-Agent's
-> write is not attributed to the Agent that delegated it. See
+> **In the code today.** `dispatchEvent` reads the ambient causation chain
+> established by the Drive that is running (parent Agent, then each delegate),
+> and skips an Event Trigger when the Trigger's own Agent appears anywhere in
+> it. A human write establishes no chain and is never suppressed, including
+> where the record it touched carries stale Agent attribution from an earlier
+> edit. See `apps/backend/src/event-causation.ts` and
 > `apps/backend/src/services/event-dispatch.ts`.
 
 A Workspace write emits a **Webhook event**, and an **Event Trigger** may run an

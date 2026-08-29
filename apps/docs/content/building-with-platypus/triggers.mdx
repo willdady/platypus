@@ -76,6 +76,13 @@ unaffected — a Trigger on both `card.moved` and `card.updated` still fires on
 every move, whatever fields the control names. To act on a column change, use
 `card.moved`: it is the event for that, and it carries the previous column.
 
+<Callout type="info">
+  An Agent's own writes never re-fire its own Event Trigger — and that holds for
+  the work its Sub-Agents do too. Whatever the Agent (or a delegate it spawned)
+  writes, the Trigger that started it doesn't run again on that write. A change
+  made by a person, or by another Agent, still fires it.
+</Callout>
+
 ### Finish
 
 Set **Max Runs to Keep** (how many run records to retain), optionally enable

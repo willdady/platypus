@@ -371,10 +371,13 @@ export class AgentRunner {
 
     // The drive computes the stats, records the output-ceiling cutoff, decides
     // the terminal status and finishes the run — this entry point only returns.
+    // The resolved Agent id is passed through as the run's causation chain, so
+    // an Event Trigger's own writes never re-fire it (ADR-0022).
     const { text, stats } = await driveOnce({
       plan: turn.stream,
       modelMessages,
       run,
+      agentId: turn.resolved.agentId,
     });
 
     return { text, stats };
