@@ -52,9 +52,12 @@ export type ToolSessionScope = Omit<
  * latency — so the search path cannot be handed a session it would have to wait
  * for. It gets this instead, which defers onto the promise.
  *
- * Registration therefore lands a microtask after the Contribution's call. Safe:
- * `dispose` is unreachable until `prepareChatTurn` has returned it, and a late
- * registration closes immediately anyway.
+ * Registration therefore lands a microtask after the Contribution's call, and
+ * `prepareChatTurn` can now dispose the session before it returns — on the
+ * failing path it opened for issue #630. Still safe, and no longer because
+ * disposal is out of reach: this `then` is attached before that path's, so a
+ * registration always wins the race, and one that somehow did not would be
+ * closed on the spot by `registerCloser`'s already-disposed branch.
  */
 export const deferCloserRegistrar =
   (session: Promise<ToolSession>): CoreCloserRegistrar =>

@@ -61,9 +61,13 @@ const userFromScope = (scope: WorkspaceScope): { id: string; name: string } => {
 /** Mutable per-run state shared by `setup`, the timeout handler, and the
  *  consumer-shaped entry point. A background timer (the timeout) and the
  *  foreground model call both read/write it, so it lives in one object both
- *  can reach. */
+ *  can reach.
+ *
+ *  The turn is deliberately NOT here. Disposing it goes through
+ *  `run.adoptOrDispose`, which either holds it for a run that can still close
+ *  it or closes it on the spot — a `turn?` read by the terminal callback is the
+ *  shape that let a turn resolving after a timeout go undisposed (issue #630). */
 type RunState = {
-  turn?: ChatTurn;
   messages: PlatypusUIMessage[];
 };
 
@@ -181,11 +185,6 @@ export class AgentRunner {
       timeouts: params.timeouts,
       onTerminate: async ({ status, error, stats }) => {
         try {
-          await state.turn?.dispose();
-        } catch (err) {
-          logger.error({ err, runId: input.runId }, "Error disposing turn");
-        }
-        try {
           await sink.onFinish({
             runId: input.runId,
             status,
@@ -223,8 +222,9 @@ export class AgentRunner {
       throw err;
     }
 
+    let turn: ChatTurn;
     try {
-      state.turn = await this.prepare(
+      turn = await this.prepare(
         scope,
         input,
         params.origin,
@@ -238,11 +238,32 @@ export class AgentRunner {
         { error, runId: input.runId },
         "Run prepare failed before model invocation",
       );
+      // Nothing to dispose here: a resolution that throws closes its own Tool
+      // session on the way out (`prepareChatTurn`), so there is no session
+      // object at this frame to leak.
       await run.finish("failed", err);
       throw err;
     }
 
-    const turn = state.turn;
+    // The run's timers were armed at registration, above — a resolution slower
+    // than the per-step bound has already terminated it, and its teardown has
+    // already been and gone. This is where that is settled: either the run takes
+    // the turn and will dispose it, or it disposes it here and says so.
+    if (!(await run.adoptOrDispose(turn.dispose))) {
+      // The caller is told what the sink was told, so the rejection and the
+      // run's terminal record name one failure. `statusFromSignal` types the
+      // error as optional because a cancelled run has none; a run that reached
+      // here was stopped by a timer, which always carries one.
+      const { error } = run.statusFromSignal();
+      const err =
+        error ?? new Error(`Run '${input.runId}' ended before it could start`);
+      logger.error(
+        { err, runId: input.runId },
+        "Run terminated while its turn was still resolving; not invoking the model",
+      );
+      throw err;
+    }
+
     const plan: ResolvedRunPlan = { resolved: turn.resolved };
     await sink.onResolved({ runId: input.runId, plan });
 

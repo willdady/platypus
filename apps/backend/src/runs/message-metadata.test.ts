@@ -62,6 +62,28 @@ const NO_USAGE = {
   outputTokens: { total: undefined, text: undefined, reasoning: undefined },
 };
 
+/**
+ * The Anthropic / Bedrock wire shape: the input figure is the TOTAL, inclusive
+ * of whatever was read from cache or newly written (issue #734). The cache
+ * fields are the breakdown the fold must carry alongside the flat sum.
+ */
+const cachedUsage = (
+  inputTotal: number,
+  outputTotal: number,
+  cacheRead: number | undefined,
+  cacheWrite: number | undefined,
+) => ({
+  inputTokens: {
+    total: inputTotal,
+    // The non-cached tail, derived so `total` is the inclusive figure a real
+    // vendor reports — the number the panel keeps meaning as Input.
+    noCache: inputTotal - (cacheRead ?? 0) - (cacheWrite ?? 0) || undefined,
+    cacheRead,
+    cacheWrite,
+  },
+  outputTokens: { total: outputTotal, text: outputTotal, reasoning: undefined },
+});
+
 /** The tool the model calls to force a second round trip. */
 const ping = tool({
   description: "Ping a service.",
@@ -455,6 +477,99 @@ describe("Token usage over a real multi-step stream", () => {
     );
 
     expect(message?.metadata).not.toHaveProperty("tokenUsage");
+  });
+
+  /** Runs a two-step turn with the given per-step usage fixtures. */
+  const runWithUsages = async (first: ProviderUsage, second: ProviderUsage) => {
+    const result = streamText({
+      model: mockModel([toolCallStep(first), answerStep(second)]),
+      prompt: "Ping the service and tell me what it said.",
+      tools: { ping },
+      stopWhen: [stepCountIs(5)],
+    });
+
+    return lastSnapshot(
+      result.toUIMessageStream({
+        messageMetadata: createMessageMetadata({ agentId: "agent-1" }),
+      }),
+    );
+  };
+
+  // Issue #734. Anthropic/Bedrock report both a cached-read and a cached-write
+  // count, so a turn on those Providers must carry both — summed across steps.
+  it("folds cached-read and cached-write tokens across every step (Anthropic/Bedrock shape)", async () => {
+    const message = await runWithUsages(
+      cachedUsage(1_000, 30, 700, 100),
+      cachedUsage(4_200, 70, 2_000, 50),
+    );
+
+    expect(message?.metadata?.tokenUsage).toEqual({
+      inputTokens: 5_200,
+      outputTokens: 100,
+      cacheReadTokens: 2_700,
+      cacheWriteTokens: 150,
+    });
+  });
+
+  // Issue #734. OpenAI and Google cache implicitly and report a read count but
+  // no write one, so the write key (and any UI row) is legitimately missing on
+  // those two rather than zero.
+  it("reports a cached-read count without a write one (OpenAI/Google shape)", async () => {
+    const message = await runWithUsages(
+      cachedUsage(1_000, 30, 500, undefined),
+      cachedUsage(4_200, 70, 900, undefined),
+    );
+
+    expect(message?.metadata?.tokenUsage).toEqual({
+      inputTokens: 5_200,
+      outputTokens: 100,
+      cacheReadTokens: 1_400,
+    });
+  });
+
+  // The breakdown must never change what Input means. The input figure already
+  // includes cached tokens, so it stays the same sum whether or not the
+  // Provider reports any cache detail.
+  it("keeps Input, Output and Total unchanged when a Provider reports cache details", async () => {
+    const message = await runWithUsages(
+      cachedUsage(1_000, 30, 700, 100),
+      cachedUsage(4_200, 70, 2_000, 50),
+    );
+
+    expect(message?.metadata?.tokenUsage?.inputTokens).toBe(5_200);
+    expect(message?.metadata?.tokenUsage?.outputTokens).toBe(100);
+  });
+
+  // Decision 4: a Provider that reports no cache detail stores no cache key and
+  // renders no row — the existing `usage()` helper reports no cache fields at
+  // all, exactly the shape of a Provider that caches nothing (or has nothing
+  // yet in the cache).
+  it("persists no cache keys for a Provider that reports no cache detail", async () => {
+    const message = await runWithUsages(usage(1_000, 30), usage(4_200, 70));
+
+    expect(message?.metadata?.tokenUsage).toEqual({
+      inputTokens: 5_200,
+      outputTokens: 100,
+    });
+  });
+
+  // The trap ADR-0018 documents for occupancy reapplies here: on a multi-step
+  // turn these are SUMS, so a later step's reports accumulate rather than
+  // replace the earlier ones.
+  it("sums the cached counts across steps, never replacing an earlier step's", async () => {
+    const message = await runWithUsages(
+      cachedUsage(1_000, 30, 700, 100),
+      cachedUsage(4_200, 70, 2_000, undefined),
+    );
+
+    // The earlier step's write of 100 survives even though the last step
+    // reported none — a billing sum only grows, unlike occupancy.
+    expect(message?.metadata?.tokenUsage).toEqual({
+      inputTokens: 5_200,
+      outputTokens: 100,
+      cacheReadTokens: 2_700,
+      cacheWriteTokens: 100,
+    });
   });
 });
 

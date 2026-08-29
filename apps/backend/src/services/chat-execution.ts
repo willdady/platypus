@@ -583,195 +583,212 @@ export const prepareChatTurn = async (
   // built alongside it nest their own sessions into this one — they take the
   // promise, not the session, and await it only if they are ever invoked.
   const sessionPromise = openToolSession(scope, agent, queries);
-  // The search path is awaited *beside* the session below, not after it, so it
-  // cannot be handed the session itself — it gets a registrar that defers onto
-  // the promise. See `deferCloserRegistrar`.
-  const registerCloser = deferCloserRegistrar(sessionPromise);
+  // From here down this function OWNS the session: `dispose` is the only
+  // handle on it and it reaches the caller only on the successful return
+  // below, so a throw in between leaves the session — its MCP clients, and
+  // every closer a Contribution registered — with nothing that will ever
+  // close it (issue #630). The window opens here rather than at the
+  // `Promise.all`: a rejection there settles the group while the session goes
+  // on resolving beside it, unowned.
+  try {
+    // The search path is awaited *beside* the session below, not after it, so it
+    // cannot be handed the session itself — it gets a registrar that defers onto
+    // the promise. See `deferCloserRegistrar`.
+    const registerCloser = deferCloserRegistrar(sessionPromise);
 
-  // Hoisted out of the `Promise.all` argument list so the resolution and the
-  // tools it produced are both in scope below — the pair is what says whether
-  // search was promised and not delivered. Pure and synchronous, so nothing
-  // about the awaited work moves.
-  const searchResolution = resolveSearchMode(request.search, provider);
+    // Hoisted out of the `Promise.all` argument list so the resolution and the
+    // tools it produced are both in scope below — the pair is what says whether
+    // search was promised and not delivered. Pure and synchronous, so nothing
+    // about the awaited work moves.
+    const searchResolution = resolveSearchMode(request.search, provider);
 
-  // Absent means yes, which is what every interactive Chat turn relies on.
-  // Resolved once, here, so the retrieval below and the block composed further
-  // down read the same decision rather than each re-deriving it (#645).
-  const includeMemories = input.includeMemories ?? true;
+    // Absent means yes, which is what every interactive Chat turn relies on.
+    // Resolved once, here, so the retrieval below and the block composed further
+    // down read the same decision rather than each re-deriving it (#645).
+    const includeMemories = input.includeMemories ?? true;
 
-  const [
-    session,
-    skills,
-    { subAgents, unavailableSubAgents, subAgentTools },
-    userContexts,
-    memories,
-    sandboxEnvKeys,
-    searchTools,
-  ] = await Promise.all([
-    sessionPromise,
-    loadSkills(queries, agent, orgId, workspaceId),
-    loadSubAgents(queries, agent, scope, sessionPromise, run),
-    queries.getUserContexts(user.id, workspaceId),
-    resolveMemories(
-      queries,
-      user.id,
-      workspaceId,
-      input.memorySnapshot,
-      input.memoriesReferenceDate,
-      includeMemories,
-    ),
-    queries.getSandboxEnvKeys(workspaceId),
-    resolveSearchTools(searchResolution, opened, provider, {
-      orgId,
-      workspaceId,
-      userId: user.id,
-      registerCloser,
-    }),
-  ]);
-
-  // Search was asked for, resolution had somewhere to send it, and nothing came
-  // back (issue #522). Outcome-based rather than a branch per cause, so an
-  // unregistered backend, a factory that threw or timed out and a missing
-  // `web_search` executor are all one condition — as is whatever cause is added
-  // next. An empty native tool set would land here too, though nothing can
-  // produce one today. The three server-side warns still name the specific
-  // fault for the Operator; this is what the person reading the reply is told.
-  const searchUnavailable =
-    searchResolution.kind !== "none" && Object.keys(searchTools).length === 0;
-
-  // Assignment order is the precedence order, and it is deliberate: search lands
-  // after the session's tools so it wins over an agent/MCP tool that happens to
-  // share a name (exactly as native search already did), and before
-  // `subAgentTools` so a sub-agent's tools still win over search.
-  const tools: Record<string, Tool> = { ...session.tools };
-  Object.assign(tools, searchTools);
-  Object.assign(tools, subAgentTools);
-
-  // The turn half carries what this turn resolved — the live retrieval when no
-  // pin was supplied (headless). The renderer receives only the stable half,
-  // with the memories folded into a byte-stable `memoriesBlock`: for a pinned
-  // interactive turn that is the snapshot verbatim, for a headless turn it is
-  // the live retrieval's formatted text. Nothing per-turn reaches composition
-  // directly (ADR-0020).
-  const turn: SystemPromptTurnContext = { memories };
-
-  const stable: SystemPromptStableContext = {
-    workspace: { id: workspaceId, context: workspace.context ?? undefined },
-    agent: agent ?? null,
-    user: {
-      id: user.id,
-      name: user.name,
-      globalContext: userContexts.global,
-      workspaceContext: userContexts.workspace,
-    },
-    // The flag gates the block; the pin and the live retrieval are only sources
-    // for it. Gating here rather than trusting the sources to be empty is what
-    // makes "off means no `<memories>`" true by construction: `turn.memories` is
-    // already empty when off, but a pin would otherwise slip past the gate and
-    // make the flag's name a lie for a caller that supplied both.
-    memoriesBlock: includeMemories
-      ? (input.memorySnapshot ?? formatSummariesForSystemPrompt(turn.memories))
-      : "",
-    skills,
-    subAgents,
-    unavailableSubAgents,
-    sandboxEnvKeys,
-    fallbackInstructions: request.instructions,
-    runMode,
-    securityGuardrails: context.guardrails,
-    organizationIdentityContext: organization?.identityContext,
-  };
-
-  const systemPrompt = renderSystemPrompt(stable);
-
-  if (skills.length > 0) {
-    tools[LOAD_SKILL_TOOL_NAME] = createLoadSkillTool(orgId, workspaceId);
-  }
-
-  // Activity events only. Result normalization (#321) is no longer bolted on
-  // here: it happens for every tool the Tool session loads, whether or not this
-  // turn is being observed. The tools core adds itself above — search, the
-  // sub-agent delegates, `loadSkill` — return core-owned JSON shapes.
-  const wrappedTools = onActivity
-    ? wrapToolsWithActivity(tools, onActivity)
-    : tools;
-
-  // Inline file URLs to `data:` bytes when we have an origin, then ALWAYS
-  // normalize (issues #328, #342): text-like files become annotated text,
-  // PDF/DOCX are extracted to capped annotated text, native files pass through
-  // untouched, and any part that couldn't be inlined — a storage miss, or a
-  // headless turn with no origin — is announced as unavailable rather than
-  // forwarded raw. Normalizing even without an origin keeps a stray file part on
-  // a headless turn from hard-failing conversion. The pre-persist gate
-  // (`validateTurnAttachments`) has already rejected files nothing can convert,
-  // so the normalizer here never throws.
-  const passthroughFileTypes = passthroughFileTypesForModel(
-    provider,
-    resolvedModelId,
-  );
-  const inlinedMessages = await normalizeFileParts(
-    origin ? await inlineFileUrls(messages, origin) : messages,
-    passthroughFileTypes,
-    {
-      maxExtractedTextChars: maxExtractedTextCharsForModel(
-        provider,
-        resolvedModelId,
+    const [
+      session,
+      skills,
+      { subAgents, unavailableSubAgents, subAgentTools },
+      userContexts,
+      memories,
+      sandboxEnvKeys,
+      searchTools,
+    ] = await Promise.all([
+      sessionPromise,
+      loadSkills(queries, agent, orgId, workspaceId),
+      loadSubAgents(queries, agent, scope, sessionPromise, run),
+      queries.getUserContexts(user.id, workspaceId),
+      resolveMemories(
+        queries,
+        user.id,
+        workspaceId,
+        input.memorySnapshot,
+        input.memoriesReferenceDate,
+        includeMemories,
       ),
-    },
-  );
+      queries.getSandboxEnvKeys(workspaceId),
+      resolveSearchTools(searchResolution, opened, provider, {
+        orgId,
+        workspaceId,
+        userId: user.id,
+        registerCloser,
+      }),
+    ]);
 
-  // Read from the INCOMING history, before this turn appends anything — Tool-
-  // result clearing's only reading for the first model call of the turn
-  // (ADR-0018 Notes, issue #524). Left off entirely rather than sent as
-  // `undefined` when there is no prior reading, matching every other optional
-  // field on this plan.
-  const initialOccupancy = initialOccupancyFrom(messages);
+    // Search was asked for, resolution had somewhere to send it, and nothing came
+    // back (issue #522). Outcome-based rather than a branch per cause, so an
+    // unregistered backend, a factory that threw or timed out and a missing
+    // `web_search` executor are all one condition — as is whatever cause is added
+    // next. An empty native tool set would land here too, though nothing can
+    // produce one today. The three server-side warns still name the specific
+    // fault for the Operator; this is what the person reading the reply is told.
+    const searchUnavailable =
+      searchResolution.kind !== "none" && Object.keys(searchTools).length === 0;
 
-  return {
-    stream: {
-      ...context.plan,
-      tools: wrappedTools,
-      system: systemPrompt,
-      messages: inlinedMessages,
-      // Tool-result clearing's other input beyond the core allowlist
-      // (ADR-0021, issue #626): only the session's OWN MCP resolutions, never
-      // a delegate's — a Sub-Agent's plan carries its own nested session's
-      // hints (`createSubAgentDelegate`), resolved under its own rule.
-      readOnlyToolNames: session.readOnlyToolNames,
-      ...(initialOccupancy !== undefined ? { initialOccupancy } : {}),
-    },
-    resolved: {
-      agentId: context.resolvedAgentId,
-      providerId: context.resolvedProviderId,
-      // The reference, not the resolution — see `ChatContext.modelReference`.
-      modelId: context.modelReference,
-      // Only Direct (no-Agent) turns persist generation params on the row;
-      // Agent-driven turns read them back from the Agent record.
-      //
-      // What is persisted here is the user's OWN instructions, never the
-      // composed system prompt above: this column backs the editable
-      // Instructions box in Chat settings, so writing the composite made the
-      // workspace context, the user's identity, memories and the provider's
-      // guardrails reappear as editable text — and compound on every turn
-      // (issue #365). What the model receives is unaffected; `stream.system`
-      // still carries the composite.
-      instructions: agent ? undefined : request.instructions,
-      temperature: agent ? undefined : context.plan.temperature,
-      topP: agent ? undefined : context.plan.topP,
-      topK: agent ? undefined : context.plan.topK,
-      frequencyPenalty: agent ? undefined : context.plan.frequencyPenalty,
-      presencePenalty: agent ? undefined : context.plan.presencePenalty,
-      seed: agent ? undefined : context.plan.seed,
-      // The REQUESTED value, not the plan's resolved ceiling — see
-      // `ResolvedGeneration.maxSteps`. Normalised to undefined so a cleared
-      // null writes null to the column like every other unset field here.
-      maxSteps: agent ? undefined : (request.maxSteps ?? undefined),
-    },
-    searchUnavailable,
-    // The session closes what it opened, delegates' nested sessions included —
-    // the caller no longer reconciles two lists of clients to get there.
-    dispose: session.dispose,
-  };
+    // Assignment order is the precedence order, and it is deliberate: search lands
+    // after the session's tools so it wins over an agent/MCP tool that happens to
+    // share a name (exactly as native search already did), and before
+    // `subAgentTools` so a sub-agent's tools still win over search.
+    const tools: Record<string, Tool> = { ...session.tools };
+    Object.assign(tools, searchTools);
+    Object.assign(tools, subAgentTools);
+
+    // The turn half carries what this turn resolved — the live retrieval when no
+    // pin was supplied (headless). The renderer receives only the stable half,
+    // with the memories folded into a byte-stable `memoriesBlock`: for a pinned
+    // interactive turn that is the snapshot verbatim, for a headless turn it is
+    // the live retrieval's formatted text. Nothing per-turn reaches composition
+    // directly (ADR-0020).
+    const turn: SystemPromptTurnContext = { memories };
+
+    const stable: SystemPromptStableContext = {
+      workspace: { id: workspaceId, context: workspace.context ?? undefined },
+      agent: agent ?? null,
+      user: {
+        id: user.id,
+        name: user.name,
+        globalContext: userContexts.global,
+        workspaceContext: userContexts.workspace,
+      },
+      // The flag gates the block; the pin and the live retrieval are only sources
+      // for it. Gating here rather than trusting the sources to be empty is what
+      // makes "off means no `<memories>`" true by construction: `turn.memories` is
+      // already empty when off, but a pin would otherwise slip past the gate and
+      // make the flag's name a lie for a caller that supplied both.
+      memoriesBlock: includeMemories
+        ? (input.memorySnapshot ??
+          formatSummariesForSystemPrompt(turn.memories))
+        : "",
+      skills,
+      subAgents,
+      unavailableSubAgents,
+      sandboxEnvKeys,
+      fallbackInstructions: request.instructions,
+      runMode,
+      securityGuardrails: context.guardrails,
+      organizationIdentityContext: organization?.identityContext,
+    };
+
+    const systemPrompt = renderSystemPrompt(stable);
+
+    if (skills.length > 0) {
+      tools[LOAD_SKILL_TOOL_NAME] = createLoadSkillTool(orgId, workspaceId);
+    }
+
+    // Activity events only. Result normalization (#321) is no longer bolted on
+    // here: it happens for every tool the Tool session loads, whether or not this
+    // turn is being observed. The tools core adds itself above — search, the
+    // sub-agent delegates, `loadSkill` — return core-owned JSON shapes.
+    const wrappedTools = onActivity
+      ? wrapToolsWithActivity(tools, onActivity)
+      : tools;
+
+    // Inline file URLs to `data:` bytes when we have an origin, then ALWAYS
+    // normalize (issues #328, #342): text-like files become annotated text,
+    // PDF/DOCX are extracted to capped annotated text, native files pass through
+    // untouched, and any part that couldn't be inlined — a storage miss, or a
+    // headless turn with no origin — is announced as unavailable rather than
+    // forwarded raw. Normalizing even without an origin keeps a stray file part on
+    // a headless turn from hard-failing conversion. The pre-persist gate
+    // (`validateTurnAttachments`) has already rejected files nothing can convert,
+    // so the normalizer here never throws.
+    const passthroughFileTypes = passthroughFileTypesForModel(
+      provider,
+      resolvedModelId,
+    );
+    const inlinedMessages = await normalizeFileParts(
+      origin ? await inlineFileUrls(messages, origin) : messages,
+      passthroughFileTypes,
+      {
+        maxExtractedTextChars: maxExtractedTextCharsForModel(
+          provider,
+          resolvedModelId,
+        ),
+      },
+    );
+
+    // Read from the INCOMING history, before this turn appends anything — Tool-
+    // result clearing's only reading for the first model call of the turn
+    // (ADR-0018 Notes, issue #524). Left off entirely rather than sent as
+    // `undefined` when there is no prior reading, matching every other optional
+    // field on this plan.
+    const initialOccupancy = initialOccupancyFrom(messages);
+
+    return {
+      stream: {
+        ...context.plan,
+        tools: wrappedTools,
+        system: systemPrompt,
+        messages: inlinedMessages,
+        // Tool-result clearing's other input beyond the core allowlist
+        // (ADR-0021, issue #626): only the session's OWN MCP resolutions, never
+        // a delegate's — a Sub-Agent's plan carries its own nested session's
+        // hints (`createSubAgentDelegate`), resolved under its own rule.
+        readOnlyToolNames: session.readOnlyToolNames,
+        ...(initialOccupancy !== undefined ? { initialOccupancy } : {}),
+      },
+      resolved: {
+        agentId: context.resolvedAgentId,
+        providerId: context.resolvedProviderId,
+        // The reference, not the resolution — see `ChatContext.modelReference`.
+        modelId: context.modelReference,
+        // Only Direct (no-Agent) turns persist generation params on the row;
+        // Agent-driven turns read them back from the Agent record.
+        //
+        // What is persisted here is the user's OWN instructions, never the
+        // composed system prompt above: this column backs the editable
+        // Instructions box in Chat settings, so writing the composite made the
+        // workspace context, the user's identity, memories and the provider's
+        // guardrails reappear as editable text — and compound on every turn
+        // (issue #365). What the model receives is unaffected; `stream.system`
+        // still carries the composite.
+        instructions: agent ? undefined : request.instructions,
+        temperature: agent ? undefined : context.plan.temperature,
+        topP: agent ? undefined : context.plan.topP,
+        topK: agent ? undefined : context.plan.topK,
+        frequencyPenalty: agent ? undefined : context.plan.frequencyPenalty,
+        presencePenalty: agent ? undefined : context.plan.presencePenalty,
+        seed: agent ? undefined : context.plan.seed,
+        // The REQUESTED value, not the plan's resolved ceiling — see
+        // `ResolvedGeneration.maxSteps`. Normalised to undefined so a cleared
+        // null writes null to the column like every other unset field here.
+        maxSteps: agent ? undefined : (request.maxSteps ?? undefined),
+      },
+      searchUnavailable,
+      // The session closes what it opened, delegates' nested sessions included —
+      // the caller no longer reconciles two lists of clients to get there.
+      dispose: session.dispose,
+    };
+  } catch (error) {
+    // Awaited, so what the session opened is closed before the failure
+    // reaches the caller. `.catch` swallows only the case where the session
+    // is what failed — there is then nothing to dispose, and the rejection
+    // the caller is about to see is that failure itself.
+    await sessionPromise.then((session) => session.dispose()).catch(() => {});
+    throw error;
+  }
 };
 
 /**

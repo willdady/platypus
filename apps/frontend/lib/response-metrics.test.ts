@@ -25,6 +25,29 @@ describe("responseMetrics", () => {
     });
   });
 
+  it("passes the cached-input breakdown through with Token usage (issue #734)", () => {
+    expect(
+      responseMetrics({
+        tokenUsage: {
+          inputTokens: 5_200,
+          outputTokens: 100,
+          cacheReadTokens: 2_700,
+          cacheWriteTokens: 150,
+        },
+      }),
+    ).toEqual({
+      tokenUsage: {
+        inputTokens: 5_200,
+        outputTokens: 100,
+        cacheReadTokens: 2_700,
+        cacheWriteTokens: 150,
+      },
+      prepDurationMs: undefined,
+      modelDurationMs: undefined,
+      measuredToolDurationMs: undefined,
+    });
+  });
+
   it("sums measured tool durations across every tool call", () => {
     const metrics = responseMetrics({
       modelDurationMs: 12_000,

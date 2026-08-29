@@ -62,6 +62,21 @@ export type RunStats = {
   inputTokens?: number;
   outputTokens?: number;
   /**
+   * Cached input tokens READ across the run's model calls, summed the same way
+   * `inputTokens` is (issue #734). A breakdown of that figure, which already
+   * includes cached tokens — never subtracted. Absent where the Provider never
+   * reported a cached-read count; nothing is estimated, and 0 is never
+   * substituted (it would read as a measurement of no cached reads).
+   */
+  cacheReadTokens?: number;
+  /**
+   * Cached input tokens the run's model calls caused to be WRITTEN, summed as
+   * above. Optional for the same reason, and only present where the Provider
+   * reports a write count at all — OpenAI and Google cache implicitly and
+   * report none (issue #734).
+   */
+  cacheWriteTokens?: number;
+  /**
    * How full the model's context got: the input tokens reported for the LAST
    * step, which is the whole conversation as last sent (ADR-0018). A last
    * value, never a sum — `inputTokens` above folds every step together and on a
