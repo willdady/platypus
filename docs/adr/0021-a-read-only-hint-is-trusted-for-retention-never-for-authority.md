@@ -1,6 +1,5 @@
 ---
 status: accepted
-implemented-by: "#626"
 ---
 
 # A tool's read-only hint is trusted for retention, never for authority

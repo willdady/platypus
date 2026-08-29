@@ -1,6 +1,5 @@
 ---
 status: accepted
-implemented-by: "#623"
 ---
 
 # The system prompt is stable while a Chat is active, and volatile turn state cannot reach it by construction

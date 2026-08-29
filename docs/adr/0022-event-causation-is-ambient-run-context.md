@@ -1,6 +1,5 @@
 ---
 status: accepted
-implemented-by: "#668"
 ---
 
 # Event causation is ambient run context, not a plugin-boundary parameter
