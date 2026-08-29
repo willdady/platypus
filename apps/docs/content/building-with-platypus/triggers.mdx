@@ -111,7 +111,10 @@ A few details worth knowing:
 
 - **Scheduled (cron) runs** are checked about once a minute; a due Trigger is
   claimed and executed, then its next run time is recomputed from the cadence
-  (one-off Triggers disable themselves instead).
+  (one-off Triggers disable themselves instead). Switching **Enabled** back on
+  restarts the cadence from that moment: the first run lands on the next slot
+  the schedule names, so a Trigger that was off over one of its slots does not
+  fire the moment you re-enable it to catch up.
 - **Event runs** fire when a matching event occurs, with a short debounce so a
   burst of rapid events coalesces into one run.
 - **No-progress runs stop early.** Because no one is watching a Trigger run,
