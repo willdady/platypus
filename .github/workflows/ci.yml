@@ -1,11 +1,21 @@
 name: CI
 
-# Pre-merge gate: lint and tests must pass on every PR into main. This catches
-# problems at the merge boundary, before release-please and the release/deploy
-# workflows ever see the code. Enforced as required status checks on main, so
-# nothing merges without it.
+# Lint and tests run twice: on every PR into main as the pre-merge gate, and on
+# main itself after every push. The PR run catches problems at the merge
+# boundary, before release-please and the release/deploy workflows ever see the
+# code, and is enforced as a required status check so nothing merges without it.
+#
+# The push run is what verifies main itself, and it exists because a green PR is
+# not a promise about the branch it lands on. Two PRs can each pass alone and
+# break together, and a change can reach main without a PR at all — the ruleset
+# lets a repository admin bypass both the pull request and this check, which is
+# how a security fix lands from a private advisory. Neither case is visible to a
+# pull_request trigger. Nothing gates on the push run; it is there to fail
+# loudly on main so the next person is not debugging someone else's merge.
 on:
   pull_request:
+    branches: [main]
+  push:
     branches: [main]
 
 permissions:
@@ -15,9 +25,12 @@ env:
   TURBO_TELEMETRY_DISABLED: "1"
 
 # Cancel superseded runs for the same ref (e.g. a new push to a PR branch).
+# Never on main: each merge is a distinct commit that release and deploy may be
+# cut from, so cancelling an in-flight run would leave that commit unverified
+# with nothing to say so.
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   # Skip on release-please's release PR: it only bumps the version and
