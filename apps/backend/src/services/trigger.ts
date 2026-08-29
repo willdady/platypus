@@ -160,8 +160,8 @@ export async function createTrigger(
  * Updates a Trigger in this Workspace. Throws `NotFoundError` when it does
  * not exist here. `config`, if supplied, replaces the stored value wholesale
  * and is (re)validated against the effective type; `nextRunAt` is recomputed
- * for a cron trigger whose `config`/`type` changed, and cleared for an event
- * trigger.
+ * for a cron trigger whose `config`/`type` changed or which is being enabled,
+ * and cleared for an event trigger.
  */
 export async function updateTrigger(
   ctx: ScopeContext,
@@ -217,6 +217,17 @@ export async function updateTrigger(
       if (fields.config !== undefined) {
         updateData.config = parsed.config;
       }
+    } else if (fields.enabled === true && !existing.enabled) {
+      // Re-enabling restarts the schedule. Disabling leaves `nextRunAt` at
+      // whatever it was, so by the time a Trigger is switched back on that
+      // value is in the past — and the scheduler's due query is
+      // `nextRunAt <= NOW()`, which reads a stale timestamp as "due" and fires
+      // an off-schedule catch-up run on the very next tick. The run after that
+      // one is scheduled from *its* completion time, so the catch-up and the
+      // first real slot can land a minute apart before the cadence settles.
+      // Recomputing here means an enabled Trigger's first run is always a slot
+      // its own expression actually names.
+      updateData.nextRunAt = parseCronConfig(existing.config).nextRunAt;
     }
   } else {
     throw new ValidationError(

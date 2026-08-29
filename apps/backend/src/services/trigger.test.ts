@@ -187,11 +187,12 @@ describe("trigger module", () => {
       expect(setArg.nextRunAt).toEqual(new Date("2026-01-01T10:00:00Z"));
     });
 
-    it("leaves nextRunAt untouched when a cron trigger's config/type are not part of the update", async () => {
+    it("leaves nextRunAt untouched when a cron trigger is disabled", async () => {
       mockDb.limit.mockResolvedValueOnce([
         {
           id: "trig-1",
           type: "cron",
+          enabled: true,
           config: { cronExpression: "0 9 * * *", timezone: "UTC" },
         },
       ]);
@@ -203,6 +204,64 @@ describe("trigger module", () => {
 
       const setArg = mockDb.set.mock.calls[0][0] as Record<string, unknown>;
       expect(setArg).not.toHaveProperty("nextRunAt");
+    });
+
+    it("recomputes nextRunAt when a disabled cron trigger is enabled", async () => {
+      // The regression: disabling leaves `nextRunAt` in the past, so without a
+      // recompute here the scheduler's `nextRunAt <= NOW()` due query fires an
+      // off-schedule catch-up run on the next tick.
+      mockDb.limit.mockResolvedValueOnce([
+        {
+          id: "trig-1",
+          type: "cron",
+          enabled: false,
+          nextRunAt: new Date("2020-01-01T00:00:00Z"),
+          config: { cronExpression: "0 9 * * *", timezone: "UTC" },
+        },
+      ]);
+      mockDb.returning.mockResolvedValueOnce([{ id: "trig-1", enabled: true }]);
+
+      await updateTrigger(ctx, "trig-1", { enabled: true });
+
+      const setArg = mockDb.set.mock.calls[0][0] as Record<string, unknown>;
+      expect(setArg.nextRunAt).toEqual(new Date("2026-01-01T10:00:00Z"));
+    });
+
+    it("leaves nextRunAt untouched when an already-enabled cron trigger is updated", async () => {
+      // Only the false -> true edge restarts the schedule. A no-op `enabled:
+      // true` on a running Trigger must not push its next run out.
+      mockDb.limit.mockResolvedValueOnce([
+        {
+          id: "trig-1",
+          type: "cron",
+          enabled: true,
+          config: { cronExpression: "0 9 * * *", timezone: "UTC" },
+        },
+      ]);
+      mockDb.returning.mockResolvedValueOnce([{ id: "trig-1" }]);
+
+      await updateTrigger(ctx, "trig-1", { enabled: true, name: "Renamed" });
+
+      const setArg = mockDb.set.mock.calls[0][0] as Record<string, unknown>;
+      expect(setArg).not.toHaveProperty("nextRunAt");
+    });
+
+    it("does not recompute nextRunAt when an event trigger is enabled", async () => {
+      // Event triggers have no schedule; enabling one must still clear it.
+      mockDb.limit.mockResolvedValueOnce([
+        {
+          id: "trig-1",
+          type: "event",
+          enabled: false,
+          config: { events: ["card.created"] },
+        },
+      ]);
+      mockDb.returning.mockResolvedValueOnce([{ id: "trig-1", enabled: true }]);
+
+      await updateTrigger(ctx, "trig-1", { enabled: true });
+
+      const setArg = mockDb.set.mock.calls[0][0] as Record<string, unknown>;
+      expect(setArg.nextRunAt).toBeNull();
     });
 
     it("throws ValidationError for an invalid cron expression on update", async () => {
