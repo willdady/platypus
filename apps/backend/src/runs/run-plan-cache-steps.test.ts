@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import type { LanguageModel, ModelMessage } from "ai";
+import type { ModelMessage } from "ai";
 import { buildModelInvocation, type RunPlan } from "./run-plan.ts";
 
 /**
@@ -14,14 +14,13 @@ import { buildModelInvocation, type RunPlan } from "./run-plan.ts";
  * eventually fails the whole call.
  */
 
-const plan = (): RunPlan =>
-  ({
-    model: "test-model" as unknown as LanguageModel,
-    system: "system prompt",
-    tools: {},
-    maxSteps: 10,
-    contextWindow: 200_000,
-  }) as RunPlan;
+const plan = (): RunPlan => ({
+  model: "test-model",
+  system: "system prompt",
+  tools: {},
+  maxSteps: 10,
+  contextWindow: 200_000,
+});
 
 const invocation = () =>
   buildModelInvocation(plan(), {
