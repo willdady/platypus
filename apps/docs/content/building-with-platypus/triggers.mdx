@@ -189,13 +189,30 @@ delivery — the `data` object it sends is what the Trigger received.
 
 ## Review run history
 
-Run history is **not** a tab inside the Trigger editor. From the **Triggers**
-list, open the three-dot menu on the Trigger's row and choose **View runs**.
+**Trigger runs** is one page per Workspace, not a tab inside the Trigger
+editor. Open it from **Trigger runs** in the Triggers section of the Workspace
+home page, or from the command menu. Every run from every Trigger in the
+Workspace is there, newest first, each row naming the Trigger it came from and
+linking to it.
 
-The runs view shows each run's status (Success / Failed / Running / Pending),
-when it ran and how long it took, the event type for Event triggers, per-run
-stats, and any error message. It's the place to confirm a schedule is actually
-firing and to debug a Trigger that's failing.
+That is the page that answers "what fired here recently?" and "which Trigger
+just failed?" — questions a per-Trigger list could only answer one Trigger at a
+time. Two filters narrow it, and both live in the address bar, so a filtered
+view survives a refresh and can be sent to a colleague as a link:
+
+- **Trigger** — all Triggers, or one of them. **View runs** on a Trigger's
+  three-dot menu opens the page already filtered to it.
+- **Status** — all, or one of Success, Failed, Running, Pending.
+
+The list loads 50 runs at a time; **Load more** fetches the next 50, and goes
+away once a batch comes back short of 50 — the end of the list. It refreshes
+about every ten seconds while the tab is in front of you, so a run can be
+watched moving from _Running_ to its final status without reloading.
+
+Each row carries the run's status, when it started and how long it took, the
+event type for Event triggers, per-run stats, and any error message. It's the
+place to confirm a schedule is actually firing and to debug a Trigger that's
+failing.
 
 Each run's identifier isn't shown on the row — it's an opaque value nobody
 reads at a glance. Instead every run offers a **Copy run id** control. Use it

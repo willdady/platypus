@@ -19,6 +19,7 @@ import {
   Zap,
   KanbanSquare,
   LayoutDashboard,
+  History,
 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import Link from "next/link";
@@ -464,11 +465,20 @@ const Workspace = () => {
             storageKey="section:triggers:open"
           >
             <TriggerList orgId={orgId} workspaceId={workspaceId} />
-            <Button variant="outline" asChild>
-              <Link href={`/${orgId}/workspace/${workspaceId}/triggers/create`}>
-                <Plus /> Create trigger
-              </Link>
-            </Button>
+            <div className="flex flex-wrap gap-2">
+              <Button variant="outline" asChild>
+                <Link
+                  href={`/${orgId}/workspace/${workspaceId}/triggers/create`}
+                >
+                  <Plus /> Create trigger
+                </Link>
+              </Button>
+              <Button variant="outline" asChild>
+                <Link href={`/${orgId}/workspace/${workspaceId}/trigger-runs`}>
+                  <History /> Trigger runs
+                </Link>
+              </Button>
+            </div>
           </CollapsibleSection>
         </>
       )}

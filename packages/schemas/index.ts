@@ -2005,6 +2005,27 @@ export const triggerRunListSchema = z.object({
 
 export type TriggerRunList = z.infer<typeof triggerRunListSchema>;
 
+/**
+ * A run as the workspace-wide Trigger runs list returns it: the run plus the
+ * name of the Trigger it belongs to. The list mixes runs from every Trigger, so
+ * a row that only carried `triggerId` could not name its own Trigger; the
+ * listing endpoint already joins the trigger table to scope the query, so the
+ * name comes back with it rather than being resolved a second time client-side.
+ */
+export const triggerRunWithTriggerSchema = triggerRunSchema.extend({
+  triggerName: z.string(),
+});
+
+export type TriggerRunWithTrigger = z.infer<typeof triggerRunWithTriggerSchema>;
+
+export const triggerRunWithTriggerListSchema = z.object({
+  results: z.array(triggerRunWithTriggerSchema),
+});
+
+export type TriggerRunWithTriggerList = z.infer<
+  typeof triggerRunWithTriggerListSchema
+>;
+
 // Notification
 
 export const notificationSchema = z.object({
