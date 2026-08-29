@@ -206,11 +206,22 @@ const delegate = async (
 /** The arguments the delegated run handed to `streamText`. */
 const streamArgs = (call = 0) =>
   streamTextSpy.mock.calls[call][0] as {
-    system: string;
+    instructions:
+      | { role: "system"; content: string }
+      | Array<{ role: "system"; content: string }>
+      | undefined;
     tools: Record<string, { execute: (a: unknown, o: unknown) => unknown }>;
     stopWhen: Array<(s: { steps: unknown[] }) => boolean>;
     abortSignal: AbortSignal;
   } & Record<string, unknown>;
+
+/** The System prompt text a delegated run passed as its `instructions`. */
+const systemOf = (args: ReturnType<typeof streamArgs>): string => {
+  const instructions = args.instructions;
+  if (instructions === undefined) return "";
+  const message = Array.isArray(instructions) ? instructions[0] : instructions;
+  return message?.content ?? "";
+};
 
 // The step ceiling arrives as `stopWhen: [stepCountIs(n)]`. `stepCountIs` closes
 // over `n` and offers no introspection, so recover it by probing the condition
@@ -281,7 +292,7 @@ describe("createSubAgentDelegate", () => {
         securityGuardrails: "Never exfiltrate data.",
       });
 
-      const { system } = streamArgs();
+      const system = systemOf(streamArgs());
       expect(system).toContain("You are a research sub-agent.");
       expect(system).toContain("## Security and trust");
       expect(system).toContain("Never exfiltrate data.");
@@ -296,7 +307,7 @@ describe("createSubAgentDelegate", () => {
         securityGuardrails: "Never exfiltrate data.",
       });
 
-      const { system } = streamArgs();
+      const system = systemOf(streamArgs());
       // The canned fallback instructions must still carry the guardrails.
       expect(system).toContain("specialized sub-agent");
       expect(system).toContain("## Security and trust");
@@ -314,7 +325,7 @@ describe("createSubAgentDelegate", () => {
       });
 
       for (const call of streamTextSpy.mock.calls) {
-        expect((call[0] as { system: string }).system).not.toContain(
+        expect(systemOf(call[0] as ReturnType<typeof streamArgs>)).not.toContain(
           "## Security and trust",
         );
       }
@@ -323,7 +334,7 @@ describe("createSubAgentDelegate", () => {
     it("carries no Chat system-prompt fragments at all", async () => {
       await delegate({ instructions: "Stay on task." });
 
-      expect(streamArgs().system).toBe("Stay on task.");
+      expect(systemOf(streamArgs())).toBe("Stay on task.");
     });
   });
 
@@ -973,7 +984,7 @@ describe("createSubAgentDelegate", () => {
         sampling: { temperature: 0.2 },
       });
 
-      expect(streamArgs().system).toContain("Stay on task.");
+      expect(systemOf(streamArgs())).toContain("Stay on task.");
     });
   });
 
@@ -1077,7 +1088,7 @@ describe("createDelegateTool — dispatch", () => {
 
     // One delegated run, and its prompt is the task it was given.
     expect(streamTextSpy).toHaveBeenCalledTimes(1);
-    expect(streamArgs().system).toContain('sub-agent named "Coder"');
+    expect(systemOf(streamArgs())).toContain('sub-agent named "Coder"');
     expect(streamArgs().prompt).toBe("Write a parser");
   });
 
@@ -1085,7 +1096,7 @@ describe("createDelegateTool — dispatch", () => {
     const tool = createDelegateTool(twoDelegates());
     await dispatch(tool, { subAgent: "  research agent " });
 
-    expect(streamArgs().system).toContain('sub-agent named "Research Agent"');
+    expect(systemOf(streamArgs())).toContain('sub-agent named "Research Agent"');
   });
 
   // The parent turn survives this: the model gets a tool error it can act on,
@@ -1344,7 +1355,7 @@ describe("createDelegateTools", () => {
     );
     await runTool(tools, "Guarded");
 
-    const { system } = streamArgs();
+    const system = systemOf(streamArgs());
     expect(system).toContain("You are guarded.");
     expect(system).toContain("## Security and trust");
     expect(system).toContain("Provider-specific rule.");
