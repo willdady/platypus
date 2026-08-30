@@ -9,7 +9,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { RevealableInput } from "@/components/ui/revealable-input";
 import { Field, FieldLabel, FieldGroup, FieldSet } from "@/components/ui/field";
 import { useState } from "react";
 import { useBackendUrl } from "@/app/client-context";
@@ -110,9 +110,8 @@ export function ChangePasswordDialog({
           <FieldGroup>
             <Field>
               <FieldLabel htmlFor="newPassword">New Password</FieldLabel>
-              <Input
+              <RevealableInput
                 id="newPassword"
-                type="password"
                 value={newPassword}
                 onChange={(e) => {
                   setNewPassword(e.target.value);
@@ -121,6 +120,7 @@ export function ChangePasswordDialog({
                 disabled={isSubmitting}
                 placeholder="Enter new password (min 8 characters)"
                 autoComplete="new-password"
+                revealLabel="new password"
               />
               {validationError && (
                 <p className="text-sm text-destructive mt-1">

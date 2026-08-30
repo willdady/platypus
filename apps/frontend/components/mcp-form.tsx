@@ -9,12 +9,7 @@ import {
   FieldError,
 } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import {
-  InputGroup,
-  InputGroupAddon,
-  InputGroupButton,
-  InputGroupInput,
-} from "@/components/ui/input-group";
+import { RevealableInput } from "@/components/ui/revealable-input";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 import {
@@ -49,8 +44,6 @@ import {
   Check,
   X,
   ExternalLink,
-  Eye,
-  EyeOff,
   ShieldCheck,
   ShieldOff,
   Plus,
@@ -121,8 +114,6 @@ const McpForm = ({
   const [validationErrors, setValidationErrors] = useState<
     Record<string, string>
   >({});
-  const [showBearerToken, setShowBearerToken] = useState(false);
-  const [showOauthClientSecret, setShowOauthClientSecret] = useState(false);
   const [isTesting, setIsTesting] = useState(false);
   const [testResult, setTestResult] = useState<{
     success: boolean;
@@ -576,32 +567,15 @@ const McpForm = ({
                 data-invalid={!!validationErrors.bearerToken}
               >
                 <FieldLabel htmlFor="bearerToken">Bearer Token</FieldLabel>
-                <InputGroup>
-                  <InputGroupInput
-                    id="bearerToken"
-                    type={showBearerToken ? "text" : "password"}
-                    placeholder="Bearer token"
-                    value={formData.bearerToken}
-                    onChange={handleChange}
-                    disabled={isSubmitting}
-                    aria-invalid={!!validationErrors.bearerToken}
-                  />
-                  <InputGroupAddon align="inline-end">
-                    <InputGroupButton
-                      type="button"
-                      size="icon-xs"
-                      onClick={() => setShowBearerToken(!showBearerToken)}
-                      disabled={isSubmitting}
-                      aria-label={
-                        showBearerToken
-                          ? "Hide bearer token"
-                          : "Show bearer token"
-                      }
-                    >
-                      {showBearerToken ? <EyeOff /> : <Eye />}
-                    </InputGroupButton>
-                  </InputGroupAddon>
-                </InputGroup>
+                <RevealableInput
+                  id="bearerToken"
+                  placeholder="Bearer token"
+                  value={formData.bearerToken}
+                  onChange={handleChange}
+                  disabled={isSubmitting}
+                  aria-invalid={!!validationErrors.bearerToken}
+                  revealLabel="bearer token"
+                />
                 {validationErrors.bearerToken && (
                   <FieldError>{validationErrors.bearerToken}</FieldError>
                 )}
@@ -631,38 +605,19 @@ const McpForm = ({
                 <FieldLabel htmlFor="oauthClientSecret">
                   Client Secret
                 </FieldLabel>
-                <InputGroup>
-                  <InputGroupInput
-                    id="oauthClientSecret"
-                    type={showOauthClientSecret ? "text" : "password"}
-                    placeholder={
-                      mcpId && mcp?.oauthClientId
-                        ? "Leave blank to keep current"
-                        : "OAuth Client Secret"
-                    }
-                    value={formData.oauthClientSecret}
-                    onChange={handleChange}
-                    disabled={isSubmitting}
-                    aria-invalid={!!validationErrors.oauthClientSecret}
-                  />
-                  <InputGroupAddon align="inline-end">
-                    <InputGroupButton
-                      type="button"
-                      size="icon-xs"
-                      onClick={() =>
-                        setShowOauthClientSecret(!showOauthClientSecret)
-                      }
-                      disabled={isSubmitting}
-                      aria-label={
-                        showOauthClientSecret
-                          ? "Hide client secret"
-                          : "Show client secret"
-                      }
-                    >
-                      {showOauthClientSecret ? <EyeOff /> : <Eye />}
-                    </InputGroupButton>
-                  </InputGroupAddon>
-                </InputGroup>
+                <RevealableInput
+                  id="oauthClientSecret"
+                  placeholder={
+                    mcpId && mcp?.oauthClientId
+                      ? "Leave blank to keep current"
+                      : "OAuth Client Secret"
+                  }
+                  value={formData.oauthClientSecret}
+                  onChange={handleChange}
+                  disabled={isSubmitting}
+                  aria-invalid={!!validationErrors.oauthClientSecret}
+                  revealLabel="client secret"
+                />
                 {validationErrors.oauthClientSecret && (
                   <FieldError>{validationErrors.oauthClientSecret}</FieldError>
                 )}

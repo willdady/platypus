@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useAuth } from "@/components/auth-provider";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { RevealableInput } from "@/components/ui/revealable-input";
 import {
   Field,
   FieldLabel,
@@ -56,38 +56,38 @@ export function ChangePasswordForm() {
         <FieldGroup>
           <Field>
             <FieldLabel htmlFor="currentPassword">Current Password</FieldLabel>
-            <Input
+            <RevealableInput
               id="currentPassword"
-              type="password"
               value={currentPassword}
               onChange={(e) => setCurrentPassword(e.target.value)}
               required
               disabled={isSubmitting}
+              revealLabel="current password"
             />
           </Field>
           <Field>
             <FieldLabel htmlFor="newPassword">New Password</FieldLabel>
-            <Input
+            <RevealableInput
               id="newPassword"
-              type="password"
               value={newPassword}
               onChange={(e) => setNewPassword(e.target.value)}
               required
               disabled={isSubmitting}
+              revealLabel="new password"
             />
           </Field>
           <Field data-invalid={!!errors.confirmPassword}>
             <FieldLabel htmlFor="confirmPassword">
               Confirm New Password
             </FieldLabel>
-            <Input
+            <RevealableInput
               id="confirmPassword"
-              type="password"
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
               required
               disabled={isSubmitting}
               aria-invalid={!!errors.confirmPassword}
+              revealLabel="confirm new password"
             />
             {errors.confirmPassword && (
               <FieldError>{errors.confirmPassword}</FieldError>

@@ -11,12 +11,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { ExpandableTextarea } from "@/components/expandable-textarea";
-import {
-  InputGroup,
-  InputGroupAddon,
-  InputGroupButton,
-  InputGroupInput,
-} from "@/components/ui/input-group";
+import { RevealableInput } from "@/components/ui/revealable-input";
 import { Button } from "@/components/ui/button";
 import {
   Collapsible,
@@ -27,8 +22,6 @@ import {
   Building,
   ChevronRight,
   ChevronsUpDown,
-  Eye,
-  EyeOff,
   Info,
   OctagonX,
   Plus,
@@ -523,7 +516,6 @@ const ProviderForm = ({
     Record<string, string>
   >({});
   const [error, setError] = useState<string | null>(null);
-  const [showApiKey, setShowApiKey] = useState(false);
 
   const fetchUrl =
     providerId && user
@@ -964,28 +956,15 @@ const ProviderForm = ({
 
           <Field data-invalid={!!validationErrors.apiKey}>
             <FieldLabel htmlFor="apiKey">API Key</FieldLabel>
-            <InputGroup>
-              <InputGroupInput
-                id="apiKey"
-                type={showApiKey ? "text" : "password"}
-                placeholder="sk-..."
-                value={formData.apiKey}
-                onChange={handleChange}
-                disabled={isSubmitting || isReadOnly}
-                aria-invalid={!!validationErrors.apiKey}
-              />
-              <InputGroupAddon align="inline-end">
-                <InputGroupButton
-                  type="button"
-                  size="icon-xs"
-                  onClick={() => setShowApiKey(!showApiKey)}
-                  disabled={isSubmitting || isReadOnly}
-                  aria-label={showApiKey ? "Hide API key" : "Show API key"}
-                >
-                  {showApiKey ? <EyeOff /> : <Eye />}
-                </InputGroupButton>
-              </InputGroupAddon>
-            </InputGroup>
+            <RevealableInput
+              id="apiKey"
+              placeholder="sk-..."
+              value={formData.apiKey}
+              onChange={handleChange}
+              disabled={isSubmitting || isReadOnly}
+              aria-invalid={!!validationErrors.apiKey}
+              revealLabel="API key"
+            />
             {validationErrors.apiKey && (
               <FieldError>{validationErrors.apiKey}</FieldError>
             )}
