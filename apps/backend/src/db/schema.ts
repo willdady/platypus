@@ -962,6 +962,7 @@ export const widget = pgTable(
         | "metric"
         | "text"
         | "image"
+        | "iframe"
         | "weather"
         | "line-chart"
         | "pie-chart"
