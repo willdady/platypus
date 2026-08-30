@@ -2351,6 +2351,7 @@ export const widgetTypeSchema = z.enum([
   "metric",
   "text",
   "image",
+  "iframe",
   "weather",
   "line-chart",
   "pie-chart",
@@ -2379,6 +2380,19 @@ export const imageWidgetDataSchema = z.object({
 });
 
 export type ImageWidgetData = z.infer<typeof imageWidgetDataSchema>;
+
+export const iframeWidgetDataSchema = z
+  .object({
+    url: z
+      .string()
+      .url()
+      .refine((url) => url.toLowerCase().startsWith("https://"), {
+        message: "Embed URL must use HTTPS",
+      }),
+  })
+  .strict();
+
+export type IframeWidgetData = z.infer<typeof iframeWidgetDataSchema>;
 
 export const weatherConditionSchema = z.enum([
   "clear-day",
@@ -2485,6 +2499,7 @@ export const widgetDataSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("metric"), data: metricWidgetDataSchema }),
   z.object({ type: z.literal("text"), data: textWidgetDataSchema }),
   z.object({ type: z.literal("image"), data: imageWidgetDataSchema }),
+  z.object({ type: z.literal("iframe"), data: iframeWidgetDataSchema }),
   z.object({ type: z.literal("weather"), data: weatherWidgetDataSchema }),
   z.object({ type: z.literal("line-chart"), data: lineChartWidgetDataSchema }),
   z.object({ type: z.literal("pie-chart"), data: pieChartWidgetDataSchema }),
@@ -2501,6 +2516,7 @@ export const widgetSchema = z.object({
       metricWidgetDataSchema,
       textWidgetDataSchema,
       imageWidgetDataSchema,
+      iframeWidgetDataSchema,
       weatherWidgetDataSchema,
       lineChartWidgetDataSchema,
       pieChartWidgetDataSchema,
@@ -2533,6 +2549,11 @@ export const widgetUpdateDataSchema = z.discriminatedUnion("type", [
     type: z.literal("image"),
     title: z.string().min(1).max(200).optional(),
     data: imageWidgetDataSchema,
+  }),
+  z.object({
+    type: z.literal("iframe"),
+    title: z.string().min(1).max(200).optional(),
+    data: iframeWidgetDataSchema,
   }),
   z.object({
     type: z.literal("weather"),
