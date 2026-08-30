@@ -1,7 +1,114 @@
-import { describe, it, expect } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { afterEach, describe, it, expect, vi } from "vitest";
+import { render, screen, waitFor } from "@testing-library/react";
+import { AnimatePresence } from "motion/react";
 
-import { ContextMeter } from "./context-meter";
+import { ContextMeter, ContextMeterEntrance } from "./context-meter";
+
+const motionPreference = vi.hoisted(() => ({
+  isMobile: true,
+  reducedMotion: false,
+}));
+
+vi.mock("@/hooks/use-mobile", () => ({
+  useIsMobile: () => motionPreference.isMobile,
+}));
+
+vi.mock("motion/react", async (importOriginal) => {
+  const motion = await importOriginal<typeof import("motion/react")>();
+  return {
+    ...motion,
+    useReducedMotion: () => motionPreference.reducedMotion,
+  };
+});
+
+afterEach(() => {
+  motionPreference.isMobile = true;
+  motionPreference.reducedMotion = false;
+});
+
+describe("ContextMeterEntrance", () => {
+  const renderPresence = (visible: boolean, label = "meter") =>
+    render(
+      <AnimatePresence initial={false}>
+        {visible && (
+          <ContextMeterEntrance key="context-meter">
+            <span>{label}</span>
+          </ContextMeterEntrance>
+        )}
+      </AnimatePresence>,
+    );
+
+  const entranceFor = (label: string) => screen.getByText(label).closest("div");
+
+  it("shows a meter present on the first render at its natural height", () => {
+    renderPresence(true);
+
+    const entrance = entranceFor("meter");
+    expect(entrance).toHaveStyle({ height: "auto", opacity: "1" });
+    expect(entrance).toHaveClass(
+      "shrink-0",
+      "overflow-hidden",
+      "-mb-3",
+      "sm:mb-0",
+    );
+  });
+
+  it("animates a mobile meter that becomes available without restarting on rerender", async () => {
+    const view = renderPresence(false);
+
+    view.rerender(
+      <AnimatePresence initial={false}>
+        <ContextMeterEntrance key="context-meter">
+          <span>meter</span>
+        </ContextMeterEntrance>
+      </AnimatePresence>,
+    );
+
+    const entrance = entranceFor("meter");
+    // The collapsed row starts at the height of its own `-mb-3` bleed, so the
+    // two cancel and it occupies nothing without pulling the toolbar upward.
+    expect(entrance).toHaveStyle({ height: "0.75rem", opacity: "0" });
+
+    await waitFor(
+      () => expect(entrance).toHaveStyle({ height: "auto", opacity: "1" }),
+      { timeout: 1_500 },
+    );
+
+    view.rerender(
+      <AnimatePresence initial={false}>
+        <ContextMeterEntrance key="context-meter">
+          <span>updated meter</span>
+        </ContextMeterEntrance>
+      </AnimatePresence>,
+    );
+    expect(entranceFor("updated meter")).toHaveStyle({
+      height: "auto",
+      opacity: "1",
+    });
+  });
+
+  it.each([
+    { name: "desktop", isMobile: false, reducedMotion: false },
+    { name: "reduced motion", isMobile: true, reducedMotion: true },
+  ])("shows a newly available meter immediately on $name", (preference) => {
+    motionPreference.isMobile = preference.isMobile;
+    motionPreference.reducedMotion = preference.reducedMotion;
+    const view = renderPresence(false);
+
+    view.rerender(
+      <AnimatePresence initial={false}>
+        <ContextMeterEntrance key="context-meter">
+          <span>meter</span>
+        </ContextMeterEntrance>
+      </AnimatePresence>,
+    );
+
+    expect(entranceFor("meter")).toHaveStyle({
+      height: "auto",
+      opacity: "1",
+    });
+  });
+});
 
 describe("ContextMeter", () => {
   it("renders nothing when no Context window is declared", () => {

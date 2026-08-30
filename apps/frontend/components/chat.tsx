@@ -13,6 +13,7 @@ import {
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport } from "ai";
 import { GlobeIcon, Info, Settings2 } from "lucide-react";
+import { AnimatePresence } from "motion/react";
 import { useRef, useEffect, useState, useCallback, useMemo } from "react";
 import {
   Chat as ChatType,
@@ -42,7 +43,7 @@ import { useSearchToggle } from "@/hooks/use-search-toggle";
 import { useModelSelection } from "@/hooks/use-model-selection";
 import { resolveModel } from "@/lib/resolve-model";
 import { clearedToolCallIds } from "@/lib/tool-result-clearing";
-import { ContextMeter } from "./context-meter";
+import { ContextMeter, ContextMeterEntrance } from "./context-meter";
 import { useMessageEditing } from "@/hooks/use-message-editing";
 import { ATTACHMENTS_ONLY_TEXT } from "@/lib/message-parts";
 import { useChatTitlePoll } from "@/hooks/use-chat-title-poll";
@@ -726,11 +727,21 @@ export const Chat = ({
                   // space, which reads as the last item of the tool row rather
                   // than drifting into the middle the way `justify-between`
                   // alone would leave it.
-                  <ContextMeter
-                    className="order-last -mx-3 -mb-3 mt-1.5 w-[calc(100%+1.5rem)] justify-center rounded-b-md bg-foreground/5 px-3 py-1.5 sm:order-none sm:mx-0 sm:mt-0 sm:mb-0 sm:w-auto sm:justify-start sm:rounded-none sm:bg-transparent sm:p-0 sm:mr-auto"
-                    occupancy={projectedOccupancy}
-                    contextWindow={resolvedModel?.contextWindow}
-                  />
+                  <AnimatePresence initial={false}>
+                    {projectedOccupancy != null &&
+                      resolvedModel?.contextWindow != null && (
+                        <ContextMeterEntrance
+                          key="context-meter"
+                          className="order-last -mx-3 w-[calc(100%+1.5rem)] sm:order-none sm:mx-0 sm:mr-auto sm:w-auto"
+                        >
+                          <ContextMeter
+                            className="mt-1.5 justify-center rounded-b-md bg-foreground/5 px-3 py-1.5 sm:mt-0 sm:justify-start sm:rounded-none sm:bg-transparent sm:p-0"
+                            occupancy={projectedOccupancy}
+                            contextWindow={resolvedModel.contextWindow}
+                          />
+                        </ContextMeterEntrance>
+                      )}
+                  </AnimatePresence>
                 }
                 submit={<PromptInputSubmit status={effectiveStatus} />}
               />
