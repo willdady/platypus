@@ -38,16 +38,16 @@ describe("ContextMeterEntrance", () => {
       </AnimatePresence>,
     );
 
-  const entranceFor = (label: string) =>
-    screen.getByText(label).parentElement?.parentElement;
+  const entranceFor = (label: string) => screen.getByText(label).closest("div");
 
   it("shows a meter present on the first render at its natural height", () => {
     renderPresence(true);
 
     const entrance = entranceFor("meter");
     expect(entrance).toHaveStyle({ height: "auto", opacity: "1" });
-    expect(entrance).toHaveClass("shrink-0", "overflow-hidden");
-    expect(screen.getByText("meter").parentElement).toHaveClass(
+    expect(entrance).toHaveClass(
+      "shrink-0",
+      "overflow-hidden",
       "-mb-3",
       "sm:mb-0",
     );
@@ -65,7 +65,9 @@ describe("ContextMeterEntrance", () => {
     );
 
     const entrance = entranceFor("meter");
-    expect(entrance).toHaveStyle({ height: "0px", opacity: "0" });
+    // The collapsed row starts at the height of its own `-mb-3` bleed, so the
+    // two cancel and it occupies nothing without pulling the toolbar upward.
+    expect(entrance).toHaveStyle({ height: "0.75rem", opacity: "0" });
 
     await waitFor(
       () => expect(entrance).toHaveStyle({ height: "auto", opacity: "1" }),

@@ -8,10 +8,23 @@ import { formatTokens } from "@/lib/context-window";
 import { cn } from "@/lib/utils";
 
 /**
+ * How far the mobile row bleeds down over the footer's own padding, matching
+ * the `-mb-3` below. The collapsed entrance starts at exactly this height so
+ * that height and negative margin cancel: the row occupies nothing, yet the
+ * margin never pulls the toolbar up by 12px on its own.
+ */
+const FOOTER_BLEED = "0.75rem";
+
+/**
  * Reveals a context meter that becomes available after mount on mobile.
  * The caller's `AnimatePresence initial={false}` keeps an initially available
  * meter at its natural height, while desktop and reduced-motion layouts use an
  * immediate transition.
+ *
+ * The bleed stays in CSS on the clipping box rather than on its content, so the
+ * `sm:` breakpoint still governs the resting layout and the tinted band sits
+ * inside the box being clipped — a negative margin on the content would shorten
+ * the box by 12px and cut the bottom of the band off.
  */
 export const ContextMeterEntrance = ({
   children,
@@ -27,14 +40,12 @@ export const ContextMeterEntrance = ({
 
   return (
     <motion.div
-      initial={shouldAnimate ? { height: 0, opacity: 0 } : visible}
+      initial={shouldAnimate ? { height: FOOTER_BLEED, opacity: 0 } : visible}
       animate={visible}
       transition={{ duration: shouldAnimate ? 0.5 : 0, ease: "easeOut" }}
-      className={cn("shrink-0 overflow-hidden", className)}
+      className={cn("shrink-0 overflow-hidden -mb-3 sm:mb-0", className)}
     >
-      {/* Keep the mobile footer bleed inside the clipped content so a collapsed
-          entrance has no negative margin that can pull the toolbar upward. */}
-      <div className="-mb-3 sm:mb-0">{children}</div>
+      {children}
     </motion.div>
   );
 };
