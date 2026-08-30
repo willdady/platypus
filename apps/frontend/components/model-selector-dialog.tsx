@@ -1,3 +1,4 @@
+import type { MouseEvent } from "react";
 import { Agent, Provider } from "@platypus/schemas";
 import {
   ModelSelector,
@@ -27,6 +28,24 @@ const filterByKeywords = (
   const haystack = (keywords ?? []).join(" ").toLowerCase();
   return haystack.includes(search.toLowerCase()) ? 1 : 0;
 };
+
+/**
+ * Stops a press from moving focus, which is what keeps the on-screen keyboard
+ * up across a model switch (issue #749).
+ *
+ * A press inside the picker otherwise focuses the nearest focusable ancestor:
+ * the trigger button on the way in, and — because a model row is not itself
+ * focusable — cmdk's scrolling list, which carries `tabindex="-1"`, on the way
+ * out. Neither is editable, and Chrome on Android drops the keyboard the moment
+ * focus leaves an editable element, so it falls away and then reappears once
+ * focus reaches the textarea. Suppressed, focus stays on the composer textarea
+ * while the picker opens and on the search box while it closes, moving only
+ * between editable elements, and the keyboard never leaves.
+ *
+ * Opening and selecting both run off `click`, so neither is affected, and Tab
+ * still reaches these elements for anyone using a hardware keyboard.
+ */
+const keepFocus = (event: MouseEvent) => event.preventDefault();
 
 interface ModelSelectorDialogProps {
   agents: Agent[];
@@ -81,6 +100,7 @@ export const ModelSelectorDialog = ({
       variant="outline"
       size="sm"
       className="max-w-40 overflow-hidden sm:max-w-none"
+      onMouseDown={keepFocus}
     >
       {selectedAgent && (
         <AgentAvatar agent={selectedAgent} className="size-4" />
@@ -123,6 +143,7 @@ export const ModelSelectorDialog = ({
                   value={encodeAgentSelection(agent.id)}
                   keywords={[agent.name]}
                   className="cursor-pointer"
+                  onMouseDown={keepFocus}
                   onSelect={() => {
                     onModelChange(encodeAgentSelection(agent.id));
                     onOpenChange(false);
@@ -144,6 +165,7 @@ export const ModelSelectorDialog = ({
                   className="cursor-pointer"
                   value={encodeProviderSelection(provider.id, model.value)}
                   keywords={[model.label, provider.name]}
+                  onMouseDown={keepFocus}
                   onSelect={() => {
                     onModelChange(
                       encodeProviderSelection(provider.id, model.value),

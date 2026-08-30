@@ -6,14 +6,24 @@ import { Composer } from "./composer";
 import { PromptInputSpeechButton } from "./ai-elements/prompt-input";
 
 /**
- * Issue #749: closing the model picker used to move focus twice — Radix
- * returned it to the trigger button, then a 250ms timer moved it on to the
- * textarea. On mobile the intermediate stop on a button dismissed the
- * on-screen keyboard, and the timer reopened it about half a second later.
+ * Issue #749: switching models dropped the Android on-screen keyboard and
+ * brought it back a moment later. Chrome shows the keyboard while an editable
+ * element has focus, so anything that parks focus elsewhere in between is a
+ * flap, and the picker did it twice.
  *
- * jsdom has no virtual keyboard, so what these tests pin is the mechanism
- * underneath it: focus ends on the textarea, and it gets there in one move
- * without passing through the trigger. Confirming the keyboard itself needs a
+ * The first pass fixed the tail: Radix returned focus to the trigger button on
+ * close and a 250ms timer then moved it to the textarea, so the picker now
+ * takes over the close and focuses the textarea itself. That alone was not
+ * enough — a press inside the picker focuses the nearest focusable ancestor
+ * first, which is the trigger button on the way in and cmdk's scrolling list on
+ * the way out, and the list held focus for the dialog's whole exit animation.
+ * The picker suppresses the browser's focus-on-press for both.
+ *
+ * jsdom has no virtual keyboard and does not move focus on a press, so it
+ * cannot show either symptom. These tests pin what the fix rests on instead:
+ * the press is default-prevented, focus lands on the textarea in a single move,
+ * and neither opening nor selecting broke. The focus timeline it produces in a
+ * real browser was measured under mobile emulation; the keyboard itself needs a
  * physical device.
  */
 
@@ -162,6 +172,40 @@ describe("Composer model picker focus", () => {
     // regression: on mobile it drops the keyboard before the textarea reopens it.
     expect(focused).toEqual([textarea]);
     expect(focused).not.toContain(trigger);
+  });
+
+  // A press that is default-prevented never moves focus, so the textarea keeps
+  // it while the picker opens and the search box keeps it while the picker
+  // closes. `fireEvent` returns false for exactly that.
+  it("does not let a press on the trigger take focus off the composer", () => {
+    const { trigger } = renderComposer();
+
+    expect(fireEvent.mouseDown(trigger)).toBe(false);
+  });
+
+  it("does not let a press on a model take focus off the search box", () => {
+    const { trigger } = renderComposer();
+    const item = openPicker(trigger).closest("[cmdk-item]")!;
+
+    expect(fireEvent.mouseDown(item)).toBe(false);
+  });
+
+  it("still opens and switches model when the picker is pressed, not just clicked", async () => {
+    const { textarea, trigger, onModelChange } = renderComposer();
+
+    // Selection runs off `click`, which a prevented `mousedown` does not stop —
+    // press both the trigger and the model the way a real tap does.
+    fireEvent.mouseDown(trigger);
+    fireEvent.mouseUp(trigger);
+    fireEvent.click(trigger);
+
+    const item = screen.getByText("gpt-4o");
+    fireEvent.mouseDown(item);
+    fireEvent.mouseUp(item);
+    fireEvent.click(item);
+
+    expect(onModelChange).toHaveBeenCalled();
+    await waitFor(() => expect(document.activeElement).toBe(textarea));
   });
 });
 
