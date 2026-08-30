@@ -112,6 +112,10 @@ This project follows [Conventional Commits](https://www.conventionalcommits.org/
 
 **Format:** `<type>[optional scope]: <description>`
 
+**Write commit messages in English.** The subject and body must both be in
+English, so that every reviewer and maintainer can read the history without
+translation.
+
 **Examples:**
 
 ```
@@ -132,7 +136,7 @@ chore(tests): add missing test coverage
 > so the fix still lands as your work.
 
 1. Ensure your code passes all tests (`pnpm test`) and is formatted (`pnpm format`).
-2. Write clear, descriptive commit messages following the conventions above.
+2. Write clear, descriptive commit messages in English, following the conventions above.
 3. Update the docs in `apps/docs/content` in the same PR, not a follow-up one.
    If you changed an `.env.example`, a user-facing limit or enum in
    `packages/schemas`, anything under `apps/backend/src/plugins`, or a visible
