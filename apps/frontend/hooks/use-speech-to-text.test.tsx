@@ -18,17 +18,29 @@ class FakeSpeechRecognition extends EventTarget {
   onerror: ((ev: unknown) => void) | null = null;
 
   emitFinalResult(transcript: string) {
-    this.onresult?.({
-      resultIndex: 0,
-      results: {
+    this.emitResults([{ transcript, isFinal: true }]);
+  }
+
+  /**
+   * Emits one `onresult` carrying the whole result list, the way Chrome on
+   * Android does: every result seen so far in the session, `resultIndex`
+   * back at 0.
+   */
+  emitResults(
+    entries: { transcript: string; isFinal: boolean }[],
+    resultIndex = 0,
+  ) {
+    const results: Record<string | number, unknown> = {
+      length: entries.length,
+    };
+    entries.forEach((entry, index) => {
+      results[index] = {
+        isFinal: entry.isFinal,
         length: 1,
-        0: {
-          isFinal: true,
-          length: 1,
-          0: { transcript, confidence: 1 },
-        },
-      },
+        0: { transcript: entry.transcript, confidence: 1 },
+      };
     });
+    this.onresult?.({ resultIndex, results });
   }
 }
 
@@ -94,6 +106,87 @@ describe("useSpeechToText", () => {
     expect(inputHandler).toHaveBeenCalledTimes(1);
     expect(onTranscriptionChange).toHaveBeenCalledWith("hello world");
     expect(result.current.transcript).toBe("hello world");
+  });
+
+  it("ignores results already appended when the engine replays them", () => {
+    const textarea = document.createElement("textarea");
+    const textareaRef = { current: textarea };
+    const onTranscriptionChange = vi.fn();
+
+    const { result } = renderHook(() =>
+      useSpeechToText({ textareaRef, onTranscriptionChange }),
+    );
+
+    act(() => result.current.toggleListening());
+
+    act(() =>
+      lastInstance?.emitResults([{ transcript: "one", isFinal: true }]),
+    );
+    expect(textarea.value).toBe("one");
+
+    // Android re-sends the finalised "one" alongside the new " two".
+    act(() =>
+      lastInstance?.emitResults([
+        { transcript: "one", isFinal: true },
+        { transcript: " two", isFinal: true },
+      ]),
+    );
+
+    expect(textarea.value).toBe("one  two");
+    expect(onTranscriptionChange).toHaveBeenLastCalledWith("one  two");
+  });
+
+  it("does not re-append a final result promoted from an interim one", () => {
+    const textarea = document.createElement("textarea");
+    const textareaRef = { current: textarea };
+
+    const { result } = renderHook(() => useSpeechToText({ textareaRef }));
+
+    act(() => result.current.toggleListening());
+
+    act(() =>
+      lastInstance?.emitResults([{ transcript: "hello", isFinal: false }]),
+    );
+    expect(textarea.value).toBe("");
+
+    act(() =>
+      lastInstance?.emitResults([{ transcript: "hello", isFinal: true }]),
+    );
+    expect(textarea.value).toBe("hello");
+
+    act(() =>
+      lastInstance?.emitResults([
+        { transcript: "hello", isFinal: true },
+        { transcript: "there", isFinal: false },
+      ]),
+    );
+    expect(textarea.value).toBe("hello");
+  });
+
+  it("starts a fresh count when a new session replaces the result list", () => {
+    const textarea = document.createElement("textarea");
+    const textareaRef = { current: textarea };
+
+    const { result } = renderHook(() => useSpeechToText({ textareaRef }));
+
+    act(() => result.current.toggleListening());
+    act(() =>
+      lastInstance?.emitResults([
+        { transcript: "one", isFinal: true },
+        { transcript: " two", isFinal: true },
+      ]),
+    );
+    expect(textarea.value).toBe("one two");
+
+    // Android drops `continuous` and ends the session after an utterance; the
+    // next one starts a result list of its own.
+    act(() => result.current.toggleListening());
+    act(() => result.current.toggleListening());
+    act(() =>
+      lastInstance?.emitResults([{ transcript: "three", isFinal: true }]),
+    );
+
+    expect(textarea.value).toBe("one two three");
   });
 
   it("stops recognition on unmount", () => {

@@ -78,6 +78,11 @@ export function useSpeechToText({
   const [isSupported, setIsSupported] = useState(false);
   const [transcript, setTranscript] = useState("");
   const recognitionRef = useRef<SpeechRecognition | null>(null);
+  // How many entries of the current session's result list have already been
+  // appended. Chrome on Android re-delivers results that were finalised
+  // earlier in the session with `resultIndex` back at 0, so `resultIndex`
+  // alone cannot tell new speech from a replay and the text doubles up.
+  const consumedResultsRef = useRef(0);
 
   useEffect(() => {
     if (
@@ -96,6 +101,7 @@ export function useSpeechToText({
     recognition.lang = "en-US";
 
     recognition.onstart = () => {
+      consumedResultsRef.current = 0;
       setIsListening(true);
     };
 
@@ -104,13 +110,23 @@ export function useSpeechToText({
     };
 
     recognition.onresult = (event) => {
+      // A shorter list than we have already consumed means the engine started
+      // a fresh list mid-session; the old indices no longer refer to anything.
+      if (event.results.length < consumedResultsRef.current) {
+        consumedResultsRef.current = 0;
+      }
+
       let finalTranscript = "";
 
-      for (let i = event.resultIndex; i < event.results.length; i++) {
+      for (let i = consumedResultsRef.current; i < event.results.length; i++) {
         const result = event.results[i];
-        if (result.isFinal) {
-          finalTranscript += result[0]?.transcript ?? "";
+        // Finalised results arrive in order and only the tail can still be
+        // interim, so stop here and pick this index up once it is final.
+        if (!result?.isFinal) {
+          break;
         }
+        finalTranscript += result[0]?.transcript ?? "";
+        consumedResultsRef.current = i + 1;
       }
 
       if (finalTranscript && textareaRef?.current) {
