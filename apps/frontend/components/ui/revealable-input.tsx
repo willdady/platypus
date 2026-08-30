@@ -1,8 +1,8 @@
 "use client";
 
 import * as React from "react";
-import { useState } from "react";
 import { Eye, EyeOff } from "lucide-react";
+
 import {
   InputGroup,
   InputGroupAddon,
@@ -10,32 +10,35 @@ import {
   InputGroupInput,
 } from "@/components/ui/input-group";
 
-export interface RevealableInputProps extends React.ComponentProps<
-  typeof InputGroupInput
-> {
-  revealLabel?: string;
-}
-
-export function RevealableInput({
+function RevealableInput({
   revealLabel = "password",
+  disabled,
   ...props
-}: RevealableInputProps) {
-  const [show, setShow] = useState(false);
+}: React.ComponentProps<typeof InputGroupInput> & {
+  revealLabel?: string;
+}) {
+  const [revealed, setRevealed] = React.useState(false);
 
   return (
     <InputGroup>
-      <InputGroupInput {...props} type={show ? "text" : "password"} />
+      <InputGroupInput
+        {...props}
+        disabled={disabled}
+        type={revealed ? "text" : "password"}
+      />
       <InputGroupAddon align="inline-end">
         <InputGroupButton
           type="button"
           size="icon-xs"
-          onClick={() => setShow(!show)}
-          disabled={props.disabled}
-          aria-label={show ? `Hide ${revealLabel}` : `Show ${revealLabel}`}
+          onClick={() => setRevealed(!revealed)}
+          disabled={disabled}
+          aria-label={revealed ? `Hide ${revealLabel}` : `Show ${revealLabel}`}
         >
-          {show ? <EyeOff /> : <Eye />}
+          {revealed ? <EyeOff /> : <Eye />}
         </InputGroupButton>
       </InputGroupAddon>
     </InputGroup>
   );
 }
+
+export { RevealableInput };
