@@ -1,5 +1,15 @@
 # Changelog
 
+## [3.4.0](https://github.com/willdady/platypus/compare/v3.3.0...v3.4.0) (2026-08-30)
+
+
+### Features
+
+* **backend:** expected-column precondition on card moves ([#782](https://github.com/willdady/platypus/issues/782)) ([8b72799](https://github.com/willdady/platypus/commit/8b72799be88ef17d933e54f0a5fd275f4b3a93a0))
+* **dashboard:** add embed widget ([8d4dd0a](https://github.com/willdady/platypus/commit/8d4dd0a70cd6ea5d9b7490fd8844d2061ce26192)), closes [#346](https://github.com/willdady/platypus/issues/346)
+* **frontend:** add password reveal toggle to sign-in and sign-up forms ([d302181](https://github.com/willdady/platypus/commit/d302181e61b06b2afd424582be0b9aa00f0132dd)), closes [#770](https://github.com/willdady/platypus/issues/770)
+* **frontend:** animate context meter entrance ([7b73d69](https://github.com/willdady/platypus/commit/7b73d69be3a0d866c6a1eb58de11805034933317)), closes [#751](https://github.com/willdady/platypus/issues/751)
+
 ## [3.3.0](https://github.com/willdady/platypus/compare/v3.2.2...v3.3.0) (2026-08-30)
 
 
