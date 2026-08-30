@@ -5,6 +5,11 @@ vi.mock("./event-dispatch.ts", () => ({
   dispatchEvent: vi.fn(),
 }));
 
+// Imported after `test-utils`, which is what installs the suite-wide
+// `drizzle-orm` mock — pulled in earlier, `eq` would be the real export and the
+// predicate assertions below would have nothing to read.
+import { eq } from "drizzle-orm";
+import { kanbanCard as kanbanCardTable } from "../db/schema.ts";
 import { ConflictError, NotFoundError, ValidationError } from "../errors.ts";
 import { dispatchEvent } from "./event-dispatch.ts";
 import {
@@ -502,6 +507,69 @@ describe("kanban module", () => {
       expect(result.card.columnId).toBe("col-new");
     });
 
+    // Without these two the suite is vacuous: every refusal test below fakes
+    // the outcome by stubbing zero rows, so an implementation that dropped the
+    // predicate and kept only the `if (!row) throw` would pass them all. The
+    // predicate itself is what has to be pinned.
+    //
+    // `drizzle-orm` is mocked suite-wide (see test-utils), so `eq()` returns
+    // undefined and the assembled clause is unreadable from the `where` args.
+    // Asserting on the `eq` mock's arguments is what remains observable. That
+    // proves the predicate is built and handed to the UPDATE; it cannot prove
+    // Postgres applies it, which no test here can without a real database.
+    it("constrains the update to the expected column", async () => {
+      vi.mocked(eq).mockClear();
+      db.limit
+        .mockResolvedValueOnce([
+          { id: "card-1", columnId: "col-old", boardId: "board-1" },
+        ])
+        .mockResolvedValueOnce([{ id: "col-new", boardId: "board-1" }]);
+      db.orderBy.mockResolvedValue([]);
+      db.returning.mockResolvedValue([
+        { id: "card-1", columnId: "col-new", position: 1 },
+      ]);
+
+      await moveCard(asDb(db), ctx, {
+        cardId: "card-1",
+        columnId: "col-new",
+        afterCardId: null,
+        expectedColumnId: "col-old",
+      });
+
+      expect(vi.mocked(eq)).toHaveBeenCalledWith(
+        kanbanCardTable.columnId,
+        "col-old",
+      );
+    });
+
+    // The converse: with no expectation the update stays unconditional, or
+    // every existing caller silently acquires a precondition it never asked
+    // for. "col-old" is the card's current column, so a precondition applied
+    // unconditionally from the pre-read would show up here.
+    it("leaves the update unconditional when no column is expected", async () => {
+      vi.mocked(eq).mockClear();
+      db.limit
+        .mockResolvedValueOnce([
+          { id: "card-1", columnId: "col-old", boardId: "board-1" },
+        ])
+        .mockResolvedValueOnce([{ id: "col-new", boardId: "board-1" }]);
+      db.orderBy.mockResolvedValue([]);
+      db.returning.mockResolvedValue([
+        { id: "card-1", columnId: "col-new", position: 1 },
+      ]);
+
+      await moveCard(asDb(db), ctx, {
+        cardId: "card-1",
+        columnId: "col-new",
+        afterCardId: null,
+      });
+
+      expect(vi.mocked(eq)).not.toHaveBeenCalledWith(
+        kanbanCardTable.columnId,
+        "col-old",
+      );
+    });
+
     // The expectation is a predicate on the UPDATE, so a card that has moved on
     // matches no rows. A comparison against the pre-transaction read would pass
     // here and let the stale write land.
@@ -559,13 +627,23 @@ describe("kanban module", () => {
     // the refusal has to leave the transaction by throwing — a value returned
     // from the callback would commit that renumbering alongside a move that
     // never happened.
+    //
+    // The target column below has a collapsed gap (1.0 to 1.0005, under the
+    // 0.001 threshold) and the card is dropped into it, so `placeCardInColumn`
+    // takes its rebalance branch and issues the renumbering UPDATEs — the
+    // writes the rollback has to discard. The mock has no rollback semantics,
+    // so what is asserted is the property that makes a real transaction roll
+    // back: the throw happens inside it.
     it("throws the refusal from inside the transaction so the rebalance rolls back", async () => {
       db.limit
         .mockResolvedValueOnce([
           { id: "card-1", columnId: "col-old", boardId: "board-1" },
         ])
         .mockResolvedValueOnce([{ id: "col-new", boardId: "board-1" }]);
-      db.orderBy.mockResolvedValue([]);
+      db.orderBy.mockResolvedValue([
+        { id: "card-2", position: 1.0 },
+        { id: "card-3", position: 1.0005 },
+      ]);
       db.returning.mockResolvedValue([]);
 
       let threwInsideTransaction = false;
@@ -582,11 +660,16 @@ describe("kanban module", () => {
         moveCard(asDb(db), ctx, {
           cardId: "card-1",
           columnId: "col-new",
-          afterCardId: null,
+          afterCardId: "card-2",
           expectedColumnId: "col-stale",
         }),
       ).rejects.toThrow(ConflictError);
 
+      // Guards the setup: without the rebalance actually firing there are no
+      // stray position writes to roll back, and this test would be asserting
+      // the throw against a case that never had the problem. One update is the
+      // move itself; the rebalance adds one per card it renumbers.
+      expect(db.update.mock.calls.length).toBeGreaterThan(1);
       expect(threwInsideTransaction).toBe(true);
     });
   });
