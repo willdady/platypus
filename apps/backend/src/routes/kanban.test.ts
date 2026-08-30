@@ -1040,6 +1040,36 @@ describe("Kanban Routes", () => {
       expect(res.status).toBe(200);
     });
 
+    // ADR-0010: a stale view of the board is a conflict, not a malformed
+    // request, so the UI can tell "re-sync" apart from "you sent nonsense".
+    it("should answer 409 when the card has left the expected column", async () => {
+      mockSession();
+      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-1", organizationId: "org-1" },
+      ]); // requireWorkspaceAccess
+
+      mockDb.limit.mockResolvedValueOnce([
+        { id: "card-1", columnId: "col-2", boardId: "board-1" },
+      ]); // card guard — already moved on
+      mockDb.limit.mockResolvedValueOnce([{ id: "col-2", boardId: "board-1" }]); // target column guard
+
+      mockDb.orderBy.mockResolvedValueOnce([]);
+      mockDb.returning.mockResolvedValueOnce([]); // the predicate matched no row
+
+      const res = await app.request(`${baseUrl}/${boardId}/cards/card-1/move`, {
+        method: "POST",
+        body: JSON.stringify({
+          columnId: "col-2",
+          afterCardId: null,
+          expectedColumnId: "col-1",
+        }),
+        headers: { "Content-Type": "application/json" },
+      });
+
+      expect(res.status).toBe(409);
+    });
+
     it("should move card after another card", async () => {
       mockSession();
       mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess

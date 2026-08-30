@@ -5,7 +5,7 @@ vi.mock("./event-dispatch.ts", () => ({
   dispatchEvent: vi.fn(),
 }));
 
-import { NotFoundError, ValidationError } from "../errors.ts";
+import { ConflictError, NotFoundError, ValidationError } from "../errors.ts";
 import { dispatchEvent } from "./event-dispatch.ts";
 import {
   applyBodyDiff,
@@ -479,6 +479,115 @@ describe("kanban module", () => {
           changedFields: [],
         }),
       );
+    });
+
+    it("moves the card when the expected column still matches", async () => {
+      db.limit
+        .mockResolvedValueOnce([
+          { id: "card-1", columnId: "col-old", boardId: "board-1" },
+        ]) // requireCard
+        .mockResolvedValueOnce([{ id: "col-new", boardId: "board-1" }]); // requireColumn
+      db.orderBy.mockResolvedValue([]); // placeCardInColumn
+      db.returning.mockResolvedValue([
+        { id: "card-1", columnId: "col-new", position: 1 },
+      ]);
+
+      const result = await moveCard(asDb(db), ctx, {
+        cardId: "card-1",
+        columnId: "col-new",
+        afterCardId: null,
+        expectedColumnId: "col-old",
+      });
+
+      expect(result.card.columnId).toBe("col-new");
+    });
+
+    // The expectation is a predicate on the UPDATE, so a card that has moved on
+    // matches no rows. A comparison against the pre-transaction read would pass
+    // here and let the stale write land.
+    it("refuses the move when the card has left the expected column", async () => {
+      db.limit
+        .mockResolvedValueOnce([
+          { id: "card-1", columnId: "col-old", boardId: "board-1" },
+        ]) // requireCard
+        .mockResolvedValueOnce([{ id: "col-new", boardId: "board-1" }]); // requireColumn
+      db.orderBy.mockResolvedValue([]); // placeCardInColumn
+      db.returning.mockResolvedValue([]); // the predicate matched no row
+
+      await expect(
+        moveCard(asDb(db), ctx, {
+          cardId: "card-1",
+          columnId: "col-new",
+          afterCardId: null,
+          expectedColumnId: "col-stale",
+        }),
+      ).rejects.toThrow(ConflictError);
+
+      expect(dispatchEvent).not.toHaveBeenCalled();
+    });
+
+    // The refusal sends the caller back to re-read the board rather than handing
+    // it the winning writer's state, which is what invites an immediate
+    // re-assertion of the losing move.
+    it("does not name the card's current column in the refusal", async () => {
+      db.limit
+        .mockResolvedValueOnce([
+          { id: "card-1", columnId: "col-note-processing", boardId: "board-1" },
+        ])
+        .mockResolvedValueOnce([{ id: "col-new", boardId: "board-1" }]);
+      db.orderBy.mockResolvedValue([]);
+      db.returning.mockResolvedValue([]);
+
+      let message = "";
+      try {
+        await moveCard(asDb(db), ctx, {
+          cardId: "card-1",
+          columnId: "col-new",
+          afterCardId: null,
+          expectedColumnId: "col-stale",
+        });
+      } catch (caught) {
+        message = (caught as Error).message;
+      }
+
+      // Asserted first so the check below can't pass by the move succeeding.
+      expect(message).toContain("expected column");
+      expect(message).not.toContain("col-note-processing");
+    });
+
+    // `placeCardInColumn` renumbers the target column before the update runs, so
+    // the refusal has to leave the transaction by throwing — a value returned
+    // from the callback would commit that renumbering alongside a move that
+    // never happened.
+    it("throws the refusal from inside the transaction so the rebalance rolls back", async () => {
+      db.limit
+        .mockResolvedValueOnce([
+          { id: "card-1", columnId: "col-old", boardId: "board-1" },
+        ])
+        .mockResolvedValueOnce([{ id: "col-new", boardId: "board-1" }]);
+      db.orderBy.mockResolvedValue([]);
+      db.returning.mockResolvedValue([]);
+
+      let threwInsideTransaction = false;
+      db.transaction.mockImplementation(async (cb: (tx: MockDb) => unknown) => {
+        try {
+          return await cb(db);
+        } catch (error) {
+          threwInsideTransaction = true;
+          throw error;
+        }
+      });
+
+      await expect(
+        moveCard(asDb(db), ctx, {
+          cardId: "card-1",
+          columnId: "col-new",
+          afterCardId: null,
+          expectedColumnId: "col-stale",
+        }),
+      ).rejects.toThrow(ConflictError);
+
+      expect(threwInsideTransaction).toBe(true);
     });
   });
 

@@ -2248,6 +2248,12 @@ export const kanbanCardUpdateSchema = kanbanCardSchema
 export const kanbanCardMoveSchema = z.object({
   columnId: z.string(),
   afterCardId: z.string().nullable(),
+  /**
+   * The column the card was in when the caller last read it. When given, the
+   * move applies only while the card is still there, so a caller working from
+   * a stale view cannot overwrite a move made in the meantime.
+   */
+  expectedColumnId: z.string().optional(),
 });
 
 // Kanban Card Comment

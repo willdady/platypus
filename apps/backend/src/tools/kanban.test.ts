@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { z } from "zod";
-import { mockDb, resetMockDb } from "../test-utils.ts";
+import { callTool, mockDb, resetMockDb } from "../test-utils.ts";
 
 vi.mock("../services/event-dispatch.ts", () => ({
   dispatchEvent: vi.fn(),
@@ -391,6 +391,39 @@ describe("createKanbanTools", () => {
           ctx,
         ),
       ).toEqual({ error: "Card not found" });
+    });
+
+    // A refused precondition has to reach the model as a readable result. If it
+    // escaped `asToolResult` it would throw into the run instead, which is a
+    // failed run rather than an agent that re-reads and carries on.
+    it("reports a refused expected column back to the model", async () => {
+      mockDb.limit
+        .mockResolvedValueOnce([
+          { id: "card-1", columnId: "col-now", boardId: "board-1" },
+        ]) // requireCard
+        .mockResolvedValueOnce([{ id: "col-target", boardId: "board-1" }]); // requireColumn
+      mockDb.orderBy.mockResolvedValue([]); // placeCardInColumn
+      mockDb.returning.mockResolvedValue([]); // the predicate matched no row
+
+      // The message is asserted whole: it must name the problem without naming
+      // the column the card is now in. `col-now` above is the current column,
+      // and it does not appear here.
+      expect(
+        await callTool(
+          tools.moveCard,
+          {
+            cardId: "card-1",
+            columnId: "col-target",
+            afterCardId: null,
+            label: "test",
+            expectedColumnId: "col-stale",
+          },
+          ctx,
+        ),
+      ).toEqual({
+        error:
+          "Card is no longer in the expected column; re-read it before moving it",
+      });
     });
   });
 
