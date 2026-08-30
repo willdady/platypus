@@ -79,21 +79,6 @@ describe("stuckChatCutoff", () => {
     // 60 min per-run timeout + 5 min buffer = 65 min.
     expect(stuckChatCutoff().toISOString()).toBe("2026-08-30T10:55:00.000Z");
   });
-
-  it("excludes a turn younger than the cutoff and includes an older one", () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date("2026-08-30T12:00:00.000Z"));
-    const cutoff = stuckChatCutoff();
-
-    // The comparison the sweep asks Postgres to make, either side of the
-    // boundary by a millisecond. `<` is strict, so the cutoff itself stays.
-    const justStale = new Date(cutoff.getTime() - 1);
-    const justLive = new Date(cutoff.getTime() + 1);
-
-    expect(justStale < cutoff).toBe(true);
-    expect(cutoff < cutoff).toBe(false);
-    expect(justLive < cutoff).toBe(false);
-  });
 });
 
 describe("recoverStuckChats", () => {
@@ -109,19 +94,30 @@ describe("recoverStuckChats", () => {
     vi.useRealTimers();
   });
 
-  it("fails only `running` Chats older than the cutoff", async () => {
+  it("fails `running` Chats whose turn started before the cutoff", async () => {
     const captured = captureUpdate([{ id: "chat-1" }]);
 
     await recoverStuckChats();
 
     expect(captured.set).toMatchObject({ status: "failed" });
 
+    // The whole predicate, pinned exactly. Asserting the rendered string
+    // rather than fragments of it is what makes this a real test: it fails
+    // if the comparison flips direction (a `>` would sweep every live turn
+    // and spare every dead one), if the anchor moves to `updated_at`, or if
+    // the `running` guard is dropped.
     const { sql: text, params } = render(captured.where);
-    expect(text).toContain(`"status" = `);
-    expect(params).toContain("running");
+    expect(text).toBe(
+      `("chat"."status" = $1 and ("chat"."last_turn_at" < $2 or ` +
+        `("chat"."last_turn_at" is null and "chat"."updated_at" < $3)))`,
+    );
     // 12:00 − (30 min + 5 min buffer): the peer-safety window, bound as a
     // UTC `timestamp` parameter exactly as the Trigger sweep binds its own.
-    expect(params).toContain("2026-08-30T11:25:00.000Z");
+    expect(params).toEqual([
+      "running",
+      "2026-08-30T11:25:00.000Z",
+      "2026-08-30T11:25:00.000Z",
+    ]);
   });
 
   it("falls back to `updatedAt` for rows with no `lastTurnAt`", async () => {
@@ -129,13 +125,14 @@ describe("recoverStuckChats", () => {
 
     await recoverStuckChats();
 
-    const { sql: text, params } = render(captured.where);
-    expect(text).toContain(`"last_turn_at"`);
-    expect(text).toContain(`"updated_at"`);
-    expect(text).toContain(`"last_turn_at" is null`);
-    // Both branches compare against the same cutoff.
-    expect(params.filter((p) => p === "2026-08-30T11:25:00.000Z")).toHaveLength(
-      2,
+    // The fallback is a second disjunct rather than a COALESCE so both
+    // comparisons stay on real columns and drizzle binds the cutoff through
+    // each column's own encoder. It is reached only when `last_turn_at` is
+    // NULL, so a row that has a turn timestamp is never judged on the
+    // timestamp auto-titling and memory extraction bump.
+    const { sql: text } = render(captured.where);
+    expect(text).toContain(
+      `("chat"."last_turn_at" is null and "chat"."updated_at" < $3)`,
     );
   });
 
