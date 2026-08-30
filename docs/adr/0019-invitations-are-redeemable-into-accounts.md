@@ -1,8 +1,19 @@
 ---
-status: accepted
+status: accepted-pending-implementation
+implemented-by: "#549, #550"
 ---
 
 # Invitations are redeemable into accounts
+
+> **In the code today.** None of this is built yet. An invitation carries no
+> token and there is no redemption link: the row is still matched to an
+> _existing_ account by email address, exactly as ADR-0008 and ADR-0009
+> describe, so the invitee must already hold an account before the invitation
+> is visible to them. Registration is open, and there is no Operator switch to
+> require an invitation. [#549](https://github.com/willdady/platypus/issues/549)
+> builds the token and the redeeming link;
+> [#550](https://github.com/willdady/platypus/issues/550) adds the Operator
+> switch. See `apps/backend/src/routes/invitation.ts`.
 
 Extends ADR-0008 and ADR-0009. Those ADRs treat an invitation as a row matched to an
 _existing_ account by email address, which makes the invitation useless as an admission
