@@ -65,6 +65,9 @@ import { useBackendUrl } from "@/app/client-context";
 import { TagInput } from "@/components/tag-input";
 import { useIsMobile } from "@/hooks/use-mobile";
 
+/** How often to re-read the chat list while at least one chat is running. */
+const RUNNING_CHAT_POLL_INTERVAL_MS = 3000;
+
 export function AppSidebar() {
   const { orgId, workspaceId } = useParams<{
     orgId: string;
@@ -129,6 +132,17 @@ export function AppSidebar() {
         )
       : null,
     fetcher,
+    {
+      // The per-chat spinner below is rendered straight off this cached list,
+      // and nothing else revalidates it when a run finishes — including runs in
+      // chats the user isn't currently viewing, where the client has no stream
+      // to hang a terminal event off. Poll while any listed chat is running;
+      // the condition clears itself once the backend reports a terminal status.
+      refreshInterval: (latest) =>
+        latest?.results.some((chat) => chat.status === "running")
+          ? RUNNING_CHAT_POLL_INTERVAL_MS
+          : 0,
+    },
   );
 
   const { data: orgData } = useSWR<Organization>(
