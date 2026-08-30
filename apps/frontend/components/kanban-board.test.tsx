@@ -46,6 +46,29 @@ vi.mock("swr", () => ({
   },
 }));
 
+// dnd-kit's pointer sensors don't survive jsdom, so a real drag can't be
+// simulated. This renders the genuine DndContext (so the sortable children
+// still get their provider) while keeping a handle on the drag callbacks the
+// board passes it, which is what lets a test drive a card drop.
+const dragHandlers: {
+  onDragStart?: (event: unknown) => void;
+  onDragEnd?: (event: unknown) => void;
+} = {};
+
+vi.mock("@dnd-kit/core", async () => {
+  const actual =
+    await vi.importActual<typeof import("@dnd-kit/core")>("@dnd-kit/core");
+  const React = await vi.importActual<typeof import("react")>("react");
+  return {
+    ...actual,
+    DndContext: (props: Record<string, unknown>) => {
+      dragHandlers.onDragStart = props.onDragStart as (e: unknown) => void;
+      dragHandlers.onDragEnd = props.onDragEnd as (e: unknown) => void;
+      return React.createElement(actual.DndContext, props);
+    },
+  };
+});
+
 import { KanbanBoard } from "./kanban-board";
 
 // --- Fixtures ----------------------------------------------------------------
@@ -449,6 +472,70 @@ describe("KanbanBoard transport", () => {
       expect(
         screen.getByRole("heading", { name: "Delete Column" }),
       ).toBeInTheDocument();
+    });
+  });
+
+  describe("card drag", () => {
+    beforeEach(() => {
+      boardState = makeBoardState([
+        makeColumn({ id: "col-1", name: "In Progress" }, [
+          makeCard({ id: "card-1", columnId: "col-1" }),
+        ]),
+        makeColumn({ id: "col-2", name: "Done" }, []),
+      ]);
+    });
+
+    /** Drops card-1 onto col-2, going through the board's real drag handlers. */
+    function dropCardOnDoneColumn() {
+      const active = {
+        id: "card-1",
+        data: { current: { type: "card" } },
+        rect: { current: { translated: null, initial: null } },
+      };
+      dragHandlers.onDragStart?.({ active });
+      dragHandlers.onDragEnd?.({
+        active,
+        over: { id: "col-2", rect: { top: 0, height: 10 } },
+      });
+    }
+
+    it("sends the column the card was dragged from", async () => {
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValue(jsonResponse(200, { id: "card-1" }));
+      vi.stubGlobal("fetch", fetchMock);
+
+      renderBoard();
+      dropCardOnDoneColumn();
+
+      await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+      const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+      expect(url).toContain("/cards/card-1/move");
+      expect(JSON.parse(init.body as string)).toMatchObject({
+        columnId: "col-2",
+        expectedColumnId: "col-1",
+      });
+    });
+
+    // The card is elsewhere, so reverting to the last poll would leave it in the
+    // wrong column until the next interval — hence the refetch.
+    it("explains a refused drag and re-syncs the board", async () => {
+      const fetchMock = vi.fn().mockResolvedValue(
+        jsonResponse(409, {
+          error: "Card is no longer in the expected column",
+        }),
+      );
+      vi.stubGlobal("fetch", fetchMock);
+
+      renderBoard();
+      dropCardOnDoneColumn();
+
+      await waitFor(() =>
+        expect(toastError).toHaveBeenCalledWith(
+          "This card was moved by someone else. Your change was not applied.",
+        ),
+      );
+      expect(mutateBoard).toHaveBeenCalled();
     });
   });
 

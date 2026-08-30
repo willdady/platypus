@@ -92,6 +92,21 @@ in a Chat or on a schedule via a [Trigger](/building-with-platypus/triggers) —
 keep it moving. Board activity (cards created, updated, or deleted) can in turn
 fire **Event** Triggers, so a change on a board can kick off another Agent run.
 
+### When two people move the same card
+
+An Agent run can take minutes, and a board can be open in someone's browser the
+whole time — so a card can move while another move is already on its way.
+Platypus refuses the later move rather than letting it silently overwrite the
+first. The same holds between two Agents working one board at once: an Agent
+acting on a stale reading of the board is refused and told to look again.
+
+<Callout type="warning">
+  If you drag a card an Agent has moved since your board last refreshed, the
+  card snaps back and the board reloads to show where it actually is. Your drag
+  did not apply — nothing else was lost, and you can repeat it against the board
+  as it now stands.
+</Callout>
+
 ## Where to next
 
 - **[Triggers](/building-with-platypus/triggers)** — fire an Agent when a card

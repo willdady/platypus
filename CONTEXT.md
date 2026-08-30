@@ -130,11 +130,11 @@ The unit of work on a **Board**: title, Markdown body, Labels, due date, priorit
 _Avoid_: ticket, issue, item, task.
 
 **Dashboard**:
-A Workspace-scoped grid of **Widgets** with separate desktop and mobile layouts, auto-refreshing in view mode. Deliberately split by ownership: Users own the layout and the widget set; an Agent updates Widget data only.
+A Workspace-scoped grid of **Widgets** with separate desktop and mobile layouts, auto-refreshing in view mode. Deliberately split by ownership: Users own the layout and the widget set; an Agent updates Widget data only, and never an Embed's URL.
 _Avoid_: report, page, view.
 
 **Widget**:
-A typed tile on a **Dashboard** — metric, text/markdown, image, weather, or chart. An Agent may bring a Widget's data current but can never change its type, placement, size, or presence; updating requires matching the declared type, so a chart cannot be overwritten into a metric.
+A typed tile on a **Dashboard** — metric, text/markdown, image, Embed, weather, or chart. An Agent may bring a Widget's data current but can never change its type, placement, size, or presence; updating requires matching the declared type, so a chart cannot be overwritten into a metric. An Embed is the one exception to data currency: it renders a human-provided HTTPS page, and its URL is set only through the Dashboard UI — no Agent can write it.
 _Avoid_: tile, panel, component.
 
 **Trigger**:

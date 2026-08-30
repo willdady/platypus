@@ -1,7 +1,54 @@
 "use client";
 
+import { motion, useReducedMotion } from "motion/react";
+import type { ReactNode } from "react";
+
+import { useIsMobile } from "@/hooks/use-mobile";
 import { formatTokens } from "@/lib/context-window";
 import { cn } from "@/lib/utils";
+
+/**
+ * How far the mobile row bleeds down over the footer's own padding, matching
+ * the `-mb-3` below. The collapsed entrance starts at exactly this height so
+ * that height and negative margin cancel: the row occupies nothing, yet the
+ * margin never pulls the toolbar up by 12px on its own.
+ */
+const FOOTER_BLEED = "0.75rem";
+
+/**
+ * Reveals a context meter that becomes available after mount on mobile.
+ * The caller's `AnimatePresence initial={false}` keeps an initially available
+ * meter at its natural height, while desktop and reduced-motion layouts use an
+ * immediate transition.
+ *
+ * The bleed stays in CSS on the clipping box rather than on its content, so the
+ * `sm:` breakpoint still governs the resting layout and the tinted band sits
+ * inside the box being clipped — a negative margin on the content would shorten
+ * the box by 12px and cut the bottom of the band off.
+ */
+export const ContextMeterEntrance = ({
+  children,
+  className,
+}: {
+  children: ReactNode;
+  className?: string;
+}) => {
+  const isMobile = useIsMobile();
+  const prefersReducedMotion = useReducedMotion();
+  const shouldAnimate = isMobile && !prefersReducedMotion;
+  const visible = { height: "auto", opacity: 1 } as const;
+
+  return (
+    <motion.div
+      initial={shouldAnimate ? { height: FOOTER_BLEED, opacity: 0 } : visible}
+      animate={visible}
+      transition={{ duration: shouldAnimate ? 0.5 : 0, ease: "easeOut" }}
+      className={cn("shrink-0 overflow-hidden -mb-3 sm:mb-0", className)}
+    >
+      {children}
+    </motion.div>
+  );
+};
 
 /**
  * How full the model's context will be on the next call (ADR-0018).
@@ -19,11 +66,9 @@ import { cn } from "@/lib/utils";
  * projection, and taking the declared window off the resolved model all belong
  * to the composing component.
  *
- * Renders nothing unless BOTH numbers are known — one hidden state with two
- * causes (no window declared, or the Provider reported no usage). A numerator
- * with no denominator would be a third display mode answering none of the
- * questions a meter exists for: a bare "42,000 tokens" cannot say whether that
- * is roomy or nearly fatal.
+ * Composing callers normally gate on BOTH numbers before mounting this meter,
+ * because a numerator with no denominator cannot say whether a value is roomy
+ * or nearly fatal. The internal guard remains for safe standalone reuse.
  */
 export const ContextMeter = ({
   occupancy,

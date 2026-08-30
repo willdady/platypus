@@ -45,7 +45,48 @@ import {
   modelLabelFor,
   findModelEntry,
   triggerRunStatsSchema,
+  iframeWidgetDataSchema,
+  widgetTypeSchema,
+  widgetUpdateDataSchema,
 } from "./index";
+
+describe("iframe widget schemas", () => {
+  it("accepts an HTTPS URL and registers iframe as a widget type", () => {
+    expect(
+      iframeWidgetDataSchema.safeParse({
+        url: "https://grafana.example.com/d/status",
+      }).success,
+    ).toBe(true);
+    expect(widgetTypeSchema.safeParse("iframe").success).toBe(true);
+  });
+
+  it.each([
+    "http://example.com",
+    "javascript:alert(1)",
+    "data:text/html,hello",
+  ])("rejects a non-HTTPS embed URL: %s", (url) => {
+    expect(iframeWidgetDataSchema.safeParse({ url }).success).toBe(false);
+  });
+
+  it("rejects data outside the URL-only contract", () => {
+    expect(
+      iframeWidgetDataSchema.safeParse({
+        url: "https://example.com",
+        sandbox: "allow-top-navigation",
+      }).success,
+    ).toBe(false);
+  });
+
+  it("allows the human update contract to save iframe data", () => {
+    expect(
+      widgetUpdateDataSchema.safeParse({
+        type: "iframe",
+        title: "Operations",
+        data: { url: "https://status.example.com/embed" },
+      }).success,
+    ).toBe(true);
+  });
+});
 
 describe("Organization Schema", () => {
   it("should validate a valid organization", () => {

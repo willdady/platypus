@@ -531,10 +531,28 @@ export function KanbanBoard({
         joinUrl(baseUrl, `cards/${active.id}/move`),
         {
           method: "POST",
-          data: { columnId: targetColumn.id, afterCardId },
+          data: {
+            columnId: targetColumn.id,
+            afterCardId,
+            // The board polls, so the column this drag started from may already
+            // be out of date. Sending it makes the move conditional: an agent's
+            // move that landed mid-drag is reported rather than overwritten.
+            expectedColumnId: sourceColumn.id,
+          },
         },
       );
       if (outcome.outcome === "success") {
+        await mutate();
+      } else if (outcome.outcome === "conflict") {
+        // Not a failed write but a stale board, so the message says who moved
+        // it rather than surfacing wording aimed at an agent.
+        toast.error(
+          "This card was moved by someone else. Your change was not applied.",
+        );
+        // Dropping the optimistic copy falls back to the last poll — the very
+        // state that just lost the race — so this path re-fetches rather than
+        // leaving the card in the wrong column until the next interval.
+        setLocalColumns(null);
         await mutate();
       } else {
         toast.error(outcome.message);

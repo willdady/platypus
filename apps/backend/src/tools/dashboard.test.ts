@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { z } from "zod";
 import { mockDb, resetMockDb } from "../test-utils.ts";
 
 import { createDashboardTools } from "./dashboard.ts";
@@ -46,7 +47,10 @@ describe("createDashboardTools", () => {
 
     it("returns widgets for a dashboard", async () => {
       mockDb.limit.mockResolvedValueOnce([{ id: dashboardId, workspaceId }]);
-      const widgets = [{ id: widgetId, dashboardId, type: "metric" }];
+      const widgets = [
+        { id: widgetId, dashboardId, type: "metric" },
+        { id: "widget-iframe", dashboardId, type: "iframe" },
+      ];
       mockDb.orderBy.mockResolvedValueOnce(widgets);
 
       expect(await tools.listWidgets.execute!({ dashboardId }, ctx)).toEqual(
@@ -55,7 +59,37 @@ describe("createDashboardTools", () => {
     });
   });
 
+  describe("getWidget", () => {
+    it("returns iframe widget data without exposing it to agent writes", async () => {
+      mockDb.limit.mockResolvedValueOnce([{ id: dashboardId, workspaceId }]);
+      const widget = {
+        id: widgetId,
+        dashboardId,
+        type: "iframe",
+        data: { url: "https://status.example.com/embed" },
+      };
+      mockDb.limit.mockResolvedValueOnce([widget]);
+
+      expect(
+        await tools.getWidget.execute!({ dashboardId, widgetId }, ctx),
+      ).toEqual(widget);
+    });
+  });
+
   describe("updateWidgetData", () => {
+    it("does not expose iframe as an agent-writable widget type", () => {
+      const schema = tools.updateWidgetData.inputSchema as z.ZodType;
+
+      expect(
+        schema.safeParse({
+          dashboardId,
+          widgetId,
+          type: "iframe",
+          data: { url: "https://status.example.com/embed" },
+        }).success,
+      ).toBe(false);
+    });
+
     it("returns error when dashboard not found", async () => {
       mockDb.limit.mockResolvedValueOnce([]);
 

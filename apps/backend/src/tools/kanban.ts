@@ -7,7 +7,7 @@ import {
   kanbanColumn as kanbanColumnTable,
   kanbanCard as kanbanCardTable,
 } from "../db/schema.ts";
-import { NotFoundError, ValidationError } from "../errors.ts";
+import { ConflictError, NotFoundError, ValidationError } from "../errors.ts";
 import {
   bulkUpdateCards,
   copyCard,
@@ -59,7 +59,11 @@ export function createKanbanTools(
     try {
       return await run();
     } catch (error) {
-      if (error instanceof NotFoundError || error instanceof ValidationError) {
+      if (
+        error instanceof NotFoundError ||
+        error instanceof ValidationError ||
+        error instanceof ConflictError
+      ) {
         return { error: error.message };
       }
       throw error;
@@ -294,10 +298,30 @@ export function createKanbanTools(
         .describe(
           "Place after this card ID, or null to place at the beginning",
         ),
+      // The wording carries the feature. An agent's useful expectation is the
+      // board it read at the start of the run, which may be minutes old by the
+      // time it moves anything; if the description invites a fresh lookup the
+      // check compares current state against current state and never fires.
+      expectedColumnId: z
+        .string()
+        .optional()
+        .describe(
+          "Optional. The column this card was in when you last read it. The " +
+            "move is refused if someone else has moved the card since, so you " +
+            "cannot silently undo their change. Do not look the card up in " +
+            "order to fill this in — omit it if you do not already know.",
+        ),
     }),
-    execute: async ({ cardId, columnId, afterCardId }) =>
+    execute: async ({ cardId, columnId, afterCardId, expectedColumnId }) =>
       asToolResult(async () =>
-        withCardUrl(await moveCard(db, ctx, { cardId, columnId, afterCardId })),
+        withCardUrl(
+          await moveCard(db, ctx, {
+            cardId,
+            columnId,
+            afterCardId,
+            expectedColumnId,
+          }),
+        ),
       ),
   });
 

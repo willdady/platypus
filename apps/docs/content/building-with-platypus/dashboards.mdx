@@ -1,6 +1,6 @@
 ---
 title: Dashboards
-description: Build a dashboard in a Workspace — add widgets (metric, text, image, weather, and charts), arrange them in an editable grid, and let Agents keep widget data up to date.
+description: Build a dashboard in a Workspace — add widgets (metric, text, image, embeds, weather, and charts), arrange them in an editable grid, and let Agents keep widget data up to date.
 ---
 
 import { Callout, Steps } from "nextra/components";
@@ -73,10 +73,16 @@ discard them and exit edit mode.
 | **Metric**          | A single value with a label, optional unit, and change indicator |
 | **Text / Markdown** | Free-form Markdown content                                       |
 | **Image**           | An image by URL                                                  |
+| **Embed**           | An HTTPS web page inside the dashboard                           |
 | **Weather**         | A location's conditions and temperature                          |
 | **Line chart**      | One or more series over shared categories                        |
 | **Pie chart**       | A donut of labelled segments with an optional centre label       |
 | **Bar chart**       | One or more series over shared categories                        |
+
+<Callout type="warning">
+  Some sites refuse to be embedded and will appear blank. Choose a site that
+  explicitly supports embedding.
+</Callout>
 
 ## Agents and dashboards
 
@@ -88,8 +94,9 @@ a widget's full data**, and **update a widget's data**.
 <Callout type="warning">
   Agents can change widget **data only** — never the layout, and they can't add
   or remove widgets. You decide what's on the dashboard and where it sits; the
-  Agent fills in the numbers. (Updating a widget also requires matching its
-  type, so an Agent can't accidentally turn a chart into a metric.)
+  Agent fills in the numbers. Embed URLs are human-owned and cannot be changed
+  by Agents. (Updating another widget also requires matching its type, so an
+  Agent can't accidentally turn a chart into a metric.)
 </Callout>
 
 Pair this with a [Trigger](/building-with-platypus/triggers): a scheduled Agent

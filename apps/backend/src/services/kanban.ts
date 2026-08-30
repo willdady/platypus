@@ -15,7 +15,7 @@ import {
   organizationMember as organizationMemberTable,
 } from "../db/schema.ts";
 import { user } from "../db/auth-schema.ts";
-import { NotFoundError, ValidationError } from "../errors.ts";
+import { ConflictError, NotFoundError, ValidationError } from "../errors.ts";
 import type { ScopeContext } from "../scope.ts";
 import { dispatchEvent } from "./event-dispatch.ts";
 import { listScopedByIds } from "./scoped-resource.ts";
@@ -725,11 +725,24 @@ export const updateCard = async (
  * Moves a card within or between columns. Both the card and the target column
  * must be in scope, so a move never carries a card off its board on the HTTP
  * surface or out of the Workspace on the Tool surface.
+ *
+ * `expectedColumnId` makes the move conditional: it applies only while the card
+ * is still in that column, so a caller working from a stale read cannot
+ * silently undo a move someone else made in the meantime. It is a predicate on
+ * the UPDATE rather than a check against `previous`, because `previous` is read
+ * before the transaction opens — comparing against it would catch a stale
+ * caller but still let two concurrent writers both pass and the later one win,
+ * which is the race worth closing.
  */
 export const moveCard = async (
   database: Database,
   ctx: KanbanContext,
-  input: { cardId: string; columnId: string; afterCardId: string | null },
+  input: {
+    cardId: string;
+    columnId: string;
+    afterCardId: string | null;
+    expectedColumnId?: string;
+  },
 ): Promise<CardResult> => {
   const previous = await requireCard(database, ctx, input.cardId);
   const column = await requireColumn(database, ctx, input.columnId);
@@ -749,10 +762,32 @@ export const moveCard = async (
         ...lastEditedBy(ctx.actor),
         updatedAt: new Date(),
       })
-      .where(eq(kanbanCardTable.id, input.cardId))
+      .where(
+        input.expectedColumnId === undefined
+          ? eq(kanbanCardTable.id, input.cardId)
+          : and(
+              eq(kanbanCardTable.id, input.cardId),
+              eq(kanbanCardTable.columnId, input.expectedColumnId),
+            ),
+      )
       .returning();
 
-    return rows[0];
+    const row = rows[0];
+    // Thrown rather than returned so the transaction rolls back:
+    // `placeCardInColumn` may already have renumbered the target column on its
+    // rebalance path, and committing that alongside a move that did not happen
+    // would reorder the board on a refused write.
+    //
+    // The message deliberately does not say where the card is now. Handing the
+    // winning writer's state back to the loser invites an immediate
+    // re-assertion of the stale move; making the caller re-read forces a fresh
+    // look at the board that changed underneath it.
+    if (!row) {
+      throw new ConflictError(
+        "Card is no longer in the expected column; re-read it before moving it",
+      );
+    }
+    return row;
   });
 
   // A move only ever touches columnId and position (bookkeeping, excluded),
