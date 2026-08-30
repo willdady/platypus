@@ -1,5 +1,13 @@
 # Changelog
 
+## [3.2.2](https://github.com/willdady/platypus/compare/v3.2.1...v3.2.2) (2026-08-30)
+
+
+### Bug Fixes
+
+* **frontend:** keep the on-screen keyboard up when switching models ([7cd0fd4](https://github.com/willdady/platypus/commit/7cd0fd4945c4d28b3bc16ceccd902d6ab12f2479)), closes [#749](https://github.com/willdady/platypus/issues/749)
+* **frontend:** stop dictation repeating finalized transcripts ([f3829c4](https://github.com/willdady/platypus/commit/f3829c4dbdfaa153c12ea149be567ef6c8a22937))
+
 ## [3.2.1](https://github.com/willdady/platypus/compare/v3.2.0...v3.2.1) (2026-08-30)
 
 
