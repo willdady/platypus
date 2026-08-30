@@ -799,6 +799,7 @@ export const PromptInputSpeechButton = ({
   className,
   textareaRef,
   onTranscriptionChange,
+  onClick,
   ...props
 }: PromptInputSpeechButtonProps) => {
   const { isListening, isSupported, toggleListening } = useSpeechToText({
@@ -814,7 +815,15 @@ export const PromptInputSpeechButton = ({
         className,
       )}
       disabled={!isSupported}
-      onClick={toggleListening}
+      // `onClick` is taken out of the spread and composed here, the way
+      // PromptInputTextarea handles `onKeyDown` (issue #710). A caller rarely
+      // writes one by hand, but wrapping this button in a Radix trigger with
+      // `asChild` injects one, and left in the spread below it would replace
+      // the toggle outright — dictation then never starts (issue #752).
+      onClick={(event) => {
+        onClick?.(event);
+        toggleListening();
+      }}
       {...props}
     >
       <MicIcon className="size-4" />

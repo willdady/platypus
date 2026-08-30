@@ -1,8 +1,9 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { useRef, useState } from "react";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import type { Provider } from "@platypus/schemas";
 import { Composer } from "./composer";
+import { PromptInputSpeechButton } from "./ai-elements/prompt-input";
 
 /**
  * Issue #749: closing the model picker used to move focus twice — Radix
@@ -15,6 +16,31 @@ import { Composer } from "./composer";
  * without passing through the trigger. Confirming the keyboard itself needs a
  * physical device.
  */
+
+class FakeSpeechRecognition extends EventTarget {
+  continuous = false;
+  interimResults = false;
+  lang = "";
+  start = vi.fn(() => this.onstart?.(new Event("start")));
+  stop = vi.fn(() => this.onend?.(new Event("end")));
+  onstart: ((ev: Event) => void) | null = null;
+  onend: ((ev: Event) => void) | null = null;
+  onresult: ((ev: unknown) => void) | null = null;
+  onerror: ((ev: unknown) => void) | null = null;
+}
+
+let lastRecognition: FakeSpeechRecognition | null = null;
+
+const registerRecognition = (instance: FakeSpeechRecognition) => {
+  lastRecognition = instance;
+};
+
+class TrackingSpeechRecognition extends FakeSpeechRecognition {
+  constructor() {
+    super();
+    registerRecognition(this);
+  }
+}
 
 const provider = {
   id: "provider-1",
@@ -63,6 +89,7 @@ const renderComposer = () => {
     onModelChange,
     textarea: screen.getByPlaceholderText("Ask anything"),
     trigger: screen.getByText("Select model").closest("button")!,
+    mic: screen.getByRole("button", { name: "Microphone" }),
   };
 };
 
@@ -92,6 +119,13 @@ beforeEach(() => {
     unobserve() {}
     disconnect() {}
   } as unknown as typeof ResizeObserver;
+  lastRecognition = null;
+  window.SpeechRecognition =
+    TrackingSpeechRecognition as unknown as Window["SpeechRecognition"];
+});
+
+afterEach(() => {
+  Reflect.deleteProperty(window, "SpeechRecognition");
 });
 
 describe("Composer model picker focus", () => {
@@ -128,5 +162,49 @@ describe("Composer model picker focus", () => {
     // regression: on mobile it drops the keyboard before the textarea reopens it.
     expect(focused).toEqual([textarea]);
     expect(focused).not.toContain(trigger);
+  });
+});
+
+/**
+ * Issue #752: the mic button wrote its own `onClick` before spreading caller
+ * props, so the `onClick` that Radix's TooltipTrigger injects through `asChild`
+ * replaced it. The tap closed the tooltip and did nothing else, so dictation
+ * never started - on any platform, not just the Android one it was reported on.
+ *
+ * These drive the composer as a user meets it, mic inside its tooltip trigger,
+ * because that wrapper is the whole defect. Asserting on a transcript alone
+ * cannot catch it: recognition is constructed on mount, so a test that emits a
+ * result directly on it passes whether or not the click ever landed.
+ */
+describe("Composer dictation", () => {
+  it("starts recognition when the mic is clicked", () => {
+    const { mic } = renderComposer();
+
+    fireEvent.click(mic);
+
+    expect(lastRecognition?.start).toHaveBeenCalled();
+  });
+
+  it("stops recognition when the mic is clicked again", () => {
+    const { mic } = renderComposer();
+
+    fireEvent.click(mic);
+    fireEvent.click(mic);
+
+    expect(lastRecognition?.stop).toHaveBeenCalled();
+  });
+
+  it("still runs an onClick supplied by a wrapping trigger", () => {
+    const onClick = vi.fn();
+    render(
+      <PromptInputSpeechButton aria-label="Microphone" onClick={onClick} />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Microphone" }));
+
+    // Both run: the wrapper keeps its behaviour - a tooltip still closes on
+    // tap - and the button keeps its own.
+    expect(onClick).toHaveBeenCalled();
+    expect(lastRecognition?.start).toHaveBeenCalled();
   });
 });
