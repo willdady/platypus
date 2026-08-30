@@ -10,7 +10,7 @@ import {
   type AdminSignUp,
 } from "./src/db/seed.ts";
 import { startMemoryScheduler } from "./src/jobs/memory-scheduler.ts";
-import { startTriggerScheduler } from "./src/jobs/trigger-scheduler.ts";
+import { startScheduler } from "./src/jobs/scheduler.ts";
 import { loadPlugins } from "./src/plugins/loader.ts";
 import { setLoadedPlugins } from "./src/plugins/registry.ts";
 import { installProviderWarningLogger } from "./src/provider-warnings.ts";
@@ -88,7 +88,7 @@ const main = async () => {
 
   // Start background jobs (safe for horizontal scaling)
   startMemoryScheduler();
-  startTriggerScheduler();
+  startScheduler();
 };
 
 const exponentialBackoff = async <T>(

@@ -1,6 +1,7 @@
-import { sql, and, eq, isNull, lt, lte, inArray } from "drizzle-orm";
+import { sql, and, eq, isNull, lt, lte, or, inArray } from "drizzle-orm";
 import { db } from "../index.ts";
 import {
+  chat as chatTable,
   trigger as triggerTable,
   triggerRun as triggerRunTable,
 } from "../db/schema.ts";
@@ -10,14 +11,17 @@ import {
 } from "../services/trigger-execution.ts";
 import { logger } from "../logger.ts";
 import { DEFAULT_PER_RUN_TIMEOUT_MS } from "../runs/run-registry.ts";
+import { chatPerRunTimeoutMs } from "../runs/chat-timeouts.ts";
 import { validateCronExpression } from "../utils/cron.ts";
 import type { CronTriggerConfig } from "@platypus/schemas";
 
-// Advisory lock ID for trigger scheduler (same as old schedule scheduler)
-const TRIGGER_SCHEDULER_LOCK_ID = 987654321;
+// Advisory lock ID for the background scheduler. The numeric value is load
+// bearing across deploys: an old and a new instance must contend for the same
+// lock during a rolling restart, so never change it when renaming things here.
+const SCHEDULER_LOCK_ID = 987654321;
 
 // Check interval: 60 seconds (1 minute)
-const TRIGGER_SCHEDULER_INTERVAL_MS = parseInt(
+const SCHEDULER_INTERVAL_MS = parseInt(
   process.env.SCHEDULE_SCHEDULER_INTERVAL_MS || "60000",
 );
 
@@ -50,19 +54,19 @@ async function withConcurrencyLimit<T>(
 
 /**
  * Attempts to acquire an advisory lock and runs the given function if successful.
- * This ensures only one backend instance processes triggers at a time.
+ * This ensures only one backend instance runs the scheduled work at a time.
  */
 async function runWithLock(fn: () => Promise<void>): Promise<void> {
   // Try to acquire advisory lock (non-blocking)
   const lockResult = await db.execute(
-    sql`SELECT pg_try_advisory_lock(${TRIGGER_SCHEDULER_LOCK_ID}) as acquired`,
+    sql`SELECT pg_try_advisory_lock(${SCHEDULER_LOCK_ID}) as acquired`,
   );
 
   const acquired = lockResult.rows[0]?.acquired;
 
   if (!acquired) {
     logger.debug(
-      "Another backend instance is processing triggers, skipping this run",
+      "Another backend instance is running the scheduler, skipping this tick",
     );
     return;
   }
@@ -71,9 +75,7 @@ async function runWithLock(fn: () => Promise<void>): Promise<void> {
     await fn();
   } finally {
     // Always release lock, even if processing fails
-    await db.execute(
-      sql`SELECT pg_advisory_unlock(${TRIGGER_SCHEDULER_LOCK_ID})`,
-    );
+    await db.execute(sql`SELECT pg_advisory_unlock(${SCHEDULER_LOCK_ID})`);
   }
 }
 
@@ -230,11 +232,12 @@ async function processDueTriggers(): Promise<void> {
 }
 
 /**
- * Buffer added on top of the per-run timeout before we consider a `running`
- * `trigger_run` row abandoned. Any live instance would have aborted the run
- * by `started_at + DEFAULT_PER_RUN_TIMEOUT_MS`, so anything older than that
- * plus this buffer is definitely orphaned. Five extra minutes gives the
- * normal per-run timeout path a chance to write the failure first.
+ * Buffer added on top of a run's own per-run timeout before we consider a
+ * `running` row abandoned — shared by both sweeps below, each of which adds it
+ * to the timeout its own kind of run is bounded by. Any live instance would
+ * have aborted the run by `started + <its per-run timeout>`, so anything older
+ * than that plus this buffer is definitely orphaned. Five extra minutes gives
+ * the normal per-run timeout path a chance to write the failure first.
  */
 const RECOVERY_STALE_BUFFER_MS = 5 * 60 * 1000;
 
@@ -347,26 +350,101 @@ async function recoverStuckTriggers(): Promise<void> {
 }
 
 /**
- * Starts the trigger scheduler.
+ * The moment before which a `running` Chat is considered abandoned.
+ *
+ * Derived from `CHAT_PER_RUN_TIMEOUT_MS` — the ceiling a Chat turn actually
+ * runs under (`runs/chat-timeouts.ts`) — and NOT from the Trigger's
+ * `DEFAULT_PER_RUN_TIMEOUT_MS`, which is three times shorter and would fail
+ * live turns. A live instance aborts any turn older than its own per-run
+ * timeout, so a row past this cutoff has no live owner on any instance.
+ *
+ * Horizontal scaling: this env var is read per process, unlike the Trigger
+ * timeout which is a code constant. Instances sharing a database must be
+ * configured with the same value; one given a shorter value computes an
+ * earlier cutoff and could fail a peer's live turn.
+ */
+export function stuckChatCutoff(): Date {
+  return new Date(
+    Date.now() - (chatPerRunTimeoutMs() + RECOVERY_STALE_BUFFER_MS),
+  );
+}
+
+/**
+ * Periodic recovery for Chats left `running` by a server crash mid-turn.
+ *
+ * `ChatSink.onStart` sets the Chat's status to `running`, and the sink is the
+ * only writer of a terminal status. The per-run and per-step timeouts that
+ * would otherwise end the turn are `setTimeout` handles in the in-memory run
+ * registry, so a crash takes them with it and the row stays `running` for
+ * ever: a sidebar spinner that never stops, a composer the frontend keeps
+ * disabled, and (since #761) a Chat-list poll every 3s for as long as a tab
+ * is open. Issue #762.
+ *
+ * Age is measured on `lastTurnAt`, the run sink's own turn-boundary signal,
+ * never on `updatedAt` — auto-titling and memory extraction bump `updatedAt`
+ * at their own cadence, so a background write on a dead Chat would keep the
+ * row looking recent and the sweep would never fire (see `db/schema.ts`).
+ * Rows predating the column fall back to `updatedAt`.
+ *
+ * Same horizontal-scaling reasoning as `recoverStuckTriggers`: the age cutoff
+ * is what makes this safe against a peer's live work; the advisory lock only
+ * serializes concurrent sweeps.
+ *
+ * The status written is `failed`, not `cancelled` — nobody requested a
+ * cancellation, and reporting one would misdescribe the event.
+ */
+export async function recoverStuckChats(): Promise<void> {
+  const cutoff = stuckChatCutoff();
+
+  const orphaned = await db
+    .update(chatTable)
+    .set({ status: "failed", updatedAt: new Date() })
+    .where(
+      and(
+        eq(chatTable.status, "running"),
+        or(
+          lt(chatTable.lastTurnAt, cutoff),
+          and(isNull(chatTable.lastTurnAt), lt(chatTable.updatedAt, cutoff)),
+        ),
+      ),
+    )
+    .returning({ id: chatTable.id });
+
+  if (orphaned.length === 0) return;
+
+  logger.warn(
+    { count: orphaned.length, cutoff: cutoff.toISOString() },
+    "Marked orphaned Chats as failed (older than the Chat per-run timeout)",
+  );
+}
+
+/**
+ * Starts the background scheduler.
  * This should be called after the database is initialized.
  */
-export function startTriggerScheduler(): void {
+export function startScheduler(): void {
   logger.info(
-    `Starting trigger scheduler (interval: ${TRIGGER_SCHEDULER_INTERVAL_MS}ms, wall-clock aligned)`,
+    `Starting scheduler (interval: ${SCHEDULER_INTERVAL_MS}ms, wall-clock aligned)`,
   );
 
-  // Schedule at wall-clock-aligned intervals with advisory lock. Recovery
-  // and due-trigger processing share the same lock so they don't race each
-  // other or peer instances. Recovery runs every tick (cheap when there's
+  // Schedule at wall-clock-aligned intervals with advisory lock. Both recovery
+  // sweeps and due-trigger processing share the same lock so they don't race
+  // each other or peer instances. Recovery runs every tick (cheap when there's
   // nothing to do) so a crash self-heals without requiring a restart, and
   // multiple booting instances can't all sweep concurrently — the first to
-  // grab the lock does it.
-  scheduleAligned(TRIGGER_SCHEDULER_INTERVAL_MS, async () => {
+  // grab the lock does it. Each sweep is wrapped independently so one failing
+  // doesn't skip the others.
+  scheduleAligned(SCHEDULER_INTERVAL_MS, async () => {
     await runWithLock(async () => {
       try {
         await recoverStuckTriggers();
       } catch (error) {
         logger.error({ error }, "Trigger recovery sweep failed");
+      }
+      try {
+        await recoverStuckChats();
+      } catch (error) {
+        logger.error({ error }, "Chat recovery sweep failed");
       }
       await processDueTriggers();
     });

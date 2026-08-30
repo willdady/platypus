@@ -32,36 +32,7 @@ import {
   resolveMemoryPin,
   retrieveRecentSummaries,
 } from "../services/memory-retrieval.ts";
-
-/**
- * The bounds an interactive Chat run is given.
- *
- * Chat used to take the registry's own defaults, which are deliberately tight
- * because they are what an unbounded caller falls back to. That gave a watched
- * conversation a 10-minute ceiling — shorter than a long agentic turn — and no
- * way for an Operator to raise it (issue #552).
- *
- * The per-step bound is an idle timeout: time with no streamed chunk at all,
- * not time spent on one step. Two minutes of complete silence from a provider
- * is a stall worth acting on; a long answer is not, and no longer trips it.
- *
- * Override via env:
- *  - `CHAT_PER_STEP_TIMEOUT_MS` (default 2 min)
- *  - `CHAT_PER_RUN_TIMEOUT_MS` (default 30 min)
- */
-const DEFAULT_CHAT_PER_STEP_TIMEOUT_MS = 2 * 60 * 1000;
-const DEFAULT_CHAT_PER_RUN_TIMEOUT_MS = 30 * 60 * 1000;
-
-const chatTimeouts = () => ({
-  perStepTimeoutMs: parseInt(
-    process.env.CHAT_PER_STEP_TIMEOUT_MS ??
-      String(DEFAULT_CHAT_PER_STEP_TIMEOUT_MS),
-  ),
-  perRunTimeoutMs: parseInt(
-    process.env.CHAT_PER_RUN_TIMEOUT_MS ??
-      String(DEFAULT_CHAT_PER_RUN_TIMEOUT_MS),
-  ),
-});
+import { chatTimeouts } from "../runs/chat-timeouts.ts";
 
 // --- Routes ---
 
