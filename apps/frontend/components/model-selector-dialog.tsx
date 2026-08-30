@@ -43,6 +43,13 @@ interface ModelSelectorDialogProps {
    * declaration is visible before a reply is cut short, not only after.
    */
   maxOutputTokens?: number;
+  /**
+   * Runs in place of the dialog's default close behaviour, which returns focus
+   * to the trigger button. Callers that want focus somewhere else — the
+   * composer wants its textarea (issue #749) — call `preventDefault()` on the
+   * event and focus their own target, so the close is a single focus move.
+   */
+  onCloseAutoFocus?: (event: Event) => void;
 }
 
 export const ModelSelectorDialog = ({
@@ -55,6 +62,7 @@ export const ModelSelectorDialog = ({
   onOpenChange,
   onModelChange,
   maxOutputTokens,
+  onCloseAutoFocus,
 }: ModelSelectorDialogProps) => {
   const selectedAgent = agentId ? agents.find((a) => a.id === agentId) : null;
 
@@ -99,7 +107,10 @@ export const ModelSelectorDialog = ({
       ) : (
         <ModelSelectorTrigger asChild>{trigger}</ModelSelectorTrigger>
       )}
-      <ModelSelectorContent filter={filterByKeywords}>
+      <ModelSelectorContent
+        filter={filterByKeywords}
+        onCloseAutoFocus={onCloseAutoFocus}
+      >
         <ModelSelectorInput placeholder="Search agents and models..." />
         <ModelSelectorList>
           <ModelSelectorEmpty>No results found.</ModelSelectorEmpty>

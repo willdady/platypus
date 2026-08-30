@@ -140,11 +140,16 @@ export const Composer = ({
             modelId={modelSelection.modelId}
             providerId={modelSelection.providerId}
             isOpen={isModelSelectorOpen}
-            onOpenChange={(open) => {
-              setIsModelSelectorOpen(open);
-              if (!open) {
-                setTimeout(() => textareaRef.current?.focus(), 250);
-              }
+            onOpenChange={setIsModelSelectorOpen}
+            // Closing the picker returns to the textarea, so a model switch
+            // doesn't interrupt typing. Radix would first hand focus back to
+            // the trigger button; letting it do so and then moving focus on
+            // again is two focus changes, which on mobile dismisses the
+            // on-screen keyboard and reopens it a moment later (issue #749).
+            // Taking over the close focus keeps it to a single move.
+            onCloseAutoFocus={(event) => {
+              event.preventDefault();
+              textareaRef.current?.focus();
             }}
             onModelChange={modelSelection.onModelChange}
             maxOutputTokens={modelSelection.maxOutputTokens}
