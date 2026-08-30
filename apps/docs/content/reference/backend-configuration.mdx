@@ -170,13 +170,25 @@ is the production option.
 | Variable                       | Purpose                                                                                                       | Default        | Required                  |
 | ------------------------------ | ------------------------------------------------------------------------------------------------------------- | -------------- | ------------------------- |
 | `STORAGE_BACKEND`              | Storage backend: `disk` or `s3`.                                                                              | `disk`         | No                        |
-| `STORAGE_DISK_PATH`            | Filesystem path for stored files (when `STORAGE_BACKEND=disk`).                                               | `./data/files` | No                        |
+| `STORAGE_DISK_PATH`            | Filesystem path for stored files (when `STORAGE_BACKEND=disk`), resolved relative to the working directory.   | `./data/files` | No                        |
 | `STORAGE_PUBLIC_URL`           | Optional public URL for direct file access, bypassing the `/files` proxy endpoint (e.g. a CDN or bucket URL). | _(unset)_      | No                        |
 | `STORAGE_S3_BUCKET`            | S3 bucket name.                                                                                               | _(unset)_      | When `STORAGE_BACKEND=s3` |
 | `STORAGE_S3_REGION`            | S3 region.                                                                                                    | `us-east-1`    | No                        |
 | `STORAGE_S3_ENDPOINT`          | S3 endpoint URL. Only needed for S3-compatible services (MinIO, R2, Spaces); leave unset for AWS S3.          | _(unset)_      | No                        |
 | `STORAGE_S3_ACCESS_KEY_ID`     | S3 access key ID.                                                                                             | _(unset)_      | When `STORAGE_BACKEND=s3` |
 | `STORAGE_S3_SECRET_ACCESS_KEY` | S3 secret access key.                                                                                         | _(unset)_      | When `STORAGE_BACKEND=s3` |
+
+The backend image sets `STORAGE_DISK_PATH` to `/data/files` and creates that
+directory, so mounting any volume over `/data` persists uploaded files — the
+Compose stack does it with the `./data` bind mount, and a Kubernetes deployment
+does it with a `PersistentVolumeClaim`. Your own value overrides the image's.
+
+<Callout type="warning">
+  If you set `STORAGE_DISK_PATH` yourself, point it inside a volume you actually
+  mount. A path that exists only in the container survives a restart but not a
+  container recreate, which both an image upgrade and a Kubernetes rollout
+  perform.
+</Callout>
 
 ## Sandbox
 

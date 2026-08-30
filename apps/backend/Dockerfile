@@ -50,6 +50,15 @@ WORKDIR /app
 
 ENV NODE_ENV=production
 
+# Where this image keeps uploaded files. `DiskStorage`'s own default is
+# relative, so it resolves under WORKDIR and lands in the container's writable
+# layer — gone on the next container recreate, which an image upgrade and a
+# Kubernetes rollout both perform. Declaring it here reaches every way the image
+# is deployed rather than Compose alone: mount a volume over /data and uploads
+# persist with nothing else to configure. A deployment that sets the variable
+# itself still overrides this.
+ENV STORAGE_DISK_PATH=/data/files
+
 # `su-exec` lets the entrypoint drop from root to `platypus` once it has
 # repaired the ownership of a bind-mounted /data.
 RUN apk add --no-cache su-exec
@@ -62,8 +71,8 @@ RUN addgroup --system --gid 1001 platypus && \
     mkdir -p /data/files && chown -R platypus:platypus /data
 
 # WORKDIR created /app as root:root, and only the *contents* of the copies below
-# carry --chown. The STORAGE_DISK_PATH default resolves to /app/data/files, so
-# the directory itself has to be writable or the app cannot create it.
+# carry --chown, leaving the directory itself owned by root. The application
+# runs from here as `platypus`, so hand it over.
 RUN chown platypus:platypus /app
 
 # Copy prod dependencies (includes root node_modules and workspace node_modules)

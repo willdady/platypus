@@ -5,13 +5,15 @@ set -e
 # writable by that account, and only one of them can be settled while the image
 # is being built:
 #
-#   - Everything under /app, including the STORAGE_DISK_PATH default of
-#     ./data/files. The Dockerfile owns this; nothing here needs to.
-#   - /data, which compose.yaml bind-mounts from the host. On Linux a bind mount
-#     keeps the host directory's ownership and masks whatever the build set, so
-#     an existing deployment whose ./data belongs to some other uid would hit
-#     EACCES on the first upload. It can only be repaired once the mount is in
-#     place, which is here.
+#   - Everything under /app, the application's own working directory. The
+#     Dockerfile owns this; nothing here needs to.
+#   - /data, which holds the store the image points STORAGE_DISK_PATH at, and
+#     which a deployment mounts its own volume over — a compose.yaml bind mount,
+#     a Kubernetes PersistentVolumeClaim. On Linux a mount keeps the host
+#     directory's ownership and masks whatever the build set, so an existing
+#     deployment whose directory belongs to some other uid would hit EACCES on
+#     the first write. It can only be repaired once the mount is in place, which
+#     is here.
 #
 # Started as root, we repair that ownership and then drop to `platypus`, so the
 # application itself never runs privileged. Started as an explicit non-root user

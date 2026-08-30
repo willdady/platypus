@@ -95,8 +95,11 @@ a model server running on the host machine rather than in the stack — see
 
 - `postgres_data` — a named volume holding the database. Your data lives here;
   don't delete it unless you mean to start over.
-- `./data` — a bind mount into the backend at `/data`, used by the default
-  disk storage backend for uploaded files.
+- `./data` — a bind mount into the backend at `/data`. The backend image stores
+  uploaded files at `/data/files`, so they arrive here on the host, under
+  `./data/files`. Override
+  [`STORAGE_DISK_PATH`](/reference/backend-configuration#storage) and your
+  uploads follow it out of this mount.
 
 #### File ownership on `./data`
 

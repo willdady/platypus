@@ -6,6 +6,8 @@
       "inputs": [
         "$TURBO_DEFAULT$",
         "$TURBO_ROOT$/.env.example",
+        "$TURBO_ROOT$/compose.yaml",
+        "$TURBO_ROOT$/apps/backend/Dockerfile",
         "$TURBO_ROOT$/apps/backend/.env.example",
         "$TURBO_ROOT$/apps/frontend/.env.example",
         "$TURBO_ROOT$/apps/backend/src/plugins/builtin.ts",

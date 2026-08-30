@@ -417,6 +417,166 @@ describe("environment variables", () => {
   });
 });
 
+// --- where the self-hosting pages say uploaded files land -------------------
+
+const COMPOSE_FILE = "compose.yaml";
+const COMPOSE_YAML = readRepoFile(COMPOSE_FILE);
+
+const BACKEND_DOCKERFILE = "apps/backend/Dockerfile";
+const DOCKERFILE = readRepoFile(BACKEND_DOCKERFILE);
+
+/** Leading-whitespace width, used to walk `compose.yaml` by indentation. */
+const indentWidth = (line: string): number =>
+  line.length - line.trimStart().length;
+
+type ComposeLine = { text: string; line: number };
+
+/**
+ * The lines of one nested block of `compose.yaml`, addressed by key path.
+ *
+ * No YAML parser is a dependency of this package, and this file already
+ * hand-reads Markdown tables and `.env` assignments. The compose file is short,
+ * hand-maintained and three levels deep, so a key path plus indentation reads
+ * it. An extractor that quietly stops matching would turn the assertions below
+ * green, so the first test in the block checks that it found anything at all.
+ */
+const composeBlock = (keyPath: string[]): ComposeLine[] => {
+  let lines: ComposeLine[] = COMPOSE_YAML.split("\n").map((text, index) => ({
+    text,
+    line: index + 1,
+  }));
+  let indent = 0;
+  for (const key of keyPath) {
+    const start = lines.findIndex(
+      ({ text }) =>
+        indentWidth(text) === indent && text.trim().startsWith(`${key}:`),
+    );
+    if (start === -1) return [];
+    const body: ComposeLine[] = [];
+    for (const entry of lines.slice(start + 1)) {
+      if (entry.text.trim() === "") continue;
+      if (indentWidth(entry.text) <= indent) break;
+      body.push(entry);
+    }
+    if (body.length === 0) return [];
+    lines = body;
+    indent = indentWidth(body[0].text);
+  }
+  return lines;
+};
+
+type BindMount = { host: string; container: string; line: number };
+
+/** The `host:container` bind mounts of a service's `volumes:` block. */
+const composeBindMounts = (service: string): BindMount[] =>
+  composeBlock(["services", service, "volumes"]).flatMap(({ text, line }) => {
+    const match = text.trim().match(/^-\s*(\.\S*?):(\/\S+?)(?::[a-z,]+)?$/);
+    return match ? [{ host: match[1], container: match[2], line }] : [];
+  });
+
+/** An `ENV KEY=value` declaration in the backend Dockerfile. */
+const dockerfileEnv = (
+  name: string,
+): { value: string; line: number } | undefined => {
+  const lines = DOCKERFILE.split("\n");
+  for (const [index, text] of lines.entries()) {
+    const match = text.match(new RegExp(`^ENV ${name}=(\\S+)\\s*$`));
+    if (match) return { value: match[1], line: index + 1 };
+  }
+  return undefined;
+};
+
+/**
+ * Where the self-hosting pages tell an Operator their uploaded files are.
+ *
+ * Two pages make that claim and both are load-bearing: the Compose page names
+ * `./data` as the directory uploads are written to, and the production page
+ * sends the Operator there to back them up — a Chat File part is the one thing
+ * a database dump does not contain, so a wrong directory there is silent data
+ * loss discovered at restore time.
+ *
+ * Neither claim is true on its own. `STORAGE_DISK_PATH` is resolved relative to
+ * the working directory, so left at its library default the backend writes
+ * uploads into the container's own layer and any mount receives nothing. The
+ * backend image is what settles this, because it is what every deployment has
+ * in common — Compose, Kubernetes, Swarm, a bare `docker run`. The pages that
+ * promise the mount sit in a third place again, which is what this pins.
+ */
+describe("the uploaded-files location the self-hosting pages promise", () => {
+  const imagePath = dockerfileEnv("STORAGE_DISK_PATH");
+  const bindMounts = composeBindMounts("backend");
+  const claimedBy = "apps/docs/content/self-hosting/docker-compose.mdx";
+
+  it("parsed the image and the compose file", () => {
+    expect(
+      dockerfileEnv("NODE_ENV")?.value,
+      `read no \`ENV NODE_ENV\` out of ${BACKEND_DOCKERFILE}, so the extractor ` +
+        `below cannot be trusted to find STORAGE_DISK_PATH either`,
+    ).toBeDefined();
+    expect(
+      bindMounts.map((mount) => `${mount.host}:${mount.container}`),
+      `parsed no host bind mount out of the backend service in ${COMPOSE_FILE}`,
+    ).not.toHaveLength(0);
+  });
+
+  it("has the image store uploads where a volume can be mounted", () => {
+    expect(
+      imagePath?.value,
+      `${BACKEND_DOCKERFILE} declares no \`ENV STORAGE_DISK_PATH\`, so the backend ` +
+        `falls back to DiskStorage's relative default. That resolves under ` +
+        `WORKDIR, inside the container's own layer, and every deployment that ` +
+        `does not set the variable itself loses uploaded files on the next ` +
+        `container recreate — an image upgrade, or a Kubernetes rollout.\n` +
+        `${claimedBy} promises an Operator those files are on the host.`,
+    ).toBeDefined();
+
+    expect(
+      imagePath?.value.startsWith("/"),
+      `${BACKEND_DOCKERFILE}:${imagePath?.line} sets STORAGE_DISK_PATH to ` +
+        `\`${imagePath?.value}\`. A relative path resolves under WORKDIR, which ` +
+        `is inside the image; it has to be absolute to name a mount point.`,
+    ).toBe(true);
+  });
+
+  it("mounts the compose stack's host directory over that location", () => {
+    const mount = bindMounts.find(
+      (candidate) =>
+        imagePath?.value === candidate.container ||
+        imagePath?.value.startsWith(`${candidate.container}/`),
+    );
+    expect(
+      mount?.host,
+      `The backend image stores uploads at \`${imagePath?.value}\` ` +
+        `(${BACKEND_DOCKERFILE}:${imagePath?.line}), which is not under any bind ` +
+        `mount the backend service declares in ${COMPOSE_FILE} ` +
+        `(${bindMounts.map((m) => `${m.container} at line ${m.line}`).join(", ") || "none"}).\n` +
+        `The Compose stack would write uploads into the container layer and lose ` +
+        `them on recreate, while ${claimedBy} goes on promising they are on the ` +
+        `host under that bind mount.`,
+    ).toBeDefined();
+  });
+
+  it("names that mount on both pages that send an Operator to it", () => {
+    const violations: string[] = [];
+    for (const page of [
+      "self-hosting/docker-compose.mdx",
+      "self-hosting/production.mdx",
+    ]) {
+      const content = readDoc(page);
+      if (bindMounts.some((mount) => content.includes(`\`${mount.host}\``)))
+        continue;
+      violations.push(
+        `apps/docs/content/${page} names none of the host directories the ` +
+          `backend service bind-mounts ` +
+          `(${bindMounts.map((m) => `\`${m.host}\` at ${COMPOSE_FILE}:${m.line}`).join(", ")}).\n` +
+          `That page tells an Operator where their uploads are and what to back ` +
+          `up, so it has to name the directory Compose actually mounts.`,
+      );
+    }
+    expectNoViolations(violations);
+  });
+});
+
 // --- webhook events ----------------------------------------------------------
 
 describe("webhook events", () => {
