@@ -50,19 +50,39 @@ WORKDIR /app
 
 ENV NODE_ENV=production
 
-# Don't run production as root
-RUN addgroup --system --gid 1001 nodejs && \
-    adduser --system --uid 1001 hono && \
-    mkdir -p /data/files && chown hono:nodejs /data/files
+# `su-exec` lets the entrypoint drop from root to `platypus` once it has
+# repaired the ownership of a bind-mounted /data.
+RUN apk add --no-cache su-exec
+
+# Don't run production as root. uid/gid 1001 is the part of this identity that
+# leaves the image — a bind-mounted /data has to match it — so it is fixed;
+# the account name is not, and both images use `platypus`.
+RUN addgroup --system --gid 1001 platypus && \
+    adduser --system --uid 1001 --ingroup platypus platypus && \
+    mkdir -p /data/files && chown -R platypus:platypus /data
+
+# WORKDIR created /app as root:root, and only the *contents* of the copies below
+# carry --chown. The STORAGE_DISK_PATH default resolves to /app/data/files, so
+# the directory itself has to be writable or the app cannot create it.
+RUN chown platypus:platypus /app
 
 # Copy prod dependencies (includes root node_modules and workspace node_modules)
-COPY --from=prod-deps /app .
+COPY --from=prod-deps --chown=platypus:platypus /app .
 
 # Copy source code
-COPY --from=builder /app/out/full/ .
+COPY --from=builder --chown=platypus:platypus /app/out/full/ .
+
+COPY --chown=platypus:platypus apps/backend/docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 
 # Expose port
 EXPOSE 4000
+
+# The entrypoint fixes ownership of the bind-mounted /data and then drops to
+# `platypus`, so the server below never runs as root. Deployments that would
+# rather the container never start as root at all can set `--user 1001:1001`
+# and take on making /data writable by that uid themselves.
+ENTRYPOINT ["docker-entrypoint.sh"]
 
 # Run migrations and start the server
 CMD ["sh", "-c", "node ./apps/backend/scripts/migrate.ts && node --env-file-if-exists=./apps/backend/.env ./apps/backend/index.ts"]

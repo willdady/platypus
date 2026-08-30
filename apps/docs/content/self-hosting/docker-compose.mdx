@@ -98,6 +98,36 @@ a model server running on the host machine rather than in the stack — see
 - `./data` — a bind mount into the backend at `/data`, used by the default
   disk storage backend for uploaded files.
 
+#### File ownership on `./data`
+
+The backend serves requests as an unprivileged account, uid **1001**, rather
+than as root. Everything inside the image is already owned by it; a bind mount
+is the exception, because it keeps whatever ownership the directory has on the
+host.
+
+You do not normally have to do anything about this. The container starts as
+root, takes ownership of `/data` if it belongs to somebody else, and only then
+drops to uid 1001 — so an existing `./data` full of uploads keeps working across
+an upgrade, and a fresh one is created correctly.
+
+Two cases do need you:
+
+- **You pin the container to a user yourself** — a `user:` key in
+  `compose.yaml`, `docker run --user`, or a Kubernetes `runAsUser`. The
+  container can no longer change ownership of anything, so make the host
+  directory writable by the uid you pinned it to:
+
+  ```bash
+  sudo chown -R 1001:1001 ./data
+  ```
+
+- **`./data` sits on a filesystem that does not carry Unix ownership** — an NFS
+  export with root squash, or an SMB share. Ownership there is decided by the
+  mount, not by the container, so set it at mount time.
+
+Uploads failing with a permission error, on a stack that is otherwise healthy,
+is the symptom of both.
+
 ## First boot
 
 <Steps>
