@@ -45,6 +45,32 @@ describe("Invitation Routes", () => {
       expect(await res.json()).toEqual({ ...mockInvitation, blueprintIds: [] });
     });
 
+    it("normalizes a mixed-case invitation email before persistence", async () => {
+      mockSession({ id: "admin-1", email: "admin@example.com", role: "user" });
+      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]);
+      mockDb.returning.mockResolvedValueOnce([
+        { id: "inv-1", email: "user@example.com" },
+      ]);
+
+      const res = await app.request(baseUrl, {
+        method: "POST",
+        body: JSON.stringify({
+          email: "User@Example.COM",
+        }),
+        headers: { "Content-Type": "application/json" },
+      });
+
+      expect(res.status).toBe(201);
+      const insertedValues = mockDb.values.mock.calls.find(
+        ([value]) =>
+          typeof value === "object" &&
+          value !== null &&
+          "organizationId" in value,
+      )?.[0];
+      expect(insertedValues).toMatchObject({ email: "user@example.com" });
+      expect(await res.json()).toMatchObject({ email: "user@example.com" });
+    });
+
     // ADR-0009: an invitation carries an ordered set of Blueprints, stored in
     // the invitation_blueprint junction with `position`.
     it("persists an ordered set of blueprints", async () => {
@@ -163,7 +189,7 @@ describe("Invitation Routes", () => {
       const res = await app.request(baseUrl, {
         method: "POST",
         body: JSON.stringify({
-          email: "admin@example.com",
+          email: "Admin@Example.COM",
           workspaceId: "ws-1",
           role: "editor",
         }),

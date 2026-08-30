@@ -32,7 +32,13 @@ invitation.post(
     const data = c.req.valid("json");
     const user = c.get("user")!;
 
-    if (data.email.toLowerCase() === user.email.toLowerCase()) {
+    // The invitation's email is canonical in lower case. better-auth lower-cases
+    // `user.email` on sign-up, and every read matches this column with an exact
+    // equality predicate, so normalizing here — at the single write — is what
+    // keeps a mixed-case invitation reachable by its invitee (#548).
+    const normalizedEmail = data.email.toLowerCase();
+
+    if (normalizedEmail === user.email.toLowerCase()) {
       return c.json({ error: "You cannot invite yourself" }, 400);
     }
 
@@ -73,7 +79,7 @@ invitation.post(
           .insert(invitationTable)
           .values({
             id: invitationId,
-            email: data.email,
+            email: normalizedEmail,
             organizationId: orgId,
             invitedBy: user.id,
             status: "pending",

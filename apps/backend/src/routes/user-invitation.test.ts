@@ -383,4 +383,126 @@ describe("User Invitation Routes", () => {
       expect(await res.json()).toEqual({ message: "Invitation declined" });
     });
   });
+  // #548: an invitation created for a mixed-case address was stored verbatim,
+  // while better-auth lower-cases `user.email` on sign-up. Every read here
+  // matches the column with an exact equality predicate, so the invitee never
+  // saw it and the admin's table showed it pending forever.
+  //
+  // `db` is mocked and `eq` is a no-op stub, so the read handlers' predicate has
+  // no behaviour of its own — asserting on the arguments handed to `eq` would
+  // pin nothing. Instead this test plays the part of Postgres: it captures the
+  // row the create handler actually persisted and serves it back to the read
+  // handlers only when the stored address matches the session user's exactly.
+  // Remove the normalization in `invitation.ts` and the captured row keeps its
+  // capitals, the match fails, and the list, accept and decline below all go
+  // empty — which is precisely the reported bug.
+  describe("mixed-case invitation round trip", () => {
+    const invitee = {
+      id: "u1",
+      email: "user@example.com",
+      name: "Jane",
+      role: "user",
+    };
+
+    /** Restores the chainable mocks between phases of the round trip. */
+    const resetChain = () => {
+      resetMockDb();
+      vi.clearAllMocks();
+      mockDb.where.mockReturnValue(mockDb);
+      mockDb.innerJoin.mockReturnValue(mockDb);
+    };
+
+    /**
+     * Drives the create handler as an Org Admin and returns the `email` it wrote
+     * to the invitation row.
+     */
+    const createInvitationAs = async (typedEmail: string): Promise<string> => {
+      mockSession({ id: "admin-1", email: "admin@example.com", role: "user" });
+      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]); // requireOrgAccess
+      mockDb.returning.mockResolvedValueOnce([{ id: "inv-1" }]);
+
+      const res = await app.request("/organizations/org-1/invitations", {
+        method: "POST",
+        body: JSON.stringify({ email: typedEmail }),
+        headers: { "Content-Type": "application/json" },
+      });
+      expect(res.status).toBe(201);
+
+      const row = mockDb.values.mock.calls
+        .map((c) => c[0] as Record<string, unknown>)
+        .find((v) => v && "organizationId" in v && "email" in v);
+      expect(row).toBeDefined();
+      return row!.email as string;
+    };
+
+    it("is listed, accepted and declined by the lower-case account", async () => {
+      const storedEmail = await createInvitationAs("User@Example.COM");
+
+      const expiresAt = new Date();
+      expiresAt.setDate(expiresAt.getDate() + 7);
+
+      const storedRow = {
+        id: "inv-1",
+        email: storedEmail,
+        status: "pending",
+        organizationId: "org-1",
+        workspaceName: "Contractor Sandbox",
+        expiresAt: expiresAt.toISOString(),
+        organizationName: "Org 1",
+        invitedByName: "Admin",
+      };
+
+      /** What the exact-match read predicate returns for this session user. */
+      const rowsVisibleTo = (email: string) =>
+        storedRow.email === email ? [storedRow] : [];
+
+      // Listed.
+      resetChain();
+      mockSession(invitee);
+      mockDb.where.mockResolvedValueOnce(rowsVisibleTo(invitee.email));
+
+      const listRes = await app.request(baseUrl);
+      expect(listRes.status).toBe(200);
+      expect(await listRes.json()).toEqual({ results: [storedRow] });
+
+      // Accepted — and the workspace is provisioned as it is for any invite.
+      resetChain();
+      mockSession(invitee);
+      mockDb.limit.mockResolvedValueOnce(rowsVisibleTo(invitee.email));
+      mockDb.limit.mockResolvedValueOnce([]); // no existing org membership
+      mockDb.orderBy.mockResolvedValueOnce([]); // no blueprints on the invite
+
+      const acceptRes = await app.request(`${baseUrl}/inv-1/accept`, {
+        method: "POST",
+      });
+      expect(acceptRes.status).toBe(200);
+      expect(await acceptRes.json()).toEqual({
+        message: "Invitation accepted",
+      });
+
+      const provisioned = mockDb.values.mock.calls
+        .map((c) => c[0] as Record<string, unknown>)
+        .find((v) => v?.name);
+      expect(provisioned).toMatchObject({
+        organizationId: "org-1",
+        ownerId: "u1",
+        name: "Contractor Sandbox",
+      });
+
+      // Declined — the same match, on the update's where clause.
+      resetChain();
+      mockSession(invitee);
+      mockDb.returning.mockResolvedValueOnce(
+        rowsVisibleTo(invitee.email).map((r) => ({ ...r, status: "declined" })),
+      );
+
+      const declineRes = await app.request(`${baseUrl}/inv-1/decline`, {
+        method: "POST",
+      });
+      expect(declineRes.status).toBe(200);
+      expect(await declineRes.json()).toEqual({
+        message: "Invitation declined",
+      });
+    });
+  });
 });
