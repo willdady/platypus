@@ -1,5 +1,17 @@
 # Changelog
 
+## [3.2.1](https://github.com/willdady/platypus/compare/v3.2.0...v3.2.1) (2026-08-30)
+
+
+### Bug Fixes
+
+* **backend:** normalize invitation email addresses to lower case ([1f443d4](https://github.com/willdady/platypus/commit/1f443d43e841a4d153c35c7636213a407c3acdad)), closes [#548](https://github.com/willdady/platypus/issues/548)
+* **backend:** recover Chats stuck in `running` after a restart ([#764](https://github.com/willdady/platypus/issues/764)) ([9beaebd](https://github.com/willdady/platypus/commit/9beaebdab913590e5def3b8037c223fd239c5a90))
+* **backend:** run the backend container as a non-root user ([#765](https://github.com/willdady/platypus/issues/765)) ([988e2e9](https://github.com/willdady/platypus/commit/988e2e94f84509d63a2a4994a0958d3112c00f97))
+* **frontend:** clear the sidebar spinner when a run finishes ([#761](https://github.com/willdady/platypus/issues/761)) ([78040bf](https://github.com/willdady/platypus/commit/78040bf2d4c3ec7a2007b68d04d6ecf09ebe7df2))
+* **frontend:** focus the composer once when the model picker closes ([#763](https://github.com/willdady/platypus/issues/763)) ([7370835](https://github.com/willdady/platypus/commit/73708359a25c53c46ec842655aa49ba05666a182)), closes [#749](https://github.com/willdady/platypus/issues/749)
+* **frontend:** make the composer mic button start dictation ([85d0dcc](https://github.com/willdady/platypus/commit/85d0dcc35231dec6d0b605b648a30cf3df187290)), closes [#752](https://github.com/willdady/platypus/issues/752)
+
 ## [3.2.0](https://github.com/willdady/platypus/compare/v3.1.1...v3.2.0) (2026-08-29)
 
 
