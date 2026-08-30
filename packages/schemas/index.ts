@@ -2512,26 +2512,50 @@ export const widgetDataSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("bar-chart"), data: barChartWidgetDataSchema }),
 ]);
 
-export const widgetSchema = z.object({
+const widgetBaseSchema = z.object({
   id: z.string(),
   dashboardId: z.string(),
-  type: widgetTypeSchema,
   title: z.string(),
-  data: z
-    .union([
-      metricWidgetDataSchema,
-      textWidgetDataSchema,
-      imageWidgetDataSchema,
-      iframeWidgetDataSchema,
-      weatherWidgetDataSchema,
-      lineChartWidgetDataSchema,
-      pieChartWidgetDataSchema,
-      barChartWidgetDataSchema,
-    ])
-    .nullable(),
   createdAt: z.date(),
   updatedAt: z.date(),
 });
+
+// Keep each persisted widget type paired with its own data contract. A plain
+// data union can let a permissive schema shadow a stricter schema with the same shape.
+export const widgetSchema = z.discriminatedUnion("type", [
+  widgetBaseSchema.extend({
+    type: z.literal("metric"),
+    data: metricWidgetDataSchema.nullable(),
+  }),
+  widgetBaseSchema.extend({
+    type: z.literal("text"),
+    data: textWidgetDataSchema.nullable(),
+  }),
+  widgetBaseSchema.extend({
+    type: z.literal("image"),
+    data: imageWidgetDataSchema.nullable(),
+  }),
+  widgetBaseSchema.extend({
+    type: z.literal("iframe"),
+    data: iframeWidgetDataSchema.nullable(),
+  }),
+  widgetBaseSchema.extend({
+    type: z.literal("weather"),
+    data: weatherWidgetDataSchema.nullable(),
+  }),
+  widgetBaseSchema.extend({
+    type: z.literal("line-chart"),
+    data: lineChartWidgetDataSchema.nullable(),
+  }),
+  widgetBaseSchema.extend({
+    type: z.literal("pie-chart"),
+    data: pieChartWidgetDataSchema.nullable(),
+  }),
+  widgetBaseSchema.extend({
+    type: z.literal("bar-chart"),
+    data: barChartWidgetDataSchema.nullable(),
+  }),
+]);
 
 export type Widget = z.infer<typeof widgetSchema>;
 
