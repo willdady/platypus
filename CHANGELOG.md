@@ -1,5 +1,18 @@
 # Changelog
 
+## [3.3.0](https://github.com/willdady/platypus/compare/v3.2.2...v3.3.0) (2026-08-30)
+
+
+### Features
+
+* **backend:** open an Agent's MCP tool sessions concurrently ([#778](https://github.com/willdady/platypus/issues/778)) ([298b52c](https://github.com/willdady/platypus/commit/298b52c7807af12ea14b0178955ccad5eb69358c))
+
+
+### Bug Fixes
+
+* **backend:** store uploaded files at /data/files in the image ([#774](https://github.com/willdady/platypus/issues/774)) ([520825e](https://github.com/willdady/platypus/commit/520825e918d96d9a46e826bbbff483f21986fc44)), closes [#767](https://github.com/willdady/platypus/issues/767)
+* **frontend:** stop dictation repeating on Android and surface its failures ([#779](https://github.com/willdady/platypus/issues/779)) ([004d32c](https://github.com/willdady/platypus/commit/004d32c9bb5685d1eaa516fa36979b28f6fd7475)), closes [#768](https://github.com/willdady/platypus/issues/768)
+
 ## [3.2.2](https://github.com/willdady/platypus/compare/v3.2.1...v3.2.2) (2026-08-30)
 
 

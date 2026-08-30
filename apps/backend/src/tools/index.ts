@@ -75,14 +75,13 @@ export type ToolSetRegistration = {
    * and result-normalized. Never rejects: a Tool set that cannot serve this turn
    * contributes no tools instead of failing it.
    *
-   * `claimed` is the turn's accumulating tool map as it stands, so a name this
-   * Tool set is about to take from an earlier one is reported rather than
-   * silently swapped. Optional: a caller resolving a single Tool set in
-   * isolation has no turn map to compare against.
+   * Reads no turn state and mutates none of it, so a turn can resolve all of an
+   * Agent's Tool sets at once. Reporting a name this Tool set takes from an
+   * earlier one belongs to whoever merges the results in assignment order —
+   * `openToolSession` — because only there is the answer deterministic.
    */
   buildTurnTools: (
     context: CoreToolSetContext,
-    claimed?: ReadonlyMap<string, ToolOwner>,
   ) => Promise<Record<string, Tool>>;
   /**
    * The contribution's tools when it declared them as a static map, for the
@@ -347,7 +346,6 @@ export const composeToolSet = (
 
   const buildTurnTools = async (
     context: CoreToolSetContext,
-    claimed?: ReadonlyMap<string, ToolOwner>,
   ): Promise<Record<string, Tool>> => {
     let resolved: unknown = tools;
     if (typeof tools === "function") {
@@ -391,18 +389,13 @@ export const composeToolSet = (
       return {};
     }
 
-    // Namespaced after per-tool result normalization and before the tools are
-    // collision-reported and claimed, so ownership keying and collision
-    // reporting both see the final name — the only name the model, the
-    // Transcript, and a second Tool set can contest.
-    const turnTools = namespaceToolNames(
+    // Namespaced after per-tool result normalization, so the name that leaves
+    // here is the final one — the only name the model, the Transcript, and a
+    // second Tool set can contest, and so the one the merge phase keys
+    // ownership and collision reporting on.
+    return namespaceToolNames(
       normalizeToolResults(resolved as Record<string, Tool>),
     );
-    reportToolNameCollisions(turnTools, claimed, {
-      toolSetId: id,
-      plugin: pluginName,
-    });
-    return turnTools;
   };
 
   return {

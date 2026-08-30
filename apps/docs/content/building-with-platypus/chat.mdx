@@ -115,6 +115,20 @@ The same button is in the box you get when [rewriting a
 message](#rewriting-a-message), and it writes into that message rather than into
 the one below.
 
+Transcription is the browser's own speech recognition, so which browsers offer
+it varies. Where it can't run, the button still answers a press — an unsupported
+browser, a blocked microphone, a device with no speech service — instead of
+going quiet.
+
+<Callout type="warning">
+  **A browser only grants a microphone over a secure connection.** Reach your
+  instance at a plain `http://` address — a LAN IP such as
+  `http://192.168.1.20:3000` — and the microphone is refused before a word is
+  heard, whatever permission you granted. Everything else on the page keeps
+  working, which is what makes it look like a broken button. Serve the frontend
+  over HTTPS, or open it at `http://localhost`, which browsers treat as secure.
+</Callout>
+
 ## How long a Tool took
 
 When a reply uses a Tool, the Tool appears in the conversation as a collapsible

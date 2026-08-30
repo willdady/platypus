@@ -60,6 +60,96 @@ declare global {
   }
 }
 
+/**
+ * Why dictation is not working, as a code the caller turns into words
+ * (issue #768). `unsupported` and `insecure-context` are standing conditions
+ * of the page; the rest are the `error` values `SpeechRecognitionErrorEvent`
+ * defines for an attempt that failed.
+ */
+export type SpeechToTextFaultCode =
+  | "unsupported"
+  | "insecure-context"
+  | "not-allowed"
+  | "service-not-allowed"
+  | "network"
+  | "audio-capture"
+  | "language-not-supported"
+  | "bad-grammar"
+  | "unknown";
+
+/**
+ * A failure worth telling the user about. A fresh object each time, so a
+ * caller watching it sees a second identical failure as a second event rather
+ * than as no change.
+ */
+export type SpeechToTextFault = { code: SpeechToTextFaultCode };
+
+/**
+ * Failures the user caused or already knows about: silence, and stopping
+ * dictation yourself. Ending quietly is the honest response to both.
+ */
+const QUIET_ERRORS = new Set(["no-speech", "aborted"]);
+
+const RECOGNITION_FAULT_CODES = new Set<string>([
+  "not-allowed",
+  "service-not-allowed",
+  "network",
+  "audio-capture",
+  "language-not-supported",
+  "bad-grammar",
+]);
+
+/**
+ * Runs two pieces of speech together with exactly one gap between them.
+ * Engines differ on whether a result carries its own leading space, so both
+ * gluing the words and doubling the space are possible without this.
+ */
+const joinSpoken = (left: string, right: string) => {
+  if (!left || !right) {
+    return left + right;
+  }
+  return /\s$/.test(left) || /^\s/.test(right)
+    ? left + right
+    : `${left} ${right}`;
+};
+
+/**
+ * The transcript the result list describes, whichever way the engine chose to
+ * fill it in.
+ *
+ * By the spec each result is its own segment of speech, so the session's
+ * transcript is every final result run together. Chrome for Android instead
+ * grows the list by one `isFinal` entry per partial update, and each entry
+ * carries the whole utterance so far, so running them together repeats every
+ * word once for each entry it appears in (issue #752).
+ *
+ * One rule covers both: an entry that the next one begins with was restated by
+ * it and only the later one counts. Segments of genuinely different speech are
+ * not prefixes of one another, so they all survive. Judging each entry against
+ * its neighbour rather than the list as a whole keeps a coincidence — one
+ * phrase that happens to open the next — down to that pair.
+ */
+const readTranscript = (results: SpeechRecognitionResultList) => {
+  const finals: string[] = [];
+
+  for (let i = 0; i < results.length; i++) {
+    const result = results[i];
+    // Only the tail of the list can still be interim, so stop at the first one
+    // and pick those indices up once they are final.
+    if (!result?.isFinal) {
+      break;
+    }
+    finals.push(result[0]?.transcript ?? "");
+  }
+
+  return finals
+    .filter((transcript, index) => {
+      const next = finals[index + 1];
+      return next === undefined || !next.startsWith(transcript);
+    })
+    .reduce(joinSpoken, "");
+};
+
 export type UseSpeechToTextOptions = {
   textareaRef?: RefObject<HTMLTextAreaElement | null>;
   onTranscriptionChange?: (text: string) => void;
@@ -75,20 +165,37 @@ export function useSpeechToText({
   onTranscriptionChange,
 }: UseSpeechToTextOptions = {}) {
   const [isListening, setIsListening] = useState(false);
-  const [isSupported, setIsSupported] = useState(false);
+  const [availability, setAvailability] = useState<
+    "unknown" | "ready" | "unsupported" | "insecure-context"
+  >("unknown");
+  const [fault, setFault] = useState<SpeechToTextFault | null>(null);
   const [transcript, setTranscript] = useState("");
   const recognitionRef = useRef<SpeechRecognition | null>(null);
-  // How many entries of the current session's result list have already been
-  // appended. Chrome on Android re-delivers results that were finalised
-  // earlier in the session with `resultIndex` back at 0, so `resultIndex`
-  // alone cannot tell new speech from a replay and the text doubles up.
-  const consumedResultsRef = useRef(0);
+  // The part of this session's transcript already written into the textarea.
+  // Every result event carries the session's transcript from the top, so what
+  // is new is whatever this does not already cover — which is what makes a
+  // replayed or restated result a no-op instead of a repeat.
+  const writtenRef = useRef("");
 
   useEffect(() => {
-    if (
-      typeof window === "undefined" ||
-      !("SpeechRecognition" in window || "webkitSpeechRecognition" in window)
-    ) {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    if (!(
+      "SpeechRecognition" in window || "webkitSpeechRecognition" in window
+    )) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setAvailability("unsupported");
+      return;
+    }
+
+    // The constructor is on `window` on insecure origins too, so the API looks
+    // available right up until `start()` fails with `not-allowed` — a browser
+    // will not grant the microphone outside a secure context. Saying so up
+    // front beats a mic button that claims to work and doesn't (issue #768).
+    if (window.isSecureContext === false) {
+      setAvailability("insecure-context");
       return;
     }
 
@@ -101,7 +208,7 @@ export function useSpeechToText({
     recognition.lang = "en-US";
 
     recognition.onstart = () => {
-      consumedResultsRef.current = 0;
+      writtenRef.current = "";
       setIsListening(true);
     };
 
@@ -110,49 +217,55 @@ export function useSpeechToText({
     };
 
     recognition.onresult = (event) => {
-      // A shorter list than we have already consumed means the engine started
-      // a fresh list mid-session; the old indices no longer refer to anything.
-      if (event.results.length < consumedResultsRef.current) {
-        consumedResultsRef.current = 0;
+      const textarea = textareaRef?.current;
+      if (!textarea) {
+        return;
       }
 
-      let finalTranscript = "";
+      const spoken = readTranscript(event.results);
+      const written = writtenRef.current;
+      // A transcript that carries on the one already written extends it; one
+      // that doesn't belongs to a result list the engine started afresh, and
+      // is new speech in its own right.
+      const continues = written !== "" && spoken.startsWith(written);
+      const addition = continues ? spoken.slice(written.length) : spoken;
 
-      for (let i = consumedResultsRef.current; i < event.results.length; i++) {
-        const result = event.results[i];
-        // Finalised results arrive in order and only the tail can still be
-        // interim, so stop here and pick this index up once it is final.
-        if (!result?.isFinal) {
-          break;
-        }
-        finalTranscript += result[0]?.transcript ?? "";
-        consumedResultsRef.current = i + 1;
+      if (!addition) {
+        return;
       }
+      writtenRef.current = spoken;
 
-      if (finalTranscript && textareaRef?.current) {
-        const textarea = textareaRef.current;
-        const currentValue = textarea.value;
-        const newValue =
-          currentValue + (currentValue ? " " : "") + finalTranscript;
+      const currentValue = textarea.value;
+      // An extension is an exact continuation of what is in the box, down to
+      // whether it starts mid-word, so it goes on verbatim. Anything else
+      // begins a new run of speech and needs a gap from what is there.
+      const newValue = continues
+        ? currentValue + addition
+        : joinSpoken(currentValue, addition);
 
-        textarea.value = newValue;
-        textarea.dispatchEvent(new Event("input", { bubbles: true }));
-        setTranscript(newValue);
-        onTranscriptionChange?.(newValue);
-      }
+      textarea.value = newValue;
+      textarea.dispatchEvent(new Event("input", { bubbles: true }));
+      setTranscript(newValue);
+      onTranscriptionChange?.(newValue);
     };
 
     recognition.onerror = (event) => {
-      console.error("Speech recognition error:", event.error);
       setIsListening(false);
+      if (QUIET_ERRORS.has(event.error)) {
+        return;
+      }
+      setFault({
+        code: RECOGNITION_FAULT_CODES.has(event.error)
+          ? (event.error as SpeechToTextFaultCode)
+          : "unknown",
+      });
     };
 
     recognitionRef.current = recognition;
-    // Expose support for the Web Speech API (only knowable after mount) to
-    // render so the mic button can enable; this setState is part of
+    // Whether dictation can run here is only knowable after mount, and it is
+    // what the mic button answers a press with; this setState is part of
     // initialising that external system.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setIsSupported(true);
+    setAvailability("ready");
 
     return () => {
       recognition.stop();
@@ -161,16 +274,30 @@ export function useSpeechToText({
 
   const toggleListening = useCallback(() => {
     const recognition = recognitionRef.current;
-    if (!recognition) {
+    if (availability !== "ready" || !recognition) {
+      // Nothing to toggle, so answer the tap with the reason instead of
+      // leaving it looking like a missed press.
+      setFault({
+        code:
+          availability === "insecure-context" ? availability : "unsupported",
+      });
       return;
     }
+
+    setFault(null);
 
     if (isListening) {
       recognition.stop();
     } else {
       recognition.start();
     }
-  }, [isListening]);
+  }, [availability, isListening]);
 
-  return { isListening, isSupported, toggleListening, transcript };
+  return {
+    isListening,
+    isSupported: availability === "ready",
+    fault,
+    toggleListening,
+    transcript,
+  };
 }
