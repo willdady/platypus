@@ -97,8 +97,8 @@ for the seeding rule and the recovery path.
 | Variable                         | Purpose                                                               | Default              | Required |
 | -------------------------------- | --------------------------------------------------------------------- | -------------------- | -------- |
 | `MEMORY_EXTRACTION_INTERVAL_MS`  | How often the memory-extraction worker runs, in milliseconds.         | `300000` (5 minutes) | No       |
-| `SCHEDULE_SCHEDULER_INTERVAL_MS` | How often the schedule scheduler polls for due runs, in milliseconds. | `60000` (1 minute)   | No       |
-| `SCHEDULE_MAX_CONCURRENT`        | Maximum parallel schedule executions.                                 | `5`                  | No       |
+| `SCHEDULE_SCHEDULER_INTERVAL_MS` | How often the scheduler runs, in milliseconds. Each pass starts due Triggers and recovers runs and Chats abandoned by a crash. | `60000` (1 minute)   | No       |
+| `SCHEDULE_MAX_CONCURRENT`        | Maximum parallel Trigger executions.                                  | `5`                  | No       |
 
 ## Triggers
 
