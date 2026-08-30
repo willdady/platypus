@@ -242,6 +242,16 @@ async function processDueTriggers(): Promise<void> {
 const RECOVERY_STALE_BUFFER_MS = 5 * 60 * 1000;
 
 /**
+ * The moment before which a `running` row of any kind has no live owner:
+ * the run's own per-run timeout ago, plus the buffer above. Both sweeps go
+ * through here, so the one thing that makes them safe against a peer's live
+ * work is stated once.
+ */
+function staleCutoff(perRunTimeoutMs: number): Date {
+  return new Date(Date.now() - (perRunTimeoutMs + RECOVERY_STALE_BUFFER_MS));
+}
+
+/**
  * Periodic recovery for state left behind by a server crash mid-execution.
  *
  * Two failure modes both manifest as "trigger never runs again":
@@ -268,9 +278,7 @@ const RECOVERY_STALE_BUFFER_MS = 5 * 60 * 1000;
  * the staleness threshold, a peer is currently executing — leave it alone.
  */
 async function recoverStuckTriggers(): Promise<void> {
-  const staleThresholdMs =
-    DEFAULT_PER_RUN_TIMEOUT_MS + RECOVERY_STALE_BUFFER_MS;
-  const cutoff = new Date(Date.now() - staleThresholdMs);
+  const cutoff = staleCutoff(DEFAULT_PER_RUN_TIMEOUT_MS);
 
   // Mark abandoned running runs as failed. The age cutoff guarantees no
   // live peer is still working on them.
@@ -364,9 +372,7 @@ async function recoverStuckTriggers(): Promise<void> {
  * earlier cutoff and could fail a peer's live turn.
  */
 export function stuckChatCutoff(): Date {
-  return new Date(
-    Date.now() - (chatPerRunTimeoutMs() + RECOVERY_STALE_BUFFER_MS),
-  );
+  return staleCutoff(chatPerRunTimeoutMs());
 }
 
 /**

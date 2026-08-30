@@ -131,17 +131,21 @@ When either bound stops a turn, the reason is shown in the chat rather than the
 answer simply ending.
 
 If the backend is killed mid-turn, neither bound gets the chance to run, so the
-chat would otherwise stay marked as running for ever — the sidebar keeps
-spinning and the composer stays disabled. A background sweep now marks those
-chats failed once they are older than `CHAT_PER_RUN_TIMEOUT_MS` plus a
-five-minute grace period, and it runs once a minute, so a chat abandoned by a
-crash frees itself roughly 35 minutes later on the defaults.
+Chat would otherwise stay marked as running for ever — the sidebar keeps
+spinning and the composer stays disabled. A background sweep marks those Chats
+failed once they are older than `CHAT_PER_RUN_TIMEOUT_MS` plus a five-minute
+grace period, and it runs once a minute, so a Chat abandoned by a crash frees
+itself roughly 35 minutes later on the defaults.
 
-If you run more than one backend against the same database, give every instance
-the same `CHAT_PER_RUN_TIMEOUT_MS`. The sweep uses it to work out which chats
-are old enough to have no live owner; an instance configured with a shorter
-value would decide too early and could mark another instance's live turn as
-failed.
+<Callout type="warning">
+  Running several backends against one database looks like it needs no
+  co-ordination, because each turn belongs to the instance serving it. The
+  sweep is the exception: it decides which Chats are old enough to have no
+  live owner, and it decides that from its own
+  `CHAT_PER_RUN_TIMEOUT_MS`. Give an instance a shorter value than its peers
+  and it will mark their live turns as failed mid-answer. Set the same value
+  on every instance.
+</Callout>
 
 ## Tools
 
