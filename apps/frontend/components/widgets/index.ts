@@ -2,6 +2,7 @@ import {
   Hash,
   AlignLeft,
   ImageIcon,
+  AppWindow,
   CloudSun,
   ChartLine,
   ChartPie,
@@ -10,6 +11,7 @@ import {
 import { MetricWidget } from "./MetricWidget";
 import { TextWidget } from "./TextWidget";
 import { ImageWidget } from "./ImageWidget";
+import { IframeWidget } from "./IframeWidget";
 import { WeatherWidget } from "./WeatherWidget";
 import { LineChartWidget } from "./LineChartWidget";
 import { PieChartWidget } from "./PieChartWidget";
@@ -19,6 +21,7 @@ export {
   MetricWidget,
   TextWidget,
   ImageWidget,
+  IframeWidget,
   WeatherWidget,
   LineChartWidget,
   PieChartWidget,
@@ -29,6 +32,7 @@ export const widgetTypeIcon = {
   metric: Hash,
   text: AlignLeft,
   image: ImageIcon,
+  iframe: AppWindow,
   weather: CloudSun,
   "line-chart": ChartLine,
   "pie-chart": ChartPie,
@@ -39,6 +43,7 @@ export const widgetTypeComponent = {
   metric: MetricWidget,
   text: TextWidget,
   image: ImageWidget,
+  iframe: IframeWidget,
   weather: WeatherWidget,
   "line-chart": LineChartWidget,
   "pie-chart": PieChartWidget,
