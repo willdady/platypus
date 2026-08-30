@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import SignUpPage from "./page";
 
 const mockSignUpEmail = vi.fn();
@@ -78,10 +78,39 @@ describe("SignUpPage password reveal toggle", () => {
     }
   });
 
+  it("submits the credentials when the form is submitted", async () => {
+    const { container } = render(<SignUpPage />);
+
+    fireEvent.change(screen.getByLabelText("Name"), {
+      target: { value: "Ada Lovelace" },
+    });
+    fireEvent.change(screen.getByLabelText("Email"), {
+      target: { value: "ada@example.com" },
+    });
+    fireEvent.change(screen.getByLabelText("Password"), {
+      target: { value: "my-secure-password" },
+    });
+    fireEvent.submit(container.querySelector("form")!);
+
+    await waitFor(() => {
+      expect(mockSignUpEmail).toHaveBeenCalledWith({
+        email: "ada@example.com",
+        password: "my-secure-password",
+        name: "Ada Lovelace",
+      });
+    });
+  });
+
   it("does not trigger form submission when clicking the reveal button", () => {
     render(<SignUpPage />);
 
     const toggleButton = screen.getByRole("button", { name: "Show password" });
+
+    // fireEvent.click does not run jsdom's form-submission algorithm, so the
+    // type attribute is what actually pins this: a submit-typed toggle would
+    // post the form in a real browser while leaving the mock untouched here.
+    expect(toggleButton).toHaveAttribute("type", "button");
+
     fireEvent.click(toggleButton);
 
     expect(mockSignUpEmail).not.toHaveBeenCalled();
