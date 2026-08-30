@@ -155,12 +155,12 @@ export const openToolSession = async (
   queries: ToolSessionQueries,
 ): Promise<ToolSession> => {
   const tools: Record<string, Tool> = {};
-  // Tool name -> where it came from. Handed to each Tool set as it resolves so
-  // it can report the names it is about to take, and the reason this is a Map
+  // Tool name -> where it came from. Read by the merge below to report the
+  // names an arriving Tool set is about to take, and the reason this is a Map
   // rather than the tool map alone.
   const owners = new Map<string, ToolOwner>();
   // Every name, among `tools`, whose MCP declared `readOnlyHint` (#626). Only
-  // ever added to from the MCP branch of `open` below.
+  // ever added to from the MCP case of `merge` below.
   const readOnlyToolNames = new Set<string>();
   const closers: Array<() => Promise<void>> = [];
   // Registered closers, by identity, and scoped to **this session** — so the
@@ -171,7 +171,7 @@ export const openToolSession = async (
   const registered = new Set<Closer>();
   let disposed = false;
   // MCP slug -> the MCP that already claimed it this turn (issue #467); see
-  // the collision check in `open` below for why this fails loudly.
+  // the collision check in `merge` below for why this fails loudly.
   const usedMcpSlugs = new Map<string, McpRow>();
 
   const registerCloser: CoreCloserRegistrar = (close, attribution) => {
@@ -198,29 +198,68 @@ export const openToolSession = async (
     closers.push(() => runCloser(close, attribution));
   };
 
+  /**
+   * Take `incoming`'s names for `owner`, reporting the ones taken from a Tool
+   * set that claimed them earlier this turn.
+   *
+   * Reporting lives here rather than at each call site because a claim that
+   * goes unreported is the bug issue #776 had to unpick: the check used to run
+   * in two different places depending on the kind of Tool set, and only one of
+   * them was at merge time.
+   */
   const claim = (incoming: Record<string, Tool>, owner: ToolOwner): void => {
+    reportToolNameCollisions(incoming, owners, owner);
     for (const [name, tool] of Object.entries(incoming)) {
       tools[name] = tool;
       owners.set(name, owner);
     }
   };
 
-  /** Resolve one assigned id — a registered Tool set, or else an MCP server. */
-  const open = async (
+  /**
+   * What resolving one assigned id produced, before any of it has touched the
+   * turn. Carries its own fault rather than rejecting: a resolve runs beside
+   * its siblings, and a rejection would settle the group while they are still
+   * opening connections — clients the session would then never see to close.
+   */
+  type Resolution =
+    | { kind: "none" }
+    | { kind: "failed"; error: unknown }
+    | { kind: "tools"; tools: Record<string, Tool>; owner: ToolOwner }
+    | {
+        kind: "mcp";
+        mcp: McpRow;
+        tools: Record<string, Tool>;
+        owner: ToolOwner;
+        readOnlyNames: readonly string[];
+      };
+
+  /**
+   * Resolve one assigned id — a registered Tool set, or else an MCP server.
+   *
+   * Everything that touches the network or the database, and nothing else: this
+   * reads none of the turn's shared state (`tools`, `owners`, `usedMcpSlugs`,
+   * `readOnlyToolNames`) and mutates none of it, which is what lets every
+   * assigned id resolve at once. `registerCloser` is the one exception, and
+   * deliberately so — a connection is registered for closing the moment it
+   * exists, so a server that opens beside one that fails is still torn down.
+   */
+  const resolve = async (
     toolSetId: string,
     context: CoreToolSetContext,
-  ): Promise<void> => {
+  ): Promise<Resolution> => {
     const registration = getToolSet(toolSetId);
     if (registration) {
-      const turnTools = await registration.buildTurnTools(context, owners);
-      claim(turnTools, {
-        toolSetId,
-        // A Tool set belonging to no loaded plugin is a core registration, and
-        // reads as one — the annotation the Tools catalog already uses. `null`
-        // is reserved for the MCP branch, where there is genuinely no plugin.
-        plugin: getToolSetPlugin(toolSetId) ?? CORE_BUILTIN_OWNER,
-      });
-      return;
+      return {
+        kind: "tools",
+        tools: await registration.buildTurnTools(context),
+        owner: {
+          toolSetId,
+          // A Tool set belonging to no loaded plugin is a core registration, and
+          // reads as one — the annotation the Tools catalog already uses. `null`
+          // is reserved for the MCP branch, where there is genuinely no plugin.
+          plugin: getToolSetPlugin(toolSetId) ?? CORE_BUILTIN_OWNER,
+        },
+      };
     }
 
     // Not a registered Tool set — the id names an MCP server, or nothing.
@@ -229,28 +268,12 @@ export const openToolSession = async (
       logger.warn(
         `Tool set with id '${toolSetId}' not found as static tool set or MCP`,
       );
-      return;
+      return { kind: "none" };
     }
     if (!mcp.url) {
       logger.warn(`MCP '${toolSetId}' has no URL configured`);
-      return;
+      return { kind: "none" };
     }
-
-    // Checked before connecting — a turn-time backstop for two attached MCPs
-    // resolving to the same tool-namespace slug (issue #467). The DB and the
-    // create/update routes prevent this going forward, but a row created
-    // before this fix (or backfilled with a collision the app-level check
-    // never saw) can still reach here, and silently picking a winner would
-    // reintroduce the exact shadowing this issue is about — just one level up,
-    // at the MCP rather than the tool. So this fails the turn loudly instead
-    // of warning and continuing, the way a plain tool-name collision does.
-    const incumbentMcp = usedMcpSlugs.get(mcp.slug);
-    if (incumbentMcp) {
-      throw new Error(
-        `Two attached MCPs resolve to the same tool-namespace slug "${mcp.slug}": "${incumbentMcp.name}" (${incumbentMcp.id}) and "${mcp.name}" (${mcp.id}). Rename one of them.`,
-      );
-    }
-    usedMcpSlugs.set(mcp.slug, mcp);
 
     const warnUnreachable = (error: unknown) => {
       logger.warn(
@@ -266,12 +289,14 @@ export const openToolSession = async (
       });
     } catch (error) {
       warnUnreachable(error);
-      return;
+      return { kind: "none" };
     }
 
     // Registered the moment the connection exists, and before anything else can
     // fail on it — a server that connects and then fails to list its tools used
-    // to leave the socket open for the life of the process.
+    // to leave the socket open for the life of the process. It is also why the
+    // slug check now belongs to the merge and not here: a connection this
+    // session can close is worth more than one never opened.
     registerCloser(() => client.close(), {
       mcpId: mcp.id,
       scope: mcp.organizationId ? "org" : "ws",
@@ -287,7 +312,7 @@ export const openToolSession = async (
       definitions = await client.listTools();
     } catch (error) {
       warnUnreachable(error);
-      return;
+      return { kind: "none" };
     }
     const mcpTools = client.toolsFromDefinitions(definitions);
 
@@ -310,6 +335,7 @@ export const openToolSession = async (
     // reintroduce this same bug for a server exposing both `pull` and
     // `github__pull`.
     const namespaced: Record<string, Tool> = {};
+    const readOnlyNames: string[] = [];
     for (const [rawName, tool] of Object.entries(mcpTools)) {
       const namespacedName = namespaceMcpToolName(mcp.slug, rawName);
       if (!TOOL_NAME_PATTERN.test(namespacedName)) {
@@ -330,31 +356,73 @@ export const openToolSession = async (
       // predating #467's namespacing degrades safely: an unrecognised name
       // reads as undeclared rather than being matched by accident.
       if (readOnlyHintByRawName.get(rawName)) {
-        readOnlyToolNames.add(namespacedName);
+        readOnlyNames.push(namespacedName);
       }
     }
 
-    const owner: ToolOwner = { toolSetId, plugin: null, mcpSlug: mcp.slug };
-    const normalized = normalizeToolResults(namespaced);
-    reportToolNameCollisions(normalized, owners, owner);
-    claim(normalized, owner);
+    return {
+      kind: "mcp",
+      mcp,
+      tools: normalizeToolResults(namespaced),
+      owner: { toolSetId, plugin: null, mcpSlug: mcp.slug },
+      readOnlyNames,
+    };
   };
 
-  if (agent) {
-    // What a Tool-set factory is handed: the turn's scope with this session's
-    // Agent on it, so a parent's and a delegate's differ by exactly the Agent.
-    // The registrar is this session's own — a delegate registers into itself and
-    // the parent closes the delegate, so lifetime nests without a shared list.
-    const context: CoreToolSetContext = {
-      ...scope,
-      agentId: agent.id,
-      registerCloser,
-    };
-    // Sequentially: each Tool set is shown the names the ones before it claimed.
-    for (const toolSetId of agent.toolSetIds ?? []) {
-      await open(toolSetId, context);
+  /** {@link resolve}, with its own fault carried back rather than thrown. */
+  const resolveSafely = async (
+    toolSetId: string,
+    context: CoreToolSetContext,
+  ): Promise<Resolution> => {
+    try {
+      return await resolve(toolSetId, context);
+    } catch (error) {
+      return { kind: "failed", error };
     }
-  }
+  };
+
+  /**
+   * Fold one resolution into the turn. The only phase that touches the turn's
+   * tool map, owner map, read-only names and claimed MCP slugs, and the only
+   * one that reports a collision (through {@link claim}) — walked in
+   * `toolSetIds` order, so the winner of a contested name and the warnings that
+   * name it are what they always were, whichever resolve finished first.
+   */
+  const merge = (resolution: Resolution): void => {
+    switch (resolution.kind) {
+      case "none":
+        return;
+      // Rethrown here rather than where it was raised, so it reaches the caller
+      // in assignment order and after every sibling has finished opening.
+      case "failed":
+        throw resolution.error;
+      case "tools":
+        claim(resolution.tools, resolution.owner);
+        return;
+      case "mcp": {
+        // A turn-time backstop for two attached MCPs resolving to the same
+        // tool-namespace slug (issue #467). The DB and the create/update routes
+        // prevent this going forward, but a row created before this fix (or
+        // backfilled with a collision the app-level check never saw) can still
+        // reach here, and silently picking a winner would reintroduce the exact
+        // shadowing this issue is about — just one level up, at the MCP rather
+        // than the tool. So this fails the turn loudly instead of warning and
+        // continuing, the way a plain tool-name collision does.
+        const incumbentMcp = usedMcpSlugs.get(resolution.mcp.slug);
+        if (incumbentMcp) {
+          throw new Error(
+            `Two attached MCPs resolve to the same tool-namespace slug "${resolution.mcp.slug}": "${incumbentMcp.name}" (${incumbentMcp.id}) and "${resolution.mcp.name}" (${resolution.mcp.id}). Rename one of them.`,
+          );
+        }
+        usedMcpSlugs.set(resolution.mcp.slug, resolution.mcp);
+        claim(resolution.tools, resolution.owner);
+        for (const name of resolution.readOnlyNames) {
+          readOnlyToolNames.add(name);
+        }
+        return;
+      }
+    }
+  };
 
   const dispose = async (): Promise<void> => {
     if (disposed) return;
@@ -376,6 +444,39 @@ export const openToolSession = async (
       }
     }
   };
+
+  if (agent) {
+    // What a Tool-set factory is handed: the turn's scope with this session's
+    // Agent on it, so a parent's and a delegate's differ by exactly the Agent.
+    // The registrar is this session's own — a delegate registers into itself and
+    // the parent closes the delegate, so lifetime nests without a shared list.
+    const context: CoreToolSetContext = {
+      ...scope,
+      agentId: agent.id,
+      registerCloser,
+    };
+    // Concurrently: N MCP servers cost roughly the slowest open rather than the
+    // sum of them, which is better than 99% of a turn's preparation once an
+    // Agent attaches a few (issue #776). Nothing a Tool set *builds* ever
+    // depended on what resolved before it — a factory is called
+    // `tools(context, plugin)` and is never shown the accumulated map — so only
+    // the merge below stays ordered.
+    const resolutions = await Promise.all(
+      (agent.toolSetIds ?? []).map((toolSetId) =>
+        resolveSafely(toolSetId, context),
+      ),
+    );
+    try {
+      for (const resolution of resolutions) merge(resolution);
+    } catch (error) {
+      // The merge is the one phase that can fail the turn (two MCPs on one
+      // slug), and it throws past the caller — which never receives the session
+      // and so could never dispose it. Everything the resolve phase opened is
+      // registered by now, so this is the only place it can be closed.
+      await dispose();
+      throw error;
+    }
+  }
 
   const nest: ToolSession["nest"] = async (nestedAgent) => {
     const child = await openToolSession(scope, nestedAgent, queries);
