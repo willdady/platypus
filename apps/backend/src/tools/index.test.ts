@@ -243,43 +243,6 @@ describe("composeToolSet", () => {
     expect(tools.acme__bare).toBe(bare);
   });
 
-  it("names both plugins when it takes a tool name an earlier tool set claimed", async () => {
-    // Keyed on the *namespaced* name, because that is the name the turn's map
-    // holds and the only name two Tool sets can now contest.
-    const claimed = new Map([
-      ["acme__search", { toolSetId: "other.set", plugin: "other" }],
-    ]);
-
-    const tools = await compose({
-      search: { execute: () => ({}) } as unknown as Tool,
-    }).buildTurnTools(ctx, claimed);
-
-    // The later one still wins — assignment order is the precedence order — but
-    // the swap is no longer silent.
-    expect(tools).toHaveProperty("acme__search");
-    expect(logger.warn).toHaveBeenCalledWith(
-      expect.objectContaining({
-        tool: "acme__search",
-        plugin: "acme",
-        shadowedToolSet: "other.set",
-        shadowedPlugin: "other",
-      }),
-      expect.stringContaining("same tool name"),
-    );
-  });
-
-  it("says nothing when no name is contested", async () => {
-    const claimed = new Map([
-      ["acme__listBoards", { toolSetId: "other.set", plugin: "other" }],
-    ]);
-
-    await compose({
-      search: { execute: () => ({}) } as unknown as Tool,
-    }).buildTurnTools(ctx, claimed);
-
-    expect(logger.warn).not.toHaveBeenCalled();
-  });
-
   it("binds the plugin's deploy-time config into the factory", async () => {
     const tools = vi.fn().mockResolvedValue({});
     const plugin = makePluginContext({ config: { region: "eu" } });
@@ -367,10 +330,7 @@ describe("composeToolSet tool-name namespacing", () => {
   it("namespaces on every turn, whether or not anything collides", async () => {
     // Nothing claimed, nothing contested — the name still changes, so it never
     // depends on the order an Agent's Tool sets happen to sit in.
-    const tools = await compose({ createIssue: stub("a") }).buildTurnTools(
-      ctx,
-      new Map(),
-    );
+    const tools = await compose({ createIssue: stub("a") }).buildTurnTools(ctx);
     expect(tools).toHaveProperty("acme__createIssue");
     expect(logger.warn).not.toHaveBeenCalled();
   });
@@ -395,18 +355,10 @@ describe("composeToolSet tool-name namespacing", () => {
 
   it("gives two plugins contributing one tool name distinct names, dropping neither", async () => {
     const first = await compose({ createIssue: stub("a") }).buildTurnTools(ctx);
-    // The turn's map as the second set is shown it — the first set's tools,
-    // already claimed.
-    const claimed = new Map(
-      Object.keys(first).map((name) => [
-        name,
-        { toolSetId: "acme.widgets", plugin: "acme" },
-      ]),
-    );
     const second = await compose(
       { createIssue: stub("b") },
       { pluginName: "globex" },
-    ).buildTurnTools(ctx, claimed);
+    ).buildTurnTools(ctx);
 
     expect(Object.keys(first)).toEqual(["acme__createIssue"]);
     expect(Object.keys(second)).toEqual(["globex__createIssue"]);

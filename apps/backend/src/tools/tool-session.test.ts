@@ -291,6 +291,204 @@ describe("openToolSession", () => {
     expect(logger.warn).not.toHaveBeenCalled();
   });
 
+  describe("resolving concurrently (issue #776)", () => {
+    /**
+     * Serve `servers` MCP connections, counting how many were opening at once.
+     * Every server parks until all of them have been asked to open, or until a
+     * short real timeout — so a sequential resolve fails the assertion below
+     * with a peak of 1 rather than hanging the suite.
+     */
+    const instrumentConcurrentOpens = (servers: number) => {
+      const counts = { inFlight: 0, peak: 0 };
+      let markAllEntered: () => void = () => {};
+      const allEntered = new Promise<void>((r) => (markAllEntered = r));
+      const escapeHatch = new Promise<void>((r) => setTimeout(r, 100));
+
+      mockCreateMCPClient.mockImplementation(async () => {
+        counts.inFlight += 1;
+        counts.peak = Math.max(counts.peak, counts.inFlight);
+        if (counts.inFlight === servers) markAllEntered();
+        await Promise.race([allEntered, escapeHatch]);
+        counts.inFlight -= 1;
+        return {
+          listTools: vi.fn().mockResolvedValue({ tools: [{ name: "go" }] }),
+          toolsFromDefinitions: vi
+            .fn()
+            .mockReturnValue({ go: toolNamed("go") }),
+          close: vi.fn().mockResolvedValue(undefined),
+        };
+      });
+      return counts;
+    };
+
+    it("opens every attached MCP at once, so the slowest bounds the turn rather than the sum", async () => {
+      const counts = instrumentConcurrentOpens(3);
+
+      const session = await openToolSession(
+        scope,
+        grantedAgent("mcp-1", "mcp-2", "mcp-3"),
+        queriesFor([
+          mcpRow(),
+          mcpRow({ id: "mcp-2", name: "Two", slug: "two" }),
+          mcpRow({ id: "mcp-3", name: "Three", slug: "three" }),
+        ]),
+      );
+
+      expect(counts.peak).toBe(3);
+      expect(Object.keys(session.tools).sort()).toEqual([
+        "test_mcp__go",
+        "three__go",
+        "two__go",
+      ]);
+    });
+
+    it("merges in assignment order even when the later Tool set resolves first", async () => {
+      const finished: string[] = [];
+      let releaseSlow: () => void = () => {};
+      // Raced with a short real timeout so a resolve that never overlaps fails
+      // the order assertion below rather than hanging the suite.
+      const slow = Promise.race([
+        new Promise<void>((r) => (releaseSlow = r)),
+        new Promise<void>((r) => setTimeout(r, 100)),
+      ]);
+      register(
+        "set.slow",
+        async () => {
+          await slow;
+          finished.push("set.slow");
+          return { search: toolNamed("slow") };
+        },
+        { pluginName: "core-a" },
+      );
+      register(
+        "set.fast",
+        // Resolves before the set assigned ahead of it, and still loses the
+        // name: precedence is the Agent's assignment order, not the wire's.
+        () => {
+          releaseSlow();
+          finished.push("set.fast");
+          return Promise.resolve({ search: toolNamed("fast") });
+        },
+        { pluginName: "core-b" },
+      );
+
+      const session = await openToolSession(
+        scope,
+        grantedAgent("set.slow", "set.fast"),
+        noMcps(),
+      );
+
+      expect(finished).toEqual(["set.fast", "set.slow"]);
+      expect(session.tools.search).toEqual(toolNamed("fast"));
+      expect(logger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          tool: "search",
+          toolSet: "set.fast",
+          plugin: "core-b",
+          shadowedToolSet: "set.slow",
+          shadowedPlugin: "core-a",
+        }),
+        expect.stringContaining("same tool name"),
+      );
+    });
+
+    it("reports a name an MCP takes from a Tool set assigned before it", async () => {
+      register("set.native", { test_mcp__search: toolNamed("native") });
+      connected({ search: toolNamed("mcp") });
+
+      const session = await openToolSession(
+        scope,
+        grantedAgent("set.native", "mcp-1"),
+        queriesFor([mcpRow()]),
+      );
+
+      expect(session.tools["test_mcp__search"]).toEqual(toolNamed("mcp"));
+      expect(logger.warn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          tool: "test_mcp__search",
+          toolSet: "mcp-1",
+          mcpSlug: "test_mcp",
+          shadowedToolSet: "set.native",
+        }),
+        expect.stringContaining("same tool name"),
+      );
+    });
+
+    it("costs a failing Tool set only its own tools when it resolves beside others", async () => {
+      register("set.fanout-broken", () => {
+        throw new Error("no API key");
+      });
+      register("set.fanout-fine", { fine: toolNamed("fine") });
+      // Connects, then cannot list — the failure that used to strand a socket.
+      // Keyed by URL rather than queued, so the assertion does not depend on
+      // which of the concurrent opens reached the mock first.
+      const stranded = vi.fn().mockResolvedValue(undefined);
+      mockCreateMCPClient.mockImplementation(
+        ({ transport }: { transport: { url: string } }) =>
+          Promise.resolve(
+            transport.url === "https://broken.example.com"
+              ? {
+                  listTools: vi.fn().mockRejectedValue(new Error("gone")),
+                  toolsFromDefinitions: vi.fn(),
+                  close: stranded,
+                }
+              : {
+                  listTools: vi
+                    .fn()
+                    .mockResolvedValue({ tools: [{ name: "ok" }] }),
+                  toolsFromDefinitions: vi
+                    .fn()
+                    .mockReturnValue({ ok: toolNamed("ok") }),
+                  close: vi.fn().mockResolvedValue(undefined),
+                },
+          ),
+      );
+
+      const session = await openToolSession(
+        scope,
+        // An unknown id, a throwing factory, an MCP with no URL, a listing
+        // failure and a healthy MCP — all resolving at once.
+        grantedAgent(
+          "nope",
+          "set.fanout-broken",
+          "mcp-3",
+          "mcp-1",
+          "mcp-2",
+          "set.fanout-fine",
+        ),
+        queriesFor([
+          mcpRow({ url: "https://broken.example.com" }),
+          mcpRow({ id: "mcp-2", name: "Two", slug: "two" }),
+          mcpRow({ id: "mcp-3", name: "Three", slug: "three", url: null }),
+        ]),
+      );
+
+      expect(Object.keys(session.tools).sort()).toEqual(["fine", "two__ok"]);
+      await session.dispose();
+      expect(stranded).toHaveBeenCalled();
+    });
+
+    // The DB lookup is the one thing in the resolve phase that can still reject.
+    // It surfaces to the caller as it always did, in assignment order, and only
+    // once every sibling has finished opening — so nothing is left connected.
+    it("closes a sibling's connection when a lookup rejects the turn", async () => {
+      const close = connected({ a: toolNamed("a") });
+      const queries = {
+        getMcp: vi.fn((id: string) =>
+          id === "mcp-1"
+            ? Promise.resolve(mcpRow())
+            : Promise.reject(new Error("database is down")),
+        ),
+      };
+
+      await expect(
+        openToolSession(scope, grantedAgent("mcp-1", "mcp-2"), queries),
+      ).rejects.toThrow("database is down");
+
+      expect(close).toHaveBeenCalled();
+    });
+  });
+
   describe("the MCP branch", () => {
     it("serves an MCP server's tools, namespaced under its slug, for an id no Tool set claims, and closes it on dispose", async () => {
       const close = connected({ mcpTool: toolNamed("mcpTool") });
@@ -477,8 +675,13 @@ describe("openToolSession", () => {
       );
     });
 
-    it("fails the turn loudly when two attached MCPs resolve to the same slug", async () => {
-      connected({ a: toolNamed("a") });
+    // The throw escapes `openToolSession`, so the caller never receives a
+    // session it could dispose. Both servers have connected by the time the
+    // merge reaches the second — they resolve side by side — so closing them is
+    // this session's own job on the way out.
+    it("fails the turn loudly when two attached MCPs resolve to the same slug, closing both", async () => {
+      const first = connected({ a: toolNamed("a") });
+      const second = connected({ b: toolNamed("b") });
 
       await expect(
         openToolSession(
@@ -489,7 +692,12 @@ describe("openToolSession", () => {
             mcpRow({ id: "mcp-2", name: "Test MCP Again" }),
           ]),
         ),
-      ).rejects.toThrow(/same tool-namespace slug "test_mcp"/);
+      ).rejects.toThrow(
+        'Two attached MCPs resolve to the same tool-namespace slug "test_mcp": "Test MCP" (mcp-1) and "Test MCP Again" (mcp-2). Rename one of them.',
+      );
+
+      expect(first).toHaveBeenCalled();
+      expect(second).toHaveBeenCalled();
     });
 
     it("closes every connection even when one close throws", async () => {

@@ -1,9 +1,20 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { useRef, useState } from "react";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import {
+  act,
+  render,
+  screen,
+  fireEvent,
+  waitFor,
+} from "@testing-library/react";
 import type { Provider } from "@platypus/schemas";
 import { Composer } from "./composer";
 import { PromptInputSpeechButton } from "./ai-elements/prompt-input";
+import { toast } from "sonner";
+
+vi.mock("sonner", () => ({
+  toast: { error: vi.fn() },
+}));
 
 /**
  * Issue #749: switching models dropped the Android on-screen keyboard and
@@ -108,6 +119,13 @@ const openPicker = (trigger: HTMLElement) => {
   return screen.getByText("gpt-4o");
 };
 
+const setSecureContext = (value: boolean) => {
+  Object.defineProperty(window, "isSecureContext", {
+    value,
+    configurable: true,
+  });
+};
+
 /** Records every element that takes focus from this point on, in order. */
 const recordFocus = () => {
   const targets: EventTarget[] = [];
@@ -116,6 +134,7 @@ const recordFocus = () => {
 };
 
 beforeEach(() => {
+  vi.clearAllMocks();
   // jsdom has no matchMedia; PromptInputTextarea subscribes to it.
   window.matchMedia = vi.fn().mockReturnValue({
     matches: false,
@@ -130,6 +149,7 @@ beforeEach(() => {
     disconnect() {}
   } as unknown as typeof ResizeObserver;
   lastRecognition = null;
+  setSecureContext(true);
   window.SpeechRecognition =
     TrackingSpeechRecognition as unknown as Window["SpeechRecognition"];
 });
@@ -250,5 +270,63 @@ describe("Composer dictation", () => {
     // tap - and the button keeps its own.
     expect(onClick).toHaveBeenCalled();
     expect(lastRecognition?.start).toHaveBeenCalled();
+  });
+});
+
+/**
+ * Issue #768: a recognition failure only reached `console.error`. On a phone
+ * there is no console short of `chrome://inspect` over USB, so permission
+ * denial, an unavailable speech service and a tap that never landed all
+ * presented the same way - as nothing happening.
+ */
+describe("Composer dictation failures", () => {
+  it("says why voice input cannot run outside a secure context", () => {
+    // A LAN address over plain http: the constructor is still on `window`, so
+    // the API looks available, but no browser grants a microphone here.
+    setSecureContext(false);
+
+    const { mic } = renderComposer();
+    fireEvent.click(mic);
+
+    expect(lastRecognition).toBeNull();
+    expect(toast.error).toHaveBeenCalledWith(
+      "Voice input needs a secure connection. Open this page over HTTPS or on localhost.",
+    );
+  });
+
+  it("tells the user when the microphone is blocked", () => {
+    const { mic } = renderComposer();
+    fireEvent.click(mic);
+
+    act(() => lastRecognition?.onerror?.({ error: "not-allowed" }));
+
+    expect(toast.error).toHaveBeenCalledWith(
+      "Microphone access is blocked. Allow the microphone for this site in your browser settings.",
+    );
+  });
+
+  it("says nothing when the microphone simply heard nothing", () => {
+    const { mic } = renderComposer();
+    fireEvent.click(mic);
+
+    act(() => lastRecognition?.onerror?.({ error: "no-speech" }));
+
+    expect(toast.error).not.toHaveBeenCalled();
+  });
+
+  it("keeps the mic pressable where dictation is unavailable, so it can explain", () => {
+    Reflect.deleteProperty(window, "SpeechRecognition");
+
+    const { mic } = renderComposer();
+
+    // A disabled button takes no pointer events, so its tooltip never opens
+    // and the reason never reaches anyone.
+    expect(mic).not.toBeDisabled();
+
+    fireEvent.click(mic);
+
+    expect(toast.error).toHaveBeenCalledWith(
+      "Voice input isn't supported in this browser.",
+    );
   });
 });

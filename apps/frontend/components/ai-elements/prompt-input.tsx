@@ -19,7 +19,10 @@ import {
   InputGroupTextarea,
 } from "@/components/ui/input-group";
 import { useIsMobile } from "@/hooks/use-mobile";
-import { useSpeechToText } from "@/hooks/use-speech-to-text";
+import {
+  useSpeechToText,
+  type SpeechToTextFaultCode,
+} from "@/hooks/use-speech-to-text";
 import { isImageAttachment } from "@/lib/message-parts";
 import { cn } from "@/lib/utils";
 import type { ChatStatus, FileUIPart } from "ai";
@@ -34,6 +37,7 @@ import {
   XIcon,
 } from "lucide-react";
 import { nanoid } from "nanoid";
+import { toast } from "sonner";
 import {
   Children,
   type ClipboardEventHandler,
@@ -795,6 +799,27 @@ export type PromptInputSpeechButtonProps = ComponentProps<
   onTranscriptionChange?: (text: string) => void;
 };
 
+/**
+ * What each way dictation can fail means to the person it happened to, and
+ * what they can do about it (issue #768). Permission denial and "not available
+ * here" read differently on purpose: retrying gets you nowhere in one case and
+ * is the whole remedy in the other.
+ */
+const SPEECH_FAULT_MESSAGES: Record<SpeechToTextFaultCode, string> = {
+  unsupported: "Voice input isn't supported in this browser.",
+  "insecure-context":
+    "Voice input needs a secure connection. Open this page over HTTPS or on localhost.",
+  "not-allowed":
+    "Microphone access is blocked. Allow the microphone for this site in your browser settings.",
+  "service-not-allowed":
+    "This device's speech service isn't available, so voice input can't run here.",
+  network: "Voice input couldn't reach the speech service. Check your network.",
+  "audio-capture": "No microphone was found.",
+  "language-not-supported": "Voice input doesn't support this language.",
+  "bad-grammar": "Voice input couldn't read its recognition grammar.",
+  unknown: "Voice input stopped unexpectedly.",
+};
+
 export const PromptInputSpeechButton = ({
   className,
   textareaRef,
@@ -802,10 +827,18 @@ export const PromptInputSpeechButton = ({
   onClick,
   ...props
 }: PromptInputSpeechButtonProps) => {
-  const { isListening, isSupported, toggleListening } = useSpeechToText({
+  const { isListening, fault, toggleListening } = useSpeechToText({
     textareaRef,
     onTranscriptionChange,
   });
+
+  // Every failure the hook reports is a fresh object, so a second identical
+  // failure is a second toast rather than a silent no-op.
+  useEffect(() => {
+    if (fault) {
+      toast.error(SPEECH_FAULT_MESSAGES[fault.code]);
+    }
+  }, [fault]);
 
   return (
     <PromptInputButton
@@ -814,7 +847,10 @@ export const PromptInputSpeechButton = ({
         isListening && "animate-pulse bg-accent text-accent-foreground",
         className,
       )}
-      disabled={!isSupported}
+      // The button stays enabled even where dictation cannot run. A disabled
+      // one takes no pointer events, so its tooltip never opens and the reason
+      // never reaches anyone — the silent failure of issue #768. Pressing it
+      // answers with the reason instead.
       // `onClick` is taken out of the spread and composed here, the way
       // PromptInputTextarea handles `onKeyDown` (issue #710). A caller rarely
       // writes one by hand, but wrapping this button in a Radix trigger with
