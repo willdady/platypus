@@ -4,7 +4,6 @@ import { useState, useEffect } from "react";
 import { useResetOnChange } from "@/hooks/use-reset-on-change";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Button } from "@/components/ui/button";
 import { Field, FieldLabel, FieldGroup, FieldSet } from "@/components/ui/field";
 import {
   Select,
@@ -15,14 +14,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { ConfirmDialog } from "@/components/confirm-dialog";
 import { ExpandableTextarea } from "@/components/expandable-textarea";
 import { fetcher, joinUrl } from "@/lib/utils";
 import { writeAt } from "@/lib/api-write";
@@ -279,34 +271,16 @@ export const WorkspaceContextForm = ({ contextId }: { contextId?: string }) => {
         onDelete={() => setIsDeleteDialogOpen(true)}
       />
 
-      {/* Delete Dialog */}
-      <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Delete Context</DialogTitle>
-            <DialogDescription>
-              Are you sure you want to delete this context? This action cannot
-              be undone.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setIsDeleteDialogOpen(false)}
-              disabled={isDeleting}
-            >
-              Cancel
-            </Button>
-            <Button
-              variant="destructive"
-              onClick={handleDelete}
-              disabled={isDeleting}
-            >
-              Delete
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <ConfirmDialog
+        open={isDeleteDialogOpen}
+        onOpenChange={setIsDeleteDialogOpen}
+        title="Delete Context"
+        description="Are you sure you want to delete this context? This action cannot be undone."
+        confirmLabel="Delete"
+        confirmVariant="destructive"
+        onConfirm={handleDelete}
+        loading={isDeleting}
+      />
     </form>
   );
 };

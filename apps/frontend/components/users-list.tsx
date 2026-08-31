@@ -17,8 +17,9 @@ import { useAuth } from "@/components/auth-provider";
 import { joinUrl } from "@/lib/utils";
 import useSWR from "swr";
 import { fetcher } from "@/lib/utils";
+import { toast } from "sonner";
 import { ChangePasswordDialog } from "@/components/change-password-dialog";
-import { DeleteUserDialog } from "@/components/delete-user-dialog";
+import { ConfirmDialog } from "@/components/confirm-dialog";
 
 interface User {
   id: string;
@@ -42,11 +43,48 @@ export function UsersList() {
     null,
   );
   const [deletingUser, setDeletingUser] = useState<User | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const { data, error, isLoading, mutate } = useSWR<ListUsersResponse>(
     joinUrl(backendUrl, "/auth/admin/list-users"),
     fetcher,
   );
+
+  const handleDeleteConfirm = async () => {
+    if (!deletingUser) return;
+
+    setIsDeleting(true);
+    try {
+      const response = await fetch(
+        joinUrl(backendUrl, "/auth/admin/remove-user"),
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Origin: window.location.origin,
+          },
+          body: JSON.stringify({
+            userId: deletingUser.id,
+          }),
+          credentials: "include",
+        },
+      );
+
+      if (response.ok) {
+        toast.success(`User ${deletingUser.name} has been deleted`);
+        setDeletingUser(null);
+        mutate();
+      } else {
+        const data = await response.json();
+        toast.error(data.error || data.message || "Failed to delete user");
+      }
+    } catch (error) {
+      toast.error("Error deleting user");
+      console.error(error);
+    } finally {
+      setIsDeleting(false);
+    }
+  };
 
   if (isLoading) {
     return (
@@ -181,14 +219,23 @@ export function UsersList() {
       )}
 
       {deletingUser && (
-        <DeleteUserDialog
-          user={deletingUser}
+        <ConfirmDialog
           open={!!deletingUser}
           onOpenChange={(open) => !open && setDeletingUser(null)}
-          onSuccess={() => {
-            setDeletingUser(null);
-            mutate();
-          }}
+          title="Delete User"
+          description={
+            <>
+              This action cannot be undone. This will permanently delete the
+              user <span className="font-semibold">{deletingUser.name}</span> (
+              {deletingUser.email}) and remove all of their data from the
+              system.
+            </>
+          }
+          confirmLabel="Delete user"
+          confirmVariant="destructive"
+          confirmPhrase="delete user"
+          onConfirm={handleDeleteConfirm}
+          loading={isDeleting}
         />
       )}
     </>

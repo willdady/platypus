@@ -36,7 +36,7 @@ const eslintConfig = defineConfig([
     files: ["**/*.ts", "**/*.tsx"],
     ignores: [
       "lib/api-write.ts",
-      "components/delete-user-dialog.tsx",
+      "components/users-list.tsx",
       "components/change-password-dialog.tsx",
       "components/agent-form.tsx",
       "components/agents-list.tsx",

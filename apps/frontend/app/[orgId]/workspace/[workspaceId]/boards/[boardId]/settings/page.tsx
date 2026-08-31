@@ -11,7 +11,7 @@ import { useBackendUrl } from "@/app/client-context";
 import { useAuth } from "@/components/auth-provider";
 import { BackButton } from "@/components/back-button";
 import { KanbanBoardForm } from "@/components/kanban-board-form";
-import { DeleteBoardDialog } from "@/components/delete-board-dialog";
+import { ConfirmDialog } from "@/components/confirm-dialog";
 import { toast } from "sonner";
 
 const BoardSettingsPage = ({
@@ -89,10 +89,20 @@ const BoardSettingsPage = ({
         />
       </div>
 
-      <DeleteBoardDialog
-        boardName={data.board.name}
+      <ConfirmDialog
         open={isDeleteDialogOpen}
         onOpenChange={setIsDeleteDialogOpen}
+        title="Delete Board"
+        description={
+          <>
+            This action cannot be undone. This will permanently delete the board{" "}
+            <span className="font-semibold">{data.board.name}</span> and all of
+            its data.
+          </>
+        }
+        confirmLabel="Delete"
+        confirmVariant="destructive"
+        confirmPhrase="delete board"
         onConfirm={handleDeleteConfirm}
         loading={isDeleting}
       />

@@ -25,14 +25,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { ConfirmDialog } from "@/components/confirm-dialog";
 import { useState } from "react";
 
 const OrgInvitationsPage = () => {
@@ -207,36 +200,16 @@ const OrgInvitationsPage = () => {
         )}
       </div>
 
-      <Dialog
+      <ConfirmDialog
         open={!!invitationToDelete}
         onOpenChange={(open) => !open && setInvitationToDelete(null)}
-      >
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Delete Invitation</DialogTitle>
-            <DialogDescription>
-              Are you sure you want to delete this invitation? This action
-              cannot be undone.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setInvitationToDelete(null)}
-              disabled={isDeleting}
-            >
-              Cancel
-            </Button>
-            <Button
-              variant="destructive"
-              onClick={handleDelete}
-              disabled={isDeleting}
-            >
-              {isDeleting ? "Deleting..." : "Delete"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+        title="Delete Invitation"
+        description="Are you sure you want to delete this invitation? This action cannot be undone."
+        confirmLabel="Delete"
+        confirmVariant="destructive"
+        onConfirm={handleDelete}
+        loading={isDeleting}
+      />
     </div>
   );
 };

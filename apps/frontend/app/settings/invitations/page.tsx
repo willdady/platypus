@@ -10,14 +10,7 @@ import { toast } from "sonner";
 import useSWR from "swr";
 import { useAuth } from "@/components/auth-provider";
 import { format } from "date-fns";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { ConfirmDialog } from "@/components/confirm-dialog";
 import { useState } from "react";
 
 const UserInvitationsPage = () => {
@@ -118,37 +111,15 @@ const UserInvitationsPage = () => {
         </div>
       )}
 
-      <Dialog
+      <ConfirmDialog
         open={!!invitationToDecline}
         onOpenChange={(open) => !open && setInvitationToDecline(null)}
-      >
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Decline Invitation</DialogTitle>
-            <DialogDescription>
-              Are you sure you want to decline this invitation?
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setInvitationToDecline(null)}
-              disabled={isDeclining}
-              className="cursor-pointer"
-            >
-              Cancel
-            </Button>
-            <Button
-              variant="destructive"
-              onClick={handleDecline}
-              disabled={isDeclining}
-              className="cursor-pointer"
-            >
-              {isDeclining ? "Declining..." : "Decline"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+        title="Decline Invitation"
+        description="Are you sure you want to decline this invitation?"
+        confirmLabel="Decline"
+        onConfirm={handleDecline}
+        loading={isDeclining}
+      />
     </div>
   );
 };

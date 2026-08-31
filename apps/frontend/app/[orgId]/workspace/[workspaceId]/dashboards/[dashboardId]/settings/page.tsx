@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { DeleteDashboardDialog } from "@/components/delete-dashboard-dialog";
+import { ConfirmDialog } from "@/components/confirm-dialog";
 import { useBackendUrl } from "@/app/client-context";
 import { useAuth } from "@/components/auth-provider";
 import { fetcher, joinUrl } from "@/lib/utils";
@@ -153,10 +153,20 @@ const DashboardSettingsPage = ({
         </form>
       </div>
 
-      <DeleteDashboardDialog
-        dashboardName={dashboard.name}
+      <ConfirmDialog
         open={deleteOpen}
         onOpenChange={setDeleteOpen}
+        title="Delete Dashboard"
+        description={
+          <>
+            This action cannot be undone. This will permanently delete the
+            dashboard <span className="font-semibold">{dashboard.name}</span>{" "}
+            and all of its widgets.
+          </>
+        }
+        confirmLabel="Delete"
+        confirmVariant="destructive"
+        confirmPhrase="delete dashboard"
         onConfirm={handleDelete}
         loading={deleting}
       />

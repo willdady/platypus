@@ -54,8 +54,8 @@ async function openDeleteDialog() {
   fireEvent.click(screen.getByText("Delete"));
   // The confirmation input must be typed before the destructive button enables.
   fireEvent.change(
-    screen.getByPlaceholderText("Type 'Delete dashboard' to confirm"),
-    { target: { value: "Delete dashboard" } },
+    screen.getByPlaceholderText("Type 'delete dashboard' to confirm"),
+    { target: { value: "delete dashboard" } },
   );
 }
 

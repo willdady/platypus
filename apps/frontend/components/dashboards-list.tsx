@@ -16,7 +16,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { DeleteDashboardDialog } from "@/components/delete-dashboard-dialog";
+import { ConfirmDialog } from "@/components/confirm-dialog";
 import { EllipsisVertical, Pencil, Trash2 } from "lucide-react";
 import { type Dashboard } from "@platypus/schemas";
 import useSWR from "swr";
@@ -150,10 +150,23 @@ export const DashboardsList = ({
         ))}
       </ul>
 
-      <DeleteDashboardDialog
-        dashboardName={dashboardToDelete?.name ?? ""}
+      <ConfirmDialog
         open={deleteDialogOpen}
         onOpenChange={setDeleteDialogOpen}
+        title="Delete Dashboard"
+        description={
+          <>
+            This action cannot be undone. This will permanently delete the
+            dashboard{" "}
+            <span className="font-semibold">
+              {dashboardToDelete?.name ?? ""}
+            </span>{" "}
+            and all of its widgets.
+          </>
+        }
+        confirmLabel="Delete"
+        confirmVariant="destructive"
+        confirmPhrase="delete dashboard"
         onConfirm={handleDeleteConfirm}
         loading={deleting}
         error={deleteError}

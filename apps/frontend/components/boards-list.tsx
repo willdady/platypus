@@ -9,7 +9,7 @@ import {
   ItemContent,
 } from "@/components/ui/item";
 import { Button } from "@/components/ui/button";
-import { DeleteBoardDialog } from "@/components/delete-board-dialog";
+import { ConfirmDialog } from "@/components/confirm-dialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -155,10 +155,20 @@ export const BoardsList = ({
         ))}
       </ul>
 
-      <DeleteBoardDialog
-        boardName={boardToDelete?.name ?? ""}
+      <ConfirmDialog
         open={deleteDialogOpen}
         onOpenChange={setDeleteDialogOpen}
+        title="Delete Board"
+        description={
+          <>
+            This action cannot be undone. This will permanently delete the board{" "}
+            <span className="font-semibold">{boardToDelete?.name ?? ""}</span>{" "}
+            and all of its data.
+          </>
+        }
+        confirmLabel="Delete"
+        confirmVariant="destructive"
+        confirmPhrase="delete board"
         onConfirm={handleDeleteConfirm}
         loading={deleting}
         error={deleteError}
