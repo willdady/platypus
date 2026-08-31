@@ -19,10 +19,11 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import { ConfirmDialog } from "@/components/confirm-dialog";
+import { FormFooterButtons } from "@/components/form-footer-buttons";
 import { useState, useMemo } from "react";
 import { useResetOnChange } from "@/hooks/use-reset-on-change";
 import { useRouter } from "next/navigation";
-import { ChevronsUpDown, Trash2 } from "lucide-react";
+import { ChevronsUpDown } from "lucide-react";
 import {
   Select,
   SelectContent,
@@ -1260,31 +1261,19 @@ const TriggerForm = ({
         </FieldGroup>
       </FieldSet>
 
-      <div className="flex gap-2">
-        <Button
-          className="cursor-pointer"
-          onClick={handleSubmit}
-          disabled={
-            isSubmitting ||
-            !canSubmitForm(validationErrors, RETRACTABLE_FIELDS) ||
-            !isCronValid ||
-            (triggerType === "event" && selectedEvents.length === 0)
-          }
-        >
-          {triggerId ? "Update" : "Save"}
-        </Button>
-
-        {triggerId && (
-          <Button
-            className="cursor-pointer"
-            variant="outline"
-            onClick={() => setIsDeleteDialogOpen(true)}
-            disabled={isSubmitting}
-          >
-            <Trash2 /> Delete
-          </Button>
-        )}
-      </div>
+      <FormFooterButtons
+        submitText={triggerId ? "Update" : "Save"}
+        onSubmit={handleSubmit}
+        submitDisabled={
+          isSubmitting ||
+          !canSubmitForm(validationErrors, RETRACTABLE_FIELDS) ||
+          !isCronValid ||
+          (triggerType === "event" && selectedEvents.length === 0)
+        }
+        deleteVisible={!!triggerId}
+        deleteDisabled={isSubmitting}
+        onDelete={() => setIsDeleteDialogOpen(true)}
+      />
 
       <ConfirmDialog
         open={isDeleteDialogOpen}

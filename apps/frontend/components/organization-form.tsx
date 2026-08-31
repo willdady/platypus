@@ -10,8 +10,8 @@ import {
 } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { ExpandableTextarea } from "@/components/expandable-textarea";
-import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/confirm-dialog";
+import { FormFooterButtons } from "@/components/form-footer-buttons";
 import { useState } from "react";
 import { useResetOnChange } from "@/hooks/use-reset-on-change";
 import { useRouter } from "next/navigation";
@@ -25,7 +25,6 @@ import {
 } from "@/lib/apply-write-outcome";
 import { useBackendUrl } from "@/app/client-context";
 import { useAuth } from "@/components/auth-provider";
-import { Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import useSWR, { useSWRConfig } from "swr";
 
@@ -200,26 +199,18 @@ const OrganizationForm = ({ classNames, orgId }: OrganizationFormProps) => {
         </FieldGroup>
       </FieldSet>
 
-      <div className="flex gap-2">
-        <Button
-          onClick={handleSubmit}
-          disabled={
-            isSubmitting || !canSubmitForm(validationErrors, RETRACTABLE_FIELDS)
-          }
-        >
-          {orgId ? "Update" : "Save"}
-        </Button>
-
-        {orgId && (
-          <Button
-            variant="outline"
-            onClick={() => setIsDeleteDialogOpen(true)}
-            disabled={isSubmitting}
-          >
-            <Trash2 /> Delete
-          </Button>
-        )}
-      </div>
+      <FormFooterButtons
+        submitText={orgId ? "Update" : "Save"}
+        onSubmit={handleSubmit}
+        submitDisabled={
+          isSubmitting || !canSubmitForm(validationErrors, RETRACTABLE_FIELDS)
+        }
+        submitClassName=""
+        deleteVisible={!!orgId}
+        deleteDisabled={isSubmitting}
+        deleteClassName=""
+        onDelete={() => setIsDeleteDialogOpen(true)}
+      />
 
       <ConfirmDialog
         open={isDeleteDialogOpen}

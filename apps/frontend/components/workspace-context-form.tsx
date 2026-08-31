@@ -29,7 +29,7 @@ import { writeAt } from "@/lib/api-write";
 import { useBackendUrl } from "@/app/client-context";
 import { useAuth } from "@/components/auth-provider";
 import useSWR from "swr";
-import { Trash2 } from "lucide-react";
+import { FormFooterButtons } from "@/components/form-footer-buttons";
 import type { Organization, Workspace, Context } from "@platypus/schemas";
 
 interface WorkspaceWithOrg extends Workspace {
@@ -268,22 +268,16 @@ export const WorkspaceContextForm = ({ contextId }: { contextId?: string }) => {
         </FieldGroup>
       </FieldSet>
 
-      <div className="flex gap-2">
-        <Button type="submit" disabled={isSubmitting}>
-          {contextId ? "Update" : "Create"}
-        </Button>
-        {contextId && (
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => setIsDeleteDialogOpen(true)}
-            disabled={isSubmitting}
-          >
-            <Trash2 className="w-4 h-4" />
-            Delete
-          </Button>
-        )}
-      </div>
+      <FormFooterButtons
+        type="submit"
+        submitText={contextId ? "Update" : "Create"}
+        submitDisabled={isSubmitting}
+        submitClassName=""
+        deleteVisible={!!contextId}
+        deleteDisabled={isSubmitting}
+        deleteClassName=""
+        onDelete={() => setIsDeleteDialogOpen(true)}
+      />
 
       {/* Delete Dialog */}
       <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>

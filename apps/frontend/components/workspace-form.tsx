@@ -11,7 +11,6 @@ import {
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { ExpandableTextarea } from "@/components/expandable-textarea";
-import { Button } from "@/components/ui/button";
 import {
   Select,
   SelectContent,
@@ -20,6 +19,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { ConfirmDialog } from "@/components/confirm-dialog";
+import { FormFooterButtons } from "@/components/form-footer-buttons";
 import { useState } from "react";
 import { useResetOnChange } from "@/hooks/use-reset-on-change";
 import { useRouter } from "next/navigation";
@@ -37,7 +37,6 @@ import {
   canListOrgMembers,
   canManageWorkspaceDelegation,
 } from "@/lib/authorization";
-import { Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import useSWR, { useSWRConfig } from "swr";
 
@@ -561,26 +560,18 @@ const WorkspaceForm = ({
         </FieldGroup>
       </FieldSet>
 
-      <div className="flex gap-2">
-        <Button
-          onClick={handleSubmit}
-          disabled={
-            isSubmitting || !canSubmitForm(validationErrors, RETRACTABLE_FIELDS)
-          }
-        >
-          {workspaceId ? "Update" : "Save"}
-        </Button>
-
-        {workspaceId && (
-          <Button
-            variant="outline"
-            onClick={() => setIsDeleteDialogOpen(true)}
-            disabled={isSubmitting}
-          >
-            <Trash2 /> Delete
-          </Button>
-        )}
-      </div>
+      <FormFooterButtons
+        submitText={workspaceId ? "Update" : "Save"}
+        onSubmit={handleSubmit}
+        submitDisabled={
+          isSubmitting || !canSubmitForm(validationErrors, RETRACTABLE_FIELDS)
+        }
+        submitClassName=""
+        deleteVisible={!!workspaceId}
+        deleteDisabled={isSubmitting}
+        deleteClassName=""
+        onDelete={() => setIsDeleteDialogOpen(true)}
+      />
 
       <ConfirmDialog
         open={isDeleteDialogOpen}

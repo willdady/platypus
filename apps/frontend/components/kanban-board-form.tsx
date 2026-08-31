@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { Field, FieldLabel, FieldError } from "@/components/ui/field";
+import { FormFooterButtons } from "@/components/form-footer-buttons";
 import { useBackendUrl } from "@/app/client-context";
 import { joinUrl } from "@/lib/utils";
 import { canSubmitForm, retractFieldError } from "@/lib/form-errors";
@@ -205,29 +206,21 @@ export function KanbanBoardForm({
         </Button>
       </div>
 
-      <div className="flex gap-2">
-        <Button
-          type="submit"
-          disabled={
-            isSubmitting ||
-            isDeleting ||
-            !name.trim() ||
-            !canSubmitForm(validationErrors, RETRACTABLE_FIELDS)
-          }
-        >
-          {isEditing ? "Update" : "Create board"}
-        </Button>
-        {isEditing && onDelete && (
-          <Button
-            type="button"
-            variant="outline"
-            onClick={onDelete}
-            disabled={isSubmitting || isDeleting}
-          >
-            <Trash2 /> Delete
-          </Button>
-        )}
-      </div>
+      <FormFooterButtons
+        type="submit"
+        submitText={isEditing ? "Update" : "Create board"}
+        submitDisabled={
+          isSubmitting ||
+          isDeleting ||
+          !name.trim() ||
+          !canSubmitForm(validationErrors, RETRACTABLE_FIELDS)
+        }
+        submitClassName=""
+        deleteVisible={isEditing && !!onDelete}
+        deleteDisabled={isSubmitting || isDeleting}
+        deleteClassName=""
+        onDelete={onDelete}
+      />
     </form>
   );
 }

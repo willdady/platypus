@@ -42,6 +42,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { ConfirmDialog } from "@/components/confirm-dialog";
+import { FormFooterButtons } from "@/components/form-footer-buttons";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import {
@@ -1372,38 +1373,26 @@ const ProviderForm = ({
       </FieldSet>
 
       {!isReadOnly && (
-        <div className="flex gap-2">
-          <Button
-            className="cursor-pointer"
-            onClick={handleSubmit}
-            disabled={
-              isSubmitting ||
-              !!headersError ||
-              !!extraBodyError ||
-              // RETRACTABLE_FIELDS is deliberately empty: several fields here
-              // (apiMode, organization, project) render only for certain
-              // provider types, so a `validationErrors` key can outlive the
-              // input that would retract it. Server-returned errors must
-              // never gate Save for that reason — re-submitting simply
-              // re-validates. The JSON errors above are different: they are
-              // computed here as the user types and always clear themselves.
-              !canSubmitForm(validationErrors, RETRACTABLE_FIELDS)
-            }
-          >
-            {providerId ? "Update" : "Save"}
-          </Button>
-
-          {providerId && (
-            <Button
-              className="cursor-pointer"
-              variant="outline"
-              onClick={() => setIsDeleteDialogOpen(true)}
-              disabled={isSubmitting}
-            >
-              <Trash2 /> Delete
-            </Button>
-          )}
-        </div>
+        <FormFooterButtons
+          submitText={providerId ? "Update" : "Save"}
+          onSubmit={handleSubmit}
+          submitDisabled={
+            isSubmitting ||
+            !!headersError ||
+            !!extraBodyError ||
+            // RETRACTABLE_FIELDS is deliberately empty: several fields here
+            // (apiMode, organization, project) render only for certain
+            // provider types, so a `validationErrors` key can outlive the
+            // input that would retract it. Server-returned errors must
+            // never gate Save for that reason — re-submitting simply
+            // re-validates. The JSON errors above are different: they are
+            // computed here as the user types and always clear themselves.
+            !canSubmitForm(validationErrors, RETRACTABLE_FIELDS)
+          }
+          deleteVisible={!!providerId}
+          deleteDisabled={isSubmitting}
+          onDelete={() => setIsDeleteDialogOpen(true)}
+        />
       )}
 
       <ConfirmDialog

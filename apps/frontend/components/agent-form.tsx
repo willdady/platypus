@@ -20,18 +20,12 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import { ConfirmDialog } from "@/components/confirm-dialog";
+import { FormFooterButtons } from "@/components/form-footer-buttons";
 import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { useResetOnChange } from "@/hooks/use-reset-on-change";
 import Link from "next/link";
-import {
-  ChevronsUpDown,
-  Trash2,
-  ImageIcon,
-  Camera,
-  X,
-  Building,
-} from "lucide-react";
+import { ChevronsUpDown, ImageIcon, Camera, X, Building } from "lucide-react";
 import {
   Select,
   SelectContent,
@@ -1035,30 +1029,18 @@ const AgentForm = ({
         </Collapsible>
       </FieldSet>
 
-      <div className="flex gap-2">
-        <Button
-          className="cursor-pointer"
-          onClick={handleSubmit}
-          disabled={
-            isSubmitting ||
-            readOnly ||
-            !canSubmitForm(validationErrors, RETRACTABLE_FIELDS)
-          }
-        >
-          {agentId ? "Update" : "Save"}
-        </Button>
-
-        {agentId && !isOrgScoped && (
-          <Button
-            className="cursor-pointer"
-            variant="outline"
-            onClick={() => setIsDeleteDialogOpen(true)}
-            disabled={isSubmitting}
-          >
-            <Trash2 /> Delete
-          </Button>
-        )}
-      </div>
+      <FormFooterButtons
+        submitText={agentId ? "Update" : "Save"}
+        onSubmit={handleSubmit}
+        submitDisabled={
+          isSubmitting ||
+          readOnly ||
+          !canSubmitForm(validationErrors, RETRACTABLE_FIELDS)
+        }
+        deleteVisible={!!agentId && !isOrgScoped}
+        deleteDisabled={isSubmitting}
+        onDelete={() => setIsDeleteDialogOpen(true)}
+      />
 
       <ConfirmDialog
         open={isDeleteDialogOpen}

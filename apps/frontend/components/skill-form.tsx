@@ -10,14 +10,13 @@ import {
 } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { ExpandableTextarea } from "@/components/expandable-textarea";
-import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { ConfirmDialog } from "@/components/confirm-dialog";
+import { FormFooterButtons } from "@/components/form-footer-buttons";
 import { useState } from "react";
 import { useResetOnChange } from "@/hooks/use-reset-on-change";
 import { useRouter } from "next/navigation";
-import { Trash2 } from "lucide-react";
 import { type Skill, type Agent } from "@platypus/schemas";
 import useSWR, { useSWRConfig } from "swr";
 import { fetcher, joinUrl } from "@/lib/utils";
@@ -293,28 +292,16 @@ const SkillForm = ({
         </Card>
       )}
 
-      <div className="flex gap-2">
-        <Button
-          className="cursor-pointer"
-          onClick={handleSubmit}
-          disabled={
-            isSubmitting || !canSubmitForm(validationErrors, RETRACTABLE_FIELDS)
-          }
-        >
-          {skillId ? "Update" : "Save"}
-        </Button>
-
-        {skillId && (
-          <Button
-            className="cursor-pointer"
-            variant="outline"
-            onClick={() => setIsDeleteDialogOpen(true)}
-            disabled={isSubmitting}
-          >
-            <Trash2 /> Delete
-          </Button>
-        )}
-      </div>
+      <FormFooterButtons
+        submitText={skillId ? "Update" : "Save"}
+        onSubmit={handleSubmit}
+        submitDisabled={
+          isSubmitting || !canSubmitForm(validationErrors, RETRACTABLE_FIELDS)
+        }
+        deleteVisible={!!skillId}
+        deleteDisabled={isSubmitting}
+        onDelete={() => setIsDeleteDialogOpen(true)}
+      />
 
       <ConfirmDialog
         open={isDeleteDialogOpen}

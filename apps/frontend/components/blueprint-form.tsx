@@ -10,7 +10,6 @@ import {
 } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { ExpandableTextarea } from "@/components/expandable-textarea";
-import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import {
@@ -21,10 +20,11 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { ConfirmDialog } from "@/components/confirm-dialog";
+import { FormFooterButtons } from "@/components/form-footer-buttons";
 import { useState } from "react";
 import { useResetOnChange } from "@/hooks/use-reset-on-change";
 import { useRouter } from "next/navigation";
-import { Bot, Plug, Sparkles, Trash2, Unplug } from "lucide-react";
+import { Bot, Plug, Sparkles, Unplug } from "lucide-react";
 import type {
   Blueprint,
   BlueprintItem,
@@ -559,28 +559,16 @@ const BlueprintForm = ({
 
       {formError && <FieldError className="mb-4">{formError}</FieldError>}
 
-      <div className="flex gap-2">
-        <Button
-          className="cursor-pointer"
-          onClick={handleSubmit}
-          disabled={
-            isSubmitting || !canSubmitForm(validationErrors, RETRACTABLE_FIELDS)
-          }
-        >
-          {blueprintId ? "Update" : "Save"}
-        </Button>
-
-        {blueprintId && (
-          <Button
-            className="cursor-pointer"
-            variant="outline"
-            onClick={() => setIsDeleteDialogOpen(true)}
-            disabled={isSubmitting}
-          >
-            <Trash2 /> Delete
-          </Button>
-        )}
-      </div>
+      <FormFooterButtons
+        submitText={blueprintId ? "Update" : "Save"}
+        onSubmit={handleSubmit}
+        submitDisabled={
+          isSubmitting || !canSubmitForm(validationErrors, RETRACTABLE_FIELDS)
+        }
+        deleteVisible={!!blueprintId}
+        deleteDisabled={isSubmitting}
+        onDelete={() => setIsDeleteDialogOpen(true)}
+      />
 
       <ConfirmDialog
         open={isDeleteDialogOpen}

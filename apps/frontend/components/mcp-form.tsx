@@ -22,6 +22,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { ConfirmDialog } from "@/components/confirm-dialog";
+import { FormFooterButtons } from "@/components/form-footer-buttons";
 import { useState, useEffect } from "react";
 import { useResetOnChange } from "@/hooks/use-reset-on-change";
 import { useRouter } from "next/navigation";
@@ -879,30 +880,18 @@ const McpForm = ({
         </div>
       </FieldSet>
 
-      <div className="flex gap-2">
-        <Button
-          className="cursor-pointer"
-          onClick={handleSubmit}
-          disabled={
-            isSubmitting ||
-            isTesting ||
-            !canSubmitForm(validationErrors, RETRACTABLE_FIELDS)
-          }
-        >
-          {mcpId ? "Update" : "Save"}
-        </Button>
-
-        {mcpId && (
-          <Button
-            className="cursor-pointer"
-            variant="outline"
-            onClick={() => setIsDeleteDialogOpen(true)}
-            disabled={isSubmitting || isTesting}
-          >
-            <Trash2 /> Delete
-          </Button>
-        )}
-      </div>
+      <FormFooterButtons
+        submitText={mcpId ? "Update" : "Save"}
+        onSubmit={handleSubmit}
+        submitDisabled={
+          isSubmitting ||
+          isTesting ||
+          !canSubmitForm(validationErrors, RETRACTABLE_FIELDS)
+        }
+        deleteVisible={!!mcpId}
+        deleteDisabled={isSubmitting || isTesting}
+        onDelete={() => setIsDeleteDialogOpen(true)}
+      />
 
       <ConfirmDialog
         open={isDeleteDialogOpen}

@@ -12,6 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { ConfirmDialog } from "@/components/confirm-dialog";
+import { FormFooterButtons } from "@/components/form-footer-buttons";
 import { useCallback, useState } from "react";
 import { useResetOnChange } from "@/hooks/use-reset-on-change";
 import { useRouter } from "next/navigation";
@@ -30,7 +31,7 @@ import {
 import { toast } from "sonner";
 import { useBackendUrl } from "@/app/client-context";
 import { useAuth } from "@/components/auth-provider";
-import { Trash2, Eye, EyeOff, Copy, RefreshCw, Plus, X } from "lucide-react";
+import { Eye, EyeOff, Copy, RefreshCw, Plus, X } from "lucide-react";
 
 interface Webhook {
   id: string;
@@ -502,28 +503,16 @@ const WebhookForm = ({ orgId, workspaceId, webhookId }: WebhookFormProps) => {
         </FieldGroup>
       </FieldSet>
 
-      <div className="flex gap-2">
-        <Button
-          className="cursor-pointer"
-          onClick={handleSubmit}
-          disabled={
-            isSubmitting || !canSubmitForm(validationErrors, RETRACTABLE_FIELDS)
-          }
-        >
-          {isEditMode ? "Update" : "Save"}
-        </Button>
-
-        {isEditMode && (
-          <Button
-            className="cursor-pointer"
-            variant="outline"
-            onClick={() => setIsDeleteDialogOpen(true)}
-            disabled={isSubmitting}
-          >
-            <Trash2 /> Delete
-          </Button>
-        )}
-      </div>
+      <FormFooterButtons
+        submitText={isEditMode ? "Update" : "Save"}
+        onSubmit={handleSubmit}
+        submitDisabled={
+          isSubmitting || !canSubmitForm(validationErrors, RETRACTABLE_FIELDS)
+        }
+        deleteVisible={isEditMode}
+        deleteDisabled={isSubmitting}
+        onDelete={() => setIsDeleteDialogOpen(true)}
+      />
 
       <ConfirmDialog
         open={isDeleteDialogOpen}
