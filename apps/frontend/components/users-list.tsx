@@ -234,6 +234,7 @@ export function UsersList() {
           confirmLabel="Delete user"
           confirmVariant="destructive"
           confirmPhrase="delete user"
+          loadingLabel="Deleting..."
           onConfirm={handleDeleteConfirm}
           loading={isDeleting}
         />

@@ -117,6 +117,7 @@ const UserInvitationsPage = () => {
         title="Decline Invitation"
         description="Are you sure you want to decline this invitation?"
         confirmLabel="Decline"
+        loadingLabel="Declining..."
         onConfirm={handleDecline}
         loading={isDeclining}
       />

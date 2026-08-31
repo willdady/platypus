@@ -206,6 +206,7 @@ const OrgInvitationsPage = () => {
         title="Delete Invitation"
         description="Are you sure you want to delete this invitation? This action cannot be undone."
         confirmLabel="Delete"
+        loadingLabel="Deleting..."
         confirmVariant="destructive"
         onConfirm={handleDelete}
         loading={isDeleting}

@@ -167,6 +167,7 @@ export const DashboardsList = ({
         confirmLabel="Delete"
         confirmVariant="destructive"
         confirmPhrase="delete dashboard"
+        loadingLabel="Deleting..."
         onConfirm={handleDeleteConfirm}
         loading={deleting}
         error={deleteError}

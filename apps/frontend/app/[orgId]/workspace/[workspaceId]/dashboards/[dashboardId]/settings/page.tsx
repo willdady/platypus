@@ -167,6 +167,7 @@ const DashboardSettingsPage = ({
         confirmLabel="Delete"
         confirmVariant="destructive"
         confirmPhrase="delete dashboard"
+        loadingLabel="Deleting..."
         onConfirm={handleDelete}
         loading={deleting}
       />

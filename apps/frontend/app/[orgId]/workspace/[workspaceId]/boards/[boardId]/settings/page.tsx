@@ -103,6 +103,7 @@ const BoardSettingsPage = ({
         confirmLabel="Delete"
         confirmVariant="destructive"
         confirmPhrase="delete board"
+        loadingLabel="Deleting..."
         onConfirm={handleDeleteConfirm}
         loading={isDeleting}
       />
