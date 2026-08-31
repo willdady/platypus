@@ -46,11 +46,20 @@ import {
   findModelEntry,
   triggerRunStatsSchema,
   iframeWidgetDataSchema,
+  widgetSchema,
   widgetTypeSchema,
   widgetUpdateDataSchema,
 } from "./index";
 
 describe("iframe widget schemas", () => {
+  const widgetEnvelope = {
+    id: "widget-1",
+    dashboardId: "dashboard-1",
+    title: "Status",
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  };
+
   it("accepts an HTTPS URL and registers iframe as a widget type", () => {
     expect(
       iframeWidgetDataSchema.safeParse({
@@ -86,6 +95,56 @@ describe("iframe widget schemas", () => {
       }).success,
     ).toBe(true);
   });
+
+  it("rejects a non-HTTPS URL when parsing a complete iframe widget", () => {
+    expect(
+      widgetSchema.safeParse({
+        ...widgetEnvelope,
+        type: "iframe",
+        data: { url: "http://status.example.com/embed" },
+      }).success,
+    ).toBe(false);
+  });
+
+  it("accepts complete iframe and image widgets under their own data contracts", () => {
+    expect(
+      widgetSchema.safeParse({
+        ...widgetEnvelope,
+        type: "iframe",
+        data: { url: "https://status.example.com/embed" },
+      }).success,
+    ).toBe(true);
+    expect(
+      widgetSchema.safeParse({
+        ...widgetEnvelope,
+        type: "image",
+        data: { url: "http://cdn.example.com/status.png" },
+      }).success,
+    ).toBe(true);
+  });
+
+  it("rejects data that belongs to a different widget type", () => {
+    expect(
+      widgetSchema.safeParse({
+        ...widgetEnvelope,
+        type: "text",
+        data: { url: "https://example.com/not-text" },
+      }).success,
+    ).toBe(false);
+  });
+
+  it.each(widgetTypeSchema.options)(
+    "keeps null data valid for a %s widget",
+    (type) => {
+      expect(
+        widgetSchema.safeParse({
+          ...widgetEnvelope,
+          type,
+          data: null,
+        }).success,
+      ).toBe(true);
+    },
+  );
 });
 
 describe("Organization Schema", () => {
