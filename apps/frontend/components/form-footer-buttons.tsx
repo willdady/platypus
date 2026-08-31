@@ -1,7 +1,7 @@
 import { Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
-type FormFooterButtonsProps = {
+export type FormFooterButtonsProps = {
   submitText: string;
   onSubmit?: () => void;
   submitDisabled?: boolean;
@@ -13,7 +13,7 @@ type FormFooterButtonsProps = {
   type?: "button" | "submit";
 };
 
-const FormFooterButtons = ({
+export const FormFooterButtons = ({
   submitText,
   onSubmit,
   submitDisabled,
@@ -49,5 +49,3 @@ const FormFooterButtons = ({
     </div>
   );
 };
-
-export { FormFooterButtons };
