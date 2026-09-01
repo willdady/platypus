@@ -12,12 +12,12 @@ import {
   Wrench,
 } from "lucide-react";
 import { toast } from "sonner";
-import type {
-  TriggerRunStats,
-  TriggerRunStatus,
-  TriggerRunWithTrigger,
+import {
+  TRIGGER_RUN_STATUS_LABELS,
+  type TriggerRunStats,
+  type TriggerRunStatus,
+  type TriggerRunWithTrigger,
 } from "@platypus/schemas";
-import { TRIGGER_RUN_STATUS_LABELS } from "@platypus/schemas";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -170,9 +170,11 @@ export const TriggerRunRow = ({
                     </TooltipTrigger>
                     <TooltipContent>
                       <ul className="text-left">
-                        {cachedTokenBreakdown(stats, formatTokens).map((line) => (
-                          <li key={line}>{line}</li>
-                        ))}
+                        {cachedTokenBreakdown(stats, formatTokens).map(
+                          (line) => (
+                            <li key={line}>{line}</li>
+                          ),
+                        )}
                       </ul>
                     </TooltipContent>
                   </Tooltip>

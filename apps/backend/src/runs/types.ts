@@ -56,6 +56,13 @@ export type ParentRunContext = {
 
 export type RunStatus = "running" | "succeeded" | "failed" | "cancelled";
 
+/**
+ * What a run reports about itself. Intersected with `CachedInputTokens`, whose
+ * pair is the cached-input breakdown of `inputTokens` (issue #734), summed
+ * across the run's model calls the same way that figure is — absent where the
+ * Provider reported no cached reads (or writes) on any step, with `0` kept as
+ * the genuine measurement it is.
+ */
 export type RunStats = {
   steps?: number;
   toolCalls?: Array<{ name: string; count: number }>;
@@ -87,12 +94,6 @@ export type RunStats = {
    * step on a low ceiling.
    */
   stoppedAtStepLimit?: true;
-  /**
-   * The cached-input breakdown of `inputTokens` (issue #734), summed across the
-   * run's model calls the same way that figure is. The keys of
-   * `CachedInputTokens` — absent where the Provider reported no cached reads
-   * (or writes) on any step, with `0` kept as the genuine measurement it is.
-   */
 } & CachedInputTokens;
 
 /**

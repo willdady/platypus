@@ -31,8 +31,8 @@ export const stepOccupancy = (usage?: {
  */
 export const pickCachedInput = (
   details: CachedInputTokens | undefined,
-): Partial<CachedInputTokens> => {
-  const picked: Partial<CachedInputTokens> = {};
+): CachedInputTokens => {
+  const picked: CachedInputTokens = {};
   if (typeof details?.cacheReadTokens === "number") {
     picked.cacheReadTokens = details.cacheReadTokens;
   }

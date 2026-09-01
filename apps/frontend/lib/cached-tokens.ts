@@ -7,9 +7,8 @@ import type { CachedInputTokens } from "@platypus/schemas";
  * token formatter and wraps the lines in its own markup, but a wording change
  * now lives in one place (issue #745).
  *
- * Takes the pair as `CachedInputTokens` — also how every caller already holds
- * it, on a `tokenUsage` object or a trigger run's `stats` — so a third key
- * added to the shared type flows here without a second signature edit.
+ * Takes the pair as `CachedInputTokens`, which is how every caller already
+ * holds it — on a `tokenUsage` object or a trigger run's `stats`.
  */
 export function cachedTokenBreakdown(
   tokens: CachedInputTokens,
