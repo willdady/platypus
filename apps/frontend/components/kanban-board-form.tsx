@@ -6,6 +6,7 @@ import { mutate } from "swr";
 import { nanoid } from "nanoid";
 import { Trash2, Plus } from "lucide-react";
 import { Input } from "@/components/ui/input";
+import { FormTextField } from "@/components/form-text-field";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { Field, FieldLabel, FieldError } from "@/components/ui/field";
@@ -116,24 +117,20 @@ export function KanbanBoardForm({
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
-      <Field data-invalid={!!validationErrors.name}>
-        <FieldLabel htmlFor="name">Name</FieldLabel>
-        <Input
-          id="name"
-          value={name}
-          onChange={(e) => {
-            setValidationErrors((prev) => retractFieldError(prev, "name"));
-            setName(e.target.value);
-          }}
-          placeholder="Board name"
-          disabled={isSubmitting}
-          required
-          autoFocus={!isEditing}
-        />
-        {validationErrors.name && (
-          <FieldError>{validationErrors.name}</FieldError>
-        )}
-      </Field>
+      <FormTextField
+        label="Name"
+        name="name"
+        value={name}
+        onChange={(value) => {
+          setValidationErrors((prev) => retractFieldError(prev, "name"));
+          setName(value);
+        }}
+        placeholder="Board name"
+        disabled={isSubmitting}
+        required
+        autoFocus={!isEditing}
+        error={validationErrors.name}
+      />
       <Field data-invalid={!!validationErrors.description}>
         <FieldLabel htmlFor="description">Description</FieldLabel>
         <Textarea

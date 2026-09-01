@@ -9,6 +9,7 @@ import {
   FieldError,
 } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import { FormTextField } from "@/components/form-text-field";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { ConfirmDialog } from "@/components/confirm-dialog";
@@ -301,47 +302,34 @@ const WebhookForm = ({ orgId, workspaceId, webhookId }: WebhookFormProps) => {
     <div>
       <FieldSet className="mb-6">
         <FieldGroup>
-          <Field data-invalid={!!validationErrors.name}>
-            <FieldLabel htmlFor="name">Name</FieldLabel>
-            <Input
-              id="name"
-              type="text"
-              placeholder="My Webhook"
-              value={name}
-              onChange={(e) => {
-                clearValidationErrors("name");
-                setName(e.target.value);
-              }}
-              disabled={isSubmitting}
-              aria-invalid={!!validationErrors.name}
-              autoFocus
-            />
-            {validationErrors.name && (
-              <FieldError>{validationErrors.name}</FieldError>
-            )}
-          </Field>
+          <FormTextField
+            label="Name"
+            name="name"
+            placeholder="My Webhook"
+            value={name}
+            onChange={(value) => {
+              clearValidationErrors("name");
+              setName(value);
+            }}
+            disabled={isSubmitting}
+            error={validationErrors.name}
+            autoFocus
+          />
 
-          <Field data-invalid={!!validationErrors.url}>
-            <FieldLabel htmlFor="url">URL</FieldLabel>
-            <Input
-              id="url"
-              type="url"
-              placeholder="https://example.com/webhook"
-              value={url}
-              onChange={(e) => {
-                clearValidationErrors("url");
-                setUrl(e.target.value);
-              }}
-              disabled={isSubmitting}
-              aria-invalid={!!validationErrors.url}
-            />
-            <FieldDescription>
-              The URL that will receive webhook POST requests.
-            </FieldDescription>
-            {validationErrors.url && (
-              <FieldError>{validationErrors.url}</FieldError>
-            )}
-          </Field>
+          <FormTextField
+            label="URL"
+            name="url"
+            type="url"
+            placeholder="https://example.com/webhook"
+            value={url}
+            onChange={(value) => {
+              clearValidationErrors("url");
+              setUrl(value);
+            }}
+            disabled={isSubmitting}
+            error={validationErrors.url}
+            description="The URL that will receive webhook POST requests."
+          />
 
           <Field data-invalid={!!validationErrors.enabled}>
             <div className="flex items-center gap-3">

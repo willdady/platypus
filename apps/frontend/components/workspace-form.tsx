@@ -8,7 +8,7 @@ import {
   FieldError,
   FieldDescription,
 } from "@/components/ui/field";
-import { Input } from "@/components/ui/input";
+import { FormTextField } from "@/components/form-text-field";
 import { Switch } from "@/components/ui/switch";
 import { ExpandableTextarea } from "@/components/expandable-textarea";
 import {
@@ -180,6 +180,13 @@ const WorkspaceForm = ({
     }));
   };
 
+  // Adapts FormTextField's `onChange(value)` to handleChange's `onChange(e)`
+  // so the centralized clear-error-and-set-formData logic stays in one place.
+  const toFieldChange = (id: string) => (value: string) =>
+    handleChange({
+      target: { id, value },
+    } as React.ChangeEvent<HTMLInputElement>);
+
   const handleSubmit = async () => {
     setIsSubmitting(true);
     setValidationErrors({});
@@ -261,21 +268,16 @@ const WorkspaceForm = ({
     <div className={classNames}>
       <FieldSet className="mb-6">
         <FieldGroup>
-          <Field data-invalid={!!validationErrors.name}>
-            <FieldLabel htmlFor="name">Name</FieldLabel>
-            <Input
-              id="name"
-              placeholder="Workspace name"
-              value={formData.name}
-              onChange={handleChange}
-              disabled={isSubmitting}
-              aria-invalid={!!validationErrors.name}
-              autoFocus
-            />
-            {validationErrors.name && (
-              <FieldError>{validationErrors.name}</FieldError>
-            )}
-          </Field>
+          <FormTextField
+            label="Name"
+            name="name"
+            placeholder="Workspace name"
+            value={formData.name}
+            onChange={toFieldChange("name")}
+            disabled={isSubmitting}
+            error={validationErrors.name}
+            autoFocus
+          />
 
           {/* ADR-0008: on creation an admin assigns the workspace owner. */}
           {!workspaceId && (
@@ -466,36 +468,26 @@ const WorkspaceForm = ({
           )}
 
           {workspaceId && (
-            <Field data-invalid={!!validationErrors.maxDailySummaries}>
-              <FieldLabel htmlFor="maxDailySummaries">
-                Memory Summary Retention
-              </FieldLabel>
-              <Input
-                id="maxDailySummaries"
-                type="number"
-                min={7}
-                max={365}
-                value={formData.maxDailySummaries}
-                onChange={(e) => {
-                  setValidationErrors((prev) =>
-                    retractFieldError(prev, "maxDailySummaries"),
-                  );
-                  setFormData((prevData) => ({
-                    ...prevData,
-                    maxDailySummaries: parseInt(e.target.value) || 90,
-                  }));
-                }}
-                disabled={isSubmitting}
-                aria-invalid={!!validationErrors.maxDailySummaries}
-              />
-              <FieldDescription>
-                Maximum number of daily memory summaries to retain (7-365,
-                default 90 days).
-              </FieldDescription>
-              {validationErrors.maxDailySummaries && (
-                <FieldError>{validationErrors.maxDailySummaries}</FieldError>
-              )}
-            </Field>
+            <FormTextField
+              label="Memory Summary Retention"
+              name="maxDailySummaries"
+              type="number"
+              min={7}
+              max={365}
+              value={String(formData.maxDailySummaries)}
+              onChange={(value) => {
+                setValidationErrors((prev) =>
+                  retractFieldError(prev, "maxDailySummaries"),
+                );
+                setFormData((prevData) => ({
+                  ...prevData,
+                  maxDailySummaries: parseInt(value) || 90,
+                }));
+              }}
+              disabled={isSubmitting}
+              error={validationErrors.maxDailySummaries}
+              description="Maximum number of daily memory summaries to retain (7-365, default 90 days)."
+            />
           )}
 
           {/* Delegation flags (ADR-0006) — admin-only. When off, only org

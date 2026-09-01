@@ -9,8 +9,8 @@ import {
   FieldDescription,
   FieldError,
 } from "@/components/ui/field";
-import { Input } from "@/components/ui/input";
 import { ExpandableTextarea } from "@/components/expandable-textarea";
+import { FormTextField } from "@/components/form-text-field";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
@@ -259,6 +259,13 @@ const AgentForm = ({
       [id]: value,
     }));
   };
+
+  // Adapts FormTextField's `onChange(value)` to handleChange's `onChange(e)`
+  // so the centralized clear-error-and-set-formData logic stays in one place.
+  const toFieldChange = (id: string) => (value: string) =>
+    handleChange({
+      target: { id, value },
+    } as React.ChangeEvent<HTMLInputElement>);
 
   const handleNumberChange = (id: string, value: string) => {
     clearValidationErrors(id);
@@ -576,21 +583,16 @@ const AgentForm = ({
         </div>
 
         <FieldGroup>
-          <Field data-invalid={!!validationErrors.name}>
-            <FieldLabel htmlFor="name">Name</FieldLabel>
-            <Input
-              id="name"
-              placeholder="Name"
-              value={formData.name}
-              onChange={handleChange}
-              disabled={isSubmitting || readOnly}
-              aria-invalid={!!validationErrors.name}
-              autoFocus
-            />
-            {validationErrors.name && (
-              <FieldError>{validationErrors.name}</FieldError>
-            )}
-          </Field>
+          <FormTextField
+            label="Name"
+            name="name"
+            placeholder="Name"
+            value={formData.name}
+            onChange={toFieldChange("name")}
+            disabled={isSubmitting || readOnly}
+            error={validationErrors.name}
+            autoFocus
+          />
           <Field data-invalid={!!validationErrors.description}>
             <ExpandableTextarea
               id="description"
@@ -605,27 +607,17 @@ const AgentForm = ({
               error={validationErrors.description}
             />
           </Field>
-          <Field data-invalid={!!validationErrors.inputPlaceholder}>
-            <FieldLabel htmlFor="inputPlaceholder">
-              Input Placeholder
-            </FieldLabel>
-            <Input
-              id="inputPlaceholder"
-              placeholder="What would you like to know?"
-              value={formData.inputPlaceholder}
-              onChange={handleChange}
-              disabled={isSubmitting || readOnly}
-              maxLength={100}
-              aria-invalid={!!validationErrors.inputPlaceholder}
-            />
-            <FieldDescription>
-              Custom placeholder text shown in the chat input when this agent is
-              selected
-            </FieldDescription>
-            {validationErrors.inputPlaceholder && (
-              <FieldError>{validationErrors.inputPlaceholder}</FieldError>
-            )}
-          </Field>
+          <FormTextField
+            label="Input Placeholder"
+            name="inputPlaceholder"
+            placeholder="What would you like to know?"
+            value={formData.inputPlaceholder}
+            onChange={toFieldChange("inputPlaceholder")}
+            disabled={isSubmitting || readOnly}
+            maxLength={100}
+            error={validationErrors.inputPlaceholder}
+            description="Custom placeholder text shown in the chat input when this agent is selected"
+          />
           <Field data-invalid={!!validationErrors.instructions}>
             <ExpandableTextarea
               id="instructions"
@@ -716,25 +708,18 @@ const AgentForm = ({
               </Field>
             );
           })()}
-          <Field className="w-1/2" data-invalid={!!validationErrors.maxSteps}>
-            <FieldLabel htmlFor="maxSteps">Max steps</FieldLabel>
-            <Input
-              id="maxSteps"
-              type="number"
-              min="1"
-              value={formData.maxSteps}
-              onChange={(e) => handleNumberChange("maxSteps", e.target.value)}
-              disabled={isSubmitting || readOnly}
-              aria-invalid={!!validationErrors.maxSteps}
-            />
-            <FieldDescription>
-              Controls when a tool-calling loop should stop based on the number
-              of steps executed
-            </FieldDescription>
-            {validationErrors.maxSteps && (
-              <FieldError>{validationErrors.maxSteps}</FieldError>
-            )}
-          </Field>
+          <FormTextField
+            className="w-1/2"
+            label="Max steps"
+            name="maxSteps"
+            type="number"
+            min="1"
+            value={String(formData.maxSteps)}
+            onChange={(value) => handleNumberChange("maxSteps", value)}
+            disabled={isSubmitting || readOnly}
+            error={validationErrors.maxSteps}
+            description="Controls when a tool-calling loop should stop based on the number of steps executed"
+          />
         </FieldGroup>
 
         {toolSets.length > 0 && (
@@ -918,112 +903,76 @@ const AgentForm = ({
           </CollapsibleTrigger>
           <CollapsibleContent className="mb-6">
             <FieldGroup className="grid grid-cols-2">
-              <Field data-invalid={!!validationErrors.temperature}>
-                <FieldLabel htmlFor="temperature">Temperature</FieldLabel>
-                <Input
-                  id="temperature"
-                  type="number"
-                  min="0"
-                  step="0.1"
-                  value={formData.temperature ?? ""}
-                  onChange={(e) =>
-                    handleFloatChange("temperature", e.target.value)
-                  }
-                  disabled={isSubmitting || readOnly}
-                  aria-invalid={!!validationErrors.temperature}
-                />
-                {validationErrors.temperature && (
-                  <FieldError>{validationErrors.temperature}</FieldError>
-                )}
-              </Field>
-              <Field data-invalid={!!validationErrors.seed}>
-                <FieldLabel htmlFor="seed">Seed</FieldLabel>
-                <Input
-                  id="seed"
-                  type="number"
-                  value={formData.seed ?? ""}
-                  onChange={(e) => handleNumberChange("seed", e.target.value)}
-                  disabled={isSubmitting || readOnly}
-                  aria-invalid={!!validationErrors.seed}
-                />
-                {validationErrors.seed && (
-                  <FieldError>{validationErrors.seed}</FieldError>
-                )}
-              </Field>
-              <Field data-invalid={!!validationErrors.topP}>
-                <FieldLabel htmlFor="topP">Top-p</FieldLabel>
-                <Input
-                  id="topP"
-                  type="number"
-                  min="0"
-                  max="1"
-                  step="0.1"
-                  value={formData.topP ?? ""}
-                  onChange={(e) => handleFloatChange("topP", e.target.value)}
-                  disabled={isSubmitting || readOnly}
-                  aria-invalid={!!validationErrors.topP}
-                />
-                {validationErrors.topP && (
-                  <FieldError>{validationErrors.topP}</FieldError>
-                )}
-              </Field>
-              <Field data-invalid={!!validationErrors.topK}>
-                <FieldLabel htmlFor="topK">Top-k</FieldLabel>
-                <Input
-                  id="topK"
-                  type="number"
-                  min="1"
-                  value={formData.topK ?? ""}
-                  onChange={(e) => handleNumberChange("topK", e.target.value)}
-                  disabled={isSubmitting || readOnly}
-                  aria-invalid={!!validationErrors.topK}
-                />
-                {validationErrors.topK && (
-                  <FieldError>{validationErrors.topK}</FieldError>
-                )}
-              </Field>
-              <Field data-invalid={!!validationErrors.presencePenalty}>
-                <FieldLabel htmlFor="presencePenalty">
-                  Presence Penalty
-                </FieldLabel>
-                <Input
-                  id="presencePenalty"
-                  type="number"
-                  min="-2"
-                  max="2"
-                  step="0.1"
-                  value={formData.presencePenalty ?? ""}
-                  onChange={(e) =>
-                    handleFloatChange("presencePenalty", e.target.value)
-                  }
-                  disabled={isSubmitting || readOnly}
-                  aria-invalid={!!validationErrors.presencePenalty}
-                />
-                {validationErrors.presencePenalty && (
-                  <FieldError>{validationErrors.presencePenalty}</FieldError>
-                )}
-              </Field>
-              <Field data-invalid={!!validationErrors.frequencyPenalty}>
-                <FieldLabel htmlFor="frequencyPenalty">
-                  Frequency Penalty
-                </FieldLabel>
-                <Input
-                  id="frequencyPenalty"
-                  type="number"
-                  min="-2"
-                  max="2"
-                  step="0.1"
-                  value={formData.frequencyPenalty ?? ""}
-                  onChange={(e) =>
-                    handleFloatChange("frequencyPenalty", e.target.value)
-                  }
-                  disabled={isSubmitting || readOnly}
-                  aria-invalid={!!validationErrors.frequencyPenalty}
-                />
-                {validationErrors.frequencyPenalty && (
-                  <FieldError>{validationErrors.frequencyPenalty}</FieldError>
-                )}
-              </Field>
+              <FormTextField
+                label="Temperature"
+                name="temperature"
+                type="number"
+                min="0"
+                step="0.1"
+                value={String(formData.temperature ?? "")}
+                onChange={(value) => handleFloatChange("temperature", value)}
+                disabled={isSubmitting || readOnly}
+                error={validationErrors.temperature}
+              />
+              <FormTextField
+                label="Seed"
+                name="seed"
+                type="number"
+                value={String(formData.seed ?? "")}
+                onChange={(value) => handleNumberChange("seed", value)}
+                disabled={isSubmitting || readOnly}
+                error={validationErrors.seed}
+              />
+              <FormTextField
+                label="Top-p"
+                name="topP"
+                type="number"
+                min="0"
+                max="1"
+                step="0.1"
+                value={String(formData.topP ?? "")}
+                onChange={(value) => handleFloatChange("topP", value)}
+                disabled={isSubmitting || readOnly}
+                error={validationErrors.topP}
+              />
+              <FormTextField
+                label="Top-k"
+                name="topK"
+                type="number"
+                min="1"
+                value={String(formData.topK ?? "")}
+                onChange={(value) => handleNumberChange("topK", value)}
+                disabled={isSubmitting || readOnly}
+                error={validationErrors.topK}
+              />
+              <FormTextField
+                label="Presence Penalty"
+                name="presencePenalty"
+                type="number"
+                min="-2"
+                max="2"
+                step="0.1"
+                value={String(formData.presencePenalty ?? "")}
+                onChange={(value) =>
+                  handleFloatChange("presencePenalty", value)
+                }
+                disabled={isSubmitting || readOnly}
+                error={validationErrors.presencePenalty}
+              />
+              <FormTextField
+                label="Frequency Penalty"
+                name="frequencyPenalty"
+                type="number"
+                min="-2"
+                max="2"
+                step="0.1"
+                value={String(formData.frequencyPenalty ?? "")}
+                onChange={(value) =>
+                  handleFloatChange("frequencyPenalty", value)
+                }
+                disabled={isSubmitting || readOnly}
+                error={validationErrors.frequencyPenalty}
+              />
             </FieldGroup>
           </CollapsibleContent>
         </Collapsible>

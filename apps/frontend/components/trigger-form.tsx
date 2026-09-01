@@ -8,8 +8,8 @@ import {
   FieldDescription,
   FieldError,
 } from "@/components/ui/field";
-import { Input } from "@/components/ui/input";
 import { ExpandableTextarea } from "@/components/expandable-textarea";
+import { FormTextField } from "@/components/form-text-field";
 import { AgentAvatar } from "@/components/agent-avatar";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
@@ -523,6 +523,13 @@ const TriggerForm = ({
     }));
   };
 
+  // Adapts FormTextField's `onChange(value)` to handleChange's `onChange(e)`
+  // so the centralized clear-error-and-set-formData logic stays in one place.
+  const toFieldChange = (id: string) => (value: string) =>
+    handleChange({
+      target: { id, value },
+    } as React.ChangeEvent<HTMLInputElement>);
+
   const handleNumberChange = (id: string, value: string) => {
     setFormData((prevData) => ({
       ...prevData,
@@ -668,36 +675,26 @@ const TriggerForm = ({
             </Select>
           </Field>
 
-          <Field data-invalid={!!validationErrors.name}>
-            <FieldLabel htmlFor="name">Name</FieldLabel>
-            <Input
-              id="name"
-              placeholder="Daily report generation"
-              value={formData.name}
-              onChange={handleChange}
-              disabled={isSubmitting}
-              aria-invalid={!!validationErrors.name}
-              autoFocus
-            />
-            {validationErrors.name && (
-              <FieldError>{validationErrors.name}</FieldError>
-            )}
-          </Field>
+          <FormTextField
+            label="Name"
+            name="name"
+            placeholder="Daily report generation"
+            value={formData.name}
+            onChange={toFieldChange("name")}
+            disabled={isSubmitting}
+            error={validationErrors.name}
+            autoFocus
+          />
 
-          <Field data-invalid={!!validationErrors.description}>
-            <FieldLabel htmlFor="description">Description</FieldLabel>
-            <Input
-              id="description"
-              placeholder="Optional description..."
-              value={formData.description}
-              onChange={handleChange}
-              disabled={isSubmitting}
-              aria-invalid={!!validationErrors.description}
-            />
-            {validationErrors.description && (
-              <FieldError>{validationErrors.description}</FieldError>
-            )}
-          </Field>
+          <FormTextField
+            label="Description"
+            name="description"
+            placeholder="Optional description..."
+            value={formData.description}
+            onChange={toFieldChange("description")}
+            disabled={isSubmitting}
+            error={validationErrors.description}
+          />
 
           <Field data-invalid={!!validationErrors.agentId}>
             <FieldLabel>Agent</FieldLabel>
@@ -956,30 +953,25 @@ const TriggerForm = ({
 
               {/* Advanced Mode */}
               {scheduleMode === "advanced" && (
-                <Field data-invalid={!!validationErrors.cronExpression}>
-                  <FieldLabel htmlFor="cronExpression">
-                    Cron Expression
-                  </FieldLabel>
-                  <Input
-                    id="cronExpression"
-                    placeholder="0 9 * * *"
-                    value={formData.cronExpression}
-                    onChange={handleChange}
-                    disabled={isSubmitting}
-                    aria-invalid={!!validationErrors.cronExpression}
-                    className={!isCronValid ? "border-destructive" : ""}
-                  />
-                  <FieldDescription>
-                    Format: minute hour day-of-month month day-of-week. Example:
-                    &quot;0 9 * * *&quot; runs daily at 9:00 AM.
-                  </FieldDescription>
-                  {validationErrors.cronExpression && (
-                    <FieldError>{validationErrors.cronExpression}</FieldError>
-                  )}
-                  {!isCronValid && !validationErrors.cronExpression && (
-                    <FieldError>Invalid cron expression</FieldError>
-                  )}
-                </Field>
+                <FormTextField
+                  label="Cron Expression"
+                  name="cronExpression"
+                  placeholder="0 9 * * *"
+                  value={formData.cronExpression}
+                  onChange={toFieldChange("cronExpression")}
+                  disabled={isSubmitting}
+                  inputClassName={!isCronValid ? "border-destructive" : ""}
+                  error={
+                    validationErrors.cronExpression ||
+                    (!isCronValid ? "Invalid cron expression" : undefined)
+                  }
+                  description={
+                    <>
+                      Format: minute hour day-of-month month day-of-week.
+                      Example: &quot;0 9 * * *&quot; runs daily at 9:00 AM.
+                    </>
+                  }
+                />
               )}
 
               <Field data-invalid={!!validationErrors.timezone}>
@@ -1158,23 +1150,18 @@ const TriggerForm = ({
               </Field>
             )}
 
-          <Field className="w-1/2">
-            <FieldLabel htmlFor="maxRunsToKeep">Max Runs to Keep</FieldLabel>
-            <Input
-              id="maxRunsToKeep"
-              type="number"
-              min="1"
-              max="1000"
-              value={formData.maxRunsToKeep}
-              onChange={(e) =>
-                handleNumberChange("maxRunsToKeep", e.target.value)
-              }
-              disabled={isSubmitting}
-            />
-            <FieldDescription>
-              Maximum number of run records to keep (oldest will be deleted)
-            </FieldDescription>
-          </Field>
+          <FormTextField
+            className="w-1/2"
+            label="Max Runs to Keep"
+            name="maxRunsToKeep"
+            type="number"
+            min="1"
+            max="1000"
+            value={String(formData.maxRunsToKeep)}
+            onChange={(value) => handleNumberChange("maxRunsToKeep", value)}
+            disabled={isSubmitting}
+            description="Maximum number of run records to keep (oldest will be deleted)"
+          />
 
           <Field orientation="horizontal">
             <Switch

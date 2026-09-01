@@ -6,9 +6,8 @@ import {
   FieldGroup,
   FieldSet,
   FieldDescription,
-  FieldError,
 } from "@/components/ui/field";
-import { Input } from "@/components/ui/input";
+import { FormTextField } from "@/components/form-text-field";
 import { ExpandableTextarea } from "@/components/expandable-textarea";
 import { Switch } from "@/components/ui/switch";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
@@ -136,6 +135,13 @@ const SkillForm = ({
     }));
   };
 
+  // Adapts FormTextField's `onChange(value)` to handleChange's `onChange(e)`
+  // so the centralized clear-error-and-set-formData logic stays in one place.
+  const toFieldChange = (id: string) => (value: string) =>
+    handleChange({
+      target: { id, value },
+    } as React.ChangeEvent<HTMLInputElement>);
+
   const handleSubmit = async () => {
     setIsSubmitting(true);
     setValidationErrors({});
@@ -197,28 +203,21 @@ const SkillForm = ({
     <div className={classNames}>
       <FieldSet className="mb-6">
         <FieldGroup className="gap-4">
-          <Field data-invalid={!!validationErrors.name}>
-            <FieldLabel htmlFor="name">Name</FieldLabel>
-            <Input
-              id="name"
-              placeholder="skill-name"
-              value={formData.name}
-              onChange={handleChange}
-              disabled={isSubmitting}
-              aria-invalid={!!validationErrors.name}
-              autoFocus
-            />
-            <div className="flex justify-between mt-1">
-              {validationErrors.name ? (
-                <FieldError>{validationErrors.name}</FieldError>
-              ) : (
-                <div />
-              )}
+          <FormTextField
+            label="Name"
+            name="name"
+            placeholder="skill-name"
+            value={formData.name}
+            onChange={toFieldChange("name")}
+            disabled={isSubmitting}
+            error={validationErrors.name}
+            autoFocus
+            trailing={
               <p className="text-xs text-muted-foreground">
                 {formData.name.length}/64
               </p>
-            </div>
-          </Field>
+            }
+          />
           <Field data-invalid={!!validationErrors.description}>
             <ExpandableTextarea
               id="description"

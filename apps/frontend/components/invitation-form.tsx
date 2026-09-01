@@ -8,7 +8,7 @@ import {
   FieldError,
   FieldDescription,
 } from "@/components/ui/field";
-import { Input } from "@/components/ui/input";
+import { FormTextField } from "@/components/form-text-field";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { useState } from "react";
@@ -129,47 +129,36 @@ export function InvitationForm({ orgId, onSuccess }: InvitationFormProps) {
       <FieldSet>
         <FieldGroup className="gap-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <Field data-invalid={!!validationErrors.email}>
-              <FieldLabel htmlFor="email">Email</FieldLabel>
-              <Input
-                id="email"
-                type="email"
-                placeholder="user@example.com"
-                value={email}
-                onChange={(e) => {
-                  setEmail(e.target.value);
-                  setValidationErrors((prev) =>
-                    retractFieldError(prev, "email"),
-                  );
-                }}
-                disabled={isSubmitting}
-                autoFocus
-                required
-              />
-              {validationErrors.email && (
-                <FieldError>{validationErrors.email}</FieldError>
-              )}
-            </Field>
+            <FormTextField
+              label="Email"
+              name="email"
+              type="email"
+              placeholder="user@example.com"
+              value={email}
+              onChange={(value) => {
+                setEmail(value);
+                setValidationErrors((prev) => retractFieldError(prev, "email"));
+              }}
+              disabled={isSubmitting}
+              error={validationErrors.email}
+              autoFocus
+              required
+            />
 
-            <Field data-invalid={!!validationErrors.workspaceName}>
-              <FieldLabel htmlFor="workspaceName">Workspace name</FieldLabel>
-              <Input
-                id="workspaceName"
-                type="text"
-                placeholder="Defaults to the member's name"
-                value={workspaceName}
-                onChange={(e) => {
-                  setWorkspaceName(e.target.value);
-                  setValidationErrors((prev) =>
-                    retractFieldError(prev, "workspaceName"),
-                  );
-                }}
-                disabled={isSubmitting}
-              />
-              {validationErrors.workspaceName && (
-                <FieldError>{validationErrors.workspaceName}</FieldError>
-              )}
-            </Field>
+            <FormTextField
+              label="Workspace name"
+              name="workspaceName"
+              placeholder="Defaults to the member's name"
+              value={workspaceName}
+              onChange={(value) => {
+                setWorkspaceName(value);
+                setValidationErrors((prev) =>
+                  retractFieldError(prev, "workspaceName"),
+                );
+              }}
+              disabled={isSubmitting}
+              error={validationErrors.workspaceName}
+            />
           </div>
 
           {/* ADR-0009: the invitation carries an ordered set of blueprints,

@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { mutate } from "swr";
 import { ResourcePage } from "@/components/resource-page";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { FormTextField } from "@/components/form-text-field";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useBackendUrl } from "@/app/client-context";
@@ -67,16 +67,14 @@ const CreateDashboardPage = ({
       variant="create"
     >
       <form onSubmit={handleSubmit} className="space-y-4">
-        <div className="space-y-2">
-          <Label htmlFor="name">Name</Label>
-          <Input
-            id="name"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="My Dashboard"
-            required
-          />
-        </div>
+        <FormTextField
+          label="Name"
+          name="name"
+          value={name}
+          onChange={setName}
+          placeholder="My Dashboard"
+          required
+        />
         <div className="space-y-2">
           <Label htmlFor="description">Description</Label>
           <Textarea

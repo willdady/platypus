@@ -11,6 +11,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { ExpandableTextarea } from "@/components/expandable-textarea";
+import { FormTextField } from "@/components/form-text-field";
 import { RevealableInput } from "@/components/ui/revealable-input";
 import { Button } from "@/components/ui/button";
 import {
@@ -679,6 +680,13 @@ const ProviderForm = ({
     }
   };
 
+  // Adapts FormTextField's `onChange(value)` to handleChange's `onChange(e)`
+  // so the centralized clear-error-and-set-formData logic stays in one place.
+  const toFieldChange = (id: string) => (value: string) =>
+    handleChange({
+      target: { id, value },
+    } as React.ChangeEvent<HTMLInputElement>);
+
   const handleSelectChange = (id: string, value: string) => {
     // Clear validation error for this field
     setValidationErrors((prev) => retractFieldError(prev, id));
@@ -939,21 +947,16 @@ const ProviderForm = ({
             </Select>
           </Field>
 
-          <Field data-invalid={!!validationErrors.name}>
-            <FieldLabel htmlFor="name">Name</FieldLabel>
-            <Input
-              id="name"
-              placeholder="Name"
-              value={formData.name}
-              onChange={handleChange}
-              disabled={isSubmitting || isReadOnly}
-              aria-invalid={!!validationErrors.name}
-              autoFocus
-            />
-            {validationErrors.name && (
-              <FieldError>{validationErrors.name}</FieldError>
-            )}
-          </Field>
+          <FormTextField
+            label="Name"
+            name="name"
+            placeholder="Name"
+            value={formData.name}
+            onChange={toFieldChange("name")}
+            disabled={isSubmitting || isReadOnly}
+            error={validationErrors.name}
+            autoFocus
+          />
 
           <Field data-invalid={!!validationErrors.apiKey}>
             <FieldLabel htmlFor="apiKey">API Key</FieldLabel>
@@ -972,43 +975,29 @@ const ProviderForm = ({
           </Field>
 
           {formData.providerType === "Bedrock" && (
-            <Field data-invalid={!!validationErrors.region}>
-              <FieldLabel htmlFor="region">Region</FieldLabel>
-              <Input
-                id="region"
-                placeholder="us-east-1"
-                value={formData.region}
-                onChange={handleChange}
-                disabled={isSubmitting || isReadOnly}
-                aria-invalid={!!validationErrors.region}
-              />
-              <FieldDescription>
-                AWS region identifier (e.g., us-east-1, eu-west-1).
-              </FieldDescription>
-              {validationErrors.region && (
-                <FieldError>{validationErrors.region}</FieldError>
-              )}
-            </Field>
+            <FormTextField
+              label="Region"
+              name="region"
+              placeholder="us-east-1"
+              value={formData.region ?? ""}
+              onChange={toFieldChange("region")}
+              disabled={isSubmitting || isReadOnly}
+              error={validationErrors.region}
+              description="AWS region identifier (e.g., us-east-1, eu-west-1)."
+            />
           )}
 
-          <Field data-invalid={!!validationErrors.baseUrl}>
-            <FieldLabel htmlFor="baseUrl">Base URL</FieldLabel>
-            <Input
-              id="baseUrl"
-              type="url"
-              placeholder="https://api.example.com/"
-              value={formData.baseUrl}
-              onChange={handleChange}
-              disabled={isSubmitting || isReadOnly}
-              aria-invalid={!!validationErrors.baseUrl}
-            />
-            <FieldDescription>
-              Optional base URL for the provider.
-            </FieldDescription>
-            {validationErrors.baseUrl && (
-              <FieldError>{validationErrors.baseUrl}</FieldError>
-            )}
-          </Field>
+          <FormTextField
+            label="Base URL"
+            name="baseUrl"
+            type="url"
+            placeholder="https://api.example.com/"
+            value={formData.baseUrl ?? ""}
+            onChange={toFieldChange("baseUrl")}
+            disabled={isSubmitting || isReadOnly}
+            error={validationErrors.baseUrl}
+            description="Optional base URL for the provider."
+          />
 
           {/* Invalid only for an error against the list itself: `data-invalid`
               reddens every descendant, which on a row error would paint the
@@ -1053,88 +1042,51 @@ const ProviderForm = ({
             {modelIdsError && <FieldError>{modelIdsError}</FieldError>}
           </Field>
 
-          <Field data-invalid={!!validationErrors.taskModelId}>
-            <FieldLabel htmlFor="taskModelId">Task Model ID</FieldLabel>
-            <Input
-              id="taskModelId"
-              placeholder="gpt-4"
-              value={formData.taskModelId}
-              onChange={handleChange}
-              disabled={isSubmitting || isReadOnly}
-              aria-invalid={!!validationErrors.taskModelId}
-            />
-            <FieldDescription>
-              Model to use for chat metadata generation.
-            </FieldDescription>
-            {validationErrors.taskModelId && (
-              <FieldError>{validationErrors.taskModelId}</FieldError>
-            )}
-          </Field>
+          <FormTextField
+            label="Task Model ID"
+            name="taskModelId"
+            placeholder="gpt-4"
+            value={formData.taskModelId}
+            onChange={toFieldChange("taskModelId")}
+            disabled={isSubmitting || isReadOnly}
+            error={validationErrors.taskModelId}
+            description="Model to use for chat metadata generation."
+          />
 
-          <Field data-invalid={!!validationErrors.memoryExtractionModelId}>
-            <FieldLabel htmlFor="memoryExtractionModelId">
-              Memory Extraction Model ID
-            </FieldLabel>
-            <Input
-              id="memoryExtractionModelId"
-              placeholder="gpt-4"
-              value={formData.memoryExtractionModelId}
-              onChange={handleChange}
-              disabled={isSubmitting || isReadOnly}
-              aria-invalid={!!validationErrors.memoryExtractionModelId}
-            />
-            <FieldDescription>
-              Model to use for extracting memories from conversations.
-            </FieldDescription>
-            {validationErrors.memoryExtractionModelId && (
-              <FieldError>
-                {validationErrors.memoryExtractionModelId}
-              </FieldError>
-            )}
-          </Field>
+          <FormTextField
+            label="Memory Extraction Model ID"
+            name="memoryExtractionModelId"
+            placeholder="gpt-4"
+            value={formData.memoryExtractionModelId}
+            onChange={toFieldChange("memoryExtractionModelId")}
+            disabled={isSubmitting || isReadOnly}
+            error={validationErrors.memoryExtractionModelId}
+            description="Model to use for extracting memories from conversations."
+          />
 
-          <Field data-invalid={!!validationErrors.embeddingModelId}>
-            <FieldLabel htmlFor="embeddingModelId">
-              Embedding Model ID
-            </FieldLabel>
-            <Input
-              id="embeddingModelId"
-              placeholder="text-embedding-3-small"
-              value={formData.embeddingModelId || ""}
-              onChange={handleChange}
-              disabled={isSubmitting || isReadOnly}
-              aria-invalid={!!validationErrors.embeddingModelId}
-            />
-            <FieldDescription>
-              Model to use for generating memory embeddings. Required for
-              semantic memory search.
-            </FieldDescription>
-            {validationErrors.embeddingModelId && (
-              <FieldError>{validationErrors.embeddingModelId}</FieldError>
-            )}
-          </Field>
+          <FormTextField
+            label="Embedding Model ID"
+            name="embeddingModelId"
+            placeholder="text-embedding-3-small"
+            value={formData.embeddingModelId || ""}
+            onChange={toFieldChange("embeddingModelId")}
+            disabled={isSubmitting || isReadOnly}
+            error={validationErrors.embeddingModelId}
+            description="Model to use for generating memory embeddings. Required for semantic memory search."
+          />
 
           {formData.embeddingModelId && (
-            <Field data-invalid={!!validationErrors.embeddingDimensions}>
-              <FieldLabel htmlFor="embeddingDimensions">
-                Embedding Dimensions
-              </FieldLabel>
-              <Input
-                id="embeddingDimensions"
-                type="number"
-                placeholder="1536"
-                value={formData.embeddingDimensions}
-                onChange={handleChange}
-                disabled={isSubmitting || isReadOnly}
-                aria-invalid={!!validationErrors.embeddingDimensions}
-              />
-              <FieldDescription>
-                Number of dimensions for the embedding model output (256-4096).
-              </FieldDescription>
-              {validationErrors.embeddingDimensions && (
-                <FieldError>{validationErrors.embeddingDimensions}</FieldError>
-              )}
-            </Field>
+            <FormTextField
+              label="Embedding Dimensions"
+              name="embeddingDimensions"
+              type="number"
+              placeholder="1536"
+              value={formData.embeddingDimensions}
+              onChange={toFieldChange("embeddingDimensions")}
+              disabled={isSubmitting || isReadOnly}
+              error={validationErrors.embeddingDimensions}
+              description="Number of dimensions for the embedding model output (256-4096)."
+            />
           )}
         </FieldGroup>
 
@@ -1188,37 +1140,27 @@ const ProviderForm = ({
                     )}
                   </Field>
 
-                  <Field data-invalid={!!validationErrors.organization}>
-                    <FieldLabel htmlFor="organization">Organization</FieldLabel>
-                    <Input
-                      id="organization"
-                      placeholder="org-..."
-                      value={formData.organization}
-                      onChange={handleChange}
-                      disabled={isSubmitting || isReadOnly}
-                      aria-invalid={!!validationErrors.organization}
-                    />
-                    <FieldDescription>OpenAI organization ID.</FieldDescription>
-                    {validationErrors.organization && (
-                      <FieldError>{validationErrors.organization}</FieldError>
-                    )}
-                  </Field>
+                  <FormTextField
+                    label="Organization"
+                    name="organization"
+                    placeholder="org-..."
+                    value={formData.organization ?? ""}
+                    onChange={toFieldChange("organization")}
+                    disabled={isSubmitting || isReadOnly}
+                    error={validationErrors.organization}
+                    description="OpenAI organization ID."
+                  />
 
-                  <Field data-invalid={!!validationErrors.project}>
-                    <FieldLabel htmlFor="project">Project</FieldLabel>
-                    <Input
-                      id="project"
-                      placeholder="proj_..."
-                      value={formData.project}
-                      onChange={handleChange}
-                      disabled={isSubmitting || isReadOnly}
-                      aria-invalid={!!validationErrors.project}
-                    />
-                    <FieldDescription>OpenAI project ID.</FieldDescription>
-                    {validationErrors.project && (
-                      <FieldError>{validationErrors.project}</FieldError>
-                    )}
-                  </Field>
+                  <FormTextField
+                    label="Project"
+                    name="project"
+                    placeholder="proj_..."
+                    value={formData.project ?? ""}
+                    onChange={toFieldChange("project")}
+                    disabled={isSubmitting || isReadOnly}
+                    error={validationErrors.project}
+                    description="OpenAI project ID."
+                  />
                 </>
               )}
 

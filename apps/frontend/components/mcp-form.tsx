@@ -9,6 +9,7 @@ import {
   FieldError,
 } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import { FormTextField } from "@/components/form-text-field";
 import { RevealableInput } from "@/components/ui/revealable-input";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
@@ -175,6 +176,13 @@ const McpForm = ({
     // Clear test result when form changes
     setTestResult(null);
   };
+
+  // Adapts FormTextField's `onChange(value)` to handleChange's `onChange(e)`
+  // so the centralized clear-error-and-set-formData logic stays in one place.
+  const toFieldChange = (id: string) => (value: string) =>
+    handleChange({
+      target: { id, value },
+    } as React.ChangeEvent<HTMLInputElement>);
 
   const handleSelectChange = (id: string, value: string) => {
     // Clear the error for this field, including any reported against a path
@@ -505,40 +513,28 @@ const McpForm = ({
     <div className={classNames}>
       <FieldSet className="mb-6">
         <FieldGroup>
-          <Field data-invalid={!!validationErrors.name}>
-            <FieldLabel htmlFor="name">Name</FieldLabel>
-            <Input
-              id="name"
-              placeholder="My MCP Server"
-              value={formData.name}
-              onChange={handleChange}
-              disabled={isSubmitting}
-              aria-invalid={!!validationErrors.name}
-              autoFocus
-            />
-            {validationErrors.name && (
-              <FieldError>{validationErrors.name}</FieldError>
-            )}
-          </Field>
+          <FormTextField
+            label="Name"
+            name="name"
+            placeholder="My MCP Server"
+            value={formData.name}
+            onChange={toFieldChange("name")}
+            disabled={isSubmitting}
+            error={validationErrors.name}
+            autoFocus
+          />
 
-          <Field data-invalid={!!validationErrors.url}>
-            <FieldLabel htmlFor="url">URL</FieldLabel>
-            <Input
-              id="url"
-              type="url"
-              placeholder="https://example.com/mcp"
-              value={formData.url}
-              onChange={handleChange}
-              disabled={isSubmitting}
-              aria-invalid={!!validationErrors.url}
-            />
-            <FieldDescription>
-              The URL endpoint for the MCP integration.
-            </FieldDescription>
-            {validationErrors.url && (
-              <FieldError>{validationErrors.url}</FieldError>
-            )}
-          </Field>
+          <FormTextField
+            label="URL"
+            name="url"
+            type="url"
+            placeholder="https://example.com/mcp"
+            value={formData.url}
+            onChange={toFieldChange("url")}
+            disabled={isSubmitting}
+            error={validationErrors.url}
+            description="The URL endpoint for the MCP integration."
+          />
 
           <FieldGroup className="grid grid-cols-3 gap-4">
             <Field className="col-span-1">
@@ -587,20 +583,15 @@ const McpForm = ({
           {/* OAuth Client Credentials */}
           {formData.authType === "OAuth" && (
             <FieldGroup className="grid grid-cols-2 gap-4">
-              <Field data-invalid={!!validationErrors.oauthClientId}>
-                <FieldLabel htmlFor="oauthClientId">Client ID</FieldLabel>
-                <Input
-                  id="oauthClientId"
-                  placeholder="OAuth Client ID"
-                  value={formData.oauthClientId}
-                  onChange={handleChange}
-                  disabled={isSubmitting}
-                  aria-invalid={!!validationErrors.oauthClientId}
-                />
-                {validationErrors.oauthClientId && (
-                  <FieldError>{validationErrors.oauthClientId}</FieldError>
-                )}
-              </Field>
+              <FormTextField
+                label="Client ID"
+                name="oauthClientId"
+                placeholder="OAuth Client ID"
+                value={formData.oauthClientId ?? ""}
+                onChange={toFieldChange("oauthClientId")}
+                disabled={isSubmitting}
+                error={validationErrors.oauthClientId}
+              />
 
               <Field data-invalid={!!validationErrors.oauthClientSecret}>
                 <FieldLabel htmlFor="oauthClientSecret">
@@ -627,32 +618,17 @@ const McpForm = ({
                 Leave blank if the server supports dynamic client registration.
               </FieldDescription>
 
-              <Field
+              <FormTextField
                 className="col-span-2"
-                data-invalid={!!validationErrors.oauthRequestedScope}
-              >
-                <FieldLabel htmlFor="oauthRequestedScope">
-                  OAuth Scopes
-                </FieldLabel>
-                <Input
-                  id="oauthRequestedScope"
-                  placeholder="e.g. https://www.googleapis.com/auth/calendar"
-                  value={formData.oauthRequestedScope || ""}
-                  onChange={handleChange}
-                  disabled={isSubmitting}
-                  aria-invalid={!!validationErrors.oauthRequestedScope}
-                />
-                <FieldDescription>
-                  Space-separated list of OAuth scopes to request. Required by
-                  some providers (e.g. Google) that reject authorize requests
-                  without an explicit scope parameter.
-                </FieldDescription>
-                {validationErrors.oauthRequestedScope && (
-                  <FieldError>
-                    {validationErrors.oauthRequestedScope}
-                  </FieldError>
-                )}
-              </Field>
+                label="OAuth Scopes"
+                name="oauthRequestedScope"
+                placeholder="e.g. https://www.googleapis.com/auth/calendar"
+                value={formData.oauthRequestedScope || ""}
+                onChange={toFieldChange("oauthRequestedScope")}
+                disabled={isSubmitting}
+                error={validationErrors.oauthRequestedScope}
+                description="Space-separated list of OAuth scopes to request. Required by some providers (e.g. Google) that reject authorize requests without an explicit scope parameter."
+              />
             </FieldGroup>
           )}
 
