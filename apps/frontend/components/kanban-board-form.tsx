@@ -205,7 +205,7 @@ export function KanbanBoardForm({
 
       <FormFooterButtons
         type="submit"
-        submitText={isEditing ? "Update" : "Create board"}
+        submitText="Save"
         submitDisabled={
           isSubmitting ||
           isDeleting ||

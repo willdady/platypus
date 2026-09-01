@@ -200,7 +200,7 @@ const OrganizationForm = ({ classNames, orgId }: OrganizationFormProps) => {
       </FieldSet>
 
       <FormFooterButtons
-        submitText={orgId ? "Update" : "Save"}
+        submitText="Save"
         onSubmit={handleSubmit}
         submitDisabled={
           isSubmitting || !canSubmitForm(validationErrors, RETRACTABLE_FIELDS)

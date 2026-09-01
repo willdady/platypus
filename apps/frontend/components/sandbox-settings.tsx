@@ -980,7 +980,7 @@ const SandboxSettings = ({
           onClick={handleSave}
           disabled={isSubmitting}
         >
-          {hasSandbox ? "Update" : "Save"}
+          Save
         </Button>
 
         {hasSandbox ? (

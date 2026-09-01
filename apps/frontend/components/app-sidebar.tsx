@@ -585,7 +585,7 @@ export function AppSidebar() {
               disabled={isRenaming || !renameTitle.trim()}
               className="cursor-pointer"
             >
-              Save changes
+              Save
             </Button>
           </DialogFooter>
         </DialogContent>

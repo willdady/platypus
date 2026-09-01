@@ -105,7 +105,7 @@ export function MemberEditDialog({
             disabled={isSubmitting || role === member.role}
             className={isSubmitting ? "opacity-50" : ""}
           >
-            {isSubmitting ? "Saving..." : "Save changes"}
+            {isSubmitting ? "Saving..." : "Save"}
           </Button>
         </DialogFooter>
       </DialogContent>

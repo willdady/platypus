@@ -553,7 +553,7 @@ const WorkspaceForm = ({
       </FieldSet>
 
       <FormFooterButtons
-        submitText={workspaceId ? "Update" : "Save"}
+        submitText="Save"
         onSubmit={handleSubmit}
         submitDisabled={
           isSubmitting || !canSubmitForm(validationErrors, RETRACTABLE_FIELDS)

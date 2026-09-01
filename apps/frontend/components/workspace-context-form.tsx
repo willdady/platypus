@@ -262,7 +262,7 @@ export const WorkspaceContextForm = ({ contextId }: { contextId?: string }) => {
 
       <FormFooterButtons
         type="submit"
-        submitText={contextId ? "Update" : "Create"}
+        submitText={contextId ? "Update" : "Save"}
         submitDisabled={isSubmitting}
         submitClassName=""
         deleteVisible={!!contextId}

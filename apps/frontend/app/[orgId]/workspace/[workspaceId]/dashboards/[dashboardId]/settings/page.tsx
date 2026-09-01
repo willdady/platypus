@@ -137,7 +137,7 @@ const DashboardSettingsPage = ({
             type="submit"
             disabled={saving || deleting || !displayName.trim()}
           >
-            Update
+            Save
           </Button>
           <Button
             type="button"
