@@ -1,5 +1,5 @@
 import { McpForm } from "@/components/mcp-form";
-import { BackButton } from "@/components/back-button";
+import { ResourcePage } from "@/components/resource-page";
 
 const McpCreatePage = async ({
   params,
@@ -9,13 +9,12 @@ const McpCreatePage = async ({
   const { orgId, workspaceId } = await params;
 
   return (
-    <div>
-      <BackButton
-        fallbackHref={`/${orgId}/workspace/${workspaceId}/settings/mcp`}
-      />
-      <h1 className="text-2xl mb-4 font-bold">Create MCP</h1>
+    <ResourcePage
+      backFallbackHref={`/${orgId}/workspace/${workspaceId}/settings/mcp`}
+      title="Create MCP"
+    >
       <McpForm orgId={orgId} workspaceId={workspaceId} />
-    </div>
+    </ResourcePage>
   );
 };
 

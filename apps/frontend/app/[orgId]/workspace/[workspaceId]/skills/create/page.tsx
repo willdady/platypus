@@ -1,5 +1,5 @@
 import { SkillForm } from "@/components/skill-form";
-import { BackButton } from "@/components/back-button";
+import { ResourcePage } from "@/components/resource-page";
 
 const SkillCreatePage = async ({
   params,
@@ -9,13 +9,13 @@ const SkillCreatePage = async ({
   const { orgId, workspaceId } = await params;
 
   return (
-    <div className="flex justify-center pb-8">
-      <div className="w-full px-4 md:px-0 md:w-4/5 xl:w-2/5">
-        <BackButton fallbackHref={`/${orgId}/workspace/${workspaceId}`} />
-        <h1 className="text-2xl mb-4 font-bold">Create Skill</h1>
-        <SkillForm orgId={orgId} workspaceId={workspaceId} />
-      </div>
-    </div>
+    <ResourcePage
+      backFallbackHref={`/${orgId}/workspace/${workspaceId}`}
+      title="Create Skill"
+      variant="create"
+    >
+      <SkillForm orgId={orgId} workspaceId={workspaceId} />
+    </ResourcePage>
   );
 };
 

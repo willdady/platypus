@@ -1,6 +1,6 @@
 import { AgentForm } from "@/components/agent-form";
 import { headers } from "next/headers";
-import { BackButton } from "@/components/back-button";
+import { ResourcePage } from "@/components/resource-page";
 import { type ToolSet } from "@platypus/schemas";
 import { joinUrl } from "@/lib/utils";
 
@@ -31,16 +31,17 @@ const OrgAgentEditPage = async ({
   const toolSets: ToolSet[] = toolSetsData.results;
 
   return (
-    <div>
-      <BackButton fallbackHref={`/${orgId}/settings/agents`} />
-      <h1 className="text-2xl mb-4 font-bold">Edit Shared Agent</h1>
+    <ResourcePage
+      backFallbackHref={`/${orgId}/settings/agents`}
+      title="Edit Shared Agent"
+    >
       <AgentForm
         orgId={orgId}
         agentId={agentId}
         toolSets={toolSets}
         orgScoped
       />
-    </div>
+    </ResourcePage>
   );
 };
 

@@ -9,7 +9,7 @@ import { writeEntity } from "@/lib/api-write";
 import { applyDeleteOutcome } from "@/lib/apply-write-outcome";
 import { useBackendUrl } from "@/app/client-context";
 import { useAuth } from "@/components/auth-provider";
-import { BackButton } from "@/components/back-button";
+import { ResourcePage } from "@/components/resource-page";
 import { KanbanBoardForm } from "@/components/kanban-board-form";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { toast } from "sonner";
@@ -67,27 +67,24 @@ const BoardSettingsPage = ({
   }
 
   return (
-    <div className="flex justify-center pb-8">
-      <div className="w-full px-4 md:px-0 md:w-4/5 xl:w-2/5 space-y-8">
-        <BackButton
-          fallbackHref={`/${orgId}/workspace/${workspaceId}/boards/${boardId}`}
-        />
-        <h1 className="text-2xl font-bold">Board Settings</h1>
-
-        <KanbanBoardForm
-          orgId={orgId}
-          workspaceId={workspaceId}
-          board={{
-            id: data.board.id,
-            name: data.board.name,
-            description: data.board.description,
-            labels: data.board.labels,
-          }}
-          onDelete={() => setIsDeleteDialogOpen(true)}
-          isDeleting={isDeleting}
-          onSuccess={() => mutate()}
-        />
-      </div>
+    <ResourcePage
+      backFallbackHref={`/${orgId}/workspace/${workspaceId}/boards/${boardId}`}
+      title="Board Settings"
+      variant="settings"
+    >
+      <KanbanBoardForm
+        orgId={orgId}
+        workspaceId={workspaceId}
+        board={{
+          id: data.board.id,
+          name: data.board.name,
+          description: data.board.description,
+          labels: data.board.labels,
+        }}
+        onDelete={() => setIsDeleteDialogOpen(true)}
+        isDeleting={isDeleting}
+        onSuccess={() => mutate()}
+      />
 
       <ConfirmDialog
         open={isDeleteDialogOpen}
@@ -107,7 +104,7 @@ const BoardSettingsPage = ({
         onConfirm={handleDeleteConfirm}
         loading={isDeleting}
       />
-    </div>
+    </ResourcePage>
   );
 };
 

@@ -1,5 +1,5 @@
 import { BlueprintForm } from "@/components/blueprint-form";
-import { BackButton } from "@/components/back-button";
+import { ResourcePage } from "@/components/resource-page";
 
 const EditBlueprintPage = async ({
   params,
@@ -9,11 +9,12 @@ const EditBlueprintPage = async ({
   const { orgId, blueprintId } = await params;
 
   return (
-    <div>
-      <BackButton fallbackHref={`/${orgId}/settings/blueprints`} />
-      <h1 className="text-2xl font-bold mb-4">Edit Blueprint</h1>
+    <ResourcePage
+      backFallbackHref={`/${orgId}/settings/blueprints`}
+      title="Edit Blueprint"
+    >
       <BlueprintForm orgId={orgId} blueprintId={blueprintId} />
-    </div>
+    </ResourcePage>
   );
 };
 

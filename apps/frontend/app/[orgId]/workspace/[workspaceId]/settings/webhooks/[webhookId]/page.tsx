@@ -1,5 +1,5 @@
 import { WebhookForm } from "@/components/webhook-form";
-import { BackButton } from "@/components/back-button";
+import { ResourcePage } from "@/components/resource-page";
 
 const WebhookEditPage = async ({
   params,
@@ -9,17 +9,16 @@ const WebhookEditPage = async ({
   const { orgId, workspaceId, webhookId } = await params;
 
   return (
-    <div>
-      <BackButton
-        fallbackHref={`/${orgId}/workspace/${workspaceId}/settings/webhooks`}
-      />
-      <h1 className="text-2xl mb-4 font-bold">Edit Webhook</h1>
+    <ResourcePage
+      backFallbackHref={`/${orgId}/workspace/${workspaceId}/settings/webhooks`}
+      title="Edit Webhook"
+    >
       <WebhookForm
         orgId={orgId}
         workspaceId={workspaceId}
         webhookId={webhookId}
       />
-    </div>
+    </ResourcePage>
   );
 };
 

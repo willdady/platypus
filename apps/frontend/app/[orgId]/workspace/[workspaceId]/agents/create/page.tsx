@@ -1,6 +1,6 @@
 import { AgentForm } from "@/components/agent-form";
 import { headers } from "next/headers";
-import { BackButton } from "@/components/back-button";
+import { ResourcePage } from "@/components/resource-page";
 import { type ToolSet } from "@platypus/schemas";
 import { joinUrl } from "@/lib/utils";
 
@@ -35,17 +35,13 @@ const AgentCreatePage = async ({
   const toolSets: ToolSet[] = toolSetsData.results;
 
   return (
-    <div className="flex justify-center pb-8">
-      <div className="w-full px-4 md:px-0 md:w-4/5 xl:w-2/5">
-        <BackButton fallbackHref={`/${orgId}/workspace/${workspaceId}`} />
-        <h1 className="text-2xl mb-4 font-bold">Create Agent</h1>
-        <AgentForm
-          orgId={orgId}
-          workspaceId={workspaceId}
-          toolSets={toolSets}
-        />
-      </div>
-    </div>
+    <ResourcePage
+      backFallbackHref={`/${orgId}/workspace/${workspaceId}`}
+      title="Create Agent"
+      variant="create"
+    >
+      <AgentForm orgId={orgId} workspaceId={workspaceId} toolSets={toolSets} />
+    </ResourcePage>
   );
 };
 

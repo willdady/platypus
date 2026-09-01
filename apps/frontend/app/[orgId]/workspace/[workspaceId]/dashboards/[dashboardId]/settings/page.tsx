@@ -4,7 +4,7 @@ import { use, useState } from "react";
 import { useRouter } from "next/navigation";
 import useSWR from "swr";
 import { Trash2 } from "lucide-react";
-import { BackButton } from "@/components/back-button";
+import { ResourcePage } from "@/components/resource-page";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -106,52 +106,49 @@ const DashboardSettingsPage = ({
   }
 
   return (
-    <div className="flex justify-center pb-8">
-      <div className="w-full px-4 md:px-0 md:w-4/5 xl:w-2/5 space-y-8">
-        <BackButton
-          fallbackHref={`/${orgId}/workspace/${workspaceId}/dashboards/${dashboardId}`}
-        />
-        <h1 className="text-2xl font-bold">Dashboard Settings</h1>
-
-        <form onSubmit={handleSave} className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="name">Name</Label>
-            <Input
-              id="name"
-              value={displayName}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="My Dashboard"
-              required
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="description">Description</Label>
-            <Textarea
-              id="description"
-              value={displayDescription}
-              onChange={(e) => setDescription(e.target.value)}
-              placeholder="Optional description"
-            />
-          </div>
-          {saveError && <p className="text-sm text-destructive">{saveError}</p>}
-          <div className="flex gap-2">
-            <Button
-              type="submit"
-              disabled={saving || deleting || !displayName.trim()}
-            >
-              Update
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => setDeleteOpen(true)}
-              disabled={saving || deleting}
-            >
-              <Trash2 /> Delete
-            </Button>
-          </div>
-        </form>
-      </div>
+    <ResourcePage
+      backFallbackHref={`/${orgId}/workspace/${workspaceId}/dashboards/${dashboardId}`}
+      title="Dashboard Settings"
+      variant="settings"
+    >
+      <form onSubmit={handleSave} className="space-y-4">
+        <div className="space-y-2">
+          <Label htmlFor="name">Name</Label>
+          <Input
+            id="name"
+            value={displayName}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="My Dashboard"
+            required
+          />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="description">Description</Label>
+          <Textarea
+            id="description"
+            value={displayDescription}
+            onChange={(e) => setDescription(e.target.value)}
+            placeholder="Optional description"
+          />
+        </div>
+        {saveError && <p className="text-sm text-destructive">{saveError}</p>}
+        <div className="flex gap-2">
+          <Button
+            type="submit"
+            disabled={saving || deleting || !displayName.trim()}
+          >
+            Update
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => setDeleteOpen(true)}
+            disabled={saving || deleting}
+          >
+            <Trash2 /> Delete
+          </Button>
+        </div>
+      </form>
 
       <ConfirmDialog
         open={deleteOpen}
@@ -171,7 +168,7 @@ const DashboardSettingsPage = ({
         onConfirm={handleDelete}
         loading={deleting}
       />
-    </div>
+    </ResourcePage>
   );
 };
 

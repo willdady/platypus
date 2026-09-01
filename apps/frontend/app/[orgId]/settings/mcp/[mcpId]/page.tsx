@@ -1,5 +1,5 @@
 import { McpForm } from "@/components/mcp-form";
-import { BackButton } from "@/components/back-button";
+import { ResourcePage } from "@/components/resource-page";
 
 const EditOrgMcpPage = async ({
   params,
@@ -9,11 +9,12 @@ const EditOrgMcpPage = async ({
   const { orgId, mcpId } = await params;
 
   return (
-    <div>
-      <BackButton fallbackHref={`/${orgId}/settings/mcp`} />
-      <h1 className="text-2xl font-bold mb-4">Edit Organization MCP</h1>
+    <ResourcePage
+      backFallbackHref={`/${orgId}/settings/mcp`}
+      title="Edit Organization MCP"
+    >
       <McpForm orgId={orgId} mcpId={mcpId} />
-    </div>
+    </ResourcePage>
   );
 };
 

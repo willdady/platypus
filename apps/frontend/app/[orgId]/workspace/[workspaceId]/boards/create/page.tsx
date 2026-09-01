@@ -2,7 +2,7 @@
 
 import { use } from "react";
 import { KanbanBoardForm } from "@/components/kanban-board-form";
-import { BackButton } from "@/components/back-button";
+import { ResourcePage } from "@/components/resource-page";
 
 const CreateBoardPage = ({
   params,
@@ -12,15 +12,13 @@ const CreateBoardPage = ({
   const { orgId, workspaceId } = use(params);
 
   return (
-    <div className="flex justify-center pb-8">
-      <div className="w-full px-4 md:px-0 md:w-4/5 xl:w-2/5">
-        <BackButton
-          fallbackHref={`/${orgId}/workspace/${workspaceId}/boards`}
-        />
-        <h1 className="text-2xl mb-4 font-bold">New Board</h1>
-        <KanbanBoardForm orgId={orgId} workspaceId={workspaceId} />
-      </div>
-    </div>
+    <ResourcePage
+      backFallbackHref={`/${orgId}/workspace/${workspaceId}/boards`}
+      title="New Board"
+      variant="create"
+    >
+      <KanbanBoardForm orgId={orgId} workspaceId={workspaceId} />
+    </ResourcePage>
   );
 };
 

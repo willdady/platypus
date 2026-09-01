@@ -1,5 +1,5 @@
 import { SkillForm } from "@/components/skill-form";
-import { BackButton } from "@/components/back-button";
+import { ResourcePage } from "@/components/resource-page";
 
 const CreateOrgSkillPage = async ({
   params,
@@ -9,11 +9,12 @@ const CreateOrgSkillPage = async ({
   const { orgId } = await params;
 
   return (
-    <div>
-      <BackButton fallbackHref={`/${orgId}/settings/skills`} />
-      <h1 className="text-2xl font-bold mb-4">Create Organization Skill</h1>
+    <ResourcePage
+      backFallbackHref={`/${orgId}/settings/skills`}
+      title="Create Organization Skill"
+    >
       <SkillForm orgId={orgId} />
-    </div>
+    </ResourcePage>
   );
 };
 

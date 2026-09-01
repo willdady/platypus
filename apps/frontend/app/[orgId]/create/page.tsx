@@ -1,5 +1,5 @@
 import { WorkspaceForm } from "@/components/workspace-form";
-import { BackButton } from "@/components/back-button";
+import { ResourcePage } from "@/components/resource-page";
 import { ProtectedRoute } from "@/components/protected-route";
 
 const WorkspaceCreatePage = async ({
@@ -11,13 +11,13 @@ const WorkspaceCreatePage = async ({
 
   return (
     <ProtectedRoute requireOrgAccess={true} requiredOrgRole="admin">
-      <div className="flex justify-center w-full p-4">
-        <div className="w-lg">
-          <BackButton fallbackHref={`/${orgId}`} />
-          <h1 className="text-2xl mb-4 font-bold">Create Workspace</h1>
-          <WorkspaceForm orgId={orgId} />
-        </div>
-      </div>
+      <ResourcePage
+        backFallbackHref={`/${orgId}`}
+        title="Create Workspace"
+        variant="wide"
+      >
+        <WorkspaceForm orgId={orgId} />
+      </ResourcePage>
     </ProtectedRoute>
   );
 };

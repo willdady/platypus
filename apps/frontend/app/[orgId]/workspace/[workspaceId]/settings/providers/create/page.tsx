@@ -1,5 +1,5 @@
 import { ProviderForm } from "@/components/provider-form";
-import { BackButton } from "@/components/back-button";
+import { ResourcePage } from "@/components/resource-page";
 
 const ProviderCreatePage = async ({
   params,
@@ -9,13 +9,12 @@ const ProviderCreatePage = async ({
   const { orgId, workspaceId } = await params;
 
   return (
-    <div>
-      <BackButton
-        fallbackHref={`/${orgId}/workspace/${workspaceId}/settings/providers`}
-      />
-      <h1 className="text-2xl mb-4 font-bold">Create Provider</h1>
+    <ResourcePage
+      backFallbackHref={`/${orgId}/workspace/${workspaceId}/settings/providers`}
+      title="Create Provider"
+    >
       <ProviderForm orgId={orgId} workspaceId={workspaceId} />
-    </div>
+    </ResourcePage>
   );
 };
 
