@@ -45,6 +45,8 @@ import {
   modelLabelFor,
   findModelEntry,
   triggerRunStatsSchema,
+  triggerRunStatusSchema,
+  TRIGGER_RUN_STATUS_LABELS,
   iframeWidgetDataSchema,
   widgetSchema,
   widgetTypeSchema,
@@ -1478,6 +1480,16 @@ describe("triggerRunStatsSchema", () => {
         triggerRunStatsSchema.safeParse({ ...base, cacheWriteTokens }).success,
       ).toBe(false);
     }
+  });
+});
+
+describe("triggerRunStatusSchema", () => {
+  it("labels every status the schema permits", () => {
+    // Keyed by the status TYPE, so a status added to the domain fails here
+    // rather than rendering raw on the trigger runs page.
+    expect(Object.keys(TRIGGER_RUN_STATUS_LABELS).sort()).toEqual(
+      [...triggerRunStatusSchema.options].sort(),
+    );
   });
 });
 

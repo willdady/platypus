@@ -1,4 +1,5 @@
 import type { RunStats } from "./types.ts";
+import type { CachedInputTokens } from "@platypus/schemas";
 
 /**
  * Per-run statistics, folded from the SDK's step results.
@@ -19,6 +20,28 @@ export const stepOccupancy = (usage?: {
 }): number | undefined =>
   typeof usage?.inputTokens === "number" ? usage.inputTokens : undefined;
 
+/**
+ * The cached-input breakdown a step (or a result's `totalUsage`) reported,
+ * spreadable where the consumer needs the optional pair as object keys.
+ *
+ * States the "absent is not zero" presence rule once (issue #745): a Provider
+ * that reports no read (or write) count must persist no key at all, because
+ * `0` reads as a measurement of no cached reads rather than an unknown.
+ * A reported `0` is a measurement and is kept.
+ */
+export const pickCachedInput = (
+  details: CachedInputTokens | undefined,
+): Partial<CachedInputTokens> => {
+  const picked: Partial<CachedInputTokens> = {};
+  if (typeof details?.cacheReadTokens === "number") {
+    picked.cacheReadTokens = details.cacheReadTokens;
+  }
+  if (typeof details?.cacheWriteTokens === "number") {
+    picked.cacheWriteTokens = details.cacheWriteTokens;
+  }
+  return picked;
+};
+
 /** As much of an SDK step result as the run lifecycle reads. */
 export type RunStep = {
   toolCalls?: Array<{ toolName: string }>;
@@ -26,10 +49,7 @@ export type RunStep = {
     inputTokens?: number;
     outputTokens?: number;
     /** Cached-input read/write breakdown of the input figure (issue #734). */
-    inputTokenDetails?: {
-      cacheReadTokens?: number;
-      cacheWriteTokens?: number;
-    };
+    inputTokenDetails?: CachedInputTokens;
   };
   // Both reasons, deliberately. The unified union collapses any reason the
   // provider adapter doesn't recognise into `other` — which is how Bedrock's
@@ -66,17 +86,17 @@ export const accumulateStepStats = (stats: RunStats, step: RunStep): void => {
     stats.outputTokens =
       (stats.outputTokens ?? 0) + (step.usage.outputTokens ?? 0);
     // Cached input, summed the same way as a breakdown of the input figure
-    // (issue #734). Each key only appears once some step has reported a value
-    // for it; a step that reports none adds nothing and needs no erasing,
-    // because a billing sum only grows.
-    const details = step.usage.inputTokenDetails;
-    if (typeof details?.cacheReadTokens === "number") {
+    // (issue #734). Only keys some step has reported a value for appear —
+    // `pickCachedInput` carries the presence check; a step that reports none
+    // adds nothing and needs no erasing, because a billing sum only grows.
+    const cached = pickCachedInput(step.usage.inputTokenDetails);
+    if (cached.cacheReadTokens !== undefined) {
       stats.cacheReadTokens =
-        (stats.cacheReadTokens ?? 0) + details.cacheReadTokens;
+        (stats.cacheReadTokens ?? 0) + cached.cacheReadTokens;
     }
-    if (typeof details?.cacheWriteTokens === "number") {
+    if (cached.cacheWriteTokens !== undefined) {
       stats.cacheWriteTokens =
-        (stats.cacheWriteTokens ?? 0) + details.cacheWriteTokens;
+        (stats.cacheWriteTokens ?? 0) + cached.cacheWriteTokens;
     }
   }
   // REPLACED, not summed, and outside the guard above: the whole conversation
@@ -101,10 +121,7 @@ export const computeStats = (result: {
     inputTokens?: number;
     outputTokens?: number;
     /** Cached-input read/write breakdown summed across steps (issue #734). */
-    inputTokenDetails?: {
-      cacheReadTokens?: number;
-      cacheWriteTokens?: number;
-    };
+    inputTokenDetails?: CachedInputTokens;
   };
 }): RunStats => {
   const toolCallCounts = new Map<string, number>();
@@ -120,7 +137,6 @@ export const computeStats = (result: {
   // a count would answer with a smaller, earlier context as though it were the
   // one the run ended on.
   const contextOccupancy = stepOccupancy(result.steps.at(-1)?.usage);
-  const cacheDetails = result.totalUsage.inputTokenDetails;
   return {
     steps: result.steps.length,
     toolCalls: Array.from(toolCallCounts, ([name, count]) => ({ name, count })),
@@ -129,12 +145,7 @@ export const computeStats = (result: {
     // Spread so a Provider that reports no cache detail stores no key at all:
     // absent means unknown, and 0 would read as a measurement of no cached
     // reads or writes (issue #734).
-    ...(typeof cacheDetails?.cacheReadTokens === "number"
-      ? { cacheReadTokens: cacheDetails.cacheReadTokens }
-      : {}),
-    ...(typeof cacheDetails?.cacheWriteTokens === "number"
-      ? { cacheWriteTokens: cacheDetails.cacheWriteTokens }
-      : {}),
+    ...pickCachedInput(result.totalUsage.inputTokenDetails),
     // Spread so a run whose Provider reported no usage stores no key at all,
     // matching the schema's optional field: absent means unknown, and 0 would
     // read as a measurement of an empty context.

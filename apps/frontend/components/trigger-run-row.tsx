@@ -17,6 +17,7 @@ import type {
   TriggerRunStatus,
   TriggerRunWithTrigger,
 } from "@platypus/schemas";
+import { TRIGGER_RUN_STATUS_LABELS } from "@platypus/schemas";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -28,19 +29,8 @@ import {
   RunCutShortNotice,
   RunStepLimitNotice,
 } from "@/components/run-cut-short-notice";
+import { cachedTokenBreakdown } from "@/lib/cached-tokens";
 import { formatTokens } from "@/lib/context-window";
-
-/**
- * How each run status is written wherever a User reads one — the badge here and
- * the status filter on the runs page. Keyed by the status type, so a status
- * added to the domain fails the typecheck rather than rendering raw.
- */
-export const TRIGGER_RUN_STATUS_LABELS: Record<TriggerRunStatus, string> = {
-  pending: "Pending",
-  running: "Running",
-  success: "Success",
-  failed: "Failed",
-};
 
 const statusBadge = (status: TriggerRunStatus) => {
   switch (status) {
@@ -180,18 +170,9 @@ export const TriggerRunRow = ({
                     </TooltipTrigger>
                     <TooltipContent>
                       <ul className="text-left">
-                        {stats.cacheReadTokens !== undefined && (
-                          <li>
-                            of which {formatTokens(stats.cacheReadTokens)} read
-                            from cache
-                          </li>
-                        )}
-                        {stats.cacheWriteTokens !== undefined && (
-                          <li>
-                            of which {formatTokens(stats.cacheWriteTokens)}{" "}
-                            written to cache
-                          </li>
-                        )}
+                        {cachedTokenBreakdown(stats, formatTokens).map((line) => (
+                          <li key={line}>{line}</li>
+                        ))}
                       </ul>
                     </TooltipContent>
                   </Tooltip>

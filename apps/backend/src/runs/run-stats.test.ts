@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   accumulateStepStats,
   computeStats,
+  pickCachedInput,
   type RunStep,
 } from "./run-stats.ts";
 import type { RunStats } from "./types.ts";
@@ -151,5 +152,24 @@ describe("computeStats", () => {
 
     expect(stats.cacheReadTokens).toBeUndefined();
     expect(stats.cacheWriteTokens).toBeUndefined();
+  });
+});
+
+describe("pickCachedInput", () => {
+  it("returns the reported keys only, keeping a reported zero", () => {
+    expect(
+      pickCachedInput({ cacheReadTokens: 900, cacheWriteTokens: 0 }),
+    ).toEqual({ cacheReadTokens: 900, cacheWriteTokens: 0 });
+  });
+
+  it("returns {} for a Provider that reported no cache detail", () => {
+    expect(pickCachedInput(undefined)).toEqual({});
+    expect(pickCachedInput({})).toEqual({});
+  });
+
+  it("drops a single reported key rather than spreading a sibling's absence", () => {
+    expect(pickCachedInput({ cacheReadTokens: 900 })).toEqual({
+      cacheReadTokens: 900,
+    });
   });
 });

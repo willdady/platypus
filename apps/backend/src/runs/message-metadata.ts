@@ -1,8 +1,10 @@
 import type { TextStreamPart, ToolSet } from "ai";
+import type { CachedInputTokens } from "@platypus/schemas";
 import {
   isTruncatedByTokenLimit,
   stoppedAtStepCeiling,
 } from "./stream-error.ts";
+import { pickCachedInput } from "./run-stats.ts";
 import type { ChatMessageMetadata } from "../types.ts";
 
 /**
@@ -178,9 +180,7 @@ export const createMessageMetadata = ({
         const tokenUsage: {
           inputTokens: number;
           outputTokens: number;
-          cacheReadTokens?: number;
-          cacheWriteTokens?: number;
-        } = {
+        } & CachedInputTokens = {
           inputTokens: inputTokensSum,
           outputTokens: outputTokensSum,
         };
@@ -190,13 +190,13 @@ export const createMessageMetadata = ({
         // occupancy, needs no erasing: the sum only grows, and the merge keeps
         // the key an override omits, so a Provider that reports no cache detail
         // at all persists no cache key rather than a `0` sum.
-        const details = part.usage.inputTokenDetails;
-        if (typeof details?.cacheReadTokens === "number") {
-          cacheReadTokensSum += details.cacheReadTokens;
+        const cached = pickCachedInput(part.usage.inputTokenDetails);
+        if (cached.cacheReadTokens !== undefined) {
+          cacheReadTokensSum += cached.cacheReadTokens;
           tokenUsage.cacheReadTokens = cacheReadTokensSum;
         }
-        if (typeof details?.cacheWriteTokens === "number") {
-          cacheWriteTokensSum += details.cacheWriteTokens;
+        if (cached.cacheWriteTokens !== undefined) {
+          cacheWriteTokensSum += cached.cacheWriteTokens;
           tokenUsage.cacheWriteTokens = cacheWriteTokensSum;
         }
         meta.tokenUsage = tokenUsage;

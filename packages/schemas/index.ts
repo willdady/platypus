@@ -1950,6 +1950,18 @@ export const triggerRunStatusSchema = z.enum([
 
 export type TriggerRunStatus = z.infer<typeof triggerRunStatusSchema>;
 
+/**
+ * How each run status is written wherever a User reads one — the row badge and
+ * the page's status filter. Keyed by the status type, so a status added to the
+ * domain fails the typecheck rather than rendering raw.
+ */
+export const TRIGGER_RUN_STATUS_LABELS: Record<TriggerRunStatus, string> = {
+  pending: "Pending",
+  running: "Running",
+  success: "Success",
+  failed: "Failed",
+};
+
 export const triggerRunStatsSchema = z.object({
   steps: z.number(),
   toolCalls: z.array(z.object({ name: z.string(), count: z.number() })),
@@ -1998,6 +2010,35 @@ export const triggerRunStatsSchema = z.object({
 });
 
 export type TriggerRunStats = z.infer<typeof triggerRunStatsSchema>;
+
+/**
+ * A Provider's cached-input breakdown of an input-token figure (issue #734):
+ * how many of the input tokens were READ from cache, and how many the model
+ * calls caused to be WRITTEN. A breakdown of the figure, never subtracted from
+ * it.
+ *
+ * Both keys optional following the rule `triggerRunStatsSchema` sets: a Provider
+ * that reports nothing persists no key, because `0` reads as a measurement
+ * rather than "unknown". OpenAI and Google cache implicitly and report no write
+ * count, so on those two the write key is legitimately missing rather than zero.
+ *
+ * The single declaration of the pair — every consumer's hand-written copy was
+ * centralised here — so a third key (a cache-hit rate) extends this one place
+ * and flows to all of them (issue #745).
+ */
+export type CachedInputTokens = {
+  /**
+   * Cached input tokens READ across the model calls, summed the same way the
+   * input figure beside it is.
+   */
+  cacheReadTokens?: number;
+  /**
+   * Cached input tokens the model calls caused to be WRITTEN, summed as above.
+   * Only present where the Provider reports a write count — OpenAI and Google
+   * cache implicitly and report none.
+   */
+  cacheWriteTokens?: number;
+};
 
 export const triggerRunSchema = z.object({
   id: z.string(),

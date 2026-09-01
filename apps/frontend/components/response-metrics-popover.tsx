@@ -4,6 +4,7 @@ import { InfoIcon } from "lucide-react";
 import type { ChatMessageMetadata } from "@platypus/backend/src/types";
 import { MessageAction } from "./ai-elements/message";
 import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
+import { cachedTokenBreakdown } from "@/lib/cached-tokens";
 import { formatToolDuration } from "@/lib/tool-duration";
 import { responseMetrics, type ResponseMetrics } from "@/lib/response-metrics";
 import { cn } from "@/lib/utils";
@@ -56,18 +57,11 @@ const ResponseMetricsContent = ({ metrics }: { metrics: ResponseMetrics }) => {
             already includes it — shown under Input, never subtracted from it
             (issue #734). Absent means the Provider reported no cached reads,
             which is never read as zero. */}
-          {tokenUsage.cacheReadTokens !== undefined && (
-            <p className="pl-3 text-xs text-muted-foreground">
-              of which {formatTokenCount(tokenUsage.cacheReadTokens)} read from
-              cache
+          {cachedTokenBreakdown(tokenUsage, formatTokenCount).map((line) => (
+            <p key={line} className="pl-3 text-xs text-muted-foreground">
+              {line}
             </p>
-          )}
-          {tokenUsage.cacheWriteTokens !== undefined && (
-            <p className="pl-3 text-xs text-muted-foreground">
-              of which {formatTokenCount(tokenUsage.cacheWriteTokens)} written
-              to cache
-            </p>
-          )}
+          ))}
           <MetricRow
             label="Output"
             value={formatTokenCount(tokenUsage.outputTokens)}

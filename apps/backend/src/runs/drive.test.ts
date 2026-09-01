@@ -489,6 +489,7 @@ describe("driveDelegate", () => {
       plan: planOf(modelOf(text("t1", "Hello", " world"))),
       run,
       prompt: "hi",
+      agentId: "sub-1",
     });
 
     const seen: unknown[] = [];
@@ -529,7 +530,12 @@ describe("driveDelegate", () => {
           }),
         }),
     });
-    const drive = driveDelegate({ plan: planOf(model), run, prompt: "hi" });
+    const drive = driveDelegate({
+      plan: planOf(model),
+      run,
+      prompt: "hi",
+      agentId: "sub-1",
+    });
     for await (const _ of drive.snapshots) void _;
     const result = await drive.done;
 
@@ -543,6 +549,7 @@ describe("driveDelegate", () => {
       plan: planOf(errorAfterText("upstream reset")),
       run,
       prompt: "hi",
+      agentId: "sub-1",
     });
     for await (const _ of drive.snapshots) void _;
     const result = await drive.done;
@@ -558,6 +565,7 @@ describe("driveDelegate", () => {
       plan: planOf(modelOf(text("t1", "gone in a flash"))),
       run,
       prompt: "hi",
+      agentId: "sub-1",
     });
     // Stopped before it is consumed: the model stream still completes, and the
     // signal is the only record that the run was cancelled rather than finished.
@@ -581,6 +589,7 @@ describe("driveDelegate", () => {
       plan: stuckPlanOf(stuckStreamingModel()),
       run,
       prompt: "hi",
+      agentId: "sub-1",
     });
     for await (const _ of drive.snapshots) void _;
     const result = await drive.done;
@@ -598,6 +607,7 @@ describe("driveDelegate", () => {
       plan: oneStepPlanOf(stuckStreamingModel()),
       run,
       prompt: "hi",
+      agentId: "sub-1",
     });
     for await (const _ of drive.snapshots) void _;
     const result = await drive.done;
@@ -613,6 +623,7 @@ describe("driveDelegate", () => {
       plan: planOf(modelOf(text("t1", "all done"))),
       run,
       prompt: "hi",
+      agentId: "sub-1",
     });
     for await (const _ of drive.snapshots) void _;
     const result = await drive.done;
@@ -630,6 +641,7 @@ describe("driveDelegate", () => {
       plan: stuckPlanOf(stuckStreamingModel()),
       run,
       prompt: "hi",
+      agentId: "sub-1",
     });
     for await (const _ of drive.snapshots) void _;
     const result = await drive.done;
@@ -651,6 +663,7 @@ describe("driveDelegate", () => {
       plan: planOf(errorThenEndOnAbort("upstream reset", run.handle.signal)),
       run,
       prompt: "hi",
+      agentId: "sub-1",
     });
     for await (const _ of drive.snapshots) void _;
     const result = await drive.done;
@@ -1019,6 +1032,7 @@ describe("Tool-result clearing inheritance", () => {
       plan: clearingPlanOf(capturingStreamModel(record)),
       run,
       modelMessages: staleToolMessages(10),
+      agentId: "sub-1",
     });
     for await (const _ of drive.snapshots) void _;
     await drive.done;

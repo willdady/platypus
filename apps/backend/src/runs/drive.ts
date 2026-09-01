@@ -239,11 +239,13 @@ export type DelegateDriveOptions = DriveBase &
   DriveConversation & {
     onStepFinish?: (step: RunStep) => void;
     /**
-     * The delegated Agent's id. Appended to the parent run's ambient causation
-     * chain for the duration of the delegate's drive, so a write the delegate
-     * makes is attributed to every Agent above it too (ADR-0022, issue #668).
+     * The delegated Agent's id, always present — the only caller, the
+     * Sub-Agent tool, always passes one. Appended to the parent run's ambient
+     * causation chain for the duration of the delegate's drive, so a write the
+     * delegate makes is attributed to every Agent above it too (ADR-0022,
+     * issue #668).
      */
-    agentId?: string;
+    agentId: string;
   };
 
 /** Where a drive's UI stream goes before it is consumed. A Chat turn tees off a
@@ -514,7 +516,7 @@ export const driveDelegate = (opts: DelegateDriveOptions): StreamedCore => {
   // every Agent above it, so a parent's Event Trigger is still suppressed when
   // the work is done through a Sub-Agent (ADR-0022, issue #668).
   const { agentId, ...rest } = opts;
-  const drive = (): StreamedCore =>
+  return withChildCausation(agentId, () =>
     runStreamedDrive(
       rest,
       {
@@ -523,10 +525,8 @@ export const driveDelegate = (opts: DelegateDriveOptions): StreamedCore => {
         stopSnapshotsAfterFinal: false,
       },
       (ui) => ui,
-    );
-  // A delegate without an id (if ever reached) extends nothing; one with an id
-  // chains beneath the parent's ambient causation.
-  return agentId ? withChildCausation(agentId, drive) : drive();
+    ),
+  );
 };
 
 export type DriveOnceOptions = DriveBase &

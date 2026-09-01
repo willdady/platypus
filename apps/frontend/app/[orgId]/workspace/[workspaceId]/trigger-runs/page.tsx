@@ -7,14 +7,12 @@ import useSWRInfinite from "swr/infinite";
 import { History, TriangleAlert } from "lucide-react";
 import {
   triggerRunStatusSchema,
+  TRIGGER_RUN_STATUS_LABELS,
   type Trigger,
   type TriggerRunWithTriggerList,
 } from "@platypus/schemas";
 import { BackButton } from "@/components/back-button";
-import {
-  TRIGGER_RUN_STATUS_LABELS,
-  TriggerRunRow,
-} from "@/components/trigger-run-row";
+import { TriggerRunRow } from "@/components/trigger-run-row";
 import { Button } from "@/components/ui/button";
 import {
   Empty,
@@ -121,6 +119,14 @@ const TriggerRunsPage = ({
         }
       : null;
 
+  const replaceQuery = useCallback(
+    (next: URLSearchParams) => {
+      const qs = next.toString();
+      router.replace(`${pathname}${qs ? `?${qs}` : ""}`, { scroll: false });
+    },
+    [router, pathname],
+  );
+
   const setFilter = useCallback(
     (key: "triggerId" | "status", value: string) => {
       const next = new URLSearchParams(searchParams.toString());
@@ -129,19 +135,17 @@ const TriggerRunsPage = ({
       } else {
         next.set(key, value);
       }
-      const qs = next.toString();
-      router.replace(`${pathname}${qs ? `?${qs}` : ""}`, { scroll: false });
+      replaceQuery(next);
     },
-    [searchParams, router, pathname],
+    [searchParams, replaceQuery],
   );
 
   const clearFilters = useCallback(() => {
     const next = new URLSearchParams(searchParams.toString());
     next.delete("triggerId");
     next.delete("status");
-    const qs = next.toString();
-    router.replace(`${pathname}${qs ? `?${qs}` : ""}`, { scroll: false });
-  }, [searchParams, router, pathname]);
+    replaceQuery(next);
+  }, [searchParams, replaceQuery]);
 
   return (
     <div className="flex justify-center pb-8">
