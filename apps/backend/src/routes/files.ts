@@ -114,6 +114,10 @@ files.get("/*", requireAuth, async (c) => {
 
   // Set response headers
   c.header("Content-Type", contentType);
+  // The stored media type is what the client's data URL claimed. Sniffing lets
+  // the browser pick a different one from the bytes, so a file stored as an
+  // expected type could still be treated as something else on our own origin.
+  c.header("X-Content-Type-Options", "nosniff");
   c.header("Cache-Control", "private, max-age=31536000, immutable");
   c.header("Content-Length", data.length.toString());
 

@@ -105,7 +105,14 @@ export function IframeWidget({
         <iframe
           src={data.url}
           title={widget.title}
-          sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
+          // No `allow-same-origin`: an Embed holds a URL a User pasted, and
+          // for one on this deployment's own origin the flag would undo the
+          // sandbox entirely — a same-origin framed document can drop the
+          // attribute from its own frame element and reload without it. The
+          // frame is kept a foreign origin whatever URL it holds, so no origin
+          // comparison is needed anywhere. Costs an embed its own cookies and
+          // storage.
+          sandbox="allow-scripts allow-forms allow-popups"
           referrerPolicy="no-referrer"
           className="h-full w-full border-0"
         />

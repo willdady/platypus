@@ -667,6 +667,94 @@ describe("Storage Utils", () => {
     });
   });
 
+  describe("extractFiles - untrusted media type", () => {
+    // The media type comes out of the client's data URL and is stored, then
+    // sent straight back by `/files/*`. A type Platypus never expects — HTML
+    // above all — is a page served from the backend's own origin, so the part
+    // is refused at store time rather than filed under a `.bin` key.
+    it("should not store a file whose media type is outside the expected set", async () => {
+      const htmlDataUrl = `data:text/html;base64,${Buffer.from(
+        "<script>alert(1)</script>",
+      ).toString("base64")}`;
+      const messages: PlatypusUIMessage[] = [
+        {
+          id: "msg-1",
+          role: "user",
+          parts: [{ type: "file", url: htmlDataUrl, mediaType: "text/html" }],
+        },
+      ];
+
+      const processed = await extractFiles(messages, {
+        orgId: "org-1",
+        workspaceId: "ws-1",
+        chatId: "chat-1",
+      });
+
+      // The data URL is left in place, exactly as for any other store failure.
+      expect((processed[0].parts[0] as FileUIPart).url).toBe(htmlDataUrl);
+      const stored = (await fs.readdir(tempDir, { recursive: true })).flat();
+      expect(stored.filter((f) => !String(f).endsWith(".meta"))).toHaveLength(
+        0,
+      );
+    });
+
+    it("should store a file whose media type is expected", async () => {
+      const messages: PlatypusUIMessage[] = [
+        {
+          id: "msg-1",
+          role: "user",
+          parts: [
+            { type: "file", url: createPngDataUrl(), mediaType: "image/png" },
+          ],
+        },
+      ];
+
+      const processed = await extractFiles(messages, {
+        orgId: "org-1",
+        workspaceId: "ws-1",
+        chatId: "chat-1",
+      });
+
+      expect((processed[0].parts[0] as FileUIPart).url).toMatch(
+        /^storage:\/\/org-1\/ws-1\/chat-1\/msg-1\/0-[a-f0-9]{8}\.png$/,
+      );
+      expect(await countPngFiles(tempDir)).toBe(1);
+    });
+
+    // A file pasted from a buffer, or picked on an OS that declines to name a
+    // type, arrives as `application/octet-stream` — the file gate admits those
+    // on the filename, so the allowlist has to as well. The only `.bin` key.
+    it("should store an unnamed binary type as .bin", async () => {
+      const dataUrl = `data:application/octet-stream;base64,${Buffer.from(
+        "binary",
+      ).toString("base64")}`;
+      const messages: PlatypusUIMessage[] = [
+        {
+          id: "msg-1",
+          role: "user",
+          parts: [
+            {
+              type: "file",
+              url: dataUrl,
+              mediaType: "application/octet-stream",
+              filename: "report.pdf",
+            },
+          ],
+        },
+      ];
+
+      const processed = await extractFiles(messages, {
+        orgId: "org-1",
+        workspaceId: "ws-1",
+        chatId: "chat-1",
+      });
+
+      expect((processed[0].parts[0] as FileUIPart).url).toMatch(
+        /^storage:\/\/org-1\/ws-1\/chat-1\/msg-1\/0-[a-f0-9]{8}\.bin$/,
+      );
+    });
+  });
+
   describe("extractFiles - untrusted message id", () => {
     // `message.id` is the client's, and it lands mid-key. Before validation a
     // message id of `../../x` filed the file outside its own Chat and

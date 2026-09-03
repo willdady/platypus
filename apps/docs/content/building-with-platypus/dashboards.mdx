@@ -80,8 +80,13 @@ discard them and exit edit mode.
 | **Bar chart**       | One or more series over shared categories                        |
 
 <Callout type="warning">
-  Some sites refuse to be embedded and will appear blank. Choose a site that
-  explicitly supports embedding.
+  An Embed can appear blank for two reasons. Some sites refuse to be embedded at
+  all — choose a site that explicitly supports embedding. Others embed fine but
+  show nothing until you are signed in to them: an Embed is kept isolated from
+  the rest of Platypus, so it never carries your session with it, and a page
+  that needs its own sign-in stays empty even when the same page works in a
+  normal browser tab. Prefer a URL that is shareable without a login, such as a
+  Grafana snapshot or a published Sheet.
 </Callout>
 
 ## Agents and dashboards

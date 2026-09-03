@@ -22,8 +22,11 @@ describe("IframeWidget", () => {
     const iframe = screen.getByTitle("Service status");
     expect(iframe).toHaveAttribute(
       "sandbox",
-      "allow-scripts allow-same-origin allow-forms allow-popups",
+      "allow-scripts allow-forms allow-popups",
     );
+    // Spelled out separately: with this flag the frame is same-origin with the
+    // app for a URL on its own origin, and can remove the sandbox itself.
+    expect(iframe.getAttribute("sandbox")).not.toContain("allow-same-origin");
     expect(iframe).toHaveAttribute("referrerpolicy", "no-referrer");
     expect(iframe).toHaveAttribute("src", "https://status.example.com/embed");
   });

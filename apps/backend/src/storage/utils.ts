@@ -3,6 +3,7 @@ import type { PlatypusUIMessage } from "../types.ts";
 import type { FileExtractionContext } from "./types.ts";
 import { getStorage } from "./index.ts";
 import { logger } from "../logger.ts";
+import { ValidationError } from "../errors.ts";
 import {
   assertValidStorageKey,
   chatStorageKeyPrefix,
@@ -17,29 +18,58 @@ import {
 export const STORAGE_URL_PREFIX = "storage://";
 
 /**
- * Extract the file extension from a MIME type.
+ * The media types a File part may be stored under, each mapped to the
+ * extension its storage key carries.
+ *
+ * This table is an allowlist, not a lookup with a fallback. The media type is
+ * the client's — it comes out of the data URL — and it is persisted and then
+ * sent straight back as `Content-Type` by `/files/*`. A type Platypus never
+ * expects is therefore a document of the client's choosing served from the
+ * deployment's own origin, `text/html` above all, so an unlisted type is
+ * refused at store time rather than filed under a `.bin` key.
+ *
+ * `application/octet-stream` is listed because it is what a file arriving from
+ * a paste buffer, or from an OS that declines to name a type, actually carries;
+ * the file gate admits those on the filename. It is the only type that stores
+ * as `.bin`.
  */
-function getExtensionFromMimeType(mimeType: string): string {
-  const extensions: Record<string, string> = {
-    "image/png": "png",
-    "image/jpeg": "jpg",
-    "image/jpg": "jpg",
-    "image/gif": "gif",
-    "image/webp": "webp",
-    "image/svg+xml": "svg",
-    "image/bmp": "bmp",
-    "image/tiff": "tiff",
-    "video/mp4": "mp4",
-    "video/webm": "webm",
-    "audio/mpeg": "mp3",
-    "audio/wav": "wav",
-    "audio/ogg": "ogg",
-    "application/pdf": "pdf",
-    "application/json": "json",
-    "text/plain": "txt",
-    "text/csv": "csv",
-  };
-  return extensions[mimeType] || "bin";
+const STORABLE_MEDIA_TYPE_EXTENSIONS: Record<string, string> = {
+  "image/png": "png",
+  "image/jpeg": "jpg",
+  "image/jpg": "jpg",
+  "image/gif": "gif",
+  "image/webp": "webp",
+  "image/svg+xml": "svg",
+  "image/bmp": "bmp",
+  "image/tiff": "tiff",
+  "video/mp4": "mp4",
+  "video/webm": "webm",
+  "audio/mpeg": "mp3",
+  "audio/wav": "wav",
+  "audio/ogg": "ogg",
+  "application/pdf": "pdf",
+  "application/json": "json",
+  "text/plain": "txt",
+  "text/csv": "csv",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
+    "docx",
+  "application/octet-stream": "bin",
+};
+
+/**
+ * The extension to file a storable media type under.
+ *
+ * Throws `ValidationError` on a type outside
+ * {@link STORABLE_MEDIA_TYPE_EXTENSIONS}, the same way the storage-key
+ * assertion does: the caller treats a failure as "leave the data URL alone",
+ * so the part stays inline and nothing is written.
+ */
+function extensionForMediaType(mimeType: string): string {
+  const extension = STORABLE_MEDIA_TYPE_EXTENSIONS[mimeType.toLowerCase()];
+  if (!extension) {
+    throw new ValidationError(`Unsupported file media type: ${mimeType}`);
+  }
+  return extension;
 }
 
 /**
@@ -141,7 +171,7 @@ export async function extractFiles(
             const { mimeType, base64Data } = parsed;
             const buffer = Buffer.from(base64Data, "base64");
             const contentHash = hashContent(buffer);
-            const extension = getExtensionFromMimeType(mimeType);
+            const extension = extensionForMediaType(mimeType);
             const key = generateStorageKey(
               { ...context, messageId: message.id },
               partIndex,

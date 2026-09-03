@@ -196,5 +196,21 @@ describe("Files Routes", () => {
         "private, max-age=31536000, immutable",
       );
     });
+
+    // The stored media type decides how the browser treats the bytes, so a
+    // browser that sniffs a different type from the content decides instead.
+    it("should tell the browser not to sniff a type from the bytes", async () => {
+      mockSession({ id: "user-1", email: "test@example.com", role: "user" });
+      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
+      mockDb.limit.mockResolvedValueOnce([{ ownerId: "user-1" }]);
+      mockStorageGet.mockResolvedValueOnce({
+        data: Buffer.from("test image data"),
+        contentType: "image/png",
+      });
+
+      const res = await app.request(baseUrl);
+      expect(res.status).toBe(200);
+      expect(res.headers.get("X-Content-Type-Options")).toBe("nosniff");
+    });
   });
 });
