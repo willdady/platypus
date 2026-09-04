@@ -79,6 +79,32 @@ async function flushMicrotasks() {
   }
 }
 
+/**
+ * Dispatches two events of the same type back-to-back inside the debounce
+ * window and reports how many trigger runs came out the other side: 1 when
+ * the pair shared a debounce key, 2 when it keyed apart.
+ */
+async function runsForPair(
+  trigger: ReturnType<typeof makeEventTrigger>,
+  event: Parameters<typeof dispatchEvent>[2],
+  first: unknown,
+  second: unknown,
+): Promise<number> {
+  // Each dispatch runs its own webhook query (none) then trigger query.
+  mockDb.where
+    .mockResolvedValueOnce([])
+    .mockResolvedValueOnce([trigger])
+    .mockResolvedValueOnce([])
+    .mockResolvedValueOnce([trigger]);
+
+  dispatchEvent("org-1", "ws-1", event, first);
+  await vi.advanceTimersByTimeAsync(0);
+  dispatchEvent("org-1", "ws-1", event, second);
+  await flushMicrotasks();
+
+  return mockExecuteTrigger.mock.calls.length;
+}
+
 describe("event-dispatch", () => {
   beforeEach(() => {
     vi.useFakeTimers();
@@ -387,6 +413,78 @@ describe("event-dispatch", () => {
       // Both calls key onto the same trigger+card debounce entry, so they
       // coalesce into a single execution — same as card.updated does.
       expect(mockExecuteTrigger).toHaveBeenCalledTimes(1);
+    });
+
+    it("should not coalesce card.deleted events for two different cards", async () => {
+      // card.deleted carries its id as `cardId`, not `id`. Two unrelated cards
+      // deleted inside the debounce window must key apart (#811).
+      const runs = await runsForPair(
+        makeEventTrigger({ config: { events: ["card.deleted"] } }),
+        "card.deleted",
+        { cardId: "c1", boardId: "board-1", columnId: "col-1" },
+        { cardId: "c2", boardId: "board-1", columnId: "col-1" },
+      );
+
+      expect(runs).toBe(2);
+    });
+
+    it("should still coalesce repeated card.deleted events for the same card", async () => {
+      const runs = await runsForPair(
+        makeEventTrigger({ config: { events: ["card.deleted"] } }),
+        "card.deleted",
+        { cardId: "c1", boardId: "board-1", columnId: "col-1" },
+        { cardId: "c1", boardId: "board-1", columnId: "col-1" },
+      );
+
+      expect(runs).toBe(1);
+    });
+
+    it("should not coalesce notification.dismissed events for two different notifications", async () => {
+      const runs = await runsForPair(
+        makeEventTrigger({ config: { events: ["notification.dismissed"] } }),
+        "notification.dismissed",
+        { notificationId: "n-1" },
+        { notificationId: "n-2" },
+      );
+
+      expect(runs).toBe(2);
+    });
+
+    it("should not coalesce single notification.read events for two different notifications", async () => {
+      const runs = await runsForPair(
+        makeEventTrigger({ config: { events: ["notification.read"] } }),
+        "notification.read",
+        { notificationId: "n-1", userId: "user-1" },
+        { notificationId: "n-2", userId: "user-1" },
+      );
+
+      expect(runs).toBe(2);
+    });
+
+    it("should coalesce bulk notification.read events, which name no single entity", async () => {
+      // A bulk mark-all-read is legitimately a multi-entity event, so it keeps
+      // sharing the per-trigger fallback bucket.
+      const runs = await runsForPair(
+        makeEventTrigger({ config: { events: ["notification.read"] } }),
+        "notification.read",
+        { notificationIds: ["n-1", "n-2"], userId: "user-1", bulk: true },
+        { notificationIds: ["n-3"], userId: "user-1", bulk: true },
+      );
+
+      expect(runs).toBe(1);
+    });
+
+    it("should prefer a top-level id over an alternate key when both are present", async () => {
+      // Row-spreading events carry `id`; a stray `cardId` naming a different
+      // entity must not split the bucket for one and the same card.
+      const runs = await runsForPair(
+        makeEventTrigger({ config: { events: ["card.updated"] } }),
+        "card.updated",
+        { id: "c1", cardId: "other-1" },
+        { id: "c1", cardId: "other-2" },
+      );
+
+      expect(runs).toBe(1);
     });
 
     it("should handle multiple webhooks and triggers", async () => {

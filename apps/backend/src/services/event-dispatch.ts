@@ -12,6 +12,26 @@ import { logger } from "../logger.ts";
 import { currentCausingAgents } from "../event-causation.ts";
 import type { WebhookEvent, EventTriggerConfig } from "@platypus/schemas";
 
+/**
+ * The debounce bucket an event with no single entity falls back to. Bulk
+ * `notification.read` lands here by design — it names a set of notifications,
+ * so coalescing two of them into one run is correct.
+ */
+const SHARED_BUCKET = "unknown";
+
+/** The entity id an event's data carries under `key`, or `undefined`. */
+const entityIdOf = (
+  eventData: unknown,
+  key: "id" | "cardId" | "notificationId",
+): string | number | undefined => {
+  const value = (eventData as Record<string, unknown> | null | undefined)?.[
+    key
+  ];
+  return typeof value === "string" || typeof value === "number"
+    ? value
+    : undefined;
+};
+
 export function dispatchEvent(
   orgId: string,
   workspaceId: string,
@@ -111,8 +131,19 @@ export function dispatchEvent(
           }
         }
 
-        // Debounce per trigger+entity to coalesce rapid events
-        const entityId = (data as { id?: string | number })?.id ?? "unknown";
+        // Debounce per trigger+entity to coalesce rapid events. Only the
+        // row-spreading events (`card.created`/`updated`/`moved`,
+        // `notification.created`/`updated`) carry a top-level `id`; the rest
+        // name their entity under an event-specific key, and reading `id`
+        // alone dropped all of them into SHARED_BUCKET per trigger, so two
+        // unrelated entities coalesced into a single run (#811). A new event
+        // naming its id under some further key would regress the same way —
+        // the chain below is structural, not enforced per event.
+        const entityId =
+          entityIdOf(data, "id") ??
+          entityIdOf(data, "cardId") ??
+          entityIdOf(data, "notificationId") ??
+          SHARED_BUCKET;
         const debounceKey = `${trigger.id}:${entityId}`;
 
         debounceTriggerExecution(
