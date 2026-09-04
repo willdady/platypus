@@ -43,6 +43,25 @@ Two more things worth doing every time:
 - **Bump both images together.** The backend and frontend are released as a pair
   and are only tested against each other.
 
+## Coming from 3.4
+
+The Embed widget added in 3.4.0 was stored under the type name `iframe`. From
+3.5.0 it is stored as `embed`, matching what the Dashboard UI has always called
+it. A migration rewrites existing rows when the backend starts, so a production
+upgrade needs nothing from you.
+
+Two cases do:
+
+- **You create Widgets through the REST API.** Send `"type": "embed"`; the
+  backend no longer accepts `iframe`.
+- **You run a development database with `drizzle-kit push`.** Push applies
+  schema changes only and skips migration files, so Embed widgets created before
+  this release keep the old name and stop rendering. Rewrite them by hand:
+
+  ```sql
+  UPDATE "widget" SET "type" = 'embed' WHERE "type" = 'iframe';
+  ```
+
 ## Coming from 2.x
 
 Nothing beyond the section above. Configuration is stable across 2.x, and the
