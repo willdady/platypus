@@ -6,6 +6,9 @@
     "skipLibCheck": true,
     "strict": true,
     "noEmit": true,
+    // `@platypus/schemas` ships raw TypeScript and imports its own modules with
+    // an explicit `.ts` extension, which the backend's Node runtime requires.
+    "allowImportingTsExtensions": true,
     "esModuleInterop": true,
     "module": "esnext",
     "moduleResolution": "bundler",

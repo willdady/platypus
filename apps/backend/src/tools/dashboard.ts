@@ -7,13 +7,8 @@ import {
   widget as widgetTable,
 } from "../db/schema.ts";
 import {
-  metricWidgetDataSchema,
-  textWidgetDataSchema,
-  imageWidgetDataSchema,
-  weatherWidgetDataSchema,
-  lineChartWidgetDataSchema,
-  pieChartWidgetDataSchema,
-  barChartWidgetDataSchema,
+  agentWritableWidgetDataSchema,
+  agentWritableWidgetTypeSchema,
 } from "@platypus/schemas";
 
 export function createDashboardTools(
@@ -104,28 +99,15 @@ export function createDashboardTools(
     inputSchema: z.object({
       dashboardId: z.string().describe("The ID of the dashboard"),
       widgetId: z.string().describe("The ID of the widget to update"),
-      type: z
-        .enum([
-          "metric",
-          "text",
-          "image",
-          "weather",
-          "line-chart",
-          "pie-chart",
-          "bar-chart",
-        ])
-        .describe("The widget type — must match the widget's existing type"),
-      data: z
-        .union([
-          metricWidgetDataSchema,
-          textWidgetDataSchema,
-          imageWidgetDataSchema,
-          weatherWidgetDataSchema,
-          lineChartWidgetDataSchema,
-          pieChartWidgetDataSchema,
-          barChartWidgetDataSchema,
-        ])
-        .describe("The new data for the widget — must match the widget's type"),
+      // Both derived from the widget type registry's `agentWritable` entries,
+      // never listed here: a type an Agent must not write (Embed) is excluded
+      // because the registry says so, not because this list forgot it.
+      type: agentWritableWidgetTypeSchema.describe(
+        "The widget type — must match the widget's existing type",
+      ),
+      data: agentWritableWidgetDataSchema.describe(
+        "The new data for the widget — must match the widget's type",
+      ),
     }),
     execute: async ({ dashboardId, widgetId, type, data }) => {
       const dash = await db

@@ -8,12 +8,13 @@
     "types": ["node"],
     "module": "esnext",
     "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
     "esModuleInterop": true,
     "isolatedModules": true,
     "strict": true,
     "skipLibCheck": true,
     "noEmit": true
   },
-  "include": ["index.ts", "index.test.ts"],
+  "include": ["**/*.ts"],
   "exclude": ["node_modules"]
 }
