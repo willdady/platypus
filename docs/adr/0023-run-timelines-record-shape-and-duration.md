@@ -15,7 +15,7 @@ seconds?" has no answer, and a run that fans out to Sub-Agents records nothing
 about the delegates at all. #647 adds a durable, timestamped **Run timeline**
 and renders it as a waterfall on a run detail page.
 
-The decision is what that timeline is *for*, because the obvious next step from
+The decision is what that timeline is _for_, because the obvious next step from
 "record what happened" is to keep recording more of it until the feature is a
 second-rate observability platform. **A Run timeline answers where a single
 run's time went — and only that.** Each **Run event** records a type, a start,
@@ -40,7 +40,7 @@ all of it moot rather than merely handled.
 
 The consequences worth naming. The timeline can say a Tool ran for 5.9 seconds
 and failed; it cannot say what it was called with, so some debugging still ends
-at "reproduce it in a Chat". Error *strings* are the deliberate exception —
+at "reproduce it in a Chat". Error _strings_ are the deliberate exception —
 captured, capped, and explicitly marked when truncated — because a timeline
 that cannot explain a failure answers half the question it exists for; they may
 echo fragments of a failed request, and that is a known and accepted limit
