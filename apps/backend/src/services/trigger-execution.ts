@@ -146,15 +146,19 @@ export const executeTrigger = async (
   // next cause. On a cron both are empty; on an event Trigger they are the
   // ambient context of the write that dispatched it, which is the one thing a
   // Trigger loop leaves no other record of (#812).
+  //
+  // Identifiers only. The instruction is deliberately absent: on an event
+  // Trigger it opens with the serialised event payload, so even a short prefix
+  // put Card titles and body text on this line (#812).
   logger.info(
     {
       triggerId: id,
       runId,
       agentId,
       type: trigger.type,
+      eventType: eventContext?.eventType,
       causingAgents: currentCausingAgents(),
       originatingTriggerId: currentOriginatingTrigger(),
-      instruction: effectiveInstruction.substring(0, 100) + "...",
     },
     "Starting trigger execution",
   );

@@ -156,6 +156,28 @@ describe("trigger-execution", () => {
       });
     });
 
+    it("logs identifiers only — never the event payload's user content", async () => {
+      // The instruction an event Trigger runs opens with the serialised
+      // payload, so a prefix of it is a prefix of the Card (#812).
+      mockDb.limit.mockResolvedValueOnce([mockScopeRow]);
+      mockGenerate.mockResolvedValueOnce({ text: "ok", stats: {} });
+
+      await executeTrigger(baseTrigger, {
+        eventType: "card.updated",
+        eventData: {
+          id: "c1",
+          title: "Board the quarterly acquisition",
+          body: "Confidential body text",
+        },
+      });
+
+      const logged = JSON.stringify(mockLogger.info.mock.calls);
+      expect(logged).not.toContain("Board the quarterly acquisition");
+      expect(logged).not.toContain("Confidential body text");
+      expect(logged).not.toContain("Do something");
+      expect(startLine()).toMatchObject({ eventType: "card.updated" });
+    });
+
     it("establishes itself as the originating Trigger for everything the run writes", async () => {
       mockDb.limit.mockResolvedValueOnce([mockScopeRow]);
       let seen: { trigger?: string; agents?: readonly string[] } = {};
