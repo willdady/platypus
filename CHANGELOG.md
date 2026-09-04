@@ -1,5 +1,21 @@
 # Changelog
 
+## [3.5.0](https://github.com/willdady/platypus/compare/v3.4.0...v3.5.0) (2026-09-04)
+
+
+### Features
+
+* **backend:** log the causal chain and trigger dispatch decisions ([#815](https://github.com/willdady/platypus/issues/815)) ([d82dfc7](https://github.com/willdady/platypus/commit/d82dfc79a22c391237f11af2a5e26600f821d078))
+* **frontend:** extract shared RevealableInput control ([#785](https://github.com/willdady/platypus/issues/785)) ([ef0f5a8](https://github.com/willdady/platypus/commit/ef0f5a862619e5fed6bc72b76262955a885d995d)), closes [#784](https://github.com/willdady/platypus/issues/784)
+
+
+### Bug Fixes
+
+* **backend:** key the event debounce on alternate entity ids ([#813](https://github.com/willdady/platypus/issues/813)) ([ab11a23](https://github.com/willdady/platypus/commit/ab11a23b765d4dd861b144d065ca625dfaa24587))
+* **dashboard:** stop the embed widget sharing the app origin ([#809](https://github.com/willdady/platypus/issues/809)) ([29b63c6](https://github.com/willdady/platypus/commit/29b63c619397f682f09afcba4c32da3708426951))
+* **frontend:** align form submit-button labels to the form-conventions rule ([#805](https://github.com/willdady/platypus/issues/805)) ([24dcdb4](https://github.com/willdady/platypus/commit/24dcdb4fcc1125531f24d9cf2753b99fb7cb02bc))
+* **schemas:** correlate widget type and data ([74cf5f9](https://github.com/willdady/platypus/commit/74cf5f92d5d3bcc88db0b4f2f296e2565a867a46)), closes [#780](https://github.com/willdady/platypus/issues/780)
+
 ## [3.4.0](https://github.com/willdady/platypus/compare/v3.3.0...v3.4.0) (2026-08-30)
 
 
