@@ -108,17 +108,12 @@ export function dispatchEvent(
         const triggerConfig = trigger.config as EventTriggerConfig;
         if (!triggerConfig.events.includes(event)) continue;
 
-        // Self-actor guard: skip when the agent that caused this event is the
-        // very same agent this trigger would run — or a delegate beneath it, at
-        // any depth. This stops an agent's own card writes (through any of its
-        // Sub-Agents) from re-firing the trigger that started it (#267, #668).
-        // Human-originated events carry an empty chain, so they always pass.
-        if (trigger.agentId && causingAgents.includes(trigger.agentId)) {
-          logDecision(trigger, "skipped_self_actor");
-          continue;
-        }
-
-        // Apply event filters
+        // Apply event filters. Evaluated before the self-actor guard so that a
+        // logged decision always describes a Trigger this event actually
+        // selected: a filtered-out Trigger is not a candidate and reports
+        // nothing, which is what lets a reader tell a filter mismatch from a
+        // suppressed dispatch. Both paths skip the Trigger either way, so the
+        // order is a logging distinction only.
         if (triggerConfig.filters?.boardId) {
           const eventData = data as Record<string, unknown>;
           if (eventData.boardId !== triggerConfig.filters.boardId) continue;
@@ -143,6 +138,16 @@ export function dispatchEvent(
           ) {
             continue;
           }
+        }
+
+        // Self-actor guard: skip when the agent that caused this event is the
+        // very same agent this trigger would run — or a delegate beneath it, at
+        // any depth. This stops an agent's own card writes (through any of its
+        // Sub-Agents) from re-firing the trigger that started it (#267, #668).
+        // Human-originated events carry an empty chain, so they always pass.
+        if (trigger.agentId && causingAgents.includes(trigger.agentId)) {
+          logDecision(trigger, "skipped_self_actor");
+          continue;
         }
 
         // Debounce per trigger+entity to coalesce rapid events

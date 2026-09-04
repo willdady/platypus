@@ -533,6 +533,32 @@ describe("event-dispatch", () => {
         expect(logged).not.toContain("Confidential body text");
       });
 
+      it("records no decision for a filtered-out trigger, even when its own agent caused the event", async () => {
+        // Otherwise a filter mismatch would masquerade as loop suppression:
+        // the Operator would read `skipped_self_actor` on a Trigger this event
+        // never selected in the first place.
+        const trigger = makeEventTrigger({
+          id: "trigger-1",
+          agentId: "agent-1",
+          config: {
+            events: ["card.updated"],
+            filters: { boardId: "board-1" },
+          },
+        });
+        mockDb.where.mockResolvedValueOnce([]).mockResolvedValueOnce([trigger]);
+
+        withCausation(["agent-1"], () =>
+          dispatchEvent("org-1", "ws-1", "card.updated", {
+            id: "c1",
+            boardId: "board-2",
+          }),
+        );
+        await flushMicrotasks();
+
+        expect(mockExecuteTrigger).not.toHaveBeenCalled();
+        expect(decisionLines()).toEqual([]);
+      });
+
       it("records no decision for a trigger an event filter ruled out", async () => {
         const trigger = makeEventTrigger({
           id: "trigger-1",
