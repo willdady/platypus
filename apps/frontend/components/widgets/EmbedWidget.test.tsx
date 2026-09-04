@@ -1,40 +1,40 @@
 import { describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
 import type { Widget } from "@platypus/schemas";
-import { IframeWidget } from "./IframeWidget";
+import { EmbedWidget } from "./EmbedWidget";
 
-const iframeWidget: Widget = {
-  id: "widget-iframe",
+const embedWidget: Widget = {
+  id: "widget-embed",
   dashboardId: "dashboard-1",
-  type: "iframe",
+  type: "embed",
   title: "Service status",
   data: { url: "https://status.example.com/embed" },
   createdAt: new Date("2026-01-01T00:00:00Z"),
   updatedAt: new Date("2026-01-01T00:00:00Z"),
 };
 
-describe("IframeWidget", () => {
+describe("EmbedWidget", () => {
   it("renders the embed with fixed isolation attributes", () => {
     render(
-      <IframeWidget widget={iframeWidget} editing={false} onSave={vi.fn()} />,
+      <EmbedWidget widget={embedWidget} editing={false} onSave={vi.fn()} />,
     );
 
-    const iframe = screen.getByTitle("Service status");
-    expect(iframe).toHaveAttribute(
+    const frame = screen.getByTitle("Service status");
+    expect(frame).toHaveAttribute(
       "sandbox",
       "allow-scripts allow-forms allow-popups",
     );
     // Spelled out separately: with this flag the frame is same-origin with the
     // app for a URL on its own origin, and can remove the sandbox itself.
-    expect(iframe.getAttribute("sandbox")).not.toContain("allow-same-origin");
-    expect(iframe).toHaveAttribute("referrerpolicy", "no-referrer");
-    expect(iframe).toHaveAttribute("src", "https://status.example.com/embed");
+    expect(frame.getAttribute("sandbox")).not.toContain("allow-same-origin");
+    expect(frame).toHaveAttribute("referrerpolicy", "no-referrer");
+    expect(frame).toHaveAttribute("src", "https://status.example.com/embed");
   });
 
   it("shows an empty state when no URL has been configured", () => {
     render(
-      <IframeWidget
-        widget={{ ...iframeWidget, data: null }}
+      <EmbedWidget
+        widget={{ ...embedWidget, data: null }}
         editing={false}
         onSave={vi.fn()}
       />,
@@ -47,8 +47,8 @@ describe("IframeWidget", () => {
 
   it("shows the empty state instead of rendering a persisted non-HTTPS URL", () => {
     render(
-      <IframeWidget
-        widget={{ ...iframeWidget, data: { url: "http://status.example.com" } }}
+      <EmbedWidget
+        widget={{ ...embedWidget, data: { url: "http://status.example.com" } }}
         editing={false}
         onSave={vi.fn()}
       />,
@@ -62,9 +62,7 @@ describe("IframeWidget", () => {
 
   it("shows the blocked-embed hint and saves edited values", () => {
     const onSave = vi.fn();
-    render(
-      <IframeWidget widget={iframeWidget} editing={true} onSave={onSave} />,
-    );
+    render(<EmbedWidget widget={embedWidget} editing={true} onSave={onSave} />);
 
     expect(
       screen.getByText(
@@ -87,9 +85,7 @@ describe("IframeWidget", () => {
 
   it("shows a field error and blocks saving until the URL uses HTTPS", () => {
     const onSave = vi.fn();
-    render(
-      <IframeWidget widget={iframeWidget} editing={true} onSave={onSave} />,
-    );
+    render(<EmbedWidget widget={embedWidget} editing={true} onSave={onSave} />);
 
     const urlInput = screen.getByLabelText("Embed URL");
     fireEvent.change(urlInput, {

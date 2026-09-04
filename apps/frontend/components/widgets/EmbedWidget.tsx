@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import type { IframeWidgetData, Widget } from "@platypus/schemas";
+import type { EmbedWidgetData, Widget } from "@platypus/schemas";
 import { useResetOnChange } from "@/hooks/use-reset-on-change";
 import { Button } from "@/components/ui/button";
 import { FieldError } from "@/components/ui/field";
@@ -23,7 +23,7 @@ function isHttpsUrl(value: unknown): value is string {
 /**
  * Renders a human-managed HTTPS page with fixed browser isolation attributes.
  */
-export function IframeWidget({
+export function EmbedWidget({
   widget,
   editing,
   onSave,
@@ -32,7 +32,7 @@ export function IframeWidget({
   editing: boolean;
   onSave: (data: object, title: string) => void;
 }) {
-  const data = widget.data as IframeWidgetData | null | undefined;
+  const data = widget.data as EmbedWidgetData | null | undefined;
   const [title, setTitle] = useState(widget.title);
   const [url, setUrl] = useState(data?.url ?? "");
   const [urlError, setUrlError] = useState<string | null>(null);
@@ -61,22 +61,22 @@ export function IframeWidget({
     return (
       <div className="flex h-full flex-col gap-2 p-3">
         <div className="space-y-1">
-          <Label className="text-xs" htmlFor={`iframe-title-${widget.id}`}>
+          <Label className="text-xs" htmlFor={`embed-title-${widget.id}`}>
             Name
           </Label>
           <Input
-            id={`iframe-title-${widget.id}`}
+            id={`embed-title-${widget.id}`}
             value={title}
             onChange={(event) => setTitle(event.target.value)}
             className="h-7 text-sm"
           />
         </div>
         <div className="space-y-1">
-          <Label className="text-xs" htmlFor={`iframe-url-${widget.id}`}>
+          <Label className="text-xs" htmlFor={`embed-url-${widget.id}`}>
             Embed URL
           </Label>
           <Input
-            id={`iframe-url-${widget.id}`}
+            id={`embed-url-${widget.id}`}
             type="url"
             value={url}
             onChange={(event) => {

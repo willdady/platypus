@@ -435,6 +435,13 @@
       "when": 1788050501690,
       "tag": "0061_lowercase_invitation_emails",
       "breakpoints": true
+    },
+    {
+      "idx": 62,
+      "version": "7",
+      "when": 1788050501691,
+      "tag": "0062_rename_iframe_widget_type",
+      "breakpoints": true
     }
   ]
 }

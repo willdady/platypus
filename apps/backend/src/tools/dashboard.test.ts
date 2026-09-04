@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { z } from "zod";
+import { widgetTypeRegistry } from "@platypus/schemas";
 import { mockDb, resetMockDb } from "../test-utils.ts";
 
 import { createDashboardTools } from "./dashboard.ts";
@@ -49,7 +50,7 @@ describe("createDashboardTools", () => {
       mockDb.limit.mockResolvedValueOnce([{ id: dashboardId, workspaceId }]);
       const widgets = [
         { id: widgetId, dashboardId, type: "metric" },
-        { id: "widget-iframe", dashboardId, type: "iframe" },
+        { id: "widget-embed", dashboardId, type: "embed" },
       ];
       mockDb.orderBy.mockResolvedValueOnce(widgets);
 
@@ -60,12 +61,12 @@ describe("createDashboardTools", () => {
   });
 
   describe("getWidget", () => {
-    it("returns iframe widget data without exposing it to agent writes", async () => {
+    it("returns embed widget data without exposing it to agent writes", async () => {
       mockDb.limit.mockResolvedValueOnce([{ id: dashboardId, workspaceId }]);
       const widget = {
         id: widgetId,
         dashboardId,
-        type: "iframe",
+        type: "embed",
         data: { url: "https://status.example.com/embed" },
       };
       mockDb.limit.mockResolvedValueOnce([widget]);
@@ -77,17 +78,46 @@ describe("createDashboardTools", () => {
   });
 
   describe("updateWidgetData", () => {
-    it("does not expose iframe as an agent-writable widget type", () => {
-      const schema = tools.updateWidgetData.inputSchema as z.ZodType;
+    // The invariant, not one type: whatever the registry declares
+    // non-writable, the tool must refuse. A new widget type that declares
+    // `agentWritable: false` is covered the moment it is added.
+    it("accepts exactly the widget types the registry marks agent-writable", () => {
+      const schema = tools.updateWidgetData
+        .inputSchema as unknown as z.ZodObject<{
+        type: z.ZodEnum<Record<string, string>>;
+      }>;
+      const accepted = schema.shape.type.options;
 
-      expect(
-        schema.safeParse({
+      expect(Object.keys(widgetTypeRegistry).length).toBeGreaterThan(
+        accepted.length,
+      );
+      for (const [type, definition] of Object.entries(widgetTypeRegistry)) {
+        expect(accepted.includes(type), type).toBe(definition.agentWritable);
+      }
+    });
+
+    it("rejects every widget type the registry marks human-owned", () => {
+      const schema = tools.updateWidgetData.inputSchema as z.ZodType;
+      const humanOwned = Object.entries(widgetTypeRegistry).filter(
+        ([, definition]) => !definition.agentWritable,
+      );
+
+      expect(humanOwned.length).toBeGreaterThan(0);
+      for (const [type] of humanOwned) {
+        const result = schema.safeParse({
           dashboardId,
           widgetId,
-          type: "iframe",
+          type,
           data: { url: "https://status.example.com/embed" },
-        }).success,
-      ).toBe(false);
+        });
+
+        expect(result.success, type).toBe(false);
+        // Rejected for the type itself, not incidentally for the data shape.
+        expect(
+          result.error?.issues.some((issue) => issue.path[0] === "type"),
+          type,
+        ).toBe(true);
+      }
     });
 
     it("returns error when dashboard not found", async () => {

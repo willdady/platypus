@@ -16,6 +16,7 @@ import { writeEntity } from "@/lib/api-write";
 import { useBackendUrl } from "@/app/client-context";
 import { useAuth } from "@/components/auth-provider";
 import {
+  widgetTypeRegistry,
   type Dashboard,
   type Widget,
   type WidgetType,
@@ -63,7 +64,14 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { widgetTypeIcon, widgetTypeComponent } from "@/components/widgets";
+import { widgetTypeUi } from "@/components/widgets";
+
+// The add-widget picker in registry order. `Object.entries` widens the keys to
+// `string`, so they are put back at their real type here.
+const widgetTypeEntries = Object.entries(widgetTypeRegistry) as [
+  WidgetType,
+  (typeof widgetTypeRegistry)[WidgetType],
+][];
 
 // ─── Main page ──────────────────────────────────────────────────────────────
 
@@ -295,22 +303,7 @@ const DashboardPage = ({
     // matching child the grid discards it and assigns a default (tiny) size.
     await mutateWidgets();
 
-    // rowHeight=30 — each unit is 30px + 10px margin = 40px effective.
-    // h values are ~1.5× the old rowHeight=60 defaults to keep similar visual sizes:
-    //   metric h=5  → 5×30 + 4×10 = 190px  (≈ old h=3 at 200px)
-    //   text   h=7  → 7×30 + 6×10 = 270px  (≈ old h=4 at 270px)
-    // All h values must be >= 3 (the global minH enforced by withMinH).
-    const defaultSize: Record<string, { w: number; h: number }> = {
-      metric: { w: 3, h: 5 },
-      text: { w: 6, h: 7 },
-      image: { w: 4, h: 7 },
-      iframe: { w: 6, h: 8 },
-      weather: { w: 2, h: 8 },
-      "line-chart": { w: 6, h: 8 },
-      "pie-chart": { w: 4, h: 8 },
-      "bar-chart": { w: 6, h: 8 },
-    };
-    const { w: dw, h: dh } = defaultSize[newWidgetType] ?? { w: 4, h: 3 };
+    const { w: dw, h: dh } = widgetTypeRegistry[newWidgetType].defaultSize;
 
     const maxY = stagedDesktop.reduce(
       (m, item) => Math.max(m, item.y + item.h),
@@ -375,24 +368,29 @@ const DashboardPage = ({
   // Stamp minH onto every layout item at render time. Values are per widget
   // type and not stored in the DB — injected here so the grid enforces them
   // during resize.
-  const widgetMinH: Record<string, number> = {
+  // Sparse on purpose: an absent type means "use the default". `Partial`
+  // keeps a mistyped key a compile error while leaving omission legal.
+  const widgetMinH: Partial<Record<WidgetType, number>> = {
     weather: 8,
     "line-chart": 6,
     "pie-chart": 6,
     "bar-chart": 6,
   };
-  const widgetMinW: Record<string, number> = {
+  const widgetMinW: Partial<Record<WidgetType, number>> = {
     "line-chart": 2,
     "pie-chart": 2,
     "bar-chart": 2,
   };
-  const widgetTypeById = Object.fromEntries(widgets.map((w) => [w.id, w.type]));
+  const widgetTypeById = new Map(widgets.map((w) => [w.id, w.type]));
   const withMinH = (items: RglLayoutItem[]) =>
-    items.map((item) => ({
-      ...item,
-      minH: widgetMinH[widgetTypeById[item.i] ?? ""] ?? 3,
-      minW: widgetMinW[widgetTypeById[item.i] ?? ""] ?? 1,
-    }));
+    items.map((item) => {
+      const type = widgetTypeById.get(item.i);
+      return {
+        ...item,
+        minH: (type && widgetMinH[type]) ?? 3,
+        minW: (type && widgetMinW[type]) ?? 1,
+      };
+    });
 
   // Compute the effective layout for display
   const effectiveDesktopLayout = withMinH(
@@ -629,13 +627,10 @@ const DashboardPage = ({
                     >
                       <div className="flex items-center gap-1.5 min-w-0">
                         {(() => {
-                          const Icon =
-                            widgetTypeIcon[
-                              widget.type as keyof typeof widgetTypeIcon
-                            ];
-                          return Icon ? (
+                          const Icon = widgetTypeUi[widget.type].icon;
+                          return (
                             <Icon className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                          ) : null;
+                          );
                         })()}
                         <span className="text-xs font-medium truncate">
                           {widget.title}
@@ -730,10 +725,8 @@ const DashboardPage = ({
                     >
                       {(() => {
                         const WidgetComponent =
-                          widgetTypeComponent[
-                            widget.type as keyof typeof widgetTypeComponent
-                          ];
-                        return WidgetComponent ? (
+                          widgetTypeUi[widget.type].component;
+                        return (
                           <WidgetComponent
                             widget={widget}
                             editing={isEditing}
@@ -741,7 +734,7 @@ const DashboardPage = ({
                               handleSaveWidgetData(widget, data, title)
                             }
                           />
-                        ) : null;
+                        );
                       })()}
                     </div>
                   </div>
@@ -775,26 +768,12 @@ const DashboardPage = ({
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {(
-                    [
-                      ["metric", "Metric"],
-                      ["text", "Text / Markdown"],
-                      ["image", "Image"],
-                      ["iframe", "Embed"],
-                      ["weather", "Weather"],
-                      ["line-chart", "Line Chart"],
-                      ["pie-chart", "Pie Chart"],
-                      ["bar-chart", "Bar Chart"],
-                    ] as const
-                  ).map(([value, label]) => {
-                    const Icon =
-                      widgetTypeIcon[value as keyof typeof widgetTypeIcon];
+                  {widgetTypeEntries.map(([value, { label }]) => {
+                    const Icon = widgetTypeUi[value].icon;
                     return (
                       <SelectItem key={value} value={value}>
                         <span className="flex items-center gap-2">
-                          {Icon && (
-                            <Icon className="h-4 w-4 shrink-0 text-muted-foreground" />
-                          )}
+                          <Icon className="h-4 w-4 shrink-0 text-muted-foreground" />
                           {label}
                         </span>
                       </SelectItem>

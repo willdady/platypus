@@ -1,0 +1,22 @@
+-- Custom SQL migration file, put your code below! --
+
+-- Rename the persisted Embed widget type from `iframe` to `embed` (issue #760).
+--
+-- Every other widget type uses one name throughout — the schema, the database,
+-- the interface and the docs. Embed did not: it was persisted as `iframe`,
+-- which names the rendering mechanism rather than the thing, while every human
+-- surface called it Embed. Issue #760 moved widget types behind a single
+-- registry keyed on the persisted string, and settling the name was part of
+-- that work — a persisted string is cheapest to rename before more rows exist.
+--
+-- Single-shot: the application accepts `embed` only. `widget.type` carries no
+-- unique constraint (the only uniqueness on the table is
+-- `uq_widget_dashboard_title`, over the dashboard and the title), so there is
+-- no collision to handle and the rewrite is unconditional.
+--
+-- Idempotent: a second run matches nothing, because no `iframe` row remains.
+--
+-- NB: `drizzle-kit push` (the dev workflow) does NOT execute migration files,
+-- so this does not run in dev. A dev database holding Embed widgets created
+-- before this change needs the same UPDATE applied by hand.
+UPDATE "widget" SET "type" = 'embed' WHERE "type" = 'iframe';
