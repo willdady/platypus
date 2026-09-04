@@ -230,6 +230,26 @@ when a run fails and you need to find that run's log lines: backend logs are
 keyed by the run id, so copying it here and pasting it into your log query is
 how you cross-reference a failed run against what happened behind the scenes.
 
+### Why a Trigger didn't run
+
+A run that never happened leaves no row in **Trigger runs**, so the answer is in
+the backend logs. Every time an event reaches a Trigger that subscribes to it,
+Platypus writes one **dispatch decision** line naming the event, the Trigger, the
+Trigger's Agent, the Agents that were running when the write happened, and one of
+three outcomes:
+
+- **fired** — the run is scheduled, and starts once the debounce window closes.
+- **skipped_self_actor** — the Trigger's own Agent (or one of its Sub-Agents)
+  made the write, so running it again would loop.
+- **debounced** — a run was already pending for the same Trigger and record, and
+  this event folded into it. A separate line reports how many events a burst
+  coalesced.
+
+A Trigger whose event or filters didn't match writes no line at all — that, and
+the absence of a decision, is how you tell a filter problem from a suppressed
+run. The lines name identifiers only, never Card titles or body text.
+
+
 Among the per-run stats, **in / out** are the run's total token counts across
 every step — what the run cost — while **context** is a different quantity: how
 much of the model's Context window the conversation filled on the run's final

@@ -1,3 +1,4 @@
+import { logger } from "../logger.ts";
 import type { EventContext } from "./trigger-execution.ts";
 import type { trigger as triggerTable } from "../db/schema.ts";
 
@@ -9,6 +10,8 @@ const pendingTriggers = new Map<
     timer: ReturnType<typeof setTimeout>;
     trigger: Trigger;
     eventContext: EventContext;
+    /** How many events this window has folded together, this one included. */
+    eventsFolded: number;
   }
 >();
 
@@ -47,12 +50,21 @@ const mergedEventContext = (
   };
 };
 
+/**
+ * Schedules `executeFn` for the debounce window `key` names, restarting the
+ * window if one is already open.
+ *
+ * Returns whether this event was folded into an open window rather than
+ * opening one — the caller records that as the dispatch decision (#812), which
+ * is the only way a coalesced burst is distinguishable after the fact from a
+ * single event.
+ */
 export function debounceTriggerExecution(
   key: string,
   trigger: Trigger,
   eventContext: EventContext,
   executeFn: (trigger: Trigger, eventContext: EventContext) => Promise<void>,
-): void {
+): boolean {
   const existing = pendingTriggers.get(key);
   if (existing) {
     clearTimeout(existing.timer);
@@ -62,13 +74,30 @@ export function debounceTriggerExecution(
     existing?.eventContext,
     eventContext,
   );
+  const eventsFolded = (existing?.eventsFolded ?? 0) + 1;
+
+  if (existing) {
+    // Identifiers and a count only: `eventData` carries Card titles and bodies,
+    // which are the Operator's users' content and never belong in a log line.
+    logger.info(
+      { debounceKey: key, triggerId: trigger.id, eventsFolded },
+      "Event trigger burst coalesced",
+    );
+  }
 
   const timer = setTimeout(() => {
     pendingTriggers.delete(key);
     void executeFn(trigger, mergedContext);
   }, DEBOUNCE_MS);
 
-  pendingTriggers.set(key, { timer, trigger, eventContext: mergedContext });
+  pendingTriggers.set(key, {
+    timer,
+    trigger,
+    eventContext: mergedContext,
+    eventsFolded,
+  });
+
+  return existing !== undefined;
 }
 
 export function clearPendingTriggers(): void {

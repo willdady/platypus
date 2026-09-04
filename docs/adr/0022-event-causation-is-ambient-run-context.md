@@ -9,7 +9,10 @@ status: accepted
 > and skips an Event Trigger when the Trigger's own Agent appears anywhere in
 > it. A human write establishes no chain and is never suppressed, including
 > where the record it touched carries stale Agent attribution from an earlier
-> edit. See `apps/backend/src/event-causation.ts` and
+> edit. The ambient record now carries a second dimension alongside the chain —
+> the Trigger whose run is driving the work — established once around a Trigger
+> run and read back when the dispatcher logs its decision. See
+> `apps/backend/src/event-causation.ts` and
 > `apps/backend/src/services/event-dispatch.ts`.
 
 A Workspace write emits a **Webhook event**, and an **Event Trigger** may run an
@@ -59,3 +62,5 @@ reads as a spurious Trigger run, not as an error. Suppressing a _cycle between
 different Triggers_ (#669) is a different rule that this one cannot express, since
 no Agent appears in the other Trigger's chain; the ambient record is the
 extension point where the originating Trigger id belongs when that is built.
+That id is now carried there (#812), for the record a dispatch decision leaves
+rather than for the guard, which still compares Agent ids alone.

@@ -38,19 +38,29 @@ vi.mock("../utils/cron.ts", () => ({
   validateCronExpression: mockValidateCronExpression,
 }));
 
-vi.mock("../logger.ts", () => ({
-  logger: {
-    info: vi.fn(),
-    error: vi.fn(),
-    warn: vi.fn(),
-  },
+const { mockLogger } = vi.hoisted(() => ({
+  mockLogger: { info: vi.fn(), error: vi.fn(), warn: vi.fn() },
 }));
+
+vi.mock("../logger.ts", () => ({ logger: mockLogger }));
 
 vi.mock("nanoid", () => ({
   nanoid: vi.fn(() => "test-id"),
 }));
 
 import { executeTrigger, updateTriggerAfterRun } from "./trigger-execution.ts";
+import {
+  currentCausingAgents,
+  currentOriginatingTrigger,
+  withCausation,
+  withOriginatingTrigger,
+} from "../event-causation.ts";
+
+/** The run-start line the logger recorded, if any. */
+const startLine = (): Record<string, unknown> | undefined =>
+  mockLogger.info.mock.calls.find(
+    (call) => call[1] === "Starting trigger execution",
+  )?.[0] as Record<string, unknown> | undefined;
 
 const baseTrigger = {
   id: "trigger-1",
@@ -114,6 +124,55 @@ describe("trigger-execution", () => {
       expect(part.type).toBe("text");
       if (part.type !== "text") throw new Error("expected a text part");
       expect(part.text).toBe("Do something");
+    });
+
+    it("records what caused this firing on the run-start line", async () => {
+      mockDb.limit.mockResolvedValueOnce([mockScopeRow]);
+      mockGenerate.mockResolvedValueOnce({ text: "ok", stats: {} });
+
+      await withOriginatingTrigger("trigger-0", () =>
+        withCausation(["agent-9"], () => executeTrigger(baseTrigger)),
+      );
+
+      expect(startLine()).toMatchObject({
+        triggerId: "trigger-1",
+        runId: "test-id",
+        agentId: "agent-1",
+        type: "cron",
+        causingAgents: ["agent-9"],
+        originatingTriggerId: "trigger-0",
+      });
+    });
+
+    it("reports an uncaused firing as one, rather than omitting the fields", async () => {
+      mockDb.limit.mockResolvedValueOnce([mockScopeRow]);
+      mockGenerate.mockResolvedValueOnce({ text: "ok", stats: {} });
+
+      await executeTrigger(baseTrigger);
+
+      expect(startLine()).toMatchObject({
+        causingAgents: [],
+        originatingTriggerId: undefined,
+      });
+    });
+
+    it("establishes itself as the originating Trigger for everything the run writes", async () => {
+      mockDb.limit.mockResolvedValueOnce([mockScopeRow]);
+      let seen: { trigger?: string; agents?: readonly string[] } = {};
+      mockGenerate.mockImplementationOnce(async () => {
+        await Promise.resolve();
+        seen = {
+          trigger: currentOriginatingTrigger(),
+          agents: currentCausingAgents(),
+        };
+        return { text: "ok", stats: {} };
+      });
+
+      await executeTrigger(baseTrigger);
+
+      // The Agent chain is the Drive's to establish; this layer only names the
+      // Trigger.
+      expect(seen).toEqual({ trigger: "trigger-1", agents: [] });
     });
 
     it("forwards the Trigger's memory-injection opt-out into the run input", async () => {

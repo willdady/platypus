@@ -9,7 +9,10 @@ import { executeTrigger } from "./trigger-execution.ts";
 import { updateTriggerAfterRun } from "./trigger-execution.ts";
 import { debounceTriggerExecution } from "./event-trigger-debounce.ts";
 import { logger } from "../logger.ts";
-import { currentCausingAgents } from "../event-causation.ts";
+import {
+  currentCausingAgents,
+  currentOriginatingTrigger,
+} from "../event-causation.ts";
 import type { WebhookEvent, EventTriggerConfig } from "@platypus/schemas";
 
 export function dispatchEvent(
@@ -25,6 +28,36 @@ export function dispatchEvent(
   // persisted attribution column (e.g. `lastEditedByAgentId`), which is sticky
   // and would cause false-negatives on later human edits.
   const causingAgents = currentCausingAgents();
+  // The Trigger whose run produced this write, when one did. Recorded, not
+  // acted on: the guard below still compares Agent ids (#669). Read here for
+  // the same reason as the chain — the async body needs a stable view.
+  const originatingTriggerId = currentOriginatingTrigger();
+
+  /**
+   * Records what dispatch decided about one candidate Trigger. A suppressed or
+   * coalesced dispatch leaves no other trace, so a Trigger loop on a
+   * self-hosted install is otherwise undiagnosable (#812).
+   *
+   * Identifiers only — `data` carries Card titles and bodies, which are the
+   * Operator's users' content. The ids are what diagnosis needs.
+   */
+  const logDecision = (
+    trigger: { id: string; agentId: string | null },
+    decision: "fired" | "skipped_self_actor" | "debounced",
+  ): void => {
+    logger.info(
+      {
+        event,
+        workspaceId,
+        triggerId: trigger.id,
+        triggerAgentId: trigger.agentId,
+        causingAgents,
+        originatingTriggerId,
+        decision,
+      },
+      "Event trigger dispatch decision",
+    );
+  };
 
   // Fire-and-forget — never awaited by the caller
   void (async () => {
@@ -81,6 +114,7 @@ export function dispatchEvent(
         // Sub-Agents) from re-firing the trigger that started it (#267, #668).
         // Human-originated events carry an empty chain, so they always pass.
         if (trigger.agentId && causingAgents.includes(trigger.agentId)) {
+          logDecision(trigger, "skipped_self_actor");
           continue;
         }
 
@@ -115,7 +149,7 @@ export function dispatchEvent(
         const entityId = (data as { id?: string | number })?.id ?? "unknown";
         const debounceKey = `${trigger.id}:${entityId}`;
 
-        debounceTriggerExecution(
+        const coalesced = debounceTriggerExecution(
           debounceKey,
           trigger,
           { eventType: event, eventData: data },
@@ -135,6 +169,11 @@ export function dispatchEvent(
             }
           },
         );
+
+        // `fired` means scheduled: the run starts when the debounce window
+        // closes. A later event on the same window reports itself `debounced`,
+        // so the pair reads as one run rather than two.
+        logDecision(trigger, coalesced ? "debounced" : "fired");
       }
     } catch (error) {
       logger.error(

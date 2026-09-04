@@ -1,4 +1,11 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+
+const { mockLogger } = vi.hoisted(() => ({
+  mockLogger: { info: vi.fn(), error: vi.fn(), warn: vi.fn() },
+}));
+
+vi.mock("../logger.ts", () => ({ logger: mockLogger }));
+
 import {
   debounceTriggerExecution,
   clearPendingTriggers,
@@ -18,6 +25,7 @@ const makeContext = (data: unknown) =>
 describe("event-trigger-debounce", () => {
   beforeEach(() => {
     vi.useFakeTimers();
+    vi.clearAllMocks();
     clearPendingTriggers();
   });
 
@@ -169,5 +177,95 @@ describe("event-trigger-debounce", () => {
     vi.advanceTimersByTime(10_000);
 
     expect(executeFn).not.toHaveBeenCalled();
+  });
+
+  describe("coalescing leaves a trace", () => {
+    it("reports the first event of a window as not coalesced", () => {
+      const executeFn = vi.fn().mockResolvedValue(undefined);
+
+      const coalesced = debounceTriggerExecution(
+        "t-1:card-1",
+        makeTrigger("t-1"),
+        makeContext({ id: "card-1" }),
+        executeFn,
+      );
+
+      expect(coalesced).toBe(false);
+      expect(mockLogger.info).not.toHaveBeenCalled();
+    });
+
+    it("reports each later event of the same window as coalesced", () => {
+      const executeFn = vi.fn().mockResolvedValue(undefined);
+      const trigger = makeTrigger("t-1");
+
+      debounceTriggerExecution(
+        "t-1:card-1",
+        trigger,
+        makeContext({ id: "card-1" }),
+        executeFn,
+      );
+      const second = debounceTriggerExecution(
+        "t-1:card-1",
+        trigger,
+        makeContext({ id: "card-1" }),
+        executeFn,
+      );
+
+      expect(second).toBe(true);
+    });
+
+    it("logs the debounce key and how many events the window has folded", () => {
+      const executeFn = vi.fn().mockResolvedValue(undefined);
+      const trigger = makeTrigger("t-1");
+
+      for (let i = 0; i < 3; i++) {
+        debounceTriggerExecution(
+          "t-1:card-1",
+          trigger,
+          makeContext({ id: "card-1", title: `secret ${i}` }),
+          executeFn,
+        );
+      }
+
+      // One line per coalesce — the first event opens the window rather than
+      // folding into it.
+      expect(mockLogger.info).toHaveBeenCalledTimes(2);
+      expect(mockLogger.info).toHaveBeenLastCalledWith(
+        { debounceKey: "t-1:card-1", triggerId: "t-1", eventsFolded: 3 },
+        "Event trigger burst coalesced",
+      );
+    });
+
+    it("counts each debounce key's window separately, and restarts it after the window fires", () => {
+      const executeFn = vi.fn().mockResolvedValue(undefined);
+      const trigger = makeTrigger("t-1");
+      const fold = (key: string) =>
+        debounceTriggerExecution(
+          key,
+          trigger,
+          makeContext({ id: "card-1" }),
+          executeFn,
+        );
+
+      fold("t-1:card-1");
+      fold("t-1:card-1");
+      fold("t-1:card-2");
+      expect(mockLogger.info).toHaveBeenCalledTimes(1);
+      expect(mockLogger.info).toHaveBeenCalledWith(
+        { debounceKey: "t-1:card-1", triggerId: "t-1", eventsFolded: 2 },
+        "Event trigger burst coalesced",
+      );
+
+      vi.advanceTimersByTime(5_000);
+      mockLogger.info.mockClear();
+
+      // A fresh window: the next event opens it rather than continuing the count.
+      expect(fold("t-1:card-1")).toBe(false);
+      fold("t-1:card-1");
+      expect(mockLogger.info).toHaveBeenCalledWith(
+        { debounceKey: "t-1:card-1", triggerId: "t-1", eventsFolded: 2 },
+        "Event trigger burst coalesced",
+      );
+    });
   });
 });

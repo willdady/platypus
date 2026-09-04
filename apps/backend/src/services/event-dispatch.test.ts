@@ -18,16 +18,20 @@ vi.mock("./trigger-execution.ts", () => ({
   updateTriggerAfterRun: mockUpdateTriggerAfterRun,
 }));
 
-vi.mock("../logger.ts", () => ({
-  logger: {
-    info: vi.fn(),
-    error: vi.fn(),
-    warn: vi.fn(),
-  },
+const { mockLogger } = vi.hoisted(() => ({
+  mockLogger: { info: vi.fn(), error: vi.fn(), warn: vi.fn() },
 }));
 
+vi.mock("../logger.ts", () => ({ logger: mockLogger }));
+
 import { dispatchEvent } from "./event-dispatch.ts";
-import { withCausation } from "../event-causation.ts";
+import { withCausation, withOriginatingTrigger } from "../event-causation.ts";
+
+/** The dispatch-decision lines the logger recorded, newest last. */
+const decisionLines = (): Record<string, unknown>[] =>
+  mockLogger.info.mock.calls
+    .filter((call) => call[1] === "Event trigger dispatch decision")
+    .map((call) => call[0] as Record<string, unknown>);
 
 const makeWebhook = (overrides: Record<string, unknown> = {}) => ({
   id: "wh-1",
@@ -418,6 +422,135 @@ describe("event-dispatch", () => {
       // Should not throw — errors are caught internally
       dispatchEvent("org-1", "ws-1", "card.created", { cardId: "c1" });
       await flushMicrotasks();
+    });
+
+    describe("dispatch decisions are logged", () => {
+      it("records a fired dispatch with the causal chain and the trigger's agent", async () => {
+        const trigger = makeEventTrigger({
+          id: "trigger-1",
+          agentId: "agent-2",
+        });
+        mockDb.where.mockResolvedValueOnce([]).mockResolvedValueOnce([trigger]);
+
+        withCausation(["agent-1"], () =>
+          dispatchEvent("org-1", "ws-1", "card.updated", { id: "c1" }),
+        );
+        await flushMicrotasks();
+
+        expect(decisionLines()).toEqual([
+          {
+            event: "card.updated",
+            workspaceId: "ws-1",
+            triggerId: "trigger-1",
+            triggerAgentId: "agent-2",
+            causingAgents: ["agent-1"],
+            originatingTriggerId: undefined,
+            decision: "fired",
+          },
+        ]);
+      });
+
+      it("records the self-actor guard's decision, which is otherwise indistinguishable from no match", async () => {
+        const trigger = makeEventTrigger({
+          id: "trigger-1",
+          agentId: "agent-1",
+        });
+        mockDb.where.mockResolvedValueOnce([]).mockResolvedValueOnce([trigger]);
+
+        withCausation(["agent-1", "sub-1"], () =>
+          dispatchEvent("org-1", "ws-1", "card.updated", { id: "c1" }),
+        );
+        await flushMicrotasks();
+
+        expect(mockExecuteTrigger).not.toHaveBeenCalled();
+        expect(decisionLines()).toEqual([
+          {
+            event: "card.updated",
+            workspaceId: "ws-1",
+            triggerId: "trigger-1",
+            triggerAgentId: "agent-1",
+            causingAgents: ["agent-1", "sub-1"],
+            originatingTriggerId: undefined,
+            decision: "skipped_self_actor",
+          },
+        ]);
+      });
+
+      it("records a second event of the same window as debounced", async () => {
+        const trigger = makeEventTrigger({ id: "trigger-1" });
+        mockDb.where
+          .mockResolvedValueOnce([])
+          .mockResolvedValueOnce([trigger])
+          .mockResolvedValueOnce([])
+          .mockResolvedValueOnce([trigger]);
+
+        dispatchEvent("org-1", "ws-1", "card.updated", { id: "c1" });
+        await vi.advanceTimersByTimeAsync(0);
+        dispatchEvent("org-1", "ws-1", "card.updated", { id: "c1" });
+        await flushMicrotasks();
+
+        expect(mockExecuteTrigger).toHaveBeenCalledTimes(1);
+        expect(decisionLines().map((line) => line.decision)).toEqual([
+          "fired",
+          "debounced",
+        ]);
+      });
+
+      it("names the Trigger whose run caused the event", async () => {
+        const trigger = makeEventTrigger({
+          id: "trigger-2",
+          agentId: "agent-2",
+        });
+        mockDb.where.mockResolvedValueOnce([]).mockResolvedValueOnce([trigger]);
+
+        withOriginatingTrigger("trigger-1", () =>
+          withCausation(["agent-1"], () =>
+            dispatchEvent("org-1", "ws-1", "card.updated", { id: "c1" }),
+          ),
+        );
+        await flushMicrotasks();
+
+        expect(decisionLines()[0]).toMatchObject({
+          triggerId: "trigger-2",
+          originatingTriggerId: "trigger-1",
+          decision: "fired",
+        });
+      });
+
+      it("logs identifiers only — never the event payload's user content", async () => {
+        const trigger = makeEventTrigger({ id: "trigger-1" });
+        mockDb.where.mockResolvedValueOnce([]).mockResolvedValueOnce([trigger]);
+
+        dispatchEvent("org-1", "ws-1", "card.updated", {
+          id: "c1",
+          title: "Board the quarterly acquisition",
+          body: "Confidential body text",
+        });
+        await flushMicrotasks();
+
+        const logged = JSON.stringify(mockLogger.info.mock.calls);
+        expect(logged).not.toContain("Board the quarterly acquisition");
+        expect(logged).not.toContain("Confidential body text");
+      });
+
+      it("records no decision for a trigger an event filter ruled out", async () => {
+        const trigger = makeEventTrigger({
+          id: "trigger-1",
+          config: {
+            events: ["card.updated"],
+            filters: { boardId: "board-1" },
+          },
+        });
+        mockDb.where.mockResolvedValueOnce([]).mockResolvedValueOnce([trigger]);
+
+        dispatchEvent("org-1", "ws-1", "card.updated", {
+          id: "c1",
+          boardId: "board-2",
+        });
+        await flushMicrotasks();
+
+        expect(decisionLines()).toEqual([]);
+      });
     });
 
     it("should skip a trigger when its own agent caused the event", async () => {

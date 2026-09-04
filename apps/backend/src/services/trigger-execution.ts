@@ -13,6 +13,11 @@ import { validateCronExpression } from "../utils/cron.ts";
 import { agentRunner } from "../runs/agent-runner.ts";
 import { TriggerSink } from "../runs/sinks/trigger-sink.ts";
 import { workspaceScopeForTrigger } from "../scope.ts";
+import {
+  currentCausingAgents,
+  currentOriginatingTrigger,
+  withOriginatingTrigger,
+} from "../event-causation.ts";
 import type { RunInput } from "../runs/types.ts";
 import type { PlatypusUIMessage } from "../types.ts";
 import type { CronTriggerConfig, WebhookEvent } from "@platypus/schemas";
@@ -137,26 +142,37 @@ export const executeTrigger = async (
     eventData: eventContext?.eventData,
   });
 
+  // What caused this firing, read before the run establishes itself as the
+  // next cause. On a cron both are empty; on an event Trigger they are the
+  // ambient context of the write that dispatched it, which is the one thing a
+  // Trigger loop leaves no other record of (#812).
   logger.info(
     {
       triggerId: id,
       runId,
       agentId,
       type: trigger.type,
+      causingAgents: currentCausingAgents(),
+      originatingTriggerId: currentOriginatingTrigger(),
       instruction: effectiveInstruction.substring(0, 100) + "...",
     },
     "Starting trigger execution",
   );
 
-  await agentRunner.generate({
-    scope,
-    input,
-    sink,
-    options: {
-      frontendUrl: process.env.FRONTEND_URL,
-      timeouts: triggerTimeouts(),
-    },
-  });
+  // Everything this run writes is caused by this Trigger, at any delegation
+  // depth — the ambient context a later dispatch reads back to name where the
+  // event came from. The Agent chain is established deeper, by the Drive.
+  await withOriginatingTrigger(id, () =>
+    agentRunner.generate({
+      scope,
+      input,
+      sink,
+      options: {
+        frontendUrl: process.env.FRONTEND_URL,
+        timeouts: triggerTimeouts(),
+      },
+    }),
+  );
 
   return runId;
 };

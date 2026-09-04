@@ -63,3 +63,37 @@ export function withChildCausation<T>(agentId: string, fn: () => T): T {
   const child: AgentChain = parent ? [...parent, agentId] : [agentId];
   return chainStorage.run(child, fn);
 }
+
+/**
+ * The Trigger whose run is driving the current execution, if any.
+ *
+ * A second ambient dimension alongside the Agent chain, and deliberately its
+ * own store: the chain is established per-Agent deep inside a Drive, while the
+ * originating Trigger is established once around a whole Trigger run, and
+ * neither should have to carry the other's value through.
+ *
+ * It exists for the record — a dispatch log line that names which Trigger's
+ * work produced the event (#812) — not for the self-actor guard, which still
+ * compares Agent ids (#669).
+ */
+const originatingTriggerStorage = new AsyncLocalStorage<string>();
+
+/**
+ * The id of the Trigger whose run caused the current work, or `undefined` when
+ * nothing Trigger-driven is running (a human write, or an interactive Chat).
+ */
+export const currentOriginatingTrigger = (): string | undefined =>
+  originatingTriggerStorage.getStore();
+
+/**
+ * Runs `fn` with `triggerId` established as the ambient originating Trigger.
+ * Same shape as {@link withCausation}: synchronous in signature, wrapping the
+ * run's async call so everything the run goes on to do reads the same id. No
+ * Trigger is a no-op, exactly as an Agentless turn reads as uncaused.
+ */
+export function withOriginatingTrigger<T>(
+  triggerId: string | undefined,
+  fn: () => T,
+): T {
+  return triggerId ? originatingTriggerStorage.run(triggerId, fn) : fn();
+}
