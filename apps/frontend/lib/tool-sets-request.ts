@@ -66,3 +66,16 @@ export async function fetchToolSets(
 
   return { ok: true, toolSets: results as ToolSet[] };
 }
+
+/**
+ * Decodes a result into the props the Agent form takes, so the three pages
+ * that render the form don't each repeat the unpacking.
+ */
+export function toolSetFormProps(result: ToolSetsResult): {
+  toolSets: ToolSet[];
+  toolSetsError?: ToolSetsFailureReason;
+} {
+  return result.ok
+    ? { toolSets: result.toolSets, toolSetsError: undefined }
+    : { toolSets: [], toolSetsError: result.reason };
+}

@@ -301,6 +301,65 @@ describe("AgentForm tool set load failure", () => {
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 
+  it("still groups tool sets by category, keeping Uncategorized last", () => {
+    const uncategorised = {
+      id: "ts2",
+      name: "Loose Tool",
+    } as unknown as ToolSet;
+    const mcp = {
+      id: "ts3",
+      name: "Some MCP",
+      category: "MCP",
+    } as unknown as ToolSet;
+
+    render(
+      <AgentForm
+        orgId="org1"
+        workspaceId="ws1"
+        toolSets={[uncategorised, mcp, toolSet]}
+        agents={[]}
+      />,
+    );
+
+    const headings = screen
+      .getAllByText(/^(Built-in|MCP|Uncategorized)$/)
+      .map((el) => el.textContent);
+    expect(headings).toEqual(["Built-in", "MCP", "Uncategorized"]);
+  });
+
+  it("names the Organization, not a Workspace, on a Shared Agent", () => {
+    render(
+      <AgentForm
+        orgId="org1"
+        agentId="a1"
+        toolSets={[]}
+        agents={[]}
+        toolSetsError="unauthorized"
+        orgScoped
+      />,
+    );
+
+    const alert = screen.getByRole("alert");
+    expect(alert).toHaveTextContent(/Organization/);
+    expect(alert).not.toHaveTextContent(/Workspace/);
+  });
+
+  it("does not promise to preserve selections when creating a new Agent", () => {
+    render(
+      <AgentForm
+        orgId="org1"
+        workspaceId="ws1"
+        toolSets={[]}
+        agents={[]}
+        toolSetsError="unauthorized"
+      />,
+    );
+
+    expect(screen.getByRole("alert")).not.toHaveTextContent(
+      /existing tool selections/i,
+    );
+  });
+
   it("preserves an existing agent's tool set selections when the tool sets could not be loaded", async () => {
     setDataFor("/agents/a1", {
       id: "a1",

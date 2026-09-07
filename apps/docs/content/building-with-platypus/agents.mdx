@@ -133,6 +133,17 @@ An Agent that can only talk is limited. Give it the ability to _act_:
   show them.
 </Callout>
 
+<Callout type="warning">
+  A missing **Tools** card means your Workspace has no tool sets. It does not
+  mean the Agent lost the ones it already had. If the app couldn't read them at
+  all you get **Tools couldn't be loaded** in the card's place instead — read
+  that as "couldn't ask", not "there are none". Save the Agent anyway and its
+  tool sets stay as they were; the notice only means you can't change them on
+  this visit. When it names authentication, sign in again — and if it comes
+  back, your Operator has `BACKEND_URL`, `BETTER_AUTH_URL`, `FRONTEND_URL` and
+  `ALLOWED_ORIGINS` disagreeing with each other.
+</Callout>
+
 ## Compose Sub-Agents
 
 A **Sub-Agent** is just another Agent that this one can hand work to. In the

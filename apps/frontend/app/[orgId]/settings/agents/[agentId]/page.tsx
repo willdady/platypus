@@ -1,7 +1,7 @@
 import { AgentForm } from "@/components/agent-form";
 import { headers } from "next/headers";
 import { ResourcePage } from "@/components/resource-page";
-import { fetchToolSets } from "@/lib/tool-sets-request";
+import { fetchToolSets, toolSetFormProps } from "@/lib/tool-sets-request";
 
 const OrgAgentEditPage = async ({
   params,
@@ -27,8 +27,7 @@ const OrgAgentEditPage = async ({
       <AgentForm
         orgId={orgId}
         agentId={agentId}
-        toolSets={toolSetsResult.ok ? toolSetsResult.toolSets : []}
-        toolSetsError={toolSetsResult.ok ? undefined : toolSetsResult.reason}
+        {...toolSetFormProps(toolSetsResult)}
         orgScoped
       />
     </ResourcePage>

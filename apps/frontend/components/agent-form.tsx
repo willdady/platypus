@@ -728,7 +728,13 @@ const AgentForm = ({
           />
         </FieldGroup>
 
-        {toolSetsError && <ToolSetsUnavailableNotice reason={toolSetsError} />}
+        {toolSetsError && (
+          <ToolSetsUnavailableNotice
+            reason={toolSetsError}
+            scope={orgScoped ? "organization" : "workspace"}
+            hasExistingSelections={Boolean(agentId)}
+          />
+        )}
 
         {!toolSetsError && toolSets.length > 0 && (
           <Card>
