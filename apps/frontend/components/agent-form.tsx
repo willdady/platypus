@@ -63,6 +63,8 @@ import { useBackendUrl } from "@/app/client-context";
 import { useAuth } from "@/components/auth-provider";
 import { AgentAvatar } from "@/components/agent-avatar";
 import { Skeleton } from "@/components/ui/skeleton";
+import { ToolSetsUnavailableNotice } from "@/components/tool-sets-unavailable-notice";
+import { type ToolSetsFailureReason } from "@/lib/tool-sets-request";
 
 // toolSetIds, skillIds, and subAgentIds are deliberately excluded: this form
 // has no field that retracts an error keyed to them, so including them here
@@ -89,6 +91,7 @@ const AgentForm = ({
   workspaceId,
   agentId,
   toolSets,
+  toolSetsError,
   agents: propAgents,
   orgScoped = false,
 }: {
@@ -97,6 +100,9 @@ const AgentForm = ({
   workspaceId?: string;
   agentId?: string;
   toolSets: ToolSet[];
+  // Set when the tool sets couldn't be read, so the form can say so instead of
+  // presenting a failed read as an empty catalogue (issue #818).
+  toolSetsError?: ToolSetsFailureReason;
   agents?: Agent[];
   // When true the form edits an org-scoped (Shared) Agent on the Organization
   // surface, pulling its references from org-scoped lists and writing via the
@@ -722,7 +728,9 @@ const AgentForm = ({
           />
         </FieldGroup>
 
-        {toolSets.length > 0 && (
+        {toolSetsError && <ToolSetsUnavailableNotice reason={toolSetsError} />}
+
+        {!toolSetsError && toolSets.length > 0 && (
           <Card>
             <CardHeader>
               <CardTitle>Tools</CardTitle>

@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
-import type { Provider } from "@platypus/schemas";
+import type { Provider, ToolSet } from "@platypus/schemas";
 import {
   navigationMock,
   configMock,
@@ -210,5 +210,128 @@ describe("AgentForm avatar write partial-success handling", () => {
     );
     expect(toastError).toHaveBeenCalledWith("Avatar storage locked");
     expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("AgentForm tool set load failure", () => {
+  const toolSet = {
+    id: "ts1",
+    name: "Web Search",
+    category: "Built-in",
+  } as unknown as ToolSet;
+
+  beforeEach(() => {
+    resetFormHarness();
+    registerSwrData();
+    setDataFor("/agents/a1", undefined);
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("renders the form instead of crashing when the tool sets could not be loaded", () => {
+    render(
+      <AgentForm
+        orgId="org1"
+        workspaceId="ws1"
+        toolSets={[]}
+        agents={[]}
+        toolSetsError="unauthorized"
+      />,
+    );
+
+    // The rest of the form is still usable.
+    expect(screen.getByRole("button", { name: "Save" })).toBeInTheDocument();
+  });
+
+  it("names authentication as the cause when the tool sets request was rejected as unauthorized", () => {
+    render(
+      <AgentForm
+        orgId="org1"
+        workspaceId="ws1"
+        toolSets={[]}
+        agents={[]}
+        toolSetsError="unauthorized"
+      />,
+    );
+
+    const alert = screen.getByRole("alert");
+    expect(alert).toHaveTextContent(/tools couldn't be loaded/i);
+    expect(alert).toHaveTextContent(/sign(ed)? in|authenticat/i);
+  });
+
+  it("does not blame authentication when the tool sets request failed for another reason", () => {
+    render(
+      <AgentForm
+        orgId="org1"
+        workspaceId="ws1"
+        toolSets={[]}
+        agents={[]}
+        toolSetsError="unavailable"
+      />,
+    );
+
+    const alert = screen.getByRole("alert");
+    expect(alert).toHaveTextContent(/tools couldn't be loaded/i);
+    expect(alert).not.toHaveTextContent(/authenticat/i);
+  });
+
+  it("shows no error and no Tools card when the workspace genuinely has no tool sets", () => {
+    render(
+      <AgentForm orgId="org1" workspaceId="ws1" toolSets={[]} agents={[]} />,
+    );
+
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(screen.queryByText("Tools")).not.toBeInTheDocument();
+  });
+
+  it("renders the Tools card as usual when the tool sets loaded", () => {
+    render(
+      <AgentForm
+        orgId="org1"
+        workspaceId="ws1"
+        toolSets={[toolSet]}
+        agents={[]}
+      />,
+    );
+
+    expect(screen.getByText("Tools")).toBeInTheDocument();
+    expect(screen.getByText("Web Search")).toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("preserves an existing agent's tool set selections when the tool sets could not be loaded", async () => {
+    setDataFor("/agents/a1", {
+      id: "a1",
+      name: "Bot",
+      description: "A helpful bot",
+      instructions: "Be helpful",
+      providerId: "p1",
+      modelId: "gpt-4o",
+      maxSteps: 5,
+      toolSetIds: ["ts1", "ts2"],
+    });
+    const fetchMock = stubSaveSequence({ status: 200, body: { id: "a1" } });
+
+    render(
+      <AgentForm
+        orgId="org1"
+        workspaceId="ws1"
+        toolSets={[]}
+        agents={[]}
+        agentId="a1"
+        toolSetsError="unauthorized"
+      />,
+    );
+
+    await waitFor(() =>
+      expect(screen.getByDisplayValue("Bot")).toBeInTheDocument(),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Update" }));
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body);
+    expect(body.toolSetIds).toEqual(["ts1", "ts2"]);
   });
 });

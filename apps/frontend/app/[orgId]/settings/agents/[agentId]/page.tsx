@@ -1,8 +1,7 @@
 import { AgentForm } from "@/components/agent-form";
 import { headers } from "next/headers";
 import { ResourcePage } from "@/components/resource-page";
-import { type ToolSet } from "@platypus/schemas";
-import { joinUrl } from "@/lib/utils";
+import { fetchToolSets } from "@/lib/tool-sets-request";
 
 const OrgAgentEditPage = async ({
   params,
@@ -11,24 +10,14 @@ const OrgAgentEditPage = async ({
 }) => {
   const { orgId, agentId } = await params;
 
-  // Use internal URL for SSR, fallback to BACKEND_URL for local dev
-  const backendUrl =
-    process.env.INTERNAL_BACKEND_URL || process.env.BACKEND_URL;
-
   // Org-scoped tool sets: static sets + org MCPs (the only ones a Shared agent
-  // may reference under the no-cascade rule).
+  // may reference under the no-cascade rule). A failed read is reported to the
+  // form rather than thrown, so the page still renders (issue #818).
   const headersList = await headers();
-  const toolSetsResponse = await fetch(
-    joinUrl(backendUrl || "", `/organizations/${orgId}/tools`),
-    {
-      headers: {
-        cookie: headersList.get("cookie") || "",
-      },
-    },
+  const toolSetsResult = await fetchToolSets(
+    `/organizations/${orgId}/tools`,
+    headersList.get("cookie") || "",
   );
-
-  const toolSetsData = await toolSetsResponse.json();
-  const toolSets: ToolSet[] = toolSetsData.results;
 
   return (
     <ResourcePage
@@ -38,7 +27,8 @@ const OrgAgentEditPage = async ({
       <AgentForm
         orgId={orgId}
         agentId={agentId}
-        toolSets={toolSets}
+        toolSets={toolSetsResult.ok ? toolSetsResult.toolSets : []}
+        toolSetsError={toolSetsResult.ok ? undefined : toolSetsResult.reason}
         orgScoped
       />
     </ResourcePage>
