@@ -155,6 +155,12 @@ export function KanbanBoard({
   // (React #185).  Coalescing to one update per frame breaks the loop while
   // still letting the user see cards animate as they drag.
   const dragOverFrameRef = useRef<number | null>(null);
+  // The column a card drag started from, captured before drag-over rewrites
+  // localColumns. Cross-column moves are applied to the local copy while the
+  // card is still in flight, so by drag-end the card already sits in its
+  // target column locally — reading the source from there would send the
+  // target as `expectedColumnId` and refuse every cross-column move.
+  const dragOriginColumnRef = useRef<string | null>(null);
   const [selectedCard, setSelectedCard] = useState<KanbanCard | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
 
@@ -285,6 +291,11 @@ export function KanbanBoard({
       setActiveId(active.id as string);
       setActiveType(type);
       activeTypeRef.current = type;
+      dragOriginColumnRef.current =
+        type === "card"
+          ? (columns.find((col) => col.cards.some((c) => c.id === active.id))
+              ?.id ?? null)
+          : null;
       setLocalColumns([...columns.map((c) => ({ ...c, cards: [...c.cards] }))]);
     },
     [columns, setLocalColumns],
@@ -433,9 +444,10 @@ export function KanbanBoard({
         return;
       }
 
-      // Card drag end.  The active card stays in its source column during
-      // drag-over (cross-column moves are deferred to here), so we resolve
-      // the target column from the drop target rather than from the array.
+      // Card drag end.  Drag-over has already moved the card in the local
+      // copy, so `sourceColumn` here is where the card sits *now* — the drag's
+      // true origin lives in dragOriginColumnRef.  The target column is
+      // resolved from the drop target rather than from the array.
       const sourceColumn = cols.find((col) =>
         col.cards.some((c) => c.id === active.id),
       );
@@ -537,7 +549,7 @@ export function KanbanBoard({
             // The board polls, so the column this drag started from may already
             // be out of date. Sending it makes the move conditional: an agent's
             // move that landed mid-drag is reported rather than overwritten.
-            expectedColumnId: sourceColumn.id,
+            expectedColumnId: dragOriginColumnRef.current ?? sourceColumn.id,
           },
         },
       );

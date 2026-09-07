@@ -1,5 +1,11 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import {
+  render,
+  screen,
+  fireEvent,
+  waitFor,
+  act,
+} from "@testing-library/react";
 import type {
   KanbanBoardState,
   KanbanCard,
@@ -52,6 +58,7 @@ vi.mock("swr", () => ({
 // board passes it, which is what lets a test drive a card drop.
 const dragHandlers: {
   onDragStart?: (event: unknown) => void;
+  onDragOver?: (event: unknown) => void;
   onDragEnd?: (event: unknown) => void;
 } = {};
 
@@ -63,6 +70,7 @@ vi.mock("@dnd-kit/core", async () => {
     ...actual,
     DndContext: (props: Record<string, unknown>) => {
       dragHandlers.onDragStart = props.onDragStart as (e: unknown) => void;
+      dragHandlers.onDragOver = props.onDragOver as (e: unknown) => void;
       dragHandlers.onDragEnd = props.onDragEnd as (e: unknown) => void;
       return React.createElement(actual.DndContext, props);
     },
@@ -498,6 +506,41 @@ describe("KanbanBoard transport", () => {
         over: { id: "col-2", rect: { top: 0, height: 10 } },
       });
     }
+
+    /**
+     * The full dnd-kit sequence: drag-over moves the card into the target
+     * column locally before drag-end fires.  The board must still report the
+     * column the drag *started* in, or the server refuses every cross-column
+     * move as a conflict.
+     */
+    it("sends the origin column after drag-over moved the card locally", async () => {
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValue(jsonResponse(200, { id: "card-1" }));
+      vi.stubGlobal("fetch", fetchMock);
+
+      renderBoard();
+      const active = {
+        id: "card-1",
+        data: { current: { type: "card" } },
+        rect: { current: { translated: null, initial: null } },
+      };
+      const over = { id: "col-2", rect: { top: 0, height: 10 } };
+      act(() => {
+        dragHandlers.onDragStart?.({ active });
+        dragHandlers.onDragOver?.({ active, over });
+      });
+      act(() => {
+        dragHandlers.onDragEnd?.({ active, over });
+      });
+
+      await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+      const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+      expect(JSON.parse(init.body as string)).toMatchObject({
+        columnId: "col-2",
+        expectedColumnId: "col-1",
+      });
+    });
 
     it("sends the column the card was dragged from", async () => {
       const fetchMock = vi
