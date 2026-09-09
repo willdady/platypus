@@ -2,14 +2,65 @@
 
 import * as React from "react";
 import * as DropdownMenuPrimitive from "@radix-ui/react-dropdown-menu";
+import { useControllableState } from "@radix-ui/react-use-controllable-state";
 import { CheckIcon, ChevronRightIcon, CircleIcon } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 
+/*
+ * Deliberate divergence from the stock shadcn dropdown-menu.
+ *
+ * `@radix-ui/react-dropdown-menu`'s Trigger toggles the menu on `pointerdown`
+ * with no `pointerType` check, so on a touch device the menu opens the instant
+ * a finger lands on the trigger — before the gesture can be recognised as a
+ * scroll. Upstream: https://github.com/radix-ui/primitives/issues/1912
+ *
+ * The fix mirrors what Radix already does in `@radix-ui/react-select`: open on
+ * `pointerdown` for a mouse (which preserves the press-drag-release gesture)
+ * and on the subsequent `click` for touch and pen (which the browser suppresses
+ * when the gesture turns into a scroll). Radix does not expose the dropdown's
+ * internal context, so the root owns the open state and hands the trigger a
+ * toggle through the context below.
+ *
+ * Re-adding this component with the `shadcn` CLI will revert all of it.
+ */
+
+type DropdownMenuContextValue = {
+  open: boolean;
+  setOpen: (open: boolean) => void;
+};
+
+const DropdownMenuContext =
+  React.createContext<DropdownMenuContextValue | null>(null);
+
 function DropdownMenu({
+  open: openProp,
+  defaultOpen,
+  onOpenChange,
   ...props
 }: React.ComponentProps<typeof DropdownMenuPrimitive.Root>) {
-  return <DropdownMenuPrimitive.Root data-slot="dropdown-menu" {...props} />;
+  const [open, setOpen] = useControllableState({
+    prop: openProp,
+    defaultProp: defaultOpen ?? false,
+    onChange: onOpenChange,
+    caller: "DropdownMenu",
+  });
+
+  const context = React.useMemo<DropdownMenuContextValue>(
+    () => ({ open, setOpen }),
+    [open, setOpen],
+  );
+
+  return (
+    <DropdownMenuContext.Provider value={context}>
+      <DropdownMenuPrimitive.Root
+        data-slot="dropdown-menu"
+        open={open}
+        onOpenChange={setOpen}
+        {...props}
+      />
+    </DropdownMenuContext.Provider>
+  );
 }
 
 function DropdownMenuPortal({
@@ -21,11 +72,76 @@ function DropdownMenuPortal({
 }
 
 function DropdownMenuTrigger({
+  disabled,
+  onPointerDown,
+  onClick,
   ...props
 }: React.ComponentProps<typeof DropdownMenuPrimitive.Trigger>) {
+  const context = React.useContext(DropdownMenuContext);
+  // What the last pointerdown said about the gesture now in progress. The
+  // click handler needs all three, so they travel together.
+  const gestureRef = React.useRef({
+    // As the Radix Select trigger does, assume touch until a pointer says otherwise.
+    pointerType: "touch",
+    openAtPointerDown: false,
+    cancelled: false,
+  });
+
+  if (!context) {
+    throw new Error("`DropdownMenuTrigger` must be used within `DropdownMenu`");
+  }
+
+  const handlePointerDown = (event: React.PointerEvent<HTMLButtonElement>) => {
+    onPointerDown?.(event);
+
+    // Recorded before any bail-out below, because the click handler still runs
+    // for gestures this one declines to act on.
+    gestureRef.current = {
+      pointerType: event.pointerType,
+      openAtPointerDown: context.open,
+      // A call site that cancels pointerdown means to suppress the activation
+      // itself, so the click that follows must not open the menu either.
+      cancelled: event.defaultPrevented,
+    };
+
+    if (event.defaultPrevented || disabled) return;
+
+    // The primitive ignores anything but an unmodified primary press, so leave
+    // those to the browser.
+    if (event.button !== 0 || event.ctrlKey) return;
+
+    // Suppress the primitive's own pointerdown toggle. It composes our handler
+    // first and bails out on a default-prevented event, which is the only seam
+    // available for taking the gesture over.
+    event.preventDefault();
+
+    if (event.pointerType === "mouse") {
+      context.setOpen(!context.open);
+    }
+  };
+
+  const handleClick = (event: React.MouseEvent<HTMLButtonElement>) => {
+    onClick?.(event);
+
+    const { pointerType, openAtPointerDown, cancelled } = gestureRef.current;
+    if (disabled || cancelled || pointerType === "mouse") return;
+
+    // A touch or pen tap completed without turning into a scroll, so open.
+    //
+    // Deliberately not vetoed by this event's own `defaultPrevented`: triggers
+    // nested inside a link call `preventDefault()` on click to stop the link
+    // navigating, which says nothing about whether the menu should open, and
+    // treating it as a veto would leave those menus unopenable by touch.
+    event.currentTarget.focus();
+    context.setOpen(!openAtPointerDown);
+  };
+
   return (
     <DropdownMenuPrimitive.Trigger
       data-slot="dropdown-menu-trigger"
+      disabled={disabled}
+      onPointerDown={handlePointerDown}
+      onClick={handleClick}
       {...props}
     />
   );

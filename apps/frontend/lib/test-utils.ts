@@ -17,6 +17,9 @@ export function openDropdownMenu() {
   if (!trigger) {
     throw new Error("No dropdown menu trigger found in the document");
   }
+  // Our DropdownMenu trigger only opens on pointerdown for a mouse; jsdom
+  // leaves `pointerType` empty, so the tap has to be completed with a click.
   fireEvent.pointerDown(trigger, { button: 0, pointerId: 1 });
   fireEvent.pointerUp(trigger, { button: 0, pointerId: 1 });
+  fireEvent.click(trigger, { button: 0 });
 }
