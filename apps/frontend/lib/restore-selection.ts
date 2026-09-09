@@ -45,7 +45,9 @@ export const resolveRestoredSelection = (
     // Only judge the Agent reference once `agents` has actually loaded —
     // agents.length === 0 while data is still in flight looks identical to a
     // genuinely empty list, and treating it as "deleted" would fall through to
-    // Priority 3 before the real Agent ever gets a chance to match.
+    // Priority 3 before the real Agent ever gets a chance to match. The hook
+    // now holds a Chat back rather than resolve it against a list still in
+    // flight (issue #799), so this is the backstop, not the only guard.
     if (chatData.agentId && agents.length > 0) {
       const agent = agents.find((a) => a.id === chatData.agentId);
       if (agent) {

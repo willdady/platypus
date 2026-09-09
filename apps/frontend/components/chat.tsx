@@ -106,11 +106,15 @@ export const Chat = ({
     scope,
   );
 
-  // Memoize agents to prevent unnecessary re-renders
-  const agents = useMemo(
-    () => agentsData?.results || [],
+  // Memoize agents to prevent unnecessary re-renders. The model-selection
+  // ladder is the one reader that needs "the list has not landed yet" apart
+  // from "this workspace has no Agents" (issue #799), so it takes the
+  // undefined-until-loaded value; everything else reads the plain list.
+  const agentsIfLoaded = useMemo(
+    () => agentsData?.results,
     [agentsData?.results],
   );
+  const agents = useMemo(() => agentsIfLoaded ?? [], [agentsIfLoaded]);
 
   // Fetch tool sets
   const { data: toolSetsData } = useScopedSWR<{ results: ToolSet[] }>(
@@ -237,17 +241,14 @@ export const Chat = ({
   const errorTreatment = classifyChatError({ error, ...runBelief });
 
   // Custom hooks for state management (must be called before any conditional returns)
-  const {
-    selection,
-    handleModelChange,
-    setters: modelSetters,
-  } = useModelSelection(
-    chatData ?? undefined,
+  const { selection, isResolved, handleModelChange } = useModelSelection({
+    chatData: chatData ?? undefined,
     providers,
-    agents,
+    agents: agentsIfLoaded,
     isChatLoading,
     workspaceId,
-  );
+    initialAgentId,
+  });
   const { settings, setters } = useChatSettings(
     chatData ?? undefined,
     selection.agentId,
@@ -274,6 +275,7 @@ export const Chat = ({
     agentId,
     modelId,
     providerId,
+    isResolved,
     onModelChange: handleModelChange,
     maxOutputTokens: resolvedModel?.maxOutputTokens,
   };
@@ -400,13 +402,6 @@ export const Chat = ({
     hasUserMessage,
     backendUrl,
   });
-
-  // Set initial agent if provided and no existing chat agent
-  useEffect(() => {
-    if (initialAgentId && !agentId && (!chatData || !chatData.agentId)) {
-      modelSetters.setAgentId(initialAgentId);
-    }
-  }, [initialAgentId, agentId, chatData, modelSetters]);
 
   const handleCopyMessage = useCallback(
     async (content: string, messageId: string) => {

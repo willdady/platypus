@@ -101,6 +101,7 @@ const renderEditor = (
         agentId: "",
         modelId: "m1",
         providerId: "p1",
+        isResolved: true,
         onModelChange: vi.fn(),
       }}
       // The seeded PDF reads natively by default, so the compatibility notice

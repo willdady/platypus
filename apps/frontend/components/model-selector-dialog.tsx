@@ -12,6 +12,7 @@ import {
 } from "./ai-elements/model-selector";
 import { AgentAvatar } from "./agent-avatar";
 import { Button } from "./ui/button";
+import { Skeleton } from "./ui/skeleton";
 import { findModelOption, getModelOptions } from "@/lib/model-config";
 import {
   encodeAgentSelection,
@@ -53,6 +54,14 @@ interface ModelSelectorDialogProps {
   agentId: string;
   modelId: string;
   providerId: string;
+  /**
+   * Whether `agentId`/`modelId`/`providerId` are settled. `false` means the
+   * restore ladder has not produced a result yet, so the trigger shows a
+   * neutral pending label instead of "Select model" — claiming nothing is
+   * selected and then correcting itself a frame later is the flicker issue
+   * #799 was about.
+   */
+  isResolved: boolean;
   isOpen: boolean;
   onOpenChange: (open: boolean) => void;
   onModelChange: (value: string) => void;
@@ -77,6 +86,7 @@ export const ModelSelectorDialog = ({
   agentId,
   modelId,
   providerId,
+  isResolved,
   isOpen,
   onOpenChange,
   onModelChange,
@@ -101,15 +111,22 @@ export const ModelSelectorDialog = ({
       size="sm"
       className="max-w-40 overflow-hidden sm:max-w-none"
       onMouseDown={keepFocus}
+      aria-busy={!isResolved || undefined}
     >
-      {selectedAgent && (
-        <AgentAvatar agent={selectedAgent} className="size-4" />
+      {isResolved ? (
+        <>
+          {selectedAgent && (
+            <AgentAvatar agent={selectedAgent} className="size-4" />
+          )}
+          <span className="truncate">
+            {agentId
+              ? selectedAgent?.name || "Select model"
+              : selectedModelLabel || "Select model"}
+          </span>
+        </>
+      ) : (
+        <Skeleton className="h-4 w-24" aria-label="Loading selection" />
       )}
-      <span className="truncate">
-        {agentId
-          ? selectedAgent?.name || "Select model"
-          : selectedModelLabel || "Select model"}
-      </span>
     </Button>
   );
 

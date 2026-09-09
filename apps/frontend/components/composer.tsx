@@ -38,6 +38,8 @@ export interface ModelSelection {
   agentId: string;
   modelId: string;
   providerId: string;
+  /** Whether the selection is settled; see `ModelSelectorDialog` (issue #799). */
+  isResolved: boolean;
   onModelChange: (value: string) => void;
   /** The resolved model's Output ceiling, for the picker's tooltip. */
   maxOutputTokens?: number;
@@ -139,6 +141,7 @@ export const Composer = ({
             agentId={modelSelection.agentId}
             modelId={modelSelection.modelId}
             providerId={modelSelection.providerId}
+            isResolved={modelSelection.isResolved}
             isOpen={isModelSelectorOpen}
             onOpenChange={setIsModelSelectorOpen}
             // Closing the picker returns to the textarea, so a model switch

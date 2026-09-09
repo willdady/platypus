@@ -87,6 +87,7 @@ const renderComposer = () => {
           agentId: "",
           modelId,
           providerId: modelId ? provider.id : "",
+          isResolved: true,
           onModelChange: (v) => {
             onModelChange(v);
             setModelId("gpt-4o");
@@ -328,5 +329,54 @@ describe("Composer dictation failures", () => {
     expect(toast.error).toHaveBeenCalledWith(
       "Voice input isn't supported in this browser.",
     );
+  });
+});
+
+/**
+ * Issue #799: the picker used to paint "Select model" — which reads as "you
+ * have nothing selected" — for as long as the restore ladder took to produce a
+ * result, then swap to the Agent the reader had selected in the previous chat.
+ * While the selection is unsettled the trigger says nothing at all.
+ */
+describe("Composer model picker — unsettled selection", () => {
+  const renderPicker = (isResolved: boolean) => {
+    const textareaRef = { current: null };
+    render(
+      <Composer
+        onSubmit={vi.fn()}
+        passthroughFileTypes={[]}
+        modelSelection={{
+          agents: [],
+          providers: [provider],
+          agentId: "",
+          modelId: "",
+          providerId: "",
+          isResolved,
+          onModelChange: vi.fn(),
+        }}
+        textarea={{
+          ref: textareaRef,
+          value: "",
+          onChange: vi.fn(),
+          placeholder: "Ask anything",
+        }}
+        onTranscriptionChange={vi.fn()}
+        submit={<button type="submit">Send</button>}
+      />,
+    );
+  };
+
+  it("shows no selection label until the selection resolves", () => {
+    renderPicker(false);
+
+    expect(screen.queryByText("Select model")).toBeNull();
+    expect(screen.getByLabelText("Loading selection")).toBeInTheDocument();
+  });
+
+  it("labels the trigger once the selection has resolved", () => {
+    renderPicker(true);
+
+    expect(screen.getByText("Select model")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Loading selection")).toBeNull();
   });
 });
