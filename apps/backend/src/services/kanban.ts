@@ -1,16 +1,20 @@
-import { and, asc, eq, inArray, max } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, max, notInArray } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import type {
   KanbanCardAssignee,
+  KanbanCardHistoryChange,
+  KanbanCardHistoryRef,
   KanbanCardPriority,
   WebhookEvent,
 } from "@platypus/schemas";
+import { KANBAN_CARD_HISTORY_LIMIT } from "@platypus/schemas";
 import { db } from "../index.ts";
 import {
   kanbanBoard as kanbanBoardTable,
   kanbanColumn as kanbanColumnTable,
   kanbanCard as kanbanCardTable,
   kanbanCardComment as kanbanCardCommentTable,
+  kanbanCardHistory as kanbanCardHistoryTable,
   agent as agentTable,
   organizationMember as organizationMemberTable,
 } from "../db/schema.ts";
@@ -200,6 +204,257 @@ const dispatchCardWrite = (
     dispatch(ctx, "card.moved", { ...row, boardId, previousColumnId });
   }
   dispatch(ctx, "card.updated", { ...row, boardId, changedFields });
+};
+
+// --- Card history ---
+
+/**
+ * A Card history entry as stored. The actor mirrors the Card's own
+ * `lastEditedBy*` columns, so an entry and the Card can never disagree about
+ * who wrote it.
+ */
+export type CardHistoryRow = typeof kanbanCardHistoryTable.$inferSelect;
+
+/** A history entry with its actor's display name resolved. */
+export type CardHistoryEntry = CardHistoryRow & { actorName: string | null };
+
+/** The attribution columns for a history entry this actor is causing. */
+const historyActor = (actor: KanbanActor) =>
+  isAgent(actor)
+    ? { actorAgentId: actor.agentId }
+    : { actorUserId: actor.userId };
+
+/**
+ * The board's Labels by id, for snapshotting names into an entry. A Card can
+ * carry a Label id the board has since dropped, in which case the id stands in
+ * for the name — an unreadable entry is still better than a missing one.
+ */
+const boardLabelNames = async (
+  executor: Executor,
+  boardId: string,
+): Promise<Map<string, string>> => {
+  const rows = await executor
+    .select({ labels: kanbanBoardTable.labels })
+    .from(kanbanBoardTable)
+    .where(eq(kanbanBoardTable.id, boardId))
+    .limit(1);
+
+  return new Map(
+    (rows[0]?.labels ?? []).map((label) => [label.id, label.name]),
+  );
+};
+
+/** Column names by id, for the same reason. */
+const columnNames = async (
+  executor: Executor,
+  columnIds: string[],
+): Promise<Map<string, string>> => {
+  const ids = [...new Set(columnIds)];
+  if (ids.length === 0) return new Map();
+
+  const rows = await executor
+    .select({ id: kanbanColumnTable.id, name: kanbanColumnTable.name })
+    .from(kanbanColumnTable)
+    .where(inArray(kanbanColumnTable.id, ids))
+    .limit(ids.length);
+
+  return new Map(rows.map((row) => [row.id, row.name]));
+};
+
+const ref = (id: string, names: Map<string, string>): KanbanCardHistoryRef => ({
+  id,
+  name: names.get(id) ?? id,
+});
+
+const isoOrNull = (value: Date | null): string | null =>
+  value ? value.toISOString() : null;
+
+/**
+ * Turns a value-diff into the changes an entry records. Driven by the field
+ * names `changedCardFields` produced, so the history and the `card.updated`
+ * event can never disagree about what moved.
+ *
+ * `body` is the deliberate exception: recorded as having changed, never with
+ * its text (ADR-0024). Label and Column values carry the name as it stood
+ * here, which is what keeps an entry readable after a rename or a deletion.
+ */
+const historyChanges = async (
+  executor: Executor,
+  boardId: string,
+  changedFields: string[],
+  previous: CardRow,
+  next: CardRow,
+): Promise<KanbanCardHistoryChange[]> => {
+  const changes: KanbanCardHistoryChange[] = [];
+
+  const labels = changedFields.includes("labelIds")
+    ? await boardLabelNames(executor, boardId)
+    : new Map<string, string>();
+  const columns = changedFields.includes("columnId")
+    ? await columnNames(executor, [previous.columnId, next.columnId])
+    : new Map<string, string>();
+
+  for (const field of changedFields) {
+    switch (field) {
+      case "title":
+        changes.push({ field, before: previous.title, after: next.title });
+        break;
+      case "body":
+        changes.push({ field });
+        break;
+      case "priority":
+        changes.push({
+          field,
+          before: previous.priority,
+          after: next.priority,
+        });
+        break;
+      case "dueDate":
+        changes.push({
+          field,
+          before: isoOrNull(previous.dueDate),
+          after: isoOrNull(next.dueDate),
+        });
+        break;
+      case "assignees":
+        changes.push({
+          field,
+          before: previous.assignees,
+          after: next.assignees,
+        });
+        break;
+      case "labelIds":
+        changes.push({
+          field,
+          before: previous.labelIds.map((id) => ref(id, labels)),
+          after: next.labelIds.map((id) => ref(id, labels)),
+        });
+        break;
+      case "columnId":
+        changes.push({
+          field,
+          before: ref(previous.columnId, columns),
+          after: ref(next.columnId, columns),
+        });
+        break;
+    }
+  }
+
+  return changes;
+};
+
+/**
+ * Drops everything past the cap for one Card, in the caller's transaction.
+ * Trimming inline is what makes the bound an invariant rather than something
+ * a sweep job eventually restores.
+ */
+const trimCardHistory = async (
+  executor: Executor,
+  cardId: string,
+): Promise<void> => {
+  // One statement rather than a read then a write: the newest N are chosen by
+  // a subquery, so a write costs no extra round trip to stay within the cap.
+  const newest = executor
+    .select({ id: kanbanCardHistoryTable.id })
+    .from(kanbanCardHistoryTable)
+    .where(eq(kanbanCardHistoryTable.cardId, cardId))
+    .orderBy(
+      desc(kanbanCardHistoryTable.createdAt),
+      desc(kanbanCardHistoryTable.id),
+    )
+    .limit(KANBAN_CARD_HISTORY_LIMIT);
+
+  await executor
+    .delete(kanbanCardHistoryTable)
+    .where(
+      and(
+        eq(kanbanCardHistoryTable.cardId, cardId),
+        notInArray(kanbanCardHistoryTable.id, newest),
+      ),
+    );
+};
+
+/**
+ * Appends one entry for one write, and trims to the cap — both in the caller's
+ * transaction, never from `dispatch()`. `dispatchEvent` returns `void` and is
+ * unawaited, so an entry written from there would land outside the transaction
+ * and a rolled-back write would still be recorded (ADR-0024).
+ *
+ * An `updated` write whose diff is empty appends nothing, which is how a
+ * within-column reorder — `position` only, and `position` is not a tracked
+ * field — leaves no trace.
+ */
+const writeHistoryEntry = async (
+  executor: Executor,
+  ctx: KanbanContext,
+  cardId: string,
+  kind: "created" | "updated",
+  changes: KanbanCardHistoryChange[],
+): Promise<void> => {
+  await executor.insert(kanbanCardHistoryTable).values({
+    id: nanoid(),
+    cardId,
+    kind,
+    changes,
+    ...historyActor(ctx.actor),
+    createdAt: new Date(),
+  });
+
+  await trimCardHistory(executor, cardId);
+};
+
+/** The entry a Card's creation leaves: it came into existence in a Column. */
+const recordCardCreated = async (
+  executor: Executor,
+  ctx: KanbanContext,
+  card: CardRow,
+): Promise<void> => {
+  const names = await columnNames(executor, [card.columnId]);
+  await writeHistoryEntry(executor, ctx, card.id, "created", [
+    { field: "columnId", before: null, after: ref(card.columnId, names) },
+  ]);
+};
+
+/** The entry a Column change leaves, for a caller that knows only the move. */
+const recordCardMoved = async (
+  executor: Executor,
+  ctx: KanbanContext,
+  cardId: string,
+  previousColumnId: string,
+  nextColumnId: string,
+): Promise<void> => {
+  const names = await columnNames(executor, [previousColumnId, nextColumnId]);
+  await writeHistoryEntry(executor, ctx, cardId, "updated", [
+    {
+      field: "columnId",
+      before: ref(previousColumnId, names),
+      after: ref(nextColumnId, names),
+    },
+  ]);
+};
+
+const recordCardHistory = async (
+  executor: Executor,
+  ctx: KanbanContext,
+  input: {
+    boardId: string;
+    previous: CardRow;
+    next: CardRow;
+    /** What `changedCardFields` found. */
+    changedFields: string[];
+  },
+): Promise<void> => {
+  const changes = await historyChanges(
+    executor,
+    input.boardId,
+    input.changedFields,
+    input.previous,
+    input.next,
+  );
+
+  if (changes.length === 0) return;
+
+  await writeHistoryEntry(executor, ctx, input.next.id, "updated", changes);
 };
 
 // --- Scope guards ---
@@ -652,24 +907,31 @@ export const createCard = async (
   const position = await nextCardPosition(database, input.columnId);
   const now = new Date();
 
-  const rows = await database
-    .insert(kanbanCardTable)
-    .values({
-      id: nanoid(),
-      columnId: input.columnId,
-      title: input.title,
-      labelIds: input.labelIds ?? [],
-      assignees: input.assignees ?? [],
-      priority: input.priority ?? "none",
-      ...cardValues(input, input.body),
-      position,
-      ...createdBy(ctx.actor),
-      createdAt: now,
-      updatedAt: now,
-    })
-    .returning();
+  // The insert and its history entry share a transaction so the two can never
+  // disagree — the reason the entry is not written from `dispatch()`.
+  const card = await database.transaction(async (tx) => {
+    const rows = await tx
+      .insert(kanbanCardTable)
+      .values({
+        id: nanoid(),
+        columnId: input.columnId,
+        title: input.title,
+        labelIds: input.labelIds ?? [],
+        assignees: input.assignees ?? [],
+        priority: input.priority ?? "none",
+        ...cardValues(input, input.body),
+        position,
+        ...createdBy(ctx.actor),
+        createdAt: now,
+        updatedAt: now,
+      })
+      .returning();
 
-  const card = rows[0];
+    const row = rows[0];
+    await recordCardCreated(tx, ctx, row);
+    return row;
+  });
+
   dispatch(ctx, "card.created", { ...card, boardId: column.boardId });
   return { card, boardId: column.boardId };
 };
@@ -699,19 +961,29 @@ export const updateCard = async (
       ? input.body
       : applyBodyDiff(previous.body ?? "", input.bodyDiff);
 
-  const rows = await database
-    .update(kanbanCardTable)
-    .set({
-      ...cardValues(input, body),
-      ...(labelIds !== undefined && { labelIds }),
-      ...lastEditedBy(ctx.actor),
-      updatedAt: new Date(),
-    })
-    .where(eq(kanbanCardTable.id, cardId))
-    .returning();
+  const record = await database.transaction(async (tx) => {
+    const rows = await tx
+      .update(kanbanCardTable)
+      .set({
+        ...cardValues(input, body),
+        ...(labelIds !== undefined && { labelIds }),
+        ...lastEditedBy(ctx.actor),
+        updatedAt: new Date(),
+      })
+      .where(eq(kanbanCardTable.id, cardId))
+      .returning();
 
-  const record = rows[0];
-  if (!record) throw new NotFoundError("Card not found");
+    const row = rows[0];
+    if (!row) throw new NotFoundError("Card not found");
+
+    await recordCardHistory(tx, ctx, {
+      boardId: card.boardId,
+      previous,
+      next: row,
+      changedFields: changedCardFields(previous, row),
+    });
+    return row;
+  });
 
   dispatch(ctx, "card.updated", {
     ...record,
@@ -786,6 +1058,14 @@ export const moveCard = async (
       throw new ConflictError(
         "Card is no longer in the expected column; re-read it before moving it",
       );
+    }
+
+    // A move only ever touches columnId and position, so the entry is built
+    // from the one comparison rather than a full-row diff — the same reason
+    // the dispatch below computes its `changedFields` by hand. A within-column
+    // reorder changes no tracked field and leaves no entry.
+    if (previous.columnId !== row.columnId) {
+      await recordCardMoved(tx, ctx, row.id, previous.columnId, row.columnId);
     }
     return row;
   });
@@ -878,6 +1158,10 @@ export const copyCard = async (
         });
       }
     }
+
+    // The copy's history starts at the copy: it is a new Card, and the
+    // source's past is not its own.
+    await recordCardCreated(tx, ctx, rows[0]);
 
     return rows[0];
   });
@@ -1033,7 +1317,12 @@ export const bulkUpdateCards = async (
     : 0;
 
   const updated = await database.transaction(async (tx) => {
-    const records: { card: CardRef; row: CardRow; previous: CardRow }[] = [];
+    const records: {
+      card: CardRef;
+      row: CardRow;
+      previous: CardRow;
+      changedFields: string[];
+    }[] = [];
 
     for (const [index, card] of cards.entries()) {
       // The value-diff each card's `card.updated` event carries is computed
@@ -1068,19 +1357,26 @@ export const bulkUpdateCards = async (
         .where(eq(kanbanCardTable.id, card.id))
         .returning();
 
-      records.push({ card, row: rows[0], previous });
+      const row = rows[0];
+      // Computed here rather than after the transaction: the history entry
+      // needs it inside, and one computation keeps the entry and the event
+      // reporting the same diff.
+      const fields = changedCardFields(previous, row);
+
+      await recordCardHistory(tx, ctx, {
+        boardId: card.boardId,
+        previous,
+        next: row,
+        changedFields: fields,
+      });
+
+      records.push({ card, row, previous, changedFields: fields });
     }
     return records;
   });
 
-  for (const { card, row, previous } of updated) {
-    dispatchCardWrite(
-      ctx,
-      row,
-      card.boardId,
-      card.columnId,
-      changedCardFields(previous, row),
-    );
+  for (const { card, row, changedFields } of updated) {
+    dispatchCardWrite(ctx, row, card.boardId, card.columnId, changedFields);
   }
 
   return input.cardIds.map((id) => outcomes.get(id)!);
@@ -1143,6 +1439,65 @@ export const resolveCommentNames = async (
       ? (userMap.get(comment.createdByUserId) ?? null)
       : comment.createdByAgentId
         ? (agentMap.get(comment.createdByAgentId) ?? null)
+        : null,
+  }));
+};
+
+/**
+ * A Card's history, newest first. Capped at the same limit the writes trim to,
+ * so a caller never has to page and the read is bounded by construction.
+ */
+export const listCardHistory = async (
+  database: Database,
+  scope: KanbanScope,
+  cardId: string,
+): Promise<CardHistoryEntry[]> => {
+  await requireCard(database, scope, cardId);
+
+  const rows = await database
+    .select()
+    .from(kanbanCardHistoryTable)
+    .where(eq(kanbanCardHistoryTable.cardId, cardId))
+    .orderBy(
+      desc(kanbanCardHistoryTable.createdAt),
+      desc(kanbanCardHistoryTable.id),
+    )
+    .limit(KANBAN_CARD_HISTORY_LIMIT);
+
+  const userIds = new Set<string>();
+  const agentIds = new Set<string>();
+  for (const row of rows) {
+    if (row.actorUserId) userIds.add(row.actorUserId);
+    if (row.actorAgentId) agentIds.add(row.actorAgentId);
+  }
+
+  const users =
+    userIds.size > 0
+      ? await database
+          .select({ id: user.id, name: user.name })
+          .from(user)
+          .where(inArray(user.id, Array.from(userIds)))
+      : [];
+  const userMap = new Map(users.map((u) => [u.id, u.name]));
+
+  const agents =
+    agentIds.size > 0
+      ? await database
+          .select({ id: agentTable.id, name: agentTable.name })
+          .from(agentTable)
+          .where(inArray(agentTable.id, Array.from(agentIds)))
+      : [];
+  const agentMap = new Map(agents.map((a) => [a.id, a.name]));
+
+  // A deleted User or Agent leaves the entry standing with no name — what
+  // changed is still the useful part, and the FK is `set null` for exactly
+  // this reason.
+  return rows.map((row) => ({
+    ...row,
+    actorName: row.actorUserId
+      ? (userMap.get(row.actorUserId) ?? null)
+      : row.actorAgentId
+        ? (agentMap.get(row.actorAgentId) ?? null)
         : null,
   }));
 };

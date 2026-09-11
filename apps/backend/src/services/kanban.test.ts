@@ -12,10 +12,12 @@ import { eq } from "drizzle-orm";
 import { kanbanCard as kanbanCardTable } from "../db/schema.ts";
 import { ConflictError, NotFoundError, ValidationError } from "../errors.ts";
 import { dispatchEvent } from "./event-dispatch.ts";
+import { KANBAN_CARD_HISTORY_LIMIT } from "@platypus/schemas";
 import {
   applyBodyDiff,
   bulkUpdateCards,
   changedCardFields,
+  createCard,
   keepKnownLabelIds,
   moveCard,
   placeCardInColumn,
@@ -416,8 +418,13 @@ describe("kanban module", () => {
         .mockResolvedValueOnce([
           { id: "card-1", columnId: "col-old", boardId: "board-1" },
         ]) // requireCard
-        .mockResolvedValueOnce([{ id: "col-new", boardId: "board-1" }]); // requireColumn
-      db.orderBy.mockResolvedValue([]); // placeCardInColumn
+        .mockResolvedValueOnce([{ id: "col-new", boardId: "board-1" }]) // requireColumn
+        .mockResolvedValueOnce([
+          { id: "col-old", name: "Old" },
+          { id: "col-new", name: "New" },
+        ]); // history entry: the column names it snapshots
+      db.orderBy.mockResolvedValueOnce([]); // placeCardInColumn — once, so the
+      // history trim's own orderBy stays chainable
       db.returning.mockResolvedValue([
         { id: "card-1", columnId: "col-new", position: 1 },
       ]);
@@ -457,7 +464,8 @@ describe("kanban module", () => {
           { id: "card-1", columnId: "col-1", boardId: "board-1" },
         ]) // requireCard
         .mockResolvedValueOnce([{ id: "col-1", boardId: "board-1" }]); // requireColumn
-      db.orderBy.mockResolvedValue([]); // placeCardInColumn
+      db.orderBy.mockResolvedValueOnce([]); // placeCardInColumn — once, so the
+      // history trim's own orderBy stays chainable
       db.returning.mockResolvedValue([
         { id: "card-1", columnId: "col-1", position: 1 },
       ]);
@@ -491,8 +499,13 @@ describe("kanban module", () => {
         .mockResolvedValueOnce([
           { id: "card-1", columnId: "col-old", boardId: "board-1" },
         ]) // requireCard
-        .mockResolvedValueOnce([{ id: "col-new", boardId: "board-1" }]); // requireColumn
-      db.orderBy.mockResolvedValue([]); // placeCardInColumn
+        .mockResolvedValueOnce([{ id: "col-new", boardId: "board-1" }]) // requireColumn
+        .mockResolvedValueOnce([
+          { id: "col-old", name: "Old" },
+          { id: "col-new", name: "New" },
+        ]); // history entry: the column names it snapshots
+      db.orderBy.mockResolvedValueOnce([]); // placeCardInColumn — once, so the
+      // history trim's own orderBy stays chainable
       db.returning.mockResolvedValue([
         { id: "card-1", columnId: "col-new", position: 1 },
       ]);
@@ -523,8 +536,12 @@ describe("kanban module", () => {
         .mockResolvedValueOnce([
           { id: "card-1", columnId: "col-old", boardId: "board-1" },
         ])
-        .mockResolvedValueOnce([{ id: "col-new", boardId: "board-1" }]);
-      db.orderBy.mockResolvedValue([]);
+        .mockResolvedValueOnce([{ id: "col-new", boardId: "board-1" }])
+        .mockResolvedValueOnce([
+          { id: "col-old", name: "Old" },
+          { id: "col-new", name: "New" },
+        ]); // history entry: the column names it snapshots
+      db.orderBy.mockResolvedValueOnce([]);
       db.returning.mockResolvedValue([
         { id: "card-1", columnId: "col-new", position: 1 },
       ]);
@@ -552,8 +569,12 @@ describe("kanban module", () => {
         .mockResolvedValueOnce([
           { id: "card-1", columnId: "col-old", boardId: "board-1" },
         ])
-        .mockResolvedValueOnce([{ id: "col-new", boardId: "board-1" }]);
-      db.orderBy.mockResolvedValue([]);
+        .mockResolvedValueOnce([{ id: "col-new", boardId: "board-1" }])
+        .mockResolvedValueOnce([
+          { id: "col-old", name: "Old" },
+          { id: "col-new", name: "New" },
+        ]); // history entry: the column names it snapshots
+      db.orderBy.mockResolvedValueOnce([]);
       db.returning.mockResolvedValue([
         { id: "card-1", columnId: "col-new", position: 1 },
       ]);
@@ -578,8 +599,13 @@ describe("kanban module", () => {
         .mockResolvedValueOnce([
           { id: "card-1", columnId: "col-old", boardId: "board-1" },
         ]) // requireCard
-        .mockResolvedValueOnce([{ id: "col-new", boardId: "board-1" }]); // requireColumn
-      db.orderBy.mockResolvedValue([]); // placeCardInColumn
+        .mockResolvedValueOnce([{ id: "col-new", boardId: "board-1" }]) // requireColumn
+        .mockResolvedValueOnce([
+          { id: "col-old", name: "Old" },
+          { id: "col-new", name: "New" },
+        ]); // history entry: the column names it snapshots
+      db.orderBy.mockResolvedValueOnce([]); // placeCardInColumn — once, so the
+      // history trim's own orderBy stays chainable
       db.returning.mockResolvedValue([]); // the predicate matched no row
 
       await expect(
@@ -603,7 +629,7 @@ describe("kanban module", () => {
           { id: "card-1", columnId: "col-note-processing", boardId: "board-1" },
         ])
         .mockResolvedValueOnce([{ id: "col-new", boardId: "board-1" }]);
-      db.orderBy.mockResolvedValue([]);
+      db.orderBy.mockResolvedValueOnce([]);
       db.returning.mockResolvedValue([]);
 
       let message = "";
@@ -745,6 +771,245 @@ describe("kanban module", () => {
     });
   });
 
+  // A Card history is working context, not an audit trail (ADR-0024): capped,
+  // dropped rather than archived, and written from inside the Card's own
+  // transaction so it can never describe a write that rolled back.
+  describe("card history", () => {
+    /** The history entries a call wrote, in order. */
+    const entries = () =>
+      db.values.mock.calls
+        .map((call) => call[0] as Record<string, unknown>)
+        .filter((value) => value && "kind" in value);
+
+    it("records one entry naming every field that moved, not one per field", async () => {
+      db.limit
+        .mockResolvedValueOnce([
+          { id: "card-1", columnId: "col-1", boardId: "board-1" },
+        ]) // requireCard
+        .mockResolvedValueOnce([
+          { id: "card-1", columnId: "col-1", title: "Old", priority: "low" },
+        ]) // currentCardRow
+        .mockResolvedValueOnce([]); // the history trim's subquery
+      db.returning.mockResolvedValue([
+        { id: "card-1", columnId: "col-1", title: "New", priority: "high" },
+      ]);
+
+      await updateCard(asDb(db), ctx, "card-1", {
+        title: "New",
+        priority: "high",
+      });
+
+      expect(entries()).toEqual([
+        expect.objectContaining({
+          cardId: "card-1",
+          kind: "updated",
+          changes: [
+            { field: "title", before: "Old", after: "New" },
+            { field: "priority", before: "low", after: "high" },
+          ],
+        }),
+      ]);
+    });
+
+    // Body is unbounded Markdown, so the entry says it moved and nothing more.
+    it("records a body edit without either version of the text", async () => {
+      db.limit
+        .mockResolvedValueOnce([
+          { id: "card-1", columnId: "col-1", boardId: "board-1" },
+        ])
+        .mockResolvedValueOnce([
+          { id: "card-1", columnId: "col-1", body: "the old body" },
+        ])
+        .mockResolvedValueOnce([]);
+      db.returning.mockResolvedValue([
+        { id: "card-1", columnId: "col-1", body: "the new body" },
+      ]);
+
+      await updateCard(asDb(db), ctx, "card-1", { body: "the new body" });
+
+      expect(entries()).toEqual([
+        expect.objectContaining({ changes: [{ field: "body" }] }),
+      ]);
+      expect(JSON.stringify(entries())).not.toContain("the old body");
+      expect(JSON.stringify(entries())).not.toContain("the new body");
+    });
+
+    // `position` is not a tracked field, so a reorder has an empty diff — which
+    // is what keeps a drag across a column from filling the history with noise.
+    it("writes nothing when the write moved no tracked field", async () => {
+      db.limit
+        .mockResolvedValueOnce([
+          { id: "card-1", columnId: "col-1", boardId: "board-1" },
+        ])
+        .mockResolvedValueOnce([
+          { id: "card-1", columnId: "col-1", title: "Same" },
+        ]);
+      db.returning.mockResolvedValue([
+        { id: "card-1", columnId: "col-1", title: "Same" },
+      ]);
+
+      await updateCard(asDb(db), ctx, "card-1", { title: "Same" });
+
+      expect(entries()).toEqual([]);
+    });
+
+    // The actor is the `KanbanActor` the module was called with — the same
+    // source as `lastEditedBy*`, never the ambient causation chain, so a
+    // Sub-Agent's write is attributed to the Sub-Agent.
+    it("attributes the entry to the acting agent", async () => {
+      db.limit
+        .mockResolvedValueOnce([
+          { id: "card-1", columnId: "col-1", boardId: "board-1" },
+        ])
+        .mockResolvedValueOnce([
+          { id: "card-1", columnId: "col-1", title: "A" },
+        ])
+        .mockResolvedValueOnce([]);
+      db.returning.mockResolvedValue([
+        { id: "card-1", columnId: "col-1", title: "B" },
+      ]);
+
+      await updateCard(asDb(db), ctx, "card-1", { title: "B" });
+
+      expect(entries()[0]).toMatchObject({ actorAgentId: "agent-1" });
+      expect(entries()[0]).not.toHaveProperty("actorUserId");
+    });
+
+    it("attributes the entry to the acting user", async () => {
+      const userCtx: KanbanContext = { ...scope, actor: { userId: "user-1" } };
+      db.limit
+        .mockResolvedValueOnce([
+          { id: "card-1", columnId: "col-1", boardId: "board-1" },
+        ])
+        .mockResolvedValueOnce([
+          { id: "card-1", columnId: "col-1", title: "A" },
+        ])
+        .mockResolvedValueOnce([]);
+      db.returning.mockResolvedValue([
+        { id: "card-1", columnId: "col-1", title: "B" },
+      ]);
+
+      await updateCard(asDb(db), userCtx, "card-1", { title: "B" });
+
+      expect(entries()[0]).toMatchObject({ actorUserId: "user-1" });
+      expect(entries()[0]).not.toHaveProperty("actorAgentId");
+    });
+
+    // The name is snapshotted at write time, so the entry still reads after the
+    // Label is deleted from the board or the Column is renamed.
+    it("snapshots label names rather than storing bare ids", async () => {
+      db.limit
+        .mockResolvedValueOnce([
+          { id: "card-1", columnId: "col-1", boardId: "board-1" },
+        ]) // requireCard
+        .mockResolvedValueOnce([
+          { id: "card-1", columnId: "col-1", labelIds: [] },
+        ]) // currentCardRow
+        .mockResolvedValueOnce([{ labels: [{ id: "lbl-a" }] }]) // keepKnownLabelIds
+        .mockResolvedValueOnce([{ labels: [{ id: "lbl-a", name: "Urgent" }] }]) // the entry's name snapshot
+        .mockResolvedValueOnce([]); // the history trim's subquery
+      db.returning.mockResolvedValue([
+        { id: "card-1", columnId: "col-1", labelIds: ["lbl-a"] },
+      ]);
+
+      await updateCard(asDb(db), ctx, "card-1", { labelIds: ["lbl-a"] });
+
+      expect(entries()[0]).toMatchObject({
+        changes: [
+          {
+            field: "labelIds",
+            before: [],
+            after: [{ id: "lbl-a", name: "Urgent" }],
+          },
+        ],
+      });
+    });
+
+    it("records a move as the columns it went between", async () => {
+      db.limit
+        .mockResolvedValueOnce([
+          { id: "card-1", columnId: "col-old", boardId: "board-1" },
+        ]) // requireCard
+        .mockResolvedValueOnce([{ id: "col-new", boardId: "board-1" }]) // requireColumn
+        .mockResolvedValueOnce([
+          { id: "col-old", name: "Doing" },
+          { id: "col-new", name: "Done" },
+        ]) // the entry's column-name snapshot
+        .mockResolvedValueOnce([]); // the history trim's subquery
+      db.orderBy.mockResolvedValueOnce([]);
+      db.returning.mockResolvedValue([
+        { id: "card-1", columnId: "col-new", position: 1 },
+      ]);
+
+      await moveCard(asDb(db), ctx, {
+        cardId: "card-1",
+        columnId: "col-new",
+        afterCardId: null,
+      });
+
+      expect(entries()).toEqual([
+        expect.objectContaining({
+          kind: "updated",
+          changes: [
+            {
+              field: "columnId",
+              before: { id: "col-old", name: "Doing" },
+              after: { id: "col-new", name: "Done" },
+            },
+          ],
+        }),
+      ]);
+    });
+
+    it("records a creation as the column the card appeared in", async () => {
+      db.where
+        .mockReturnValueOnce(db) // requireColumn's chain
+        .mockResolvedValueOnce([{ maxPos: 1 }]); // nextCardPosition
+      db.limit
+        .mockResolvedValueOnce([{ id: "col-1", boardId: "board-1" }]) // requireColumn
+        .mockResolvedValueOnce([{ id: "col-1", name: "Backlog" }]) // the entry's column-name snapshot
+        .mockResolvedValueOnce([]); // the history trim's subquery
+      db.returning.mockResolvedValue([{ id: "card-1", columnId: "col-1" }]);
+
+      await createCard(asDb(db), ctx, { columnId: "col-1", title: "New" });
+
+      expect(entries()).toEqual([
+        expect.objectContaining({
+          cardId: "card-1",
+          kind: "created",
+          changes: [
+            {
+              field: "columnId",
+              before: null,
+              after: { id: "col-1", name: "Backlog" },
+            },
+          ],
+        }),
+      ]);
+    });
+
+    // The cap is enforced in the same transaction as the insert, so it is an
+    // invariant rather than something a sweep eventually restores.
+    it("trims past the cap on the same write that appended", async () => {
+      db.limit
+        .mockResolvedValueOnce([
+          { id: "card-1", columnId: "col-1", boardId: "board-1" },
+        ])
+        .mockResolvedValueOnce([
+          { id: "card-1", columnId: "col-1", title: "A" },
+        ])
+        .mockResolvedValueOnce([]);
+      db.returning.mockResolvedValue([
+        { id: "card-1", columnId: "col-1", title: "B" },
+      ]);
+
+      await updateCard(asDb(db), ctx, "card-1", { title: "B" });
+
+      expect(db.delete).toHaveBeenCalled();
+      expect(db.limit).toHaveBeenCalledWith(KANBAN_CARD_HISTORY_LIMIT);
+    });
+  });
+
   describe("bulkUpdateCards", () => {
     it("reports the cards it could not reach and updates the rest", async () => {
       db.limit
@@ -796,6 +1061,11 @@ describe("kanban module", () => {
           { id: "card-2", columnId: "col-new", boardId: "board-1" },
         ]) // requireCard card-2, already in the target column
         .mockResolvedValueOnce([{ id: "card-1", columnId: "col-old" }]) // card-1's row before this write
+        .mockResolvedValueOnce([
+          { id: "col-old", name: "Old" },
+          { id: "col-new", name: "New" },
+        ]) // card-1 changed column, so its history entry snapshots both names
+        .mockResolvedValueOnce([]) // the history trim's subquery
         .mockResolvedValueOnce([{ id: "card-2", columnId: "col-new" }]); // card-2's row before this write
       db.returning
         .mockResolvedValueOnce([

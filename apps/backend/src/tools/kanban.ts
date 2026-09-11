@@ -14,6 +14,7 @@ import {
   createCard,
   createComment,
   deleteCards,
+  listCardHistory,
   listComments,
   moveCard,
   requireBoard,
@@ -181,12 +182,19 @@ export function createKanbanTools(
   });
 
   const getCard = tool({
-    description: "Get full details of a specific kanban card.",
+    description:
+      "Get full details of a specific kanban card. Set includeHistory to also see how the card reached its current state — who changed which fields, and when — before acting on it.",
     inputSchema: z.object({
       cardId: z.string().describe("The ID of the card to get"),
       label: z.string().describe("The card title (for display purposes)"),
+      includeHistory: z
+        .boolean()
+        .optional()
+        .describe(
+          "Include the card's recent change history, newest first. Off by default.",
+        ),
     }),
-    execute: async ({ cardId }) =>
+    execute: async ({ cardId, includeHistory }) =>
       asToolResult(async () => {
         const ref = await requireCard(db, ctx, cardId);
 
@@ -196,7 +204,13 @@ export function createKanbanTools(
           .where(eq(kanbanCardTable.id, cardId))
           .limit(1);
 
-        return withCardUrl({ card: cards[0], boardId: ref.boardId });
+        const card = withCardUrl({ card: cards[0], boardId: ref.boardId });
+        if (!includeHistory) return card;
+
+        return {
+          ...card,
+          history: await listCardHistory(db, ctx, cardId),
+        };
       }),
   });
 

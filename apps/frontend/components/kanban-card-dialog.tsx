@@ -69,6 +69,7 @@ import { useAuth } from "@/components/auth-provider";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { AgentAvatar } from "@/components/agent-avatar";
+import { KanbanCardHistory } from "@/components/kanban-card-history";
 import { Calendar } from "@/components/ui/calendar";
 import { toast } from "sonner";
 
@@ -471,6 +472,7 @@ export function KanbanCardDialog({
             <TabsList className="shrink-0">
               <TabsTrigger value="details">Details</TabsTrigger>
               <TabsTrigger value="comments">Comments</TabsTrigger>
+              <TabsTrigger value="history">History</TabsTrigger>
             </TabsList>
             <TabsContent
               value="details"
@@ -802,6 +804,17 @@ export function KanbanCardDialog({
                 </div>
               </div>
             </TabsContent>
+            <TabsContent
+              value="history"
+              className="flex-1 overflow-y-auto mt-0 pt-4 min-w-0"
+            >
+              <KanbanCardHistory
+                orgId={orgId}
+                workspaceId={workspaceId}
+                boardId={boardId}
+                cardId={card.id}
+              />
+            </TabsContent>
           </Tabs>
         ) : (
           <div className="flex flex-row gap-2 min-h-0 flex-1 overflow-hidden">
@@ -968,6 +981,14 @@ export function KanbanCardDialog({
                       Comment
                     </Button>
                   </div>
+                </div>
+                <div className="mt-6">
+                  <KanbanCardHistory
+                    orgId={orgId}
+                    workspaceId={workspaceId}
+                    boardId={boardId}
+                    cardId={card.id}
+                  />
                 </div>
               </div>
             </div>

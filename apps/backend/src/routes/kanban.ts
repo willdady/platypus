@@ -39,6 +39,7 @@ import {
   createCard,
   createComment,
   deleteCard,
+  listCardHistory,
   listComments,
   moveCard,
   nextColumnPosition,
@@ -668,6 +669,23 @@ const requireCommentOnCard = async (
 /** Whether this user may edit or delete a comment somebody else wrote. */
 const canModerate = (c: Context<{ Variables: Variables }>) =>
   isSuperAdmin(c.get("user")) || c.get("orgMembership")?.role === "admin";
+
+/** A card's history, newest first */
+kanban.get(
+  "/:boardId/cards/:cardId/history",
+  requireAuth,
+  requireOrgAccess(),
+  requireWorkspaceAccess,
+  async (c) => {
+    const results = await listCardHistory(
+      db,
+      scopeOf(c),
+      c.req.param("cardId"),
+    );
+
+    return c.json({ results });
+  },
+);
 
 /** List comments for a card */
 kanban.get(

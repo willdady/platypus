@@ -129,6 +129,10 @@ _Avoid_: lane, swimlane, list, stage.
 The unit of work on a **Board**: title, Markdown body, Labels, due date, priority (none/low/medium/high/urgent), a single Assignee, and threaded Comments. Every write records who made it — a User _or_ an Agent — and an Assignee may be either. An Agent is held to the same rules as a person: only Labels the Board actually has, only Assignees who can work in the Workspace.
 _Avoid_: ticket, issue, item, task.
 
+**Card history**:
+The record of how a **Card** reached its current state: an ordered, capped series of **history entries**, each naming what changed, when, and who did it — the User or Agent that made the write itself, at whatever delegation depth. Scoped to field writes addressed to one Card: a Board-level write that reshapes many Cards at once (deleting a Label) is in none of their histories, and a Comment is its own durable record rather than a history entry. Working context for whoever acts on the Card next, not an audit trail: entries roll off, and the history dies with the Card. Durable, exportable board activity is what the `card.*` **Webhook events** are for.
+_Avoid_: event log, audit log, audit trail, card timeline, activity feed.
+
 **Dashboard**:
 A Workspace-scoped grid of **Widgets** with separate desktop and mobile layouts, auto-refreshing in view mode. Deliberately split by ownership: Users own the layout and the widget set; an Agent updates Widget data only, and never an Embed's URL.
 _Avoid_: report, page, view.

@@ -2310,6 +2310,94 @@ export const kanbanCardCommentUpdateSchema = kanbanCardCommentSchema
 
 export type KanbanCardComment = z.infer<typeof kanbanCardCommentSchema>;
 
+// Kanban Card history
+
+/**
+ * The most recent entries a Card's history keeps. Older entries are dropped,
+ * never archived: a Card history is working context for whoever acts on the
+ * Card next, not an audit trail (ADR-0024). Deliberately a constant rather
+ * than an Operator setting — the cap is what keeps the concept honest.
+ */
+export const KANBAN_CARD_HISTORY_LIMIT = 50;
+
+/**
+ * A Label or Column as it stood when the entry was written. The id keeps the
+ * entry joinable while the referent exists; the name is what makes it readable
+ * after a rename or a deletion — and for a history the snapshot is the more
+ * correct of the two, since a Column renamed last month did not have its
+ * current name when the Card entered it.
+ */
+export const kanbanCardHistoryRefSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+});
+
+export type KanbanCardHistoryRef = z.infer<typeof kanbanCardHistoryRefSchema>;
+
+/**
+ * One field's movement within a single write. `body` is the deliberate
+ * exception and carries no values at all: it is unbounded Markdown, and
+ * storing it twice per edit is the capture ADR-0024 refuses. A body edit is
+ * legible ("who touched it, when") but not recoverable.
+ */
+export const kanbanCardHistoryChangeSchema = z.discriminatedUnion("field", [
+  z.object({
+    field: z.literal("title"),
+    before: z.string().nullable(),
+    after: z.string().nullable(),
+  }),
+  z.object({ field: z.literal("body") }),
+  z.object({
+    field: z.literal("priority"),
+    before: kanbanCardPrioritySchema,
+    after: kanbanCardPrioritySchema,
+  }),
+  z.object({
+    field: z.literal("dueDate"),
+    before: z.string().nullable(),
+    after: z.string().nullable(),
+  }),
+  z.object({
+    field: z.literal("assignees"),
+    before: z.array(kanbanCardAssigneeSchema),
+    after: z.array(kanbanCardAssigneeSchema),
+  }),
+  z.object({
+    field: z.literal("labelIds"),
+    before: z.array(kanbanCardHistoryRefSchema),
+    after: z.array(kanbanCardHistoryRefSchema),
+  }),
+  z.object({
+    field: z.literal("columnId"),
+    before: kanbanCardHistoryRefSchema.nullable(),
+    after: kanbanCardHistoryRefSchema,
+  }),
+]);
+
+export type KanbanCardHistoryChange = z.infer<
+  typeof kanbanCardHistoryChangeSchema
+>;
+
+/**
+ * One write addressed to a Card, as its history remembers it. A `created`
+ * entry carries the single `columnId` change that brought the Card into
+ * existence; an `updated` entry carries every field that actually moved.
+ */
+export const kanbanCardHistoryEntrySchema = z.object({
+  id: z.string(),
+  cardId: z.string(),
+  kind: z.enum(["created", "updated"]),
+  changes: z.array(kanbanCardHistoryChangeSchema).default([]),
+  actorUserId: z.string().nullable().optional(),
+  actorAgentId: z.string().nullable().optional(),
+  actorName: z.string().nullable().optional(),
+  createdAt: z.date(),
+});
+
+export type KanbanCardHistoryEntry = z.infer<
+  typeof kanbanCardHistoryEntrySchema
+>;
+
 // Kanban Board State (nested response)
 
 export const kanbanBoardStateSchema = z.object({

@@ -70,6 +70,59 @@ describe("createKanbanTools", () => {
         await tools.getCard.execute!({ cardId: "bad-id", label: "test" }, ctx),
       ).toEqual({ error: "Card not found" });
     });
+
+    // History is opt-in: most reads want what the card says now, and the flag
+    // is what keeps the common call from paying for a past it will not use.
+    it("omits the history unless it is asked for", async () => {
+      mockDb.limit
+        .mockResolvedValueOnce([
+          { id: "card-1", columnId: "col-1", boardId: "board-1" },
+        ]) // card guard
+        .mockResolvedValueOnce([{ id: "card-1", title: "Card" }]); // the card row
+
+      const result = (await tools.getCard.execute!(
+        { cardId: "card-1", label: "test" },
+        ctx,
+      )) as Record<string, unknown>;
+
+      expect(result).not.toHaveProperty("history");
+    });
+
+    it("returns the card's history when includeHistory is set", async () => {
+      const entry = {
+        id: "hist-1",
+        cardId: "card-1",
+        kind: "updated",
+        changes: [{ field: "title", before: "Old", after: "New" }],
+        actorUserId: null,
+        actorAgentId: "agent-1",
+        createdAt: new Date(),
+      };
+      mockDb.limit
+        .mockResolvedValueOnce([
+          { id: "card-1", columnId: "col-1", boardId: "board-1" },
+        ]) // card guard
+        .mockResolvedValueOnce([{ id: "card-1", title: "Card" }]) // the card row
+        .mockResolvedValueOnce([
+          { id: "card-1", columnId: "col-1", boardId: "board-1" },
+        ]) // card guard again, inside the history read
+        .mockResolvedValueOnce([entry]); // the entries
+      // Only the actor-name lookup terminates at where(); the chains before it
+      // have to stay chainable.
+      for (let i = 0; i < 4; i++) mockDb.where.mockReturnValueOnce(mockDb);
+      mockDb.where.mockResolvedValueOnce([
+        { id: "agent-1", name: "Triage bot" },
+      ]); // the actor's name
+
+      const result = (await tools.getCard.execute!(
+        { cardId: "card-1", label: "test", includeHistory: true },
+        ctx,
+      )) as { history?: { actorName: string | null }[] };
+
+      expect(result.history).toEqual([
+        expect.objectContaining({ id: "hist-1", actorName: "Triage bot" }),
+      ]);
+    });
   });
 
   describe("upsertCard (create)", () => {
@@ -292,8 +345,14 @@ describe("createKanbanTools", () => {
           { id: "card-1", columnId: "col-1", boardId: "board-1" },
         ]) // card guard
         .mockResolvedValueOnce([{ id: "card-1", columnId: "col-1" }]) // prior row, for the changedFields value-diff
-        .mockResolvedValueOnce([{ labels: [{ id: "lbl-a" }] }]); // board labels
-      mockDb.returning.mockResolvedValueOnce([{ id: "card-1" }]);
+        .mockResolvedValueOnce([{ labels: [{ id: "lbl-a" }] }]) // board labels
+        .mockResolvedValueOnce([{ labels: [{ id: "lbl-a", name: "A" }] }]) // board labels again, for the history entry's name snapshot
+        .mockResolvedValueOnce([]); // the history trim's subquery
+      // The written row carries the column it is already in: a `returning`
+      // stub that omitted it would read as a column change to the value-diff.
+      mockDb.returning.mockResolvedValueOnce([
+        { id: "card-1", columnId: "col-1" },
+      ]);
 
       await tools.upsertCard.execute!(
         {
@@ -342,8 +401,12 @@ describe("createKanbanTools", () => {
           { id: "card-1", columnId: "col-1", boardId: "board-1" },
         ]) // card guard
         .mockResolvedValueOnce([{ id: "card-1", columnId: "col-1" }]) // prior row, for the changedFields value-diff
-        .mockResolvedValueOnce([{ labels: [{ id: "lbl-a" }] }]); // board labels
-      mockDb.returning.mockResolvedValueOnce([{ id: "card-1" }]);
+        .mockResolvedValueOnce([{ labels: [{ id: "lbl-a" }] }]) // board labels
+        .mockResolvedValueOnce([{ labels: [{ id: "lbl-a", name: "A" }] }]) // board labels again, for the history entry's name snapshot
+        .mockResolvedValueOnce([]); // the history trim's subquery
+      mockDb.returning.mockResolvedValueOnce([
+        { id: "card-1", columnId: "col-1" },
+      ]);
 
       await tools.bulkEditCards.execute!(
         {
@@ -447,7 +510,9 @@ describe("createKanbanTools", () => {
           { id: "card-1", columnId: "col-1", boardId: "board-1" },
         ]) // card guard
         .mockResolvedValueOnce([{ id: "col-2", boardId: "board-1" }]) // column guard
-        .mockResolvedValueOnce([sourceCard]); // source card select
+        .mockResolvedValueOnce([sourceCard]) // source card select
+        .mockResolvedValueOnce([{ id: "col-2", name: "Doing" }]) // the copy's created entry snapshots its column name
+        .mockResolvedValueOnce([]); // the history trim's subquery
       // Skip non-terminal where() calls, then resolve terminal where() for max position
       for (let i = 0; i < 3; i++) mockDb.where.mockReturnValueOnce(mockDb);
       mockDb.where.mockResolvedValueOnce([{ maxPos: 3 }]);
@@ -484,7 +549,9 @@ describe("createKanbanTools", () => {
           { id: "card-1", columnId: "col-1", boardId: "board-1" },
         ]) // card guard
         .mockResolvedValueOnce([{ id: "col-1", boardId: "board-1" }]) // column guard
-        .mockResolvedValueOnce([sourceCard]); // source card select
+        .mockResolvedValueOnce([sourceCard]) // source card select
+        .mockResolvedValueOnce([{ id: "col-2", name: "Doing" }]) // the copy's created entry snapshots its column name
+        .mockResolvedValueOnce([]); // the history trim's subquery
       // Skip non-terminal where() calls, then resolve terminal where() for max position
       for (let i = 0; i < 3; i++) mockDb.where.mockReturnValueOnce(mockDb);
       mockDb.where.mockResolvedValueOnce([{ maxPos: 1 }]);
@@ -503,8 +570,9 @@ describe("createKanbanTools", () => {
       )) as { error?: string };
 
       expect(result).not.toHaveProperty("error");
-      // insert called for the new card + once per comment
-      expect(mockDb.insert).toHaveBeenCalledTimes(2);
+      // insert called for the new card, once per comment, and once for the
+      // copy's own `created` history entry
+      expect(mockDb.insert).toHaveBeenCalledTimes(3);
     });
 
     it("returns error when source card not found", async () => {

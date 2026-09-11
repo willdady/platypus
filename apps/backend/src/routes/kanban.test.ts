@@ -615,6 +615,8 @@ describe("Kanban Routes", () => {
         { ownerId: "user-1", organizationId: "org-1" },
       ]); // requireWorkspaceAccess
       mockDb.limit.mockResolvedValueOnce([{ id: "col-1", boardId: "board-1" }]); // column guard
+      mockDb.limit.mockResolvedValueOnce([{ id: "col-1", name: "To do" }]); // the created entry snapshots its column name
+      mockDb.limit.mockResolvedValueOnce([]); // the history trim's subquery
 
       const mockCard = {
         id: "test-id-123",
@@ -673,8 +675,15 @@ describe("Kanban Routes", () => {
         { id: "card-1", columnId: "col-1", title: "Card" },
       ]); // prior row, for the changedFields value-diff
 
-      const mockCard = { id: "card-1", title: "Updated Card" };
+      // Carries its column: a row that omitted it would read as a column
+      // change to the value-diff behind the history entry.
+      const mockCard = {
+        id: "card-1",
+        columnId: "col-1",
+        title: "Updated Card",
+      };
       mockDb.returning.mockResolvedValueOnce([mockCard]);
+      mockDb.limit.mockResolvedValueOnce([]); // the history trim's subquery
 
       const res = await app.request(`${baseUrl}/${boardId}/cards/card-1`, {
         method: "PUT",
@@ -721,7 +730,20 @@ describe("Kanban Routes", () => {
           { id: "card-1", columnId: "col-1", labelIds: [] },
         ]); // prior row, for the changedFields value-diff
         mockBoardLabels([{ id: "lbl-a" }, { id: "lbl-b" }]);
-        mockDb.returning.mockResolvedValueOnce([{ id: "card-1" }]);
+        // Carries the column it stays in and the labels it persisted, so the
+        // value-diff behind the history entry sees only the label change.
+        mockDb.returning.mockResolvedValueOnce([
+          { id: "card-1", columnId: "col-1", labelIds: ["lbl-b", "lbl-a"] },
+        ]);
+        mockDb.limit.mockResolvedValueOnce([
+          {
+            labels: [
+              { id: "lbl-a", name: "A" },
+              { id: "lbl-b", name: "B" },
+            ],
+          },
+        ]); // board labels again, for the entry's name snapshot
+        mockDb.limit.mockResolvedValueOnce([]); // the history trim's subquery
 
         const res = await app.request(`${baseUrl}/${boardId}/cards/card-1`, {
           method: "PUT",
@@ -748,7 +770,15 @@ describe("Kanban Routes", () => {
           { id: "card-1", columnId: "col-1", labelIds: [] },
         ]); // prior row, for the changedFields value-diff
         mockBoardLabels([{ id: "lbl-new" }]);
-        mockDb.returning.mockResolvedValueOnce([{ id: "card-1" }]);
+        // Carries the column it stays in and the labels it persisted, so the
+        // value-diff behind the history entry sees only the label change.
+        mockDb.returning.mockResolvedValueOnce([
+          { id: "card-1", columnId: "col-1", labelIds: ["lbl-new"] },
+        ]);
+        mockDb.limit.mockResolvedValueOnce([
+          { labels: [{ id: "lbl-new", name: "New" }] },
+        ]); // board labels again, for the entry's name snapshot
+        mockDb.limit.mockResolvedValueOnce([]); // the history trim's subquery
 
         const res = await app.request(`${baseUrl}/${boardId}/cards/card-1`, {
           method: "PUT",
@@ -783,7 +813,12 @@ describe("Kanban Routes", () => {
           { id: "card-1", columnId: "col-1", labelIds: [] },
         ]); // prior row, for the changedFields value-diff
         mockBoardLabels([]);
-        mockDb.returning.mockResolvedValueOnce([{ id: "card-1" }]);
+        // Every submitted label was unknown, so the card ends where it started
+        // and the write changes nothing a history entry would record.
+        mockDb.returning.mockResolvedValueOnce([
+          { id: "card-1", columnId: "col-1", labelIds: [] },
+        ]);
+        mockDb.limit.mockResolvedValueOnce([]); // the history trim's subquery
 
         const res = await app.request(`${baseUrl}/${boardId}/cards/card-1`, {
           method: "PUT",
@@ -858,6 +893,7 @@ describe("Kanban Routes", () => {
 
         const mockCard = {
           id: "card-1",
+          columnId: "col-1",
           title: "Test",
           assignees: [{ type: "user", id: "admin-user" }],
         };
@@ -912,6 +948,7 @@ describe("Kanban Routes", () => {
 
         const mockCard = {
           id: "card-1",
+          columnId: "col-1",
           title: "Test",
           assignees: [{ type: "agent", id: "shared-agent" }],
         };
@@ -989,6 +1026,7 @@ describe("Kanban Routes", () => {
 
         const mockCard = {
           id: "card-1",
+          columnId: "col-1",
           title: "Test",
           assignees: [{ type: "user", id: "user-1" }],
         };
@@ -1021,6 +1059,11 @@ describe("Kanban Routes", () => {
         { id: "card-1", columnId: "col-1", boardId: "board-1" },
       ]); // card guard
       mockDb.limit.mockResolvedValueOnce([{ id: "col-2", boardId: "board-1" }]); // target column guard
+      mockDb.limit.mockResolvedValueOnce([
+        { id: "col-1", name: "To do" },
+        { id: "col-2", name: "Doing" },
+      ]); // the move's history entry snapshots both column names
+      mockDb.limit.mockResolvedValueOnce([]); // the history trim's subquery
 
       const existingCards = [
         { id: "card-2", columnId: "col-2", position: 1.0 },
@@ -1053,6 +1096,11 @@ describe("Kanban Routes", () => {
         { id: "card-1", columnId: "col-2", boardId: "board-1" },
       ]); // card guard — already moved on
       mockDb.limit.mockResolvedValueOnce([{ id: "col-2", boardId: "board-1" }]); // target column guard
+      mockDb.limit.mockResolvedValueOnce([
+        { id: "col-1", name: "To do" },
+        { id: "col-2", name: "Doing" },
+      ]); // the move's history entry snapshots both column names
+      mockDb.limit.mockResolvedValueOnce([]); // the history trim's subquery
 
       mockDb.orderBy.mockResolvedValueOnce([]);
       mockDb.returning.mockResolvedValueOnce([]); // the predicate matched no row
@@ -1081,6 +1129,11 @@ describe("Kanban Routes", () => {
         { id: "card-1", columnId: "col-1", boardId: "board-1" },
       ]); // card guard
       mockDb.limit.mockResolvedValueOnce([{ id: "col-2", boardId: "board-1" }]); // target column guard
+      mockDb.limit.mockResolvedValueOnce([
+        { id: "col-1", name: "To do" },
+        { id: "col-2", name: "Doing" },
+      ]); // the move's history entry snapshots both column names
+      mockDb.limit.mockResolvedValueOnce([]); // the history trim's subquery
 
       const existingCards = [
         { id: "card-2", columnId: "col-2", position: 1.0 },
@@ -1143,6 +1196,11 @@ describe("Kanban Routes", () => {
         { id: "card-1", columnId: "col-1", boardId: "board-1" },
       ]); // card guard
       mockDb.limit.mockResolvedValueOnce([{ id: "col-2", boardId: "board-1" }]); // target column guard
+      mockDb.limit.mockResolvedValueOnce([
+        { id: "col-1", name: "To do" },
+        { id: "col-2", name: "Doing" },
+      ]); // the move's history entry snapshots both column names
+      mockDb.limit.mockResolvedValueOnce([]); // the history trim's subquery
 
       const existingCards = [
         { id: "card-2", columnId: "col-2", position: 1.0 },

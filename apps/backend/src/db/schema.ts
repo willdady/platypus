@@ -9,6 +9,7 @@ import {
 // Import and re-export auth schema
 export * from "./auth-schema.ts";
 import { user } from "./auth-schema.ts";
+import type { KanbanCardHistoryChange } from "@platypus/schemas";
 
 // Custom vector type without fixed dimensions — allows variable-dimension vectors per workspace
 const unboundVector = customType<{
@@ -915,6 +916,48 @@ export const kanbanCardComment = pgTable(
     updatedAt: t.timestamp("updated_at").notNull().defaultNow(),
   }),
   (t) => [index("idx_kanban_card_comment_card_id").on(t.cardId)],
+);
+
+/**
+ * One write addressed to a Card, as its history remembers it (ADR-0024).
+ * Cascades with the Card by design: a Card history is working context, so it
+ * has no reason to outlive what it describes — which is also why `card.deleted`
+ * is unloggable here.
+ *
+ * The actor is the leaf writer, taken from the `KanbanActor` the service was
+ * called with and mirroring the Card's own `lastEditedBy*` columns, never the
+ * ambient causation chain (ADR-0022) — that models who is responsible for a
+ * run, which is a different question.
+ */
+export const kanbanCardHistory = pgTable(
+  "kanban_card_history",
+  (t) => ({
+    id: t.text("id").primaryKey(),
+    cardId: t
+      .text("card_id")
+      .notNull()
+      .references(() => kanbanCard.id, { onDelete: "cascade" }),
+    kind: t.text("kind").$type<"created" | "updated">().notNull(),
+    changes: t
+      .jsonb("changes")
+      .$type<KanbanCardHistoryChange[]>()
+      .notNull()
+      .default([]),
+    actorUserId: t
+      .text("actor_user_id")
+      .references(() => user.id, { onDelete: "set null" }),
+    actorAgentId: t
+      .text("actor_agent_id")
+      .references(() => agent.id, { onDelete: "set null" }),
+    createdAt: t.timestamp("created_at").notNull().defaultNow(),
+  }),
+  (t) => [
+    // Read newest-first for one card, and trimmed by the same key.
+    index("idx_kanban_card_history_card_id_created_at").on(
+      t.cardId,
+      t.createdAt,
+    ),
+  ],
 );
 
 // Dashboard

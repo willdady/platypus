@@ -60,6 +60,8 @@ Click a card to open its detail dialog, where you can edit:
   Agent_.
 - **Comments** — a threaded discussion on the card (also Markdown).
 
+Below the comments, **History** lists how the card got here — newest first.
+
 <Callout type="info">
   Cards record who created and last edited them — and that can be an **Agent**,
   not just a person. When an Agent works a board, its activity shows up in the
@@ -106,6 +108,40 @@ acting on a stale reading of the board is refused and told to look again.
   did not apply — nothing else was lost, and you can repeat it against the board
   as it now stands.
 </Callout>
+
+## Card history
+
+Every card keeps a short record of how it reached its current state: who moved
+it, who changed its labels, priority, due date, title or assignee, and when.
+Open a card and read **History** at the bottom of the dialog.
+
+One write is one entry, however many fields it touched — an Agent that retitles
+a card and bumps its priority in a single edit leaves one line, not two.
+Reordering a card inside its column changes nothing the history tracks and
+leaves no entry at all.
+
+Two things it deliberately does not record:
+
+- **The description's text.** An entry says the description was edited and who
+  edited it, never what it said before. Use a Comment if the previous wording
+  matters.
+- **Anything that happened to the board rather than the card.** Delete a Label
+  at board level and it disappears from every card carrying it, and no card's
+  history mentions it. Entries written earlier still show that Label by the
+  name it had at the time.
+
+<Callout type="warning">
+  A card keeps its **50 most recent** entries. Past that, the oldest are
+  dropped — permanently, and with no copy kept anywhere. Treating History as an
+  audit trail is the trap: it is there to tell whoever picks the card up next
+  how it got here, and a busy card outruns it. If you need a durable record of
+  board activity, send `card.*` events to a
+  [Webhook](/building-with-platypus/webhooks) and keep them your side. Deleting
+  a card deletes its history with it.
+</Callout>
+
+An Agent with the **Kanban** tool set reads the same history when it fetches a
+card, so you can tell it to check how a card has moved before acting on it.
 
 ## Where to next
 
