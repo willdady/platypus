@@ -1,4 +1,4 @@
-import { and, count, desc, eq, gt, notInArray, ne } from "drizzle-orm";
+import { and, count, desc, eq, gt, lte, notInArray, ne } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import { db } from "../index.ts";
 import { triggerRun as triggerRunTable } from "../db/schema.ts";
@@ -219,28 +219,23 @@ export const retainTriggerRuns = async (
       .limit(maxRunsToKeep);
 
     if (newest.length >= maxRunsToKeep) {
+      // The window half of the union is expressed as a predicate rather than
+      // an id list: selecting every row inside the window would grow the
+      // `notInArray` argument with the Trigger's throughput, on a query that
+      // runs after every run. `startedAt` is NOT NULL, so `<= since` is the
+      // exact complement of the `> since` the count uses.
       const since = new Date(Date.now() - windowSeconds * 1000);
-      const withinWindow = await db
-        .select({ id: triggerRunTable.id })
-        .from(triggerRunTable)
-        .where(
-          and(
-            eq(triggerRunTable.triggerId, triggerId),
-            ne(triggerRunTable.status, "suppressed"),
-            gt(triggerRunTable.startedAt, since),
-          ),
-        );
-
-      const kept = [
-        ...new Set([...newest, ...withinWindow].map((row) => row.id)),
-      ];
       const removed = await db
         .delete(triggerRunTable)
         .where(
           and(
             eq(triggerRunTable.triggerId, triggerId),
             ne(triggerRunTable.status, "suppressed"),
-            notInArray(triggerRunTable.id, kept),
+            lte(triggerRunTable.startedAt, since),
+            notInArray(
+              triggerRunTable.id,
+              newest.map((row) => row.id),
+            ),
           ),
         )
         .returning({ id: triggerRunTable.id });

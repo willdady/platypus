@@ -230,6 +230,7 @@ vi.mock("drizzle-orm", async () => {
     inArray: vi.fn(),
     notInArray: vi.fn(),
     gt: vi.fn(),
+    lte: vi.fn(),
     asc: vi.fn(),
     count: vi.fn(),
     max: vi.fn(),

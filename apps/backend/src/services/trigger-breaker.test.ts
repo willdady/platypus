@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { mockDb, resetMockDb } from "../test-utils.ts";
-import { gt, notInArray } from "drizzle-orm";
+import { lte, notInArray } from "drizzle-orm";
 import { triggerRun as triggerRunTable } from "../db/schema.ts";
 
 vi.mock("nanoid", () => ({
@@ -199,13 +199,11 @@ describe("trigger-breaker", () => {
      */
     const stubRetention = ({
       newest,
-      withinWindow,
       suppressed,
       deleted = [],
       deletedSuppressed = [],
     }: {
       newest: { id: string }[];
-      withinWindow: { id: string }[];
       suppressed: { id: string }[];
       deleted?: { id: string }[];
       deletedSuppressed?: { id: string }[];
@@ -213,9 +211,6 @@ describe("trigger-breaker", () => {
       mockDb.limit
         .mockResolvedValueOnce(newest)
         .mockResolvedValueOnce(suppressed);
-      mockDb.where
-        .mockImplementationOnce(() => mockDb)
-        .mockResolvedValueOnce(withinWindow);
       mockDb.returning
         .mockResolvedValueOnce(deleted)
         .mockResolvedValueOnce(deletedSuppressed);
@@ -223,26 +218,29 @@ describe("trigger-breaker", () => {
 
     it("keeps every run inside the breaker window, however small maxRunsToKeep is", async () => {
       // The floor the breaker's count depends on: maxRunsToKeep alone would
-      // have deleted `in-window` before the count could see it.
+      // have deleted the in-window rows before the count could see them. They
+      // are spared by predicate rather than by id, so the delete cannot grow
+      // an id list with the Trigger's throughput.
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date("2026-01-01T12:00:00Z"));
       vi.stubEnv(TRIGGER_BREAKER_WINDOW_SECONDS_ENV, "3600");
-      stubRetention({
-        newest: [{ id: "newest" }],
-        withinWindow: [{ id: "in-window" }],
-        suppressed: [],
-      });
+      stubRetention({ newest: [{ id: "newest" }], suppressed: [] });
 
       await retainTriggerRuns("trigger-1", 1);
 
-      expect(vi.mocked(notInArray)).toHaveBeenCalledWith(triggerRunTable.id, [
-        "newest",
-        "in-window",
-      ]);
+      expect(vi.mocked(lte)).toHaveBeenCalledWith(
+        triggerRunTable.startedAt,
+        new Date("2026-01-01T11:00:00Z"),
+      );
     });
 
-    it("deduplicates a row that is both newest and inside the window", async () => {
+    it("carries no more ids into the delete than maxRunsToKeep", async () => {
+      // The regression this guards: the kept set used to be the union of the
+      // newest page and every row inside the window, so a Trigger firing
+      // across many entities built an unbounded `notInArray` argument on a
+      // query that runs after every run.
       stubRetention({
         newest: [{ id: "newest" }, { id: "newer" }],
-        withinWindow: [{ id: "newest" }],
         suppressed: [],
       });
 
@@ -252,6 +250,9 @@ describe("trigger-breaker", () => {
         "newest",
         "newer",
       ]);
+      // Two selects only — the newest page and the suppressed page. A third
+      // would be the window scan this replaced.
+      expect(mockDb.select).toHaveBeenCalledTimes(2);
     });
 
     it("derives the kept window from the configured breaker window", async () => {
@@ -260,15 +261,11 @@ describe("trigger-breaker", () => {
       vi.useFakeTimers();
       vi.setSystemTime(new Date("2026-01-01T12:00:00Z"));
       vi.stubEnv(TRIGGER_BREAKER_WINDOW_SECONDS_ENV, "60");
-      stubRetention({
-        newest: [{ id: "newest" }],
-        withinWindow: [{ id: "in-window" }],
-        suppressed: [],
-      });
+      stubRetention({ newest: [{ id: "newest" }], suppressed: [] });
 
       await retainTriggerRuns("trigger-1", 1);
 
-      expect(vi.mocked(gt)).toHaveBeenCalledWith(
+      expect(vi.mocked(lte)).toHaveBeenCalledWith(
         triggerRunTable.startedAt,
         new Date("2026-01-01T11:59:00Z"),
       );
@@ -278,7 +275,6 @@ describe("trigger-breaker", () => {
       vi.stubEnv(TRIGGER_BREAKER_SUPPRESSED_RUNS_TO_KEEP_ENV, "1");
       stubRetention({
         newest: [{ id: "newest" }],
-        withinWindow: [],
         suppressed: [{ id: "suppressed-newest" }],
       });
 
