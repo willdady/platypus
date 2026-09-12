@@ -48,22 +48,28 @@ credentials attached. The session cookie is set by the **backend** and has to be
 sent back to the backend on requests initiated by a page served from the
 **frontend**.
 
-With the default cookie settings, browsers only do that when the two are
-**same-site** — same registrable domain. So one of these:
+The cookie is **host-only** unless `AUTH_COOKIE_DOMAIN` names a parent domain
+both origins share, so only these layouts actually work:
 
-| Layout                                                          | Works | Why                                                     |
-| --------------------------------------------------------------- | ----- | ------------------------------------------------------- |
-| `app.example.com` + `api.example.com`                            | Yes   | Same registrable domain, so the request is same-site     |
-| `example.com` + `example.com/api` behind one proxy               | Yes   | One origin — nothing is cross-site at all               |
-| `platypus.example.com` + `api.example.net`                       | No    | Different registrable domains: the cookie is not sent    |
-| `app.vercel-ish-host.app` + `api.other-host.app`                 | No    | Same shape as above, on shared-suffix hosting            |
+| Layout                                                          | Works | Why                                                                                    |
+| --------------------------------------------------------------- | ----- | -------------------------------------------------------------------------------------- |
+| `example.com` + `example.com/api` behind one proxy              | Yes   | One origin — a single cookie covers both                                                |
+| `app.example.com` + `api.example.com`, `AUTH_COOKIE_DOMAIN=example.com` | Yes | The cookie is issued for the shared parent domain, so both hosts send it          |
+| `platypus.example.com` + `api.example.net`                      | No    | Different registrable domains: no cookie can cover both                                |
+| `app.vercel-ish-host.app` + `api.other-host.app`                | No    | Same shape as above, on shared-suffix hosting                                          |
 
 <Callout type="warning">
-  Get this wrong and **sign-in appears to succeed and then silently fails**. The
-  credentials are accepted, the cookie is issued, and the very next request
+  Two subdomains of one parent domain only work when `AUTH_COOKIE_DOMAIN` names
+  that parent. Without it the cookie is host-only, server-rendered requests
+  arrive unauthenticated, and the backend **refuses to start** — a container
+  that exits with a message naming both hostnames is better than an app that
+  signs you in and then silently serves degraded pages.
+
+  A partial edit of the URL variables is a different failure: the browser's own
+  requests break, so **sign-in appears to succeed and then silently fails**.
+  The credentials are accepted, the cookie is issued, and the very next request
   arrives unauthenticated, so you land back on the sign-in page with no error
-  message anywhere. It reads exactly like a wrong password. If sign-in "works but
-  doesn't stick", check the two hostnames before you check anything else.
+  message anywhere. It reads exactly like a wrong password.
 </Callout>
 
 Whichever layout you pick, the URL variables have to agree with it —
@@ -134,7 +140,8 @@ R2 or Spaces — before you run more than one backend. The variables are in
 ## A short checklist
 
 - TLS terminated at a proxy, with an HTTP → HTTPS redirect.
-- Frontend and backend hostnames same-site, or both behind one origin.
+- Frontend and backend on one origin, or two subdomains of one parent domain
+  with `AUTH_COOKIE_DOMAIN` set to that parent.
 - `ALLOWED_ORIGINS`, `BACKEND_URL` and `FRONTEND_URL` matching those hostnames.
 - `BETTER_AUTH_SECRET` a real random value, not the placeholder.
 - `ADMIN_PASSWORD` changed from whatever seeded the first admin.

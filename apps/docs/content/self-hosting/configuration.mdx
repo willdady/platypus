@@ -49,7 +49,21 @@ These have to agree. If the browser loads the app from one origin but
   you out — the cookie was issued against an origin the browser isn't on, so
   the next request arrives unauthenticated. There is no error message for this;
   change all of them in one edit.
+
+  Getting all four right is **necessary but not sufficient**. If the two origins
+  end up on different hosts they must also share a parent domain named by
+  `AUTH_COOKIE_DOMAIN`, or the backend refuses to start. See
+  [Supported topologies](#supported-topologies) below.
 </Callout>
+
+### Supported topologies
+
+The session cookie is issued by the backend and has to be sent back to it on requests a page served from the frontend makes. Only two layouts let that happen:
+
+- **One origin behind a reverse proxy** — the frontend at `/` and the backend under a path such as `/api` on the same host. The browser holds one cookie covering both, so no extra configuration is needed.
+- **Two subdomains of one parent domain** — e.g. `app.example.com` and `api.example.com`. Set `AUTH_COOKIE_DOMAIN` to the shared parent (`example.com`) so the session cookie is issued for it and every subdomain sends it. Without the variable the cookie is host-only and server-rendered requests arrive unauthenticated.
+
+Two hosts with **different parent domains** — e.g. `app.example.com` and `api.example.net` — are **not supported**. No cookie can cover both, and there is no service-to-service credential for internal calls. The backend **refuses to start** on that topology rather than serve a half-broken app; the fatal message names both hostnames and `AUTH_COOKIE_DOMAIN`.
 
 ### CORS / trusted origins
 

@@ -159,6 +159,13 @@ Edit `.env`. At minimum set:
 The shipped `.env.example` sets all four URL-shaped values for `localhost`, so
 a laptop deployment works unedited.
 
+If you serve the frontend and backend as two subdomains of one parent domain,
+also set `AUTH_COOKIE_DOMAIN` to that shared parent (e.g. `example.com`). Two
+hosts with different parent domains are not supported; the backend refuses to
+start rather than serve pages whose server-rendered requests are silently
+unauthenticated. See
+[Supported topologies](/self-hosting/configuration#supported-topologies).
+
 <Callout type="warning">
   **The three URL variables change together.** `ALLOWED_ORIGINS`,
   `FRONTEND_URL` and `BACKEND_URL` are one set — plus `BETTER_AUTH_URL`, which
@@ -167,6 +174,10 @@ a laptop deployment works unedited.
   stack: you sign in successfully and are immediately signed out again, because
   the cookie was issued against an origin the browser isn't on. Change all
   three in one edit.
+
+  That is separate from the hostname topology above: all four can be right and
+  the app still cannot authenticate server-side requests if the two origins are
+  on unrelated hosts, which is why the backend checks and refuses to start.
 </Callout>
 
 Both services read the same root `.env` via `env_file`. The full set of
