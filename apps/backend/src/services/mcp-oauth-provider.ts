@@ -2,6 +2,7 @@ import type { OAuthClientProvider } from "@ai-sdk/mcp";
 import { nanoid } from "nanoid";
 import { eq } from "drizzle-orm";
 import { db } from "../index.ts";
+import { frontendBaseUrl } from "../base-urls.ts";
 import { mcp as mcpTable, mcpOauthState } from "../db/schema.ts";
 
 export type McpRecord = typeof mcpTable.$inferSelect;
@@ -12,9 +13,7 @@ let _cachedCallbackUrl: string | undefined;
 /** Build the stable OAuth callback URL used across all OAuth flows. */
 export const buildOAuthCallbackUrl = () => {
   if (!_cachedCallbackUrl) {
-    const frontendUrl = (
-      process.env.FRONTEND_URL || "http://localhost:3001"
-    ).replace(/\/+$/, "");
+    const frontendUrl = frontendBaseUrl().replace(/\/+$/, "");
     _cachedCallbackUrl = `${frontendUrl}/oauth/mcp/callback`;
   }
   return _cachedCallbackUrl;

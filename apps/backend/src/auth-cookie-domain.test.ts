@@ -112,14 +112,43 @@ describe("checkAuthTopology", () => {
     expect(result).toEqual({ valid: true, cookieDomain: "example.com" });
   });
 
-  it("normalises a leading dot on the cookie domain", () => {
+  it("rejects a leading-dot cookie domain", () => {
+    // The variable takes a bare domain. Accepting the legacy dotted form would
+    // leave two spellings of the same value in circulation.
     const result = checkAuthTopology(
       "https://api.example.com",
       "https://app.example.com",
       ".example.com",
     );
 
-    expect(result).toEqual({ valid: true, cookieDomain: "example.com" });
+    const message = expectInvalid(result);
+    expect(message).toContain("AUTH_COOKIE_DOMAIN");
+    expect(message).toContain("leading dot");
+  });
+
+  it("rejects a cookie domain given as a URL, saying so", () => {
+    // Without this the value falls through to the suffix check and is refused
+    // as "not a parent domain of both", which sends the Operator hunting the
+    // wrong rule.
+    const result = checkAuthTopology(
+      "https://api.example.com",
+      "https://app.example.com",
+      "https://example.com",
+    );
+
+    const message = expectInvalid(result);
+    expect(message).toContain("AUTH_COOKIE_DOMAIN");
+    expect(message).toContain("URL, not a bare domain");
+  });
+
+  it("rejects a cookie domain carrying a path", () => {
+    const result = checkAuthTopology(
+      "https://api.example.com",
+      "https://app.example.com",
+      "example.com/app",
+    );
+
+    expect(expectInvalid(result)).toContain("URL, not a bare domain");
   });
 
   it("rejects a single-label cookie domain", () => {
@@ -164,6 +193,41 @@ describe("checkAuthTopology", () => {
     );
 
     expect(expectInvalid(result)).toContain("IP address");
+  });
+
+  it("refuses a backend URL it cannot read a hostname from", () => {
+    // Neither hostname can be compared, so the topology is unjudgeable and the
+    // same refusal applies. The message names only the variable at fault.
+    const result = checkAuthTopology(
+      "api.example.com",
+      "https://app.example.com",
+      "example.com",
+    );
+
+    const message = expectInvalid(result);
+    expect(message).toContain("BETTER_AUTH_URL");
+    expect(message).toContain("api.example.com");
+    expect(message).not.toContain("FRONTEND_URL");
+  });
+
+  it("refuses a frontend URL it cannot read a hostname from", () => {
+    const result = checkAuthTopology(
+      "https://api.example.com",
+      "not a url",
+      undefined,
+    );
+
+    const message = expectInvalid(result);
+    expect(message).toContain("FRONTEND_URL");
+    expect(message).not.toContain("BETTER_AUTH_URL");
+  });
+
+  it("names both variables when neither URL is readable", () => {
+    const result = checkAuthTopology("api", "app", undefined);
+
+    const message = expectInvalid(result);
+    expect(message).toContain("BETTER_AUTH_URL");
+    expect(message).toContain("FRONTEND_URL");
   });
 });
 

@@ -2,6 +2,7 @@ import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { admin } from "better-auth/plugins";
 import { db } from "./index.ts";
+import { backendBaseUrl } from "./base-urls.ts";
 import * as authSchema from "./db/auth-schema.ts";
 import {
   crossSubdomainCookieConfig,
@@ -14,7 +15,7 @@ import {
 const authCookieDomain = resolveAuthCookieDomain();
 
 export const auth = betterAuth({
-  baseURL: process.env.BETTER_AUTH_URL || "http://localhost:4001",
+  baseURL: backendBaseUrl(),
   basePath: "/auth",
   database: drizzleAdapter(db, {
     provider: "pg",

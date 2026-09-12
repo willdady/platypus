@@ -14,14 +14,13 @@
  * every server-rendered request arrives unauthenticated and nothing says so.
  */
 
+import { backendBaseUrl, frontendBaseUrl } from "./base-urls.ts";
+
 export type AuthTopologyResult =
   | { valid: true; cookieDomain: string | undefined }
   | { valid: false; message: string };
 
 const AUTH_COOKIE_DOMAIN_VAR = "AUTH_COOKIE_DOMAIN";
-
-const DEFAULT_BACKEND_URL = "http://localhost:4001";
-const DEFAULT_FRONTEND_URL = "http://localhost:3001";
 
 const IPV4 = /^\d{1,3}(?:\.\d{1,3}){3}$/;
 
@@ -34,6 +33,13 @@ const isIpAddress = (value: string): boolean => {
   }
   return bare.includes(":");
 };
+
+/**
+ * True for a value carrying URL syntax rather than a bare domain. Matches on a
+ * path separator or a scheme, so an IPv6 literal's colons don't read as one.
+ */
+const looksLikeUrl = (value: string): boolean =>
+  value.includes("/") || /^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//.test(value);
 
 /** `example.com` scopes `app.example.com` and itself; case-insensitively. */
 const isParentDomain = (host: string, domain: string): boolean =>
@@ -63,7 +69,8 @@ const badCookieDomain = (
   message:
     `Refusing to start: ${origins} need a session cookie scoped to a ` +
     `shared parent domain, but ${AUTH_COOKIE_DOMAIN_VAR} is set to ` +
-    `"${domain}", which cannot scope a cookie because ${reason}. ${rule}`,
+    `"${domain}", which is not usable as a cookie domain because ${reason}. ` +
+    rule,
 });
 
 /**
@@ -80,20 +87,41 @@ export const checkAuthTopology = (
   const backendHost = hostnameOf(backendUrl);
   const frontendHost = hostnameOf(frontendUrl);
   if (!backendHost || !frontendHost) {
+    // Without both hostnames the topology cannot be judged either way. Name
+    // whichever variable is unreadable rather than both.
+    const unreadable = [
+      backendHost ? undefined : `BETTER_AUTH_URL ("${backendUrl}")`,
+      frontendHost ? undefined : `FRONTEND_URL ("${frontendUrl}")`,
+    ]
+      .filter((clause): clause is string => clause !== undefined)
+      .join(" and ");
     return {
       valid: false,
       message:
-        `Refusing to start: could not read a hostname from ` +
-        `BETTER_AUTH_URL ("${backendUrl}") or FRONTEND_URL ("${frontendUrl}"). ` +
-        `Both must be absolute URLs.`,
+        `Refusing to start: could not read a hostname from ${unreadable}. ` +
+        `The backend and frontend hostnames have to be compared before ` +
+        `server-rendered requests can be authenticated. Set each to an ` +
+        `absolute URL (for example, https://api.example.com).`,
     };
   }
 
-  const domain = cookieDomain?.trim().replace(/^\./, "").toLowerCase();
+  const raw = cookieDomain?.trim();
   const sameHost = backendHost === frontendHost;
 
-  if (domain !== undefined && domain !== "") {
+  if (raw !== undefined && raw !== "") {
     const origins = originsClause(backendHost, frontendHost);
+    if (looksLikeUrl(raw)) {
+      return badCookieDomain(origins, raw, "it is a URL, not a bare domain");
+    }
+    if (raw.startsWith(".")) {
+      return badCookieDomain(
+        origins,
+        raw,
+        "it has a leading dot; use the bare domain",
+      );
+    }
+
+    const domain = raw.toLowerCase();
     if (isIpAddress(domain)) {
       return badCookieDomain(origins, domain, "it is an IP address");
     }
@@ -133,12 +161,14 @@ export const checkAuthTopology = (
  * server-side requests. Returns the validated cookie domain, if any.
  */
 export const resolveAuthCookieDomain = (): string | undefined => {
-  const backendUrl = process.env.BETTER_AUTH_URL || DEFAULT_BACKEND_URL;
-  const frontendUrl = process.env.FRONTEND_URL || DEFAULT_FRONTEND_URL;
   const raw = process.env.AUTH_COOKIE_DOMAIN;
   const cookieDomain = raw?.trim() ? raw.trim() : undefined;
 
-  const result = checkAuthTopology(backendUrl, frontendUrl, cookieDomain);
+  const result = checkAuthTopology(
+    backendBaseUrl(),
+    frontendBaseUrl(),
+    cookieDomain,
+  );
   if (!result.valid) {
     throw new Error(result.message);
   }
