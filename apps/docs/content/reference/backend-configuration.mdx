@@ -115,6 +115,36 @@ run sooner.
 | `TRIGGER_PER_STEP_TIMEOUT_MS` | Idle timeout between steps of a Trigger run; a step that makes no progress aborts it. | `600000` (10 minutes)  | No       |
 | `TRIGGER_PER_RUN_TIMEOUT_MS`  | Wall-clock timeout for an entire Trigger run.                                         | `3600000` (60 minutes) | No       |
 
+### The run-rate breaker
+
+No Event Trigger may run without bound against one record. When a Trigger has
+already run the ceiling below for the same Card or Notification inside the
+rolling window, further firings are dropped before an Agent is invoked — no
+model call, no tokens — and recorded on the **Trigger runs** page as
+_Suppressed_.
+
+This is a standing safety net rather than a diagnosis of one loop: the
+per-Agent guard ([Agents & Sub-Agents](/building-with-platypus/triggers#create-a-trigger))
+stops a Trigger re-firing on its own Agent's writes, but two Triggers can keep a
+record moving between them without ever crossing that rule. The count is per
+Trigger and per record, so one busy Card does not consume a Trigger's budget for
+every other Card, and events that name a set rather than one record (a bulk
+mark-all-read) are exempt.
+
+The window is also a retention floor: every run inside it is kept even when a
+Trigger has run more than **Max Runs to Keep** times, because the breaker counts
+those rows. A longer window therefore retains more run records. Suppressed rows
+get their own budget and do not consume **Max Runs to Keep**.
+
+| Variable                                      | Purpose                                                                                                        | Default              | Required |
+| --------------------------------------------- | -------------------------------------------------------------------------------------------------------------- | -------------------- | -------- |
+| `TRIGGER_BREAKER_MAX_RUNS`                    | Runs allowed per Trigger per record within the window; firings past it are suppressed.                         | `20`                 | No       |
+| `TRIGGER_BREAKER_WINDOW_SECONDS`              | Length of the rolling window, in seconds.                                                                      | `3600` (1 hour)      | No       |
+| `TRIGGER_BREAKER_SUPPRESSED_RUNS_TO_KEEP`     | Suppressed run records retained per Trigger, separate from the Trigger's Max Runs to Keep.                     | `20`                 | No       |
+
+Each value must be a positive integer; a malformed setting fails the backend at
+startup rather than silently falling back to a default nobody chose.
+
 ## Chat
 
 Timeouts that bound an interactive Chat turn. The idle timeout measures silence

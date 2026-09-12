@@ -723,9 +723,16 @@ export const triggerRun = pgTable(
       .text("trigger_id")
       .notNull()
       .references(() => trigger.id, { onDelete: "cascade" }),
-    status: t.text("status").notNull().default("pending"), // pending | running | success | failed
+    // pending | running | success | failed | suppressed
+    status: t.text("status").notNull().default("pending"),
     eventType: t.text("event_type"),
     eventData: t.jsonb("event_data"),
+    // The entity an Event Trigger's event named — the Card or Notification the
+    // run was for. Null on Cron runs, on rows written before the column
+    // existed, and on events that name no single entity (bulk
+    // `notification.read`); the run-rate breaker counts by this column and
+    // ignores null, so those firings are exempt by construction.
+    entityId: t.text("entity_id"),
     startedAt: t.timestamp("started_at").notNull().defaultNow(),
     completedAt: t.timestamp("completed_at"),
     errorMessage: t.text("error_message"),
@@ -735,6 +742,14 @@ export const triggerRun = pgTable(
   (t) => [
     index("idx_trigger_run_trigger_id").on(t.triggerId),
     index("idx_trigger_run_started_at").on(t.startedAt),
+    // The run-rate breaker's per-(Trigger, entity) count over its rolling window,
+    // and the retention union that keeps that window countable. Column order
+    // matches the predicate: exact Trigger, exact entity, range on time.
+    index("idx_trigger_run_trigger_entity_started_at").on(
+      t.triggerId,
+      t.entityId,
+      t.startedAt,
+    ),
   ],
 );
 

@@ -14,6 +14,12 @@ import type { PlatypusUIMessage } from "../../types.ts";
 
 export type TriggerSinkParams = {
   triggerId: string;
+  /**
+   * The single entity the event named, when it named one. Stored on the run
+   * row so the run-rate breaker can count runs per Trigger per entity; absent
+   * for Cron runs and for events that name a set rather than one thing.
+   */
+  entityId?: string;
   eventType?: WebhookEvent;
   eventData?: unknown;
   /** Override the FlushScheduler interval. Defaults to 5 seconds. */
@@ -69,9 +75,11 @@ const toTriggerRunStats = (stats: RunStats): TriggerRunStats | null => {
  *   is observable on the runs page mid-flight.
  * - `onFinish`: UPDATE row with terminal status, final stats, error message.
  *
- * The `triggerRun` schema's status enum is `running | success | failed`,
- * so cancelled runs are mapped to `failed`. Adding a `cancelled` value is
- * deferred to a follow-up.
+ * The `triggerRun` schema's status vocabulary is `pending | running | success
+ * | failed | suppressed`, so cancelled runs are mapped to `failed`. (A
+ * `suppressed` row is written by the run-rate breaker instead of a run, and
+ * never passes through this sink.) Adding a `cancelled` value is deferred to a
+ * follow-up.
  *
  * Note: trigger-table maintenance (`lastRunAt`, `nextRunAt`, retention) is
  * still owned by `updateTriggerAfterRun`, called by event-dispatch and the
@@ -96,6 +104,7 @@ export class TriggerSink implements RunSink {
       id: ctx.runId,
       triggerId: this.params.triggerId,
       status: "running",
+      entityId: this.params.entityId ?? null,
       eventType: this.params.eventType ?? null,
       eventData: this.params.eventData ?? null,
       startedAt: new Date(),

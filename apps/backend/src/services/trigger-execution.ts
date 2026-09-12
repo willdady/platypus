@@ -1,10 +1,8 @@
 import { nanoid } from "nanoid";
-import { and, desc, eq, notInArray, type Column } from "drizzle-orm";
-import type { PgTable, PgColumn } from "drizzle-orm/pg-core";
+import { eq } from "drizzle-orm";
 import { db } from "../index.ts";
 import {
   trigger as triggerTable,
-  triggerRun as triggerRunTable,
   user as userTable,
   workspace as workspaceTable,
 } from "../db/schema.ts";
@@ -18,52 +16,20 @@ import {
   currentOriginatingTrigger,
   withOriginatingTrigger,
 } from "../event-causation.ts";
+import { retainTriggerRuns } from "./trigger-breaker.ts";
 import type { RunInput } from "../runs/types.ts";
 import type { PlatypusUIMessage } from "../types.ts";
 import type { CronTriggerConfig, WebhookEvent } from "@platypus/schemas";
 
-/**
- * Retains the newest N rows for a given foreign key and deletes the rest.
- */
-async function retainNewest(
-  table: PgTable,
-  fkColumn: PgColumn,
-  idColumn: PgColumn,
-  orderColumn: Column,
-  fkValue: string,
-  limit: number,
-  label: string,
-): Promise<void> {
-  const toKeep = await db
-    .select({ id: idColumn })
-    .from(table)
-    .where(eq(fkColumn, fkValue))
-    .orderBy(desc(orderColumn))
-    .limit(limit);
-
-  if (toKeep.length < limit) return;
-
-  const idsToKeep = toKeep.map((r) => r.id as string);
-  const deleted = await db
-    .delete(table)
-    .where(and(eq(fkColumn, fkValue), notInArray(idColumn, idsToKeep)))
-    .returning({ id: idColumn });
-
-  if (deleted.length > 0) {
-    logger.info(
-      {
-        triggerId: fkValue,
-        deletedCount: deleted.length,
-        maxRunsToKeep: limit,
-      },
-      `Cleaned up old ${label}`,
-    );
-  }
-}
-
 export type EventContext = {
   eventType: WebhookEvent;
   eventData: unknown;
+  /**
+   * The single entity the event named, when it named one. Persisted on the run
+   * row so the run-rate breaker can count per entity; absent for events that
+   * name a set instead (bulk `notification.read`), which the breaker exempts.
+   */
+  entityId?: string;
 };
 
 /**
@@ -138,6 +104,7 @@ export const executeTrigger = async (
 
   const sink = new TriggerSink({
     triggerId: id,
+    entityId: eventContext?.entityId,
     eventType: eventContext?.eventType,
     eventData: eventContext?.eventData,
   });
@@ -253,18 +220,10 @@ export const updateTriggerAfterRun = async (
     })
     .where(eq(triggerTable.id, triggerId));
 
-  // Retention cleanup: delete old runs beyond maxRunsToKeep
-  if (maxRunsToKeep > 0) {
-    await retainNewest(
-      triggerRunTable,
-      triggerRunTable.triggerId,
-      triggerRunTable.id,
-      triggerRunTable.startedAt,
-      triggerId,
-      maxRunsToKeep,
-      "trigger runs",
-    );
-  }
+  // Retention cleanup: the newest maxRunsToKeep rows, plus everything inside
+  // the run-rate breaker's window so its count is never pruned out from under
+  // it.
+  await retainTriggerRuns(triggerId, maxRunsToKeep);
 
   logger.info(
     {

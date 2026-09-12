@@ -1160,7 +1160,7 @@ const TriggerForm = ({
             value={String(formData.maxRunsToKeep)}
             onChange={(value) => handleNumberChange("maxRunsToKeep", value)}
             disabled={isSubmitting}
-            description="Maximum number of run records to keep (oldest will be deleted)"
+            description="Minimum number of recent run records to keep; older ones are pruned"
           />
 
           <Field orientation="horizontal">

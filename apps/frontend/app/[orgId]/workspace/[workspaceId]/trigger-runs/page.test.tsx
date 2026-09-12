@@ -99,6 +99,7 @@ import {
   RUN_CUT_SHORT_NOTICE,
   RUN_STEP_LIMIT_NOTICE,
 } from "@/components/run-cut-short-notice";
+import { RUN_SUPPRESSED_NOTICE } from "@/components/trigger-run-row";
 
 const stats = (overrides?: Partial<TriggerRunStats>): TriggerRunStats => ({
   steps: 1,
@@ -406,6 +407,38 @@ describe("Trigger runs paging", () => {
 
     expect(state.keys[1]).toContain("offset=50");
     expect(screen.getByRole("link", { name: "Card watcher" })).toBeVisible();
+  });
+});
+
+// The run-rate breaker's visible trace: a dropped firing is a row an Operator
+// can see, not silence. Without it a runaway is indistinguishable from activity.
+describe("Trigger runs suppression", () => {
+  it("marks a suppressed firing and explains that no Agent was started", async () => {
+    await renderRuns([
+      run({ status: "suppressed", stats: null, completedAt: null }),
+    ]);
+
+    expect(screen.getByText("Suppressed")).toBeInTheDocument();
+    expect(screen.getByText(RUN_SUPPRESSED_NOTICE)).toBeInTheDocument();
+  });
+
+  it("leaves a run that happened without the suppression notice", async () => {
+    await renderRuns([run()]);
+
+    expect(screen.queryByText(RUN_SUPPRESSED_NOTICE)).toBeNull();
+  });
+
+  it("offers Suppressed among the status filters", async () => {
+    await renderRuns([run()]);
+
+    await act(async () => {
+      await selectOption("All statuses", "Suppressed");
+    });
+
+    expect(replaceSpy).toHaveBeenCalledWith(
+      "/org-1/workspace/ws-1/trigger-runs?status=suppressed",
+      { scroll: false },
+    );
   });
 });
 

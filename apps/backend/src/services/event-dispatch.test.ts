@@ -18,6 +18,18 @@ vi.mock("./trigger-execution.ts", () => ({
   updateTriggerAfterRun: mockUpdateTriggerAfterRun,
 }));
 
+const { mockShouldSuppressTriggerRun, mockSuppressTriggerRun } = vi.hoisted(
+  () => ({
+    mockShouldSuppressTriggerRun: vi.fn(),
+    mockSuppressTriggerRun: vi.fn(),
+  }),
+);
+
+vi.mock("./trigger-breaker.ts", () => ({
+  shouldSuppressTriggerRun: mockShouldSuppressTriggerRun,
+  suppressTriggerRun: mockSuppressTriggerRun,
+}));
+
 const { mockLogger } = vi.hoisted(() => ({
   mockLogger: { info: vi.fn(), error: vi.fn(), warn: vi.fn() },
 }));
@@ -116,6 +128,8 @@ describe("event-dispatch", () => {
     vi.clearAllMocks();
     mockExecuteTrigger.mockResolvedValue("chat-1");
     mockUpdateTriggerAfterRun.mockResolvedValue(undefined);
+    mockShouldSuppressTriggerRun.mockResolvedValue(false);
+    mockSuppressTriggerRun.mockResolvedValue(undefined);
   });
 
   afterEach(() => {
@@ -185,6 +199,7 @@ describe("event-dispatch", () => {
       expect(mockExecuteTrigger).toHaveBeenCalledWith(trigger, {
         eventType: "card.created",
         eventData: { cardId: "c1" },
+        entityId: "c1",
       });
       expect(mockUpdateTriggerAfterRun).toHaveBeenCalledWith(
         "trigger-1",
@@ -489,6 +504,106 @@ describe("event-dispatch", () => {
       );
 
       expect(runs).toBe(1);
+    });
+
+    describe("the run-rate breaker", () => {
+      it("consults the breaker with the trigger and the event's entity", async () => {
+        const trigger = makeEventTrigger({ id: "trigger-1" });
+        mockDb.where.mockResolvedValueOnce([]).mockResolvedValueOnce([trigger]);
+
+        dispatchEvent("org-1", "ws-1", "card.updated", { id: "c1" });
+        await flushMicrotasks();
+
+        expect(mockShouldSuppressTriggerRun).toHaveBeenCalledWith(
+          "trigger-1",
+          "c1",
+        );
+        expect(mockExecuteTrigger).toHaveBeenCalledTimes(1);
+      });
+
+      it("keys the count by the event-specific id rather than a shared bucket", async () => {
+        const trigger = makeEventTrigger({
+          config: { events: ["card.deleted"] },
+        });
+        mockDb.where.mockResolvedValueOnce([]).mockResolvedValueOnce([trigger]);
+
+        dispatchEvent("org-1", "ws-1", "card.deleted", {
+          cardId: "c1",
+          boardId: "board-1",
+          columnId: "col-1",
+        });
+        await flushMicrotasks();
+
+        expect(mockShouldSuppressTriggerRun).toHaveBeenCalledWith(
+          "trigger-1",
+          "c1",
+        );
+      });
+
+      it("exempts events that name no single entity", async () => {
+        // A bulk mark-all-read names a set, so counting its firings would trip
+        // the breaker after N unrelated Notifications.
+        const trigger = makeEventTrigger({
+          config: { events: ["notification.read"] },
+        });
+        mockDb.where.mockResolvedValueOnce([]).mockResolvedValueOnce([trigger]);
+
+        dispatchEvent("org-1", "ws-1", "notification.read", {
+          notificationIds: ["n-1", "n-2"],
+          userId: "user-1",
+          bulk: true,
+        });
+        await flushMicrotasks();
+
+        expect(mockShouldSuppressTriggerRun).not.toHaveBeenCalled();
+        expect(mockExecuteTrigger).toHaveBeenCalledTimes(1);
+      });
+
+      it("drops the firing when the breaker trips, recording a suppressed row instead", async () => {
+        const trigger = makeEventTrigger({ id: "trigger-1" });
+        mockDb.where.mockResolvedValueOnce([]).mockResolvedValueOnce([trigger]);
+        mockShouldSuppressTriggerRun.mockResolvedValue(true);
+
+        dispatchEvent("org-1", "ws-1", "card.updated", {
+          id: "c1",
+          title: "Board the quarterly acquisition",
+        });
+        await flushMicrotasks();
+
+        expect(mockExecuteTrigger).not.toHaveBeenCalled();
+        expect(mockUpdateTriggerAfterRun).not.toHaveBeenCalled();
+        expect(mockSuppressTriggerRun).toHaveBeenCalledWith({
+          triggerId: "trigger-1",
+          maxRunsToKeep: 10,
+          entityId: "c1",
+          eventType: "card.updated",
+          eventData: {
+            id: "c1",
+            title: "Board the quarterly acquisition",
+          },
+        });
+        expect(decisionLines().map((line) => line.decision)).toEqual([
+          "fired",
+          "suppressed",
+        ]);
+      });
+
+      it("checks the breaker only once the run would start, after the debounce window", async () => {
+        const trigger = makeEventTrigger();
+        mockDb.where.mockResolvedValueOnce([]).mockResolvedValueOnce([trigger]);
+        mockShouldSuppressTriggerRun.mockResolvedValue(true);
+
+        dispatchEvent("org-1", "ws-1", "card.created", { id: "c1" });
+        await vi.advanceTimersByTimeAsync(1_000);
+
+        // Still inside the debounce window: nothing has been decided yet, so
+        // a burst folded into this window can write at most one suppressed row.
+        expect(mockSuppressTriggerRun).not.toHaveBeenCalled();
+
+        await flushMicrotasks();
+
+        expect(mockSuppressTriggerRun).toHaveBeenCalledTimes(1);
+      });
     });
 
     it("should handle multiple webhooks and triggers", async () => {
@@ -835,6 +950,7 @@ describe("event-dispatch", () => {
       expect(mockExecuteTrigger).toHaveBeenCalledWith(unrelated, {
         eventType: "card.created",
         eventData: { cardId: "c1" },
+        entityId: "c1",
       });
     });
   });

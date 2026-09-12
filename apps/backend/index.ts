@@ -14,6 +14,7 @@ import { startScheduler } from "./src/jobs/scheduler.ts";
 import { loadPlugins } from "./src/plugins/loader.ts";
 import { setLoadedPlugins } from "./src/plugins/registry.ts";
 import { installProviderWarningLogger } from "./src/provider-warnings.ts";
+import { validateTriggerBreakerConfig } from "./src/services/trigger-breaker.ts";
 
 const PORT = process.env.PORT || "4001";
 
@@ -38,6 +39,11 @@ const main = async () => {
   // can authenticate against reports healthy while being unusable (#369). Retry
   // the transient failures, then exit non-zero so the orchestrator says so.
   try {
+    // Fail loud before the database is touched: the run-rate breaker is the only
+    // ceiling on an Event Trigger's run rate against one entity, and a
+    // malformed setting must not silently become a default nobody chose.
+    validateTriggerBreakerConfig();
+
     await exponentialBackoff(async () => {
       // Enable pgvector extension for embedding storage (needed before drizzle-kit push in dev)
       await db.execute(sql`CREATE EXTENSION IF NOT EXISTS vector`);

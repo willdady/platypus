@@ -1946,6 +1946,7 @@ export const triggerRunStatusSchema = z.enum([
   "running",
   "success",
   "failed",
+  "suppressed",
 ]);
 
 export type TriggerRunStatus = z.infer<typeof triggerRunStatusSchema>;
@@ -1954,12 +1955,17 @@ export type TriggerRunStatus = z.infer<typeof triggerRunStatusSchema>;
  * How each run status is written wherever a User reads one — the row badge and
  * the page's status filter. Keyed by the status type, so a status added to the
  * domain fails the typecheck rather than rendering raw.
+ *
+ * `suppressed` is not a run that failed: it is a firing the run-rate breaker
+ * dropped before it started, so the Trigger did not run against that record at
+ * all (see the Operator reference on Triggers).
  */
 export const TRIGGER_RUN_STATUS_LABELS: Record<TriggerRunStatus, string> = {
   pending: "Pending",
   running: "Running",
   success: "Success",
   failed: "Failed",
+  suppressed: "Suppressed",
 };
 
 /**

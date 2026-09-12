@@ -8,6 +8,10 @@ import { deliverWebhook } from "./webhook-delivery.ts";
 import { executeTrigger } from "./trigger-execution.ts";
 import { updateTriggerAfterRun } from "./trigger-execution.ts";
 import { debounceTriggerExecution } from "./event-trigger-debounce.ts";
+import {
+  shouldSuppressTriggerRun,
+  suppressTriggerRun,
+} from "./trigger-breaker.ts";
 import { logger } from "../logger.ts";
 import {
   currentCausingAgents,
@@ -54,16 +58,18 @@ export function dispatchEvent(
   const originatingTriggerId = currentOriginatingTrigger();
 
   /**
-   * Records what dispatch decided about one candidate Trigger. A suppressed or
-   * coalesced dispatch leaves no other trace, so a Trigger loop on a
-   * self-hosted install is otherwise undiagnosable (#812).
+   * Records what dispatch decided about one candidate Trigger. A coalesced or
+   * self-actor-skipped dispatch leaves no other trace, so a Trigger loop on a
+   * self-hosted install is otherwise undiagnosable (#812). A breaker-dropped
+   * firing also writes a `suppressed` run row, but the decisions beside it —
+   * why this event reached the Trigger at all — have no other record.
    *
    * Identifiers only — `data` carries Card titles and bodies, which are the
    * Operator's users' content. The ids are what diagnosis needs.
    */
   const logDecision = (
     trigger: { id: string; agentId: string | null },
-    decision: "fired" | "skipped_self_actor" | "debounced",
+    decision: "fired" | "skipped_self_actor" | "debounced" | "suppressed",
   ): void => {
     logger.info(
       {
@@ -178,19 +184,41 @@ export function dispatchEvent(
         // unrelated entities coalesced into a single run (#811). A new event
         // naming its id under some further key would regress the same way —
         // the chain below is structural, not enforced per event.
-        const entityId =
+        const namedEntityId =
           entityIdOf(data, "id") ??
           entityIdOf(data, "cardId") ??
-          entityIdOf(data, "notificationId") ??
-          SHARED_BUCKET;
-        const debounceKey = `${trigger.id}:${entityId}`;
+          entityIdOf(data, "notificationId");
+        const debounceKey = `${trigger.id}:${namedEntityId ?? SHARED_BUCKET}`;
+        // What the run-rate breaker counts by. Absent for the shared bucket:
+        // those events name a set rather than one entity, so counting them
+        // together would trip a Trigger after N unrelated changes.
+        const breakerEntityId =
+          namedEntityId === undefined ? undefined : String(namedEntityId);
 
         const coalesced = debounceTriggerExecution(
           debounceKey,
           trigger,
-          { eventType: event, eventData: data },
+          { eventType: event, eventData: data, entityId: breakerEntityId },
           async (t, ctx) => {
             try {
+              // The breaker is checked when the run would start, not when the
+              // event arrives: the debounce has then folded any burst into one
+              // firing, so a burst cannot manufacture suppressed rows, and the
+              // count includes runs that started during the window.
+              if (
+                ctx.entityId &&
+                (await shouldSuppressTriggerRun(t.id, ctx.entityId))
+              ) {
+                await suppressTriggerRun({
+                  triggerId: t.id,
+                  maxRunsToKeep: t.maxRunsToKeep,
+                  entityId: ctx.entityId,
+                  eventType: ctx.eventType,
+                  eventData: ctx.eventData,
+                });
+                logDecision(t, "suppressed");
+                return;
+              }
               await executeTrigger(t, ctx);
               await updateTriggerAfterRun(t.id, t);
             } catch (error) {
@@ -207,8 +235,9 @@ export function dispatchEvent(
         );
 
         // `fired` means scheduled: the run starts when the debounce window
-        // closes. A later event on the same window reports itself `debounced`,
-        // so the pair reads as one run rather than two.
+        // closes — and a firing the breaker drops at that point reports itself
+        // `suppressed` separately. A later event on the same window reports
+        // itself `debounced`, so the pair reads as one run rather than two.
         logDecision(trigger, coalesced ? "debounced" : "fired");
       }
     } catch (error) {

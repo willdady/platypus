@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { format, formatDistanceToNow } from "date-fns";
 import {
+  Ban,
   Copy,
   Database,
   Footprints,
@@ -29,8 +30,16 @@ import {
   RunCutShortNotice,
   RunStepLimitNotice,
 } from "@/components/run-cut-short-notice";
+import { TurnNotice } from "@/components/turn-notice";
 import { cachedTokenBreakdown } from "@/lib/cached-tokens";
 import { formatTokens } from "@/lib/context-window";
+
+/**
+ * What the runs list says about a firing the run-rate breaker dropped before it
+ * started. A constant so tests assert the wording without restating the prose.
+ */
+export const RUN_SUPPRESSED_NOTICE =
+  "Suppressed: this trigger ran too often for this record, so no Agent was started.";
 
 const statusBadge = (status: TriggerRunStatus) => {
   switch (status) {
@@ -47,6 +56,13 @@ const statusBadge = (status: TriggerRunStatus) => {
         <Badge variant="secondary">
           <Loader2 className="w-3 h-3 mr-1 animate-spin" />
           {TRIGGER_RUN_STATUS_LABELS.running}
+        </Badge>
+      );
+    case "suppressed":
+      return (
+        <Badge variant="destructive">
+          <Ban className="w-3 h-3 mr-1" />
+          {TRIGGER_RUN_STATUS_LABELS.suppressed}
         </Badge>
       );
     case "pending":
@@ -206,6 +222,9 @@ export const TriggerRunRow = ({
             )}
             {stats?.truncatedByTokenLimit && <RunCutShortNotice />}
             {stats?.stoppedAtStepLimit && <RunStepLimitNotice />}
+            {run.status === "suppressed" && (
+              <TurnNotice className="mt-1">{RUN_SUPPRESSED_NOTICE}</TurnNotice>
+            )}
             {run.errorMessage && (
               <p className="text-sm text-destructive mt-1">
                 {run.errorMessage}

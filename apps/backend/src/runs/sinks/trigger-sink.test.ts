@@ -34,10 +34,28 @@ describe("TriggerSink", () => {
       expect(inserted.id).toBe("run-1");
       expect(inserted.triggerId).toBe("trigger-1");
       expect(inserted.status).toBe("running");
+      expect(inserted.entityId).toBeNull();
       expect(inserted.eventType).toBe("card.created");
       expect(inserted.eventData).toEqual({ cardId: "c1" });
       expect(inserted.startedAt).toBeInstanceOf(Date);
       expect(inserted.createdAt).toBeInstanceOf(Date);
+    });
+
+    it("stores the event's entity so the run-rate breaker can count per record", async () => {
+      const sink = new TriggerSink({
+        triggerId: "trigger-1",
+        entityId: "card-1",
+        eventType: "card.updated",
+        eventData: { id: "card-1" },
+      });
+
+      await sink.onStart({ runId: "run-1", messages: [] });
+
+      const inserted = mockDb.values.mock.calls[0][0] as Record<
+        string,
+        unknown
+      >;
+      expect(inserted.entityId).toBe("card-1");
     });
 
     it("inserts a row with null event metadata when no event context is provided", async () => {

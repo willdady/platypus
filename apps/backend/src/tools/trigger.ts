@@ -198,7 +198,9 @@ export function createTriggerTools(
         .min(1)
         .max(1000)
         .optional()
-        .describe("Maximum number of run records to retain"),
+        .describe(
+          "Minimum number of recent run records to keep; runs inside the run-rate breaker's window are retained beyond it",
+        ),
       search: z
         .boolean()
         .optional()
