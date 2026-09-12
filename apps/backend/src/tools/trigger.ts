@@ -199,7 +199,7 @@ export function createTriggerTools(
         .max(1000)
         .optional()
         .describe(
-          "Minimum number of recent run records to keep; runs inside the loop breaker's window are retained beyond it",
+          "Minimum number of recent run records to keep; runs inside the run-rate breaker's window are retained beyond it",
         ),
       search: z
         .boolean()

@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { mockDb, resetMockDb } from "../test-utils.ts";
-import { notInArray } from "drizzle-orm";
+import { gt, notInArray } from "drizzle-orm";
 import { triggerRun as triggerRunTable } from "../db/schema.ts";
 
 vi.mock("nanoid", () => ({
@@ -17,9 +17,9 @@ import {
   DEFAULT_TRIGGER_BREAKER_MAX_RUNS,
   DEFAULT_TRIGGER_BREAKER_SUPPRESSED_RUNS_TO_KEEP,
   DEFAULT_TRIGGER_BREAKER_WINDOW_SECONDS,
-  recordSuppressedTriggerRun,
   retainTriggerRuns,
   shouldSuppressTriggerRun,
+  suppressTriggerRun,
   TRIGGER_BREAKER_MAX_RUNS_ENV,
   TRIGGER_BREAKER_SUPPRESSED_RUNS_TO_KEEP_ENV,
   TRIGGER_BREAKER_WINDOW_SECONDS_ENV,
@@ -92,7 +92,7 @@ describe("trigger-breaker", () => {
       expect(validateTriggerBreakerConfig()).toMatchObject({ maxRuns: 5 });
       expect(mockLogger.info).toHaveBeenCalledWith(
         expect.objectContaining({ maxRuns: 5 }),
-        "Trigger run loop breaker configured",
+        "Trigger run-rate breaker configured",
       );
     });
 
@@ -142,13 +142,15 @@ describe("trigger-breaker", () => {
     });
   });
 
-  describe("recordSuppressedTriggerRun", () => {
+  describe("suppressTriggerRun", () => {
     it("writes a suppressed row carrying the entity and the event", async () => {
       vi.useFakeTimers();
       vi.setSystemTime(new Date("2026-01-01T12:00:00Z"));
+      mockDb.limit.mockResolvedValue([]);
 
-      await recordSuppressedTriggerRun({
+      await suppressTriggerRun({
         triggerId: "trigger-1",
+        maxRunsToKeep: 10,
         entityId: "card-1",
         eventType: "card.updated",
         eventData: { id: "card-1" },
@@ -168,6 +170,24 @@ describe("trigger-breaker", () => {
       });
       expect(inserted.startedAt).toEqual(new Date("2026-01-01T12:00:00Z"));
       expect(inserted.createdAt).toEqual(new Date("2026-01-01T12:00:00Z"));
+    });
+
+    it("trims the Trigger's history with the row it just wrote", async () => {
+      // A runaway produces suppressed rows fast; recording one without
+      // retention would let the evidence of the trip fill the table.
+      mockDb.limit.mockResolvedValue([]);
+
+      await suppressTriggerRun({
+        triggerId: "trigger-1",
+        maxRunsToKeep: 10,
+        entityId: "card-1",
+        eventType: "card.updated",
+        eventData: { id: "card-1" },
+      });
+
+      // Both retention budgets were consulted — newest normal rows and newest
+      // suppressed rows — so the write came with its cleanup.
+      expect(mockDb.select).toHaveBeenCalledTimes(2);
     });
   });
 
@@ -232,6 +252,26 @@ describe("trigger-breaker", () => {
         "newest",
         "newer",
       ]);
+    });
+
+    it("derives the kept window from the configured breaker window", async () => {
+      // The floor is the Operator's window, read at runtime: a test pinned to
+      // a module constant could not cover a value set at deploy time.
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date("2026-01-01T12:00:00Z"));
+      vi.stubEnv(TRIGGER_BREAKER_WINDOW_SECONDS_ENV, "60");
+      stubRetention({
+        newest: [{ id: "newest" }],
+        withinWindow: [{ id: "in-window" }],
+        suppressed: [],
+      });
+
+      await retainTriggerRuns("trigger-1", 1);
+
+      expect(vi.mocked(gt)).toHaveBeenCalledWith(
+        triggerRunTable.startedAt,
+        new Date("2026-01-01T11:59:00Z"),
+      );
     });
 
     it("budgets suppressed rows separately from maxRunsToKeep", async () => {

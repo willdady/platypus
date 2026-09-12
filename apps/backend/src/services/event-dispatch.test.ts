@@ -18,20 +18,16 @@ vi.mock("./trigger-execution.ts", () => ({
   updateTriggerAfterRun: mockUpdateTriggerAfterRun,
 }));
 
-const {
-  mockShouldSuppressTriggerRun,
-  mockRecordSuppressedTriggerRun,
-  mockRetainTriggerRuns,
-} = vi.hoisted(() => ({
-  mockShouldSuppressTriggerRun: vi.fn(),
-  mockRecordSuppressedTriggerRun: vi.fn(),
-  mockRetainTriggerRuns: vi.fn(),
-}));
+const { mockShouldSuppressTriggerRun, mockSuppressTriggerRun } = vi.hoisted(
+  () => ({
+    mockShouldSuppressTriggerRun: vi.fn(),
+    mockSuppressTriggerRun: vi.fn(),
+  }),
+);
 
 vi.mock("./trigger-breaker.ts", () => ({
   shouldSuppressTriggerRun: mockShouldSuppressTriggerRun,
-  recordSuppressedTriggerRun: mockRecordSuppressedTriggerRun,
-  retainTriggerRuns: mockRetainTriggerRuns,
+  suppressTriggerRun: mockSuppressTriggerRun,
 }));
 
 const { mockLogger } = vi.hoisted(() => ({
@@ -133,8 +129,7 @@ describe("event-dispatch", () => {
     mockExecuteTrigger.mockResolvedValue("chat-1");
     mockUpdateTriggerAfterRun.mockResolvedValue(undefined);
     mockShouldSuppressTriggerRun.mockResolvedValue(false);
-    mockRecordSuppressedTriggerRun.mockResolvedValue(undefined);
-    mockRetainTriggerRuns.mockResolvedValue(undefined);
+    mockSuppressTriggerRun.mockResolvedValue(undefined);
   });
 
   afterEach(() => {
@@ -577,8 +572,9 @@ describe("event-dispatch", () => {
 
         expect(mockExecuteTrigger).not.toHaveBeenCalled();
         expect(mockUpdateTriggerAfterRun).not.toHaveBeenCalled();
-        expect(mockRecordSuppressedTriggerRun).toHaveBeenCalledWith({
+        expect(mockSuppressTriggerRun).toHaveBeenCalledWith({
           triggerId: "trigger-1",
+          maxRunsToKeep: 10,
           entityId: "c1",
           eventType: "card.updated",
           eventData: {
@@ -586,7 +582,6 @@ describe("event-dispatch", () => {
             title: "Board the quarterly acquisition",
           },
         });
-        expect(mockRetainTriggerRuns).toHaveBeenCalledWith("trigger-1", 10);
         expect(decisionLines().map((line) => line.decision)).toEqual([
           "fired",
           "suppressed",
@@ -603,11 +598,11 @@ describe("event-dispatch", () => {
 
         // Still inside the debounce window: nothing has been decided yet, so
         // a burst folded into this window can write at most one suppressed row.
-        expect(mockRecordSuppressedTriggerRun).not.toHaveBeenCalled();
+        expect(mockSuppressTriggerRun).not.toHaveBeenCalled();
 
         await flushMicrotasks();
 
-        expect(mockRecordSuppressedTriggerRun).toHaveBeenCalledTimes(1);
+        expect(mockSuppressTriggerRun).toHaveBeenCalledTimes(1);
       });
     });
 

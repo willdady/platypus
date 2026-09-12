@@ -132,8 +132,8 @@ mark-all-read) are exempt.
 
 The window is also a retention floor: every run inside it is kept even when a
 Trigger has run more than **Max Runs to Keep** times, because the breaker counts
-those rows. A longer window therefore retains more `trigger_run` rows.
-Suppressed rows get their own budget and do not consume **Max Runs to Keep**.
+those rows. A longer window therefore retains more run records. Suppressed rows
+get their own budget and do not consume **Max Runs to Keep**.
 
 | Variable                                      | Purpose                                                                                                        | Default              | Required |
 | --------------------------------------------- | -------------------------------------------------------------------------------------------------------------- | -------------------- | -------- |

@@ -26,8 +26,8 @@ export type EventContext = {
   eventData: unknown;
   /**
    * The single entity the event named, when it named one. Persisted on the run
-   * row so the loop breaker can count per entity; absent for events that name
-   * a set instead (bulk `notification.read`), which the breaker exempts.
+   * row so the run-rate breaker can count per entity; absent for events that
+   * name a set instead (bulk `notification.read`), which the breaker exempts.
    */
   entityId?: string;
 };
@@ -221,7 +221,8 @@ export const updateTriggerAfterRun = async (
     .where(eq(triggerTable.id, triggerId));
 
   // Retention cleanup: the newest maxRunsToKeep rows, plus everything inside
-  // the loop breaker's window so its count is never pruned out from under it.
+  // the run-rate breaker's window so its count is never pruned out from under
+  // it.
   await retainTriggerRuns(triggerId, maxRunsToKeep);
 
   logger.info(

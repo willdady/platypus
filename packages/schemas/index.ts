@@ -1956,7 +1956,7 @@ export type TriggerRunStatus = z.infer<typeof triggerRunStatusSchema>;
  * the page's status filter. Keyed by the status type, so a status added to the
  * domain fails the typecheck rather than rendering raw.
  *
- * `suppressed` is not a run that failed: it is a firing the loop breaker
+ * `suppressed` is not a run that failed: it is a firing the run-rate breaker
  * dropped before it started, so the Trigger did not run against that record at
  * all (see the Operator reference on Triggers).
  */

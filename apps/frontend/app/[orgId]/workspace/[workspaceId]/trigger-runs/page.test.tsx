@@ -410,8 +410,8 @@ describe("Trigger runs paging", () => {
   });
 });
 
-// The loop breaker's visible trace: a dropped firing is a row an Operator can
-// see, not silence. Without it a runaway is indistinguishable from activity.
+// The run-rate breaker's visible trace: a dropped firing is a row an Operator
+// can see, not silence. Without it a runaway is indistinguishable from activity.
 describe("Trigger runs suppression", () => {
   it("marks a suppressed firing and explains that no Agent was started", async () => {
     await renderRuns([

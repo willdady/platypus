@@ -9,9 +9,8 @@ import { executeTrigger } from "./trigger-execution.ts";
 import { updateTriggerAfterRun } from "./trigger-execution.ts";
 import { debounceTriggerExecution } from "./event-trigger-debounce.ts";
 import {
-  recordSuppressedTriggerRun,
-  retainTriggerRuns,
   shouldSuppressTriggerRun,
+  suppressTriggerRun,
 } from "./trigger-breaker.ts";
 import { logger } from "../logger.ts";
 import {
@@ -185,17 +184,16 @@ export function dispatchEvent(
         // unrelated entities coalesced into a single run (#811). A new event
         // naming its id under some further key would regress the same way —
         // the chain below is structural, not enforced per event.
-        const entityId =
+        const namedEntityId =
           entityIdOf(data, "id") ??
           entityIdOf(data, "cardId") ??
-          entityIdOf(data, "notificationId") ??
-          SHARED_BUCKET;
-        const debounceKey = `${trigger.id}:${entityId}`;
-        // What the loop breaker counts by. The shared bucket is exempt: its
-        // events name a set rather than one entity, so counting them together
-        // would trip a Trigger after N unrelated changes (see the breaker).
+          entityIdOf(data, "notificationId");
+        const debounceKey = `${trigger.id}:${namedEntityId ?? SHARED_BUCKET}`;
+        // What the run-rate breaker counts by. Absent for the shared bucket:
+        // those events name a set rather than one entity, so counting them
+        // together would trip a Trigger after N unrelated changes.
         const breakerEntityId =
-          entityId === SHARED_BUCKET ? undefined : String(entityId);
+          namedEntityId === undefined ? undefined : String(namedEntityId);
 
         const coalesced = debounceTriggerExecution(
           debounceKey,
@@ -211,13 +209,13 @@ export function dispatchEvent(
                 ctx.entityId &&
                 (await shouldSuppressTriggerRun(t.id, ctx.entityId))
               ) {
-                await recordSuppressedTriggerRun({
+                await suppressTriggerRun({
                   triggerId: t.id,
+                  maxRunsToKeep: t.maxRunsToKeep,
                   entityId: ctx.entityId,
                   eventType: ctx.eventType,
                   eventData: ctx.eventData,
                 });
-                await retainTriggerRuns(t.id, t.maxRunsToKeep);
                 logDecision(t, "suppressed");
                 return;
               }

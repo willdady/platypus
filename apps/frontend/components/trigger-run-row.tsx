@@ -35,7 +35,7 @@ import { cachedTokenBreakdown } from "@/lib/cached-tokens";
 import { formatTokens } from "@/lib/context-window";
 
 /**
- * What the runs list says about a firing the loop breaker dropped before it
+ * What the runs list says about a firing the run-rate breaker dropped before it
  * started. A constant so tests assert the wording without restating the prose.
  */
 export const RUN_SUPPRESSED_NOTICE =

@@ -104,7 +104,7 @@ export const triggerBreakerConfig = (
  */
 export const validateTriggerBreakerConfig = (): TriggerBreakerConfig => {
   const config = triggerBreakerConfig();
-  logger.info(config, "Trigger run loop breaker configured");
+  logger.info(config, "Trigger run-rate breaker configured");
   if (config.windowSeconds > DEFAULT_TRIGGER_BREAKER_WINDOW_SECONDS) {
     logger.warn(
       {
@@ -151,13 +151,17 @@ export const shouldSuppressTriggerRun = async (
 };
 
 /**
- * Records a firing the breaker dropped, in place of the run it would have
- * started. The row exists so the trip is visible in run history; it carries the
+ * Drops one firing: writes the `suppressed` row the Operator sees, then trims
+ * the Trigger's run history. Both belong together — the row is what makes the
+ * trip visible, and retention is what stops a runaway from filling the table
+ * with the evidence — so a caller cannot record a suppression and forget to
+ * bound it. Called in place of the run it would have started; it carries the
  * same event fields a run row would, and no stats or completion time, because
  * no Agent was invoked.
  */
-export const recordSuppressedTriggerRun = async (input: {
+export const suppressTriggerRun = async (input: {
   triggerId: string;
+  maxRunsToKeep: number;
   entityId: string;
   eventType: WebhookEvent;
   eventData: unknown;
@@ -173,6 +177,8 @@ export const recordSuppressedTriggerRun = async (input: {
     startedAt: now,
     createdAt: now,
   });
+
+  await retainTriggerRuns(input.triggerId, input.maxRunsToKeep);
 };
 
 /**

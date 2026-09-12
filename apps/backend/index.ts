@@ -39,7 +39,7 @@ const main = async () => {
   // can authenticate against reports healthy while being unusable (#369). Retry
   // the transient failures, then exit non-zero so the orchestrator says so.
   try {
-    // Fail loud before the database is touched: the loop breaker is the only
+    // Fail loud before the database is touched: the run-rate breaker is the only
     // ceiling on an Event Trigger's run rate against one entity, and a
     // malformed setting must not silently become a default nobody chose.
     validateTriggerBreakerConfig();

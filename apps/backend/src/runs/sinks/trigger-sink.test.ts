@@ -41,7 +41,7 @@ describe("TriggerSink", () => {
       expect(inserted.createdAt).toBeInstanceOf(Date);
     });
 
-    it("stores the event's entity so the loop breaker can count per record", async () => {
+    it("stores the event's entity so the run-rate breaker can count per record", async () => {
       const sink = new TriggerSink({
         triggerId: "trigger-1",
         entityId: "card-1",

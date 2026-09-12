@@ -16,8 +16,8 @@ export type TriggerSinkParams = {
   triggerId: string;
   /**
    * The single entity the event named, when it named one. Stored on the run
-   * row so the loop breaker can count runs per Trigger per entity; absent for
-   * Cron runs and for events that name a set rather than one thing.
+   * row so the run-rate breaker can count runs per Trigger per entity; absent
+   * for Cron runs and for events that name a set rather than one thing.
    */
   entityId?: string;
   eventType?: WebhookEvent;
@@ -77,8 +77,8 @@ const toTriggerRunStats = (stats: RunStats): TriggerRunStats | null => {
  *
  * The `triggerRun` schema's status vocabulary is `pending | running | success
  * | failed | suppressed`, so cancelled runs are mapped to `failed`. (A
- * `suppressed` row is written by the loop breaker instead of a run, and never
- * passes through this sink.) Adding a `cancelled` value is deferred to a
+ * `suppressed` row is written by the run-rate breaker instead of a run, and
+ * never passes through this sink.) Adding a `cancelled` value is deferred to a
  * follow-up.
  *
  * Note: trigger-table maintenance (`lastRunAt`, `nextRunAt`, retention) is

@@ -36,7 +36,7 @@ import { fetcher, joinUrl } from "@/lib/utils";
 /**
  * How many runs a page of the list holds. The endpoint caps a request at 100;
  * runs are pruned per Trigger — to `maxRunsToKeep`, everything inside the
- * loop breaker's window, and the newest suppressed rows — so the volume
+ * run-rate breaker's window, and the newest suppressed rows — so the volume
  * behind this list is bounded and plain offset paging is enough.
  */
 const PAGE_SIZE = 50;
