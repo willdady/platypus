@@ -228,6 +228,7 @@ vi.mock("drizzle-orm", async () => {
     and: vi.fn((...args: unknown[]) => args.filter(Boolean)), // Return non-null args
     or: vi.fn(),
     inArray: vi.fn(),
+    notInArray: vi.fn(),
     asc: vi.fn(),
     count: vi.fn(),
     max: vi.fn(),

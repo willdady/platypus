@@ -8,6 +8,11 @@ import { deliverWebhook } from "./webhook-delivery.ts";
 import { executeTrigger } from "./trigger-execution.ts";
 import { updateTriggerAfterRun } from "./trigger-execution.ts";
 import { debounceTriggerExecution } from "./event-trigger-debounce.ts";
+import {
+  recordSuppressedTriggerRun,
+  retainTriggerRuns,
+  shouldSuppressTriggerRun,
+} from "./trigger-breaker.ts";
 import { logger } from "../logger.ts";
 import {
   currentCausingAgents,
@@ -54,16 +59,18 @@ export function dispatchEvent(
   const originatingTriggerId = currentOriginatingTrigger();
 
   /**
-   * Records what dispatch decided about one candidate Trigger. A suppressed or
-   * coalesced dispatch leaves no other trace, so a Trigger loop on a
-   * self-hosted install is otherwise undiagnosable (#812).
+   * Records what dispatch decided about one candidate Trigger. A coalesced or
+   * self-actor-skipped dispatch leaves no other trace, so a Trigger loop on a
+   * self-hosted install is otherwise undiagnosable (#812). A breaker-dropped
+   * firing also writes a `suppressed` run row, but the decisions beside it —
+   * why this event reached the Trigger at all — have no other record.
    *
    * Identifiers only — `data` carries Card titles and bodies, which are the
    * Operator's users' content. The ids are what diagnosis needs.
    */
   const logDecision = (
     trigger: { id: string; agentId: string | null },
-    decision: "fired" | "skipped_self_actor" | "debounced",
+    decision: "fired" | "skipped_self_actor" | "debounced" | "suppressed",
   ): void => {
     logger.info(
       {
@@ -184,13 +191,36 @@ export function dispatchEvent(
           entityIdOf(data, "notificationId") ??
           SHARED_BUCKET;
         const debounceKey = `${trigger.id}:${entityId}`;
+        // What the loop breaker counts by. The shared bucket is exempt: its
+        // events name a set rather than one entity, so counting them together
+        // would trip a Trigger after N unrelated changes (see the breaker).
+        const breakerEntityId =
+          entityId === SHARED_BUCKET ? undefined : String(entityId);
 
         const coalesced = debounceTriggerExecution(
           debounceKey,
           trigger,
-          { eventType: event, eventData: data },
+          { eventType: event, eventData: data, entityId: breakerEntityId },
           async (t, ctx) => {
             try {
+              // The breaker is checked when the run would start, not when the
+              // event arrives: the debounce has then folded any burst into one
+              // firing, so a burst cannot manufacture suppressed rows, and the
+              // count includes runs that started during the window.
+              if (
+                ctx.entityId &&
+                (await shouldSuppressTriggerRun(t.id, ctx.entityId))
+              ) {
+                await recordSuppressedTriggerRun({
+                  triggerId: t.id,
+                  entityId: ctx.entityId,
+                  eventType: ctx.eventType,
+                  eventData: ctx.eventData,
+                });
+                await retainTriggerRuns(t.id, t.maxRunsToKeep);
+                logDecision(t, "suppressed");
+                return;
+              }
               await executeTrigger(t, ctx);
               await updateTriggerAfterRun(t.id, t);
             } catch (error) {
@@ -207,8 +237,9 @@ export function dispatchEvent(
         );
 
         // `fired` means scheduled: the run starts when the debounce window
-        // closes. A later event on the same window reports itself `debounced`,
-        // so the pair reads as one run rather than two.
+        // closes — and a firing the breaker drops at that point reports itself
+        // `suppressed` separately. A later event on the same window reports
+        // itself `debounced`, so the pair reads as one run rather than two.
         logDecision(trigger, coalesced ? "debounced" : "fired");
       }
     } catch (error) {

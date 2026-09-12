@@ -1,0 +1,2 @@
+ALTER TABLE "trigger_run" ADD COLUMN "entity_id" text;--> statement-breakpoint
+CREATE INDEX "idx_trigger_run_trigger_entity_started_at" ON "trigger_run" USING btree ("trigger_id","entity_id","started_at");

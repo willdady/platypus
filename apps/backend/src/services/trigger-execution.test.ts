@@ -38,6 +38,14 @@ vi.mock("../utils/cron.ts", () => ({
   validateCronExpression: mockValidateCronExpression,
 }));
 
+const { mockRetainTriggerRuns } = vi.hoisted(() => ({
+  mockRetainTriggerRuns: vi.fn(),
+}));
+
+vi.mock("./trigger-breaker.ts", () => ({
+  retainTriggerRuns: mockRetainTriggerRuns,
+}));
+
 const { mockLogger } = vi.hoisted(() => ({
   mockLogger: { info: vi.fn(), error: vi.fn(), warn: vi.fn() },
 }));
@@ -256,17 +264,19 @@ describe("trigger-execution", () => {
       expect(principal.name).toBe("Grace Hopper");
     });
 
-    it("constructs a TriggerSink with the trigger id and event metadata", async () => {
+    it("constructs a TriggerSink with the trigger id, entity and event metadata", async () => {
       mockDb.limit.mockResolvedValueOnce([mockScopeRow]);
       mockGenerate.mockResolvedValueOnce({ text: "ok", stats: {} });
 
       await executeTrigger(baseTrigger, {
         eventType: "card.created",
         eventData: { cardId: "c1" },
+        entityId: "c1",
       });
 
       expect(TriggerSinkSpy).toHaveBeenCalledWith({
         triggerId: "trigger-1",
+        entityId: "c1",
         eventType: "card.created",
         eventData: { cardId: "c1" },
       });
@@ -358,26 +368,21 @@ describe("trigger-execution", () => {
       );
     });
 
-    it("should perform retention cleanup when maxRunsToKeep > 0", async () => {
+    it("delegates retention with the Trigger's own run budget", async () => {
       mockValidateCronExpression.mockReturnValue(new Date());
-      mockDb.limit.mockResolvedValue(
-        Array.from({ length: 10 }, (_, i) => ({ id: `item-${i}` })),
-      );
-      mockDb.returning.mockResolvedValue([]);
 
       await updateTriggerAfterRun("trigger-1", baseTrigger);
 
-      expect(mockDb.select).toHaveBeenCalled();
+      expect(mockRetainTriggerRuns).toHaveBeenCalledWith("trigger-1", 10);
     });
 
-    it("should skip retention cleanup when maxRunsToKeep is 0", async () => {
+    it("hands retention a zero budget rather than skipping it, so suppressed rows stay bounded", async () => {
       mockValidateCronExpression.mockReturnValue(new Date());
       const trigger = { ...baseTrigger, maxRunsToKeep: 0 } as TriggerRow;
 
-      resetMockDb();
       await updateTriggerAfterRun("trigger-1", trigger);
 
-      expect(mockDb.update).toHaveBeenCalled();
+      expect(mockRetainTriggerRuns).toHaveBeenCalledWith("trigger-1", 0);
     });
   });
 });

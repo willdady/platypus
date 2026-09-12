@@ -85,12 +85,12 @@ every move, whatever fields the control names. To act on a column change, use
 
 ### Finish
 
-Set **Max Runs to Keep** (how many run records to retain), optionally enable
-**Web Search** (web search on the resolved Provider — its built-in tool, or a
-Web-search backend selected on it; see [Providers &
+Set **Max Runs to Keep** (the fewest recent run records to keep), optionally
+enable **Web Search** (web search on the resolved Provider — its built-in tool,
+or a Web-search backend selected on it; see [Providers &
 models](/concepts/providers#web-search)), and leave **Enabled** on. Expand
-**Advanced settings** if the run needs your Memory summaries — see [Memories
-in a run](#memories-in-a-run). Click save.
+**Advanced settings** if the run needs your Memory summaries — see [Memories in
+a run](#memories-in-a-run). Click save.
 
 </Steps>
 
@@ -123,7 +123,33 @@ A few details worth knowing:
   _failed_ with a reason naming the repeated tool, so it can't quietly burn its
   whole step budget. (This guard is unattended-only; interactive Chats are never
   stopped this way.)
-- Older run records beyond **Max Runs to Keep** are pruned automatically.
+- Older run records are pruned automatically, keeping at least the newest **Max
+  Runs to Keep**.
+
+### Run limits
+
+An Event Trigger has a ceiling on how often it may run for the same record — the
+same Card or Notification. Once it has run its cap inside a rolling window,
+further firings are dropped before the Agent starts: no model call, no tokens,
+no writes. Each dropped firing is still recorded, as a run marked _Suppressed_
+with a line saying no Agent was started. Find them with the **Suppressed**
+status filter in [run history](#review-run-history), or from the Trigger's own
+**View runs**.
+
+This is the backstop for a cycle the per-Agent guard above cannot see. That
+guard stops a Trigger re-firing on its own Agent's writes; it cannot see two
+Triggers handing a record back and forth, or an event that arrives long after
+the debounce window and starts another lap. The ceiling is per Trigger and per
+record, so one busy Card does not use up a Trigger's budget for every other
+Card. Events that name a set rather than one record — a bulk mark-all-read — are
+exempt, because counting them together would trip the cap after a handful of
+unrelated Notifications.
+
+The cap is deployment configuration set by your Operator, not a field on the
+Trigger: see [the run-rate
+breaker](/reference/backend-configuration#the-run-rate-breaker). **Max Runs to
+Keep** is not the ceiling — it is how much history to keep, and runs inside the
+breaker's window are kept beyond it.
 
 ### Memories in a run
 
@@ -212,7 +238,7 @@ view survives a refresh and can be sent to a colleague as a link:
 
 - **Trigger** — all Triggers, or one of them. **View runs** on a Trigger's
   three-dot menu opens the page already filtered to it.
-- **Status** — all, or one of Success, Failed, Running, Pending.
+- **Status** — all, or one of Success, Failed, Running, Pending, Suppressed.
 
 The list loads 50 runs at a time; **Load more** fetches the next 50, and goes
 away once a batch comes back short of 50 — the end of the list. It refreshes
@@ -251,11 +277,12 @@ it is absent for a Provider that reports no cache detail.
 
 ### Why a Trigger didn't run
 
-A run that never happened leaves no row in **Trigger runs**, so the answer is in
-the backend logs. Every time an event reaches a Trigger that subscribes to it,
-Platypus writes one dispatch decision line naming the event, the Trigger, the
-Trigger's Agent, the Agents that were running when the write happened, and one of
-three outcomes:
+A run that never happened leaves no row in **Trigger runs** — unless it was the
+[run limit](#run-limits) that dropped it, which records a _Suppressed_ row. For
+anything else the answer is in the backend logs. Every time an event reaches a
+Trigger that subscribes to it, Platypus writes one dispatch decision line naming
+the event, the Trigger, the Trigger's Agent, the Agents that were running when
+the write happened, and one of four outcomes:
 
 - `fired` — the run is scheduled, and starts once the debounce window closes.
 - `skipped_self_actor` — the Trigger's own Agent (or one of its Sub-Agents) made
@@ -263,6 +290,9 @@ three outcomes:
 - `debounced` — a run was already pending for the same Trigger and record, and
   this event folded into it. A separate line reports how many events a burst
   coalesced.
+- `suppressed` — the run limit had already been reached for this Trigger and
+  record, so the firing was dropped before the Agent started. The dropped firing
+  is also recorded on **Trigger runs** as _Suppressed_.
 
 A Trigger the event didn't select — the wrong event type, or filters that didn't
 match — writes no line at all. So the absence of a decision is how you tell a
