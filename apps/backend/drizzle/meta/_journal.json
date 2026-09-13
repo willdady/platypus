@@ -449,6 +449,13 @@
       "when": 1789184507162,
       "tag": "0063_zippy_zarda",
       "breakpoints": true
+    },
+    {
+      "idx": 64,
+      "version": "7",
+      "when": 1789279668287,
+      "tag": "0064_kanban_card_history",
+      "breakpoints": true
     }
   ]
 }
