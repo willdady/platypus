@@ -364,15 +364,12 @@ function rawStorageKeyFromUrl(url: string): string | undefined {
  * `streamText()` call. The DB continues to store storage:// URLs.
  *
  * @param messages - Array of chat messages with parts
- * @param backendOrigin - The origin of the backend server (e.g. http://localhost:4000)
  * @returns Modified messages with file URLs replaced by data: URLs
  */
 export async function inlineFileUrls(
   messages: PlatypusUIMessage[],
-  backendOrigin: string,
 ): Promise<PlatypusUIMessage[]> {
   const storage = getStorage();
-  const filesPrefix = `${backendOrigin}/files/`;
 
   return Promise.all(
     messages.map(async (message) => {
@@ -392,20 +389,11 @@ export async function inlineFileUrls(
 
           const url = part.url;
 
-          // Already a data URL — nothing to do
-          if (url.startsWith("data:")) {
-            return part;
-          }
-
-          // Extract the storage key from the URL
-          let key: string | undefined;
-          if (url.startsWith(filesPrefix)) {
-            key = url.slice(filesPrefix.length);
-          } else if (url.startsWith(STORAGE_URL_PREFIX)) {
-            key = url.slice(STORAGE_URL_PREFIX.length);
-          }
-
-          if (!key) {
+          // Every form `rewriteStorageUrls` can have served, read back by the
+          // one parser (issue #839). Anything else — a data: URL, an external
+          // one — carries no key and is left alone.
+          const key = rawStorageKeyFromUrl(url);
+          if (key === undefined) {
             return part;
           }
 

@@ -536,7 +536,7 @@ describe("Storage Utils", () => {
       const storedMessages = await extractFiles(messages, context);
 
       // Now inline the storage:// URLs back to data URLs
-      const inlined = await inlineFileUrls(storedMessages, backendOrigin);
+      const inlined = await inlineFileUrls(storedMessages);
 
       const filePart = inlined[0].parts[1];
       expect((filePart as FileUIPart).url).toMatch(/^data:image\/png;base64,/);
@@ -561,7 +561,7 @@ describe("Storage Utils", () => {
       const httpMessages = rewriteStorageUrls(storedMessages, backendOrigin);
 
       // Now inline them back
-      const inlined = await inlineFileUrls(httpMessages, backendOrigin);
+      const inlined = await inlineFileUrls(httpMessages);
 
       const filePart = inlined[0].parts[1];
       expect((filePart as FileUIPart).url).toMatch(/^data:image\/png;base64,/);
@@ -573,7 +573,7 @@ describe("Storage Utils", () => {
         createMessageWithFile("msg-1", dataUrl),
       ];
 
-      const inlined = await inlineFileUrls(messages, backendOrigin);
+      const inlined = await inlineFileUrls(messages);
 
       const filePart = inlined[0].parts[1];
       expect((filePart as FileUIPart).url).toBe(dataUrl);
@@ -585,7 +585,7 @@ describe("Storage Utils", () => {
         createMessageWithFile("msg-1", externalUrl),
       ];
 
-      const inlined = await inlineFileUrls(messages, backendOrigin);
+      const inlined = await inlineFileUrls(messages);
 
       const filePart = inlined[0].parts[1];
       expect((filePart as FileUIPart).url).toBe(externalUrl);
@@ -596,7 +596,7 @@ describe("Storage Utils", () => {
         { id: "msg-1", role: "user", parts: [] },
       ];
 
-      const inlined = await inlineFileUrls(messages, backendOrigin);
+      const inlined = await inlineFileUrls(messages);
       expect(inlined).toHaveLength(1);
       expect(inlined[0].parts).toHaveLength(0);
     });
@@ -611,7 +611,7 @@ describe("Storage Utils", () => {
         },
       ];
 
-      const inlined = await inlineFileUrls(messages, backendOrigin);
+      const inlined = await inlineFileUrls(messages);
 
       const filePart = inlined[0].parts[0];
       expect((filePart as FileUIPart).url).toBe(storageUrl);
@@ -637,7 +637,7 @@ describe("Storage Utils", () => {
         },
       ];
 
-      const inlined = await inlineFileUrls(messages, backendOrigin);
+      const inlined = await inlineFileUrls(messages);
 
       const filePart = inlined[0].parts[0] as FileUIPart;
       expect(filePart.url).toBe(traversalUrl);
@@ -661,7 +661,7 @@ describe("Storage Utils", () => {
         },
       ];
 
-      const inlined = await inlineFileUrls(messages, backendOrigin);
+      const inlined = await inlineFileUrls(messages);
 
       expect((inlined[0].parts[0] as FileUIPart).url).toBe(traversalUrl);
     });

@@ -3,7 +3,11 @@ import { promises as fs } from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import type { PlatypusUIMessage } from "../types.ts";
-import { extractFiles, inlineFileUrls } from "../storage/utils.ts";
+import {
+  extractFiles,
+  inlineFileUrls,
+  rewriteStorageUrls,
+} from "../storage/utils.ts";
 import { resetStorage } from "../storage/index.ts";
 import { assertFilePartsSupported, normalizeFileParts } from "./file-gate.ts";
 import { resetExtractedTextCache } from "./file-extraction.ts";
@@ -80,7 +84,7 @@ describe("attachment pipeline (gate → store → inline → normalize)", () => 
       /^storage:\/\//,
     );
     // 3. A later turn replays history: inline, then normalize for the model.
-    const inlined = await inlineFileUrls(stored, origin);
+    const inlined = await inlineFileUrls(stored);
     const [normalized] = await normalizeFileParts(inlined, ["image/*"]);
     return normalized;
   };
@@ -99,5 +103,74 @@ describe("attachment pipeline (gate → store → inline → normalize)", () => 
     );
     expect(textOf(normalized, 1)).toContain("[extracted text from spec.docx]");
     expect(textOf(normalized, 1)).toContain("Design goals");
+  });
+
+  /**
+   * With `STORAGE_PUBLIC_URL` set the read path hands the client
+   * `{publicUrl}/{key}` instead of `{origin}/files/{key}`, and the Chat
+   * resubmits that URL on every later turn (issue #839). The resolve path must
+   * recognise it, or the model is told the file is unavailable from turn 2 on.
+   */
+  describe("with STORAGE_PUBLIC_URL set", () => {
+    const publicUrl = "https://cdn.example.com";
+
+    beforeEach(() => {
+      process.env.STORAGE_PUBLIC_URL = publicUrl;
+    });
+
+    afterEach(() => {
+      delete process.env.STORAGE_PUBLIC_URL;
+    });
+
+    /** Turn 1 persists; every later turn replays what the client sent back. */
+    const replay = async (message: PlatypusUIMessage, turns: number) => {
+      await assertFilePartsSupported([message], ["image/*"]);
+      const stored = await extractFiles([message], {
+        orgId: "org-1",
+        workspaceId: "ws-1",
+        chatId: "chat-1",
+      });
+      const served = rewriteStorageUrls(stored, origin);
+      expect((served[0].parts[1] as unknown as { url: string }).url).toBe(
+        `${publicUrl}/${(stored[0].parts[1] as unknown as { url: string }).url.slice("storage://".length)}`,
+      );
+
+      const results: PlatypusUIMessage[] = [];
+      for (let turn = 0; turn < turns; turn++) {
+        // The client resubmits the history it was served, verbatim.
+        const inlined = await inlineFileUrls(served);
+        const [normalized] = await normalizeFileParts(inlined, ["image/*"]);
+        results.push(normalized);
+      }
+      return results;
+    };
+
+    it("inlines a replayed .txt on turns 2 and 3", async () => {
+      const turns = await replay(
+        attachment(
+          "notes.txt",
+          "text/plain",
+          Buffer.from("Quarterly numbers are in", "utf8"),
+        ),
+        2,
+      );
+      for (const normalized of turns) {
+        expect(textOf(normalized, 1)).toContain("[file: notes.txt]");
+        expect(textOf(normalized, 1)).toContain("Quarterly numbers are in");
+      }
+    });
+
+    it("extracts a replayed .pdf on turns 2 and 3", async () => {
+      const turns = await replay(
+        attachment("report.pdf", PDF_TYPE, buildTestPdf(["Revenue is up"])),
+        2,
+      );
+      for (const normalized of turns) {
+        expect(textOf(normalized, 1)).toContain(
+          "[extracted text from report.pdf]",
+        );
+        expect(textOf(normalized, 1)).toContain("Revenue is up");
+      }
+    });
   });
 });
