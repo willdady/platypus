@@ -60,10 +60,10 @@ both origins share, so only these layouts actually work:
 
 <Callout type="warning">
   Two subdomains of one parent domain only work when `AUTH_COOKIE_DOMAIN` names
-  that parent. Without it the cookie is host-only, server-rendered requests
-  arrive unauthenticated, and the backend **refuses to start** — a container
-  that exits with a message naming both hostnames is better than an app that
-  signs you in and then silently serves degraded pages.
+  that parent. Without it the cookie is host-only and server-rendered
+  requests arrive unauthenticated. The backend still starts, so watch for the
+  startup error naming both hostnames — otherwise the app signs you in and
+  then silently serves degraded pages.
 
   A partial edit of the URL variables is a different failure: the browser's own
   requests break, so **sign-in appears to succeed and then silently fails**.

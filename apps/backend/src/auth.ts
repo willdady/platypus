@@ -9,9 +9,11 @@ import {
   resolveAuthCookieDomain,
 } from "./auth-cookie-domain.ts";
 
-// Fatal at module load, before the HTTP server listens: a backend and frontend
-// on unrelated hosts cannot authenticate server-side requests, and silently
-// starting half-broken is the failure this refuses (issue #819).
+// Reported at module load, before the HTTP server listens: a backend and
+// frontend on unrelated hosts cannot authenticate server-side requests, and
+// silently starting half-broken is the failure this names (issue #819). It
+// logs and carries on — see `auth-cookie-domain.ts` for why it does not refuse
+// to start.
 const authCookieDomain = resolveAuthCookieDomain();
 
 export const auth = betterAuth({

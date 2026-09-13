@@ -177,7 +177,8 @@ unauthenticated. See
 
   That is separate from the hostname topology above: all four can be right and
   the app still cannot authenticate server-side requests if the two origins are
-  on unrelated hosts, which is why the backend checks and refuses to start.
+  on unrelated hosts, which is why the backend checks and logs an error at
+  startup.
 </Callout>
 
 Both services read the same root `.env` via `env_file`. The full set of

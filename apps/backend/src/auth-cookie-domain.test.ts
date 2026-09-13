@@ -1,9 +1,10 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   checkAuthTopology,
   crossSubdomainCookieConfig,
   resolveAuthCookieDomain,
 } from "./auth-cookie-domain.ts";
+import { logger } from "./logger.ts";
 
 /**
  * Narrows a result to its failure branch, so each test can assert on the
@@ -273,13 +274,30 @@ describe("resolveAuthCookieDomain", () => {
     expect(resolveAuthCookieDomain()).toBe("example.com");
   });
 
-  it("throws before startup on a topology that cannot authenticate SSR requests", () => {
+  it("reports a topology that cannot authenticate SSR requests, and starts anyway", () => {
     process.env.BETTER_AUTH_URL = "https://api.example.com";
     process.env.FRONTEND_URL = "https://app.other.com";
     process.env.AUTH_COOKIE_DOMAIN = "example.com";
+    const error = vi.spyOn(logger, "error").mockImplementation(() => {});
 
-    expect(() => resolveAuthCookieDomain()).toThrowError(/AUTH_COOKIE_DOMAIN/);
-    expect(() => resolveAuthCookieDomain()).toThrowError(/api\.example\.com/);
-    expect(() => resolveAuthCookieDomain()).toThrowError(/app\.other\.com/);
+    // Startup continues: an upgrade onto an unsupported topology degrades the
+    // way it did before this check existed, rather than failing to boot.
+    expect(resolveAuthCookieDomain()).toBeUndefined();
+
+    const [message] = error.mock.calls[0] as [string];
+    expect(message).toContain("AUTH_COOKIE_DOMAIN");
+    expect(message).toContain("api.example.com");
+    expect(message).toContain("app.other.com");
+    error.mockRestore();
+  });
+
+  it("drops an unusable cookie domain rather than scoping cookies to it", () => {
+    process.env.BETTER_AUTH_URL = "https://api.example.com";
+    process.env.FRONTEND_URL = "https://app.example.com";
+    process.env.AUTH_COOKIE_DOMAIN = "https://example.com";
+    const error = vi.spyOn(logger, "error").mockImplementation(() => {});
+
+    expect(resolveAuthCookieDomain()).toBeUndefined();
+    error.mockRestore();
   });
 });
