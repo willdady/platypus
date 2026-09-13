@@ -6,6 +6,8 @@ import {
   resetMockDb,
 } from "../test-utils.ts";
 import app from "../server.ts";
+import { logger } from "../logger.ts";
+import type { WidgetType } from "@platypus/schemas";
 
 vi.mock("nanoid", () => ({
   nanoid: vi.fn(() => "test-id-123"),
@@ -23,6 +25,52 @@ describe("Dashboard Routes", () => {
   const dashboardId = "dash-1";
   const widgetId = "widget-1";
   const baseUrl = `/organizations/${orgId}/workspaces/${workspaceId}/dashboards`;
+
+  const createdAt = new Date("2026-01-01T00:00:00.000Z");
+
+  /**
+   * A Widget row as the read path receives it from the database.
+   *
+   * `data` is deliberately `unknown` rather than the payload for `type`: these
+   * fixtures need to express the mismatched rows the parse is there to reject.
+   * Every other key is checked, so a typo cannot quietly produce an invalid row
+   * that a drop test then "proves" is dropped.
+   */
+  type WidgetRowFixture = {
+    type: WidgetType;
+    id?: string;
+    dashboardId?: string;
+    title?: string;
+    data?: unknown;
+    createdAt?: Date;
+    updatedAt?: Date;
+  };
+
+  const widgetRow = (overrides: WidgetRowFixture) => ({
+    id: widgetId,
+    dashboardId,
+    title: "A widget",
+    data: null,
+    createdAt,
+    updatedAt: createdAt,
+    ...overrides,
+  });
+
+  /** The same row as it appears once serialized to JSON. */
+  const serialized = (row: ReturnType<typeof widgetRow>) => ({
+    ...row,
+    createdAt: row.createdAt.toISOString(),
+    updatedAt: row.updatedAt.toISOString(),
+  });
+
+  /** The org, workspace and dashboard lookups the widget list performs first. */
+  const mockWidgetListAuth = () => {
+    mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
+    mockDb.limit.mockResolvedValueOnce([
+      { ownerId: "user-1", organizationId: "org-1" },
+    ]);
+    mockDb.limit.mockResolvedValueOnce([{ id: dashboardId, workspaceId }]);
+  };
 
   // --- Dashboard CRUD ---
 
@@ -223,17 +271,72 @@ describe("Dashboard Routes", () => {
 
     it("lists widgets on a dashboard", async () => {
       mockSession();
-      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
-      mockDb.limit.mockResolvedValueOnce([
-        { ownerId: "user-1", organizationId: "org-1" },
-      ]);
-      mockDb.limit.mockResolvedValueOnce([{ id: dashboardId, workspaceId }]);
-      const mockWidgets = [{ id: widgetId, dashboardId, type: "metric" }];
-      mockDb.orderBy.mockResolvedValueOnce(mockWidgets);
+      mockWidgetListAuth();
+      const metric = widgetRow({
+        type: "metric",
+        data: { value: 42, label: "Signups" },
+      });
+      mockDb.orderBy.mockResolvedValueOnce([metric]);
 
       const res = await app.request(`${baseUrl}/${dashboardId}/widgets`);
       expect(res.status).toBe(200);
-      expect(await res.json()).toEqual({ results: mockWidgets });
+      expect(await res.json()).toEqual({ results: [serialized(metric)] });
+    });
+
+    it("returns a widget whose data is null", async () => {
+      mockSession();
+      mockWidgetListAuth();
+      // A freshly created Widget has no data until it is first edited, so a
+      // null payload is the normal case and must survive the read parse.
+      const fresh = widgetRow({ type: "embed", data: null });
+      mockDb.orderBy.mockResolvedValueOnce([fresh]);
+
+      const res = await app.request(`${baseUrl}/${dashboardId}/widgets`);
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({ results: [serialized(fresh)] });
+    });
+
+    it("drops an embed widget whose stored URL is not https", async () => {
+      mockSession();
+      mockWidgetListAuth();
+      const warn = vi.spyOn(logger, "warn").mockImplementation(() => {});
+      const tampered = widgetRow({
+        id: "widget-http",
+        type: "embed",
+        data: { url: "http://insecure.example.com/embed" },
+      });
+      mockDb.orderBy.mockResolvedValueOnce([tampered]);
+
+      const res = await app.request(`${baseUrl}/${dashboardId}/widgets`);
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({ results: [] });
+      expect(warn).toHaveBeenCalledWith(
+        expect.objectContaining({ dashboardId, widgetId: "widget-http" }),
+        expect.any(String),
+      );
+    });
+
+    it("keeps the rest of the dashboard when one widget fails to parse", async () => {
+      mockSession();
+      mockWidgetListAuth();
+      vi.spyOn(logger, "warn").mockImplementation(() => {});
+      const good = widgetRow({
+        id: "widget-good",
+        type: "text",
+        data: { content: "Still here" },
+      });
+      // A metric payload stored against a text Widget — the cross-type
+      // mismatch a plain data union used to let through.
+      const mismatched = widgetRow({
+        id: "widget-bad",
+        type: "text",
+        data: { value: 1, label: "Wrong shape" },
+      });
+      mockDb.orderBy.mockResolvedValueOnce([good, mismatched]);
+
+      const res = await app.request(`${baseUrl}/${dashboardId}/widgets`);
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({ results: [serialized(good)] });
     });
   });
 

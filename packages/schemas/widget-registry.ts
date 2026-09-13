@@ -263,7 +263,11 @@ export const widgetTypeSchema = z.enum(widgetTypes);
 
 /**
  * `z.discriminatedUnion` and `z.union` need a non-empty tuple, which `.map`
- * cannot produce. The only cast the derivation needs, contained in this module.
+ * cannot produce.
+ *
+ * One of the two casts the derivation needs, both contained in this module —
+ * the other is {@link asWidget}, which repairs the inference this same `.map`
+ * erases.
  */
 function nonEmpty<T>(items: T[]): [T, ...T[]] {
   return items as [T, ...T[]];
@@ -325,6 +329,21 @@ export type Widget = {
     data: z.infer<(typeof widgetTypeRegistry)[K]["dataSchema"]> | null;
   };
 }[WidgetType];
+
+/**
+ * Narrows a parsed Widget to {@link Widget}.
+ *
+ * `widgetSchema.safeParse` reports its output as the union `unionMembers`
+ * assembled, which has lost the same key/value correlation the `.map` erases
+ * everywhere else — its `data` infers as `unknown` and its `type` as every
+ * Widget type at once. The runtime check is the precise one: a value reaching
+ * here has already been validated against its own type's `dataSchema`. Only
+ * the static type is lossy, so this repairs the inference the way the mapped
+ * {@link Widget} type above repairs the other half, and keeps the assertion in
+ * the module that creates the gap rather than in each caller.
+ */
+export const asWidget = (parsed: z.infer<typeof widgetSchema>): Widget =>
+  parsed as Widget;
 
 export const widgetCreateSchema = z.object({
   type: widgetTypeSchema,

@@ -10,9 +10,12 @@ import {
 import {
   dashboardCreateSchema,
   dashboardUpdateSchema,
+  asWidget,
   widgetCreateSchema,
+  widgetSchema,
   widgetUpdateDataSchema,
 } from "@platypus/schemas";
+import type { Widget } from "@platypus/schemas";
 import { requireAuth } from "../middleware/authentication.ts";
 import {
   requireOrgAccess,
@@ -30,8 +33,43 @@ import {
   deleteOwnedWidget,
 } from "../services/workspace-resource.ts";
 import type { Variables } from "../server.ts";
+import { logger } from "../logger.ts";
+import { formatIssues } from "../zod-issues.ts";
 
 const dashboard = new Hono<{ Variables: Variables }>();
+
+type WidgetRow = typeof widgetTable.$inferSelect;
+
+/**
+ * Validates stored Widgets against their own type's data contract, dropping
+ * any row that fails.
+ *
+ * `widgetSchema` pairs each Widget type with its data schema — including the
+ * Embed type's HTTPS-only URL — but nothing ran it on the read path, so the
+ * pairing held for writes alone and the browser was the only thing checking a
+ * persisted Embed URL (#798).
+ *
+ * A row can only fail here by having been written around the API, so it is
+ * untrusted input rather than legacy data to repair: there is no backfill, and
+ * one bad row must not take its Dashboard down with it.
+ */
+const parseStoredWidgets = (rows: WidgetRow[], dashboardId: string): Widget[] =>
+  rows.flatMap((row) => {
+    const parsed = widgetSchema.safeParse(row);
+    if (parsed.success) {
+      return [asWidget(parsed.data)];
+    }
+    logger.warn(
+      {
+        dashboardId,
+        widgetId: row.id,
+        widgetType: row.type,
+        issues: formatIssues(parsed.error.issues),
+      },
+      "Widget omitted from dashboard: stored data does not match its type",
+    );
+    return [];
+  });
 
 // --- Dashboard CRUD ---
 
@@ -191,12 +229,12 @@ dashboard.get(
     const dashboardId = c.req.param("dashboardId");
     const { workspaceId } = workspaceScopeOf(c);
     await requireOwned(db, "dashboard", dashboardId, workspaceId);
-    const results = await listOwnedWidgets(
+    const rows = await listOwnedWidgets(
       db,
       dashboardId,
       asc(widgetTable.createdAt),
     );
-    return c.json({ results });
+    return c.json({ results: parseStoredWidgets(rows, dashboardId) });
   },
 );
 
