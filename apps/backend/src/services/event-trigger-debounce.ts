@@ -1,4 +1,4 @@
-import type { WebhookEventPayload } from "@platypus/schemas";
+import { webhookEventChangedFields } from "@platypus/schemas";
 import { logger } from "../logger.ts";
 import type { EventContext } from "./trigger-execution.ts";
 import type { trigger as triggerTable } from "../db/schema.ts";
@@ -18,12 +18,6 @@ const pendingTriggers = new Map<
 
 const DEBOUNCE_MS = 5_000;
 
-/** The `changedFields` an event carries — only `card.updated` declares any. */
-const changedFieldsOf = (
-  payload: WebhookEventPayload | undefined,
-): string[] | undefined =>
-  payload?.event === "card.updated" ? payload.data.changedFields : undefined;
-
 /**
  * The event context a coalesced replacement delivers: the incoming context,
  * except `changedFields` — when both the incoming and the pending context
@@ -36,7 +30,7 @@ const mergedEventContext = (
   incoming: EventContext,
 ): EventContext => {
   if (incoming.payload.event !== "card.updated") return incoming;
-  const pendingFields = changedFieldsOf(pending?.payload);
+  const pendingFields = pending && webhookEventChangedFields(pending.payload);
   if (!pendingFields) return incoming;
 
   return {

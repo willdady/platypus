@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   webhookEventSchema,
   webhookEventDataSchemas,
+  webhookEventChangedFields,
   webhookEventEntity,
   webhookEventScope,
   organizationSchema,
@@ -1523,6 +1524,18 @@ describe("webhook event payloads", () => {
         data: { notificationIds: ["n-1", "n-2"], userId: "u-1", bulk: true },
       }),
     ).toEqual({ kind: "set" });
+  });
+
+  it("reports a changed-fields diff only for the event that declares one", () => {
+    expect(
+      webhookEventChangedFields({
+        event: "card.updated",
+        data: { ...card, changedFields: ["body"] },
+      }),
+    ).toEqual(["body"]);
+    expect(
+      webhookEventChangedFields({ event: "card.created", data: card }),
+    ).toBeUndefined();
   });
 
   it("reports the board and column only for the events that name one", () => {

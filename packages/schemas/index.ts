@@ -2647,9 +2647,17 @@ export const dashboardUpdateSchema = z.object({
  *
  * The record-carrying events spread the stored row whole, so their schemas are
  * loose: a row that gains a column keeps parsing, and what an external
- * subscriber receives on the wire is unchanged. What is pinned is the part the
+ * subscriber receives on the wire is unchanged. These describe the value handed
+ * to `dispatchEvent`, not the delivered body — a delivery is that value
+ * JSON-encoded, so a `z.date()` here reaches a subscriber as an ISO string. What is pinned is the part the
  * dispatcher, the Trigger filters and the docs all read — the entity id, the
  * Board and Column, and `card.updated`'s `changedFields`.
+ *
+ * The Card record is spelled out rather than derived from
+ * {@link kanbanCardSchema}, which describes the Card an API response carries:
+ * the row a dispatch spreads holds `dueDate` and the timestamps as `Date`s, and
+ * none of the read-side fields the board view joins on (`createdByName`,
+ * `resolvedAssignees`, `commentCount`).
  */
 const webhookCardRecordShape = {
   id: z.string(),
@@ -2753,13 +2761,25 @@ export const webhookEventEntity = (
     case "notification.dismissed":
       return { kind: "entity", id: payload.data.notificationId };
     case "notification.read":
-      return "notificationIds" in payload.data
+      // `bulk` is the flag the two shapes are told apart by — the same one the
+      // Webhooks page tells an integrator to branch on.
+      return "bulk" in payload.data
         ? { kind: "set" }
         : { kind: "entity", id: payload.data.notificationId };
     case "card.deleted":
       return { kind: "entity", id: payload.data.cardId };
   }
 };
+
+/**
+ * The value-diff an event reports, where it reports one. Only `card.updated`
+ * declares `changedFields`; every other event answers `undefined` rather than
+ * each reader deciding for itself what carries a diff.
+ */
+export const webhookEventChangedFields = (
+  payload: WebhookEventPayload,
+): string[] | undefined =>
+  payload.event === "card.updated" ? payload.data.changedFields : undefined;
 
 /** The Board and Column an event names, where it names them. */
 export const webhookEventScope = (
