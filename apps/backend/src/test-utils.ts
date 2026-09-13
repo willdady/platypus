@@ -24,6 +24,7 @@ import type {
   LoadedPlugin,
   LoadPluginsResult,
 } from "./plugins/loader.ts";
+import type { WebhookEventData, WebhookEventPayload } from "@platypus/schemas";
 import type {
   InferToolInput,
   InferToolOutput,
@@ -415,4 +416,58 @@ export const makePluginContext = (
   credentials: undefined,
   logger: makeFakePluginLogger(),
   ...over,
+});
+
+/**
+ * A `card.*` event with its declared payload. The Card record is the stored row
+ * spread whole, so a test that cares about one field supplies that field and
+ * takes the rest as given.
+ */
+export const cardEvent = <
+  E extends "card.created" | "card.updated" | "card.moved",
+>(
+  event: E,
+  over: Partial<WebhookEventData<E>> = {},
+): WebhookEventPayload =>
+  ({
+    event,
+    data: {
+      id: "c1",
+      boardId: "board-1",
+      columnId: "col-1",
+      title: "A card",
+      body: null,
+      labelIds: [],
+      assignees: [],
+      dueDate: null,
+      priority: "none",
+      position: 1024,
+      createdByUserId: "user-1",
+      createdByAgentId: null,
+      lastEditedByUserId: null,
+      lastEditedByAgentId: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      ...(event === "card.updated" ? { changedFields: [] } : {}),
+      ...(event === "card.moved" ? { previousColumnId: "col-0" } : {}),
+      ...over,
+    },
+  }) as WebhookEventPayload;
+
+/** A `notification.created`/`notification.updated` event and its record. */
+export const notificationEvent = (
+  event: "notification.created" | "notification.updated",
+  over: Partial<WebhookEventData<"notification.created">> = {},
+): WebhookEventPayload => ({
+  event,
+  data: {
+    id: "n-1",
+    workspaceId: "ws-1",
+    agentId: "agent-1",
+    title: null,
+    body: "Something happened",
+    createdAt: new Date(),
+    updatedAt: new Date(),
+    ...over,
+  },
 });

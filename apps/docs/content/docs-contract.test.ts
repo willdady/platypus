@@ -48,7 +48,9 @@ import {
   TOOL_NAME_NAMESPACE_SEPARATOR,
   TOOL_NAME_PATTERN,
   triggerSchema,
+  webhookEventDataSchemas,
   webhookEventSchema,
+  type WebhookEvent,
   workspaceSchema,
 } from "@platypus/schemas";
 
@@ -623,6 +625,137 @@ describe("webhook events", () => {
             `That event never fires.`,
         );
       }
+    }
+    expectNoViolations(violations);
+  });
+});
+
+// --- webhook event payloads --------------------------------------------------
+
+/**
+ * Every event's `data` example on the Webhooks page, pinned against the
+ * declared payload it claims to show.
+ *
+ * The event names have been pinned in both directions for a while; the
+ * examples beside them were prose, and an integrator writes their handler
+ * against the example, not the name. A payload is one declaration now
+ * (`webhookEventDataSchemas`), so the page can be held to it: an event whose
+ * shape changes, or one that ships with no example at all, fails here rather
+ * than at somebody's endpoint.
+ *
+ * An example is attributed to an event by the `"event"` key in its envelope,
+ * or — for the short `data`-only blocks — to the last event named in a code
+ * span above it. Write one of those two ways or this test cannot see it.
+ */
+
+/** A shape-bearing schema, and a union of them, without importing zod here. */
+type ShapeLike = { shape: Record<string, unknown> };
+type UnionLike = { options: ShapeLike[] };
+
+/** The key sets one event's payload may take — more than one where it has two shapes. */
+const declaredPayloadKeys = (event: WebhookEvent): string[][] => {
+  const schema: unknown = webhookEventDataSchemas[event];
+  const variants =
+    schema !== null && typeof schema === "object" && "options" in schema
+      ? (schema as UnionLike).options
+      : [schema as ShapeLike];
+  return variants.map((variant) => Object.keys(variant.shape).sort());
+};
+
+/** Each ```json fence in `content`, with the line its opening fence sits on. */
+const jsonFences = (content: string): { line: number; text: string }[] => {
+  const lines = content.split("\n");
+  const fences: { line: number; text: string }[] = [];
+  for (let index = 0; index < lines.length; index++) {
+    if (lines[index].trim() !== "```json") continue;
+    const line = index + 1;
+    const body: string[] = [];
+    index++;
+    while (index < lines.length && lines[index].trim() !== "```") {
+      body.push(lines[index]);
+      index++;
+    }
+    fences.push({ line, text: body.join("\n") });
+  }
+  return fences;
+};
+
+describe("webhook event payloads", () => {
+  const page = "building-with-platypus/webhooks.mdx";
+  const content = readDoc(page);
+  const source = "packages/schemas/index.ts (webhookEventDataSchemas)";
+  const events: readonly string[] = webhookEventSchema.options;
+
+  /** The examples, each attributed to the event it documents. */
+  const examples = jsonFences(content).flatMap(({ line, text }) => {
+    const parsed = JSON.parse(text) as {
+      event?: unknown;
+      data?: unknown;
+    };
+    if (parsed.data === null || typeof parsed.data !== "object") return [];
+    const named = typeof parsed.event === "string" ? parsed.event : undefined;
+    // A `data`-only block belongs to the event the prose above it named.
+    const preceding = content
+      .split("\n")
+      .slice(0, line - 1)
+      .join("\n")
+      .match(/`([a-z]+\.[a-z]+)`/g)
+      ?.map((span) => span.replaceAll("`", ""))
+      .filter((span) => events.includes(span));
+    const event = named ?? preceding?.at(-1);
+    return event === undefined
+      ? []
+      : [{ event, line, keys: Object.keys(parsed.data).sort() }];
+  });
+
+  it("shows a payload for every event", () => {
+    const violations: string[] = [];
+    for (const event of webhookEventSchema.options) {
+      const shown = examples.filter((example) => example.event === event);
+      if (shown.length === 0) {
+        violations.push(
+          `\`${event}\` is in ${source} but apps/docs/content/${page} shows no example of its \`data\`.\n` +
+            `An integrator writes their handler against the example.`,
+        );
+        continue;
+      }
+      // An event with two declared shapes needs both: the bulk
+      // `notification.read` is the one a handler written against the singular
+      // form drops silently.
+      const variants = declaredPayloadKeys(event);
+      for (const variant of variants) {
+        if (!shown.some((example) => example.keys.join() === variant.join())) {
+          violations.push(
+            `\`${event}\` declares a payload shaped \`{ ${variant.join(", ")} }\` in ${source}, ` +
+              `and apps/docs/content/${page} shows no example of it.\n` +
+              `Each shape an event can take needs its own example.`,
+          );
+        }
+      }
+    }
+    expectNoViolations(violations);
+  });
+
+  it("shows no payload the declaration does not describe", () => {
+    const violations: string[] = [];
+    for (const example of examples) {
+      if (!events.includes(example.event)) {
+        violations.push(
+          `apps/docs/content/${page}:${example.line} documents \`${example.event}\`, which is not in ${source}.\n` +
+            `That event never fires.`,
+        );
+        continue;
+      }
+      const variants = declaredPayloadKeys(example.event as WebhookEvent);
+      if (variants.some((variant) => variant.join() === example.keys.join())) {
+        continue;
+      }
+      violations.push(
+        `apps/docs/content/${page}:${example.line} shows \`${example.event}\` carrying ` +
+          `\`{ ${example.keys.join(", ")} }\`, but ${source} declares ` +
+          `${variants.map((variant) => `\`{ ${variant.join(", ")} }\``).join(" or ")}.\n` +
+          `The page is what an integrator writes their handler against.`,
+      );
     }
     expectNoViolations(violations);
   });

@@ -19,11 +19,11 @@ import {
 import { retainTriggerRuns } from "./trigger-breaker.ts";
 import type { RunInput } from "../runs/types.ts";
 import type { PlatypusUIMessage } from "../types.ts";
-import type { CronTriggerConfig, WebhookEvent } from "@platypus/schemas";
+import type { CronTriggerConfig, WebhookEventPayload } from "@platypus/schemas";
 
 export type EventContext = {
-  eventType: WebhookEvent;
-  eventData: unknown;
+  /** The event that fired this run, carried with its declared payload. */
+  payload: WebhookEventPayload;
   /**
    * The single entity the event named, when it named one. Persisted on the run
    * row so the run-rate breaker can count per entity; absent for events that
@@ -76,7 +76,7 @@ export const executeTrigger = async (
   });
 
   const effectiveInstruction = eventContext
-    ? `Event: ${eventContext.eventType}\nEvent Data:\n${JSON.stringify(eventContext.eventData, null, 2)}\n---\n${instruction}`
+    ? `Event: ${eventContext.payload.event}\nEvent Data:\n${JSON.stringify(eventContext.payload.data, null, 2)}\n---\n${instruction}`
     : instruction;
 
   const messages: PlatypusUIMessage[] = [
@@ -105,8 +105,8 @@ export const executeTrigger = async (
   const sink = new TriggerSink({
     triggerId: id,
     entityId: eventContext?.entityId,
-    eventType: eventContext?.eventType,
-    eventData: eventContext?.eventData,
+    eventType: eventContext?.payload.event,
+    eventData: eventContext?.payload.data,
   });
 
   // What caused this firing, read before the run establishes itself as the
@@ -123,7 +123,7 @@ export const executeTrigger = async (
       runId,
       agentId,
       type: trigger.type,
-      eventType: eventContext?.eventType,
+      eventType: eventContext?.payload.event,
       causingAgents: currentCausingAgents(),
       originatingTriggerId: currentOriginatingTrigger(),
     },

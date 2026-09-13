@@ -131,6 +131,26 @@ the full notification record:
 }
 ```
 
+`notification.updated` carries the same record, as it stands after the edit:
+
+```json
+{
+  "event": "notification.updated",
+  "timestamp": "2026-06-26T09:33:00.000Z",
+  "orgId": "g7Qw3pLm9xRt2nK5vB8dY",
+  "workspaceId": "k4Tn2pXqRf7Lm9sWvB3dY",
+  "data": {
+    "id": "Hs8dK2pQ9mRnL7wT4vYx1",
+    "workspaceId": "k4Tn2pXqRf7Lm9sWvB3dY",
+    "agentId": "Jf3kP9xR2mLqN7wT4vYsZ",
+    "title": "Daily summary ready",
+    "body": "Your daily summary has been regenerated.",
+    "createdAt": "2026-06-26T09:31:00.000Z",
+    "updatedAt": "2026-06-26T09:33:00.000Z"
+  }
+}
+```
+
 `card.moved` carries the full card record plus `previousColumnId`, so a handler
 can tell where the card came from without a separate lookup:
 

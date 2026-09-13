@@ -42,7 +42,10 @@ export const createNotification = async (
       updatedAt: new Date(),
     })
     .returning();
-  dispatchEvent(ctx.orgId, ctx.workspaceId, "notification.created", rows[0]);
+  dispatchEvent(ctx.orgId, ctx.workspaceId, {
+    event: "notification.created",
+    data: rows[0],
+  });
   return rows[0];
 };
 
@@ -81,7 +84,10 @@ export const updateNotification = async (
     .where(agentOwnedWhere(ctx, id))
     .returning();
   if (!rows.length) return null;
-  dispatchEvent(ctx.orgId, ctx.workspaceId, "notification.updated", rows[0]);
+  dispatchEvent(ctx.orgId, ctx.workspaceId, {
+    event: "notification.updated",
+    data: rows[0],
+  });
   return rows[0];
 };
 
@@ -103,8 +109,9 @@ export const deleteNotification = async (
     .where(agentOwnedWhere(ctx, id))
     .returning();
   if (Array.isArray(rows) && rows.length === 0) return false;
-  dispatchEvent(ctx.orgId, ctx.workspaceId, "notification.dismissed", {
-    notificationId: id,
+  dispatchEvent(ctx.orgId, ctx.workspaceId, {
+    event: "notification.dismissed",
+    data: { notificationId: id },
   });
   return true;
 };
@@ -126,9 +133,9 @@ export const markRead = async (
     .insert(notificationReadTable)
     .values({ id: nanoid(), notificationId, userId })
     .onConflictDoNothing();
-  dispatchEvent(ctx.orgId, ctx.workspaceId, "notification.read", {
-    notificationId,
-    userId,
+  dispatchEvent(ctx.orgId, ctx.workspaceId, {
+    event: "notification.read",
+    data: { notificationId, userId },
   });
   return true;
 };
@@ -160,10 +167,9 @@ export const markAllRead = async (
       userId,
     })),
   );
-  dispatchEvent(ctx.orgId, ctx.workspaceId, "notification.read", {
-    notificationIds: ids,
-    userId,
-    bulk: true,
+  dispatchEvent(ctx.orgId, ctx.workspaceId, {
+    event: "notification.read",
+    data: { notificationIds: ids, userId, bulk: true },
   });
 };
 

@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import { mockDb, resetMockDb } from "../test-utils.ts";
+import { cardEvent, mockDb, resetMockDb } from "../test-utils.ts";
 import type { trigger as triggerTable } from "../db/schema.ts";
 import type { WorkspaceScope } from "../scope.ts";
 import type { RunInput } from "../runs/types.ts";
@@ -171,12 +171,11 @@ describe("trigger-execution", () => {
       mockGenerate.mockResolvedValueOnce({ text: "ok", stats: {} });
 
       await executeTrigger(baseTrigger, {
-        eventType: "card.updated",
-        eventData: {
+        payload: cardEvent("card.updated", {
           id: "c1",
           title: "Board the quarterly acquisition",
           body: "Confidential body text",
-        },
+        }),
       });
 
       const logged = JSON.stringify(mockLogger.info.mock.calls);
@@ -230,14 +229,13 @@ describe("trigger-execution", () => {
       mockGenerate.mockResolvedValueOnce({ text: "ok", stats: {} });
 
       await executeTrigger(baseTrigger, {
-        eventType: "card.created",
-        eventData: { cardId: "c1" },
+        payload: cardEvent("card.created", { id: "c1" }),
       });
 
       const args = mockGenerate.mock.calls[0][0] as GenerateArgs;
       const text = (args.input.messages[0].parts[0] as { text: string }).text;
       expect(text).toContain("Event: card.created");
-      expect(text).toContain('"cardId": "c1"');
+      expect(text).toContain('"id": "c1"');
       expect(text).toContain("Do something");
     });
 
@@ -253,8 +251,7 @@ describe("trigger-execution", () => {
         config: { events: ["card.created"] },
       } as TriggerRow;
       await executeTrigger(trigger, {
-        eventType: "card.created",
-        eventData: { cardId: "c1" },
+        payload: cardEvent("card.created", { id: "c1" }),
       });
 
       const { principal } = (mockGenerate.mock.calls[0][0] as GenerateArgs)
@@ -268,17 +265,14 @@ describe("trigger-execution", () => {
       mockDb.limit.mockResolvedValueOnce([mockScopeRow]);
       mockGenerate.mockResolvedValueOnce({ text: "ok", stats: {} });
 
-      await executeTrigger(baseTrigger, {
-        eventType: "card.created",
-        eventData: { cardId: "c1" },
-        entityId: "c1",
-      });
+      const payload = cardEvent("card.created", { id: "c1" });
+      await executeTrigger(baseTrigger, { payload, entityId: "c1" });
 
       expect(TriggerSinkSpy).toHaveBeenCalledWith({
         triggerId: "trigger-1",
         entityId: "c1",
         eventType: "card.created",
-        eventData: { cardId: "c1" },
+        eventData: payload.data,
       });
     });
 

@@ -6,21 +6,23 @@ const { mockLogger } = vi.hoisted(() => ({
 
 vi.mock("../logger.ts", () => ({ logger: mockLogger }));
 
+import type { WebhookEventData } from "@platypus/schemas";
 import {
   debounceTriggerExecution,
   clearPendingTriggers,
 } from "./event-trigger-debounce.ts";
+import { cardEvent } from "../test-utils.ts";
 
 const makeTrigger = (id: string) =>
   ({ id, workspaceId: "ws-1" }) as Parameters<
     typeof debounceTriggerExecution
   >[1];
 
-const makeContext = (data: unknown) =>
-  ({
-    eventType: "card.updated" as const,
-    eventData: data,
-  }) as Parameters<typeof debounceTriggerExecution>[2];
+const makeContext = (
+  over: Partial<WebhookEventData<"card.updated">> = {},
+): Parameters<typeof debounceTriggerExecution>[2] => ({
+  payload: cardEvent("card.updated", over),
+});
 
 describe("event-trigger-debounce", () => {
   beforeEach(() => {
@@ -88,18 +90,24 @@ describe("event-trigger-debounce", () => {
     vi.advanceTimersByTime(5_000);
 
     expect(executeFn).toHaveBeenCalledOnce();
-    const deliveredCtx = executeFn.mock.calls[0][1];
-    const changedFields = (
-      deliveredCtx.eventData as { changedFields: string[] }
-    ).changedFields;
-    expect(changedFields.slice().sort()).toEqual(["assignees", "body"]);
+    const delivered = executeFn.mock.calls[0][1].payload;
+    if (delivered.event !== "card.updated")
+      throw new Error("expected a card.updated payload");
+    expect([...delivered.data.changedFields].sort()).toEqual([
+      "assignees",
+      "body",
+    ]);
   });
 
   it("does not union changedFields when only one of the two events carries it", () => {
     const executeFn = vi.fn().mockResolvedValue(undefined);
     const trigger = makeTrigger("t-1");
 
-    const ctx1 = makeContext({ id: "card-1" }); // e.g. card.created, no changedFields
+    // A `card.moved` carries no changed-fields diff, so there is nothing to
+    // union with the `card.updated` that follows it.
+    const ctx1: Parameters<typeof debounceTriggerExecution>[2] = {
+      payload: cardEvent("card.moved", { id: "card-1" }),
+    };
     const ctx2 = makeContext({ id: "card-1", changedFields: ["body"] });
 
     debounceTriggerExecution("t-1:card-1", trigger, ctx1, executeFn);
@@ -135,7 +143,7 @@ describe("event-trigger-debounce", () => {
     debounceTriggerExecution(
       "t-1:card-1",
       trigger,
-      makeContext({ id: "card-1", v: 1 }),
+      makeContext({ id: "card-1", title: "first" }),
       executeFn,
     );
 
@@ -143,7 +151,7 @@ describe("event-trigger-debounce", () => {
     vi.advanceTimersByTime(4_000);
     expect(executeFn).not.toHaveBeenCalled();
 
-    const latestCtx = makeContext({ id: "card-1", v: 2 });
+    const latestCtx = makeContext({ id: "card-1", title: "second" });
     debounceTriggerExecution("t-1:card-1", trigger, latestCtx, executeFn);
 
     // 4s after second event — still not fired
