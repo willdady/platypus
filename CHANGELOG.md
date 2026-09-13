@@ -1,5 +1,24 @@
 # Changelog
 
+## [3.6.0](https://github.com/willdady/platypus/compare/v3.5.0...v3.6.0) (2026-09-13)
+
+
+### Features
+
+* **backend:** authenticate SSR requests across subdomains ([4e06d14](https://github.com/willdady/platypus/commit/4e06d145a760fba15e429061694e65fdb4f9722c)), closes [#819](https://github.com/willdady/platypus/issues/819)
+* **backend:** loop breaker for trigger runs ([#826](https://github.com/willdady/platypus/issues/826)) ([3680cb2](https://github.com/willdady/platypus/commit/3680cb296bd040dbaba7eef4dbdec67f2d559ba5))
+* give Kanban cards a capped history ([#825](https://github.com/willdady/platypus/issues/825)) ([a0f32cd](https://github.com/willdady/platypus/commit/a0f32cdb4de8f2a88a371b11aac97ec2270dd324))
+
+
+### Bug Fixes
+
+* **backend:** create the kanban_card_history table in a migration ([#831](https://github.com/willdady/platypus/issues/831)) ([de1e47b](https://github.com/willdady/platypus/commit/de1e47b9eba20cc1de7cf76b91bdb35e1d72ab86))
+* **backend:** report an unsupported auth topology without refusing to start ([#832](https://github.com/willdady/platypus/issues/832)) ([466061d](https://github.com/willdady/platypus/commit/466061dd1e0e40a3fe82fdd4053730ff0b12a39f))
+* **backend:** validate widgets on the dashboard read path ([df755c2](https://github.com/willdady/platypus/commit/df755c22a265df0ac48d6603572579cfaa28e2e3))
+* **frontend:** only open a dropdown menu on a deliberate touch tap ([#823](https://github.com/willdady/platypus/issues/823)) ([3fc664f](https://github.com/willdady/platypus/commit/3fc664f8cb9ef1757bad9f620e20244033660082))
+* **frontend:** resolve the chat model selection before the first paint ([#822](https://github.com/willdady/platypus/issues/822)) ([335f551](https://github.com/willdady/platypus/commit/335f5516425e9aeb86fe4f601cf188ee0e666c81))
+* keep Kanban Card history accurate and out of the way ([#828](https://github.com/willdady/platypus/issues/828)) ([e49e3b2](https://github.com/willdady/platypus/commit/e49e3b2a90624ea5db57a6beebf4b4f5c5d525f4))
+
 ## [3.5.0](https://github.com/willdady/platypus/compare/v3.4.0...v3.5.0) (2026-09-07)
 
 
