@@ -240,7 +240,7 @@ A Sub-Agent writes against its own model's output ceiling, the same one that cut
 a Chat reply short. Hit it and the delegated answer breaks off wherever it got
 to. That is not treated as a failure: the fragment comes back as the delegate's
 result, the parent Agent is told in the same breath that the answer is partial,
-and expanding the Sub-Agent's card in the Chat shows a muted line under the
+and expanding the Sub-Agent's row in the Chat shows a muted line under the
 response reading **Sub-Agent response cut short at the model's output limit.**
 
 <Callout type="warning">
@@ -253,7 +253,7 @@ response reading **Sub-Agent response cut short at the model's output limit.**
 A delegation can also stop early for the other reason: the Sub-Agent ran out of
 _steps_ rather than room to write. Its **Max steps** is its own, the same way its
 output ceiling is, and reaching it stops the delegation with work outstanding.
-The card then shows a muted line under the response reading **Sub-Agent response
+The row then shows a muted line under the response reading **Sub-Agent response
 cut short at the step limit.**, and the parent Agent is told in the same breath
 that what came back is not a finished answer — so it reports a partial result
 rather than presenting it as the finding.

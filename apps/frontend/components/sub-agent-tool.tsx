@@ -1,32 +1,17 @@
 "use client";
 
-import {
-  CheckCircleIcon,
-  ChevronDownIcon,
-  CircleIcon,
-  ClockIcon,
-  BotIcon,
-  XCircleIcon,
-} from "lucide-react";
 import type { ToolUIPart } from "ai";
-import { Badge } from "@/components/ui/badge";
 import { ActivityRow, type ActivityRowEntry } from "./activity-row";
 import { TurnNotice } from "./turn-notice";
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/components/ui/collapsible";
-import { cn } from "@/lib/utils";
 import {
   Message,
   MessageContent,
   MessageResponse,
 } from "./ai-elements/message";
 import { Shimmer } from "./ai-elements/shimmer";
-import { ToolDuration } from "./tool-duration";
+import { Tool, ToolContent, ToolHeader } from "./ai-elements/tool";
 import { toolCallDurationMs } from "@/lib/tool-duration";
-import { useMemo, type ReactNode } from "react";
+import { useMemo } from "react";
 
 type SubAgentActivityEntry = {
   type: "tool-call" | "thinking" | "generating" | "failed";
@@ -45,7 +30,7 @@ type SubAgentActivity = {
 /**
  * What the person reading a delegated run is told when the Sub-Agent stopped at
  * its model's output ceiling rather than because it had finished. The Chat
- * counterpart of the marker a cut-short reply carries, one level down: the card
+ * counterpart of the marker a cut-short reply carries, one level down: the row
  * shows the delegate's answer verbatim, so an unmarked fragment reads as a
  * finished finding. A constant so tests assert the wording without restating it.
  */
@@ -66,35 +51,6 @@ const isSubAgentActivity = (output: unknown): output is SubAgentActivity =>
   "entries" in output &&
   Array.isArray((output as SubAgentActivity).entries);
 
-const getStatusBadge = (status: ToolUIPart["state"]) => {
-  const labels: Record<ToolUIPart["state"], string> = {
-    "input-streaming": "Pending",
-    "input-available": "Running",
-    "output-available": "Completed",
-    "output-error": "Error",
-    "approval-requested": "Approval Requested",
-    "approval-responded": "Approval Responded",
-    "output-denied": "Denied",
-  };
-
-  const icons: Record<ToolUIPart["state"], ReactNode> = {
-    "input-streaming": <CircleIcon className="size-4" />,
-    "input-available": <ClockIcon className="size-4 animate-pulse" />,
-    "output-available": <CheckCircleIcon className="size-4 text-green-600" />,
-    "output-error": <XCircleIcon className="size-4 text-red-600" />,
-    "approval-requested": <ClockIcon className="size-4" />,
-    "approval-responded": <CheckCircleIcon className="size-4" />,
-    "output-denied": <XCircleIcon className="size-4 text-red-600" />,
-  };
-
-  return (
-    <Badge className="gap-1.5 rounded-full text-xs" variant="secondary">
-      {icons[status]}
-      {labels[status]}
-    </Badge>
-  );
-};
-
 /**
  * Extracts the sub-agent name from a pre-dispatcher tool name.
  * e.g., "delegateToDadJokeBot" -> "Dad Joke Bot"
@@ -113,7 +69,7 @@ const extractSubAgentName = (toolName: string): string => {
 };
 
 /**
- * Whose name to put on the card.
+ * Whose name to put on the row.
  *
  * A new-shape part names its target in the tool's own input, because one tool
  * serves every sub-agent — there is nothing in `tool-delegate` to un-mangle.
@@ -184,7 +140,7 @@ const compactEntries = (
  * delegation, absent when it finished on its own.
  */
 const ResponseBlock = ({ text, notice }: { text: string; notice?: string }) => (
-  <div className="space-y-2 border-t p-4">
+  <div className="space-y-2">
     <h4 className="font-medium text-muted-foreground text-xs uppercase tracking-wide">
       Response
     </h4>
@@ -254,31 +210,26 @@ export const SubAgentTool = ({
         ? "input-available"
         : toolPart.state;
 
+  // The shared shell draws the row; `type` picks the Sub-Agent icon, and
+  // `title` names the delegate rather than the tool. Its open state is the
+  // shell's own, so the nested transcript below can hold its own disclosures
+  // without any of them turning this chevron.
   return (
-    <Collapsible className="not-prose mb-4 w-full rounded-md border group/subagent">
-      <CollapsibleTrigger className="flex w-full items-center justify-between gap-4 p-3">
-        <div className="flex items-center gap-2">
-          <BotIcon className="size-4 text-muted-foreground" />
-          <span className="font-medium text-sm">{subAgentName}</span>
-          <ToolDuration
-            durationMs={toolCallDurationMs(
-              toolPart.toolMetadata,
-              messageMetadata,
-              toolPart.toolCallId,
-            )}
-          />
-          {getStatusBadge(effectiveState)}
-        </div>
-        <ChevronDownIcon className="size-4 text-muted-foreground transition-transform group-data-[state=open]/subagent:rotate-180" />
-      </CollapsibleTrigger>
-
-      <CollapsibleContent
-        className={cn(
-          "data-[state=closed]:fade-out-0 data-[state=closed]:slide-out-to-top-2 data-[state=open]:slide-in-from-top-2 text-popover-foreground outline-none data-[state=closed]:animate-out data-[state=open]:animate-in",
+    <Tool>
+      <ToolHeader
+        type="tool-delegate"
+        title={subAgentName}
+        state={effectiveState}
+        durationMs={toolCallDurationMs(
+          toolPart.toolMetadata,
+          messageMetadata,
+          toolPart.toolCallId,
         )}
-      >
+      />
+
+      <ToolContent>
         {/* Task input */}
-        <div className="space-y-2 border-t p-4">
+        <div className="space-y-2">
           <h4 className="font-medium text-muted-foreground text-xs uppercase tracking-wide">
             Task
           </h4>
@@ -289,7 +240,7 @@ export const SubAgentTool = ({
 
         {/* Activity log, error, working indicator, or response */}
         {errorText ? (
-          <div className="space-y-2 border-t p-4">
+          <div className="space-y-2">
             <h4 className="font-medium text-muted-foreground text-xs uppercase tracking-wide">
               Error
             </h4>
@@ -299,7 +250,7 @@ export const SubAgentTool = ({
           </div>
         ) : activity && activity.entries.length > 0 ? (
           <>
-            <div className="space-y-1 border-t px-4 py-3">
+            <div className="space-y-1">
               <h4 className="font-medium text-muted-foreground text-xs uppercase tracking-wide mb-1">
                 Activity
               </h4>
@@ -312,13 +263,11 @@ export const SubAgentTool = ({
             ) : null}
           </>
         ) : !isComplete ? (
-          <div className="border-t p-4">
-            <Shimmer className="text-sm">Working...</Shimmer>
-          </div>
+          <Shimmer className="text-sm">Working...</Shimmer>
         ) : responseText ? (
           <ResponseBlock text={responseText} notice={cutShortNotice} />
         ) : null}
-      </CollapsibleContent>
-    </Collapsible>
+      </ToolContent>
+    </Tool>
   );
 };

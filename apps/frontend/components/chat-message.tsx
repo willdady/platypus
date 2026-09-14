@@ -27,7 +27,6 @@ import {
   ToolInput,
   ToolOutput,
 } from "./ai-elements/tool";
-import { DynamicToolHeader } from "./dynamic-tool-header";
 import {
   DynamicToolUIPart,
   FileUIPart,
@@ -68,7 +67,7 @@ export const CUT_SHORT_NOTICE =
 /**
  * The same thing for the other limit: the turn's tool-calling loop ran out of
  * steps while the model was still working, so the reply is whatever it had
- * produced by then — often nothing after the last tool card. States the fact and
+ * produced by then — often nothing after the last tool row. States the fact and
  * stops: the ceiling is raisable on an Agent turn and not on a direct one, so a
  * remedy sentence would be wrong for half the turns that see this.
  */
@@ -312,8 +311,12 @@ export const ChatMessage = memo(function ChatMessage({
         const toolPart = part as DynamicToolUIPart;
         return (
           <Tool key={`${message.id}-${i}`}>
-            <DynamicToolHeader
+            {/* An MCP tool's name is its identity — namespace and all — so it
+            is shown verbatim rather than humanised (issue #691 is why it has
+            to truncate). */}
+            <ToolHeader
               state={toolPart.state}
+              type={toolPart.type}
               title={toolPart.toolName}
               durationMs={toolCallDurationMs(
                 toolPart.toolMetadata,
