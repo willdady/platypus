@@ -5,7 +5,7 @@ import type {
   KanbanCardHistoryChange,
   KanbanCardHistoryRef,
   KanbanCardPriority,
-  WebhookEvent,
+  WebhookEventPayload,
 } from "@platypus/schemas";
 import { KANBAN_CARD_HISTORY_LIMIT } from "@platypus/schemas";
 import { db } from "../index.ts";
@@ -135,8 +135,8 @@ const lastEditedBy = (actor: KanbanActor) =>
  * volunteered here — whether this write re-fires an Event Trigger is decided by
  * the chain of Agents the run established, not by this helper.
  */
-const dispatch = (ctx: KanbanContext, event: WebhookEvent, data: unknown) =>
-  dispatchEvent(ctx.orgId, ctx.workspaceId, event, data);
+const dispatch = (ctx: KanbanContext, payload: WebhookEventPayload) =>
+  dispatchEvent(ctx.orgId, ctx.workspaceId, payload);
 
 /**
  * The card attributes a value-diff considers. Bookkeeping columns
@@ -206,9 +206,15 @@ const dispatchCardWrite = (
   changedFields: string[],
 ) => {
   if (previousColumnId !== row.columnId) {
-    dispatch(ctx, "card.moved", { ...row, boardId, previousColumnId });
+    dispatch(ctx, {
+      event: "card.moved",
+      data: { ...row, boardId, previousColumnId },
+    });
   }
-  dispatch(ctx, "card.updated", { ...row, boardId, changedFields });
+  dispatch(ctx, {
+    event: "card.updated",
+    data: { ...row, boardId, changedFields },
+  });
 };
 
 // --- Card history ---
@@ -937,7 +943,10 @@ export const createCard = async (
     return row;
   });
 
-  dispatch(ctx, "card.created", { ...card, boardId: column.boardId });
+  dispatch(ctx, {
+    event: "card.created",
+    data: { ...card, boardId: column.boardId },
+  });
   return { card, boardId: column.boardId };
 };
 
@@ -990,10 +999,13 @@ export const updateCard = async (
     return row;
   });
 
-  dispatch(ctx, "card.updated", {
-    ...record,
-    boardId: card.boardId,
-    changedFields: changedCardFields(previous, record),
+  dispatch(ctx, {
+    event: "card.updated",
+    data: {
+      ...record,
+      boardId: card.boardId,
+      changedFields: changedCardFields(previous, record),
+    },
   });
   return { card: record, boardId: card.boardId };
 };
@@ -1171,7 +1183,10 @@ export const copyCard = async (
     return rows[0];
   });
 
-  dispatch(ctx, "card.created", { ...record, boardId: source.boardId });
+  dispatch(ctx, {
+    event: "card.created",
+    data: { ...record, boardId: source.boardId },
+  });
   return { card: record, boardId: source.boardId };
 };
 
@@ -1183,10 +1198,13 @@ const removeCard = async (
 ): Promise<void> => {
   await database.delete(kanbanCardTable).where(eq(kanbanCardTable.id, card.id));
 
-  dispatch(ctx, "card.deleted", {
-    cardId: card.id,
-    boardId: card.boardId,
-    columnId: card.columnId,
+  dispatch(ctx, {
+    event: "card.deleted",
+    data: {
+      cardId: card.id,
+      boardId: card.boardId,
+      columnId: card.columnId,
+    },
   });
 };
 

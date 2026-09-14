@@ -1,3 +1,4 @@
+import { webhookEventChangedFields } from "@platypus/schemas";
 import { logger } from "../logger.ts";
 import type { EventContext } from "./trigger-execution.ts";
 import type { trigger as triggerTable } from "../db/schema.ts";
@@ -24,28 +25,27 @@ const DEBOUNCE_MS = 5_000;
  * sees every field changed across the coalesced window, not just the last
  * event's (see #622).
  */
-/** The `changedFields` an event's data carries, or `undefined` if it has none. */
-const changedFieldsOf = (eventData: unknown): string[] | undefined => {
-  const fields = (eventData as { changedFields?: unknown } | undefined)
-    ?.changedFields;
-  return Array.isArray(fields) && fields.every((f) => typeof f === "string")
-    ? fields
-    : undefined;
-};
-
 const mergedEventContext = (
   pending: EventContext | undefined,
   incoming: EventContext,
 ): EventContext => {
-  const pendingFields = changedFieldsOf(pending?.eventData);
-  const incomingFields = changedFieldsOf(incoming.eventData);
-  if (!pendingFields || !incomingFields) return incoming;
+  if (incoming.payload.event !== "card.updated") return incoming;
+  const pendingFields = pending && webhookEventChangedFields(pending.payload);
+  if (!pendingFields) return incoming;
 
   return {
     ...incoming,
-    eventData: {
-      ...(incoming.eventData as Record<string, unknown>),
-      changedFields: [...new Set([...pendingFields, ...incomingFields])],
+    payload: {
+      event: "card.updated",
+      data: {
+        ...incoming.payload.data,
+        changedFields: [
+          ...new Set([
+            ...pendingFields,
+            ...incoming.payload.data.changedFields,
+          ]),
+        ],
+      },
     },
   };
 };

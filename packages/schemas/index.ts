@@ -1848,7 +1848,10 @@ export const memoryDailySummarySchema = z.object({
 
 export type MemoryDailySummary = z.infer<typeof memoryDailySummarySchema>;
 
-// Webhook Event (defined here so trigger schemas can reference it)
+// Webhook Event (defined here so trigger schemas can reference it). Each
+// event's payload is declared beside the name in `webhookEventDataSchemas` at
+// the foot of this file, where the Card and Notification pieces it builds on
+// are already in scope.
 
 export const webhookEventSchema = z.enum([
   "notification.created",
@@ -2628,3 +2631,167 @@ export const dashboardUpdateSchema = z.object({
   desktopLayout: z.array(rglLayoutItemSchema).optional(),
   mobileLayout: z.array(rglLayoutItemSchema).optional(),
 });
+
+// --- Webhook event payloads --------------------------------------------------
+
+/**
+ * What each **Webhook event** carries as its `data`.
+ *
+ * The name and the payload are one value ({@link WebhookEventPayload}), so a
+ * producer cannot pair `card.deleted` with a Notification's shape and the
+ * dispatcher does not have to guess where the entity id is (#811, #840).
+ *
+ * Declared here rather than beside {@link webhookEventSchema} only because the
+ * Card and Notification pieces these build on are defined further down the
+ * file. The enum points here.
+ *
+ * The record-carrying events spread the stored row whole, so their schemas are
+ * loose: a row that gains a column keeps parsing, and what an external
+ * subscriber receives on the wire is unchanged. These describe the value handed
+ * to `dispatchEvent`, not the delivered body — a delivery is that value
+ * JSON-encoded, so a `z.date()` here reaches a subscriber as an ISO string. What is pinned is the part the
+ * dispatcher, the Trigger filters and the docs all read — the entity id, the
+ * Board and Column, and `card.updated`'s `changedFields`.
+ *
+ * The Card record is spelled out rather than derived from
+ * {@link kanbanCardSchema}, which describes the Card an API response carries:
+ * the row a dispatch spreads holds `dueDate` and the timestamps as `Date`s, and
+ * none of the read-side fields the board view joins on (`createdByName`,
+ * `resolvedAssignees`, `commentCount`).
+ */
+const webhookCardRecordShape = {
+  id: z.string(),
+  boardId: z.string(),
+  columnId: z.string(),
+  title: z.string(),
+  body: z.string().nullable(),
+  labelIds: z.array(z.string()),
+  assignees: z.array(kanbanCardAssigneeSchema),
+  dueDate: z.date().nullable(),
+  priority: kanbanCardPrioritySchema,
+  position: z.number(),
+  createdByUserId: z.string().nullable(),
+  createdByAgentId: z.string().nullable(),
+  lastEditedByUserId: z.string().nullable(),
+  lastEditedByAgentId: z.string().nullable(),
+  createdAt: z.date(),
+  updatedAt: z.date(),
+};
+
+const webhookNotificationRecordShape = {
+  id: z.string(),
+  workspaceId: z.string(),
+  agentId: z.string(),
+  title: z.string().nullable(),
+  body: z.string(),
+  createdAt: z.date(),
+  updatedAt: z.date(),
+};
+
+/**
+ * Every event's payload, keyed by event name. The `satisfies` is the whole
+ * enforcement: an event added to {@link webhookEventSchema} without a payload
+ * here fails to compile, and a payload for an event that does not exist fails
+ * the same way.
+ */
+export const webhookEventDataSchemas = {
+  "notification.created": z.looseObject(webhookNotificationRecordShape),
+  "notification.updated": z.looseObject(webhookNotificationRecordShape),
+  /**
+   * Two legitimate shapes: marking one Notification read names it, while
+   * "mark all as read" names the set it covered in a single event rather than
+   * one event per Notification.
+   */
+  "notification.read": z.union([
+    z.object({ notificationId: z.string(), userId: z.string() }),
+    z.object({
+      notificationIds: z.array(z.string()),
+      userId: z.string(),
+      bulk: z.literal(true),
+    }),
+  ]),
+  /** The id and nothing else — a dismissal has nobody to attribute it to. */
+  "notification.dismissed": z.object({ notificationId: z.string() }),
+  "card.created": z.looseObject(webhookCardRecordShape),
+  "card.updated": z.looseObject({
+    ...webhookCardRecordShape,
+    changedFields: z.array(z.string()),
+  }),
+  "card.moved": z.looseObject({
+    ...webhookCardRecordShape,
+    previousColumnId: z.string(),
+  }),
+  "card.deleted": z.object({
+    cardId: z.string(),
+    boardId: z.string(),
+    columnId: z.string(),
+  }),
+} satisfies Record<WebhookEvent, z.ZodType>;
+
+/** The `data` the named event carries. */
+export type WebhookEventData<E extends WebhookEvent = WebhookEvent> = z.infer<
+  (typeof webhookEventDataSchemas)[E]
+>;
+
+/** An event and its payload — the value `dispatchEvent` takes. */
+export type WebhookEventPayload = {
+  [E in WebhookEvent]: { event: E; data: WebhookEventData<E> };
+}[WebhookEvent];
+
+/**
+ * What an event names: one entity, or a set of them. The debounce bucket and
+ * the run-rate breaker both key off this, so an event naming a set says so in
+ * its type rather than by failing a chain of probes for keys it never had
+ * (#811).
+ */
+export type WebhookEventEntity =
+  { kind: "entity"; id: string } | { kind: "set" };
+
+/** The entity an event names. The one place that knows where the id lives. */
+export const webhookEventEntity = (
+  payload: WebhookEventPayload,
+): WebhookEventEntity => {
+  switch (payload.event) {
+    case "notification.created":
+    case "notification.updated":
+    case "card.created":
+    case "card.updated":
+    case "card.moved":
+      return { kind: "entity", id: payload.data.id };
+    case "notification.dismissed":
+      return { kind: "entity", id: payload.data.notificationId };
+    case "notification.read":
+      // `bulk` is the flag the two shapes are told apart by — the same one the
+      // Webhooks page tells an integrator to branch on.
+      return "bulk" in payload.data
+        ? { kind: "set" }
+        : { kind: "entity", id: payload.data.notificationId };
+    case "card.deleted":
+      return { kind: "entity", id: payload.data.cardId };
+  }
+};
+
+/**
+ * The value-diff an event reports, where it reports one. Only `card.updated`
+ * declares `changedFields`; every other event answers `undefined` rather than
+ * each reader deciding for itself what carries a diff.
+ */
+export const webhookEventChangedFields = (
+  payload: WebhookEventPayload,
+): string[] | undefined =>
+  payload.event === "card.updated" ? payload.data.changedFields : undefined;
+
+/** The Board and Column an event names, where it names them. */
+export const webhookEventScope = (
+  payload: WebhookEventPayload,
+): { boardId?: string; columnId?: string } => {
+  switch (payload.event) {
+    case "card.created":
+    case "card.updated":
+    case "card.moved":
+    case "card.deleted":
+      return { boardId: payload.data.boardId, columnId: payload.data.columnId };
+    default:
+      return {};
+  }
+};

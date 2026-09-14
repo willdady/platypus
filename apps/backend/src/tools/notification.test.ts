@@ -48,12 +48,10 @@ describe("createNotificationTools", () => {
           ctx,
         ),
       ).toEqual(record);
-      expect(dispatchEvent).toHaveBeenCalledWith(
-        orgId,
-        workspaceId,
-        "notification.created",
-        record,
-      );
+      expect(dispatchEvent).toHaveBeenCalledWith(orgId, workspaceId, {
+        event: "notification.created",
+        data: record,
+      });
     });
   });
 
@@ -105,12 +103,10 @@ describe("createNotificationTools", () => {
           ctx,
         ),
       ).toEqual(updated);
-      expect(dispatchEvent).toHaveBeenCalledWith(
-        orgId,
-        workspaceId,
-        "notification.updated",
-        updated,
-      );
+      expect(dispatchEvent).toHaveBeenCalledWith(orgId, workspaceId, {
+        event: "notification.updated",
+        data: updated,
+      });
     });
   });
 
@@ -132,12 +128,10 @@ describe("createNotificationTools", () => {
       expect(
         await tools.deleteNotification.execute!({ notificationId: "n1" }, ctx),
       ).toEqual({ success: true });
-      expect(dispatchEvent).toHaveBeenCalledWith(
-        orgId,
-        workspaceId,
-        "notification.dismissed",
-        { notificationId: "n1" },
-      );
+      expect(dispatchEvent).toHaveBeenCalledWith(orgId, workspaceId, {
+        event: "notification.dismissed",
+        data: { notificationId: "n1" },
+      });
     });
   });
 });

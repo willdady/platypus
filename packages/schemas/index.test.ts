@@ -1,5 +1,10 @@
 import { describe, it, expect } from "vitest";
 import {
+  webhookEventSchema,
+  webhookEventDataSchemas,
+  webhookEventChangedFields,
+  webhookEventEntity,
+  webhookEventScope,
   organizationSchema,
   organizationUpdateSchema,
   workspaceSchema,
@@ -1447,5 +1452,114 @@ describe("nextTurnOccupancy", () => {
     // undefined so the meter hides rather than showing a confident 0.
     expect(nextTurnOccupancy(null)).toBeUndefined();
     expect(nextTurnOccupancy(undefined)).toBeUndefined();
+  });
+});
+
+describe("webhook event payloads", () => {
+  const card = {
+    id: "c1",
+    boardId: "board-1",
+    columnId: "col-1",
+    title: "Review onboarding flow",
+    body: null,
+    labelIds: [],
+    assignees: [],
+    dueDate: null,
+    priority: "none" as const,
+    position: 1024,
+    createdByUserId: "u1",
+    createdByAgentId: null,
+    lastEditedByUserId: null,
+    lastEditedByAgentId: null,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  };
+
+  it("declares a payload for every event in the enum", () => {
+    expect(Object.keys(webhookEventDataSchemas).sort()).toEqual(
+      [...webhookEventSchema.options].sort(),
+    );
+  });
+
+  it("names the entity of a row-spreading event by its id", () => {
+    expect(
+      webhookEventEntity({
+        event: "card.updated",
+        data: { ...card, changedFields: ["body"] },
+      }),
+    ).toEqual({
+      kind: "entity",
+      id: "c1",
+    });
+  });
+
+  it("names the entity of an event that carries ids alone", () => {
+    // These are the shapes the old probe chain recovered by guessing at keys.
+    expect(
+      webhookEventEntity({
+        event: "card.deleted",
+        data: { cardId: "c1", boardId: "board-1", columnId: "col-1" },
+      }),
+    ).toEqual({ kind: "entity", id: "c1" });
+    expect(
+      webhookEventEntity({
+        event: "notification.dismissed",
+        data: { notificationId: "n-1" },
+      }),
+    ).toEqual({ kind: "entity", id: "n-1" });
+  });
+
+  it("tells the two notification.read shapes apart", () => {
+    // The bulk form names a set, so it says so rather than failing a probe and
+    // falling into the shared debounce bucket by accident (#811).
+    expect(
+      webhookEventEntity({
+        event: "notification.read",
+        data: { notificationId: "n-1", userId: "u-1" },
+      }),
+    ).toEqual({ kind: "entity", id: "n-1" });
+    expect(
+      webhookEventEntity({
+        event: "notification.read",
+        data: { notificationIds: ["n-1", "n-2"], userId: "u-1", bulk: true },
+      }),
+    ).toEqual({ kind: "set" });
+  });
+
+  it("reports a changed-fields diff only for the event that declares one", () => {
+    expect(
+      webhookEventChangedFields({
+        event: "card.updated",
+        data: { ...card, changedFields: ["body"] },
+      }),
+    ).toEqual(["body"]);
+    expect(
+      webhookEventChangedFields({ event: "card.created", data: card }),
+    ).toBeUndefined();
+  });
+
+  it("reports the board and column only for the events that name one", () => {
+    expect(
+      webhookEventScope({
+        event: "card.deleted",
+        data: { cardId: "c1", boardId: "board-1", columnId: "col-1" },
+      }),
+    ).toEqual({ boardId: "board-1", columnId: "col-1" });
+    expect(
+      webhookEventScope({
+        event: "notification.dismissed",
+        data: { notificationId: "n-1" },
+      }),
+    ).toEqual({});
+  });
+
+  it("keeps the card payload parsing when the stored row gains a column", () => {
+    // The wire contract is the row spread whole; a new column must not make a
+    // delivery invalid.
+    const parsed = webhookEventDataSchemas["card.created"].parse({
+      ...card,
+      somethingNew: "x",
+    });
+    expect(parsed).toMatchObject({ id: "c1", somethingNew: "x" });
   });
 });

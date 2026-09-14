@@ -17,7 +17,11 @@ import {
   currentCausingAgents,
   currentOriginatingTrigger,
 } from "../event-causation.ts";
-import type { WebhookEvent, EventTriggerConfig } from "@platypus/schemas";
+import type {
+  EventTriggerConfig,
+  WebhookEventPayload,
+} from "@platypus/schemas";
+import { webhookEventEntity, webhookEventScope } from "@platypus/schemas";
 
 /**
  * The debounce bucket an event with no single entity falls back to. Bulk
@@ -26,25 +30,12 @@ import type { WebhookEvent, EventTriggerConfig } from "@platypus/schemas";
  */
 const SHARED_BUCKET = "unknown";
 
-/** The entity id an event's data carries under `key`, or `undefined`. */
-const entityIdOf = (
-  eventData: unknown,
-  key: "id" | "cardId" | "notificationId",
-): string | number | undefined => {
-  const value = (eventData as Record<string, unknown> | null | undefined)?.[
-    key
-  ];
-  return typeof value === "string" || typeof value === "number"
-    ? value
-    : undefined;
-};
-
 export function dispatchEvent(
   orgId: string,
   workspaceId: string,
-  event: WebhookEvent,
-  data: unknown,
+  payload: WebhookEventPayload,
 ): void {
+  const { event, data } = payload;
   // Causation is ambient run context (ADR-0022): the chain of Agents acting
   // when the write happened, read once here so the fire-and-forget body below
   // keeps a stable view of it. A human write establishes no chain, so it reads
@@ -84,6 +75,14 @@ export function dispatchEvent(
       "Event trigger dispatch decision",
     );
   };
+
+  // What this event names, read once through the accessor that lives beside
+  // the payload declaration rather than recovered from the data here.
+  const entity = webhookEventEntity(payload);
+  const scope = webhookEventScope(payload);
+  // What the run-rate breaker counts by. Absent for an event naming a set:
+  // counting those together would trip a Trigger after N unrelated changes.
+  const breakerEntityId = entity.kind === "entity" ? entity.id : undefined;
 
   // Fire-and-forget — never awaited by the caller
   void (async () => {
@@ -140,26 +139,29 @@ export function dispatchEvent(
         // nothing, which is what lets a reader tell a filter mismatch from a
         // suppressed dispatch. Both paths skip the Trigger either way, so the
         // order is a logging distinction only.
-        if (triggerConfig.filters?.boardId) {
-          const eventData = data as Record<string, unknown>;
-          if (eventData.boardId !== triggerConfig.filters.boardId) continue;
+        if (
+          triggerConfig.filters?.boardId &&
+          scope.boardId !== triggerConfig.filters.boardId
+        ) {
+          continue;
         }
-        if (triggerConfig.filters?.columnId) {
-          const eventData = data as Record<string, unknown>;
-          if (eventData.columnId !== triggerConfig.filters.columnId) continue;
+        if (
+          triggerConfig.filters?.columnId &&
+          scope.columnId !== triggerConfig.filters.columnId
+        ) {
+          continue;
         }
         // Only `card.updated` reports a changed-fields diff, so the filter is
         // scoped to it: a `card.moved`/`card.created`/`card.deleted` selected
         // alongside it keeps firing rather than being silently suppressed.
-        if (event === "card.updated" && triggerConfig.filters?.changedFields) {
-          const eventData = data as Record<string, unknown>;
-          const changedFields = eventData.changedFields;
+        if (
+          payload.event === "card.updated" &&
+          triggerConfig.filters?.changedFields
+        ) {
           const filterFields = triggerConfig.filters.changedFields;
           if (
-            !Array.isArray(changedFields) ||
-            !changedFields.some(
-              (field): boolean =>
-                typeof field === "string" && filterFields.includes(field),
+            !payload.data.changedFields.some((field): boolean =>
+              filterFields.includes(field),
             )
           ) {
             continue;
@@ -176,29 +178,19 @@ export function dispatchEvent(
           continue;
         }
 
-        // Debounce per trigger+entity to coalesce rapid events. Only the
-        // row-spreading events (`card.created`/`updated`/`moved`,
-        // `notification.created`/`updated`) carry a top-level `id`; the rest
-        // name their entity under an event-specific key, and reading `id`
-        // alone dropped all of them into SHARED_BUCKET per trigger, so two
-        // unrelated entities coalesced into a single run (#811). A new event
-        // naming its id under some further key would regress the same way —
-        // the chain below is structural, not enforced per event.
-        const namedEntityId =
-          entityIdOf(data, "id") ??
-          entityIdOf(data, "cardId") ??
-          entityIdOf(data, "notificationId");
-        const debounceKey = `${trigger.id}:${namedEntityId ?? SHARED_BUCKET}`;
-        // What the run-rate breaker counts by. Absent for the shared bucket:
-        // those events name a set rather than one entity, so counting them
-        // together would trip a Trigger after N unrelated changes.
-        const breakerEntityId =
-          namedEntityId === undefined ? undefined : String(namedEntityId);
+        // Debounce per trigger+entity to coalesce rapid events. An event that
+        // names a set rather than one entity — bulk `notification.read` — has
+        // no id to key by and shares one bucket per Trigger, which is correct
+        // for it and was a regression for everything else while the id was
+        // recovered by probing for keys the payload might carry (#811).
+        const debounceKey = `${trigger.id}:${
+          entity.kind === "entity" ? entity.id : SHARED_BUCKET
+        }`;
 
         const coalesced = debounceTriggerExecution(
           debounceKey,
           trigger,
-          { eventType: event, eventData: data, entityId: breakerEntityId },
+          { payload, entityId: breakerEntityId },
           async (t, ctx) => {
             try {
               // The breaker is checked when the run would start, not when the
@@ -213,8 +205,8 @@ export function dispatchEvent(
                   triggerId: t.id,
                   maxRunsToKeep: t.maxRunsToKeep,
                   entityId: ctx.entityId,
-                  eventType: ctx.eventType,
-                  eventData: ctx.eventData,
+                  eventType: ctx.payload.event,
+                  eventData: ctx.payload.data,
                 });
                 logDecision(t, "suppressed");
                 return;
