@@ -67,7 +67,7 @@ export const CUT_SHORT_NOTICE =
 /**
  * The same thing for the other limit: the turn's tool-calling loop ran out of
  * steps while the model was still working, so the reply is whatever it had
- * produced by then — often nothing after the last tool card. States the fact and
+ * produced by then — often nothing after the last tool row. States the fact and
  * stops: the ceiling is raisable on an Agent turn and not on a direct one, so a
  * remedy sentence would be wrong for half the turns that see this.
  */

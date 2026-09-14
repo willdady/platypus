@@ -182,13 +182,13 @@ const FindBody = ({
   );
 
 /**
- * The Web tool block: one card for a native provider search, a Web-search
+ * The Web tool block: one row for a native provider search, a Web-search
  * backend's search or page read, and the web-fetch Tool set's `fetchUrl`
  * (issue #525) — a reader cannot tell which of them ran.
  *
  * Deliberately not the generic tool renderer: a native search's citations
  * already render as `source-url` pills, a plugin search's as Sources pills,
- * and a page read has content that belongs in this card's summary, not
+ * and a page read has content that belongs in this row's body, not
  * dumped whole into the Transcript body.
  */
 export const WebToolCard = ({

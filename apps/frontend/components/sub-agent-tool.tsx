@@ -30,7 +30,7 @@ type SubAgentActivity = {
 /**
  * What the person reading a delegated run is told when the Sub-Agent stopped at
  * its model's output ceiling rather than because it had finished. The Chat
- * counterpart of the marker a cut-short reply carries, one level down: the card
+ * counterpart of the marker a cut-short reply carries, one level down: the row
  * shows the delegate's answer verbatim, so an unmarked fragment reads as a
  * finished finding. A constant so tests assert the wording without restating it.
  */
@@ -69,7 +69,7 @@ const extractSubAgentName = (toolName: string): string => {
 };
 
 /**
- * Whose name to put on the card.
+ * Whose name to put on the row.
  *
  * A new-shape part names its target in the tool's own input, because one tool
  * serves every sub-agent — there is nothing in `tool-delegate` to un-mangle.

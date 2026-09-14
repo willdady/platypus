@@ -192,13 +192,6 @@ export function getToolIcon(type: string): LucideIcon {
   return WrenchIcon;
 }
 
-/**
- * The Chat's tool disclosure shell (issue #834): the same borderless, muted
- * row Thinking draws, holding one tool call. Unlike `Reasoning` it never opens
- * or closes itself — a tool call is an execution record, so the reader's click
- * is the only thing that expands it — and it keeps its own open state so a
- * chevron answers to its row alone, however deep a Sub-Agent nests them.
- */
 type ToolContextValue = { isOpen: boolean };
 
 const ToolContext = createContext<ToolContextValue | null>(null);
@@ -220,6 +213,13 @@ export const toolRowClassName =
 
 export type ToolProps = ComponentProps<typeof Collapsible>;
 
+/**
+ * The Chat's tool disclosure shell (issue #834): the same borderless, muted
+ * row Thinking draws, holding one tool call. Unlike `Reasoning` it never opens
+ * or closes itself — a tool call is an execution record, so the reader's click
+ * is the only thing that expands it — and it keeps its own open state so a
+ * chevron answers to its row alone, however deep a Sub-Agent nests them.
+ */
 export const Tool = ({
   className,
   open,
