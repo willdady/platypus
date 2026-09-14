@@ -19,6 +19,12 @@ import { isValidStorageKey } from "./keys.ts";
  * the resolved value — a key, or bytes — and parses no URL of its own; four
  * readers with four ideas of which forms exist is what made a `.txt` go
  * `[file unavailable]` from turn 2 on wherever `STORAGE_PUBLIC_URL` was set.
+ *
+ * Two readings of the served forms are offered, and the difference is the
+ * point: resolving bytes accepts only what this deployment itself served
+ * ({@link resolvableStorageKeyFromUrl}), while cleanup accepts anything that
+ * looks like one of its keys ({@link claimedStorageKeyFromUrl}) so a changed
+ * origin can't orphan files.
  */
 
 /** Scheme identifying the canonical stored form. */
@@ -45,8 +51,7 @@ export const canonicalStorageKeyFromUrl = (url: string): string | undefined =>
     : undefined;
 
 /** Whether `url` is inline content rather than a reference to a stored object. */
-export const isDataUrl = (url: string): boolean =>
-  url.startsWith(DATA_URL_SCHEME);
+const isDataUrl = (url: string): boolean => url.startsWith(DATA_URL_SCHEME);
 
 /**
  * Whether `url` is one the model can neither fetch nor read bytes from: a
@@ -74,59 +79,77 @@ export const servedUrlForKey = (key: string, baseUrl: string): string => {
 };
 
 /**
- * Slice the key out of whichever form `url` carries, without judging it.
- * Returns undefined for inline content and for a URL that names no stored
- * object.
+ * The key `url` carries if it is one THIS deployment served — the public base
+ * when one is configured, or this request's own `/files/` route. Anchoring
+ * matters here: an unanchored match would let a client hand back
+ * `https://anywhere.example.com/x/files/<key>` and have the backend read that
+ * key out of its own store, so a URL naming someone else's host is left alone
+ * as the external URL it claims to be.
  */
-const rawStorageKeyFromUrl = (url: string): string | undefined => {
-  if (url.startsWith(STORAGE_URL_SCHEME)) {
-    return url.slice(STORAGE_URL_SCHEME.length);
-  }
-
-  // A data: URL is inline content, not a stored reference.
-  if (isDataUrl(url)) {
-    return undefined;
-  }
-
+const servedStorageKey = (
+  url: string,
+  origin: string | undefined,
+): string | undefined => {
   const publicUrl = publicBaseUrl();
   if (publicUrl && url.startsWith(`${publicUrl}/`)) {
     return url.slice(publicUrl.length + 1);
   }
 
-  // The `/files/` match is deliberately loose about the origin in front of it:
-  // a deployment whose origin has changed still has rows carrying the old one,
-  // and failing to recognise those would orphan their files forever.
-  const markerIndex = url.lastIndexOf(FILES_ROUTE_PREFIX);
-  if (markerIndex !== -1) {
-    return url.slice(markerIndex + FILES_ROUTE_PREFIX.length);
+  const filesPrefix = origin ? `${origin}${FILES_ROUTE_PREFIX}` : undefined;
+  if (filesPrefix && url.startsWith(filesPrefix)) {
+    return url.slice(filesPrefix.length);
   }
 
   return undefined;
 };
 
 /**
- * The storage key `url` refers to, or undefined when it refers to none.
+ * The key to read bytes back for, paired with whether it is one Platypus could
+ * have stored — the inverse of {@link servedUrlForKey}. Returns undefined for
+ * inline content and for a URL this deployment never served.
  *
- * The URL came back from the client, so the key in it is untrusted. A key
- * Platypus could never have generated names nothing it stored, so callers treat
- * it the same as a URL that carried no key at all. Validity is not ownership:
- * a caller that deletes or serves must still check the key is its own.
+ * The URL came back from the client, so the key in it is untrusted; the
+ * validity flag is separate because a caller that refuses a key wants to say
+ * so, which it can't do if a refused key and no key at all look alike. Validity
+ * is not ownership.
  */
-export const storageKeyFromUrl = (url: string): string | undefined => {
-  const key = rawStorageKeyFromUrl(url);
-  return key !== undefined && isValidStorageKey(key) ? key : undefined;
+export const resolvableStorageKeyFromUrl = (
+  url: string,
+  origin?: string,
+): { key: string; valid: boolean } | undefined => {
+  if (isDataUrl(url)) {
+    return undefined;
+  }
+
+  const key = canonicalStorageKeyFromUrl(url) ?? servedStorageKey(url, origin);
+  return key === undefined ? undefined : { key, valid: isValidStorageKey(key) };
 };
 
 /**
- * The key `url` refers to, paired with whether it is one Platypus could have
- * stored. Callers that want to say something about a rejected key — a log line,
- * a placeholder part — need to tell "no key here" from "a key we refuse".
+ * Every key a message's URLs could name, for cleanup — deliberately looser than
+ * {@link resolvableStorageKeyFromUrl}: the `/files/` match ignores the origin in
+ * front of it, because a deployment whose origin has changed still has rows
+ * carrying the old one and failing to recognise those would orphan their files
+ * forever.
+ *
+ * The cost of that tolerance is that these keys are only what the client
+ * claimed. They name candidates, not property — a caller that deletes must
+ * filter them by the Chat they belong to.
  */
-export const storageKeyCandidateFromUrl = (
-  url: string,
-): { key: string; valid: boolean } | undefined => {
-  const key = rawStorageKeyFromUrl(url);
-  return key === undefined ? undefined : { key, valid: isValidStorageKey(key) };
+export const claimedStorageKeyFromUrl = (url: string): string | undefined => {
+  if (isDataUrl(url)) {
+    return undefined;
+  }
+
+  const markerIndex = url.lastIndexOf(FILES_ROUTE_PREFIX);
+  const key =
+    canonicalStorageKeyFromUrl(url) ??
+    servedStorageKey(url, undefined) ??
+    (markerIndex === -1
+      ? undefined
+      : url.slice(markerIndex + FILES_ROUTE_PREFIX.length));
+
+  return key !== undefined && isValidStorageKey(key) ? key : undefined;
 };
 
 /**

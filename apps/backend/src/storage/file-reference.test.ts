@@ -1,12 +1,11 @@
 import { describe, it, expect, afterEach } from "vitest";
 import {
   canonicalStorageKeyFromUrl,
+  claimedStorageKeyFromUrl,
   decodeDataUrl,
-  isDataUrl,
   isUnresolvedReference,
+  resolvableStorageKeyFromUrl,
   servedUrlForKey,
-  storageKeyCandidateFromUrl,
-  storageKeyFromUrl,
   storageReferenceUrl,
 } from "./file-reference.ts";
 
@@ -39,58 +38,99 @@ describe("file reference", () => {
     });
   });
 
-  describe("storageKeyFromUrl", () => {
+  describe("resolvableStorageKeyFromUrl", () => {
+    const origin = "http://localhost:4000";
+
     it("reads the canonical form", () => {
-      expect(storageKeyFromUrl(storageReferenceUrl(KEY))).toBe(KEY);
+      expect(
+        resolvableStorageKeyFromUrl(storageReferenceUrl(KEY), origin),
+      ).toEqual({ key: KEY, valid: true });
     });
 
-    it("reads the /files/ form", () => {
-      expect(storageKeyFromUrl(`http://localhost:4000/files/${KEY}`)).toBe(KEY);
+    it("reads this deployment's own /files/ form", () => {
+      expect(
+        resolvableStorageKeyFromUrl(`${origin}/files/${KEY}`, origin),
+      ).toEqual({ key: KEY, valid: true });
     });
 
     // Issue #839: the form a client replays on a deployment with a CDN.
     it("reads the public form", () => {
       process.env.STORAGE_PUBLIC_URL = "https://cdn.example.com";
-      expect(storageKeyFromUrl(`https://cdn.example.com/${KEY}`)).toBe(KEY);
+      expect(
+        resolvableStorageKeyFromUrl(`https://cdn.example.com/${KEY}`, origin),
+      ).toEqual({ key: KEY, valid: true });
     });
 
     /**
-     * The `/files/` match stays loose about the origin in front of it: rows
-     * written before a deployment's origin changed still resolve, and dropping
-     * that tolerance would orphan their files forever.
+     * A client can put any URL on a part. A `/files/` path under somebody
+     * else's host names nothing this deployment served, so it stays the
+     * external URL it claims to be rather than becoming a read of our own
+     * store.
      */
-    it("reads the /files/ form under an origin this deployment no longer has", () => {
+    it("ignores a /files/ URL under a host this deployment does not serve", () => {
       expect(
-        storageKeyFromUrl(`https://old-host.example.com/files/${KEY}`),
+        resolvableStorageKeyFromUrl(
+          `https://attacker.example.com/x/files/${KEY}`,
+          origin,
+        ),
+      ).toBeUndefined();
+    });
+
+    it("returns undefined for inline content and external URLs", () => {
+      expect(
+        resolvableStorageKeyFromUrl("data:text/plain;base64,aGk=", origin),
+      ).toBeUndefined();
+      expect(
+        resolvableStorageKeyFromUrl("https://example.com/report.pdf", origin),
+      ).toBeUndefined();
+    });
+
+    it("separates 'no key here' from 'a key we refuse'", () => {
+      expect(
+        resolvableStorageKeyFromUrl(`${origin}/files/../secret`, origin),
+      ).toEqual({ key: "../secret", valid: false });
+    });
+  });
+
+  describe("claimedStorageKeyFromUrl", () => {
+    it("reads the canonical form", () => {
+      expect(claimedStorageKeyFromUrl(storageReferenceUrl(KEY))).toBe(KEY);
+    });
+
+    it("reads the public form", () => {
+      process.env.STORAGE_PUBLIC_URL = "https://cdn.example.com";
+      expect(claimedStorageKeyFromUrl(`https://cdn.example.com/${KEY}`)).toBe(
+        KEY,
+      );
+    });
+
+    /**
+     * Cleanup's `/files/` match stays loose about the origin in front of it:
+     * rows written before a deployment's origin changed must still be
+     * recognised, or their files are orphaned forever. The keys name
+     * candidates, not property — `deleteFiles` filters them by Chat.
+     */
+    it("reads a /files/ URL under an origin this deployment no longer has", () => {
+      expect(
+        claimedStorageKeyFromUrl(`https://old-host.example.com/files/${KEY}`),
       ).toBe(KEY);
     });
 
     it("returns undefined for inline content and external URLs", () => {
-      expect(storageKeyFromUrl("data:text/plain;base64,aGk=")).toBeUndefined();
       expect(
-        storageKeyFromUrl("https://example.com/report.pdf"),
+        claimedStorageKeyFromUrl("data:text/plain;base64,aGk="),
+      ).toBeUndefined();
+      expect(
+        claimedStorageKeyFromUrl("https://example.com/report.pdf"),
       ).toBeUndefined();
     });
 
     it("returns undefined for a key Platypus could not have stored", () => {
       expect(
-        storageKeyFromUrl("http://localhost:4000/files/../../etc/passwd"),
+        claimedStorageKeyFromUrl(
+          "http://localhost:4000/files/../../etc/passwd",
+        ),
       ).toBeUndefined();
-    });
-  });
-
-  describe("storageKeyCandidateFromUrl", () => {
-    it("separates 'no key here' from 'a key we refuse'", () => {
-      expect(
-        storageKeyCandidateFromUrl("https://example.com/report.pdf"),
-      ).toBeUndefined();
-      expect(
-        storageKeyCandidateFromUrl("http://localhost:4000/files/../secret"),
-      ).toEqual({ key: "../secret", valid: false });
-      expect(storageKeyCandidateFromUrl(storageReferenceUrl(KEY))).toEqual({
-        key: KEY,
-        valid: true,
-      });
     });
   });
 
@@ -143,13 +183,6 @@ describe("file reference", () => {
       expect(decodeDataUrl("")).toBeNull();
       expect(decodeDataUrl(storageReferenceUrl(KEY))).toBeNull();
       expect(decodeDataUrl("https://example.com/x.png")).toBeNull();
-    });
-  });
-
-  describe("isDataUrl", () => {
-    it("recognises inline content", () => {
-      expect(isDataUrl("data:text/plain;base64,aGk=")).toBe(true);
-      expect(isDataUrl(storageReferenceUrl(KEY))).toBe(false);
     });
   });
 });

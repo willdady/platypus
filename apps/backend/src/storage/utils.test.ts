@@ -6,7 +6,7 @@ import {
   deleteFiles,
   inlineFileUrls,
 } from "./utils.ts";
-import { storageReferenceUrl } from "./file-reference.ts";
+import { canonicalStorageKeyFromUrl } from "./file-reference.ts";
 import type { PlatypusUIMessage } from "../types.ts";
 import type { FileUIPart } from "ai";
 import { resetStorage } from "./index.ts";
@@ -89,9 +89,7 @@ describe("Storage Utils", () => {
       expect((filePart as FileUIPart).url).toMatch(/^storage:\/\//);
 
       // Verify the key format
-      const key = (filePart as FileUIPart).url.slice(
-        storageReferenceUrl("").length,
-      );
+      const key = canonicalStorageKeyFromUrl((filePart as FileUIPart).url);
       expect(key).toMatch(/^org-1\/ws-1\/chat-1\/msg-1\/1-[a-f0-9]{8}\.png$/);
     });
 
@@ -124,7 +122,7 @@ describe("Storage Utils", () => {
 
         const url = (result.parts[1] as FileUIPart).url;
         expect(url).toMatch(/^storage:\/\//);
-        const key = url.slice(storageReferenceUrl("").length);
+        const key = canonicalStorageKeyFromUrl(url)!;
         expect(key).toMatch(keyPattern);
         expect(await fs.readFile(path.join(tempDir, key), "utf8")).toBe(
           content,
@@ -575,7 +573,7 @@ describe("Storage Utils", () => {
       const storedMessages = await extractFiles(messages, context);
 
       // Now inline the storage:// URLs back to data URLs
-      const inlined = await inlineFileUrls(storedMessages);
+      const inlined = await inlineFileUrls(storedMessages, backendOrigin);
 
       const filePart = inlined[0].parts[1];
       expect((filePart as FileUIPart).url).toMatch(/^data:image\/png;base64,/);
@@ -600,7 +598,7 @@ describe("Storage Utils", () => {
       const httpMessages = rewriteStorageUrls(storedMessages, backendOrigin);
 
       // Now inline them back
-      const inlined = await inlineFileUrls(httpMessages);
+      const inlined = await inlineFileUrls(httpMessages, backendOrigin);
 
       const filePart = inlined[0].parts[1];
       expect((filePart as FileUIPart).url).toMatch(/^data:image\/png;base64,/);
@@ -612,7 +610,7 @@ describe("Storage Utils", () => {
         createMessageWithFile("msg-1", dataUrl),
       ];
 
-      const inlined = await inlineFileUrls(messages);
+      const inlined = await inlineFileUrls(messages, backendOrigin);
 
       const filePart = inlined[0].parts[1];
       expect((filePart as FileUIPart).url).toBe(dataUrl);
@@ -624,7 +622,7 @@ describe("Storage Utils", () => {
         createMessageWithFile("msg-1", externalUrl),
       ];
 
-      const inlined = await inlineFileUrls(messages);
+      const inlined = await inlineFileUrls(messages, backendOrigin);
 
       const filePart = inlined[0].parts[1];
       expect((filePart as FileUIPart).url).toBe(externalUrl);
@@ -635,7 +633,7 @@ describe("Storage Utils", () => {
         { id: "msg-1", role: "user", parts: [] },
       ];
 
-      const inlined = await inlineFileUrls(messages);
+      const inlined = await inlineFileUrls(messages, backendOrigin);
       expect(inlined).toHaveLength(1);
       expect(inlined[0].parts).toHaveLength(0);
     });
@@ -650,7 +648,7 @@ describe("Storage Utils", () => {
         },
       ];
 
-      const inlined = await inlineFileUrls(messages);
+      const inlined = await inlineFileUrls(messages, backendOrigin);
 
       const filePart = inlined[0].parts[0];
       expect((filePart as FileUIPart).url).toBe(storageUrl);
@@ -676,7 +674,7 @@ describe("Storage Utils", () => {
         },
       ];
 
-      const inlined = await inlineFileUrls(messages);
+      const inlined = await inlineFileUrls(messages, backendOrigin);
 
       const filePart = inlined[0].parts[0] as FileUIPart;
       expect(filePart.url).toBe(traversalUrl);
@@ -700,9 +698,46 @@ describe("Storage Utils", () => {
         },
       ];
 
-      const inlined = await inlineFileUrls(messages);
+      const inlined = await inlineFileUrls(messages, backendOrigin);
 
       expect((inlined[0].parts[0] as FileUIPart).url).toBe(traversalUrl);
+    });
+
+    // A client can put any URL on a part, so a `/files/` path under a host this
+    // deployment does not serve names nothing it stored. It stays the external
+    // URL it claims to be rather than becoming a read of our own store.
+    it("should not inline a /files/ URL under a foreign host", async () => {
+      const messages: PlatypusUIMessage[] = [
+        {
+          id: "msg-1",
+          role: "user",
+          parts: [
+            { type: "file", url: createPngDataUrl(), mediaType: "image/png" },
+          ],
+        },
+      ];
+      const stored = await extractFiles(messages, {
+        orgId: "org-1",
+        workspaceId: "ws-1",
+        chatId: "chat-1",
+      });
+      const key = canonicalStorageKeyFromUrl(
+        (stored[0].parts[0] as FileUIPart).url,
+      )!;
+      const foreignUrl = `https://attacker.example.com/x/files/${key}`;
+
+      const inlined = await inlineFileUrls(
+        [
+          {
+            id: "msg-2",
+            role: "user",
+            parts: [{ type: "file", url: foreignUrl, mediaType: "image/png" }],
+          },
+        ],
+        backendOrigin,
+      );
+
+      expect((inlined[0].parts[0] as FileUIPart).url).toBe(foreignUrl);
     });
   });
 

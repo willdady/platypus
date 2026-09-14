@@ -710,7 +710,7 @@ export const prepareChatTurn = async (
       resolvedModelId,
     );
     const inlinedMessages = await normalizeFileParts(
-      origin ? await inlineFileUrls(messages) : messages,
+      origin ? await inlineFileUrls(messages, origin) : messages,
       passthroughFileTypes,
       {
         maxExtractedTextChars: maxExtractedTextCharsForModel(

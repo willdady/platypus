@@ -84,7 +84,7 @@ describe("attachment pipeline (gate → store → inline → normalize)", () => 
       /^storage:\/\//,
     );
     // 3. A later turn replays history: inline, then normalize for the model.
-    const inlined = await inlineFileUrls(stored);
+    const inlined = await inlineFileUrls(stored, origin);
     const [normalized] = await normalizeFileParts(inlined, ["image/*"]);
     return normalized;
   };
@@ -138,7 +138,7 @@ describe("attachment pipeline (gate → store → inline → normalize)", () => 
       const results: PlatypusUIMessage[] = [];
       for (let turn = 0; turn < turns; turn++) {
         // The client resubmits the history it was served, verbatim.
-        const inlined = await inlineFileUrls(served);
+        const inlined = await inlineFileUrls(served, origin);
         const [normalized] = await normalizeFileParts(inlined, ["image/*"]);
         results.push(normalized);
       }

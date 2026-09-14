@@ -12,10 +12,10 @@ import {
 } from "./keys.ts";
 import {
   canonicalStorageKeyFromUrl,
+  claimedStorageKeyFromUrl,
   decodeDataUrl,
+  resolvableStorageKeyFromUrl,
   servedUrlForKey,
-  storageKeyCandidateFromUrl,
-  storageKeyFromUrl,
   storageReferenceUrl,
 } from "./file-reference.ts";
 
@@ -259,7 +259,7 @@ export function extractStorageKeys(messages: PlatypusUIMessage[]): string[] {
         continue;
       }
 
-      const key = storageKeyFromUrl(part.url);
+      const key = claimedStorageKeyFromUrl(part.url);
       if (key) {
         keys.push(key);
       }
@@ -278,10 +278,13 @@ export function extractStorageKeys(messages: PlatypusUIMessage[]): string[] {
  * `streamText()` call. The DB continues to store canonical references.
  *
  * @param messages - Array of chat messages with parts
+ * @param backendOrigin - The origin of the backend server, whose `/files/` URLs
+ *   this deployment will resolve (e.g. http://localhost:4000)
  * @returns Modified messages with file URLs replaced by data: URLs
  */
 export async function inlineFileUrls(
   messages: PlatypusUIMessage[],
+  backendOrigin: string,
 ): Promise<PlatypusUIMessage[]> {
   const storage = getStorage();
 
@@ -303,10 +306,10 @@ export async function inlineFileUrls(
 
           const url = part.url;
 
-          // Every form a File part's URL can take, read back by the one parser
-          // that knows them (issue #839). Anything else — inline content, an
-          // external URL — carries no key and is left alone.
-          const candidate = storageKeyCandidateFromUrl(url);
+          // Every form this deployment can have served, read back by the one
+          // parser that knows them (issue #839). Anything else — inline
+          // content, a URL naming another host — is left alone.
+          const candidate = resolvableStorageKeyFromUrl(url, backendOrigin);
           if (!candidate) {
             return part;
           }
