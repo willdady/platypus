@@ -3,6 +3,7 @@ import { eq, and } from "drizzle-orm";
 import { requireAuth } from "../middleware/authentication.ts";
 import { isSuperAdmin } from "../middleware/authorization.ts";
 import { assertValidStorageKey } from "../storage/keys.ts";
+import { FILES_ROUTE_PREFIX } from "../storage/file-reference.ts";
 import {
   organizationMember,
   workspace as workspaceTable,
@@ -44,7 +45,7 @@ files.get("/*", requireAuth, async (c) => {
   const db = c.get("db");
 
   // Extract the storage key from the wildcard path
-  const key = c.req.path.slice("/files/".length);
+  const key = c.req.path.slice(FILES_ROUTE_PREFIX.length);
 
   if (!key) {
     return c.json({ error: "File key required" }, 400);

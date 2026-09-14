@@ -5,6 +5,10 @@ import {
   type ExtractedText,
   type ExtractionResult,
 } from "./file-extraction.ts";
+import {
+  decodeDataUrl,
+  isUnresolvedReference,
+} from "../storage/file-reference.ts";
 
 /**
  * The pre-persist validation gate and the send-time normalizer (issues #328,
@@ -141,9 +145,7 @@ export const assertFilePartsSupported = async (
       if (outcome !== "extract") continue;
 
       const url = typeof part.url === "string" ? part.url : "";
-      const bytes = url.startsWith("data:")
-        ? decodeDataUrl(url)?.bytes
-        : undefined;
+      const bytes = decodeDataUrl(url)?.bytes;
       if (!bytes) continue;
 
       const extracted = await extractDocumentText(bytes, part);
@@ -155,20 +157,6 @@ export const assertFilePartsSupported = async (
   if (rejections.length > 0) {
     throw new FileValidationError(rejections);
   }
-};
-
-/** Parse a base64 (or URL-encoded) `data:` URL into its media type and bytes. */
-const decodeDataUrl = (
-  url: string,
-): { mediaType: string; bytes: Uint8Array } | null => {
-  const match = url.match(/^data:([^;,]*)(;base64)?,([\s\S]*)$/);
-  if (!match) return null;
-  const mediaType = match[1] || "application/octet-stream";
-  const body = match[3];
-  const bytes = match[2]
-    ? new Uint8Array(Buffer.from(body, "base64"))
-    : new Uint8Array(Buffer.from(decodeURIComponent(body), "utf8"));
-  return { mediaType, bytes };
 };
 
 /**
@@ -254,7 +242,8 @@ const omittedFilePlaceholder = (
  * Extraction only fires on the non-native branch — a model that lists PDF in its
  * `passthroughFileTypes` still receives the real PDF, never a downgrade.
  *
- * A `storage://` URL (or a missing one) that reaches here never got inlined —
+ * An unresolved storage reference (or a missing URL) that reaches here never
+ * got inlined —
  * a storage miss, or a headless turn with no origin to inline against. The
  * model can't fetch it, so forwarding it raw would hard-fail conversion and
  * re-brick the chat on every history replay (issue #328); it is announced as
@@ -274,11 +263,11 @@ export const normalizeFileParts = async (
           if (!isFilePart(part)) return part;
 
           const url = typeof part.url === "string" ? part.url : "";
-          const decoded = url.startsWith("data:") ? decodeDataUrl(url) : null;
-          const bytes = decoded?.bytes;
-          // An internal storage URL that survived inlining is unreachable by
-          // the model; a missing URL likewise has nothing to send.
-          const unfetchable = url === "" || url.startsWith("storage://");
+          const bytes = decodeDataUrl(url)?.bytes;
+          // An internal storage reference that survived resolution is
+          // unreachable by the model; a missing URL likewise has nothing to
+          // send. Both verdicts come from the module that owns the reference.
+          const unfetchable = isUnresolvedReference(url);
 
           const outcome = classifyFilePart(part, passthroughFileTypes, bytes);
 

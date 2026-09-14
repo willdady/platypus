@@ -5,8 +5,8 @@ import {
   extractStorageKeys,
   deleteFiles,
   inlineFileUrls,
-  STORAGE_URL_PREFIX,
 } from "./utils.ts";
+import { storageReferenceUrl } from "./file-reference.ts";
 import type { PlatypusUIMessage } from "../types.ts";
 import type { FileUIPart } from "ai";
 import { resetStorage } from "./index.ts";
@@ -89,9 +89,48 @@ describe("Storage Utils", () => {
       expect((filePart as FileUIPart).url).toMatch(/^storage:\/\//);
 
       // Verify the key format
-      const key = (filePart as FileUIPart).url.slice(STORAGE_URL_PREFIX.length);
+      const key = (filePart as FileUIPart).url.slice(
+        storageReferenceUrl("").length,
+      );
       expect(key).toMatch(/^org-1\/ws-1\/chat-1\/msg-1\/1-[a-f0-9]{8}\.png$/);
     });
+
+    /**
+     * The gate and persistence read data URLs with one parser (issue #839).
+     * Each of these shapes was admitted by the gate and refused by the second,
+     * stricter parser, leaving base64 inline in the stored row.
+     */
+    it.each([
+      [
+        "a URL-encoded body",
+        "data:text/plain,hello%20world",
+        /\.txt$/,
+        "hello world",
+      ],
+      ["an omitted media type", "data:;base64,aGVsbG8=", /\.bin$/, "hello"],
+      [
+        "a body split across lines",
+        "data:text/plain;base64,aGVs\nbG8=",
+        /\.txt$/,
+        "hello",
+      ],
+    ])(
+      "should persist a data URL carrying %s",
+      async (_label, dataUrl, keyPattern, content) => {
+        const [result] = await extractFiles(
+          [createMessageWithFile("msg-1", dataUrl)],
+          { orgId: "org-1", workspaceId: "ws-1", chatId: "chat-1" },
+        );
+
+        const url = (result.parts[1] as FileUIPart).url;
+        expect(url).toMatch(/^storage:\/\//);
+        const key = url.slice(storageReferenceUrl("").length);
+        expect(key).toMatch(keyPattern);
+        expect(await fs.readFile(path.join(tempDir, key), "utf8")).toBe(
+          content,
+        );
+      },
+    );
 
     it("should leave non-data URLs unchanged", async () => {
       const httpUrl = "https://example.com/image.png";

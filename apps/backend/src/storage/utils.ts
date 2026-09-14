@@ -8,14 +8,16 @@ import {
   assertValidStorageKey,
   chatStorageKeyPrefix,
   isKeyUnderChat,
-  isValidStorageKey,
   type ChatKeyScope,
 } from "./keys.ts";
-
-/**
- * Storage URL prefix used to identify storage references.
- */
-export const STORAGE_URL_PREFIX = "storage://";
+import {
+  canonicalStorageKeyFromUrl,
+  decodeDataUrl,
+  servedUrlForKey,
+  storageKeyCandidateFromUrl,
+  storageKeyFromUrl,
+  storageReferenceUrl,
+} from "./file-reference.ts";
 
 /**
  * The media types a File part may be stored under, each mapped to the
@@ -104,35 +106,14 @@ function hashContent(data: Buffer): string {
 }
 
 /**
- * Parse a data URL and extract its components.
- * Returns null if not a valid data URL.
- */
-function parseDataUrl(
-  url: string,
-): { mimeType: string; base64Data: string } | null {
-  const match = url.match(/^data:([^;,]+)(;base64)?,(.+)$/);
-  if (!match) {
-    return null;
-  }
-
-  const [, mimeType, , base64Data] = match;
-  if (!match[2]) {
-    // Not base64 encoded - we don't support URL-encoded data
-    return null;
-  }
-
-  return { mimeType, base64Data };
-}
-
-/**
- * Extract files from messages, store them via the storage backend,
- * and replace data URLs with storage:// URLs.
+ * Extract files from messages, store them via the storage backend, and replace
+ * inline data URLs with canonical storage references.
  *
  * On storage failure, leaves the data URL as-is and logs the error.
  *
  * @param messages - Array of chat messages with parts
  * @param context - Context for generating storage keys (org, workspace, chat IDs)
- * @returns Modified messages with data URLs replaced by storage:// URLs
+ * @returns Modified messages with data URLs replaced by storage references
  */
 export async function extractFiles(
   messages: PlatypusUIMessage[],
@@ -157,21 +138,16 @@ export async function extractFiles(
             return part;
           }
 
-          const url = part.url;
-          if (!url.startsWith("data:")) {
-            return part;
-          }
-
-          const parsed = parseDataUrl(url);
+          const parsed = decodeDataUrl(part.url);
           if (!parsed) {
             return part;
           }
 
           try {
-            const { mimeType, base64Data } = parsed;
-            const buffer = Buffer.from(base64Data, "base64");
+            const { mediaType, bytes } = parsed;
+            const buffer = Buffer.from(bytes);
             const contentHash = hashContent(buffer);
-            const extension = extensionForMediaType(mimeType);
+            const extension = extensionForMediaType(mediaType);
             const key = generateStorageKey(
               { ...context, messageId: message.id },
               partIndex,
@@ -179,12 +155,12 @@ export async function extractFiles(
               extension,
             );
 
-            await storage.put(key, buffer, mimeType);
+            await storage.put(key, buffer, mediaType);
 
-            // Replace the data URL with storage:// URL
+            // Replace the data URL with a canonical storage reference
             return {
               ...part,
-              url: `${STORAGE_URL_PREFIX}${key}`,
+              url: storageReferenceUrl(key),
             };
           } catch (error) {
             logger.error(
@@ -207,22 +183,17 @@ export async function extractFiles(
 }
 
 /**
- * Rewrite storage:// URLs to HTTP URLs for serving.
- *
- * If STORAGE_PUBLIC_URL is set, URLs are rewritten to that base.
- * Otherwise, URLs are rewritten to the /files/{key} endpoint.
+ * Rewrite canonical storage references to the URL a reader is served
+ * ({@link servedUrlForKey}).
  *
  * @param messages - Array of chat messages with parts
  * @param baseUrl - The base URL of the backend server
- * @returns Modified messages with storage:// URLs replaced by HTTP URLs
+ * @returns Modified messages with storage references replaced by served URLs
  */
 export function rewriteStorageUrls(
   messages: PlatypusUIMessage[],
   baseUrl: string,
 ): PlatypusUIMessage[] {
-  const publicUrl = process.env.STORAGE_PUBLIC_URL;
-  const filesBaseUrl = publicUrl || `${baseUrl}/files`;
-
   return messages.map((message) => {
     if (!message.parts || !Array.isArray(message.parts)) {
       return message;
@@ -237,15 +208,16 @@ export function rewriteStorageUrls(
         return part;
       }
 
-      const url = part.url;
-      if (!url.startsWith(STORAGE_URL_PREFIX)) {
+      // Only the canonical form is rewritten: a part already carrying a served
+      // URL came back from the client and is left as it is.
+      const key = canonicalStorageKeyFromUrl(part.url);
+      if (key === undefined) {
         return part;
       }
 
-      const key = url.slice(STORAGE_URL_PREFIX.length);
       return {
         ...part,
-        url: `${filesBaseUrl}/${key}`,
+        url: servedUrlForKey(key, baseUrl),
       };
     });
 
@@ -260,20 +232,12 @@ export function rewriteStorageUrls(
  * Extract all storage keys from messages.
  * Useful for cleanup operations (e.g., when deleting a chat).
  *
- * Because a Chat resubmits its full history every turn, and the read path
- * rewrites `storage://` URLs to HTTP URLs, stored rows carry either form:
- * - `storage://<key>` (the canonical form)
- * - `<filesBase>/<key>` (the HTTP form the client returns on later turns, via
- *   `rewriteStorageUrls`)
+ * Every form a stored row can carry is recognised — `file-reference.ts` lists
+ * them — so cleanup never orphans a file.
  *
- * Both forms must be recognised so cleanup never orphans a file. The HTTP match
- * is deliberately looser than `inlineFileUrls`, which anchors on the request's
- * own origin: a deployment whose origin has changed still has rows carrying the
- * old one, and failing to recognise those would leak files forever.
- *
- * The cost of that tolerance is that the key here is only what the client
- * claimed. These keys therefore name candidates, not property — a caller that
- * deletes must filter them with `isKeyUnderChat`, as {@link deleteFiles} does.
+ * The keys are only what the client claimed: they name candidates, not
+ * property. A caller that deletes must filter them with `isKeyUnderChat`, as
+ * {@link deleteFiles} does.
  *
  * @param messages - Array of chat messages
  * @returns Array of storage keys found in the messages
@@ -306,62 +270,12 @@ export function extractStorageKeys(messages: PlatypusUIMessage[]): string[] {
 }
 
 /**
- * Extract the storage key from a file part URL, accepting both stored forms:
- * `storage://<key>`, or the HTTP form `<filesBase>/<key>` that
- * `rewriteStorageUrls` produces. Returns undefined when the URL is neither.
- */
-function storageKeyFromUrl(url: string): string | undefined {
-  const key = rawStorageKeyFromUrl(url);
-
-  // The URL came back from the client, so the key in it is untrusted. A key
-  // Platypus never generated names nothing it stored, so callers treat it the
-  // same as a URL that carried no key at all.
-  if (key === undefined || !isValidStorageKey(key)) {
-    return undefined;
-  }
-
-  return key;
-}
-
-/**
- * Slice the key out of each URL form `rewriteStorageUrls` can produce, without
- * judging it. Split out so {@link storageKeyFromUrl} has one place to validate.
- */
-function rawStorageKeyFromUrl(url: string): string | undefined {
-  if (url.startsWith(STORAGE_URL_PREFIX)) {
-    return url.slice(STORAGE_URL_PREFIX.length);
-  }
-
-  // A data: URL is inline content, not a stored reference.
-  if (url.startsWith("data:")) {
-    return undefined;
-  }
-
-  // When STORAGE_PUBLIC_URL is set, `rewriteStorageUrls` writes
-  // `{publicUrl}/{key}` (no `/files/` segment).
-  const publicUrl = process.env.STORAGE_PUBLIC_URL;
-  const normalizedPublicUrl = publicUrl?.replace(/\/+$/, "");
-  if (normalizedPublicUrl && url.startsWith(`${normalizedPublicUrl}/`)) {
-    return url.slice(normalizedPublicUrl.length + 1);
-  }
-
-  // Default rewrite form: `<baseUrl>/files/<key>`.
-  const filesMarker = "/files/";
-  const markerIndex = url.lastIndexOf(filesMarker);
-  if (markerIndex !== -1) {
-    return url.slice(markerIndex + filesMarker.length);
-  }
-
-  return undefined;
-}
-
-/**
- * Replace HTTP file URLs and storage:// URLs with inline data: URLs
- * so that `convertToModelMessages()` can access file content without
- * making HTTP requests (which would fail without session cookies).
+ * Resolve every stored File-part reference back to inline `data:` bytes so that
+ * `convertToModelMessages()` can access file content without making HTTP
+ * requests (which would fail without session cookies).
  *
  * This is an ephemeral transformation — only used in-memory for the
- * `streamText()` call. The DB continues to store storage:// URLs.
+ * `streamText()` call. The DB continues to store canonical references.
  *
  * @param messages - Array of chat messages with parts
  * @returns Modified messages with file URLs replaced by data: URLs
@@ -389,11 +303,11 @@ export async function inlineFileUrls(
 
           const url = part.url;
 
-          // Every form `rewriteStorageUrls` can have served, read back by the
-          // one parser (issue #839). Anything else — a data: URL, an external
-          // one — carries no key and is left alone.
-          const key = rawStorageKeyFromUrl(url);
-          if (key === undefined) {
+          // Every form a File part's URL can take, read back by the one parser
+          // that knows them (issue #839). Anything else — inline content, an
+          // external URL — carries no key and is left alone.
+          const candidate = storageKeyCandidateFromUrl(url);
+          if (!candidate) {
             return part;
           }
 
@@ -401,13 +315,15 @@ export async function inlineFileUrls(
           // traversal key here would otherwise read a host file and inline it
           // into the System prompt. `normalizeFileParts` announces the part as
           // unavailable, exactly as it does for a storage miss.
-          if (!isValidStorageKey(key)) {
+          if (!candidate.valid) {
             logger.warn(
-              { key },
+              { key: candidate.key },
               "Rejected invalid storage key during inlining",
             );
             return part;
           }
+
+          const key = candidate.key;
 
           try {
             const result = await storage.get(key);
