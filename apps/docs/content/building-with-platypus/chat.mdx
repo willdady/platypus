@@ -68,12 +68,12 @@ Where the Provider uses a backend rather than the vendor's own search, turning
 **Search** on may also hand the model a page reader for that turn — see [what a
 backend grants](/concepts/providers#web-search).
 
-A search or a page read renders the same way whichever ran: a compact card
-naming the query or the page, a result count where one is knowable, and an
-error line where it failed — never a raw dump of what the vendor or backend
-actually returned. The **Web Fetch** Tool set's page reads render on the same
-card. A count isn't always shown; some Providers don't report one for their own
-search, and the card says nothing there rather than guessing.
+A search or a page read renders the same way whichever ran: a compact Tool row
+naming the query or the page, and beneath it once opened a result count where
+one is knowable, and an error line where it failed — never a raw dump of what
+the vendor or backend actually returned. The **Web Fetch** Tool set's page reads
+render on the same row. A count isn't always shown; some Providers don't report
+one for their own search, and the row says nothing there rather than guessing.
 
 Occasionally a turn gets no search even though you asked for it: the Provider
 names a backend your Operator has since removed, or the backend fails to start.
@@ -131,10 +131,13 @@ going quiet.
 
 ## How long a Tool took
 
-When a reply uses a Tool, the Tool appears in the conversation as a collapsible
-card. Its header shows the Tool's name, a status — **Pending**, **Running**,
-**Completed**, **Error** — and how long the Tool took: `<1ms`, `842ms`, `1.2s`,
-or `1m 03s` past a minute.
+When a reply uses a Tool, the Tool appears in the conversation as a collapsed
+row, drawn the same way as the model's Thinking. The row shows the Tool's name,
+a status — **Pending**, **Running**, **Completed**, **Error** — and how long the
+Tool took: `<1ms`, `842ms`, `1.2s`, or `1m 03s` past a minute. Click the row to
+read the Tool's parameters and result; it stays collapsed until you do, even
+while the Tool is still running. A long name is cut short on a narrow screen —
+hover over it for the whole name.
 
 The time is the Tool's own work, measured on the server, so it appears the
 moment the Tool finishes rather than counting up while it runs. It is stored
@@ -145,17 +148,17 @@ Read it against the reply as a whole: most Tools land in single milliseconds, so
 a turn that felt slow and shows nothing above `1.2s` spent its time in the
 model, not the Tools.
 
-A Sub-Agent card carries a time too, covering the whole delegated run — every
+A Sub-Agent row carries a time too, covering the whole delegated run — every
 step that Sub-Agent took, not just the handover. It is usually the largest
 number on the page and the first one to look at on a slow turn.
 
 <Callout type="warning">
-  **A card with no time is not a Tool that took no time.** A Tool that really
+  **A row with no time is not a Tool that took no time.** A Tool that really
   was instant reads `<1ms`; a blank means there is no measurement at all. Three
-  cards are blank by nature: a search the Provider ran inside its own service,
-  the **Loading skill** card, which draws its own header, and Chats from before
+  rows are blank by nature: a search the Provider ran inside its own service,
+  the **Loading skill** row, which has nothing to open, and Chats from before
   your deployment was upgraded. A blank never means "still running" — the status
-  badge is what tells you that.
+  is what tells you that.
 </Callout>
 
 ## Where a reply's time and tokens went
@@ -233,7 +236,7 @@ that uses tools works in steps: each tool the model calls, and each reply it
 writes after getting the result back, is one step. A turn only gets so many of
 them, and reaching that number stops the turn wherever it had got to.
 
-The reply then ends without an answer — often with a tool card and nothing after
+The reply then ends without an answer — often with a Tool row and nothing after
 it. A muted line appears under the message reading **Response cut short at the
 step limit.** Like the marker above, it is stored with the message and is still
 there when you reload the Chat.

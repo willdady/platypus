@@ -232,7 +232,7 @@ export const WebToolCard = ({
         cleared={cleared}
       />
       <ToolContent>
-        <div className="space-y-2 p-4 text-sm">
+        <div className="space-y-2 text-sm">
           {errorText ? (
             <p className="text-destructive text-xs">{errorText}</p>
           ) : result.kind === "search" ? (

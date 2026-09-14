@@ -39,8 +39,14 @@ import {
   XCircleIcon,
   type LucideIcon,
 } from "lucide-react";
+import { useControllableState } from "@radix-ui/react-use-controllable-state";
 import type { ComponentProps, ReactNode } from "react";
-import { createElement, isValidElement } from "react";
+import {
+  createContext,
+  createElement,
+  isValidElement,
+  useContext,
+} from "react";
 import { CodeBlock } from "./code-block";
 import { ToolDuration } from "../tool-duration";
 
@@ -146,6 +152,9 @@ const toolIcons: Record<string, LucideIcon> = {
   // reader.
   web_search: GlobeIcon,
   read_url: GlobeIcon,
+  // Delegation to a Sub-Agent: one tool serving every delegate, drawn with
+  // the same bot the Sub-Agent's own activity rows use.
+  delegate: BotIcon,
   shellExec: TerminalIcon,
   fsRead: FileIcon,
   fsWrite: FilePlusIcon,
@@ -183,20 +192,68 @@ export function getToolIcon(type: string): LucideIcon {
   return WrenchIcon;
 }
 
+/**
+ * The Chat's tool disclosure shell (issue #834): the same borderless, muted
+ * row Thinking draws, holding one tool call. Unlike `Reasoning` it never opens
+ * or closes itself — a tool call is an execution record, so the reader's click
+ * is the only thing that expands it — and it keeps its own open state so a
+ * chevron answers to its row alone, however deep a Sub-Agent nests them.
+ */
+type ToolContextValue = { isOpen: boolean };
+
+const ToolContext = createContext<ToolContextValue | null>(null);
+
+const useTool = () => {
+  const context = useContext(ToolContext);
+  if (!context) {
+    throw new Error("Tool components must be used within Tool");
+  }
+  return context;
+};
+
+/**
+ * The row every tool call — collapsible or not — is drawn with, shared with
+ * `LoadSkillTool` so its one-shot status line sits flush with its neighbours.
+ */
+export const toolRowClassName =
+  "flex w-full min-w-0 items-center gap-2 text-left text-muted-foreground text-sm";
+
 export type ToolProps = ComponentProps<typeof Collapsible>;
 
-export const Tool = ({ className, ...props }: ToolProps) => (
-  <Collapsible
-    className={cn("not-prose mb-4 w-full rounded-md border group", className)}
-    {...props}
-  />
-);
+export const Tool = ({
+  className,
+  open,
+  defaultOpen = false,
+  onOpenChange,
+  children,
+  ...props
+}: ToolProps) => {
+  const [isOpen, setIsOpen] = useControllableState({
+    prop: open,
+    defaultProp: defaultOpen,
+    onChange: onOpenChange,
+  });
+
+  return (
+    <ToolContext.Provider value={{ isOpen }}>
+      <Collapsible
+        className={cn("not-prose mb-4 w-full min-w-0", className)}
+        open={isOpen}
+        onOpenChange={setIsOpen}
+        {...props}
+      >
+        {children}
+      </Collapsible>
+    </ToolContext.Provider>
+  );
+};
 
 export type ToolHeaderProps = {
   title?: string;
   /** Optional human-readable label shown after the tool name (e.g. card title, agent name). */
   label?: string;
-  type: ToolUIPart["type"];
+  /** The part's `type`: `tool-<name>`, or `dynamic-tool` for an MCP call. */
+  type: ToolUIPart["type"] | "dynamic-tool";
   state: ToolUIPart["state"];
   /** Recorded execution time, once the run has been persisted. */
   durationMs?: number;
@@ -209,7 +266,11 @@ export type ToolHeaderProps = {
   cleared?: boolean;
 };
 
-const getStatusBadge = (status: ToolUIPart["state"]) => {
+/**
+ * How a tool call stands, in the words the Chat has always used for it. The
+ * one copy of the state → wording table; every tool renderer draws this.
+ */
+export const ToolStatus = ({ state }: { state: ToolUIPart["state"] }) => {
   const labels: Record<ToolUIPart["state"], string> = {
     "input-streaming": "Pending",
     "input-available": "Running",
@@ -221,20 +282,20 @@ const getStatusBadge = (status: ToolUIPart["state"]) => {
   };
 
   const icons: Record<ToolUIPart["state"], ReactNode> = {
-    "input-streaming": <CircleIcon className="size-4" />,
-    "input-available": <ClockIcon className="size-4 animate-pulse" />,
-    "output-available": <CheckCircleIcon className="size-4 text-green-600" />,
-    "output-error": <XCircleIcon className="size-4 text-red-600" />,
-    "approval-requested": <ClockIcon className="size-4" />,
-    "approval-responded": <CheckCircleIcon className="size-4" />,
-    "output-denied": <XCircleIcon className="size-4 text-red-600" />,
+    "input-streaming": <CircleIcon className="size-3.5" />,
+    "input-available": <ClockIcon className="size-3.5 animate-pulse" />,
+    "output-available": <CheckCircleIcon className="size-3.5 text-green-600" />,
+    "output-error": <XCircleIcon className="size-3.5 text-red-600" />,
+    "approval-requested": <ClockIcon className="size-3.5" />,
+    "approval-responded": <CheckCircleIcon className="size-3.5" />,
+    "output-denied": <XCircleIcon className="size-3.5 text-red-600" />,
   };
 
   return (
-    <Badge className="gap-1.5 rounded-full text-xs" variant="secondary">
-      {icons[status]}
-      {labels[status]}
-    </Badge>
+    <span className="inline-flex shrink-0 items-center gap-1 text-xs">
+      {icons[state]}
+      {labels[state]}
+    </span>
   );
 };
 
@@ -272,35 +333,45 @@ export const ToolHeader = ({
   cleared,
   ...props
 }: ToolHeaderProps) => {
+  const { isOpen } = useTool();
+  const name = title ?? humanizeToolType(type);
+
   // getToolIcon returns a stable module-level Lucide icon; render via
   // createElement so the dynamic selection isn't flagged as a component
   // created during render.
   return (
     <CollapsibleTrigger
       className={cn(
-        "flex w-full items-center justify-between gap-4 p-3",
+        toolRowClassName,
+        "cursor-pointer transition-colors hover:text-foreground",
         className,
       )}
       {...props}
     >
-      <div className="flex items-center gap-2 min-w-0">
-        {createElement(getToolIcon(type), {
-          className: "size-4 shrink-0 text-muted-foreground",
-        })}
-        <span className="font-medium text-sm truncate select-text">
-          {title ?? humanizeToolType(type)}
-          {label && (
-            <span className="font-normal text-muted-foreground">
-              {" "}
-              &mdash; {label}
-            </span>
-          )}
-        </span>
-        <ToolDuration durationMs={durationMs} />
-        {cleared && state === "output-available" && <ClearedResultBadge />}
-        {getStatusBadge(state)}
-      </div>
-      <ChevronDownIcon className="size-4 shrink-0 text-muted-foreground transition-transform group-data-[state=open]:rotate-180" />
+      {createElement(getToolIcon(type), { className: "size-4 shrink-0" })}
+      {/* `min-w-0` + `truncate` lets a long MCP name give way instead of
+      pushing the row wide (issue #691); the full name rides on `title`. */}
+      <span
+        className="min-w-0 flex-1 truncate font-medium text-foreground select-text"
+        title={label ? `${name} — ${label}` : name}
+      >
+        {name}
+        {label && (
+          <span className="font-normal text-muted-foreground">
+            {" "}
+            &mdash; {label}
+          </span>
+        )}
+      </span>
+      <ToolDuration durationMs={durationMs} />
+      {cleared && state === "output-available" && <ClearedResultBadge />}
+      <ToolStatus state={state} />
+      <ChevronDownIcon
+        className={cn(
+          "size-4 shrink-0 transition-transform",
+          isOpen ? "rotate-180" : "rotate-0",
+        )}
+      />
     </CollapsibleTrigger>
   );
 };
@@ -310,6 +381,9 @@ export type ToolContentProps = ComponentProps<typeof CollapsibleContent>;
 export const ToolContent = ({ className, ...props }: ToolContentProps) => (
   <CollapsibleContent
     className={cn(
+      // Indented under the row's icon, the way Thinking's body sits under its
+      // brain. Sections stack with a gap rather than rules between them.
+      "mt-3 space-y-4 pl-6 text-sm",
       "data-[state=closed]:fade-out-0 data-[state=closed]:slide-out-to-top-2 data-[state=open]:slide-in-from-top-2 text-popover-foreground outline-none data-[state=closed]:animate-out data-[state=open]:animate-in",
       className,
     )}
@@ -322,7 +396,7 @@ export type ToolInputProps = ComponentProps<"div"> & {
 };
 
 export const ToolInput = ({ className, input, ...props }: ToolInputProps) => (
-  <div className={cn("space-y-2 overflow-hidden p-4", className)} {...props}>
+  <div className={cn("space-y-2 overflow-hidden", className)} {...props}>
     <h4 className="font-medium text-muted-foreground text-xs uppercase tracking-wide">
       Parameters
     </h4>
@@ -358,7 +432,7 @@ export const ToolOutput = ({
   }
 
   return (
-    <div className={cn("space-y-2 p-4", className)} {...props}>
+    <div className={cn("space-y-2", className)} {...props}>
       <h4 className="font-medium text-muted-foreground text-xs uppercase tracking-wide">
         {errorText ? "Error" : "Result"}
       </h4>

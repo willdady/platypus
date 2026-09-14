@@ -1019,3 +1019,47 @@ describe("ChatMessage while editing", () => {
     expect(screen.queryByAltText("shot.png")).toBeNull();
   });
 });
+
+// Issue #834. MCP tools arrive as `dynamic-tool` parts, which are not in the
+// part union and so never reached `ToolHeader`; they now draw through the one
+// shared disclosure, named by the tool's own name.
+describe("ChatMessage dynamic tool renderer", () => {
+  const dynamicToolMessage = (
+    state: "input-available" | "output-available",
+  ): PlatypusUIMessage => ({
+    id: "m1",
+    role: "assistant",
+    parts: [
+      {
+        type: "dynamic-tool",
+        toolName: "github__create_issue",
+        toolCallId: "c1",
+        state,
+        input: { title: "Fix the thing" },
+        output: state === "output-available" ? { number: 7 } : undefined,
+      } as unknown as MessagePart,
+    ],
+  });
+
+  it("names the row after the tool and stays collapsed until clicked", () => {
+    renderMessage(dynamicToolMessage("output-available"));
+
+    const trigger = screen.getByRole("button", {
+      name: /github__create_issue/,
+    });
+    expect(trigger).toHaveAttribute("aria-expanded", "false");
+    expect(screen.getByText("Completed")).toBeInTheDocument();
+    expect(screen.queryByText("Parameters")).toBeNull();
+
+    fireEvent.click(trigger);
+
+    expect(screen.getByText("Parameters")).toBeInTheDocument();
+    expect(screen.getByText("Result")).toBeInTheDocument();
+  });
+
+  it("reports a running call in the shared status words", () => {
+    renderMessage(dynamicToolMessage("input-available"));
+
+    expect(screen.getByText("Running")).toBeInTheDocument();
+  });
+});

@@ -193,3 +193,59 @@ describe("SubAgentTool step-limit marker", () => {
     expect(screen.queryByText(SUB_AGENT_STEP_LIMIT_NOTICE)).toBeNull();
   });
 });
+
+// Issue #834. The Sub-Agent card is the one tool whose body embeds a whole
+// nested transcript, so it is the one that most needs the shared shell:
+// collapsed until clicked, status in the shared words, no border of its own.
+describe("SubAgentTool disclosure", () => {
+  it("is collapsed until clicked and reports its status in the header", () => {
+    const { container } = render(<SubAgentTool toolPart={delegateCall()} />);
+
+    const trigger = screen.getByRole("button", { name: /Research Bot/ });
+    expect(trigger).toHaveAttribute("aria-expanded", "false");
+    expect(screen.getByText("Completed")).toBeInTheDocument();
+    expect(screen.queryByText("Task")).toBeNull();
+    expect(container.firstElementChild?.className).not.toMatch(/\bborder\b/);
+
+    fireEvent.click(trigger);
+
+    expect(trigger).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByText("Task")).toBeInTheDocument();
+    expect(screen.getByText("Find the release date")).toBeInTheDocument();
+  });
+
+  it("reports a delegation still streaming its activity as Running", () => {
+    render(
+      <SubAgentTool
+        toolPart={
+          {
+            type: "tool-delegate",
+            toolCallId: "call-1",
+            state: "output-available",
+            input: { subAgent: "Research Bot", task: "Find the release date" },
+            output: {
+              entries: [
+                { type: "tool-call", toolName: "webFetch", status: "running" },
+              ],
+            },
+          } as unknown as ToolUIPart
+        }
+      />,
+    );
+
+    expect(screen.getByText("Running")).toBeInTheDocument();
+  });
+
+  it("keeps the delegation's own chevron independent of its nested transcript", () => {
+    render(<SubAgentTool toolPart={delegateCall()} />);
+    const trigger = screen.getByRole("button", { name: /Research Bot/ });
+
+    expect(trigger.querySelector(":scope > svg:last-child")).not.toHaveClass(
+      "rotate-180",
+    );
+    fireEvent.click(trigger);
+    expect(trigger.querySelector(":scope > svg:last-child")).toHaveClass(
+      "rotate-180",
+    );
+  });
+});

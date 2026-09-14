@@ -27,7 +27,6 @@ import {
   ToolInput,
   ToolOutput,
 } from "./ai-elements/tool";
-import { DynamicToolHeader } from "./dynamic-tool-header";
 import {
   DynamicToolUIPart,
   FileUIPart,
@@ -312,8 +311,12 @@ export const ChatMessage = memo(function ChatMessage({
         const toolPart = part as DynamicToolUIPart;
         return (
           <Tool key={`${message.id}-${i}`}>
-            <DynamicToolHeader
+            {/* An MCP tool's name is its identity — namespace and all — so it
+            is shown verbatim rather than humanised (issue #691 is why it has
+            to truncate). */}
+            <ToolHeader
               state={toolPart.state}
+              type={toolPart.type}
               title={toolPart.toolName}
               durationMs={toolCallDurationMs(
                 toolPart.toolMetadata,
