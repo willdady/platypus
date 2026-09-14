@@ -1,5 +1,19 @@
 # Changelog
 
+## [3.7.0](https://github.com/willdady/platypus/compare/v3.6.0...v3.7.0) (2026-09-14)
+
+
+### Features
+
+* capture trigger runs as a timeline of events with a waterfall run detail view ([#845](https://github.com/willdady/platypus/issues/845)) ([d1f5a89](https://github.com/willdady/platypus/commit/d1f5a8975a5b6b1ee8e281c89c7414c47e55e42e))
+* let Skills be marked user-invocable only ([#833](https://github.com/willdady/platypus/issues/833)) ([25a9dad](https://github.com/willdady/platypus/commit/25a9dadcf2adc62735f83181565f31befe8cc4df))
+
+
+### Bug Fixes
+
+* **backend:** let the non-root backend reach the mounted Docker socket ([#849](https://github.com/willdady/platypus/issues/849)) ([7116cd8](https://github.com/willdady/platypus/commit/7116cd8f403750cff6a24e09018b14fbc07d3149))
+* **backend:** resolve a replayed file part when STORAGE_PUBLIC_URL is set ([#847](https://github.com/willdady/platypus/issues/847)) ([165adf3](https://github.com/willdady/platypus/commit/165adf3e2f2bd55e273e4877ca85f97664b47135))
+
 ## [3.6.0](https://github.com/willdady/platypus/compare/v3.5.0...v3.6.0) (2026-09-13)
 
 
