@@ -470,6 +470,20 @@
       "when": 1789290346160,
       "tag": "0066_trigger_run_events",
       "breakpoints": true
+    },
+    {
+      "idx": 67,
+      "version": "7",
+      "when": 1789494415739,
+      "tag": "0067_add_invitation_token",
+      "breakpoints": true
+    },
+    {
+      "idx": 68,
+      "version": "7",
+      "when": 1789494452865,
+      "tag": "0068_backfill_invitation_tokens",
+      "breakpoints": true
     }
   ]
 }

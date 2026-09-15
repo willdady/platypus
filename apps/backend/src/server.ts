@@ -21,6 +21,7 @@ import { orgAttachment } from "./routes/org-attachment.ts";
 import { orgBlueprint } from "./routes/org-blueprint.ts";
 import { attachment } from "./routes/attachment.ts";
 import { invitation } from "./routes/invitation.ts";
+import { invitationLink } from "./routes/invitation-link.ts";
 import { userInvitation } from "./routes/user-invitation.ts";
 import { member } from "./routes/member.ts";
 import { context } from "./routes/context.ts";
@@ -182,6 +183,7 @@ app.route(
 );
 app.route("/organizations/:orgId/workspaces/:workspaceId/webhooks", webhook);
 app.route("/organizations/:orgId/invitations", invitation);
+app.route("/invitation-links", invitationLink);
 app.route("/organizations/:orgId/members", member);
 app.route("/users/me/invitations", userInvitation);
 app.route("/users/me/contexts", context);

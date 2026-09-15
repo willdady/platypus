@@ -181,6 +181,29 @@ describe("Invitation Routes", () => {
       });
     });
 
+    // #549 / ADR-0019: every invitation mints its own redemption token.
+    it("mints a token when creating an invitation", async () => {
+      mockSession({ id: "admin-1", email: "admin@example.com", role: "user" });
+      mockDb.limit.mockResolvedValueOnce([{ role: "admin" }]); // requireOrgAccess
+      mockDb.returning.mockResolvedValueOnce([{ id: "inv-1" }]);
+
+      const res = await app.request(baseUrl, {
+        method: "POST",
+        body: JSON.stringify({ email: "user@example.com" }),
+        headers: { "Content-Type": "application/json" },
+      });
+
+      expect(res.status).toBe(201);
+      const insertedValues = mockDb.values.mock.calls.find(
+        ([value]) =>
+          typeof value === "object" &&
+          value !== null &&
+          "organizationId" in value,
+      )?.[0] as { token?: string } | undefined;
+      expect(typeof insertedValues?.token).toBe("string");
+      expect(insertedValues?.token).toHaveLength(21);
+    });
+
     it("should return 400 if inviting self", async () => {
       mockSession({ id: "admin-1", email: "admin@example.com", role: "user" });
       // requireOrgAccess

@@ -1725,6 +1725,10 @@ export const invitationSchema = z.object({
   // accept (ADR-0009). Stored in the invitation_blueprint junction; surfaced
   // here in `position` order on reads.
   blueprintIds: z.array(z.string()).optional(),
+  // Redemption token minted with the invitation (ADR-0019, #549). Nullable
+  // only at the column level for pre-existing rows a backfill migration
+  // hasn't reached yet; every invitation created through the API has one.
+  token: z.string().nullable().optional(),
   expiresAt: z.date(),
   createdAt: z.date(),
 });
@@ -1743,6 +1747,19 @@ export const invitationListItemSchema = invitationSchema.extend({
 });
 
 export type InvitationListItem = z.infer<typeof invitationListItemSchema>;
+
+// Response of the unauthenticated invitation-link resolution endpoint
+// (#549, ADR-0019): only what a bare "choose a password" form needs to
+// look legitimate rather than like a phishing page. Never the inviter,
+// the Blueprint set, or the Workspace name.
+export const invitationLinkResolutionSchema = z.object({
+  email: z.string().email(),
+  organizationName: z.string(),
+});
+
+export type InvitationLinkResolution = z.infer<
+  typeof invitationLinkResolutionSchema
+>;
 
 export const providerUpdateSchema = providerBaseSchema.pick({
   name: true,

@@ -73,6 +73,10 @@ invitation.post(
     expiresAt.setDate(expiresAt.getDate() + INVITATION_EXPIRY_DAYS);
 
     const invitationId = nanoid();
+    // The redemption token (#549, ADR-0019): URL-safe, minted with the same
+    // generator as the row id, whose default alphabet and 21-character
+    // length are the whole defence against guessing a link.
+    const token = nanoid();
     try {
       const record = await db.transaction(async (tx) => {
         const [row] = await tx
@@ -84,6 +88,7 @@ invitation.post(
             invitedBy: user.id,
             status: "pending",
             workspaceName: data.workspaceName ?? null,
+            token,
             expiresAt,
           })
           .returning();
