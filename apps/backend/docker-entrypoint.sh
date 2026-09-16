@@ -32,6 +32,32 @@ if [ "$(id -u)" = "0" ]; then
       chown -R platypus:platypus "$dir"
     fi
   done
+  # The compose.sandbox.yaml overlay bind-mounts the host's Docker socket for
+  # the @platypus/docker Sandbox adapter. Like /data it keeps its host identity
+  # — typically root:docker, mode 0660 — and the host's `docker` group has no
+  # fixed gid, so no group baked into the image can be relied on to match it.
+  # Put `platypus` into whichever group owns the socket so it can connect after
+  # the drop; su-exec rebuilds the supplementary groups from /etc/group, so this
+  # is the only place that membership can be granted. `group_add` on the
+  # container would be discarded by that same rebuild, which is why it is done
+  # here rather than in the overlay. The socket itself is never chowned or
+  # chmodded: it is the host's, and would change for every process on the host.
+  case "${DOCKER_HOST:-}" in
+    "") docker_sock=/var/run/docker.sock ;;
+    unix://*) docker_sock="${DOCKER_HOST#unix://}" ;;
+    *) docker_sock="" ;;
+  esac
+  if [ -n "$docker_sock" ] && [ -S "$docker_sock" ]; then
+    sock_gid="$(stat -c %g "$docker_sock")"
+    sock_group="$(getent group "$sock_gid" | cut -d: -f1)"
+    if [ -z "$sock_group" ]; then
+      sock_group=docker
+      addgroup --system --gid "$sock_gid" "$sock_group"
+    fi
+    if ! id -Gn platypus | tr ' ' '\n' | grep -qx "$sock_group"; then
+      addgroup platypus "$sock_group"
+    fi
+  fi
   exec su-exec platypus "$@"
 fi
 

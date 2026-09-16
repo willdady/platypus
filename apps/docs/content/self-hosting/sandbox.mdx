@@ -69,6 +69,27 @@ docker compose -f compose.yaml -f compose.sandbox.yaml up
   [Configuration → Plugins](/self-hosting/configuration#plugins).
 </Callout>
 
+#### Socket permissions
+
+The backend runs as an unprivileged account, uid 1001, and the mounted socket
+keeps the ownership it has on the host, usually `root:docker` with a group id
+that differs from one distribution to the next. You do not normally have to do
+anything about this: the container starts as root, adds its account to whichever
+group owns the socket, and only then drops to uid 1001. The socket itself is
+never changed.
+
+If you pin the container to a user yourself (a `user:` key in `compose.yaml`,
+`docker run --user`, or a Kubernetes `runAsUser`), the container can no longer do
+that, so grant the group membership at the container level instead:
+
+```yaml
+services:
+  backend:
+    user: "1001:1001"
+    group_add:
+      - "999" # the gid of /var/run/docker.sock on the host: stat -c %g /var/run/docker.sock
+```
+
 Each container is spawned with fixed resource and security limits — a process
 cap (`PidsLimit`), a memory ceiling, and `no-new-privileges` — to contain
 runaway or hostile workloads. These are hardcoded in the adapter, not
