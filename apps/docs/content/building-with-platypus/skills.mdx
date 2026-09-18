@@ -35,9 +35,10 @@ From your Workspace, go to the **Skills** section and click **Create skill**.
   floor is enforced on save, so a one-line placeholder body is rejected — write
   the real instructions or don't create the Skill yet.
 - **Argument hint** _(optional)_ — up to **120 characters** describing what text
-  should follow the command when a person invokes this Skill.
+  should follow the command when a person invokes this Skill. It is shown beside
+  the name in the Chat input's [command list](/building-with-platypus/chat#invoking-a-skill-yourself).
 - **User-invocable only** — keep this Skill out of the model's catalogue while
-  leaving it available for direct invocation by a person.
+  leaving it available for a person to invoke by name.
 
 </Steps>
 
@@ -75,9 +76,20 @@ Skill's full **body** — which the model reads before responding. Nothing in th
 body costs context until the moment it's actually needed.
 
 A Skill marked **User-invocable only** is left out of this catalogue entirely:
-the model is never told its name, and cannot load it by name. The Skill stays
-available for direct invocation by a person; the flag narrows the model's view
-only, never the user's.
+the model is never told its name, and cannot load it by name. The flag narrows
+the model's view only, never the user's — see below.
+
+## Invoking a Skill by name
+
+Anyone using the Chat can ask for a Skill directly: type `/` at the start of the
+input and pick from the list of the Agent's Skills. The Skill's body is loaded
+before the Agent answers, exactly as if the model had called for it. The full
+behaviour — what the list shows, what happens to a name that matches nothing —
+is in [Chat](/building-with-platypus/chat#invoking-a-skill-yourself).
+
+Every Skill attached to the Agent is offered, **User-invocable only** ones
+included. That is the point of the setting: a Skill nobody wants the model
+choosing on its own stays one keystroke away for the person driving.
 
 ## Workspace vs Shared scope
 
@@ -100,5 +112,7 @@ A Skill lives at exactly one scope:
 
 - **[Agents & Sub-Agents](/building-with-platypus/agents)** — the Agent that uses
   the Skills you author here.
+- **[Chat](/building-with-platypus/chat#invoking-a-skill-yourself)** — invoking a
+  Skill by name from the input.
 - **[Sharing across workspaces](/concepts/sharing)** — how a Skill becomes a
   Shared resource.

@@ -1347,6 +1347,107 @@ describe("AgentRunner.stream — success & interruption", () => {
     expect(runRegistry.has("s-ok")).toBe(false);
   });
 
+  // A user-invoked Skill arrives as a trailing assistant message carrying the
+  // seeded `loadSkill` pair (issue #649). The SDK folds the reply into that
+  // same message and reuses its id, so a mid-run flush must REPLACE it — the
+  // append this path used to do wrote two assistant messages under one id, and
+  // a user reconnecting mid-run saw the card twice.
+  it("replaces a trailing assistant message the stream continues rather than appending beside it", async () => {
+    mockPrepareChatTurn.mockResolvedValueOnce(fakeTurn());
+    const queue = new streamHarness.AsyncQueue();
+    streamHarness.queue = queue;
+    primeStreamText();
+
+    const seeded = {
+      id: "msg-seed",
+      role: "assistant",
+      parts: [
+        {
+          type: "tool-loadSkill",
+          toolCallId: "call-1",
+          state: "output-available",
+          input: { name: "blog-post" },
+          output: { name: "blog-post", body: "Write a blog post." },
+        },
+      ],
+    };
+    const user = { id: "u1", role: "user", parts: [] };
+
+    const sink = new RecordingSink();
+    const progressMessages: unknown[][] = [];
+    sink.onProgress = (ctx: { runId: string; messages: unknown[] }) => {
+      progressMessages.push(ctx.messages);
+      return Promise.resolve();
+    };
+
+    await runner.stream({
+      scope,
+      input: {
+        ...baseInput,
+        runId: "s-continuation",
+        messages: [user, seeded] as RunInput["messages"],
+      },
+      sink,
+      options: { origin: "http://test" },
+    });
+
+    // The SDK's continuation: the streamed message carries the seeded id, with
+    // the reply folded in beside the tool parts.
+    const continued = {
+      id: "msg-seed",
+      role: "assistant",
+      parts: [...seeded.parts, { type: "text", text: "Here you go." }],
+    };
+    queue.push(continued);
+    await tick();
+    streamHarness.onStepFinish!({ usage: {}, toolCalls: [] });
+    await tick();
+
+    expect(progressMessages.at(-1)).toEqual([user, continued]);
+
+    await streamHarness.onFinish!({ messages: [user, continued] });
+    queue.end();
+    await tick();
+  });
+
+  it("still appends a snapshot that opened a message of its own", async () => {
+    mockPrepareChatTurn.mockResolvedValueOnce(fakeTurn());
+    const queue = new streamHarness.AsyncQueue();
+    streamHarness.queue = queue;
+    primeStreamText();
+
+    const user = { id: "u1", role: "user", parts: [] };
+    const sink = new RecordingSink();
+    const progressMessages: unknown[][] = [];
+    sink.onProgress = (ctx: { runId: string; messages: unknown[] }) => {
+      progressMessages.push(ctx.messages);
+      return Promise.resolve();
+    };
+
+    await runner.stream({
+      scope,
+      input: {
+        ...baseInput,
+        runId: "s-fresh",
+        messages: [user] as RunInput["messages"],
+      },
+      sink,
+      options: { origin: "http://test" },
+    });
+
+    const fresh = { id: "m1", role: "assistant", parts: [] };
+    queue.push(fresh);
+    await tick();
+    streamHarness.onStepFinish!({ usage: {}, toolCalls: [] });
+    await tick();
+
+    expect(progressMessages.at(-1)).toEqual([user, fresh]);
+
+    await streamHarness.onFinish!({ messages: [user, fresh] });
+    queue.end();
+    await tick();
+  });
+
   it("persists each tool call's execution time on the finished messages", async () => {
     mockPrepareChatTurn.mockResolvedValueOnce(fakeTurn());
     const queue = new streamHarness.AsyncQueue();

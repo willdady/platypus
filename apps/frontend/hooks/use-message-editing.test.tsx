@@ -200,3 +200,61 @@ describe("useMessageEditing submitting an edit", () => {
     expect(sendMessage).not.toHaveBeenCalled();
   });
 });
+
+/**
+ * A message invoking a Skill carries its command in the text — there is no
+ * structured part alongside it (issue #649). That is what makes the edit
+ * round trip work at all, and it is worth pinning: the composer's value is a
+ * string, so a command held anywhere else would be silently dropped here.
+ */
+describe("useMessageEditing on a message that invokes a Skill", () => {
+  const withCommand: UIMessage[] = [
+    {
+      id: "u1",
+      role: "user",
+      parts: [{ type: "text", text: "/blog-post about otters" }],
+    },
+    {
+      id: "a1",
+      role: "assistant",
+      parts: [
+        {
+          type: "tool-loadSkill",
+          toolCallId: "call-1",
+          state: "output-available",
+          input: { name: "blog-post" },
+          output: { name: "blog-post", body: "Write a blog post." },
+        } as unknown as UIMessage["parts"][number],
+        { type: "text", text: "Here you go." },
+      ],
+    },
+  ];
+
+  it("opens holding the command token", () => {
+    const { result } = harness(withCommand);
+
+    act(() => result.current.handleMessageEditStart("u1"));
+
+    expect(result.current.editing?.text).toBe("/blog-post about otters");
+  });
+
+  it("resubmits with the command still leading the text", () => {
+    const { result, setMessages, sendMessage } = harness(withCommand);
+
+    act(() => result.current.handleMessageEditStart("u1"));
+    act(() =>
+      result.current.handleMessageEditSubmit({
+        text: "/blog-post about platypuses",
+        files: [],
+      }),
+    );
+
+    // The seeded pair goes with the message it belonged to; the resubmitted
+    // turn is seeded afresh from the command in its text.
+    expect(setMessages).toHaveBeenCalledWith([]);
+    expect(sendMessage).toHaveBeenCalledWith(
+      { text: "/blog-post about platypuses", files: [] },
+      { body: { providerId: "p1" } },
+    );
+  });
+});

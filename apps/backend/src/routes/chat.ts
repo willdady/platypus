@@ -33,6 +33,7 @@ import {
   retrieveRecentSummaries,
 } from "../services/memory-retrieval.ts";
 import { chatTimeouts } from "../runs/chat-timeouts.ts";
+import { seedUserInvokedSkill } from "../services/slash-command.ts";
 
 // --- Routes ---
 
@@ -194,10 +195,26 @@ chat.post(
           ),
         );
 
+    // A user-invoked Skill (issue #649). The token stays in the text the user
+    // sent; what is appended here is a trailing assistant message carrying the
+    // `loadSkill` call and its result, so the body reaches the model as tool
+    // content with correct provenance and never as words the user said.
+    //
+    // Seeded onto the messages that go into `RunInput` — the array that reaches
+    // `originalMessages` and is what the sink persists. Seeding into the
+    // converted model messages instead would reach the model and persist
+    // nothing, quietly turning "persist the pair" into "re-seed every turn".
+    const messages = await seedUserInvokedSkill({
+      messages: (data.messages as PlatypusUIMessage[] | undefined) ?? [],
+      orgId: scope.orgId,
+      workspaceId: scope.workspaceId,
+      agentId: data.agentId,
+    });
+
     const input: RunInput = {
       runId: data.id,
       request: data,
-      messages: (data.messages as PlatypusUIMessage[] | undefined) ?? [],
+      messages,
       memorySnapshot,
       // The same moment the pin was resolved against, so a re-take and its
       // retrieval window agree on "now" rather than reading the clock twice.

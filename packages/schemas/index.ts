@@ -358,7 +358,16 @@ export const agentUpdateSchema = agentBaseSchema.pick({
 
 // Skill
 
-const skillNameRegex = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+/**
+ * A Skill name's shape, as a source fragment rather than a finished pattern:
+ * the name is matched whole here, and anchored differently by the Chat input's
+ * slash command, which reads it after a leading `/` and greedily — so
+ * `/deploy-staging` can never resolve as `/deploy`. One source, so the two
+ * cannot drift into disagreeing about what the user typed.
+ */
+export const SKILL_NAME_SOURCE = "[a-z0-9]+(?:-[a-z0-9]+)*";
+
+const skillNameRegex = new RegExp(`^${SKILL_NAME_SOURCE}$`);
 
 // A Skill is scoped to either a Workspace or an Organization (mutually
 // exclusive), mirroring the dual-scope shape of `provider`/`mcp`. Org-scoped

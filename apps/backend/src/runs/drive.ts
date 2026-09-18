@@ -35,6 +35,7 @@ import {
 } from "./run-events.ts";
 import type { RunStats, RunStatus, TurnFacts } from "./types.ts";
 import { normalizeWebToolParts } from "./web-tool-normalize.ts";
+import { replaySeededParts } from "./replay-seeded-parts.ts";
 import { withAgentCausation, withChildCausation } from "../event-causation.ts";
 
 /**
@@ -372,10 +373,16 @@ const runStreamedDrive = (
     },
   });
 
+  // A continued assistant message's own parts, put back on the stream before
+  // anything downstream reads it — the SDK reuses the message's id but re-emits
+  // nothing, and its own fold is the only consumer that already has them. See
+  // `replay-seeded-parts.ts`.
+  const withSeeded = uiStream.pipeThrough(replaySeededParts(originalMessages));
+
   // Recorded before the split, so the delegate's Run events see every chunk
   // whichever branch is read first, and a Chat turn (no scope) pays nothing.
   const consume = split(
-    events ? uiStream.pipeThrough(recordRunEvents(events)) : uiStream,
+    events ? withSeeded.pipeThrough(recordRunEvents(events)) : withSeeded,
   );
 
   const snapshots: AsyncIterable<PlatypusUIMessage> = (async function* () {
