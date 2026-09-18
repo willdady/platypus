@@ -112,7 +112,11 @@ An **MCP** server's own declaration that one of its tools does not change anythi
 _Avoid_: read-only flag, safe tool, tool safety (all three claim a verification nobody performed), annotation (that names the protocol's whole carrier, of which this is one field).
 
 **Skill**:
-A named capability with a description, attached to an Agent. Surfaced to the model so it can request the skill's instructions on demand via the `loadSkill` Tool. Lives at Workspace scope, or — as a Shared resource — at Organization scope.
+A named capability with a description, attached to an Agent. Its instructions are loaded on demand rather than carried in the prompt, by either of two routes: the model requests it through the `loadSkill` Tool, or a User names it with a **Slash command**. A Skill marked user-invocable only is left out of the catalogue the model is shown and stays reachable by the second route alone. Lives at Workspace scope, or — as a Shared resource — at Organization scope.
+
+**Slash command**:
+A User naming a **Skill** from the chat input: a message whose first text part opens with `/<skill-name>`, at position 0, which is what makes one command per message a property of the grammar rather than a rule. The token stays in the message text and that text is its only carrier — no structured part rides alongside it — so the Transcript shows what was typed and an edit round-trips it. Resolution appends a `loadSkill` call and its result as a trailing assistant message, so the body reaches the model as Tool content with a Tool's provenance, never as words the User said. A name that resolves to no Skill is ordinary text, not an error.
+_Avoid_: slash skill, command part (there is no part), trigger (that names the scheduled/event kind).
 
 **Sandbox**:
 A configured, isolated execution environment registered in a Workspace, providing shell and filesystem tools that operate inside it. Resolves to a Tool set at Chat-turn time. The Sandbox interface is an Extension point: different backends (local container, remote VM, hosted sandbox-as-a-service, …) are contributed by Plugins. A Sandbox also carries workspace-default environment variables that are merged into every shell execution without transiting the model.

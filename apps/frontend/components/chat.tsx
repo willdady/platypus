@@ -69,6 +69,9 @@ import { MessageEditor } from "./message-editor";
 import { ChatReconnectingNotice } from "./chat-reconnecting-notice";
 import { toast } from "sonner";
 import { Composer, type ModelSelection } from "./composer";
+import { SlashCommandPicker } from "./slash-command-picker";
+import { useSlashCommands } from "@/hooks/use-slash-commands";
+import { skillsForAgent } from "@/lib/slash-commands";
 
 export const Chat = ({
   orgId,
@@ -258,6 +261,26 @@ export const Chat = ({
   // Extract values from hooks for easier access
   const { agentId, modelId, providerId } = selection;
 
+  const selectedAgent = useMemo(
+    () => (agentId ? (agents.find((a) => a.id === agentId) ?? null) : null),
+    [agentId, agents],
+  );
+
+  // What the slash-command picker offers — see `skillsForAgent` for why the
+  // list is the Agent's unfiltered assignment.
+  const agentSkills = useMemo(
+    () => skillsForAgent(skills, selectedAgent?.skillIds),
+    [selectedAgent, skills],
+  );
+
+  const slash = useSlashCommands({
+    commands: agentSkills,
+    enabled: Boolean(selectedAgent),
+    value: inputValue,
+    onChange: setInputValue,
+    textareaRef,
+  });
+
   // One entry point for "what model will this Chat turn use, and what can it
   // do?" — replaces separately resolving the provider, the concrete model id,
   // passthrough file types, context window and search capability by hand.
@@ -443,8 +466,6 @@ export const Chat = ({
     );
   }
 
-  const selectedAgent = agentId ? agents.find((a) => a.id === agentId) : null;
-
   // Context occupancy (ADR-0018): the capacity comes from the Org Admin's
   // declaration on the resolved model (`resolvedModel.contextWindow`), the
   // reading from the latest assistant message that CARRIES one. It rides in
@@ -614,8 +635,9 @@ export const Chat = ({
       </Conversation>
       <div className="grid shrink-0 gap-4 p-4">
         <div className="flex justify-center min-w-0">
-          <div className="w-full xl:w-4/5 max-w-4xl min-w-0">
+          <div className="relative w-full xl:w-4/5 max-w-4xl min-w-0">
             {isRecoveringRun && <ChatReconnectingNotice />}
+            {canSendMessages && <SlashCommandPicker {...slash.picker} />}
             {canSendMessages ? (
               <Composer
                 onSubmit={(message) => {
@@ -629,6 +651,12 @@ export const Chat = ({
                   ref: textareaRef,
                   value: inputValue,
                   onChange: (e) => setInputValue(e.target.value),
+                  // Runs before `PromptInputTextarea`'s own Enter-to-submit
+                  // branch, which stands down on `defaultPrevented` — that
+                  // ordering is what lets Enter accept a highlighted command
+                  // instead of sending the message (issue #649).
+                  onKeyDown: slash.onKeyDown,
+                  ...slash.combobox,
                   className: messages.length === 0 ? "min-h-24" : undefined,
                   placeholder: runHeldElsewhere
                     ? "Run in progress…"

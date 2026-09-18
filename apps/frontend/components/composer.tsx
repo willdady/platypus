@@ -1,7 +1,13 @@
 "use client";
 
 import { useState } from "react";
-import type { ChangeEvent, KeyboardEvent, ReactNode, RefObject } from "react";
+import type {
+  AriaAttributes,
+  ChangeEvent,
+  KeyboardEvent,
+  ReactNode,
+  RefObject,
+} from "react";
 import type { FileUIPart, ChatStatus } from "ai";
 import type { Agent, Provider } from "@platypus/schemas";
 import {
@@ -45,8 +51,15 @@ export interface ModelSelection {
   maxOutputTokens?: number;
 }
 
-/** The textarea's own controls, which are the one truly per-surface part. */
-export interface ComposerTextareaProps {
+/**
+ * The textarea's own controls, which are the one truly per-surface part.
+ *
+ * `AriaAttributes` and `role` are widened in rather than listed one by one: a
+ * surface that turns the textarea into a combobox (the slash-command picker,
+ * issue #649) supplies its ARIA as one bag, and that bag has to stay the
+ * picker's business rather than becoming a list here that can drift from it.
+ */
+export interface ComposerTextareaProps extends AriaAttributes {
   ref: RefObject<HTMLTextAreaElement | null>;
   value: string;
   onChange: (e: ChangeEvent<HTMLTextAreaElement>) => void;
@@ -56,6 +69,7 @@ export interface ComposerTextareaProps {
   disabled?: boolean;
   className?: string;
   autoFocus?: boolean;
+  role?: string;
 }
 
 interface ComposerProps {

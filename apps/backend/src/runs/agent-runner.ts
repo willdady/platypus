@@ -76,6 +76,28 @@ type RunState = {
 };
 
 /**
+ * Folds a mid-run snapshot onto the messages the turn opened with.
+ *
+ * A snapshot REPLACES a trailing assistant message rather than sitting beside
+ * it. The SDK treats a trailing assistant message as a continuation and reuses
+ * its id, so the streamed message *is* that message with more parts on it — the
+ * terminal `onFinish` reconciles exactly this way. Appending instead wrote two
+ * assistant messages carrying one id, and a user reconnecting mid-run saw the
+ * seeded `loadSkill` card twice until the final write corrected it (issue #649).
+ *
+ * Keyed on the id rather than on the role, because the id is what the SDK's own
+ * continuation rule turns on: a turn that opened a fresh message appends, as it
+ * always did.
+ */
+const foldSnapshot = (
+  original: PlatypusUIMessage[],
+  message: PlatypusUIMessage,
+): PlatypusUIMessage[] =>
+  original.at(-1)?.id === message.id
+    ? [...original.slice(0, -1), message]
+    : [...original, message];
+
+/**
  * Orchestrates an end-to-end agent run.
  *
  * The runner wraps `prepareChatTurn` with a `RunSink` lifecycle and offers
@@ -356,7 +378,7 @@ export class AgentRunner {
           // who reconnects mid-run sees the partial answer. The drive stops
           // yielding after the final handover, so this never overwrites the
           // folded final with a duration-less snapshot.
-          state.messages = [...input.messages, message];
+          state.messages = foldSnapshot(input.messages, message);
         }
       } catch (err) {
         logger.error(

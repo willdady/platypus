@@ -110,7 +110,8 @@ export const labelOf = (type: ScopedResourceType): string =>
 /** The noun for mid-sentence messages ("agent", "skill", "mcp", "provider"). */
 export const nounOf = (type: ScopedResourceType): string => REGISTRY[type].noun;
 
-type Database = typeof db;
+/** The Drizzle handle every read here takes, so a caller can declare one too. */
+export type Database = typeof db;
 
 /**
  * `and()` is typed to tolerate `undefined` operands and so widens to

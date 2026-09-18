@@ -17,6 +17,7 @@ vi.mock("../services/chat-execution.ts", () => ({
   drizzleChatTurnQueries: {},
 }));
 
+import { createUIMessageStreamResponse, streamText } from "ai";
 import app from "../server.ts";
 import { NotFoundError, ValidationError } from "../errors.ts";
 import { FileValidationError } from "../services/file-gate.ts";
@@ -230,6 +231,26 @@ describe("Chat Routes", () => {
       stream: { model: {}, tools: {}, system: "", messages: [], maxSteps: 1 },
       resolved: { providerId: "p1", modelId: "m1" },
       dispose: vi.fn().mockResolvedValue(undefined),
+    };
+
+    /**
+     * The `ai` mock hands out ONE `ReadableStream` and ONE `Response`, and both
+     * are consumed on the way through the drive — so the second test to reach
+     * the drive finds them locked. A test that needs the run to get that far
+     * re-stubs both with instances of its own.
+     */
+    const freshStream = () => {
+      vi.mocked(streamText).mockReturnValueOnce({
+        toUIMessageStream: () =>
+          new ReadableStream({
+            start(controller) {
+              controller.close();
+            },
+          }),
+      } as unknown as ReturnType<typeof streamText>);
+      vi.mocked(createUIMessageStreamResponse).mockReturnValueOnce(
+        new Response("stream"),
+      );
     };
 
     it("should start a chat stream", async () => {
@@ -467,6 +488,116 @@ describe("Chat Routes", () => {
       // The existing pin is forwarded verbatim — the prefix stays byte-identical.
       expect(inputArg.memorySnapshot).toBe("pinned-block");
       expect(retrieveRecentSummaries).not.toHaveBeenCalled();
+    });
+
+    // A user-invoked Skill (issue #649). Seeded onto the messages that reach
+    // `prepareChatTurn` — the array the run also persists — rather than onto the
+    // converted model messages, which would reach the model and persist nothing.
+    it("seeds a loadSkill pair for a message that opens with a slash command", async () => {
+      mockSession();
+      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]); // requireOrgAccess
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-1", organizationId: "org-1" },
+      ]); // requireWorkspaceAccess
+      mockDb.limit.mockResolvedValueOnce([]); // ADR-0020 row lookup (new chat)
+      mockDb.limit.mockResolvedValueOnce([
+        { id: "agent-1", workspaceId, skillIds: ["skill-1"] },
+      ]); // the turn's Agent, for its assigned Skills
+      mockDb.limit.mockResolvedValueOnce([
+        {
+          id: "skill-1",
+          workspaceId,
+          name: "blog-post",
+          body: "Write a blog post.",
+          // User-invocable only, so the model's catalogue excludes it — and the
+          // user invoking it by name must still work (#713).
+          disableModelInvocation: true,
+        },
+      ]); // the named Skill
+      mockDb.returning.mockResolvedValueOnce([{ id: "chat-cmd" }]);
+      mockPrepareChatTurn.mockResolvedValueOnce(validTurn);
+      freshStream();
+
+      const res = await app.request(baseUrl, {
+        method: "POST",
+        body: JSON.stringify({
+          id: "chat-cmd",
+          workspaceId,
+          agentId: "agent-1",
+          messages: [
+            {
+              id: "u1",
+              role: "user",
+              parts: [{ type: "text", text: "/blog-post about otters" }],
+            },
+          ],
+        }),
+        headers: { "Content-Type": "application/json" },
+      });
+
+      expect(res.status).toBe(200);
+
+      const inputArg = mockPrepareChatTurn.mock.calls[0][0] as {
+        messages: Array<{
+          role: string;
+          parts: Array<Record<string, unknown>>;
+        }>;
+      };
+      expect(inputArg.messages).toHaveLength(2);
+      // The user's message still carries the token, so the transcript shows it.
+      expect(inputArg.messages[0].parts[0]).toEqual({
+        type: "text",
+        text: "/blog-post about otters",
+      });
+      // Trailing assistant, so the SDK folds the reply into this same message —
+      // one bubble with a loadSkill card above the answer, not two.
+      expect(inputArg.messages[1].role).toBe("assistant");
+      expect(inputArg.messages[1].parts[0]).toMatchObject({
+        type: "tool-loadSkill",
+        state: "output-available",
+        input: { name: "blog-post" },
+        output: { name: "blog-post", body: "Write a blog post." },
+      });
+    });
+
+    it("sends an unresolvable command as ordinary text", async () => {
+      mockSession();
+      mockDb.limit.mockResolvedValueOnce([{ role: "member" }]);
+      mockDb.limit.mockResolvedValueOnce([
+        { ownerId: "user-1", organizationId: "org-1" },
+      ]);
+      mockDb.limit.mockResolvedValueOnce([]);
+      mockDb.limit.mockResolvedValueOnce([
+        { id: "agent-1", workspaceId, skillIds: ["skill-1"] },
+      ]);
+      // No Skill of that name in either scope, and no Attachment either.
+      mockDb.limit.mockResolvedValue([]);
+      mockDb.returning.mockResolvedValueOnce([{ id: "chat-typo" }]);
+      mockPrepareChatTurn.mockResolvedValueOnce(validTurn);
+      freshStream();
+
+      const res = await app.request(baseUrl, {
+        method: "POST",
+        body: JSON.stringify({
+          id: "chat-typo",
+          workspaceId,
+          agentId: "agent-1",
+          messages: [
+            {
+              id: "u1",
+              role: "user",
+              parts: [{ type: "text", text: "/usr/bin/env is broken" }],
+            },
+          ],
+        }),
+        headers: { "Content-Type": "application/json" },
+      });
+
+      expect(res.status).toBe(200);
+      const inputArg = mockPrepareChatTurn.mock.calls[0][0] as {
+        messages: unknown[];
+      };
+      expect(inputArg.messages).toHaveLength(1);
     });
   });
 

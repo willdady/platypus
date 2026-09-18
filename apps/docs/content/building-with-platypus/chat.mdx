@@ -1,6 +1,6 @@
 ---
 title: Chat
-description: The screen you use every day — attaching files, web search, voice input, editing messages, organising a long history, and what happens when you lose the connection mid-run.
+description: The screen you use every day — invoking a Skill by name, attaching files, web search, voice input, editing messages, organising a long history, and what happens when you lose the connection mid-run.
 ---
 
 import { Callout } from "nextra/components";
@@ -28,6 +28,54 @@ points at, including after an Org Admin repoints it.
 With an Agent selected, an info button opens **Agent Information**, which shows
 what that Agent is actually bringing to the conversation: its model, its Tool
 sets, its Skills and its Sub-Agents.
+
+## Invoking a Skill yourself
+
+An Agent decides for itself when to reach for one of its
+[Skills](/building-with-platypus/skills). You can also ask for one by name.
+
+Type `/` as the first character of an empty input and a list of the selected
+Agent's Skills opens above it. Keep typing to narrow it, **↑** and **↓** to move
+through it, **Tab** or **Enter** to take the one highlighted — or click it. The
+name lands in the box with the cursor after it, so you carry straight on with
+the rest of the message:
+
+```
+/write-release-note for the 3.6 release, grouped by area
+```
+
+Each row shows the Skill's name, its **Argument hint** where the author wrote
+one, and its description. The list is every Skill attached to the Agent,
+including any marked **User-invocable only** — that setting hides a Skill from
+the model, not from you. An Agent with no Skills attached says so instead.
+
+Send it and the Skill's instructions are loaded before the Agent starts writing.
+The reply carries a **Loading skill** row above it — the same row you see when
+the Agent reaches for a Skill on its own. Your message reads exactly as you
+typed it, `/write-release-note` and all; the instructions never appear in the
+conversation as something you said.
+
+Editing such a message keeps the command: it comes back in the box with the rest
+of the text, and the resubmitted turn loads the Skill again.
+
+<Callout type="warning">
+  **The command only counts as the first thing in the message.**
+  `/write-release-note for 3.6` invokes the Skill. `draft this with
+  /write-release-note` sends those words to the model and nothing more — no
+  Skill is loaded. One command per message, at the very start of it.
+</Callout>
+
+<Callout type="warning">
+  **A name that matches no Skill is sent as ordinary text, not refused.**
+  Mistype it — `/write-relase-note` — and the turn runs normally with the typo
+  sitting in your prompt: the Agent answers without the Skill and nothing says
+  why. The list is the check. It reads **No matching skill — this will send as
+  ordinary text** while you are still typing, and **Escape** closes it without
+  clearing what you have written.
+</Callout>
+
+With a Provider and model picked directly rather than an Agent, there is no list
+and `/` is an ordinary character — Skills belong to an Agent.
 
 ## Attaching files
 
