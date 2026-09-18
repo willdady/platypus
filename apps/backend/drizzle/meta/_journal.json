@@ -470,6 +470,13 @@
       "when": 1789290346160,
       "tag": "0066_trigger_run_events",
       "breakpoints": true
+    },
+    {
+      "idx": 67,
+      "version": "7",
+      "when": 1789727738798,
+      "tag": "0067_session_impersonated_by",
+      "breakpoints": true
     }
   ]
 }

@@ -1,6 +1,6 @@
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
-import { admin } from "better-auth/plugins";
+import { authPlugins } from "./auth-plugins.ts";
 import { db } from "./index.ts";
 import { backendBaseUrl } from "./base-urls.ts";
 import * as authSchema from "./db/auth-schema.ts";
@@ -37,5 +37,5 @@ export const auth = betterAuth({
   },
   trustedOrigins: process.env.ALLOWED_ORIGINS?.split(",") || [],
   ...crossSubdomainCookieConfig(authCookieDomain),
-  plugins: [admin()],
+  plugins: authPlugins,
 });
