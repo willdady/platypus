@@ -1,5 +1,25 @@
 # Changelog
 
+## [3.7.0](https://github.com/willdady/platypus/compare/v3.6.0...v3.7.0) (2026-09-18)
+
+
+### Features
+
+* capture trigger runs as a timeline of events with a waterfall run detail view ([#845](https://github.com/willdady/platypus/issues/845)) ([d1f5a89](https://github.com/willdady/platypus/commit/d1f5a8975a5b6b1ee8e281c89c7414c47e55e42e))
+* **frontend:** restyle chat tool calls as Thinking-style disclosures ([#848](https://github.com/willdady/platypus/issues/848)) ([8a3abbd](https://github.com/willdady/platypus/commit/8a3abbd85e2d9616c5c1a6b0ec264081b32d0ba6))
+* invoke skills with slash commands from the chat input ([#854](https://github.com/willdady/platypus/issues/854)) ([f4daf77](https://github.com/willdady/platypus/commit/f4daf771c0fb6a2cf6ddabf821216ddda0c4b53b))
+* let Skills be marked user-invocable only ([#833](https://github.com/willdady/platypus/issues/833)) ([25a9dad](https://github.com/willdady/platypus/commit/25a9dadcf2adc62735f83181565f31befe8cc4df))
+
+
+### Bug Fixes
+
+* **backend:** add the session column better-auth's admin plugin expects ([#856](https://github.com/willdady/platypus/issues/856)) ([969871d](https://github.com/willdady/platypus/commit/969871dba6050cefb97f6af631dedfb40aca741a))
+* **backend:** let the non-root backend reach the mounted Docker socket ([#849](https://github.com/willdady/platypus/issues/849)) ([7116cd8](https://github.com/willdady/platypus/commit/7116cd8f403750cff6a24e09018b14fbc07d3149))
+* **backend:** resolve a replayed file part when STORAGE_PUBLIC_URL is set ([#847](https://github.com/willdady/platypus/issues/847)) ([165adf3](https://github.com/willdady/platypus/commit/165adf3e2f2bd55e273e4877ca85f97664b47135))
+* **frontend:** align chat disclosures with the transcript and mute them like Thinking ([#851](https://github.com/willdady/platypus/issues/851)) ([cc4fd14](https://github.com/willdady/platypus/commit/cc4fd142f8ec6646aa825eedc0dddff01baa197d))
+* **frontend:** let the trigger run Response fill its card ([#858](https://github.com/willdady/platypus/issues/858)) ([4411b50](https://github.com/willdady/platypus/commit/4411b50d0ca1f663d456efa9f3c52125bd64c316))
+* **frontend:** loosen the vertical spacing between chat items ([#857](https://github.com/willdady/platypus/issues/857)) ([57c81ea](https://github.com/willdady/platypus/commit/57c81ea5080a02e55960ab2b6607747195877a16))
+
 ## [3.6.0](https://github.com/willdady/platypus/compare/v3.5.0...v3.6.0) (2026-09-13)
 
 
