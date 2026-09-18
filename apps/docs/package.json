@@ -26,17 +26,17 @@
     "@opennextjs/cloudflare": "1.20.1",
     "@platypus/schemas": "workspace:*",
     "@tailwindcss/postcss": "^4.3.3",
-    "@types/node": "^24.13.3",
-    "@types/react": "^19.2.18",
-    "@types/react-dom": "^19.2.4",
-    "eslint": "^10.8.0",
+    "@types/node": "^24.13.5",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "eslint": "^10.10.0",
     "eslint-config-next": "16.3.1",
     "github-slugger": "^2.0.0",
     "pagefind": "^1.5.2",
     "tailwindcss": "^4.3.3",
     "typescript": "^6.0.3",
     "vite": "^7.3.6",
-    "vitest": "^4.1.10",
-    "wrangler": "^4.123.0"
+    "vitest": "^4.1.11",
+    "wrangler": "^4.134.0"
   }
 }

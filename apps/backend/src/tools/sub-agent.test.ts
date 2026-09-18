@@ -787,9 +787,12 @@ describe("createSubAgentDelegate", () => {
       expect(modelText(tool, final)).toBe("All done.");
     });
 
-    // The same rule the run path applies: a step inside the tool loop can end at
-    // the ceiling and the sub-agent still recover and answer in full.
-    it("ignores a step that ended at the limit mid tool-loop", async () => {
+    // A tool call that arrived on a step cut off at the ceiling may be half a
+    // call, so the SDK refuses to execute it and the loop ends there. The
+    // delegation is genuinely truncated: the tool never ran and no later step
+    // recovers the answer.
+    it("flags a delegation cut off on a step carrying a tool call", async () => {
+      const listCards = vi.fn(() => Promise.resolve([{ id: "c1" }]));
       const { yielded } = await delegate({
         model: modelOf(
           step(toolCall("tc1", "listCards", "{}"), {
@@ -799,15 +802,12 @@ describe("createSubAgentDelegate", () => {
           step(text("t1", "One card.")),
         ),
         loadTools: toolsOf({
-          listCards: {
-            inputSchema: z.object({}),
-            execute: () => Promise.resolve([{ id: "c1" }]),
-          },
+          listCards: { inputSchema: z.object({}), execute: listCards },
         }),
       });
 
-      expect(yielded.at(-1)!).not.toHaveProperty("truncatedByTokenLimit");
-      expect(yielded.at(-1)!.text).toBe("One card.");
+      expect(listCards).not.toHaveBeenCalled();
+      expect(yielded.at(-1)!).toHaveProperty("truncatedByTokenLimit", true);
     });
 
     // A cutoff is a fact about the answer, not an activity step, so the log the
