@@ -151,8 +151,15 @@ const TriggerRunDetailPage = ({
                   Response
                 </h2>
                 <div className="border rounded-lg p-4">
-                  <Message from="assistant">
-                    <MessageContent className="max-w-full">
+                  {/* The chat column caps a message at 80% and lets its inner
+                      column shrink to fit the content; here the Response is
+                      the only thing in its box, so both take the whole width
+                      and a table's frame reaches the edge. */}
+                  <Message
+                    from="assistant"
+                    className="max-w-full sm:max-w-full [&>div]:flex-1"
+                  >
+                    <MessageContent className="w-full max-w-full">
                       <MessageResponse>{data.run.finalText}</MessageResponse>
                     </MessageContent>
                   </Message>
