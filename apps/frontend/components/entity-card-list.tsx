@@ -1,6 +1,5 @@
 "use client";
 
-import { useState } from "react";
 import {
   Item,
   ItemTitle,
@@ -9,7 +8,8 @@ import {
   ItemContent,
 } from "@/components/ui/item";
 import { Button } from "@/components/ui/button";
-import { ConfirmDialog } from "@/components/confirm-dialog";
+import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
+import { ListError, ListState } from "@/components/list-state";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -21,7 +21,7 @@ import { EllipsisVertical, Pencil, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useScopedSWR } from "@/hooks/use-scoped-swr";
 import { writeEntity } from "@/lib/api-write";
-import { useBackendUrl } from "@/components/auth-provider";
+import { useDeleteFlow } from "@/hooks/use-delete-flow";
 
 /** The card fields Boards and Dashboards both expose. */
 interface EntityCard {
@@ -60,52 +60,33 @@ export const EntityCardList = ({
   workspaceId: string;
   config: EntityCardListConfig;
 }) => {
-  const backendUrl = useBackendUrl();
-  const { data, isLoading, mutate } = useScopedSWR<{
+  const { data, error, isLoading, mutate } = useScopedSWR<{
     results: EntityCard[];
   }>(config.entity, { orgId, workspaceId });
-
-  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-  const [cardToDelete, setCardToDelete] = useState<EntityCard | null>(null);
-  const [deleting, setDeleting] = useState(false);
-  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const cards = [...(data?.results || [])].sort((a, b) =>
     a.name.localeCompare(b.name),
   );
 
-  const handleDeleteClick = (card: EntityCard) => {
-    setCardToDelete(card);
-    setDeleteError(null);
-    setDeleteDialogOpen(true);
-  };
-
-  const handleDeleteConfirm = async () => {
-    if (!cardToDelete || !backendUrl) return;
-
-    setDeleting(true);
-    setDeleteError(null);
-    try {
-      const outcome = await writeEntity(
+  const deleteFlow = useDeleteFlow<EntityCard>({
+    mutate,
+    delete: (card, backendUrl) =>
+      writeEntity(
         backendUrl,
         config.entity,
         { orgId, workspaceId },
-        { id: cardToDelete.id },
-      );
-      if (outcome.outcome === "success") {
-        mutate();
-        setDeleteDialogOpen(false);
-        setCardToDelete(null);
-      } else {
-        setDeleteError(outcome.message);
-      }
-    } finally {
-      setDeleting(false);
-    }
-  };
+        {
+          id: card.id,
+        },
+      ),
+  });
 
   if (isLoading) {
-    return <div>Loading...</div>;
+    return <ListState variant="loading">Loading...</ListState>;
+  }
+
+  if (error) {
+    return <ListError error={error} subject={config.entity} />;
   }
 
   if (!cards.length) {
@@ -156,7 +137,7 @@ export const EntityCardList = ({
                         onClick={(e) => {
                           e.preventDefault();
                           e.stopPropagation();
-                          handleDeleteClick(card);
+                          deleteFlow.request(card);
                         }}
                       >
                         <Trash2 /> Delete
@@ -170,25 +151,24 @@ export const EntityCardList = ({
         ))}
       </ul>
 
-      <ConfirmDialog
-        open={deleteDialogOpen}
-        onOpenChange={setDeleteDialogOpen}
+      <DeleteConfirmDialog
+        open={deleteFlow.open}
+        onOpenChange={(open) => !open && deleteFlow.close()}
         title={config.labels.deleteTitle}
         description={
           <>
             This action cannot be undone. This will permanently delete the{" "}
             {config.labels.deleteNoun}{" "}
-            <span className="font-semibold">{cardToDelete?.name ?? ""}</span>{" "}
+            <span className="font-semibold">
+              {deleteFlow.target?.name ?? ""}
+            </span>{" "}
             {config.labels.deleteTail}
           </>
         }
-        confirmLabel="Delete"
-        confirmVariant="destructive"
         confirmPhrase={config.labels.confirmPhrase}
-        loadingLabel="Deleting..."
-        onConfirm={handleDeleteConfirm}
-        loading={deleting}
-        error={deleteError}
+        onConfirm={deleteFlow.confirm}
+        loading={deleteFlow.deleting}
+        error={deleteFlow.error}
       />
     </>
   );

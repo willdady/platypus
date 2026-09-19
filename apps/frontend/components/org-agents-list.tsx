@@ -11,6 +11,8 @@ import {
 } from "@/components/ui/item";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/confirm-dialog";
+import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
+import { ListError, ListState } from "@/components/list-state";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -29,6 +31,7 @@ import {
 } from "@/components/manage-sharing";
 import Link from "next/link";
 import { scopedPath, writeEntity, type Scope } from "@/lib/api-write";
+import { useDeleteFlow } from "@/hooks/use-delete-flow";
 
 // The Organization surface for Shared Agents (ADR-0007): Org Admins see and
 // manage every Shared Agent, attached or not. Promotion (from a Workspace) is
@@ -38,9 +41,6 @@ export const OrgAgentsList = ({ orgId }: { orgId: string }) => {
   const { actor } = useAuth();
   const canManage = canManageOrgSharedResource(actor).allowed;
   const backendUrl = useBackendUrl();
-  const [agentToDelete, setAgentToDelete] = useState<Agent | null>(null);
-  const [deleting, setDeleting] = useState(false);
-  const [deleteError, setDeleteError] = useState<string | null>(null);
   const [agentToManage, setAgentToManage] = useState<Agent | null>(null);
   const [deleteBlocked, setDeleteBlocked] = useState<{
     agent: Agent;
@@ -52,7 +52,7 @@ export const OrgAgentsList = ({ orgId }: { orgId: string }) => {
   // each call site.
   const scope: Scope = { orgId };
 
-  const { data, isLoading, mutate } = useScopedSWR<{ results: Agent[] }>(
+  const { data, error, isLoading, mutate } = useScopedSWR<{ results: Agent[] }>(
     "agents",
     scope,
   );
@@ -60,6 +60,11 @@ export const OrgAgentsList = ({ orgId }: { orgId: string }) => {
   const agents = [...(data?.results || [])].sort((a, b) =>
     a.name.localeCompare(b.name),
   );
+
+  const deleteFlow = useDeleteFlow<Agent>({
+    mutate,
+    delete: (agent, url) => writeEntity(url, "agents", scope, { id: agent.id }),
+  });
 
   // A Shared resource can't be deleted while attached (ADR-0007). Check the
   // live attachment count first so we explain the blocker up front instead of
@@ -83,39 +88,23 @@ export const OrgAgentsList = ({ orgId }: { orgId: string }) => {
     } catch {
       // If the check fails, fall through — the backend still guards with a 409.
     }
-    setDeleteError(null);
-    setAgentToDelete(agent);
-  };
-
-  const handleDeleteConfirm = async () => {
-    if (!agentToDelete || !backendUrl) return;
-    setDeleting(true);
-    setDeleteError(null);
-    try {
-      const outcome = await writeEntity(backendUrl, "agents", scope, {
-        id: agentToDelete.id,
-      });
-      if (outcome.outcome === "success") {
-        await mutate();
-        setAgentToDelete(null);
-      } else {
-        setDeleteError(outcome.message);
-      }
-    } finally {
-      setDeleting(false);
-    }
+    deleteFlow.request(agent);
   };
 
   if (isLoading) {
-    return <div>Loading...</div>;
+    return <ListState variant="loading">Loading...</ListState>;
+  }
+
+  if (error) {
+    return <ListError error={error} subject="shared agents" />;
   }
 
   if (agents.length === 0) {
     return (
-      <p className="text-sm text-muted-foreground">
+      <ListState variant="empty">
         No shared agents yet. Promote a workspace agent to the organization to
         share it across workspaces.
-      </p>
+      </ListState>
     );
   }
 
@@ -212,21 +201,14 @@ export const OrgAgentsList = ({ orgId }: { orgId: string }) => {
         />
       )}
 
-      <ConfirmDialog
-        open={!!agentToDelete}
-        onOpenChange={(open) => {
-          if (!open) {
-            setAgentToDelete(null);
-            setDeleteError(null);
-          }
-        }}
+      <DeleteConfirmDialog
+        open={deleteFlow.open}
+        onOpenChange={(open) => !open && deleteFlow.close()}
         title="Delete shared agent"
-        description={`Delete "${agentToDelete?.name}"? This cannot be undone.`}
-        confirmLabel="Delete"
-        confirmVariant="destructive"
-        onConfirm={handleDeleteConfirm}
-        loading={deleting}
-        error={deleteError}
+        description={`Delete "${deleteFlow.target?.name}"? This cannot be undone.`}
+        onConfirm={deleteFlow.confirm}
+        loading={deleteFlow.deleting}
+        error={deleteFlow.error}
       />
 
       <ConfirmDialog

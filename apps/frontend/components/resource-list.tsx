@@ -20,6 +20,7 @@ import {
 } from "@/lib/authorization";
 import { writeEntity, type Scope } from "@/lib/api-write";
 import { useDetachDialog } from "@/hooks/use-detach-dialog";
+import { ListError, ListState } from "./list-state";
 import { Item, ItemActions, ItemContent, ItemTitle } from "./ui/item";
 import { Button } from "./ui/button";
 import {
@@ -142,18 +143,11 @@ export const ResourceList = ({
     : true;
 
   if (isLoading) {
-    return null;
+    return <ListState variant="loading">Loading...</ListState>;
   }
 
   if (error) {
-    return (
-      <div className="flex items-center justify-center py-8">
-        <p className="text-destructive">
-          Failed to load {config.labels.plural}.{" "}
-          {error.info?.message || error.message}
-        </p>
-      </div>
-    );
+    return <ListError error={error} subject={config.labels.plural} />;
   }
 
   const resources: ScopedResource[] = data?.results ?? [];

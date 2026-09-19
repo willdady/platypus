@@ -16,9 +16,12 @@ import { useAuth, useBackendUrl } from "@/components/auth-provider";
 import { joinUrl } from "@/lib/utils";
 import useSWR from "swr";
 import { fetcher } from "@/lib/utils";
+import { writeAt } from "@/lib/api-write";
+import { useDeleteFlow } from "@/hooks/use-delete-flow";
 import { toast } from "sonner";
 import { ChangePasswordDialog } from "@/components/change-password-dialog";
-import { ConfirmDialog } from "@/components/confirm-dialog";
+import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
+import { ListError, ListState } from "@/components/list-state";
 
 interface User {
   id: string;
@@ -41,76 +44,38 @@ export function UsersList() {
   const [changingPasswordUser, setChangingPasswordUser] = useState<User | null>(
     null,
   );
-  const [deletingUser, setDeletingUser] = useState<User | null>(null);
-  const [isDeleting, setIsDeleting] = useState(false);
 
   const { data, error, isLoading, mutate } = useSWR<ListUsersResponse>(
     joinUrl(backendUrl, "/auth/admin/list-users"),
     fetcher,
   );
 
-  const handleDeleteConfirm = async () => {
-    if (!deletingUser) return;
-
-    setIsDeleting(true);
-    try {
-      const response = await fetch(
-        joinUrl(backendUrl, "/auth/admin/remove-user"),
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Origin: window.location.origin,
-          },
-          body: JSON.stringify({
-            userId: deletingUser.id,
-          }),
-          credentials: "include",
-        },
-      );
-
-      if (response.ok) {
-        toast.success(`User ${deletingUser.name} has been deleted`);
-        setDeletingUser(null);
-        mutate();
-      } else {
-        const data = await response.json();
-        toast.error(data.error || data.message || "Failed to delete user");
-      }
-    } catch (error) {
-      toast.error("Error deleting user");
-      console.error(error);
-    } finally {
-      setIsDeleting(false);
-    }
-  };
+  const deleteFlow = useDeleteFlow<User>({
+    mutate,
+    delete: (target, url) =>
+      writeAt(joinUrl(url, "/auth/admin/remove-user"), {
+        method: "POST",
+        data: { userId: target.id },
+        // better-auth's admin actions echo the browser's Origin.
+        headers: { Origin: window.location.origin },
+      }),
+    onSuccess: (target) => {
+      toast.success(`User ${target.name} has been deleted`);
+    },
+  });
 
   if (isLoading) {
-    return (
-      <div className="flex items-center justify-center py-8">
-        <p className="text-muted-foreground">Loading users...</p>
-      </div>
-    );
+    return <ListState variant="loading">Loading users...</ListState>;
   }
 
   if (error) {
-    return (
-      <div className="flex items-center justify-center py-8">
-        <p className="text-destructive">
-          Failed to load users. {error.info?.message || error.message}
-        </p>
-      </div>
-    );
+    return <ListError error={error} subject="users" />;
   }
 
   const users = data?.users || [];
 
   if (users.length === 0) {
-    return (
-      <div className="flex items-center justify-center py-8">
-        <p className="text-muted-foreground">No users found.</p>
-      </div>
-    );
+    return <ListState variant="empty">No users found.</ListState>;
   }
 
   return (
@@ -188,7 +153,7 @@ export function UsersList() {
                           <Button
                             variant="destructive"
                             size="sm"
-                            onClick={() => setDeletingUser(user)}
+                            onClick={() => deleteFlow.request(user)}
                             className="cursor-pointer"
                           >
                             <Trash2 className="h-4 w-4" />
@@ -217,25 +182,25 @@ export function UsersList() {
         />
       )}
 
-      {deletingUser && (
-        <ConfirmDialog
-          open={!!deletingUser}
-          onOpenChange={(open) => !open && setDeletingUser(null)}
+      {deleteFlow.target && (
+        <DeleteConfirmDialog
+          open={deleteFlow.open}
+          onOpenChange={(open) => !open && deleteFlow.close()}
           title="Delete User"
           description={
             <>
               This action cannot be undone. This will permanently delete the
-              user <span className="font-semibold">{deletingUser.name}</span> (
-              {deletingUser.email}) and remove all of their data from the
+              user{" "}
+              <span className="font-semibold">{deleteFlow.target.name}</span> (
+              {deleteFlow.target.email}) and remove all of their data from the
               system.
             </>
           }
           confirmLabel="Delete user"
-          confirmVariant="destructive"
           confirmPhrase="delete user"
-          loadingLabel="Deleting..."
-          onConfirm={handleDeleteConfirm}
-          loading={isDeleting}
+          onConfirm={deleteFlow.confirm}
+          loading={deleteFlow.deleting}
+          error={deleteFlow.error}
         />
       )}
     </>

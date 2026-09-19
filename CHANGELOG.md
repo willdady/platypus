@@ -1,5 +1,15 @@
 # Changelog
 
+## [3.7.3](https://github.com/willdady/platypus/compare/v3.7.2...v3.7.3) (2026-09-19)
+
+
+### Bug Fixes
+
+* **frontend:** give resource forms failure states and route workspace contexts through the outcome seam ([#886](https://github.com/willdady/platypus/issues/886)) ([c9b6123](https://github.com/willdady/platypus/commit/c9b61230b939873390658ebb5a8881fbe25123ca))
+* **frontend:** reduce dashboard grid re-renders and collapse chart widgets ([#888](https://github.com/willdady/platypus/issues/888)) ([fb2bea3](https://github.com/willdady/platypus/commit/fb2bea36e163b7f5cb6de45b9e945ec750b9ed1a))
+* **frontend:** repair chat attachments, settings sync, and per-token re-renders ([#884](https://github.com/willdady/platypus/issues/884)) ([05090ec](https://github.com/willdady/platypus/commit/05090ec9288cc018af15ba7a88a1996b1f71af3f))
+* **frontend:** stabilize kanban drag rendering and deduplicate the card dialog ([#887](https://github.com/willdady/platypus/issues/887)) ([1e0f973](https://github.com/willdady/platypus/commit/1e0f97342dc416df5fad11b4ca3d0be963b88831))
+
 ## [3.7.2](https://github.com/willdady/platypus/compare/v3.7.1...v3.7.2) (2026-09-19)
 
 
