@@ -9,7 +9,8 @@ import {
   ItemContent,
 } from "@/components/ui/item";
 import { Button } from "@/components/ui/button";
-import { ConfirmDialog } from "@/components/confirm-dialog";
+import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
+import { ListError, ListState } from "@/components/list-state";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -41,6 +42,7 @@ import { toast } from "sonner";
 import { AgentAvatar } from "@/components/agent-avatar";
 import { writeEntity, type Scope } from "@/lib/api-write";
 import { useScopedSWR } from "@/hooks/use-scoped-swr";
+import { useDeleteFlow } from "@/hooks/use-delete-flow";
 
 export const TriggerList = ({
   orgId,
@@ -50,11 +52,8 @@ export const TriggerList = ({
   workspaceId: string;
 }) => {
   const backendUrl = useBackendUrl();
-  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-  const [triggerToDelete, setTriggerToDelete] = useState<Trigger | null>(null);
   const [triggerToToggle, setTriggerToToggle] = useState<Trigger | null>(null);
   const [isToggling, setIsToggling] = useState(false);
-  const [isDeleting, setIsDeleting] = useState(false);
 
   // Resolved once per render and reused for the list's reads and every write
   // below, rather than re-deriving the Organization-vs-Workspace branch at
@@ -63,6 +62,7 @@ export const TriggerList = ({
 
   const {
     data: triggersData,
+    error,
     isLoading,
     mutate,
   } = useScopedSWR<{
@@ -82,30 +82,11 @@ export const TriggerList = ({
     a.name.localeCompare(b.name),
   );
 
-  const handleDeleteClick = (trigger: Trigger) => {
-    setTriggerToDelete(trigger);
-    setDeleteDialogOpen(true);
-  };
-
-  const handleDeleteConfirm = async () => {
-    if (!triggerToDelete || !backendUrl) return;
-
-    setIsDeleting(true);
-    try {
-      const outcome = await writeEntity(backendUrl, "triggers", scope, {
-        id: triggerToDelete.id,
-      });
-      if (outcome.outcome === "success") {
-        mutate();
-        setDeleteDialogOpen(false);
-        setTriggerToDelete(null);
-      }
-    } catch {
-      toast.error("Failed to delete trigger");
-    } finally {
-      setIsDeleting(false);
-    }
-  };
+  const deleteFlow = useDeleteFlow<Trigger>({
+    mutate,
+    delete: (trigger, url) =>
+      writeEntity(url, "triggers", scope, { id: trigger.id }),
+  });
 
   const handleToggleEnabled = async (trigger: Trigger) => {
     if (!backendUrl) return;
@@ -131,7 +112,11 @@ export const TriggerList = ({
   };
 
   if (isLoading) {
-    return <div>Loading...</div>;
+    return <ListState variant="loading">Loading...</ListState>;
+  }
+
+  if (error) {
+    return <ListError error={error} subject="triggers" />;
   }
 
   if (!triggers.length) {
@@ -258,7 +243,7 @@ export const TriggerList = ({
                       <DropdownMenuSeparator />
                       <DropdownMenuItem
                         className="cursor-pointer text-destructive focus:text-destructive"
-                        onSelect={() => handleDeleteClick(trigger)}
+                        onSelect={() => deleteFlow.request(trigger)}
                       >
                         <Trash2 /> Delete
                       </DropdownMenuItem>
@@ -271,15 +256,14 @@ export const TriggerList = ({
         ))}
       </ul>
 
-      <ConfirmDialog
-        open={deleteDialogOpen}
-        onOpenChange={setDeleteDialogOpen}
+      <DeleteConfirmDialog
+        open={deleteFlow.open}
+        onOpenChange={(open) => !open && deleteFlow.close()}
         title="Delete Trigger"
-        description={`Are you sure you want to delete "${triggerToDelete?.name}"? This will also delete all chat history for this trigger. This action cannot be undone.`}
-        confirmLabel="Delete"
-        confirmVariant="destructive"
-        onConfirm={handleDeleteConfirm}
-        loading={isDeleting}
+        description={`Are you sure you want to delete "${deleteFlow.target?.name}"? This will also delete all chat history for this trigger. This action cannot be undone.`}
+        onConfirm={deleteFlow.confirm}
+        loading={deleteFlow.deleting}
+        error={deleteFlow.error}
       />
     </>
   );
