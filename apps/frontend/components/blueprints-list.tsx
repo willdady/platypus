@@ -9,7 +9,8 @@ import {
   ItemContent,
 } from "@/components/ui/item";
 import { Button } from "@/components/ui/button";
-import { ConfirmDialog } from "@/components/confirm-dialog";
+import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
+import { ListError, ListState } from "@/components/list-state";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -22,6 +23,7 @@ import type { Blueprint } from "@platypus/schemas";
 import useSWR from "swr";
 import { fetcher, joinUrl } from "@/lib/utils";
 import { writeEntity } from "@/lib/api-write";
+import { useDeleteFlow } from "@/hooks/use-delete-flow";
 import Link from "next/link";
 import { useAuth, useBackendUrl } from "@/components/auth-provider";
 import { ApplyBlueprintDialog } from "@/components/apply-blueprint-dialog";
@@ -31,16 +33,11 @@ export const BlueprintsList = ({ orgId }: { orgId: string }) => {
   const backendUrl = useBackendUrl();
   const editBasePath = `/${orgId}/settings/blueprints`;
 
-  const [blueprintToDelete, setBlueprintToDelete] = useState<Blueprint | null>(
-    null,
-  );
-  const [deleting, setDeleting] = useState(false);
-  const [deleteError, setDeleteError] = useState<string | null>(null);
   const [blueprintToApply, setBlueprintToApply] = useState<Blueprint | null>(
     null,
   );
 
-  const { data, isLoading, mutate } = useSWR<{ results: Blueprint[] }>(
+  const { data, error, isLoading, mutate } = useSWR<{ results: Blueprint[] }>(
     backendUrl && user
       ? joinUrl(backendUrl, `/organizations/${orgId}/blueprints`)
       : null,
@@ -51,41 +48,27 @@ export const BlueprintsList = ({ orgId }: { orgId: string }) => {
     a.name.localeCompare(b.name),
   );
 
-  const handleDeleteConfirm = async () => {
-    if (!blueprintToDelete || !backendUrl) return;
-    setDeleting(true);
-    setDeleteError(null);
-    try {
-      const outcome = await writeEntity(
-        backendUrl,
-        "blueprints",
-        { orgId },
-        {
-          id: blueprintToDelete.id,
-        },
-      );
-      if (outcome.outcome === "success") {
-        await mutate();
-        setBlueprintToDelete(null);
-      } else {
-        setDeleteError(outcome.message);
-      }
-    } finally {
-      setDeleting(false);
-    }
-  };
+  const deleteFlow = useDeleteFlow<Blueprint>({
+    mutate,
+    delete: (blueprint, url) =>
+      writeEntity(url, "blueprints", { orgId }, { id: blueprint.id }),
+  });
 
   if (isLoading) {
-    return <div>Loading...</div>;
+    return <ListState variant="loading">Loading...</ListState>;
+  }
+
+  if (error) {
+    return <ListError error={error} subject="blueprints" />;
   }
 
   return (
     <>
       {blueprints.length === 0 ? (
-        <p className="text-sm text-muted-foreground">
+        <ListState variant="empty">
           No blueprints yet. Create one to provision new workspaces with a set
           of shared resources in a single step.
-        </p>
+        </ListState>
       ) : (
         <ul className="grid grid-cols-1 lg:grid-cols-2 gap-2 lg:gap-4">
           {blueprints.map((blueprint) => {
@@ -142,8 +125,7 @@ export const BlueprintsList = ({ orgId }: { orgId: string }) => {
                           <DropdownMenuItem
                             className="cursor-pointer text-destructive focus:text-destructive"
                             onSelect={() => {
-                              setDeleteError(null);
-                              setBlueprintToDelete(blueprint);
+                              deleteFlow.request(blueprint);
                             }}
                           >
                             <Trash2 /> Delete
@@ -177,21 +159,14 @@ export const BlueprintsList = ({ orgId }: { orgId: string }) => {
         />
       )}
 
-      <ConfirmDialog
-        open={!!blueprintToDelete}
-        onOpenChange={(open) => {
-          if (!open) {
-            setBlueprintToDelete(null);
-            setDeleteError(null);
-          }
-        }}
+      <DeleteConfirmDialog
+        open={deleteFlow.open}
+        onOpenChange={(open) => !open && deleteFlow.close()}
         title="Delete Blueprint"
-        description={`Are you sure you want to delete "${blueprintToDelete?.name}"? Workspaces already provisioned from it are unaffected.`}
-        confirmLabel="Delete"
-        confirmVariant="destructive"
-        onConfirm={handleDeleteConfirm}
-        loading={deleting}
-        error={deleteError}
+        description={`Are you sure you want to delete "${deleteFlow.target?.name}"? Workspaces already provisioned from it are unaffected.`}
+        onConfirm={deleteFlow.confirm}
+        loading={deleteFlow.deleting}
+        error={deleteFlow.error}
       />
     </>
   );

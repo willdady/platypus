@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { toast } from "sonner";
 import {
   Item,
   ItemTitle,
@@ -11,6 +10,8 @@ import {
 } from "@/components/ui/item";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/confirm-dialog";
+import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
+import { ListError, ListState } from "@/components/list-state";
 import {
   Dialog,
   DialogContent,
@@ -61,8 +62,8 @@ import {
   SharedWithBadge,
 } from "@/components/manage-sharing";
 import { scopedPath, writeEntity, type Scope } from "@/lib/api-write";
-import { applyDeleteOutcome } from "@/lib/apply-write-outcome";
 import { useDetachDialog } from "@/hooks/use-detach-dialog";
+import { useDeleteFlow } from "@/hooks/use-delete-flow";
 
 // The list serves two surfaces: a Workspace (workspaceId provided) where it
 // shows workspace-scoped Skills plus attached org-scoped Shared Skills as
@@ -127,12 +128,6 @@ export const SkillsList = ({
 }) => {
   const { user, actor } = useAuth();
   const backendUrl = useBackendUrl();
-  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-  const [skillToDelete, setSkillToDelete] = useState<SkillWithScope | null>(
-    null,
-  );
-  const [deleteError, setDeleteError] = useState<string | null>(null);
-  const [deleting, setDeleting] = useState(false);
   const orgSkillDetach = useDetachDialog<SkillWithScope>();
   const [detaching, setDetaching] = useState(false);
   const [attachOpen, setAttachOpen] = useState(false);
@@ -160,6 +155,7 @@ export const SkillsList = ({
 
   const {
     data: skillsData,
+    error,
     isLoading,
     mutate,
   } = useSWR<{
@@ -195,8 +191,13 @@ export const SkillsList = ({
   const getAgentsForSkill = (skillId: string) =>
     agents.filter((agent) => agent.skillIds?.includes(skillId));
 
+  const deleteFlow = useDeleteFlow<SkillWithScope>({
+    mutate,
+    guidanceOnForbidden: true,
+    delete: (skill, url) => writeEntity(url, "skills", scope, { id: skill.id }),
+  });
+
   const handleDeleteClick = async (skill: SkillWithScope) => {
-    setDeleteError(null);
     // On the Organization surface a Shared Skill can't be deleted while attached
     // (ADR-0007) — check the live count first and explain the blocker up front
     // instead of offering a Delete button that is guaranteed to fail.
@@ -219,39 +220,7 @@ export const SkillsList = ({
         // If the check fails, fall through — the backend still guards with 409.
       }
     }
-    setSkillToDelete(skill);
-    setDeleteDialogOpen(true);
-  };
-
-  const handleDeleteConfirm = async () => {
-    if (!skillToDelete || !backendUrl) return;
-    setDeleting(true);
-    setDeleteError(null);
-    try {
-      const outcome = await writeEntity(backendUrl, "skills", scope, {
-        id: skillToDelete.id,
-      });
-      await applyDeleteOutcome(outcome, {
-        mutate: () => mutate(),
-        onSuccess: () => {
-          setDeleteDialogOpen(false);
-          setSkillToDelete(null);
-        },
-        onError: (message, result) => {
-          if (result.outcome === "forbidden") {
-            // Guidance, not a failure — the backend's message already says
-            // where the Shared resource is actually managed (#570).
-            setDeleteDialogOpen(false);
-            setSkillToDelete(null);
-            toast.info(message);
-          } else {
-            setDeleteError(message);
-          }
-        },
-      });
-    } finally {
-      setDeleting(false);
-    }
+    deleteFlow.request(skill);
   };
 
   const detachOrgSkill = async (skillId: string) => {
@@ -300,138 +269,150 @@ export const SkillsList = ({
   };
 
   if (isLoading) {
-    return <div>Loading...</div>;
+    return <ListState variant="loading">Loading...</ListState>;
+  }
+
+  if (error) {
+    return <ListError error={error} subject="skills" />;
   }
 
   return (
     <>
-      <ul className="grid grid-cols-1 lg:grid-cols-2 grid-rows-1 gap-2 lg:gap-4">
-        {skills.map((skill) => {
-          // Org-scoped (Shared) Skills are locked inside a workspace: they can
-          // only be edited from the organization settings surface.
-          const isOrgScopedInWorkspace =
-            Boolean(workspaceId) && skill.scope === "organization";
+      {skills.length === 0 ? (
+        <ListState variant="empty">
+          No skills yet. Create one to get started.
+        </ListState>
+      ) : (
+        <ul className="grid grid-cols-1 lg:grid-cols-2 grid-rows-1 gap-2 lg:gap-4">
+          {skills.map((skill) => {
+            // Org-scoped (Shared) Skills are locked inside a workspace: they can
+            // only be edited from the organization settings surface.
+            const isOrgScopedInWorkspace =
+              Boolean(workspaceId) && skill.scope === "organization";
 
-          const skillAgents = getAgentsForSkill(skill.id);
-          const agentCount = skillAgents.length;
+            const skillAgents = getAgentsForSkill(skill.id);
+            const agentCount = skillAgents.length;
 
-          if (isOrgScopedInWorkspace) {
+            if (isOrgScopedInWorkspace) {
+              return (
+                <li key={skill.id}>
+                  <Item
+                    variant="outline"
+                    className="h-full cursor-pointer"
+                    onClick={() => orgSkillDetach.open(skill)}
+                  >
+                    <ItemContent>
+                      <div className="flex items-center gap-2">
+                        <ItemTitle>{skill.name}</ItemTitle>
+                        <UserInvocableBadge skill={skill} />
+                        <div className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-secondary text-[10px] font-medium text-secondary-foreground uppercase tracking-wider">
+                          <Building className="size-3" />
+                          Organization
+                        </div>
+                      </div>
+                      <ItemDescription className="text-xs line-clamp-2">
+                        {skill.description}
+                      </ItemDescription>
+                      <SkillAgentsIndicator agents={skillAgents} />
+                    </ItemContent>
+                    <ItemActions>
+                      <Pencil className="size-4" />
+                    </ItemActions>
+                  </Item>
+                </li>
+              );
+            }
+
             return (
               <li key={skill.id}>
                 <Item
                   variant="outline"
-                  className="h-full cursor-pointer"
-                  onClick={() => orgSkillDetach.open(skill)}
+                  className={`h-full cursor-pointer ${
+                    workspaceId && agentCount === 0 ? "border-warning" : ""
+                  }`}
+                  asChild
                 >
-                  <ItemContent>
-                    <div className="flex items-center gap-2">
-                      <ItemTitle>{skill.name}</ItemTitle>
-                      <UserInvocableBadge skill={skill} />
-                      <div className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-secondary text-[10px] font-medium text-secondary-foreground uppercase tracking-wider">
-                        <Building className="size-3" />
-                        Organization
+                  <Link href={`${editBasePath}/${skill.id}`}>
+                    <ItemContent>
+                      <div className="flex items-center gap-2">
+                        <ItemTitle>{skill.name}</ItemTitle>
+                        <UserInvocableBadge skill={skill} />
                       </div>
-                    </div>
-                    <ItemDescription className="text-xs line-clamp-2">
-                      {skill.description}
-                    </ItemDescription>
-                    <SkillAgentsIndicator agents={skillAgents} />
-                  </ItemContent>
-                  <ItemActions>
-                    <Pencil className="size-4" />
-                  </ItemActions>
+                      <ItemDescription className="text-xs line-clamp-2">
+                        {skill.description}
+                      </ItemDescription>
+                      {workspaceId && (
+                        <SkillAgentsIndicator agents={skillAgents} />
+                      )}
+                      {!workspaceId && canManageOrg && (
+                        <div className="mt-1">
+                          <SharedWithBadge
+                            orgId={orgId}
+                            resourceType="skill"
+                            resourceId={skill.id}
+                          />
+                        </div>
+                      )}
+                    </ItemContent>
+                    <ItemActions>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button
+                            className="cursor-pointer text-muted-foreground"
+                            variant="ghost"
+                            size="icon"
+                            onClick={(e) => e.preventDefault()}
+                          >
+                            <EllipsisVertical className="h-4 w-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent
+                          onClick={(e) => e.preventDefault()}
+                        >
+                          <DropdownMenuItem asChild>
+                            <Link
+                              className="cursor-pointer"
+                              href={`${editBasePath}/${skill.id}`}
+                            >
+                              <Pencil /> Edit
+                            </Link>
+                          </DropdownMenuItem>
+                          {canPromote && (
+                            <DropdownMenuItem
+                              className="cursor-pointer"
+                              onSelect={() => {
+                                setPromoteError(null);
+                                setSkillToPromote(skill);
+                              }}
+                            >
+                              <ArrowUpFromLine /> Promote to organization
+                            </DropdownMenuItem>
+                          )}
+                          {!workspaceId && canManageOrg && (
+                            <DropdownMenuItem
+                              className="cursor-pointer"
+                              onSelect={() => setSkillToManage(skill)}
+                            >
+                              <Share2 /> Manage attachments
+                            </DropdownMenuItem>
+                          )}
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem
+                            className="cursor-pointer text-destructive focus:text-destructive"
+                            onSelect={() => handleDeleteClick(skill)}
+                          >
+                            <Trash2 /> Delete
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </ItemActions>
+                  </Link>
                 </Item>
               </li>
             );
-          }
-
-          return (
-            <li key={skill.id}>
-              <Item
-                variant="outline"
-                className={`h-full cursor-pointer ${
-                  workspaceId && agentCount === 0 ? "border-warning" : ""
-                }`}
-                asChild
-              >
-                <Link href={`${editBasePath}/${skill.id}`}>
-                  <ItemContent>
-                    <div className="flex items-center gap-2">
-                      <ItemTitle>{skill.name}</ItemTitle>
-                      <UserInvocableBadge skill={skill} />
-                    </div>
-                    <ItemDescription className="text-xs line-clamp-2">
-                      {skill.description}
-                    </ItemDescription>
-                    {workspaceId && (
-                      <SkillAgentsIndicator agents={skillAgents} />
-                    )}
-                    {!workspaceId && canManageOrg && (
-                      <div className="mt-1">
-                        <SharedWithBadge
-                          orgId={orgId}
-                          resourceType="skill"
-                          resourceId={skill.id}
-                        />
-                      </div>
-                    )}
-                  </ItemContent>
-                  <ItemActions>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button
-                          className="cursor-pointer text-muted-foreground"
-                          variant="ghost"
-                          size="icon"
-                          onClick={(e) => e.preventDefault()}
-                        >
-                          <EllipsisVertical className="h-4 w-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent onClick={(e) => e.preventDefault()}>
-                        <DropdownMenuItem asChild>
-                          <Link
-                            className="cursor-pointer"
-                            href={`${editBasePath}/${skill.id}`}
-                          >
-                            <Pencil /> Edit
-                          </Link>
-                        </DropdownMenuItem>
-                        {canPromote && (
-                          <DropdownMenuItem
-                            className="cursor-pointer"
-                            onSelect={() => {
-                              setPromoteError(null);
-                              setSkillToPromote(skill);
-                            }}
-                          >
-                            <ArrowUpFromLine /> Promote to organization
-                          </DropdownMenuItem>
-                        )}
-                        {!workspaceId && canManageOrg && (
-                          <DropdownMenuItem
-                            className="cursor-pointer"
-                            onSelect={() => setSkillToManage(skill)}
-                          >
-                            <Share2 /> Manage attachments
-                          </DropdownMenuItem>
-                        )}
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem
-                          className="cursor-pointer text-destructive focus:text-destructive"
-                          onSelect={() => handleDeleteClick(skill)}
-                        >
-                          <Trash2 /> Delete
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </ItemActions>
-                </Link>
-              </Item>
-            </li>
-          );
-        })}
-      </ul>
+          })}
+        </ul>
+      )}
 
       <div className="mt-4 flex gap-2">
         <Button variant="outline" asChild>
@@ -534,22 +515,14 @@ export const SkillsList = ({
         error={promoteError}
       />
 
-      <ConfirmDialog
-        open={deleteDialogOpen}
-        onOpenChange={(open) => {
-          setDeleteDialogOpen(open);
-          if (!open) {
-            setSkillToDelete(null);
-            setDeleteError(null);
-          }
-        }}
+      <DeleteConfirmDialog
+        open={deleteFlow.open}
+        onOpenChange={(open) => !open && deleteFlow.close()}
         title="Delete Skill"
-        description={`Are you sure you want to delete "${skillToDelete?.name}"? This action cannot be undone.`}
-        confirmLabel="Delete"
-        confirmVariant="destructive"
-        onConfirm={handleDeleteConfirm}
-        loading={deleting}
-        error={deleteError}
+        description={`Are you sure you want to delete "${deleteFlow.target?.name}"? This action cannot be undone.`}
+        onConfirm={deleteFlow.confirm}
+        loading={deleteFlow.deleting}
+        error={deleteFlow.error}
       />
 
       <ConfirmDialog

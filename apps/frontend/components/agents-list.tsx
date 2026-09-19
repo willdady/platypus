@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { toast } from "sonner";
 import {
   Item,
   ItemTitle,
@@ -21,7 +20,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { ConfirmDialog } from "@/components/confirm-dialog";
+import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
+import { ListError, ListState } from "@/components/list-state";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -65,8 +65,8 @@ import { canManageSharedResource } from "@/lib/authorization";
 import { NoProvidersEmptyState } from "@/components/no-providers-empty-state";
 import { AttachSharedResourceDialog } from "@/components/attach-shared-resource-dialog";
 import { scopedPath, writeEntity, type Scope } from "@/lib/api-write";
-import { applyDeleteOutcome } from "@/lib/apply-write-outcome";
 import { useDetachDialog } from "@/hooks/use-detach-dialog";
+import { useDeleteFlow } from "@/hooks/use-delete-flow";
 
 // The Agent is shown either in a Workspace, where it may be a workspace-scoped
 // Agent or an attached org-scoped (Shared) Agent rendered with an Organization
@@ -100,10 +100,6 @@ export const AgentsList = ({
   const [agentToClone, setAgentToClone] = useState<Agent | null>(null);
   const [cloneName, setCloneName] = useState("");
   const [cloneError, setCloneError] = useState<string | null>(null);
-  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-  const [agentToDelete, setAgentToDelete] = useState<Agent | null>(null);
-  const [deleting, setDeleting] = useState(false);
-  const [deleteError, setDeleteError] = useState<string | null>(null);
   const [attachOpen, setAttachOpen] = useState(false);
   const orgAgentDetach = useDetachDialog<AgentWithScope>();
   const [detaching, setDetaching] = useState(false);
@@ -121,6 +117,7 @@ export const AgentsList = ({
 
   const {
     data: agentsData,
+    error: agentsError,
     isLoading: isLoadingAgents,
     mutate,
   } = useScopedSWR<{
@@ -181,42 +178,14 @@ export const AgentsList = ({
     setCloneDialogOpen(true);
   };
 
+  const deleteFlow = useDeleteFlow<AgentWithScope>({
+    mutate,
+    guidanceOnForbidden: true,
+    delete: (agent, url) => writeEntity(url, "agents", scope, { id: agent.id }),
+  });
+
   const handleDeleteClick = (agent: Agent) => {
-    setAgentToDelete(agent);
-    setDeleteError(null);
-    setDeleteDialogOpen(true);
-  };
-
-  const handleDeleteConfirm = async () => {
-    if (!agentToDelete || !backendUrl) return;
-
-    setDeleting(true);
-    setDeleteError(null);
-    try {
-      const outcome = await writeEntity(backendUrl, "agents", scope, {
-        id: agentToDelete.id,
-      });
-      await applyDeleteOutcome(outcome, {
-        mutate: () => mutate(),
-        onSuccess: () => {
-          setDeleteDialogOpen(false);
-          setAgentToDelete(null);
-        },
-        onError: (message, result) => {
-          if (result.outcome === "forbidden") {
-            // Guidance, not a failure — the backend's message already says
-            // where the Shared resource is actually managed (#570).
-            setDeleteDialogOpen(false);
-            setAgentToDelete(null);
-            toast.info(message);
-          } else {
-            setDeleteError(message);
-          }
-        },
-      });
-    } finally {
-      setDeleting(false);
-    }
+    deleteFlow.request(agent);
   };
 
   const handleCloneConfirm = async () => {
@@ -315,7 +284,11 @@ export const AgentsList = ({
   };
 
   if (isLoadingAgents || isLoadingProviders) {
-    return <div>Loading...</div>;
+    return <ListState variant="loading">Loading...</ListState>;
+  }
+
+  if (agentsError) {
+    return <ListError error={agentsError} subject="agents" />;
   }
 
   if (!providers.length) {
@@ -400,174 +373,180 @@ export const AgentsList = ({
 
   return (
     <>
-      <ul className="grid grid-cols-1 lg:grid-cols-2 grid-rows-1 gap-2 lg:gap-4">
-        {agents.map((agent) => {
-          const isOrgScoped = agent.scope === "organization";
-          // Count and list only references that actually resolve in this
-          // workspace, so the badge count matches the tooltip — a detached
-          // shared resource drops out of both (it is no longer active here).
-          const toolSetNames = getToolSetNames(agent.toolSetIds);
-          const skillNames = getSkillNames(agent.skillIds);
-          const subAgentNames = getSubAgentNames(agent.subAgentIds);
-          return (
-            <li key={agent.id}>
-              <Item variant="outline" className="h-full items-stretch">
-                {agent.avatarUrl ? (
-                  <ItemMedia variant="image" className="size-12 rounded-lg">
-                    {/* Agent avatar URL is user-supplied (arbitrary host); not
+      {agents.length === 0 ? (
+        <ListState variant="empty">
+          No agents yet. Create one to get started.
+        </ListState>
+      ) : (
+        <ul className="grid grid-cols-1 lg:grid-cols-2 grid-rows-1 gap-2 lg:gap-4">
+          {agents.map((agent) => {
+            const isOrgScoped = agent.scope === "organization";
+            // Count and list only references that actually resolve in this
+            // workspace, so the badge count matches the tooltip — a detached
+            // shared resource drops out of both (it is no longer active here).
+            const toolSetNames = getToolSetNames(agent.toolSetIds);
+            const skillNames = getSkillNames(agent.skillIds);
+            const subAgentNames = getSubAgentNames(agent.subAgentIds);
+            return (
+              <li key={agent.id}>
+                <Item variant="outline" className="h-full items-stretch">
+                  {agent.avatarUrl ? (
+                    <ItemMedia variant="image" className="size-12 rounded-lg">
+                      {/* Agent avatar URL is user-supplied (arbitrary host); not
                     routable through the Next image optimizer. */}
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={agent.avatarUrl}
-                      alt={agent.name}
-                      className="size-full object-cover"
-                    />
-                  </ItemMedia>
-                ) : (
-                  <ItemMedia
-                    variant="icon"
-                    className="size-12 rounded-lg [&_svg]:!size-7"
-                  >
-                    <Bot className="h-7 w-7 text-muted-foreground" />
-                  </ItemMedia>
-                )}
-                <ItemContent>
-                  <div className="flex items-center gap-2">
-                    <ItemTitle>{agent.name}</ItemTitle>
-                    {isOrgScoped && (
-                      <div className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-secondary text-[10px] font-medium text-secondary-foreground uppercase tracking-wider">
-                        <Building className="size-3" />
-                        Organization
-                      </div>
-                    )}
-                  </div>
-                  <ItemDescription className="text-xs line-clamp-3">
-                    {agent.description}
-                  </ItemDescription>
-                  <div className="flex gap-3 mt-auto text-xs text-muted-foreground">
-                    {toolSetNames.length ? (
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <span className="flex items-center gap-1 cursor-default">
-                            <Wrench className="h-3 w-3" />
-                            {toolSetNames.length} tool set
-                            {toolSetNames.length !== 1 && "s"}
-                          </span>
-                        </TooltipTrigger>
-                        <TooltipContent>
-                          <ul className="text-left">
-                            {toolSetNames.map((name) => (
-                              <li key={name}>{name}</li>
-                            ))}
-                          </ul>
-                        </TooltipContent>
-                      </Tooltip>
-                    ) : (
-                      <span className="flex items-center gap-1 cursor-default">
-                        <Wrench className="h-3 w-3" />0 tool sets
-                      </span>
-                    )}
-                    {skillNames.length ? (
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <span className="flex items-center gap-1 cursor-default">
-                            <Sparkles className="h-3 w-3" />
-                            {skillNames.length} skill
-                            {skillNames.length !== 1 && "s"}
-                          </span>
-                        </TooltipTrigger>
-                        <TooltipContent>
-                          <ul className="text-left">
-                            {skillNames.map((name) => (
-                              <li key={name}>{name}</li>
-                            ))}
-                          </ul>
-                        </TooltipContent>
-                      </Tooltip>
-                    ) : (
-                      <span className="flex items-center gap-1 cursor-default">
-                        <Sparkles className="h-3 w-3" />0 skills
-                      </span>
-                    )}
-                    {subAgentNames.length ? (
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <span className="flex items-center gap-1 cursor-default">
-                            <Bot className="h-3 w-3" />
-                            {subAgentNames.length} sub-agent
-                            {subAgentNames.length !== 1 && "s"}
-                          </span>
-                        </TooltipTrigger>
-                        <TooltipContent>
-                          <ul className="text-left">
-                            {subAgentNames.map((name) => (
-                              <li key={name}>{name}</li>
-                            ))}
-                          </ul>
-                        </TooltipContent>
-                      </Tooltip>
-                    ) : (
-                      <span className="flex items-center gap-1 cursor-default">
-                        <Bot className="h-3 w-3" />0 sub-agents
-                      </span>
-                    )}
-                  </div>
-                </ItemContent>
-                <ItemActions className="hidden xl:flex">
-                  <Button size="sm" asChild>
-                    <Link
-                      href={`/${orgId}/workspace/${workspaceId}/chat?agentId=${agent.id}`}
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={agent.avatarUrl}
+                        alt={agent.name}
+                        className="size-full object-cover"
+                      />
+                    </ItemMedia>
+                  ) : (
+                    <ItemMedia
+                      variant="icon"
+                      className="size-12 rounded-lg [&_svg]:!size-7"
                     >
-                      <BotMessageSquare /> New chat
-                    </Link>
-                  </Button>
-                  {hasMenu(agent) && (
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button
-                          className="cursor-pointer text-muted-foreground"
-                          variant="ghost"
-                          size="icon"
-                        >
-                          <EllipsisVertical className="h-4 w-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent>
-                        {renderMenuItems(agent)}
-                      </DropdownMenuContent>
-                    </DropdownMenu>
+                      <Bot className="h-7 w-7 text-muted-foreground" />
+                    </ItemMedia>
                   )}
-                </ItemActions>
-                <ItemFooter className="xl:hidden mt-0 pl-16">
-                  <Button size="sm" asChild>
-                    <Link
-                      href={`/${orgId}/workspace/${workspaceId}/chat?agentId=${agent.id}`}
-                    >
-                      <BotMessageSquare /> New chat
-                    </Link>
-                  </Button>
-                  {hasMenu(agent) && (
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button
-                          className="cursor-pointer text-muted-foreground"
-                          variant="ghost"
-                          size="icon"
-                        >
-                          <EllipsisVertical className="h-4 w-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent>
-                        {renderMenuItems(agent)}
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  )}
-                </ItemFooter>
-              </Item>
-            </li>
-          );
-        })}
-      </ul>
+                  <ItemContent>
+                    <div className="flex items-center gap-2">
+                      <ItemTitle>{agent.name}</ItemTitle>
+                      {isOrgScoped && (
+                        <div className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-secondary text-[10px] font-medium text-secondary-foreground uppercase tracking-wider">
+                          <Building className="size-3" />
+                          Organization
+                        </div>
+                      )}
+                    </div>
+                    <ItemDescription className="text-xs line-clamp-3">
+                      {agent.description}
+                    </ItemDescription>
+                    <div className="flex gap-3 mt-auto text-xs text-muted-foreground">
+                      {toolSetNames.length ? (
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <span className="flex items-center gap-1 cursor-default">
+                              <Wrench className="h-3 w-3" />
+                              {toolSetNames.length} tool set
+                              {toolSetNames.length !== 1 && "s"}
+                            </span>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            <ul className="text-left">
+                              {toolSetNames.map((name) => (
+                                <li key={name}>{name}</li>
+                              ))}
+                            </ul>
+                          </TooltipContent>
+                        </Tooltip>
+                      ) : (
+                        <span className="flex items-center gap-1 cursor-default">
+                          <Wrench className="h-3 w-3" />0 tool sets
+                        </span>
+                      )}
+                      {skillNames.length ? (
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <span className="flex items-center gap-1 cursor-default">
+                              <Sparkles className="h-3 w-3" />
+                              {skillNames.length} skill
+                              {skillNames.length !== 1 && "s"}
+                            </span>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            <ul className="text-left">
+                              {skillNames.map((name) => (
+                                <li key={name}>{name}</li>
+                              ))}
+                            </ul>
+                          </TooltipContent>
+                        </Tooltip>
+                      ) : (
+                        <span className="flex items-center gap-1 cursor-default">
+                          <Sparkles className="h-3 w-3" />0 skills
+                        </span>
+                      )}
+                      {subAgentNames.length ? (
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <span className="flex items-center gap-1 cursor-default">
+                              <Bot className="h-3 w-3" />
+                              {subAgentNames.length} sub-agent
+                              {subAgentNames.length !== 1 && "s"}
+                            </span>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            <ul className="text-left">
+                              {subAgentNames.map((name) => (
+                                <li key={name}>{name}</li>
+                              ))}
+                            </ul>
+                          </TooltipContent>
+                        </Tooltip>
+                      ) : (
+                        <span className="flex items-center gap-1 cursor-default">
+                          <Bot className="h-3 w-3" />0 sub-agents
+                        </span>
+                      )}
+                    </div>
+                  </ItemContent>
+                  <ItemActions className="hidden xl:flex">
+                    <Button size="sm" asChild>
+                      <Link
+                        href={`/${orgId}/workspace/${workspaceId}/chat?agentId=${agent.id}`}
+                      >
+                        <BotMessageSquare /> New chat
+                      </Link>
+                    </Button>
+                    {hasMenu(agent) && (
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button
+                            className="cursor-pointer text-muted-foreground"
+                            variant="ghost"
+                            size="icon"
+                          >
+                            <EllipsisVertical className="h-4 w-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent>
+                          {renderMenuItems(agent)}
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    )}
+                  </ItemActions>
+                  <ItemFooter className="xl:hidden mt-0 pl-16">
+                    <Button size="sm" asChild>
+                      <Link
+                        href={`/${orgId}/workspace/${workspaceId}/chat?agentId=${agent.id}`}
+                      >
+                        <BotMessageSquare /> New chat
+                      </Link>
+                    </Button>
+                    {hasMenu(agent) && (
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button
+                            className="cursor-pointer text-muted-foreground"
+                            variant="ghost"
+                            size="icon"
+                          >
+                            <EllipsisVertical className="h-4 w-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent>
+                          {renderMenuItems(agent)}
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    )}
+                  </ItemFooter>
+                </Item>
+              </li>
+            );
+          })}
+        </ul>
+      )}
 
       <div className="mt-4 flex gap-2">
         <Button variant="outline" asChild>
@@ -735,19 +714,14 @@ export const AgentsList = ({
         </DialogContent>
       </Dialog>
 
-      <ConfirmDialog
-        open={deleteDialogOpen}
-        onOpenChange={(open) => {
-          setDeleteDialogOpen(open);
-          if (!open) setDeleteError(null);
-        }}
+      <DeleteConfirmDialog
+        open={deleteFlow.open}
+        onOpenChange={(open) => !open && deleteFlow.close()}
         title="Delete Agent"
-        description={`Are you sure you want to delete "${agentToDelete?.name}"? This action cannot be undone.`}
-        confirmLabel="Delete"
-        confirmVariant="destructive"
-        onConfirm={handleDeleteConfirm}
-        loading={deleting}
-        error={deleteError}
+        description={`Are you sure you want to delete "${deleteFlow.target?.name}"? This action cannot be undone.`}
+        onConfirm={deleteFlow.confirm}
+        loading={deleteFlow.deleting}
+        error={deleteFlow.error}
       />
     </>
   );
