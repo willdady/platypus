@@ -475,7 +475,14 @@ export const ChatMessage = memo(function ChatMessage({
           )}
         </>
       )}
-      {!(isLastMessage && status === "streaming") && (
+      {/* Hidden on the last message for the whole of a turn in flight, not
+      only while chunks stream: between send and the first chunk the reply
+      exists with nothing to show, and its row of controls would otherwise
+      sit alone where the answer is about to appear. */}
+      {!(
+        isLastMessage &&
+        (status === "submitted" || status === "streaming")
+      ) && (
         <MessageActions
           className={message.role === "user" ? "justify-end" : "pl-8"}
         >
