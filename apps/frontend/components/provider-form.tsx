@@ -43,6 +43,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { ConfirmDialog } from "@/components/confirm-dialog";
+import { DetailFormState } from "@/components/detail-form-state";
 import { FormFooterButtons } from "@/components/form-footer-buttons";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
@@ -477,6 +478,10 @@ const ProviderForm = ({
   const router = useRouter();
 
   const formScope = workspaceId ? "workspace" : "organization";
+  const listHref =
+    formScope === "workspace"
+      ? `/${orgId}/workspace/${workspaceId}/settings/providers`
+      : `/${orgId}/settings/providers`;
 
   const [formData, setFormData] = useState<ProviderFormData>({
     providerType: "OpenAI",
@@ -530,10 +535,11 @@ const ProviderForm = ({
 
   const { mutate: globalMutate } = useSWRConfig();
 
-  const { data: provider, isLoading } = useSWR<ProviderWithScope>(
-    fetchUrl,
-    fetcher,
-  );
+  const {
+    data: provider,
+    error: providerError,
+    isLoading,
+  } = useSWR<ProviderWithScope>(fetchUrl, fetcher);
 
   // The Web-search backends this deployment has installed (ADR-0014). Org-scoped
   // rather than workspace-scoped because this form serves both Provider scopes and
@@ -897,14 +903,10 @@ const ProviderForm = ({
     });
   };
 
-  if (isLoading) {
-    return <div className={classNames}>Loading...</div>;
-  }
-
   const isReadOnly =
     formScope === "workspace" && provider?.scope === "organization";
 
-  return (
+  const form = (
     <div className={classNames}>
       {error && (
         <div className="mb-6 p-4 rounded-lg bg-destructive/10 border border-destructive/20 text-sm text-destructive flex items-center gap-2">
@@ -1359,6 +1361,19 @@ const ProviderForm = ({
         }}
       />
     </div>
+  );
+
+  return (
+    <DetailFormState
+      isLoading={isLoading}
+      error={providerError}
+      data={provider}
+      subject="provider"
+      backHref={listHref}
+      backLabel="Back to providers"
+    >
+      {form}
+    </DetailFormState>
   );
 };
 

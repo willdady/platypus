@@ -5,6 +5,7 @@ import {
   fireEvent,
   waitFor,
   act,
+  within,
 } from "@testing-library/react";
 import type {
   KanbanBoardState,
@@ -14,12 +15,18 @@ import type {
 
 // --- Module mocks ------------------------------------------------------------
 
-const replace = vi.fn();
-vi.mock("next/navigation", () => ({
-  useSearchParams: () => new URLSearchParams(),
-  useRouter: () => ({ replace, push: vi.fn() }),
-  usePathname: () => "/org1/workspace/ws1/boards/board-1",
-}));
+const { replace } = vi.hoisted(() => ({ replace: vi.fn() }));
+vi.mock("next/navigation", () => {
+  // Next hands back stable instances between renders; the board's memoized
+  // children rely on that, so the mock must too.
+  const searchParams = new URLSearchParams();
+  const router = { replace, push: vi.fn() };
+  return {
+    useSearchParams: () => searchParams,
+    useRouter: () => router,
+    usePathname: () => "/org1/workspace/ws1/boards/board-1",
+  };
+});
 
 vi.mock("@/components/auth-provider", () => ({
   useBackendUrl: () => "http://test",
@@ -70,6 +77,26 @@ vi.mock("@dnd-kit/core", async () => {
       dragHandlers.onDragOver = props.onDragOver as (e: unknown) => void;
       dragHandlers.onDragEnd = props.onDragEnd as (e: unknown) => void;
       return React.createElement(actual.DndContext, props);
+    },
+  };
+});
+
+// Counts every `useSortable` call. The card and column components both own a
+// `useSortable` hook, so a call is a render of that memoized component — the
+// only way to see whether the drag handlers are re-rendering more than they
+// should.
+const { sortableRenders } = vi.hoisted(() => ({
+  sortableRenders: new Map<string, number>(),
+}));
+
+vi.mock("@dnd-kit/sortable", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@dnd-kit/sortable")>();
+  return {
+    ...actual,
+    useSortable: (args: Parameters<typeof actual.useSortable>[0]) => {
+      const id = String(args.id);
+      sortableRenders.set(id, (sortableRenders.get(id) ?? 0) + 1);
+      return actual.useSortable(args);
     },
   };
 });
@@ -576,6 +603,72 @@ describe("KanbanBoard transport", () => {
         ),
       );
       expect(mutateBoard).toHaveBeenCalled();
+    });
+  });
+
+  describe("drag-over render isolation", () => {
+    beforeEach(() => {
+      sortableRenders.clear();
+      boardState = makeBoardState([
+        makeColumn({ id: "col-1", name: "In Progress" }, [
+          makeCard({ id: "card-1", columnId: "col-1", title: "Card one" }),
+          makeCard({ id: "card-2", columnId: "col-1", title: "Card two" }),
+        ]),
+        makeColumn({ id: "col-2", name: "Done" }, [
+          makeCard({ id: "card-3", columnId: "col-2" }),
+        ]),
+        makeColumn({ id: "col-3", name: "Later" }, [
+          makeCard({ id: "card-4", columnId: "col-3" }),
+        ]),
+      ]);
+    });
+
+    function cardOrder() {
+      const column = screen
+        .getByText("In Progress")
+        .closest(".w-80") as HTMLElement;
+      return within(column)
+        .getAllByText(/^Card (one|two)$/)
+        .map((el) => el.textContent);
+    }
+
+    // Runs one drag-over and waits for the board's animation-frame throttle to
+    // release, so the next drag-over lands in a new frame.
+    async function dragOverFrame(active: unknown, over: unknown) {
+      await act(async () => {
+        dragHandlers.onDragOver?.({ active, over });
+        await new Promise((resolve) =>
+          requestAnimationFrame(() => resolve(null)),
+        );
+      });
+    }
+
+    it("re-renders only the column a drag-over reordered cards in", async () => {
+      renderBoard();
+      sortableRenders.clear();
+
+      const active = {
+        id: "card-1",
+        data: { current: { type: "card" } },
+        rect: { current: { translated: null, initial: null } },
+      };
+      act(() => {
+        dragHandlers.onDragStart?.({ active });
+      });
+      // Drag start clones every column, so the whole board re-renders once.
+      // The per-frame drag-over updates are what must stay local.
+      sortableRenders.clear();
+
+      const over = { id: "card-2", rect: { top: 0, height: 10 } };
+      await dragOverFrame(active, over);
+      expect(cardOrder()).toEqual(["Card two", "Card one"]);
+      await dragOverFrame(active, over);
+      expect(cardOrder()).toEqual(["Card one", "Card two"]);
+
+      expect(sortableRenders.get("col-1")).toBeGreaterThan(0);
+      expect(sortableRenders.get("col-2")).toBeUndefined();
+      expect(sortableRenders.get("col-3")).toBeUndefined();
+      expect(sortableRenders.get("card-3")).toBeUndefined();
     });
   });
 

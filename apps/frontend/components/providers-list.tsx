@@ -1,277 +1,33 @@
 "use client";
 
-import { Provider } from "@platypus/schemas";
-import { Item, ItemActions, ItemContent, ItemTitle } from "./ui/item";
-import useSWR from "swr";
-import { cn, fetcher, joinUrl } from "../lib/utils";
-import { useAuth, useBackendUrl } from "@/components/auth-provider";
-import {
-  canConfigureWorkspaceResource,
-  canManageSharedResource,
-} from "@/lib/authorization";
-import {
-  Building,
-  ExternalLink,
-  Link2,
-  Pencil,
-  Plus,
-  Unlink,
-} from "lucide-react";
-import Link from "next/link";
-import { Button } from "./ui/button";
 import { NoProvidersEmptyState } from "./no-providers-empty-state";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "./ui/dialog";
-import { AttachSharedResourceDialog } from "./attach-shared-resource-dialog";
-import { useState } from "react";
-import { scopedPath, writeEntity, type Scope } from "@/lib/api-write";
-import { useDetachDialog } from "@/hooks/use-detach-dialog";
+import { ResourceList, type ResourceListConfig } from "./resource-list";
 
-const ProvidersList = ({
-  className,
+const providersConfig: ResourceListConfig = {
+  entity: "providers",
+  resourceType: "provider",
+  settingsPath: "settings/providers",
+  delegationFlag: "providerSelfManagement",
+  labels: {
+    add: "Add provider",
+    attach: "Attach shared provider",
+    detachTitle: "Organization Provider",
+    noun: "provider",
+    plural: "providers",
+  },
+  emptyState: NoProvidersEmptyState,
+};
+
+export const ProvidersList = ({
   orgId,
   workspaceId,
 }: {
-  className?: string;
   orgId: string;
   workspaceId?: string;
-}) => {
-  // Add scope to Provider type for this component
-  type ProviderWithScope = Provider & { scope: "organization" | "workspace" };
-
-  const { user, actor, workspaceDelegation } = useAuth();
-  const backendUrl = useBackendUrl();
-  const orgProviderDetach = useDetachDialog<ProviderWithScope>();
-  const [attachOpen, setAttachOpen] = useState(false);
-  const [detaching, setDetaching] = useState(false);
-
-  // Resolved once per render and reused for the list's read and every write
-  // below, rather than re-deriving the Organization-vs-Workspace branch at
-  // each call site.
-  const scope: Scope = workspaceId ? { orgId, workspaceId } : { orgId };
-
-  const fetchUrl =
-    backendUrl && user
-      ? joinUrl(backendUrl, scopedPath("providers", scope))
-      : null;
-
-  const { data, error, isLoading, mutate } = useSWR<{
-    results: ProviderWithScope[];
-  }>(fetchUrl, fetcher);
-
-  // Attach, detach, and Promote a Shared resource are the same rule
-  // (ADR-0007 / #154), asked of the auth module instead of re-derived here.
-  const canAttach = canManageSharedResource(actor, workspaceId).allowed;
-
-  const detachOrgProvider = async (providerId: string) => {
-    if (!backendUrl || !workspaceId) return;
-    setDetaching(true);
-    orgProviderDetach.setError(null);
-    try {
-      const outcome = await writeEntity(
-        backendUrl,
-        "attachments/provider",
-        scope,
-        {
-          id: providerId,
-        },
-      );
-      if (outcome.outcome === "success") {
-        orgProviderDetach.close();
-        await mutate();
-      } else {
-        orgProviderDetach.setError(outcome.message);
-      }
-    } finally {
-      setDetaching(false);
-    }
-  };
-
-  // Workspace-scoped provider config is admin-only unless the workspace
-  // delegates it (ADR-0006), resolved once by the auth module off the
-  // Workspace's own delegation flags — no separate fetch needed. Org-level
-  // provider management lives behind an admin-only route, so it is always
-  // manageable here.
-  const canManage = workspaceId
-    ? canConfigureWorkspaceResource(
-        actor,
-        "provider",
-        workspaceDelegation?.providerSelfManagement === true,
-      ).allowed
-    : true;
-
-  if (isLoading || error) return null; // FIXME
-
-  const providers: ProviderWithScope[] = data?.results ?? [];
-  const attachedOrgIds = providers
-    .filter((p) => p.scope === "organization")
-    .map((p) => p.id);
-  // When an admin can attach Shared resources, fall through to the main render
-  // (which offers the Attach button) even if the workspace has no providers yet.
-  if (!providers.length && workspaceId && !canAttach) {
-    return (
-      <NoProvidersEmptyState
-        orgId={orgId}
-        workspaceId={workspaceId}
-        canManage={canManage}
-      />
-    );
-  }
-
-  return (
-    <>
-      <ul className={cn("mb-4", className)}>
-        {providers.map((provider) => {
-          const isOrgScopedInWorkspace =
-            workspaceId && provider.scope === "organization";
-
-          return (
-            <li key={provider.id} className="mb-2">
-              <Item
-                variant="outline"
-                asChild={!isOrgScopedInWorkspace}
-                onClick={
-                  isOrgScopedInWorkspace
-                    ? () => orgProviderDetach.open(provider)
-                    : undefined
-                }
-                className={cn(isOrgScopedInWorkspace && "cursor-pointer")}
-              >
-                {isOrgScopedInWorkspace ? (
-                  <>
-                    <ItemContent>
-                      <div className="flex items-center gap-2">
-                        <ItemTitle>{provider.name}</ItemTitle>
-                        <div className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-secondary text-[10px] font-medium text-secondary-foreground uppercase tracking-wider">
-                          <Building className="size-3" />
-                          Organization
-                        </div>
-                      </div>
-                    </ItemContent>
-                    <ItemActions>
-                      <Pencil className="size-4" />
-                    </ItemActions>
-                  </>
-                ) : (
-                  <Link
-                    href={
-                      workspaceId
-                        ? `/${orgId}/workspace/${workspaceId}/settings/providers/${provider.id}`
-                        : `/${orgId}/settings/providers/${provider.id}`
-                    }
-                  >
-                    <ItemContent>
-                      <div className="flex items-center gap-2">
-                        <ItemTitle>{provider.name}</ItemTitle>
-                        {provider.scope === "organization" && (
-                          <div className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-secondary text-[10px] font-medium text-secondary-foreground uppercase tracking-wider">
-                            <Building className="size-3" />
-                            Organization
-                          </div>
-                        )}
-                      </div>
-                    </ItemContent>
-                    <ItemActions>
-                      <Pencil className="size-4" />
-                    </ItemActions>
-                  </Link>
-                )}
-              </Item>
-            </li>
-          );
-        })}
-      </ul>
-      <div className="flex gap-2">
-        {canManage && (
-          <Button asChild>
-            <Link
-              href={
-                workspaceId
-                  ? `/${orgId}/workspace/${workspaceId}/settings/providers/create`
-                  : `/${orgId}/settings/providers/create`
-              }
-            >
-              <Plus /> Add provider
-            </Link>
-          </Button>
-        )}
-        {canAttach && (
-          <Button variant="outline" onClick={() => setAttachOpen(true)}>
-            <Link2 className="size-4" /> Attach shared provider
-          </Button>
-        )}
-      </div>
-      {canAttach && workspaceId && (
-        <AttachSharedResourceDialog
-          open={attachOpen}
-          onOpenChange={setAttachOpen}
-          orgId={orgId}
-          workspaceId={workspaceId}
-          resourceType="provider"
-          attachedIds={attachedOrgIds}
-          onAttached={() => {
-            setAttachOpen(false);
-            mutate();
-          }}
-        />
-      )}
-      <Dialog
-        open={!!orgProviderDetach.selected}
-        onOpenChange={(open) => {
-          if (!open) orgProviderDetach.close();
-        }}
-      >
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Organization Provider</DialogTitle>
-            <DialogDescription>
-              The provider <strong>{orgProviderDetach.selected?.name}</strong>{" "}
-              is managed at the organization level. It can only be edited from
-              the organization settings.
-            </DialogDescription>
-          </DialogHeader>
-          {orgProviderDetach.error && (
-            <p className="text-sm text-destructive">
-              {orgProviderDetach.error}
-            </p>
-          )}
-          <DialogFooter>
-            <Button variant="outline" onClick={orgProviderDetach.close}>
-              Close
-            </Button>
-            {canAttach && orgProviderDetach.selected && (
-              <Button
-                variant="destructive"
-                disabled={detaching}
-                onClick={() =>
-                  detachOrgProvider(orgProviderDetach.selected!.id)
-                }
-              >
-                <Unlink className="size-4" />
-                Detach
-              </Button>
-            )}
-            {canAttach && (
-              <Button asChild>
-                <Link
-                  href={`/${orgId}/settings/providers/${orgProviderDetach.selected?.id}`}
-                >
-                  <ExternalLink className="size-4" />
-                  Org settings
-                </Link>
-              </Button>
-            )}
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </>
-  );
-};
-
-export { ProvidersList };
+}) => (
+  <ResourceList
+    orgId={orgId}
+    workspaceId={workspaceId}
+    config={providersConfig}
+  />
+);

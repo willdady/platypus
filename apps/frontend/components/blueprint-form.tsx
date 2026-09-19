@@ -20,6 +20,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { ConfirmDialog } from "@/components/confirm-dialog";
+import { DetailFormState } from "@/components/detail-form-state";
 import { FormFooterButtons } from "@/components/form-footer-buttons";
 import { useState } from "react";
 import { useResetOnChange } from "@/hooks/use-reset-on-change";
@@ -172,7 +173,11 @@ const BlueprintForm = ({
   const collectionUrl = `/organizations/${orgId}/blueprints`;
   const returnPath = `/${orgId}/settings/blueprints`;
 
-  const { data: blueprint, isLoading } = useSWR<Blueprint>(
+  const {
+    data: blueprint,
+    error: blueprintError,
+    isLoading,
+  } = useSWR<Blueprint>(
     blueprintId && user
       ? joinUrl(backendUrl, `${collectionUrl}/${blueprintId}`)
       : null,
@@ -226,10 +231,6 @@ const BlueprintForm = ({
       );
     }
   });
-
-  if (isLoading) {
-    return <div className={classNames}>Loading...</div>;
-  }
 
   const handleChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>,
@@ -354,7 +355,7 @@ const BlueprintForm = ({
     });
   };
 
-  return (
+  const form = (
     <div className={classNames}>
       <FieldSet className="mb-6">
         <FieldGroup className="gap-4">
@@ -584,6 +585,19 @@ const BlueprintForm = ({
         error={deleteError}
       />
     </div>
+  );
+
+  return (
+    <DetailFormState
+      isLoading={isLoading}
+      error={blueprintError}
+      data={blueprint}
+      subject="blueprint"
+      backHref={returnPath}
+      backLabel="Back to blueprints"
+    >
+      {form}
+    </DetailFormState>
   );
 };
 

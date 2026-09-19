@@ -13,6 +13,7 @@ import { FormTextField } from "@/components/form-text-field";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { ConfirmDialog } from "@/components/confirm-dialog";
+import { DetailFormState } from "@/components/detail-form-state";
 import { FormFooterButtons } from "@/components/form-footer-buttons";
 import { useCallback, useState } from "react";
 import { useResetOnChange } from "@/hooks/use-reset-on-change";
@@ -116,6 +117,7 @@ const WebhookForm = ({ orgId, workspaceId, webhookId }: WebhookFormProps) => {
 
   const {
     data: webhook,
+    error: webhookError,
     isLoading,
     mutate,
   } = useSWR<Webhook>(fetchUrl, fetcher);
@@ -285,10 +287,6 @@ const WebhookForm = ({ orgId, workspaceId, webhookId }: WebhookFormProps) => {
     );
   };
 
-  if (isLoading) {
-    return <div>Loading...</div>;
-  }
-
   // parseValidationErrors mirrors any headers.<key> issue onto the bare
   // "headers" key too, as a fallback for forms with no per-row UI. This form
   // has one, so once a row is showing that message, repeating it at the
@@ -297,7 +295,7 @@ const WebhookForm = ({ orgId, workspaceId, webhookId }: WebhookFormProps) => {
     (header) => !!validationErrors[headerRowErrorKey(header.key)],
   );
 
-  return (
+  const form = (
     <div>
       <FieldSet className="mb-6">
         <FieldGroup>
@@ -523,6 +521,19 @@ const WebhookForm = ({ orgId, workspaceId, webhookId }: WebhookFormProps) => {
         loading={isRegenerating}
       />
     </div>
+  );
+
+  return (
+    <DetailFormState
+      isLoading={isLoading}
+      error={webhookError}
+      data={webhook}
+      subject="webhook"
+      backHref={`/${orgId}/workspace/${workspaceId}/settings/webhooks`}
+      backLabel="Back to webhooks"
+    >
+      {form}
+    </DetailFormState>
   );
 };
 

@@ -40,6 +40,7 @@ import type {
   KanbanCardAssignee,
   KanbanCardPriority,
   KanbanColumn,
+  KanbanLabel,
 } from "@platypus/schemas";
 import { cn, fetcher, joinUrl } from "@/lib/utils";
 import { writeEntity, writeAt, type Scope } from "@/lib/api-write";
@@ -71,6 +72,21 @@ import { Skeleton } from "@/components/ui/skeleton";
 type ColumnWithCards = KanbanColumn & { cards: KanbanCard[] };
 
 const DROP_ZONE_PREFIX = "column-drop-";
+
+const EMPTY_LABELS: KanbanLabel[] = [];
+
+const noop = () => {};
+
+// Module-level so their identity survives re-renders: `useSensor` memoizes on
+// the options object, and a fresh literal here rebuilds the sensor list, the
+// activators, and every dnd-kit context consumer on every board render.
+const POINTER_SENSOR_OPTIONS = {
+  activationConstraint: { distance: 5 },
+} as const;
+
+const TOUCH_SENSOR_OPTIONS = {
+  activationConstraint: { delay: 250, tolerance: 5 },
+} as const;
 
 function parseDropZoneId(id: string): string | null {
   return id.startsWith(DROP_ZONE_PREFIX)
@@ -187,7 +203,16 @@ export function KanbanBoard({
     () => localColumns ?? data?.columns ?? [],
     [localColumns, data],
   );
-  const labels = data?.board.labels ?? [];
+  const labels = data?.board.labels ?? EMPTY_LABELS;
+
+  // Drag handlers run between commits, so an effect-updated ref always holds
+  // the columns the last commit rendered. Reading `columns` directly would
+  // rebuild the handlers on every drag frame, and every DndContext prop change
+  // re-renders its subtree.
+  const columnsRef = useRef(columns);
+  useEffect(() => {
+    columnsRef.current = columns;
+  });
 
   // When fresh server data arrives (and we're not mid-drag), drop the local
   // optimistic copy so the board reflects the server. Uses React's "adjust
@@ -230,6 +255,17 @@ export function KanbanBoard({
     [searchParams, router, pathname],
   );
 
+  // Stable across drag frames so the memoized columns and cards it is passed
+  // through are not re-rendered on every drag-over update.
+  const handleCardClick = useCallback(
+    (card: KanbanCard) => {
+      setSelectedCard(card);
+      setDialogOpen(true);
+      updateCardIdParam(card.id);
+    },
+    [updateCardIdParam],
+  );
+
   // Open card dialog from URL query param on initial data load. Runs once when
   // data first arrives, reads the URL, and may navigate (updateCardIdParam) —
   // genuine effect work, so opening the dialog via setState here is intended.
@@ -252,13 +288,18 @@ export function KanbanBoard({
   }, [data, searchParams, updateCardIdParam]);
 
   const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
-    useSensor(TouchSensor, {
-      activationConstraint: { delay: 250, tolerance: 5 },
-    }),
+    useSensor(PointerSensor, POINTER_SENSOR_OPTIONS),
+    useSensor(TouchSensor, TOUCH_SENSOR_OPTIONS),
   );
 
-  const columnIds = columns.map((c) => c.id);
+  const columnIdsKey = columns.map((c) => c.id).join("\n");
+  // Both sortable contexts key off array identity, so rebuilding this array
+  // every render makes every card and column re-render. Rebuild it only when
+  // the id sequence actually changes.
+  const columnIds = useMemo(
+    () => (columnIdsKey ? columnIdsKey.split("\n") : []),
+    [columnIdsKey],
+  );
   const collisionDetection: CollisionDetection = useCallback(
     (args) => {
       if (activeTypeRef.current === "column") {
@@ -287,17 +328,18 @@ export function KanbanBoard({
     (event: DragStartEvent) => {
       const { active } = event;
       const type = active.data.current?.type;
+      const cols = columnsRef.current;
       setActiveId(active.id as string);
       setActiveType(type);
       activeTypeRef.current = type;
       dragOriginColumnRef.current =
         type === "card"
-          ? (columns.find((col) => col.cards.some((c) => c.id === active.id))
-              ?.id ?? null)
+          ? (cols.find((col) => col.cards.some((c) => c.id === active.id))?.id ??
+            null)
           : null;
-      setLocalColumns([...columns.map((c) => ({ ...c, cards: [...c.cards] }))]);
+      setLocalColumns([...cols.map((c) => ({ ...c, cards: [...c.cards] }))]);
     },
-    [columns, setLocalColumns],
+    [setLocalColumns],
   );
 
   const handleDragOver = useCallback(
@@ -636,13 +678,13 @@ export function KanbanBoard({
 
   const handleEditColumn = useCallback(
     (columnId: string) => {
-      const column = columns.find((c) => c.id === columnId);
+      const column = columnsRef.current.find((c) => c.id === columnId);
       if (!column) return;
       setEditColumnId(columnId);
       setEditColumnName(column.name);
       setEditColumnDialogOpen(true);
     },
-    [columns],
+    [],
   );
 
   const confirmEditColumn = useCallback(async () => {
@@ -917,7 +959,7 @@ export function KanbanBoard({
         <div className="flex-1 min-h-0 min-w-0 overflow-x-auto">
           <div className="flex gap-4 p-4 h-full min-w-fit">
             <SortableContext
-              items={columns.map((c) => c.id)}
+              items={columnIds}
               strategy={horizontalListSortingStrategy}
             >
               {columns.map((column, index) => (
@@ -929,11 +971,7 @@ export function KanbanBoard({
                   isDraggingColumn={activeType === "column"}
                   isFirst={index === 0}
                   isLast={index === columns.length - 1}
-                  onCardClick={(card) => {
-                    setSelectedCard(card);
-                    setDialogOpen(true);
-                    updateCardIdParam(card.id);
-                  }}
+                  onCardClick={handleCardClick}
                   onAddCard={handleAddCard}
                   onEditColumn={handleEditColumn}
                   onDeleteColumn={handleDeleteColumn}
@@ -959,7 +997,7 @@ export function KanbanBoard({
               <KanbanCardComponent
                 card={activeCard}
                 labels={labels}
-                onClick={() => {}}
+                onCardClick={noop}
               />
             </motion.div>
           )}
@@ -973,10 +1011,10 @@ export function KanbanBoard({
                 labels={labels}
                 draggable={false}
                 overlay
-                onCardClick={() => {}}
-                onAddCard={() => {}}
-                onEditColumn={() => {}}
-                onDeleteColumn={() => {}}
+                onCardClick={noop}
+                onAddCard={noop}
+                onEditColumn={noop}
+                onDeleteColumn={noop}
               />
             </motion.div>
           )}
