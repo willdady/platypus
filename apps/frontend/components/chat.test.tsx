@@ -39,6 +39,11 @@ const { harness } = vi.hoisted(() => ({
     setMessages: vi.fn(),
     sendMessage: vi.fn(),
     chatMutate: vi.fn(),
+    chatMessageRenders: 0,
+    lastChatMessageProps: null as null | {
+      onMessageDelete: (messageId: string) => void;
+      staleToolCallIds?: ReadonlySet<string>;
+    },
   },
 }));
 
@@ -122,16 +127,21 @@ vi.mock("@/components/ai-elements/prompt-input", () => ({
     placeholder,
     disabled,
     status,
+    value,
+    onChange,
   }: {
     placeholder?: string;
     disabled?: boolean;
     status?: string;
+    value?: string;
+    onChange?: React.ChangeEventHandler<HTMLTextAreaElement>;
   }) => (
     <textarea
-      readOnly
       placeholder={placeholder}
       disabled={disabled}
       data-status={status}
+      value={value}
+      onChange={onChange}
     />
   ),
   PromptInputSubmit: ({ status }: { status?: string }) => (
@@ -147,19 +157,32 @@ vi.mock("./chat-message", () => ({
     message,
     editor,
     onEditStart,
+    onMessageDelete,
+    staleToolCallIds,
   }: {
     message: PlatypusUIMessage;
     editor?: React.ReactNode;
     onEditStart: (messageId: string) => void;
-  }) => (
-    <div>
-      {editor ?? (
-        <button type="button" onClick={() => onEditStart(message.id)}>
-          Edit {message.id}
-        </button>
-      )}
-    </div>
-  ),
+    onMessageDelete: (messageId: string) => void;
+    staleToolCallIds?: ReadonlySet<string>;
+  }) => {
+    harness.chatMessageRenders += 1;
+    harness.lastChatMessageProps = { onMessageDelete, staleToolCallIds };
+    return (
+      <div>
+        {editor ?? (
+          <>
+            <button type="button" onClick={() => onEditStart(message.id)}>
+              Edit {message.id}
+            </button>
+            <button type="button" onClick={() => onMessageDelete(message.id)}>
+              Delete {message.id}
+            </button>
+          </>
+        )}
+      </div>
+    );
+  },
 }));
 
 // Stubbed to what the Chat hands the edit surface, and to the one thing the
@@ -192,7 +215,12 @@ vi.mock("./message-editor", () => ({
     </div>
   ),
 }));
-vi.mock("./context-meter", () => ({ ContextMeter: () => null }));
+vi.mock("./context-meter", () => ({
+  ContextMeter: () => null,
+  ContextMeterEntrance: ({ children }: { children?: React.ReactNode }) => (
+    <div>{children}</div>
+  ),
+}));
 vi.mock("./file-compatibility-warning", () => ({
   FileCompatibilityWarning: () => null,
 }));
@@ -220,7 +248,7 @@ const CHAT_KEY = `http://test/organizations/org1/workspaces/ws1/chat/${CHAT_ID}`
 const provider = {
   id: "p1",
   name: "OpenRouter",
-  modelIds: [{ id: "m1", passthroughFileTypes: [] }],
+  modelIds: [{ id: "m1", passthroughFileTypes: [], contextWindow: 1000 }],
 };
 
 const message = (id: string, text: string): PlatypusUIMessage =>
@@ -281,6 +309,8 @@ beforeEach(() => {
   harness.sendMessage.mockReset();
   harness.chatMutate.mockReset();
   harness.chatMutate.mockResolvedValue(undefined);
+  harness.chatMessageRenders = 0;
+  harness.lastChatMessageProps = null;
 });
 
 describe("Chat detail read", () => {
@@ -611,5 +641,103 @@ describe("editing a message", () => {
 
     expect(screen.getAllByTestId("editor")).toHaveLength(1);
     expect(screen.getByRole("button", { name: "Edit u2" })).toBeInTheDocument();
+  });
+});
+
+/**
+ * Issue #869: the transcript re-rendered on every streamed token and every
+ * composer keystroke. `ChatMessage` is memoised, so what defeated it was the
+ * props changing identity — the cleared-tool-call Set and the delete callback
+ * — and the composer's input state living in `Chat`, so a keystroke re-rendered
+ * the whole tree.
+ */
+describe("transcript stability", () => {
+  it("keeps the stale tool-call set and the delete callback stable across renders", () => {
+    harness.turn.messages = [message("u1", "q"), message("a1", "a")];
+    const view = renderChat();
+    const first = harness.lastChatMessageProps!;
+
+    view.rerender(<Chat orgId="org1" workspaceId="ws1" chatId={CHAT_ID} />);
+
+    expect(harness.lastChatMessageProps!.onMessageDelete).toBe(
+      first.onMessageDelete,
+    );
+    expect(harness.lastChatMessageProps!.staleToolCallIds).toBe(
+      first.staleToolCallIds,
+    );
+  });
+
+  it("deletes through an updater, so the callback need not close over the list", () => {
+    harness.turn.messages = [message("u1", "q"), message("a1", "a")];
+    renderChat();
+
+    fireEvent.click(screen.getByRole("button", { name: "Delete u1" }));
+
+    const update = harness.setMessages.mock.calls.at(-1)?.[0] as (
+      held: PlatypusUIMessage[],
+    ) => PlatypusUIMessage[];
+    expect(typeof update).toBe("function");
+    expect(update(harness.turn.messages).map((m) => m.id)).toEqual(["a1"]);
+  });
+
+  it("does not re-render the transcript while the composer is typed into", () => {
+    harness.turn.messages = [message("u1", "q"), message("a1", "a")];
+    renderChat();
+    const before = harness.chatMessageRenders;
+
+    fireEvent.change(
+      screen.getByPlaceholderText("What would you like to know?"),
+      { target: { value: "hello" } },
+    );
+
+    expect(harness.chatMessageRenders).toBe(before);
+  });
+
+  // With clearing ACTIVE the set is non-empty, and the function rebuilds it
+  // from `messages` — which changes on every streamed token. Identity has to
+  // survive that too, or every token re-renders the transcript exactly when a
+  // long chat (the reason clearing exists) is streaming (issue #869).
+  it("keeps the cleared tool-call set stable while a reply streams", () => {
+    harness.data.set(`/chat/${CHAT_ID}`, {
+      id: CHAT_ID,
+      status: "running",
+      providerId: "p1",
+      modelId: "m1",
+      messages: [],
+    });
+    const toolResults = ["t0", "t1", "t2", "t3", "t4", "t5"].map(
+      (toolCallId) =>
+        ({
+          id: `a-${toolCallId}`,
+          role: "assistant",
+          parts: [
+            {
+              type: "tool-read_url",
+              toolCallId,
+              state: "output-available",
+              input: {},
+              output: {},
+            },
+          ],
+          metadata: {
+            readOnlyToolNames: ["read_url"],
+            // 700/1000 is at the clearing threshold; keep-recent is 4, so t0
+            // and t1 are stale.
+            contextOccupancy: { inputTokens: 700, outputTokens: 0 },
+          },
+        }) as unknown as PlatypusUIMessage,
+    );
+    harness.turn.messages = [...toolResults, message("a-last", "an answer")];
+    const view = renderChat();
+    const first = harness.lastChatMessageProps!.staleToolCallIds;
+    expect(first?.size).toBe(2);
+
+    harness.turn.messages = [
+      ...toolResults,
+      message("a-last", "an answer, still streaming"),
+    ];
+    view.rerender(<Chat orgId="org1" workspaceId="ws1" chatId={CHAT_ID} />);
+
+    expect(harness.lastChatMessageProps!.staleToolCallIds).toBe(first);
   });
 });

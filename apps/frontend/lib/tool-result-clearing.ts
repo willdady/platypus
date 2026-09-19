@@ -37,6 +37,14 @@ const clearableToolNamesOf = (
   return names;
 };
 
+/**
+ * The one "nothing is cleared" answer. The Transcript memo compares this value
+ * by identity, so returning a fresh empty `Set` per call re-rendered every
+ * message on every streamed token — the normal case is unknown occupancy, so
+ * this is the answer nearly every render returns (issue #869).
+ */
+const NOTHING_CLEARED: ReadonlySet<string> = new Set();
+
 type ToolLikePart = {
   type: string;
   toolCallId: string;
@@ -66,7 +74,8 @@ const toolNameOf = (part: ToolLikePart): string =>
  * reading is at or above the shared threshold.
  *
  * Returns an empty set — clears nothing visually — the same way clearing
- * itself does nothing when occupancy or the Context window is unknown.
+ * itself does nothing when occupancy or the Context window is unknown, and the
+ * SAME empty set every time, so the Transcript memo is not defeated.
  */
 export const clearedToolCallIds = (
   messages: readonly PlatypusUIMessage[],
@@ -74,10 +83,10 @@ export const clearedToolCallIds = (
 ): ReadonlySet<string> => {
   const { occupancy, contextWindow } = reading;
   if (occupancy === undefined || contextWindow === undefined) {
-    return new Set();
+    return NOTHING_CLEARED;
   }
   if (occupancy / contextWindow < TOOL_RESULT_CLEARING_THRESHOLD) {
-    return new Set();
+    return NOTHING_CLEARED;
   }
 
   const clearableToolNames = clearableToolNamesOf(messages);
@@ -96,5 +105,8 @@ export const clearedToolCallIds = (
     0,
     clearableIds.length - TOOL_RESULT_CLEARING_KEEP_RECENT,
   );
+  if (staleCount === 0) {
+    return NOTHING_CLEARED;
+  }
   return new Set(clearableIds.slice(0, staleCount));
 };

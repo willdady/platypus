@@ -14,7 +14,7 @@ import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport } from "ai";
 import { GlobeIcon, Info, Settings2 } from "lucide-react";
 import { AnimatePresence } from "motion/react";
-import { useRef, useEffect, useState, useCallback, useMemo } from "react";
+import { useRef, useEffect, useCallback, useMemo } from "react";
 import {
   Chat as ChatType,
   Provider,
@@ -43,6 +43,7 @@ import { useSearchToggle } from "@/hooks/use-search-toggle";
 import { useModelSelection } from "@/hooks/use-model-selection";
 import { resolveModel } from "@/lib/resolve-model";
 import { clearedToolCallIds } from "@/lib/tool-result-clearing";
+import { useStableSet } from "@/hooks/use-stable-set";
 import { ContextMeter, ContextMeterEntrance } from "./context-meter";
 import { useMessageEditing } from "@/hooks/use-message-editing";
 import { ATTACHMENTS_ONLY_TEXT } from "@/lib/message-parts";
@@ -67,9 +68,8 @@ import { ChatMessage } from "./chat-message";
 import { MessageEditor } from "./message-editor";
 import { ChatReconnectingNotice } from "./chat-reconnecting-notice";
 import { toast } from "sonner";
-import { Composer, type ModelSelection } from "./composer";
-import { SlashCommandPicker } from "./slash-command-picker";
-import { useSlashCommands } from "@/hooks/use-slash-commands";
+import { ChatComposer } from "./chat-composer";
+import type { ModelSelection } from "./composer";
 import { skillsForAgent } from "@/lib/slash-commands";
 
 export const Chat = ({
@@ -87,9 +87,6 @@ export const Chat = ({
   const canSendMessages = canSendChatMessages(ownsWorkspace).allowed;
   const backendUrl = useBackendUrl();
   const scope = useMemo(() => ({ orgId, workspaceId }), [orgId, workspaceId]);
-
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const [inputValue, setInputValue] = useState("");
 
   // Fetch providers
   const { data: providersData, isLoading } = useScopedSWR<{
@@ -272,14 +269,6 @@ export const Chat = ({
     [selectedAgent, skills],
   );
 
-  const slash = useSlashCommands({
-    commands: agentSkills,
-    enabled: Boolean(selectedAgent),
-    value: inputValue,
-    onChange: setInputValue,
-    textareaRef,
-  });
-
   // One entry point for "what model will this Chat turn use, and what can it
   // do?" — replaces separately resolving the provider, the concrete model id,
   // passthrough file types, context window and search capability by hand.
@@ -444,26 +433,15 @@ export const Chat = ({
     regenerate({ body });
   }, [getRequestBody, regenerate]);
 
+  // An updater, not a slice of the current list: closing over `messages` gave
+  // this callback a new identity on every message update, which defeated the
+  // `ChatMessage` memo and re-rendered the whole transcript per token (#869).
   const handleMessageDelete = useCallback(
     (messageId: string) => {
-      setMessages(messages.filter((m) => m.id !== messageId));
+      setMessages((held) => held.filter((m) => m.id !== messageId));
     },
-    [messages, setMessages],
+    [setMessages],
   );
-
-  // TODO: Ideally show a loading indicator here
-  if (isLoading || !providersData) return null;
-
-  // Show alert if no providers are configured
-  if (providers.length === 0) {
-    return (
-      <div className="flex items-center justify-center h-full p-8">
-        <div className="w-full xl:w-4/5 max-w-4xl">
-          <NoProvidersEmptyState orgId={orgId} workspaceId={workspaceId} />
-        </div>
-      </div>
-    );
-  }
 
   // Context occupancy (ADR-0018): the capacity comes from the Org Admin's
   // declaration on the resolved model (`resolvedModel.contextWindow`), the
@@ -496,11 +474,32 @@ export const Chat = ({
   // Tool-result clearing (ADR-0018 Notes, issue #524): which tool results the
   // NEXT model call would no longer receive, derived from the same reading the
   // meter above shows rather than a stored flag — a message this session
-  // hasn't reloaded can't carry a stale one.
-  const staleToolCallIds = clearedToolCallIds(messages, {
-    occupancy: projectedOccupancy,
-    contextWindow: resolvedModel?.contextWindow,
-  });
+  // hasn't reloaded can't carry a stale one. `useStableSet` keeps the memo on
+  // `ChatMessage` intact while clearing is active: a streamed token changes
+  // text, not the set of cleared results (issue #869).
+  //
+  // Computed above the early returns below: `useStableSet` is a hook, so it
+  // cannot sit after a conditional return.
+  const staleToolCallIds = useStableSet(
+    clearedToolCallIds(messages, {
+      occupancy: projectedOccupancy,
+      contextWindow: resolvedModel?.contextWindow,
+    }),
+  );
+
+  // TODO: Ideally show a loading indicator here
+  if (isLoading || !providersData) return null;
+
+  // Show alert if no providers are configured
+  if (providers.length === 0) {
+    return (
+      <div className="flex items-center justify-center h-full p-8">
+        <div className="w-full xl:w-4/5 max-w-4xl">
+          <NoProvidersEmptyState orgId={orgId} workspaceId={workspaceId} />
+        </div>
+      </div>
+    );
+  }
 
   // Treat a server-side run-in-progress as if we were locally streaming,
   // so a tab that reconnects mid-run (or an unrelated tab opened on the
@@ -636,36 +635,22 @@ export const Chat = ({
         <div className="flex justify-center min-w-0">
           <div className="relative w-full xl:w-4/5 max-w-4xl min-w-0">
             {isRecoveringRun && <ChatReconnectingNotice />}
-            {canSendMessages && <SlashCommandPicker {...slash.picker} />}
             {canSendMessages ? (
-              <Composer
-                onSubmit={(message) => {
-                  handleSubmit(message);
-                  setInputValue("");
-                }}
-                globalDrop
-                passthroughFileTypes={resolvedModel?.passthroughFileTypes ?? []}
-                modelSelection={modelSelection}
-                textarea={{
-                  ref: textareaRef,
-                  value: inputValue,
-                  onChange: (e) => setInputValue(e.target.value),
-                  // Runs before `PromptInputTextarea`'s own Enter-to-submit
-                  // branch, which stands down on `defaultPrevented` — that
-                  // ordering is what lets Enter accept a highlighted command
-                  // instead of sending the message (issue #649).
-                  onKeyDown: slash.onKeyDown,
-                  ...slash.combobox,
-                  className: messages.length === 0 ? "min-h-24" : undefined,
-                  placeholder: runHeldElsewhere
+              <ChatComposer
+                onSubmit={handleSubmit}
+                commands={agentSkills}
+                slashEnabled={Boolean(selectedAgent)}
+                className={messages.length === 0 ? "min-h-24" : undefined}
+                placeholder={
+                  runHeldElsewhere
                     ? "Run in progress…"
                     : selectedAgent?.inputPlaceholder ||
-                      "What would you like to know?",
-                  autoFocus: true,
-                  status: effectiveStatus,
-                  disabled: runHeldElsewhere,
-                }}
-                onTranscriptionChange={setInputValue}
+                      "What would you like to know?"
+                }
+                status={effectiveStatus}
+                disabled={runHeldElsewhere}
+                passthroughFileTypes={resolvedModel?.passthroughFileTypes ?? []}
+                modelSelection={modelSelection}
                 tools={
                   <>
                     {resolvedModel?.canSearch && (

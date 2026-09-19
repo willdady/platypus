@@ -30,7 +30,11 @@ export const useChatSettings = (
 
   // Initialize chat settings from existing chat data (only when no agent is
   // selected — an agent supplies its own settings). Re-syncs when either the
-  // chat data or the selected agent changes.
+  // chat identity or the selected agent changes.
+  //
+  // Keyed on the Chat's id, never the row object: the row is replaced by every
+  // poll flush while a run is live, and re-syncing on those discarded whatever
+  // the user had typed into the settings dialog (issue #869).
   const initializeFromChat = () => {
     if (chatData && !agentId) {
       setInstructions(chatData.instructions || "");
@@ -43,7 +47,7 @@ export const useChatSettings = (
       setMaxSteps(chatData.maxSteps ?? undefined);
     }
   };
-  useResetOnChange(chatData, initializeFromChat);
+  useResetOnChange(chatData?.id, initializeFromChat);
   useResetOnChange(agentId, initializeFromChat);
 
   const settings: ChatSettings = {

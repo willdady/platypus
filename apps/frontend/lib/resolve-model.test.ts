@@ -148,4 +148,39 @@ describe("resolveModel", () => {
       "application/pdf",
     ]);
   });
+
+  // Issue #869: five helpers each re-normalised the provider's model list per
+  // render. The list is read through a getter here, so the count is exactly
+  // how many times the list was normalised.
+  it("normalises the provider's model list once per invocation", () => {
+    let reads = 0;
+    const counting = {
+      id: "p1",
+      name: "Test",
+      providerType: "Anthropic",
+      apiMode: "chat",
+      searchSource: "native",
+      get modelIds() {
+        reads += 1;
+        return [
+          {
+            id: "gpt-4",
+            alias: "flagship",
+            passthroughFileTypes: ["image/*"],
+            contextWindow: 128_000,
+            maxOutputTokens: 8_192,
+          },
+        ];
+      },
+    } as unknown as Provider;
+
+    const resolved = resolveModel({
+      providers: [counting],
+      agents: [],
+      selection: { agentId: "", modelId: "alias:flagship", providerId: "p1" },
+    });
+
+    expect(resolved?.concreteId).toBe("gpt-4");
+    expect(reads).toBe(1);
+  });
 });
