@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.7.1](https://github.com/willdady/platypus/compare/v3.7.0...v3.7.1) (2026-09-19)
+
+
+### Bug Fixes
+
+* **backend:** re-apply the skill migration that 3.6.0 databases skipped ([#859](https://github.com/willdady/platypus/issues/859)) ([f6c25ae](https://github.com/willdady/platypus/commit/f6c25ae81d4819d41ec5f69076b33df4509aa9a3))
+
 ## [3.7.0](https://github.com/willdady/platypus/compare/v3.6.0...v3.7.0) (2026-09-18)
 
 
