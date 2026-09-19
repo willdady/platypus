@@ -1,7 +1,7 @@
 import { type ReactNode } from "react";
 import { BackButton } from "@/components/back-button";
 
-export type ResourcePageVariant = "plain" | "create" | "settings" | "wide";
+export type ResourcePageVariant = "bare" | "narrow" | "stacked" | "wide";
 
 export type ResourcePageProps = {
   backFallbackHref: string;
@@ -17,13 +17,13 @@ const layoutByVariant: Record<
   ResourcePageVariant,
   { outer?: string; inner: string; title: string }
 > = {
-  plain: { inner: "", title: narrowTitleClass },
-  create: {
+  bare: { inner: "", title: narrowTitleClass },
+  narrow: {
     outer: "flex justify-center pb-8",
     inner: narrowColumnClass,
     title: narrowTitleClass,
   },
-  settings: {
+  stacked: {
     outer: "flex justify-center pb-8",
     inner: `${narrowColumnClass} space-y-8`,
     title: "text-2xl font-bold",
@@ -39,7 +39,7 @@ export const ResourcePage = ({
   backFallbackHref,
   title,
   children,
-  variant = "plain",
+  variant = "bare",
 }: ResourcePageProps) => {
   const layout = layoutByVariant[variant];
 

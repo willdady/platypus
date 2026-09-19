@@ -1,29 +1,22 @@
 "use client";
 
-import {
-  createContext,
-  useContext,
-  ReactNode,
-  useMemo,
-  useState,
-  useEffect,
-} from "react";
+import { createContext, useContext, ReactNode, useMemo } from "react";
 import { createAuthClient } from "better-auth/react";
 import { useParams } from "next/navigation";
+import useSWR from "swr";
+import type { Workspace } from "@platypus/schemas";
 import {
   type Actor,
   type WorkspaceDelegationFlags,
   resolveActor,
 } from "@/lib/authorization";
+import { scopedUrl, membershipEntity, workspaceEntity } from "@/lib/api-write";
+import { fetcher } from "@/lib/utils";
 
 interface OrgMembership {
   id: string;
   organizationId: string;
   role: "admin" | "member";
-}
-
-interface WorkspaceData extends WorkspaceDelegationFlags {
-  ownerId: string;
 }
 
 interface User {
@@ -90,134 +83,86 @@ export function AuthProvider({
 
   const { data, isPending, error } = authClient.useSession();
   const params = useParams();
-  const [orgMembership, setOrgMembership] = useState<OrgMembership | null>(
-    null,
-  );
-  const [workspaceData, setWorkspaceData] = useState<WorkspaceData | null>(
-    null,
-  );
-  const [isOrgMembershipLoading, setIsOrgMembershipLoading] = useState(false);
-  const [isWorkspaceLoading, setIsWorkspaceLoading] = useState(false);
-  const [hasFetchedOrg, setHasFetchedOrg] = useState(false);
-  const [hasFetchedWorkspace, setHasFetchedWorkspace] = useState(false);
 
   const orgId = params.orgId as string | undefined;
   const workspaceId = params.workspaceId as string | undefined;
   // Depend on the user id rather than the user object so SWR revalidations
-  // (which produce a new object identity) don't re-trigger these fetches.
+  // (which produce a new object identity) don't re-trigger these reads.
   const userId = data?.user?.id;
 
-  // Manually fetch org membership when the org/user changes. This is a
-  // data-fetching effect; the synchronous resets and loading flags below are
-  // part of its fetch lifecycle (a future refactor could move this to SWR).
-  useEffect(() => {
-    /* eslint-disable react-hooks/set-state-in-effect */
-    if (!userId || !orgId) {
-      setOrgMembership(null);
-      setHasFetchedOrg(false);
-      setIsOrgMembershipLoading(false);
-      return;
-    }
+  // Membership and Workspace rows are reads, not hand-rolled effects: routing
+  // them through SWR gives them a shared, per-key cache the pages read from
+  // too, instead of a raw `fetch` invisible to every other consumer.
+  const { data: orgMembership, isLoading: isOrgMembershipLoading } =
+    useSWR<OrgMembership>(
+      userId && orgId
+        ? scopedUrl(backendUrl, membershipEntity, { orgId })
+        : null,
+      fetcher,
+    );
 
-    // If we already have the membership for this org, don't reset it
-    if (orgMembership?.organizationId === orgId) {
-      return;
-    }
-
-    setOrgMembership(null);
-    setHasFetchedOrg(false);
-    setIsOrgMembershipLoading(true);
-    /* eslint-enable react-hooks/set-state-in-effect */
-    fetch(`${backendUrl}/organizations/${orgId}/membership`, {
-      credentials: "include",
-    })
-      .then((res) => (res.ok ? res.json() : null))
-      .then((membership) => {
-        setOrgMembership(membership);
-        setIsOrgMembershipLoading(false);
-        setHasFetchedOrg(true);
-      })
-      .catch(() => {
-        setOrgMembership(null);
-        setIsOrgMembershipLoading(false);
-        setHasFetchedOrg(true);
-      });
-  }, [userId, orgId, backendUrl, orgMembership?.organizationId]);
-
-  // Manually fetch workspace data when the workspace/org/user changes (to
-  // determine ownership). Data-fetching effect; the synchronous resets and
-  // loading flags below are part of its fetch lifecycle.
-  useEffect(() => {
-    /* eslint-disable react-hooks/set-state-in-effect */
-    if (!userId || !workspaceId || !orgId) {
-      setWorkspaceData(null);
-      setHasFetchedWorkspace(false);
-      setIsWorkspaceLoading(false);
-      return;
-    }
-
-    setWorkspaceData(null);
-    setHasFetchedWorkspace(false);
-    setIsWorkspaceLoading(true);
-    /* eslint-enable react-hooks/set-state-in-effect */
-    fetch(`${backendUrl}/organizations/${orgId}/workspaces/${workspaceId}`, {
-      credentials: "include",
-    })
-      .then((res) => (res.ok ? res.json() : null))
-      .then((ws) => {
-        setWorkspaceData(
-          ws
-            ? {
-                ownerId: ws.ownerId,
-                providerSelfManagement: ws.providerSelfManagement === true,
-                mcpSelfManagement: ws.mcpSelfManagement === true,
-              }
-            : null,
-        );
-        setIsWorkspaceLoading(false);
-        setHasFetchedWorkspace(true);
-      })
-      .catch(() => {
-        setWorkspaceData(null);
-        setIsWorkspaceLoading(false);
-        setHasFetchedWorkspace(true);
-      });
-  }, [userId, orgId, workspaceId, backendUrl]);
+  const { data: workspace, isLoading: isWorkspaceLoading } = useSWR<Workspace>(
+    userId && orgId && workspaceId
+      ? scopedUrl(backendUrl, workspaceEntity(workspaceId), { orgId })
+      : null,
+    fetcher,
+  );
 
   // Computed permissions
   const isSuperAdmin =
     (data?.user as unknown as User | undefined)?.role === "admin";
-  const ownsWorkspace = workspaceData?.ownerId === data?.user?.id;
+  const ownsWorkspace = workspace?.ownerId === data?.user?.id;
   const actor = resolveActor({
     isOperator: isSuperAdmin,
     orgRole: orgMembership?.role ?? null,
     ownsWorkspace,
   });
-  const workspaceDelegation: WorkspaceDelegationFlags | null = workspaceData;
-
-  return (
-    <AuthContext.Provider
-      value={{
-        backendUrl,
-        user: (data?.user as unknown as User) ?? null,
-        session: (data?.session as unknown as Session) ?? null,
-        isPending,
-        isAuthLoading:
-          isPending ||
-          (!!data?.user &&
-            ((!!orgId && (isOrgMembershipLoading || !hasFetchedOrg)) ||
-              (!!workspaceId && (isWorkspaceLoading || !hasFetchedWorkspace)))),
-        error,
-        authClient,
-        orgMembership,
-        actor,
-        ownsWorkspace,
-        workspaceDelegation,
-      }}
-    >
-      {children}
-    </AuthContext.Provider>
+  // Keyed on the flags themselves, not the fetched row, so an SWR revalidation
+  // that returns the same row doesn't hand consumers a new object identity.
+  const hasWorkspace = !!workspace;
+  const providerSelfManagement = workspace?.providerSelfManagement === true;
+  const mcpSelfManagement = workspace?.mcpSelfManagement === true;
+  const workspaceDelegation = useMemo<WorkspaceDelegationFlags | null>(
+    () => (hasWorkspace ? { providerSelfManagement, mcpSelfManagement } : null),
+    [hasWorkspace, providerSelfManagement, mcpSelfManagement],
   );
+
+  const isAuthLoading =
+    isPending ||
+    (!!data?.user &&
+      ((!!orgId && isOrgMembershipLoading) ||
+        (!!workspaceId && isWorkspaceLoading)));
+
+  const value = useMemo<AuthContextType>(
+    () => ({
+      backendUrl,
+      user: (data?.user as unknown as User) ?? null,
+      session: (data?.session as unknown as Session) ?? null,
+      isPending,
+      isAuthLoading,
+      error,
+      authClient,
+      orgMembership: orgMembership ?? null,
+      actor,
+      ownsWorkspace,
+      workspaceDelegation,
+    }),
+    [
+      backendUrl,
+      data?.user,
+      data?.session,
+      isPending,
+      isAuthLoading,
+      error,
+      authClient,
+      orgMembership,
+      actor,
+      ownsWorkspace,
+      workspaceDelegation,
+    ],
+  );
+
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 
 export function useAuth() {

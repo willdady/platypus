@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { format, formatDistanceToNow } from "date-fns";
+import { format } from "date-fns";
 import {
   Ban,
   Copy,
@@ -34,6 +34,7 @@ import {
 import { TurnNotice } from "@/components/turn-notice";
 import { cachedTokenBreakdown } from "@/lib/cached-tokens";
 import { formatTokens } from "@/lib/context-window";
+import { formatRelativeTime } from "@/lib/relative-time";
 
 /**
  * What the runs list says about a firing the run-rate breaker dropped before it
@@ -150,9 +151,7 @@ export const TriggerRunRow = ({
             </Link>
             <p className="text-sm">{format(new Date(run.startedAt), "PPp")}</p>
             <p className="text-sm text-muted-foreground">
-              {formatDistanceToNow(new Date(run.startedAt), {
-                addSuffix: true,
-              })}
+              {formatRelativeTime(run.startedAt)}
             </p>
             {run.eventType && (
               <p className="text-sm text-muted-foreground">

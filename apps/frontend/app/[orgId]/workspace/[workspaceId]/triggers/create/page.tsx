@@ -15,7 +15,7 @@ const CreateTriggerPage = ({
     <ResourcePage
       backFallbackHref={`/${orgId}/workspace/${workspaceId}`}
       title="New Trigger"
-      variant="create"
+      variant="narrow"
     >
       <TriggerForm orgId={orgId} workspaceId={workspaceId} />
     </ResourcePage>

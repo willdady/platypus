@@ -64,7 +64,7 @@ const CreateDashboardPage = ({
     <ResourcePage
       backFallbackHref={`/${orgId}/workspace/${workspaceId}`}
       title="New Dashboard"
-      variant="create"
+      variant="narrow"
     >
       <form onSubmit={handleSubmit} className="space-y-4">
         <FormTextField

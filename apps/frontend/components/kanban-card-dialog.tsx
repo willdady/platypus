@@ -64,6 +64,7 @@ import {
 } from "lucide-react";
 import { cn, fetcher, joinUrl } from "@/lib/utils";
 import { writeEntity } from "@/lib/api-write";
+import { formatRelativeTime } from "@/lib/relative-time";
 import { useAuth, useBackendUrl } from "@/components/auth-provider";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -83,19 +84,6 @@ type CardSaveData = {
 };
 
 type AgentOption = { id: string; name: string; avatarUrl?: string };
-
-function formatRelativeTime(date: Date): string {
-  const now = new Date();
-  const diff = now.getTime() - date.getTime();
-  const minutes = Math.floor(diff / 60000);
-  if (minutes < 1) return "just now";
-  if (minutes < 60) return `${minutes}m ago`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h ago`;
-  const days = Math.floor(hours / 24);
-  if (days < 30) return `${days}d ago`;
-  return date.toLocaleDateString();
-}
 
 function AssigneePicker({
   user,
@@ -449,16 +437,14 @@ function CommentsSection({
                   {comment.createdByName ?? "Unknown"}
                 </span>
                 <span className="text-xs text-muted-foreground">
-                  {formatRelativeTime(new Date(comment.createdAt))}
+                  {formatRelativeTime(comment.createdAt)}
                 </span>
               </div>
               {editingCommentId === comment.id ? (
                 <div className="space-y-2">
                   <Textarea
                     value={editingCommentBody}
-                    onChange={(e) =>
-                      onEditingCommentBodyChange(e.target.value)
-                    }
+                    onChange={(e) => onEditingCommentBodyChange(e.target.value)}
                     rows={3}
                     autoFocus
                   />

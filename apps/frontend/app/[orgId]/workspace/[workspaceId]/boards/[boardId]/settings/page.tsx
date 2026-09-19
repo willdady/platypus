@@ -69,7 +69,7 @@ const BoardSettingsPage = ({
     <ResourcePage
       backFallbackHref={`/${orgId}/workspace/${workspaceId}/boards/${boardId}`}
       title="Board Settings"
-      variant="settings"
+      variant="stacked"
     >
       <KanbanBoardForm
         orgId={orgId}

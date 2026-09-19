@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { useAuth, useBackendUrl } from "@/components/auth-provider";
+import { useMemo, useState } from "react";
+import { useBackendUrl } from "@/components/auth-provider";
 import { Bell, Mail, Bot, ChevronDown, ChevronUp, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -13,35 +13,17 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
-import { fetcher, joinUrl } from "@/lib/utils";
 import { writeEntity } from "@/lib/api-write";
+import { formatRelativeTime } from "@/lib/relative-time";
+import { useScopedSWR } from "@/hooks/use-scoped-swr";
 import {
   type InvitationListItem,
   type NotificationListItem,
 } from "@platypus/schemas";
 import Link from "next/link";
-import useSWR from "swr";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { toast } from "sonner";
-
-function formatRelativeTime(date: Date | string): string {
-  const now = Date.now();
-  const then = new Date(date).getTime();
-  const diffSeconds = Math.floor((now - then) / 1000);
-
-  if (diffSeconds < 60) return "just now";
-  const diffMinutes = Math.floor(diffSeconds / 60);
-  if (diffMinutes < 60)
-    return `${diffMinutes} min${diffMinutes === 1 ? "" : "s"} ago`;
-  const diffHours = Math.floor(diffMinutes / 60);
-  if (diffHours < 24)
-    return `${diffHours} hour${diffHours === 1 ? "" : "s"} ago`;
-  const diffDays = Math.floor(diffHours / 24);
-  if (diffDays < 30) return `${diffDays} day${diffDays === 1 ? "" : "s"} ago`;
-  const diffMonths = Math.floor(diffDays / 30);
-  return `${diffMonths} month${diffMonths === 1 ? "" : "s"} ago`;
-}
 
 interface NotificationsDropdownProps {
   orgId?: string;
@@ -52,41 +34,36 @@ export function NotificationsDropdown({
   orgId,
   workspaceId,
 }: NotificationsDropdownProps) {
-  const { user } = useAuth();
   const backendUrl = useBackendUrl();
+  const [isOpen, setIsOpen] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
-  const notificationsUrl =
-    backendUrl && user && orgId && workspaceId
-      ? joinUrl(
-          backendUrl,
-          `/organizations/${orgId}/workspaces/${workspaceId}/notifications`,
-        )
-      : null;
+  const scope = orgId && workspaceId ? { orgId, workspaceId } : null;
 
-  const unreadCountUrl =
-    backendUrl && user && orgId && workspaceId
-      ? joinUrl(
-          backendUrl,
-          `/organizations/${orgId}/workspaces/${workspaceId}/notifications/unread-count`,
-        )
-      : null;
+  // Polling is gated on the dropdown being open: the badge still loads its
+  // initial count, but a closed bell doesn't keep re-reading in the background.
+  const { data: notificationsData, mutate: mutateNotifications } =
+    useScopedSWR<{
+      results: NotificationListItem[];
+    }>("notifications", scope, { refreshInterval: isOpen ? 30000 : 0 });
 
-  const { data: notificationsData, mutate: mutateNotifications } = useSWR<{
-    results: NotificationListItem[];
-  }>(notificationsUrl, fetcher, { refreshInterval: 30000 });
-
-  const { data: unreadCountData, mutate: mutateUnreadCount } = useSWR<{
+  const { data: unreadCountData, mutate: mutateUnreadCount } = useScopedSWR<{
     count: number;
-  }>(unreadCountUrl, fetcher, { refreshInterval: 30000 });
+  }>("notifications/unread-count", scope, {
+    refreshInterval: isOpen ? 30000 : 0,
+  });
 
-  const { data: invitationsData } = useSWR<{ results: InvitationListItem[] }>(
-    backendUrl && user ? joinUrl(backendUrl, "/users/me/invitations") : null,
-    fetcher,
-    { refreshInterval: 60000 * 2 },
+  const { data: invitationsData } = useScopedSWR<{
+    results: InvitationListItem[];
+  }>("users/me/invitations", {}, { refreshInterval: isOpen ? 60000 * 2 : 0 });
+
+  const notifications = useMemo(
+    () => notificationsData?.results ?? [],
+    [notificationsData],
   );
-
-  const notifications = notificationsData?.results || [];
-  const invitations = invitationsData?.results || [];
+  const invitations = useMemo(
+    () => invitationsData?.results ?? [],
+    [invitationsData],
+  );
   const unreadNotificationCount = unreadCountData?.count ?? 0;
   const totalCount = unreadNotificationCount + invitations.length;
 
@@ -148,6 +125,7 @@ export function NotificationsDropdown({
   return (
     <DropdownMenu
       onOpenChange={(open) => {
+        setIsOpen(open);
         setExpandedId(null);
         if (open) {
           mutateNotifications();

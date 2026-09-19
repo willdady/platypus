@@ -15,7 +15,7 @@ const CreateBoardPage = ({
     <ResourcePage
       backFallbackHref={`/${orgId}/workspace/${workspaceId}/boards`}
       title="New Board"
-      variant="create"
+      variant="narrow"
     >
       <KanbanBoardForm orgId={orgId} workspaceId={workspaceId} />
     </ResourcePage>

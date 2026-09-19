@@ -92,6 +92,17 @@ export function scopedUrl(
   return joinUrl(backendUrl, scopedPath(entity, scope));
 }
 
+/**
+ * The two rows the auth shell reads and pages reuse. Named here, beside the
+ * path resolution they feed, so the provider's key and a page's key can't
+ * drift onto two cache entries.
+ */
+export const membershipEntity = "membership";
+
+export function workspaceEntity(workspaceId: string): string {
+  return `workspaces/${workspaceId}`;
+}
+
 export function errorMessage(body: unknown): string | undefined {
   if (body && typeof body === "object" && "error" in body) {
     const { error } = body as { error: unknown };

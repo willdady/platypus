@@ -21,7 +21,7 @@ describe("ResourcePage", () => {
     expect(screen.getByText("form goes here")).toBeInTheDocument();
   });
 
-  it("defaults to the plain variant with no outer centering wrapper", () => {
+  it("defaults to the bare variant with no outer centering wrapper", () => {
     const { container } = render(
       <ResourcePage backFallbackHref="/somewhere" title="Title">
         <div>content</div>
@@ -31,12 +31,12 @@ describe("ResourcePage", () => {
     expect(container.firstChild).not.toHaveClass("flex");
   });
 
-  it("applies the create variant's centered column and mb-4 title spacing", () => {
+  it("applies the narrow variant's centered column and mb-4 title spacing", () => {
     render(
       <ResourcePage
         backFallbackHref="/somewhere"
         title="Create Thing"
-        variant="create"
+        variant="narrow"
       >
         <div>content</div>
       </ResourcePage>,
@@ -46,12 +46,12 @@ describe("ResourcePage", () => {
     expect(heading).toHaveClass("mb-4");
   });
 
-  it("applies the settings variant's spacing without a title mb-4", () => {
+  it("applies the stacked variant's spacing without a title mb-4", () => {
     render(
       <ResourcePage
         backFallbackHref="/somewhere"
         title="Settings"
-        variant="settings"
+        variant="stacked"
       >
         <div>content</div>
       </ResourcePage>,

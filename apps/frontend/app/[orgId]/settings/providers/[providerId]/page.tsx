@@ -1,4 +1,5 @@
 import { ProviderForm } from "@/components/provider-form";
+import { ResourcePage } from "@/components/resource-page";
 
 const EditOrgProviderPage = async ({
   params,
@@ -8,10 +9,12 @@ const EditOrgProviderPage = async ({
   const { orgId, providerId } = await params;
 
   return (
-    <div>
-      <h1 className="text-2xl font-bold mb-4">Edit Organization Provider</h1>
+    <ResourcePage
+      backFallbackHref={`/${orgId}/settings/providers`}
+      title="Edit Organization Provider"
+    >
       <ProviderForm orgId={orgId} providerId={providerId} />
-    </div>
+    </ResourcePage>
   );
 };
 

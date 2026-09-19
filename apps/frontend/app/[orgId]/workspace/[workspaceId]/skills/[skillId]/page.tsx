@@ -12,7 +12,7 @@ const SkillEditPage = async ({
     <ResourcePage
       backFallbackHref={`/${orgId}/workspace/${workspaceId}`}
       title="Edit Skill"
-      variant="create"
+      variant="narrow"
     >
       <SkillForm orgId={orgId} workspaceId={workspaceId} skillId={skillId} />
     </ResourcePage>

@@ -108,7 +108,7 @@ const DashboardSettingsPage = ({
     <ResourcePage
       backFallbackHref={`/${orgId}/workspace/${workspaceId}/dashboards/${dashboardId}`}
       title="Dashboard Settings"
-      variant="settings"
+      variant="stacked"
     >
       <form onSubmit={handleSave} className="space-y-4">
         <div className="space-y-2">

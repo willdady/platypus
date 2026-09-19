@@ -15,7 +15,7 @@ const EditTriggerPage = ({
     <ResourcePage
       backFallbackHref={`/${orgId}/workspace/${workspaceId}`}
       title="Edit Trigger"
-      variant="create"
+      variant="narrow"
     >
       <TriggerForm
         orgId={orgId}

@@ -22,7 +22,7 @@ const AgentCreatePage = async ({
     <ResourcePage
       backFallbackHref={`/${orgId}/workspace/${workspaceId}`}
       title="Create Agent"
-      variant="create"
+      variant="narrow"
     >
       <AgentForm
         orgId={orgId}
