@@ -135,11 +135,15 @@ export const TriggerRunRow = ({
   return (
     <div className="p-4">
       <div className="flex items-center gap-4 justify-between">
-        <div className="flex items-center gap-4">
+        {/* `min-w-0` down the left column: a flex item's minimum is otherwise
+          its content's, so a long Trigger name, an error message or the stats
+          line would widen the column past the row and push the actions off
+          the right edge on a phone. */}
+        <div className="flex min-w-0 items-center gap-4">
           {statusBadge(run.status)}
-          <div>
+          <div className="min-w-0">
             <Link
-              className="font-medium hover:underline"
+              className="font-medium hover:underline break-words"
               href={`/${orgId}/workspace/${workspaceId}/triggers/${run.triggerId}`}
             >
               {run.triggerName}
@@ -161,15 +165,15 @@ export const TriggerRunRow = ({
               </p>
             )}
             {stats && (
-              <div className="flex gap-3 mt-1 text-xs text-muted-foreground">
-                <span className="flex items-center gap-1">
+              <div className="flex flex-wrap gap-x-3 gap-y-1 mt-1 text-xs text-muted-foreground">
+                <span className="flex items-center gap-1 whitespace-nowrap">
                   <Footprints className="h-3 w-3" />
                   {stats.steps} step{stats.steps !== 1 ? "s" : ""}
                 </span>
                 {stats.toolCalls.length > 0 ? (
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <span className="flex items-center gap-1 cursor-default">
+                      <span className="flex items-center gap-1 cursor-default whitespace-nowrap">
                         <Wrench className="h-3 w-3" />
                         {toolCallCount} tool call
                         {toolCallCount !== 1 ? "s" : ""}
@@ -186,7 +190,7 @@ export const TriggerRunRow = ({
                     </TooltipContent>
                   </Tooltip>
                 ) : (
-                  <span className="flex items-center gap-1">
+                  <span className="flex items-center gap-1 whitespace-nowrap">
                     <Wrench className="h-3 w-3" />0 tool calls
                   </span>
                 )}
@@ -199,7 +203,7 @@ export const TriggerRunRow = ({
                 stats.cacheWriteTokens !== undefined ? (
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <span className="flex items-center gap-1 cursor-default">
+                      <span className="flex items-center gap-1 cursor-default whitespace-nowrap">
                         <MessageSquare className="h-3 w-3" />
                         {formatTokens(stats.inputTokens)} in /{" "}
                         {formatTokens(stats.outputTokens)} out
@@ -217,7 +221,7 @@ export const TriggerRunRow = ({
                     </TooltipContent>
                   </Tooltip>
                 ) : (
-                  <span className="flex items-center gap-1">
+                  <span className="flex items-center gap-1 whitespace-nowrap">
                     <MessageSquare className="h-3 w-3" />
                     {formatTokens(stats.inputTokens)} in /{" "}
                     {formatTokens(stats.outputTokens)} out
@@ -230,7 +234,7 @@ export const TriggerRunRow = ({
                 {stats.contextOccupancy !== undefined && (
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <span className="flex items-center gap-1 cursor-default">
+                      <span className="flex items-center gap-1 cursor-default whitespace-nowrap">
                         <Gauge className="h-3 w-3" />
                         {formatTokens(stats.contextOccupancy)} context
                       </span>
@@ -248,7 +252,7 @@ export const TriggerRunRow = ({
               <TurnNotice className="mt-1">{RUN_SUPPRESSED_NOTICE}</TurnNotice>
             )}
             {run.errorMessage && (
-              <p className="text-sm text-destructive mt-1">
+              <p className="text-sm text-destructive mt-1 break-words">
                 {run.errorMessage}
               </p>
             )}
