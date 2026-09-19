@@ -484,6 +484,20 @@
       "when": 1789781399693,
       "tag": "0068_reapply_skill_invocation_columns",
       "breakpoints": true
+    },
+    {
+      "idx": 69,
+      "version": "7",
+      "when": 1789787665926,
+      "tag": "0069_add_invitation_token",
+      "breakpoints": true
+    },
+    {
+      "idx": 70,
+      "version": "7",
+      "when": 1789787683082,
+      "tag": "0070_backfill_invitation_tokens",
+      "breakpoints": true
     }
   ]
 }
