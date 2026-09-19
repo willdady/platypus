@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, afterEach, beforeAll } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
-import type { Dashboard } from "@platypus/schemas";
+import type { ComponentType } from "react";
 import {
   installRadixPointerPolyfills,
   openDropdownMenu as openMenu,
@@ -15,28 +15,54 @@ vi.mock("@/components/auth-provider", () => ({
   useAuth: () => ({ user: { id: "u1" } }),
 }));
 
-// The `GET .../dashboards` list this component renders. Set per test.
-let dashboards: Dashboard[] = [];
+type EntityCard = { id: string; name: string; description?: string | null };
+
+// The list this component renders. Set per test.
+let items: EntityCard[] = [];
 const mutateSpy = vi.fn();
 
 vi.mock("swr", () => ({
   __esModule: true,
   default: () => ({
-    data: { results: dashboards },
+    data: { results: items },
+    error: undefined,
     isLoading: false,
     mutate: mutateSpy,
   }),
 }));
 
+import { BoardsList } from "./boards-list";
 import { DashboardsList } from "./dashboards-list";
 
-// --- Helpers -----------------------------------------------------------------
+// --- Fixtures ----------------------------------------------------------------
 
-const dashboard: Dashboard = {
-  id: "d1",
+const card: EntityCard = {
+  id: "r1",
   name: "Revenue",
   description: "Revenue overview",
-} as unknown as Dashboard;
+};
+
+const RESOURCES: {
+  name: string;
+  List: ComponentType<{ orgId: string; workspaceId: string }>;
+  entity: string;
+  confirmPhrase: string;
+}[] = [
+  {
+    name: "boards",
+    List: BoardsList,
+    entity: "boards",
+    confirmPhrase: "delete board",
+  },
+  {
+    name: "dashboards",
+    List: DashboardsList,
+    entity: "dashboards",
+    confirmPhrase: "delete dashboard",
+  },
+];
+
+// --- Helpers -----------------------------------------------------------------
 
 function jsonResponse(status: number, body: unknown) {
   return {
@@ -46,54 +72,68 @@ function jsonResponse(status: number, body: unknown) {
   } as unknown as Response;
 }
 
-async function openDeleteDialog() {
+async function openDeleteDialog(confirmPhrase: string) {
   openMenu();
   fireEvent.click(screen.getByText("Delete"));
   // The confirmation input must be typed before the destructive button enables.
   fireEvent.change(
-    screen.getByPlaceholderText("Type 'delete dashboard' to confirm"),
-    { target: { value: "delete dashboard" } },
+    screen.getByPlaceholderText(`Type '${confirmPhrase}' to confirm`),
+    { target: { value: confirmPhrase } },
   );
 }
 
 afterEach(() => {
-  dashboards = [];
+  items = [];
   mutateSpy.mockClear();
   vi.restoreAllMocks();
 });
 
 // --- Tests -------------------------------------------------------------------
 
-describe("DashboardsList delete", () => {
+describe.each(RESOURCES)("$name list", ({ List, entity, confirmPhrase }) => {
+  it("renders each card as a link to its detail page", () => {
+    items = [card];
+
+    render(<List orgId="org1" workspaceId="ws1" />);
+
+    expect(screen.getByText("Revenue").closest("a")).toHaveAttribute(
+      "href",
+      `/org1/workspace/ws1/${entity}/r1`,
+    );
+    expect(screen.getByText("Revenue overview")).toBeInTheDocument();
+  });
+
   it("deletes through the request module and revalidates on success", async () => {
-    dashboards = [dashboard];
+    items = [card];
     const fetchMock = vi.fn().mockResolvedValue(jsonResponse(200, {}));
     vi.stubGlobal("fetch", fetchMock);
 
-    render(<DashboardsList orgId="org1" workspaceId="ws1" />);
-    await openDeleteDialog();
+    render(<List orgId="org1" workspaceId="ws1" />);
+    await openDeleteDialog(confirmPhrase);
     fireEvent.click(screen.getByRole("button", { name: "Delete" }));
 
     await waitFor(() => expect(mutateSpy).toHaveBeenCalled());
     expect(fetchMock).toHaveBeenCalledWith(
-      "http://test/organizations/org1/workspaces/ws1/dashboards/d1",
+      `http://test/organizations/org1/workspaces/ws1/${entity}/r1`,
       expect.objectContaining({ method: "DELETE" }),
     );
   });
 
   it("surfaces the backend's reason inline and does not revalidate when delete is refused", async () => {
-    dashboards = [dashboard];
+    items = [card];
     const fetchMock = vi
       .fn()
-      .mockResolvedValue(jsonResponse(409, { error: "Dashboard is in use" }));
+      .mockResolvedValue(
+        jsonResponse(409, { error: `This ${entity} is in use` }),
+      );
     vi.stubGlobal("fetch", fetchMock);
 
-    render(<DashboardsList orgId="org1" workspaceId="ws1" />);
-    await openDeleteDialog();
+    render(<List orgId="org1" workspaceId="ws1" />);
+    await openDeleteDialog(confirmPhrase);
     fireEvent.click(screen.getByRole("button", { name: "Delete" }));
 
     await waitFor(() =>
-      expect(screen.getByText("Dashboard is in use")).toBeInTheDocument(),
+      expect(screen.getByText(`This ${entity} is in use`)).toBeInTheDocument(),
     );
     expect(mutateSpy).not.toHaveBeenCalled();
     // The dialog stays open on a refused delete, letting the user retry.
