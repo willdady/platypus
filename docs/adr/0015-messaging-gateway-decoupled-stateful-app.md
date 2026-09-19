@@ -1,8 +1,15 @@
 ---
-status: accepted
+status: accepted-pending-implementation
+implemented-by: none yet (no implementation ticket exists at the time of this correction)
 ---
 
 # The messaging Gateway is a decoupled, stateful app bridging chat Surfaces to a messaging-agnostic backend
+
+> State of the code today: the messaging Gateway described here is not
+> implemented. No Gateway app, channel adapters, or Identity link and
+> Conversation binding records exist in the repository. This ADR records the
+> decision only. It moves to `accepted` in the pull request that builds the
+> Gateway.
 
 Platypus can be reached from external chat **Surfaces** (Telegram, Slack, Discord, …) through a **Gateway** — a decoupled, stateful app deployed alongside the frontend and backend. The Gateway holds the long-lived per-Surface connections and relays messages **both ways**; the **backend stays messaging-agnostic** — inbound rides the existing Chat API, outbound reuses the webhook event bus's transport, and no backend code knows about any Surface. Channel integrations are **Gateway adapters** behind the Gateway's _own_ adapter seam — first-party and in-repo — **not** Contributions to the backend Plugin system (ADR-0013). **Platypus, not the Gateway, is the identity authority.** This **revises** the roadmap's "each channel is a plugin extension point, same pattern as Sandbox backends" and **supersedes** ADR-0013's note that a messaging-gateway adapter would be a third backend Extension point (ADR-0013's text is left unchanged; this ADR is the correction of record). Human-in-the-loop approvals are explicitly **out of scope** for the first version.
 
