@@ -5,6 +5,7 @@ import {
   widgetTypeRegistry,
   widgetTypeSchema,
   widgetUpdateDataSchema,
+  type WidgetTypeDefinition,
 } from "./widget-registry.ts";
 
 describe("embed widget schemas", () => {
@@ -117,6 +118,29 @@ describe("widget type registry", () => {
       expect(typeof definition.agentWritable, type).toBe("boolean");
       expect(definition.defaultSize.h, type).toBeGreaterThanOrEqual(3);
       expect(definition.defaultSize.w, type).toBeGreaterThanOrEqual(1);
+    }
+  });
+
+  it("declares the grid minimum size in the registry, not the dashboard page", () => {
+    expect(widgetTypeRegistry.weather.minSize).toEqual({ h: 8 });
+    expect(widgetTypeRegistry["line-chart"].minSize).toEqual({ w: 2, h: 6 });
+    expect(widgetTypeRegistry["bar-chart"].minSize).toEqual({ w: 2, h: 6 });
+    expect(widgetTypeRegistry["pie-chart"].minSize).toEqual({ w: 2, h: 6 });
+  });
+
+  it("keeps any declared minimum at or below the default size", () => {
+    const entries = Object.entries(widgetTypeRegistry) as [
+      string,
+      WidgetTypeDefinition,
+    ][];
+    for (const [type, definition] of entries) {
+      const { minSize, defaultSize } = definition;
+      if (minSize?.h !== undefined) {
+        expect(minSize.h, `${type} minH`).toBeLessThanOrEqual(defaultSize.h);
+      }
+      if (minSize?.w !== undefined) {
+        expect(minSize.w, `${type} minW`).toBeLessThanOrEqual(defaultSize.w);
+      }
     }
   });
 

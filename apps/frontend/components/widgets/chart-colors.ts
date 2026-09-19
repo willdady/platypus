@@ -5,3 +5,7 @@ export const CHART_COLORS = [
   "var(--chart-4)",
   "var(--chart-5)",
 ];
+
+/** Cycles the palette so a series or segment keeps one colour as it is added. */
+export const colorForIndex = (index: number) =>
+  CHART_COLORS[index % CHART_COLORS.length];

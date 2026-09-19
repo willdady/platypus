@@ -16,9 +16,8 @@ import { TextWidget } from "./TextWidget";
 import { ImageWidget } from "./ImageWidget";
 import { EmbedWidget } from "./EmbedWidget";
 import { WeatherWidget } from "./WeatherWidget";
-import { LineChartWidget } from "./LineChartWidget";
+import { CartesianChartWidget } from "./CartesianChartWidget";
 import { PieChartWidget } from "./PieChartWidget";
-import { BarChartWidget } from "./BarChartWidget";
 
 export {
   MetricWidget,
@@ -26,9 +25,8 @@ export {
   ImageWidget,
   EmbedWidget,
   WeatherWidget,
-  LineChartWidget,
+  CartesianChartWidget,
   PieChartWidget,
-  BarChartWidget,
 };
 
 type WidgetComponent = ComponentType<{
@@ -52,7 +50,10 @@ export const widgetTypeUi: Record<
   image: { icon: ImageIcon, component: ImageWidget },
   embed: { icon: AppWindow, component: EmbedWidget },
   weather: { icon: CloudSun, component: WeatherWidget },
-  "line-chart": { icon: ChartLine, component: LineChartWidget },
+  "line-chart": { icon: ChartLine, component: CartesianChartWidget },
   "pie-chart": { icon: ChartPie, component: PieChartWidget },
-  "bar-chart": { icon: ChartColumnIncreasing, component: BarChartWidget },
+  "bar-chart": {
+    icon: ChartColumnIncreasing,
+    component: CartesianChartWidget,
+  },
 };

@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Check, Plus, X } from "lucide-react";
-import { CHART_COLORS } from "./chart-colors";
+import { colorForIndex } from "./chart-colors";
 import { genId, seriesValuesToText, textToSeriesValues } from "./chart-utils";
 
 export interface SeriesEntry {
@@ -86,7 +86,7 @@ export function SeriesEditor({
               <div
                 className="h-2 w-2 shrink-0 rounded-full"
                 style={{
-                  backgroundColor: CHART_COLORS[i % CHART_COLORS.length],
+                  backgroundColor: colorForIndex(i),
                 }}
               />
               <Input

@@ -16,22 +16,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Check, Plus, X } from "lucide-react";
-import { genId } from "./chart-utils";
-import { CHART_COLORS } from "./chart-colors";
+import { genId, toEditorEntries } from "./chart-utils";
+import { colorForIndex } from "./chart-colors";
 
 interface SegmentEntry {
   id: string;
   label: string;
   value: number;
-}
-
-function toSegmentEntries(
-  segments: PieChartWidgetData["segments"] | undefined,
-): SegmentEntry[] {
-  return (segments ?? [{ label: "", value: 0 }]).map((s) => ({
-    id: genId(),
-    ...s,
-  }));
 }
 
 export function PieChartWidget({
@@ -50,7 +41,7 @@ export function PieChartWidget({
     data?.centerSubLabel ?? "",
   );
   const [segments, setSegments] = useState<SegmentEntry[]>(() =>
-    toSegmentEntries(data?.segments),
+    toEditorEntries(data?.segments, { label: "", value: 0 }),
   );
 
   useResetOnChange(widget.title, () => setTitle(widget.title));
@@ -58,7 +49,7 @@ export function PieChartWidget({
   useResetOnChange(String(widget.updatedAt), () => {
     setCenterLabel(data?.centerLabel ?? "");
     setCenterSubLabel(data?.centerSubLabel ?? "");
-    setSegments(toSegmentEntries(data?.segments));
+    setSegments(toEditorEntries(data?.segments, { label: "", value: 0 }));
   });
 
   if (editing) {
@@ -115,7 +106,7 @@ export function PieChartWidget({
               <div
                 className="h-2 w-2 shrink-0 rounded-full"
                 style={{
-                  backgroundColor: CHART_COLORS[i % CHART_COLORS.length],
+                  backgroundColor: colorForIndex(i),
                 }}
               />
               <Input
@@ -192,7 +183,7 @@ export function PieChartWidget({
   const chartConfig: ChartConfig = Object.fromEntries(
     data.segments.map((s, i) => [
       s.label,
-      { label: s.label, color: CHART_COLORS[i % CHART_COLORS.length] },
+      { label: s.label, color: colorForIndex(i) },
     ]),
   );
 
@@ -213,7 +204,7 @@ export function PieChartWidget({
           stroke="none"
         >
           {data.segments.map((s, i) => (
-            <Cell key={s.label} fill={CHART_COLORS[i % CHART_COLORS.length]} />
+            <Cell key={s.label} fill={colorForIndex(i)} />
           ))}
           {(data.centerLabel || data.centerSubLabel) && (
             <RechartsLabel

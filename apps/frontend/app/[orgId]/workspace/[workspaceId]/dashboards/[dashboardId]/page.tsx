@@ -1,6 +1,13 @@
 "use client";
 
-import { use, useState, useCallback, useEffect } from "react";
+import {
+  use,
+  useState,
+  useCallback,
+  useEffect,
+  useMemo,
+  memo,
+} from "react";
 import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "motion/react";
 import ReactMarkdown from "react-markdown";
@@ -19,6 +26,7 @@ import {
   type Dashboard,
   type Widget,
   type WidgetType,
+  type WidgetTypeDefinition,
   type RglLayoutItem,
 } from "@platypus/schemas";
 import { Button } from "@/components/ui/button";
@@ -71,6 +79,157 @@ const widgetTypeEntries = Object.entries(widgetTypeRegistry) as [
   WidgetType,
   (typeof widgetTypeRegistry)[WidgetType],
 ][];
+
+// Static grid configuration. Hoisted so the `layouts` object handed to the grid
+// keeps a stable identity across renders.
+const GRID_BREAKPOINTS = { lg: 736, sm: 0 };
+const GRID_COLS = { lg: 12, sm: 2 };
+const GRID_CONTAINER_PADDING: [number, number] = [0, 0];
+const DEFAULT_MIN_W = 1;
+const DEFAULT_MIN_H = 3;
+
+const WIDGET_TIMESTAMP_FORMAT: Intl.DateTimeFormatOptions = {
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+  hour: "2-digit",
+  minute: "2-digit",
+};
+
+function formatWidgetTimestamp(value: Date | string | number): string {
+  return new Date(value).toLocaleString("sv-SE", WIDGET_TIMESTAMP_FORMAT);
+}
+
+// Stamp the registry's per-type minimum onto each layout item at render time.
+// Values are not stored in the DB; they are injected so the grid enforces them
+// during resize. An absent type or axis falls back to the global minimum.
+function withMinSize(
+  items: RglLayoutItem[],
+  widgetTypeById: Map<string, WidgetType>,
+): RglLayoutItem[] {
+  return items.map((item) => {
+    const type = widgetTypeById.get(item.i);
+    const definition = type
+      ? (widgetTypeRegistry[type] as WidgetTypeDefinition)
+      : undefined;
+    const minSize = definition?.minSize;
+    return {
+      ...item,
+      minH: minSize?.h ?? DEFAULT_MIN_H,
+      minW: minSize?.w ?? DEFAULT_MIN_W,
+    };
+  });
+}
+
+type WidgetTileProps = {
+  widget: Widget;
+  editMode: boolean;
+  isEditing: boolean;
+  isExpanded: boolean;
+  onEditToggle: (widgetId: string) => void;
+  onDelete: (widgetId: string) => void;
+  onExpand: (widgetId: string) => void;
+  onSave: (widget: Widget, data: object, title: string) => void;
+};
+
+/**
+ * The contents of one dashboard tile, memoised so that editing or dragging one
+ * Widget — which only changes that tile's `isEditing`/`isExpanded` — does not
+ * re-render the rest.
+ *
+ * It deliberately renders *inside* the grid item rather than being the grid
+ * item: react-grid-layout clones its direct children to position them, handing
+ * each a fresh `style` object on every render. A tile that received that prop
+ * could never bail out of `memo`, so the cheap positioning wrapper stays in the
+ * page and the expensive content lives here.
+ */
+const WidgetTile = memo(function WidgetTile({
+  widget,
+  editMode,
+  isEditing,
+  isExpanded,
+  onEditToggle,
+  onDelete,
+  onExpand,
+  onSave,
+}: WidgetTileProps) {
+  const { icon: Icon, component: WidgetComponent } = widgetTypeUi[widget.type];
+
+  return (
+    <>
+      {/* Widget header */}
+      <div
+        className={cn(
+          "widget-drag-handle flex items-center justify-between px-3 pt-1.5 pb-0.5 shrink-0",
+          editMode && "cursor-grab active:cursor-grabbing",
+        )}
+      >
+        <div className="flex items-center gap-1.5 min-w-0">
+          <Icon className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+          <span className="text-xs font-medium truncate">{widget.title}</span>
+        </div>
+        <div className="flex items-center gap-1 shrink-0">
+          {widget.type === "text" && !editMode && (
+            <button
+              className="hidden md:flex items-center justify-center h-6 w-6 text-muted-foreground/50 hover:text-muted-foreground transition-colors"
+              onMouseDown={(e) => e.stopPropagation()}
+              onClick={() => onExpand(widget.id)}
+            >
+              <Maximize2 className="h-3 w-3" />
+            </button>
+          )}
+          <Tooltip delayDuration={500}>
+            <TooltipTrigger asChild onMouseDown={(e) => e.stopPropagation()}>
+              <button
+                className={cn(
+                  "hidden items-center justify-center h-6 w-6 text-muted-foreground/50 hover:text-muted-foreground transition-colors",
+                  !editMode && "md:flex",
+                )}
+              >
+                <InfoIcon className="h-3 w-3" />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent side="top" className="text-left">
+              <div>Created: {formatWidgetTimestamp(widget.createdAt)}</div>
+              <div>Updated: {formatWidgetTimestamp(widget.updatedAt)}</div>
+            </TooltipContent>
+          </Tooltip>
+          {editMode && (
+            <>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-6 w-6"
+                onMouseDown={(e) => e.stopPropagation()}
+                onClick={() => onEditToggle(widget.id)}
+              >
+                <Pencil className="h-3 w-3" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-6 w-6 text-destructive hover:text-destructive"
+                onMouseDown={(e) => e.stopPropagation()}
+                onClick={() => onDelete(widget.id)}
+              >
+                <Trash2 className="h-3 w-3" />
+              </Button>
+            </>
+          )}
+        </div>
+      </div>
+
+      {/* Widget body */}
+      <div className={cn("flex-1 min-h-0", isExpanded && "invisible")}>
+        <WidgetComponent
+          widget={widget}
+          editing={isEditing}
+          onSave={(data, title) => onSave(widget, data, title)}
+        />
+      </div>
+    </>
+  );
+});
 
 // ─── Main page ──────────────────────────────────────────────────────────────
 
@@ -163,7 +322,9 @@ const DashboardPage = ({
     { refreshInterval: editMode ? 0 : 5000 },
   );
 
-  // Also fetch all dashboards for the dropdown switcher
+  // Also fetch all dashboards for the dropdown switcher. Deliberately not
+  // polled: it only backs a menu, and polling it re-rendered the whole page
+  // every 5s for a list the user is not looking at.
   const { data: allDashboardsData } = useSWR<{ results: Dashboard[] }>(
     backendUrl && user
       ? joinUrl(
@@ -172,11 +333,12 @@ const DashboardPage = ({
         )
       : null,
     fetcher,
-    { refreshInterval: editMode ? 0 : 5000 },
   );
 
-  const widgets = (widgetsData?.results ?? []).filter(
-    (w) => !pendingDeletions.has(w.id),
+  const widgets = useMemo(
+    () =>
+      (widgetsData?.results ?? []).filter((w) => !pendingDeletions.has(w.id)),
+    [widgetsData, pendingDeletions],
   );
   const allDashboards = allDashboardsData?.results ?? [];
 
@@ -336,76 +498,78 @@ const DashboardPage = ({
   }, []);
 
   // Stage a widget deletion — only committed to the API when the user clicks Done
-  const handleDeleteWidget = (widgetId: string) => {
+  const handleDeleteWidget = useCallback((widgetId: string) => {
     setPendingDeletions((prev) => new Set([...prev, widgetId]));
     setStagedDesktop((prev) => prev.filter((item) => item.i !== widgetId));
     setStagedMobile((prev) => prev.filter((item) => item.i !== widgetId));
     setEditingWidgetId((prev) => (prev === widgetId ? null : prev));
-  };
+  }, []);
+
+  const handleEditToggle = useCallback((widgetId: string) => {
+    setEditingWidgetId((prev) => (prev === widgetId ? null : widgetId));
+  }, []);
+
+  const handleExpand = useCallback((widgetId: string) => {
+    setExpandedWidgetId(widgetId);
+  }, []);
 
   // Save widget data inline
-  const handleSaveWidgetData = async (
-    widget: Widget,
-    data: object,
-    title: string,
-  ) => {
-    if (!backendUrl) return;
-    const outcome = await writeEntity(
-      backendUrl,
-      widgetsEntity,
-      { orgId, workspaceId },
-      { id: widget.id, data: { type: widget.type, data, title } },
-    );
-    if (outcome.outcome !== "success") {
-      toast.error("Failed to save widget");
-      return;
-    }
-    await mutateWidgets();
-    setEditingWidgetId(null);
-  };
+  const handleSaveWidgetData = useCallback(
+    async (widget: Widget, data: object, title: string) => {
+      if (!backendUrl) return;
+      const outcome = await writeEntity(
+        backendUrl,
+        widgetsEntity,
+        { orgId, workspaceId },
+        { id: widget.id, data: { type: widget.type, data, title } },
+      );
+      if (outcome.outcome !== "success") {
+        toast.error("Failed to save widget");
+        return;
+      }
+      await mutateWidgets();
+      setEditingWidgetId(null);
+    },
+    [backendUrl, orgId, workspaceId, widgetsEntity, mutateWidgets],
+  );
 
-  // Stamp minH onto every layout item at render time. Values are per widget
-  // type and not stored in the DB — injected here so the grid enforces them
-  // during resize.
-  // Sparse on purpose: an absent type means "use the default". `Partial`
-  // keeps a mistyped key a compile error while leaving omission legal.
-  const widgetMinH: Partial<Record<WidgetType, number>> = {
-    weather: 8,
-    "line-chart": 6,
-    "pie-chart": 6,
-    "bar-chart": 6,
-  };
-  const widgetMinW: Partial<Record<WidgetType, number>> = {
-    "line-chart": 2,
-    "pie-chart": 2,
-    "bar-chart": 2,
-  };
-  const widgetTypeById = new Map(widgets.map((w) => [w.id, w.type]));
-  const withMinH = (items: RglLayoutItem[]) =>
-    items.map((item) => {
-      const type = widgetTypeById.get(item.i);
-      return {
-        ...item,
-        minH: (type && widgetMinH[type]) ?? 3,
-        minW: (type && widgetMinW[type]) ?? 1,
-      };
-    });
+  // Per-type minimum sizes live in the registry (see `withMinSize`).
+  const widgetTypeById = useMemo(
+    () => new Map(widgets.map((w) => [w.id, w.type])),
+    [widgets],
+  );
 
   // Compute the effective layout for display
-  const effectiveDesktopLayout = withMinH(
-    editMode ? stagedDesktop : (dashboard?.desktopLayout ?? []),
+  const serverDesktopLayout = useMemo(
+    () => dashboard?.desktopLayout ?? [],
+    [dashboard],
+  );
+  const serverMobileLayout = useMemo(
+    () => dashboard?.mobileLayout ?? [],
+    [dashboard],
+  );
+  const effectiveDesktopLayout = useMemo(
+    () =>
+      withMinSize(
+        editMode ? stagedDesktop : serverDesktopLayout,
+        widgetTypeById,
+      ),
+    [editMode, stagedDesktop, serverDesktopLayout, widgetTypeById],
   );
 
   // For mobile fallback: sort by desktop y if mobileLayout is empty
-  const rawMobileLayout = editMode
-    ? stagedMobile
-    : (dashboard?.mobileLayout ?? []);
-  const effectiveMobileLayout = withMinH(
-    rawMobileLayout.length > 0
-      ? rawMobileLayout
-      : [...effectiveDesktopLayout]
-          .sort((a, b) => a.y - b.y)
-          .map((item, idx) => ({ ...item, x: 0, y: idx * 5, w: 2, h: 5 })),
+  const rawMobileLayout = editMode ? stagedMobile : serverMobileLayout;
+  const effectiveMobileLayout = useMemo(
+    () =>
+      withMinSize(
+        rawMobileLayout.length > 0
+          ? rawMobileLayout
+          : [...effectiveDesktopLayout]
+              .sort((a, b) => a.y - b.y)
+              .map((item, idx) => ({ ...item, x: 0, y: idx * 5, w: 2, h: 5 })),
+        widgetTypeById,
+      ),
+    [rawMobileLayout, effectiveDesktopLayout, widgetTypeById],
   );
 
   const activeLayout = isMobileViewport
@@ -414,6 +578,35 @@ const DashboardPage = ({
   // When editing the mobile layout on a desktop viewport, render a narrow
   // phone-shaped preview so the 2-column sm grid is clearly visible.
   const isMobilePreview = editMode && layoutTab === "mobile";
+
+  // Memoised so the grid keeps a stable identity for this prop. `lg` is the
+  // layout in view; `sm` always backs the mobile grid.
+  const layouts = useMemo(
+    () => ({
+      lg: editMode
+        ? layoutTab === "desktop"
+          ? effectiveDesktopLayout
+          : effectiveMobileLayout
+        : activeLayout,
+      sm: effectiveMobileLayout,
+    }),
+    [
+      editMode,
+      layoutTab,
+      effectiveDesktopLayout,
+      effectiveMobileLayout,
+      activeLayout,
+    ],
+  );
+
+  const handleInteractionStart = useCallback(() => setIsInteracting(true), []);
+  const handleInteractionStop = useCallback(
+    (layout: readonly LayoutItem[]) => {
+      setIsInteracting(false);
+      syncLayout(layout);
+    },
+    [syncLayout],
+  );
 
   // Sizing chain (keep these in sync if you change padding):
   //
@@ -577,168 +770,43 @@ const DashboardPage = ({
             <ResponsiveGridLayout
               width={effectiveGridWidth}
               className="layout"
-              layouts={{
-                lg: editMode
-                  ? layoutTab === "desktop"
-                    ? effectiveDesktopLayout
-                    : effectiveMobileLayout
-                  : activeLayout,
-                sm: effectiveMobileLayout,
-              }}
+              layouts={layouts}
               // lg: 736 = 768 (desired breakpoint) - 32 (p-4 wrapper padding).
               // See the "Sizing chain" comment above effectiveGridWidth.
-              breakpoints={{ lg: 736, sm: 0 }}
-              cols={{ lg: 12, sm: 2 }}
-              containerPadding={[0, 0]}
+              breakpoints={GRID_BREAKPOINTS}
+              cols={GRID_COLS}
+              containerPadding={GRID_CONTAINER_PADDING}
               rowHeight={30}
               dragConfig={{
                 enabled: editMode && !isMobileViewport,
                 handle: ".widget-drag-handle",
               }}
               resizeConfig={{ enabled: editMode && !isMobileViewport }}
-              onDragStart={() => setIsInteracting(true)}
-              onDragStop={(layout) => {
-                setIsInteracting(false);
-                syncLayout(layout);
-              }}
-              onResizeStart={() => setIsInteracting(true)}
-              onResizeStop={(layout) => {
-                setIsInteracting(false);
-                syncLayout(layout);
-              }}
+              onDragStart={handleInteractionStart}
+              onDragStop={handleInteractionStop}
+              onResizeStart={handleInteractionStart}
+              onResizeStop={handleInteractionStop}
             >
-              {widgets.map((widget) => {
-                const isEditing = editingWidgetId === widget.id;
-                return (
-                  <div
-                    key={widget.id}
-                    className={cn(
-                      "rounded-lg border bg-card text-card-foreground shadow-sm overflow-hidden flex flex-col",
-                      editMode && "ring-1 ring-border",
-                    )}
-                  >
-                    {/* Widget header */}
-                    <div
-                      className={cn(
-                        "widget-drag-handle flex items-center justify-between px-3 pt-1.5 pb-0.5 shrink-0",
-                        editMode && "cursor-grab active:cursor-grabbing",
-                      )}
-                    >
-                      <div className="flex items-center gap-1.5 min-w-0">
-                        {(() => {
-                          const Icon = widgetTypeUi[widget.type].icon;
-                          return (
-                            <Icon className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                          );
-                        })()}
-                        <span className="text-xs font-medium truncate">
-                          {widget.title}
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-1 shrink-0">
-                        {widget.type === "text" && !editMode && (
-                          <button
-                            className="hidden md:flex items-center justify-center h-6 w-6 text-muted-foreground/50 hover:text-muted-foreground transition-colors"
-                            onMouseDown={(e) => e.stopPropagation()}
-                            onClick={() => setExpandedWidgetId(widget.id)}
-                          >
-                            <Maximize2 className="h-3 w-3" />
-                          </button>
-                        )}
-                        <Tooltip delayDuration={500}>
-                          <TooltipTrigger
-                            asChild
-                            onMouseDown={(e) => e.stopPropagation()}
-                          >
-                            <button
-                              className={cn(
-                                "hidden items-center justify-center h-6 w-6 text-muted-foreground/50 hover:text-muted-foreground transition-colors",
-                                !editMode && "md:flex",
-                              )}
-                            >
-                              <InfoIcon className="h-3 w-3" />
-                            </button>
-                          </TooltipTrigger>
-                          <TooltipContent side="top" className="text-left">
-                            <div>
-                              Created:{" "}
-                              {new Date(widget.createdAt).toLocaleString(
-                                "sv-SE",
-                                {
-                                  year: "numeric",
-                                  month: "2-digit",
-                                  day: "2-digit",
-                                  hour: "2-digit",
-                                  minute: "2-digit",
-                                },
-                              )}
-                            </div>
-                            <div>
-                              Updated:{" "}
-                              {new Date(widget.updatedAt).toLocaleString(
-                                "sv-SE",
-                                {
-                                  year: "numeric",
-                                  month: "2-digit",
-                                  day: "2-digit",
-                                  hour: "2-digit",
-                                  minute: "2-digit",
-                                },
-                              )}
-                            </div>
-                          </TooltipContent>
-                        </Tooltip>
-                        {editMode && (
-                          <>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-6 w-6"
-                              onMouseDown={(e) => e.stopPropagation()}
-                              onClick={() =>
-                                setEditingWidgetId(isEditing ? null : widget.id)
-                              }
-                            >
-                              <Pencil className="h-3 w-3" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-6 w-6 text-destructive hover:text-destructive"
-                              onMouseDown={(e) => e.stopPropagation()}
-                              onClick={() => handleDeleteWidget(widget.id)}
-                            >
-                              <Trash2 className="h-3 w-3" />
-                            </Button>
-                          </>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Widget body */}
-                    <div
-                      className={cn(
-                        "flex-1 min-h-0",
-                        expandedWidgetId === widget.id && "invisible",
-                      )}
-                    >
-                      {(() => {
-                        const WidgetComponent =
-                          widgetTypeUi[widget.type].component;
-                        return (
-                          <WidgetComponent
-                            widget={widget}
-                            editing={isEditing}
-                            onSave={(data, title) =>
-                              handleSaveWidgetData(widget, data, title)
-                            }
-                          />
-                        );
-                      })()}
-                    </div>
-                  </div>
-                );
-              })}
+              {widgets.map((widget) => (
+                <div
+                  key={widget.id}
+                  className={cn(
+                    "rounded-lg border bg-card text-card-foreground shadow-sm overflow-hidden flex flex-col",
+                    editMode && "ring-1 ring-border",
+                  )}
+                >
+                  <WidgetTile
+                    widget={widget}
+                    editMode={editMode}
+                    isEditing={editingWidgetId === widget.id}
+                    isExpanded={expandedWidgetId === widget.id}
+                    onEditToggle={handleEditToggle}
+                    onDelete={handleDeleteWidget}
+                    onExpand={handleExpand}
+                    onSave={handleSaveWidgetData}
+                  />
+                </div>
+              ))}
             </ResponsiveGridLayout>
           </div>
         ) : null}

@@ -21,8 +21,9 @@ import { z } from "zod";
  * frontend's `widgetTypeUi` map, and the `widget.type` column's inline union in
  * the backend Drizzle schema. Omitting any of the three fails `pnpm typecheck`.
  *
- * Minimum sizes are deliberately NOT here: they stay sparse in the dashboard
- * page, where an absent type means "use the default".
+ * {@link WidgetTypeDefinition.minSize} is sparse on purpose: an absent type
+ * means "use the dashboard grid's default". It lives here, beside `defaultSize`,
+ * so both halves of a type's sizing are declared in one place.
  */
 
 // Per-type data contracts. Each is the payload stored in `widget.data` for one
@@ -168,7 +169,7 @@ export type BarChartWidgetData = z.infer<typeof barChartWidgetDataSchema>;
  * Every field is required — in particular {@link WidgetTypeDefinition.agentWritable},
  * which must never gain a default.
  */
-type WidgetTypeDefinition = {
+export type WidgetTypeDefinition = {
   /** The name a User sees — in the add-widget picker and the docs. */
   label: string;
   /** The contract for this type's `widget.data` payload. */
@@ -181,6 +182,11 @@ type WidgetTypeDefinition = {
   agentWritable: boolean;
   /** Grid units a freshly added Widget of this type occupies. */
   defaultSize: { w: number; h: number };
+  /**
+   * Grid units the dashboard grid enforces when resizing this type. Sparse:
+   * a type that omits it (or one of its axes) takes the grid's global minimum.
+   */
+  minSize?: { w?: number; h?: number };
 };
 
 /**
@@ -218,24 +224,28 @@ export const widgetTypeRegistry = {
     dataSchema: weatherWidgetDataSchema,
     agentWritable: true,
     defaultSize: { w: 2, h: 8 },
+    minSize: { h: 8 },
   },
   "line-chart": {
     label: "Line Chart",
     dataSchema: lineChartWidgetDataSchema,
     agentWritable: true,
     defaultSize: { w: 6, h: 8 },
+    minSize: { w: 2, h: 6 },
   },
   "pie-chart": {
     label: "Pie Chart",
     dataSchema: pieChartWidgetDataSchema,
     agentWritable: true,
     defaultSize: { w: 4, h: 8 },
+    minSize: { w: 2, h: 6 },
   },
   "bar-chart": {
     label: "Bar Chart",
     dataSchema: barChartWidgetDataSchema,
     agentWritable: true,
     defaultSize: { w: 6, h: 8 },
+    minSize: { w: 2, h: 6 },
   },
 } as const satisfies Record<string, WidgetTypeDefinition>;
 

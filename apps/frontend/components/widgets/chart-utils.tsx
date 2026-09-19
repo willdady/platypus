@@ -1,5 +1,17 @@
 export const genId = () => Math.random().toString(36).slice(2, 9);
 
+/**
+ * Seeds an editor's local rows from persisted data. Each row is given a stable
+ * client-only `id` so it can be reordered/removed before it is ever saved. The
+ * fallback keeps an empty row for a widget that has no data yet.
+ */
+export function toEditorEntries<T extends object>(
+  items: T[] | undefined,
+  fallback: T,
+): (T & { id: string })[] {
+  return (items ?? [fallback]).map((item) => ({ id: genId(), ...item }));
+}
+
 export function seriesValuesToText(values: (number | null)[]): string {
   return values.map((v) => (v === null ? "" : String(v))).join(", ");
 }
