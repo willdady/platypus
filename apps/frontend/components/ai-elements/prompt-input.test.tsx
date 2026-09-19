@@ -1,5 +1,7 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import type { FileUIPart } from "ai";
+import { toast } from "sonner";
 import {
   PromptInput,
   PromptInputAttachment,
@@ -8,6 +10,8 @@ import {
   PromptInputSubmit,
   PromptInputTextarea,
 } from "./prompt-input";
+
+vi.mock("sonner", () => ({ toast: { error: vi.fn() } }));
 
 beforeEach(() => {
   // jsdom has no matchMedia; PromptInputTextarea subscribes to it via useIsMobile.
@@ -456,5 +460,151 @@ describe("PromptInputTextarea onKeyDown", () => {
     fireEvent.keyDown(screen.getByRole("textbox"), { key: "Enter" });
 
     expect(onSubmit).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * Issue #869: the blob-URL cleanup effect ran on every change to the
+ * attachment list rather than on unmount alone, so adding a second file
+ * revoked the first file's `blob:` URL. Submit then read the revoked URL,
+ * the rejection was swallowed, and Send appeared dead.
+ */
+describe("PromptInput blob-URL lifecycle", () => {
+  const originals = {
+    createObjectURL: URL.createObjectURL,
+    revokeObjectURL: URL.revokeObjectURL,
+  };
+  let nextBlobId = 0;
+
+  beforeEach(() => {
+    nextBlobId = 0;
+    URL.createObjectURL = vi.fn(
+      () => `blob:test-${++nextBlobId}`,
+    ) as unknown as typeof URL.createObjectURL;
+    URL.revokeObjectURL = vi.fn() as unknown as typeof URL.revokeObjectURL;
+  });
+
+  afterEach(() => {
+    URL.createObjectURL = originals.createObjectURL;
+    URL.revokeObjectURL = originals.revokeObjectURL;
+    vi.unstubAllGlobals();
+  });
+
+  const fileA = () => new File(["a"], "a.txt", { type: "text/plain" });
+  const fileB = () => new File(["b"], "b.txt", { type: "text/plain" });
+
+  const renderInput = (
+    onSubmit: (message: { text: string; files: FileUIPart[] }) => void,
+    onError?: (err: { code: string; message: string }) => void,
+  ) =>
+    render(
+      <PromptInput multiple onError={onError} onSubmit={onSubmit}>
+        <PromptInputAttachments className="w-full">
+          {(attachment) => <PromptInputAttachment data={attachment} />}
+        </PromptInputAttachments>
+        <PromptInputBody>
+          <PromptInputTextarea />
+        </PromptInputBody>
+        <PromptInputSubmit />
+      </PromptInput>,
+    );
+
+  it("keeps the first attachment's URL alive when a second is added", () => {
+    renderInput(vi.fn());
+    const input = getFileInput();
+
+    fireFileChange(input, [fileA()]);
+    fireFileChange(input, [fileB()]);
+
+    expect(screen.getByText("a.txt")).toBeInTheDocument();
+    expect(screen.getByText("b.txt")).toBeInTheDocument();
+    expect(URL.revokeObjectURL).not.toHaveBeenCalled();
+  });
+
+  it("submits the remaining attachment after one of two is removed", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        blob: async () => new Blob(["b"], { type: "text/plain" }),
+      }),
+    );
+    const onSubmit = vi.fn();
+    renderInput(onSubmit);
+
+    fireFileChange(getFileInput(), [fileA(), fileB()]);
+    fireEvent.click(
+      screen.getAllByRole("button", { name: "Remove attachment" })[0],
+    );
+
+    expect(screen.queryByText("a.txt")).not.toBeInTheDocument();
+    expect(screen.getByText("b.txt")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Submit" }));
+
+    await waitFor(() => expect(onSubmit).toHaveBeenCalled());
+    expect(onSubmit.mock.calls[0][0].files).toEqual([
+      expect.objectContaining({ filename: "b.txt" }),
+    ]);
+  });
+
+  it("revokes a removed attachment's URL, and only that one", () => {
+    renderInput(vi.fn());
+
+    fireFileChange(getFileInput(), [fileA(), fileB()]);
+    fireEvent.click(
+      screen.getAllByRole("button", { name: "Remove attachment" })[0],
+    );
+
+    expect(URL.revokeObjectURL).toHaveBeenCalledTimes(1);
+    expect(URL.revokeObjectURL).toHaveBeenCalledWith("blob:test-1");
+  });
+
+  it("revokes every live attachment URL on unmount", () => {
+    const view = renderInput(vi.fn());
+
+    fireFileChange(getFileInput(), [fileA(), fileB()]);
+    view.unmount();
+
+    expect(URL.revokeObjectURL).toHaveBeenCalledTimes(2);
+    expect(URL.revokeObjectURL).toHaveBeenCalledWith("blob:test-1");
+    expect(URL.revokeObjectURL).toHaveBeenCalledWith("blob:test-2");
+  });
+
+  it("reports a failed conversion instead of silently blocking submit", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockRejectedValue(new Error("blob URL revoked")),
+    );
+    const onError = vi.fn();
+    const onSubmit = vi.fn();
+    renderInput(onSubmit, onError);
+
+    fireFileChange(getFileInput(), [fileA()]);
+    fireEvent.click(screen.getByRole("button", { name: "Submit" }));
+
+    await waitFor(() =>
+      expect(onError).toHaveBeenCalledWith({
+        code: "conversion",
+        message: "Couldn't read an attachment. Remove it and try again.",
+      }),
+    );
+    expect(onSubmit).not.toHaveBeenCalled();
+  });
+
+  it("falls back to a toast when a failed conversion has no onError handler", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockRejectedValue(new Error("blob URL revoked")),
+    );
+    renderInput(vi.fn());
+
+    fireFileChange(getFileInput(), [fileA()]);
+    fireEvent.click(screen.getByRole("button", { name: "Submit" }));
+
+    await waitFor(() =>
+      expect(toast.error).toHaveBeenCalledWith(
+        "Couldn't read an attachment. Remove it and try again.",
+      ),
+    );
   });
 });

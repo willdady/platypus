@@ -12,6 +12,7 @@ import { ExpandableTextarea } from "@/components/expandable-textarea";
 import { Switch } from "@/components/ui/switch";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { ConfirmDialog } from "@/components/confirm-dialog";
+import { DetailFormState } from "@/components/detail-form-state";
 import { FormFooterButtons } from "@/components/form-footer-buttons";
 import { useState } from "react";
 import { useResetOnChange } from "@/hooks/use-reset-on-change";
@@ -67,9 +68,11 @@ const SkillForm = ({
     : `/${orgId}/settings/skills`;
 
   // Fetch existing skill data if editing (includes agentIds in workspace mode)
-  const { data: skill, isLoading: skillLoading } = useSWR<
-    Skill & { agentIds?: string[] }
-  >(
+  const {
+    data: skill,
+    error: skillError,
+    isLoading: skillLoading,
+  } = useSWR<Skill & { agentIds?: string[] }>(
     skillId && user ? joinUrl(backendUrl, `${collectionUrl}/${skillId}`) : null,
     fetcher,
   );
@@ -121,10 +124,6 @@ const SkillForm = ({
       setSelectedAgentIds(skill.agentIds);
     }
   });
-
-  if (skillLoading) {
-    return <div className={classNames}>Loading...</div>;
-  }
 
   const handleChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>,
@@ -209,7 +208,7 @@ const SkillForm = ({
     });
   };
 
-  return (
+  const form = (
     <div className={classNames}>
       <FieldSet className="mb-6">
         <FieldGroup className="gap-4">
@@ -365,6 +364,19 @@ const SkillForm = ({
         error={deleteError}
       />
     </div>
+  );
+
+  return (
+    <DetailFormState
+      isLoading={skillLoading}
+      error={skillError}
+      data={skill}
+      subject="skill"
+      backHref={returnPath}
+      backLabel={workspaceId ? "Back to workspace" : "Back to skills"}
+    >
+      {form}
+    </DetailFormState>
   );
 };
 
