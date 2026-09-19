@@ -109,6 +109,27 @@ describe("clearedToolCallIds", () => {
     expect(result).toEqual(new Set(["t0", "t1"]));
   });
 
+  // The transcript memo compares this Set by identity, so "nothing is cleared"
+  // has to be one object rather than a fresh empty Set per render (issue #869).
+  it("returns the same empty set identity whenever nothing is cleared", () => {
+    const messages = [toolResultMessage("read_url", "t1")];
+    const unknown = clearedToolCallIds(messages, {
+      occupancy: undefined,
+      contextWindow: undefined,
+    });
+    const belowThreshold = clearedToolCallIds(messages, {
+      occupancy: 10,
+      contextWindow: 100,
+    });
+    const nothingStale = clearedToolCallIds(messages, {
+      occupancy: 95,
+      contextWindow: 100,
+    });
+
+    expect(unknown).toBe(belowThreshold);
+    expect(nothingStale).toBe(unknown);
+  });
+
   it("ignores a clearable tool call that hasn't produced its result yet", () => {
     const inFlight = {
       id: "m-x",

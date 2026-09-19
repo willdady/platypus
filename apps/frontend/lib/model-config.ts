@@ -116,12 +116,16 @@ export const resolveModelId = (
 ): ConcreteModelId | undefined =>
   resolveModelReference(getModelConfigs(provider), reference);
 
-/** The resolved passthrough types for a model, filling the provider default. */
-export const getPassthroughFileTypes = (
-  provider: Pick<Provider, "modelIds" | "providerType" | "apiMode">,
-  modelId: ConcreteModelId,
+/**
+ * The resolved passthrough types for one already-normalised model entry,
+ * filling the provider default when the entry declares none. Config-taking so
+ * a caller that has normalised the provider's list once can answer this
+ * without normalising it again (issue #869).
+ */
+export const passthroughFileTypesFor = (
+  provider: Pick<Provider, "providerType" | "apiMode">,
+  model: ModelConfigView | undefined,
 ): string[] => {
-  const model = getModelConfigs(provider).find((m) => m.id === modelId);
   const declared = model?.passthroughFileTypes ?? [];
   return declared.length > 0
     ? declared
@@ -130,6 +134,16 @@ export const getPassthroughFileTypes = (
         apiMode: provider.apiMode,
       });
 };
+
+/** The resolved passthrough types for a model, filling the provider default. */
+export const getPassthroughFileTypes = (
+  provider: Pick<Provider, "modelIds" | "providerType" | "apiMode">,
+  modelId: ConcreteModelId,
+): string[] =>
+  passthroughFileTypesFor(
+    provider,
+    getModelConfigs(provider).find((m) => m.id === modelId),
+  );
 
 /**
  * The total token capacity declared for a model, or `undefined` where none was

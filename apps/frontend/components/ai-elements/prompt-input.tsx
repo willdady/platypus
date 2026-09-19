@@ -283,7 +283,7 @@ export type PromptInputProps = Omit<
   maxFiles?: number;
   maxFileSize?: number; // bytes
   onError?: (err: {
-    code: "max_files" | "max_file_size" | "accept";
+    code: "max_files" | "max_file_size" | "accept" | "conversion";
     message: string;
   }) => void;
   onSubmit: (
@@ -460,13 +460,23 @@ export const PromptInput = ({
     };
   }, [add, globalDrop]);
 
+  // The live attachment list, for the unmount cleanup below. The cleanup must
+  // not itself depend on `files`: an effect keyed on the list re-runs on every
+  // change and revoked the URLs of files still attached, so adding a second
+  // attachment killed the first's blob URL and submit then read a dead one
+  // (issue #869). Revocation belongs to `remove`, `clear` and unmount alone.
+  const liveFilesRef = useRef(files);
+  useEffect(() => {
+    liveFilesRef.current = files;
+  }, [files]);
+
   useEffect(
     () => () => {
-      for (const f of files) {
+      for (const f of liveFilesRef.current) {
         if (f.url) URL.revokeObjectURL(f.url);
       }
     },
-    [files],
+    [],
   );
 
   const handleChange: ChangeEventHandler<HTMLInputElement> = (event) => {
@@ -484,6 +494,22 @@ export const PromptInput = ({
       reader.onerror = reject;
       reader.readAsDataURL(blob);
     });
+  };
+
+  // A blob URL that no longer resolves (or a FileReader that failed) must say
+  // so: the rejection used to be swallowed and Send simply did nothing
+  // (issue #869). `onError` is the caller's channel; a caller that supplies
+  // none gets a toast, so the failure is never silent.
+  const reportConversionFailure = () => {
+    const failure = {
+      code: "conversion" as const,
+      message: "Couldn't read an attachment. Remove it and try again.",
+    };
+    if (onError) {
+      onError(failure);
+    } else {
+      toast.error(failure.message);
+    }
   };
 
   const ctx = useMemo<AttachmentsContext>(
@@ -520,23 +546,25 @@ export const PromptInput = ({
         }
         return item;
       }),
-    ).then((convertedFiles: FileUIPart[]) => {
-      try {
-        const result = onSubmit({ text, files: convertedFiles }, event);
+    )
+      .then((convertedFiles: FileUIPart[]) => {
+        try {
+          const result = onSubmit({ text, files: convertedFiles }, event);
 
-        // Handle both sync and async onSubmit
-        if (result instanceof Promise) {
-          result.then(clear).catch(() => {
-            // Don't clear on error - user may want to retry
-          });
-        } else {
-          // Sync function completed without throwing, clear attachments
-          clear();
+          // Handle both sync and async onSubmit
+          if (result instanceof Promise) {
+            result.then(clear).catch(() => {
+              // Don't clear on error - user may want to retry
+            });
+          } else {
+            // Sync function completed without throwing, clear attachments
+            clear();
+          }
+        } catch {
+          // Don't clear on error - user may want to retry
         }
-      } catch {
-        // Don't clear on error - user may want to retry
-      }
-    });
+      })
+      .catch(reportConversionFailure);
   };
 
   return (

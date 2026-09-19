@@ -1,4 +1,4 @@
-import type { MouseEvent } from "react";
+import { useMemo, type MouseEvent } from "react";
 import { Agent, Provider } from "@platypus/schemas";
 import {
   ModelSelector,
@@ -95,15 +95,30 @@ export const ModelSelectorDialog = ({
 }: ModelSelectorDialogProps) => {
   const selectedAgent = agentId ? agents.find((a) => a.id === agentId) : null;
 
+  // Normalising every Provider's model list is pure work, but it ran on every
+  // render — once per Provider, per keystroke, per streamed token (issue #869).
+  // Keyed on the Provider list, which the caller memoises from its SWR read.
+  const providerOptions = useMemo(
+    () =>
+      providers.map((provider) => ({
+        provider,
+        options: getModelOptions(provider),
+      })),
+    [providers],
+  );
+
   // Label the trigger with what the picker shows, never the stored reference —
   // `alias:flagship` is a storage disambiguator and is never user-visible.
   const selectedProvider = providerId
     ? providers.find((p) => p.id === providerId)
     : undefined;
-  const selectedModelLabel =
-    selectedProvider && modelId
-      ? findModelOption(selectedProvider, modelId)?.label
-      : undefined;
+  const selectedModelLabel = useMemo(
+    () =>
+      selectedProvider && modelId
+        ? findModelOption(selectedProvider, modelId)?.label
+        : undefined,
+    [selectedProvider, modelId],
+  );
 
   const trigger = (
     <Button
@@ -174,9 +189,9 @@ export const ModelSelectorDialog = ({
           )}
 
           {/* Providers Group */}
-          {providers.map((provider) => (
+          {providerOptions.map(({ provider, options }) => (
             <ModelSelectorGroup key={provider.id} heading={provider.name}>
-              {getModelOptions(provider).map((model) => (
+              {options.map((model) => (
                 <ModelSelectorItem
                   key={encodeProviderSelection(provider.id, model.value)}
                   className="cursor-pointer"
