@@ -973,6 +973,39 @@ describe("ChatMessage action bar permissions", () => {
   });
 });
 
+/**
+ * Between send and the first chunk the reply is already in the transcript
+ * with nothing to show, so an action bar rendered then sits alone above where
+ * the answer is about to appear — Regenerate included, since the reply is the
+ * last message. The bar waits for the whole turn, not only for the chunks.
+ */
+describe("ChatMessage action bar during a turn", () => {
+  it.each(["submitted", "streaming"] as const)(
+    "withholds the bar from the last reply while the chat is %s",
+    (status) => {
+      renderMessage({ ...assistantMessage(), parts: [] }, { status });
+
+      for (const action of ["Copy", "Delete", "Regenerate"]) {
+        expect(screen.queryByRole("button", { name: action })).toBeNull();
+      }
+    },
+  );
+
+  it("keeps the bar on earlier messages while the chat is submitted", () => {
+    renderMessage(userMessage(), { status: "submitted", isLastMessage: false });
+
+    expect(screen.getByRole("button", { name: "Copy" })).toBeInTheDocument();
+  });
+
+  it("shows the bar once the chat is ready", () => {
+    renderMessage(assistantMessage(), { status: "ready" });
+
+    expect(
+      screen.getByRole("button", { name: "Regenerate" }),
+    ).toBeInTheDocument();
+  });
+});
+
 describe("ChatMessage while editing", () => {
   const editing = { editor: <div data-testid="editor">editing</div> };
 
