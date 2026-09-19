@@ -23,6 +23,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { ConfirmDialog } from "@/components/confirm-dialog";
+import { DetailFormState } from "@/components/detail-form-state";
 import { FormFooterButtons } from "@/components/form-footer-buttons";
 import { useState, useEffect } from "react";
 import { useResetOnChange } from "@/hooks/use-reset-on-change";
@@ -130,6 +131,7 @@ const McpForm = ({
 
   const {
     data: mcp,
+    error: mcpError,
     isLoading,
     mutate: mutateMcp,
   } = useSWR<MCP & { oauthAuthorized?: boolean }>(
@@ -502,13 +504,9 @@ const McpForm = ({
     setIsRevoking(false);
   };
 
-  if (isLoading) {
-    return <div className={classNames}>Loading...</div>;
-  }
-
   const oauthAuthorized = mcp?.oauthAuthorized === true;
 
-  return (
+  const form = (
     <div className={classNames}>
       <FieldSet className="mb-6">
         <FieldGroup>
@@ -879,6 +877,19 @@ const McpForm = ({
         loading={isDeleting}
       />
     </div>
+  );
+
+  return (
+    <DetailFormState
+      isLoading={isLoading}
+      error={mcpError}
+      data={mcp}
+      subject="MCP server"
+      backHref={listPath}
+      backLabel="Back to MCP servers"
+    >
+      {form}
+    </DetailFormState>
   );
 };
 

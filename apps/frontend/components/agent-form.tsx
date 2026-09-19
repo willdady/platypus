@@ -20,6 +20,7 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import { ConfirmDialog } from "@/components/confirm-dialog";
+import { DetailFormState } from "@/components/detail-form-state";
 import { FormFooterButtons } from "@/components/form-footer-buttons";
 import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { useRouter } from "next/navigation";
@@ -61,7 +62,6 @@ import { ModelCapabilityNotice } from "@/components/model-capability-notice";
 import { toast } from "sonner";
 import { useAuth, useBackendUrl } from "@/components/auth-provider";
 import { AgentAvatar } from "@/components/agent-avatar";
-import { Skeleton } from "@/components/ui/skeleton";
 import { ToolSetsUnavailableNotice } from "@/components/tool-sets-unavailable-notice";
 import { type ToolSetsFailureReason } from "@/lib/tool-sets-request";
 
@@ -155,9 +155,11 @@ const AgentForm = ({
   const agents = propAgents || agentsData?.results || [];
 
   // Fetch existing agent data if editing
-  const { data: agent, isLoading: agentLoading } = useSWR<
-    Agent & { scope?: "organization" | "workspace" }
-  >(
+  const {
+    data: agent,
+    error: agentError,
+    isLoading: agentLoading,
+  } = useSWR<Agent & { scope?: "organization" | "workspace" }>(
     agentId && user ? joinUrl(backendUrl, `${agentsBase}/${agentId}`) : null,
     fetcher,
   );
@@ -475,48 +477,7 @@ const AgentForm = ({
     });
   };
 
-  if (providersLoading || agentLoading) {
-    return (
-      <div className={classNames}>
-        <div className="flex flex-col items-center mb-6">
-          <Skeleton className="w-20 h-20 rounded-2xl" />
-          <Skeleton className="h-4 w-16 mt-2" />
-        </div>
-        <div className="space-y-6 mb-6">
-          <div className="space-y-2">
-            <Skeleton className="h-4 w-12" />
-            <Skeleton className="h-9 w-full" />
-          </div>
-          <div className="space-y-2">
-            <Skeleton className="h-4 w-24" />
-            <Skeleton className="h-20 w-full" />
-          </div>
-          <div className="space-y-2">
-            <Skeleton className="h-4 w-32" />
-            <Skeleton className="h-9 w-full" />
-          </div>
-          <div className="space-y-2">
-            <Skeleton className="h-4 w-28" />
-            <Skeleton className="h-32 w-full" />
-          </div>
-          <div className="space-y-2">
-            <Skeleton className="h-4 w-16" />
-            <Skeleton className="h-9 w-full" />
-          </div>
-          <div className="space-y-2 w-1/2">
-            <Skeleton className="h-4 w-20" />
-            <Skeleton className="h-9 w-full" />
-          </div>
-        </div>
-        <div className="flex gap-2">
-          <Skeleton className="h-9 w-20" />
-          {agentId && <Skeleton className="h-9 w-24" />}
-        </div>
-      </div>
-    );
-  }
-
-  return (
+  const form = (
     <div className={classNames}>
       {readOnly && (
         <div className="mb-6 rounded-md border bg-secondary/50 p-3 text-sm flex items-center gap-2">
@@ -1015,6 +976,19 @@ const AgentForm = ({
         loading={isDeleting}
       />
     </div>
+  );
+
+  return (
+    <DetailFormState
+      isLoading={providersLoading || agentLoading}
+      error={agentError}
+      data={agent}
+      subject="agent"
+      backHref={doneHref}
+      backLabel={orgScoped ? "Back to agents" : "Back to workspace"}
+    >
+      {form}
+    </DetailFormState>
   );
 };
 

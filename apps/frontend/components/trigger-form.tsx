@@ -19,6 +19,7 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import { ConfirmDialog } from "@/components/confirm-dialog";
+import { DetailFormState } from "@/components/detail-form-state";
 import { FormFooterButtons } from "@/components/form-footer-buttons";
 import { useState, useMemo } from "react";
 import { useResetOnChange } from "@/hooks/use-reset-on-change";
@@ -351,7 +352,11 @@ const TriggerForm = ({
   );
   const boards = boardsData?.results || [];
 
-  const { data: trigger, isLoading: triggerLoading } = useSWR<Trigger>(
+  const {
+    data: trigger,
+    error: triggerError,
+    isLoading: triggerLoading,
+  } = useSWR<Trigger>(
     triggerId && user
       ? joinUrl(
           backendUrl,
@@ -503,10 +508,6 @@ const TriggerForm = ({
     }
   }, [triggerType, effectiveCronExpression, formData.timezone]);
 
-  if (agentsLoading || (triggerId && triggerLoading)) {
-    return null;
-  }
-
   const handleChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>,
   ) => {
@@ -650,7 +651,7 @@ const TriggerForm = ({
     });
   };
 
-  return (
+  const form = (
     <div>
       <FieldSet className="mb-6">
         <FieldGroup>
@@ -1272,6 +1273,19 @@ const TriggerForm = ({
         loading={isDeleting}
       />
     </div>
+  );
+
+  return (
+    <DetailFormState
+      isLoading={agentsLoading || (!!triggerId && triggerLoading)}
+      error={triggerError}
+      data={trigger}
+      subject="trigger"
+      backHref={`/${orgId}/workspace/${workspaceId}`}
+      backLabel="Back to workspace"
+    >
+      {form}
+    </DetailFormState>
   );
 };
 
