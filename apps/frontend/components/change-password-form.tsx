@@ -1,6 +1,5 @@
 "use client";
 
-import { useState } from "react";
 import { useAuth } from "@/components/auth-provider";
 import { Button } from "@/components/ui/button";
 import { RevealableInput } from "@/components/ui/revealable-input";
@@ -11,43 +10,66 @@ import {
   FieldSet,
   FieldError,
 } from "@/components/ui/field";
-import { toast } from "sonner";
+import { useEntityForm } from "@/hooks/use-entity-form";
+
+const RETRACTABLE_FIELDS = [
+  "currentPassword",
+  "newPassword",
+  "confirmPassword",
+] as const;
+
+const INITIAL_DATA = {
+  currentPassword: "",
+  newPassword: "",
+  confirmPassword: "",
+};
 
 export function ChangePasswordForm() {
   const { authClient } = useAuth();
-  const [currentPassword, setCurrentPassword] = useState("");
-  const [newPassword, setNewPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [errors, setErrors] = useState<Record<string, string>>({});
+
+  const {
+    formData,
+    setFormData,
+    validationErrors,
+    setValidationErrors,
+    isSubmitting,
+    handleChange,
+    submit,
+  } = useEntityForm<typeof INITIAL_DATA, unknown>({
+    initialData: INITIAL_DATA,
+    entity: "password",
+    scope: {},
+    retractableFields: RETRACTABLE_FIELDS,
+    // The password change is an auth-client call, not a REST write — kept
+    // local, mapped onto the shared outcome shape.
+    write: async (data) => {
+      const { error } = await authClient.changePassword({
+        currentPassword: data.currentPassword,
+        newPassword: data.newPassword,
+        revokeOtherSessions: true,
+      });
+      return error
+        ? {
+            outcome: "error",
+            message: error.message || "Failed to change password",
+          }
+        : { outcome: "success", data: {}, revalidateKeys: [] };
+    },
+    successMessage: "Password changed successfully",
+    onSuccess: () => {
+      setFormData(INITIAL_DATA);
+    },
+  });
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setIsSubmitting(true);
-    setErrors({});
 
-    if (newPassword !== confirmPassword) {
-      setErrors({ confirmPassword: "Passwords do not match" });
-      setIsSubmitting(false);
+    if (formData.newPassword !== formData.confirmPassword) {
+      setValidationErrors({ confirmPassword: "Passwords do not match" });
       return;
     }
 
-    const { error } = await authClient.changePassword({
-      currentPassword,
-      newPassword,
-      revokeOtherSessions: true,
-    });
-
-    if (error) {
-      toast.error(error.message || "Failed to change password");
-      setIsSubmitting(false);
-    } else {
-      toast.success("Password changed successfully");
-      setCurrentPassword("");
-      setNewPassword("");
-      setConfirmPassword("");
-      setIsSubmitting(false);
-    }
+    await submit();
   };
 
   return (
@@ -58,8 +80,8 @@ export function ChangePasswordForm() {
             <FieldLabel htmlFor="currentPassword">Current Password</FieldLabel>
             <RevealableInput
               id="currentPassword"
-              value={currentPassword}
-              onChange={(e) => setCurrentPassword(e.target.value)}
+              value={formData.currentPassword}
+              onChange={handleChange}
               required
               disabled={isSubmitting}
               revealLabel="current password"
@@ -69,28 +91,28 @@ export function ChangePasswordForm() {
             <FieldLabel htmlFor="newPassword">New Password</FieldLabel>
             <RevealableInput
               id="newPassword"
-              value={newPassword}
-              onChange={(e) => setNewPassword(e.target.value)}
+              value={formData.newPassword}
+              onChange={handleChange}
               required
               disabled={isSubmitting}
               revealLabel="new password"
             />
           </Field>
-          <Field data-invalid={!!errors.confirmPassword}>
+          <Field data-invalid={!!validationErrors.confirmPassword}>
             <FieldLabel htmlFor="confirmPassword">
               Confirm New Password
             </FieldLabel>
             <RevealableInput
               id="confirmPassword"
-              value={confirmPassword}
-              onChange={(e) => setConfirmPassword(e.target.value)}
+              value={formData.confirmPassword}
+              onChange={handleChange}
               required
               disabled={isSubmitting}
-              aria-invalid={!!errors.confirmPassword}
+              aria-invalid={!!validationErrors.confirmPassword}
               revealLabel="confirm new password"
             />
-            {errors.confirmPassword && (
-              <FieldError>{errors.confirmPassword}</FieldError>
+            {validationErrors.confirmPassword && (
+              <FieldError>{validationErrors.confirmPassword}</FieldError>
             )}
           </Field>
         </FieldGroup>

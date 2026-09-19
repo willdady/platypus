@@ -2,6 +2,15 @@ import { z } from "zod";
 
 const kebabCaseRegex = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
+// Shared free-text bounds, exported so the forms' `maxLength` attributes read
+// the same source as the server rule.
+//
+// The Organization's identity / context.
+export const ORGANIZATION_IDENTITY_CONTEXT_MAX_LENGTH = 4000;
+// Every free-text Workspace context field (Workspace, Blueprint, Workspace
+// context).
+export const CONTEXT_MAX_LENGTH = 1000;
+
 // Organization
 
 export const organizationSchema = z.object({
@@ -11,7 +20,11 @@ export const organizationSchema = z.object({
   // prompt beside the workspace context as framing — NOT a security control
   // (see the provider `securityGuardrails` field for that). Length-bounded
   // against abuse; nullable so existing orgs are unchanged.
-  identityContext: z.string().max(4000).nullable().optional(),
+  identityContext: z
+    .string()
+    .max(ORGANIZATION_IDENTITY_CONTEXT_MAX_LENGTH)
+    .nullable()
+    .optional(),
   createdAt: z.date(),
   updatedAt: z.date(),
 });
@@ -32,6 +45,11 @@ export const organizationUpdateSchema = organizationSchema.pick({
 export const WORKSPACE_NAME_MIN_LENGTH = 3;
 export const WORKSPACE_NAME_MAX_LENGTH = 30;
 
+// Daily memory-summary retention bounds, shared with the Workspace form.
+export const WORKSPACE_MAX_DAILY_SUMMARIES_MIN = 7;
+export const WORKSPACE_MAX_DAILY_SUMMARIES_MAX = 365;
+export const DEFAULT_WORKSPACE_MAX_DAILY_SUMMARIES = 90;
+
 export const workspaceSchema = z.object({
   id: z.string(),
   organizationId: z.string(),
@@ -40,11 +58,16 @@ export const workspaceSchema = z.object({
     .string()
     .min(WORKSPACE_NAME_MIN_LENGTH)
     .max(WORKSPACE_NAME_MAX_LENGTH),
-  context: z.string().max(1000).nullable().optional(),
+  context: z.string().max(CONTEXT_MAX_LENGTH).nullable().optional(),
   taskModelProviderId: z.string().nullable().optional(),
   memoryExtractionProviderId: z.string().nullable().optional(),
   memoryEmbeddingProviderId: z.string().nullable().optional(),
-  maxDailySummaries: z.number().int().min(7).max(365).optional(),
+  maxDailySummaries: z
+    .number()
+    .int()
+    .min(WORKSPACE_MAX_DAILY_SUMMARIES_MIN)
+    .max(WORKSPACE_MAX_DAILY_SUMMARIES_MAX)
+    .optional(),
   // Per-workspace delegation flags (ADR-0006). Settable only by an org admin
   // (enforced in the workspace route); when true the owner may self-manage the
   // respective resource.
@@ -265,6 +288,14 @@ export const DEFAULT_DIRECT_MAX_STEPS = 10;
 // An Agent is scoped to either a Workspace or an Organization (mutually
 // exclusive), mirroring the dual-scope shape of `provider`/`mcp`/`skill`.
 // Org-scoped Agents are Shared resources managed by Org Admins (ADR-0007);
+// The bounds the Agent form's counters and `maxLength` attributes read.
+export const AGENT_NAME_MIN_LENGTH = 3;
+export const AGENT_NAME_MAX_LENGTH = 30;
+export const AGENT_DESCRIPTION_MIN_LENGTH = 1;
+export const AGENT_DESCRIPTION_MAX_LENGTH = 128;
+export const AGENT_INPUT_PLACEHOLDER_MAX_LENGTH = 100;
+export const AGENT_MAX_STEPS_MIN = 1;
+
 // the XOR is enforced on `agentSchema` below, while the create routes inject
 // the scope and Promote re-scopes a Workspace Agent to the Organization.
 export const agentBaseSchema = z.object({
@@ -272,8 +303,11 @@ export const agentBaseSchema = z.object({
   organizationId: z.string().optional(),
   workspaceId: z.string().optional(),
   providerId: z.string(),
-  name: z.string().min(3).max(30),
-  description: z.string().min(1).max(128),
+  name: z.string().min(AGENT_NAME_MIN_LENGTH).max(AGENT_NAME_MAX_LENGTH),
+  description: z
+    .string()
+    .min(AGENT_DESCRIPTION_MIN_LENGTH)
+    .max(AGENT_DESCRIPTION_MAX_LENGTH),
   instructions: z.string().optional(),
   modelId: z.string(),
   // Bounded because the value reaches `stepCountIs(n)`, whose predicate is
@@ -282,7 +316,7 @@ export const agentBaseSchema = z.object({
   // therefore never equal to a real step count, so the loop runs unbounded —
   // the opposite of the ceiling the operator asked for. `min(1)` matches the
   // `min="1"` the Agent form already puts on the input.
-  maxSteps: z.number().int().min(1).optional(),
+  maxSteps: z.number().int().min(AGENT_MAX_STEPS_MIN).optional(),
   // Sampling params are nullable so the UI can clear them back to "unset"
   // (null) — without null, JSON.stringify drops the cleared `undefined` key
   // and the column keeps its previous value (#263). null is treated as "unset"
@@ -296,7 +330,10 @@ export const agentBaseSchema = z.object({
   toolSetIds: z.array(z.string()).optional(),
   skillIds: z.array(z.string()).optional(),
   subAgentIds: z.array(z.string()).optional(),
-  inputPlaceholder: z.string().max(100).optional(),
+  inputPlaceholder: z
+    .string()
+    .max(AGENT_INPUT_PLACEHOLDER_MAX_LENGTH)
+    .optional(),
   avatarUrl: z.string().optional(),
   createdAt: z.date(),
   updatedAt: z.date(),
@@ -367,6 +404,16 @@ export const agentUpdateSchema = agentBaseSchema.pick({
  */
 export const SKILL_NAME_SOURCE = "[a-z0-9]+(?:-[a-z0-9]+)*";
 
+// The bounds the Skill form's counters and `maxLength` attributes read, so the
+// input and the server rule cannot drift apart.
+export const SKILL_NAME_MIN_LENGTH = 5;
+export const SKILL_NAME_MAX_LENGTH = 64;
+export const SKILL_DESCRIPTION_MIN_LENGTH = 24;
+export const SKILL_DESCRIPTION_MAX_LENGTH = 1024;
+export const SKILL_BODY_MIN_LENGTH = 48;
+export const SKILL_BODY_MAX_LENGTH = 50000;
+export const SKILL_ARGUMENT_HINT_MAX_LENGTH = 120;
+
 const skillNameRegex = new RegExp(`^${SKILL_NAME_SOURCE}$`);
 
 // A Skill is scoped to either a Workspace or an Organization (mutually
@@ -379,13 +426,20 @@ export const skillBaseSchema = z.object({
   workspaceId: z.string().optional(),
   name: z
     .string()
-    .min(5)
-    .max(64)
+    .min(SKILL_NAME_MIN_LENGTH)
+    .max(SKILL_NAME_MAX_LENGTH)
     .regex(skillNameRegex, "Skill name must be kebab-case"),
-  description: z.string().min(24).max(1024),
-  body: z.string().min(48).max(50000),
+  description: z
+    .string()
+    .min(SKILL_DESCRIPTION_MIN_LENGTH)
+    .max(SKILL_DESCRIPTION_MAX_LENGTH),
+  body: z.string().min(SKILL_BODY_MIN_LENGTH).max(SKILL_BODY_MAX_LENGTH),
   disableModelInvocation: z.boolean().default(false),
-  argumentHint: z.string().max(120).nullable().optional(),
+  argumentHint: z
+    .string()
+    .max(SKILL_ARGUMENT_HINT_MAX_LENGTH)
+    .nullable()
+    .optional(),
   createdAt: z.date(),
   updatedAt: z.date(),
 });
@@ -698,6 +752,11 @@ export type AttachmentCreateData = z.infer<typeof attachmentCreateSchema>;
 // Workspaces. A Blueprint may only list org-scoped (Shared) resources, so its
 // items reuse the Attachment resource-type set.
 
+// The bounds the Blueprint form's counters and `maxLength` attributes read.
+export const BLUEPRINT_NAME_MIN_LENGTH = 3;
+export const BLUEPRINT_NAME_MAX_LENGTH = 100;
+export const BLUEPRINT_DESCRIPTION_MAX_LENGTH = 500;
+
 const blueprintItemSchema = z.object({
   resourceType: attachmentResourceTypeSchema,
   resourceId: z.string(),
@@ -707,8 +766,15 @@ export type BlueprintItem = z.infer<typeof blueprintItemSchema>;
 const blueprintBaseSchema = z.object({
   id: z.string(),
   organizationId: z.string(),
-  name: z.string().min(3).max(100),
-  description: z.string().max(500).nullable().optional(),
+  name: z
+    .string()
+    .min(BLUEPRINT_NAME_MIN_LENGTH)
+    .max(BLUEPRINT_NAME_MAX_LENGTH),
+  description: z
+    .string()
+    .max(BLUEPRINT_DESCRIPTION_MAX_LENGTH)
+    .nullable()
+    .optional(),
   // The Shared resources this Blueprint provisions. Deduped/validated by the
   // route; each must be an org-scoped resource in the same organization.
   items: z.array(blueprintItemSchema),
@@ -719,7 +785,7 @@ const blueprintBaseSchema = z.object({
   taskModelProviderId: z.string().nullable().optional(),
   memoryExtractionProviderId: z.string().nullable().optional(),
   memoryEmbeddingProviderId: z.string().nullable().optional(),
-  context: z.string().max(1000).nullable().optional(),
+  context: z.string().max(CONTEXT_MAX_LENGTH).nullable().optional(),
   createdAt: z.date(),
   updatedAt: z.date(),
 });
@@ -1356,6 +1422,9 @@ export const classifyFile = (
 export const SEARCH_SOURCE_NONE = "none";
 export const SEARCH_SOURCE_NATIVE = "native";
 
+// The bound the Provider form's `maxLength` attribute reads.
+export const PROVIDER_SECURITY_GUARDRAILS_MAX_LENGTH = 8000;
+
 const providerBaseSchema = z.object({
   id: z.string(),
   organizationId: z.string().optional(),
@@ -1409,7 +1478,11 @@ const providerBaseSchema = z.object({
   // ones. Append-only and non-suppressible — the escape hatch is to point the
   // agent at a different provider. A prompt-level FLOOR, not a guarantee.
   // Length-bounded against abuse; nullable so existing providers are unchanged.
-  securityGuardrails: z.string().max(8000).nullable().optional(),
+  securityGuardrails: z
+    .string()
+    .max(PROVIDER_SECURITY_GUARDRAILS_MAX_LENGTH)
+    .nullable()
+    .optional(),
   modelIds: modelIdsSchema,
   // The three pointer-settings hold a concrete model id and never an alias —
   // enforced on the FIELD, not in a `providerSchema.refine`, because
@@ -1904,16 +1977,33 @@ export const eventTriggerConfigSchema = z.object({
 
 export type EventTriggerConfig = z.infer<typeof eventTriggerConfigSchema>;
 
+// The bounds the Trigger form's `maxLength` / `min` / `max` attributes read.
+export const TRIGGER_NAME_MIN_LENGTH = 1;
+export const TRIGGER_NAME_MAX_LENGTH = 100;
+export const TRIGGER_DESCRIPTION_MAX_LENGTH = 500;
+export const TRIGGER_INSTRUCTION_MAX_LENGTH = 10000;
+export const TRIGGER_MAX_RUNS_TO_KEEP_MIN = 1;
+export const TRIGGER_MAX_RUNS_TO_KEEP_MAX = 1000;
+
 export const triggerSchema = z.object({
   id: z.string(),
   workspaceId: z.string(),
   agentId: z.string(),
   type: triggerTypeSchema,
-  name: z.string().min(1).max(100),
-  description: z.string().max(500).nullable().optional(),
-  instruction: z.string().min(1).max(10000),
+  name: z.string().min(TRIGGER_NAME_MIN_LENGTH).max(TRIGGER_NAME_MAX_LENGTH),
+  description: z
+    .string()
+    .max(TRIGGER_DESCRIPTION_MAX_LENGTH)
+    .nullable()
+    .optional(),
+  instruction: z.string().min(1).max(TRIGGER_INSTRUCTION_MAX_LENGTH),
   enabled: z.boolean().default(true),
-  maxRunsToKeep: z.number().int().min(1).max(1000).default(50),
+  maxRunsToKeep: z
+    .number()
+    .int()
+    .min(TRIGGER_MAX_RUNS_TO_KEEP_MIN)
+    .max(TRIGGER_MAX_RUNS_TO_KEEP_MAX)
+    .default(50),
   search: z.boolean().default(false),
   // Whether a firing composes the `<memories>` block. Off by default: a
   // headless run should not have a system prompt that drifts with the

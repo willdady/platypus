@@ -9,21 +9,17 @@ import {
   FieldError,
 } from "@/components/ui/field";
 import { FormTextField } from "@/components/form-text-field";
+import { FormSelectField } from "@/components/form-select-field";
 import { ExpandableTextarea } from "@/components/expandable-textarea";
 import { Switch } from "@/components/ui/switch";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { ConfirmDialog } from "@/components/confirm-dialog";
+import { SelectItem } from "@/components/ui/select";
+import { EntityDeleteDialog } from "@/components/entity-delete-dialog";
 import { DetailFormState } from "@/components/detail-form-state";
 import { FormFooterButtons } from "@/components/form-footer-buttons";
 import { useState } from "react";
 import { useResetOnChange } from "@/hooks/use-reset-on-change";
+import { useEntityDelete, useEntityForm } from "@/hooks/use-entity-form";
 import { useRouter } from "next/navigation";
 import { Bot, Plug, Sparkles, Unplug } from "lucide-react";
 import type {
@@ -32,14 +28,14 @@ import type {
   AttachmentResourceType,
   Provider,
 } from "@platypus/schemas";
-import useSWR, { useSWRConfig } from "swr";
-import { fetcher, joinUrl } from "@/lib/utils";
-import { canSubmitForm, retractFieldError } from "@/lib/form-errors";
-import { writeEntity } from "@/lib/api-write";
 import {
-  applyWriteOutcome,
-  applyDeleteOutcome,
-} from "@/lib/apply-write-outcome";
+  BLUEPRINT_DESCRIPTION_MAX_LENGTH,
+  BLUEPRINT_NAME_MAX_LENGTH,
+  CONTEXT_MAX_LENGTH,
+} from "@platypus/schemas";
+import useSWR from "swr";
+import { fetcher, joinUrl } from "@/lib/utils";
+import { retractFieldError } from "@/lib/form-errors";
 import { useAuth, useBackendUrl } from "@/components/auth-provider";
 
 // The composer lists every Shared resource the org owns, grouped by type. A
@@ -153,6 +149,16 @@ const RETRACTABLE_FIELDS = [
   "memoryEmbeddingProviderId",
 ] as const;
 
+const INITIAL_DATA = {
+  name: "",
+  description: "",
+  // Tier 2 pointer-settings stamped onto the workspace on apply (ADR-0008).
+  context: "",
+  taskModelProviderId: null as string | null,
+  memoryExtractionProviderId: null as string | null,
+  memoryEmbeddingProviderId: null as string | null,
+};
+
 const BlueprintForm = ({
   classNames,
   orgId,
@@ -162,13 +168,8 @@ const BlueprintForm = ({
   orgId: string;
   blueprintId?: string;
 }) => {
-  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
-  const [isDeleting, setIsDeleting] = useState(false);
-  const [deleteError, setDeleteError] = useState<string | null>(null);
-
   const { user } = useAuth();
   const backendUrl = useBackendUrl();
-  const { mutate: globalMutate } = useSWRConfig();
 
   const collectionUrl = `/organizations/${orgId}/blueprints`;
   const returnPath = `/${orgId}/settings/blueprints`;
@@ -194,24 +195,65 @@ const BlueprintForm = ({
   );
   const providers = providersData?.results || [];
 
-  const [formData, setFormData] = useState({
-    name: "",
-    description: "",
-    // Tier 2 pointer-settings stamped onto the workspace on apply (ADR-0008).
-    context: "",
-    taskModelProviderId: null as string | null,
-    memoryExtractionProviderId: null as string | null,
-    memoryEmbeddingProviderId: null as string | null,
-  });
   // Selected items as a Set of `${type}:${id}` keys for cheap toggling.
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [validationErrors, setValidationErrors] = useState<
-    Record<string, string>
-  >({});
   const [formError, setFormError] = useState<string | null>(null);
 
   const router = useRouter();
+
+  const {
+    formData,
+    setFormData,
+    validationErrors,
+    setValidationErrors,
+    isSubmitting,
+    canSubmit,
+    handleChange,
+    toFieldChange,
+    submit,
+  } = useEntityForm<typeof INITIAL_DATA, unknown>({
+    initialData: INITIAL_DATA,
+    entity: "blueprints",
+    scope: { orgId },
+    id: blueprintId,
+    retractableFields: RETRACTABLE_FIELDS,
+    buildPayload: (data) => {
+      const items: BlueprintItem[] = [...selected].map((key) => {
+        const [resourceType, resourceId] = key.split(":");
+        return {
+          resourceType: resourceType as AttachmentResourceType,
+          resourceId,
+        };
+      });
+      return {
+        name: data.name,
+        description: data.description || undefined,
+        items,
+        // Tier 2 pointer-settings (ADR-0008). Null clears the slot; on apply a
+        // null slot leaves the workspace's existing value untouched.
+        context: data.context || null,
+        taskModelProviderId: data.taskModelProviderId,
+        memoryExtractionProviderId: data.memoryExtractionProviderId,
+        memoryEmbeddingProviderId: data.memoryEmbeddingProviderId,
+      };
+    },
+    onSuccess: () => router.push(returnPath),
+    onError: (message) => setFormError(message),
+  });
+
+  const {
+    isDeleteDialogOpen,
+    setIsDeleteDialogOpen,
+    isDeleting,
+    deleteError,
+    openDeleteDialog,
+    handleDelete,
+  } = useEntityDelete({
+    entity: "blueprints",
+    scope: { orgId },
+    id: blueprintId,
+    onSuccess: () => router.push(returnPath),
+  });
 
   useResetOnChange(blueprint, () => {
     if (blueprint) {
@@ -231,21 +273,6 @@ const BlueprintForm = ({
       );
     }
   });
-
-  const handleChange = (
-    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>,
-  ) => {
-    const { id, value } = e.target;
-    setValidationErrors((prev) => retractFieldError(prev, id));
-    setFormData((prev) => ({ ...prev, [id]: value }));
-  };
-
-  // Adapts FormTextField's `onChange(value)` to handleChange's `onChange(e)`
-  // so the centralized clear-error-and-set-formData logic stays in one place.
-  const toFieldChange = (id: string) => (value: string) =>
-    handleChange({
-      target: { id, value },
-    } as React.ChangeEvent<HTMLInputElement>);
 
   const toggleItem = (
     type: AttachmentResourceType,
@@ -293,68 +320,6 @@ const BlueprintForm = ({
     (p) => (p as { embeddingModelId?: string }).embeddingModelId,
   );
 
-  const handleSubmit = async () => {
-    setIsSubmitting(true);
-    setValidationErrors({});
-    setFormError(null);
-
-    const items: BlueprintItem[] = [...selected].map((key) => {
-      const [resourceType, resourceId] = key.split(":");
-      return {
-        resourceType: resourceType as AttachmentResourceType,
-        resourceId,
-      };
-    });
-    const payload = {
-      name: formData.name,
-      description: formData.description || undefined,
-      items,
-      // Tier 2 pointer-settings (ADR-0008). Null clears the slot; on apply a
-      // null slot leaves the workspace's existing value untouched.
-      context: formData.context || null,
-      taskModelProviderId: formData.taskModelProviderId,
-      memoryExtractionProviderId: formData.memoryExtractionProviderId,
-      memoryEmbeddingProviderId: formData.memoryEmbeddingProviderId,
-    };
-
-    const result = await writeEntity(
-      backendUrl,
-      "blueprints",
-      { orgId },
-      { id: blueprintId, data: payload },
-    );
-
-    await applyWriteOutcome(result, {
-      mutate: globalMutate,
-      setValidationErrors,
-      onSuccess: () => router.push(returnPath),
-      onError: (message) => setFormError(message),
-    });
-
-    setIsSubmitting(false);
-  };
-
-  const handleDelete = async () => {
-    if (!blueprintId) return;
-    setIsDeleting(true);
-    setDeleteError(null);
-    const result = await writeEntity(
-      backendUrl,
-      "blueprints",
-      { orgId },
-      { id: blueprintId },
-    );
-
-    await applyDeleteOutcome(result, {
-      mutate: globalMutate,
-      onSuccess: () => router.push(returnPath),
-      onError: (message) => {
-        setDeleteError(message);
-        setIsDeleting(false);
-      },
-    });
-  };
-
   const form = (
     <div className={classNames}>
       <FieldSet className="mb-6">
@@ -370,7 +335,7 @@ const BlueprintForm = ({
             autoFocus
             trailing={
               <p className="text-xs text-muted-foreground">
-                {formData.name.length}/100
+                {formData.name.length}/{BLUEPRINT_NAME_MAX_LENGTH}
               </p>
             }
           />
@@ -382,7 +347,7 @@ const BlueprintForm = ({
               value={formData.description}
               onChange={handleChange}
               disabled={isSubmitting}
-              maxLength={500}
+              maxLength={BLUEPRINT_DESCRIPTION_MAX_LENGTH}
               aria-invalid={!!validationErrors.description}
               error={validationErrors.description}
             />
@@ -428,7 +393,7 @@ const BlueprintForm = ({
               onChange={handleChange}
               disabled={isSubmitting}
               className="!font-mono"
-              maxLength={1000}
+              maxLength={CONTEXT_MAX_LENGTH}
               aria-invalid={!!validationErrors.context}
               error={validationErrors.context}
             />
@@ -437,123 +402,83 @@ const BlueprintForm = ({
             </FieldDescription>
           </Field>
 
-          <Field data-invalid={!!validationErrors.taskModelProviderId}>
-            <FieldLabel htmlFor="taskModelProviderId">
-              Task model provider
-            </FieldLabel>
-            <Select
-              value={formData.taskModelProviderId || "none"}
-              onValueChange={(value) => {
-                setValidationErrors((prev) =>
-                  retractFieldError(prev, "taskModelProviderId"),
-                );
-                setFormData((prev) => ({
-                  ...prev,
-                  taskModelProviderId: value === "none" ? null : value,
-                }));
-              }}
-              disabled={isSubmitting || attachedProviders.length === 0}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Select a provider" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none">Leave unset</SelectItem>
-                {attachedProviders.map((provider) => (
-                  <SelectItem key={provider.id} value={provider.id}>
-                    {provider.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <FieldDescription>
-              Provider used for generating chat titles and tags. Attach a
-              provider under Shared resources to enable this.
-            </FieldDescription>
-            {validationErrors.taskModelProviderId && (
-              <FieldError>{validationErrors.taskModelProviderId}</FieldError>
-            )}
-          </Field>
+          <FormSelectField
+            label="Task model provider"
+            name="taskModelProviderId"
+            value={formData.taskModelProviderId || "none"}
+            onValueChange={(value) => {
+              setValidationErrors((prev) =>
+                retractFieldError(prev, "taskModelProviderId"),
+              );
+              setFormData((prev) => ({
+                ...prev,
+                taskModelProviderId: value === "none" ? null : value,
+              }));
+            }}
+            disabled={isSubmitting || attachedProviders.length === 0}
+            placeholder="Select a provider"
+            error={validationErrors.taskModelProviderId}
+            description="Provider used for generating chat titles and tags. Attach a provider under Shared resources to enable this."
+          >
+            <SelectItem value="none">Leave unset</SelectItem>
+            {attachedProviders.map((provider) => (
+              <SelectItem key={provider.id} value={provider.id}>
+                {provider.name}
+              </SelectItem>
+            ))}
+          </FormSelectField>
 
-          <Field data-invalid={!!validationErrors.memoryExtractionProviderId}>
-            <FieldLabel htmlFor="memoryExtractionProviderId">
-              Memory extraction provider
-            </FieldLabel>
-            <Select
-              value={formData.memoryExtractionProviderId || "none"}
-              onValueChange={(value) => {
-                setValidationErrors((prev) =>
-                  retractFieldError(prev, "memoryExtractionProviderId"),
-                );
-                setFormData((prev) => ({
-                  ...prev,
-                  memoryExtractionProviderId: value === "none" ? null : value,
-                }));
-              }}
-              disabled={isSubmitting || memoryExtractionProviders.length === 0}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Select a provider" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none">Leave unset</SelectItem>
-                {memoryExtractionProviders.map((provider) => (
-                  <SelectItem key={provider.id} value={provider.id}>
-                    {provider.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <FieldDescription>
-              Provider used to extract memories from conversations. Must be
-              attached by this blueprint and expose a memory-extraction model.
-            </FieldDescription>
-            {validationErrors.memoryExtractionProviderId && (
-              <FieldError>
-                {validationErrors.memoryExtractionProviderId}
-              </FieldError>
-            )}
-          </Field>
+          <FormSelectField
+            label="Memory extraction provider"
+            name="memoryExtractionProviderId"
+            value={formData.memoryExtractionProviderId || "none"}
+            onValueChange={(value) => {
+              setValidationErrors((prev) =>
+                retractFieldError(prev, "memoryExtractionProviderId"),
+              );
+              setFormData((prev) => ({
+                ...prev,
+                memoryExtractionProviderId: value === "none" ? null : value,
+              }));
+            }}
+            disabled={isSubmitting || memoryExtractionProviders.length === 0}
+            placeholder="Select a provider"
+            error={validationErrors.memoryExtractionProviderId}
+            description="Provider used to extract memories from conversations. Must be attached by this blueprint and expose a memory-extraction model."
+          >
+            <SelectItem value="none">Leave unset</SelectItem>
+            {memoryExtractionProviders.map((provider) => (
+              <SelectItem key={provider.id} value={provider.id}>
+                {provider.name}
+              </SelectItem>
+            ))}
+          </FormSelectField>
 
-          <Field data-invalid={!!validationErrors.memoryEmbeddingProviderId}>
-            <FieldLabel htmlFor="memoryEmbeddingProviderId">
-              Memory embedding provider
-            </FieldLabel>
-            <Select
-              value={formData.memoryEmbeddingProviderId || "none"}
-              onValueChange={(value) => {
-                setValidationErrors((prev) =>
-                  retractFieldError(prev, "memoryEmbeddingProviderId"),
-                );
-                setFormData((prev) => ({
-                  ...prev,
-                  memoryEmbeddingProviderId: value === "none" ? null : value,
-                }));
-              }}
-              disabled={isSubmitting || memoryEmbeddingProviders.length === 0}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Select a provider" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none">Leave unset</SelectItem>
-                {memoryEmbeddingProviders.map((provider) => (
-                  <SelectItem key={provider.id} value={provider.id}>
-                    {provider.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <FieldDescription>
-              Provider used for memory embeddings. Must be attached by this
-              blueprint and expose an embedding model.
-            </FieldDescription>
-            {validationErrors.memoryEmbeddingProviderId && (
-              <FieldError>
-                {validationErrors.memoryEmbeddingProviderId}
-              </FieldError>
-            )}
-          </Field>
+          <FormSelectField
+            label="Memory embedding provider"
+            name="memoryEmbeddingProviderId"
+            value={formData.memoryEmbeddingProviderId || "none"}
+            onValueChange={(value) => {
+              setValidationErrors((prev) =>
+                retractFieldError(prev, "memoryEmbeddingProviderId"),
+              );
+              setFormData((prev) => ({
+                ...prev,
+                memoryEmbeddingProviderId: value === "none" ? null : value,
+              }));
+            }}
+            disabled={isSubmitting || memoryEmbeddingProviders.length === 0}
+            placeholder="Select a provider"
+            error={validationErrors.memoryEmbeddingProviderId}
+            description="Provider used for memory embeddings. Must be attached by this blueprint and expose an embedding model."
+          >
+            <SelectItem value="none">Leave unset</SelectItem>
+            {memoryEmbeddingProviders.map((provider) => (
+              <SelectItem key={provider.id} value={provider.id}>
+                {provider.name}
+              </SelectItem>
+            ))}
+          </FormSelectField>
         </FieldGroup>
       </FieldSet>
 
@@ -561,25 +486,18 @@ const BlueprintForm = ({
 
       <FormFooterButtons
         submitText={blueprintId ? "Update" : "Save"}
-        onSubmit={handleSubmit}
-        submitDisabled={
-          isSubmitting || !canSubmitForm(validationErrors, RETRACTABLE_FIELDS)
-        }
+        onSubmit={() => void submit()}
+        submitDisabled={isSubmitting || !canSubmit}
         deleteVisible={!!blueprintId}
         deleteDisabled={isSubmitting}
-        onDelete={() => setIsDeleteDialogOpen(true)}
+        onDelete={openDeleteDialog}
       />
 
-      <ConfirmDialog
+      <EntityDeleteDialog
         open={isDeleteDialogOpen}
-        onOpenChange={(open) => {
-          setIsDeleteDialogOpen(open);
-          if (!open) setDeleteError(null);
-        }}
+        onOpenChange={setIsDeleteDialogOpen}
         title="Delete Blueprint"
         description="Are you sure you want to delete this blueprint? Workspaces already provisioned from it are unaffected."
-        confirmLabel="Delete"
-        confirmVariant="destructive"
         onConfirm={handleDelete}
         loading={isDeleting}
         error={deleteError}

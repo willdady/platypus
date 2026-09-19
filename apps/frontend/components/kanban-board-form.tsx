@@ -1,21 +1,18 @@
 "use client";
 
-import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { mutate } from "swr";
 import { nanoid } from "nanoid";
 import { Trash2, Plus } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { FormTextField } from "@/components/form-text-field";
-import { Textarea } from "@/components/ui/textarea";
+import { FormTextareaField } from "@/components/form-textarea-field";
 import { Button } from "@/components/ui/button";
-import { Field, FieldLabel, FieldError } from "@/components/ui/field";
+import { FieldLabel } from "@/components/ui/field";
 import { FormFooterButtons } from "@/components/form-footer-buttons";
 import { useBackendUrl } from "@/components/auth-provider";
 import { joinUrl } from "@/lib/utils";
-import { canSubmitForm, retractFieldError } from "@/lib/form-errors";
-import { writeEntity } from "@/lib/api-write";
-import { applyWriteOutcome } from "@/lib/apply-write-outcome";
+import { useEntityForm } from "@/hooks/use-entity-form";
 import { KANBAN_LABEL_COLORS, type KanbanLabel } from "@platypus/schemas";
 import { toast } from "sonner";
 
@@ -25,6 +22,12 @@ const DEFAULT_COLOR = KANBAN_LABEL_COLORS[5].value; // Blue
 // to it, so including it here would disable Save forever the moment the
 // server rejects a label.
 const RETRACTABLE_FIELDS = ["name", "description"] as const;
+
+type BoardFormData = {
+  name: string;
+  description: string;
+  labels: KanbanLabel[];
+};
 
 export function KanbanBoardForm({
   orgId,
@@ -48,107 +51,108 @@ export function KanbanBoardForm({
 }) {
   const backendUrl = useBackendUrl();
   const router = useRouter();
-  const [name, setName] = useState(board?.name ?? "");
-  const [description, setDescription] = useState(board?.description ?? "");
-  const [labels, setLabels] = useState<KanbanLabel[]>(board?.labels ?? []);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [validationErrors, setValidationErrors] = useState<
-    Record<string, string>
-  >({});
 
   const isEditing = !!board;
 
+  const {
+    formData,
+    setFormData,
+    validationErrors,
+    isSubmitting,
+    canSubmit,
+    toFieldChange,
+    submit,
+  } = useEntityForm<BoardFormData, { id: string }>({
+    initialData: {
+      name: board?.name ?? "",
+      description: board?.description ?? "",
+      labels: board?.labels ?? [],
+    },
+    entity: "boards",
+    scope: { orgId, workspaceId },
+    id: board?.id,
+    retractableFields: RETRACTABLE_FIELDS,
+    buildPayload: (data) => ({
+      name: data.name,
+      description: data.description || null,
+      labels: data.labels,
+    }),
+    onSuccess: async (data) => {
+      if (isEditing) {
+        toast.success("Board updated");
+        onSuccess?.();
+        return;
+      }
+      const stateUrl = joinUrl(
+        backendUrl,
+        `/organizations/${orgId}/workspaces/${workspaceId}/boards/${data.id}/state`,
+      );
+      await mutate(stateUrl, { board: data, columns: [] }, false);
+      router.push(`/${orgId}/workspace/${workspaceId}/boards/${data.id}`);
+    },
+  });
+
+  const { labels } = formData;
+
   const handleAddLabel = () => {
-    setLabels((prev) => [
+    setFormData((prev) => ({
       ...prev,
-      { id: nanoid(), name: "", color: DEFAULT_COLOR },
-    ]);
+      labels: [
+        ...prev.labels,
+        { id: nanoid(), name: "", color: DEFAULT_COLOR },
+      ],
+    }));
   };
 
   const handleLabelNameChange = (id: string, value: string) => {
-    setLabels((prev) =>
-      prev.map((l) => (l.id === id ? { ...l, name: value } : l)),
-    );
+    setFormData((prev) => ({
+      ...prev,
+      labels: prev.labels.map((l) => (l.id === id ? { ...l, name: value } : l)),
+    }));
   };
 
   const handleLabelColorChange = (id: string, color: string) => {
-    setLabels((prev) => prev.map((l) => (l.id === id ? { ...l, color } : l)));
+    setFormData((prev) => ({
+      ...prev,
+      labels: prev.labels.map((l) => (l.id === id ? { ...l, color } : l)),
+    }));
   };
 
   const handleDeleteLabel = (id: string) => {
-    setLabels((prev) => prev.filter((l) => l.id !== id));
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsSubmitting(true);
-    setValidationErrors({});
-
-    const result = await writeEntity<{ id: string }>(
-      backendUrl,
-      "boards",
-      { orgId, workspaceId },
-      {
-        id: board?.id,
-        data: { name, description: description || null, labels },
-      },
-    );
-
-    await applyWriteOutcome(result, {
-      mutate,
-      setValidationErrors,
-      onSuccess: async (data) => {
-        if (isEditing) {
-          toast.success("Board updated");
-          onSuccess?.();
-        } else {
-          const stateUrl = joinUrl(
-            backendUrl,
-            `/organizations/${orgId}/workspaces/${workspaceId}/boards/${data.id}/state`,
-          );
-          await mutate(stateUrl, { board: data, columns: [] }, false);
-          router.push(`/${orgId}/workspace/${workspaceId}/boards/${data.id}`);
-        }
-      },
-    });
-
-    setIsSubmitting(false);
+    setFormData((prev) => ({
+      ...prev,
+      labels: prev.labels.filter((l) => l.id !== id),
+    }));
   };
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4">
+    <form
+      onSubmit={(e) => {
+        e.preventDefault();
+        void submit();
+      }}
+      className="space-y-4"
+    >
       <FormTextField
         label="Name"
         name="name"
-        value={name}
-        onChange={(value) => {
-          setValidationErrors((prev) => retractFieldError(prev, "name"));
-          setName(value);
-        }}
+        value={formData.name}
+        onChange={toFieldChange("name")}
         placeholder="Board name"
         disabled={isSubmitting}
         required
         autoFocus={!isEditing}
         error={validationErrors.name}
       />
-      <Field data-invalid={!!validationErrors.description}>
-        <FieldLabel htmlFor="description">Description</FieldLabel>
-        <Textarea
-          id="description"
-          value={description}
-          onChange={(e) => {
-            setValidationErrors((prev) =>
-              retractFieldError(prev, "description"),
-            );
-            setDescription(e.target.value);
-          }}
-          placeholder="Optional description"
-          disabled={isSubmitting}
-        />
-        {validationErrors.description && (
-          <FieldError>{validationErrors.description}</FieldError>
-        )}
-      </Field>
+      <FormTextareaField
+        label="Description"
+        name="description"
+        value={formData.description}
+        onChange={toFieldChange("description")}
+        placeholder="Optional description"
+        disabled={isSubmitting}
+        error={validationErrors.description}
+      />
 
       <div className="space-y-2">
         <FieldLabel>Labels</FieldLabel>
@@ -207,10 +211,7 @@ export function KanbanBoardForm({
         type="submit"
         submitText="Save"
         submitDisabled={
-          isSubmitting ||
-          isDeleting ||
-          !name.trim() ||
-          !canSubmitForm(validationErrors, RETRACTABLE_FIELDS)
+          isSubmitting || isDeleting || !formData.name.trim() || !canSubmit
         }
         submitClassName=""
         deleteVisible={isEditing && !!onDelete}

@@ -10,6 +10,7 @@ import {
 } from "@/components/ui/field";
 import { ExpandableTextarea } from "@/components/expandable-textarea";
 import { FormTextField } from "@/components/form-text-field";
+import { FormSelectField } from "@/components/form-select-field";
 import { AgentAvatar } from "@/components/agent-avatar";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
@@ -18,11 +19,12 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
-import { ConfirmDialog } from "@/components/confirm-dialog";
+import { EntityDeleteDialog } from "@/components/entity-delete-dialog";
 import { DetailFormState } from "@/components/detail-form-state";
 import { FormFooterButtons } from "@/components/form-footer-buttons";
 import { useState, useMemo } from "react";
 import { useResetOnChange } from "@/hooks/use-reset-on-change";
+import { useEntityDelete, useEntityForm } from "@/hooks/use-entity-form";
 import { useRouter } from "next/navigation";
 import { ChevronsUpDown } from "lucide-react";
 import {
@@ -42,14 +44,14 @@ import {
   type KanbanBoard,
   type KanbanBoardState,
 } from "@platypus/schemas";
-import useSWR, { useSWRConfig } from "swr";
-import { fetcher, joinUrl } from "@/lib/utils";
-import { canSubmitForm, retractFieldError } from "@/lib/form-errors";
-import { writeEntity } from "@/lib/api-write";
 import {
-  applyWriteOutcome,
-  applyDeleteOutcome,
-} from "@/lib/apply-write-outcome";
+  TRIGGER_INSTRUCTION_MAX_LENGTH,
+  TRIGGER_MAX_RUNS_TO_KEEP_MAX,
+  TRIGGER_MAX_RUNS_TO_KEEP_MIN,
+} from "@platypus/schemas";
+import useSWR from "swr";
+import { fetcher, joinUrl } from "@/lib/utils";
+import { retractFieldError } from "@/lib/form-errors";
 import { useAuth, useBackendUrl } from "@/components/auth-provider";
 import { Cron } from "croner";
 import { format } from "date-fns";
@@ -310,6 +312,20 @@ const RETRACTABLE_FIELDS = [
   "config",
 ] as const;
 
+type TriggerFormData = {
+  name: string;
+  description: string;
+  agentId: string;
+  instruction: string;
+  cronExpression: string;
+  timezone: string;
+  isOneOff: boolean;
+  enabled: boolean;
+  maxRunsToKeep: number;
+  search: boolean;
+  includeMemories: boolean;
+};
+
 const TriggerForm = ({
   orgId,
   workspaceId,
@@ -319,12 +335,8 @@ const TriggerForm = ({
   workspaceId: string;
   triggerId?: string;
 }) => {
-  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
-  const [isDeleting, setIsDeleting] = useState(false);
-
   const { user } = useAuth();
   const backendUrl = useBackendUrl();
-  const { mutate: globalMutate } = useSWRConfig();
 
   const { data: agentsData, isLoading: agentsLoading } = useSWR<{
     results: Agent[];
@@ -383,20 +395,6 @@ const TriggerForm = ({
   );
   const columns = boardStateData?.columns || [];
 
-  const [formData, setFormData] = useState({
-    name: "",
-    description: "",
-    agentId: "",
-    instruction: "",
-    cronExpression: "0 9 * * *",
-    timezone: getBrowserTimezone(),
-    isOneOff: false,
-    enabled: true,
-    maxRunsToKeep: 10,
-    search: false,
-    includeMemories: false,
-  });
-
   const [isAdvancedOpen, setIsAdvancedOpen] = useState(false);
   const [scheduleMode, setScheduleMode] = useState<"simple" | "advanced">(
     "simple",
@@ -415,12 +413,102 @@ const TriggerForm = ({
     dayOfMonth: "1",
   });
 
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [validationErrors, setValidationErrors] = useState<
-    Record<string, string>
-  >({});
-
   const router = useRouter();
+
+  const {
+    formData,
+    setFormData,
+    validationErrors,
+    setValidationErrors,
+    isSubmitting,
+    canSubmit,
+    handleChange,
+    toFieldChange,
+    setNumberField,
+    setField,
+    submit,
+  } = useEntityForm<TriggerFormData, { id: string }>({
+    initialData: {
+      name: "",
+      description: "",
+      agentId: "",
+      instruction: "",
+      cronExpression: "0 9 * * *",
+      timezone: getBrowserTimezone(),
+      isOneOff: false,
+      enabled: true,
+      maxRunsToKeep: 10,
+      search: false,
+      includeMemories: false,
+    },
+    entity: "triggers",
+    scope: { orgId, workspaceId },
+    id: triggerId,
+    retractableFields: RETRACTABLE_FIELDS,
+    buildPayload: (data): unknown => {
+      const commonFields = {
+        workspaceId,
+        agentId: data.agentId,
+        name: data.name,
+        description: data.description || undefined,
+        instruction: data.instruction,
+        enabled: data.enabled,
+        maxRunsToKeep: data.maxRunsToKeep,
+        search: data.search,
+        includeMemories: data.includeMemories,
+      };
+
+      return triggerType === "cron"
+        ? {
+            ...commonFields,
+            type: "cron" as const,
+            config: {
+              cronExpression: effectiveCronExpression,
+              timezone: data.timezone,
+              isOneOff: data.isOneOff,
+            },
+          }
+        : {
+            ...commonFields,
+            type: "event" as const,
+            config: {
+              events: selectedEvents,
+              ...(filterBoardId || filterChangedFields.length > 0
+                ? {
+                    filters: {
+                      ...(filterBoardId ? { boardId: filterBoardId } : {}),
+                      ...(filterBoardId && filterColumnId
+                        ? { columnId: filterColumnId }
+                        : {}),
+                      ...(filterChangedFields.length > 0
+                        ? { changedFields: filterChangedFields }
+                        : {}),
+                    },
+                  }
+                : {}),
+            },
+          };
+    },
+    onSuccess: () => router.push(`/${orgId}/workspace/${workspaceId}`),
+    failureMessage: "Error saving trigger",
+  });
+
+  const {
+    isDeleteDialogOpen,
+    setIsDeleteDialogOpen,
+    isDeleting,
+    openDeleteDialog,
+    handleDelete,
+  } = useEntityDelete({
+    entity: "triggers",
+    scope: { orgId, workspaceId },
+    id: triggerId,
+    onSuccess: () => router.push(`/${orgId}/workspace/${workspaceId}`),
+    onError: (message, _outcome, { close }) => {
+      toast.error(message);
+      close();
+    },
+  });
 
   useResetOnChange(trigger, () => {
     if (trigger) {
@@ -478,18 +566,16 @@ const TriggerForm = ({
     }
   });
 
-  const effectiveCronExpression = useMemo(() => {
-    if (scheduleMode === "simple") {
-      return buildCronExpression(
-        simpleSchedule.frequency,
-        simpleSchedule.minute,
-        simpleSchedule.hour,
-        simpleSchedule.dayOfWeek,
-        simpleSchedule.dayOfMonth,
-      );
-    }
-    return formData.cronExpression;
-  }, [scheduleMode, simpleSchedule, formData.cronExpression]);
+  const effectiveCronExpression =
+    scheduleMode === "simple"
+      ? buildCronExpression(
+          simpleSchedule.frequency,
+          simpleSchedule.minute,
+          simpleSchedule.hour,
+          simpleSchedule.dayOfWeek,
+          simpleSchedule.dayOfMonth,
+        )
+      : formData.cronExpression;
 
   const { isCronValid, nextRunPreview } = useMemo(() => {
     if (triggerType !== "cron")
@@ -507,35 +593,6 @@ const TriggerForm = ({
       return { isCronValid: false, nextRunPreview: null };
     }
   }, [triggerType, effectiveCronExpression, formData.timezone]);
-
-  const handleChange = (
-    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>,
-  ) => {
-    const { id, value } = e.target;
-
-    // Clear the error for this field, including any reported against a path
-    // inside it.
-    setValidationErrors((prev) => retractFieldError(prev, id));
-
-    setFormData((prevData) => ({
-      ...prevData,
-      [id]: value,
-    }));
-  };
-
-  // Adapts FormTextField's `onChange(value)` to handleChange's `onChange(e)`
-  // so the centralized clear-error-and-set-formData logic stays in one place.
-  const toFieldChange = (id: string) => (value: string) =>
-    handleChange({
-      target: { id, value },
-    } as React.ChangeEvent<HTMLInputElement>);
-
-  const handleNumberChange = (id: string, value: string) => {
-    setFormData((prevData) => ({
-      ...prevData,
-      [id]: value === "" ? undefined : parseInt(value),
-    }));
-  };
 
   const handleEventToggle = (event: string) => {
     setValidationErrors((prev) => retractFieldError(prev, "config"));
@@ -560,95 +617,6 @@ const TriggerForm = ({
     setFilterChangedFields((prev) =>
       prev.includes(field) ? prev.filter((f) => f !== field) : [...prev, field],
     );
-  };
-
-  const handleSubmit = async () => {
-    setIsSubmitting(true);
-    setValidationErrors({});
-    try {
-      const commonFields = {
-        workspaceId,
-        agentId: formData.agentId,
-        name: formData.name,
-        description: formData.description || undefined,
-        instruction: formData.instruction,
-        enabled: formData.enabled,
-        maxRunsToKeep: formData.maxRunsToKeep,
-        search: formData.search,
-        includeMemories: formData.includeMemories,
-      };
-
-      const payload =
-        triggerType === "cron"
-          ? {
-              ...commonFields,
-              type: "cron" as const,
-              config: {
-                cronExpression: effectiveCronExpression,
-                timezone: formData.timezone,
-                isOneOff: formData.isOneOff,
-              },
-            }
-          : {
-              ...commonFields,
-              type: "event" as const,
-              config: {
-                events: selectedEvents,
-                ...(filterBoardId || filterChangedFields.length > 0
-                  ? {
-                      filters: {
-                        ...(filterBoardId ? { boardId: filterBoardId } : {}),
-                        ...(filterBoardId && filterColumnId
-                          ? { columnId: filterColumnId }
-                          : {}),
-                        ...(filterChangedFields.length > 0
-                          ? { changedFields: filterChangedFields }
-                          : {}),
-                      },
-                    }
-                  : {}),
-              },
-            };
-
-      const result = await writeEntity(
-        backendUrl,
-        "triggers",
-        { orgId, workspaceId },
-        { id: triggerId, data: payload },
-      );
-
-      await applyWriteOutcome(result, {
-        mutate: globalMutate,
-        setValidationErrors,
-        onSuccess: () => router.push(`/${orgId}/workspace/${workspaceId}`),
-      });
-    } catch {
-      toast.error("Error saving trigger");
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  const handleDelete = async () => {
-    if (!triggerId) return;
-
-    setIsDeleting(true);
-    const result = await writeEntity(
-      backendUrl,
-      "triggers",
-      { orgId, workspaceId },
-      { id: triggerId },
-    );
-
-    await applyDeleteOutcome(result, {
-      mutate: globalMutate,
-      onSuccess: () => router.push(`/${orgId}/workspace/${workspaceId}`),
-      onError: (message) => {
-        toast.error(message);
-        setIsDeleting(false);
-        setIsDeleteDialogOpen(false);
-      },
-    });
   };
 
   const form = (
@@ -696,34 +664,22 @@ const TriggerForm = ({
             error={validationErrors.description}
           />
 
-          <Field data-invalid={!!validationErrors.agentId}>
-            <FieldLabel>Agent</FieldLabel>
-            <Select
-              value={formData.agentId}
-              onValueChange={(value) => {
-                setValidationErrors((prev) =>
-                  retractFieldError(prev, "agentId"),
-                );
-                setFormData((prev) => ({ ...prev, agentId: value }));
-              }}
-              disabled={isSubmitting}
-            >
-              <SelectTrigger disabled={isSubmitting}>
-                <SelectValue placeholder="Select an agent" />
-              </SelectTrigger>
-              <SelectContent>
-                {agents.map((agent) => (
-                  <SelectItem key={agent.id} value={agent.id}>
-                    <AgentAvatar agent={agent} className="size-5" />
-                    {agent.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            {validationErrors.agentId && (
-              <FieldError>{validationErrors.agentId}</FieldError>
-            )}
-          </Field>
+          <FormSelectField
+            label="Agent"
+            name="agentId"
+            value={formData.agentId}
+            onValueChange={(value) => setField("agentId", value)}
+            disabled={isSubmitting}
+            placeholder="Select an agent"
+            error={validationErrors.agentId}
+          >
+            {agents.map((agent) => (
+              <SelectItem key={agent.id} value={agent.id}>
+                <AgentAvatar agent={agent} className="size-5" />
+                {agent.name}
+              </SelectItem>
+            ))}
+          </FormSelectField>
 
           <Field data-invalid={!!validationErrors.instruction}>
             <ExpandableTextarea
@@ -737,7 +693,7 @@ const TriggerForm = ({
               value={formData.instruction}
               onChange={handleChange}
               disabled={isSubmitting}
-              maxLength={10000}
+              maxLength={TRIGGER_INSTRUCTION_MAX_LENGTH}
               aria-invalid={!!validationErrors.instruction}
               error={validationErrors.instruction}
             />
@@ -974,35 +930,23 @@ const TriggerForm = ({
                 />
               )}
 
-              <Field data-invalid={!!validationErrors.timezone}>
-                <FieldLabel>Timezone</FieldLabel>
-                <Select
-                  value={formData.timezone}
-                  onValueChange={(value) => {
-                    setValidationErrors((prev) =>
-                      retractFieldError(prev, "timezone"),
-                    );
-                    setFormData((prev) => ({ ...prev, timezone: value }));
-                  }}
-                  disabled={isSubmitting}
-                >
-                  <SelectTrigger disabled={isSubmitting}>
-                    <SelectValue placeholder="Select timezone" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectGroup>
-                      {TIMEZONES.map((tz) => (
-                        <SelectItem key={tz} value={tz}>
-                          {tz}
-                        </SelectItem>
-                      ))}
-                    </SelectGroup>
-                  </SelectContent>
-                </Select>
-                {validationErrors.timezone && (
-                  <FieldError>{validationErrors.timezone}</FieldError>
-                )}
-              </Field>
+              <FormSelectField
+                label="Timezone"
+                name="timezone"
+                value={formData.timezone}
+                onValueChange={(value) => setField("timezone", value)}
+                disabled={isSubmitting}
+                placeholder="Select timezone"
+                error={validationErrors.timezone}
+              >
+                <SelectGroup>
+                  {TIMEZONES.map((tz) => (
+                    <SelectItem key={tz} value={tz}>
+                      {tz}
+                    </SelectItem>
+                  ))}
+                </SelectGroup>
+              </FormSelectField>
 
               {nextRunPreview && isCronValid && (
                 <Field>
@@ -1155,10 +1099,10 @@ const TriggerForm = ({
             label="Max Runs to Keep"
             name="maxRunsToKeep"
             type="number"
-            min="1"
-            max="1000"
+            min={TRIGGER_MAX_RUNS_TO_KEEP_MIN}
+            max={TRIGGER_MAX_RUNS_TO_KEEP_MAX}
             value={String(formData.maxRunsToKeep)}
-            onChange={(value) => handleNumberChange("maxRunsToKeep", value)}
+            onChange={(value) => setNumberField("maxRunsToKeep", value)}
             disabled={isSubmitting}
             description="Minimum number of recent run records to keep; older ones are pruned"
           />
@@ -1250,25 +1194,23 @@ const TriggerForm = ({
 
       <FormFooterButtons
         submitText={triggerId ? "Update" : "Save"}
-        onSubmit={handleSubmit}
+        onSubmit={() => void submit()}
         submitDisabled={
           isSubmitting ||
-          !canSubmitForm(validationErrors, RETRACTABLE_FIELDS) ||
+          !canSubmit ||
           !isCronValid ||
           (triggerType === "event" && selectedEvents.length === 0)
         }
         deleteVisible={!!triggerId}
         deleteDisabled={isSubmitting}
-        onDelete={() => setIsDeleteDialogOpen(true)}
+        onDelete={openDeleteDialog}
       />
 
-      <ConfirmDialog
+      <EntityDeleteDialog
         open={isDeleteDialogOpen}
         onOpenChange={setIsDeleteDialogOpen}
         title="Delete Trigger"
         description="Are you sure you want to delete this trigger? This will also delete all run history for this trigger. This action cannot be undone."
-        confirmLabel="Delete"
-        confirmVariant="destructive"
         onConfirm={handleDelete}
         loading={isDeleting}
       />

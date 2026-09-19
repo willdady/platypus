@@ -18,26 +18,27 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { ConfirmDialog } from "@/components/confirm-dialog";
+import { EntityDeleteDialog } from "@/components/entity-delete-dialog";
 import { FormFooterButtons } from "@/components/form-footer-buttons";
-import { useState } from "react";
 import { useResetOnChange } from "@/hooks/use-reset-on-change";
+import { useEntityDelete, useEntityForm } from "@/hooks/use-entity-form";
 import { useRouter } from "next/navigation";
 import { type Workspace, type Provider } from "@platypus/schemas";
-import { fetcher, joinUrl } from "@/lib/utils";
-import { canSubmitForm, retractFieldError } from "@/lib/form-errors";
-import { writeEntity } from "@/lib/api-write";
 import {
-  applyWriteOutcome,
-  applyDeleteOutcome,
-} from "@/lib/apply-write-outcome";
-import { useAuth, useBackendUrl } from "@/components/auth-provider";
+  CONTEXT_MAX_LENGTH,
+  DEFAULT_WORKSPACE_MAX_DAILY_SUMMARIES,
+  WORKSPACE_MAX_DAILY_SUMMARIES_MAX,
+  WORKSPACE_MAX_DAILY_SUMMARIES_MIN,
+} from "@platypus/schemas";
+import { fetcher, joinUrl } from "@/lib/utils";
+import { retractFieldError } from "@/lib/form-errors";
 import {
   canListOrgMembers,
   canManageWorkspaceDelegation,
 } from "@/lib/authorization";
+import { useAuth, useBackendUrl } from "@/components/auth-provider";
 import { toast } from "sonner";
-import useSWR, { useSWRConfig } from "swr";
+import useSWR from "swr";
 
 interface WorkspaceFormProps {
   classNames?: string;
@@ -57,6 +58,18 @@ const RETRACTABLE_FIELDS = [
   "maxDailySummaries",
 ] as const;
 
+type WorkspaceFormData = {
+  name: string;
+  context: string;
+  ownerId: string;
+  taskModelProviderId: string | null;
+  memoryExtractionProviderId: string | null;
+  memoryEmbeddingProviderId: string | null;
+  maxDailySummaries: number;
+  providerSelfManagement: boolean;
+  mcpSelfManagement: boolean;
+};
+
 const WorkspaceForm = ({
   classNames,
   orgId,
@@ -67,7 +80,6 @@ const WorkspaceForm = ({
   const canManageDelegation = canManageWorkspaceDelegation(actor).allowed;
   const backendUrl = useBackendUrl();
   const router = useRouter();
-  const { mutate: globalMutate } = useSWRConfig();
 
   const { data: workspace } = useSWR<Workspace>(
     workspaceId && user
@@ -113,27 +125,89 @@ const WorkspaceForm = ({
         ]
       : members;
 
-  const [formData, setFormData] = useState(() => ({
-    name: "",
-    context: "",
-    // Default the owner to the current user when creating. The session is
-    // usually cached, so `user` is available synchronously on first render;
-    // the useResetOnChange below covers the case where it loads later.
-    ownerId: (!workspaceId && user?.id) || ("" as string),
-    taskModelProviderId: null as string | null,
-    memoryExtractionProviderId: null as string | null,
-    memoryEmbeddingProviderId: null as string | null,
-    maxDailySummaries: 90,
-    providerSelfManagement: false,
-    mcpSelfManagement: false,
-  }));
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [validationErrors, setValidationErrors] = useState<
-    Record<string, string>
-  >({});
+  const {
+    formData,
+    setFormData,
+    validationErrors,
+    setValidationErrors,
+    isSubmitting,
+    canSubmit,
+    handleChange,
+    toFieldChange,
+    submit,
+  } = useEntityForm<WorkspaceFormData, Workspace>({
+    initialData: {
+      name: "",
+      context: "",
+      // Default the owner to the current user when creating. The session is
+      // usually cached, so `user` is available synchronously on first render;
+      // the useResetOnChange below covers the case where it loads later.
+      ownerId: (!workspaceId && user?.id) || ("" as string),
+      taskModelProviderId: null as string | null,
+      memoryExtractionProviderId: null as string | null,
+      memoryEmbeddingProviderId: null as string | null,
+      maxDailySummaries: DEFAULT_WORKSPACE_MAX_DAILY_SUMMARIES,
+      providerSelfManagement: false,
+      mcpSelfManagement: false,
+    },
+    entity: "workspaces",
+    scope: { orgId },
+    id: workspaceId,
+    retractableFields: RETRACTABLE_FIELDS,
+    buildPayload: (data) =>
+      workspaceId
+        ? {
+            name: data.name,
+            context: data.context || null,
+            taskModelProviderId: data.taskModelProviderId,
+            memoryExtractionProviderId: data.memoryExtractionProviderId,
+            memoryEmbeddingProviderId: data.memoryEmbeddingProviderId,
+            maxDailySummaries: data.maxDailySummaries,
+            // Admin-only; the backend strips these for non-admins (ADR-0006).
+            providerSelfManagement: data.providerSelfManagement,
+            mcpSelfManagement: data.mcpSelfManagement,
+          }
+        : {
+            name: data.name,
+            context: data.context || null,
+            // ADR-0008: an admin assigns the owner; defaults to themselves.
+            ownerId: data.ownerId || user?.id,
+          },
+    onSuccess: (data) => {
+      if (workspaceId) {
+        toast.success("Workspace updated");
+        router.refresh();
+      } else {
+        toast.success("Workspace created");
+        router.push(`/${orgId}/workspace/${data.id}`);
+      }
+    },
+  });
 
-  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
-  const [isDeleting, setIsDeleting] = useState(false);
+  const {
+    isDeleteDialogOpen,
+    setIsDeleteDialogOpen,
+    isDeleting,
+    openDeleteDialog,
+    handleDelete,
+  } = useEntityDelete<Workspace>({
+    entity: "workspaces",
+    scope: { orgId },
+    id: workspaceId,
+    successMessage: "Workspace deleted",
+    onSuccess: () => {
+      // A full document load, deliberately — see the matching note in
+      // `organization-form.tsx`. The Workspace this view is scoped to is
+      // gone, and a client-side transition would keep the app shell (and its
+      // cached payload for the deleted Workspace) alive around it.
+      // eslint-disable-next-line @next/next/no-location-assign-relative-destination
+      window.location.href = `/${orgId}`;
+    },
+    onError: (message, _outcome, { close }) => {
+      toast.error(message);
+      close();
+    },
+  });
 
   // When creating, default the owner to the current admin until they pick
   // another member.
@@ -155,113 +229,13 @@ const WorkspaceForm = ({
         memoryExtractionProviderId:
           workspace.memoryExtractionProviderId || null,
         memoryEmbeddingProviderId: workspace.memoryEmbeddingProviderId || null,
-        maxDailySummaries: workspace.maxDailySummaries ?? 90,
+        maxDailySummaries:
+          workspace.maxDailySummaries ?? DEFAULT_WORKSPACE_MAX_DAILY_SUMMARIES,
         providerSelfManagement: workspace.providerSelfManagement ?? false,
         mcpSelfManagement: workspace.mcpSelfManagement ?? false,
       });
     }
   });
-
-  const handleChange = (
-    e:
-      | React.ChangeEvent<HTMLInputElement>
-      | React.ChangeEvent<HTMLTextAreaElement>,
-  ) => {
-    const { id, value } = e.target;
-
-    // Clear the error for this field, including any reported against a path
-    // inside it.
-    setValidationErrors((prev) => retractFieldError(prev, id));
-
-    setFormData((prevData) => ({
-      ...prevData,
-      [id]: value,
-    }));
-  };
-
-  // Adapts FormTextField's `onChange(value)` to handleChange's `onChange(e)`
-  // so the centralized clear-error-and-set-formData logic stays in one place.
-  const toFieldChange = (id: string) => (value: string) =>
-    handleChange({
-      target: { id, value },
-    } as React.ChangeEvent<HTMLInputElement>);
-
-  const handleSubmit = async () => {
-    setIsSubmitting(true);
-    setValidationErrors({});
-
-    const payload = workspaceId
-      ? {
-          name: formData.name,
-          context: formData.context || null,
-          taskModelProviderId: formData.taskModelProviderId,
-          memoryExtractionProviderId: formData.memoryExtractionProviderId,
-          memoryEmbeddingProviderId: formData.memoryEmbeddingProviderId,
-          maxDailySummaries: formData.maxDailySummaries,
-          // Admin-only; the backend strips these for non-admins (ADR-0006).
-          providerSelfManagement: formData.providerSelfManagement,
-          mcpSelfManagement: formData.mcpSelfManagement,
-        }
-      : {
-          name: formData.name,
-          context: formData.context || null,
-          // ADR-0008: an admin assigns the owner; defaults to themselves.
-          ownerId: formData.ownerId || user?.id,
-        };
-
-    const result = await writeEntity<Workspace>(
-      backendUrl,
-      "workspaces",
-      { orgId },
-      { id: workspaceId, data: payload },
-    );
-
-    await applyWriteOutcome(result, {
-      mutate: globalMutate,
-      setValidationErrors,
-      onSuccess: (data) => {
-        if (workspaceId) {
-          toast.success("Workspace updated");
-          router.refresh();
-        } else {
-          toast.success("Workspace created");
-          router.push(`/${orgId}/workspace/${data.id}`);
-        }
-      },
-    });
-
-    setIsSubmitting(false);
-  };
-
-  const handleDelete = async () => {
-    if (!workspaceId) return;
-
-    setIsDeleting(true);
-    const result = await writeEntity(
-      backendUrl,
-      "workspaces",
-      { orgId },
-      { id: workspaceId },
-    );
-
-    await applyDeleteOutcome(result, {
-      mutate: globalMutate,
-      onSuccess: () => {
-        toast.success("Workspace deleted");
-        // A full document load, deliberately — see the matching note in
-        // `organization-form.tsx`. The Workspace this view is scoped to is
-        // gone, and a client-side transition would keep the app shell (and its
-        // cached payload for the deleted Workspace) alive around it.
-        // eslint-disable-next-line @next/next/no-location-assign-relative-destination
-        window.location.href = `/${orgId}`;
-      },
-      onError: (message) => {
-        toast.error(message);
-        setIsDeleting(false);
-        setIsDeleteDialogOpen(false);
-      },
-    });
-  };
 
   return (
     <div className={classNames}>
@@ -323,7 +297,7 @@ const WorkspaceForm = ({
               disabled={isSubmitting}
               aria-invalid={!!validationErrors.context}
               className="!font-mono"
-              maxLength={1000}
+              maxLength={CONTEXT_MAX_LENGTH}
             />
             <FieldDescription>
               Additional context about this workspace included in all chats in
@@ -471,8 +445,8 @@ const WorkspaceForm = ({
               label="Memory Summary Retention"
               name="maxDailySummaries"
               type="number"
-              min={7}
-              max={365}
+              min={WORKSPACE_MAX_DAILY_SUMMARIES_MIN}
+              max={WORKSPACE_MAX_DAILY_SUMMARIES_MAX}
               value={String(formData.maxDailySummaries)}
               onChange={(value) => {
                 setValidationErrors((prev) =>
@@ -480,7 +454,8 @@ const WorkspaceForm = ({
                 );
                 setFormData((prevData) => ({
                   ...prevData,
-                  maxDailySummaries: parseInt(value) || 90,
+                  maxDailySummaries:
+                    parseInt(value) || DEFAULT_WORKSPACE_MAX_DAILY_SUMMARIES,
                 }));
               }}
               disabled={isSubmitting}
@@ -553,24 +528,20 @@ const WorkspaceForm = ({
 
       <FormFooterButtons
         submitText="Save"
-        onSubmit={handleSubmit}
-        submitDisabled={
-          isSubmitting || !canSubmitForm(validationErrors, RETRACTABLE_FIELDS)
-        }
+        onSubmit={() => void submit()}
+        submitDisabled={isSubmitting || !canSubmit}
         submitClassName=""
         deleteVisible={!!workspaceId}
         deleteDisabled={isSubmitting}
         deleteClassName=""
-        onDelete={() => setIsDeleteDialogOpen(true)}
+        onDelete={openDeleteDialog}
       />
 
-      <ConfirmDialog
+      <EntityDeleteDialog
         open={isDeleteDialogOpen}
         onOpenChange={setIsDeleteDialogOpen}
         title="Delete Workspace"
         description="Are you sure you want to delete this workspace? This action cannot be undone."
-        confirmLabel="Delete"
-        confirmVariant="destructive"
         confirmPhrase="Delete workspace"
         onConfirm={handleDelete}
         loading={isDeleting}

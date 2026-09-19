@@ -10,34 +10,23 @@ import {
 } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { FormTextField } from "@/components/form-text-field";
+import { FormSelectField } from "@/components/form-select-field";
 import { RevealableInput } from "@/components/ui/revealable-input";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
-import {
-  Select,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-  SelectLabel,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { ConfirmDialog } from "@/components/confirm-dialog";
+import { SelectGroup, SelectItem, SelectLabel } from "@/components/ui/select";
+import { EntityDeleteDialog } from "@/components/entity-delete-dialog";
 import { DetailFormState } from "@/components/detail-form-state";
 import { FormFooterButtons } from "@/components/form-footer-buttons";
 import { useState, useEffect } from "react";
 import { useResetOnChange } from "@/hooks/use-reset-on-change";
+import { useEntityDelete, useEntityForm } from "@/hooks/use-entity-form";
 import { useRouter } from "next/navigation";
 import { type MCP } from "@platypus/schemas";
-import useSWR, { useSWRConfig } from "swr";
+import useSWR from "swr";
 import { fetcher, joinUrl } from "@/lib/utils";
-import { canSubmitForm, retractFieldError } from "@/lib/form-errors";
-import { writeEntity, writeAt } from "@/lib/api-write";
-import {
-  applyWriteOutcome,
-  applyDeleteOutcome,
-  toastGuidanceOrError,
-} from "@/lib/apply-write-outcome";
+import { writeAt } from "@/lib/api-write";
+import { toastGuidanceOrError } from "@/lib/apply-write-outcome";
 import { toast } from "sonner";
 import { useAuth, useBackendUrl } from "@/components/auth-provider";
 import {
@@ -100,22 +89,6 @@ const McpForm = ({
       ? `/${orgId}/workspace/${workspaceId}/settings/mcp/${id}`
       : `/${orgId}/settings/mcp/${id}`;
 
-  const [formData, setFormData] = useState<McpFormData>({
-    name: "",
-    url: "",
-    authType: "None",
-    bearerToken: "",
-    oauthClientId: "",
-    oauthClientSecret: "",
-    oauthRequestedScope: "",
-    headerRows: [],
-  });
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
-  const [isDeleting, setIsDeleting] = useState(false);
-  const [validationErrors, setValidationErrors] = useState<
-    Record<string, string>
-  >({});
   const [isTesting, setIsTesting] = useState(false);
   const [testResult, setTestResult] = useState<{
     success: boolean;
@@ -127,7 +100,6 @@ const McpForm = ({
   const [isRevoking, setIsRevoking] = useState(false);
 
   const router = useRouter();
-  const { mutate: globalMutate } = useSWRConfig();
 
   const {
     data: mcp,
@@ -138,6 +110,83 @@ const McpForm = ({
     mcpId && user ? joinUrl(backendUrl, `${collectionUrl}/${mcpId}`) : null,
     fetcher,
   );
+
+  /** Convert headerRows to a Record, filtering out empty keys */
+  const buildHeadersObject = (): Record<string, string> | undefined => {
+    const headers: Record<string, string> = {};
+    for (const row of formData.headerRows) {
+      const key = row.key.trim();
+      if (key) {
+        headers[key] = row.value;
+      }
+    }
+    return Object.keys(headers).length > 0 ? headers : undefined;
+  };
+
+  const {
+    formData,
+    setFormData,
+    validationErrors,
+    clearErrors,
+    isSubmitting,
+    canSubmit,
+    handleChange: onFieldChange,
+    toFieldChange: toFieldChangeBase,
+    submit,
+  } = useEntityForm<McpFormData, { id: string }>({
+    initialData: {
+      name: "",
+      url: "",
+      authType: "None",
+      bearerToken: "",
+      oauthClientId: "",
+      oauthClientSecret: "",
+      oauthRequestedScope: "",
+      headerRows: [],
+    },
+    entity: "mcps",
+    scope: workspaceId ? { orgId, workspaceId } : { orgId },
+    id: mcpId,
+    retractableFields: RETRACTABLE_FIELDS,
+    buildPayload: (data) => ({
+      // Scope discriminator — the backend routes also enforce this from the
+      // URL, but sending it keeps the create payload self-describing.
+      ...(workspaceId ? { workspaceId } : { organizationId: orgId }),
+      name: data.name,
+      url: data.url,
+      headers: buildHeadersObject(),
+      authType: data.authType,
+      bearerToken: data.authType === "Bearer" ? data.bearerToken : undefined,
+      oauthClientId: data.authType === "OAuth" ? data.oauthClientId : undefined,
+      oauthClientSecret:
+        data.authType === "OAuth" && data.oauthClientSecret
+          ? data.oauthClientSecret
+          : undefined,
+      oauthRequestedScope:
+        data.authType === "OAuth" && data.oauthRequestedScope?.trim()
+          ? data.oauthRequestedScope.trim()
+          : undefined,
+    }),
+    onError: toastGuidanceOrError,
+    failureMessage: "Failed to save MCP server",
+  });
+
+  const {
+    isDeleteDialogOpen,
+    setIsDeleteDialogOpen,
+    isDeleting,
+    openDeleteDialog,
+    handleDelete,
+  } = useEntityDelete({
+    entity: "mcps",
+    scope: workspaceId ? { orgId, workspaceId } : { orgId },
+    id: mcpId,
+    onSuccess: () => router.push(listPath),
+    onError: (message, outcome, { close }) => {
+      toastGuidanceOrError(message, outcome);
+      close();
+    },
+  });
 
   useResetOnChange(mcp, () => {
     if (mcp) {
@@ -163,38 +212,26 @@ const McpForm = ({
   });
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const { id, value } = e.target;
-
-    // Clear the error for this field, including any reported against a path
-    // inside it.
-    setValidationErrors((prev) => retractFieldError(prev, id));
-
-    setFormData((prevData) => ({
-      ...prevData,
-      [id]: value,
-    }));
-
+    onFieldChange(e);
     // Clear test result when form changes
     setTestResult(null);
   };
 
   // Adapts FormTextField's `onChange(value)` to handleChange's `onChange(e)`
   // so the centralized clear-error-and-set-formData logic stays in one place.
-  const toFieldChange = (id: string) => (value: string) =>
-    handleChange({
-      target: { id, value },
-    } as React.ChangeEvent<HTMLInputElement>);
+  const toFieldChange = (id: string) => (value: string) => {
+    toFieldChangeBase(id)(value);
+    // Clear test result when form changes
+    setTestResult(null);
+  };
 
   const handleSelectChange = (id: string, value: string) => {
     // Clear the error for this field, including any reported against a path
     // inside it. Switching authType away from bearer also retracts a stale
     // bearerToken error: that field disappears from the form, so nothing
     // could otherwise clear it.
-    setValidationErrors((prev) =>
-      id === "authType"
-        ? retractFieldError(retractFieldError(prev, id), "bearerToken")
-        : retractFieldError(prev, id),
-    );
+    if (id === "authType") clearErrors(id, "bearerToken");
+    else clearErrors(id);
 
     setFormData((prevData) => ({
       ...prevData,
@@ -205,105 +242,20 @@ const McpForm = ({
     setTestResult(null);
   };
 
-  /** Convert headerRows to a Record, filtering out empty keys */
-  const buildHeadersObject = (): Record<string, string> | undefined => {
-    const headers: Record<string, string> = {};
-    for (const row of formData.headerRows) {
-      const key = row.key.trim();
-      if (key) {
-        headers[key] = row.value;
-      }
-    }
-    return Object.keys(headers).length > 0 ? headers : undefined;
-  };
-
-  /** Builds the save payload from current form state */
-  const buildPayload = () => {
-    const payload: Record<string, unknown> = {
-      // Scope discriminator — the backend routes also enforce this from the
-      // URL, but sending it keeps the create payload self-describing.
-      ...(workspaceId ? { workspaceId } : { organizationId: orgId }),
-      name: formData.name,
-      url: formData.url,
-      headers: buildHeadersObject(),
-      authType: formData.authType,
-      bearerToken:
-        formData.authType === "Bearer" ? formData.bearerToken : undefined,
-      oauthClientId:
-        formData.authType === "OAuth" ? formData.oauthClientId : undefined,
-      oauthClientSecret:
-        formData.authType === "OAuth" && formData.oauthClientSecret
-          ? formData.oauthClientSecret
-          : undefined,
-      oauthRequestedScope:
-        formData.authType === "OAuth" && formData.oauthRequestedScope?.trim()
-          ? formData.oauthRequestedScope.trim()
-          : undefined,
-    };
-    return payload;
-  };
-
   /**
    * Saves the MCP (create or update). Returns the saved record's ID on
    * success, or null on failure.
    */
-  const saveMcp = async (existingId?: string): Promise<string | null> => {
-    setValidationErrors({});
-    const payload = buildPayload();
-    const scope = workspaceId ? { orgId, workspaceId } : { orgId };
-
-    const result = await writeEntity<{ id: string }>(
-      backendUrl,
-      "mcps",
-      scope,
-      { id: existingId, data: payload },
-    );
-
-    let savedId: string | null = null;
-    await applyWriteOutcome(result, {
-      mutate: globalMutate,
-      setValidationErrors,
-      onSuccess: (data) => {
-        savedId = data.id;
-      },
-      onError: toastGuidanceOrError,
-    });
-    return savedId;
+  const saveMcp = async (): Promise<string | null> => {
+    const saved = await submit({ silent: true });
+    return saved?.id ?? null;
   };
 
   const handleSubmit = async () => {
-    setIsSubmitting(true);
-    try {
-      const savedId = await saveMcp(mcpId);
-      if (savedId) {
-        router.push(listPath);
-      }
-    } catch (error) {
-      console.error("Error saving MCP:", error);
-      toast.error("Failed to save MCP server");
-    } finally {
-      setIsSubmitting(false);
+    const savedId = await saveMcp();
+    if (savedId) {
+      router.push(listPath);
     }
-  };
-
-  const handleDelete = async () => {
-    if (!mcpId) return;
-
-    setIsDeleting(true);
-    const scope = workspaceId ? { orgId, workspaceId } : { orgId };
-    const result = await writeEntity(backendUrl, "mcps", scope, {
-      id: mcpId,
-    });
-
-    await applyDeleteOutcome(result, {
-      mutate: globalMutate,
-      onSuccess: () => router.push(listPath),
-      onError: (message, outcome) => {
-        toastGuidanceOrError(message, outcome);
-        setIsDeleting(false);
-        setIsDeleteDialogOpen(false);
-      },
-    });
   };
 
   const handleTestConnection = async () => {
@@ -391,7 +343,7 @@ const McpForm = ({
         }
       } else {
         // Save any pending changes (e.g. newly entered client credentials)
-        const savedId = await saveMcp(resolvedMcpId);
+        const savedId = await saveMcp();
         if (!savedId) {
           setIsAuthorizing(false);
           return;
@@ -534,26 +486,22 @@ const McpForm = ({
           />
 
           <FieldGroup className="grid grid-cols-3 gap-4">
-            <Field className="col-span-1">
-              <FieldLabel htmlFor="authType">Auth</FieldLabel>
-              <Select
-                value={formData.authType}
-                onValueChange={(value) => handleSelectChange("authType", value)}
-                disabled={isSubmitting}
-              >
-                <SelectTrigger disabled={isSubmitting}>
-                  <SelectValue placeholder="Select authentication type" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectGroup>
-                    <SelectLabel>Authentication</SelectLabel>
-                    <SelectItem value="None">None</SelectItem>
-                    <SelectItem value="Bearer">Bearer</SelectItem>
-                    <SelectItem value="OAuth">OAuth</SelectItem>
-                  </SelectGroup>
-                </SelectContent>
-              </Select>
-            </Field>
+            <FormSelectField
+              className="col-span-1"
+              label="Auth"
+              name="authType"
+              value={formData.authType}
+              onValueChange={(value) => handleSelectChange("authType", value)}
+              disabled={isSubmitting}
+              placeholder="Select authentication type"
+            >
+              <SelectGroup>
+                <SelectLabel>Authentication</SelectLabel>
+                <SelectItem value="None">None</SelectItem>
+                <SelectItem value="Bearer">Bearer</SelectItem>
+                <SelectItem value="OAuth">OAuth</SelectItem>
+              </SelectGroup>
+            </FormSelectField>
 
             {formData.authType === "Bearer" && (
               <Field
@@ -855,24 +803,18 @@ const McpForm = ({
 
       <FormFooterButtons
         submitText={mcpId ? "Update" : "Save"}
-        onSubmit={handleSubmit}
-        submitDisabled={
-          isSubmitting ||
-          isTesting ||
-          !canSubmitForm(validationErrors, RETRACTABLE_FIELDS)
-        }
+        onSubmit={() => void handleSubmit()}
+        submitDisabled={isSubmitting || isTesting || !canSubmit}
         deleteVisible={!!mcpId}
         deleteDisabled={isSubmitting || isTesting}
-        onDelete={() => setIsDeleteDialogOpen(true)}
+        onDelete={openDeleteDialog}
       />
 
-      <ConfirmDialog
+      <EntityDeleteDialog
         open={isDeleteDialogOpen}
         onOpenChange={setIsDeleteDialogOpen}
         title="Delete MCP server"
         description="Are you sure you want to delete this MCP server? This action cannot be undone."
-        confirmLabel="Delete"
-        confirmVariant="destructive"
         onConfirm={handleDelete}
         loading={isDeleting}
       />

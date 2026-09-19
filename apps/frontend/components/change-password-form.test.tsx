@@ -10,6 +10,7 @@ vi.mock("@/components/auth-provider", () => ({
       changePassword: mockChangePassword,
     },
   }),
+  useBackendUrl: () => "http://test",
 }));
 
 vi.mock("sonner", () => ({

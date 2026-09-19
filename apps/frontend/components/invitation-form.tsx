@@ -11,17 +11,14 @@ import {
 import { FormTextField } from "@/components/form-text-field";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
-import { useState } from "react";
 import Link from "next/link";
-import useSWR, { useSWRConfig } from "swr";
+import useSWR from "swr";
 import { fetcher, joinUrl } from "@/lib/utils";
-import { canSubmitForm, retractFieldError } from "@/lib/form-errors";
-import { writeEntity } from "@/lib/api-write";
-import { applyWriteOutcome } from "@/lib/apply-write-outcome";
+import { useEntityForm } from "@/hooks/use-entity-form";
+import { FIX_FORM_ERRORS_MESSAGE } from "@/lib/apply-write-outcome";
 import { useAuth, useBackendUrl } from "@/components/auth-provider";
 import type { Blueprint } from "@platypus/schemas";
 import { ArrowDown, ArrowUp, X } from "lucide-react";
-import { toast } from "sonner";
 
 interface InvitationFormProps {
   orgId: string;
@@ -30,21 +27,51 @@ interface InvitationFormProps {
 
 const RETRACTABLE_FIELDS = ["email", "workspaceName", "blueprintIds"] as const;
 
-export function InvitationForm({ orgId, onSuccess }: InvitationFormProps) {
-  const backendUrl = useBackendUrl();
-  const { user } = useAuth();
-  const { mutate: globalMutate } = useSWRConfig();
-
-  const [email, setEmail] = useState("");
-  const [workspaceName, setWorkspaceName] = useState("");
+const INITIAL_DATA = {
+  email: "",
+  workspaceName: "",
   // The ordered set of blueprints applied to the provisioned workspace on
   // accept (ADR-0009). Selection order is application order; on conflicting
   // settings the later blueprint wins (last-write-wins).
-  const [blueprintIds, setBlueprintIds] = useState<string[]>([]);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [validationErrors, setValidationErrors] = useState<
-    Record<string, string>
-  >({});
+  blueprintIds: [] as string[],
+};
+
+export function InvitationForm({ orgId, onSuccess }: InvitationFormProps) {
+  const backendUrl = useBackendUrl();
+  const { user } = useAuth();
+
+  const {
+    formData,
+    setFormData,
+    validationErrors,
+    isSubmitting,
+    canSubmit,
+    toFieldChange,
+    clearErrors,
+    submit,
+  } = useEntityForm<typeof INITIAL_DATA, unknown>({
+    initialData: INITIAL_DATA,
+    entity: "invitations",
+    scope: { orgId },
+    retractableFields: RETRACTABLE_FIELDS,
+    buildPayload: (data) => ({
+      email: data.email,
+      // Optional; the workspace provisioned on accept defaults to
+      // "<member name>'s Workspace" when blank (ADR-0008).
+      ...(data.workspaceName.trim()
+        ? { workspaceName: data.workspaceName.trim() }
+        : {}),
+      // The ordered set of blueprints applied on accept (ADR-0009).
+      ...(data.blueprintIds.length ? { blueprintIds: data.blueprintIds } : {}),
+    }),
+    conflictField: "email",
+    invalidMessage: FIX_FORM_ERRORS_MESSAGE,
+    successMessage: "Invitation created",
+    onSuccess: () => {
+      setFormData(INITIAL_DATA);
+      onSuccess?.();
+    },
+  });
 
   const { data: blueprintsData } = useSWR<{ results: Blueprint[] }>(
     backendUrl && user
@@ -56,72 +83,33 @@ export function InvitationForm({ orgId, onSuccess }: InvitationFormProps) {
   const blueprintsById = new Map(blueprints.map((b) => [b.id, b]));
 
   const toggleBlueprint = (id: string, on: boolean) => {
-    setValidationErrors((prev) => retractFieldError(prev, "blueprintIds"));
-    setBlueprintIds((prev) =>
-      on ? [...prev, id] : prev.filter((bid) => bid !== id),
-    );
+    clearErrors("blueprintIds");
+    setFormData((prev) => ({
+      ...prev,
+      blueprintIds: on
+        ? [...prev.blueprintIds, id]
+        : prev.blueprintIds.filter((bid) => bid !== id),
+    }));
   };
 
   const moveBlueprint = (index: number, delta: number) => {
-    setBlueprintIds((prev) => {
-      const next = [...prev];
+    setFormData((prev) => {
+      const next = [...prev.blueprintIds];
       const target = index + delta;
       if (target < 0 || target >= next.length) return prev;
       [next[index], next[target]] = [next[target], next[index]];
-      return next;
+      return { ...prev, blueprintIds: next };
     });
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsSubmitting(true);
-    setValidationErrors({});
-
-    const result = await writeEntity(
-      backendUrl,
-      "invitations",
-      { orgId },
-      {
-        data: {
-          email,
-          // Optional; the workspace provisioned on accept defaults to
-          // "<member name>'s Workspace" when blank (ADR-0008).
-          ...(workspaceName.trim()
-            ? { workspaceName: workspaceName.trim() }
-            : {}),
-          // The ordered set of blueprints applied on accept (ADR-0009).
-          ...(blueprintIds.length ? { blueprintIds } : {}),
-        },
-      },
-    );
-
-    await applyWriteOutcome(result, {
-      mutate: globalMutate,
-      setValidationErrors,
-      conflictField: "email",
-      onInvalid: (fieldErrors, message) => {
-        setValidationErrors(fieldErrors);
-        toast.error(
-          Object.keys(fieldErrors).length > 0
-            ? "Please fix the errors in the form"
-            : message,
-        );
-      },
-      onSuccess: () => {
-        toast.success("Invitation created");
-        setEmail("");
-        setWorkspaceName("");
-        setBlueprintIds([]);
-        onSuccess?.();
-      },
-    });
-
-    setIsSubmitting(false);
-  };
+  const { blueprintIds } = formData;
 
   return (
     <form
-      onSubmit={handleSubmit}
+      onSubmit={(e) => {
+        e.preventDefault();
+        void submit();
+      }}
       className="space-y-4 border p-4 rounded-lg bg-muted/30"
     >
       <h3 className="font-semibold">Invite User to Organization</h3>
@@ -133,11 +121,8 @@ export function InvitationForm({ orgId, onSuccess }: InvitationFormProps) {
               name="email"
               type="email"
               placeholder="user@example.com"
-              value={email}
-              onChange={(value) => {
-                setEmail(value);
-                setValidationErrors((prev) => retractFieldError(prev, "email"));
-              }}
+              value={formData.email}
+              onChange={toFieldChange("email")}
               disabled={isSubmitting}
               error={validationErrors.email}
               autoFocus
@@ -148,13 +133,8 @@ export function InvitationForm({ orgId, onSuccess }: InvitationFormProps) {
               label="Workspace name"
               name="workspaceName"
               placeholder="Defaults to the member's name"
-              value={workspaceName}
-              onChange={(value) => {
-                setWorkspaceName(value);
-                setValidationErrors((prev) =>
-                  retractFieldError(prev, "workspaceName"),
-                );
-              }}
+              value={formData.workspaceName}
+              onChange={toFieldChange("workspaceName")}
               disabled={isSubmitting}
               error={validationErrors.workspaceName}
             />
@@ -278,9 +258,7 @@ export function InvitationForm({ orgId, onSuccess }: InvitationFormProps) {
       </FieldSet>
       <Button
         type="submit"
-        disabled={
-          isSubmitting || !canSubmitForm(validationErrors, RETRACTABLE_FIELDS)
-        }
+        disabled={isSubmitting || !canSubmit}
         className={`w-full md:w-auto mt-2 ${!isSubmitting ? "cursor-pointer" : ""}`}
       >
         {isSubmitting ? "Sending..." : "Send invitation"}
