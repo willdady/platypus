@@ -40,13 +40,13 @@ const KanbanCardComponentInner = function KanbanCardComponent({
   labels,
   draggable = true,
   disabled = false,
-  onClick,
+  onCardClick,
 }: {
   card: KanbanCard;
   labels: KanbanLabel[];
   draggable?: boolean;
   disabled?: boolean;
-  onClick: () => void;
+  onCardClick: (card: KanbanCard) => void;
 }) {
   const {
     attributes,
@@ -94,7 +94,7 @@ const KanbanCardComponentInner = function KanbanCardComponent({
       style={
         priorityColor ? { ...style, borderLeftColor: priorityColor } : style
       }
-      onClick={onClick}
+      onClick={() => onCardClick(card)}
     >
       <p className="text-sm font-medium">{card.title}</p>
       {cardLabels.length > 0 && (

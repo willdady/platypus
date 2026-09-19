@@ -1,6 +1,6 @@
 "use client";
 
-import { memo } from "react";
+import { memo, useMemo } from "react";
 import { useSortable } from "@dnd-kit/sortable";
 import {
   SortableContext,
@@ -78,7 +78,9 @@ function ColumnContent({
   isDraggingColumn?: boolean;
 }) {
   const hasCards = column.cards.length > 0;
-  const cardIds = column.cards.map((c) => c.id);
+  // SortableContext keys off array identity, so a fresh array here would
+  // re-render every card in the column on any parent render.
+  const cardIds = useMemo(() => column.cards.map((c) => c.id), [column.cards]);
 
   return (
     <>
@@ -145,7 +147,7 @@ function ColumnContent({
               card={card}
               labels={labels}
               draggable={false}
-              onClick={() => onCardClick(card)}
+              onCardClick={onCardClick}
             />
           ))
         ) : (
@@ -160,7 +162,7 @@ function ColumnContent({
                 labels={labels}
                 draggable={draggable}
                 disabled={isDraggingColumn}
-                onClick={() => onCardClick(card)}
+                onCardClick={onCardClick}
               />
             ))}
           </SortableContext>
