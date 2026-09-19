@@ -51,7 +51,11 @@ const lineWidget: Widget = {
 describe("CartesianChartWidget", () => {
   it("renders a bar series for a bar-chart widget", () => {
     const { container } = render(
-      <CartesianChartWidget widget={barWidget} editing={false} onSave={vi.fn()} />,
+      <CartesianChartWidget
+        widget={barWidget}
+        editing={false}
+        onSave={vi.fn()}
+      />,
     );
 
     expect(container.querySelector(".recharts-bar")).toBeInTheDocument();

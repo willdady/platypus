@@ -24,7 +24,13 @@ const { widgetRender, swrCalls, mutateWidgets, mutateDashboard, gridHandlers } =
     } as {
       onDragStart?: () => void;
       onDragStop?: (
-        layout: readonly { i: string; x: number; y: number; w: number; h: number }[],
+        layout: readonly {
+          i: string;
+          x: number;
+          y: number;
+          w: number;
+          h: number;
+        }[],
       ) => void;
     },
   }));

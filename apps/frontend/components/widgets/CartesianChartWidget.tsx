@@ -11,7 +11,11 @@ import {
   YAxis,
   CartesianGrid,
 } from "recharts";
-import type { Widget, BarChartWidgetData, LineChartWidgetData } from "@platypus/schemas";
+import type {
+  Widget,
+  BarChartWidgetData,
+  LineChartWidgetData,
+} from "@platypus/schemas";
 import {
   ChartContainer,
   ChartTooltip,
@@ -112,11 +116,7 @@ export function CartesianChartWidget({
 
   const axes = (
     <>
-      <CartesianGrid
-        vertical={false}
-        stroke="var(--border)"
-        strokeWidth={1}
-      />
+      <CartesianGrid vertical={false} stroke="var(--border)" strokeWidth={1} />
       <XAxis
         dataKey="category"
         tickLine={false}
