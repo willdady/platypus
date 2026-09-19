@@ -477,6 +477,13 @@
       "when": 1789727738798,
       "tag": "0067_session_impersonated_by",
       "breakpoints": true
+    },
+    {
+      "idx": 68,
+      "version": "7",
+      "when": 1789781399693,
+      "tag": "0068_reapply_skill_invocation_columns",
+      "breakpoints": true
     }
   ]
 }

@@ -134,7 +134,14 @@ The gate Step 1 confirmed is a floor. These four hold the release and none of th
   release goes out with SDK changes that never reach consumers.
 - **Migrations.** If the range adds a migration, confirm it's a real `.sql` file that
   `drizzle-kit migrate` will run in production, not a dev-only `push` that exists nowhere
-  but a developer's database.
+  but a developer's database. Then check the journal: every new entry's `when` in
+  `apps/backend/drizzle/meta/_journal.json` must be later than every entry before it.
+  Drizzle applies only entries newer than the database's newest recorded migration, so
+  a migration generated on a branch before its lower-numbered neighbour merged is
+  skipped by every database that already ran that neighbour — and fresh installs,
+  including dev, apply it fine, so nothing local notices. That is how 3.7.0 shipped
+  without the `skill` columns 3.6.0 upgraders needed. An out-of-order entry is a hold;
+  `migration-journal.test.ts` now pins this, but check the range by hand as well.
 
 ## Step 4 — Check the roadmap
 
