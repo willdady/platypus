@@ -1,5 +1,13 @@
 # Changelog
 
+## [3.7.4](https://github.com/willdady/platypus/compare/v3.7.3...v3.7.4) (2026-09-19)
+
+
+### Bug Fixes
+
+* **frontend:** extract shared list states and a delete-flow hook ([#912](https://github.com/willdady/platypus/issues/912)) ([a57c3ae](https://github.com/willdady/platypus/commit/a57c3aec10ff866287ff373cd4b02872366ac1ce))
+* **frontend:** reduce app-shell re-renders, gate notification polling, and consolidate layouts ([#915](https://github.com/willdady/platypus/issues/915)) ([1461aa8](https://github.com/willdady/platypus/commit/1461aa8bec8fbdfb64fee29f3626419a5fa97881))
+
 ## [3.7.3](https://github.com/willdady/platypus/compare/v3.7.2...v3.7.3) (2026-09-19)
 
 
