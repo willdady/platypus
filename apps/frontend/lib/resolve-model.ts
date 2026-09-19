@@ -1,11 +1,15 @@
-import type { Agent, ConcreteModelId, Provider } from "@platypus/schemas";
 import {
-  findModelOption,
-  getContextWindow,
-  getMaxOutputTokens,
-  getPassthroughFileTypes,
+  findModelEntry,
+  modelLabelFor,
+  resolveModelReference,
+  type Agent,
+  type ConcreteModelId,
+  type Provider,
+} from "@platypus/schemas";
+import {
+  getModelConfigs,
   getSearchCapability,
-  resolveModelId,
+  passthroughFileTypesFor,
 } from "./model-config";
 
 export type ModelSelectionInput = {
@@ -66,17 +70,22 @@ export const resolveModel = (input: {
 
   if (!provider || !modelReference) return null;
 
-  const concreteId = resolveModelId(provider, modelReference);
+  // Normalise the Provider's model list ONCE and answer every capability from
+  // that one list. Five provider-taking helpers each re-normalised it per
+  // render — on the hot path of every Chat render (issue #869).
+  const configs = getModelConfigs(provider);
+
+  const concreteId = resolveModelReference(configs, modelReference);
   if (!concreteId) return null;
 
-  const option = findModelOption(provider, modelReference);
+  const entry = findModelEntry(configs, modelReference);
 
   return {
-    label: option?.label ?? concreteId,
+    label: entry ? modelLabelFor(entry) : concreteId,
     concreteId,
-    contextWindow: getContextWindow(provider, concreteId),
-    maxOutputTokens: getMaxOutputTokens(provider, concreteId),
-    passthroughFileTypes: getPassthroughFileTypes(provider, concreteId),
+    contextWindow: entry?.contextWindow,
+    maxOutputTokens: entry?.maxOutputTokens,
+    passthroughFileTypes: passthroughFileTypesFor(provider, entry),
     canSearch: getSearchCapability(provider),
   };
 };
