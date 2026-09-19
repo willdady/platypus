@@ -9,9 +9,10 @@ import {
   FieldDescription,
 } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import { ExpandableTextarea } from "@/components/expandable-textarea";
+import { FormTextareaField } from "@/components/form-textarea-field";
 import { FormTextField } from "@/components/form-text-field";
+import { FormSelectField } from "@/components/form-select-field";
 import { RevealableInput } from "@/components/ui/revealable-input";
 import { Button } from "@/components/ui/button";
 import {
@@ -43,29 +44,26 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { ConfirmDialog } from "@/components/confirm-dialog";
+import { EntityDeleteDialog } from "@/components/entity-delete-dialog";
 import { DetailFormState } from "@/components/detail-form-state";
 import { FormFooterButtons } from "@/components/form-footer-buttons";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { useEntityDelete, useEntityForm } from "@/hooks/use-entity-form";
 import {
   CONTEXT_WINDOW_MAX,
   CONTEXT_WINDOW_MIN,
   DEFAULT_MAX_EXTRACTED_TEXT_CHARS,
   providerHasNativeSearch,
+  PROVIDER_SECURITY_GUARDRAILS_MAX_LENGTH,
   SEARCH_SOURCE_NATIVE,
   SEARCH_SOURCE_NONE,
   type AliasRepoint,
   type Provider,
 } from "@platypus/schemas";
-import useSWR, { useSWRConfig } from "swr";
+import useSWR from "swr";
 import { cn, fetcher, joinUrl } from "@/lib/utils";
-import { canSubmitForm, retractFieldError } from "@/lib/form-errors";
-import { writeEntity } from "@/lib/api-write";
-import {
-  applyWriteOutcome,
-  applyDeleteOutcome,
-  toastGuidanceOrError,
-} from "@/lib/apply-write-outcome";
+import { toastGuidanceOrError } from "@/lib/apply-write-outcome";
 import {
   getModelConfigs,
   defaultPassthroughFileTypes,
@@ -483,26 +481,6 @@ const ProviderForm = ({
       ? `/${orgId}/workspace/${workspaceId}/settings/providers`
       : `/${orgId}/settings/providers`;
 
-  const [formData, setFormData] = useState<ProviderFormData>({
-    providerType: "OpenAI",
-    name: "",
-    apiKey: "",
-    region: "",
-    baseUrl: "",
-    headers: {},
-    extraBody: {},
-    organization: "",
-    project: "",
-    apiMode: "responses",
-    searchSource: SEARCH_SOURCE_NATIVE,
-    securityGuardrails: "",
-    modelIds: [],
-    taskModelId: "",
-    memoryExtractionModelId: "",
-    embeddingModelId: "",
-    embeddingDimensions: "",
-  });
-  const [isSubmitting, setIsSubmitting] = useState(false);
   const [isEmbeddingChangeDialogOpen, setIsEmbeddingChangeDialogOpen] =
     useState(false);
   const [savedEmbeddingModelId, setSavedEmbeddingModelId] = useState<
@@ -515,13 +493,91 @@ const ProviderForm = ({
   const [headersString, setHeadersString] = useState("{}");
   const [extraBodyError, setExtraBodyError] = useState<string | null>(null);
   const [extraBodyString, setExtraBodyString] = useState("{}");
-  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
-  const [isDeleting, setIsDeleting] = useState(false);
   const [isOpen, setIsOpen] = useState(false);
-  const [validationErrors, setValidationErrors] = useState<
-    Record<string, string>
-  >({});
   const [error, setError] = useState<string | null>(null);
+
+  const scope = formScope === "workspace" ? { orgId, workspaceId } : { orgId };
+
+  const {
+    formData,
+    setFormData,
+    validationErrors,
+    isSubmitting,
+    canSubmit,
+    clearErrors,
+    submit,
+  } = useEntityForm<ProviderFormData, { id: string; aliasRepoints?: unknown }>({
+    initialData: {
+      providerType: "OpenAI",
+      name: "",
+      apiKey: "",
+      region: "",
+      baseUrl: "",
+      headers: {},
+      extraBody: {},
+      organization: "",
+      project: "",
+      apiMode: "responses",
+      searchSource: SEARCH_SOURCE_NATIVE,
+      securityGuardrails: "",
+      modelIds: [],
+      taskModelId: "",
+      memoryExtractionModelId: "",
+      embeddingModelId: "",
+      embeddingDimensions: "",
+    },
+    entity: "providers",
+    scope,
+    id: providerId,
+    retractableFields: RETRACTABLE_FIELDS,
+    buildPayload: (data) => ({
+      workspaceId: workspaceId || undefined,
+      organizationId: !workspaceId ? orgId : undefined,
+      name: data.name,
+      providerType: data.providerType,
+      apiKey: data.apiKey,
+      region: data.region || undefined,
+      baseUrl: data.baseUrl || undefined,
+      headers: data.headers,
+      extraBody: data.extraBody,
+      organization: data.organization || undefined,
+      project: data.project || undefined,
+      apiMode: data.apiMode,
+      searchSource: data.searchSource,
+      securityGuardrails: data.securityGuardrails || null,
+      modelIds: data.modelIds,
+      taskModelId: data.taskModelId,
+      memoryExtractionModelId: data.memoryExtractionModelId,
+      embeddingModelId: data.embeddingModelId || null,
+      embeddingDimensions: data.embeddingDimensions
+        ? parseInt(data.embeddingDimensions)
+        : null,
+    }),
+    onConflict: (message) => setError(message),
+    onError: toastGuidanceOrError,
+    failureMessage: "Failed to save provider",
+    onSuccess: (data) => {
+      reportAliasRepoints(data.aliasRepoints);
+      router.push(listHref);
+    },
+  });
+
+  const {
+    isDeleteDialogOpen,
+    setIsDeleteDialogOpen,
+    isDeleting,
+    openDeleteDialog,
+    handleDelete,
+  } = useEntityDelete({
+    entity: "providers",
+    scope,
+    id: providerId,
+    onSuccess: () => router.push(listHref),
+    onError: (message, outcome, { close }) => {
+      toastGuidanceOrError(message, outcome);
+      close();
+    },
+  });
 
   const fetchUrl =
     providerId && user
@@ -532,8 +588,6 @@ const ProviderForm = ({
           )
         : joinUrl(backendUrl, `/organizations/${orgId}/providers/${providerId}`)
       : null;
-
-  const { mutate: globalMutate } = useSWRConfig();
 
   const {
     data: provider,
@@ -650,7 +704,7 @@ const ProviderForm = ({
     const { id, value } = e.target;
 
     // Clear validation error for this field
-    setValidationErrors((prev) => retractFieldError(prev, id));
+    clearErrors(id);
     setError(null);
 
     if (id === "headers") {
@@ -694,7 +748,7 @@ const ProviderForm = ({
 
   const handleSelectChange = (id: string, value: string) => {
     // Clear validation error for this field
-    setValidationErrors((prev) => retractFieldError(prev, id));
+    clearErrors(id);
     setError(null);
 
     setFormData((prevData) => ({ ...prevData, [id]: value }));
@@ -705,7 +759,7 @@ const ProviderForm = ({
   // Retracts the list's error and every row error under it, so a stale message
   // doesn't sit under a row the user has already corrected.
   const clearModelIdsError = () => {
-    setValidationErrors((prev) => retractFieldError(prev, "modelIds"));
+    clearErrors("modelIds");
   };
 
   /**
@@ -809,98 +863,16 @@ const ProviderForm = ({
   };
 
   const doSubmit = async () => {
-    setIsSubmitting(true);
-    setValidationErrors({});
     setError(null);
-    try {
-      const payload: Omit<Provider, "id" | "createdAt" | "updatedAt"> = {
-        workspaceId: workspaceId || undefined,
-        organizationId: !workspaceId ? orgId : undefined,
-        name: formData.name,
-        providerType: formData.providerType,
-        apiKey: formData.apiKey,
-        region: formData.region || undefined,
-        baseUrl: formData.baseUrl || undefined,
-        headers: formData.headers,
-        extraBody: formData.extraBody,
-        organization: formData.organization || undefined,
-        project: formData.project || undefined,
-        apiMode: formData.apiMode,
-        searchSource: formData.searchSource,
-        securityGuardrails: formData.securityGuardrails || null,
-        modelIds: formData.modelIds,
-        taskModelId: formData.taskModelId,
-        memoryExtractionModelId: formData.memoryExtractionModelId,
-        embeddingModelId: formData.embeddingModelId || null,
-        embeddingDimensions: formData.embeddingDimensions
-          ? parseInt(formData.embeddingDimensions)
-          : null,
-      };
-
-      const scope =
-        formScope === "workspace" ? { orgId, workspaceId } : { orgId };
-      const result = await writeEntity<{
-        id: string;
-        aliasRepoints?: unknown;
-      }>(backendUrl, "providers", scope, { id: providerId, data: payload });
-
-      await applyWriteOutcome(result, {
-        mutate: globalMutate,
-        setValidationErrors,
-        onConflict: (message) => setError(message),
-        onError: toastGuidanceOrError,
-        onSuccess: (data) => {
-          reportAliasRepoints(data.aliasRepoints);
-          if (formScope === "workspace") {
-            router.push(
-              `/${orgId}/workspace/${workspaceId}/settings/providers`,
-            );
-          } else {
-            router.push(`/${orgId}/settings/providers`);
-          }
-        },
-      });
-    } catch (error) {
-      console.error("Error saving provider:", error);
-      toast.error("Failed to save provider");
-    } finally {
-      setIsSubmitting(false);
-    }
+    await submit();
   };
 
   const handleSubmit = () => {
     if (hasEmbeddingConfigChanged()) {
       setIsEmbeddingChangeDialogOpen(true);
     } else {
-      doSubmit();
+      void doSubmit();
     }
-  };
-
-  const handleDelete = async () => {
-    if (!providerId) return;
-
-    setIsDeleting(true);
-    const scope =
-      formScope === "workspace" ? { orgId, workspaceId } : { orgId };
-    const result = await writeEntity(backendUrl, "providers", scope, {
-      id: providerId,
-    });
-
-    await applyDeleteOutcome(result, {
-      mutate: globalMutate,
-      onSuccess: () => {
-        if (formScope === "workspace") {
-          router.push(`/${orgId}/workspace/${workspaceId}/settings/providers`);
-        } else {
-          router.push(`/${orgId}/settings/providers`);
-        }
-      },
-      onError: (message, outcome) => {
-        toastGuidanceOrError(message, outcome);
-        setIsDeleting(false);
-        setIsDeleteDialogOpen(false);
-      },
-    });
   };
 
   const isReadOnly =
@@ -923,30 +895,23 @@ const ProviderForm = ({
       )}
       <FieldSet className="mb-6">
         <FieldGroup>
-          <Field>
-            <FieldLabel htmlFor="providerType">Provider Type</FieldLabel>
-            <Select
-              value={formData.providerType}
-              onValueChange={(value) =>
-                handleSelectChange("providerType", value)
-              }
-              disabled={isSubmitting || isReadOnly}
-            >
-              <SelectTrigger disabled={isSubmitting || isReadOnly}>
-                <SelectValue placeholder="Select a provider type" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectGroup>
-                  <SelectLabel>Provider Types</SelectLabel>
-                  <SelectItem value="Bedrock">Bedrock</SelectItem>
-                  <SelectItem value="Google">Google</SelectItem>
-                  <SelectItem value="OpenAI">OpenAI</SelectItem>
-                  <SelectItem value="OpenRouter">OpenRouter</SelectItem>
-                  <SelectItem value="Anthropic">Anthropic</SelectItem>
-                </SelectGroup>
-              </SelectContent>
-            </Select>
-          </Field>
+          <FormSelectField
+            label="Provider Type"
+            name="providerType"
+            value={formData.providerType}
+            onValueChange={(value) => handleSelectChange("providerType", value)}
+            disabled={isSubmitting || isReadOnly}
+            placeholder="Select a provider type"
+          >
+            <SelectGroup>
+              <SelectLabel>Provider Types</SelectLabel>
+              <SelectItem value="Bedrock">Bedrock</SelectItem>
+              <SelectItem value="Google">Google</SelectItem>
+              <SelectItem value="OpenAI">OpenAI</SelectItem>
+              <SelectItem value="OpenRouter">OpenRouter</SelectItem>
+              <SelectItem value="Anthropic">Anthropic</SelectItem>
+            </SelectGroup>
+          </FormSelectField>
 
           <FormTextField
             label="Name"
@@ -1109,37 +1074,32 @@ const ProviderForm = ({
             <FieldGroup>
               {formData.providerType === "OpenAI" && (
                 <>
-                  <Field data-invalid={!!validationErrors.apiMode}>
-                    <FieldLabel htmlFor="apiMode">API Mode</FieldLabel>
-                    <Select
-                      value={formData.apiMode}
-                      onValueChange={(value) =>
-                        handleSelectChange("apiMode", value)
-                      }
-                      disabled={isSubmitting || isReadOnly}
-                    >
-                      <SelectTrigger disabled={isSubmitting || isReadOnly}>
-                        <SelectValue placeholder="Select API mode" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectGroup>
-                          <SelectLabel>API Mode</SelectLabel>
-                          <SelectItem value="chat">Chat Completions</SelectItem>
-                          <SelectItem value="responses">Responses</SelectItem>
-                        </SelectGroup>
-                      </SelectContent>
-                    </Select>
-                    <FieldDescription>
-                      Responses is OpenAI&apos;s default and supports hosted
-                      web_search, reasoning summaries, and previous_response_id.
-                      Switch to Chat Completions when pointing at an
-                      OpenAI-compatible server that does not implement
-                      /v1/responses (e.g. vLLM, Ollama, LiteLLM).
-                    </FieldDescription>
-                    {validationErrors.apiMode && (
-                      <FieldError>{validationErrors.apiMode}</FieldError>
-                    )}
-                  </Field>
+                  <FormSelectField
+                    label="API Mode"
+                    name="apiMode"
+                    value={formData.apiMode}
+                    onValueChange={(value) =>
+                      handleSelectChange("apiMode", value)
+                    }
+                    disabled={isSubmitting || isReadOnly}
+                    placeholder="Select API mode"
+                    error={validationErrors.apiMode}
+                    description={
+                      <>
+                        Responses is OpenAI&apos;s default and supports hosted
+                        web_search, reasoning summaries, and
+                        previous_response_id. Switch to Chat Completions when
+                        pointing at an OpenAI-compatible server that does not
+                        implement /v1/responses (e.g. vLLM, Ollama, LiteLLM).
+                      </>
+                    }
+                  >
+                    <SelectGroup>
+                      <SelectLabel>API Mode</SelectLabel>
+                      <SelectItem value="chat">Chat Completions</SelectItem>
+                      <SelectItem value="responses">Responses</SelectItem>
+                    </SelectGroup>
+                  </FormSelectField>
 
                   <FormTextField
                     label="Organization"
@@ -1165,125 +1125,98 @@ const ProviderForm = ({
                 </>
               )}
 
-              <Field
-                data-invalid={!!headersError || !!validationErrors.headers}
-              >
-                <FieldLabel htmlFor="headers">Headers</FieldLabel>
-                <Textarea
-                  id="headers"
-                  placeholder='{"Header Name": "Header Value"}'
-                  value={headersString}
-                  onChange={handleChange}
-                  disabled={isSubmitting || isReadOnly}
-                  aria-invalid={!!headersError || !!validationErrors.headers}
-                />
-                <FieldDescription>
-                  Optional headers as JSON object.
-                </FieldDescription>
-                {(headersError || validationErrors.headers) && (
-                  <FieldError>
-                    {headersError || validationErrors.headers}
-                  </FieldError>
-                )}
-              </Field>
+              <FormTextareaField
+                label="Headers"
+                name="headers"
+                placeholder='{"Header Name": "Header Value"}'
+                value={headersString}
+                onChange={(value) =>
+                  handleChange({
+                    target: { id: "headers", value },
+                  } as React.ChangeEvent<HTMLTextAreaElement>)
+                }
+                disabled={isSubmitting || isReadOnly}
+                description="Optional headers as JSON object."
+                error={headersError || validationErrors.headers}
+              />
 
               {formData.providerType === "OpenRouter" && (
-                <Field
-                  data-invalid={
-                    !!extraBodyError || !!validationErrors.extraBody
-                  }
-                >
-                  <FieldLabel htmlFor="extraBody">Extra Body</FieldLabel>
-                  <Textarea
-                    id="extraBody"
-                    placeholder='{"customField": "value"}'
-                    value={extraBodyString}
-                    onChange={handleChange}
-                    disabled={isSubmitting || isReadOnly}
-                    aria-invalid={
-                      !!extraBodyError || !!validationErrors.extraBody
-                    }
-                  />
-                  <FieldDescription>
-                    Optional extra body parameters as JSON object.
-                  </FieldDescription>
-                  {(extraBodyError || validationErrors.extraBody) && (
-                    <FieldError>
-                      {extraBodyError || validationErrors.extraBody}
-                    </FieldError>
-                  )}
-                </Field>
-              )}
-
-              <Field data-invalid={!!validationErrors.searchSource}>
-                <FieldLabel htmlFor="searchSource">Web search</FieldLabel>
-                <Select
-                  value={formData.searchSource}
-                  onValueChange={(value) =>
-                    handleSelectChange("searchSource", value)
+                <FormTextareaField
+                  label="Extra Body"
+                  name="extraBody"
+                  placeholder='{"customField": "value"}'
+                  value={extraBodyString}
+                  onChange={(value) =>
+                    handleChange({
+                      target: { id: "extraBody", value },
+                    } as React.ChangeEvent<HTMLTextAreaElement>)
                   }
                   disabled={isSubmitting || isReadOnly}
-                >
-                  <SelectTrigger
-                    id="searchSource"
-                    disabled={isSubmitting || isReadOnly}
-                  >
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectGroup>
-                      <SelectLabel>Web search</SelectLabel>
-                      <SelectItem value={SEARCH_SOURCE_NONE}>None</SelectItem>
-                      {(providerHasNativeSearch(formData) ||
-                        nativeSelectedButUnavailable) && (
-                        <SelectItem value={SEARCH_SOURCE_NATIVE}>
-                          {nativeSelectedButUnavailable
-                            ? "The provider's built-in search (unavailable here)"
-                            : "The provider's built-in search"}
-                        </SelectItem>
-                      )}
-                      {availableWebBackends.map((b) => (
-                        <SelectItem key={b.backend} value={b.backend}>
-                          {b.name}
-                          {b.plugin ? ` (${b.plugin})` : ""}
-                        </SelectItem>
-                      ))}
-                      {/* A stored id the catalog does not list — its plugin was
-                      dropped from `PLATYPUS_PLUGINS`, or the id was set through
-                      the API. It degrades to no search tools server-side, so it
-                      is named here rather than silently reading as "None".
-                      The "(not installed)" verdict needs the catalog to have
-                      actually loaded; while it is in flight or failed, the id is
-                      shown without a claim about it. */}
-                      {formData.searchSource !== SEARCH_SOURCE_NONE &&
-                        formData.searchSource !== SEARCH_SOURCE_NATIVE &&
-                        !availableWebBackends.some(
-                          (b) => b.backend === formData.searchSource,
-                        ) && (
-                          <SelectItem value={formData.searchSource}>
-                            {formData.searchSource}
-                            {webBackendsKnown ? " (not installed)" : ""}
-                          </SelectItem>
-                        )}
-                    </SelectGroup>
-                  </SelectContent>
-                </Select>
-                <FieldDescription>
-                  Which search this provider&apos;s chat turns use: none, the
-                  vendor&apos;s own tool, or a plugin Web-search backend.
-                </FieldDescription>
-                {/* Without this the same empty dropdown means both "none
-                installed" and "we could not ask". */}
-                {!!webBackendsError && (
-                  <FieldDescription className="text-destructive">
-                    Couldn&apos;t load the installed backends, so this list may
-                    be incomplete. Any stored selection is unchanged.
-                  </FieldDescription>
-                )}
-                {validationErrors.searchSource && (
-                  <FieldError>{validationErrors.searchSource}</FieldError>
-                )}
-              </Field>
+                  description="Optional extra body parameters as JSON object."
+                  error={extraBodyError || validationErrors.extraBody}
+                />
+              )}
+
+              <FormSelectField
+                label="Web search"
+                name="searchSource"
+                value={formData.searchSource}
+                onValueChange={(value) =>
+                  handleSelectChange("searchSource", value)
+                }
+                disabled={isSubmitting || isReadOnly}
+                error={validationErrors.searchSource}
+                description={
+                  <>
+                    Which search this provider&apos;s chat turns use: none, the
+                    vendor&apos;s own tool, or a plugin Web-search backend.
+                    {/* Without this the same empty dropdown means both "none
+                    installed" and "we could not ask". */}
+                    {!!webBackendsError && (
+                      <span className="block text-destructive">
+                        Couldn&apos;t load the installed backends, so this list
+                        may be incomplete. Any stored selection is unchanged.
+                      </span>
+                    )}
+                  </>
+                }
+              >
+                <SelectGroup>
+                  <SelectLabel>Web search</SelectLabel>
+                  <SelectItem value={SEARCH_SOURCE_NONE}>None</SelectItem>
+                  {(providerHasNativeSearch(formData) ||
+                    nativeSelectedButUnavailable) && (
+                    <SelectItem value={SEARCH_SOURCE_NATIVE}>
+                      {nativeSelectedButUnavailable
+                        ? "The provider's built-in search (unavailable here)"
+                        : "The provider's built-in search"}
+                    </SelectItem>
+                  )}
+                  {availableWebBackends.map((b) => (
+                    <SelectItem key={b.backend} value={b.backend}>
+                      {b.name}
+                      {b.plugin ? ` (${b.plugin})` : ""}
+                    </SelectItem>
+                  ))}
+                  {/* A stored id the catalog does not list — its plugin was
+                  dropped from `PLATYPUS_PLUGINS`, or the id was set through
+                  the API. It degrades to no search tools server-side, so it
+                  is named here rather than silently reading as "None".
+                  The "(not installed)" verdict needs the catalog to have
+                  actually loaded; while it is in flight or failed, the id is
+                  shown without a claim about it. */}
+                  {formData.searchSource !== SEARCH_SOURCE_NONE &&
+                    formData.searchSource !== SEARCH_SOURCE_NATIVE &&
+                    !availableWebBackends.some(
+                      (b) => b.backend === formData.searchSource,
+                    ) && (
+                      <SelectItem value={formData.searchSource}>
+                        {formData.searchSource}
+                        {webBackendsKnown ? " (not installed)" : ""}
+                      </SelectItem>
+                    )}
+                </SelectGroup>
+              </FormSelectField>
 
               <Field data-invalid={!!validationErrors.securityGuardrails}>
                 <ExpandableTextarea
@@ -1295,7 +1228,7 @@ const ProviderForm = ({
                   onChange={handleChange}
                   disabled={isSubmitting || isReadOnly}
                   aria-invalid={!!validationErrors.securityGuardrails}
-                  maxLength={8000}
+                  maxLength={PROVIDER_SECURITY_GUARDRAILS_MAX_LENGTH}
                 />
                 <FieldDescription>
                   Free-text security directives appended to the end of the
@@ -1330,21 +1263,19 @@ const ProviderForm = ({
             // never gate Save for that reason — re-submitting simply
             // re-validates. The JSON errors above are different: they are
             // computed here as the user types and always clear themselves.
-            !canSubmitForm(validationErrors, RETRACTABLE_FIELDS)
+            !canSubmit
           }
           deleteVisible={!!providerId}
           deleteDisabled={isSubmitting}
-          onDelete={() => setIsDeleteDialogOpen(true)}
+          onDelete={openDeleteDialog}
         />
       )}
 
-      <ConfirmDialog
+      <EntityDeleteDialog
         open={isDeleteDialogOpen}
         onOpenChange={setIsDeleteDialogOpen}
         title="Delete Provider"
         description="Are you sure you want to delete this provider? This action cannot be undone."
-        confirmLabel="Delete"
-        confirmVariant="destructive"
         onConfirm={handleDelete}
         loading={isDeleting}
       />

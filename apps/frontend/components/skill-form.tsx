@@ -11,25 +11,27 @@ import { FormTextField } from "@/components/form-text-field";
 import { ExpandableTextarea } from "@/components/expandable-textarea";
 import { Switch } from "@/components/ui/switch";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
-import { ConfirmDialog } from "@/components/confirm-dialog";
+import { EntityDeleteDialog } from "@/components/entity-delete-dialog";
 import { DetailFormState } from "@/components/detail-form-state";
 import { FormFooterButtons } from "@/components/form-footer-buttons";
 import { useState } from "react";
 import { useResetOnChange } from "@/hooks/use-reset-on-change";
+import { useEntityDelete, useEntityForm } from "@/hooks/use-entity-form";
 import { useRouter } from "next/navigation";
-import { type Skill, type Agent } from "@platypus/schemas";
-import useSWR, { useSWRConfig } from "swr";
-import { fetcher, joinUrl } from "@/lib/utils";
-import { canSubmitForm, retractFieldError } from "@/lib/form-errors";
-import { writeEntity } from "@/lib/api-write";
 import {
-  applyWriteOutcome,
-  applyDeleteOutcome,
-  toastGuidanceOrError,
-} from "@/lib/apply-write-outcome";
+  SKILL_ARGUMENT_HINT_MAX_LENGTH,
+  SKILL_BODY_MAX_LENGTH,
+  SKILL_DESCRIPTION_MAX_LENGTH,
+  SKILL_NAME_MAX_LENGTH,
+  type Skill,
+  type Agent,
+} from "@platypus/schemas";
+import useSWR from "swr";
+import { fetcher, joinUrl } from "@/lib/utils";
 import { toast } from "sonner";
 import { useAuth, useBackendUrl } from "@/components/auth-provider";
 import { AgentAvatar } from "@/components/agent-avatar";
+import { toastGuidanceOrError } from "@/lib/apply-write-outcome";
 
 const RETRACTABLE_FIELDS = [
   "name",
@@ -37,6 +39,14 @@ const RETRACTABLE_FIELDS = [
   "body",
   "argumentHint",
 ] as const;
+
+const INITIAL_DATA = {
+  name: "",
+  description: "",
+  body: "",
+  argumentHint: "",
+  disableModelInvocation: false,
+};
 
 const SkillForm = ({
   classNames,
@@ -51,13 +61,8 @@ const SkillForm = ({
   workspaceId?: string;
   skillId?: string;
 }) => {
-  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
-  const [isDeleting, setIsDeleting] = useState(false);
-  const [deleteError, setDeleteError] = useState<string | null>(null);
-
   const { user } = useAuth();
   const backendUrl = useBackendUrl();
-  const { mutate: globalMutate } = useSWRConfig();
 
   // The scope determines the backend collection and where we return after save.
   const collectionUrl = workspaceId
@@ -66,6 +71,7 @@ const SkillForm = ({
   const returnPath = workspaceId
     ? `/${orgId}/workspace/${workspaceId}`
     : `/${orgId}/settings/skills`;
+  const scope = workspaceId ? { orgId, workspaceId } : { orgId };
 
   // Fetch existing skill data if editing (includes agentIds in workspace mode)
   const {
@@ -89,21 +95,67 @@ const SkillForm = ({
   );
   const agents = agentsData?.results || [];
 
-  const [formData, setFormData] = useState({
-    name: "",
-    description: "",
-    body: "",
-    argumentHint: "",
-    disableModelInvocation: false,
-  });
   const [selectedAgentIds, setSelectedAgentIds] = useState<string[]>([]);
 
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [validationErrors, setValidationErrors] = useState<
-    Record<string, string>
-  >({});
-
   const router = useRouter();
+
+  const {
+    formData,
+    setFormData,
+    validationErrors,
+    isSubmitting,
+    canSubmit,
+    handleChange,
+    toFieldChange,
+    submit,
+  } = useEntityForm<typeof INITIAL_DATA, unknown>({
+    initialData: INITIAL_DATA,
+    entity: "skills",
+    scope,
+    id: skillId,
+    retractableFields: RETRACTABLE_FIELDS,
+    // A Skill name is normalised to lowercase as it is typed.
+    transformField: (id, value) =>
+      id === "name" ? value.toLowerCase() : value,
+    buildPayload: (data) => ({
+      name: data.name,
+      description: data.description,
+      body: data.body,
+      argumentHint: data.argumentHint || null,
+      disableModelInvocation: data.disableModelInvocation,
+      // Scope and agent associations only apply to the workspace surface.
+      ...(workspaceId
+        ? { workspaceId, agentIds: selectedAgentIds }
+        : { organizationId: orgId }),
+    }),
+    onSuccess: () => router.push(returnPath),
+    onError: toastGuidanceOrError,
+  });
+
+  const {
+    isDeleteDialogOpen,
+    setIsDeleteDialogOpen,
+    isDeleting,
+    deleteError,
+    openDeleteDialog,
+    handleDelete,
+  } = useEntityDelete({
+    entity: "skills",
+    scope,
+    id: skillId,
+    onSuccess: () => router.push(returnPath),
+    onError: (message, outcome, { close, setError, stopLoading }) => {
+      if (outcome.outcome === "forbidden") {
+        // Guidance, not a failure — the backend's message already says
+        // where the Shared resource is actually managed (#570).
+        toast.info(message);
+        close();
+      } else {
+        setError(message);
+        stopLoading();
+      }
+    },
+  });
 
   // Initialize form with existing skill data when editing
   useResetOnChange(skill, () => {
@@ -125,89 +177,6 @@ const SkillForm = ({
     }
   });
 
-  const handleChange = (
-    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>,
-  ) => {
-    const { id, value } = e.target;
-
-    // Clear the error for this field, including any reported against a path
-    // inside it.
-    setValidationErrors((prev) => retractFieldError(prev, id));
-
-    const nextValue = id === "name" ? value.toLowerCase() : value;
-
-    setFormData((prevData) => ({
-      ...prevData,
-      [id]: nextValue,
-    }));
-  };
-
-  // Adapts FormTextField's `onChange(value)` to handleChange's `onChange(e)`
-  // so the centralized clear-error-and-set-formData logic stays in one place.
-  const toFieldChange = (id: string) => (value: string) =>
-    handleChange({
-      target: { id, value },
-    } as React.ChangeEvent<HTMLInputElement>);
-
-  const handleSubmit = async () => {
-    setIsSubmitting(true);
-    setValidationErrors({});
-
-    const payload = {
-      name: formData.name,
-      description: formData.description,
-      body: formData.body,
-      argumentHint: formData.argumentHint || null,
-      disableModelInvocation: formData.disableModelInvocation,
-      // Scope and agent associations only apply to the workspace surface.
-      ...(workspaceId
-        ? { workspaceId, agentIds: selectedAgentIds }
-        : { organizationId: orgId }),
-    };
-
-    const scope = workspaceId ? { orgId, workspaceId } : { orgId };
-    const result = await writeEntity(backendUrl, "skills", scope, {
-      id: skillId,
-      data: payload,
-    });
-
-    await applyWriteOutcome(result, {
-      mutate: globalMutate,
-      setValidationErrors,
-      onSuccess: () => router.push(returnPath),
-      onError: toastGuidanceOrError,
-    });
-
-    setIsSubmitting(false);
-  };
-
-  const handleDelete = async () => {
-    if (!skillId) return;
-
-    setIsDeleting(true);
-    setDeleteError(null);
-    const scope = workspaceId ? { orgId, workspaceId } : { orgId };
-    const result = await writeEntity(backendUrl, "skills", scope, {
-      id: skillId,
-    });
-
-    await applyDeleteOutcome(result, {
-      mutate: globalMutate,
-      onSuccess: () => router.push(returnPath),
-      onError: (message, outcome) => {
-        if (outcome.outcome === "forbidden") {
-          // Guidance, not a failure — the backend's message already says
-          // where the Shared resource is actually managed (#570).
-          toast.info(message);
-          setIsDeleteDialogOpen(false);
-        } else {
-          setDeleteError(message);
-        }
-        setIsDeleting(false);
-      },
-    });
-  };
-
   const form = (
     <div className={classNames}>
       <FieldSet className="mb-6">
@@ -223,7 +192,7 @@ const SkillForm = ({
             autoFocus
             trailing={
               <p className="text-xs text-muted-foreground">
-                {formData.name.length}/64
+                {formData.name.length}/{SKILL_NAME_MAX_LENGTH}
               </p>
             }
           />
@@ -235,7 +204,7 @@ const SkillForm = ({
               value={formData.description}
               onChange={handleChange}
               disabled={isSubmitting}
-              maxLength={1024}
+              maxLength={SKILL_DESCRIPTION_MAX_LENGTH}
               aria-invalid={!!validationErrors.description}
               error={validationErrors.description}
             />
@@ -250,7 +219,7 @@ const SkillForm = ({
               disabled={isSubmitting}
               className="min-h-[200px] !font-mono"
               aria-invalid={!!validationErrors.body}
-              maxLength={50000}
+              maxLength={SKILL_BODY_MAX_LENGTH}
               error={validationErrors.body}
             />
           </Field>
@@ -263,10 +232,10 @@ const SkillForm = ({
             error={validationErrors.argumentHint}
             description="Text shown after the command name when a person invokes this Skill."
             placeholder="What should follow the command?"
-            maxLength={120}
+            maxLength={SKILL_ARGUMENT_HINT_MAX_LENGTH}
             trailing={
               <p className="text-xs text-muted-foreground">
-                {formData.argumentHint.length}/120
+                {formData.argumentHint.length}/{SKILL_ARGUMENT_HINT_MAX_LENGTH}
               </p>
             }
           />
@@ -340,25 +309,18 @@ const SkillForm = ({
 
       <FormFooterButtons
         submitText={skillId ? "Update" : "Save"}
-        onSubmit={handleSubmit}
-        submitDisabled={
-          isSubmitting || !canSubmitForm(validationErrors, RETRACTABLE_FIELDS)
-        }
+        onSubmit={() => void submit()}
+        submitDisabled={isSubmitting || !canSubmit}
         deleteVisible={!!skillId}
         deleteDisabled={isSubmitting}
-        onDelete={() => setIsDeleteDialogOpen(true)}
+        onDelete={openDeleteDialog}
       />
 
-      <ConfirmDialog
+      <EntityDeleteDialog
         open={isDeleteDialogOpen}
-        onOpenChange={(open) => {
-          setIsDeleteDialogOpen(open);
-          if (!open) setDeleteError(null);
-        }}
+        onOpenChange={setIsDeleteDialogOpen}
         title="Delete Skill"
         description="Are you sure you want to delete this skill? This action cannot be undone."
-        confirmLabel="Delete"
-        confirmVariant="destructive"
         onConfirm={handleDelete}
         loading={isDeleting}
         error={deleteError}

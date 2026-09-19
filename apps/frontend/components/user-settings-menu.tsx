@@ -12,15 +12,16 @@ import { User, ShieldCheck, Mail, Users, BookText } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useAuth } from "@/components/auth-provider";
+import { userRoutes } from "@/lib/routes";
 
 export function UserSettingsMenu() {
   const pathname = usePathname();
   const { user } = useAuth();
-  const profileHref = `/settings`;
-  const contextsHref = `/settings/contexts`;
-  const securityHref = `/settings/security`;
-  const invitationsHref = `/settings/invitations`;
-  const usersHref = `/settings/users`;
+  const profileHref = userRoutes.profile;
+  const contextsHref = userRoutes.contexts;
+  const securityHref = userRoutes.security;
+  const invitationsHref = userRoutes.invitations;
+  const usersHref = userRoutes.users;
 
   const isSuperAdmin = user?.role === "admin";
 

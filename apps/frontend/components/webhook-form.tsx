@@ -13,23 +13,17 @@ import { FormTextField } from "@/components/form-text-field";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { ConfirmDialog } from "@/components/confirm-dialog";
+import { EntityDeleteDialog } from "@/components/entity-delete-dialog";
 import { DetailFormState } from "@/components/detail-form-state";
 import { FormFooterButtons } from "@/components/form-footer-buttons";
 import { useCallback, useState } from "react";
 import { useResetOnChange } from "@/hooks/use-reset-on-change";
+import { useEntityDelete, useEntityForm } from "@/hooks/use-entity-form";
 import { useRouter } from "next/navigation";
-import useSWR, { useSWRConfig } from "swr";
+import useSWR from "swr";
 import { fetcher, joinUrl } from "@/lib/utils";
-import {
-  canSubmitForm,
-  retractExactKeys,
-  retractFieldError,
-} from "@/lib/form-errors";
-import { writeEntity, writeAt } from "@/lib/api-write";
-import {
-  applyWriteOutcome,
-  applyDeleteOutcome,
-} from "@/lib/apply-write-outcome";
+import { retractExactKeys } from "@/lib/form-errors";
+import { writeAt } from "@/lib/api-write";
 import { toast } from "sonner";
 import { useAuth, useBackendUrl } from "@/components/auth-provider";
 import { Eye, EyeOff, Copy, RefreshCw, Plus, X } from "lucide-react";
@@ -83,27 +77,22 @@ const RETRACTABLE_FIELDS = [
   "headers",
 ] as const;
 
+const INITIAL_DATA = {
+  name: "",
+  url: "",
+  enabled: true,
+  events: [...ALL_EVENTS] as string[],
+  headers: [] as { key: string; value: string }[],
+};
+
 const WebhookForm = ({ orgId, workspaceId, webhookId }: WebhookFormProps) => {
   const { user } = useAuth();
   const backendUrl = useBackendUrl();
   const router = useRouter();
-  const { mutate: globalMutate } = useSWRConfig();
 
-  const [name, setName] = useState("");
-  const [url, setUrl] = useState("");
-  const [enabled, setEnabled] = useState(true);
-  const [events, setEvents] = useState<string[]>([...ALL_EVENTS]);
-  const [headers, setHeaders] = useState<{ key: string; value: string }[]>([]);
-
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
-  const [isDeleting, setIsDeleting] = useState(false);
   const [isRegenerateDialogOpen, setIsRegenerateDialogOpen] = useState(false);
   const [isRegenerating, setIsRegenerating] = useState(false);
   const [showSecret, setShowSecret] = useState(false);
-  const [validationErrors, setValidationErrors] = useState<
-    Record<string, string>
-  >({});
 
   const isEditMode = !!webhookId;
 
@@ -122,45 +111,89 @@ const WebhookForm = ({ orgId, workspaceId, webhookId }: WebhookFormProps) => {
     mutate,
   } = useSWR<Webhook>(fetchUrl, fetcher);
 
+  const {
+    formData,
+    setFormData,
+    validationErrors,
+    setValidationErrors,
+    isSubmitting,
+    canSubmit,
+    toFieldChange,
+    clearErrors,
+    submit,
+  } = useEntityForm<typeof INITIAL_DATA, unknown>({
+    initialData: INITIAL_DATA,
+    entity: "webhooks",
+    scope: { orgId, workspaceId },
+    id: webhookId,
+    retractableFields: RETRACTABLE_FIELDS,
+    buildPayload: (data) => {
+      const headersObj: Record<string, string> = {};
+      for (const h of data.headers) {
+        if (h.key.trim()) {
+          headersObj[h.key.trim()] = h.value;
+        }
+      }
+      return {
+        name: data.name,
+        url: data.url,
+        enabled: data.enabled,
+        events: data.events,
+        headers: Object.keys(headersObj).length > 0 ? headersObj : null,
+      };
+    },
+    successMessage: () => (isEditMode ? "Webhook updated" : "Webhook created"),
+    onSuccess: () =>
+      router.push(`/${orgId}/workspace/${workspaceId}/settings/webhooks`),
+  });
+
+  const {
+    isDeleteDialogOpen,
+    setIsDeleteDialogOpen,
+    isDeleting,
+    openDeleteDialog,
+    handleDelete,
+  } = useEntityDelete({
+    entity: "webhooks",
+    scope: { orgId, workspaceId },
+    id: webhookId,
+    successMessage: "Webhook deleted",
+    onSuccess: () =>
+      router.push(`/${orgId}/workspace/${workspaceId}/settings/webhooks`),
+    onError: (message, _outcome, { close }) => {
+      toast.error(message);
+      close();
+    },
+  });
+
   // Initialise the form from the loaded webhook, once per webhook id.
   useResetOnChange(webhook?.id, () => {
     if (webhook) {
-      setName(webhook.name);
-      setUrl(webhook.url);
-      setEnabled(webhook.enabled);
-      setEvents(webhook.events ?? [...ALL_EVENTS]);
-      if (webhook.headers) {
-        setHeaders(
-          Object.entries(webhook.headers).map(([key, value]) => ({
-            key,
-            value,
-          })),
-        );
-      } else {
-        setHeaders([]);
-      }
+      setFormData({
+        name: webhook.name,
+        url: webhook.url,
+        enabled: webhook.enabled,
+        events: webhook.events ?? [...ALL_EVENTS],
+        headers: webhook.headers
+          ? Object.entries(webhook.headers).map(([key, value]) => ({
+              key,
+              value,
+            }))
+          : [],
+      });
     }
   });
 
-  // Drop the stored server validation error for the given field(s) so a
-  // corrected field stops rendering its error and re-enables the Save button.
-  const clearValidationErrors = useCallback((...fieldNames: string[]) => {
-    setValidationErrors((prev) =>
-      fieldNames.reduce(
-        (errors, fieldName) => retractFieldError(errors, fieldName),
-        prev,
-      ),
-    );
-  }, []);
+  const { events, headers } = formData;
 
   const toggleEvent = (event: string) => {
-    clearValidationErrors("events");
-    setEvents((prev) => {
-      if (prev.includes(event)) {
-        if (prev.length === 1) return prev;
-        return prev.filter((e) => e !== event);
+    clearErrors("events");
+    setFormData((prev) => {
+      if (prev.events.includes(event)) {
+        if (prev.events.length === 1) return prev;
+        return { ...prev, events: prev.events.filter((e) => e !== event) };
       }
-      return [...prev, event];
+      return { ...prev, events: [...prev.events, event] };
     });
   };
 
@@ -168,69 +201,6 @@ const WebhookForm = ({ orgId, workspaceId, webhookId }: WebhookFormProps) => {
     backendUrl,
     `/organizations/${orgId}/workspaces/${workspaceId}/webhooks`,
   );
-
-  const buildPayload = () => {
-    const headersObj: Record<string, string> = {};
-    for (const h of headers) {
-      if (h.key.trim()) {
-        headersObj[h.key.trim()] = h.value;
-      }
-    }
-    return {
-      name,
-      url,
-      enabled,
-      events,
-      headers: Object.keys(headersObj).length > 0 ? headersObj : null,
-    };
-  };
-
-  const handleSubmit = async () => {
-    setIsSubmitting(true);
-    setValidationErrors({});
-
-    const payload = buildPayload();
-    const result = await writeEntity(
-      backendUrl,
-      "webhooks",
-      { orgId, workspaceId },
-      { id: webhookId, data: payload },
-    );
-
-    await applyWriteOutcome(result, {
-      mutate: globalMutate,
-      setValidationErrors,
-      onSuccess: () => {
-        toast.success(isEditMode ? "Webhook updated" : "Webhook created");
-        router.push(`/${orgId}/workspace/${workspaceId}/settings/webhooks`);
-      },
-    });
-
-    setIsSubmitting(false);
-  };
-
-  const handleDelete = async () => {
-    setIsDeleting(true);
-    const result = await writeEntity(
-      backendUrl,
-      "webhooks",
-      { orgId, workspaceId },
-      { id: webhookId },
-    );
-
-    await applyDeleteOutcome(result, {
-      mutate: globalMutate,
-      onSuccess: () => {
-        toast.success("Webhook deleted");
-        router.push(`/${orgId}/workspace/${workspaceId}/settings/webhooks`);
-      },
-      onError: (message) => {
-        toast.error(message);
-        setIsDeleting(false);
-        setIsDeleteDialogOpen(false);
-      },
-    });
-  };
 
   const handleRegenerateSecret = async () => {
     setIsRegenerating(true);
@@ -259,21 +229,32 @@ const WebhookForm = ({ orgId, workspaceId, webhookId }: WebhookFormProps) => {
   const headerRowErrorKey = (key: string) => `headers.${key}`;
 
   const addHeader = () => {
-    clearValidationErrors("headers");
-    setHeaders((prev) => [...prev, { key: "", value: "" }]);
+    clearErrors("headers");
+    setFormData((prev) => ({
+      ...prev,
+      headers: [...prev.headers, { key: "", value: "" }],
+    }));
   };
 
   // Retract the whole-field "headers" error (any edit is an attempt to fix
   // it) and the row-level error keyed to this entry, without touching errors
   // stranded on other rows.
-  const clearHeaderRowError = (index: number) => {
-    const rowKey = headerRowErrorKey(headers[index].key);
-    setValidationErrors((prev) => retractExactKeys(prev, ["headers", rowKey]));
-  };
+  const clearHeaderRowError = useCallback(
+    (index: number) => {
+      const rowKey = headerRowErrorKey(headers[index].key);
+      setValidationErrors((prev) =>
+        retractExactKeys(prev, ["headers", rowKey]),
+      );
+    },
+    [headers, setValidationErrors],
+  );
 
   const removeHeader = (index: number) => {
     clearHeaderRowError(index);
-    setHeaders((prev) => prev.filter((_, i) => i !== index));
+    setFormData((prev) => ({
+      ...prev,
+      headers: prev.headers.filter((_, i) => i !== index),
+    }));
   };
 
   const updateHeader = (
@@ -282,9 +263,12 @@ const WebhookForm = ({ orgId, workspaceId, webhookId }: WebhookFormProps) => {
     value: string,
   ) => {
     clearHeaderRowError(index);
-    setHeaders((prev) =>
-      prev.map((h, i) => (i === index ? { ...h, [field]: value } : h)),
-    );
+    setFormData((prev) => ({
+      ...prev,
+      headers: prev.headers.map((h, i) =>
+        i === index ? { ...h, [field]: value } : h,
+      ),
+    }));
   };
 
   // parseValidationErrors mirrors any headers.<key> issue onto the bare
@@ -303,11 +287,8 @@ const WebhookForm = ({ orgId, workspaceId, webhookId }: WebhookFormProps) => {
             label="Name"
             name="name"
             placeholder="My Webhook"
-            value={name}
-            onChange={(value) => {
-              clearValidationErrors("name");
-              setName(value);
-            }}
+            value={formData.name}
+            onChange={toFieldChange("name")}
             disabled={isSubmitting}
             error={validationErrors.name}
             autoFocus
@@ -318,11 +299,8 @@ const WebhookForm = ({ orgId, workspaceId, webhookId }: WebhookFormProps) => {
             name="url"
             type="url"
             placeholder="https://example.com/webhook"
-            value={url}
-            onChange={(value) => {
-              clearValidationErrors("url");
-              setUrl(value);
-            }}
+            value={formData.url}
+            onChange={toFieldChange("url")}
             disabled={isSubmitting}
             error={validationErrors.url}
             description="The URL that will receive webhook POST requests."
@@ -332,10 +310,10 @@ const WebhookForm = ({ orgId, workspaceId, webhookId }: WebhookFormProps) => {
             <div className="flex items-center gap-3">
               <Switch
                 id="enabled"
-                checked={enabled}
+                checked={formData.enabled}
                 onCheckedChange={(checked) => {
-                  clearValidationErrors("enabled");
-                  setEnabled(checked);
+                  clearErrors("enabled");
+                  setFormData((prev) => ({ ...prev, enabled: checked }));
                 }}
                 disabled={isSubmitting}
               />
@@ -490,22 +468,18 @@ const WebhookForm = ({ orgId, workspaceId, webhookId }: WebhookFormProps) => {
 
       <FormFooterButtons
         submitText={isEditMode ? "Update" : "Save"}
-        onSubmit={handleSubmit}
-        submitDisabled={
-          isSubmitting || !canSubmitForm(validationErrors, RETRACTABLE_FIELDS)
-        }
+        onSubmit={() => void submit()}
+        submitDisabled={isSubmitting || !canSubmit}
         deleteVisible={isEditMode}
         deleteDisabled={isSubmitting}
-        onDelete={() => setIsDeleteDialogOpen(true)}
+        onDelete={openDeleteDialog}
       />
 
-      <ConfirmDialog
+      <EntityDeleteDialog
         open={isDeleteDialogOpen}
         onOpenChange={setIsDeleteDialogOpen}
         title="Delete webhook"
         description="Are you sure you want to delete this webhook? This action cannot be undone."
-        confirmLabel="Delete"
-        confirmVariant="destructive"
         onConfirm={handleDelete}
         loading={isDeleting}
       />

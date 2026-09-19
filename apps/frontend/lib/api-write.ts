@@ -126,18 +126,18 @@ async function performWrite<TResult, TData>(
   method: "POST" | "PUT" | "PATCH" | "DELETE",
   data: TData | undefined,
   revalidateKeys: readonly string[],
+  extraHeaders?: Record<string, string>,
 ): Promise<WriteOutcome<TResult>> {
   let response: Response;
   try {
     response = await fetch(url, {
       method,
       credentials: "include",
-      ...(method !== "DELETE"
-        ? {
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(data),
-          }
-        : {}),
+      headers:
+        method !== "DELETE"
+          ? { "Content-Type": "application/json", ...extraHeaders }
+          : extraHeaders,
+      ...(method !== "DELETE" ? { body: JSON.stringify(data) } : {}),
     });
   } catch {
     return { outcome: "error", message: "Network request failed" };
@@ -223,6 +223,11 @@ export interface WriteAtOptions<TData> {
   readonly data?: TData;
   /** SWR keys this write should invalidate. Defaults to none. */
   readonly revalidateKeys?: readonly string[];
+  /**
+   * Extra request headers, merged over the JSON `Content-Type`. For the
+   * better-auth admin actions that must echo the browser's `Origin`.
+   */
+  readonly headers?: Record<string, string>;
 }
 
 /**
@@ -235,6 +240,12 @@ export async function writeAt<TResult = unknown, TData = unknown>(
   url: string,
   options: WriteAtOptions<TData>,
 ): Promise<WriteOutcome<TResult>> {
-  const { method, data, revalidateKeys = [] } = options;
-  return performWrite<TResult, TData>(url, method, data, revalidateKeys);
+  const { method, data, revalidateKeys = [], headers } = options;
+  return performWrite<TResult, TData>(
+    url,
+    method,
+    data,
+    revalidateKeys,
+    headers,
+  );
 }

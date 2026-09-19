@@ -1,6 +1,13 @@
 import { toast } from "sonner";
 import type { WriteOutcome } from "./api-write";
 
+/**
+ * The default copy for a rejected write that mapped to fields the form can
+ * show, so the "please fix the errors" toast is written once rather than
+ * reworded per form.
+ */
+export const FIX_FORM_ERRORS_MESSAGE = "Please fix the errors in the form";
+
 export interface ApplyWriteOutcomeOptions<TResult> {
   /** Revalidates one SWR key — usually `useSWRConfig()`'s `mutate`. */
   readonly mutate: (key: string) => void;
@@ -21,6 +28,12 @@ export interface ApplyWriteOutcomeOptions<TResult> {
   ) => void;
   /** Overrides the default `setValidationErrors({ [conflictField]: message })`. */
   readonly onConflict?: (message: string) => void;
+  /**
+   * Toast shown by the default `invalid` handling when the rejection mapped to
+   * at least one field (so the copy is single-sourced). Ignored if `onInvalid`
+   * is given; when omitted, a mapped rejection stays inline-only.
+   */
+  readonly invalidMessage?: string;
   /**
    * Covers `forbidden`, `notFound`, and `error`, plus an `invalid` outcome
    * with no field errors to show. Defaults to `toast.error`. Receives the
@@ -47,6 +60,7 @@ export async function applyWriteOutcome<TResult>(
     onSuccess,
     onInvalid,
     onConflict,
+    invalidMessage,
     onError = (message) => toast.error(message),
   } = options;
 
@@ -63,6 +77,8 @@ export async function applyWriteOutcome<TResult>(
       setValidationErrors(result.fieldErrors);
       if (Object.keys(result.fieldErrors).length === 0) {
         onError(result.message, result);
+      } else if (invalidMessage) {
+        toast.error(invalidMessage);
       }
       return;
     case "conflict":

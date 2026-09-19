@@ -1,34 +1,28 @@
 "use client";
 
 import { useEffect } from "react";
-import { useRouter, usePathname, useSearchParams } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { nanoid } from "nanoid";
+import { workspaceRoutes } from "@/lib/routes";
 
 const ChatPage = () => {
   const router = useRouter();
-  const pathname = usePathname();
+  const { orgId, workspaceId } = useParams<{
+    orgId: string;
+    workspaceId: string;
+  }>();
   const searchParams = useSearchParams();
 
   useEffect(() => {
-    // Extract orgId and workspaceId from pathname
-    // Pathname format: /:orgId/workspace/:workspaceId/chat
-    const pathParts = pathname.split("/").filter(Boolean);
+    if (!orgId || !workspaceId) return;
 
-    if (pathParts.length >= 4) {
-      const orgId = pathParts[0]; // e.g., 'my-org'
-      const workspaceId = pathParts[2]; // e.g., 'my-workspace'
-
-      if (orgId && workspaceId) {
-        // Generate a new chat ID and redirect to the specific chat page
-        const newChatId = nanoid();
-        const queryString = searchParams.toString();
-        const redirectUrl = queryString
-          ? `/${orgId}/workspace/${workspaceId}/chat/${newChatId}?${queryString}`
-          : `/${orgId}/workspace/${workspaceId}/chat/${newChatId}`;
-        router.replace(redirectUrl);
-      }
-    }
-  }, [pathname, router, searchParams]);
+    // Generate a new chat ID and redirect to the specific chat page
+    const newChatId = nanoid();
+    const queryString = searchParams.toString();
+    const chatPath = workspaceRoutes(orgId, workspaceId).chat.detail(newChatId);
+    const redirectUrl = queryString ? `${chatPath}?${queryString}` : chatPath;
+    router.replace(redirectUrl);
+  }, [orgId, workspaceId, router, searchParams]);
 
   return null;
 };

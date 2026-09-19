@@ -11,6 +11,7 @@ import {
 import { Box, Info, Radio, Settings, Unplug, Wrench } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { workspaceRoutes } from "@/lib/routes";
 
 interface WorkspaceSettingsMenuProps {
   orgId: string;
@@ -22,12 +23,13 @@ export function WorkspaceSettingsMenu({
   workspaceId,
 }: WorkspaceSettingsMenuProps) {
   const pathname = usePathname();
-  const workspaceHref = `/${orgId}/workspace/${workspaceId}/settings`;
-  const providersHref = `/${orgId}/workspace/${workspaceId}/settings/providers`;
-  const mcpHref = `/${orgId}/workspace/${workspaceId}/settings/mcp`;
-  const sandboxHref = `/${orgId}/workspace/${workspaceId}/settings/sandbox`;
-  const webhookHref = `/${orgId}/workspace/${workspaceId}/settings/webhooks`;
-  const aboutHref = `/${orgId}/workspace/${workspaceId}/settings/about`;
+  const routes = workspaceRoutes(orgId, workspaceId);
+  const workspaceHref = routes.settings.root;
+  const providersHref = routes.settings.providers;
+  const mcpHref = routes.settings.mcp;
+  const sandboxHref = routes.settings.sandbox;
+  const webhookHref = routes.settings.webhooks;
+  const aboutHref = routes.settings.about;
 
   return (
     <SidebarContent>

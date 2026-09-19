@@ -19,12 +19,13 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
-import { ConfirmDialog } from "@/components/confirm-dialog";
+import { EntityDeleteDialog } from "@/components/entity-delete-dialog";
 import { DetailFormState } from "@/components/detail-form-state";
 import { FormFooterButtons } from "@/components/form-footer-buttons";
 import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { useResetOnChange } from "@/hooks/use-reset-on-change";
+import { useEntityDelete, useEntityForm } from "@/hooks/use-entity-form";
 import Link from "next/link";
 import { ChevronsUpDown, ImageIcon, Camera, X, Building } from "lucide-react";
 import {
@@ -37,20 +38,21 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
+  AGENT_DESCRIPTION_MAX_LENGTH,
+  AGENT_INPUT_PLACEHOLDER_MAX_LENGTH,
+  AGENT_MAX_STEPS_MIN,
   DEFAULT_AGENT_MAX_STEPS,
   type ToolSet,
   type Agent,
   type Provider,
   type Skill,
 } from "@platypus/schemas";
-import useSWR, { useSWRConfig } from "swr";
+import useSWR from "swr";
 import { fetcher, joinUrl } from "@/lib/utils";
-import { canSubmitForm, retractFieldError } from "@/lib/form-errors";
-import { writeEntity, writeAt, errorMessage } from "@/lib/api-write";
+import { writeAt, errorMessage } from "@/lib/api-write";
 import {
-  applyWriteOutcome,
-  applyDeleteOutcome,
   toastGuidanceOrError,
+  FIX_FORM_ERRORS_MESSAGE,
 } from "@/lib/apply-write-outcome";
 import { findModelOption, getModelOptions } from "@/lib/model-config";
 import { resolveModel } from "@/lib/resolve-model";
@@ -84,6 +86,25 @@ const RETRACTABLE_FIELDS = [
   "frequencyPenalty",
 ] as const;
 
+type AgentFormData = {
+  name: string;
+  description: string;
+  inputPlaceholder: string;
+  instructions: string;
+  providerId: string;
+  modelId: string;
+  maxSteps: number;
+  temperature?: number;
+  toolSetIds: string[];
+  skillIds: string[];
+  subAgentIds: string[];
+  topP?: number;
+  topK?: number;
+  seed?: number;
+  presencePenalty?: number;
+  frequencyPenalty?: number;
+};
+
 const AgentForm = ({
   classNames,
   orgId,
@@ -109,12 +130,9 @@ const AgentForm = ({
   orgScoped?: boolean;
 }) => {
   const [isOpen, setIsOpen] = useState(false);
-  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
-  const [isDeleting, setIsDeleting] = useState(false);
 
   const { user } = useAuth();
   const backendUrl = useBackendUrl();
-  const { mutate } = useSWRConfig();
 
   // Resource base paths differ by scope: the Organization surface lists/writes
   // org-scoped references, the Workspace surface its own.
@@ -170,34 +188,147 @@ const AgentForm = ({
   const isOrgScoped = agent?.scope === "organization";
   const readOnly = isOrgScoped && !orgScoped;
 
-  const [formData, setFormData] = useState({
-    name: "",
-    description: "",
-    inputPlaceholder: "",
-    instructions: "",
-    providerId: "",
-    modelId: "",
-    maxSteps: DEFAULT_AGENT_MAX_STEPS,
-    temperature: undefined as number | undefined,
-    toolSetIds: [] as string[],
-    skillIds: [] as string[],
-    subAgentIds: [] as string[],
-    topP: undefined as number | undefined,
-    topK: undefined as number | undefined,
-    seed: undefined as number | undefined,
-    presencePenalty: undefined as number | undefined,
-    frequencyPenalty: undefined as number | undefined,
-  });
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [validationErrors, setValidationErrors] = useState<
-    Record<string, string>
-  >({});
+  const router = useRouter();
+
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
   const [avatarPreviewUrl, setAvatarPreviewUrl] = useState<string | null>(null);
   const [avatarDeleted, setAvatarDeleted] = useState(false);
   const avatarInputRef = useRef<HTMLInputElement>(null);
 
-  const router = useRouter();
+  const {
+    formData,
+    setFormData,
+    validationErrors,
+    setValidationErrors,
+    isSubmitting,
+    canSubmit,
+    handleChange,
+    toFieldChange,
+    setNumberField,
+    setFloatField,
+    clearErrors,
+    submit,
+  } = useEntityForm<AgentFormData, Agent>({
+    initialData: {
+      name: "",
+      description: "",
+      inputPlaceholder: "",
+      instructions: "",
+      providerId: "",
+      modelId: "",
+      maxSteps: DEFAULT_AGENT_MAX_STEPS,
+      toolSetIds: [],
+      skillIds: [],
+      subAgentIds: [],
+    },
+    entity: "agents",
+    scope: orgScoped ? { orgId } : { orgId, workspaceId },
+    id: agentId,
+    retractableFields: RETRACTABLE_FIELDS,
+    buildPayload: (data) => {
+      // Saving migrates a concrete id to the alias its model now carries
+      // (ADR-0017). Once a model is aliased the picker no longer offers the
+      // bare id, so "pin to exactly gpt-4" is not an expressible choice — and
+      // without this the migration would only ever happen when the user
+      // switches to a *different* model, since re-picking the already-selected
+      // option fires no change event. Falls back to the stored value when the
+      // model resolves to nothing, leaving today's dangling-id behaviour alone.
+      const submittedProvider = providers.find((p) => p.id === data.providerId);
+      const submittedModelId =
+        (submittedProvider && data.modelId
+          ? findModelOption(submittedProvider, data.modelId)?.value
+          : undefined) ?? data.modelId;
+
+      return {
+        // Scope comes from the route, not the body; the org PUT ignores this.
+        workspaceId: orgScoped ? undefined : workspaceId,
+        providerId: data.providerId,
+        name: data.name,
+        description: data.description,
+        inputPlaceholder: data.inputPlaceholder || undefined,
+        instructions: data.instructions,
+        modelId: submittedModelId,
+        maxSteps: data.maxSteps,
+        // Send null (not undefined) for cleared sampling params so the key
+        // survives JSON.stringify and the backend persists the cleared value
+        // instead of silently keeping the previous one (#263).
+        temperature: data.temperature ?? null,
+        topP: data.topP ?? null,
+        topK: data.topK ?? null,
+        seed: data.seed ?? null,
+        presencePenalty: data.presencePenalty ?? null,
+        frequencyPenalty: data.frequencyPenalty ?? null,
+        toolSetIds: data.toolSetIds,
+        skillIds: data.skillIds,
+        subAgentIds: data.subAgentIds,
+      };
+    },
+    onInvalid: (fieldErrors) => {
+      setValidationErrors(fieldErrors);
+      // Surface a user-visible signal even when the failure maps to a
+      // field without an inline error, so a rejected save is never
+      // silent (#331).
+      toast.error(
+        Object.keys(fieldErrors).length > 0
+          ? FIX_FORM_ERRORS_MESSAGE
+          : "Failed to save agent",
+      );
+    },
+    onError: toastGuidanceOrError,
+    failureMessage: "Failed to save agent",
+    onSuccess: async (data) => {
+      const savedAgentId = data.id || agentId;
+
+      // The Agent itself already saved, so a failed avatar write is a
+      // partial success, not a reason to block navigation — surface a
+      // toast and continue on (#595).
+      if (avatarDeleted && agentId) {
+        const avatarOutcome = await writeAt(
+          joinUrl(backendUrl, `${agentsBase}/${savedAgentId}/avatar`),
+          { method: "DELETE" },
+        );
+        if (avatarOutcome.outcome !== "success") {
+          toast.error(avatarOutcome.message);
+        }
+      } else if (avatarFile) {
+        // Multipart upload can't go through writeAt (JSON-only body), so
+        // this call stays raw fetch — see the eslint.config.mjs exception.
+        const avatarFormData = new FormData();
+        avatarFormData.append("file", avatarFile);
+        const avatarResponse = await fetch(
+          joinUrl(backendUrl, `${agentsBase}/${savedAgentId}/avatar`),
+          {
+            method: "POST",
+            body: avatarFormData,
+            credentials: "include",
+          },
+        );
+        if (!avatarResponse.ok) {
+          const body: unknown = await avatarResponse.json().catch(() => null);
+          toast.error(errorMessage(body) ?? "Failed to upload the avatar");
+        }
+      }
+
+      router.push(doneHref);
+    },
+  });
+
+  const {
+    isDeleteDialogOpen,
+    setIsDeleteDialogOpen,
+    isDeleting,
+    openDeleteDialog,
+    handleDelete,
+  } = useEntityDelete<Agent>({
+    entity: "agents",
+    scope: orgScoped ? { orgId } : { orgId, workspaceId },
+    id: agentId,
+    onSuccess: () => router.push(doneHref),
+    onError: (message, outcome, { close }) => {
+      toastGuidanceOrError(message, outcome);
+      close();
+    },
+  });
 
   // Initialize with first provider's first model once providers are loaded
   useResetOnChange(
@@ -245,50 +376,6 @@ const AgentForm = ({
       }
     }
   });
-
-  // Drop the stored server validation error for the given field(s) so a
-  // corrected field stops rendering its error and re-enables the Save button.
-  const clearValidationErrors = useCallback((...ids: string[]) => {
-    setValidationErrors((prev) =>
-      ids.reduce((errors, id) => retractFieldError(errors, id), prev),
-    );
-  }, []);
-
-  const handleChange = (
-    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>,
-  ) => {
-    const { id, value } = e.target;
-
-    clearValidationErrors(id);
-
-    setFormData((prevData) => ({
-      ...prevData,
-      [id]: value,
-    }));
-  };
-
-  // Adapts FormTextField's `onChange(value)` to handleChange's `onChange(e)`
-  // so the centralized clear-error-and-set-formData logic stays in one place.
-  const toFieldChange = (id: string) => (value: string) =>
-    handleChange({
-      target: { id, value },
-    } as React.ChangeEvent<HTMLInputElement>);
-
-  const handleNumberChange = (id: string, value: string) => {
-    clearValidationErrors(id);
-    setFormData((prevData) => ({
-      ...prevData,
-      [id]: value === "" ? undefined : parseInt(value),
-    }));
-  };
-
-  const handleFloatChange = (id: string, value: string) => {
-    clearValidationErrors(id);
-    setFormData((prevData) => ({
-      ...prevData,
-      [id]: value === "" ? undefined : parseFloat(value),
-    }));
-  };
 
   const setAvatarFromFile = useCallback(
     (file: File) => {
@@ -339,142 +426,12 @@ const AgentForm = ({
   const handleModelChange = (value: string) => {
     const decoded = decodeSelectionReference(value);
     if (decoded?.type !== "provider") return;
-    clearValidationErrors("providerId", "modelId");
+    clearErrors("providerId", "modelId");
     setFormData((prevData) => ({
       ...prevData,
       providerId: decoded.providerId,
       modelId: decoded.modelReference,
     }));
-  };
-
-  const handleSubmit = async () => {
-    setIsSubmitting(true);
-    setValidationErrors({});
-    try {
-      // Saving migrates a concrete id to the alias its model now carries
-      // (ADR-0017). Once a model is aliased the picker no longer offers the
-      // bare id, so "pin to exactly gpt-4" is not an expressible choice — and
-      // without this the migration would only ever happen when the user
-      // switches to a *different* model, since re-picking the already-selected
-      // option fires no change event. Falls back to the stored value when the
-      // model resolves to nothing, leaving today's dangling-id behaviour alone.
-      const submittedProvider = providers.find(
-        (p) => p.id === formData.providerId,
-      );
-      const submittedModelId =
-        (submittedProvider && formData.modelId
-          ? findModelOption(submittedProvider, formData.modelId)?.value
-          : undefined) ?? formData.modelId;
-
-      const payload: Omit<Agent, "id" | "createdAt" | "updatedAt"> = {
-        // Scope comes from the route, not the body; the org PUT ignores this.
-        workspaceId: orgScoped ? undefined : workspaceId,
-        providerId: formData.providerId,
-        name: formData.name,
-        description: formData.description,
-        inputPlaceholder: formData.inputPlaceholder || undefined,
-        instructions: formData.instructions,
-        modelId: submittedModelId,
-        maxSteps: formData.maxSteps,
-        // Send null (not undefined) for cleared sampling params so the key
-        // survives JSON.stringify and the backend persists the cleared value
-        // instead of silently keeping the previous one (#263).
-        temperature: formData.temperature ?? null,
-        topP: formData.topP ?? null,
-        topK: formData.topK ?? null,
-        seed: formData.seed ?? null,
-        presencePenalty: formData.presencePenalty ?? null,
-        frequencyPenalty: formData.frequencyPenalty ?? null,
-        toolSetIds: formData.toolSetIds,
-        skillIds: formData.skillIds,
-        subAgentIds: formData.subAgentIds,
-      };
-
-      const scope = orgScoped ? { orgId } : { orgId, workspaceId };
-      const result = await writeEntity<Agent>(backendUrl, "agents", scope, {
-        id: agentId,
-        data: payload,
-      });
-
-      await applyWriteOutcome(result, {
-        mutate,
-        setValidationErrors,
-        onInvalid: (fieldErrors) => {
-          setValidationErrors(fieldErrors);
-          // Surface a user-visible signal even when the failure maps to a
-          // field without an inline error, so a rejected save is never
-          // silent (#331).
-          toast.error(
-            Object.keys(fieldErrors).length > 0
-              ? "Please fix the highlighted fields and try again"
-              : "Failed to save agent",
-          );
-        },
-        onError: toastGuidanceOrError,
-        onSuccess: async (data) => {
-          const savedAgentId = data.id || agentId;
-
-          // The Agent itself already saved, so a failed avatar write is a
-          // partial success, not a reason to block navigation — surface a
-          // toast and continue on (#595).
-          if (avatarDeleted && agentId) {
-            const avatarOutcome = await writeAt(
-              joinUrl(backendUrl, `${agentsBase}/${savedAgentId}/avatar`),
-              { method: "DELETE" },
-            );
-            if (avatarOutcome.outcome !== "success") {
-              toast.error(avatarOutcome.message);
-            }
-          } else if (avatarFile) {
-            // Multipart upload can't go through writeAt (JSON-only body), so
-            // this call stays raw fetch — see the eslint.config.mjs exception.
-            const avatarFormData = new FormData();
-            avatarFormData.append("file", avatarFile);
-            const avatarResponse = await fetch(
-              joinUrl(backendUrl, `${agentsBase}/${savedAgentId}/avatar`),
-              {
-                method: "POST",
-                body: avatarFormData,
-                credentials: "include",
-              },
-            );
-            if (!avatarResponse.ok) {
-              const body: unknown = await avatarResponse
-                .json()
-                .catch(() => null);
-              toast.error(errorMessage(body) ?? "Failed to upload the avatar");
-            }
-          }
-
-          router.push(doneHref);
-        },
-      });
-    } catch (error) {
-      console.error("Error saving agent:", error);
-      toast.error("Failed to save agent");
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  const handleDelete = async () => {
-    if (!agentId) return;
-
-    setIsDeleting(true);
-    const scope = orgScoped ? { orgId } : { orgId, workspaceId };
-    const result = await writeEntity(backendUrl, "agents", scope, {
-      id: agentId,
-    });
-
-    await applyDeleteOutcome(result, {
-      mutate,
-      onSuccess: () => router.push(doneHref),
-      onError: (message, outcome) => {
-        toastGuidanceOrError(message, outcome);
-        setIsDeleting(false);
-        setIsDeleteDialogOpen(false);
-      },
-    });
   };
 
   const form = (
@@ -568,7 +525,7 @@ const AgentForm = ({
               value={formData.description}
               onChange={handleChange}
               disabled={isSubmitting || readOnly}
-              maxLength={128}
+              maxLength={AGENT_DESCRIPTION_MAX_LENGTH}
               aria-invalid={!!validationErrors.description}
               error={validationErrors.description}
             />
@@ -580,7 +537,7 @@ const AgentForm = ({
             value={formData.inputPlaceholder}
             onChange={toFieldChange("inputPlaceholder")}
             disabled={isSubmitting || readOnly}
-            maxLength={100}
+            maxLength={AGENT_INPUT_PLACEHOLDER_MAX_LENGTH}
             error={validationErrors.inputPlaceholder}
             description="Custom placeholder text shown in the chat input when this agent is selected"
           />
@@ -679,9 +636,9 @@ const AgentForm = ({
             label="Max steps"
             name="maxSteps"
             type="number"
-            min="1"
+            min={AGENT_MAX_STEPS_MIN}
             value={String(formData.maxSteps)}
-            onChange={(value) => handleNumberChange("maxSteps", value)}
+            onChange={(value) => setNumberField("maxSteps", value)}
             disabled={isSubmitting || readOnly}
             error={validationErrors.maxSteps}
             description="Controls when a tool-calling loop should stop based on the number of steps executed"
@@ -884,7 +841,7 @@ const AgentForm = ({
                 min="0"
                 step="0.1"
                 value={String(formData.temperature ?? "")}
-                onChange={(value) => handleFloatChange("temperature", value)}
+                onChange={(value) => setFloatField("temperature", value)}
                 disabled={isSubmitting || readOnly}
                 error={validationErrors.temperature}
               />
@@ -893,7 +850,7 @@ const AgentForm = ({
                 name="seed"
                 type="number"
                 value={String(formData.seed ?? "")}
-                onChange={(value) => handleNumberChange("seed", value)}
+                onChange={(value) => setNumberField("seed", value)}
                 disabled={isSubmitting || readOnly}
                 error={validationErrors.seed}
               />
@@ -905,7 +862,7 @@ const AgentForm = ({
                 max="1"
                 step="0.1"
                 value={String(formData.topP ?? "")}
-                onChange={(value) => handleFloatChange("topP", value)}
+                onChange={(value) => setFloatField("topP", value)}
                 disabled={isSubmitting || readOnly}
                 error={validationErrors.topP}
               />
@@ -915,7 +872,7 @@ const AgentForm = ({
                 type="number"
                 min="1"
                 value={String(formData.topK ?? "")}
-                onChange={(value) => handleNumberChange("topK", value)}
+                onChange={(value) => setNumberField("topK", value)}
                 disabled={isSubmitting || readOnly}
                 error={validationErrors.topK}
               />
@@ -927,9 +884,7 @@ const AgentForm = ({
                 max="2"
                 step="0.1"
                 value={String(formData.presencePenalty ?? "")}
-                onChange={(value) =>
-                  handleFloatChange("presencePenalty", value)
-                }
+                onChange={(value) => setFloatField("presencePenalty", value)}
                 disabled={isSubmitting || readOnly}
                 error={validationErrors.presencePenalty}
               />
@@ -941,9 +896,7 @@ const AgentForm = ({
                 max="2"
                 step="0.1"
                 value={String(formData.frequencyPenalty ?? "")}
-                onChange={(value) =>
-                  handleFloatChange("frequencyPenalty", value)
-                }
+                onChange={(value) => setFloatField("frequencyPenalty", value)}
                 disabled={isSubmitting || readOnly}
                 error={validationErrors.frequencyPenalty}
               />
@@ -954,24 +907,18 @@ const AgentForm = ({
 
       <FormFooterButtons
         submitText={agentId ? "Update" : "Save"}
-        onSubmit={handleSubmit}
-        submitDisabled={
-          isSubmitting ||
-          readOnly ||
-          !canSubmitForm(validationErrors, RETRACTABLE_FIELDS)
-        }
+        onSubmit={() => void submit()}
+        submitDisabled={isSubmitting || readOnly || !canSubmit}
         deleteVisible={!!agentId && !isOrgScoped}
         deleteDisabled={isSubmitting}
-        onDelete={() => setIsDeleteDialogOpen(true)}
+        onDelete={openDeleteDialog}
       />
 
-      <ConfirmDialog
+      <EntityDeleteDialog
         open={isDeleteDialogOpen}
         onOpenChange={setIsDeleteDialogOpen}
         title="Delete Agent"
         description="Are you sure you want to delete this agent? This action cannot be undone."
-        confirmLabel="Delete"
-        confirmVariant="destructive"
         onConfirm={handleDelete}
         loading={isDeleting}
       />

@@ -10,6 +10,7 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { joinUrl } from "@/lib/utils";
 import { Header } from "@/components/header";
+import { workspaceRoutes } from "@/lib/routes";
 import { ProtectedRoute } from "@/components/protected-route";
 import { WorkspaceScrollContainer } from "@/components/workspace-scroll-container";
 import type { Workspace } from "@platypus/schemas";
@@ -64,6 +65,8 @@ export default async function WorkspaceLayout({
     notFound();
   }
 
+  const routes = workspaceRoutes(orgId, workspaceId);
+
   return (
     <ProtectedRoute requireOrgAccess requireWorkspaceAccess>
       <SidebarInset className="min-w-0">
@@ -78,7 +81,7 @@ export default async function WorkspaceLayout({
                 asChild
                 className="size-7 cursor-pointer"
               >
-                <Link href={`/${orgId}/workspace/${workspaceId}`}>
+                <Link href={routes.root}>
                   <Home />
                 </Link>
               </Button>

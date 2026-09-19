@@ -1,9 +1,8 @@
 "use client";
 
-import { useState } from "react";
 import { useResetOnChange } from "@/hooks/use-reset-on-change";
+import { useEntityDelete, useEntityForm } from "@/hooks/use-entity-form";
 import { useRouter } from "next/navigation";
-import { toast } from "sonner";
 import {
   Field,
   FieldError,
@@ -21,47 +20,95 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
-import { ConfirmDialog } from "@/components/confirm-dialog";
+import { EntityDeleteDialog } from "@/components/entity-delete-dialog";
 import { DetailFormState } from "@/components/detail-form-state";
 import { ExpandableTextarea } from "@/components/expandable-textarea";
 import { fetcher, joinUrl } from "@/lib/utils";
 import { writeAt } from "@/lib/api-write";
-import {
-  applyDeleteOutcome,
-  applyWriteOutcome,
-} from "@/lib/apply-write-outcome";
-import { retractFieldError } from "@/lib/form-errors";
 import { useAuth, useBackendUrl } from "@/components/auth-provider";
-import useSWR, { useSWRConfig } from "swr";
+import useSWR from "swr";
 import { FormFooterButtons } from "@/components/form-footer-buttons";
 import type { Organization, Workspace, Context } from "@platypus/schemas";
+import { CONTEXT_MAX_LENGTH } from "@platypus/schemas";
 
 interface WorkspaceWithOrg extends Workspace {
   organizationName?: string;
 }
 
+const RETRACTABLE_FIELDS = ["content", "workspaceId"] as const;
+
+const INITIAL_DATA = {
+  content: "",
+  workspaceId: "",
+};
+
 export const WorkspaceContextForm = ({ contextId }: { contextId?: string }) => {
   const router = useRouter();
   const backendUrl = useBackendUrl();
   const { user } = useAuth();
-  const { mutate: globalMutate } = useSWRConfig();
 
   const contextsUrl = joinUrl(backendUrl, "/users/me/contexts");
   const contextUrl = contextId
     ? joinUrl(backendUrl, `/users/me/contexts/${contextId}`)
     : null;
 
-  const [formData, setFormData] = useState({
-    content: "",
-    workspaceId: "",
+  const {
+    formData,
+    setFormData,
+    validationErrors,
+    setValidationErrors,
+    isSubmitting,
+    setField,
+    handleChange,
+    submit,
+  } = useEntityForm<typeof INITIAL_DATA, Context>({
+    initialData: INITIAL_DATA,
+    entity: "contexts",
+    scope: {},
+    id: contextId,
+    retractableFields: RETRACTABLE_FIELDS,
+    write: (data) =>
+      contextId && contextUrl
+        ? writeAt<Context>(contextUrl, {
+            method: "PUT",
+            data: { content: data.content },
+            revalidateKeys: [contextsUrl, contextUrl],
+          })
+        : writeAt<Context>(contextsUrl, {
+            method: "POST",
+            data: {
+              content: data.content,
+              workspaceId: data.workspaceId,
+            },
+            revalidateKeys: [contextsUrl],
+          }),
+    // A create's 409 is "you already have a context for this workspace", so
+    // it belongs on the Workspace field; an update has no such field.
+    conflictField: contextId ? null : "workspaceId",
+    successMessage: () =>
+      contextId ? "Workspace context updated" : "Workspace context created",
+    onSuccess: () => router.push("/settings/contexts"),
   });
-  const [validationErrors, setValidationErrors] = useState<
-    Record<string, string>
-  >({});
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
-  const [isDeleting, setIsDeleting] = useState(false);
-  const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  const {
+    isDeleteDialogOpen,
+    setIsDeleteDialogOpen,
+    isDeleting,
+    deleteError,
+    openDeleteDialog,
+    handleDelete,
+  } = useEntityDelete({
+    entity: "contexts",
+    scope: {},
+    id: contextId,
+    write: () =>
+      writeAt(contextUrl as string, {
+        method: "DELETE",
+        revalidateKeys: [contextsUrl],
+      }),
+    successMessage: "Context deleted",
+    onSuccess: () => router.push("/settings/contexts"),
+  });
 
   // Fetch existing context if editing
   const {
@@ -155,10 +202,6 @@ export const WorkspaceContextForm = ({ contextId }: { contextId?: string }) => {
     return acc;
   }, {});
 
-  const clearError = (field: string) => {
-    setValidationErrors((prev) => retractFieldError(prev, field));
-  };
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -167,63 +210,7 @@ export const WorkspaceContextForm = ({ contextId }: { contextId?: string }) => {
       return;
     }
 
-    setIsSubmitting(true);
-    setValidationErrors({});
-
-    const result =
-      contextId && contextUrl
-        ? await writeAt<Context>(contextUrl, {
-            method: "PUT",
-            data: { content: formData.content },
-            revalidateKeys: [contextsUrl, contextUrl],
-          })
-        : await writeAt<Context>(contextsUrl, {
-            method: "POST",
-            data: {
-              content: formData.content,
-              workspaceId: formData.workspaceId,
-            },
-            revalidateKeys: [contextsUrl],
-          });
-
-    await applyWriteOutcome(result, {
-      mutate: globalMutate,
-      setValidationErrors,
-      // A create's 409 is "you already have a context for this workspace", so
-      // it belongs on the Workspace field; an update has no such field.
-      conflictField: contextId ? null : "workspaceId",
-      onSuccess: () => {
-        toast.success(
-          contextId ? "Workspace context updated" : "Workspace context created",
-        );
-        router.push("/settings/contexts");
-      },
-    });
-
-    setIsSubmitting(false);
-  };
-
-  const handleDelete = async () => {
-    if (!contextUrl) return;
-
-    setIsDeleting(true);
-    setDeleteError(null);
-    const result = await writeAt(contextUrl, {
-      method: "DELETE",
-      revalidateKeys: [contextsUrl],
-    });
-
-    await applyDeleteOutcome(result, {
-      mutate: globalMutate,
-      onSuccess: () => {
-        toast.success("Context deleted");
-        router.push("/settings/contexts");
-      },
-      onError: (message) => {
-        setDeleteError(message);
-        setIsDeleting(false);
-      },
-    });
+    await submit();
   };
 
   return (
@@ -273,10 +260,7 @@ export const WorkspaceContextForm = ({ contextId }: { contextId?: string }) => {
                 ) : (
                   <Select
                     value={formData.workspaceId}
-                    onValueChange={(value) => {
-                      clearError("workspaceId");
-                      setFormData({ ...formData, workspaceId: value });
-                    }}
+                    onValueChange={(value) => setField("workspaceId", value)}
                   >
                     <SelectTrigger
                       id="workspace"
@@ -317,12 +301,9 @@ export const WorkspaceContextForm = ({ contextId }: { contextId?: string }) => {
                 label="Content"
                 placeholder="Enter project-specific context, team conventions, or workspace instructions..."
                 value={formData.content}
-                onChange={(e) => {
-                  clearError("content");
-                  setFormData({ ...formData, content: e.target.value });
-                }}
+                onChange={handleChange}
                 className="!font-mono"
-                maxLength={1000}
+                maxLength={CONTEXT_MAX_LENGTH}
                 error={validationErrors.content}
               />
             </Field>
@@ -337,19 +318,14 @@ export const WorkspaceContextForm = ({ contextId }: { contextId?: string }) => {
           deleteVisible={!!contextId}
           deleteDisabled={isSubmitting}
           deleteClassName=""
-          onDelete={() => setIsDeleteDialogOpen(true)}
+          onDelete={openDeleteDialog}
         />
 
-        <ConfirmDialog
+        <EntityDeleteDialog
           open={isDeleteDialogOpen}
-          onOpenChange={(open) => {
-            setIsDeleteDialogOpen(open);
-            if (!open) setDeleteError(null);
-          }}
+          onOpenChange={setIsDeleteDialogOpen}
           title="Delete Context"
           description="Are you sure you want to delete this context? This action cannot be undone."
-          confirmLabel="Delete"
-          confirmVariant="destructive"
           onConfirm={handleDelete}
           loading={isDeleting}
           error={deleteError}

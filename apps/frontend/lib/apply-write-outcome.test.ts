@@ -69,6 +69,25 @@ describe("applyWriteOutcome", () => {
     expect(toast.error).not.toHaveBeenCalled();
   });
 
+  it("toasts the shared copy when invalidMessage is given and a field was rejected", async () => {
+    await applyWriteOutcome(
+      {
+        outcome: "invalid",
+        message: "Validation failed",
+        fieldErrors: { name: "Required" },
+      },
+      {
+        mutate: vi.fn(),
+        setValidationErrors: vi.fn(),
+        invalidMessage: "Please fix the errors in the form",
+      },
+    );
+
+    expect(toast.error).toHaveBeenCalledWith(
+      "Please fix the errors in the form",
+    );
+  });
+
   it("falls back to onError when invalid carries no field errors", async () => {
     const setValidationErrors = vi.fn();
 
