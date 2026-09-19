@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { orgRoutes } from "@/lib/routes";
 
 interface OrgSettingsMenuProps {
   orgId: string;
@@ -39,15 +40,16 @@ export function OrgSettingsMenu({
 }: OrgSettingsMenuProps) {
   const pathname = usePathname();
 
-  const generalHref = `/${orgId}/settings`;
-  const membersHref = `/${orgId}/settings/members`;
-  const invitationsHref = `/${orgId}/settings/invitations`;
-  const providersHref = `/${orgId}/settings/providers`;
-  const mcpHref = `/${orgId}/settings/mcp`;
-  const skillsHref = `/${orgId}/settings/skills`;
-  const agentsHref = `/${orgId}/settings/agents`;
-  const blueprintsHref = `/${orgId}/settings/blueprints`;
-  const pluginsHref = `/${orgId}/settings/plugins`;
+  const routes = orgRoutes(orgId);
+  const generalHref = routes.settings.root;
+  const membersHref = routes.settings.members;
+  const invitationsHref = routes.settings.invitations;
+  const providersHref = routes.settings.providers;
+  const mcpHref = routes.settings.mcp;
+  const skillsHref = routes.settings.skills;
+  const agentsHref = routes.settings.agents;
+  const blueprintsHref = routes.settings.blueprints;
+  const pluginsHref = routes.settings.plugins;
 
   return (
     <SidebarContent>

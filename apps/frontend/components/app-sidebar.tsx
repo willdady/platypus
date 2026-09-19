@@ -68,6 +68,7 @@ import {
   chatListPoll,
   type WatchedChat,
 } from "@/lib/chat-list-poll";
+import { orgRoutes, workspaceRoutes } from "@/lib/routes";
 
 export function AppSidebar() {
   const { orgId, workspaceId } = useParams<{
@@ -77,6 +78,9 @@ export function AppSidebar() {
   const { user } = useAuth();
   const backendUrl = useBackendUrl();
   const isMobile = useIsMobile();
+
+  const routes = workspaceRoutes(orgId, workspaceId);
+  const org = orgRoutes(orgId);
 
   const pathname = usePathname();
   const router = useRouter();
@@ -268,12 +272,8 @@ export function AppSidebar() {
       setDeleteChatId(null);
 
       // Navigate to the main chat page if we were on the deleted chat
-      if (
-        pathname.startsWith(
-          `/${orgId}/workspace/${workspaceId}/chat/${deleteChatId}`,
-        )
-      ) {
-        router.push(`/${orgId}/workspace/${workspaceId}/chat`);
+      if (pathname.startsWith(routes.chat.detail(deleteChatId))) {
+        router.push(routes.chat.root);
       }
 
       // Revalidate the chat list
@@ -349,7 +349,10 @@ export function AppSidebar() {
                   </DropdownMenuLabel>
                   <DropdownMenuGroup>
                     {workspaces.map((workspace) => {
-                      const href = `/${workspace.organizationId}/workspace/${workspace.id}`;
+                      const href = workspaceRoutes(
+                        workspace.organizationId,
+                        workspace.id,
+                      ).root;
                       return (
                         <DropdownMenuItem key={workspace.id} asChild>
                           <Link className="cursor-pointer" href={href}>
@@ -369,13 +372,13 @@ export function AppSidebar() {
                     <DropdownMenuItem asChild>
                       <Link
                         className="cursor-pointer"
-                        href={`/${orgId}/create`}
+                        href={org.createWorkspace}
                       >
                         <Plus /> Add workspace
                       </Link>
                     </DropdownMenuItem>
                     <DropdownMenuItem asChild>
-                      <Link className="cursor-pointer" href={`/${orgId}`}>
+                      <Link className="cursor-pointer" href={org.root}>
                         <ArrowLeftRight /> Switch org
                       </Link>
                     </DropdownMenuItem>
@@ -385,7 +388,7 @@ export function AppSidebar() {
             </SidebarMenuItem>
             <SidebarMenuItem>
               <Button asChild className="w-full">
-                <Link href={`/${orgId}/workspace/${workspaceId}/chat`}>
+                <Link href={routes.chat.root}>
                   <BotMessageSquare /> New chat
                 </Link>
               </Button>
@@ -436,12 +439,10 @@ export function AppSidebar() {
                           <SidebarMenuButton
                             asChild
                             isActive={pathname.startsWith(
-                              `/${orgId}/workspace/${workspaceId}/chat/${chat.id}`,
+                              routes.chat.detail(chat.id),
                             )}
                           >
-                            <Link
-                              href={`/${orgId}/workspace/${workspaceId}/chat/${chat.id}`}
-                            >
+                            <Link href={routes.chat.detail(chat.id)}>
                               {chat.status === "running" && (
                                 <Loader2
                                   className="h-3 w-3 shrink-0 animate-spin text-muted-foreground"

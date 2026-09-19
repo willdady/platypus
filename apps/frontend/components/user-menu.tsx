@@ -12,6 +12,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
+import { userRoutes, workspaceRoutes } from "@/lib/routes";
 
 interface UserMenuProps {
   orgId?: string;
@@ -49,7 +50,7 @@ export function UserMenu({ orgId, workspaceId }: UserMenuProps) {
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
         <DropdownMenuItem
-          onClick={() => router.push(`/settings`)}
+          onClick={() => router.push(userRoutes.profile)}
           className="cursor-pointer"
         >
           <Settings className="size-4" /> My settings
@@ -57,7 +58,7 @@ export function UserMenu({ orgId, workspaceId }: UserMenuProps) {
         {orgId && workspaceId && (
           <DropdownMenuItem
             onClick={() =>
-              router.push(`/${orgId}/workspace/${workspaceId}/settings`)
+              router.push(workspaceRoutes(orgId, workspaceId).settings.root)
             }
             className="cursor-pointer"
           >
