@@ -8,6 +8,7 @@ import { Pencil, Plus, Folder } from "lucide-react";
 import Link from "next/link";
 import { Button } from "./ui/button";
 import type { Context } from "@platypus/schemas";
+import { userRoutes } from "@/lib/routes";
 
 interface ContextWithNames extends Context {
   workspaceName?: string | null;
@@ -33,7 +34,7 @@ const ContextsList = ({ className }: { className?: string }) => {
         <Folder className="mx-auto h-12 w-12 text-muted-foreground mb-4 opacity-50" />
         <p className="text-muted-foreground mb-4">No workspace contexts.</p>
         <Button asChild>
-          <Link href="/settings/contexts/create">
+          <Link href={userRoutes.createContext}>
             <Plus className="w-4 h-4" />
             Add workspace context
           </Link>
@@ -48,7 +49,7 @@ const ContextsList = ({ className }: { className?: string }) => {
         {workspaceContexts.map((context) => (
           <li key={context.id} className="mb-2">
             <Item variant="outline" asChild>
-              <Link href={`/settings/contexts/${context.id}`}>
+              <Link href={userRoutes.contextDetail(context.id)}>
                 <ItemContent>
                   <div>
                     <p className="text-xs text-muted-foreground mb-0.5">
@@ -68,7 +69,7 @@ const ContextsList = ({ className }: { className?: string }) => {
         ))}
       </ul>
       <Button asChild>
-        <Link href="/settings/contexts/create">
+        <Link href={userRoutes.createContext}>
           <Plus className="w-4 h-4" />
           Add workspace context
         </Link>

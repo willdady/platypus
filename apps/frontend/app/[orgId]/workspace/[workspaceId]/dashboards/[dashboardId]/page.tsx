@@ -232,7 +232,10 @@ const DashboardPage = ({
   params: Promise<{ orgId: string; workspaceId: string; dashboardId: string }>;
 }) => {
   const { orgId, workspaceId, dashboardId } = use(params);
-  const routes = workspaceRoutes(orgId, workspaceId);
+  const routes = useMemo(
+    () => workspaceRoutes(orgId, workspaceId),
+    [orgId, workspaceId],
+  );
   const { user } = useAuth();
   const backendUrl = useBackendUrl();
 

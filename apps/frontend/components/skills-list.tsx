@@ -64,6 +64,7 @@ import {
 import { scopedPath, writeEntity, type Scope } from "@/lib/api-write";
 import { useDetachDialog } from "@/hooks/use-detach-dialog";
 import { useDeleteFlow } from "@/hooks/use-delete-flow";
+import { orgRoutes, workspaceRoutes } from "@/lib/routes";
 
 // The list serves two surfaces: a Workspace (workspaceId provided) where it
 // shows workspace-scoped Skills plus attached org-scoped Shared Skills as
@@ -150,8 +151,8 @@ export const SkillsList = ({
   const scope: Scope = workspaceId ? { orgId, workspaceId } : { orgId };
   const listUrl = scopedPath("skills", scope);
   const editBasePath = workspaceId
-    ? `/${orgId}/workspace/${workspaceId}/skills`
-    : `/${orgId}/settings/skills`;
+    ? workspaceRoutes(orgId, workspaceId).skills.root
+    : orgRoutes(orgId).settings.skills;
 
   const {
     data: skillsData,
@@ -488,7 +489,9 @@ export const SkillsList = ({
             {canAttach && orgSkillDetach.selected && (
               <Button asChild>
                 <Link
-                  href={`/${orgId}/settings/skills/${orgSkillDetach.selected.id}`}
+                  href={orgRoutes(orgId).settings.skillDetail(
+                    orgSkillDetach.selected.id,
+                  )}
                 >
                   <ExternalLink className="size-4" />
                   Org settings

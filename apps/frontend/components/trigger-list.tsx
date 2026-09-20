@@ -43,6 +43,7 @@ import { AgentAvatar } from "@/components/agent-avatar";
 import { writeEntity, type Scope } from "@/lib/api-write";
 import { useScopedSWR } from "@/hooks/use-scoped-swr";
 import { useDeleteFlow } from "@/hooks/use-delete-flow";
+import { workspaceRoutes } from "@/lib/routes";
 
 export const TriggerList = ({
   orgId,
@@ -52,6 +53,7 @@ export const TriggerList = ({
   workspaceId: string;
 }) => {
   const backendUrl = useBackendUrl();
+  const routes = workspaceRoutes(orgId, workspaceId);
   const [triggerToToggle, setTriggerToToggle] = useState<Trigger | null>(null);
   const [isToggling, setIsToggling] = useState(false);
 
@@ -129,9 +131,7 @@ export const TriggerList = ({
         {triggers.map((trigger) => (
           <li key={trigger.id}>
             <Item variant="outline" className="h-full cursor-pointer" asChild>
-              <Link
-                href={`/${orgId}/workspace/${workspaceId}/triggers/${trigger.id}`}
-              >
+              <Link href={routes.triggers.detail(trigger.id)}>
                 <ItemContent>
                   <div className="flex items-center gap-2">
                     <ItemTitle>{trigger.name}</ItemTitle>
@@ -210,7 +210,7 @@ export const TriggerList = ({
                       <DropdownMenuItem asChild>
                         <Link
                           className="cursor-pointer"
-                          href={`/${orgId}/workspace/${workspaceId}/triggers/${trigger.id}`}
+                          href={routes.triggers.detail(trigger.id)}
                         >
                           <Pencil /> Edit
                         </Link>
@@ -218,7 +218,7 @@ export const TriggerList = ({
                       <DropdownMenuItem asChild>
                         <Link
                           className="cursor-pointer"
-                          href={`/${orgId}/workspace/${workspaceId}/trigger-runs?triggerId=${trigger.id}`}
+                          href={routes.triggerRuns.forTrigger(trigger.id)}
                         >
                           <List /> View runs
                         </Link>

@@ -9,6 +9,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Wrench, Plus } from "lucide-react";
 import Link from "next/link";
+import { workspaceRoutes } from "@/lib/routes";
 
 interface NoMcpEmptyStateProps {
   orgId: string;
@@ -37,9 +38,7 @@ export const NoMcpEmptyState = ({
       {canManage && (
         <EmptyContent>
           <Button asChild>
-            <Link
-              href={`/${orgId}/workspace/${workspaceId}/settings/mcp/create`}
-            >
+            <Link href={workspaceRoutes(orgId, workspaceId).settings.createMcp}>
               <Plus /> Add MCP
             </Link>
           </Button>

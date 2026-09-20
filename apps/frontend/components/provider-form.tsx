@@ -80,6 +80,7 @@ import {
 import { toast } from "sonner";
 import { useAuth, useBackendUrl } from "@/components/auth-provider";
 import { useResetOnChange } from "@/hooks/use-reset-on-change";
+import { orgRoutes, workspaceRoutes } from "@/lib/routes";
 
 /**
  * Per-field help for a model row. The fields each need a paragraph of
@@ -476,10 +477,9 @@ const ProviderForm = ({
   const router = useRouter();
 
   const formScope = workspaceId ? "workspace" : "organization";
-  const listHref =
-    formScope === "workspace"
-      ? `/${orgId}/workspace/${workspaceId}/settings/providers`
-      : `/${orgId}/settings/providers`;
+  const listHref = workspaceId
+    ? workspaceRoutes(orgId, workspaceId).settings.providers
+    : orgRoutes(orgId).settings.providers;
 
   const [isEmbeddingChangeDialogOpen, setIsEmbeddingChangeDialogOpen] =
     useState(false);

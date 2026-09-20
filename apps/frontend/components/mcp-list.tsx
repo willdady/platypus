@@ -6,7 +6,7 @@ import { ResourceList, type ResourceListConfig } from "./resource-list";
 const mcpConfig: ResourceListConfig = {
   entity: "mcps",
   resourceType: "mcp",
-  settingsPath: "settings/mcp",
+  settingsKey: "mcp",
   delegationFlag: "mcpSelfManagement",
   labels: {
     add: "Add MCP",

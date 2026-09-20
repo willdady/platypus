@@ -37,6 +37,7 @@ import useSWR from "swr";
 import { fetcher, joinUrl } from "@/lib/utils";
 import { retractFieldError } from "@/lib/form-errors";
 import { useAuth, useBackendUrl } from "@/components/auth-provider";
+import { orgRoutes } from "@/lib/routes";
 
 // The composer lists every Shared resource the org owns, grouped by type. A
 // Blueprint may only list org-scoped resources, so these org collections are
@@ -172,7 +173,7 @@ const BlueprintForm = ({
   const backendUrl = useBackendUrl();
 
   const collectionUrl = `/organizations/${orgId}/blueprints`;
-  const returnPath = `/${orgId}/settings/blueprints`;
+  const returnPath = orgRoutes(orgId).settings.blueprints;
 
   const {
     data: blueprint,

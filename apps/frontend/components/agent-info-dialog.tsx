@@ -17,6 +17,7 @@ import {
 import { ChevronsUpDown, Pencil } from "lucide-react";
 import { useState } from "react";
 import { useParams, useRouter } from "next/navigation";
+import { workspaceRoutes } from "@/lib/routes";
 
 interface AgentInfoDialogProps {
   agent: Agent;
@@ -45,7 +46,7 @@ export const AgentInfoDialog = ({
   const provider = providers.find((p) => p.id === agent.providerId);
 
   const handleEdit = () => {
-    router.push(`/${orgId}/workspace/${workspaceId}/agents/${agent.id}`);
+    router.push(workspaceRoutes(orgId, workspaceId).agents.detail(agent.id));
   };
 
   return (

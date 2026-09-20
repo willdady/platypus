@@ -112,6 +112,8 @@ export function workspaceRoutes(orgId: string, workspaceId: string) {
 export const userRoutes = {
   profile: "/settings",
   contexts: "/settings/contexts",
+  createContext: "/settings/contexts/create",
+  contextDetail: (contextId: string) => `/settings/contexts/${contextId}`,
   security: "/settings/security",
   invitations: "/settings/invitations",
   users: "/settings/users",

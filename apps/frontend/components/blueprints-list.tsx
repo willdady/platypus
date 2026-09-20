@@ -27,11 +27,12 @@ import { useDeleteFlow } from "@/hooks/use-delete-flow";
 import Link from "next/link";
 import { useAuth, useBackendUrl } from "@/components/auth-provider";
 import { ApplyBlueprintDialog } from "@/components/apply-blueprint-dialog";
+import { orgRoutes } from "@/lib/routes";
 
 export const BlueprintsList = ({ orgId }: { orgId: string }) => {
   const { user } = useAuth();
   const backendUrl = useBackendUrl();
-  const editBasePath = `/${orgId}/settings/blueprints`;
+  const editBasePath = orgRoutes(orgId).settings.blueprints;
 
   const [blueprintToApply, setBlueprintToApply] = useState<Blueprint | null>(
     null,

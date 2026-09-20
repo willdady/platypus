@@ -68,6 +68,7 @@ import {
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
 import { Skeleton } from "@/components/ui/skeleton";
+import { workspaceRoutes } from "@/lib/routes";
 
 type ColumnWithCards = KanbanColumn & { cards: KanbanCard[] };
 
@@ -104,6 +105,10 @@ export function KanbanBoard({
   workspaceId: string;
 }) {
   const backendUrl = useBackendUrl();
+  const routes = useMemo(
+    () => workspaceRoutes(orgId, workspaceId),
+    [orgId, workspaceId],
+  );
   const { user } = useAuth();
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -910,7 +915,7 @@ export function KanbanBoard({
                 .map((board) => (
                   <DropdownMenuItem key={board.id} asChild>
                     <Link
-                      href={`/${orgId}/workspace/${workspaceId}/boards/${board.id}`}
+                      href={routes.boards.detail(board.id)}
                       className="flex items-center gap-2 cursor-pointer"
                     >
                       <KanbanSquare className="h-4 w-4" />
@@ -921,7 +926,7 @@ export function KanbanBoard({
               <DropdownMenuSeparator />
               <DropdownMenuItem asChild>
                 <Link
-                  href={`/${orgId}/workspace/${workspaceId}/boards/create`}
+                  href={routes.boards.create}
                   className="flex items-center gap-2 cursor-pointer"
                 >
                   <Plus className="h-4 w-4" />
@@ -939,7 +944,7 @@ export function KanbanBoard({
           </DropdownMenu>
         </div>
         <Link
-          href={`/${orgId}/workspace/${workspaceId}/boards/${boardId}/settings`}
+          href={routes.boards.settings(boardId)}
           aria-label="Board settings"
           className="p-2 hover:bg-muted rounded-md transition-colors shrink-0"
         >

@@ -14,6 +14,7 @@ import { cn, fetcher, joinUrl } from "../lib/utils";
 import { ChevronRight, FolderClosed } from "lucide-react";
 import Link from "next/link";
 import { Skeleton } from "@/components/ui/skeleton";
+import { workspaceRoutes } from "@/lib/routes";
 
 const WorkspaceList = ({
   className,
@@ -60,7 +61,7 @@ const WorkspaceList = ({
         .sort((a, b) => a.name.localeCompare(b.name))
         .map((workspace) => (
           <Item key={workspace.id} variant="outline" asChild className="mb-2">
-            <Link href={`/${orgId}/workspace/${workspace.id}`}>
+            <Link href={workspaceRoutes(orgId, workspace.id).root}>
               <ItemContent>
                 <ItemTitle>
                   <FolderClosed size={18} /> {workspace.name}

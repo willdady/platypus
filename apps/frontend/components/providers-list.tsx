@@ -6,7 +6,7 @@ import { ResourceList, type ResourceListConfig } from "./resource-list";
 const providersConfig: ResourceListConfig = {
   entity: "providers",
   resourceType: "provider",
-  settingsPath: "settings/providers",
+  settingsKey: "providers",
   delegationFlag: "providerSelfManagement",
   labels: {
     add: "Add provider",

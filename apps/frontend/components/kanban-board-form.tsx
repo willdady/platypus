@@ -15,6 +15,7 @@ import { joinUrl } from "@/lib/utils";
 import { useEntityForm } from "@/hooks/use-entity-form";
 import { KANBAN_LABEL_COLORS, type KanbanLabel } from "@platypus/schemas";
 import { toast } from "sonner";
+import { workspaceRoutes } from "@/lib/routes";
 
 const DEFAULT_COLOR = KANBAN_LABEL_COLORS[5].value; // Blue
 
@@ -88,7 +89,7 @@ export function KanbanBoardForm({
         `/organizations/${orgId}/workspaces/${workspaceId}/boards/${data.id}/state`,
       );
       await mutate(stateUrl, { board: data, columns: [] }, false);
-      router.push(`/${orgId}/workspace/${workspaceId}/boards/${data.id}`);
+      router.push(workspaceRoutes(orgId, workspaceId).boards.detail(data.id));
     },
   });
 

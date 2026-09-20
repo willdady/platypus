@@ -66,6 +66,7 @@ import { useAuth, useBackendUrl } from "@/components/auth-provider";
 import { AgentAvatar } from "@/components/agent-avatar";
 import { ToolSetsUnavailableNotice } from "@/components/tool-sets-unavailable-notice";
 import { type ToolSetsFailureReason } from "@/lib/tool-sets-request";
+import { orgRoutes, workspaceRoutes } from "@/lib/routes";
 
 // toolSetIds, skillIds, and subAgentIds are deliberately excluded: this form
 // has no field that retracts an error keyed to them, so including them here
@@ -146,8 +147,8 @@ const AgentForm = ({
     ? `/organizations/${orgId}/skills`
     : `/organizations/${orgId}/workspaces/${workspaceId}/skills`;
   const doneHref = orgScoped
-    ? `/${orgId}/settings/agents`
-    : `/${orgId}/workspace/${workspaceId}`;
+    ? orgRoutes(orgId).settings.agents
+    : workspaceRoutes(orgId, workspaceId!).root;
 
   // Fetch providers
   const { data: providersData, isLoading: providersLoading } = useSWR<{
@@ -443,7 +444,7 @@ const AgentForm = ({
             This is a shared organization agent and is read-only here. Edit it
             in{" "}
             <Link
-              href={`/${orgId}/settings/agents/${agentId}`}
+              href={orgRoutes(orgId).settings.agentDetail(agentId!)}
               className="underline"
             >
               Organization settings

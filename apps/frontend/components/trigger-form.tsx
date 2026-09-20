@@ -56,6 +56,7 @@ import { useAuth, useBackendUrl } from "@/components/auth-provider";
 import { Cron } from "croner";
 import { format } from "date-fns";
 import { toast } from "sonner";
+import { workspaceRoutes } from "@/lib/routes";
 
 const TIMEZONES = ["UTC", ...Intl.supportedValuesOf("timeZone")];
 
@@ -489,7 +490,7 @@ const TriggerForm = ({
             },
           };
     },
-    onSuccess: () => router.push(`/${orgId}/workspace/${workspaceId}`),
+    onSuccess: () => router.push(workspaceRoutes(orgId, workspaceId).root),
     failureMessage: "Error saving trigger",
   });
 
@@ -503,7 +504,7 @@ const TriggerForm = ({
     entity: "triggers",
     scope: { orgId, workspaceId },
     id: triggerId,
-    onSuccess: () => router.push(`/${orgId}/workspace/${workspaceId}`),
+    onSuccess: () => router.push(workspaceRoutes(orgId, workspaceId).root),
     onError: (message, _outcome, { close }) => {
       toast.error(message);
       close();
@@ -1223,7 +1224,7 @@ const TriggerForm = ({
       error={triggerError}
       data={trigger}
       subject="trigger"
-      backHref={`/${orgId}/workspace/${workspaceId}`}
+      backHref={workspaceRoutes(orgId, workspaceId).root}
       backLabel="Back to workspace"
     >
       {form}

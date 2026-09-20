@@ -9,6 +9,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Plus, Unplug } from "lucide-react";
 import Link from "next/link";
+import { workspaceRoutes } from "@/lib/routes";
 
 interface NoProvidersEmptyStateProps {
   orgId: string;
@@ -38,9 +39,7 @@ export const NoProvidersEmptyState = ({
       {canManage && (
         <EmptyContent>
           <Button asChild className="gap-1">
-            <Link
-              href={`/${orgId}/workspace/${workspaceId}/settings/providers`}
-            >
+            <Link href={workspaceRoutes(orgId, workspaceId).settings.providers}>
               <Plus />
               Add provider
             </Link>

@@ -27,6 +27,7 @@ import { writeAt } from "@/lib/api-write";
 import { toast } from "sonner";
 import { useAuth, useBackendUrl } from "@/components/auth-provider";
 import { Eye, EyeOff, Copy, RefreshCw, Plus, X } from "lucide-react";
+import { workspaceRoutes } from "@/lib/routes";
 
 interface Webhook {
   id: string;
@@ -144,7 +145,7 @@ const WebhookForm = ({ orgId, workspaceId, webhookId }: WebhookFormProps) => {
     },
     successMessage: () => (isEditMode ? "Webhook updated" : "Webhook created"),
     onSuccess: () =>
-      router.push(`/${orgId}/workspace/${workspaceId}/settings/webhooks`),
+      router.push(workspaceRoutes(orgId, workspaceId).settings.webhooks),
   });
 
   const {
@@ -159,7 +160,7 @@ const WebhookForm = ({ orgId, workspaceId, webhookId }: WebhookFormProps) => {
     id: webhookId,
     successMessage: "Webhook deleted",
     onSuccess: () =>
-      router.push(`/${orgId}/workspace/${workspaceId}/settings/webhooks`),
+      router.push(workspaceRoutes(orgId, workspaceId).settings.webhooks),
     onError: (message, _outcome, { close }) => {
       toast.error(message);
       close();
@@ -503,7 +504,7 @@ const WebhookForm = ({ orgId, workspaceId, webhookId }: WebhookFormProps) => {
       error={webhookError}
       data={webhook}
       subject="webhook"
-      backHref={`/${orgId}/workspace/${workspaceId}/settings/webhooks`}
+      backHref={workspaceRoutes(orgId, workspaceId).settings.webhooks}
       backLabel="Back to webhooks"
     >
       {form}

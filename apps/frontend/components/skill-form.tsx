@@ -32,6 +32,7 @@ import { toast } from "sonner";
 import { useAuth, useBackendUrl } from "@/components/auth-provider";
 import { AgentAvatar } from "@/components/agent-avatar";
 import { toastGuidanceOrError } from "@/lib/apply-write-outcome";
+import { orgRoutes, workspaceRoutes } from "@/lib/routes";
 
 const RETRACTABLE_FIELDS = [
   "name",
@@ -69,8 +70,8 @@ const SkillForm = ({
     ? `/organizations/${orgId}/workspaces/${workspaceId}/skills`
     : `/organizations/${orgId}/skills`;
   const returnPath = workspaceId
-    ? `/${orgId}/workspace/${workspaceId}`
-    : `/${orgId}/settings/skills`;
+    ? workspaceRoutes(orgId, workspaceId).root
+    : orgRoutes(orgId).settings.skills;
   const scope = workspaceId ? { orgId, workspaceId } : { orgId };
 
   // Fetch existing skill data if editing (includes agentIds in workspace mode)

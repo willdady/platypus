@@ -23,6 +23,7 @@ import {
 import Link from "next/link";
 import { Markdown } from "@/components/markdown";
 import { toast } from "sonner";
+import { userRoutes } from "@/lib/routes";
 
 interface NotificationsDropdownProps {
   orgId?: string;
@@ -248,7 +249,7 @@ export function NotificationsDropdown({
               {invitations.map((invite) => (
                 <DropdownMenuItem key={invite.id} asChild>
                   <Link
-                    href="/settings/invitations"
+                    href={userRoutes.invitations}
                     className="flex flex-col items-start gap-1 p-3 cursor-pointer"
                   >
                     <div className="flex items-center gap-2 font-medium">

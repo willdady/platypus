@@ -35,6 +35,7 @@ import { TurnNotice } from "@/components/turn-notice";
 import { cachedTokenBreakdown } from "@/lib/cached-tokens";
 import { formatTokens } from "@/lib/context-window";
 import { formatRelativeTime } from "@/lib/relative-time";
+import { workspaceRoutes } from "@/lib/routes";
 
 /**
  * What the runs list says about a firing the run-rate breaker dropped before it
@@ -89,7 +90,7 @@ export const triggerRunDetailHref = (
   orgId: string,
   workspaceId: string,
   runId: string,
-) => `/${orgId}/workspace/${workspaceId}/trigger-runs/${runId}`;
+) => workspaceRoutes(orgId, workspaceId).triggerRuns.detail(runId);
 
 const formatDuration = (run: TriggerRunWithTrigger) => {
   if (!run.completedAt) return null;
@@ -145,7 +146,9 @@ export const TriggerRunRow = ({
           <div className="min-w-0">
             <Link
               className="font-medium hover:underline break-words"
-              href={`/${orgId}/workspace/${workspaceId}/triggers/${run.triggerId}`}
+              href={workspaceRoutes(orgId, workspaceId).triggers.detail(
+                run.triggerId,
+              )}
             >
               {run.triggerName}
             </Link>

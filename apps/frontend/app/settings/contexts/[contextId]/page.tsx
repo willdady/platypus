@@ -1,5 +1,6 @@
 import { WorkspaceContextForm } from "@/components/workspace-context-form";
 import { ResourcePage } from "@/components/resource-page";
+import { userRoutes } from "@/lib/routes";
 
 const WorkspaceContextEditPage = async ({
   params,
@@ -10,7 +11,7 @@ const WorkspaceContextEditPage = async ({
 
   return (
     <ResourcePage
-      backFallbackHref="/settings/contexts"
+      backFallbackHref={userRoutes.contexts}
       title="Edit Workspace Context"
     >
       <WorkspaceContextForm contextId={contextId} />

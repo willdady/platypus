@@ -170,12 +170,15 @@ describe("workspaceRoutes", () => {
 
 describe("userRoutes", () => {
   it("builds the user-scoped settings paths", () => {
-    expect(userRoutes).toEqual({
-      profile: "/settings",
-      contexts: "/settings/contexts",
-      security: "/settings/security",
-      invitations: "/settings/invitations",
-      users: "/settings/users",
-    });
+    expect(userRoutes.profile).toBe("/settings");
+    expect(userRoutes.contexts).toBe("/settings/contexts");
+    expect(userRoutes.security).toBe("/settings/security");
+    expect(userRoutes.invitations).toBe("/settings/invitations");
+    expect(userRoutes.users).toBe("/settings/users");
+  });
+
+  it("builds the workspace-context create and detail paths", () => {
+    expect(userRoutes.createContext).toBe("/settings/contexts/create");
+    expect(userRoutes.contextDetail("wc1")).toBe("/settings/contexts/wc1");
   });
 });

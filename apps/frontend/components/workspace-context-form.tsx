@@ -30,6 +30,7 @@ import useSWR from "swr";
 import { FormFooterButtons } from "@/components/form-footer-buttons";
 import type { Organization, Workspace, Context } from "@platypus/schemas";
 import { CONTEXT_MAX_LENGTH } from "@platypus/schemas";
+import { userRoutes } from "@/lib/routes";
 
 interface WorkspaceWithOrg extends Workspace {
   organizationName?: string;
@@ -87,7 +88,7 @@ export const WorkspaceContextForm = ({ contextId }: { contextId?: string }) => {
     conflictField: contextId ? null : "workspaceId",
     successMessage: () =>
       contextId ? "Workspace context updated" : "Workspace context created",
-    onSuccess: () => router.push("/settings/contexts"),
+    onSuccess: () => router.push(userRoutes.contexts),
   });
 
   const {
@@ -107,7 +108,7 @@ export const WorkspaceContextForm = ({ contextId }: { contextId?: string }) => {
         revalidateKeys: [contextsUrl],
       }),
     successMessage: "Context deleted",
-    onSuccess: () => router.push("/settings/contexts"),
+    onSuccess: () => router.push(userRoutes.contexts),
   });
 
   // Fetch existing context if editing
@@ -219,7 +220,7 @@ export const WorkspaceContextForm = ({ contextId }: { contextId?: string }) => {
       error={contextError}
       data={contextData}
       subject="workspace context"
-      backHref="/settings/contexts"
+      backHref={userRoutes.contexts}
       backLabel="Back to contexts"
     >
       <form onSubmit={handleSubmit}>

@@ -22,6 +22,7 @@ import Link from "next/link";
 import { useScopedSWR } from "@/hooks/use-scoped-swr";
 import { writeEntity } from "@/lib/api-write";
 import { useDeleteFlow } from "@/hooks/use-delete-flow";
+import { workspaceRoutes } from "@/lib/routes";
 
 /** The card fields Boards and Dashboards both expose. */
 interface EntityCard {
@@ -31,8 +32,8 @@ interface EntityCard {
 }
 
 export interface EntityCardListConfig {
-  /** Collection entity as the API spells it, and the route segment for its pages. */
-  readonly entity: string;
+  /** Collection entity as the API spells it, and the key to its routes. */
+  readonly entity: "boards" | "dashboards";
   readonly labels: {
     /** Delete confirmation title: "Delete Board" / "Delete Dashboard". */
     readonly deleteTitle: string;
@@ -63,6 +64,8 @@ export const EntityCardList = ({
   const { data, error, isLoading, mutate } = useScopedSWR<{
     results: EntityCard[];
   }>(config.entity, { orgId, workspaceId });
+
+  const routes = workspaceRoutes(orgId, workspaceId)[config.entity];
 
   const cards = [...(data?.results || [])].sort((a, b) =>
     a.name.localeCompare(b.name),
@@ -99,9 +102,7 @@ export const EntityCardList = ({
         {cards.map((card) => (
           <li key={card.id}>
             <Item variant="outline" className="h-full cursor-pointer" asChild>
-              <Link
-                href={`/${orgId}/workspace/${workspaceId}/${config.entity}/${card.id}`}
-              >
+              <Link href={routes.detail(card.id)}>
                 <ItemContent>
                   <ItemTitle>{card.name}</ItemTitle>
                   {card.description && (
@@ -125,7 +126,7 @@ export const EntityCardList = ({
                     <DropdownMenuContent>
                       <DropdownMenuItem className="cursor-pointer" asChild>
                         <Link
-                          href={`/${orgId}/workspace/${workspaceId}/${config.entity}/${card.id}/settings`}
+                          href={routes.settings(card.id)}
                           onClick={(e) => e.stopPropagation()}
                         >
                           <Pencil /> Edit

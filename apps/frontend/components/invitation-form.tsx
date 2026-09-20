@@ -19,6 +19,7 @@ import { FIX_FORM_ERRORS_MESSAGE } from "@/lib/apply-write-outcome";
 import { useAuth, useBackendUrl } from "@/components/auth-provider";
 import type { Blueprint } from "@platypus/schemas";
 import { ArrowDown, ArrowUp, X } from "lucide-react";
+import { orgRoutes } from "@/lib/routes";
 
 interface InvitationFormProps {
   orgId: string;
@@ -154,7 +155,7 @@ export function InvitationForm({ orgId, onSuccess }: InvitationFormProps) {
               <p className="text-sm text-muted-foreground mt-2">
                 No blueprints in this organization yet.{" "}
                 <Link
-                  href={`/${orgId}/settings/blueprints`}
+                  href={orgRoutes(orgId).settings.blueprints}
                   className="underline underline-offset-2"
                 >
                   Create one

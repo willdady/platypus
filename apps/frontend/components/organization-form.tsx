@@ -20,6 +20,7 @@ import { fetcher, joinUrl } from "@/lib/utils";
 import { useAuth, useBackendUrl } from "@/components/auth-provider";
 import { toast } from "sonner";
 import useSWR from "swr";
+import { orgRoutes } from "@/lib/routes";
 
 interface OrganizationFormProps {
   classNames?: string;
@@ -69,7 +70,7 @@ const OrganizationForm = ({ classNames, orgId }: OrganizationFormProps) => {
         router.refresh();
       } else {
         toast.success("Organization created");
-        router.push(`/${data.id}`);
+        router.push(orgRoutes(data.id).root);
       }
     },
   });

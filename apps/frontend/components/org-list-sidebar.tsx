@@ -16,6 +16,7 @@ import { fetcher, joinUrl } from "@/lib/utils";
 import { useAuth, useBackendUrl } from "@/components/auth-provider";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { Organization } from "@platypus/schemas";
+import { orgRoutes } from "@/lib/routes";
 
 interface OrgListSidebarProps {
   currentOrgId: string;
@@ -68,7 +69,7 @@ export function OrgListSidebar({ currentOrgId }: OrgListSidebarProps) {
                       isActive={currentOrgId === org.id}
                       className="cursor-pointer"
                     >
-                      <Link href={`/${org.id}`}>
+                      <Link href={orgRoutes(org.id).root}>
                         <Building className="size-4" />
                         <span>{org.name}</span>
                       </Link>

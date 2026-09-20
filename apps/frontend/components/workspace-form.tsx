@@ -39,6 +39,7 @@ import {
 import { useAuth, useBackendUrl } from "@/components/auth-provider";
 import { toast } from "sonner";
 import useSWR from "swr";
+import { orgRoutes, workspaceRoutes } from "@/lib/routes";
 
 interface WorkspaceFormProps {
   classNames?: string;
@@ -179,7 +180,7 @@ const WorkspaceForm = ({
         router.refresh();
       } else {
         toast.success("Workspace created");
-        router.push(`/${orgId}/workspace/${data.id}`);
+        router.push(workspaceRoutes(orgId, data.id).root);
       }
     },
   });
@@ -200,8 +201,7 @@ const WorkspaceForm = ({
       // `organization-form.tsx`. The Workspace this view is scoped to is
       // gone, and a client-side transition would keep the app shell (and its
       // cached payload for the deleted Workspace) alive around it.
-      // eslint-disable-next-line @next/next/no-location-assign-relative-destination
-      window.location.href = `/${orgId}`;
+      window.location.href = orgRoutes(orgId).root;
     },
     onError: (message, _outcome, { close }) => {
       toast.error(message);

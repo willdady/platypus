@@ -43,6 +43,7 @@ import {
   OAUTH_MCP_SUCCESS_EVENT,
   OAUTH_MCP_ERROR_EVENT,
 } from "@/lib/constants";
+import { orgRoutes, workspaceRoutes } from "@/lib/routes";
 
 type HeaderRow = { key: string; value: string };
 
@@ -82,12 +83,12 @@ const McpForm = ({
     ? `/organizations/${orgId}/workspaces/${workspaceId}/mcps`
     : `/organizations/${orgId}/mcps`;
   const listPath = workspaceId
-    ? `/${orgId}/workspace/${workspaceId}/settings/mcp`
-    : `/${orgId}/settings/mcp`;
+    ? workspaceRoutes(orgId, workspaceId).settings.mcp
+    : orgRoutes(orgId).settings.mcp;
   const editPath = (id: string) =>
     workspaceId
-      ? `/${orgId}/workspace/${workspaceId}/settings/mcp/${id}`
-      : `/${orgId}/settings/mcp/${id}`;
+      ? workspaceRoutes(orgId, workspaceId).settings.mcpDetail(id)
+      : orgRoutes(orgId).settings.mcpDetail(id);
 
   const [isTesting, setIsTesting] = useState(false);
   const [testResult, setTestResult] = useState<{

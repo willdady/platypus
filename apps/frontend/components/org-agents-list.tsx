@@ -32,6 +32,7 @@ import {
 import Link from "next/link";
 import { scopedPath, writeEntity, type Scope } from "@/lib/api-write";
 import { useDeleteFlow } from "@/hooks/use-delete-flow";
+import { orgRoutes } from "@/lib/routes";
 
 // The Organization surface for Shared Agents (ADR-0007): Org Admins see and
 // manage every Shared Agent, attached or not. Promotion (from a Workspace) is
@@ -164,7 +165,7 @@ export const OrgAgentsList = ({ orgId }: { orgId: string }) => {
                       <DropdownMenuItem asChild>
                         <Link
                           className="cursor-pointer"
-                          href={`/${orgId}/settings/agents/${agent.id}`}
+                          href={orgRoutes(orgId).settings.agentDetail(agent.id)}
                         >
                           <Pencil /> Edit
                         </Link>
