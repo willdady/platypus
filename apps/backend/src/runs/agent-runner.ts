@@ -301,7 +301,18 @@ export class AgentRunner {
     // The conversation is converted once, here, and handed to whichever drive
     // the caller picks — `stream` for an HTTP client, `generate` for a headless
     // run. The drives own the model call and the terminal decision from there.
-    const modelMessages = await convertToModelMessages(turn.stream.messages);
+    //
+    // `ignoreIncompleteToolCalls` drops a tool call the Transcript holds with
+    // no result beside it. A turn cancelled while a tool was still running
+    // persists exactly that, and a provider handed a tool call it never sees
+    // answered rejects the whole request ("Tool result is missing for tool
+    // call ..."), so every later turn in that Chat fails until the Chat is
+    // deleted. Cancellation is only the common way in — a crash or a timeout
+    // mid-tool strands a call the same way, which is why the guard sits at the
+    // one seam every drive converts through rather than on the abort path.
+    const modelMessages = await convertToModelMessages(turn.stream.messages, {
+      ignoreIncompleteToolCalls: true,
+    });
 
     return {
       state,

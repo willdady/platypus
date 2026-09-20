@@ -105,6 +105,7 @@ vi.mock("../logger.ts", () => ({
   },
 }));
 
+import { convertToModelMessages } from "ai";
 import { AgentRunner } from "./agent-runner.ts";
 import { ConflictError, mapError } from "../errors.ts";
 import { logger } from "../logger.ts";
@@ -2055,5 +2056,68 @@ describe("AgentRunner timeout types", () => {
     expect(e).toBeInstanceOf(Error);
     expect(e.kind).toBe("run");
     expect(e.limitMs).toBe(1000);
+  });
+});
+
+/**
+ * A turn cancelled while a tool was still running persists the tool call with
+ * no result beside it. Sent as-is, a provider rejects the whole request
+ * ("Tool result is missing for tool call ..."), so the next message in that
+ * Chat — and every one after it — fails until the Chat is deleted.
+ */
+describe("dangling tool calls in the Transcript", () => {
+  const danglingTranscript = [
+    { id: "u1", role: "user", parts: [{ type: "text", text: "run it" }] },
+    {
+      id: "a1",
+      role: "assistant",
+      parts: [
+        { type: "text", text: "Running the command." },
+        {
+          type: "tool-shellExec",
+          toolCallId: "call-1",
+          state: "input-available",
+          input: { command: "sleep 60" },
+        },
+      ],
+    },
+  ];
+
+  it("converts the Transcript with incomplete tool calls ignored", async () => {
+    mockPrepareChatTurn.mockReset();
+    mockStreamText.mockReset();
+    mockPrepareChatTurn.mockResolvedValueOnce(fakeTurn());
+    mockStreamText.mockReturnValueOnce(streamResultOf(fakeGenerateResult));
+
+    await new AgentRunner().generate({
+      scope,
+      input: baseInput,
+      sink: new RecordingSink(),
+    });
+
+    expect(vi.mocked(convertToModelMessages)).toHaveBeenCalledWith(
+      expect.anything(),
+      { ignoreIncompleteToolCalls: true },
+    );
+  });
+
+  // What that flag buys, against the real SDK — the behaviour the line above
+  // is only worth having if it keeps. A version that stopped dropping the
+  // unanswered call would put the 400 back without touching our code.
+  it("drops the unanswered call and keeps the text beside it", async () => {
+    const { convertToModelMessages: convert } =
+      await vi.importActual<typeof import("ai")>("ai");
+
+    const converted = await convert(danglingTranscript as never, {
+      ignoreIncompleteToolCalls: true,
+    });
+
+    expect(converted).toEqual([
+      { role: "user", content: [{ type: "text", text: "run it" }] },
+      {
+        role: "assistant",
+        content: [{ type: "text", text: "Running the command." }],
+      },
+    ]);
   });
 });
