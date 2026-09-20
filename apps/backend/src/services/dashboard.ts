@@ -1,13 +1,17 @@
 import { and, asc, eq, ne } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import type { Widget } from "@platypus/schemas";
-import { asWidget, widgetSchema } from "@platypus/schemas";
+import {
+  asWidget,
+  widgetSchema,
+  widgetUpdateDataSchema,
+} from "@platypus/schemas";
 import { db } from "../index.ts";
 import {
   dashboard as dashboardTable,
   widget as widgetTable,
 } from "../db/schema.ts";
-import { ConflictError, NotFoundError } from "../errors.ts";
+import { ConflictError, NotFoundError, ValidationError } from "../errors.ts";
 import {
   deleteOwned,
   deleteOwnedWidget,
@@ -206,6 +210,20 @@ export const updateWidget = async (
   await getDashboard(database, dashboardId, workspaceId);
   const existing = await requireOwnedWidget(database, widgetId, dashboardId);
   if (existing.type !== data.type) return { typeMismatch: true as const };
+  // Matching `type` is only half the contract: `data` has to be the payload
+  // that type declares. The REST route's body schema already pairs the two,
+  // but the Agent tool set presents `type` and `data` as independent inputs
+  // over an undiscriminated union, so a payload belonging to another Widget
+  // type reaches here intact (#830). Pairing them once, here, covers both
+  // surfaces and anything that calls this next.
+  const pairing = widgetUpdateDataSchema.safeParse({
+    type: data.type,
+    data: data.data,
+  });
+  if (!pairing.success)
+    throw new ValidationError(
+      `Widget data does not match type "${data.type}": ${formatIssues(pairing.error.issues)}`,
+    );
   if (data.title) {
     const conflict = await database
       .select({ id: widgetTable.id })
@@ -224,7 +242,10 @@ export const updateWidget = async (
       );
   }
   return updateOwnedWidget(database, widgetId, dashboardId, {
-    data: data.data,
+    // The parse output, not the input: it is the payload as the named type's
+    // own schema resolved it, rather than as whichever union branch happened
+    // to match first.
+    data: pairing.data.data,
     ...(data.title && { title: data.title }),
     updatedAt: new Date(),
   });

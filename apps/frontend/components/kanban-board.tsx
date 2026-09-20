@@ -334,8 +334,8 @@ export function KanbanBoard({
       activeTypeRef.current = type;
       dragOriginColumnRef.current =
         type === "card"
-          ? (cols.find((col) => col.cards.some((c) => c.id === active.id))?.id ??
-            null)
+          ? (cols.find((col) => col.cards.some((c) => c.id === active.id))
+              ?.id ?? null)
           : null;
       setLocalColumns([...cols.map((c) => ({ ...c, cards: [...c.cards] }))]);
     },
@@ -676,16 +676,13 @@ export function KanbanBoard({
     mutate,
   ]);
 
-  const handleEditColumn = useCallback(
-    (columnId: string) => {
-      const column = columnsRef.current.find((c) => c.id === columnId);
-      if (!column) return;
-      setEditColumnId(columnId);
-      setEditColumnName(column.name);
-      setEditColumnDialogOpen(true);
-    },
-    [],
-  );
+  const handleEditColumn = useCallback((columnId: string) => {
+    const column = columnsRef.current.find((c) => c.id === columnId);
+    if (!column) return;
+    setEditColumnId(columnId);
+    setEditColumnName(column.name);
+    setEditColumnDialogOpen(true);
+  }, []);
 
   const confirmEditColumn = useCallback(async () => {
     if (!editColumnName.trim() || !editColumnId) return;

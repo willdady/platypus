@@ -55,7 +55,9 @@ describe("workspaceRoutes", () => {
 
   it("builds item paths", () => {
     expect(routes.boards.detail("b1")).toBe("/org1/workspace/ws1/boards/b1");
-    expect(routes.triggers.detail("t1")).toBe("/org1/workspace/ws1/triggers/t1");
+    expect(routes.triggers.detail("t1")).toBe(
+      "/org1/workspace/ws1/triggers/t1",
+    );
   });
 
   it("builds the trigger-runs path", () => {
