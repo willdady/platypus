@@ -2,6 +2,7 @@ import { AgentForm } from "@/components/agent-form";
 import { headers } from "next/headers";
 import { ResourcePage } from "@/components/resource-page";
 import { fetchToolSets, toolSetFormProps } from "@/lib/tool-sets-request";
+import { orgRoutes } from "@/lib/routes";
 
 const OrgAgentEditPage = async ({
   params,
@@ -21,7 +22,7 @@ const OrgAgentEditPage = async ({
 
   return (
     <ResourcePage
-      backFallbackHref={`/${orgId}/settings/agents`}
+      backFallbackHref={orgRoutes(orgId).settings.agents}
       title="Edit Shared Agent"
     >
       <AgentForm

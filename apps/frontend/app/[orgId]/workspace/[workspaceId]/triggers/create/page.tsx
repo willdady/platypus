@@ -3,6 +3,7 @@
 import { use } from "react";
 import { TriggerForm } from "@/components/trigger-form";
 import { ResourcePage } from "@/components/resource-page";
+import { workspaceRoutes } from "@/lib/routes";
 
 const CreateTriggerPage = ({
   params,
@@ -13,7 +14,7 @@ const CreateTriggerPage = ({
 
   return (
     <ResourcePage
-      backFallbackHref={`/${orgId}/workspace/${workspaceId}`}
+      backFallbackHref={workspaceRoutes(orgId, workspaceId).root}
       title="New Trigger"
       variant="narrow"
     >

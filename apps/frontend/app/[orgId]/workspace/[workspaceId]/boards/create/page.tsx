@@ -3,6 +3,7 @@
 import { use } from "react";
 import { KanbanBoardForm } from "@/components/kanban-board-form";
 import { ResourcePage } from "@/components/resource-page";
+import { workspaceRoutes } from "@/lib/routes";
 
 const CreateBoardPage = ({
   params,
@@ -13,7 +14,7 @@ const CreateBoardPage = ({
 
   return (
     <ResourcePage
-      backFallbackHref={`/${orgId}/workspace/${workspaceId}/boards`}
+      backFallbackHref={workspaceRoutes(orgId, workspaceId).boards.root}
       title="New Board"
       variant="narrow"
     >

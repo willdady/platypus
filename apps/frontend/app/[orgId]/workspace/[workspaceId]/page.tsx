@@ -34,11 +34,13 @@ import {
   type Organization,
 } from "@platypus/schemas";
 import { useParams } from "next/navigation";
+import { workspaceRoutes } from "@/lib/routes";
 
 const Workspace = () => {
   const params = useParams();
   const orgId = params.orgId as string;
   const workspaceId = params.workspaceId as string;
+  const routes = workspaceRoutes(orgId, workspaceId);
   const { user } = useAuth();
   const backendUrl = useBackendUrl();
 
@@ -256,7 +258,7 @@ const Workspace = () => {
             </h1>
           </div>
           <Link
-            href={`/${orgId}/workspace/${workspaceId}/settings`}
+            href={routes.settings.root}
             aria-label="Workspace settings"
             className="p-2 hover:bg-muted rounded-md transition-colors shrink-0"
           >
@@ -417,9 +419,7 @@ const Workspace = () => {
           >
             <DashboardsList orgId={orgId} workspaceId={workspaceId} />
             <Button variant="outline" asChild>
-              <Link
-                href={`/${orgId}/workspace/${workspaceId}/dashboards/create`}
-              >
+              <Link href={routes.dashboards.create}>
                 <Plus /> Create dashboard
               </Link>
             </Button>
@@ -439,7 +439,7 @@ const Workspace = () => {
           >
             <BoardsList orgId={orgId} workspaceId={workspaceId} />
             <Button variant="outline" asChild>
-              <Link href={`/${orgId}/workspace/${workspaceId}/boards/create`}>
+              <Link href={routes.boards.create}>
                 <Plus /> Create board
               </Link>
             </Button>
@@ -460,14 +460,12 @@ const Workspace = () => {
             <TriggerList orgId={orgId} workspaceId={workspaceId} />
             <div className="flex flex-wrap gap-2">
               <Button variant="outline" asChild>
-                <Link
-                  href={`/${orgId}/workspace/${workspaceId}/triggers/create`}
-                >
+                <Link href={routes.triggers.create}>
                   <Plus /> Create trigger
                 </Link>
               </Button>
               <Button variant="outline" asChild>
-                <Link href={`/${orgId}/workspace/${workspaceId}/trigger-runs`}>
+                <Link href={routes.triggerRuns.root}>
                   <History /> Trigger runs
                 </Link>
               </Button>

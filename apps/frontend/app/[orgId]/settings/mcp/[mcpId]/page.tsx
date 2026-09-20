@@ -1,5 +1,6 @@
 import { McpForm } from "@/components/mcp-form";
 import { ResourcePage } from "@/components/resource-page";
+import { orgRoutes } from "@/lib/routes";
 
 const EditOrgMcpPage = async ({
   params,
@@ -10,7 +11,7 @@ const EditOrgMcpPage = async ({
 
   return (
     <ResourcePage
-      backFallbackHref={`/${orgId}/settings/mcp`}
+      backFallbackHref={orgRoutes(orgId).settings.mcp}
       title="Edit Organization MCP"
     >
       <McpForm orgId={orgId} mcpId={mcpId} />

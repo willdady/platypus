@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/empty";
 import type { Workspace } from "@platypus/schemas";
 import { use } from "react";
+import { orgRoutes } from "@/lib/routes";
 
 export default function OrgPage({
   params,
@@ -28,6 +29,7 @@ export default function OrgPage({
   const backendUrl = useBackendUrl();
   const { user, actor, isAuthLoading } = useAuth();
   const canCreate = canCreateWorkspace(actor).allowed;
+  const routes = orgRoutes(orgId);
 
   const { data: workspacesData } = useSWR<{
     results: Workspace[];
@@ -57,13 +59,13 @@ export default function OrgPage({
             {/* ADR-0008: Workspace creation is org-admin-only. */}
             {canCreate && (
               <Button asChild>
-                <Link href={`/${orgId}/create`}>
+                <Link href={routes.createWorkspace}>
                   <Plus className="size-4" /> Add workspace
                 </Link>
               </Button>
             )}
             <Button variant="outline" asChild>
-              <Link href={`/${orgId}/settings`}>
+              <Link href={routes.settings.root}>
                 <Settings className="size-4" /> Organization settings
               </Link>
             </Button>
@@ -87,13 +89,13 @@ export default function OrgPage({
               {/* ADR-0008: Workspace creation is org-admin-only. */}
               {canCreate && (
                 <Button asChild className="flex-1">
-                  <Link href={`/${orgId}/create`}>
+                  <Link href={routes.createWorkspace}>
                     <Plus className="h-4 w-4" /> Create workspace
                   </Link>
                 </Button>
               )}
               <Button variant="outline" asChild>
-                <Link href={`/${orgId}/settings`}>
+                <Link href={routes.settings.root}>
                   <Settings className="size-4" /> Organization settings
                 </Link>
               </Button>

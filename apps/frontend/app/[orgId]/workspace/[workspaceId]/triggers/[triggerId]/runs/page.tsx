@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { workspaceRoutes } from "@/lib/routes";
 
 /**
  * Runs used to be read one Trigger at a time, at this address. They are now a
@@ -13,9 +14,7 @@ const TriggerRunsRedirect = async ({
   const { orgId, workspaceId, triggerId } = await params;
 
   redirect(
-    `/${orgId}/workspace/${workspaceId}/trigger-runs?triggerId=${encodeURIComponent(
-      triggerId,
-    )}`,
+    workspaceRoutes(orgId, workspaceId).triggerRuns.forTrigger(triggerId),
   );
 };
 

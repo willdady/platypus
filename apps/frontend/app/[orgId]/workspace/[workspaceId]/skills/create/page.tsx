@@ -1,5 +1,6 @@
 import { SkillForm } from "@/components/skill-form";
 import { ResourcePage } from "@/components/resource-page";
+import { workspaceRoutes } from "@/lib/routes";
 
 const SkillCreatePage = async ({
   params,
@@ -10,7 +11,7 @@ const SkillCreatePage = async ({
 
   return (
     <ResourcePage
-      backFallbackHref={`/${orgId}/workspace/${workspaceId}`}
+      backFallbackHref={workspaceRoutes(orgId, workspaceId).root}
       title="Create Skill"
       variant="narrow"
     >

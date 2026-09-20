@@ -1,4 +1,5 @@
 import { permanentRedirect } from "next/navigation";
+import { orgRoutes } from "@/lib/routes";
 
 interface PageProps {
   params: Promise<{
@@ -8,7 +9,7 @@ interface PageProps {
 
 const Workspace = async ({ params }: PageProps) => {
   const { orgId } = await params;
-  permanentRedirect(`/${orgId}`);
+  permanentRedirect(orgRoutes(orgId).root);
 };
 
 export default Workspace;

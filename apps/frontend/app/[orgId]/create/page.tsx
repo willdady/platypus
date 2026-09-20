@@ -1,6 +1,7 @@
 import { WorkspaceForm } from "@/components/workspace-form";
 import { ResourcePage } from "@/components/resource-page";
 import { ProtectedRoute } from "@/components/protected-route";
+import { orgRoutes } from "@/lib/routes";
 
 const WorkspaceCreatePage = async ({
   params,
@@ -12,7 +13,7 @@ const WorkspaceCreatePage = async ({
   return (
     <ProtectedRoute requireOrgAccess={true} requiredOrgRole="admin">
       <ResourcePage
-        backFallbackHref={`/${orgId}`}
+        backFallbackHref={orgRoutes(orgId).root}
         title="Create Workspace"
         variant="wide"
       >

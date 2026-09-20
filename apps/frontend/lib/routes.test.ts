@@ -9,18 +9,39 @@ describe("orgRoutes", () => {
     expect(routes.createWorkspace).toBe("/org1/create");
   });
 
-  it("builds every organization settings path", () => {
-    expect(routes.settings).toEqual({
-      root: "/org1/settings",
-      members: "/org1/settings/members",
-      invitations: "/org1/settings/invitations",
-      providers: "/org1/settings/providers",
-      mcp: "/org1/settings/mcp",
-      skills: "/org1/settings/skills",
-      agents: "/org1/settings/agents",
-      blueprints: "/org1/settings/blueprints",
-      plugins: "/org1/settings/plugins",
-    });
+  it("builds every organization settings list path", () => {
+    expect(routes.settings.root).toBe("/org1/settings");
+    expect(routes.settings.members).toBe("/org1/settings/members");
+    expect(routes.settings.invitations).toBe("/org1/settings/invitations");
+    expect(routes.settings.providers).toBe("/org1/settings/providers");
+    expect(routes.settings.mcp).toBe("/org1/settings/mcp");
+    expect(routes.settings.skills).toBe("/org1/settings/skills");
+    expect(routes.settings.agents).toBe("/org1/settings/agents");
+    expect(routes.settings.blueprints).toBe("/org1/settings/blueprints");
+    expect(routes.settings.plugins).toBe("/org1/settings/plugins");
+  });
+
+  it("builds the organization settings create paths", () => {
+    expect(routes.settings.createProvider).toBe(
+      "/org1/settings/providers/create",
+    );
+    expect(routes.settings.createMcp).toBe("/org1/settings/mcp/create");
+    expect(routes.settings.createSkill).toBe("/org1/settings/skills/create");
+    expect(routes.settings.createBlueprint).toBe(
+      "/org1/settings/blueprints/create",
+    );
+  });
+
+  it("builds the organization settings detail paths", () => {
+    expect(routes.settings.providerDetail("p1")).toBe(
+      "/org1/settings/providers/p1",
+    );
+    expect(routes.settings.mcpDetail("m1")).toBe("/org1/settings/mcp/m1");
+    expect(routes.settings.skillDetail("s1")).toBe("/org1/settings/skills/s1");
+    expect(routes.settings.agentDetail("a1")).toBe("/org1/settings/agents/a1");
+    expect(routes.settings.blueprintDetail("b1")).toBe(
+      "/org1/settings/blueprints/b1",
+    );
   });
 
   it("scopes every path to the given organization", () => {
@@ -28,6 +49,7 @@ describe("orgRoutes", () => {
     expect(other.root).toBe("/org2");
     expect(other.createWorkspace).toBe("/org2/create");
     expect(other.settings.members).toBe("/org2/settings/members");
+    expect(other.settings.agentDetail("a1")).toBe("/org2/settings/agents/a1");
   });
 });
 
@@ -41,6 +63,15 @@ describe("workspaceRoutes", () => {
   it("builds chat paths", () => {
     expect(routes.chat.root).toBe("/org1/workspace/ws1/chat");
     expect(routes.chat.detail("c1")).toBe("/org1/workspace/ws1/chat/c1");
+    expect(routes.chat.forAgent("a1")).toBe(
+      "/org1/workspace/ws1/chat?agentId=a1",
+    );
+  });
+
+  it("builds the collection roots", () => {
+    expect(routes.skills.root).toBe("/org1/workspace/ws1/skills");
+    expect(routes.boards.root).toBe("/org1/workspace/ws1/boards");
+    expect(routes.dashboards.root).toBe("/org1/workspace/ws1/dashboards");
   });
 
   it("builds the create paths", () => {
@@ -54,26 +85,79 @@ describe("workspaceRoutes", () => {
   });
 
   it("builds item paths", () => {
+    expect(routes.agents.detail("a1")).toBe("/org1/workspace/ws1/agents/a1");
+    expect(routes.skills.detail("s1")).toBe("/org1/workspace/ws1/skills/s1");
     expect(routes.boards.detail("b1")).toBe("/org1/workspace/ws1/boards/b1");
+    expect(routes.dashboards.detail("d1")).toBe(
+      "/org1/workspace/ws1/dashboards/d1",
+    );
     expect(routes.triggers.detail("t1")).toBe(
       "/org1/workspace/ws1/triggers/t1",
     );
   });
 
-  it("builds the trigger-runs path", () => {
-    expect(routes.triggerRuns.root).toBe("/org1/workspace/ws1/trigger-runs");
+  it("builds the per-item settings paths", () => {
+    expect(routes.boards.settings("b1")).toBe(
+      "/org1/workspace/ws1/boards/b1/settings",
+    );
+    expect(routes.dashboards.settings("d1")).toBe(
+      "/org1/workspace/ws1/dashboards/d1/settings",
+    );
   });
 
-  it("builds every workspace settings path", () => {
-    expect(routes.settings).toEqual({
-      root: "/org1/workspace/ws1/settings",
-      providers: "/org1/workspace/ws1/settings/providers",
-      mcp: "/org1/workspace/ws1/settings/mcp",
-      sandbox: "/org1/workspace/ws1/settings/sandbox",
-      webhooks: "/org1/workspace/ws1/settings/webhooks",
-      createWebhook: "/org1/workspace/ws1/settings/webhooks/create",
-      about: "/org1/workspace/ws1/settings/about",
-    });
+  it("builds the trigger-runs paths", () => {
+    expect(routes.triggerRuns.root).toBe("/org1/workspace/ws1/trigger-runs");
+    expect(routes.triggerRuns.detail("r1")).toBe(
+      "/org1/workspace/ws1/trigger-runs/r1",
+    );
+    expect(routes.triggerRuns.forTrigger("t1")).toBe(
+      "/org1/workspace/ws1/trigger-runs?triggerId=t1",
+    );
+  });
+
+  it("escapes ids interpolated into a query string", () => {
+    expect(routes.triggerRuns.forTrigger("a b&c")).toBe(
+      "/org1/workspace/ws1/trigger-runs?triggerId=a%20b%26c",
+    );
+    expect(routes.chat.forAgent("a b&c")).toBe(
+      "/org1/workspace/ws1/chat?agentId=a%20b%26c",
+    );
+  });
+
+  it("builds every workspace settings list path", () => {
+    expect(routes.settings.root).toBe("/org1/workspace/ws1/settings");
+    expect(routes.settings.providers).toBe(
+      "/org1/workspace/ws1/settings/providers",
+    );
+    expect(routes.settings.mcp).toBe("/org1/workspace/ws1/settings/mcp");
+    expect(routes.settings.sandbox).toBe(
+      "/org1/workspace/ws1/settings/sandbox",
+    );
+    expect(routes.settings.webhooks).toBe(
+      "/org1/workspace/ws1/settings/webhooks",
+    );
+    expect(routes.settings.about).toBe("/org1/workspace/ws1/settings/about");
+  });
+
+  it("builds the workspace settings create and detail paths", () => {
+    expect(routes.settings.createProvider).toBe(
+      "/org1/workspace/ws1/settings/providers/create",
+    );
+    expect(routes.settings.providerDetail("p1")).toBe(
+      "/org1/workspace/ws1/settings/providers/p1",
+    );
+    expect(routes.settings.createMcp).toBe(
+      "/org1/workspace/ws1/settings/mcp/create",
+    );
+    expect(routes.settings.mcpDetail("m1")).toBe(
+      "/org1/workspace/ws1/settings/mcp/m1",
+    );
+    expect(routes.settings.createWebhook).toBe(
+      "/org1/workspace/ws1/settings/webhooks/create",
+    );
+    expect(routes.settings.webhookDetail("w1")).toBe(
+      "/org1/workspace/ws1/settings/webhooks/w1",
+    );
   });
 
   it("scopes every path to the given org and workspace", () => {

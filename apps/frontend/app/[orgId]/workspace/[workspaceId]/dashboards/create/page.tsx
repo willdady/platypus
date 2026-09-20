@@ -12,6 +12,7 @@ import { useBackendUrl } from "@/components/auth-provider";
 import { joinUrl } from "@/lib/utils";
 import { writeEntity } from "@/lib/api-write";
 import type { Dashboard } from "@platypus/schemas";
+import { workspaceRoutes } from "@/lib/routes";
 
 const CreateDashboardPage = ({
   params,
@@ -19,6 +20,7 @@ const CreateDashboardPage = ({
   params: Promise<{ orgId: string; workspaceId: string }>;
 }) => {
   const { orgId, workspaceId } = use(params);
+  const routes = workspaceRoutes(orgId, workspaceId);
   const router = useRouter();
   const backendUrl = useBackendUrl();
   const [name, setName] = useState("");
@@ -51,9 +53,7 @@ const CreateDashboardPage = ({
         `/organizations/${orgId}/workspaces/${workspaceId}/dashboards/${dashboard.id}`,
       );
       await mutate(dashUrl, dashboard, false);
-      router.push(
-        `/${orgId}/workspace/${workspaceId}/dashboards/${dashboard.id}`,
-      );
+      router.push(routes.dashboards.detail(dashboard.id));
     } else {
       setError(outcome.message);
     }
@@ -62,7 +62,7 @@ const CreateDashboardPage = ({
 
   return (
     <ResourcePage
-      backFallbackHref={`/${orgId}/workspace/${workspaceId}`}
+      backFallbackHref={routes.root}
       title="New Dashboard"
       variant="narrow"
     >

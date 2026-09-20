@@ -31,6 +31,7 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { useAuth, useBackendUrl } from "@/components/auth-provider";
 import { fetcher, joinUrl } from "@/lib/utils";
+import { workspaceRoutes } from "@/lib/routes";
 
 /**
  * How many runs a page of the list holds. The endpoint caps a request at 100;
@@ -154,7 +155,7 @@ const TriggerRunsPage = ({
       touched the sidebar on one side and the viewport on the other. The
       widths are the workspace home page's, so the two read as one app. */}
       <div className="w-full px-4 md:px-8 xl:w-4/5 max-w-4xl">
-        <BackButton fallbackHref={`/${orgId}/workspace/${workspaceId}`} />
+        <BackButton fallbackHref={workspaceRoutes(orgId, workspaceId).root} />
         <h1 className="text-2xl mb-1 font-bold">Trigger runs</h1>
         <p className="text-muted-foreground mb-4">
           Every run from every trigger in this workspace, newest first.

@@ -1,5 +1,6 @@
 import { ProviderForm } from "@/components/provider-form";
 import { ResourcePage } from "@/components/resource-page";
+import { workspaceRoutes } from "@/lib/routes";
 
 const ProviderCreatePage = async ({
   params,
@@ -10,7 +11,7 @@ const ProviderCreatePage = async ({
 
   return (
     <ResourcePage
-      backFallbackHref={`/${orgId}/workspace/${workspaceId}/settings/providers`}
+      backFallbackHref={workspaceRoutes(orgId, workspaceId).settings.providers}
       title="Create Provider"
     >
       <ProviderForm orgId={orgId} workspaceId={workspaceId} />

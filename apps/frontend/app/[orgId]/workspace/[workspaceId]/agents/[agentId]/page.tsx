@@ -2,6 +2,7 @@ import { AgentForm } from "@/components/agent-form";
 import { headers } from "next/headers";
 import { ResourcePage } from "@/components/resource-page";
 import { fetchToolSets, toolSetFormProps } from "@/lib/tool-sets-request";
+import { workspaceRoutes } from "@/lib/routes";
 
 const AgentEditPage = async ({
   params,
@@ -20,7 +21,7 @@ const AgentEditPage = async ({
 
   return (
     <ResourcePage
-      backFallbackHref={`/${orgId}/workspace/${workspaceId}`}
+      backFallbackHref={workspaceRoutes(orgId, workspaceId).root}
       title="Edit Agent"
       variant="narrow"
     >

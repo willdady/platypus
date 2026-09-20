@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useBackendUrl } from "@/components/auth-provider";
 import { joinUrl } from "@/lib/utils";
 import { writeAt } from "@/lib/api-write";
+import { orgRoutes, workspaceRoutes } from "@/lib/routes";
 import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -73,8 +74,10 @@ export const OAuthCallbackHandler = ({
         // org-scoped (Shared) MCP has no workspaceId, so it edits under the
         // organization settings surface.
         const mcpEditPath = data.workspaceId
-          ? `/${data.orgId}/workspace/${data.workspaceId}/settings/mcp/${data.mcpId}`
-          : `/${data.orgId}/settings/mcp/${data.mcpId}`;
+          ? workspaceRoutes(data.orgId, data.workspaceId).settings.mcpDetail(
+              data.mcpId,
+            )
+          : orgRoutes(data.orgId).settings.mcpDetail(data.mcpId);
         window.location.replace(mcpEditPath);
         return;
       }

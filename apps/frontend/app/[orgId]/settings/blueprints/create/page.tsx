@@ -1,5 +1,6 @@
 import { BlueprintForm } from "@/components/blueprint-form";
 import { ResourcePage } from "@/components/resource-page";
+import { orgRoutes } from "@/lib/routes";
 
 const CreateBlueprintPage = async ({
   params,
@@ -10,7 +11,7 @@ const CreateBlueprintPage = async ({
 
   return (
     <ResourcePage
-      backFallbackHref={`/${orgId}/settings/blueprints`}
+      backFallbackHref={orgRoutes(orgId).settings.blueprints}
       title="Create Blueprint"
     >
       <BlueprintForm orgId={orgId} />

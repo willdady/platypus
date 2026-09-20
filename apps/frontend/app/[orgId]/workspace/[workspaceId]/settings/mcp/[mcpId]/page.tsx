@@ -1,5 +1,6 @@
 import { McpForm } from "@/components/mcp-form";
 import { ResourcePage } from "@/components/resource-page";
+import { workspaceRoutes } from "@/lib/routes";
 
 const McpEditPage = async ({
   params,
@@ -10,7 +11,7 @@ const McpEditPage = async ({
 
   return (
     <ResourcePage
-      backFallbackHref={`/${orgId}/workspace/${workspaceId}/settings/mcp`}
+      backFallbackHref={workspaceRoutes(orgId, workspaceId).settings.mcp}
       title="Edit MCP"
     >
       <McpForm orgId={orgId} workspaceId={workspaceId} mcpId={mcpId} />

@@ -1,5 +1,6 @@
 import { ProviderForm } from "@/components/provider-form";
 import { ResourcePage } from "@/components/resource-page";
+import { orgRoutes } from "@/lib/routes";
 
 const CreateOrgProviderPage = async ({
   params,
@@ -10,7 +11,7 @@ const CreateOrgProviderPage = async ({
 
   return (
     <ResourcePage
-      backFallbackHref={`/${orgId}/settings/providers`}
+      backFallbackHref={orgRoutes(orgId).settings.providers}
       title="Add Organization Provider"
     >
       <ProviderForm orgId={orgId} />

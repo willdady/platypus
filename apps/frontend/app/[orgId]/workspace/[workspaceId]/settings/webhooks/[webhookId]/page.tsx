@@ -1,5 +1,6 @@
 import { WebhookForm } from "@/components/webhook-form";
 import { ResourcePage } from "@/components/resource-page";
+import { workspaceRoutes } from "@/lib/routes";
 
 const WebhookEditPage = async ({
   params,
@@ -10,7 +11,7 @@ const WebhookEditPage = async ({
 
   return (
     <ResourcePage
-      backFallbackHref={`/${orgId}/workspace/${workspaceId}/settings/webhooks`}
+      backFallbackHref={workspaceRoutes(orgId, workspaceId).settings.webhooks}
       title="Edit Webhook"
     >
       <WebhookForm

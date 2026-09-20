@@ -5,8 +5,7 @@
  * roughly a hundred of them across the front end, each free to drift from the
  * App Router tree it pointed at. These builders are the single definition of
  * those paths for the Organization, Workspace, and User scopes: a rename or a
- * moved segment changes one line here rather than every call site. The scopes
- * grow as their call sites migrate onto the builders.
+ * moved segment changes one line here rather than every call site.
  *
  * Follows the API-side precedent of `scopedPath` (ADR-0007): a pure function
  * resolves a resource's path from its scope, so a component holds a route
@@ -16,19 +15,31 @@
 
 /** Organization-scoped pages: the org root, workspace creation, and settings. */
 export function orgRoutes(orgId: string) {
+  const settings = `/${orgId}/settings`;
   return {
     root: `/${orgId}`,
     createWorkspace: `/${orgId}/create`,
     settings: {
-      root: `/${orgId}/settings`,
-      members: `/${orgId}/settings/members`,
-      invitations: `/${orgId}/settings/invitations`,
-      providers: `/${orgId}/settings/providers`,
-      mcp: `/${orgId}/settings/mcp`,
-      skills: `/${orgId}/settings/skills`,
-      agents: `/${orgId}/settings/agents`,
-      blueprints: `/${orgId}/settings/blueprints`,
-      plugins: `/${orgId}/settings/plugins`,
+      root: settings,
+      members: `${settings}/members`,
+      invitations: `${settings}/invitations`,
+      providers: `${settings}/providers`,
+      createProvider: `${settings}/providers/create`,
+      providerDetail: (providerId: string) =>
+        `${settings}/providers/${providerId}`,
+      mcp: `${settings}/mcp`,
+      createMcp: `${settings}/mcp/create`,
+      mcpDetail: (mcpId: string) => `${settings}/mcp/${mcpId}`,
+      skills: `${settings}/skills`,
+      createSkill: `${settings}/skills/create`,
+      skillDetail: (skillId: string) => `${settings}/skills/${skillId}`,
+      agents: `${settings}/agents`,
+      agentDetail: (agentId: string) => `${settings}/agents/${agentId}`,
+      blueprints: `${settings}/blueprints`,
+      createBlueprint: `${settings}/blueprints/create`,
+      blueprintDetail: (blueprintId: string) =>
+        `${settings}/blueprints/${blueprintId}`,
+      plugins: `${settings}/plugins`,
     },
   };
 }
@@ -36,24 +47,37 @@ export function orgRoutes(orgId: string) {
 /** Pages under one Workspace. */
 export function workspaceRoutes(orgId: string, workspaceId: string) {
   const root = `/${orgId}/workspace/${workspaceId}`;
+  const settings = `${root}/settings`;
   return {
     root,
     chat: {
       root: `${root}/chat`,
       detail: (chatId: string) => `${root}/chat/${chatId}`,
+      /** A new chat pre-selecting one Agent. */
+      forAgent: (agentId: string) =>
+        `${root}/chat?agentId=${encodeURIComponent(agentId)}`,
     },
     agents: {
       create: `${root}/agents/create`,
+      detail: (agentId: string) => `${root}/agents/${agentId}`,
     },
     skills: {
+      root: `${root}/skills`,
       create: `${root}/skills/create`,
+      detail: (skillId: string) => `${root}/skills/${skillId}`,
     },
     boards: {
+      root: `${root}/boards`,
       create: `${root}/boards/create`,
       detail: (boardId: string) => `${root}/boards/${boardId}`,
+      settings: (boardId: string) => `${root}/boards/${boardId}/settings`,
     },
     dashboards: {
+      root: `${root}/dashboards`,
       create: `${root}/dashboards/create`,
+      detail: (dashboardId: string) => `${root}/dashboards/${dashboardId}`,
+      settings: (dashboardId: string) =>
+        `${root}/dashboards/${dashboardId}/settings`,
     },
     triggers: {
       create: `${root}/triggers/create`,
@@ -61,15 +85,25 @@ export function workspaceRoutes(orgId: string, workspaceId: string) {
     },
     triggerRuns: {
       root: `${root}/trigger-runs`,
+      detail: (runId: string) => `${root}/trigger-runs/${runId}`,
+      /** The run list filtered to one Trigger. */
+      forTrigger: (triggerId: string) =>
+        `${root}/trigger-runs?triggerId=${encodeURIComponent(triggerId)}`,
     },
     settings: {
-      root: `${root}/settings`,
-      providers: `${root}/settings/providers`,
-      mcp: `${root}/settings/mcp`,
-      sandbox: `${root}/settings/sandbox`,
-      webhooks: `${root}/settings/webhooks`,
-      createWebhook: `${root}/settings/webhooks/create`,
-      about: `${root}/settings/about`,
+      root: settings,
+      providers: `${settings}/providers`,
+      createProvider: `${settings}/providers/create`,
+      providerDetail: (providerId: string) =>
+        `${settings}/providers/${providerId}`,
+      mcp: `${settings}/mcp`,
+      createMcp: `${settings}/mcp/create`,
+      mcpDetail: (mcpId: string) => `${settings}/mcp/${mcpId}`,
+      sandbox: `${settings}/sandbox`,
+      webhooks: `${settings}/webhooks`,
+      createWebhook: `${settings}/webhooks/create`,
+      webhookDetail: (webhookId: string) => `${settings}/webhooks/${webhookId}`,
+      about: `${settings}/about`,
     },
   };
 }
