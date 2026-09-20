@@ -210,6 +210,29 @@ describe("SkillsList delete", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("blocks delete and reports the attachment count when the skill is still attached", async () => {
+    skills = [orgSkill];
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(jsonResponse(200, { results: [{ id: "att1" }] }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    render(<SkillsList orgId="org1" />);
+    openMenu();
+    fireEvent.click(screen.getByText("Delete"));
+
+    await waitFor(() =>
+      expect(screen.getByText("Can't delete shared skill")).toBeInTheDocument(),
+    );
+    expect(
+      screen.getByText(/is shared with 1 workspace\./),
+    ).toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledWith(
+      "http://test/organizations/org1/attachments?resourceType=skill&resourceId=s1",
+      expect.objectContaining({ credentials: "include" }),
+    );
+  });
+
   it("deletes from the org-scoped path on the Organization surface (no workspaceId)", async () => {
     skills = [orgSkill];
     const fetchMock = vi.fn().mockResolvedValue(jsonResponse(200, {}));
@@ -235,6 +258,21 @@ describe("SkillsList promote", () => {
     skills = [];
     mutateSpy.mockClear();
     vi.restoreAllMocks();
+  });
+
+  it("reports an unreachable backend rather than leaving the dialog silent", async () => {
+    skills = [workspaceSkill];
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("offline")));
+
+    render(<SkillsList orgId="org1" workspaceId="ws1" />);
+    openMenu();
+    fireEvent.click(screen.getByText("Promote to organization"));
+    fireEvent.click(screen.getByRole("button", { name: "Promote" }));
+
+    await waitFor(() =>
+      expect(screen.getByText("Network request failed")).toBeInTheDocument(),
+    );
+    expect(mutateSpy).not.toHaveBeenCalled();
   });
 
   it("surfaces the backend's reason when promote fails", async () => {

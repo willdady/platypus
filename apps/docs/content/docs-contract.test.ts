@@ -36,6 +36,7 @@ import { describe, expect, it } from "vitest";
 import {
   agentSchema,
   chatSchema,
+  invitationRedemptionRegisterSchema,
   dashboardCreateSchema,
   DEFAULT_DIRECT_MAX_STEPS,
   DEFAULT_MAX_EXTRACTED_TEXT_CHARS,
@@ -1109,6 +1110,15 @@ type LimitClaim = {
  */
 const LIMIT_CLAIMS: LimitClaim[] = [
   {
+    doc: "self-hosting/users-and-access.mdx",
+    anchor: "**Not signed in** — a short form",
+    source:
+      "packages/schemas/index.ts (invitationRedemptionRegisterSchema.password)",
+    expected: {
+      min: stringField(invitationRedemptionRegisterSchema, "password").min,
+    },
+  },
+  {
     doc: "building-with-platypus/agents.mdx",
     anchor: "**Name** — what to call the Agent",
     source: "packages/schemas/index.ts (agentSchema.name)",
@@ -1282,6 +1292,12 @@ const readClaimedLimits = (
     new RegExp(`(?:up to|default)[^.]*?(\\d+)\\s*${LIMIT_UNIT}`),
   );
   if (upTo) return { max: Number(upTo[1]) };
+  // A floor with no ceiling — a password minimum states one bound and the
+  // reader never meets the other.
+  const atLeast = normalised.match(
+    new RegExp(`at least[^.]*?(\\d+)\\s*${LIMIT_UNIT}`),
+  );
+  if (atLeast) return { min: Number(atLeast[1]) };
   return undefined;
 };
 

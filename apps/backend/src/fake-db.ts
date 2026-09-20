@@ -440,6 +440,10 @@ export const createFakeDb = (
           take = n;
           return builder;
         },
+        // This fake is single-threaded; lock behavior is tested on Postgres.
+        for(_strength: string) {
+          return builder;
+        },
         then(
           onFulfilled?: (result: Row[]) => unknown,
           onRejected?: (error: unknown) => unknown,

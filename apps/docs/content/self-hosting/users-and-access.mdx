@@ -53,9 +53,9 @@ at the network layer rather than shrugging at.
 
 **Organization settings → Invitations**. Fill in:
 
-- **Email** — the address of the person joining. It must match the address on
-  their account, though capitalisation does not matter: `Bob@Example.com` and
-  `bob@example.com` are the same person here.
+- **Email** — the address of the person joining. Whoever redeems the link
+  gets an account on this exact address; capitalisation does not matter:
+  `Bob@Example.com` and `bob@example.com` are the same person here.
 - **Workspace name** _(optional)_ — a Workspace provisioned for them on
   acceptance. Left blank, it is named after them.
 - **Blueprints** _(optional)_ — one or more
@@ -64,33 +64,47 @@ at the network layer rather than shrugging at.
 
 Click **Send invitation**.
 
+### Copy the link
+
+Every pending invitation in the table has a copy button at the end of its row,
+shown as a copy icon with the tooltip **Copy invitation link**. Click it to
+copy a `/invite/...` link that stays good for as long as the invitation is
+pending and unexpired — the same link works whether the recipient has an account
+yet or not.
+
 ### Tell them yourself
 
 Nothing is emailed. See the warning below.
 
-### They accept
+### They open the link
 
-The invitee signs in and finds the invitation under **Settings → Invitations**, or
-via the bell in the header, which shows an **Organization Invitation** entry.
-Accepting joins them to the Organization and provisions the Workspace with any
-Blueprints applied.
+What they see depends on whether they're signed in, and as whom:
+
+- **Not signed in** — a short form: their name and a password of at least 8
+  characters. The email is fixed to the invited address and can't be changed.
+  Submitting it creates the account and joins the Organization in one step;
+  there is no separate sign-up first. They land in the Workspace that was
+  provisioned for them.
+- **Have an account but are signed out** — they choose **Already have an
+  account? Sign in** on the invitation page, enter their existing password, and
+  then click **Accept invitation**. They stay on the page throughout.
+- **Already signed in as the invited address** — a single **Accept
+  invitation** button. It lands them in the Workspace that was provisioned for
+  them, even if they belong to other Organizations too.
+- **Signed in as a different address** — refused, with an explanation and a
+  **Sign out** button. The invitation is untouched and still pending; they
+  can sign out and sign in with the invited account on the same page.
+
+Either of the first two provisions the Workspace, with any Blueprints applied.
 
 </Steps>
 
 <Callout type="warning">
   **Platypus sends no email. Ever.** There is no SMTP configuration, no mail
-  transport, and no delivery to wait for. "Send invitation" writes a row; it does
-  not notify anybody. Tell the person yourself, over whatever channel you already
-  use, that an invitation is waiting and they should sign in to accept it.
-  Watching an inbox for a Platypus invitation is watching an inbox nothing will
-  arrive in.
-</Callout>
-
-<Callout type="info">
-  The invitee needs an account **on that email address** before they can see the
-  invitation — invitations are matched by address, not by a link. If they don't
-  have one yet, they sign up first. This is the one place the open sign-up above
-  is doing useful work.
+  transport, and no delivery to wait for. "Send invitation" writes a row; it
+  does not notify anybody. Copy the link yourself and send it over whatever
+  channel you already use. Watching an inbox for a Platypus invitation is
+  watching an inbox nothing will arrive in.
 </Callout>
 
 ### Expiry
@@ -103,11 +117,11 @@ invitation cannot be accepted — send a new one.
 
 Three levels of authority, each bounded by the one above:
 
-| Role                | Is                                                              | Gets it by                                                     |
-| ------------------- | --------------------------------------------------------------- | -------------------------------------------------------------- |
-| **Super Admin**     | The platform account. Bypasses all in-app authorization         | Seeded on first boot from `ADMIN_EMAIL` / `ADMIN_PASSWORD`      |
-| **Org Admin**       | Holds the Organization's credentials and Shared resources        | An existing Org Admin sets their **Org Role** to `admin`        |
-| **Workspace Owner** | Owns one Workspace and everything composed inside it            | Assigned when the Workspace is created                         |
+| Role                | Is                                                        | Gets it by                                                 |
+| ------------------- | --------------------------------------------------------- | ---------------------------------------------------------- |
+| **Super Admin**     | The platform account. Bypasses all in-app authorization   | Seeded on first boot from `ADMIN_EMAIL` / `ADMIN_PASSWORD` |
+| **Org Admin**       | Holds the Organization's credentials and Shared resources | An existing Org Admin sets their **Org Role** to `admin`   |
+| **Workspace Owner** | Owns one Workspace and everything composed inside it      | Assigned when the Workspace is created                     |
 
 An Org Admin changes roles from **Organization settings → Members**, using a
 row's **Edit org role**, and can remove somebody with **Remove from Org**. A
@@ -132,9 +146,9 @@ self-registered account should not exist. It is also the recovery path referred 
 elsewhere as "the in-app user management".
 
 <Callout type="info">
-  Neither action is offered on your own row, or on another **Super Admin**'s. You
-  cannot delete yourself by accident, and you cannot demote or lock out the other
-  platform admin from here — that needs database access.
+  Neither action is offered on your own row, or on another **Super Admin**'s.
+  You cannot delete yourself by accident, and you cannot demote or lock out the
+  other platform admin from here — that needs database access.
 </Callout>
 
 ## Where to next

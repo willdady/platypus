@@ -9,7 +9,7 @@ import {
   type Blueprint,
 } from "@platypus/schemas";
 import { Button } from "@/components/ui/button";
-import { Trash2, Mail } from "lucide-react";
+import { Trash2, Mail, Copy } from "lucide-react";
 import { toast } from "sonner";
 import { useBackendUrl } from "@/components/auth-provider";
 import { useScopedSWR } from "@/hooks/use-scoped-swr";
@@ -49,6 +49,19 @@ const OrgInvitationsPage = () => {
     null,
   );
   const [isDeleting, setIsDeleting] = useState(false);
+
+  // Available for the whole time an Invitation is pending (#549, ADR-0019) --
+  // once accepted/declined/expired the token no longer resolves to anything,
+  // so there is nothing useful left to copy.
+  const handleCopyLink = async (token: string) => {
+    const link = `${window.location.origin}/invite/${token}`;
+    try {
+      await navigator.clipboard.writeText(link);
+      toast.success("Invitation link copied");
+    } catch {
+      toast.error("Could not copy the invitation link");
+    }
+  };
 
   const handleDelete = async () => {
     if (!invitationToDelete) return;
@@ -174,6 +187,17 @@ const OrgInvitationsPage = () => {
                         {format(new Date(invite.expiresAt), "MMM d, yyyy")}
                       </TableCell>
                       <TableCell className="text-right">
+                        {invite.status === "pending" && invite.token && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="cursor-pointer"
+                            title="Copy invitation link"
+                            onClick={() => handleCopyLink(invite.token!)}
+                          >
+                            <Copy className="h-4 w-4" />
+                          </Button>
+                        )}
                         <Button
                           variant="ghost"
                           size="icon"

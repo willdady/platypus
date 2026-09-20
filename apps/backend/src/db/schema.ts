@@ -554,6 +554,16 @@ export const invitation = pgTable(
     // Optional name for the Workspace provisioned on accept (ADR-0008). Null
     // defaults to "<member name>'s Workspace" at accept time.
     workspaceName: t.text("workspace_name"),
+    // Redemption token minted with the invitation (ADR-0019, #549): a
+    // URL-safe, unguessable string that lets someone without an account yet
+    // resolve and redeem the invitation via its link rather than only after
+    // they already hold an account with the invited address. Plaintext and re-copyable by design (ADR-0019): there
+    // is no rotation action, and Platypus has no email to re-send a
+    // show-once secret through. Every insert sets this explicitly (the
+    // create handler mints it, same as `id`); it stays nullable at the
+    // column level only so backfilling pre-existing rows is a plain data
+    // migration rather than a multi-step NOT NULL dance.
+    token: t.text("token"),
     expiresAt: t.timestamp("expires_at").notNull(),
     createdAt: t.timestamp("created_at").notNull().defaultNow(),
   }),
@@ -561,6 +571,7 @@ export const invitation = pgTable(
     index("idx_invitation_email").on(t.email),
     index("idx_invitation_org_id").on(t.organizationId),
     unique("unique_invitation_org_email").on(t.organizationId, t.email),
+    unique("unique_invitation_token").on(t.token),
   ],
 );
 
