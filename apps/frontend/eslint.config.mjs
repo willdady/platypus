@@ -30,15 +30,15 @@ const eslintConfig = defineConfig([
   // backend's ADR-0010 error responses consistently. A handful of call sites
   // predate the module and can't move onto it (see the comment at each): a
   // better-auth admin action needing a bespoke `Origin` header, a multipart
-  // avatar upload, and one write whose 422 "blockers" checklist the module's
-  // outcome type doesn't carry.
+  // avatar upload, and the shared Promote write (every Shared resource's) whose
+  // 422 "blockers" checklist the module's outcome type doesn't carry.
   {
     files: ["**/*.ts", "**/*.tsx"],
     ignores: [
       "lib/api-write.ts",
       "components/change-password-dialog.tsx",
       "components/agent-form.tsx",
-      "components/agents-list.tsx",
+      "hooks/use-shared-resource-actions.ts",
     ],
     rules: {
       "no-restricted-syntax": [

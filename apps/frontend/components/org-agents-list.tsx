@@ -10,7 +10,6 @@ import {
   ItemTitle,
 } from "@/components/ui/item";
 import { Button } from "@/components/ui/button";
-import { ConfirmDialog } from "@/components/confirm-dialog";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { ListError, ListState } from "@/components/list-state";
 import {
@@ -21,17 +20,18 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Bot, EllipsisVertical, Pencil, Share2, Trash2 } from "lucide-react";
 import { type Agent } from "@platypus/schemas";
-import { joinUrl } from "@/lib/utils";
 import { useScopedSWR } from "@/hooks/use-scoped-swr";
-import { useAuth, useBackendUrl } from "@/components/auth-provider";
+import { useAuth } from "@/components/auth-provider";
 import { canManageOrgSharedResource } from "@/lib/authorization";
 import {
   ManageAttachmentsDialog,
   SharedWithBadge,
 } from "@/components/manage-sharing";
+import { DeleteBlockedDialog } from "@/components/shared-resource-actions";
 import Link from "next/link";
-import { scopedPath, writeEntity, type Scope } from "@/lib/api-write";
+import { writeEntity, type Scope } from "@/lib/api-write";
 import { useDeleteFlow } from "@/hooks/use-delete-flow";
+import { useSharedDeleteGuard } from "@/hooks/use-shared-resource-actions";
 
 // The Organization surface for Shared Agents (ADR-0007): Org Admins see and
 // manage every Shared Agent, attached or not. Promotion (from a Workspace) is
@@ -40,12 +40,7 @@ import { useDeleteFlow } from "@/hooks/use-delete-flow";
 export const OrgAgentsList = ({ orgId }: { orgId: string }) => {
   const { actor } = useAuth();
   const canManage = canManageOrgSharedResource(actor).allowed;
-  const backendUrl = useBackendUrl();
   const [agentToManage, setAgentToManage] = useState<Agent | null>(null);
-  const [deleteBlocked, setDeleteBlocked] = useState<{
-    agent: Agent;
-    count: number;
-  } | null>(null);
 
   // Resolved once per render and reused for the list's read and every write
   // below, rather than re-deriving the Organization-vs-Workspace branch at
@@ -66,30 +61,11 @@ export const OrgAgentsList = ({ orgId }: { orgId: string }) => {
     delete: (agent, url) => writeEntity(url, "agents", scope, { id: agent.id }),
   });
 
-  // A Shared resource can't be deleted while attached (ADR-0007). Check the
-  // live attachment count first so we explain the blocker up front instead of
-  // offering a Delete button that is guaranteed to fail.
-  const requestDelete = async (agent: Agent) => {
-    if (!backendUrl) return;
-    try {
-      const res = await fetch(
-        joinUrl(
-          backendUrl,
-          `${scopedPath("attachments", scope)}?resourceType=agent&resourceId=${agent.id}`,
-        ),
-        { credentials: "include" },
-      );
-      const info = await res.json().catch(() => ({ results: [] }));
-      const count = (info.results ?? []).length;
-      if (count > 0) {
-        setDeleteBlocked({ agent, count });
-        return;
-      }
-    } catch {
-      // If the check fails, fall through — the backend still guards with a 409.
-    }
-    deleteFlow.request(agent);
-  };
+  const deleteGuard = useSharedDeleteGuard<Agent>({
+    resourceType: "agent",
+    scope,
+    onAllowed: deleteFlow.request,
+  });
 
   if (isLoading) {
     return <ListState variant="loading">Loading...</ListState>;
@@ -177,7 +153,7 @@ export const OrgAgentsList = ({ orgId }: { orgId: string }) => {
                       </DropdownMenuItem>
                       <DropdownMenuItem
                         className="cursor-pointer text-destructive focus:text-destructive"
-                        onSelect={() => requestDelete(agent)}
+                        onSelect={() => deleteGuard.request(agent)}
                       >
                         <Trash2 /> Delete
                       </DropdownMenuItem>
@@ -211,24 +187,10 @@ export const OrgAgentsList = ({ orgId }: { orgId: string }) => {
         error={deleteFlow.error}
       />
 
-      <ConfirmDialog
-        open={!!deleteBlocked}
-        onOpenChange={(open) => !open && setDeleteBlocked(null)}
-        title="Can't delete shared agent"
-        description={
-          deleteBlocked
-            ? `“${deleteBlocked.agent.name}” is shared with ${deleteBlocked.count} workspace${
-                deleteBlocked.count !== 1 ? "s" : ""
-              }. Detach it from every workspace before deleting.`
-            : ""
-        }
-        confirmLabel="Manage attachments"
-        cancelLabel="Close"
-        onConfirm={() => {
-          const agent = deleteBlocked?.agent ?? null;
-          setDeleteBlocked(null);
-          setAgentToManage(agent);
-        }}
+      <DeleteBlockedDialog
+        guard={deleteGuard}
+        noun="agent"
+        onManage={setAgentToManage}
       />
     </>
   );

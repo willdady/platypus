@@ -41,8 +41,6 @@ import {
   Building,
   Copy,
   EllipsisVertical,
-  ExternalLink,
-  Link2,
   Pencil,
   Plus,
   Trash2,
@@ -56,35 +54,28 @@ import {
   type ToolSet,
   type Skill,
 } from "@platypus/schemas";
-import { joinUrl } from "@/lib/utils";
 import { useScopedSWR } from "@/hooks/use-scoped-swr";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAuth, useBackendUrl } from "@/components/auth-provider";
 import { canManageSharedResource } from "@/lib/authorization";
 import { NoProvidersEmptyState } from "@/components/no-providers-empty-state";
-import { AttachSharedResourceDialog } from "@/components/attach-shared-resource-dialog";
-import { scopedPath, writeEntity, type Scope } from "@/lib/api-write";
-import { useDetachDialog } from "@/hooks/use-detach-dialog";
+import {
+  AttachSharedAction,
+  DetachSharedDialog,
+  PromoteSharedDialog,
+} from "@/components/shared-resource-actions";
+import { writeEntity, type Scope } from "@/lib/api-write";
+import {
+  usePromoteShared,
+  useSharedDetach,
+} from "@/hooks/use-shared-resource-actions";
 import { useDeleteFlow } from "@/hooks/use-delete-flow";
 
 // The Agent is shown either in a Workspace, where it may be a workspace-scoped
 // Agent or an attached org-scoped (Shared) Agent rendered with an Organization
 // badge (ADR-0007). The backend tags each row with its scope.
 type AgentWithScope = Agent & { scope?: "organization" | "workspace" };
-
-type PromoteBlocker = {
-  type: "provider" | "skill" | "subAgent" | "mcp";
-  id: string;
-  name: string;
-};
-
-const BLOCKER_LABEL: Record<PromoteBlocker["type"], string> = {
-  provider: "Provider",
-  skill: "Skill",
-  subAgent: "Sub-Agent",
-  mcp: "MCP tool set",
-};
 
 export const AgentsList = ({
   orgId,
@@ -100,15 +91,6 @@ export const AgentsList = ({
   const [agentToClone, setAgentToClone] = useState<Agent | null>(null);
   const [cloneName, setCloneName] = useState("");
   const [cloneError, setCloneError] = useState<string | null>(null);
-  const [attachOpen, setAttachOpen] = useState(false);
-  const orgAgentDetach = useDetachDialog<AgentWithScope>();
-  const [detaching, setDetaching] = useState(false);
-  const [agentToPromote, setAgentToPromote] = useState<AgentWithScope | null>(
-    null,
-  );
-  const [promoting, setPromoting] = useState(false);
-  const [promoteError, setPromoteError] = useState<string | null>(null);
-  const [promoteBlockers, setPromoteBlockers] = useState<PromoteBlocker[]>([]);
 
   // Resolved once per render and reused for the list's reads and every write
   // below, rather than re-deriving the Organization-vs-Workspace branch at
@@ -136,6 +118,18 @@ export const AgentsList = ({
     results: Skill[];
   }>("skills", scope);
 
+  const orgAgentDetach = useSharedDetach<AgentWithScope>({
+    resourceType: "agent",
+    scope,
+    mutate,
+  });
+
+  const promote = usePromoteShared<AgentWithScope>({
+    entity: "agents",
+    scope,
+    mutate,
+  });
+
   const agents = [...(agentsData?.results || [])].sort((a, b) =>
     a.name.localeCompare(b.name),
   );
@@ -146,9 +140,6 @@ export const AgentsList = ({
   // Attach, detach, and Promote a Shared resource are the same rule
   // (ADR-0007), asked of the auth module instead of re-derived here.
   const canManageShared = canManageSharedResource(actor, workspaceId).allowed;
-  const attachedOrgIds = agents
-    .filter((a) => a.scope === "organization")
-    .map((a) => a.id);
 
   const getToolSetNames = (toolSetIds: string[] | undefined) => {
     if (!toolSetIds?.length) return [];
@@ -228,61 +219,6 @@ export const AgentsList = ({
     }
   };
 
-  // The backend blocks Promote with a 422 fix-this checklist (ADR-0007's
-  // no-cascade rule) whose `blockers` array is outside the outcomes the
-  // request module maps, so this write stays raw rather than losing it.
-  const handlePromoteConfirm = async () => {
-    if (!agentToPromote || !backendUrl) return;
-    setPromoting(true);
-    setPromoteError(null);
-    setPromoteBlockers([]);
-    try {
-      const response = await fetch(
-        joinUrl(
-          backendUrl,
-          `${scopedPath("agents", scope)}/${agentToPromote.id}/promote`,
-        ),
-        { method: "POST", credentials: "include" },
-      );
-      if (response.ok) {
-        await mutate();
-        setAgentToPromote(null);
-      } else {
-        const info = await response.json().catch(() => ({}));
-        if (Array.isArray(info.blockers) && info.blockers.length > 0) {
-          setPromoteBlockers(info.blockers);
-        }
-        setPromoteError(info.error || "Failed to promote agent.");
-      }
-    } finally {
-      setPromoting(false);
-    }
-  };
-
-  const detachOrgAgent = async (agentId: string) => {
-    if (!backendUrl) return;
-    setDetaching(true);
-    orgAgentDetach.setError(null);
-    try {
-      const outcome = await writeEntity(
-        backendUrl,
-        "attachments/agent",
-        scope,
-        {
-          id: agentId,
-        },
-      );
-      if (outcome.outcome === "success") {
-        orgAgentDetach.close();
-        await mutate();
-      } else {
-        orgAgentDetach.setError(outcome.message);
-      }
-    } finally {
-      setDetaching(false);
-    }
-  };
-
   if (isLoadingAgents || isLoadingProviders) {
     return <ListState variant="loading">Loading...</ListState>;
   }
@@ -345,11 +281,7 @@ export const AgentsList = ({
             {canManageShared && (
               <DropdownMenuItem
                 className="cursor-pointer"
-                onSelect={() => {
-                  setPromoteError(null);
-                  setPromoteBlockers([]);
-                  setAgentToPromote(agent);
-                }}
+                onSelect={() => promote.open(agent)}
               >
                 <ArrowUpFromLine /> Promote to organization
               </DropdownMenuItem>
@@ -555,127 +487,31 @@ export const AgentsList = ({
           </Link>
         </Button>
         {canManageShared && (
-          <Button variant="outline" onClick={() => setAttachOpen(true)}>
-            <Link2 className="size-4" /> Attach shared agent
-          </Button>
+          <AttachSharedAction
+            orgId={orgId}
+            workspaceId={workspaceId}
+            resourceType="agent"
+            label="Attach shared agent"
+            resources={agents}
+            onAttached={mutate}
+          />
         )}
       </div>
 
-      {canManageShared && (
-        <AttachSharedResourceDialog
-          open={attachOpen}
-          onOpenChange={setAttachOpen}
-          orgId={orgId}
-          workspaceId={workspaceId}
-          resourceType="agent"
-          attachedIds={attachedOrgIds}
-          onAttached={() => {
-            setAttachOpen(false);
-            mutate();
-          }}
-        />
-      )}
+      <DetachSharedDialog
+        detach={orgAgentDetach}
+        title="Detach shared agent"
+        description={(selected) => (
+          <>
+            Detach <strong>{selected.name}</strong> from this workspace? The
+            shared agent itself is not deleted; it just stops appearing here.
+          </>
+        )}
+        canDetach={canManageShared}
+        orgSettingsHref={() => `/${orgId}/settings/agents`}
+      />
 
-      <Dialog
-        open={!!orgAgentDetach.selected}
-        onOpenChange={(open) => {
-          if (!open) orgAgentDetach.close();
-        }}
-      >
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Detach shared agent</DialogTitle>
-            <DialogDescription>
-              Detach <strong>{orgAgentDetach.selected?.name}</strong> from this
-              workspace? The shared agent itself is not deleted; it just stops
-              appearing here.
-            </DialogDescription>
-          </DialogHeader>
-          {orgAgentDetach.error && (
-            <p className="text-sm text-destructive">{orgAgentDetach.error}</p>
-          )}
-          <DialogFooter>
-            <Button variant="outline" onClick={orgAgentDetach.close}>
-              Close
-            </Button>
-            {canManageShared && orgAgentDetach.selected && (
-              <Button asChild variant="ghost">
-                <Link href={`/${orgId}/settings/agents`}>
-                  <ExternalLink className="size-4" />
-                  Org settings
-                </Link>
-              </Button>
-            )}
-            {orgAgentDetach.selected && (
-              <Button
-                variant="destructive"
-                disabled={detaching}
-                onClick={() => detachOrgAgent(orgAgentDetach.selected!.id)}
-              >
-                <Unlink className="size-4" />
-                Detach
-              </Button>
-            )}
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog
-        open={!!agentToPromote}
-        onOpenChange={(open) => {
-          if (!open) {
-            setAgentToPromote(null);
-            setPromoteError(null);
-            setPromoteBlockers([]);
-          }
-        }}
-      >
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Promote to organization</DialogTitle>
-            <DialogDescription>
-              Promote <strong>{agentToPromote?.name}</strong> to an
-              organization-shared agent? It will be managed by org admins and
-              remain attached to this workspace.
-            </DialogDescription>
-          </DialogHeader>
-          {promoteBlockers.length > 0 && (
-            <div className="rounded-md border border-warning bg-warning/10 p-3 text-sm">
-              <p className="mb-2 font-medium">
-                Promote the following workspace-private references first:
-              </p>
-              <ul className="space-y-1">
-                {promoteBlockers.map((b) => (
-                  <li key={`${b.type}-${b.id}`} className="flex gap-2">
-                    <span className="text-muted-foreground">
-                      {BLOCKER_LABEL[b.type]}:
-                    </span>
-                    <span className="font-medium">{b.name}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-          {promoteError && promoteBlockers.length === 0 && (
-            <p className="text-sm text-destructive">{promoteError}</p>
-          )}
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => {
-                setAgentToPromote(null);
-                setPromoteError(null);
-                setPromoteBlockers([]);
-              }}
-            >
-              Cancel
-            </Button>
-            <Button onClick={handlePromoteConfirm} disabled={promoting}>
-              Promote
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <PromoteSharedDialog promote={promote} noun="agent" />
 
       <Dialog open={cloneDialogOpen} onOpenChange={setCloneDialogOpen}>
         <DialogContent>

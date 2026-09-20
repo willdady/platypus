@@ -1,37 +1,25 @@
 "use client";
 
-import { type ComponentType, useState } from "react";
-import {
-  Building,
-  ExternalLink,
-  Link2,
-  Pencil,
-  Plus,
-  Unlink,
-} from "lucide-react";
+import { type ComponentType } from "react";
+import { Building, Pencil, Plus } from "lucide-react";
 import Link from "next/link";
 import { useScopedSWR } from "@/hooks/use-scoped-swr";
-import { useAuth, useBackendUrl } from "@/components/auth-provider";
+import { useAuth } from "@/components/auth-provider";
 import {
   canConfigureWorkspaceResource,
   canManageSharedResource,
   type DelegatableResourceType,
   type WorkspaceDelegationFlags,
 } from "@/lib/authorization";
-import { writeEntity, type Scope } from "@/lib/api-write";
-import { useDetachDialog } from "@/hooks/use-detach-dialog";
+import { type Scope } from "@/lib/api-write";
+import { useSharedDetach } from "@/hooks/use-shared-resource-actions";
 import { ListError, ListState } from "./list-state";
 import { Item, ItemActions, ItemContent, ItemTitle } from "./ui/item";
 import { Button } from "./ui/button";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "./ui/dialog";
-import { AttachSharedResourceDialog } from "./attach-shared-resource-dialog";
+  AttachSharedAction,
+  DetachSharedDialog,
+} from "./shared-resource-actions";
 
 /** A list row as the API returns it: an id, a name, and — inside a workspace — its scope. */
 interface ScopedResource {
@@ -90,10 +78,6 @@ export const ResourceList = ({
   config: ResourceListConfig;
 }) => {
   const { actor, workspaceDelegation } = useAuth();
-  const backendUrl = useBackendUrl();
-  const detach = useDetachDialog<ScopedResource>();
-  const [attachOpen, setAttachOpen] = useState(false);
-  const [detaching, setDetaching] = useState(false);
 
   // Resolved once per render and reused for the list's read and every write
   // below, rather than re-deriving the Organization-vs-Workspace branch at
@@ -104,31 +88,15 @@ export const ResourceList = ({
     results: ScopedResource[];
   }>(config.entity, scope);
 
+  const detach = useSharedDetach<ScopedResource>({
+    resourceType: config.resourceType,
+    scope,
+    mutate,
+  });
+
   // Attach, detach, and Promote a Shared resource are the same rule
   // (ADR-0007 / #154), asked of the auth module instead of re-derived here.
   const canAttach = canManageSharedResource(actor, workspaceId).allowed;
-
-  const detachResource = async (resourceId: string) => {
-    if (!backendUrl || !workspaceId) return;
-    setDetaching(true);
-    detach.setError(null);
-    try {
-      const outcome = await writeEntity(
-        backendUrl,
-        `attachments/${config.resourceType}`,
-        scope,
-        { id: resourceId },
-      );
-      if (outcome.outcome === "success") {
-        detach.close();
-        await mutate();
-      } else {
-        detach.setError(outcome.message);
-      }
-    } finally {
-      setDetaching(false);
-    }
-  };
 
   // Workspace-scoped config is admin-only unless the workspace delegates it
   // (ADR-0006), resolved once by the auth module off the Workspace's own
@@ -151,9 +119,6 @@ export const ResourceList = ({
   }
 
   const resources: ScopedResource[] = data?.results ?? [];
-  const attachedOrgIds = resources
-    .filter((resource) => resource.scope === "organization")
-    .map((resource) => resource.id);
   // When an admin can attach Shared resources, fall through to the main render
   // (which offers the Attach button) even if the workspace has no resources yet.
   if (!resources.length && workspaceId && !canAttach) {
@@ -224,73 +189,32 @@ export const ResourceList = ({
             </Link>
           </Button>
         )}
-        {canAttach && (
-          <Button variant="outline" onClick={() => setAttachOpen(true)}>
-            <Link2 className="size-4" /> {config.labels.attach}
-          </Button>
+        {canAttach && workspaceId && (
+          <AttachSharedAction
+            orgId={orgId}
+            workspaceId={workspaceId}
+            resourceType={config.resourceType}
+            label={config.labels.attach}
+            resources={resources}
+            onAttached={mutate}
+          />
         )}
       </div>
-      {canAttach && workspaceId && (
-        <AttachSharedResourceDialog
-          open={attachOpen}
-          onOpenChange={setAttachOpen}
-          orgId={orgId}
-          workspaceId={workspaceId}
-          resourceType={config.resourceType}
-          attachedIds={attachedOrgIds}
-          onAttached={() => {
-            setAttachOpen(false);
-            mutate();
-          }}
-        />
-      )}
-      <Dialog
-        open={!!detach.selected}
-        onOpenChange={(open) => {
-          if (!open) detach.close();
-        }}
-      >
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>{config.labels.detachTitle}</DialogTitle>
-            <DialogDescription>
-              The {config.labels.noun} <strong>{detach.selected?.name}</strong>{" "}
-              is managed at the organization level. It can only be edited from
-              the organization settings.
-            </DialogDescription>
-          </DialogHeader>
-          {detach.error && (
-            <p className="text-sm text-destructive">{detach.error}</p>
-          )}
-          <DialogFooter>
-            <Button variant="outline" onClick={detach.close}>
-              Close
-            </Button>
-            {canAttach && detach.selected && (
-              <Button
-                variant="destructive"
-                disabled={detaching}
-                onClick={() => detachResource(detach.selected!.id)}
-              >
-                <Unlink className="size-4" />
-                Detach
-              </Button>
-            )}
-            {canAttach && (
-              <Button asChild>
-                {/* The Org settings copy, even from a workspace: that is where
-                    the Shared resource is edited. */}
-                <Link
-                  href={`/${orgId}/${config.settingsPath}/${detach.selected?.id}`}
-                >
-                  <ExternalLink className="size-4" />
-                  Org settings
-                </Link>
-              </Button>
-            )}
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <DetachSharedDialog
+        detach={detach}
+        title={config.labels.detachTitle}
+        description={(selected) => (
+          <>
+            The {config.labels.noun} <strong>{selected.name}</strong> is managed
+            at the organization level. It can only be edited from the
+            organization settings.
+          </>
+        )}
+        canDetach={canAttach}
+        orgSettingsHref={(selected) =>
+          `/${orgId}/${config.settingsPath}/${selected.id}`
+        }
+      />
     </>
   );
 };
