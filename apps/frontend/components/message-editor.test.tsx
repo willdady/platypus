@@ -1,6 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
-import type { FileUIPart } from "ai";
 import type { Provider } from "@platypus/schemas";
 
 /**
@@ -20,65 +19,22 @@ vi.mock("./model-selector-dialog", () => ({
 }));
 
 import { MessageEditor } from "./message-editor";
+import {
+  reportPdf,
+  installSpeechRecognition,
+  uninstallSpeechRecognition,
+} from "@/lib/chat-test-fixtures";
+import { installMatchMediaStub } from "@/lib/test-utils";
 
-class FakeSpeechRecognition extends EventTarget {
-  continuous = false;
-  interimResults = false;
-  lang = "";
-  start = vi.fn(() => this.onstart?.(new Event("start")));
-  stop = vi.fn(() => this.onend?.(new Event("end")));
-  onstart: ((ev: Event) => void) | null = null;
-  onend: ((ev: Event) => void) | null = null;
-  onresult: ((ev: unknown) => void) | null = null;
-  onerror: ((ev: unknown) => void) | null = null;
-
-  emitFinalResult(transcript: string) {
-    this.onresult?.({
-      resultIndex: 0,
-      results: {
-        length: 1,
-        0: { isFinal: true, length: 1, 0: { transcript, confidence: 1 } },
-      },
-    });
-  }
-}
-
-let lastRecognition: FakeSpeechRecognition | null = null;
-
-const registerRecognition = (instance: FakeSpeechRecognition) => {
-  lastRecognition = instance;
-};
-
-class TrackingSpeechRecognition extends FakeSpeechRecognition {
-  constructor() {
-    super();
-    registerRecognition(this);
-  }
-}
+/** The session the editor most recently constructed. */
+let recognition: ReturnType<typeof installSpeechRecognition>;
 
 beforeEach(() => {
-  // jsdom has no matchMedia; PromptInputTextarea subscribes to it.
-  window.matchMedia = vi.fn().mockReturnValue({
-    matches: false,
-    addEventListener: vi.fn(),
-    removeEventListener: vi.fn(),
-  }) as unknown as typeof window.matchMedia;
-  lastRecognition = null;
-  window.SpeechRecognition =
-    TrackingSpeechRecognition as unknown as Window["SpeechRecognition"];
+  installMatchMediaStub();
+  recognition = installSpeechRecognition();
 });
 
-afterEach(() => {
-  Reflect.deleteProperty(window, "SpeechRecognition");
-  Reflect.deleteProperty(window, "webkitSpeechRecognition");
-});
-
-const report: FileUIPart = {
-  type: "file",
-  url: "https://files.example.com/report.pdf",
-  mediaType: "application/pdf",
-  filename: "report.pdf",
-};
+afterEach(uninstallSpeechRecognition);
 
 const provider = {
   id: "p1",
@@ -94,7 +50,7 @@ const renderEditor = (
   const view = render(
     <MessageEditor
       initialText="What does this say?"
-      initialAttachments={[report]}
+      initialAttachments={[reportPdf]}
       modelSelection={{
         agents: [],
         providers: [provider],
@@ -138,7 +94,7 @@ describe("MessageEditor", () => {
     await waitFor(() => expect(onSubmit).toHaveBeenCalled());
     expect(onSubmit.mock.calls[0][0]).toEqual({
       text: "What does this actually say?",
-      files: [report],
+      files: [reportPdf],
     });
   });
 
@@ -276,7 +232,7 @@ describe("MessageEditor", () => {
     const { onSubmit } = renderEditor({ initialText: "" });
 
     fireEvent.click(screen.getByRole("button", { name: "Microphone" }));
-    lastRecognition?.emitFinalResult("dictated words");
+    recognition()?.emitFinalResult("dictated words");
 
     await waitFor(() =>
       expect(screen.getByRole("textbox")).toHaveValue("dictated words"),

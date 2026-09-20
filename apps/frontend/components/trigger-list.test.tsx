@@ -1,46 +1,29 @@
-import { describe, it, expect, vi, afterEach, beforeAll } from "vitest";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { screen, waitFor } from "@testing-library/react";
 import type { Trigger } from "@platypus/schemas";
 import {
-  installRadixPointerPolyfills,
-  openDropdownMenu as openMenu,
-} from "@/lib/test-utils";
-
-beforeAll(installRadixPointerPolyfills);
+  authMock,
+  toastMock,
+  swrMock,
+  mockScopedSWR,
+  resetListHarness,
+  renderList,
+  confirmDialog,
+  stubAcceptedSave,
+  stubRejectedSave,
+  mutate,
+  toastError,
+} from "@/lib/list-test-harness";
 
 // --- Module mocks ------------------------------------------------------------
 
-vi.mock("@/components/auth-provider", () => ({
-  useBackendUrl: () => "http://test",
-  useAuth: () => ({ user: { id: "u1" } }),
-}));
-
-const { toastErrorSpy } = vi.hoisted(() => ({ toastErrorSpy: vi.fn() }));
-vi.mock("sonner", () => ({
-  toast: { error: toastErrorSpy },
-}));
-
-// The `GET .../triggers` list this component renders. Set per test.
-let triggers: Trigger[] = [];
-const mutateSpy = vi.fn();
-
-vi.mock("swr", () => ({
-  __esModule: true,
-  default: (key: string | null) => {
-    if (key?.includes("/triggers")) {
-      return {
-        data: { results: triggers },
-        isLoading: false,
-        mutate: mutateSpy,
-      };
-    }
-    return { data: { results: [] }, isLoading: false };
-  },
-}));
+vi.mock("@/components/auth-provider", () => authMock);
+vi.mock("sonner", () => toastMock);
+vi.mock("swr", () => swrMock);
 
 import { TriggerList } from "./trigger-list";
 
-// --- Helpers -----------------------------------------------------------------
+// --- Fixtures ----------------------------------------------------------------
 
 const cronTrigger: Trigger = {
   id: "t1",
@@ -51,18 +34,15 @@ const cronTrigger: Trigger = {
   config: { cronExpression: "0 0 * * *", timezone: "UTC" },
 } as unknown as Trigger;
 
-function jsonResponse(status: number, body: unknown) {
-  return {
-    ok: status >= 200 && status < 300,
-    status,
-    json: async () => body,
-  } as unknown as Response;
+function renderTriggers(triggers: Trigger[], menuItem?: string) {
+  mockScopedSWR({ "/triggers": triggers });
+  return renderList(<TriggerList orgId="org1" workspaceId="ws1" />, menuItem);
 }
 
+beforeEach(resetListHarness);
+
 afterEach(() => {
-  triggers = [];
-  mutateSpy.mockClear();
-  toastErrorSpy.mockClear();
+  vi.unstubAllGlobals();
   vi.restoreAllMocks();
 });
 
@@ -70,16 +50,12 @@ afterEach(() => {
 
 describe("TriggerList delete", () => {
   it("deletes through the request module and revalidates on success", async () => {
-    triggers = [cronTrigger];
-    const fetchMock = vi.fn().mockResolvedValue(jsonResponse(200, {}));
-    vi.stubGlobal("fetch", fetchMock);
+    const fetchMock = stubAcceptedSave();
 
-    render(<TriggerList orgId="org1" workspaceId="ws1" />);
-    openMenu();
-    fireEvent.click(screen.getByText("Delete"));
-    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+    renderTriggers([cronTrigger], "Delete");
+    await confirmDialog("Delete");
 
-    await waitFor(() => expect(mutateSpy).toHaveBeenCalled());
+    await waitFor(() => expect(mutate).toHaveBeenCalled());
     expect(fetchMock).toHaveBeenCalledWith(
       "http://test/organizations/org1/workspaces/ws1/triggers/t1",
       expect.objectContaining({ method: "DELETE" }),
@@ -87,21 +63,15 @@ describe("TriggerList delete", () => {
   });
 
   it("surfaces the backend's reason inline and does not revalidate when delete is refused", async () => {
-    triggers = [cronTrigger];
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValue(jsonResponse(409, { error: "Trigger is in use" }));
-    vi.stubGlobal("fetch", fetchMock);
+    stubRejectedSave("Trigger is in use", 409);
 
-    render(<TriggerList orgId="org1" workspaceId="ws1" />);
-    openMenu();
-    fireEvent.click(screen.getByText("Delete"));
-    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+    renderTriggers([cronTrigger], "Delete");
+    await confirmDialog("Delete");
 
     await waitFor(() =>
       expect(screen.getByText("Trigger is in use")).toBeInTheDocument(),
     );
-    expect(mutateSpy).not.toHaveBeenCalled();
+    expect(mutate).not.toHaveBeenCalled();
     // The dialog stays open on a refused delete, letting the user retry.
     expect(screen.getByRole("button", { name: "Delete" })).toBeInTheDocument();
   });
@@ -109,15 +79,11 @@ describe("TriggerList delete", () => {
 
 describe("TriggerList toggle enabled", () => {
   it("PUTs the flipped enabled flag and revalidates on success", async () => {
-    triggers = [cronTrigger];
-    const fetchMock = vi.fn().mockResolvedValue(jsonResponse(200, {}));
-    vi.stubGlobal("fetch", fetchMock);
+    const fetchMock = stubAcceptedSave();
 
-    render(<TriggerList orgId="org1" workspaceId="ws1" />);
-    openMenu();
-    fireEvent.click(screen.getByText("Disable"));
+    renderTriggers([cronTrigger], "Disable");
 
-    await waitFor(() => expect(mutateSpy).toHaveBeenCalled());
+    await waitFor(() => expect(mutate).toHaveBeenCalled());
     expect(fetchMock).toHaveBeenCalledWith(
       "http://test/organizations/org1/workspaces/ws1/triggers/t1",
       expect.objectContaining({
@@ -128,19 +94,30 @@ describe("TriggerList toggle enabled", () => {
   });
 
   it("surfaces the backend's reason and does not flip when the toggle is refused", async () => {
-    triggers = [cronTrigger];
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValue(jsonResponse(409, { error: "Trigger is running" }));
-    vi.stubGlobal("fetch", fetchMock);
+    stubRejectedSave("Trigger is running", 409);
 
-    render(<TriggerList orgId="org1" workspaceId="ws1" />);
-    openMenu();
-    fireEvent.click(screen.getByText("Disable"));
+    renderTriggers([cronTrigger], "Disable");
 
     await waitFor(() =>
-      expect(toastErrorSpy).toHaveBeenCalledWith("Trigger is running"),
+      expect(toastError).toHaveBeenCalledWith("Trigger is running"),
     );
-    expect(mutateSpy).not.toHaveBeenCalled();
+    expect(mutate).not.toHaveBeenCalled();
+  });
+});
+
+describe("TriggerList list states", () => {
+  // The page around it owns the empty copy, so the list renders nothing at all
+  // rather than a second, competing empty state.
+  it("renders nothing when the workspace has no triggers", () => {
+    const { container } = renderTriggers([]);
+
+    expect(container).toBeEmptyDOMElement();
+  });
+
+  it("surfaces a failed read rather than rendering an empty list", () => {
+    mockScopedSWR({ "/triggers": { error: new Error("500") } });
+    renderList(<TriggerList orgId="org1" workspaceId="ws1" />);
+
+    expect(screen.getByText(/Failed to load triggers/)).toBeInTheDocument();
   });
 });

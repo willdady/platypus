@@ -1,59 +1,32 @@
-import { describe, it, expect, vi, afterEach, beforeAll } from "vitest";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { screen, fireEvent, waitFor } from "@testing-library/react";
 import type { Skill } from "@platypus/schemas";
 import {
-  installRadixPointerPolyfills,
-  openDropdownMenu as openMenu,
-} from "@/lib/test-utils";
-
-beforeAll(installRadixPointerPolyfills);
+  authMock,
+  toastMock,
+  swrMock,
+  mockScopedSWR,
+  resetListHarness,
+  renderList,
+  confirmDialog,
+  stubAcceptedSave,
+  stubRejectedSave,
+  mutate,
+  toastError,
+  toastInfo,
+} from "@/lib/list-test-harness";
 
 // --- Module mocks ------------------------------------------------------------
 
-vi.mock("@/components/auth-provider", () => ({
-  useBackendUrl: () => "http://test",
-  useAuth: () => ({
-    user: { id: "u1" },
-    actor: "org-admin",
-  }),
-}));
-
-type SkillWithScope = Skill & { scope?: "organization" | "workspace" };
-
-// The `GET .../skills` list this component renders. Set per test.
-let skills: SkillWithScope[] = [];
-
-vi.mock("swr", () => ({
-  __esModule: true,
-  default: (key: string | null) => {
-    if (key?.includes("/skills")) {
-      return {
-        data: { results: skills },
-        error: undefined,
-        isLoading: false,
-        mutate: mutateSpy,
-      };
-    }
-    // Agent-association lookup — unused by these tests.
-    return {
-      data: { results: [] },
-      error: undefined,
-      isLoading: false,
-      mutate: vi.fn(),
-    };
-  },
-}));
-
-const mutateSpy = vi.fn();
-
-vi.mock("sonner", () => ({
-  toast: { error: vi.fn(), info: vi.fn(), success: vi.fn() },
-}));
+vi.mock("@/components/auth-provider", () => authMock);
+vi.mock("sonner", () => toastMock);
+vi.mock("swr", () => swrMock);
 
 import { SkillsList } from "./skills-list";
-import { toast } from "sonner";
 
-// --- Helpers -----------------------------------------------------------------
+// --- Fixtures ----------------------------------------------------------------
+
+type SkillWithScope = Skill & { scope?: "organization" | "workspace" };
 
 const orgSkill: SkillWithScope = {
   id: "s1",
@@ -69,39 +42,37 @@ const workspaceSkill: SkillWithScope = {
   scope: "workspace",
 } as unknown as SkillWithScope;
 
-function jsonResponse(status: number, body: unknown) {
-  return {
-    ok: status >= 200 && status < 300,
-    status,
-    json: async () => body,
-  } as unknown as Response;
+/** Renders the Workspace surface with `skills` in the list. */
+function renderSkills(skills: SkillWithScope[], menuItem?: string) {
+  mockScopedSWR({ "/skills": skills });
+  return renderList(<SkillsList orgId="org1" workspaceId="ws1" />, menuItem);
 }
 
-function openDetachDialog() {
-  fireEvent.click(screen.getByText("Shared Skill"));
+/** Renders the Organization surface, which has no `workspaceId`. */
+function renderOrgSkills(skills: SkillWithScope[], menuItem?: string) {
+  mockScopedSWR({ "/skills": skills });
+  return renderList(<SkillsList orgId="org1" />, menuItem);
 }
+
+const openDetachDialog = () =>
+  fireEvent.click(screen.getByText("Shared Skill"));
+
+beforeEach(resetListHarness);
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+  vi.restoreAllMocks();
+});
 
 // --- Tests -------------------------------------------------------------------
 
 describe("SkillsList detach", () => {
-  afterEach(() => {
-    skills = [];
-    mutateSpy.mockClear();
-    vi.restoreAllMocks();
-  });
-
   it("surfaces the backend's reason and keeps the row when detach is refused", async () => {
-    skills = [orgSkill];
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValue(
-        jsonResponse(409, { error: "This skill is in use by an agent" }),
-      );
-    vi.stubGlobal("fetch", fetchMock);
+    const fetchMock = stubRejectedSave("This skill is in use by an agent", 409);
 
-    render(<SkillsList orgId="org1" workspaceId="ws1" />);
+    renderSkills([orgSkill]);
     openDetachDialog();
-    fireEvent.click(screen.getByRole("button", { name: /Detach/ }));
+    await confirmDialog(/Detach/);
 
     await waitFor(() =>
       expect(
@@ -109,7 +80,7 @@ describe("SkillsList detach", () => {
       ).toBeInTheDocument(),
     );
 
-    expect(mutateSpy).not.toHaveBeenCalled();
+    expect(mutate).not.toHaveBeenCalled();
     expect(screen.getByText("Organization Skill")).toBeInTheDocument();
     expect(fetchMock).toHaveBeenCalledWith(
       "http://test/organizations/org1/workspaces/ws1/attachments/skill/s1",
@@ -118,28 +89,20 @@ describe("SkillsList detach", () => {
   });
 
   it("revalidates and closes the dialog when detach succeeds", async () => {
-    skills = [orgSkill];
-    const fetchMock = vi.fn().mockResolvedValue(jsonResponse(200, {}));
-    vi.stubGlobal("fetch", fetchMock);
+    stubAcceptedSave();
 
-    render(<SkillsList orgId="org1" workspaceId="ws1" />);
+    renderSkills([orgSkill]);
     openDetachDialog();
-    fireEvent.click(screen.getByRole("button", { name: /Detach/ }));
+    await confirmDialog(/Detach/);
 
-    await waitFor(() => expect(mutateSpy).toHaveBeenCalled());
+    await waitFor(() => expect(mutate).toHaveBeenCalled());
     expect(screen.queryByText("Organization Skill")).not.toBeInTheDocument();
   });
 });
 
 describe("SkillsList invocation badge", () => {
-  afterEach(() => {
-    skills = [];
-    mutateSpy.mockClear();
-    vi.restoreAllMocks();
-  });
-
   it("badges a user-invocable-only Skill but not a model-visible one", () => {
-    skills = [
+    renderSkills([
       {
         ...workspaceSkill,
         id: "user-only",
@@ -147,9 +110,7 @@ describe("SkillsList invocation badge", () => {
         disableModelInvocation: true,
       },
       workspaceSkill,
-    ];
-
-    render(<SkillsList orgId="org1" workspaceId="ws1" />);
+    ]);
 
     expect(screen.getAllByText("User-invocable only")).toHaveLength(1);
     expect(screen.getByText("Workspace Skill")).toBeInTheDocument();
@@ -157,28 +118,16 @@ describe("SkillsList invocation badge", () => {
 });
 
 describe("SkillsList delete", () => {
-  afterEach(() => {
-    skills = [];
-    mutateSpy.mockClear();
-    vi.restoreAllMocks();
-  });
-
   it("surfaces the backend's reason and leaves the skill in place when delete fails", async () => {
-    skills = [workspaceSkill];
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValue(jsonResponse(409, { error: "Skill is referenced" }));
-    vi.stubGlobal("fetch", fetchMock);
+    const fetchMock = stubRejectedSave("Skill is referenced", 409);
 
-    render(<SkillsList orgId="org1" workspaceId="ws1" />);
-    openMenu();
-    fireEvent.click(screen.getByText("Delete"));
-    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+    renderSkills([workspaceSkill], "Delete");
+    await confirmDialog("Delete");
 
     await waitFor(() =>
       expect(screen.getByText("Skill is referenced")).toBeInTheDocument(),
     );
-    expect(mutateSpy).not.toHaveBeenCalled();
+    expect(mutate).not.toHaveBeenCalled();
     expect(fetchMock).toHaveBeenCalledWith(
       "http://test/organizations/org1/workspaces/ws1/skills/s2",
       expect.objectContaining({ method: "DELETE" }),
@@ -186,40 +135,26 @@ describe("SkillsList delete", () => {
   });
 
   it("shows the backend's guidance, not an inline error, when delete is refused because the skill is Shared", async () => {
-    skills = [workspaceSkill];
-    const fetchMock = vi.fn().mockResolvedValue(
-      jsonResponse(403, {
-        error: "This skill is managed at the organization level",
-      }),
-    );
-    vi.stubGlobal("fetch", fetchMock);
+    stubRejectedSave("This skill is managed at the organization level", 403);
 
-    render(<SkillsList orgId="org1" workspaceId="ws1" />);
-    openMenu();
-    fireEvent.click(screen.getByText("Delete"));
-    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+    renderSkills([workspaceSkill], "Delete");
+    await confirmDialog("Delete");
 
     await waitFor(() =>
-      expect(toast.info).toHaveBeenCalledWith(
+      expect(toastInfo).toHaveBeenCalledWith(
         "This skill is managed at the organization level",
       ),
     );
-    expect(toast.error).not.toHaveBeenCalled();
+    expect(toastError).not.toHaveBeenCalled();
     expect(
       screen.queryByText("This skill is managed at the organization level"),
     ).not.toBeInTheDocument();
   });
 
   it("blocks delete and reports the attachment count when the skill is still attached", async () => {
-    skills = [orgSkill];
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValue(jsonResponse(200, { results: [{ id: "att1" }] }));
-    vi.stubGlobal("fetch", fetchMock);
+    const fetchMock = stubAcceptedSave({ results: [{ id: "att1" }] });
 
-    render(<SkillsList orgId="org1" />);
-    openMenu();
-    fireEvent.click(screen.getByText("Delete"));
+    renderOrgSkills([orgSkill], "Delete");
 
     await waitFor(() =>
       expect(screen.getByText("Can't delete shared skill")).toBeInTheDocument(),
@@ -234,18 +169,14 @@ describe("SkillsList delete", () => {
   });
 
   it("deletes from the org-scoped path on the Organization surface (no workspaceId)", async () => {
-    skills = [orgSkill];
-    const fetchMock = vi.fn().mockResolvedValue(jsonResponse(200, {}));
-    vi.stubGlobal("fetch", fetchMock);
+    const fetchMock = stubAcceptedSave();
 
-    render(<SkillsList orgId="org1" />);
-    openMenu();
-    fireEvent.click(screen.getByText("Delete"));
+    renderOrgSkills([orgSkill], "Delete");
     // The Organization surface checks the live attachment count (a GET)
     // before opening the confirm dialog.
-    fireEvent.click(await screen.findByRole("button", { name: "Delete" }));
+    await confirmDialog("Delete");
 
-    await waitFor(() => expect(mutateSpy).toHaveBeenCalled());
+    await waitFor(() => expect(mutate).toHaveBeenCalled());
     expect(fetchMock).toHaveBeenCalledWith(
       "http://test/organizations/org1/skills/s1",
       expect.objectContaining({ method: "DELETE" }),
@@ -254,46 +185,46 @@ describe("SkillsList delete", () => {
 });
 
 describe("SkillsList promote", () => {
-  afterEach(() => {
-    skills = [];
-    mutateSpy.mockClear();
-    vi.restoreAllMocks();
-  });
-
   it("reports an unreachable backend rather than leaving the dialog silent", async () => {
-    skills = [workspaceSkill];
     vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("offline")));
 
-    render(<SkillsList orgId="org1" workspaceId="ws1" />);
-    openMenu();
-    fireEvent.click(screen.getByText("Promote to organization"));
-    fireEvent.click(screen.getByRole("button", { name: "Promote" }));
+    renderSkills([workspaceSkill], "Promote to organization");
+    await confirmDialog("Promote");
 
     await waitFor(() =>
       expect(screen.getByText("Network request failed")).toBeInTheDocument(),
     );
-    expect(mutateSpy).not.toHaveBeenCalled();
+    expect(mutate).not.toHaveBeenCalled();
   });
 
   it("surfaces the backend's reason when promote fails", async () => {
-    skills = [workspaceSkill];
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValue(jsonResponse(409, { error: "Name already shared" }));
-    vi.stubGlobal("fetch", fetchMock);
+    const fetchMock = stubRejectedSave("Name already shared", 409);
 
-    render(<SkillsList orgId="org1" workspaceId="ws1" />);
-    openMenu();
-    fireEvent.click(screen.getByText("Promote to organization"));
-    fireEvent.click(screen.getByRole("button", { name: "Promote" }));
+    renderSkills([workspaceSkill], "Promote to organization");
+    await confirmDialog("Promote");
 
     await waitFor(() =>
       expect(screen.getByText("Name already shared")).toBeInTheDocument(),
     );
-    expect(mutateSpy).not.toHaveBeenCalled();
+    expect(mutate).not.toHaveBeenCalled();
     expect(fetchMock).toHaveBeenCalledWith(
       "http://test/organizations/org1/workspaces/ws1/skills/s2/promote",
       expect.objectContaining({ method: "POST" }),
     );
+  });
+});
+
+describe("SkillsList list states", () => {
+  it("shows the empty state when the workspace has no skills", () => {
+    renderSkills([]);
+
+    expect(screen.getByText(/No skills yet/i)).toBeInTheDocument();
+  });
+
+  it("surfaces a failed read rather than rendering an empty list", () => {
+    mockScopedSWR({ "/skills": { error: new Error("500") } });
+    renderList(<SkillsList orgId="org1" workspaceId="ws1" />);
+
+    expect(screen.getByText(/Failed to load skills/)).toBeInTheDocument();
   });
 });

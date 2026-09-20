@@ -81,23 +81,17 @@ vi.mock("sonner", () => ({
   toast: { success: toastSuccessSpy, error: toastErrorSpy },
 }));
 
-// Radix Tooltip content measures itself on focus, which jsdom has no
-// ResizeObserver for.
-vi.stubGlobal(
-  "ResizeObserver",
-  class {
-    observe() {}
-    unobserve() {}
-    disconnect() {}
-  },
-);
-
 import TriggerRunsPage from "./page";
 import {
   RUN_CUT_SHORT_NOTICE,
   RUN_STEP_LIMIT_NOTICE,
 } from "@/components/run-cut-short-notice";
 import { RUN_SUPPRESSED_NOTICE } from "@/components/trigger-run-row";
+import { installResizeObserverStub, selectOption } from "@/lib/test-utils";
+
+// Radix Tooltip content measures itself on focus, which jsdom has no
+// ResizeObserver for.
+installResizeObserverStub();
 
 const stats = (overrides?: Partial<TriggerRunStats>): TriggerRunStats => ({
   steps: 1,
@@ -139,22 +133,6 @@ const renderPage = async () => {
 const renderRuns = async (rows: TriggerRunWithTrigger[]) => {
   state.pages = [{ results: rows }];
   await renderPage();
-};
-
-/** Picks an option on the Radix Select currently reading `from`. */
-const selectOption = async (from: string, option: string) => {
-  const combobox = screen
-    .getAllByRole("combobox")
-    .find((el) => el.textContent === from)!;
-  const scrollIntoView = Element.prototype.scrollIntoView;
-  Element.prototype.scrollIntoView = vi.fn();
-  try {
-    fireEvent.keyDown(combobox, { key: "ArrowDown" });
-    const item = await screen.findByRole("option", { name: option });
-    fireEvent.keyDown(item, { key: "Enter" });
-  } finally {
-    Element.prototype.scrollIntoView = scrollIntoView;
-  }
 };
 
 beforeEach(() => {

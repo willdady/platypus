@@ -1,40 +1,29 @@
-import { describe, it, expect, vi, afterEach, beforeAll } from "vitest";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { screen, fireEvent, waitFor } from "@testing-library/react";
 import type { ComponentType } from "react";
 import {
-  installRadixPointerPolyfills,
-  openDropdownMenu as openMenu,
-} from "@/lib/test-utils";
-
-beforeAll(installRadixPointerPolyfills);
+  authMock,
+  swrMock,
+  mockScopedSWR,
+  resetListHarness,
+  renderList,
+  confirmDialog,
+  stubAcceptedSave,
+  stubRejectedSave,
+  mutate,
+} from "@/lib/list-test-harness";
 
 // --- Module mocks ------------------------------------------------------------
 
-vi.mock("@/components/auth-provider", () => ({
-  useBackendUrl: () => "http://test",
-  useAuth: () => ({ user: { id: "u1" } }),
-}));
-
-type EntityCard = { id: string; name: string; description?: string | null };
-
-// The list this component renders. Set per test.
-let items: EntityCard[] = [];
-const mutateSpy = vi.fn();
-
-vi.mock("swr", () => ({
-  __esModule: true,
-  default: () => ({
-    data: { results: items },
-    error: undefined,
-    isLoading: false,
-    mutate: mutateSpy,
-  }),
-}));
+vi.mock("@/components/auth-provider", () => authMock);
+vi.mock("swr", () => swrMock);
 
 import { BoardsList } from "./boards-list";
 import { DashboardsList } from "./dashboards-list";
 
 // --- Fixtures ----------------------------------------------------------------
+
+type EntityCard = { id: string; name: string; description?: string | null };
 
 const card: EntityCard = {
   id: "r1",
@@ -62,39 +51,33 @@ const RESOURCES: {
   },
 ];
 
-// --- Helpers -----------------------------------------------------------------
-
-function jsonResponse(status: number, body: unknown) {
-  return {
-    ok: status >= 200 && status < 300,
-    status,
-    json: async () => body,
-  } as unknown as Response;
-}
-
-async function openDeleteDialog(confirmPhrase: string) {
-  openMenu();
-  fireEvent.click(screen.getByText("Delete"));
-  // The confirmation input must be typed before the destructive button enables.
-  fireEvent.change(
-    screen.getByPlaceholderText(`Type '${confirmPhrase}' to confirm`),
-    { target: { value: confirmPhrase } },
-  );
-}
+beforeEach(resetListHarness);
 
 afterEach(() => {
-  items = [];
-  mutateSpy.mockClear();
+  vi.unstubAllGlobals();
   vi.restoreAllMocks();
 });
 
 // --- Tests -------------------------------------------------------------------
 
 describe.each(RESOURCES)("$name list", ({ List, entity, confirmPhrase }) => {
-  it("renders each card as a link to its detail page", () => {
-    items = [card];
+  /** Renders the list with `cards` in it, optionally opening the row menu. */
+  const renderCards = (cards: EntityCard[], menuItem?: string) => {
+    mockScopedSWR({ [`/${entity}`]: cards });
+    return renderList(<List orgId="org1" workspaceId="ws1" />, menuItem);
+  };
 
-    render(<List orgId="org1" workspaceId="ws1" />);
+  /** Opens the delete dialog and types the phrase that enables its button. */
+  const armDelete = (cards: EntityCard[]) => {
+    renderCards(cards, "Delete");
+    fireEvent.change(
+      screen.getByPlaceholderText(`Type '${confirmPhrase}' to confirm`),
+      { target: { value: confirmPhrase } },
+    );
+  };
+
+  it("renders each card as a link to its detail page", () => {
+    renderCards([card]);
 
     expect(screen.getByText("Revenue").closest("a")).toHaveAttribute(
       "href",
@@ -104,15 +87,12 @@ describe.each(RESOURCES)("$name list", ({ List, entity, confirmPhrase }) => {
   });
 
   it("deletes through the request module and revalidates on success", async () => {
-    items = [card];
-    const fetchMock = vi.fn().mockResolvedValue(jsonResponse(200, {}));
-    vi.stubGlobal("fetch", fetchMock);
+    const fetchMock = stubAcceptedSave();
 
-    render(<List orgId="org1" workspaceId="ws1" />);
-    await openDeleteDialog(confirmPhrase);
-    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+    armDelete([card]);
+    await confirmDialog("Delete");
 
-    await waitFor(() => expect(mutateSpy).toHaveBeenCalled());
+    await waitFor(() => expect(mutate).toHaveBeenCalled());
     expect(fetchMock).toHaveBeenCalledWith(
       `http://test/organizations/org1/workspaces/ws1/${entity}/r1`,
       expect.objectContaining({ method: "DELETE" }),
@@ -120,23 +100,40 @@ describe.each(RESOURCES)("$name list", ({ List, entity, confirmPhrase }) => {
   });
 
   it("surfaces the backend's reason inline and does not revalidate when delete is refused", async () => {
-    items = [card];
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValue(
-        jsonResponse(409, { error: `This ${entity} is in use` }),
-      );
-    vi.stubGlobal("fetch", fetchMock);
+    stubRejectedSave(`This ${entity} is in use`, 409);
 
-    render(<List orgId="org1" workspaceId="ws1" />);
-    await openDeleteDialog(confirmPhrase);
-    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+    armDelete([card]);
+    await confirmDialog("Delete");
 
     await waitFor(() =>
       expect(screen.getByText(`This ${entity} is in use`)).toBeInTheDocument(),
     );
-    expect(mutateSpy).not.toHaveBeenCalled();
+    expect(mutate).not.toHaveBeenCalled();
     // The dialog stays open on a refused delete, letting the user retry.
     expect(screen.getByRole("button", { name: "Delete" })).toBeInTheDocument();
+  });
+
+  // The page around it owns the empty copy, so the list renders nothing at all
+  // rather than a second, competing empty state.
+  it("renders nothing when the workspace has none", () => {
+    const { container } = renderCards([]);
+
+    expect(container).toBeEmptyDOMElement();
+  });
+
+  it("surfaces a failed read rather than rendering an empty list", () => {
+    mockScopedSWR({ [`/${entity}`]: { error: new Error("500") } });
+    renderList(<List orgId="org1" workspaceId="ws1" />);
+
+    expect(
+      screen.getByText(new RegExp(`Failed to load ${entity}`)),
+    ).toBeInTheDocument();
+  });
+
+  it("shows the loading state while the read is in flight", () => {
+    mockScopedSWR({ [`/${entity}`]: { isLoading: true } });
+    renderList(<List orgId="org1" workspaceId="ws1" />);
+
+    expect(screen.getByText("Loading...")).toBeInTheDocument();
   });
 });

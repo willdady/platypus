@@ -1,40 +1,29 @@
-import { describe, it, expect, vi, afterEach } from "vitest";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { screen, fireEvent, waitFor } from "@testing-library/react";
 import type { ComponentType } from "react";
 import type { MCP, Provider } from "@platypus/schemas";
+import {
+  authMock,
+  swrMock,
+  mockScopedSWR,
+  resetListHarness,
+  renderList,
+  stubAcceptedSave,
+  stubRejectedSave,
+  mutate,
+} from "@/lib/list-test-harness";
 
 // --- Module mocks ------------------------------------------------------------
 
-vi.mock("@/components/auth-provider", () => ({
-  useBackendUrl: () => "http://test",
-  useAuth: () => ({
-    user: { id: "u1" },
-    actor: "org-admin",
-    workspaceDelegation: null,
-  }),
-}));
+vi.mock("@/components/auth-provider", () => authMock);
+vi.mock("swr", () => swrMock);
+
+import { ProvidersList } from "./providers-list";
+import { McpList } from "./mcp-list";
 
 type ScopedResource = (Provider | MCP) & {
   scope?: "organization" | "workspace";
 };
-
-// The list this component renders, and the failure it may fail with. Set per test.
-let items: ScopedResource[] = [];
-let listError: unknown = undefined;
-const mutateSpy = vi.fn();
-
-vi.mock("swr", () => ({
-  __esModule: true,
-  default: () => ({
-    data: { results: items },
-    error: listError,
-    isLoading: false,
-    mutate: mutateSpy,
-  }),
-}));
-
-import { ProvidersList } from "./providers-list";
-import { McpList } from "./mcp-list";
 
 // --- Fixtures ----------------------------------------------------------------
 
@@ -68,6 +57,8 @@ const RESOURCES: {
   name: string;
   List: ComponentType<{ orgId: string; workspaceId?: string }>;
   resourceType: "provider" | "mcp";
+  /** Collection entity as the API spells it — the read the list makes. */
+  entity: string;
   settingsPath: string;
   item: ScopedResource;
   workspaceItem: ScopedResource;
@@ -78,6 +69,7 @@ const RESOURCES: {
     name: "provider",
     List: ProvidersList,
     resourceType: "provider",
+    entity: "providers",
     settingsPath: "settings/providers",
     item: orgProvider,
     workspaceItem: workspaceProvider,
@@ -88,6 +80,7 @@ const RESOURCES: {
     name: "MCP",
     List: McpList,
     resourceType: "mcp",
+    entity: "mcps",
     settingsPath: "settings/mcp",
     item: orgMcp,
     workspaceItem: workspaceMcp,
@@ -96,20 +89,10 @@ const RESOURCES: {
   },
 ];
 
-// --- Helpers -----------------------------------------------------------------
-
-function jsonResponse(status: number, body: unknown) {
-  return {
-    ok: status >= 200 && status < 300,
-    status,
-    json: async () => body,
-  } as unknown as Response;
-}
+beforeEach(resetListHarness);
 
 afterEach(() => {
-  items = [];
-  listError = undefined;
-  mutateSpy.mockClear();
+  vi.unstubAllGlobals();
   vi.restoreAllMocks();
 });
 
@@ -120,16 +103,21 @@ describe.each(RESOURCES)(
   ({
     List,
     resourceType,
+    entity,
     settingsPath,
     item,
     workspaceItem,
     dialogTitle,
     fetchErrorNoun,
   }) => {
-    it("links each workspace row to its workspace settings page", () => {
-      items = [workspaceItem];
+    /** Renders the Workspace surface with `rows` in the list. */
+    const renderRows = (rows: ScopedResource[]) => {
+      mockScopedSWR({ [`/${entity}`]: rows });
+      return renderList(<List orgId="org1" workspaceId="ws1" />);
+    };
 
-      render(<List orgId="org1" workspaceId="ws1" />);
+    it("links each workspace row to its workspace settings page", () => {
+      renderRows([workspaceItem]);
 
       expect(screen.getByText(workspaceItem.name).closest("a")).toHaveAttribute(
         "href",
@@ -138,9 +126,7 @@ describe.each(RESOURCES)(
     });
 
     it("links the create CTA to the workspace create page", () => {
-      items = [item];
-
-      render(<List orgId="org1" workspaceId="ws1" />);
+      renderRows([item]);
 
       expect(screen.getByRole("link", { name: /^Add/ })).toHaveAttribute(
         "href",
@@ -149,12 +135,15 @@ describe.each(RESOURCES)(
     });
 
     it("renders a fetch failure rather than swallowing it", () => {
-      listError = {
-        message: "An error occurred while fetching the data.",
-        info: { message: "Server exploded" },
-      };
-
-      render(<List orgId="org1" workspaceId="ws1" />);
+      mockScopedSWR({
+        [`/${entity}`]: {
+          error: {
+            message: "An error occurred while fetching the data.",
+            info: { message: "Server exploded" },
+          },
+        },
+      });
+      renderList(<List orgId="org1" workspaceId="ws1" />);
 
       expect(
         screen.getByText(`Failed to load ${fetchErrorNoun}. Server exploded`),
@@ -162,9 +151,7 @@ describe.each(RESOURCES)(
     });
 
     it("points the detach dialog's Org settings link at the organization page", () => {
-      items = [item];
-
-      render(<List orgId="org1" workspaceId="ws1" />);
+      renderRows([item]);
       fireEvent.click(screen.getByText(item.name));
 
       expect(
@@ -173,15 +160,13 @@ describe.each(RESOURCES)(
     });
 
     it("detaches through the request module and revalidates on success", async () => {
-      items = [item];
-      const fetchMock = vi.fn().mockResolvedValue(jsonResponse(200, {}));
-      vi.stubGlobal("fetch", fetchMock);
+      const fetchMock = stubAcceptedSave();
 
-      render(<List orgId="org1" workspaceId="ws1" />);
+      renderRows([item]);
       fireEvent.click(screen.getByText(item.name));
       fireEvent.click(screen.getByRole("button", { name: /Detach/ }));
 
-      await waitFor(() => expect(mutateSpy).toHaveBeenCalled());
+      await waitFor(() => expect(mutate).toHaveBeenCalled());
       expect(fetchMock).toHaveBeenCalledWith(
         `http://test/organizations/org1/workspaces/ws1/attachments/${resourceType}/${item.id}`,
         expect.objectContaining({ method: "DELETE" }),
@@ -190,15 +175,12 @@ describe.each(RESOURCES)(
     });
 
     it("surfaces the backend's reason and keeps the dialog open when detach is refused", async () => {
-      items = [item];
-      const fetchMock = vi.fn().mockResolvedValue(
-        jsonResponse(409, {
-          error: "This resource is in use by an agent in this workspace",
-        }),
+      stubRejectedSave(
+        "This resource is in use by an agent in this workspace",
+        409,
       );
-      vi.stubGlobal("fetch", fetchMock);
 
-      render(<List orgId="org1" workspaceId="ws1" />);
+      renderRows([item]);
       fireEvent.click(screen.getByText(item.name));
       fireEvent.click(screen.getByRole("button", { name: /Detach/ }));
 
@@ -211,7 +193,7 @@ describe.each(RESOURCES)(
       );
 
       // A refused detach must not revalidate the list.
-      expect(mutateSpy).not.toHaveBeenCalled();
+      expect(mutate).not.toHaveBeenCalled();
       // The dialog stays open rather than silently closing.
       expect(screen.getByText(dialogTitle)).toBeInTheDocument();
     });

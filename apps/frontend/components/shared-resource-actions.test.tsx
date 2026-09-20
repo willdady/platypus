@@ -17,16 +17,7 @@ vi.mock("swr", () => ({
 }));
 
 import { AttachSharedAction } from "./shared-resource-actions";
-
-// --- Helpers -----------------------------------------------------------------
-
-function jsonResponse(status: number, body: unknown) {
-  return {
-    ok: status >= 200 && status < 300,
-    status,
-    json: async () => body,
-  } as unknown as Response;
-}
+import { jsonResponse } from "@/lib/test-utils";
 
 afterEach(() => {
   orgRows = [];

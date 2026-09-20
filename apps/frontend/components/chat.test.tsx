@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, vi } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
 import type { ChatStatus, FileUIPart } from "ai";
 import type { PlatypusUIMessage } from "@platypus/backend/src/types";
+import { reportPdf } from "@/lib/chat-test-fixtures";
 
 /**
  * The wiring between `Chat` and `lib/chat-recovery` (issue #648).
@@ -591,18 +592,11 @@ describe("holding the composer", () => {
  * a file resubmitted without it.
  */
 describe("editing a message", () => {
-  const report: FileUIPart = {
-    type: "file",
-    url: "https://files.example.com/report.pdf",
-    mediaType: "application/pdf",
-    filename: "report.pdf",
-  };
-
   const withAttachment = (): PlatypusUIMessage =>
     ({
       id: "u1",
       role: "user",
-      parts: [report, { type: "text", text: "What does this say?" }],
+      parts: [reportPdf, { type: "text", text: "What does this say?" }],
     }) as PlatypusUIMessage;
 
   const openEditOn = (id: string) => {
@@ -629,7 +623,7 @@ describe("editing a message", () => {
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
 
     expect(harness.sendMessage).toHaveBeenCalledWith(
-      { text: "What does this say? (edited)", files: [report] },
+      { text: "What does this say? (edited)", files: [reportPdf] },
       { body: expect.objectContaining({ providerId: expect.anything() }) },
     );
   });

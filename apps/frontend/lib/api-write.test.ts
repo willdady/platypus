@@ -7,15 +7,7 @@ import {
   chatListEntity,
   organizationEntity,
 } from "./api-write";
-
-function mockResponse(status: number, body: unknown) {
-  return {
-    ok: status >= 200 && status < 300,
-    status,
-    statusText: "",
-    json: async () => body,
-  } as unknown as Response;
-}
+import { jsonResponse } from "./test-utils";
 
 const BACKEND_URL = "http://localhost:4000";
 
@@ -27,7 +19,7 @@ describe("writeEntity — transport", () => {
   it("POSTs to the org-scoped collection path when creating with no workspace scope", async () => {
     const fetchMock = vi
       .fn()
-      .mockResolvedValue(mockResponse(201, { id: "a1" }));
+      .mockResolvedValue(jsonResponse(201, { id: "a1" }));
     vi.stubGlobal("fetch", fetchMock);
 
     await writeEntity(
@@ -51,7 +43,7 @@ describe("writeEntity — transport", () => {
   });
 
   it("POSTs to the workspace-scoped collection path when a workspaceId is present", async () => {
-    const fetchMock = vi.fn().mockResolvedValue(mockResponse(201, {}));
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse(201, {}));
     vi.stubGlobal("fetch", fetchMock);
 
     await writeEntity(
@@ -68,7 +60,7 @@ describe("writeEntity — transport", () => {
   });
 
   it("PUTs to the item path when an id and data are both given (update)", async () => {
-    const fetchMock = vi.fn().mockResolvedValue(mockResponse(200, {}));
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse(200, {}));
     vi.stubGlobal("fetch", fetchMock);
 
     await writeEntity(
@@ -88,7 +80,7 @@ describe("writeEntity — transport", () => {
   });
 
   it("DELETEs the item path with no body when an id is given without data", async () => {
-    const fetchMock = vi.fn().mockResolvedValue(mockResponse(200, {}));
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse(200, {}));
     vi.stubGlobal("fetch", fetchMock);
 
     await writeEntity(
@@ -108,7 +100,7 @@ describe("writeEntity — transport", () => {
   it("POSTs to the root collection path when the scope carries no orgId", async () => {
     const fetchMock = vi
       .fn()
-      .mockResolvedValue(mockResponse(201, { id: "org1" }));
+      .mockResolvedValue(jsonResponse(201, { id: "org1" }));
     vi.stubGlobal("fetch", fetchMock);
 
     await writeEntity(
@@ -128,7 +120,7 @@ describe("writeEntity — transport", () => {
   });
 
   it("PUTs to the root item path when the scope carries no orgId but an id is given", async () => {
-    const fetchMock = vi.fn().mockResolvedValue(mockResponse(200, {}));
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse(200, {}));
     vi.stubGlobal("fetch", fetchMock);
 
     await writeEntity(
@@ -145,7 +137,7 @@ describe("writeEntity — transport", () => {
   });
 
   it("always sends credentials: include", async () => {
-    const fetchMock = vi.fn().mockResolvedValue(mockResponse(200, {}));
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse(200, {}));
     vi.stubGlobal("fetch", fetchMock);
 
     await writeEntity(
@@ -161,7 +153,7 @@ describe("writeEntity — transport", () => {
   });
 
   it("DELETEs the root item path when the scope carries no orgId", async () => {
-    const fetchMock = vi.fn().mockResolvedValue(mockResponse(200, {}));
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse(200, {}));
     vi.stubGlobal("fetch", fetchMock);
 
     await writeEntity(BACKEND_URL, "organizations", {}, { id: "org1" });
@@ -226,7 +218,7 @@ describe("writeEntity — outcomes", () => {
   it("maps a 2xx response to a success outcome carrying the parsed body", async () => {
     vi.stubGlobal(
       "fetch",
-      vi.fn().mockResolvedValue(mockResponse(201, { id: "a1", name: "Bot" })),
+      vi.fn().mockResolvedValue(jsonResponse(201, { id: "a1", name: "Bot" })),
     );
 
     const result = await writeEntity(
@@ -246,7 +238,7 @@ describe("writeEntity — outcomes", () => {
   });
 
   it("declares both the collection and item keys to revalidate after an update", async () => {
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(mockResponse(200, {})));
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse(200, {})));
 
     const result = await writeEntity(
       BACKEND_URL,
@@ -268,7 +260,7 @@ describe("writeEntity — outcomes", () => {
   });
 
   it("declares only the collection key to revalidate after a delete", async () => {
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(mockResponse(200, {})));
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse(200, {})));
 
     const result = await writeEntity(
       BACKEND_URL,
@@ -292,7 +284,7 @@ describe("writeEntity — outcomes", () => {
       "fetch",
       vi
         .fn()
-        .mockResolvedValue(mockResponse(404, { error: "Agent not found" })),
+        .mockResolvedValue(jsonResponse(404, { error: "Agent not found" })),
     );
 
     const result = await writeEntity(
@@ -309,7 +301,7 @@ describe("writeEntity — outcomes", () => {
   });
 
   it("falls back to a default message when a 404 body carries none", async () => {
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(mockResponse(404, {})));
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse(404, {})));
 
     const result = await writeEntity(
       BACKEND_URL,
@@ -328,7 +320,7 @@ describe("writeEntity — outcomes", () => {
     vi.stubGlobal(
       "fetch",
       vi.fn().mockResolvedValue(
-        mockResponse(403, {
+        jsonResponse(403, {
           error: "This resource is managed at the organization level",
         }),
       ),
@@ -351,7 +343,7 @@ describe("writeEntity — outcomes", () => {
   });
 
   it("maps a 403 with an empty body to a forbidden outcome with the neutral default message", async () => {
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(mockResponse(403, {})));
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse(403, {})));
 
     const result = await writeEntity(
       BACKEND_URL,
@@ -373,7 +365,7 @@ describe("writeEntity — outcomes", () => {
     vi.stubGlobal(
       "fetch",
       vi.fn().mockResolvedValue(
-        mockResponse(409, {
+        jsonResponse(409, {
           error: "A resource with that name already exists",
         }),
       ),
@@ -398,7 +390,7 @@ describe("writeEntity — outcomes", () => {
     vi.stubGlobal(
       "fetch",
       vi.fn().mockResolvedValue(
-        mockResponse(400, {
+        jsonResponse(400, {
           data: {},
           success: false,
           error: [
@@ -436,7 +428,7 @@ describe("writeEntity — outcomes", () => {
     vi.stubGlobal(
       "fetch",
       vi.fn().mockResolvedValue(
-        mockResponse(400, {
+        jsonResponse(400, {
           error: "Some files could not be processed: scan.pdf",
           files: ["scan.pdf"],
         }),
@@ -460,7 +452,7 @@ describe("writeEntity — outcomes", () => {
       "fetch",
       vi
         .fn()
-        .mockResolvedValue(mockResponse(400, { error: "Invalid label ID" })),
+        .mockResolvedValue(jsonResponse(400, { error: "Invalid label ID" })),
     );
 
     const result = await writeEntity(BACKEND_URL, "boards", {
@@ -481,7 +473,7 @@ describe("writeEntity — outcomes", () => {
       vi
         .fn()
         .mockResolvedValue(
-          mockResponse(500, { error: "Internal Server Error" }),
+          jsonResponse(500, { error: "Internal Server Error" }),
         ),
     );
 
@@ -559,7 +551,7 @@ describe("writeAt", () => {
   it("sends the given method and body to the given URL", async () => {
     const fetchMock = vi
       .fn()
-      .mockResolvedValue(mockResponse(201, { id: "c1" }));
+      .mockResolvedValue(jsonResponse(201, { id: "c1" }));
     vi.stubGlobal("fetch", fetchMock);
 
     await writeAt(`${BACKEND_URL}/users/me/contexts`, {
@@ -579,7 +571,7 @@ describe("writeAt", () => {
   });
 
   it("sends no body for a DELETE", async () => {
-    const fetchMock = vi.fn().mockResolvedValue(mockResponse(200, {}));
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse(200, {}));
     vi.stubGlobal("fetch", fetchMock);
 
     await writeAt(`${BACKEND_URL}/users/me/contexts/c1`, {
@@ -595,7 +587,7 @@ describe("writeAt", () => {
   it("defaults revalidateKeys to an empty array when omitted", async () => {
     vi.stubGlobal(
       "fetch",
-      vi.fn().mockResolvedValue(mockResponse(200, { ok: true })),
+      vi.fn().mockResolvedValue(jsonResponse(200, { ok: true })),
     );
 
     const result = await writeAt(`${BACKEND_URL}/oauth/mcp/callback`, {
@@ -611,7 +603,7 @@ describe("writeAt", () => {
   });
 
   it("carries caller-supplied revalidateKeys on success", async () => {
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(mockResponse(200, {})));
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse(200, {})));
 
     const result = await writeAt(`${BACKEND_URL}/users/me/contexts/c1`, {
       method: "PUT",
@@ -631,7 +623,7 @@ describe("writeAt", () => {
     vi.stubGlobal(
       "fetch",
       vi.fn().mockResolvedValue(
-        mockResponse(409, {
+        jsonResponse(409, {
           error: "You already have a context for this scope",
         }),
       ),
@@ -651,7 +643,7 @@ describe("writeAt", () => {
   it("sends a PATCH with a body, for a partial update", async () => {
     const fetchMock = vi
       .fn()
-      .mockResolvedValue(mockResponse(200, { id: "m1", role: "admin" }));
+      .mockResolvedValue(jsonResponse(200, { id: "m1", role: "admin" }));
     vi.stubGlobal("fetch", fetchMock);
 
     await writeAt(`${BACKEND_URL}/organizations/org1/members/m1`, {

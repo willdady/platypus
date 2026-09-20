@@ -1,28 +1,16 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useRef, useState } from "react";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import type { Provider, Skill } from "@platypus/schemas";
+import type { Skill } from "@platypus/schemas";
 import { Composer } from "./composer";
 import { SlashCommandPicker } from "./slash-command-picker";
 import { useSlashCommands } from "@/hooks/use-slash-commands";
+import { composerProvider } from "@/lib/chat-test-fixtures";
+import { installMatchMediaStub } from "@/lib/test-utils";
 
 vi.mock("sonner", () => ({ toast: { error: vi.fn() } }));
 
-beforeEach(() => {
-  // jsdom has no matchMedia; PromptInputTextarea subscribes to it for the
-  // mobile Enter-inserts-a-newline branch.
-  window.matchMedia = vi.fn().mockReturnValue({
-    matches: false,
-    addEventListener: vi.fn(),
-    removeEventListener: vi.fn(),
-  }) as unknown as typeof window.matchMedia;
-});
-
-const provider = {
-  id: "provider-1",
-  name: "OpenAI",
-  modelIds: ["gpt-4o"],
-} as unknown as Provider;
+beforeEach(installMatchMediaStub);
 
 const skill = (
   name: string,
@@ -70,10 +58,10 @@ const renderPicker = ({
           passthroughFileTypes={[]}
           modelSelection={{
             agents: [],
-            providers: [provider],
+            providers: [composerProvider],
             agentId: "",
             modelId: "gpt-4o",
-            providerId: provider.id,
+            providerId: composerProvider.id,
             isResolved: true,
             onModelChange: vi.fn(),
           }}

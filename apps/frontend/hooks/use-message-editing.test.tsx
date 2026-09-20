@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from "vitest";
 import { act, renderHook } from "@testing-library/react";
 import type { FileUIPart, UIMessage } from "ai";
 import { useMessageEditing } from "./use-message-editing";
+import { reportPdf, screenshotPng } from "@/lib/chat-test-fixtures";
 
 /**
  * Editing used to resubmit `{ text }` and nothing else, so a message that
@@ -10,25 +11,15 @@ import { useMessageEditing } from "./use-message-editing";
  * round trip at the hook: what an edit opens holding, and what it resubmits.
  */
 
-const report: FileUIPart = {
-  type: "file",
-  url: "https://files.example.com/report.pdf",
-  mediaType: "application/pdf",
-  filename: "report.pdf",
-};
-
-const screenshot: FileUIPart = {
-  type: "file",
-  url: "https://files.example.com/shot.png",
-  mediaType: "image/png",
-  filename: "shot.png",
-};
-
 const transcript: UIMessage[] = [
   {
     id: "u1",
     role: "user",
-    parts: [report, screenshot, { type: "text", text: "What does this say?" }],
+    parts: [
+      reportPdf,
+      screenshotPng,
+      { type: "text", text: "What does this say?" },
+    ],
   },
   {
     id: "a1",
@@ -63,7 +54,7 @@ describe("useMessageEditing opening an edit", () => {
     expect(result.current.editing).toEqual({
       messageId: "u1",
       text: "What does this say?",
-      attachments: [report, screenshot],
+      attachments: [reportPdf, screenshotPng],
     });
   });
 
@@ -104,14 +95,14 @@ describe("useMessageEditing submitting an edit", () => {
     act(() =>
       result.current.handleMessageEditSubmit({
         text: "What does this actually say?",
-        files: [report, screenshot],
+        files: [reportPdf, screenshotPng],
       }),
     );
 
     expect(sendMessage).toHaveBeenCalledWith(
       {
         text: "What does this actually say?",
-        files: [report, screenshot],
+        files: [reportPdf, screenshotPng],
       },
       { body: { providerId: "p1" } },
     );
@@ -153,11 +144,11 @@ describe("useMessageEditing submitting an edit", () => {
     act(() =>
       result.current.handleMessageEditSubmit({
         text: "Both, please",
-        files: [report, added],
+        files: [reportPdf, added],
       }),
     );
 
-    expect(sendMessage.mock.calls[0][0].files).toEqual([report, added]);
+    expect(sendMessage.mock.calls[0][0].files).toEqual([reportPdf, added]);
   });
 
   // An attachment-only edit is a real edit: the question was the file.
@@ -166,12 +157,12 @@ describe("useMessageEditing submitting an edit", () => {
 
     act(() => result.current.handleMessageEditStart("u1"));
     act(() =>
-      result.current.handleMessageEditSubmit({ text: "", files: [report] }),
+      result.current.handleMessageEditSubmit({ text: "", files: [reportPdf] }),
     );
 
     expect(sendMessage.mock.calls[0][0]).toEqual({
       text: "Sent with attachments",
-      files: [report],
+      files: [reportPdf],
     });
   });
 

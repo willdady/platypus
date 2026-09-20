@@ -9,7 +9,11 @@ function stubFetch(impl: () => Promise<Response> | Response) {
   return spy;
 }
 
-function jsonResponse(body: unknown, status = 200) {
+/**
+ * A genuine `Response`, not the shape-cast stub in `lib/test-utils`: this
+ * module runs server-side and reads the body through the real class.
+ */
+function httpResponse(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
     status,
     headers: { "content-type": "application/json" },
@@ -28,7 +32,7 @@ describe("fetchToolSets", () => {
   });
 
   it("returns the tool sets when the request succeeds", async () => {
-    stubFetch(() => jsonResponse({ results: [{ id: "ts1", name: "Web" }] }));
+    stubFetch(() => httpResponse({ results: [{ id: "ts1", name: "Web" }] }));
 
     const result = await fetchToolSets("/organizations/o1/tools", cookie);
 
@@ -39,7 +43,7 @@ describe("fetchToolSets", () => {
   });
 
   it("returns an empty list, not a failure, when the workspace has no tool sets", async () => {
-    stubFetch(() => jsonResponse({ results: [] }));
+    stubFetch(() => httpResponse({ results: [] }));
 
     const result = await fetchToolSets("/organizations/o1/tools", cookie);
 
@@ -47,7 +51,7 @@ describe("fetchToolSets", () => {
   });
 
   it("forwards the caller's cookie to the backend so SSR requests carry the session", async () => {
-    const spy = stubFetch(() => jsonResponse({ results: [] }));
+    const spy = stubFetch(() => httpResponse({ results: [] }));
 
     await fetchToolSets("/organizations/o1/tools", cookie);
 
@@ -58,7 +62,7 @@ describe("fetchToolSets", () => {
   });
 
   it("reports an unauthorized failure on 401 rather than throwing", async () => {
-    stubFetch(() => jsonResponse({ error: "Unauthorized" }, 401));
+    stubFetch(() => httpResponse({ error: "Unauthorized" }, 401));
 
     const result = await fetchToolSets("/organizations/o1/tools", cookie);
 
@@ -66,7 +70,7 @@ describe("fetchToolSets", () => {
   });
 
   it("reports an unauthorized failure on 403", async () => {
-    stubFetch(() => jsonResponse({ error: "Forbidden" }, 403));
+    stubFetch(() => httpResponse({ error: "Forbidden" }, 403));
 
     const result = await fetchToolSets("/organizations/o1/tools", cookie);
 
@@ -74,7 +78,7 @@ describe("fetchToolSets", () => {
   });
 
   it("reports an unavailable failure on a server error", async () => {
-    stubFetch(() => jsonResponse({ error: "Boom" }, 500));
+    stubFetch(() => httpResponse({ error: "Boom" }, 500));
 
     const result = await fetchToolSets("/organizations/o1/tools", cookie);
 
@@ -90,7 +94,7 @@ describe("fetchToolSets", () => {
   });
 
   it("reports an unavailable failure when a 200 body carries no results array", async () => {
-    stubFetch(() => jsonResponse({ unexpected: true }));
+    stubFetch(() => httpResponse({ unexpected: true }));
 
     const result = await fetchToolSets("/organizations/o1/tools", cookie);
 
@@ -108,7 +112,7 @@ describe("fetchToolSets", () => {
   it("falls back to BACKEND_URL when no internal URL is configured", async () => {
     delete process.env.INTERNAL_BACKEND_URL;
     process.env.BACKEND_URL = "http://localhost:4000";
-    const spy = stubFetch(() => jsonResponse({ results: [] }));
+    const spy = stubFetch(() => httpResponse({ results: [] }));
 
     await fetchToolSets("/organizations/o1/tools", cookie);
 

@@ -1,61 +1,36 @@
-import { describe, it, expect, vi, afterEach, beforeAll } from "vitest";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { screen, waitFor } from "@testing-library/react";
 import type { Agent, Provider } from "@platypus/schemas";
 import {
-  installRadixPointerPolyfills,
-  openDropdownMenu as openMenu,
-} from "@/lib/test-utils";
-
-beforeAll(installRadixPointerPolyfills);
+  authMock,
+  navigationMock,
+  toastMock,
+  swrMock,
+  mockScopedSWR,
+  resetListHarness,
+  renderList,
+  confirmDialog,
+  stubAcceptedSave,
+  stubRejectedSave,
+  jsonResponse,
+  push,
+  mutate,
+  toastError,
+  toastInfo,
+} from "@/lib/list-test-harness";
 
 // --- Module mocks ------------------------------------------------------------
 
-vi.mock("@/components/auth-provider", () => ({
-  useBackendUrl: () => "http://test",
-  useAuth: () => ({
-    user: { id: "u1" },
-    actor: "org-admin",
-  }),
-}));
-
-const pushSpy = vi.fn();
-vi.mock("next/navigation", () => ({
-  useRouter: () => ({ push: pushSpy }),
-}));
-
-vi.mock("sonner", () => ({
-  toast: { error: vi.fn(), info: vi.fn(), success: vi.fn() },
-}));
-
-type AgentWithScope = Agent & { scope?: "organization" | "workspace" };
-
-// The `GET .../agents` list this component renders. Set per test.
-let agents: AgentWithScope[] = [];
-const provider: Provider = { id: "p1", name: "OpenAI" } as unknown as Provider;
-
-const mutateSpy = vi.fn();
-
-vi.mock("swr", () => ({
-  __esModule: true,
-  default: (key: string | null) => {
-    if (key?.includes("/agents")) {
-      return {
-        data: { results: agents },
-        isLoading: false,
-        mutate: mutateSpy,
-      };
-    }
-    if (key?.includes("/providers")) {
-      return { data: { results: [provider] }, isLoading: false };
-    }
-    return { data: { results: [] }, isLoading: false };
-  },
-}));
+vi.mock("@/components/auth-provider", () => authMock);
+vi.mock("next/navigation", () => navigationMock);
+vi.mock("sonner", () => toastMock);
+vi.mock("swr", () => swrMock);
 
 import { AgentsList } from "./agents-list";
-import { toast } from "sonner";
 
-// --- Helpers -----------------------------------------------------------------
+// --- Fixtures ----------------------------------------------------------------
+
+type AgentWithScope = Agent & { scope?: "organization" | "workspace" };
 
 const orgAgent: AgentWithScope = {
   id: "a1",
@@ -71,18 +46,18 @@ const workspaceAgent: AgentWithScope = {
   scope: "workspace",
 } as unknown as AgentWithScope;
 
-function jsonResponse(status: number, body: unknown) {
-  return {
-    ok: status >= 200 && status < 300,
-    status,
-    json: async () => body,
-  } as unknown as Response;
+const provider: Provider = { id: "p1", name: "OpenAI" } as unknown as Provider;
+
+/** Renders the Workspace surface with `agents` in the list. */
+function renderAgents(agents: AgentWithScope[], menuItem?: string) {
+  mockScopedSWR({ "/agents": agents, "/providers": [provider] });
+  return renderList(<AgentsList orgId="org1" workspaceId="ws1" />, menuItem);
 }
 
+beforeEach(resetListHarness);
+
 afterEach(() => {
-  agents = [];
-  mutateSpy.mockClear();
-  pushSpy.mockClear();
+  vi.unstubAllGlobals();
   vi.restoreAllMocks();
 });
 
@@ -90,25 +65,20 @@ afterEach(() => {
 
 describe("AgentsList detach", () => {
   it("surfaces the backend's reason and keeps the row when detach is refused", async () => {
-    agents = [orgAgent];
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValue(
-        jsonResponse(409, { error: "This agent is a sub-agent elsewhere" }),
-      );
-    vi.stubGlobal("fetch", fetchMock);
+    const fetchMock = stubRejectedSave(
+      "This agent is a sub-agent elsewhere",
+      409,
+    );
 
-    render(<AgentsList orgId="org1" workspaceId="ws1" />);
-    openMenu();
-    fireEvent.click(screen.getByText("Detach"));
-    fireEvent.click(screen.getByRole("button", { name: /Detach/ }));
+    renderAgents([orgAgent], "Detach");
+    await confirmDialog(/Detach/);
 
     await waitFor(() =>
       expect(
         screen.getByText("This agent is a sub-agent elsewhere"),
       ).toBeInTheDocument(),
     );
-    expect(mutateSpy).not.toHaveBeenCalled();
+    expect(mutate).not.toHaveBeenCalled();
     expect(screen.getByText("Detach shared agent")).toBeInTheDocument();
     expect(fetchMock).toHaveBeenCalledWith(
       "http://test/organizations/org1/workspaces/ws1/attachments/agent/a1",
@@ -117,32 +87,24 @@ describe("AgentsList detach", () => {
   });
 
   it("revalidates and closes the dialog when detach succeeds", async () => {
-    agents = [orgAgent];
-    const fetchMock = vi.fn().mockResolvedValue(jsonResponse(200, {}));
-    vi.stubGlobal("fetch", fetchMock);
+    stubAcceptedSave();
 
-    render(<AgentsList orgId="org1" workspaceId="ws1" />);
-    openMenu();
-    fireEvent.click(screen.getByText("Detach"));
-    fireEvent.click(screen.getByRole("button", { name: /Detach/ }));
+    renderAgents([orgAgent], "Detach");
+    await confirmDialog(/Detach/);
 
-    await waitFor(() => expect(mutateSpy).toHaveBeenCalled());
+    await waitFor(() => expect(mutate).toHaveBeenCalled());
     expect(screen.queryByText("Detach shared agent")).not.toBeInTheDocument();
   });
 });
 
 describe("AgentsList delete", () => {
   it("deletes the workspace-scoped agent through the request module", async () => {
-    agents = [workspaceAgent];
-    const fetchMock = vi.fn().mockResolvedValue(jsonResponse(200, {}));
-    vi.stubGlobal("fetch", fetchMock);
+    const fetchMock = stubAcceptedSave();
 
-    render(<AgentsList orgId="org1" workspaceId="ws1" />);
-    openMenu();
-    fireEvent.click(screen.getByText("Delete"));
-    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+    renderAgents([workspaceAgent], "Delete");
+    await confirmDialog("Delete");
 
-    await waitFor(() => expect(mutateSpy).toHaveBeenCalled());
+    await waitFor(() => expect(mutate).toHaveBeenCalled());
     expect(fetchMock).toHaveBeenCalledWith(
       "http://test/organizations/org1/workspaces/ws1/agents/a2",
       expect.objectContaining({ method: "DELETE" }),
@@ -150,63 +112,43 @@ describe("AgentsList delete", () => {
   });
 
   it("shows the backend's guidance, not an error, when delete is refused because the agent is Shared", async () => {
-    agents = [workspaceAgent];
-    const fetchMock = vi.fn().mockResolvedValue(
-      jsonResponse(403, {
-        error: "This agent is managed at the organization level",
-      }),
-    );
-    vi.stubGlobal("fetch", fetchMock);
+    stubRejectedSave("This agent is managed at the organization level", 403);
 
-    render(<AgentsList orgId="org1" workspaceId="ws1" />);
-    openMenu();
-    fireEvent.click(screen.getByText("Delete"));
-    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+    renderAgents([workspaceAgent], "Delete");
+    await confirmDialog("Delete");
 
     await waitFor(() =>
-      expect(toast.info).toHaveBeenCalledWith(
+      expect(toastInfo).toHaveBeenCalledWith(
         "This agent is managed at the organization level",
       ),
     );
-    expect(toast.error).not.toHaveBeenCalled();
-    expect(mutateSpy).not.toHaveBeenCalled();
+    expect(toastError).not.toHaveBeenCalled();
+    expect(mutate).not.toHaveBeenCalled();
     expect(screen.queryByText("Delete Agent")).not.toBeInTheDocument();
   });
 
   it("surfaces the backend's reason inline when delete fails for another reason", async () => {
-    agents = [workspaceAgent];
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValue(jsonResponse(409, { error: "Agent is in use" }));
-    vi.stubGlobal("fetch", fetchMock);
+    stubRejectedSave("Agent is in use", 409);
 
-    render(<AgentsList orgId="org1" workspaceId="ws1" />);
-    openMenu();
-    fireEvent.click(screen.getByText("Delete"));
-    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+    renderAgents([workspaceAgent], "Delete");
+    await confirmDialog("Delete");
 
     await waitFor(() =>
       expect(screen.getByText("Agent is in use")).toBeInTheDocument(),
     );
-    expect(mutateSpy).not.toHaveBeenCalled();
+    expect(mutate).not.toHaveBeenCalled();
   });
 });
 
 describe("AgentsList clone", () => {
   it("navigates to the new agent on success", async () => {
-    agents = [workspaceAgent];
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValue(jsonResponse(201, { id: "a3", name: "Cloned" }));
-    vi.stubGlobal("fetch", fetchMock);
+    const fetchMock = stubAcceptedSave({ id: "a3", name: "Cloned" }, 201);
 
-    render(<AgentsList orgId="org1" workspaceId="ws1" />);
-    openMenu();
-    fireEvent.click(screen.getByText("Clone"));
-    fireEvent.click(screen.getByRole("button", { name: "Clone" }));
+    renderAgents([workspaceAgent], "Clone");
+    await confirmDialog("Clone");
 
     await waitFor(() =>
-      expect(pushSpy).toHaveBeenCalledWith("/org1/workspace/ws1/agents/a3"),
+      expect(push).toHaveBeenCalledWith("/org1/workspace/ws1/agents/a3"),
     );
     expect(fetchMock).toHaveBeenCalledWith(
       "http://test/organizations/org1/workspaces/ws1/agents",
@@ -215,27 +157,22 @@ describe("AgentsList clone", () => {
   });
 
   it("surfaces the backend's reason when clone fails", async () => {
-    agents = [workspaceAgent];
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValue(jsonResponse(409, { error: "Name already in use" }));
-    vi.stubGlobal("fetch", fetchMock);
+    stubRejectedSave("Name already in use", 409);
 
-    render(<AgentsList orgId="org1" workspaceId="ws1" />);
-    openMenu();
-    fireEvent.click(screen.getByText("Clone"));
-    fireEvent.click(screen.getByRole("button", { name: "Clone" }));
+    renderAgents([workspaceAgent], "Clone");
+    await confirmDialog("Clone");
 
     await waitFor(() =>
       expect(screen.getByText("Name already in use")).toBeInTheDocument(),
     );
-    expect(pushSpy).not.toHaveBeenCalled();
+    expect(push).not.toHaveBeenCalled();
   });
 });
 
 describe("AgentsList promote", () => {
   it("surfaces blockers from a refused promote", async () => {
-    agents = [workspaceAgent];
+    // Not `stubRejectedSave`: a refused promote carries its blockers beside
+    // the reason, which that helper's `{ error }` body has no room for.
     const fetchMock = vi.fn().mockResolvedValue(
       jsonResponse(422, {
         error: "Promote blocked",
@@ -244,18 +181,46 @@ describe("AgentsList promote", () => {
     );
     vi.stubGlobal("fetch", fetchMock);
 
-    render(<AgentsList orgId="org1" workspaceId="ws1" />);
-    openMenu();
-    fireEvent.click(screen.getByText("Promote to organization"));
-    fireEvent.click(screen.getByRole("button", { name: "Promote" }));
+    renderAgents([workspaceAgent], "Promote to organization");
+    await confirmDialog("Promote");
 
     await waitFor(() =>
       expect(screen.getByText("Private Skill")).toBeInTheDocument(),
     );
-    expect(mutateSpy).not.toHaveBeenCalled();
+    expect(mutate).not.toHaveBeenCalled();
     expect(fetchMock).toHaveBeenCalledWith(
       "http://test/organizations/org1/workspaces/ws1/agents/a2/promote",
       expect.objectContaining({ method: "POST" }),
     );
+  });
+});
+
+describe("AgentsList list states", () => {
+  it("shows the empty state when the workspace has no agents", () => {
+    renderAgents([]);
+
+    expect(
+      screen.getByText("No agents yet. Create one to get started."),
+    ).toBeInTheDocument();
+  });
+
+  it("shows the loading state while the read is in flight", () => {
+    mockScopedSWR({
+      "/agents": { isLoading: true },
+      "/providers": [provider],
+    });
+    renderList(<AgentsList orgId="org1" workspaceId="ws1" />);
+
+    expect(screen.getByText("Loading...")).toBeInTheDocument();
+  });
+
+  it("surfaces a failed read rather than rendering an empty list", () => {
+    mockScopedSWR({
+      "/agents": { error: new Error("500") },
+      "/providers": [provider],
+    });
+    renderList(<AgentsList orgId="org1" workspaceId="ws1" />);
+
+    expect(screen.getByText(/Failed to load/i)).toBeInTheDocument();
   });
 });

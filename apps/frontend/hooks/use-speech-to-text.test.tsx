@@ -1,87 +1,25 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { act, renderHook } from "@testing-library/react";
+import {
+  installSpeechRecognition,
+  uninstallSpeechRecognition,
+  setSecureContext,
+} from "@/lib/chat-test-fixtures";
 import { useSpeechToText } from "./use-speech-to-text";
 
-class FakeSpeechRecognition extends EventTarget {
-  continuous = false;
-  interimResults = false;
-  lang = "";
-  start = vi.fn(() => {
-    this.onstart?.(new Event("start"));
-  });
-  stop = vi.fn(() => {
-    this.onend?.(new Event("end"));
-  });
-  onstart: ((ev: Event) => void) | null = null;
-  onend: ((ev: Event) => void) | null = null;
-  onresult: ((ev: unknown) => void) | null = null;
-  onerror: ((ev: unknown) => void) | null = null;
-
-  emitFinalResult(transcript: string) {
-    this.emitResults([{ transcript, isFinal: true }]);
-  }
-
-  /**
-   * Emits one `onresult` carrying the whole result list, the way Chrome on
-   * Android does: every result seen so far in the session, `resultIndex`
-   * back at 0.
-   */
-  emitResults(
-    entries: { transcript: string; isFinal: boolean }[],
-    resultIndex = 0,
-  ) {
-    const results: Record<string | number, unknown> = {
-      length: entries.length,
-    };
-    entries.forEach((entry, index) => {
-      results[index] = {
-        isFinal: entry.isFinal,
-        length: 1,
-        0: { transcript: entry.transcript, confidence: 1 },
-      };
-    });
-    this.onresult?.({ resultIndex, results });
-  }
-
-  emitError(error: string) {
-    this.onerror?.({ error });
-  }
-}
-
 describe("useSpeechToText", () => {
-  let lastInstance: FakeSpeechRecognition | null = null;
-  const registerInstance = (instance: FakeSpeechRecognition) => {
-    lastInstance = instance;
-  };
-
-  class TrackingSpeechRecognition extends FakeSpeechRecognition {
-    constructor() {
-      super();
-      registerInstance(this);
-    }
-  }
-
-  const setSecureContext = (value: boolean) => {
-    Object.defineProperty(window, "isSecureContext", {
-      value,
-      configurable: true,
-    });
-  };
+  /** The session the hook most recently constructed. */
+  let recognition: ReturnType<typeof installSpeechRecognition>;
 
   beforeEach(() => {
-    lastInstance = null;
     setSecureContext(true);
-    window.SpeechRecognition =
-      TrackingSpeechRecognition as unknown as Window["SpeechRecognition"];
+    recognition = installSpeechRecognition();
   });
 
-  afterEach(() => {
-    Reflect.deleteProperty(window, "SpeechRecognition");
-    Reflect.deleteProperty(window, "webkitSpeechRecognition");
-  });
+  afterEach(uninstallSpeechRecognition);
 
   it("reports unsupported when no Web Speech API is present", () => {
-    Reflect.deleteProperty(window, "SpeechRecognition");
+    uninstallSpeechRecognition();
     const { result } = renderHook(() => useSpeechToText());
     expect(result.current.isSupported).toBe(false);
   });
@@ -93,11 +31,11 @@ describe("useSpeechToText", () => {
 
     act(() => result.current.toggleListening());
     expect(result.current.isListening).toBe(true);
-    expect(lastInstance?.start).toHaveBeenCalledTimes(1);
+    expect(recognition()?.start).toHaveBeenCalledTimes(1);
 
     act(() => result.current.toggleListening());
     expect(result.current.isListening).toBe(false);
-    expect(lastInstance?.stop).toHaveBeenCalledTimes(1);
+    expect(recognition()?.stop).toHaveBeenCalledTimes(1);
   });
 
   it("appends a final transcript onto the textarea and dispatches input", () => {
@@ -112,7 +50,7 @@ describe("useSpeechToText", () => {
       useSpeechToText({ textareaRef, onTranscriptionChange }),
     );
 
-    act(() => lastInstance?.emitFinalResult("world"));
+    act(() => recognition()?.emitFinalResult("world"));
 
     expect(textarea.value).toBe("hello world");
     expect(inputHandler).toHaveBeenCalledTimes(1);
@@ -149,7 +87,7 @@ describe("useSpeechToText", () => {
 
     stream.forEach((_, index) => {
       act(() =>
-        lastInstance?.emitResults(
+        recognition()?.emitResults(
           stream
             .slice(0, index + 1)
             .map((transcript) => ({ transcript, isFinal: true })),
@@ -175,13 +113,13 @@ describe("useSpeechToText", () => {
     act(() => result.current.toggleListening());
 
     act(() =>
-      lastInstance?.emitResults([{ transcript: "one", isFinal: true }]),
+      recognition()?.emitResults([{ transcript: "one", isFinal: true }]),
     );
     expect(textarea.value).toBe("one");
 
     // The engine re-sends the finalised "one" alongside the new " two".
     act(() =>
-      lastInstance?.emitResults([
+      recognition()?.emitResults([
         { transcript: "one", isFinal: true },
         { transcript: " two", isFinal: true },
       ]),
@@ -203,7 +141,7 @@ describe("useSpeechToText", () => {
     // spoken once. Judging each entry against its neighbour keeps the mistake
     // to the pair - the unrelated segment after it still lands.
     act(() =>
-      lastInstance?.emitResults([
+      recognition()?.emitResults([
         { transcript: "yes", isFinal: true },
         { transcript: "yes please", isFinal: true },
         { transcript: "send it", isFinal: true },
@@ -222,17 +160,17 @@ describe("useSpeechToText", () => {
     act(() => result.current.toggleListening());
 
     act(() =>
-      lastInstance?.emitResults([{ transcript: "hello", isFinal: false }]),
+      recognition()?.emitResults([{ transcript: "hello", isFinal: false }]),
     );
     expect(textarea.value).toBe("");
 
     act(() =>
-      lastInstance?.emitResults([{ transcript: "hello", isFinal: true }]),
+      recognition()?.emitResults([{ transcript: "hello", isFinal: true }]),
     );
     expect(textarea.value).toBe("hello");
 
     act(() =>
-      lastInstance?.emitResults([
+      recognition()?.emitResults([
         { transcript: "hello", isFinal: true },
         { transcript: "there", isFinal: false },
       ]),
@@ -248,7 +186,7 @@ describe("useSpeechToText", () => {
 
     act(() => result.current.toggleListening());
     act(() =>
-      lastInstance?.emitResults([
+      recognition()?.emitResults([
         { transcript: "one", isFinal: true },
         { transcript: " two", isFinal: true },
       ]),
@@ -260,7 +198,7 @@ describe("useSpeechToText", () => {
     act(() => result.current.toggleListening());
     act(() => result.current.toggleListening());
     act(() =>
-      lastInstance?.emitResults([{ transcript: "three", isFinal: true }]),
+      recognition()?.emitResults([{ transcript: "three", isFinal: true }]),
     );
 
     expect(textarea.value).toBe("one two three");
@@ -272,7 +210,7 @@ describe("useSpeechToText", () => {
     act(() => result.current.toggleListening());
     expect(result.current.fault).toBeNull();
 
-    act(() => lastInstance?.emitError("not-allowed"));
+    act(() => recognition()?.emitError("not-allowed"));
 
     expect(result.current.fault).toEqual({ code: "not-allowed" });
     expect(result.current.isListening).toBe(false);
@@ -282,11 +220,11 @@ describe("useSpeechToText", () => {
     const { result } = renderHook(() => useSpeechToText());
 
     act(() => result.current.toggleListening());
-    act(() => lastInstance?.emitError("network"));
+    act(() => recognition()?.emitError("network"));
     const first = result.current.fault;
 
     act(() => result.current.toggleListening());
-    act(() => lastInstance?.emitError("network"));
+    act(() => recognition()?.emitError("network"));
 
     expect(result.current.fault).toEqual({ code: "network" });
     expect(result.current.fault).not.toBe(first);
@@ -296,7 +234,7 @@ describe("useSpeechToText", () => {
     const { result } = renderHook(() => useSpeechToText());
 
     act(() => result.current.toggleListening());
-    act(() => lastInstance?.emitError("something-new"));
+    act(() => recognition()?.emitError("something-new"));
 
     expect(result.current.fault).toEqual({ code: "unknown" });
   });
@@ -305,7 +243,7 @@ describe("useSpeechToText", () => {
     const { result } = renderHook(() => useSpeechToText());
 
     act(() => result.current.toggleListening());
-    act(() => lastInstance?.emitError(error));
+    act(() => recognition()?.emitError(error));
 
     expect(result.current.fault).toBeNull();
     expect(result.current.isListening).toBe(false);
@@ -318,7 +256,7 @@ describe("useSpeechToText", () => {
 
     expect(result.current.isSupported).toBe(false);
     // No recognition object is built at all, so nothing can be started.
-    expect(lastInstance).toBeNull();
+    expect(recognition()).toBeNull();
 
     act(() => result.current.toggleListening());
 
@@ -338,6 +276,6 @@ describe("useSpeechToText", () => {
   it("stops recognition on unmount", () => {
     const { unmount } = renderHook(() => useSpeechToText());
     unmount();
-    expect(lastInstance?.stop).toHaveBeenCalledTimes(1);
+    expect(recognition()?.stop).toHaveBeenCalledTimes(1);
   });
 });

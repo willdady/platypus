@@ -7,10 +7,19 @@ import {
   fireEvent,
   waitFor,
 } from "@testing-library/react";
-import type { Provider } from "@platypus/schemas";
 import { Composer } from "./composer";
 import { PromptInputSpeechButton } from "./ai-elements/prompt-input";
 import { toast } from "sonner";
+import {
+  composerProvider,
+  installSpeechRecognition,
+  uninstallSpeechRecognition,
+  setSecureContext,
+} from "@/lib/chat-test-fixtures";
+import {
+  installMatchMediaStub,
+  installResizeObserverStub,
+} from "@/lib/test-utils";
 
 vi.mock("sonner", () => ({
   toast: { error: vi.fn() },
@@ -38,36 +47,8 @@ vi.mock("sonner", () => ({
  * physical device.
  */
 
-class FakeSpeechRecognition extends EventTarget {
-  continuous = false;
-  interimResults = false;
-  lang = "";
-  start = vi.fn(() => this.onstart?.(new Event("start")));
-  stop = vi.fn(() => this.onend?.(new Event("end")));
-  onstart: ((ev: Event) => void) | null = null;
-  onend: ((ev: Event) => void) | null = null;
-  onresult: ((ev: unknown) => void) | null = null;
-  onerror: ((ev: unknown) => void) | null = null;
-}
-
-let lastRecognition: FakeSpeechRecognition | null = null;
-
-const registerRecognition = (instance: FakeSpeechRecognition) => {
-  lastRecognition = instance;
-};
-
-class TrackingSpeechRecognition extends FakeSpeechRecognition {
-  constructor() {
-    super();
-    registerRecognition(this);
-  }
-}
-
-const provider = {
-  id: "provider-1",
-  name: "OpenAI",
-  modelIds: ["gpt-4o"],
-} as unknown as Provider;
+/** The session the composer most recently constructed. */
+let recognition: ReturnType<typeof installSpeechRecognition>;
 
 const renderComposer = () => {
   const onModelChange = vi.fn();
@@ -83,10 +64,10 @@ const renderComposer = () => {
         passthroughFileTypes={[]}
         modelSelection={{
           agents: [],
-          providers: [provider],
+          providers: [composerProvider],
           agentId: "",
           modelId,
-          providerId: modelId ? provider.id : "",
+          providerId: modelId ? composerProvider.id : "",
           isResolved: true,
           onModelChange: (v) => {
             onModelChange(v);
@@ -120,13 +101,6 @@ const openPicker = (trigger: HTMLElement) => {
   return screen.getByText("gpt-4o");
 };
 
-const setSecureContext = (value: boolean) => {
-  Object.defineProperty(window, "isSecureContext", {
-    value,
-    configurable: true,
-  });
-};
-
 /** Records every element that takes focus from this point on, in order. */
 const recordFocus = () => {
   const targets: EventTarget[] = [];
@@ -136,28 +110,15 @@ const recordFocus = () => {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  // jsdom has no matchMedia; PromptInputTextarea subscribes to it.
-  window.matchMedia = vi.fn().mockReturnValue({
-    matches: false,
-    addEventListener: vi.fn(),
-    removeEventListener: vi.fn(),
-  }) as unknown as typeof window.matchMedia;
-  // cmdk scrolls the active item into view and observes its list.
-  Element.prototype.scrollIntoView = vi.fn();
-  window.ResizeObserver = class {
-    observe() {}
-    unobserve() {}
-    disconnect() {}
-  } as unknown as typeof ResizeObserver;
-  lastRecognition = null;
+  installMatchMediaStub();
+  installResizeObserverStub();
+  // cmdk scrolls the active item into view.
+  Element.prototype.scrollIntoView = () => {};
   setSecureContext(true);
-  window.SpeechRecognition =
-    TrackingSpeechRecognition as unknown as Window["SpeechRecognition"];
+  recognition = installSpeechRecognition();
 });
 
-afterEach(() => {
-  Reflect.deleteProperty(window, "SpeechRecognition");
-});
+afterEach(uninstallSpeechRecognition);
 
 describe("Composer model picker focus", () => {
   it("returns focus to the textarea when a model is selected", async () => {
@@ -247,7 +208,7 @@ describe("Composer dictation", () => {
 
     fireEvent.click(mic);
 
-    expect(lastRecognition?.start).toHaveBeenCalled();
+    expect(recognition()?.start).toHaveBeenCalled();
   });
 
   it("stops recognition when the mic is clicked again", () => {
@@ -256,7 +217,7 @@ describe("Composer dictation", () => {
     fireEvent.click(mic);
     fireEvent.click(mic);
 
-    expect(lastRecognition?.stop).toHaveBeenCalled();
+    expect(recognition()?.stop).toHaveBeenCalled();
   });
 
   it("still runs an onClick supplied by a wrapping trigger", () => {
@@ -270,7 +231,7 @@ describe("Composer dictation", () => {
     // Both run: the wrapper keeps its behaviour - a tooltip still closes on
     // tap - and the button keeps its own.
     expect(onClick).toHaveBeenCalled();
-    expect(lastRecognition?.start).toHaveBeenCalled();
+    expect(recognition()?.start).toHaveBeenCalled();
   });
 });
 
@@ -289,7 +250,7 @@ describe("Composer dictation failures", () => {
     const { mic } = renderComposer();
     fireEvent.click(mic);
 
-    expect(lastRecognition).toBeNull();
+    expect(recognition()).toBeNull();
     expect(toast.error).toHaveBeenCalledWith(
       "Voice input needs a secure connection. Open this page over HTTPS or on localhost.",
     );
@@ -299,7 +260,7 @@ describe("Composer dictation failures", () => {
     const { mic } = renderComposer();
     fireEvent.click(mic);
 
-    act(() => lastRecognition?.onerror?.({ error: "not-allowed" }));
+    act(() => recognition()?.onerror?.({ error: "not-allowed" }));
 
     expect(toast.error).toHaveBeenCalledWith(
       "Microphone access is blocked. Allow the microphone for this site in your browser settings.",
@@ -310,7 +271,7 @@ describe("Composer dictation failures", () => {
     const { mic } = renderComposer();
     fireEvent.click(mic);
 
-    act(() => lastRecognition?.onerror?.({ error: "no-speech" }));
+    act(() => recognition()?.onerror?.({ error: "no-speech" }));
 
     expect(toast.error).not.toHaveBeenCalled();
   });
@@ -347,7 +308,7 @@ describe("Composer model picker — unsettled selection", () => {
         passthroughFileTypes={[]}
         modelSelection={{
           agents: [],
-          providers: [provider],
+          providers: [composerProvider],
           agentId: "",
           modelId: "",
           providerId: "",

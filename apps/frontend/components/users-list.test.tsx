@@ -1,24 +1,28 @@
-import { describe, it, expect, vi, afterEach } from "vitest";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { screen, fireEvent, waitFor } from "@testing-library/react";
+import {
+  authMock,
+  toastMock,
+  swrMock,
+  mockScopedSWR,
+  resetListHarness,
+  renderList,
+  confirmDialog,
+  stubAcceptedSave,
+  stubRejectedSave,
+  mutate,
+  toastSuccess,
+} from "@/lib/list-test-harness";
 
 // --- Module mocks ------------------------------------------------------------
 
-vi.mock("@/components/auth-provider", () => ({
-  useBackendUrl: () => "http://test",
-  useAuth: () => ({ user: { id: "admin1" } }),
-}));
+vi.mock("@/components/auth-provider", () => authMock);
+vi.mock("sonner", () => toastMock);
+vi.mock("swr", () => swrMock);
 
-const { toastSuccessSpy, toastErrorSpy } = vi.hoisted(() => ({
-  toastSuccessSpy: vi.fn(),
-  toastErrorSpy: vi.fn(),
-}));
-vi.mock("sonner", () => ({
-  toast: {
-    error: toastErrorSpy,
-    info: vi.fn(),
-    success: toastSuccessSpy,
-  },
-}));
+import { UsersList } from "./users-list";
+
+// --- Fixtures ----------------------------------------------------------------
 
 interface User {
   id: string;
@@ -31,24 +35,6 @@ interface User {
   updatedAt: string;
 }
 
-// The `GET /auth/admin/list-users` list this component renders. Set per test.
-let users: User[] = [];
-const mutateSpy = vi.fn();
-
-vi.mock("swr", () => ({
-  __esModule: true,
-  default: () => ({
-    data: { users },
-    error: undefined,
-    isLoading: false,
-    mutate: mutateSpy,
-  }),
-}));
-
-import { UsersList } from "./users-list";
-
-// --- Fixtures ----------------------------------------------------------------
-
 const target: User = {
   id: "u2",
   email: "sam@example.com",
@@ -59,12 +45,13 @@ const target: User = {
   updatedAt: "2024-01-01T00:00:00.000Z",
 };
 
-function jsonResponse(status: number, body: unknown) {
-  return {
-    ok: status >= 200 && status < 300,
-    status,
-    json: async () => body,
-  } as unknown as Response;
+/**
+ * `GET /auth/admin/list-users` answers with `{ users }`, not the
+ * `{ results }` every other list returns, so it registers a raw payload.
+ */
+function renderUsers(users: User[]) {
+  mockScopedSWR({ "list-users": { data: { users } } });
+  return renderList(<UsersList />);
 }
 
 async function confirmDelete() {
@@ -73,14 +60,13 @@ async function confirmDelete() {
     screen.getByPlaceholderText("Type 'delete user' to confirm"),
     { target: { value: "delete user" } },
   );
-  fireEvent.click(screen.getByRole("button", { name: "Delete user" }));
+  await confirmDialog("Delete user");
 }
 
+beforeEach(resetListHarness);
+
 afterEach(() => {
-  users = [];
-  mutateSpy.mockClear();
-  toastSuccessSpy.mockClear();
-  toastErrorSpy.mockClear();
+  vi.unstubAllGlobals();
   vi.restoreAllMocks();
 });
 
@@ -88,14 +74,12 @@ afterEach(() => {
 
 describe("UsersList delete", () => {
   it("deletes through the request module, revalidates, and confirms on success", async () => {
-    users = [target];
-    const fetchMock = vi.fn().mockResolvedValue(jsonResponse(200, {}));
-    vi.stubGlobal("fetch", fetchMock);
+    const fetchMock = stubAcceptedSave();
 
-    render(<UsersList />);
+    renderUsers([target]);
     await confirmDelete();
 
-    await waitFor(() => expect(mutateSpy).toHaveBeenCalled());
+    await waitFor(() => expect(mutate).toHaveBeenCalled());
     expect(fetchMock).toHaveBeenCalledWith(
       "http://test/auth/admin/remove-user",
       expect.objectContaining({
@@ -103,26 +87,44 @@ describe("UsersList delete", () => {
         body: JSON.stringify({ userId: "u2" }),
       }),
     );
-    expect(toastSuccessSpy).toHaveBeenCalledWith("User Sam has been deleted");
+    expect(toastSuccess).toHaveBeenCalledWith("User Sam has been deleted");
   });
 
   it("surfaces the backend's reason inline and does not revalidate when delete is refused", async () => {
-    users = [target];
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValue(jsonResponse(409, { error: "User owns resources" }));
-    vi.stubGlobal("fetch", fetchMock);
+    stubRejectedSave("User owns resources", 409);
 
-    render(<UsersList />);
+    renderUsers([target]);
     await confirmDelete();
 
     await waitFor(() =>
       expect(screen.getByText("User owns resources")).toBeInTheDocument(),
     );
-    expect(mutateSpy).not.toHaveBeenCalled();
-    expect(toastSuccessSpy).not.toHaveBeenCalled();
+    expect(mutate).not.toHaveBeenCalled();
+    expect(toastSuccess).not.toHaveBeenCalled();
     expect(
       screen.getByRole("button", { name: "Delete user" }),
     ).toBeInTheDocument();
+  });
+});
+
+describe("UsersList list states", () => {
+  it("shows the empty state when no users came back", () => {
+    renderUsers([]);
+
+    expect(screen.getByText("No users found.")).toBeInTheDocument();
+  });
+
+  it("surfaces a failed read rather than rendering an empty list", () => {
+    mockScopedSWR({ "list-users": { error: new Error("500") } });
+    renderList(<UsersList />);
+
+    expect(screen.getByText(/Failed to load users/)).toBeInTheDocument();
+  });
+
+  it("shows the loading state while the read is in flight", () => {
+    mockScopedSWR({ "list-users": { isLoading: true } });
+    renderList(<UsersList />);
+
+    expect(screen.getByText("Loading users...")).toBeInTheDocument();
   });
 });

@@ -8,6 +8,7 @@ import {
 } from "@testing-library/react";
 import { Suspense } from "react";
 import type { Dashboard, Widget } from "@platypus/schemas";
+import { installResizeObserverStub } from "@/lib/test-utils";
 
 const ORG_ID = "org-1";
 const WS_ID = "ws-1";
@@ -177,14 +178,7 @@ describe("Dashboard editor mutations", () => {
     mutateWidgets.mockClear();
     mutateDashboard.mockClear();
     toastError.mockClear();
-    vi.stubGlobal(
-      "ResizeObserver",
-      class {
-        observe() {}
-        unobserve() {}
-        disconnect() {}
-      },
-    );
+    installResizeObserverStub();
   });
 
   afterEach(() => {

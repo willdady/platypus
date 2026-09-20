@@ -42,6 +42,7 @@ vi.mock("swr", () => ({
 }));
 
 import { KanbanCardDialog } from "./kanban-card-dialog";
+import { jsonResponse } from "@/lib/test-utils";
 
 // --- Helpers -----------------------------------------------------------------
 
@@ -63,14 +64,6 @@ const existingComment: KanbanCardComment = {
   createdByName: "Bob",
   createdAt: new Date("2026-01-01").toISOString(),
 } as unknown as KanbanCardComment;
-
-function jsonResponse(status: number, body: unknown) {
-  return {
-    ok: status >= 200 && status < 300,
-    status,
-    json: async () => body,
-  } as unknown as Response;
-}
 
 function setViewportWidth(width: number) {
   Object.defineProperty(window, "innerWidth", {

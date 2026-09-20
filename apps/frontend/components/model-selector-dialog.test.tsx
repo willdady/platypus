@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render } from "@testing-library/react";
 import type { Provider } from "@platypus/schemas";
 import { ModelSelectorDialog } from "./model-selector-dialog";
+import { installResizeObserverStub } from "@/lib/test-utils";
 
 const countingProvider = () => {
   let reads = 0;
@@ -32,12 +33,8 @@ const dialog = (providers: Provider[]) => (
 
 beforeEach(() => {
   // cmdk scrolls the active item into view and observes its list.
-  Element.prototype.scrollIntoView = vi.fn();
-  window.ResizeObserver = class {
-    observe() {}
-    unobserve() {}
-    disconnect() {}
-  } as unknown as typeof ResizeObserver;
+  Element.prototype.scrollIntoView = () => {};
+  installResizeObserverStub();
 });
 
 describe("ModelSelectorDialog model options", () => {

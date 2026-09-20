@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { act, render, screen, fireEvent } from "@testing-library/react";
 import { Suspense } from "react";
 import type { Dashboard, Widget } from "@platypus/schemas";
+import { installResizeObserverStub } from "@/lib/test-utils";
 
 const ORG_ID = "org-1";
 const WS_ID = "ws-1";
@@ -153,14 +154,7 @@ describe("Dashboard render stability", () => {
     widgetsData = { results: [textWidget("w-1", "First")] };
     swrCalls.length = 0;
     widgetRender.mockClear();
-    vi.stubGlobal(
-      "ResizeObserver",
-      class {
-        observe() {}
-        unobserve() {}
-        disconnect() {}
-      },
-    );
+    installResizeObserverStub();
   });
 
   afterEach(() => {

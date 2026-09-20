@@ -102,6 +102,7 @@ vi.mock("@dnd-kit/sortable", async (importOriginal) => {
 });
 
 import { KanbanBoard } from "./kanban-board";
+import { stubAcceptedSave, stubRejectedSave } from "@/lib/test-utils";
 
 // --- Fixtures ----------------------------------------------------------------
 
@@ -169,15 +170,6 @@ function renderBoard() {
   );
 }
 
-function jsonResponse(status: number, body: unknown) {
-  return {
-    ok: status >= 200 && status < 300,
-    status,
-    statusText: "",
-    json: async () => body,
-  } as unknown as Response;
-}
-
 // --- Tests -------------------------------------------------------------------
 
 describe("KanbanBoard transport", () => {
@@ -203,126 +195,152 @@ describe("KanbanBoard transport", () => {
     vi.restoreAllMocks();
   });
 
-  describe("column create", () => {
-    beforeEach(() => {
-      boardState = makeBoardState([makeColumn()]);
-    });
-
-    it("POSTs the new column and closes the dialog on success", async () => {
-      const fetchMock = vi
-        .fn()
-        .mockResolvedValue(
-          jsonResponse(201, { id: "col-2", name: "In Review" }),
+  /**
+   * Every dialog on the board is the same pair of claims — an accepted write
+   * goes to the right endpoint and closes the dialog, a refused one names the
+   * backend's reason and leaves the dialog open to retry. The gesture, the
+   * endpoint, and each outcome's own fixture are the parameters.
+   *
+   * `perform` takes the text to submit so the refused run can describe the
+   * conflict it is provoking: "a column with this name already exists" is only
+   * a real scenario when the name typed is one the board already has.
+   */
+  const DIALOG_FLOWS: {
+    name: string;
+    /** The dialog's heading: gone once accepted, still there once refused. */
+    heading: string;
+    /** Opens the dialog, fills it with `value`, and submits. */
+    perform: (value: string) => Promise<void> | void;
+    url: string;
+    /** What each outcome's run types. Ignored by a dialog with no input. */
+    input: { accepted: string; refused: string };
+    /** The accepted request, asserted on the accepted run only. */
+    request: Record<string, unknown>;
+    accepted: { status: number; body: unknown };
+    refused: { status: number; error: string };
+  }[] = [
+    {
+      name: "column create",
+      heading: "Add Column",
+      perform: (value) => {
+        fireEvent.click(screen.getByRole("button", { name: /add column/i }));
+        fireEvent.change(screen.getByPlaceholderText("Enter column name"), {
+          target: { value },
+        });
+        fireEvent.click(screen.getByRole("button", { name: "Add column" }));
+      },
+      url: "http://test/organizations/org1/workspaces/ws1/boards/board-1/columns",
+      // "To Do" is the column the board already has, so the refused run is
+      // asking for a genuine duplicate.
+      input: { accepted: "In Review", refused: "To Do" },
+      request: {
+        method: "POST",
+        credentials: "include",
+        body: JSON.stringify({ name: "In Review" }),
+      },
+      accepted: { status: 201, body: { id: "col-2", name: "In Review" } },
+      refused: {
+        status: 409,
+        error: "A column with this name already exists on the board",
+      },
+    },
+    {
+      name: "card create",
+      heading: "Add Card",
+      perform: (value) => {
+        fireEvent.click(screen.getByRole("button", { name: /add card/i }));
+        fireEvent.change(screen.getByPlaceholderText("Enter card title"), {
+          target: { value },
+        });
+        fireEvent.click(screen.getByRole("button", { name: "Add card" }));
+      },
+      url: "http://test/organizations/org1/workspaces/ws1/boards/board-1/columns/col-1/cards",
+      input: { accepted: "New task", refused: "New task" },
+      request: {
+        method: "POST",
+        body: JSON.stringify({ title: "New task" }),
+      },
+      accepted: { status: 201, body: { id: "card-2" } },
+      // The column went away between opening the dialog and submitting it.
+      refused: { status: 404, error: "Column not found" },
+    },
+    {
+      name: "column edit",
+      heading: "Edit Column",
+      perform: async (value) => {
+        await openColumnMenuItem("To Do", "Edit");
+        fireEvent.change(
+          await screen.findByPlaceholderText("Enter column name"),
+          { target: { value } },
         );
-      vi.stubGlobal("fetch", fetchMock);
+        fireEvent.click(screen.getByRole("button", { name: "Save" }));
+      },
+      url: "http://test/organizations/org1/workspaces/ws1/boards/board-1/columns/col-1",
+      input: { accepted: "Doing", refused: "Duplicate" },
+      request: { method: "PUT", body: JSON.stringify({ name: "Doing" }) },
+      accepted: { status: 200, body: { id: "col-1", name: "Doing" } },
+      refused: {
+        status: 409,
+        error: "A column with this name already exists on the board",
+      },
+    },
+    {
+      name: "column delete",
+      heading: "Delete Column",
+      perform: async () => {
+        await openColumnMenuItem("To Do", "Delete");
+        fireEvent.click(await screen.findByRole("button", { name: "Delete" }));
+      },
+      url: "http://test/organizations/org1/workspaces/ws1/boards/board-1/columns/col-1",
+      input: { accepted: "", refused: "" },
+      request: { method: "DELETE" },
+      accepted: { status: 200, body: { message: "Column deleted" } },
+      refused: { status: 404, error: "Column not found" },
+    },
+  ];
 
-      renderBoard();
-
-      fireEvent.click(screen.getByRole("button", { name: /add column/i }));
-      fireEvent.change(screen.getByPlaceholderText("Enter column name"), {
-        target: { value: "In Review" },
+  describe.each(DIALOG_FLOWS)(
+    "$name",
+    ({ heading, perform, url, input, request, accepted, refused }) => {
+      beforeEach(() => {
+        boardState = makeBoardState([makeColumn()]);
       });
-      fireEvent.click(screen.getByRole("button", { name: "Add column" }));
 
-      await waitFor(() =>
-        expect(fetchMock).toHaveBeenCalledWith(
-          "http://test/organizations/org1/workspaces/ws1/boards/board-1/columns",
-          expect.objectContaining({
-            method: "POST",
-            credentials: "include",
-            body: JSON.stringify({ name: "In Review" }),
-          }),
-        ),
-      );
+      it("sends the write and closes the dialog on success", async () => {
+        const fetchMock = stubAcceptedSave(accepted.body, accepted.status);
 
-      await waitFor(() =>
-        expect(screen.queryByText("Add Column")).not.toBeInTheDocument(),
-      );
-      expect(toastError).not.toHaveBeenCalled();
-    });
+        renderBoard();
+        await perform(input.accepted);
 
-    it("shows the conflict message and keeps the dialog open on failure", async () => {
-      const fetchMock = vi.fn().mockResolvedValue(
-        jsonResponse(409, {
-          error: "A column with this name already exists on the board",
-        }),
-      );
-      vi.stubGlobal("fetch", fetchMock);
-
-      renderBoard();
-
-      fireEvent.click(screen.getByRole("button", { name: /add column/i }));
-      fireEvent.change(screen.getByPlaceholderText("Enter column name"), {
-        target: { value: "To Do" },
+        await waitFor(() =>
+          expect(fetchMock).toHaveBeenCalledWith(
+            url,
+            expect.objectContaining(request),
+          ),
+        );
+        await waitFor(() =>
+          expect(
+            screen.queryByRole("heading", { name: heading }),
+          ).not.toBeInTheDocument(),
+        );
+        expect(toastError).not.toHaveBeenCalled();
       });
-      fireEvent.click(screen.getByRole("button", { name: "Add column" }));
 
-      await waitFor(() =>
-        expect(toastError).toHaveBeenCalledWith(
-          "A column with this name already exists on the board",
-        ),
-      );
-      expect(
-        screen.getByRole("heading", { name: "Add Column" }),
-      ).toBeInTheDocument();
-    });
-  });
+      it("shows the backend's reason and keeps the dialog open on failure", async () => {
+        stubRejectedSave(refused.error, refused.status);
 
-  describe("card create", () => {
-    beforeEach(() => {
-      boardState = makeBoardState([makeColumn()]);
-    });
+        renderBoard();
+        await perform(input.refused);
 
-    it("POSTs the new card and closes the dialog on success", async () => {
-      const fetchMock = vi
-        .fn()
-        .mockResolvedValue(jsonResponse(201, { id: "card-2" }));
-      vi.stubGlobal("fetch", fetchMock);
-
-      renderBoard();
-
-      fireEvent.click(screen.getByRole("button", { name: /add card/i }));
-      fireEvent.change(screen.getByPlaceholderText("Enter card title"), {
-        target: { value: "New task" },
+        await waitFor(() =>
+          expect(toastError).toHaveBeenCalledWith(refused.error),
+        );
+        expect(
+          screen.getByRole("heading", { name: heading }),
+        ).toBeInTheDocument();
       });
-      fireEvent.click(screen.getByRole("button", { name: "Add card" }));
-
-      await waitFor(() =>
-        expect(fetchMock).toHaveBeenCalledWith(
-          "http://test/organizations/org1/workspaces/ws1/boards/board-1/columns/col-1/cards",
-          expect.objectContaining({
-            method: "POST",
-            body: JSON.stringify({ title: "New task" }),
-          }),
-        ),
-      );
-      await waitFor(() =>
-        expect(screen.queryByText("Add Card")).not.toBeInTheDocument(),
-      );
-    });
-
-    it("shows the failure message and keeps the dialog open on failure", async () => {
-      const fetchMock = vi
-        .fn()
-        .mockResolvedValue(jsonResponse(404, { error: "Column not found" }));
-      vi.stubGlobal("fetch", fetchMock);
-
-      renderBoard();
-
-      fireEvent.click(screen.getByRole("button", { name: /add card/i }));
-      fireEvent.change(screen.getByPlaceholderText("Enter card title"), {
-        target: { value: "New task" },
-      });
-      fireEvent.click(screen.getByRole("button", { name: "Add card" }));
-
-      await waitFor(() =>
-        expect(toastError).toHaveBeenCalledWith("Column not found"),
-      );
-      expect(
-        screen.getByRole("heading", { name: "Add Card" }),
-      ).toBeInTheDocument();
-    });
-  });
+    },
+  );
 
   describe("column move", () => {
     beforeEach(() => {
@@ -350,10 +368,7 @@ describe("KanbanBoard transport", () => {
     }
 
     it("reorders on success without a rollback or error toast", async () => {
-      const fetchMock = vi
-        .fn()
-        .mockResolvedValue(jsonResponse(200, { message: "Columns reordered" }));
-      vi.stubGlobal("fetch", fetchMock);
+      const fetchMock = stubAcceptedSave({ message: "Columns reordered" });
 
       renderBoard();
       await moveFirstColumnRight();
@@ -372,12 +387,7 @@ describe("KanbanBoard transport", () => {
     });
 
     it("rolls the board back and reports the error on failure", async () => {
-      const fetchMock = vi.fn().mockResolvedValue(
-        jsonResponse(403, {
-          error: "Only the workspace owner can perform this action",
-        }),
-      );
-      vi.stubGlobal("fetch", fetchMock);
+      stubRejectedSave("Only the workspace owner can perform this action", 403);
 
       renderBoard();
       await moveFirstColumnRight();
@@ -401,111 +411,6 @@ describe("KanbanBoard transport", () => {
     fireEvent.click(trigger);
     return screen.findByText(itemText).then((item) => fireEvent.click(item));
   }
-
-  describe("column edit", () => {
-    beforeEach(() => {
-      boardState = makeBoardState([makeColumn()]);
-    });
-
-    it("PUTs the renamed column and closes the dialog on success", async () => {
-      const fetchMock = vi
-        .fn()
-        .mockResolvedValue(jsonResponse(200, { id: "col-1", name: "Doing" }));
-      vi.stubGlobal("fetch", fetchMock);
-
-      renderBoard();
-      await openColumnMenuItem("To Do", "Edit");
-
-      const input = await screen.findByPlaceholderText("Enter column name");
-      fireEvent.change(input, { target: { value: "Doing" } });
-      fireEvent.click(screen.getByRole("button", { name: "Save" }));
-
-      await waitFor(() =>
-        expect(fetchMock).toHaveBeenCalledWith(
-          "http://test/organizations/org1/workspaces/ws1/boards/board-1/columns/col-1",
-          expect.objectContaining({
-            method: "PUT",
-            body: JSON.stringify({ name: "Doing" }),
-          }),
-        ),
-      );
-      await waitFor(() =>
-        expect(screen.queryByText("Edit Column")).not.toBeInTheDocument(),
-      );
-    });
-
-    it("shows the error and keeps the dialog open on failure", async () => {
-      const fetchMock = vi.fn().mockResolvedValue(
-        jsonResponse(409, {
-          error: "A column with this name already exists on the board",
-        }),
-      );
-      vi.stubGlobal("fetch", fetchMock);
-
-      renderBoard();
-      await openColumnMenuItem("To Do", "Edit");
-
-      const input = await screen.findByPlaceholderText("Enter column name");
-      fireEvent.change(input, { target: { value: "Duplicate" } });
-      fireEvent.click(screen.getByRole("button", { name: "Save" }));
-
-      await waitFor(() =>
-        expect(toastError).toHaveBeenCalledWith(
-          "A column with this name already exists on the board",
-        ),
-      );
-      expect(
-        screen.getByRole("heading", { name: "Edit Column" }),
-      ).toBeInTheDocument();
-    });
-  });
-
-  describe("column delete", () => {
-    beforeEach(() => {
-      boardState = makeBoardState([makeColumn()]);
-    });
-
-    it("DELETEs the column and closes the dialog on success", async () => {
-      const fetchMock = vi
-        .fn()
-        .mockResolvedValue(jsonResponse(200, { message: "Column deleted" }));
-      vi.stubGlobal("fetch", fetchMock);
-
-      renderBoard();
-      await openColumnMenuItem("To Do", "Delete");
-
-      fireEvent.click(await screen.findByRole("button", { name: "Delete" }));
-
-      await waitFor(() =>
-        expect(fetchMock).toHaveBeenCalledWith(
-          "http://test/organizations/org1/workspaces/ws1/boards/board-1/columns/col-1",
-          expect.objectContaining({ method: "DELETE" }),
-        ),
-      );
-      await waitFor(() =>
-        expect(screen.queryByText("Delete Column")).not.toBeInTheDocument(),
-      );
-    });
-
-    it("shows the error and keeps the dialog open on failure", async () => {
-      const fetchMock = vi
-        .fn()
-        .mockResolvedValue(jsonResponse(404, { error: "Column not found" }));
-      vi.stubGlobal("fetch", fetchMock);
-
-      renderBoard();
-      await openColumnMenuItem("To Do", "Delete");
-
-      fireEvent.click(await screen.findByRole("button", { name: "Delete" }));
-
-      await waitFor(() =>
-        expect(toastError).toHaveBeenCalledWith("Column not found"),
-      );
-      expect(
-        screen.getByRole("heading", { name: "Delete Column" }),
-      ).toBeInTheDocument();
-    });
-  });
 
   describe("card drag", () => {
     beforeEach(() => {
@@ -538,10 +443,7 @@ describe("KanbanBoard transport", () => {
      * move as a conflict.
      */
     it("sends the origin column after drag-over moved the card locally", async () => {
-      const fetchMock = vi
-        .fn()
-        .mockResolvedValue(jsonResponse(200, { id: "card-1" }));
-      vi.stubGlobal("fetch", fetchMock);
+      const fetchMock = stubAcceptedSave({ id: "card-1" });
 
       renderBoard();
       const active = {
@@ -567,10 +469,7 @@ describe("KanbanBoard transport", () => {
     });
 
     it("sends the column the card was dragged from", async () => {
-      const fetchMock = vi
-        .fn()
-        .mockResolvedValue(jsonResponse(200, { id: "card-1" }));
-      vi.stubGlobal("fetch", fetchMock);
+      const fetchMock = stubAcceptedSave({ id: "card-1" });
 
       renderBoard();
       dropCardOnDoneColumn();
@@ -587,12 +486,7 @@ describe("KanbanBoard transport", () => {
     // The card is elsewhere, so reverting to the last poll would leave it in the
     // wrong column until the next interval — hence the refetch.
     it("explains a refused drag and re-syncs the board", async () => {
-      const fetchMock = vi.fn().mockResolvedValue(
-        jsonResponse(409, {
-          error: "Card is no longer in the expected column",
-        }),
-      );
-      vi.stubGlobal("fetch", fetchMock);
+      stubRejectedSave("Card is no longer in the expected column", 409);
 
       renderBoard();
       dropCardOnDoneColumn();
@@ -677,43 +571,6 @@ describe("KanbanBoard transport", () => {
       boardState = makeBoardState([makeColumn({ id: "col-1" }, [makeCard()])]);
     });
 
-    it("PUTs the card's changes and closes the dialog on success", async () => {
-      const fetchMock = vi
-        .fn()
-        .mockResolvedValue(jsonResponse(200, { id: "card-1" }));
-      vi.stubGlobal("fetch", fetchMock);
-
-      renderBoard();
-      fireEvent.click(screen.getByText("A card"));
-      fireEvent.click(await screen.findByRole("button", { name: "Save" }));
-
-      await waitFor(() =>
-        expect(fetchMock).toHaveBeenCalledWith(
-          "http://test/organizations/org1/workspaces/ws1/boards/board-1/cards/card-1",
-          expect.objectContaining({ method: "PUT" }),
-        ),
-      );
-      await waitFor(() =>
-        expect(screen.queryByText("Delete this card?")).not.toBeInTheDocument(),
-      );
-    });
-
-    it("shows the error and keeps the dialog open when the save fails", async () => {
-      const fetchMock = vi
-        .fn()
-        .mockResolvedValue(jsonResponse(404, { error: "Card not found" }));
-      vi.stubGlobal("fetch", fetchMock);
-
-      renderBoard();
-      fireEvent.click(screen.getByText("A card"));
-      fireEvent.click(await screen.findByRole("button", { name: "Save" }));
-
-      await waitFor(() =>
-        expect(toastError).toHaveBeenCalledWith("Card not found"),
-      );
-      expect(screen.getByRole("button", { name: "Save" })).toBeInTheDocument();
-    });
-
     async function openCardDeleteConfirm() {
       fireEvent.click(screen.getByText("A card"));
       const trigger = await screen.findByRole("button", { name: "Delete" });
@@ -727,36 +584,68 @@ describe("KanbanBoard transport", () => {
       fireEvent.click(confirms[confirms.length - 1]);
     }
 
-    it("DELETEs the card and closes the dialog on success", async () => {
-      const fetchMock = vi
-        .fn()
-        .mockResolvedValue(jsonResponse(200, { message: "Card deleted" }));
-      vi.stubGlobal("fetch", fetchMock);
+    /**
+     * The card dialog's two writes, against the same endpoint. Each names the
+     * method it sends and its own proof the dialog went away, since the save
+     * and the delete close different things.
+     */
+    const CARD_WRITES: {
+      name: string;
+      method: string;
+      perform: () => Promise<void>;
+      /** Gone once the write is accepted. */
+      closed: () => HTMLElement | null;
+    }[] = [
+      {
+        name: "save",
+        method: "PUT",
+        perform: async () => {
+          fireEvent.click(screen.getByText("A card"));
+          fireEvent.click(await screen.findByRole("button", { name: "Save" }));
+        },
+        closed: () => screen.queryByRole("button", { name: "Save" }),
+      },
+      {
+        name: "delete",
+        method: "DELETE",
+        perform: openCardDeleteConfirm,
+        closed: () => screen.queryByText("Delete this card?"),
+      },
+    ];
 
-      renderBoard();
-      await openCardDeleteConfirm();
+    it.each(CARD_WRITES)(
+      "sends the card $name and closes the dialog on success",
+      async ({ method, perform, closed }) => {
+        const fetchMock = stubAcceptedSave({ id: "card-1" });
 
-      await waitFor(() =>
-        expect(fetchMock).toHaveBeenCalledWith(
-          "http://test/organizations/org1/workspaces/ws1/boards/board-1/cards/card-1",
-          expect.objectContaining({ method: "DELETE" }),
-        ),
-      );
-    });
+        renderBoard();
+        await perform();
 
-    it("shows the error and keeps the dialog open when the delete fails", async () => {
-      const fetchMock = vi
-        .fn()
-        .mockResolvedValue(jsonResponse(404, { error: "Card not found" }));
-      vi.stubGlobal("fetch", fetchMock);
+        await waitFor(() =>
+          expect(fetchMock).toHaveBeenCalledWith(
+            "http://test/organizations/org1/workspaces/ws1/boards/board-1/cards/card-1",
+            expect.objectContaining({ method }),
+          ),
+        );
+        await waitFor(() => expect(closed()).not.toBeInTheDocument());
+      },
+    );
 
-      renderBoard();
-      await openCardDeleteConfirm();
+    it.each(CARD_WRITES)(
+      "shows the error and keeps the dialog open when the $name fails",
+      async ({ perform }) => {
+        stubRejectedSave("Card not found", 404);
 
-      await waitFor(() =>
-        expect(toastError).toHaveBeenCalledWith("Card not found"),
-      );
-      expect(screen.getByRole("button", { name: "Save" })).toBeInTheDocument();
-    });
+        renderBoard();
+        await perform();
+
+        await waitFor(() =>
+          expect(toastError).toHaveBeenCalledWith("Card not found"),
+        );
+        expect(
+          screen.getByRole("button", { name: "Save" }),
+        ).toBeInTheDocument();
+      },
+    );
   });
 });

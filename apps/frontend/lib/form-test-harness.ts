@@ -1,4 +1,23 @@
 import { vi, type Mock } from "vitest";
+import { resetSharedSpies } from "./test-utils";
+
+// The write-stubbing helpers live in `test-utils` — lists stub the same
+// `fetch` shapes — and are re-exported here so a form test still has one
+// import to reach for.
+export {
+  jsonResponse,
+  stubAcceptedSave,
+  stubRejectedSave,
+  stubSaveSequence,
+  push,
+  toastError,
+  toastSuccess,
+  toastInfo,
+  authState,
+  authMock,
+  navigationMock,
+  toastMock,
+} from "./test-utils";
 
 /**
  * Shared setup for the form test files (agent-form, mcp-form, webhook-form):
@@ -40,20 +59,7 @@ export interface SwrResponse<T = unknown> {
   mutate: Mock;
 }
 
-export const push = vi.fn();
-export const toastError = vi.fn();
-export const toastSuccess = vi.fn();
-export const toastInfo = vi.fn();
 export const configuredMutate = vi.fn();
-
-export const navigationMock = { useRouter: () => ({ push }) };
-export const authMock = {
-  useAuth: () => ({ user: { id: "u1" } }),
-  useBackendUrl: () => "http://test",
-};
-export const toastMock = {
-  toast: { error: toastError, success: toastSuccess, info: toastInfo },
-};
 
 function buildResponse(data: unknown): SwrResponse {
   return { data, error: undefined, isLoading: false, mutate: vi.fn() };
@@ -98,6 +104,10 @@ export function setError(error: unknown, keySuffix?: string) {
   defaultResponse = { ...defaultResponse, error };
 }
 
+// Suffix matching, not substring: a form's registered key is the tail of the
+// request URL (`/providers`), and a substring match would also catch the
+// detail read beneath it (`/providers/p1`). The list harness matches on
+// `includes` instead, because a list's reads are keyed mid-URL.
 function swrFetcher(key: string | null): SwrResponse {
   if (!key) return nullResponse;
   for (const [suffix, response] of responsesByKeySuffix) {
@@ -114,50 +124,21 @@ export const swrMock = {
 
 /** Resets spies and data-fetching registrations between tests. */
 export function resetFormHarness() {
-  push.mockReset();
-  toastError.mockReset();
-  toastSuccess.mockReset();
-  toastInfo.mockReset();
+  resetSharedSpies();
   configuredMutate.mockReset();
   defaultResponse = nullResponse;
   responsesByKeySuffix.clear();
 }
 
-/** Builds a fetch-shaped `Response` resolving to `body` with `status`. */
-export function jsonResponse(status: number, body: unknown): Response {
-  return {
-    ok: status >= 200 && status < 300,
-    status,
-    json: async () => body,
-  } as unknown as Response;
-}
-
-/** Stubs global `fetch` to resolve with an accepted (2xx) save. */
-export function stubAcceptedSave(body: unknown = {}, status = 200): Mock {
-  const fetchMock = vi.fn().mockResolvedValue(jsonResponse(status, body));
-  vi.stubGlobal("fetch", fetchMock);
-  return fetchMock;
-}
-
-/** Stubs global `fetch` to resolve with a rejected save, `{ error }`. */
-export function stubRejectedSave(error: unknown, status = 400): Mock {
-  const fetchMock = vi.fn().mockResolvedValue(jsonResponse(status, { error }));
-  vi.stubGlobal("fetch", fetchMock);
-  return fetchMock;
-}
-
 /**
- * Stubs global `fetch` to resolve each call in turn with the given
- * `{ status, body }` responses — for flows that make more than one request
- * (e.g. a save followed by a dependent, separately-failing write).
+ * The JSON body the form put on the wire for the last save. Typed on the one
+ * thing it reads rather than `Mock`, whose generic varies with how the caller
+ * spelled `vi.fn()`.
  */
-export function stubSaveSequence(
-  ...responses: Array<{ status: number; body: unknown }>
-): Mock {
-  const fetchMock = vi.fn();
-  for (const { status, body } of responses) {
-    fetchMock.mockResolvedValueOnce(jsonResponse(status, body));
-  }
-  vi.stubGlobal("fetch", fetchMock);
-  return fetchMock;
+export function savedBody(fetchMock: { mock: { calls: unknown[][] } }) {
+  const [, init] = fetchMock.mock.calls.at(-1) as unknown as [
+    string,
+    RequestInit,
+  ];
+  return JSON.parse(String(init.body));
 }

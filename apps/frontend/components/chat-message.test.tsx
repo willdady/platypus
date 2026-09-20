@@ -717,55 +717,64 @@ describe("ChatMessage sub-agent tool dispatch", () => {
   });
 });
 
-// Issue #420: a reply that stopped at the model's output ceiling used to just
-// stop mid-sentence, with the only record of it in the operator's log.
-describe("ChatMessage truncation marker", () => {
-  it("marks a message the run flagged as cut short at the output limit", () => {
-    renderMessage(assistantMessage({ truncatedByTokenLimit: true }));
+/**
+ * The run-outcome notices a message can carry. Each is set by its own metadata
+ * flag and shown on its own row, so the matrix — flagged, not flagged, and
+ * flagged on an agent turn — is driven once rather than restated per notice.
+ */
+const NOTICES = [
+  // Issue #420: a reply that stopped at the model's output ceiling used to just
+  // stop mid-sentence, with the only record of it in the operator's log.
+  {
+    name: "truncation",
+    flag: "truncatedByTokenLimit",
+    notice: CUT_SHORT_NOTICE,
+  },
+  // Issue #540: a turn whose loop ran out of steps ended with no answer — often
+  // a tool card and nothing after it — and nothing anywhere said a step limit
+  // was what happened.
+  {
+    name: "step-limit",
+    flag: "stoppedAtStepLimit",
+    notice: STEP_LIMIT_NOTICE,
+  },
+  // Issue #522: a user turns search on, the backend the Provider names is gone
+  // or failed to start, and the reply is written without it. The model is never
+  // told — this row is the only place the difference is visible.
+  {
+    name: "search-unavailable",
+    flag: "searchUnavailable",
+    notice: SEARCH_UNAVAILABLE_NOTICE,
+  },
+] as const;
 
-    expect(screen.getByText(CUT_SHORT_NOTICE)).toBeInTheDocument();
+describe.each(NOTICES)("ChatMessage $name notice", ({ flag, notice }) => {
+  it("marks a message the run flagged", () => {
+    renderMessage(assistantMessage({ [flag]: true }));
+
+    expect(screen.getByText(notice)).toBeInTheDocument();
   });
 
   it.each([
     ["a message that finished cleanly", { agentId: "agent-1" }],
     ["a message with no metadata at all", undefined],
-  ] as const)("renders no marker for %s", (_, metadata) => {
+  ] as const)("renders no notice for %s", (_, metadata) => {
     renderMessage(assistantMessage(metadata));
 
-    expect(screen.queryByText(CUT_SHORT_NOTICE)).toBeNull();
+    expect(screen.queryByText(notice)).toBeNull();
   });
 
-  // The two keys arrive on separate metadata chunks that merge into one
-  // message, so a truncated agent turn is the one case where both are set.
-  it("keeps the agent avatar on a truncated agent turn", () => {
-    renderMessage(
-      assistantMessage({ agentId: "agent-1", truncatedByTokenLimit: true }),
-    );
+  // The flags arrive on separate metadata chunks that merge into one message,
+  // so a flagged agent turn is the one case where both are set.
+  it("keeps the agent avatar on a flagged agent turn", () => {
+    renderMessage(assistantMessage({ agentId: "agent-1", [flag]: true }));
 
     expect(screen.getByAltText("Research Agent")).toBeInTheDocument();
-    expect(screen.getByText(CUT_SHORT_NOTICE)).toBeInTheDocument();
+    expect(screen.getByText(notice)).toBeInTheDocument();
   });
 });
 
-// Issue #540: a turn whose loop ran out of steps ended with no answer — often a
-// tool card and nothing after it — and nothing anywhere said a step limit was
-// what happened.
-describe("ChatMessage step-limit marker", () => {
-  it("marks a message the run flagged as stopped at the step limit", () => {
-    renderMessage(assistantMessage({ stoppedAtStepLimit: true }));
-
-    expect(screen.getByText(STEP_LIMIT_NOTICE)).toBeInTheDocument();
-  });
-
-  it.each([
-    ["a message that finished cleanly", { agentId: "agent-1" }],
-    ["a message with no metadata at all", undefined],
-  ] as const)("renders no marker for %s", (_, metadata) => {
-    renderMessage(assistantMessage(metadata));
-
-    expect(screen.queryByText(STEP_LIMIT_NOTICE)).toBeNull();
-  });
-
+describe("ChatMessage notices together", () => {
   // The two cut-short notices name different limits — one bounds the loop, the
   // other bounds a single reply — and a turn only ever hits one of them.
   it("renders the output-limit marker without the step-limit one", () => {
@@ -775,41 +784,9 @@ describe("ChatMessage step-limit marker", () => {
     expect(screen.queryByText(STEP_LIMIT_NOTICE)).toBeNull();
   });
 
-  it("keeps the agent avatar on a step-limited agent turn", () => {
-    renderMessage(
-      assistantMessage({ agentId: "agent-1", stoppedAtStepLimit: true }),
-    );
-
-    expect(screen.getByAltText("Research Agent")).toBeInTheDocument();
-    expect(screen.getByText(STEP_LIMIT_NOTICE)).toBeInTheDocument();
-  });
-});
-
-// Issue #522: a user turns search on, the backend the Provider names is gone or
-// failed to start, and the reply is written without it. The model is never told
-// — this row is the only place the difference is visible.
-describe("ChatMessage search-unavailable notice", () => {
-  it("marks a reply the run flagged as written without search", () => {
-    renderMessage(assistantMessage({ searchUnavailable: true }));
-
-    expect(screen.getByText(SEARCH_UNAVAILABLE_NOTICE)).toBeInTheDocument();
-  });
-
-  it.each([
-    [
-      "a message whose turn had the search it asked for",
-      { agentId: "agent-1" },
-    ],
-    ["a message with no metadata at all", undefined],
-  ] as const)("renders no notice for %s", (_, metadata) => {
-    renderMessage(assistantMessage(metadata));
-
-    expect(screen.queryByText(SEARCH_UNAVAILABLE_NOTICE)).toBeNull();
-  });
-
-  // The two notices answer different questions — how the reply was produced,
-  // and how it ended — so a turn that lost its search and then ran out of
-  // output budget shows both, in that order.
+  // Search-unavailable and cut-short answer different questions — how the reply
+  // was produced, and how it ended — so a turn that lost its search and then ran
+  // out of output budget shows both, in that order.
   it("renders both notices when the turn also stopped at the output limit", () => {
     renderMessage(
       assistantMessage({
@@ -826,15 +803,6 @@ describe("ChatMessage search-unavailable notice", () => {
       search.compareDocumentPosition(cutShort) &
         Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
-  });
-
-  it("keeps the agent avatar on a search-less agent turn", () => {
-    renderMessage(
-      assistantMessage({ agentId: "agent-1", searchUnavailable: true }),
-    );
-
-    expect(screen.getByAltText("Research Agent")).toBeInTheDocument();
-    expect(screen.getByText(SEARCH_UNAVAILABLE_NOTICE)).toBeInTheDocument();
   });
 });
 
@@ -867,54 +835,74 @@ describe("ChatMessage tool duration", () => {
     toolMetadata,
   });
 
-  it.each([
-    ["a static tool", staticToolPart({ durationMs: 1234 })],
-    ["a dynamic tool", dynamicToolPart({ durationMs: 1234 })],
-  ])("renders the persisted duration for %s", (_, part) => {
-    renderMessage(withToolPart(part));
+  const TOOL_PARTS = [
+    ["a static tool", staticToolPart],
+    ["a dynamic tool", dynamicToolPart],
+  ] as const;
 
-    expect(screen.getByText(/1\.2s/)).toBeInTheDocument();
-  });
+  /**
+   * The two places the figure can arrive. Persisted, it rides on the part;
+   * live, the SDK hands back a part stripped of its metadata mid-turn and the
+   * figure comes off the message instead — that second carrier is the one that
+   * was broken, leaving the duration blank until the chat was re-fetched and
+   * then overwritten out of the database by the next turn. Both must read the
+   * same; `lib/tool-duration.test.ts` covers the formatting itself.
+   */
+  const CARRIERS = [
+    [
+      "persisted on the part",
+      (build: (m?: Record<string, unknown>) => unknown) =>
+        withToolPart(build({ durationMs: 1234 })),
+    ],
+    [
+      "delivered on the message",
+      (build: (m?: Record<string, unknown>) => unknown) => {
+        const message = withToolPart(build());
+        message.metadata = { toolDurations: { "call-1": 1234 } };
+        return message;
+      },
+    ],
+  ] as const;
 
-  // Tool calls recorded before this shipped carry no timing; they render the
-  // header exactly as before rather than a placeholder.
-  it.each([
-    ["a static tool", staticToolPart()],
-    ["a dynamic tool", dynamicToolPart()],
-  ])("renders no duration for %s recorded before timing existed", (_, part) => {
-    renderMessage(withToolPart(part));
-
-    expect(screen.getByText("Completed")).toBeInTheDocument();
-    expect(screen.queryByText(/\d+ms|\d+\.\d+s/)).toBeNull();
-  });
-
-  // The live case, and the one that was broken: mid-turn the SDK hands back a
-  // tool part stripped of its metadata, so the figure has to come off the
-  // message. Without this the duration was blank until the chat was re-fetched
-  // — and the next turn then overwrote it out of the database.
-  it.each([
-    ["a static tool", staticToolPart()],
-    ["a dynamic tool", dynamicToolPart()],
-  ])("renders the duration delivered on the message for %s", (_, part) => {
-    const message = withToolPart(part);
-    message.metadata = { toolDurations: { "call-1": 1234 } };
-
+  it.each(
+    TOOL_PARTS.flatMap(([partName, build]) =>
+      CARRIERS.map(
+        ([carrierName, carry]) =>
+          [`${partName}, ${carrierName}`, carry(build)] as const,
+      ),
+    ),
+  )("renders the duration for %s", (_, message) => {
     renderMessage(message);
 
     expect(screen.getByText(/1\.2s/)).toBeInTheDocument();
   });
 
+  // The point of driving both carriers: the figure a reader sees must not
+  // depend on which one held it, so the two are compared directly and not just
+  // matched against the same pattern.
   it("shows the same figure whichever carrier holds it", () => {
-    const fromMessage = withToolPart(staticToolPart());
-    fromMessage.metadata = { toolDurations: { "call-1": 1234 } };
-    const { unmount } = renderMessage(fromMessage);
+    const [, fromMessage] = CARRIERS[1];
+    const { unmount } = renderMessage(fromMessage(staticToolPart));
     const live = screen.getByText(/1\.2s/).textContent;
     unmount();
 
-    renderMessage(withToolPart(staticToolPart({ durationMs: 1234 })));
+    const [, fromPart] = CARRIERS[0];
+    renderMessage(fromPart(staticToolPart));
 
     expect(screen.getByText(/1\.2s/).textContent).toBe(live);
   });
+
+  // Tool calls recorded before this shipped carry no timing on either carrier;
+  // they render the header exactly as before rather than a placeholder.
+  it.each(TOOL_PARTS)(
+    "renders no duration for %s recorded before timing existed",
+    (_, build) => {
+      renderMessage(withToolPart(build()));
+
+      expect(screen.getByText("Completed")).toBeInTheDocument();
+      expect(screen.queryByText(/\d+ms|\d+\.\d+s/)).toBeNull();
+    },
+  );
 });
 
 const userMessage = (): PlatypusUIMessage => ({

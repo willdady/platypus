@@ -1,66 +1,41 @@
-import { describe, it, expect, vi, afterEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import type { Provider } from "@platypus/schemas";
+import {
+  navigationMock,
+  authMock,
+  toastMock,
+  swrMock,
+  setData,
+  setDataFor,
+  setError,
+  resetFormHarness,
+  stubAcceptedSave,
+  stubRejectedSave,
+  savedBody,
+} from "@/lib/form-test-harness";
+import { selectOption } from "@/lib/test-utils";
 
 // --- Module mocks ------------------------------------------------------------
 
-const push = vi.fn();
-vi.mock("next/navigation", () => ({
-  useRouter: () => ({ push }),
-}));
-
-vi.mock("@/components/auth-provider", () => ({
-  useBackendUrl: () => "http://test",
-  useAuth: () => ({ user: { id: "u1" } }),
-}));
-
-vi.mock("sonner", () => ({
-  toast: { error: vi.fn(), info: vi.fn(), success: vi.fn() },
-}));
-
-// The provider the edit form loads. Set per test before rendering.
-let loadedProvider: Provider | undefined;
-
-// The `GET /organizations/:orgId/web-backends` catalog. Empty by default —
-// the Web search selector offers only None (and the built-in search option,
-// where the provider has one) for every test that predates it.
-let webBackendCatalog: Array<{
-  backend: string;
-  name: string;
-  plugin: string | null;
-}> = [];
-
-// Set to make the catalog request fail instead of resolving, so the "we could not
-// ask" state is distinguishable from "nothing installed".
-let webBackendCatalogError: Error | undefined;
-
-// Keyed on the request URL: the form now makes two calls, and returning the
-// loaded Provider for the catalog one would hand the selector a `results`-less
-// object.
-vi.mock("swr", () => ({
-  __esModule: true,
-  default: (key: string | null) => {
-    if (key?.includes("/web-backends")) {
-      return {
-        data: webBackendCatalogError
-          ? undefined
-          : { results: webBackendCatalog },
-        error: webBackendCatalogError,
-        isLoading: false,
-        mutate: vi.fn(),
-      };
-    }
-    return { data: loadedProvider, isLoading: false, mutate: vi.fn() };
-  },
-  useSWRConfig: () => ({ mutate: vi.fn() }),
-}));
+vi.mock("next/navigation", () => navigationMock);
+vi.mock("@/components/auth-provider", () => authMock);
+vi.mock("sonner", () => toastMock);
+// The form makes two reads: the Provider being edited, and the
+// `GET /organizations/:orgId/web-backends` catalog. The harness keys its
+// responses off the request URL suffix so the catalog read does not get
+// handed the Provider, which carries no `results`.
+vi.mock("swr", () => swrMock);
 
 import { ProviderForm } from "./provider-form";
 
 // --- Helpers -----------------------------------------------------------------
 
+/** The body an accepted save resolves with, so the form can read it back. */
+const ACCEPTED_SAVE = { id: "p1", aliasRepoints: [] };
+
 function renderEditForm(modelIds: Provider["modelIds"]) {
-  loadedProvider = {
+  setData({
     id: "p1",
     name: "OpenAI",
     providerType: "OpenAI",
@@ -69,52 +44,34 @@ function renderEditForm(modelIds: Provider["modelIds"]) {
     modelIds,
     taskModelId: "gpt-4o",
     memoryExtractionModelId: "gpt-4o",
-  } as unknown as Provider;
+  } as unknown as Provider);
   return render(<ProviderForm orgId="org1" providerId="p1" />);
-}
-
-/** A server rejection carrying standardschema issues, as the API returns them. */
-function mockRejectedSave(issues: Array<{ path: unknown[]; message: string }>) {
-  return vi.fn().mockResolvedValue({
-    ok: false,
-    status: 400,
-    json: async () => ({ error: issues }),
-  } as unknown as Response);
-}
-
-/** An accepted save, so the payload the form sent can be read back. */
-function mockAcceptedSave() {
-  return vi.fn().mockResolvedValue({
-    ok: true,
-    status: 200,
-    json: async () => ({ id: "p1", aliasRepoints: [] }),
-  } as unknown as Response);
-}
-
-/** `mockAcceptedSave`, installed as the global `fetch` and handed back to read. */
-function stubAcceptedSave() {
-  const fetchMock = mockAcceptedSave();
-  vi.stubGlobal("fetch", fetchMock);
-  return fetchMock;
 }
 
 /** The `modelIds` the form put on the wire for the last save. */
 function savedModelIds(fetchMock: ReturnType<typeof vi.fn>) {
-  const [, init] = fetchMock.mock.calls.at(-1) as [string, RequestInit];
-  return JSON.parse(String(init.body)).modelIds;
+  return savedBody(fetchMock).modelIds;
 }
 
 const save = () =>
   fireEvent.click(screen.getByRole("button", { name: "Update" }));
 
+beforeEach(() => {
+  resetFormHarness();
+  // Empty by default — the Web search selector offers only None (and the
+  // built-in search option, where the Provider has one) for every test that
+  // predates the catalog.
+  setDataFor("/web-backends", { results: [] });
+});
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+  vi.restoreAllMocks();
+});
+
 // --- Tests -------------------------------------------------------------------
 
 describe("ProviderForm model rows", () => {
-  afterEach(() => {
-    loadedProvider = undefined;
-    vi.restoreAllMocks();
-  });
-
   it("labels the Model ID input rather than relying on its placeholder", () => {
     renderEditForm([{ id: "gpt-4o", passthroughFileTypes: [] }]);
 
@@ -217,8 +174,7 @@ describe("ProviderForm model rows", () => {
   });
 
   it("sends a declared window back unchanged, so it survives a save", async () => {
-    const fetchMock = mockAcceptedSave();
-    vi.stubGlobal("fetch", fetchMock);
+    const fetchMock = stubAcceptedSave(ACCEPTED_SAVE);
 
     renderEditForm([
       { id: "gpt-4o", passthroughFileTypes: [], contextWindow: 200000 },
@@ -234,8 +190,7 @@ describe("ProviderForm model rows", () => {
   // The field is optional on both create and update: a row that never touches
   // it must not start sending a number the Org Admin did not declare.
   it("declares no window for a row that was left alone", async () => {
-    const fetchMock = mockAcceptedSave();
-    vi.stubGlobal("fetch", fetchMock);
+    const fetchMock = stubAcceptedSave(ACCEPTED_SAVE);
 
     renderEditForm([{ id: "gpt-4o", passthroughFileTypes: [] }]);
     save();
@@ -247,8 +202,7 @@ describe("ProviderForm model rows", () => {
   // Editing a Custom value types straight through, bounds included, so a `128`
   // meant as 128k is rejected by the server rather than silently swallowed.
   it("sends a typed Custom value exactly as typed", async () => {
-    const fetchMock = mockAcceptedSave();
-    vi.stubGlobal("fetch", fetchMock);
+    const fetchMock = stubAcceptedSave(ACCEPTED_SAVE);
 
     renderEditForm([
       { id: "qwen", passthroughFileTypes: [], contextWindow: 131072 },
@@ -290,8 +244,7 @@ describe("ProviderForm model rows", () => {
   });
 
   it("sends a declared output ceiling back unchanged, so it survives a save", async () => {
-    const fetchMock = mockAcceptedSave();
-    vi.stubGlobal("fetch", fetchMock);
+    const fetchMock = stubAcceptedSave(ACCEPTED_SAVE);
 
     renderEditForm([
       { id: "gpt-4o", passthroughFileTypes: [], maxOutputTokens: 64000 },
@@ -306,8 +259,7 @@ describe("ProviderForm model rows", () => {
   // `modelIds` array is replaced on save, so an absent key is a real removal —
   // but only if the form stops sending the old number.
   it("clears a declared output ceiling when the input is emptied", async () => {
-    const fetchMock = mockAcceptedSave();
-    vi.stubGlobal("fetch", fetchMock);
+    const fetchMock = stubAcceptedSave(ACCEPTED_SAVE);
 
     renderEditForm([
       { id: "gpt-4o", passthroughFileTypes: [], maxOutputTokens: 64000 },
@@ -326,8 +278,7 @@ describe("ProviderForm model rows", () => {
   // then stopped after one token. A ceiling must reach the server as typed or
   // not at all.
   it("reads an exponent in the output ceiling as the number it denotes", async () => {
-    const fetchMock = mockAcceptedSave();
-    vi.stubGlobal("fetch", fetchMock);
+    const fetchMock = stubAcceptedSave(ACCEPTED_SAVE);
 
     renderEditForm([
       { id: "gpt-4o", passthroughFileTypes: [], maxOutputTokens: 64000 },
@@ -345,8 +296,7 @@ describe("ProviderForm model rows", () => {
   // rejects it with a message the reader can act on, which is the whole point of
   // not coercing here.
   it("sends a fractional output ceiling as typed, for the schema to reject", async () => {
-    const fetchMock = mockAcceptedSave();
-    vi.stubGlobal("fetch", fetchMock);
+    const fetchMock = stubAcceptedSave(ACCEPTED_SAVE);
 
     renderEditForm([
       { id: "gpt-4o", passthroughFileTypes: [], maxOutputTokens: 64000 },
@@ -362,8 +312,7 @@ describe("ProviderForm model rows", () => {
 
   // The extracted-text cap shares the parser, so it shares the fix.
   it("reads an exponent in the extracted-text cap as the number it denotes", async () => {
-    const fetchMock = mockAcceptedSave();
-    vi.stubGlobal("fetch", fetchMock);
+    const fetchMock = stubAcceptedSave(ACCEPTED_SAVE);
 
     renderEditForm([
       { id: "gpt-4o", passthroughFileTypes: [], maxExtractedTextChars: 1000 },
@@ -378,8 +327,7 @@ describe("ProviderForm model rows", () => {
   });
 
   it("declares no output ceiling for a row that was left alone", async () => {
-    const fetchMock = mockAcceptedSave();
-    vi.stubGlobal("fetch", fetchMock);
+    const fetchMock = stubAcceptedSave(ACCEPTED_SAVE);
 
     renderEditForm([{ id: "gpt-4o", passthroughFileTypes: [] }]);
     save();
@@ -401,17 +349,12 @@ describe("ProviderForm model rows", () => {
 });
 
 describe("ProviderForm switching Providers", () => {
-  afterEach(() => {
-    loadedProvider = undefined;
-    vi.restoreAllMocks();
-  });
-
   // The form is reused across Providers within one mount. Populating from the
   // warm SWR cache has to repopulate on the switch too, not just on first load —
   // otherwise the reader would see the previous Provider's fields left on
   // screen under the new Provider's name.
   it("repopulates every field when the reader switches to another Provider, even from an already-warm cache", () => {
-    loadedProvider = {
+    setData({
       id: "p1",
       name: "OpenAI provider",
       providerType: "OpenAI",
@@ -421,7 +364,7 @@ describe("ProviderForm switching Providers", () => {
       modelIds: [{ id: "gpt-4o", passthroughFileTypes: [] }],
       taskModelId: "gpt-4o",
       memoryExtractionModelId: "gpt-4o",
-    } as unknown as Provider;
+    } as unknown as Provider);
     const { rerender } = render(<ProviderForm orgId="org1" providerId="p1" />);
 
     expect(screen.getByLabelText("Name")).toHaveValue("OpenAI provider");
@@ -429,7 +372,7 @@ describe("ProviderForm switching Providers", () => {
 
     // Already resolved before the rerender, as it would be for a Provider
     // whose data is already warm in SWR's cache.
-    loadedProvider = {
+    setData({
       id: "p2",
       name: "Anthropic provider",
       providerType: "Anthropic",
@@ -439,7 +382,7 @@ describe("ProviderForm switching Providers", () => {
       modelIds: [{ id: "claude-opus", passthroughFileTypes: [] }],
       taskModelId: "claude-opus",
       memoryExtractionModelId: "claude-opus",
-    } as unknown as Provider;
+    } as unknown as Provider);
     rerender(<ProviderForm orgId="org1" providerId="p2" />);
 
     expect(screen.getByLabelText("Name")).toHaveValue("Anthropic provider");
@@ -459,7 +402,7 @@ describe("ProviderForm switching Providers", () => {
   // `provider` itself is what keeps this working without the ref: `provider`
   // gets a new reference on every such revalidation, but `providerId` does not.
   it("does not clobber an in-progress edit when the same Provider's data revalidates", () => {
-    loadedProvider = {
+    const provider = {
       id: "p1",
       name: "OpenAI provider",
       providerType: "OpenAI",
@@ -469,6 +412,7 @@ describe("ProviderForm switching Providers", () => {
       taskModelId: "gpt-4o",
       memoryExtractionModelId: "gpt-4o",
     } as unknown as Provider;
+    setData(provider);
     const { rerender } = render(<ProviderForm orgId="org1" providerId="p1" />);
 
     fireEvent.change(screen.getByLabelText("Name"), {
@@ -476,7 +420,7 @@ describe("ProviderForm switching Providers", () => {
     });
 
     // A new object for the same Provider, as a revalidation would hand back.
-    loadedProvider = { ...loadedProvider };
+    setData({ ...provider });
     rerender(<ProviderForm orgId="org1" providerId="p1" />);
 
     expect(screen.getByLabelText("Name")).toHaveValue("My edited name");
@@ -484,11 +428,6 @@ describe("ProviderForm switching Providers", () => {
 });
 
 describe("ProviderForm validation errors on model rows", () => {
-  afterEach(() => {
-    loadedProvider = undefined;
-    vi.restoreAllMocks();
-  });
-
   const threeModels = () => [
     { id: "a", passthroughFileTypes: [] },
     { id: "b", alias: "dup", passthroughFileTypes: [] },
@@ -499,13 +438,10 @@ describe("ProviderForm validation errors on model rows", () => {
   // and the second overwrote the first: one message, one fix per round-trip,
   // and no indication of which row was wrong.
   it("shows every rejected row its own message, against the field that failed", async () => {
-    vi.stubGlobal(
-      "fetch",
-      mockRejectedSave([
-        { path: ["modelIds", 1, "alias"], message: "Alias 'dup' duplicates" },
-        { path: ["modelIds", 2, "alias"], message: "Alias 'DUP' duplicates" },
-      ]),
-    );
+    stubRejectedSave([
+      { path: ["modelIds", 1, "alias"], message: "Alias 'dup' duplicates" },
+      { path: ["modelIds", 2, "alias"], message: "Alias 'DUP' duplicates" },
+    ]);
 
     renderEditForm(threeModels());
     save();
@@ -523,12 +459,9 @@ describe("ProviderForm validation errors on model rows", () => {
   });
 
   it("does not repeat a row's message against the Models field", async () => {
-    vi.stubGlobal(
-      "fetch",
-      mockRejectedSave([
-        { path: ["modelIds", 1, "alias"], message: "Alias 'dup' duplicates" },
-      ]),
-    );
+    stubRejectedSave([
+      { path: ["modelIds", 1, "alias"], message: "Alias 'dup' duplicates" },
+    ]);
 
     renderEditForm(threeModels());
     save();
@@ -539,12 +472,9 @@ describe("ProviderForm validation errors on model rows", () => {
   });
 
   it("still shows an error reported against the list itself", async () => {
-    vi.stubGlobal(
-      "fetch",
-      mockRejectedSave([
-        { path: ["modelIds"], message: "At least one model is required" },
-      ]),
-    );
+    stubRejectedSave([
+      { path: ["modelIds"], message: "At least one model is required" },
+    ]);
 
     renderEditForm([]);
     save();
@@ -560,12 +490,9 @@ describe("ProviderForm validation errors on model rows", () => {
   // were only retracted by field-specific handlers. An error key with no
   // matching handler disabled Save with no way back but a reload.
   it("leaves Save usable after a rejection, so the retry is one click", async () => {
-    vi.stubGlobal(
-      "fetch",
-      mockRejectedSave([
-        { path: ["modelIds", 1, "alias"], message: "Alias 'dup' duplicates" },
-      ]),
-    );
+    stubRejectedSave([
+      { path: ["modelIds", 1, "alias"], message: "Alias 'dup' duplicates" },
+    ]);
 
     renderEditForm(threeModels());
     save();
@@ -577,13 +504,10 @@ describe("ProviderForm validation errors on model rows", () => {
   });
 
   it("retracts the row errors once the list is edited", async () => {
-    vi.stubGlobal(
-      "fetch",
-      mockRejectedSave([
-        { path: ["modelIds", 1, "alias"], message: "Alias 'dup' duplicates" },
-        { path: ["modelIds", 2, "alias"], message: "Alias 'DUP' duplicates" },
-      ]),
-    );
+    stubRejectedSave([
+      { path: ["modelIds", 1, "alias"], message: "Alias 'dup' duplicates" },
+      { path: ["modelIds", 2, "alias"], message: "Alias 'DUP' duplicates" },
+    ]);
 
     renderEditForm(threeModels());
     save();
@@ -601,15 +525,12 @@ describe("ProviderForm validation errors on model rows", () => {
   });
 
   it("opens a collapsed row when the server rejects a field inside it", async () => {
-    vi.stubGlobal(
-      "fetch",
-      mockRejectedSave([
-        {
-          path: ["modelIds", 0, "maxExtractedTextChars"],
-          message: "Too small",
-        },
-      ]),
-    );
+    stubRejectedSave([
+      {
+        path: ["modelIds", 0, "maxExtractedTextChars"],
+        message: "Too small",
+      },
+    ]);
 
     renderEditForm([{ id: "a", passthroughFileTypes: [] }]);
     expect(screen.queryByLabelText("Max extracted text characters")).toBeNull();
@@ -625,15 +546,12 @@ describe("ProviderForm validation errors on model rows", () => {
   });
 
   it("opens a collapsed row when the server rejects its output ceiling", async () => {
-    vi.stubGlobal(
-      "fetch",
-      mockRejectedSave([
-        {
-          path: ["modelIds", 0, "maxOutputTokens"],
-          message: "Too small: expected number to be >0",
-        },
-      ]),
-    );
+    stubRejectedSave([
+      {
+        path: ["modelIds", 0, "maxOutputTokens"],
+        message: "Too small: expected number to be >0",
+      },
+    ]);
 
     renderEditForm([{ id: "a", passthroughFileTypes: [] }]);
     expect(screen.queryByLabelText("Max output tokens")).toBeNull();
@@ -651,15 +569,12 @@ describe("ProviderForm validation errors on model rows", () => {
   // The window sits outside Advanced, so its rejection needs no disclosure
   // opened — it lands on a control the reader is already looking at.
   it("shows a rejected Context window against the control itself", async () => {
-    vi.stubGlobal(
-      "fetch",
-      mockRejectedSave([
-        {
-          path: ["modelIds", 0, "contextWindow"],
-          message: "Too small: expected number to be >=1000",
-        },
-      ]),
-    );
+    stubRejectedSave([
+      {
+        path: ["modelIds", 0, "contextWindow"],
+        message: "Too small: expected number to be >=1000",
+      },
+    ]);
 
     renderEditForm([{ id: "a", passthroughFileTypes: [], contextWindow: 128 }]);
     save();
@@ -677,20 +592,13 @@ describe("ProviderForm validation errors on model rows", () => {
 });
 
 describe("ProviderForm Web search selector", () => {
-  afterEach(() => {
-    loadedProvider = undefined;
-    webBackendCatalog = [];
-    webBackendCatalogError = undefined;
-    vi.restoreAllMocks();
-  });
-
   const CATALOG = [
     { backend: "acme-search.searx", name: "SearXNG", plugin: "acme-search" },
   ];
 
   /** Renders the edit form and opens the Advanced settings section the field sits in. */
   const renderWithAdvancedOpen = (overrides: Partial<Provider>) => {
-    loadedProvider = {
+    setData({
       id: "p1",
       name: "vLLM",
       providerType: "OpenAI",
@@ -701,7 +609,7 @@ describe("ProviderForm Web search selector", () => {
       taskModelId: "qwen",
       memoryExtractionModelId: "qwen",
       ...overrides,
-    } as unknown as Provider;
+    } as unknown as Provider);
     const result = render(<ProviderForm orgId="org1" providerId="p1" />);
     fireEvent.click(screen.getByRole("button", { name: "Toggle" }));
     return result;
@@ -717,7 +625,7 @@ describe("ProviderForm Web search selector", () => {
   });
 
   it("offers the installed backends, annotated with the plugin that contributed them", () => {
-    webBackendCatalog = CATALOG;
+    setDataFor("/web-backends", { results: CATALOG });
     renderWithAdvancedOpen({
       searchSource: "acme-search.searx",
     } as Partial<Provider>);
@@ -766,7 +674,7 @@ describe("ProviderForm Web search selector", () => {
   // search anyway while the capability is missing, and that comes back on its
   // own if the Provider regains a native tool.
   it("keeps a stale native selection stored when some other field is saved", async () => {
-    const fetchMock = stubAcceptedSave();
+    const fetchMock = stubAcceptedSave(ACCEPTED_SAVE);
 
     renderWithAdvancedOpen({});
     expect(searchSelect()).toHaveTextContent("unavailable here");
@@ -780,19 +688,11 @@ describe("ProviderForm Web search selector", () => {
   // The other half of keeping it: picking None explicitly is a real edit, and
   // must overwrite the stored "native" rather than round-tripping it.
   it("stores none when the reader picks it on a Provider with no native search", async () => {
-    const fetchMock = stubAcceptedSave();
+    const fetchMock = stubAcceptedSave(ACCEPTED_SAVE);
 
     renderWithAdvancedOpen({});
 
-    const scrollIntoView = Element.prototype.scrollIntoView;
-    Element.prototype.scrollIntoView = vi.fn();
-    try {
-      fireEvent.keyDown(searchSelect()!, { key: "ArrowDown" });
-      const none = await screen.findByRole("option", { name: "None" });
-      fireEvent.keyDown(none, { key: "Enter" });
-    } finally {
-      Element.prototype.scrollIntoView = scrollIntoView;
-    }
+    await selectOption(searchSelect()!, "None");
     save();
 
     await waitFor(() => expect(fetchMock).toHaveBeenCalled());
@@ -811,19 +711,7 @@ describe("ProviderForm Web search selector", () => {
 
     // Provider Type's SelectTrigger has no accessible name (a pre-existing
     // gap), so it is found by its current value instead.
-    const providerTypeSelect = screen
-      .getAllByRole("combobox")
-      .find((el) => el.textContent === "OpenAI")!;
-
-    const scrollIntoView = Element.prototype.scrollIntoView;
-    Element.prototype.scrollIntoView = vi.fn();
-    try {
-      fireEvent.keyDown(providerTypeSelect, { key: "ArrowDown" });
-      const bedrock = await screen.findByRole("option", { name: "Bedrock" });
-      fireEvent.keyDown(bedrock, { key: "Enter" });
-    } finally {
-      Element.prototype.scrollIntoView = scrollIntoView;
-    }
+    await selectOption("OpenAI", "Bedrock");
 
     expect(searchSelect()).toHaveTextContent(
       "The provider's built-in search (unavailable here)",
@@ -836,21 +724,7 @@ describe("ProviderForm Web search selector", () => {
     renderWithAdvancedOpen({ apiMode: "chat", searchSource: "native" });
     expect(searchSelect()).toHaveTextContent("unavailable here");
 
-    const apiModeSelect = screen
-      .getAllByRole("combobox")
-      .find((el) => el.textContent === "Chat Completions")!;
-
-    const scrollIntoView = Element.prototype.scrollIntoView;
-    Element.prototype.scrollIntoView = vi.fn();
-    try {
-      fireEvent.keyDown(apiModeSelect, { key: "ArrowDown" });
-      const responses = await screen.findByRole("option", {
-        name: "Responses",
-      });
-      fireEvent.keyDown(responses, { key: "Enter" });
-    } finally {
-      Element.prototype.scrollIntoView = scrollIntoView;
-    }
+    await selectOption("Chat Completions", "Responses");
 
     expect(searchSelect()).toHaveTextContent("The provider's built-in search");
     expect(searchSelect()).not.toHaveTextContent("unavailable here");
@@ -865,7 +739,7 @@ describe("ProviderForm Web search selector", () => {
 
   // An empty list means "none installed" only when the catalog actually answered.
   it("keeps the field and says so when the catalog could not be loaded", () => {
-    webBackendCatalogError = new Error("500");
+    setError(new Error("500"), "/web-backends");
     renderWithAdvancedOpen({});
 
     expect(searchSelect()).not.toBeNull();
@@ -877,7 +751,7 @@ describe("ProviderForm Web search selector", () => {
   // Calling an installed backend "not installed" because the request failed sends
   // an Operator hunting a plugin that is fine.
   it("does not call a stored backend uninstalled when the catalog failed", () => {
-    webBackendCatalogError = new Error("500");
+    setError(new Error("500"), "/web-backends");
     renderWithAdvancedOpen({
       searchSource: "acme-search.searx",
     } as Partial<Provider>);
@@ -887,8 +761,8 @@ describe("ProviderForm Web search selector", () => {
   });
 
   it("round-trips the stored backend through a save", async () => {
-    webBackendCatalog = CATALOG;
-    const fetchMock = stubAcceptedSave();
+    setDataFor("/web-backends", { results: CATALOG });
+    const fetchMock = stubAcceptedSave(ACCEPTED_SAVE);
 
     renderWithAdvancedOpen({
       searchSource: "acme-search.searx",
@@ -901,8 +775,8 @@ describe("ProviderForm Web search selector", () => {
   });
 
   it("round-trips none through a save", async () => {
-    webBackendCatalog = CATALOG;
-    const fetchMock = stubAcceptedSave();
+    setDataFor("/web-backends", { results: CATALOG });
+    const fetchMock = stubAcceptedSave(ACCEPTED_SAVE);
 
     renderWithAdvancedOpen({ searchSource: "none" } as Partial<Provider>);
     save();

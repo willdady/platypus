@@ -1,85 +1,46 @@
-import { describe, it, expect, vi, afterEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import {
+  navigationMock,
+  authMock,
+  toastMock,
+  swrMock,
+  setDataFor,
+  resetFormHarness,
+  stubAcceptedSave,
+  savedBody,
+} from "@/lib/form-test-harness";
+import { selectOption } from "@/lib/test-utils";
 
 // --- Module mocks ------------------------------------------------------------
 
-const push = vi.fn();
-vi.mock("next/navigation", () => ({
-  useRouter: () => ({ push }),
-}));
-
-vi.mock("@/components/auth-provider", () => ({
-  useBackendUrl: () => "http://test",
-  useAuth: () => ({ user: { id: "u1" } }),
-}));
-
-vi.mock("sonner", () => ({
-  toast: { error: vi.fn(), info: vi.fn(), success: vi.fn() },
-}));
-
-const agents = [{ id: "agent-1", name: "Agent One" }];
-const boards = [{ id: "board-1", name: "Board One" }];
-
-vi.mock("swr", () => ({
-  __esModule: true,
-  default: (key: string | null) => {
-    if (key?.includes("/agents")) {
-      return { data: { results: agents }, isLoading: false, mutate: vi.fn() };
-    }
-    if (key?.includes("/boards")) {
-      return { data: { results: boards }, isLoading: false, mutate: vi.fn() };
-    }
-    return { data: undefined, isLoading: false, mutate: vi.fn() };
-  },
-  useSWRConfig: () => ({ mutate: vi.fn() }),
-}));
+vi.mock("next/navigation", () => navigationMock);
+vi.mock("@/components/auth-provider", () => authMock);
+vi.mock("sonner", () => toastMock);
+vi.mock("swr", () => swrMock);
 
 import { TriggerForm } from "./trigger-form";
 
 // --- Helpers -----------------------------------------------------------------
 
-/** An accepted save, so the payload the form sent can be read back. */
-function stubAcceptedSave() {
-  const fetchMock = vi.fn().mockResolvedValue({
-    ok: true,
-    status: 200,
-    json: async () => ({ id: "trigger-1" }),
-  } as unknown as Response);
-  vi.stubGlobal("fetch", fetchMock);
-  return fetchMock;
-}
-
-/** The body the form put on the wire for the last save. */
-function savedBody(fetchMock: ReturnType<typeof vi.fn>) {
-  const [, init] = fetchMock.mock.calls.at(-1) as [string, RequestInit];
-  return JSON.parse(String(init.body));
-}
+const agents = [{ id: "agent-1", name: "Agent One" }];
+const boards = [{ id: "board-1", name: "Board One" }];
 
 /** The `config` the form put on the wire for the last save. */
 function savedConfig(fetchMock: ReturnType<typeof vi.fn>) {
   return savedBody(fetchMock).config;
 }
 
+beforeEach(() => {
+  resetFormHarness();
+  setDataFor("/agents", { results: agents });
+  setDataFor("/boards", { results: boards });
+});
+
 afterEach(() => {
   vi.unstubAllGlobals();
   vi.clearAllMocks();
 });
-
-/** Picks an option on the Radix Select currently reading `from`. */
-async function selectOption(from: string, option: string) {
-  const combobox = screen
-    .getAllByRole("combobox")
-    .find((el) => el.textContent === from)!;
-  const scrollIntoView = Element.prototype.scrollIntoView;
-  Element.prototype.scrollIntoView = vi.fn();
-  try {
-    fireEvent.keyDown(combobox, { key: "ArrowDown" });
-    const item = await screen.findByRole("option", { name: option });
-    fireEvent.keyDown(item, { key: "Enter" });
-  } finally {
-    Element.prototype.scrollIntoView = scrollIntoView;
-  }
-}
 
 async function renderEventTriggerForm() {
   render(<TriggerForm orgId="org1" workspaceId="ws1" />);
@@ -138,7 +99,7 @@ describe("TriggerForm — changed-fields filter", () => {
   });
 
   it("submits the selected changed fields as the trigger filter", async () => {
-    const fetchMock = stubAcceptedSave();
+    const fetchMock = stubAcceptedSave({ id: "trigger-1" });
     await renderEventTriggerForm();
 
     fireEvent.change(screen.getByLabelText("Name"), {
@@ -162,7 +123,7 @@ describe("TriggerForm — changed-fields filter", () => {
 
 describe("TriggerForm — Include Memories", () => {
   it("keeps the control behind a collapsed Advanced settings panel and saves it off", async () => {
-    const fetchMock = stubAcceptedSave();
+    const fetchMock = stubAcceptedSave({ id: "trigger-1" });
     render(<TriggerForm orgId="org1" workspaceId="ws1" />);
     await waitFor(() => expect(screen.getByText("Agent")).toBeInTheDocument());
 
@@ -182,7 +143,7 @@ describe("TriggerForm — Include Memories", () => {
   });
 
   it("saves the opt-in once Advanced settings is expanded and the switch turned on", async () => {
-    const fetchMock = stubAcceptedSave();
+    const fetchMock = stubAcceptedSave({ id: "trigger-1" });
     render(<TriggerForm orgId="org1" workspaceId="ws1" />);
     await waitFor(() => expect(screen.getByText("Agent")).toBeInTheDocument());
 

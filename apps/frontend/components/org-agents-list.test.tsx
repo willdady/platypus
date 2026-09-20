@@ -1,39 +1,26 @@
-import { describe, it, expect, vi, afterEach, beforeAll } from "vitest";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { screen, waitFor } from "@testing-library/react";
 import type { Agent } from "@platypus/schemas";
 import {
-  installRadixPointerPolyfills,
-  openDropdownMenu as openMenu,
-} from "@/lib/test-utils";
-
-beforeAll(installRadixPointerPolyfills);
+  authMock,
+  swrMock,
+  mockScopedSWR,
+  resetListHarness,
+  renderList,
+  confirmDialog,
+  stubSaveSequence,
+  stubAcceptedSave,
+  mutate,
+} from "@/lib/list-test-harness";
 
 // --- Module mocks ------------------------------------------------------------
 
-vi.mock("@/components/auth-provider", () => ({
-  useBackendUrl: () => "http://test",
-  useAuth: () => ({
-    user: { id: "u1" },
-    actor: "org-admin",
-  }),
-}));
-
-// The `GET .../agents` list this component renders. Set per test.
-let agents: Agent[] = [];
-const mutateSpy = vi.fn();
-
-vi.mock("swr", () => ({
-  __esModule: true,
-  default: () => ({
-    data: { results: agents },
-    isLoading: false,
-    mutate: mutateSpy,
-  }),
-}));
+vi.mock("@/components/auth-provider", () => authMock);
+vi.mock("swr", () => swrMock);
 
 import { OrgAgentsList } from "./org-agents-list";
 
-// --- Helpers -----------------------------------------------------------------
+// --- Fixtures ----------------------------------------------------------------
 
 const sharedAgent: Agent = {
   id: "a1",
@@ -41,17 +28,16 @@ const sharedAgent: Agent = {
   description: "desc",
 } as unknown as Agent;
 
-function jsonResponse(status: number, body: unknown) {
-  return {
-    ok: status >= 200 && status < 300,
-    status,
-    json: async () => body,
-  } as unknown as Response;
+/** Renders the Organization surface with `agents` in the list. */
+function renderAgents(agents: Agent[], menuItem?: string) {
+  mockScopedSWR({ "/agents": agents });
+  return renderList(<OrgAgentsList orgId="org1" />, menuItem);
 }
 
+beforeEach(resetListHarness);
+
 afterEach(() => {
-  agents = [];
-  mutateSpy.mockClear();
+  vi.unstubAllGlobals();
   vi.restoreAllMocks();
 });
 
@@ -59,15 +45,9 @@ afterEach(() => {
 
 describe("OrgAgentsList delete", () => {
   it("blocks delete and reports the attachment count when the agent is still attached", async () => {
-    agents = [sharedAgent];
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValue(jsonResponse(200, { results: [{ id: "att1" }] }));
-    vi.stubGlobal("fetch", fetchMock);
+    const fetchMock = stubAcceptedSave({ results: [{ id: "att1" }] });
 
-    render(<OrgAgentsList orgId="org1" />);
-    openMenu();
-    fireEvent.click(screen.getByText("Delete"));
+    renderAgents([sharedAgent], "Delete");
 
     await waitFor(() =>
       expect(screen.getByText("Can't delete shared agent")).toBeInTheDocument(),
@@ -79,24 +59,19 @@ describe("OrgAgentsList delete", () => {
   });
 
   it("surfaces the backend's reason and keeps the agent when delete fails", async () => {
-    agents = [sharedAgent];
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValueOnce(jsonResponse(200, { results: [] }))
-      .mockResolvedValueOnce(jsonResponse(409, { error: "Still referenced" }));
-    vi.stubGlobal("fetch", fetchMock);
+    // The attachment-count check first, then the delete itself.
+    const fetchMock = stubSaveSequence(
+      { status: 200, body: { results: [] } },
+      { status: 409, body: { error: "Still referenced" } },
+    );
 
-    render(<OrgAgentsList orgId="org1" />);
-    openMenu();
-    fireEvent.click(screen.getByText("Delete"));
-
-    const deleteButton = await screen.findByRole("button", { name: "Delete" });
-    fireEvent.click(deleteButton);
+    renderAgents([sharedAgent], "Delete");
+    await confirmDialog("Delete");
 
     await waitFor(() =>
       expect(screen.getByText("Still referenced")).toBeInTheDocument(),
     );
-    expect(mutateSpy).not.toHaveBeenCalled();
+    expect(mutate).not.toHaveBeenCalled();
     expect(fetchMock).toHaveBeenCalledWith(
       "http://test/organizations/org1/agents/a1",
       expect.objectContaining({ method: "DELETE" }),
@@ -104,20 +79,31 @@ describe("OrgAgentsList delete", () => {
   });
 
   it("revalidates when delete succeeds", async () => {
-    agents = [sharedAgent];
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValueOnce(jsonResponse(200, { results: [] }))
-      .mockResolvedValueOnce(jsonResponse(200, {}));
-    vi.stubGlobal("fetch", fetchMock);
+    stubSaveSequence(
+      { status: 200, body: { results: [] } },
+      { status: 200, body: {} },
+    );
 
-    render(<OrgAgentsList orgId="org1" />);
-    openMenu();
-    fireEvent.click(screen.getByText("Delete"));
+    renderAgents([sharedAgent], "Delete");
+    await confirmDialog("Delete");
 
-    const deleteButton = await screen.findByRole("button", { name: "Delete" });
-    fireEvent.click(deleteButton);
+    await waitFor(() => expect(mutate).toHaveBeenCalled());
+  });
+});
 
-    await waitFor(() => expect(mutateSpy).toHaveBeenCalled());
+describe("OrgAgentsList list states", () => {
+  it("shows the empty state when the organization shares no agents", () => {
+    renderAgents([]);
+
+    expect(screen.getByText(/No shared agents yet/i)).toBeInTheDocument();
+  });
+
+  it("surfaces a failed read rather than rendering an empty list", () => {
+    mockScopedSWR({ "/agents": { error: new Error("500") } });
+    renderList(<OrgAgentsList orgId="org1" />);
+
+    expect(
+      screen.getByText(/Failed to load shared agents/),
+    ).toBeInTheDocument();
   });
 });

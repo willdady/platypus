@@ -36,23 +36,27 @@ const openCard = () => fireEvent.click(screen.getByRole("button"));
 // Issue #469. A plugin search is the tool most likely to take several seconds,
 // so the card that heads it is where the elapsed time is worth reading.
 describe("WebToolCard duration", () => {
-  it("renders the duration recorded on the part", () => {
-    render(
+  // Persisted, the figure rides on the part; live, the SDK strips the part's
+  // metadata mid-turn and it comes off the message instead. Both must read the
+  // same — `lib/tool-duration.test.ts` covers the formatting itself.
+  it.each([
+    [
+      "recorded on the part",
       <WebToolCard
+        key="part"
         toolPart={searchCall(backendSearch, { durationMs: 4200 })}
       />,
-    );
-
-    expect(screen.getByText(/4\.2s/)).toBeInTheDocument();
-  });
-
-  it("renders the duration the message carries mid-turn", () => {
-    render(
+    ],
+    [
+      "carried on the message mid-turn",
       <WebToolCard
+        key="message"
         toolPart={searchCall(backendSearch)}
         messageMetadata={{ toolDurations: { "call-1": 4200 } }}
       />,
-    );
+    ],
+  ])("renders the duration %s", (_, element) => {
+    render(element);
 
     expect(screen.getByText(/4\.2s/)).toBeInTheDocument();
   });

@@ -13,6 +13,7 @@ import {
   stubAcceptedSave,
   stubRejectedSave,
 } from "@/lib/form-test-harness";
+import { selectOption } from "@/lib/test-utils";
 
 // --- Module mocks ------------------------------------------------------------
 
@@ -103,17 +104,8 @@ function renderEditForm() {
 }
 
 /** Picks the first workspace through the Radix select, as a keyboard user would. */
-async function chooseWorkspace() {
-  const scrollIntoView = Element.prototype.scrollIntoView;
-  Element.prototype.scrollIntoView = vi.fn();
-  try {
-    fireEvent.keyDown(screen.getByRole("combobox"), { key: "ArrowDown" });
-    const option = await screen.findByRole("option", { name: "Alpha" });
-    fireEvent.keyDown(option, { key: "Enter" });
-  } finally {
-    Element.prototype.scrollIntoView = scrollIntoView;
-  }
-}
+const chooseWorkspace = () =>
+  selectOption(screen.getByRole("combobox"), "Alpha");
 
 const submit = () =>
   fireEvent.click(screen.getByRole("button", { name: /Save|Update/ }));

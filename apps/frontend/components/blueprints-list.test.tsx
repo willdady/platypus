@@ -1,38 +1,25 @@
-import { describe, it, expect, vi, afterEach, beforeAll } from "vitest";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { screen, waitFor } from "@testing-library/react";
 import type { Blueprint } from "@platypus/schemas";
 import {
-  installRadixPointerPolyfills,
-  openDropdownMenu as openMenu,
-} from "@/lib/test-utils";
-
-beforeAll(installRadixPointerPolyfills);
+  authMock,
+  toastMock,
+  swrMock,
+  mockScopedSWR,
+  resetListHarness,
+  renderList,
+  confirmDialog,
+  stubAcceptedSave,
+  stubRejectedSave,
+  mutate,
+  toastInfo,
+} from "@/lib/list-test-harness";
 
 // --- Module mocks ------------------------------------------------------------
 
-vi.mock("@/components/auth-provider", () => ({
-  useBackendUrl: () => "http://test",
-  useAuth: () => ({ user: { id: "u1" } }),
-}));
-
-const { toastInfoSpy } = vi.hoisted(() => ({ toastInfoSpy: vi.fn() }));
-vi.mock("sonner", () => ({
-  toast: { error: vi.fn(), info: toastInfoSpy, success: vi.fn() },
-}));
-
-// The `GET .../blueprints` list this component renders. Set per test.
-let blueprints: Blueprint[] = [];
-const mutateSpy = vi.fn();
-
-vi.mock("swr", () => ({
-  __esModule: true,
-  default: () => ({
-    data: { results: blueprints },
-    error: undefined,
-    isLoading: false,
-    mutate: mutateSpy,
-  }),
-}));
+vi.mock("@/components/auth-provider", () => authMock);
+vi.mock("sonner", () => toastMock);
+vi.mock("swr", () => swrMock);
 
 import { BlueprintsList } from "./blueprints-list";
 
@@ -45,18 +32,15 @@ const blueprint: Blueprint = {
   items: [],
 } as unknown as Blueprint;
 
-function jsonResponse(status: number, body: unknown) {
-  return {
-    ok: status >= 200 && status < 300,
-    status,
-    json: async () => body,
-  } as unknown as Response;
+function renderBlueprints(blueprints: Blueprint[], menuItem?: string) {
+  mockScopedSWR({ "/blueprints": blueprints });
+  return renderList(<BlueprintsList orgId="org1" />, menuItem);
 }
 
+beforeEach(resetListHarness);
+
 afterEach(() => {
-  blueprints = [];
-  mutateSpy.mockClear();
-  toastInfoSpy.mockClear();
+  vi.unstubAllGlobals();
   vi.restoreAllMocks();
 });
 
@@ -64,16 +48,12 @@ afterEach(() => {
 
 describe("BlueprintsList delete", () => {
   it("deletes through the request module and revalidates on success", async () => {
-    blueprints = [blueprint];
-    const fetchMock = vi.fn().mockResolvedValue(jsonResponse(200, {}));
-    vi.stubGlobal("fetch", fetchMock);
+    const fetchMock = stubAcceptedSave();
 
-    render(<BlueprintsList orgId="org1" />);
-    openMenu();
-    fireEvent.click(screen.getByText("Delete"));
-    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+    renderBlueprints([blueprint], "Delete");
+    await confirmDialog("Delete");
 
-    await waitFor(() => expect(mutateSpy).toHaveBeenCalled());
+    await waitFor(() => expect(mutate).toHaveBeenCalled());
     expect(fetchMock).toHaveBeenCalledWith(
       "http://test/organizations/org1/blueprints/b1",
       expect.objectContaining({ method: "DELETE" }),
@@ -81,44 +61,45 @@ describe("BlueprintsList delete", () => {
   });
 
   it("surfaces the backend's reason inline and does not revalidate when delete is refused", async () => {
-    blueprints = [blueprint];
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValue(jsonResponse(409, { error: "Blueprint is in use" }));
-    vi.stubGlobal("fetch", fetchMock);
+    stubRejectedSave("Blueprint is in use", 409);
 
-    render(<BlueprintsList orgId="org1" />);
-    openMenu();
-    fireEvent.click(screen.getByText("Delete"));
-    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+    renderBlueprints([blueprint], "Delete");
+    await confirmDialog("Delete");
 
     await waitFor(() =>
       expect(screen.getByText("Blueprint is in use")).toBeInTheDocument(),
     );
-    expect(mutateSpy).not.toHaveBeenCalled();
+    expect(mutate).not.toHaveBeenCalled();
     expect(screen.getByRole("button", { name: "Delete" })).toBeInTheDocument();
   });
 
   it("surfaces a forbidden refusal inline like any other failure", async () => {
-    blueprints = [blueprint];
-    const fetchMock = vi.fn().mockResolvedValue(
-      jsonResponse(403, {
-        error: "You do not have permission to delete blueprints",
-      }),
-    );
-    vi.stubGlobal("fetch", fetchMock);
+    stubRejectedSave("You do not have permission to delete blueprints", 403);
 
-    render(<BlueprintsList orgId="org1" />);
-    openMenu();
-    fireEvent.click(screen.getByText("Delete"));
-    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+    renderBlueprints([blueprint], "Delete");
+    await confirmDialog("Delete");
 
     await waitFor(() =>
       expect(
         screen.getByText("You do not have permission to delete blueprints"),
       ).toBeInTheDocument(),
     );
-    expect(toastInfoSpy).not.toHaveBeenCalled();
-    expect(mutateSpy).not.toHaveBeenCalled();
+    expect(toastInfo).not.toHaveBeenCalled();
+    expect(mutate).not.toHaveBeenCalled();
+  });
+});
+
+describe("BlueprintsList list states", () => {
+  it("shows the empty state when the organization has no blueprints", () => {
+    renderBlueprints([]);
+
+    expect(screen.getByText(/No blueprints yet/i)).toBeInTheDocument();
+  });
+
+  it("surfaces a failed read rather than rendering an empty list", () => {
+    mockScopedSWR({ "/blueprints": { error: new Error("500") } });
+    renderList(<BlueprintsList orgId="org1" />);
+
+    expect(screen.getByText(/Failed to load blueprints/)).toBeInTheDocument();
   });
 });

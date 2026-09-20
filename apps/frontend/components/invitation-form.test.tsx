@@ -1,40 +1,26 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import {
+  authMock,
+  toastMock,
+  swrMock,
+  toastError,
+  toastSuccess,
+  setData,
+  resetFormHarness,
+  stubAcceptedSave,
+  stubRejectedSave,
+} from "@/lib/form-test-harness";
 
 // --- Module mocks ------------------------------------------------------------
 
-vi.mock("@/components/auth-provider", () => ({
-  useBackendUrl: () => "http://test",
-  useAuth: () => ({ user: { id: "u1" } }),
-}));
-
-const toastError = vi.fn();
-const toastSuccess = vi.fn();
-vi.mock("sonner", () => ({
-  toast: {
-    error: (...args: unknown[]) => toastError(...args),
-    success: (...args: unknown[]) => toastSuccess(...args),
-  },
-}));
-
-// The form never has any Blueprints to offer in these tests.
-vi.mock("swr", () => ({
-  __esModule: true,
-  default: () => ({ data: { results: [] }, isLoading: false }),
-  useSWRConfig: () => ({ mutate: vi.fn() }),
-}));
+vi.mock("@/components/auth-provider", () => authMock);
+vi.mock("sonner", () => toastMock);
+vi.mock("swr", () => swrMock);
 
 import { InvitationForm } from "./invitation-form";
 
 // --- Helpers -----------------------------------------------------------------
-
-function mockResponse(status: number, body: unknown) {
-  return vi.fn().mockResolvedValue({
-    ok: status >= 200 && status < 300,
-    status,
-    json: async () => body,
-  } as unknown as Response);
-}
 
 function renderForm() {
   return render(<InvitationForm orgId="org1" />);
@@ -47,28 +33,27 @@ function submit() {
   fireEvent.click(screen.getByRole("button", { name: "Send invitation" }));
 }
 
+beforeEach(() => {
+  resetFormHarness();
+  // The form never has any Blueprints to offer in these tests.
+  setData({ results: [] });
+});
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+  vi.restoreAllMocks();
+});
+
 // --- Tests -------------------------------------------------------------------
 
 describe("InvitationForm conflict handling", () => {
-  beforeEach(() => {
-    toastError.mockReset();
-    toastSuccess.mockReset();
-  });
-
-  afterEach(() => {
-    vi.restoreAllMocks();
-  });
-
   // A duplicate invite is a 409 from the central error seam (ADR-0010),
   // carrying `{ error: "..." }` — the request module surfaces it as a
   // conflict outcome rather than the generic validation fallback.
   it("shows the backend's message against the Email field on a duplicate invite", async () => {
-    vi.stubGlobal(
-      "fetch",
-      mockResponse(409, {
-        error:
-          "A pending invitation already exists for this user and organization",
-      }),
+    stubRejectedSave(
+      "A pending invitation already exists for this user and organization",
+      409,
     );
 
     renderForm();
@@ -84,10 +69,7 @@ describe("InvitationForm conflict handling", () => {
   });
 
   it("never discards a rejection silently — a plain 400 message still surfaces", async () => {
-    vi.stubGlobal(
-      "fetch",
-      mockResponse(400, { error: "You cannot invite yourself" }),
-    );
+    stubRejectedSave("You cannot invite yourself", 400);
 
     renderForm();
     submit();
@@ -98,7 +80,7 @@ describe("InvitationForm conflict handling", () => {
   });
 
   it("clears the form and reports success once the invite is accepted", async () => {
-    vi.stubGlobal("fetch", mockResponse(201, { id: "inv-1" }));
+    stubAcceptedSave({ id: "inv-1" }, 201);
 
     renderForm();
     submit();
