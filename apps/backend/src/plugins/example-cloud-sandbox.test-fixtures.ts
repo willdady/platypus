@@ -9,11 +9,10 @@ import { PLUGIN_API_VERSION } from "@platypuschat/plugin-sdk";
 import { tool } from "ai";
 import { z } from "zod";
 
-// Example third-party plugin, kept as an in-repo reference for the deploy-time
-// plugin-config + shared-credential mechanics of ADR-0013. It is NOT in the
-// core allowlist (`builtin.ts`) and is NOT listed in any default
-// `PLATYPUS_PLUGINS`, so it never loads in a real deployment — it exists to
-// document the pattern and to exercise the loader's config injection in tests.
+// Test-only fixture for the deploy-time plugin-config + shared-credential
+// mechanics of ADR-0013, exercised through the loader. It is NOT a core plugin
+// (absent from the allowlist in `builtin.ts`) and is NOT listed in any default
+// `PLATYPUS_PLUGINS`, so it never loads in a real deployment.
 //
 // It mimics a hosted-sandbox vendor ("Daytona"-style): the Operator supplies
 // one deploy-time credential block (an API token) plus non-secret config (a
@@ -25,21 +24,16 @@ import { z } from "zod";
 // Plugin-level deploy-time schemas (separate from the per-Workspace Sandbox
 // config/credentials the SandboxBackendContribution declares). `config` is
 // non-secret shape; `credentials` is secret material shared across tenants.
-export const examplePluginConfigSchema = z
+const examplePluginConfigSchema = z
   .object({ region: z.string().min(1).default("us") })
   .strict();
-export const examplePluginCredentialsSchema = z
+const examplePluginCredentialsSchema = z
   .object({ apiToken: z.string().min(1) })
   .strict();
 
-export type ExamplePluginConfig = z.infer<typeof examplePluginConfigSchema>;
-export type ExamplePluginCredentials = z.infer<
-  typeof examplePluginCredentialsSchema
->;
-
 type ExamplePluginContext = PluginConfigContext<
-  ExamplePluginConfig,
-  ExamplePluginCredentials
+  z.infer<typeof examplePluginConfigSchema>,
+  z.infer<typeof examplePluginCredentialsSchema>
 >;
 
 // A stub Sandbox backend that closes over the shared deploy-time credentials.

@@ -23,7 +23,7 @@ import {
   parsePluginList,
   type PluginLoggerParent,
 } from "./loader.ts";
-import { plugin as examplePlugin } from "./example/index.ts";
+import { plugin as examplePlugin } from "./example-cloud-sandbox.test-fixtures.ts";
 import {
   registerToolSet,
   getToolSet,
