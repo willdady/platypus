@@ -1,9 +1,8 @@
 "use client";
 
-import useSWR from "swr";
 import { Blocks, Container, Globe, Wrench } from "lucide-react";
-import { useAuth, useBackendUrl } from "@/components/auth-provider";
-import { cn, fetcher, joinUrl } from "@/lib/utils";
+import { cn } from "@/lib/utils";
+import { useScopedSWR } from "@/hooks/use-scoped-swr";
 import { Badge } from "@/components/ui/badge";
 import {
   Item,
@@ -42,18 +41,9 @@ const PluginsList = ({
   className?: string;
   orgId: string;
 }) => {
-  const { user } = useAuth();
-  const backendUrl = useBackendUrl();
-
-  const fetchUrl =
-    backendUrl && user
-      ? joinUrl(backendUrl, `/organizations/${orgId}/plugins`)
-      : null;
-
-  const { data, error, isLoading } = useSWR<{ results: InstalledPlugin[] }>(
-    fetchUrl,
-    fetcher,
-  );
+  const { data, error, isLoading } = useScopedSWR<{
+    results: InstalledPlugin[];
+  }>("plugins", { orgId });
 
   if (isLoading) {
     return (

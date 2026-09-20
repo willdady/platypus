@@ -2,7 +2,7 @@
 
 import { use, useState } from "react";
 import { useRouter } from "next/navigation";
-import useSWR from "swr";
+import { useScopedSWR } from "@/hooks/use-scoped-swr";
 import { Trash2 } from "lucide-react";
 import { ResourcePage } from "@/components/resource-page";
 import { Button } from "@/components/ui/button";
@@ -10,8 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { ConfirmDialog } from "@/components/confirm-dialog";
-import { useAuth, useBackendUrl } from "@/components/auth-provider";
-import { fetcher, joinUrl } from "@/lib/utils";
+import { useBackendUrl } from "@/components/auth-provider";
 import { writeEntity } from "@/lib/api-write";
 import type { Dashboard } from "@platypus/schemas";
 import { toast } from "sonner";
@@ -26,19 +25,13 @@ const DashboardSettingsPage = ({
   }>;
 }) => {
   const { orgId, workspaceId, dashboardId } = use(params);
-  const { user } = useAuth();
   const backendUrl = useBackendUrl();
   const router = useRouter();
 
-  const dashUrl =
-    backendUrl && user
-      ? joinUrl(
-          backendUrl,
-          `/organizations/${orgId}/workspaces/${workspaceId}/dashboards/${dashboardId}`,
-        )
-      : null;
-
-  const { data: dashboard, mutate } = useSWR<Dashboard>(dashUrl, fetcher);
+  const { data: dashboard, mutate } = useScopedSWR<Dashboard>(
+    `dashboards/${dashboardId}`,
+    { orgId, workspaceId },
+  );
 
   const [name, setName] = useState("");
   const [description, setDescription] = useState<string | null>(null);

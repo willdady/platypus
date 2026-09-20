@@ -20,29 +20,22 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { EllipsisVertical, Pencil, Play, Plus, Trash2 } from "lucide-react";
 import type { Blueprint } from "@platypus/schemas";
-import useSWR from "swr";
-import { fetcher, joinUrl } from "@/lib/utils";
 import { writeEntity } from "@/lib/api-write";
+import { useScopedSWR } from "@/hooks/use-scoped-swr";
 import { useDeleteFlow } from "@/hooks/use-delete-flow";
 import Link from "next/link";
-import { useAuth, useBackendUrl } from "@/components/auth-provider";
 import { ApplyBlueprintDialog } from "@/components/apply-blueprint-dialog";
 
 export const BlueprintsList = ({ orgId }: { orgId: string }) => {
-  const { user } = useAuth();
-  const backendUrl = useBackendUrl();
   const editBasePath = `/${orgId}/settings/blueprints`;
 
   const [blueprintToApply, setBlueprintToApply] = useState<Blueprint | null>(
     null,
   );
 
-  const { data, error, isLoading, mutate } = useSWR<{ results: Blueprint[] }>(
-    backendUrl && user
-      ? joinUrl(backendUrl, `/organizations/${orgId}/blueprints`)
-      : null,
-    fetcher,
-  );
+  const { data, error, isLoading, mutate } = useScopedSWR<{
+    results: Blueprint[];
+  }>("blueprints", { orgId });
 
   const blueprints = [...(data?.results || [])].sort((a, b) =>
     a.name.localeCompare(b.name),

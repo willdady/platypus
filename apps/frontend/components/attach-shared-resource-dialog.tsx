@@ -1,7 +1,7 @@
 "use client";
 
-import useSWR from "swr";
-import { fetcher, joinUrl } from "../lib/utils";
+import { useScopedSWR } from "@/hooks/use-scoped-swr";
+import { joinUrl } from "../lib/utils";
 import { writeAt } from "../lib/api-write";
 import { useBackendUrl } from "@/components/auth-provider";
 import { Button } from "./ui/button";
@@ -58,11 +58,9 @@ const AttachSharedResourceDialog = ({
   const collection = COLLECTION[resourceType];
   const label = LABEL[resourceType];
 
-  const { data } = useSWR<{ results: { id: string; name: string }[] }>(
-    open && backendUrl
-      ? joinUrl(backendUrl, `/organizations/${orgId}/${collection}`)
-      : null,
-    fetcher,
+  const { data } = useScopedSWR<{ results: { id: string; name: string }[] }>(
+    collection,
+    open ? { orgId } : null,
   );
 
   const [busyId, setBusyId] = useState<string | null>(null);

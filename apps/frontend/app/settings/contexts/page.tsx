@@ -1,15 +1,15 @@
 "use client";
 
 import { useState } from "react";
-import { useAuth, useBackendUrl } from "@/components/auth-provider";
+import { useBackendUrl } from "@/components/auth-provider";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
-import { fetcher, joinUrl } from "@/lib/utils";
+import { joinUrl } from "@/lib/utils";
 import { writeAt } from "@/lib/api-write";
 import { type Context } from "@platypus/schemas";
 import { ExpandableTextarea } from "@/components/expandable-textarea";
 import { Globe, FolderClosed } from "lucide-react";
-import useSWR from "swr";
+import { useScopedSWR } from "@/hooks/use-scoped-swr";
 import { ContextsList } from "@/components/contexts-list";
 
 interface ContextWithWorkspaceName extends Context {
@@ -21,12 +21,11 @@ const findGlobalContext = (contexts?: {
 }) => contexts?.results.find((c) => !c.workspaceId);
 
 const ContextsPage = () => {
-  const { user } = useAuth();
   const backendUrl = useBackendUrl();
 
-  const { data: contexts, mutate } = useSWR<{
+  const { data: contexts, mutate } = useScopedSWR<{
     results: ContextWithWorkspaceName[];
-  }>(user ? joinUrl(backendUrl, "/users/me/contexts") : null, fetcher);
+  }>("users/me/contexts", {});
 
   const [globalContextContent, setGlobalContextContent] = useState(
     () => findGlobalContext(contexts)?.content || "",

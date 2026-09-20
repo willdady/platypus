@@ -1,9 +1,8 @@
 "use client";
 
 import { Item, ItemActions, ItemContent, ItemTitle } from "./ui/item";
-import useSWR from "swr";
-import { cn, fetcher, joinUrl } from "../lib/utils";
-import { useAuth, useBackendUrl } from "@/components/auth-provider";
+import { cn } from "../lib/utils";
+import { useScopedSWR } from "@/hooks/use-scoped-swr";
 import { Pencil, Plus, Folder } from "lucide-react";
 import Link from "next/link";
 import { Button } from "./ui/button";
@@ -15,12 +14,9 @@ interface ContextWithNames extends Context {
 }
 
 const ContextsList = ({ className }: { className?: string }) => {
-  const { user } = useAuth();
-  const backendUrl = useBackendUrl();
-
-  const { data, error, isLoading } = useSWR<{
+  const { data, error, isLoading } = useScopedSWR<{
     results: ContextWithNames[];
-  }>(user ? joinUrl(backendUrl, "/users/me/contexts") : null, fetcher);
+  }>("users/me/contexts", {});
 
   if (isLoading || error) return null;
 

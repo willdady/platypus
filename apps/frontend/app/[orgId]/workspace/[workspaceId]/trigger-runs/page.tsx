@@ -2,7 +2,8 @@
 
 import { use, useCallback } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import useSWR from "swr";
+import { useScopedSWR } from "@/hooks/use-scoped-swr";
+import { scopedUrl } from "@/lib/api-write";
 import useSWRInfinite from "swr/infinite";
 import { History, TriangleAlert } from "lucide-react";
 import {
@@ -30,7 +31,7 @@ import {
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useAuth, useBackendUrl } from "@/components/auth-provider";
-import { fetcher, joinUrl } from "@/lib/utils";
+import { fetcher } from "@/lib/utils";
 
 /**
  * How many runs a page of the list holds. The endpoint caps a request at 100;
@@ -64,14 +65,9 @@ const TriggerRunsPage = ({
   const statusFilter = searchParams.get("status") ?? "";
   const isFiltered = Boolean(triggerFilter || statusFilter);
 
-  const { data: triggersData } = useSWR<{ results: Trigger[] }>(
-    backendUrl && user
-      ? joinUrl(
-          backendUrl,
-          `/organizations/${orgId}/workspaces/${workspaceId}/triggers`,
-        )
-      : null,
-    fetcher,
+  const { data: triggersData } = useScopedSWR<{ results: Trigger[] }>(
+    "triggers",
+    { orgId, workspaceId },
   );
   const triggers = triggersData?.results ?? [];
 
@@ -86,10 +82,12 @@ const TriggerRunsPage = ({
       });
       if (triggerFilter) query.set("triggerId", triggerFilter);
       if (statusFilter) query.set("status", statusFilter);
-      return joinUrl(
-        backendUrl,
-        `/organizations/${orgId}/workspaces/${workspaceId}/trigger-runs?${query.toString()}`,
-      );
+      // `useSWRInfinite` owns its own keys, so this is the one read that
+      // still gates itself — but the path shape still comes from `scopedUrl`.
+      return scopedUrl(backendUrl, `trigger-runs?${query.toString()}`, {
+        orgId,
+        workspaceId,
+      });
     },
     [backendUrl, user, orgId, workspaceId, triggerFilter, statusFilter],
   );

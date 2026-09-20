@@ -23,12 +23,14 @@ import {
 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import Link from "next/link";
-import useSWR from "swr";
-import { fetcher, joinUrl } from "@/lib/utils";
 import { NoProvidersEmptyState } from "@/components/no-providers-empty-state";
 import { useAuth, useBackendUrl } from "@/components/auth-provider";
 import { useScopedSWR } from "@/hooks/use-scoped-swr";
-import { workspaceEntity } from "@/lib/api-write";
+import {
+  chatListEntity,
+  organizationEntity,
+  workspaceEntity,
+} from "@/lib/api-write";
 import {
   type Workspace as WorkspaceType,
   type Organization,
@@ -45,94 +47,41 @@ const Workspace = () => {
   const { data: workspaceData, isLoading: isLoadingWorkspace } =
     useScopedSWR<WorkspaceType>(workspaceEntity(workspaceId), { orgId });
 
-  const { data: agentsData, isLoading: isLoadingAgents } = useSWR<{
-    results: [];
-  }>(
-    backendUrl && user
-      ? joinUrl(
-          backendUrl,
-          `/organizations/${orgId}/workspaces/${workspaceId}/agents`,
-        )
-      : null,
-    fetcher,
-  );
+  const scope = { orgId, workspaceId };
 
-  const { data: chatsData, isLoading: isLoadingChats } = useSWR<{
+  const { data: agentsData, isLoading: isLoadingAgents } = useScopedSWR<{
+    results: [];
+  }>("agents", scope);
+
+  const { data: chatsData, isLoading: isLoadingChats } = useScopedSWR<{
     results: [];
     totalCount: number;
-  }>(
-    backendUrl && user
-      ? joinUrl(
-          backendUrl,
-          `/organizations/${orgId}/workspaces/${workspaceId}/chat`,
-        )
-      : null,
-    fetcher,
-  );
+  }>(chatListEntity(), scope);
 
-  const { data: providersData, isLoading: isLoadingProviders } = useSWR<{
+  const { data: providersData, isLoading: isLoadingProviders } = useScopedSWR<{
     results: [];
-  }>(
-    backendUrl && user
-      ? joinUrl(
-          backendUrl,
-          `/organizations/${orgId}/workspaces/${workspaceId}/providers`,
-        )
-      : null,
-    fetcher,
-  );
+  }>("providers", scope);
 
-  const { data: skillsData, isLoading: isLoadingSkills } = useSWR<{
+  const { data: skillsData, isLoading: isLoadingSkills } = useScopedSWR<{
     results: [];
-  }>(
-    backendUrl && user
-      ? joinUrl(
-          backendUrl,
-          `/organizations/${orgId}/workspaces/${workspaceId}/skills`,
-        )
-      : null,
-    fetcher,
-  );
+  }>("skills", scope);
 
-  const { data: triggersData, isLoading: isLoadingTriggers } = useSWR<{
+  const { data: triggersData, isLoading: isLoadingTriggers } = useScopedSWR<{
     results: [];
-  }>(
-    backendUrl && user
-      ? joinUrl(
-          backendUrl,
-          `/organizations/${orgId}/workspaces/${workspaceId}/triggers`,
-        )
-      : null,
-    fetcher,
-  );
+  }>("triggers", scope);
 
-  const { data: boardsData, isLoading: isLoadingBoards } = useSWR<{
+  const { data: boardsData, isLoading: isLoadingBoards } = useScopedSWR<{
     results: [];
-  }>(
-    backendUrl && user
-      ? joinUrl(
-          backendUrl,
-          `/organizations/${orgId}/workspaces/${workspaceId}/boards`,
-        )
-      : null,
-    fetcher,
-  );
+  }>("boards", scope);
 
-  const { data: dashboardsData, isLoading: isLoadingDashboards } = useSWR<{
-    results: [];
-  }>(
-    backendUrl && user
-      ? joinUrl(
-          backendUrl,
-          `/organizations/${orgId}/workspaces/${workspaceId}/dashboards`,
-        )
-      : null,
-    fetcher,
-  );
+  const { data: dashboardsData, isLoading: isLoadingDashboards } =
+    useScopedSWR<{
+      results: [];
+    }>("dashboards", scope);
 
-  const { data: orgData, isLoading: isLoadingOrg } = useSWR<Organization>(
-    backendUrl && user ? joinUrl(backendUrl, `/organizations/${orgId}`) : null,
-    fetcher,
+  const { data: orgData, isLoading: isLoadingOrg } = useScopedSWR<Organization>(
+    organizationEntity(orgId),
+    {},
   );
 
   if (

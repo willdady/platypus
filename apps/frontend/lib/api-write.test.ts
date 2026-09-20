@@ -1,5 +1,12 @@
 import { describe, it, expect, afterEach, vi } from "vitest";
-import { writeEntity, writeAt, scopedUrl } from "./api-write";
+import {
+  writeEntity,
+  writeAt,
+  scopedUrl,
+  attachmentsEntity,
+  chatListEntity,
+  organizationEntity,
+} from "./api-write";
 
 function mockResponse(status: number, body: unknown) {
   return {
@@ -178,6 +185,35 @@ describe("scopedUrl — the read-side path shape", () => {
   it("builds the org-scoped URL when no workspaceId is given", () => {
     expect(scopedUrl(BACKEND_URL, "agents", { orgId: "org1" })).toBe(
       "http://localhost:4000/organizations/org1/agents",
+    );
+  });
+});
+
+describe("the query-parameterized key builders", () => {
+  it("makes the parameterless chat list key a prefix of every variant of it", () => {
+    const prefix = scopedUrl(BACKEND_URL, chatListEntity(), {
+      orgId: "org1",
+      workspaceId: "ws1",
+    });
+    const searched = scopedUrl(
+      BACKEND_URL,
+      chatListEntity({ limit: 100, search: "hello there" }),
+      { orgId: "org1", workspaceId: "ws1" },
+    );
+    expect(searched.startsWith(prefix)).toBe(true);
+    expect(searched).toContain("limit=100");
+    expect(searched).toContain("search=hello+there");
+  });
+
+  it("spells the attachments key the same for every surface that asks", () => {
+    expect(attachmentsEntity("skill", "s1")).toBe(
+      "attachments?resourceType=skill&resourceId=s1",
+    );
+  });
+
+  it("keeps one Organization at the root collection, not nested under itself", () => {
+    expect(scopedUrl(BACKEND_URL, organizationEntity("org1"), {})).toBe(
+      "http://localhost:4000/organizations/org1",
     );
   });
 });

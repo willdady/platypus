@@ -1,9 +1,7 @@
 "use client";
 
 import { Item, ItemActions, ItemContent, ItemTitle } from "./ui/item";
-import useSWR from "swr";
-import { fetcher, joinUrl } from "../lib/utils";
-import { useAuth, useBackendUrl } from "@/components/auth-provider";
+import { useScopedSWR } from "@/hooks/use-scoped-swr";
 import { Pencil, Plus } from "lucide-react";
 import Link from "next/link";
 import { Button } from "./ui/button";
@@ -23,20 +21,9 @@ const WebhooksList = ({
   orgId: string;
   workspaceId: string;
 }) => {
-  const { user } = useAuth();
-  const backendUrl = useBackendUrl();
-
-  const fetchUrl =
-    backendUrl && user
-      ? joinUrl(
-          backendUrl,
-          `/organizations/${orgId}/workspaces/${workspaceId}/webhooks`,
-        )
-      : null;
-
-  const { data, error, isLoading } = useSWR<{ results: Webhook[] }>(
-    fetchUrl,
-    fetcher,
+  const { data, error, isLoading } = useScopedSWR<{ results: Webhook[] }>(
+    "webhooks",
+    { orgId, workspaceId },
   );
 
   if (isLoading) return null;

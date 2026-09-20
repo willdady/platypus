@@ -1,24 +1,22 @@
 "use client";
 
-import { fetcher, joinUrl } from "@/lib/utils";
+import { joinUrl } from "@/lib/utils";
 import { writeAt } from "@/lib/api-write";
 import { type InvitationListItem } from "@platypus/schemas";
 import { Button } from "@/components/ui/button";
 import { Mail, Check, X } from "lucide-react";
 import { toast } from "sonner";
-import useSWR from "swr";
-import { useAuth, useBackendUrl } from "@/components/auth-provider";
+import { useBackendUrl } from "@/components/auth-provider";
+import { useScopedSWR } from "@/hooks/use-scoped-swr";
 import { format } from "date-fns";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { useState } from "react";
 
 const UserInvitationsPage = () => {
-  const { user } = useAuth();
   const backendUrl = useBackendUrl();
-  const { data, mutate, isLoading } = useSWR<{ results: InvitationListItem[] }>(
-    backendUrl && user ? joinUrl(backendUrl, "/users/me/invitations") : null,
-    fetcher,
-  );
+  const { data, mutate, isLoading } = useScopedSWR<{
+    results: InvitationListItem[];
+  }>("users/me/invitations", {});
 
   const [invitationToDecline, setInvitationToDecline] = useState<string | null>(
     null,

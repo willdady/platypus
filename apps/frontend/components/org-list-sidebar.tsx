@@ -10,10 +10,12 @@ import {
 } from "@/components/ui/sidebar";
 import { Building, Plus } from "lucide-react";
 import Link from "next/link";
-import useSWR, { preload } from "swr";
+import { preload } from "swr";
 import { useEffect } from "react";
-import { fetcher, joinUrl } from "@/lib/utils";
-import { useAuth, useBackendUrl } from "@/components/auth-provider";
+import { fetcher } from "@/lib/utils";
+import { useBackendUrl } from "@/components/auth-provider";
+import { useScopedSWR } from "@/hooks/use-scoped-swr";
+import { scopedUrl } from "@/lib/api-write";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { Organization } from "@platypus/schemas";
 
@@ -22,12 +24,11 @@ interface OrgListSidebarProps {
 }
 
 export function OrgListSidebar({ currentOrgId }: OrgListSidebarProps) {
-  const { user } = useAuth();
   const backendUrl = useBackendUrl();
 
-  const { data } = useSWR<{ results: Organization[] }>(
-    backendUrl && user ? joinUrl(backendUrl, "/organizations") : null,
-    fetcher,
+  const { data } = useScopedSWR<{ results: Organization[] }>(
+    "organizations",
+    {},
   );
 
   const isReady = !!data;
@@ -40,10 +41,7 @@ export function OrgListSidebar({ currentOrgId }: OrgListSidebarProps) {
   useEffect(() => {
     if (!backendUrl || !data?.results) return;
     for (const org of data.results) {
-      preload(
-        joinUrl(backendUrl, `/organizations/${org.id}/workspaces`),
-        fetcher,
-      );
+      preload(scopedUrl(backendUrl, "workspaces", { orgId: org.id }), fetcher);
     }
   }, [backendUrl, data]);
 

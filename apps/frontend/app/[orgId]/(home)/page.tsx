@@ -4,9 +4,8 @@ import { WorkspaceList } from "@/components/workspace-list";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import { Plus, Settings, FolderClosed } from "lucide-react";
-import useSWR from "swr";
-import { fetcher, joinUrl } from "@/lib/utils";
-import { useAuth, useBackendUrl } from "@/components/auth-provider";
+import { useAuth } from "@/components/auth-provider";
+import { useScopedSWR } from "@/hooks/use-scoped-swr";
 import { canCreateWorkspace } from "@/lib/authorization";
 import {
   Empty,
@@ -25,18 +24,12 @@ export default function OrgPage({
   params: Promise<{ orgId: string }>;
 }) {
   const { orgId } = use(params);
-  const backendUrl = useBackendUrl();
-  const { user, actor, isAuthLoading } = useAuth();
+  const { actor, isAuthLoading } = useAuth();
   const canCreate = canCreateWorkspace(actor).allowed;
 
-  const { data: workspacesData } = useSWR<{
+  const { data: workspacesData } = useScopedSWR<{
     results: Workspace[];
-  }>(
-    backendUrl && user
-      ? joinUrl(backendUrl, `/organizations/${orgId}/workspaces`)
-      : null,
-    fetcher,
-  );
+  }>("workspaces", { orgId });
 
   // Wait for the org-membership fetch too, not just workspaces. Switching orgs
   // clears orgMembership and re-fetches it; if workspaces resolve first,

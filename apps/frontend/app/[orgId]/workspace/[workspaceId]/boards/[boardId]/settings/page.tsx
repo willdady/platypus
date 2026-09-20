@@ -1,13 +1,13 @@
 "use client";
 
 import { use, useState } from "react";
-import useSWR, { useSWRConfig } from "swr";
+import { useSWRConfig } from "swr";
+import { useScopedSWR } from "@/hooks/use-scoped-swr";
 import { useRouter } from "next/navigation";
 import type { KanbanBoardState } from "@platypus/schemas";
-import { fetcher, joinUrl } from "@/lib/utils";
 import { writeEntity } from "@/lib/api-write";
 import { applyDeleteOutcome } from "@/lib/apply-write-outcome";
-import { useAuth, useBackendUrl } from "@/components/auth-provider";
+import { useBackendUrl } from "@/components/auth-provider";
 import { ResourcePage } from "@/components/resource-page";
 import { KanbanBoardForm } from "@/components/kanban-board-form";
 import { ConfirmDialog } from "@/components/confirm-dialog";
@@ -19,21 +19,15 @@ const BoardSettingsPage = ({
   params: Promise<{ orgId: string; workspaceId: string; boardId: string }>;
 }) => {
   const { orgId, workspaceId, boardId } = use(params);
-  const { user } = useAuth();
   const backendUrl = useBackendUrl();
   const router = useRouter();
   const { mutate: globalMutate } = useSWRConfig();
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
 
-  const baseUrl = joinUrl(
-    backendUrl,
-    `/organizations/${orgId}/workspaces/${workspaceId}/boards/${boardId}`,
-  );
-
-  const { data, error, mutate } = useSWR<KanbanBoardState>(
-    backendUrl && user ? joinUrl(baseUrl, "/state") : null,
-    fetcher,
+  const { data, error, mutate } = useScopedSWR<KanbanBoardState>(
+    `boards/${boardId}/state`,
+    { orgId, workspaceId },
   );
 
   const handleDeleteConfirm = async () => {

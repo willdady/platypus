@@ -103,6 +103,47 @@ export function workspaceEntity(workspaceId: string): string {
   return `workspaces/${workspaceId}`;
 }
 
+/**
+ * One Organization row, read from the root `/organizations` collection — so
+ * it pairs with the `{}` scope, not with `{ orgId }`, which would nest it
+ * under the Organization it *is*.
+ */
+export function organizationEntity(orgId: string): string {
+  return `organizations/${orgId}`;
+}
+
+/**
+ * One Shared resource's attachment list, keyed by the query parameters that
+ * select it. Four surfaces ask for it — the badge, the manage dialog, and the
+ * pre-delete count check on each of the Agent and Skill lists — so the
+ * spelling lives here rather than in each of them.
+ */
+export function attachmentsEntity(
+  resourceType: string,
+  resourceId: string,
+): string {
+  const query = new URLSearchParams({ resourceType, resourceId });
+  return `attachments?${query.toString()}`;
+}
+
+/**
+ * The chat list's key, with the query parameters the callers vary it by.
+ * Defined here so the sidebar's searched-and-limited read, a page's unpaged
+ * count, and the prefix `mutate` that revalidates every variant of it can't
+ * drift onto different spellings of the same collection. Parameterless it is
+ * exactly that prefix — hence the params appended in a fixed order.
+ */
+export function chatListEntity(params?: {
+  readonly limit?: number;
+  readonly search?: string;
+}): string {
+  const query = new URLSearchParams();
+  if (params?.limit !== undefined) query.set("limit", String(params.limit));
+  if (params?.search) query.set("search", params.search);
+  const suffix = query.toString();
+  return suffix ? `chat?${suffix}` : "chat";
+}
+
 export function errorMessage(body: unknown): string | undefined {
   if (body && typeof body === "object" && "error" in body) {
     const { error } = body as { error: unknown };

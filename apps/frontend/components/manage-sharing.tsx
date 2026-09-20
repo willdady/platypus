@@ -1,6 +1,5 @@
 "use client";
 
-import useSWR from "swr";
 import { Check, FolderClosed, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -26,8 +25,9 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useState } from "react";
-import { cn, fetcher, joinUrl } from "@/lib/utils";
-import { writeAt } from "@/lib/api-write";
+import { cn, joinUrl } from "@/lib/utils";
+import { attachmentsEntity, writeAt } from "@/lib/api-write";
+import { useScopedSWR } from "@/hooks/use-scoped-swr";
 import { useBackendUrl } from "@/components/auth-provider";
 
 type ResourceType = "mcp" | "provider" | "skill" | "agent";
@@ -40,17 +40,6 @@ const LABEL: Record<ResourceType, string> = {
 };
 
 type AttachedWorkspace = { workspaceId: string; workspaceName: string };
-
-const attachmentsUrl = (
-  backendUrl: string,
-  orgId: string,
-  resourceType: ResourceType,
-  resourceId: string,
-) =>
-  joinUrl(
-    backendUrl,
-    `/organizations/${orgId}/attachments?resourceType=${resourceType}&resourceId=${resourceId}`,
-  );
 
 /**
  * Read-only affordance shown on an org-surface card: "Shared with N workspaces"
@@ -67,12 +56,9 @@ export const SharedWithBadge = ({
   resourceType: ResourceType;
   resourceId: string;
 }) => {
-  const backendUrl = useBackendUrl();
-  const { data } = useSWR<{ results: AttachedWorkspace[] }>(
-    backendUrl
-      ? attachmentsUrl(backendUrl, orgId, resourceType, resourceId)
-      : null,
-    fetcher,
+  const { data } = useScopedSWR<{ results: AttachedWorkspace[] }>(
+    attachmentsEntity(resourceType, resourceId),
+    { orgId },
   );
   const attached = data?.results ?? [];
   const count = attached.length;
@@ -124,24 +110,16 @@ export const ManageAttachmentsDialog = ({
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const { data: attData, mutate: mutateAtt } = useSWR<{
+  const { data: attData, mutate: mutateAtt } = useScopedSWR<{
     results: AttachedWorkspace[];
-  }>(
-    backendUrl
-      ? attachmentsUrl(backendUrl, orgId, resourceType, resourceId)
-      : null,
-    fetcher,
-  );
+  }>(attachmentsEntity(resourceType, resourceId), { orgId });
   const attached = attData?.results ?? [];
   const attachedIds = new Set(attached.map((a) => a.workspaceId));
 
   // The full workspace list is only needed while the dialog is open.
-  const { data: wsData } = useSWR<{ results: { id: string; name: string }[] }>(
-    open && backendUrl
-      ? joinUrl(backendUrl, `/organizations/${orgId}/workspaces`)
-      : null,
-    fetcher,
-  );
+  const { data: wsData } = useScopedSWR<{
+    results: { id: string; name: string }[];
+  }>("workspaces", open ? { orgId } : null);
   const workspaces = [...(wsData?.results ?? [])].sort((a, b) =>
     a.name.localeCompare(b.name),
   );

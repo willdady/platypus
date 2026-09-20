@@ -1,7 +1,7 @@
 "use client";
 
 import { use, useCallback, useRef } from "react";
-import useSWR from "swr";
+import { useScopedSWR } from "@/hooks/use-scoped-swr";
 import { TriangleAlert } from "lucide-react";
 import type { RunEvent, TriggerRunDetailResponse } from "@platypus/schemas";
 import { BackButton } from "@/components/back-button";
@@ -20,8 +20,7 @@ import {
   EmptyTitle,
 } from "@/components/ui/empty";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useAuth, useBackendUrl } from "@/components/auth-provider";
-import { fetcher, joinUrl } from "@/lib/utils";
+import { fetcher } from "@/lib/utils";
 import { mergeRunEvents, nextSinceSeq } from "@/lib/run-timeline";
 
 /**
@@ -52,21 +51,11 @@ const TriggerRunDetailPage = ({
   params: Promise<{ orgId: string; workspaceId: string; runId: string }>;
 }) => {
   const { orgId, workspaceId, runId } = use(params);
-  const { user } = useAuth();
-  const backendUrl = useBackendUrl();
 
   // The events the page has accumulated so far, across polls. A ref rather
   // than state: the fetcher reads it to decide what to ask for, and SWR's
   // returned data is what renders.
   const heldEvents = useRef<RunEvent[]>([]);
-
-  const key =
-    backendUrl && user
-      ? joinUrl(
-          backendUrl,
-          `/organizations/${orgId}/workspaces/${workspaceId}/trigger-runs/${runId}`,
-        )
-      : null;
 
   const fetchIncrementally = useCallback(
     async (url: string): Promise<TriggerRunDetailResponse> => {
@@ -80,10 +69,11 @@ const TriggerRunDetailPage = ({
     [],
   );
 
-  const { data, error, isLoading } = useSWR<TriggerRunDetailResponse>(
-    key,
-    fetchIncrementally,
+  const { data, error, isLoading } = useScopedSWR<TriggerRunDetailResponse>(
+    `trigger-runs/${runId}`,
+    { orgId, workspaceId },
     {
+      fetcher: fetchIncrementally,
       refreshInterval: (latest) =>
         latest?.run.status === "running" || latest?.run.status === "pending"
           ? RUN_DETAIL_POLL_MS

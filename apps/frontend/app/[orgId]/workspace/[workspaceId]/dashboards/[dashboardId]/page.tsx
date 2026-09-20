@@ -4,15 +4,15 @@ import { use, useState, useCallback, useEffect, useMemo, memo } from "react";
 import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "motion/react";
 import { Markdown } from "@/components/markdown";
-import useSWR from "swr";
+import { useScopedSWR } from "@/hooks/use-scoped-swr";
 import Link from "next/link";
 import { toast } from "sonner";
 import { ResponsiveGridLayout } from "react-grid-layout";
 import type { LayoutItem } from "react-grid-layout";
 import "react-grid-layout/css/styles.css";
-import { fetcher, joinUrl, cn } from "@/lib/utils";
+import { cn } from "@/lib/utils";
 import { writeEntity } from "@/lib/api-write";
-import { useAuth, useBackendUrl } from "@/components/auth-provider";
+import { useBackendUrl } from "@/components/auth-provider";
 import {
   widgetTypeRegistry,
   type Dashboard,
@@ -231,8 +231,9 @@ const DashboardPage = ({
   params: Promise<{ orgId: string; workspaceId: string; dashboardId: string }>;
 }) => {
   const { orgId, workspaceId, dashboardId } = use(params);
-  const { user } = useAuth();
   const backendUrl = useBackendUrl();
+  const scope = useMemo(() => ({ orgId, workspaceId }), [orgId, workspaceId]);
+  const widgetsEntity = `dashboards/${dashboardId}/widgets`;
 
   const [gridContainerEl, setGridContainerEl] = useState<HTMLDivElement | null>(
     null,
@@ -287,44 +288,26 @@ const DashboardPage = ({
   const [newWidgetType, setNewWidgetType] = useState<WidgetType>("metric");
   const [newWidgetTitle, setNewWidgetTitle] = useState("");
 
-  const dashUrl =
-    backendUrl && user
-      ? joinUrl(
-          backendUrl,
-          `/organizations/${orgId}/workspaces/${workspaceId}/dashboards/${dashboardId}`,
-        )
-      : null;
-
-  const { data: dashboard, mutate: mutateDashboard } = useSWR<Dashboard>(
-    dashUrl,
-    fetcher,
-    { refreshInterval: editMode ? 0 : 5000 },
+  const { data: dashboard, mutate: mutateDashboard } = useScopedSWR<Dashboard>(
+    `dashboards/${dashboardId}`,
+    scope,
+    {
+      refreshInterval: editMode ? 0 : 5000,
+    },
   );
 
-  const { data: widgetsData, mutate: mutateWidgets } = useSWR<{
+  const { data: widgetsData, mutate: mutateWidgets } = useScopedSWR<{
     results: Widget[];
-  }>(
-    backendUrl && user
-      ? joinUrl(
-          backendUrl,
-          `/organizations/${orgId}/workspaces/${workspaceId}/dashboards/${dashboardId}/widgets`,
-        )
-      : null,
-    fetcher,
-    { refreshInterval: editMode ? 0 : 5000 },
-  );
+  }>(widgetsEntity, scope, {
+    refreshInterval: editMode ? 0 : 5000,
+  });
 
   // Also fetch all dashboards for the dropdown switcher. Deliberately not
   // polled: it only backs a menu, and polling it re-rendered the whole page
   // every 5s for a list the user is not looking at.
-  const { data: allDashboardsData } = useSWR<{ results: Dashboard[] }>(
-    backendUrl && user
-      ? joinUrl(
-          backendUrl,
-          `/organizations/${orgId}/workspaces/${workspaceId}/dashboards`,
-        )
-      : null,
-    fetcher,
+  const { data: allDashboardsData } = useScopedSWR<{ results: Dashboard[] }>(
+    "dashboards",
+    scope,
   );
 
   const widgets = useMemo(
@@ -346,19 +329,12 @@ const DashboardPage = ({
     }
   };
 
-  const widgetsEntity = `dashboards/${dashboardId}/widgets`;
-
   // Cancel: undo pending additions and discard all other staged changes
   const cancelEdit = async () => {
     if (backendUrl && pendingAdditions.size > 0) {
       const outcomes = await Promise.all(
         [...pendingAdditions].map((widgetId) =>
-          writeEntity(
-            backendUrl,
-            widgetsEntity,
-            { orgId, workspaceId },
-            { id: widgetId },
-          ),
+          writeEntity(backendUrl, widgetsEntity, scope, { id: widgetId }),
         ),
       );
       if (outcomes.some((outcome) => outcome.outcome !== "success")) {
@@ -378,12 +354,7 @@ const DashboardPage = ({
     if (!backendUrl || !dashboard) return;
     const deleteOutcomes = await Promise.all(
       [...pendingDeletions].map((widgetId) =>
-        writeEntity(
-          backendUrl,
-          widgetsEntity,
-          { orgId, workspaceId },
-          { id: widgetId },
-        ),
+        writeEntity(backendUrl, widgetsEntity, scope, { id: widgetId }),
       ),
     );
     if (deleteOutcomes.some((outcome) => outcome.outcome !== "success")) {
@@ -435,7 +406,7 @@ const DashboardPage = ({
     const outcome = await writeEntity<Widget>(
       backendUrl,
       widgetsEntity,
-      { orgId, workspaceId },
+      scope,
       { data: { type: newWidgetType, title: newWidgetTitle } },
     );
     if (outcome.outcome === "conflict") {
@@ -509,12 +480,10 @@ const DashboardPage = ({
   const handleSaveWidgetData = useCallback(
     async (widget: Widget, data: object, title: string) => {
       if (!backendUrl) return;
-      const outcome = await writeEntity(
-        backendUrl,
-        widgetsEntity,
-        { orgId, workspaceId },
-        { id: widget.id, data: { type: widget.type, data, title } },
-      );
+      const outcome = await writeEntity(backendUrl, widgetsEntity, scope, {
+        id: widget.id,
+        data: { type: widget.type, data, title },
+      });
       if (outcome.outcome !== "success") {
         toast.error("Failed to save widget");
         return;
@@ -522,7 +491,7 @@ const DashboardPage = ({
       await mutateWidgets();
       setEditingWidgetId(null);
     },
-    [backendUrl, orgId, workspaceId, widgetsEntity, mutateWidgets],
+    [backendUrl, scope, widgetsEntity, mutateWidgets],
   );
 
   // Per-type minimum sizes live in the registry (see `withMinSize`).

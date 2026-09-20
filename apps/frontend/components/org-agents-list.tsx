@@ -21,7 +21,6 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Bot, EllipsisVertical, Pencil, Share2, Trash2 } from "lucide-react";
 import { type Agent } from "@platypus/schemas";
-import { joinUrl } from "@/lib/utils";
 import { useScopedSWR } from "@/hooks/use-scoped-swr";
 import { useAuth, useBackendUrl } from "@/components/auth-provider";
 import { canManageOrgSharedResource } from "@/lib/authorization";
@@ -30,7 +29,12 @@ import {
   SharedWithBadge,
 } from "@/components/manage-sharing";
 import Link from "next/link";
-import { scopedPath, writeEntity, type Scope } from "@/lib/api-write";
+import {
+  attachmentsEntity,
+  scopedUrl,
+  writeEntity,
+  type Scope,
+} from "@/lib/api-write";
 import { useDeleteFlow } from "@/hooks/use-delete-flow";
 
 // The Organization surface for Shared Agents (ADR-0007): Org Admins see and
@@ -73,10 +77,7 @@ export const OrgAgentsList = ({ orgId }: { orgId: string }) => {
     if (!backendUrl) return;
     try {
       const res = await fetch(
-        joinUrl(
-          backendUrl,
-          `${scopedPath("attachments", scope)}?resourceType=agent&resourceId=${agent.id}`,
-        ),
+        scopedUrl(backendUrl, attachmentsEntity("agent", agent.id), scope),
         { credentials: "include" },
       );
       const info = await res.json().catch(() => ({ results: [] }));

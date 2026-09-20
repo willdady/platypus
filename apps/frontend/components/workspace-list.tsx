@@ -1,7 +1,6 @@
 "use client";
 
 import { Workspace } from "@platypus/schemas";
-import { useAuth, useBackendUrl } from "@/components/auth-provider";
 import {
   Item,
   ItemActions,
@@ -9,8 +8,8 @@ import {
   ItemGroup,
   ItemTitle,
 } from "./ui/item";
-import useSWR from "swr";
-import { cn, fetcher, joinUrl } from "../lib/utils";
+import { cn } from "../lib/utils";
+import { useScopedSWR } from "@/hooks/use-scoped-swr";
 import { ChevronRight, FolderClosed } from "lucide-react";
 import Link from "next/link";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -22,14 +21,9 @@ const WorkspaceList = ({
   className?: string;
   orgId: string;
 }) => {
-  const { user } = useAuth();
-  const backendUrl = useBackendUrl();
-
-  const { data, error, isLoading } = useSWR<{ results: Workspace[] }>(
-    backendUrl && user
-      ? joinUrl(backendUrl, `/organizations/${orgId}/workspaces`)
-      : null,
-    fetcher,
+  const { data, error, isLoading } = useScopedSWR<{ results: Workspace[] }>(
+    "workspaces",
+    { orgId },
   );
 
   if (error) return null;

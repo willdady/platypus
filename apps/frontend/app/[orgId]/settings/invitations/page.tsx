@@ -2,8 +2,7 @@
 
 import { useParams } from "next/navigation";
 import { InvitationForm } from "@/components/invitation-form";
-import { fetcher, joinUrl } from "@/lib/utils";
-import { writeEntity } from "@/lib/api-write";
+import { organizationEntity, writeEntity } from "@/lib/api-write";
 import {
   type InvitationListItem,
   type Organization,
@@ -12,8 +11,8 @@ import {
 import { Button } from "@/components/ui/button";
 import { Trash2, Mail } from "lucide-react";
 import { toast } from "sonner";
-import useSWR from "swr";
-import { useAuth, useBackendUrl } from "@/components/auth-provider";
+import { useBackendUrl } from "@/components/auth-provider";
+import { useScopedSWR } from "@/hooks/use-scoped-swr";
 import { format } from "date-fns";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -28,25 +27,19 @@ import { ConfirmDialog } from "@/components/confirm-dialog";
 import { useState } from "react";
 
 const OrgInvitationsPage = () => {
-  const { user } = useAuth();
   const { orgId } = useParams<{ orgId: string }>();
   const backendUrl = useBackendUrl();
-  const { data: orgData } = useSWR<Organization>(
-    backendUrl && user ? joinUrl(backendUrl, `/organizations/${orgId}`) : null,
-    fetcher,
+  const { data: orgData } = useScopedSWR<Organization>(
+    organizationEntity(orgId),
+    {},
   );
-  const { data, mutate, isLoading } = useSWR<{ results: InvitationListItem[] }>(
-    backendUrl && user
-      ? joinUrl(backendUrl, `/organizations/${orgId}/invitations`)
-      : null,
-    fetcher,
-  );
+  const { data, mutate, isLoading } = useScopedSWR<{
+    results: InvitationListItem[];
+  }>("invitations", { orgId });
   // Map blueprint id → name so the table can show what each invite provisions.
-  const { data: blueprintsData } = useSWR<{ results: Blueprint[] }>(
-    backendUrl && user
-      ? joinUrl(backendUrl, `/organizations/${orgId}/blueprints`)
-      : null,
-    fetcher,
+  const { data: blueprintsData } = useScopedSWR<{ results: Blueprint[] }>(
+    "blueprints",
+    { orgId },
   );
   const blueprintNameById = new Map(
     (blueprintsData?.results ?? []).map((b) => [b.id, b.name]),

@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react";
 import { useSWRConfig } from "swr";
 import { UNTITLED_CHAT_TITLE } from "@platypus/schemas";
-import { joinUrl } from "@/lib/utils";
+import { chatListEntity, scopedUrl } from "@/lib/api-write";
 
 /** How often to re-check the chat record for a backend-generated title. */
 const POLL_INTERVAL_MS = 3000;
@@ -57,10 +57,10 @@ export const useChatTitlePoll = ({
       title !== UNTITLED_CHAT_TITLE &&
       prevTitleRef.current === UNTITLED_CHAT_TITLE
     ) {
-      const chatListUrl = joinUrl(
-        backendUrl,
-        `/organizations/${orgId}/workspaces/${workspaceId}/chat`,
-      );
+      const chatListUrl = scopedUrl(backendUrl, chatListEntity(), {
+        orgId,
+        workspaceId,
+      });
       mutate((key) => typeof key === "string" && key.startsWith(chatListUrl));
     }
     prevTitleRef.current = title;
@@ -72,10 +72,10 @@ export const useChatTitlePoll = ({
     if (title !== UNTITLED_CHAT_TITLE || !hasUserMessage) return;
     if (attemptsRef.current >= MAX_ATTEMPTS) return;
 
-    const chatUrl = joinUrl(
-      backendUrl,
-      `/organizations/${orgId}/workspaces/${workspaceId}/chat/${chatId}`,
-    );
+    const chatUrl = scopedUrl(backendUrl, `chat/${chatId}`, {
+      orgId,
+      workspaceId,
+    });
     const interval = setInterval(() => {
       attemptsRef.current += 1;
       void mutate(chatUrl);

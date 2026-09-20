@@ -48,8 +48,7 @@ import {
   UserRound,
 } from "lucide-react";
 import { type Skill, type Agent } from "@platypus/schemas";
-import useSWR from "swr";
-import { fetcher, joinUrl } from "@/lib/utils";
+import { useScopedSWR } from "@/hooks/use-scoped-swr";
 import Link from "next/link";
 import { useAuth, useBackendUrl } from "@/components/auth-provider";
 import {
@@ -61,7 +60,12 @@ import {
   ManageAttachmentsDialog,
   SharedWithBadge,
 } from "@/components/manage-sharing";
-import { scopedPath, writeEntity, type Scope } from "@/lib/api-write";
+import {
+  attachmentsEntity,
+  scopedUrl,
+  writeEntity,
+  type Scope,
+} from "@/lib/api-write";
 import { useDetachDialog } from "@/hooks/use-detach-dialog";
 import { useDeleteFlow } from "@/hooks/use-delete-flow";
 
@@ -126,7 +130,7 @@ export const SkillsList = ({
   orgId: string;
   workspaceId?: string;
 }) => {
-  const { user, actor } = useAuth();
+  const { actor } = useAuth();
   const backendUrl = useBackendUrl();
   const orgSkillDetach = useDetachDialog<SkillWithScope>();
   const [detaching, setDetaching] = useState(false);
@@ -148,7 +152,6 @@ export const SkillsList = ({
   // below, rather than re-deriving the Organization-vs-Workspace branch at
   // each call site.
   const scope: Scope = workspaceId ? { orgId, workspaceId } : { orgId };
-  const listUrl = scopedPath("skills", scope);
   const editBasePath = workspaceId
     ? `/${orgId}/workspace/${workspaceId}/skills`
     : `/${orgId}/settings/skills`;
@@ -158,19 +161,14 @@ export const SkillsList = ({
     error,
     isLoading,
     mutate,
-  } = useSWR<{
+  } = useScopedSWR<{
     results: SkillWithScope[];
-  }>(backendUrl && user ? joinUrl(backendUrl, listUrl) : null, fetcher);
+  }>("skills", scope);
 
   // Agent associations are a workspace concern; only fetched on that surface.
-  const { data: agentsData } = useSWR<{
+  const { data: agentsData } = useScopedSWR<{
     results: Agent[];
-  }>(
-    backendUrl && user && workspaceId
-      ? joinUrl(backendUrl, scopedPath("agents", scope))
-      : null,
-    fetcher,
-  );
+  }>("agents", workspaceId ? scope : null);
 
   const agents = agentsData?.results || [];
 
@@ -204,10 +202,7 @@ export const SkillsList = ({
     if (!workspaceId && backendUrl) {
       try {
         const res = await fetch(
-          joinUrl(
-            backendUrl,
-            `${scopedPath("attachments", scope)}?resourceType=skill&resourceId=${skill.id}`,
-          ),
+          scopedUrl(backendUrl, attachmentsEntity("skill", skill.id), scope),
           { credentials: "include" },
         );
         const info = await res.json().catch(() => ({ results: [] }));

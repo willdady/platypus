@@ -1,27 +1,21 @@
 "use client";
 
 import { useParams } from "next/navigation";
-import { fetcher, joinUrl } from "@/lib/utils";
 import { type OrgMemberListItem, type Organization } from "@platypus/schemas";
 import { MembersList } from "@/components/members-list";
 import { Users } from "lucide-react";
-import useSWR from "swr";
-import { useAuth, useBackendUrl } from "@/components/auth-provider";
+import { useScopedSWR } from "@/hooks/use-scoped-swr";
+import { organizationEntity } from "@/lib/api-write";
 
 const OrgMembersPage = () => {
-  const { user } = useAuth();
   const { orgId } = useParams<{ orgId: string }>();
-  const backendUrl = useBackendUrl();
-  const { data: orgData } = useSWR<Organization>(
-    backendUrl && user ? joinUrl(backendUrl, `/organizations/${orgId}`) : null,
-    fetcher,
+  const { data: orgData } = useScopedSWR<Organization>(
+    organizationEntity(orgId),
+    {},
   );
-  const { data, mutate, isLoading } = useSWR<{ results: OrgMemberListItem[] }>(
-    backendUrl && user
-      ? joinUrl(backendUrl, `/organizations/${orgId}/members`)
-      : null,
-    fetcher,
-  );
+  const { data, mutate, isLoading } = useScopedSWR<{
+    results: OrgMemberListItem[];
+  }>("members", { orgId });
 
   return (
     <div className="space-y-8">

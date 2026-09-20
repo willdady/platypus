@@ -8,7 +8,7 @@ import {
   useMemo,
   useSyncExternalStore,
 } from "react";
-import useSWR from "swr";
+import { useScopedSWR } from "@/hooks/use-scoped-swr";
 import {
   DndContext,
   closestCorners,
@@ -42,9 +42,9 @@ import type {
   KanbanColumn,
   KanbanLabel,
 } from "@platypus/schemas";
-import { cn, fetcher, joinUrl } from "@/lib/utils";
+import { cn, joinUrl } from "@/lib/utils";
 import { writeEntity, writeAt, type Scope } from "@/lib/api-write";
-import { useAuth, useBackendUrl } from "@/components/auth-provider";
+import { useBackendUrl } from "@/components/auth-provider";
 import { KanbanColumnComponent } from "@/components/kanban-column";
 import { KanbanCardComponent } from "@/components/kanban-card";
 import { KanbanCardDialog } from "@/components/kanban-card-dialog";
@@ -104,7 +104,6 @@ export function KanbanBoard({
   workspaceId: string;
 }) {
   const backendUrl = useBackendUrl();
-  const { user } = useAuth();
   const searchParams = useSearchParams();
   const router = useRouter();
   const pathname = usePathname();
@@ -119,23 +118,15 @@ export function KanbanBoard({
   );
   const boardPath = `boards/${boardId}`;
 
-  const { data, error, mutate } = useSWR<KanbanBoardState>(
-    backendUrl && user ? joinUrl(baseUrl, "/state") : null,
-    fetcher,
+  const { data, error, mutate } = useScopedSWR<KanbanBoardState>(
+    `${boardPath}/state`,
+    scope,
     { refreshInterval: 10000, refreshWhenHidden: false },
   );
 
-  const { data: boardsData } = useSWR<{
+  const { data: boardsData } = useScopedSWR<{
     results: { id: string; name: string }[];
-  }>(
-    backendUrl && user
-      ? joinUrl(
-          backendUrl,
-          `/organizations/${orgId}/workspaces/${workspaceId}/boards`,
-        )
-      : null,
-    fetcher,
-  );
+  }>("boards", scope);
 
   const [localColumns, _setLocalColumns] = useState<ColumnWithCards[] | null>(
     null,

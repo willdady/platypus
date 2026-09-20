@@ -2,15 +2,14 @@
 
 import { useMemo, useState } from "react";
 import { useResetOnChange } from "@/hooks/use-reset-on-change";
-import useSWR from "swr";
+import { useScopedSWR } from "@/hooks/use-scoped-swr";
 import { toast } from "sonner";
 import { Box, Plus, Trash2, X } from "lucide-react";
 import { type Sandbox } from "@platypus/schemas";
 
 import { useAuth, useBackendUrl } from "@/components/auth-provider";
 import { canConfigureSandbox } from "@/lib/authorization";
-import { fetcher, joinUrl } from "@/lib/utils";
-import { writeAt } from "@/lib/api-write";
+import { scopedUrl, writeAt } from "@/lib/api-write";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
@@ -225,15 +224,16 @@ const SandboxSettings = ({
   orgId: string;
   workspaceId: string;
 }) => {
-  const { user, actor } = useAuth();
+  const { actor } = useAuth();
   const backendUrl = useBackendUrl();
   // Credential- and reach-bearing sandbox config is admin-managed (ADR-0006).
   const canConfigure = canConfigureSandbox(actor).allowed;
 
-  const sandboxUrl = joinUrl(
-    backendUrl,
-    `/organizations/${orgId}/workspaces/${workspaceId}/sandbox`,
-  );
+  const scope = { orgId, workspaceId };
+
+  // The same URL the reads above key on, so a write and its revalidation
+  // can't drift apart.
+  const sandboxUrl = scopedUrl(backendUrl, "sandbox", scope);
 
   const sandboxFetcher = async (url: string): Promise<Sandbox | null> => {
     const res = await fetch(url, { credentials: "include" });
@@ -250,20 +250,21 @@ const SandboxSettings = ({
     return res.json();
   };
 
-  const { data, error, isLoading, mutate } = useSWR<Sandbox | null>(
-    backendUrl && user ? sandboxUrl : null,
-    sandboxFetcher,
+  const { data, error, isLoading, mutate } = useScopedSWR<Sandbox | null>(
+    "sandbox",
+    scope,
+    { fetcher: sandboxFetcher },
   );
 
-  const { data: backendsData, isLoading: backendsLoading } = useSWR<{
+  const { data: backendsData, isLoading: backendsLoading } = useScopedSWR<{
     results: SandboxBackend[];
-  }>(backendUrl && user ? `${sandboxUrl}/backends` : null, fetcher);
+  }>("sandbox/backends", scope);
   const backends = useMemo(() => backendsData?.results ?? [], [backendsData]);
 
   // Operator network allowlist — admin-only endpoint (ADR-0005).
-  const { data: networksData } = useSWR<{ results: string[] }>(
-    backendUrl && user && canConfigure ? `${sandboxUrl}/networks` : null,
-    fetcher,
+  const { data: networksData } = useScopedSWR<{ results: string[] }>(
+    "sandbox/networks",
+    canConfigure ? scope : null,
   );
   const allowedNetworks = networksData?.results ?? [];
 

@@ -4,8 +4,7 @@ import type { Organization } from "@platypus/schemas";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import { AlertCircle, Building, Plus } from "lucide-react";
-import useSWR from "swr";
-import { fetcher, joinUrl } from "@/lib/utils";
+import { useScopedSWR } from "@/hooks/use-scoped-swr";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { ProtectedRoute } from "@/components/protected-route";
 import { Header } from "@/components/header";
@@ -26,10 +25,9 @@ export default function Home() {
   const backendUrl = useBackendUrl();
   const router = useRouter();
 
-  const { data, error, isLoading } = useSWR<{ results: Organization[] }>(
-    backendUrl && user ? joinUrl(backendUrl, "/organizations") : null,
-    fetcher,
-  );
+  const { data, error, isLoading } = useScopedSWR<{
+    results: Organization[];
+  }>("organizations", {});
 
   const organizations = useMemo(() => data?.results || [], [data]);
 
