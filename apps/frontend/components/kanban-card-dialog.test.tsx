@@ -210,8 +210,6 @@ describe("KanbanCardDialog mobile composition", () => {
       button: 0,
     });
     expect(screen.getByText("First comment")).toBeInTheDocument();
-    expect(
-      screen.getByPlaceholderText("Add a comment..."),
-    ).toBeInTheDocument();
+    expect(screen.getByPlaceholderText("Add a comment...")).toBeInTheDocument();
   });
 });
