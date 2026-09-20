@@ -20,6 +20,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { OctagonX, Home, Building } from "lucide-react";
 import Link from "next/link";
+import { orgRoutes } from "@/lib/routes";
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
@@ -137,7 +138,7 @@ export function ProtectedRoute({
       <AccessDenied
         title="Workspace Access Required"
         description="You do not have permission to access this workspace. You can only access workspaces you own."
-        buttonHref={`/${params.orgId}`}
+        buttonHref={orgRoutes(params.orgId as string).root}
         buttonText="Back to Organization"
         buttonIcon={Building}
       />

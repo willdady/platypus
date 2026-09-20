@@ -22,26 +22,39 @@ describe("orgRoutes", () => {
   });
 
   it("builds the organization settings create paths", () => {
-    expect(routes.settings.createProvider).toBe(
-      "/org1/settings/providers/create",
-    );
     expect(routes.settings.createMcp).toBe("/org1/settings/mcp/create");
-    expect(routes.settings.createSkill).toBe("/org1/settings/skills/create");
     expect(routes.settings.createBlueprint).toBe(
       "/org1/settings/blueprints/create",
     );
   });
 
   it("builds the organization settings detail paths", () => {
-    expect(routes.settings.providerDetail("p1")).toBe(
-      "/org1/settings/providers/p1",
-    );
     expect(routes.settings.mcpDetail("m1")).toBe("/org1/settings/mcp/m1");
     expect(routes.settings.skillDetail("s1")).toBe("/org1/settings/skills/s1");
     expect(routes.settings.agentDetail("a1")).toBe("/org1/settings/agents/a1");
     expect(routes.settings.blueprintDetail("b1")).toBe(
       "/org1/settings/blueprints/b1",
     );
+  });
+
+  it("exposes exactly the organization settings keys", () => {
+    expect(Object.keys(routes.settings).sort()).toEqual([
+      "agentDetail",
+      "agents",
+      "blueprintDetail",
+      "blueprints",
+      "createBlueprint",
+      "createMcp",
+      "invitations",
+      "mcp",
+      "mcpDetail",
+      "members",
+      "plugins",
+      "providers",
+      "root",
+      "skillDetail",
+      "skills",
+    ]);
   });
 
   it("scopes every path to the given organization", () => {
@@ -71,7 +84,6 @@ describe("workspaceRoutes", () => {
   it("builds the collection roots", () => {
     expect(routes.skills.root).toBe("/org1/workspace/ws1/skills");
     expect(routes.boards.root).toBe("/org1/workspace/ws1/boards");
-    expect(routes.dashboards.root).toBe("/org1/workspace/ws1/dashboards");
   });
 
   it("builds the create paths", () => {
@@ -86,7 +98,6 @@ describe("workspaceRoutes", () => {
 
   it("builds item paths", () => {
     expect(routes.agents.detail("a1")).toBe("/org1/workspace/ws1/agents/a1");
-    expect(routes.skills.detail("s1")).toBe("/org1/workspace/ws1/skills/s1");
     expect(routes.boards.detail("b1")).toBe("/org1/workspace/ws1/boards/b1");
     expect(routes.dashboards.detail("d1")).toBe(
       "/org1/workspace/ws1/dashboards/d1",
@@ -140,12 +151,6 @@ describe("workspaceRoutes", () => {
   });
 
   it("builds the workspace settings create and detail paths", () => {
-    expect(routes.settings.createProvider).toBe(
-      "/org1/workspace/ws1/settings/providers/create",
-    );
-    expect(routes.settings.providerDetail("p1")).toBe(
-      "/org1/workspace/ws1/settings/providers/p1",
-    );
     expect(routes.settings.createMcp).toBe(
       "/org1/workspace/ws1/settings/mcp/create",
     );
@@ -158,6 +163,21 @@ describe("workspaceRoutes", () => {
     expect(routes.settings.webhookDetail("w1")).toBe(
       "/org1/workspace/ws1/settings/webhooks/w1",
     );
+  });
+
+  it("exposes exactly the workspace settings keys", () => {
+    expect(Object.keys(routes.settings).sort()).toEqual([
+      "about",
+      "createMcp",
+      "createWebhook",
+      "mcp",
+      "mcpDetail",
+      "providers",
+      "root",
+      "sandbox",
+      "webhookDetail",
+      "webhooks",
+    ]);
   });
 
   it("scopes every path to the given org and workspace", () => {

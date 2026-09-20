@@ -24,14 +24,10 @@ export function orgRoutes(orgId: string) {
       members: `${settings}/members`,
       invitations: `${settings}/invitations`,
       providers: `${settings}/providers`,
-      createProvider: `${settings}/providers/create`,
-      providerDetail: (providerId: string) =>
-        `${settings}/providers/${providerId}`,
       mcp: `${settings}/mcp`,
       createMcp: `${settings}/mcp/create`,
       mcpDetail: (mcpId: string) => `${settings}/mcp/${mcpId}`,
       skills: `${settings}/skills`,
-      createSkill: `${settings}/skills/create`,
       skillDetail: (skillId: string) => `${settings}/skills/${skillId}`,
       agents: `${settings}/agents`,
       agentDetail: (agentId: string) => `${settings}/agents/${agentId}`,
@@ -64,7 +60,6 @@ export function workspaceRoutes(orgId: string, workspaceId: string) {
     skills: {
       root: `${root}/skills`,
       create: `${root}/skills/create`,
-      detail: (skillId: string) => `${root}/skills/${skillId}`,
     },
     boards: {
       root: `${root}/boards`,
@@ -73,7 +68,6 @@ export function workspaceRoutes(orgId: string, workspaceId: string) {
       settings: (boardId: string) => `${root}/boards/${boardId}/settings`,
     },
     dashboards: {
-      root: `${root}/dashboards`,
       create: `${root}/dashboards/create`,
       detail: (dashboardId: string) => `${root}/dashboards/${dashboardId}`,
       settings: (dashboardId: string) =>
@@ -93,9 +87,6 @@ export function workspaceRoutes(orgId: string, workspaceId: string) {
     settings: {
       root: settings,
       providers: `${settings}/providers`,
-      createProvider: `${settings}/providers/create`,
-      providerDetail: (providerId: string) =>
-        `${settings}/providers/${providerId}`,
       mcp: `${settings}/mcp`,
       createMcp: `${settings}/mcp/create`,
       mcpDetail: (mcpId: string) => `${settings}/mcp/${mcpId}`,
