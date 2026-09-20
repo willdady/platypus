@@ -422,6 +422,11 @@ export const ChatMessage = memo(function ChatMessage({
     },
   ];
 
+  const isAwaitedReply =
+    message.role === "assistant" &&
+    isLastMessage &&
+    (status === "submitted" || status === "streaming");
+
   return (
     <Fragment key={message.id}>
       {fileParts && fileParts.length > 0 && (
@@ -475,14 +480,13 @@ export const ChatMessage = memo(function ChatMessage({
           )}
         </>
       )}
-      {/* Hidden on the last message for the whole of a turn in flight, not
-      only while chunks stream: between send and the first chunk the reply
-      exists with nothing to show, and its row of controls would otherwise
-      sit alone where the answer is about to appear. */}
-      {!(
-        isLastMessage &&
-        (status === "submitted" || status === "streaming")
-      ) && (
+      {/* The wait covers the whole turn, not only the chunks: between send and
+      the first chunk the reply exists with nothing to show, and its controls
+      would sit alone where the answer is about to appear. It is the REPLY that
+      waits — a user message is whole when it renders, but it holds the last
+      position until the reply arrives, which is what used to hold its own
+      controls back with it (issue #918). */}
+      {!isAwaitedReply && (
         <MessageActions
           className={message.role === "user" ? "justify-end" : "pl-8"}
         >

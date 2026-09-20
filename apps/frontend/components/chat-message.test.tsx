@@ -997,6 +997,21 @@ describe("ChatMessage action bar during a turn", () => {
     expect(screen.getByRole("button", { name: "Copy" })).toBeInTheDocument();
   });
 
+  // Between send and the first chunk the user message IS the last message, so
+  // the gate above used to take its controls with the reply's (issue #918).
+  it.each(["submitted", "streaming"] as const)(
+    "keeps the bar on the last user message while the chat is %s",
+    (status) => {
+      renderMessage(userMessage(), { status, isLastMessage: true });
+
+      for (const action of ["Edit", "Copy", "Delete"]) {
+        expect(
+          screen.getByRole("button", { name: action }),
+        ).toBeInTheDocument();
+      }
+    },
+  );
+
   it("shows the bar once the chat is ready", () => {
     renderMessage(assistantMessage(), { status: "ready" });
 
