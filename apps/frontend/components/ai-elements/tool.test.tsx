@@ -171,4 +171,25 @@ describe("Tool parameter and result panels", () => {
     expect(pre).toHaveTextContent(`"url": "${longUrl}"`);
     expect(pre).toHaveClass("overflow-auto");
   });
+
+  // The two panels are a pair and must read as one. `ToolContent` mutes its
+  // whole subtree, which is right for the section headings and wrong for the
+  // data; only Result used to say otherwise, so Parameters came out grey
+  // beside a black Result.
+  it("draws Parameters and Result in the same colour", () => {
+    const { container } = render(
+      <Tool defaultOpen>
+        <ToolHeader type="tool-getCard" state="output-available" />
+        <ToolContent>
+          <ToolInput input={{ id: "card-1" }} />
+          <ToolOutput output={{ id: "card-1" }} errorText={undefined} />
+        </ToolContent>
+      </Tool>,
+    );
+
+    const [parameters, result] = container.querySelectorAll("pre");
+
+    expect(parameters).toHaveClass("text-foreground");
+    expect(result).toHaveClass("text-foreground");
+  });
 });
