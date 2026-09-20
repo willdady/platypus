@@ -148,12 +148,13 @@ export const startRun = (params: {
 
   const handle = runRegistry.register(runId, {
     ...params.timeouts,
+    // Logging only. The registry aborts the controller before calling this,
+    // and the abort listener below is what terminates the run.
     onTimeout: (error) => {
       logger.error(
         { ...logFields, kind: error.kind, message: error.message, stats },
         "Run timed out",
       );
-      void finish("failed", error);
     },
   });
 
@@ -226,6 +227,41 @@ export const startRun = (params: {
     const reason: unknown = handle.signal.reason;
     return reason instanceof Error ? reason.message : undefined;
   };
+
+  /**
+   * The abort writes the terminal status itself.
+   *
+   * Both ways a run is stopped — `RunRegistry.cancel` and either timeout —
+   * abort the controller and clear the run's timers. Until now the terminal
+   * write still depended on the run's own work unwinding afterwards: every
+   * in-flight tool promise settling, the drive draining, its `finally` calling
+   * `finish`. Anything that does not observe the signal never unwinds, and with
+   * both timers already cleared nothing was left to recover it — the Chat row
+   * kept `status: "running"` (a stop button that does nothing, however often
+   * the page is reloaded) and the registry entry was never unregistered, so
+   * every later turn in that Chat was answered 409 until the process
+   * restarted. That is why deleting the Chat was the only way out.
+   *
+   * Issue #921 closed one instance of this at the sandbox tool layer. The hole
+   * is not the sandbox's: a Turn still resolving against an unresponsive MCP
+   * server, or any tool that ignores the signal it is handed, strands a run the
+   * same way. This is the one place every run in the system registers, so it is
+   * where the guarantee belongs: an aborted run reaches a terminal status
+   * whatever its work is doing.
+   *
+   * The ordering is the timeout path's, which already terminated from its own
+   * handler rather than waiting for the drive. `finish` is once-only, so a run
+   * that does unwind normally still finishes exactly once — whoever gets there
+   * first wins, and the other call is the no-op.
+   */
+  handle.signal.addEventListener(
+    "abort",
+    () => {
+      const { status, error } = statusFromSignal();
+      void finish(status, error);
+    },
+    { once: true },
+  );
 
   return {
     handle,
