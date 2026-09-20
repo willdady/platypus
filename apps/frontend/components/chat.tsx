@@ -100,10 +100,9 @@ export const Chat = ({
   );
 
   // Fetch agents
-  const { data: agentsData } = useScopedSWR<{ results: Agent[] }>(
-    "agents",
-    scope,
-  );
+  const { data: agentsData, mutate: mutateAgents } = useScopedSWR<{
+    results: Agent[];
+  }>("agents", scope);
 
   // Memoize agents to prevent unnecessary re-renders. The model-selection
   // ladder is the one reader that needs "the list has not landed yet" apart
@@ -311,6 +310,18 @@ export const Chat = ({
     copiedMessageId,
     setCopiedMessageId,
   } = chatUI;
+
+  // An Agent holding the agent-management tools can rewrite its own row
+  // mid-chat, and nothing else invalidates this read: the turn writes on the
+  // server and the list here keeps whatever it loaded with. So re-read it when
+  // the info dialog opens, which is the only moment the Agent's configuration
+  // is on screen (issue #920). Fire-and-forget for the same reason
+  // `refreshChat` is: the dialog keeps showing the cached row if this fails,
+  // which is exactly the behaviour it has without the refresh.
+  useEffect(() => {
+    if (!isAgentInfoDialogOpen) return;
+    void mutateAgents().catch(() => {});
+  }, [isAgentInfoDialogOpen, mutateAgents]);
 
   // Use ref to store getRequestBody so the transport callback can access current values
   const getRequestBodyRef = useRef<(() => Record<string, unknown>) | undefined>(

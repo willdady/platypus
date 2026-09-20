@@ -39,6 +39,9 @@ const { harness } = vi.hoisted(() => ({
     setMessages: vi.fn(),
     sendMessage: vi.fn(),
     chatMutate: vi.fn(),
+    agentsMutate: vi.fn(),
+    /** Stands in for the info dialog's open state - see the `use-chat-ui` mock. */
+    agentInfoDialogOpen: false,
     chatMessageRenders: 0,
     lastChatMessageProps: null as null | {
       onMessageDelete: (messageId: string) => void;
@@ -64,7 +67,11 @@ vi.mock("swr", () => ({
       response = {
         data: match ? match[1] : undefined,
         isLoading: false,
-        mutate: key.includes("/chat/") ? harness.chatMutate : vi.fn(),
+        mutate: key.includes("/chat/")
+          ? harness.chatMutate
+          : key.endsWith("/agents")
+            ? harness.agentsMutate
+            : vi.fn(),
       };
       harness.responses.set(key, response);
     }
@@ -229,6 +236,20 @@ vi.mock("./no-providers-empty-state", () => ({
 }));
 vi.mock("./model-selector-dialog", () => ({ ModelSelectorDialog: () => null }));
 vi.mock("./agent-info-dialog", () => ({ AgentInfoDialog: () => null }));
+
+// The info dialog opens from a composer button this file stubs to null, so the
+// open state is driven from the harness instead of through a click. Everything
+// else about the hook is left real, because the error-dialog tests below are
+// assertions about its actual behaviour.
+vi.mock("@/hooks/use-chat-ui", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/hooks/use-chat-ui")>();
+  return {
+    useChatUI: (...args: Parameters<typeof actual.useChatUI>) => ({
+      ...actual.useChatUI(...args),
+      isAgentInfoDialogOpen: harness.agentInfoDialogOpen,
+    }),
+  };
+});
 vi.mock("./chat-settings-dialog", () => ({
   ChatSettingsDialog: () => null,
   CHAT_MAX_STEPS_ERROR: "bad max steps",
@@ -309,6 +330,9 @@ beforeEach(() => {
   harness.sendMessage.mockReset();
   harness.chatMutate.mockReset();
   harness.chatMutate.mockResolvedValue(undefined);
+  harness.agentsMutate.mockReset();
+  harness.agentsMutate.mockResolvedValue(undefined);
+  harness.agentInfoDialogOpen = false;
   harness.chatMessageRenders = 0;
   harness.lastChatMessageProps = null;
 });
@@ -739,5 +763,66 @@ describe("transcript stability", () => {
     view.rerender(<Chat orgId="org1" workspaceId="ws1" chatId={CHAT_ID} />);
 
     expect(harness.lastChatMessageProps!.staleToolCallIds).toBe(first);
+  });
+});
+
+// An Agent carrying the agent-management tools can rewrite its own row mid-chat,
+// and the write lands on the server: this read is not told, and no interval or
+// mutate anywhere else touches it. The info dialog is the only place that
+// configuration is shown, so opening it is the moment worth spending a request
+// on (issue #920).
+describe("the Agent behind the info dialog", () => {
+  const openInfoDialog = (view: ReturnType<typeof renderChat>) => {
+    harness.agentInfoDialogOpen = true;
+    view.rerender(<Chat orgId="org1" workspaceId="ws1" chatId={CHAT_ID} />);
+  };
+
+  it("does not re-read the Agents while the dialog is closed", () => {
+    renderChat();
+
+    expect(harness.agentsMutate).not.toHaveBeenCalled();
+  });
+
+  it("re-reads the Agents when the dialog opens", () => {
+    const view = renderChat();
+
+    openInfoDialog(view);
+
+    expect(harness.agentsMutate).toHaveBeenCalledTimes(1);
+  });
+
+  // The trigger is the open transition, not the render. A Chat re-renders on
+  // every streamed chunk, and a request per chunk for a dialog that is already
+  // showing the answer would be worse than the staleness it fixes.
+  it("re-reads once, however many times it re-renders while open", () => {
+    const view = renderChat();
+    openInfoDialog(view);
+
+    view.rerender(<Chat orgId="org1" workspaceId="ws1" chatId={CHAT_ID} />);
+    view.rerender(<Chat orgId="org1" workspaceId="ws1" chatId={CHAT_ID} />);
+
+    expect(harness.agentsMutate).toHaveBeenCalledTimes(1);
+  });
+
+  it("re-reads again the next time the dialog is opened", () => {
+    const view = renderChat();
+    openInfoDialog(view);
+
+    harness.agentInfoDialogOpen = false;
+    view.rerender(<Chat orgId="org1" workspaceId="ws1" chatId={CHAT_ID} />);
+    openInfoDialog(view);
+
+    expect(harness.agentsMutate).toHaveBeenCalledTimes(2);
+  });
+
+  // The dialog keeps showing the cached row when the re-read fails, which is
+  // what it does without the re-read at all. Nothing to report, nothing to
+  // leave unhandled.
+  it("swallows a failed re-read", async () => {
+    harness.agentsMutate.mockRejectedValue(new Error("offline"));
+    const view = renderChat();
+
+    expect(() => openInfoDialog(view)).not.toThrow();
+    await Promise.resolve();
   });
 });
