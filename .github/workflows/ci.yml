@@ -12,17 +12,11 @@ name: CI
 # how a security fix lands from a private advisory. Neither case is visible to a
 # pull_request trigger. Nothing gates on the push run; it is there to fail
 # loudly on main so the next person is not debugging someone else's merge.
-#
-# The merge_group trigger is what the merge queue validates against: GitHub
-# builds a temporary branch of main plus every earlier queue entry plus this PR
-# and runs the required checks on it, so `gate` must report here or entries wait
-# forever. It is what lets parallel PRs land without rebasing each one onto main.
 on:
   pull_request:
     branches: [main]
   push:
     branches: [main]
-  merge_group:
 
 permissions:
   contents: read
@@ -33,9 +27,7 @@ env:
 # Cancel superseded runs for the same ref (e.g. a new push to a PR branch).
 # Never on main: each merge is a distinct commit that release and deploy may be
 # cut from, so cancelling an in-flight run would leave that commit unverified
-# with nothing to say so. Never on merge_group either: github.ref is the unique
-# gh-readonly-queue branch, so entries never collide, and cancelling one would
-# stall the queue behind an unreported required check.
+# with nothing to say so.
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
@@ -46,11 +38,11 @@ jobs:
   # already passed. Skipped jobs feed the `gate` job below — the single required
   # check — so the release PR stays mergeable without doing redundant work.
   lint:
-    if: ${{ !startsWith(github.head_ref || github.event.merge_group.head_ref, 'release-please--') }}
+    if: ${{ !startsWith(github.head_ref, 'release-please--') }}
     uses: ./.github/workflows/lint.yml
 
   test:
-    if: ${{ !startsWith(github.head_ref || github.event.merge_group.head_ref, 'release-please--') }}
+    if: ${{ !startsWith(github.head_ref, 'release-please--') }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -76,7 +68,7 @@ jobs:
   # (see #233). Covers every package exposing a `typecheck` script, test files
   # included; others join by adding one.
   typecheck:
-    if: ${{ !startsWith(github.head_ref || github.event.merge_group.head_ref, 'release-please--') }}
+    if: ${{ !startsWith(github.head_ref, 'release-please--') }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
