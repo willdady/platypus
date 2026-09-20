@@ -5,7 +5,7 @@ import {
   agentWritableWidgetTypeSchema,
 } from "@platypus/schemas";
 import { db } from "../index.ts";
-import { ConflictError, NotFoundError } from "../errors.ts";
+import { ConflictError, NotFoundError, ValidationError } from "../errors.ts";
 import {
   getWidget,
   listDashboards as listDashboardsService,
@@ -22,7 +22,11 @@ export function createDashboardTools(
     try {
       return await run();
     } catch (error) {
-      if (error instanceof NotFoundError || error instanceof ConflictError)
+      if (
+        error instanceof NotFoundError ||
+        error instanceof ConflictError ||
+        error instanceof ValidationError
+      )
         return { error: error.message };
       throw error;
     }

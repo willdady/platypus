@@ -378,6 +378,18 @@ export const widgetUpdateDataSchema = z.discriminatedUnion(
  */
 export const agentWritableWidgetTypeSchema = z.enum(agentWritableWidgetTypes);
 
+/**
+ * The shape menu the model sees for the `updateWidgetData` tool's `data`
+ * field — **not** a guarantee that `data` belongs to the named `type`.
+ *
+ * A plain union with no discriminator: a Text payload satisfies it just as a
+ * Metric payload does, so it cannot tell that either belongs to the Widget
+ * type the caller named. It stays undiscriminated on purpose. The tool's input
+ * has to stay a flat object, because a root-level `anyOf` in tool parameters
+ * is refused by some providers, so the pairing is enforced where both the tool
+ * and the REST route already meet — the shared Widget update path, against
+ * {@link widgetUpdateDataSchema} (#830).
+ */
 export const agentWritableWidgetDataSchema = z.union(
   nonEmpty(
     agentWritableWidgetTypes.map((type) => widgetTypeRegistry[type].dataSchema),
