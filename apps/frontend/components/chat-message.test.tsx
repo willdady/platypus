@@ -7,14 +7,6 @@ import {
 } from "@platypus/schemas";
 import type { PlatypusUIMessage } from "@platypus/backend/src/types";
 
-// Streamdown pulls in shiki and a worker-ish runtime that jsdom can't host;
-// the assertions here only care about the avatar rendered beside the message.
-vi.mock("streamdown", () => ({
-  Streamdown: ({ children }: { children?: React.ReactNode }) => (
-    <div>{children}</div>
-  ),
-}));
-
 import {
   ChatMessage,
   CUT_SHORT_NOTICE,

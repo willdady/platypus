@@ -63,12 +63,6 @@ vi.mock("@/components/auth-provider", () => ({
 vi.mock("@/components/back-button", () => ({
   BackButton: () => null,
 }));
-// Streamdown pulls in shiki, which jsdom cannot host.
-vi.mock("streamdown", () => ({
-  Streamdown: ({ children }: { children?: React.ReactNode }) => (
-    <div>{children}</div>
-  ),
-}));
 
 import TriggerRunDetailPage, {
   RUN_DETAIL_ERROR_NOTICE,

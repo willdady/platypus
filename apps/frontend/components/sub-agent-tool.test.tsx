@@ -1,14 +1,6 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
 import type { ToolUIPart } from "ai";
-
-// Streamdown pulls in shiki and a worker-ish runtime that jsdom can't host; the
-// assertions here only care about the card's header.
-vi.mock("streamdown", () => ({
-  Streamdown: ({ children }: { children?: React.ReactNode }) => (
-    <div>{children}</div>
-  ),
-}));
 
 import {
   SubAgentTool,
