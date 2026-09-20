@@ -1,5 +1,17 @@
 # Changelog
 
+## [3.8.0](https://github.com/willdady/platypus/compare/v3.7.4...v3.8.0) (2026-09-20)
+
+
+### Features
+
+* complete invitation link redemption ([#850](https://github.com/willdady/platypus/issues/850)) ([5c57355](https://github.com/willdady/platypus/commit/5c573556996e29a5cd6df4aa6963e6b8eac3742c))
+
+
+### Bug Fixes
+
+* **backend:** always write a run's terminal status when it is aborted ([#937](https://github.com/willdady/platypus/issues/937)) ([c7b06d1](https://github.com/willdady/platypus/commit/c7b06d108446983f705161103f4016bf83de1913))
+
 ## [3.7.4](https://github.com/willdady/platypus/compare/v3.7.3...v3.7.4) (2026-09-20)
 
 
