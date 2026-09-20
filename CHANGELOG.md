@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.8.1](https://github.com/willdady/platypus/compare/v3.8.0...v3.8.1) (2026-09-20)
+
+
+### Bug Fixes
+
+* **backend:** drop unanswered tool calls from what the model is sent ([#938](https://github.com/willdady/platypus/issues/938)) ([05b7658](https://github.com/willdady/platypus/commit/05b765800844880d7c913d0fd7bbed42716f8618))
+
 ## [3.8.0](https://github.com/willdady/platypus/compare/v3.7.4...v3.8.0) (2026-09-20)
 
 
