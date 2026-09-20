@@ -402,8 +402,13 @@ export const ToolContent = ({ className, ...props }: ToolContentProps) => (
  * How a tool's Parameters and Result panels are drawn: preformatted text that
  * scrolls on its own axis, so a long unbroken value — a URL, a base64 blob —
  * is reachable rather than clipped (issue #922).
+ *
+ * `text-foreground` is on the panel rather than on either section, so the two
+ * read as one pair. `ToolContent` mutes everything under it — that is right
+ * for the section headings and wrong for the data, and the Result section
+ * used to be the only one that said so.
  */
-const toolPanelClassName = "overflow-auto p-4 text-xs";
+const toolPanelClassName = "overflow-auto p-4 text-xs text-foreground";
 
 export type ToolInputProps = ComponentProps<"div"> & {
   input: ToolUIPart["input"];
