@@ -1,5 +1,19 @@
 # Changelog
 
+## [3.7.4](https://github.com/willdady/platypus/compare/v3.7.3...v3.7.4) (2026-09-20)
+
+
+### Bug Fixes
+
+* **backend:** pair a widget's type with its data on the agent write path ([#925](https://github.com/willdady/platypus/issues/925)) ([e1bbfb1](https://github.com/willdady/platypus/commit/e1bbfb19c21a5d9e461d2f24c406ea2cc25022a5))
+* **backend:** race a sandbox tool call against the run's abort ([7bf8972](https://github.com/willdady/platypus/commit/7bf89726867c281be630eafc7514f9211015fb62)), closes [#921](https://github.com/willdady/platypus/issues/921)
+* **frontend:** draw a tool's Parameters and Result in the same colour ([#927](https://github.com/willdady/platypus/issues/927)) ([fe53a26](https://github.com/willdady/platypus/commit/fe53a263db5a09fdb6fee1881193d0a6d99ba31d))
+* **frontend:** extract shared list states and a delete-flow hook ([#912](https://github.com/willdady/platypus/issues/912)) ([a57c3ae](https://github.com/willdady/platypus/commit/a57c3aec10ff866287ff373cd4b02872366ac1ce))
+* **frontend:** re-read the Agent when the info dialog opens ([#924](https://github.com/willdady/platypus/issues/924)) ([8a3fd66](https://github.com/willdady/platypus/commit/8a3fd667eca1dc163e8a086716b7847d921a3450))
+* **frontend:** reduce app-shell re-renders, gate notification polling, and consolidate layouts ([#915](https://github.com/willdady/platypus/issues/915)) ([1461aa8](https://github.com/willdady/platypus/commit/1461aa8bec8fbdfb64fee29f3626419a5fa97881))
+* **frontend:** show "Deleting..." while an entity form's delete is in flight ([#931](https://github.com/willdady/platypus/issues/931)) ([12ebcba](https://github.com/willdady/platypus/commit/12ebcba31a1b68eb2410b5a799387b3f6a101168))
+* **frontend:** show a user message's controls as soon as it renders ([#923](https://github.com/willdady/platypus/issues/923)) ([46b084e](https://github.com/willdady/platypus/commit/46b084e9fab7d2617939903f67c8a79acf358ecd))
+
 ## [3.7.3](https://github.com/willdady/platypus/compare/v3.7.2...v3.7.3) (2026-09-19)
 
 
