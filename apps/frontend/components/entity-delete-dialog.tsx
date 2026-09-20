@@ -39,6 +39,7 @@ export const EntityDeleteDialog = ({
     description={description}
     confirmLabel="Delete"
     confirmVariant="destructive"
+    loadingLabel="Deleting..."
     onConfirm={onConfirm}
     loading={loading}
     error={error}

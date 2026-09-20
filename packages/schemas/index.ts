@@ -285,9 +285,6 @@ export const DEFAULT_AGENT_MAX_STEPS = 15;
  */
 export const DEFAULT_DIRECT_MAX_STEPS = 10;
 
-// An Agent is scoped to either a Workspace or an Organization (mutually
-// exclusive), mirroring the dual-scope shape of `provider`/`mcp`/`skill`.
-// Org-scoped Agents are Shared resources managed by Org Admins (ADR-0007);
 // The bounds the Agent form's counters and `maxLength` attributes read.
 export const AGENT_NAME_MIN_LENGTH = 3;
 export const AGENT_NAME_MAX_LENGTH = 30;
@@ -296,6 +293,9 @@ export const AGENT_DESCRIPTION_MAX_LENGTH = 128;
 export const AGENT_INPUT_PLACEHOLDER_MAX_LENGTH = 100;
 export const AGENT_MAX_STEPS_MIN = 1;
 
+// An Agent is scoped to either a Workspace or an Organization (mutually
+// exclusive), mirroring the dual-scope shape of `provider`/`mcp`/`skill`.
+// Org-scoped Agents are Shared resources managed by Org Admins (ADR-0007);
 // the XOR is enforced on `agentSchema` below, while the create routes inject
 // the scope and Promote re-scopes a Workspace Agent to the Organization.
 export const agentBaseSchema = z.object({
