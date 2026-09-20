@@ -6,7 +6,11 @@ import {
   MAX_SHELL_OUTPUT_BYTES,
   MAX_SHELL_TIMEOUT_MS,
 } from "./index.ts";
-import { SandboxPathExistsError, type SandboxTransport } from "./transport.ts";
+import {
+  raceCancellation,
+  SandboxPathExistsError,
+  type SandboxTransport,
+} from "./transport.ts";
 import type {
   FsEditInput,
   FsEditOutput,
@@ -18,6 +22,7 @@ import type {
   FsWriteInput,
   FsWriteOutput,
   SandboxBackend,
+  SandboxCallOptions,
   SandboxContext,
   ShellExecInput,
   ShellExecOutput,
@@ -182,12 +187,11 @@ const readForTool = async (
   tool: string,
   rootDir: string,
   path: string,
+  signal: AbortSignal | undefined,
 ): Promise<Buffer> => {
   try {
-    return await transport.readFile(
-      ctx,
-      absPath(rootDir, path),
-      MAX_READ_BYTES,
+    return await raceCancellation(signal, () =>
+      transport.readFile(ctx, absPath(rootDir, path), MAX_READ_BYTES),
     );
   } catch (cause) {
     const detail =
@@ -195,6 +199,24 @@ const readForTool = async (
     throw new Error(`${tool}: ${detail || `${tool} failed`}`, { cause });
   }
 };
+
+/**
+ * The workspace root, which every tool resolves its paths against and which
+ * core calls first in all five.
+ *
+ * Raced against the turn's signal, because it is also the transport's
+ * lazy-initialisation hook: provisioning a container or opening a connection
+ * happens here, and those are unbounded calls to a daemon or a host that run
+ * before any per-command timeout exists. The transport is not *told* to
+ * abandon them — the work is shared with whatever other tool call is warming
+ * the same Sandbox — core simply stops waiting on it (issue #921).
+ */
+const resolveRoot = (
+  transport: SandboxTransport,
+  ctx: SandboxContext,
+  options: SandboxCallOptions | undefined,
+): Promise<string> =>
+  raceCancellation(options?.signal, () => transport.rootDir(ctx));
 
 /**
  * Build a {@link SandboxBackend} — the five model-facing tools — from a {@link
@@ -210,8 +232,9 @@ export const createPosixSandbox = (
   async shellExec(
     ctx: SandboxContext,
     input: ShellExecInput,
+    options?: SandboxCallOptions,
   ): Promise<ShellExecOutput> {
-    const rootDir = await transport.rootDir(ctx);
+    const rootDir = await resolveRoot(transport, ctx, options);
     // The clamp is core's, not the schema's: the schema bounds what a model may
     // ask for, this bounds what any adapter will actually wait for.
     const timeoutMs = Math.min(
@@ -223,6 +246,9 @@ export const createPosixSandbox = (
       cwd: input.cwd ? absPath(rootDir, input.cwd) : rootDir,
       env: input.env,
       timeoutMs,
+      // Passed to the transport so a cancelled turn stops the command itself,
+      // not just core's wait for it (issue #921).
+      signal: options?.signal,
       stdoutCap: MAX_SHELL_OUTPUT_BYTES,
       stderrCap: MAX_SHELL_OUTPUT_BYTES,
     });
@@ -241,14 +267,19 @@ export const createPosixSandbox = (
     };
   },
 
-  async fsRead(ctx: SandboxContext, input: FsReadInput): Promise<FsReadOutput> {
-    const rootDir = await transport.rootDir(ctx);
+  async fsRead(
+    ctx: SandboxContext,
+    input: FsReadInput,
+    options?: SandboxCallOptions,
+  ): Promise<FsReadOutput> {
+    const rootDir = await resolveRoot(transport, ctx, options);
     const bytes = await readForTool(
       transport,
       ctx,
       "fs.read",
       rootDir,
       input.path,
+      options?.signal,
     );
 
     const decoded = decodeUtf8Strict(bytes, "fs.read", input.path);
@@ -270,16 +301,19 @@ export const createPosixSandbox = (
   async fsWrite(
     ctx: SandboxContext,
     input: FsWriteInput,
+    options?: SandboxCallOptions,
   ): Promise<FsWriteOutput> {
-    const rootDir = await transport.rootDir(ctx);
+    const rootDir = await resolveRoot(transport, ctx, options);
     const bytes = Buffer.from(input.content, "utf8");
 
     try {
-      await transport.writeFile(
-        ctx,
-        absPath(rootDir, input.path),
-        bytes,
-        input.mode,
+      await raceCancellation(options?.signal, () =>
+        transport.writeFile(
+          ctx,
+          absPath(rootDir, input.path),
+          bytes,
+          input.mode,
+        ),
       );
     } catch (cause) {
       // Re-stated in terms the model can act on: it asked about a relative
@@ -296,14 +330,19 @@ export const createPosixSandbox = (
     return { bytesWritten: bytes.length };
   },
 
-  async fsEdit(ctx: SandboxContext, input: FsEditInput): Promise<FsEditOutput> {
-    const rootDir = await transport.rootDir(ctx);
+  async fsEdit(
+    ctx: SandboxContext,
+    input: FsEditInput,
+    options?: SandboxCallOptions,
+  ): Promise<FsEditOutput> {
+    const rootDir = await resolveRoot(transport, ctx, options);
     const bytes = await readForTool(
       transport,
       ctx,
       "fs.edit",
       rootDir,
       input.path,
+      options?.signal,
     );
 
     const updated = replaceUnique(
@@ -311,23 +350,30 @@ export const createPosixSandbox = (
       input,
     );
 
-    await transport.writeFile(
-      ctx,
-      absPath(rootDir, input.path),
-      Buffer.from(updated, "utf8"),
-      "overwrite",
+    await raceCancellation(options?.signal, () =>
+      transport.writeFile(
+        ctx,
+        absPath(rootDir, input.path),
+        Buffer.from(updated, "utf8"),
+        "overwrite",
+      ),
     );
 
     return { replacements: 1 };
   },
 
-  async fsList(ctx: SandboxContext, input: FsListInput): Promise<FsListOutput> {
-    const rootDir = await transport.rootDir(ctx);
+  async fsList(
+    ctx: SandboxContext,
+    input: FsListInput,
+    options?: SandboxCallOptions,
+  ): Promise<FsListOutput> {
+    const rootDir = await resolveRoot(transport, ctx, options);
     const target = input.path ? absPath(rootDir, input.path) : rootDir;
 
     const res = await transport.exec(ctx, buildFindArgs(target, input), {
       cwd: rootDir,
       timeoutMs: DEFAULT_SHELL_TIMEOUT_MS,
+      signal: options?.signal,
       stdoutCap: MAX_LIST_OUTPUT_BYTES,
       stderrCap: MAX_SHELL_OUTPUT_BYTES,
     });

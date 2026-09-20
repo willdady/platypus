@@ -4,6 +4,7 @@ import { isPresentableUrl, WEB_BACKEND_TOOL_MARKER } from "@platypus/schemas";
 import { logger } from "../logger.ts";
 import { createContributionRegistry } from "../registry/contribution-registry.ts";
 import { checkEgress, EGRESS_BLOCKED_MESSAGE } from "../utils/egress-guard.ts";
+import { raceAbort } from "../utils/abort-race.ts";
 import { withAttributedRegistrar } from "../tools/closers.ts";
 import {
   READ_URL_TOOL_NAME,
@@ -163,38 +164,6 @@ class WebBackendTimeoutError extends Error {}
 class WebBackendCancelledError extends Error {}
 
 /**
- * Reject as soon as `signal` aborts, and hand back the means to drop the listener.
- *
- * Released in a `finally` rather than left to garbage collection. The signal
- * listened on is per-call, but it is *derived from* the run's, which outlives
- * every individual tool call — and the shape of that retention is the platform's
- * business, not something a searching turn should depend on being generous.
- */
-const rejectOnAbort = (
-  signal: AbortSignal,
-): { promise: Promise<never>; release: () => void } => {
-  let release = () => {};
-  const promise = new Promise<never>((_resolve, reject) => {
-    // The signal's own `reason` is `any` — a caller may abort with anything — and
-    // it is never read: `withDeadline` classifies on *which* signal aborted, not
-    // on what it was aborted with. Carried as `cause` so nothing is lost.
-    const onAbort = () =>
-      reject(new Error("aborted", { cause: signal.reason }));
-    // Not the live path: `withDeadline` refuses an already-aborted call before it
-    // gets here, precisely so this promise is never handed back already rejected
-    // with nothing attached to it. The branch stays as the guard that keeps that
-    // true for a second caller.
-    if (signal.aborted) {
-      onAbort();
-      return;
-    }
-    signal.addEventListener("abort", onAbort, { once: true });
-    release = () => signal.removeEventListener("abort", onAbort);
-  });
-  return { promise, release };
-};
-
-/**
  * Run an executor under a deadline, and hand it the signal for that deadline.
  *
  * Two things at once, because they are one signal to whoever is called: the
@@ -232,20 +201,12 @@ const withDeadline = async <T>(
     ? AbortSignal.any([deadline.signal, caller])
     : deadline.signal;
   try {
-    // Already cancelled before the call even reached the executor — a tool call
-    // dispatched just before the abort landed, or a delegate unwinding. The
-    // executor is not called at all: a backend that ignores its signal would
-    // otherwise spend a live upstream request on a turn nobody will read.
-    // `read_url`'s own guard still stands ahead of this one, because the egress
-    // guard's DNS lookup happens before control reaches here.
-    if (signal.aborted) throw new WebBackendCancelledError("turn cancelled");
-
-    const abort = rejectOnAbort(signal);
-    try {
-      return await Promise.race([Promise.resolve(run(signal)), abort.promise]);
-    } finally {
-      abort.release();
-    }
+    // The race, not a bare signal — and an already-aborted call never reaches
+    // the executor at all. Both are {@link raceAbort}'s, shared with the Sandbox
+    // tools; what survives here is the classification below, which is this
+    // module's alone. `read_url`'s own guard still stands ahead of this one,
+    // because the egress guard's DNS lookup happens before control reaches here.
+    return await raceAbort(signal, run);
   } catch (cause) {
     if (deadline.signal.aborted) {
       throw new WebBackendTimeoutError(

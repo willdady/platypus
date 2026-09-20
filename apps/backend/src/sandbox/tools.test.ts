@@ -15,11 +15,19 @@ function callExecute(
   tools: ReturnType<typeof createSandboxTools>,
   name: string,
   input: Record<string, unknown>,
+  // Production always has a signal, so that is the default here. `null` is the
+  // explicit "the SDK handed us none" case.
+  abortSignal: AbortSignal | null = new AbortController().signal,
 ): Promise<unknown> {
   const fn = tools[name]?.execute as TypedExecute | undefined;
   if (!fn) throw new Error(`tool "${name}" has no execute function`);
   return Promise.resolve(
-    fn(input, { toolCallId: "test", messages: [], context: {} }),
+    fn(input, {
+      toolCallId: "test",
+      messages: [],
+      context: {},
+      abortSignal: abortSignal ?? undefined,
+    }),
   );
 }
 
@@ -78,7 +86,13 @@ describe("createSandboxTools", () => {
     const { backend, mocks } = makeBackend();
     const tools = createSandboxTools(backend, ctx);
     const result = await callExecute(tools, "shellExec", { command: "ls" });
-    expect(mocks.shellExec).toHaveBeenCalledWith(ctx, { command: "ls" });
+    expect(mocks.shellExec).toHaveBeenCalledWith(
+      ctx,
+      { command: "ls" },
+      {
+        signal: expect.any(AbortSignal) as unknown,
+      },
+    );
     expect((result as { stdout: string }).stdout).toBe("ok");
   });
 
@@ -86,7 +100,13 @@ describe("createSandboxTools", () => {
     const { backend, mocks } = makeBackend();
     const tools = createSandboxTools(backend, ctx);
     const result = await callExecute(tools, "fsRead", { path: "README.md" });
-    expect(mocks.fsRead).toHaveBeenCalledWith(ctx, { path: "README.md" });
+    expect(mocks.fsRead).toHaveBeenCalledWith(
+      ctx,
+      { path: "README.md" },
+      {
+        signal: expect.any(AbortSignal) as unknown,
+      },
+    );
     expect((result as { content: string }).content).toBe("hello");
   });
 
@@ -98,11 +118,11 @@ describe("createSandboxTools", () => {
       content: "hi",
       mode: "create",
     });
-    expect(mocks.fsWrite).toHaveBeenCalledWith(ctx, {
-      path: "a.txt",
-      content: "hi",
-      mode: "create",
-    });
+    expect(mocks.fsWrite).toHaveBeenCalledWith(
+      ctx,
+      { path: "a.txt", content: "hi", mode: "create" },
+      { signal: expect.any(AbortSignal) as unknown },
+    );
   });
 
   it("delegates fsEdit to the backend with the sandbox context", async () => {
@@ -113,28 +133,35 @@ describe("createSandboxTools", () => {
       oldString: "foo",
       newString: "bar",
     });
-    expect(mocks.fsEdit).toHaveBeenCalledWith(ctx, {
-      path: "a.txt",
-      oldString: "foo",
-      newString: "bar",
-    });
+    expect(mocks.fsEdit).toHaveBeenCalledWith(
+      ctx,
+      { path: "a.txt", oldString: "foo", newString: "bar" },
+      { signal: expect.any(AbortSignal) as unknown },
+    );
   });
 
   it("delegates fsList to the backend with the sandbox context", async () => {
     const { backend, mocks } = makeBackend();
     const tools = createSandboxTools(backend, ctx);
     await callExecute(tools, "fsList", { recursive: true });
-    expect(mocks.fsList).toHaveBeenCalledWith(ctx, { recursive: true });
+    expect(mocks.fsList).toHaveBeenCalledWith(
+      ctx,
+      { recursive: true },
+      {
+        signal: expect.any(AbortSignal) as unknown,
+      },
+    );
   });
 
   it("does not touch input when workspace env is empty", async () => {
     const { backend, mocks } = makeBackend();
     const tools = createSandboxTools(backend, ctx, {});
     await callExecute(tools, "shellExec", { command: "ls", env: { A: "1" } });
-    expect(mocks.shellExec).toHaveBeenCalledWith(ctx, {
-      command: "ls",
-      env: { A: "1" },
-    });
+    expect(mocks.shellExec).toHaveBeenCalledWith(
+      ctx,
+      { command: "ls", env: { A: "1" } },
+      { signal: expect.any(AbortSignal) as unknown },
+    );
   });
 
   it("merges workspace env on top of input.env (workspace wins on collision)", async () => {
@@ -147,23 +174,115 @@ describe("createSandboxTools", () => {
       command: "node script.js",
       env: { OPENAI_API_KEY: "sk-spoof", FOO: "bar" },
     });
-    expect(mocks.shellExec).toHaveBeenCalledWith(ctx, {
-      command: "node script.js",
-      env: {
-        FOO: "bar",
-        OPENAI_API_KEY: "sk-real",
-        NODE_ENV: "production",
+    expect(mocks.shellExec).toHaveBeenCalledWith(
+      ctx,
+      {
+        command: "node script.js",
+        env: {
+          FOO: "bar",
+          OPENAI_API_KEY: "sk-real",
+          NODE_ENV: "production",
+        },
       },
-    });
+      { signal: expect.any(AbortSignal) as unknown },
+    );
   });
 
   it("injects workspace env when input has no env field", async () => {
     const { backend, mocks } = makeBackend();
     const tools = createSandboxTools(backend, ctx, { GITHUB_TOKEN: "ghp-x" });
     await callExecute(tools, "shellExec", { command: "gh repo list" });
-    expect(mocks.shellExec).toHaveBeenCalledWith(ctx, {
-      command: "gh repo list",
-      env: { GITHUB_TOKEN: "ghp-x" },
-    });
+    expect(mocks.shellExec).toHaveBeenCalledWith(
+      ctx,
+      { command: "gh repo list", env: { GITHUB_TOKEN: "ghp-x" } },
+      { signal: expect.any(AbortSignal) as unknown },
+    );
+  });
+  it("hands the backend the run's signal alongside the context", async () => {
+    const { backend, mocks } = makeBackend();
+    const tools = createSandboxTools(backend, ctx);
+    const controller = new AbortController();
+
+    await callExecute(tools, "fsRead", { path: "a.txt" }, controller.signal);
+
+    expect(mocks.fsRead).toHaveBeenCalledWith(
+      ctx,
+      { path: "a.txt" },
+      { signal: controller.signal },
+    );
+  });
+
+  // The appended parameter is optional on the published contract, so an adapter
+  // written before it existed takes two arguments and must keep working.
+  it("runs a two-argument backend written before the signal existed", async () => {
+    const backend = {
+      shellExec: (_ctx: SandboxContext, input: { command: string }) =>
+        Promise.resolve({
+          stdout: input.command,
+          stderr: "",
+          exitCode: 0,
+          truncated: false,
+          durationMs: 1,
+        }),
+    } as unknown as SandboxBackend;
+
+    const tools = createSandboxTools(backend, ctx);
+    const result = await callExecute(
+      tools,
+      "shellExec",
+      { command: "ls" },
+      new AbortController().signal,
+    );
+
+    expect((result as { stdout: string }).stdout).toBe("ls");
+  });
+
+  // The AI SDK declares `abortSignal` optional. Nothing in core drives a turn
+  // without one, but a call that arrives without it is handed to the adapter
+  // exactly as it always was.
+  it("calls the backend with no options when the SDK supplies no signal", async () => {
+    const { backend, mocks } = makeBackend();
+    const tools = createSandboxTools(backend, ctx);
+
+    await callExecute(tools, "fsList", { recursive: true }, null);
+
+    expect(mocks.fsList).toHaveBeenCalledWith(
+      ctx,
+      { recursive: true },
+      undefined,
+    );
+  });
+
+  // Issue #921. The turn not being pinned open cannot rest on the adapter's
+  // cooperation: a backend that never settles must not hold the tool call open.
+  it("rejects when the run aborts while a backend call is still in flight", async () => {
+    const backend = {
+      shellExec: () => new Promise<never>(() => {}),
+    } as unknown as SandboxBackend;
+
+    const tools = createSandboxTools(backend, ctx);
+    const controller = new AbortController();
+    const inflight = callExecute(
+      tools,
+      "shellExec",
+      { command: "sleep 300" },
+      controller.signal,
+    );
+
+    controller.abort();
+
+    await expect(inflight).rejects.toThrow(/cancelled/i);
+  });
+
+  it("does not call the backend at all when the signal has already aborted", async () => {
+    const { backend, mocks } = makeBackend();
+    const tools = createSandboxTools(backend, ctx);
+    const controller = new AbortController();
+    controller.abort();
+
+    await expect(
+      callExecute(tools, "fsList", {}, controller.signal),
+    ).rejects.toThrow(/cancelled/i);
+    expect(mocks.fsList).not.toHaveBeenCalled();
   });
 });

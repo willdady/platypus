@@ -17,6 +17,8 @@ import {
 import { createPosixSandbox } from "../../sandbox/posix.ts";
 import {
   createCappedSink,
+  raceCancellation,
+  SandboxCancelledError,
   SandboxPathExistsError,
   type SandboxExecOptions,
   type SandboxExecResult,
@@ -428,60 +430,105 @@ export class SshSandboxTransport implements SandboxTransport {
   // enforcing a timeout. On timeout the channel is closed and exit code 124 is
   // reported (a remote command may keep running as an orphan — the host is not
   // ours to reap; ADR-0012).
+  //
+  // `signal` closes the channel the same way, but rejects instead of reporting
+  // an exit code: the command did not finish, core stopped listening. It is
+  // honoured from before the channel exists, because opening one on a wedged
+  // connection is itself an unbounded wait and the timer is not armed until the
+  // channel is open (issue #921).
   private runExec(
     client: Client,
     command: string,
     timeoutMs: number,
     stdoutCap: number = MAX_SHELL_OUTPUT_BYTES,
     stderrCap: number = MAX_SHELL_OUTPUT_BYTES,
+    signal?: AbortSignal,
   ): Promise<SandboxExecResult> {
     return new Promise<SandboxExecResult>((resolve, reject) => {
       const started = Date.now();
-      client.exec(command, (err: Error | undefined, stream: ClientChannel) => {
-        if (err) {
-          reject(err);
+      let settled = false;
+      let cancelled = false;
+      let stream: ClientChannel | undefined;
+
+      const onAbort = () => {
+        cancelled = true;
+        // No channel yet — there is nothing to close, so stop waiting for one.
+        if (!stream) {
+          settle(() => reject(new SandboxCancelledError()));
           return;
+        }
+        try {
+          stream.close();
+        } catch {
+          // ignore — we settle on the close event regardless
+        }
+      };
+      const settle = (act: () => void) => {
+        if (settled) return;
+        settled = true;
+        signal?.removeEventListener("abort", onAbort);
+        act();
+      };
+
+      if (signal?.aborted) {
+        reject(new SandboxCancelledError());
+        return;
+      }
+      signal?.addEventListener("abort", onAbort, { once: true });
+
+      client.exec(command, (err: Error | undefined, channel: ClientChannel) => {
+        if (err) {
+          settle(() => reject(err));
+          return;
+        }
+        stream = channel;
+        // Aborted while the channel was being opened.
+        if (cancelled) {
+          try {
+            channel.close();
+          } catch {
+            // ignore
+          }
         }
 
         const stdoutSink = createCappedSink(stdoutCap);
         const stderrSink = createCappedSink(stderrCap);
         let exitCode = 0;
         let timedOut = false;
-        let settled = false;
 
         const timer = setTimeout(() => {
           timedOut = true;
           try {
-            stream.close();
+            channel.close();
           } catch {
             // ignore — resolve on the close event regardless
           }
         }, timeoutMs);
         timer.unref?.();
 
-        stream.on("data", (chunk: Buffer) => stdoutSink.push(chunk));
-        stream.stderr.on("data", (chunk: Buffer) => stderrSink.push(chunk));
+        channel.on("data", (chunk: Buffer) => stdoutSink.push(chunk));
+        channel.stderr.on("data", (chunk: Buffer) => stderrSink.push(chunk));
         // The exit code arrives on `exit`; `close` fires afterwards and is when
         // we settle. A signal-killed process reports a null code.
-        stream.on("exit", (code: number | null) => {
+        channel.on("exit", (code: number | null) => {
           if (typeof code === "number") exitCode = code;
         });
-        stream.on("close", () => {
+        channel.on("close", () => {
           clearTimeout(timer);
-          if (settled) return;
-          settled = true;
-          resolve({
-            stdout: stdoutSink.collect(),
-            stderr: stderrSink.collect(),
-            exitCode: timedOut ? 124 : exitCode,
-            durationMs: Date.now() - started,
-          });
+          settle(() =>
+            cancelled
+              ? reject(new SandboxCancelledError())
+              : resolve({
+                  stdout: stdoutSink.collect(),
+                  stderr: stderrSink.collect(),
+                  exitCode: timedOut ? 124 : exitCode,
+                  durationMs: Date.now() - started,
+                }),
+          );
         });
-        stream.on("error", (streamErr: Error) => {
+        channel.on("error", (streamErr: Error) => {
           clearTimeout(timer);
-          if (settled) return;
-          settled = true;
-          reject(streamErr);
+          settle(() => reject(streamErr));
         });
       });
     });
@@ -505,7 +552,13 @@ export class SshSandboxTransport implements SandboxTransport {
     argv: string[],
     opts: SandboxExecOptions,
   ): Promise<SandboxExecResult> {
-    const conn = await this.ensureConnection();
+    // Connecting is unbounded — a TCP dial, a handshake, the root-resolving
+    // exec — and it runs before any per-command timer exists. An abort stops
+    // *this* call waiting on it; the connection is shared, so it is not torn
+    // down under whoever else is using it.
+    const conn = await raceCancellation(opts.signal, () =>
+      this.ensureConnection(),
+    );
     const cdPrefix = opts.cwd ? `cd ${shQuote(opts.cwd)} && ` : "";
     const command = `${cdPrefix}${buildEnvPrefix(opts.env)}${argv
       .map(shQuote)
@@ -517,6 +570,7 @@ export class SshSandboxTransport implements SandboxTransport {
       opts.timeoutMs,
       opts.stdoutCap,
       opts.stderrCap,
+      opts.signal,
     );
     this.touchIdleTimer();
     return res;

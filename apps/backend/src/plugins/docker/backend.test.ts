@@ -43,6 +43,16 @@ type ExecConfig = {
   exitCode?: number;
   /** Delay (ms) before stream closes — used to test timeout behaviour. */
   closeDelayMs?: number;
+  /**
+   * Never resolve the daemon's exec-create call. The unbounded daemon call that
+   * runs *before* the per-command timer is armed (issue #921).
+   */
+  hangCreate?: boolean;
+  /**
+   * Fires as the exec is started — the window between the last daemon await
+   * resolving and the abort listener being attached (issue #921).
+   */
+  onStart?: () => void;
 };
 
 /** A PassThrough stream extended with optional exec configuration attached by the mock. */
@@ -140,6 +150,7 @@ function makeFakeContainer(): FakeContainer {
     exec: vi.fn((opts: Record<string, unknown>) => {
       mockState.execCalls.push(opts);
       const cfg: ExecConfig = mockState.execQueue.shift() ?? {};
+      if (cfg.hangCreate) return new Promise(() => {});
       const stream: ExecStream = new PassThrough();
       stream.__execCfg = cfg;
       // Production code awaits stream.on("end" | "close" | "error"). Since
@@ -157,7 +168,10 @@ function makeFakeContainer(): FakeContainer {
         process.nextTick(closeStream);
       }
       return Promise.resolve({
-        start: vi.fn(() => Promise.resolve(stream)),
+        start: vi.fn(() => {
+          cfg.onStart?.();
+          return Promise.resolve(stream);
+        }),
         inspect: vi.fn(() => Promise.resolve({ ExitCode: cfg.exitCode ?? 0 })),
       });
     }),
@@ -660,6 +674,67 @@ describe("DockerSandboxTransport — shellExec output handling", () => {
     });
 
     expect(res.exitCode).toBe(124);
+  });
+
+  // Issue #921. The turn is already over; reporting an exit code for a command
+  // that did not finish would put a fabricated result in the transcript.
+  it("closes the exec stream and rejects when the turn is cancelled", async () => {
+    setupFreshProvision();
+    queueExec({ closeDelayMs: 5_000, exitCode: 0 });
+
+    const backend = createDockerSandboxBackend({}, {}, withPluginLogger());
+    const controller = new AbortController();
+    const inflight = backend.shellExec(
+      ctx,
+      { command: "sleep 300" },
+      { signal: controller.signal },
+    );
+    await new Promise((r) => setTimeout(r, 10));
+    controller.abort();
+
+    await expect(inflight).rejects.toThrow(/cancelled/i);
+  });
+
+  // The daemon calls that create and start the exec run before the per-command
+  // timer is armed, so an abort there has nothing else behind it.
+  it("stops waiting when the daemon hangs before the command is started", async () => {
+    setupFreshProvision();
+    queueExec({ hangCreate: true });
+
+    const backend = createDockerSandboxBackend({}, {}, withPluginLogger());
+    const controller = new AbortController();
+    const inflight = backend.shellExec(
+      ctx,
+      { command: "ls" },
+      { signal: controller.signal },
+    );
+    await new Promise((r) => setTimeout(r, 10));
+    controller.abort();
+
+    await expect(inflight).rejects.toThrow(/cancelled/i);
+  });
+
+  // A listener added to an already-aborted signal never fires, so an abort
+  // landing in that window used to be dropped entirely: the command ran to its
+  // timeout and reported an exit code for a turn that was already over.
+  it("catches an abort that lands while the exec is being started", async () => {
+    setupFreshProvision();
+    const controller = new AbortController();
+    queueExec({
+      closeDelayMs: 5_000,
+      exitCode: 0,
+      onStart: () => controller.abort(),
+    });
+
+    const backend = createDockerSandboxBackend({}, {}, withPluginLogger());
+
+    await expect(
+      backend.shellExec(
+        ctx,
+        { command: "sleep 300" },
+        { signal: controller.signal },
+      ),
+    ).rejects.toThrow(/cancelled/i);
   });
 
   it("caps stdout at MAX_SHELL_OUTPUT_BYTES and flags truncated", async () => {

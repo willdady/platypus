@@ -288,6 +288,27 @@ export interface FsListOutput {
 }
 
 /**
+ * The per-call options a Sandbox backend's tool methods are handed as an
+ * appended third argument, mirroring {@link WebExecutorOptions}.
+ *
+ * `signal` fires when core stops waiting for this call: the person in the Chat
+ * pressed stop, or the run hit its per-step or per-run timeout. Honour it where
+ * the work actually happens — kill the command, close the channel — and the
+ * work stops with the turn instead of running on as an orphan.
+ *
+ * **Consuming it is optional.** A backend that ignores it behaves exactly as
+ * every adapter did before this parameter existed: core stops waiting either
+ * way, so the turn is never held open by a call that does not come back.
+ *
+ * Named for the call, not for `SandboxExecOptions` — that is core's *internal*
+ * per-command shape (`timeoutMs`, output caps) beneath the POSIX transport
+ * seam, and nothing an adapter implementing this interface ever sees.
+ */
+export interface SandboxCallOptions {
+  signal: AbortSignal;
+}
+
+/**
  * Implemented by every Sandbox adapter. Methods take a {@link SandboxContext}
  * plus their typed input and MUST honour the Platypus-defined output bounds,
  * setting the `truncated` flag when they apply them. `destroy()` MUST be
@@ -295,16 +316,38 @@ export interface FsListOutput {
  *
  * This is append-only within a major API version: new capability arrives as an
  * optional member, never a new required method.
+ *
+ * The five tool methods take {@link SandboxCallOptions} as an **optional**
+ * appended argument, on the same terms the Web-search executors do. Core always
+ * supplies it; an adapter written before it existed declares two parameters,
+ * still satisfies this interface, and still works.
  */
 export interface SandboxBackend {
   shellExec(
     ctx: SandboxContext,
     input: ShellExecInput,
+    options?: SandboxCallOptions,
   ): Promise<ShellExecOutput>;
-  fsRead(ctx: SandboxContext, input: FsReadInput): Promise<FsReadOutput>;
-  fsWrite(ctx: SandboxContext, input: FsWriteInput): Promise<FsWriteOutput>;
-  fsEdit(ctx: SandboxContext, input: FsEditInput): Promise<FsEditOutput>;
-  fsList(ctx: SandboxContext, input: FsListInput): Promise<FsListOutput>;
+  fsRead(
+    ctx: SandboxContext,
+    input: FsReadInput,
+    options?: SandboxCallOptions,
+  ): Promise<FsReadOutput>;
+  fsWrite(
+    ctx: SandboxContext,
+    input: FsWriteInput,
+    options?: SandboxCallOptions,
+  ): Promise<FsWriteOutput>;
+  fsEdit(
+    ctx: SandboxContext,
+    input: FsEditInput,
+    options?: SandboxCallOptions,
+  ): Promise<FsEditOutput>;
+  fsList(
+    ctx: SandboxContext,
+    input: FsListInput,
+    options?: SandboxCallOptions,
+  ): Promise<FsListOutput>;
   destroy(ctx: SandboxContext): Promise<void>;
 }
 

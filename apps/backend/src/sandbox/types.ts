@@ -10,6 +10,7 @@ import type {
   FsWriteInput as SdkFsWriteInput,
   FsWriteOutput,
   SandboxBackend,
+  SandboxCallOptions,
   SandboxContext,
   ShellExecInput as SdkShellExecInput,
   ShellExecOutput,
@@ -28,6 +29,7 @@ export type {
   FsReadOutput,
   FsWriteOutput,
   SandboxBackend,
+  SandboxCallOptions,
   SandboxContext,
   ShellExecOutput,
 };

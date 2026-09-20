@@ -1,3 +1,4 @@
+import { raceAbort } from "../utils/abort-race.ts";
 import type { SandboxContext } from "./types.ts";
 
 // The seam beneath a Sandbox adapter (ADR-0002/0003/0012).
@@ -38,6 +39,22 @@ export interface SandboxExecOptions {
   stdoutCap: number;
   /** Stop accumulating stderr past this many bytes (keep draining). */
   stderrCap: number;
+  /**
+   * Fires when core has stopped waiting for this command — the turn was
+   * cancelled, or the run hit a timeout.
+   *
+   * Honour it where the command actually runs, and honour it from the *first*
+   * await: the per-command timer is armed only after the unbounded daemon or
+   * connection calls that precede it, so those are exactly where an abort has
+   * nothing else to recover it (issue #921).
+   *
+   * Reject when it fires, rather than resolving with an exit code — the command
+   * did not finish, core stopped listening. Optional: core races the whole tool
+   * call against the same signal, so a transport that ignores this still cannot
+   * hold the turn open; ignoring it only means the command runs on as an orphan
+   * until its own timeout, exactly as it does today.
+   */
+  signal?: AbortSignal;
 }
 
 /**
@@ -97,6 +114,43 @@ export class SandboxPathExistsError extends Error {
     this.name = "SandboxPathExistsError";
   }
 }
+
+/**
+ * Thrown by a transport when {@link SandboxExecOptions.signal} fired before the
+ * command finished. A distinct type rather than a message because it is not a
+ * failure of the command — nothing ran badly, core stopped listening — and the
+ * layers above must not report it as one.
+ */
+export class SandboxCancelledError extends Error {
+  constructor(options?: { cause?: unknown }) {
+    super("sandbox: turn cancelled", options);
+    this.name = "SandboxCancelledError";
+  }
+}
+
+/**
+ * Run `work` under `signal`, and stop waiting the moment it fires.
+ *
+ * The one way anything on the Sandbox path honours an abort, so all of them
+ * report it identically: the race is {@link raceAbort}'s, shared with the
+ * Web-search backend, and what is added here is the verdict — an abort that
+ * fired becomes a {@link SandboxCancelledError}, and anything else the work
+ * threw passes through untouched.
+ *
+ * An absent signal is a plain call. Nothing in core drives a turn without one;
+ * a transport primitive invoked outside a tool call (provisioning, teardown) has
+ * no turn to be cancelled with.
+ */
+export const raceCancellation = <T>(
+  signal: AbortSignal | undefined,
+  work: () => Promise<T>,
+): Promise<T> => {
+  if (!signal) return work();
+  return raceAbort(signal, work).catch((cause) => {
+    if (signal.aborted) throw new SandboxCancelledError({ cause });
+    throw cause;
+  });
+};
 
 /**
  * The five primitives an adapter supplies. Everything the model sees is built

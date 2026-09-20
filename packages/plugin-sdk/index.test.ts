@@ -7,6 +7,7 @@ import {
   type PlatypusPlugin,
   type PluginConfigContext,
   type PluginLogger,
+  type SandboxBackend,
   type SandboxBackendContribution,
   type ToolSetContribution,
   type WebBackendContribution,
@@ -141,6 +142,71 @@ describe("@platypuschat/plugin-sdk", () => {
       },
     };
     backend.create({}, {}, shared);
+  });
+
+  // Issue #921 appended `SandboxCallOptions` to all five tool methods. Two
+  // different compile-time guarantees, protected by two different things, and
+  // it is worth being exact about which is which.
+  //
+  // An *implementer* is safe because TypeScript lets a function with fewer
+  // parameters satisfy a type with more — the `?` is not what saves it, and a
+  // required third parameter would accept this adapter just as happily.
+  it("still accepts an adapter written before the per-call signal existed", () => {
+    const preSignal: SandboxBackend = {
+      shellExec: (_ctx, input) =>
+        Promise.resolve({
+          stdout: input.command,
+          stderr: "",
+          exitCode: 0,
+          truncated: false,
+          durationMs: 1,
+        }),
+      fsRead: (_ctx, _input) =>
+        Promise.resolve({ content: "", lineCount: 0, truncated: false }),
+      fsWrite: (_ctx, input) =>
+        Promise.resolve({ bytesWritten: input.content.length }),
+      fsEdit: (_ctx, _input) => Promise.resolve({ replacements: 1 }),
+      fsList: (_ctx, _input) =>
+        Promise.resolve({ entries: [], truncated: false }),
+      destroy: () => Promise.resolve(),
+    };
+
+    // Core supplies the third argument regardless; the adapter above ignores it.
+    const ctx = { orgId: "o", workspaceId: "w", userId: "u" };
+    const signal = new AbortController().signal;
+    return expect(
+      preSignal.shellExec(ctx, { command: "ls" }, { signal }),
+    ).resolves.toMatchObject({ stdout: "ls" });
+  });
+
+  // …whereas a *caller* is safe only because the parameter is optional. This is
+  // the half the `?` actually buys: anything that wraps, decorates or exercises
+  // an adapter calls these methods itself, and `options: SandboxCallOptions`
+  // turns every such two-argument call into TS2554 "Expected 3 arguments, but
+  // got 2". Verified by making it required — the assertion below is the one
+  // that fails.
+  it("still lets a caller invoke a tool method without the appended options", () => {
+    const backend: SandboxBackend = {
+      shellExec: (_ctx, input, options) =>
+        Promise.resolve({
+          stdout: options ? "signalled" : input.command,
+          stderr: "",
+          exitCode: 0,
+          truncated: false,
+          durationMs: 1,
+        }),
+      fsRead: () =>
+        Promise.resolve({ content: "", lineCount: 0, truncated: false }),
+      fsWrite: () => Promise.resolve({ bytesWritten: 0 }),
+      fsEdit: () => Promise.resolve({ replacements: 1 }),
+      fsList: () => Promise.resolve({ entries: [], truncated: false }),
+      destroy: () => Promise.resolve(),
+    };
+
+    const ctx = { orgId: "o", workspaceId: "w", userId: "u" };
+    return expect(
+      backend.shellExec(ctx, { command: "ls" }),
+    ).resolves.toMatchObject({ stdout: "ls" });
   });
 
   it("carries an optional logger on the shared block, callable both ways", () => {

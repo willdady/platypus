@@ -14,6 +14,12 @@ type ExecConfig = {
   exitCode?: number;
   /** Delay (ms) before the channel emits + closes — used for the timeout test. */
   closeDelayMs?: number;
+  /**
+   * Never invoke the exec callback. Opening a channel on a wedged connection is
+   * itself an unbounded wait, and it happens before the per-command timer is
+   * armed (issue #921).
+   */
+  hangOpen?: boolean;
 };
 
 type MockState = {
@@ -230,6 +236,8 @@ vi.mock("ssh2", () => {
             exitCode: mockState.rootCreateFails ? 1 : 0,
           }
         : (mockState.execQueue.shift() ?? { exitCode: 0 });
+
+      if (cfg.hangOpen) return this;
 
       const channel = new FakeChannel();
       cb(undefined, channel);
@@ -649,6 +657,47 @@ describe("SshSandboxTransport — shellExec", () => {
       timeoutMs: 20,
     });
     expect(res.exitCode).toBe(124);
+  });
+
+  // Issue #921. A cancelled turn closes the channel like a timeout does, but
+  // rejects rather than reporting an exit code for a command that never
+  // finished.
+  it("closes the channel and rejects when the turn is cancelled", async () => {
+    queueExec({ closeDelayMs: 5_000, exitCode: 0 });
+    const backend = createSshSandboxBackend(
+      CONFIG,
+      CREDENTIALS,
+      withPluginLogger(),
+    );
+    const controller = new AbortController();
+    const inflight = backend.shellExec(
+      ctx,
+      { command: "sleep 300" },
+      { signal: controller.signal },
+    );
+    await new Promise((r) => setTimeout(r, 10));
+    controller.abort();
+
+    await expect(inflight).rejects.toThrow(/cancelled/i);
+  });
+
+  it("stops waiting when the channel never opens", async () => {
+    queueExec({ hangOpen: true });
+    const backend = createSshSandboxBackend(
+      CONFIG,
+      CREDENTIALS,
+      withPluginLogger(),
+    );
+    const controller = new AbortController();
+    const inflight = backend.shellExec(
+      ctx,
+      { command: "ls" },
+      { signal: controller.signal },
+    );
+    await new Promise((r) => setTimeout(r, 10));
+    controller.abort();
+
+    await expect(inflight).rejects.toThrow(/cancelled/i);
   });
 });
 

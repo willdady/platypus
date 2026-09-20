@@ -13,6 +13,8 @@ import {
 import { createPosixSandbox } from "../../sandbox/posix.ts";
 import {
   createCappedSink,
+  raceCancellation,
+  SandboxCancelledError,
   SandboxPathExistsError,
   type SandboxExecOptions,
   type SandboxExecResult,
@@ -198,6 +200,11 @@ function splitParent(absPath: string): { parent: string; name: string } {
 
 // Run a single command inside the container, demuxing stdout/stderr into
 // byte-capped sinks that keep draining once full (see createCappedSink).
+//
+// `signal` is honoured from the first await, not just once the command is
+// streaming: creating and starting the exec are unbounded calls to the daemon
+// and they run *before* the timeout timer is armed, so an unresponsive daemon
+// is precisely where nothing else would recover the call (issue #921).
 async function runExec(
   container: Container,
   cmd: string[],
@@ -207,20 +214,27 @@ async function runExec(
     timeoutMs?: number;
     stdoutCap?: number;
     stderrCap?: number;
+    signal?: AbortSignal;
   } = {},
 ): Promise<SandboxExecResult> {
   const started = Date.now();
-  const exec: Exec = await container.exec({
-    Cmd: cmd,
-    AttachStdout: true,
-    AttachStderr: true,
-    WorkingDir: opts.workingDir,
-    Env: opts.env
-      ? Object.entries(opts.env).map(([k, v]) => `${k}=${v}`)
-      : undefined,
-  });
+  const signal = opts.signal;
 
-  const stream = await exec.start({ hijack: true, stdin: false });
+  const exec: Exec = await raceCancellation(signal, () =>
+    container.exec({
+      Cmd: cmd,
+      AttachStdout: true,
+      AttachStderr: true,
+      WorkingDir: opts.workingDir,
+      Env: opts.env
+        ? Object.entries(opts.env).map(([k, v]) => `${k}=${v}`)
+        : undefined,
+    }),
+  );
+
+  const stream = await raceCancellation(signal, () =>
+    exec.start({ hijack: true, stdin: false }),
+  );
 
   const stdoutSink = createCappedSink(
     opts.stdoutCap ?? Number.POSITIVE_INFINITY,
@@ -250,23 +264,47 @@ async function runExec(
     stream.on("error", () => resolve());
   });
 
+  // Best-effort destroy of the exec stream; on timeout we also issue a
+  // KILL to the container's exec process group via a sidecar exec.
+  const destroyStream = () => {
+    try {
+      (stream as unknown as { destroy: () => void }).destroy();
+    } catch {
+      // ignore
+    }
+  };
+
   const timeoutMs = opts.timeoutMs;
   let timer: NodeJS.Timeout | undefined;
   if (timeoutMs && timeoutMs > 0) {
     timer = setTimeout(() => {
       timedOut = true;
-      // Best-effort destroy of the exec stream; on timeout we also issue a
-      // KILL to the container's exec process group via a sidecar exec.
-      try {
-        (stream as unknown as { destroy: () => void }).destroy();
-      } catch {
-        // ignore
-      }
+      destroyStream();
     }, timeoutMs);
   }
 
-  await streamEnd;
+  // A cancelled turn ends the command the same way its timeout would: the
+  // stream is destroyed, `streamEnd` settles, and the call rejects rather than
+  // reporting an exit code for a command that did not finish.
+  let cancelled = false;
+  const onAbort = () => {
+    cancelled = true;
+    destroyStream();
+  };
+  signal?.addEventListener("abort", onAbort, { once: true });
+  // An abort that landed between the last await above and that subscription
+  // would never be delivered — a listener added to an already-aborted signal
+  // does not fire — and the command would run to its timeout and report an exit
+  // code for a turn that was already over.
+  if (signal?.aborted) onAbort();
+
+  try {
+    await streamEnd;
+  } finally {
+    signal?.removeEventListener("abort", onAbort);
+  }
   if (timer) clearTimeout(timer);
+  if (cancelled) throw new SandboxCancelledError();
 
   // Drain the pass-throughs.
   stdoutPass.end();
@@ -439,13 +477,19 @@ export class DockerSandboxTransport implements SandboxTransport {
     argv: string[],
     opts: SandboxExecOptions,
   ): Promise<SandboxExecResult> {
-    const container = await this.ensureContainer(ctx);
+    // Provisioning is unbounded — an image pull, a container create — and it
+    // is shared with every other caller for this Workspace, so an abort stops
+    // *this* call waiting on it rather than cancelling the shared work.
+    const container = await raceCancellation(opts.signal, () =>
+      this.ensureContainer(ctx),
+    );
     return runExec(container, argv, {
       workingDir: opts.cwd,
       env: opts.env,
       timeoutMs: opts.timeoutMs,
       stdoutCap: opts.stdoutCap,
       stderrCap: opts.stderrCap,
+      signal: opts.signal,
     });
   }
 

@@ -71,6 +71,43 @@ things exposes the extra through a
   concurrent use, or you will corrupt state under a model you didn't write.
 </Callout>
 
+## The signal your tool methods get
+
+Every tool call gets a third argument carrying `{ signal }`. Pass it to whatever
+actually runs the work — the exec request, the HTTP call to your sandbox
+service — and the command stops when Platypus stops waiting.
+
+It fires for either of two reasons, and you do not need to tell them apart:
+
+- someone in the Chat pressed stop, or their run was cancelled;
+- the run hit its per-step or per-run timeout.
+
+Honour it from your **first** await, not just once a command is streaming.
+Resolving a workspace root, opening a connection and creating an exec are
+usually unbounded calls to a daemon or a remote API, and they happen before any
+per-command timeout of yours is armed — so they are exactly where an abort has
+nothing else behind it. Reject when it fires rather than returning an exit code:
+the command did not finish, and a fabricated result would go into the
+transcript as though it had.
+
+<Callout type="info">
+  **Ignoring the signal is allowed, and it costs you a command you are no longer
+  being paid for.** An adapter that never reads it behaves as every adapter did
+  before the argument existed: Platypus stops waiting either way, the turn is
+  never held open, and the chat returns to the person straight away. Your
+  command runs on until its own timeout, holding a container, a connection or a
+  billed sandbox minute for an answer nobody will read.
+</Callout>
+
+The argument is optional. An adapter written before it existed declares two
+parameters, still satisfies `SandboxBackend`, and still works — Platypus passes
+the third argument regardless and your method ignores it.
+
+`AbortSignal` is a platform global rather than something the SDK declares, so a
+`tsconfig.json` with `"lib": ["esnext"]` and no `@types/node` reports `Cannot
+find name 'AbortSignal'`. Add `@types/node` — you are running on Node — or
+`"dom"` to `lib`.
+
 ## Contributing one
 
 Add an entry to `contributes.sandboxBackends`. A
