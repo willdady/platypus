@@ -1,14 +1,13 @@
 "use client";
 
 import { useState } from "react";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
 import type { Widget } from "@platypus/schemas";
 import { useResetOnChange } from "@/hooks/use-reset-on-change";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Markdown } from "@/components/markdown";
 import { Check } from "lucide-react";
 
 export function TextWidget({
@@ -52,11 +51,9 @@ export function TextWidget({
   }
 
   return (
-    <div className="p-4 h-full overflow-auto prose prose-sm dark:prose-invert max-w-none">
+    <div className="p-4 h-full overflow-auto">
       {data?.content ? (
-        <ReactMarkdown remarkPlugins={[remarkGfm]}>
-          {data.content}
-        </ReactMarkdown>
+        <Markdown>{data.content}</Markdown>
       ) : (
         <p className="text-sm text-muted-foreground italic">No content yet</p>
       )}

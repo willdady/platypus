@@ -3,8 +3,7 @@
 import { use, useState, useCallback, useEffect, useMemo, memo } from "react";
 import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "motion/react";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
+import { Markdown } from "@/components/markdown";
 import useSWR from "swr";
 import Link from "next/link";
 import { toast } from "sonner";
@@ -909,11 +908,9 @@ const DashboardPage = ({
                           <span className="sr-only">Collapse</span>
                         </Button>
                       </div>
-                      <div className="flex-1 min-h-0 overflow-auto prose prose-sm dark:prose-invert max-w-none">
+                      <div className="flex-1 min-h-0 overflow-auto">
                         {expandedData?.content ? (
-                          <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                            {expandedData.content}
-                          </ReactMarkdown>
+                          <Markdown>{expandedData.content}</Markdown>
                         ) : (
                           <p className="text-sm text-muted-foreground italic">
                             No content yet

@@ -21,8 +21,7 @@ import {
   type NotificationListItem,
 } from "@platypus/schemas";
 import Link from "next/link";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
+import { Markdown } from "@/components/markdown";
 import { toast } from "sonner";
 
 interface NotificationsDropdownProps {
@@ -187,12 +186,15 @@ export function NotificationsDropdown({
                         </div>
                       )}
                       <div
-                        className={`text-xs text-muted-foreground prose prose-sm dark:prose-invert max-w-none [&_p]:m-0 [&_a]:text-primary ${isExpanded ? "" : "line-clamp-2"}`}
+                        className={`text-xs text-muted-foreground [&_p]:m-0 [&_a]:text-primary ${isExpanded ? "" : "line-clamp-2"}`}
                       >
-                        <ReactMarkdown
-                          remarkPlugins={[remarkGfm]}
+                        <Markdown
                           allowedElements={["p", "a", "strong", "em", "code"]}
                           components={{
+                            // Streamdown's own link renders as a button that
+                            // bubbles into the row's expand/collapse click.
+                            // A plain anchor keeps a notification link one
+                            // click, as it has always been.
                             a: ({ children, href }) => (
                               <a
                                 href={href}
@@ -206,7 +208,7 @@ export function NotificationsDropdown({
                           }}
                         >
                           {notif.body}
-                        </ReactMarkdown>
+                        </Markdown>
                       </div>
                       <div className="flex items-center gap-2 mt-1">
                         <span className="text-xs text-muted-foreground">

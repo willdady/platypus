@@ -1,7 +1,14 @@
 import { describe, it, expect } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
 import type { ComponentProps, ReactNode } from "react";
-import { humanizeToolType, Tool, ToolContent, ToolHeader } from "./tool";
+import {
+  humanizeToolType,
+  Tool,
+  ToolContent,
+  ToolHeader,
+  ToolInput,
+  ToolOutput,
+} from "./tool";
 
 // The header label is the only place a tool name is shown as prose, and the names
 // reaching it are not all camelCase: provider-native search and the Web-search
@@ -135,5 +142,33 @@ describe("Tool disclosure", () => {
       "rotate-180",
     );
     expect(screen.getByText("Inner body")).toBeInTheDocument();
+  });
+});
+
+// Issue #899/#922. The panels are plain `<pre>`s that scroll on their own
+// axis: a long unbroken value used to be clipped by the highlighter's
+// `overflow-hidden` wrappers with no way to reach the rest of it.
+describe("Tool parameter and result panels", () => {
+  const longUrl = `https://example.com/${"x".repeat(400)}`;
+
+  it("pretty-prints the input as scrollable JSON", () => {
+    const { container } = render(<ToolInput input={{ url: longUrl }} />);
+    const pre = container.querySelector("pre");
+
+    expect(pre).toHaveTextContent(`"url": "${longUrl}"`);
+    expect(pre).toHaveClass("overflow-auto");
+    // The panel's own scroll is only reachable if nothing above it clips:
+    // the section wrapper used to carry `overflow-hidden`.
+    expect(pre?.parentElement).not.toHaveClass("overflow-hidden");
+  });
+
+  it("pretty-prints an object result as scrollable JSON", () => {
+    const { container } = render(
+      <ToolOutput output={{ url: longUrl }} errorText={undefined} />,
+    );
+    const pre = container.querySelector("pre");
+
+    expect(pre).toHaveTextContent(`"url": "${longUrl}"`);
+    expect(pre).toHaveClass("overflow-auto");
   });
 });

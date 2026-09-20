@@ -2,8 +2,7 @@
 
 import { useState, type FocusEventHandler, type ReactNode } from "react";
 import { useResetOnChange } from "@/hooks/use-reset-on-change";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
+import { Markdown } from "@/components/markdown";
 import { format } from "date-fns";
 import useSWR from "swr";
 import type {
@@ -328,8 +327,8 @@ function CardBodySection({
   return (
     <div className="min-h-[150px]">
       {body ? (
-        <div className="prose prose-sm dark:prose-invert max-w-none [overflow-wrap:anywhere]">
-          <ReactMarkdown remarkPlugins={[remarkGfm]}>{body}</ReactMarkdown>
+        <div className="[overflow-wrap:anywhere]">
+          <Markdown>{body}</Markdown>
         </div>
       ) : (
         <p className="text-sm text-muted-foreground">No description.</p>
@@ -467,10 +466,8 @@ function CommentsSection({
                 </div>
               ) : (
                 <>
-                  <div className="prose prose-sm dark:prose-invert max-w-none [overflow-wrap:anywhere]">
-                    <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                      {comment.body}
-                    </ReactMarkdown>
+                  <div className="[overflow-wrap:anywhere]">
+                    <Markdown>{comment.body}</Markdown>
                   </div>
                   <div className="flex gap-2">
                     <button

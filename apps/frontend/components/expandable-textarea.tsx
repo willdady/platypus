@@ -4,8 +4,7 @@ import * as React from "react";
 import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "motion/react";
 import { Maximize2, Minimize2 } from "lucide-react";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
+import { Markdown } from "@/components/markdown";
 import { Textarea } from "./ui/textarea";
 import { FieldError, FieldLabel } from "./ui/field";
 import { Button } from "./ui/button";
@@ -240,10 +239,8 @@ function ExpandableTextarea({
                     ) : (
                       <div className="h-full overflow-y-auto rounded-md border bg-transparent px-3 py-2">
                         {draftValue.length > 0 ? (
-                          <div className="prose prose-sm dark:prose-invert max-w-none [overflow-wrap:anywhere]">
-                            <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                              {draftValue}
-                            </ReactMarkdown>
+                          <div className="[overflow-wrap:anywhere]">
+                            <Markdown>{draftValue}</Markdown>
                           </div>
                         ) : (
                           <p className="text-sm text-muted-foreground">
